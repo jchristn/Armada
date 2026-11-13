@@ -1,9 +1,11 @@
 namespace Armada.Core.Models
 {
-    using System.Collections.Generic;
-
     /// <summary>
-    /// A thread with the work it tracks and its pending proposals.
+    /// A thread with counts of what it holds. The collections are read one page at a time: tracked work with POST
+    /// /api/v1/ask/threads/{id}/work/enumerate, proposals with POST /api/v1/ask/threads/{id}/proposals/enumerate, CLI
+    /// permission requests with POST /api/v1/cli-permissions/requests/enumerate (threadId), and the running turn's tool
+    /// calls with POST /api/v1/ask/threads/{id}/turn/tool-calls/enumerate (MCP list_ask_work, list_ask_proposals,
+    /// list_ask_tool_calls).
     /// </summary>
     public class AskThreadDetail
     {
@@ -19,35 +21,24 @@ namespace Armada.Core.Models
         }
 
         /// <summary>
-        /// Work tracked by the thread, newest first, each with its latest snapshot.
+        /// Number of work items the thread tracks (every state). Thread.ActiveWorkCount counts the active ones.
         /// </summary>
-        public List<AskTrackedWork> TrackedWork
-        {
-            get => _TrackedWork;
-            set => _TrackedWork = value ?? new List<AskTrackedWork>();
-        }
+        public long TrackedWorkCount { get; set; } = 0;
 
         /// <summary>
-        /// Proposals still waiting for a decision, oldest first.
+        /// Number of proposals still waiting for a decision.
         /// </summary>
-        public List<AskActionProposal> PendingProposals
-        {
-            get => _PendingProposals;
-            set => _PendingProposals = value ?? new List<AskActionProposal>();
-        }
+        public long PendingProposalCount { get; set; } = 0;
 
         /// <summary>
-        /// Pending CLI permission requests of the thread's captain, newest first.
+        /// Number of pending CLI permission requests of the thread's captain.
         /// </summary>
-        public List<CliPermissionRequest> PendingCliPermissions
-        {
-            get => _PendingCliPermissions;
-            set => _PendingCliPermissions = value ?? new List<CliPermissionRequest>();
-        }
+        public long PendingCliPermissionCount { get; set; } = 0;
 
         /// <summary>
-        /// What the captain turn running in the thread has produced so far (streamed text, thinking, and tool calls), or
-        /// null when no turn is running. Lets a client that opens the thread mid-turn restore the live reply.
+        /// What the captain turn running in the thread has produced so far (streamed text, thinking, and the number of
+        /// tool calls), or null when no turn is running. Lets a client that opens the thread mid-turn restore the live
+        /// reply; the tool calls themselves are paged.
         /// </summary>
         public AskTurnProgress? ActiveTurn { get; set; } = null;
 
@@ -56,9 +47,6 @@ namespace Armada.Core.Models
         #region Private-Members
 
         private AskThread _Thread = new AskThread();
-        private List<AskTrackedWork> _TrackedWork = new List<AskTrackedWork>();
-        private List<AskActionProposal> _PendingProposals = new List<AskActionProposal>();
-        private List<CliPermissionRequest> _PendingCliPermissions = new List<CliPermissionRequest>();
 
         #endregion
 

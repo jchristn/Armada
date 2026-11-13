@@ -1,6 +1,8 @@
+# Stops the Armada MCP stdio hosts (dotnet Armada.Helm.dll mcp stdio) that run from a repository checkout.
+# Usage: powershell -NoProfile -ExecutionPolicy Bypass -File scripts\windows\stop-repo-mcp-hosts.ps1 [-RepoRoot <dir>]
+#   -RepoRoot   the checkout to match; defaults to the one this script is in
 param(
-    [Parameter(Mandatory = $true)]
-    [string]$RepoRoot
+    [string]$RepoRoot = (Join-Path $PSScriptRoot '..\..')
 )
 
 $resolvedRepoRoot = [System.IO.Path]::GetFullPath($RepoRoot)

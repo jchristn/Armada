@@ -58,8 +58,7 @@ namespace Armada.Server.Routes
                 EnumerationQuery query = EnumerationRequestReader.Read(req, _jsonOptions);
                 try
                 {
-                    List<PlanningSession> sessions = await EnumerateSessionsAsync(ctx).ConfigureAwait(false);
-                    return EnumerationResult<PlanningSession>.Page(query, sessions.OrderByDescending(s => s.LastUpdateUtc).ToList());
+                    return await EnumerateSessionsAsync(ctx, query).ConfigureAwait(false);
                 }
                 catch (NotSupportedException ex)
                 {
@@ -70,7 +69,7 @@ namespace Armada.Server.Routes
             api => api
                 .WithTag("Planning Sessions")
                 .WithSummary("Enumerate planning sessions")
-                .WithDescription("One page of the planning sessions visible to the caller, most recently updated first. Paging and filters come from the JSON body (EnumerationQuery) or the querystring (pageNumber, pageSize 1 to 1000, default 10).")
+                .WithDescription("One page of the planning sessions visible to the caller, paged in the database: most recently updated first (CreatedDescending, the default) or least recently updated first (CreatedAscending), id as the tie-break. Filters: status, captainId, vesselId, fleetId, createdAfter, createdBefore; a global admin may narrow with tenantId and userId, a tenant admin with userId. Paging and filters come from the JSON body (EnumerationQuery) or the querystring (pageNumber, pageSize 1 to 1000, default 10).")
                 .WithRequestBody(OpenApiJson.BodyFor<EnumerationQuery>("Paging and filters", false))
                 .WithResponse(200, OpenApiJson.For<EnumerationResult<PlanningSession>>("One page"))
                 .WithSecurity("ApiKey"));
@@ -149,7 +148,7 @@ namespace Armada.Server.Routes
                 .WithSummary("Create a planning session")
                 .WithDescription("Creates a planning session, reserves a captain, and provisions a planning dock.")
                 .WithRequestBody(OpenApiJson.BodyFor<PlanningSessionCreateRequest>("Planning session request", true))
-                .WithResponse(201, OpenApiJson.For<object>("Created planning session detail (Session, Messages, Captain, Vessel)"))
+                .WithResponse(201, OpenApiJson.For<PlanningSessionDetail>("Created planning session detail (Session, MessageCount, Captain, Vessel, LinkedObjectiveCount)"))
                 .WithResponse(400, OpenApiResponseMetadata.BadRequest())
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())
                 .WithResponse(501, OpenApiJson.For<ApiStatusErrorResponse>("Not supported for the captain's runtime (Error NotImplemented)"))
@@ -190,13 +189,56 @@ namespace Armada.Server.Routes
                 }
             },
             api => api
-                .WithResponse(200, OpenApiResponseMetadata.Create("Successful response"))
+                .WithResponse(200, OpenApiJson.For<PlanningSessionDetail>("Planning session detail (Session, MessageCount, Captain, Vessel, LinkedObjectiveCount)"))
                 .WithTag("Planning")
                 .WithSummary("Get a planning session")
-                .WithDescription("Returns a planning session, its transcript, and related captain/vessel context.")
+                .WithDescription("Returns a planning session with its captain and vessel, the transcript's MessageCount, and LinkedObjectiveCount. The transcript itself is read with POST /api/v1/planning-sessions/{id}/messages/enumerate.")
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Planning session ID (psn_ prefix)"))
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())
                 .WithResponse(501, OpenApiJson.For<ApiStatusErrorResponse>("Not supported for the captain's runtime (Error NotImplemented)"))
+                .WithSecurity("ApiKey"));
+
+            app.Post("/api/v1/planning-sessions/{id}/messages/enumerate", async (ApiRequest req) =>
+            {
+                AuthContext ctx = await authenticate(req.Http).ConfigureAwait(false);
+                if (!authz.IsAuthorized(ctx, req.Http.Request.Method.ToString(), req.Http.Request.Url.RawWithoutQuery))
+                {
+                    req.Http.Response.StatusCode = ctx.IsAuthenticated ? 403 : 401;
+                    return new ApiErrorResponse
+                    {
+                        Error = ctx.IsAuthenticated ? ApiResultEnum.Forbidden : ApiResultEnum.NotAuthorized,
+                        Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required"
+                    };
+                }
+
+                EnumerationQuery query = EnumerationRequestReader.Read(req, _jsonOptions);
+                try
+                {
+                    PlanningSession? session = await ReadSessionForContextAsync(ctx, req.Parameters["id"]).ConfigureAwait(false);
+                    if (session == null)
+                    {
+                        req.Http.Response.StatusCode = 404;
+                        return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Planning session not found" };
+                    }
+
+                    return await _database.PlanningSessionMessages.EnumeratePageBySessionAsync(session.Id, query).ConfigureAwait(false);
+                }
+                catch (NotSupportedException ex)
+                {
+                    req.Http.Response.StatusCode = 501;
+                    return new ApiStatusErrorResponse(ApiStatusErrorCodeEnum.NotImplemented, ex.Message);
+                }
+            },
+            api => api
+                .WithTag("Planning")
+                .WithSummary("Enumerate a planning session's transcript")
+                .WithDescription("One page of the session's messages, paged in the database: newest first (CreatedDescending, the default) or oldest first (CreatedAscending), by sequence with the id as the tie-break. TotalRecords is the transcript length. Paging comes from the JSON body (EnumerationQuery) or the querystring (pageNumber, pageSize 1 to 1000, default 10, order).")
+                .WithParameter(OpenApiParameterMetadata.Path("id", "Planning session ID (psn_ prefix)"))
+                .WithRequestBody(OpenApiJson.BodyFor<EnumerationQuery>("Paging and order", false))
+                .WithResponse(200, OpenApiJson.For<EnumerationResult<PlanningSessionMessage>>("One page of messages"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
+                .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithResponse(501, OpenApiJson.For<ApiStatusErrorResponse>("Not supported by the database provider (Error NotImplemented)"))
                 .WithSecurity("ApiKey"));
 
             app.Post<PlanningSessionMessageRequest>("/api/v1/planning-sessions/{id}/messages", async (ApiRequest req) =>
@@ -243,7 +285,7 @@ namespace Armada.Server.Routes
                 }
             },
             api => api
-                .WithResponse(200, OpenApiResponseMetadata.Create("Successful response"))
+                .WithResponse(200, OpenApiJson.For<PlanningSessionDetail>("Planning session detail (Session, MessageCount, Captain, Vessel, LinkedObjectiveCount)"))
                 .WithTag("Planning")
                 .WithSummary("Send a planning message")
                 .WithDescription("Appends a user message to the planning transcript and launches the next planning turn.")
@@ -280,11 +322,7 @@ namespace Armada.Server.Routes
                     }
 
                     Voyage voyage = await _planningSessions.DispatchAsync(session, request).ConfigureAwait(false);
-                    List<Objective> linkedObjectives = await _objectives.EnumerateByPlanningSessionAsync(ctx, session.Id).ConfigureAwait(false);
-                    foreach (Objective objective in linkedObjectives)
-                    {
-                        await _objectives.LinkVoyageAsync(ctx, objective.Id, voyage.Id).ConfigureAwait(false);
-                    }
+                    await PlanningDispatchLinker.LinkAsync(_objectives, ctx, session.Id, voyage.Id).ConfigureAwait(false);
                     return voyage;
                 }
                 catch (NotSupportedException ex)
@@ -301,7 +339,7 @@ namespace Armada.Server.Routes
                 .WithResponse(200, OpenApiResponseMetadata.Create("Successful response"))
                 .WithTag("Planning")
                 .WithSummary("Dispatch from a planning session")
-                .WithDescription("Creates a voyage from selected or inferred planning output.")
+                .WithDescription("Creates a voyage from selected or inferred planning output and links it to every objective linked to the session. When linking would push an objective's id lists over MaxLinkedIds the call fails with 400 CollectionLimitExceeded, naming the voyage that was dispatched.")
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Planning session ID (psn_ prefix)"))
                 .WithRequestBody(OpenApiJson.BodyFor<PlanningSessionDispatchRequest>("Planning dispatch request", false))
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())
@@ -393,7 +431,7 @@ namespace Armada.Server.Routes
                 }
             },
             api => api
-                .WithResponse(200, OpenApiResponseMetadata.Create("Successful response"))
+                .WithResponse(200, OpenApiJson.For<PlanningSessionDetail>("Planning session detail (Session, MessageCount, Captain, Vessel, LinkedObjectiveCount)"))
                 .WithTag("Planning")
                 .WithSummary("Stop a planning session")
                 .WithDescription("Stops an active planning session, releases the captain, and reclaims the planning dock.")
@@ -438,7 +476,7 @@ namespace Armada.Server.Routes
                 }
             },
             api => api
-                .WithResponse(200, OpenApiResponseMetadata.Create("Successful response"))
+                .WithResponse(200, OpenApiJson.For<PlanningSessionDetail>("Planning session detail (Session, MessageCount, Captain, Vessel, LinkedObjectiveCount)"))
                 .WithTag("Planning")
                 .WithSummary("Stop the current planning turn")
                 .WithDescription("Aborts the in-flight planning turn (cancelling the captain runtime) while keeping the session active so the user can keep chatting.")
@@ -494,13 +532,13 @@ namespace Armada.Server.Routes
                 .WithSecurity("ApiKey"));
         }
 
-        private async Task<List<PlanningSession>> EnumerateSessionsAsync(AuthContext ctx)
+        private async Task<EnumerationResult<PlanningSession>> EnumerateSessionsAsync(AuthContext ctx, EnumerationQuery query)
         {
             if (ctx.IsAdmin)
-                return await _database.PlanningSessions.EnumerateAsync().ConfigureAwait(false);
+                return await _database.PlanningSessions.EnumeratePageAsync(query.TenantId, query.UserId, query).ConfigureAwait(false);
             if (ctx.IsTenantAdmin)
-                return await _database.PlanningSessions.EnumerateAsync(ctx.TenantId!).ConfigureAwait(false);
-            return await _database.PlanningSessions.EnumerateAsync(ctx.TenantId!, ctx.UserId!).ConfigureAwait(false);
+                return await _database.PlanningSessions.EnumeratePageAsync(ctx.TenantId!, query.UserId, query).ConfigureAwait(false);
+            return await _database.PlanningSessions.EnumeratePageAsync(ctx.TenantId!, ctx.UserId!, query).ConfigureAwait(false);
         }
 
         private async Task<PlanningSession?> ReadSessionForContextAsync(AuthContext ctx, string id)
@@ -530,26 +568,19 @@ namespace Armada.Server.Routes
             return await _database.Vessels.ReadAsync(ctx.TenantId!, ctx.UserId!, id).ConfigureAwait(false);
         }
 
-        private async Task<object> BuildDetailResponseAsync(PlanningSession session, AuthContext ctx)
+        private async Task<PlanningSessionDetail> BuildDetailResponseAsync(PlanningSession session, AuthContext ctx)
         {
             PlanningSession? refreshed = await ReadSessionForContextAsync(ctx, session.Id).ConfigureAwait(false);
             if (refreshed == null)
                 throw new KeyNotFoundException("Planning session not found: " + session.Id);
 
-            List<PlanningSessionMessage> messages = await _database.PlanningSessionMessages
-                .EnumerateBySessionAsync(refreshed.Id)
-                .ConfigureAwait(false);
-
-            Captain? captain = await ReadCaptainForContextAsync(ctx, refreshed.CaptainId).ConfigureAwait(false);
-            Vessel? vessel = await ReadVesselForContextAsync(ctx, refreshed.VesselId).ConfigureAwait(false);
-
-            return new
-            {
-                Session = refreshed,
-                Messages = messages.OrderBy(m => m.Sequence).ToList(),
-                Captain = captain,
-                Vessel = vessel
-            };
+            PlanningSessionDetail detail = new PlanningSessionDetail();
+            detail.Session = refreshed;
+            detail.MessageCount = await _database.PlanningSessionMessages.CountBySessionAsync(refreshed.Id).ConfigureAwait(false);
+            detail.Captain = await ReadCaptainForContextAsync(ctx, refreshed.CaptainId).ConfigureAwait(false);
+            detail.Vessel = await ReadVesselForContextAsync(ctx, refreshed.VesselId).ConfigureAwait(false);
+            detail.LinkedObjectiveCount = await _objectives.CountByPlanningSessionAsync(ctx, refreshed.Id).ConfigureAwait(false);
+            return detail;
         }
     }
 }

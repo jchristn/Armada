@@ -4,6 +4,7 @@ namespace Armada.Core.Models
     using System.Collections.Generic;
     using System.Diagnostics;
     using System.Linq;
+    using Armada.Core.Services;
 
     /// <summary>
     /// Paginated result wrapper for enumeration queries.
@@ -41,6 +42,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// The result objects for this page.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxPageSize, Reason = "One page")]
         public List<T> Objects { get; set; } = new List<T>();
 
         /// <summary>

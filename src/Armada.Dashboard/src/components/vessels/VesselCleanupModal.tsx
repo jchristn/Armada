@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useId, useMemo, useState } from 'react';
 import {
   getVesselCleanupInventory,
+  listVesselCleanupResources,
   runVesselCleanup,
   type VesselCleanupDisposition,
   type VesselCleanupInventory,
   type VesselCleanupItemResult,
   type VesselCleanupResource,
 } from '../../api/client';
+import type { EnumerationResult } from '../../types/models';
 import { useLocale } from '../../context/LocaleContext';
 import { formatBytes } from '../../lib/format';
 import ConfirmDialog from '../shared/ConfirmDialog';
@@ -37,6 +39,15 @@ const GROUPS: { disposition: VesselCleanupDisposition; title: string; hint: stri
   },
 ];
 
+/** Rows shown per disposition group; the server pages each group and reports the exact total. */
+export const CLEANUP_GROUP_PAGE_SIZE = 50;
+/** Page size used when every safe resource must be read (select all), page by page. */
+const SELECT_ALL_PAGE_SIZE = 1000;
+const MAX_SELECT_ALL_PAGES = 100;
+
+type GroupPages = Record<VesselCleanupDisposition, EnumerationResult<VesselCleanupResource> | null>;
+const EMPTY_PAGES: GroupPages = { Safe: null, InUse: null, Unknown: null };
+
 /**
  * Vessel cleanup: opens with a read-only inventory of the vessel's docks, worktrees, and Armada-managed branches,
  * grouped as safe, in use, or unknown with the reason for each. Only safe resources can be selected; cleanup asks for
@@ -50,22 +61,43 @@ export default function VesselCleanupModal({ vesselId, vesselName, open, onClose
   const [running, setRunning] = useState(false);
   const [error, setError] = useState('');
   const [inventory, setInventory] = useState<VesselCleanupInventory | null>(null);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
+  // Selected safe keys with their measured size (null when unmeasured), so selection survives paging.
+  const [selected, setSelected] = useState<Map<string, number | null>>(new Map());
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [results, setResults] = useState<VesselCleanupItemResult[] | null>(null);
+  const [pages, setPages] = useState<GroupPages>(EMPTY_PAGES);
+  const [selectingAll, setSelectingAll] = useState(false);
+
+  // Page 1 replaces the group; later pages append (Load more), keeping the server's exact totals.
+  const loadGroup = useCallback(async (disposition: VesselCleanupDisposition, pageNumber: number) => {
+    const page = await listVesselCleanupResources(vesselId, { pageNumber, pageSize: CLEANUP_GROUP_PAGE_SIZE, status: disposition });
+    setPages(prev => {
+      const existing = prev[disposition];
+      if (pageNumber <= 1 || !existing) return { ...prev, [disposition]: page };
+      return { ...prev, [disposition]: { ...page, objects: [...existing.objects, ...(page.objects ?? [])] } };
+    });
+  }, [vesselId]);
+
+  const loadGroups = useCallback(async (summary: VesselCleanupInventory) => {
+    setPages(EMPTY_PAGES);
+    if (summary.resourceCount === 0) return;
+    await Promise.all(GROUPS.map(g => loadGroup(g.disposition, 1)));
+  }, [loadGroup]);
 
   const scan = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
-      setInventory(await getVesselCleanupInventory(vesselId));
-      setSelected(new Set());
+      const summary = await getVesselCleanupInventory(vesselId);
+      setInventory(summary);
+      setSelected(new Map());
+      await loadGroups(summary);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setLoading(false);
     }
-  }, [vesselId]);
+  }, [vesselId, loadGroups]);
 
   useEffect(() => {
     if (!open) return;
@@ -74,37 +106,57 @@ export default function VesselCleanupModal({ vesselId, vesselName, open, onClose
     void scan();
   }, [open, scan]);
 
-  const grouped = useMemo(() => {
-    const map: Record<VesselCleanupDisposition, VesselCleanupResource[]> = { Safe: [], InUse: [], Unknown: [] };
-    for (const r of inventory?.resources ?? []) (map[r.disposition] ?? map.Unknown).push(r);
-    return map;
-  }, [inventory]);
+  const grouped = useMemo(() => ({
+    Safe: pages.Safe?.objects ?? [],
+    InUse: pages.InUse?.objects ?? [],
+    Unknown: pages.Unknown?.objects ?? [],
+  }), [pages]);
 
   if (!open) return null;
 
-  const safeKeys = grouped.Safe.map(r => r.key);
-  const allSafeSelected = safeKeys.length > 0 && safeKeys.every(k => selected.has(k));
-  const selectedBytes = grouped.Safe.filter(r => selected.has(r.key)).reduce((sum, r) => sum + (r.sizeBytes ?? 0), 0);
+  const safeTotal = pages.Safe?.totalRecords ?? inventory?.safeCount ?? 0;
+  const allSafeSelected = safeTotal > 0 && selected.size >= safeTotal;
+  const selectedBytes = [...selected.values()].reduce<number>((sum, size) => sum + (size ?? 0), 0);
 
-  const toggle = (key: string) => {
+  const toggle = (r: VesselCleanupResource) => {
     setSelected(prev => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key); else next.add(key);
+      const next = new Map(prev);
+      if (next.has(r.key)) next.delete(r.key); else next.set(r.key, r.sizeBytes);
       return next;
     });
   };
 
-  const toggleAllSafe = () => setSelected(allSafeSelected ? new Set() : new Set(safeKeys));
+  // Every safe resource, not just this page: read the Safe group page by page (1000 per page) explicitly.
+  const toggleAllSafe = async () => {
+    if (allSafeSelected) { setSelected(new Map()); return; }
+    setSelectingAll(true);
+    setError('');
+    try {
+      const next = new Map<string, number | null>();
+      for (let pageNumber = 1; pageNumber <= MAX_SELECT_ALL_PAGES; pageNumber++) {
+        const page = await listVesselCleanupResources(vesselId, { pageNumber, pageSize: SELECT_ALL_PAGE_SIZE, status: 'Safe' });
+        for (const r of page.objects ?? []) next.set(r.key, r.sizeBytes);
+        if (!page.objects?.length || pageNumber >= page.totalPages) break;
+      }
+      setSelected(next);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSelectingAll(false);
+    }
+  };
 
   const runCleanup = async () => {
     setConfirmOpen(false);
     setRunning(true);
     setError('');
     try {
-      const result = await runVesselCleanup(vesselId, [...selected]);
+      // runVesselCleanup sends at most 1000 keys per request and merges the outcomes.
+      const result = await runVesselCleanup(vesselId, [...selected.keys()]);
       setResults(result.results);
       setInventory(result.inventory);
-      setSelected(new Set());
+      setSelected(new Map());
+      await loadGroups(result.inventory);
     } catch (e) {
       setError(t('Cleanup failed: {{message}}', { message: e instanceof Error ? e.message : String(e) }));
     } finally {
@@ -139,7 +191,7 @@ export default function VesselCleanupModal({ vesselId, vesselName, open, onClose
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        style={{ width: 'min(1100px, 96vw)', maxWidth: 'min(1100px, 96vw)', maxHeight: '92vh', overflowY: 'auto' }}
+        style={{ width: '95vw', maxWidth: '95vw', height: '95vh', maxHeight: '95vh', overflowY: 'auto' }}
         onClick={e => e.stopPropagation()}
       >
         <h3 id={titleId} style={{ marginTop: 0 }}>{t('Cleanup: {{name}}', { name: vesselName })}</h3>
@@ -183,16 +235,18 @@ export default function VesselCleanupModal({ vesselId, vesselName, open, onClose
               {inventory.safeUnmeasuredCount > 0 && ` ${t('{{count}} safe resources could not be measured.', { count: String(inventory.safeUnmeasuredCount) })}`}
             </p>
 
-            {inventory.resources.length === 0 && (
+            {inventory.resourceCount === 0 && (
               <p className="text-dim vessel-cleanup-empty">{t('Nothing to clean up: this vessel has no docks, orphaned worktrees, or Armada branches.')}</p>
             )}
 
-            {inventory.resources.length > 0 && GROUPS.map(group => {
+            {inventory.resourceCount > 0 && GROUPS.map(group => {
               const rows = grouped[group.disposition];
+              const page = pages[group.disposition];
+              const total = page?.totalRecords ?? rows.length;
               const selectable = group.disposition === 'Safe';
               return (
                 <section key={group.disposition} className="vessel-cleanup-group" data-disposition={group.disposition} aria-label={t(group.title)} style={{ marginBottom: '1rem' }}>
-                  <h4 style={{ margin: '0 0 0.25rem' }}>{t(group.title)} ({rows.length})</h4>
+                  <h4 style={{ margin: '0 0 0.25rem' }}>{t(group.title)} ({total})</h4>
                   <p className="text-dim" style={{ margin: '0 0 0.4rem', fontSize: '0.85rem' }}>{t(group.hint)}</p>
                   {rows.length === 0 ? (
                     <p className="text-dim" style={{ margin: 0 }}>{t('None.')}</p>
@@ -202,7 +256,7 @@ export default function VesselCleanupModal({ vesselId, vesselName, open, onClose
                         <tr>
                           <th style={{ width: '2rem' }}>
                             {selectable && (
-                              <input type="checkbox" aria-label={t('Select all safe resources')} checked={allSafeSelected} onChange={toggleAllSafe} disabled={running} />
+                              <input type="checkbox" aria-label={t('Select all safe resources')} checked={allSafeSelected} onChange={() => void toggleAllSafe()} disabled={running || selectingAll} />
                             )}
                           </th>
                           <th>{t('Type')}</th>
@@ -222,7 +276,7 @@ export default function VesselCleanupModal({ vesselId, vesselName, open, onClose
                                 checked={selectable && selected.has(r.key)}
                                 disabled={!selectable || running}
                                 title={selectable ? undefined : t('Only safe resources can be cleaned up.')}
-                                onChange={() => toggle(r.key)}
+                                onChange={() => toggle(r)}
                               />
                             </td>
                             <td>{typeLabel(r)}</td>
@@ -238,6 +292,11 @@ export default function VesselCleanupModal({ vesselId, vesselName, open, onClose
                         ))}
                       </tbody>
                     </table></div>
+                  )}
+                  {page && page.pageNumber < page.totalPages && (
+                    <div className="vessel-cleanup-pager" style={{ marginTop: '0.4rem' }}>
+                      <button type="button" className="btn btn-sm" disabled={running} onClick={() => void loadGroup(group.disposition, page.pageNumber + 1)}>{t('Load more')}</button>
+                    </div>
                   )}
                 </section>
               );

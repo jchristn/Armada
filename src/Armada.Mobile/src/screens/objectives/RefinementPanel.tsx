@@ -117,6 +117,16 @@ export function RefinementPanel({ objective, refinement, reference, pipelines, c
           accessibilityValue={session.status}
         />
       ))}
+      {refinement.sessionsTotal > refinement.sessions.length ? (
+        <View style={styles.pad}>
+          <Button
+            label={t('Load more ({{shown}} of {{total}})', { shown: refinement.sessions.length, total: refinement.sessionsTotal })}
+            variant="secondary"
+            onPress={() => void refinement.loadMoreSessions()}
+            testID="objective-refine-more-sessions"
+          />
+        </View>
+      ) : null}
 
       {!detail ? (
         <View style={styles.pad}>
@@ -146,6 +156,14 @@ export function RefinementPanel({ objective, refinement, reference, pipelines, c
             </ActionRow>
           ) : null}
 
+          {(detail.messageCount ?? 0) > detail.messages.length ? (
+            <Button
+              label={t('Load earlier messages ({{shown}} of {{total}})', { shown: detail.messages.length, total: detail.messageCount })}
+              variant="secondary"
+              onPress={() => void refinement.loadOlder()}
+              testID="objective-refine-load-older"
+            />
+          ) : null}
           {detail.messages.map((message) => {
             const selected = message.id === selectedMessageId;
             return (

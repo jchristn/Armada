@@ -26,14 +26,14 @@ namespace Armada.Helm.Commands
         /// Optional new title for the restarted mission.
         /// </summary>
         [Description("New mission title")]
-        [CommandOption("--title|-t")]
+        [CommandOption("--title|-t <TITLE>")]
         public string? Title { get; set; }
 
         /// <summary>
         /// Optional new description for the restarted mission.
         /// </summary>
         [Description("New mission description/instructions")]
-        [CommandOption("--description|-d")]
+        [CommandOption("--description|-d <TEXT>")]
         public string? Description { get; set; }
     }
 }

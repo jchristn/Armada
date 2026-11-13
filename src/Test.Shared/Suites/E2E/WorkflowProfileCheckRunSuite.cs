@@ -460,6 +460,33 @@ namespace Test.Shared.Suites.E2E
                 AssertEqual(HttpStatusCode.Unauthorized, response.StatusCode);
             }));
 
+            cases.Add(CaseAsync("check_runs_import_rejects_too_many_artifacts", "CheckRuns_ImportRejectsTooManyArtifacts", TestTags.Negative, async () =>
+            {
+                E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this);
+                List<CheckRunArtifact> artifacts = new List<CheckRunArtifact>();
+                for (int i = 0; i < 257; i++) artifacts.Add(new CheckRunArtifact { Path = "artifacts/a" + i + ".txt", SizeBytes = 1, LastWriteUtc = DateTime.UtcNow });
+                HttpResponseMessage rejected = await fx.AuthClient.PostAsync("/api/v1/check-runs/import", JsonHelper.ToJsonContent(new CheckRunImportRequest
+                {
+                    VesselId = _VesselId, Type = CheckRunTypeEnum.UnitTest, Status = CheckRunStatusEnum.Passed, ProviderName = "ci", ExternalId = "too-many", Artifacts = artifacts
+                })).ConfigureAwait(false);
+                string body = await rejected.Content.ReadAsStringAsync().ConfigureAwait(false);
+                AssertEqual(HttpStatusCode.BadRequest, rejected.StatusCode, body);
+                E2eLimitErrorBody error = JsonHelper.Deserialize<E2eLimitErrorBody>(body);
+                AssertEqual("CollectionLimitExceeded", error.Data?.Code, body);
+                AssertEqual("Artifacts", error.Data!.Field);
+                AssertEqual(256, error.Data.Limit);
+                AssertEqual(257L, error.Data.Actual);
+
+                artifacts.RemoveAt(0);
+                HttpResponseMessage accepted = await fx.AuthClient.PostAsync("/api/v1/check-runs/import", JsonHelper.ToJsonContent(new CheckRunImportRequest
+                {
+                    VesselId = _VesselId, Type = CheckRunTypeEnum.UnitTest, Status = CheckRunStatusEnum.Passed, ProviderName = "ci", ExternalId = "at-limit", Artifacts = artifacts
+                })).ConfigureAwait(false);
+                AssertEqual(HttpStatusCode.Created, accepted.StatusCode, await accepted.Content.ReadAsStringAsync().ConfigureAwait(false));
+                CheckRun run = await JsonHelper.DeserializeAsync<CheckRun>(accepted).ConfigureAwait(false);
+                AssertEqual(256, run.Artifacts.Count, "exactly the limit is stored");
+            }));
+
             cases.Add(CaseAsync("workflow_profile_check_run_cleanup_resources", "WorkflowProfileCheckRun_CleanupResources", TestTags.Positive, async () =>
             {
                 E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this);

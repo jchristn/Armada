@@ -202,7 +202,7 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
-            cases.Add(CaseAsync("enumerate_prefers_newer_incident_snapshot_when_timestamps_tie", "EnumerateAsync prefers newer incident snapshot when timestamps tie", TestTags.Positive, async () =>
+            cases.Add(CaseAsync("import_legacy_snapshots_prefers_newer_snapshot_when_timestamps_tie", "ImportLegacySnapshotsAsync imports the newer incident snapshot when timestamps tie, once", TestTags.Positive, async () =>
             {
                 using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
                 IncidentService incidents = new IncidentService(testDb.Driver);
@@ -266,6 +266,11 @@ namespace Test.Shared.Suites.Services
 
                 await testDb.Driver.Events.CreateAsync(originalSnapshot).ConfigureAwait(false);
                 await testDb.Driver.Events.CreateAsync(updatedSnapshot).ConfigureAwait(false);
+
+                // Snapshot events alone are history; the incidents table is the current state, filled once from them.
+                AssertNull(await incidents.ReadAsync(auth, original.Id).ConfigureAwait(false), "not imported yet");
+                AssertEqual(1, await incidents.ImportLegacySnapshotsAsync().ConfigureAwait(false), "one incident imported");
+                AssertEqual(0, await incidents.ImportLegacySnapshotsAsync().ConfigureAwait(false), "a second import does nothing");
 
                 Incident? loaded = await incidents.ReadAsync(auth, original.Id).ConfigureAwait(false);
                 loaded = NotNull(loaded);

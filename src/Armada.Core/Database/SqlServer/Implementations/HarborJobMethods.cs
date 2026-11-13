@@ -114,6 +114,36 @@ namespace Armada.Core.Database.SqlServer.Implementations
         }
 
         /// <inheritdoc />
+        public async Task<EnumerationResult<HarborJobRecord>> EnumeratePageAsync(string harborId, bool openOnly, DateTime fromUtc, DateTime toUtc, EnumerationQuery query, CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(harborId)) throw new ArgumentNullException(nameof(harborId));
+            if (query == null) throw new ArgumentNullException(nameof(query));
+            string where = openOnly
+                ? " WHERE harbor_id = @harbor_id AND ended_utc IS NULL"
+                : " WHERE harbor_id = @harbor_id AND launched_utc < @to_utc AND (ended_utc IS NULL OR ended_utc >= @from_utc)";
+            string direction = query.Order == EnumerationOrderEnum.CreatedAscending ? "ASC" : "DESC";
+            Action<SqlCommand> bind = cmd =>
+            {
+                SqlServerCommandHelper.Add(cmd, "@harbor_id", harborId);
+                if (!openOnly)
+                {
+                    SqlServerCommandHelper.AddDate(cmd, "@from_utc", fromUtc);
+                    SqlServerCommandHelper.AddDate(cmd, "@to_utc", toUtc);
+                }
+            };
+
+            using (SqlConnection conn = new SqlConnection(_ConnectionString))
+            {
+                await conn.OpenAsync(token).ConfigureAwait(false);
+                long total = await SqlServerCommandHelper.CountAsync(conn, "SELECT COUNT(*) FROM harbor_jobs" + where + ";", bind, token).ConfigureAwait(false);
+                List<HarborJobRecord> rows = await SqlServerCommandHelper.QueryAsync(conn,
+                    "SELECT * FROM harbor_jobs" + where + " ORDER BY launched_utc " + direction + ", id " + direction + SqlServerCommandHelper.Page(query.Offset, query.PageSize) + ";",
+                    bind, FromReader, token).ConfigureAwait(false);
+                return EnumerationResult<HarborJobRecord>.Create(query, rows, total);
+            }
+        }
+
+        /// <inheritdoc />
         public async Task<List<HarborJobRecord>> EnumerateOpenAsync(string harborId, CancellationToken token = default)
         {
             if (String.IsNullOrEmpty(harborId)) throw new ArgumentNullException(nameof(harborId));

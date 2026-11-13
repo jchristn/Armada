@@ -45,58 +45,9 @@ namespace Armada.Core.Services
             if (auth == null) throw new ArgumentNullException(nameof(auth));
             if (query == null) throw new ArgumentNullException(nameof(query));
 
-            List<Incident> incidents = await ReadAllIncidentsAsync(auth, token).ConfigureAwait(false);
-            IEnumerable<Incident> filtered = incidents;
-
-            if (!String.IsNullOrWhiteSpace(query.VesselId))
-                filtered = filtered.Where(item => String.Equals(item.VesselId, query.VesselId, StringComparison.OrdinalIgnoreCase));
-            if (!String.IsNullOrWhiteSpace(query.EnvironmentId))
-                filtered = filtered.Where(item => String.Equals(item.EnvironmentId, query.EnvironmentId, StringComparison.OrdinalIgnoreCase));
-            if (!String.IsNullOrWhiteSpace(query.DeploymentId))
-                filtered = filtered.Where(item => String.Equals(item.DeploymentId, query.DeploymentId, StringComparison.OrdinalIgnoreCase));
-            if (!String.IsNullOrWhiteSpace(query.ReleaseId))
-                filtered = filtered.Where(item => String.Equals(item.ReleaseId, query.ReleaseId, StringComparison.OrdinalIgnoreCase));
-            if (!String.IsNullOrWhiteSpace(query.MissionId))
-                filtered = filtered.Where(item => String.Equals(item.MissionId, query.MissionId, StringComparison.OrdinalIgnoreCase));
-            if (!String.IsNullOrWhiteSpace(query.VoyageId))
-                filtered = filtered.Where(item => String.Equals(item.VoyageId, query.VoyageId, StringComparison.OrdinalIgnoreCase));
-            if (query.Status.HasValue)
-                filtered = filtered.Where(item => item.Status == query.Status.Value);
-            if (query.Severity.HasValue)
-                filtered = filtered.Where(item => item.Severity == query.Severity.Value);
-
-            string? search = Normalize(query.Search);
-            if (!String.IsNullOrWhiteSpace(search))
-            {
-                filtered = filtered.Where(item =>
-                    ContainsIgnoreCase(item.Title, search)
-                    || ContainsIgnoreCase(item.Summary, search)
-                    || ContainsIgnoreCase(item.Impact, search)
-                    || ContainsIgnoreCase(item.RootCause, search)
-                    || ContainsIgnoreCase(item.RecoveryNotes, search)
-                    || ContainsIgnoreCase(item.Postmortem, search)
-                    || ContainsIgnoreCase(item.EnvironmentName, search));
-            }
-
-            List<Incident> ordered = filtered
-                .OrderByDescending(item => item.LastUpdateUtc)
-                .ThenByDescending(item => item.Id, StringComparer.Ordinal)
-                .ToList();
-
-            int pageSize = query.PageSize < 1 ? 50 : Math.Min(query.PageSize, 500);
-            int pageNumber = query.PageNumber < 1 ? 1 : query.PageNumber;
-            int offset = (pageNumber - 1) * pageSize;
-            List<Incident> page = ordered.Skip(offset).Take(pageSize).ToList();
-
-            return new EnumerationResult<Incident>
-            {
-                PageNumber = pageNumber,
-                PageSize = pageSize,
-                TotalRecords = ordered.Count,
-                TotalPages = pageSize > 0 ? (int)Math.Ceiling((double)ordered.Count / pageSize) : 0,
-                Objects = page,
-                TotalMs = 0
-            };
+            // Paged, filtered, and counted in the database, inside the caller's scope.
+            ApplyScope(auth, query);
+            return await _Database.Incidents.EnumerateAsync(query, token).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -107,8 +58,7 @@ namespace Armada.Core.Services
             if (auth == null) throw new ArgumentNullException(nameof(auth));
             if (String.IsNullOrWhiteSpace(id)) throw new ArgumentNullException(nameof(id));
 
-            List<ArmadaEvent> snapshots = await ReadIncidentSnapshotEventsAsync(auth, id, token).ConfigureAwait(false);
-            return ProjectLatestIncident(snapshots);
+            return await _Database.Incidents.ReadAsync(id, BuildScope(auth), token).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -118,6 +68,7 @@ namespace Armada.Core.Services
         {
             if (auth == null) throw new ArgumentNullException(nameof(auth));
             if (request == null) throw new ArgumentNullException(nameof(request));
+            CollectionBounds.Validate(request);
 
             Incident incident = new Incident
             {
@@ -141,7 +92,7 @@ namespace Armada.Core.Services
                 Postmortem = Normalize(request.Postmortem),
                 FailureKind = Normalize(request.FailureKind),
                 RecoveryAttempts = request.RecoveryAttempts.HasValue ? Math.Max(0, request.RecoveryAttempts.Value) : 0,
-                RescueMissionIds = request.RescueMissionIds ?? new List<string>(),
+                RescueMissionIds = DistinctIds(request.RescueMissionIds),
                 DetectedUtc = request.DetectedUtc?.ToUniversalTime() ?? DateTime.UtcNow,
                 MitigatedUtc = request.MitigatedUtc?.ToUniversalTime(),
                 ClosedUtc = request.ClosedUtc?.ToUniversalTime(),
@@ -149,6 +100,8 @@ namespace Armada.Core.Services
             };
 
             ApplyLifecycleTimestamps(incident);
+            CollectionBounds.Validate(incident);
+            await _Database.Incidents.CreateAsync(incident, token).ConfigureAwait(false);
             await WriteSnapshotAsync(auth, incident, token).ConfigureAwait(false);
             OnIncidentChanged?.Invoke(incident);
             return incident;
@@ -162,6 +115,7 @@ namespace Armada.Core.Services
             if (auth == null) throw new ArgumentNullException(nameof(auth));
             if (String.IsNullOrWhiteSpace(id)) throw new ArgumentNullException(nameof(id));
             if (request == null) throw new ArgumentNullException(nameof(request));
+            CollectionBounds.Validate(request);
 
             Incident incident = await ReadAsync(auth, id, token).ConfigureAwait(false)
                 ?? throw new KeyNotFoundException("Incident not found.");
@@ -184,12 +138,14 @@ namespace Armada.Core.Services
             incident.Postmortem = request.Postmortem != null ? Normalize(request.Postmortem) : incident.Postmortem;
             incident.FailureKind = request.FailureKind != null ? Normalize(request.FailureKind) : incident.FailureKind;
             incident.RecoveryAttempts = request.RecoveryAttempts.HasValue ? Math.Max(0, request.RecoveryAttempts.Value) : incident.RecoveryAttempts;
-            incident.RescueMissionIds = request.RescueMissionIds ?? incident.RescueMissionIds;
+            incident.RescueMissionIds = request.RescueMissionIds != null ? DistinctIds(request.RescueMissionIds) : incident.RescueMissionIds;
             incident.MitigatedUtc = request.MitigatedUtc.HasValue ? request.MitigatedUtc.Value.ToUniversalTime() : incident.MitigatedUtc;
             incident.ClosedUtc = request.ClosedUtc.HasValue ? request.ClosedUtc.Value.ToUniversalTime() : incident.ClosedUtc;
             incident.LastUpdateUtc = DateTime.UtcNow;
 
             ApplyLifecycleTimestamps(incident);
+            CollectionBounds.Validate(incident);
+            await _Database.Incidents.UpdateAsync(incident, token).ConfigureAwait(false);
             await WriteSnapshotAsync(auth, incident, token).ConfigureAwait(false);
             OnIncidentChanged?.Invoke(incident);
             return incident;
@@ -203,17 +159,40 @@ namespace Armada.Core.Services
             if (auth == null) throw new ArgumentNullException(nameof(auth));
             if (String.IsNullOrWhiteSpace(id)) throw new ArgumentNullException(nameof(id));
 
-            List<ArmadaEvent> snapshots = await ReadIncidentSnapshotEventsAsync(auth, id, token).ConfigureAwait(false);
-            if (snapshots.Count == 0)
+            Incident? existing = await ReadAsync(auth, id, token).ConfigureAwait(false);
+            if (existing == null)
                 throw new KeyNotFoundException("Incident not found.");
 
+            await _Database.Incidents.DeleteAsync(id, token).ConfigureAwait(false);
+            List<ArmadaEvent> snapshots = await ReadIncidentSnapshotEventsAsync(auth, id, token).ConfigureAwait(false);
             foreach (ArmadaEvent snapshot in snapshots)
             {
                 await DeleteEventAsync(auth, snapshot.Id, token).ConfigureAwait(false);
             }
         }
 
-        private async Task<List<Incident>> ReadAllIncidentsAsync(AuthContext auth, CancellationToken token)
+        /// <summary>
+        /// One-time import of incidents recorded before the incidents table existed: when the table is empty, the latest
+        /// incident.snapshot event of each incident becomes its row (a newer snapshot wins; equal timestamps fall back to
+        /// the larger event id). Later calls do nothing.
+        /// </summary>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>Number of incidents imported.</returns>
+        public async Task<int> ImportLegacySnapshotsAsync(CancellationToken token = default)
+        {
+            if (await _Database.Incidents.CountAsync(token).ConfigureAwait(false) > 0) return 0;
+            AuthContext system = new AuthContext { IsAuthenticated = true, IsAdmin = true, AuthMethod = "system" };
+            List<Incident> incidents = await ReadLatestSnapshotsAsync(system, token).ConfigureAwait(false);
+            foreach (Incident incident in incidents)
+            {
+                if (await _Database.Incidents.ReadAsync(incident.Id, null, token).ConfigureAwait(false) == null)
+                    await _Database.Incidents.CreateAsync(incident, token).ConfigureAwait(false);
+            }
+
+            return incidents.Count;
+        }
+
+        private async Task<List<Incident>> ReadLatestSnapshotsAsync(AuthContext auth, CancellationToken token)
         {
             List<ArmadaEvent> snapshots = await ReadIncidentSnapshotEventsAsync(auth, null, token).ConfigureAwait(false);
             Dictionary<string, ArmadaEvent> latestByIncidentId = new Dictionary<string, ArmadaEvent>(StringComparer.OrdinalIgnoreCase);
@@ -319,15 +298,6 @@ namespace Armada.Core.Services
                 await _Database.Events.DeleteAsync(auth.TenantId!, auth.UserId!, id, token).ConfigureAwait(false);
         }
 
-        private static Incident? ProjectLatestIncident(List<ArmadaEvent> snapshots)
-        {
-            ArmadaEvent? latest = snapshots
-                .OrderByDescending(item => item.CreatedUtc)
-                .ThenByDescending(item => item.Id, StringComparer.Ordinal)
-                .FirstOrDefault();
-            return latest != null ? DeserializeIncident(latest) : null;
-        }
-
         private static Incident? DeserializeIncident(ArmadaEvent snapshot)
         {
             if (String.IsNullOrWhiteSpace(snapshot.Payload))
@@ -366,11 +336,25 @@ namespace Armada.Core.Services
             }
         }
 
-        private static bool ContainsIgnoreCase(string? value, string? search)
+        private static void ApplyScope(AuthContext auth, IncidentQuery query)
         {
-            if (String.IsNullOrWhiteSpace(value) || String.IsNullOrWhiteSpace(search))
-                return false;
-            return value.IndexOf(search, StringComparison.OrdinalIgnoreCase) >= 0;
+            if (auth.IsAdmin) return;
+            query.TenantId = auth.TenantId;
+            if (!auth.IsTenantAdmin) query.UserId = auth.UserId;
+        }
+
+        private static IncidentQuery? BuildScope(AuthContext auth)
+        {
+            if (auth.IsAdmin) return null;
+            IncidentQuery scope = new IncidentQuery();
+            ApplyScope(auth, scope);
+            return scope;
+        }
+
+        private static List<string> DistinctIds(List<string>? ids)
+        {
+            if (ids == null) return new List<string>();
+            return ids.Where(item => !String.IsNullOrWhiteSpace(item)).Select(item => item.Trim()).Distinct(StringComparer.Ordinal).ToList();
         }
 
         private static string? Normalize(string? value)

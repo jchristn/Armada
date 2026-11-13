@@ -260,6 +260,38 @@ namespace Test.Shared.Suites.Services
                 AssertNull(persistedCaptain.ProcessId);
             }));
 
+            cases.Add(CaseAsync("stop_preserves_new_owner", "Stopping an old session preserves a newer captain owner", TestTags.Positive, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync();
+                using CoordinatorFixture fixture = new CoordinatorFixture(testDb.Driver);
+                Objective objective = await fixture.CreateObjectiveAsync("owner");
+                Captain captain = await fixture.CreateCaptainAsync("owner", AgentRuntimeEnum.Custom, state: CaptainStateEnum.Refining);
+                ObjectiveRefinementSession session = await fixture.CreateSessionAsync(objective, captain);
+                AssertTrue(await testDb.Driver.Captains.TryReleaseExclusiveAsync(captain.Id, session.Id));
+                AssertTrue(await testDb.Driver.Captains.TryClaimExclusiveAsync(captain.Id, "new-owner", CaptainStateEnum.Refining));
+                AssertTrue(await testDb.Driver.Captains.TryUpdateExclusiveAsync(captain.Id, "new-owner", CaptainStateEnum.Refining, 999999));
+                await fixture.Coordinator.StopAsync(session);
+                Captain stored = (await testDb.Driver.Captains.ReadAsync(captain.Id))!;
+                AssertEqual("new-owner", stored.CurrentSessionId); AssertEqual(999999, stored.ProcessId); AssertNull(stored.Assignment);
+                AssertEqual(ObjectiveRefinementSessionStatusEnum.Stopped, (await testDb.Driver.ObjectiveRefinementSessions.ReadAsync(session.Id))!.Status);
+            }));
+
+            cases.Add(CaseAsync("recovery_preserves_new_owner", "Recovery preserves a newer captain owner", TestTags.Positive, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync();
+                using CoordinatorFixture fixture = new CoordinatorFixture(testDb.Driver);
+                Objective objective = await fixture.CreateObjectiveAsync("owner");
+                Captain captain = await fixture.CreateCaptainAsync("owner", AgentRuntimeEnum.Custom, state: CaptainStateEnum.Refining);
+                ObjectiveRefinementSession session = await fixture.CreateSessionAsync(objective, captain);
+                AssertTrue(await testDb.Driver.Captains.TryReleaseExclusiveAsync(captain.Id, session.Id));
+                AssertTrue(await testDb.Driver.Captains.TryClaimExclusiveAsync(captain.Id, "new-owner", CaptainStateEnum.Refining));
+                AssertTrue(await testDb.Driver.Captains.TryUpdateExclusiveAsync(captain.Id, "new-owner", CaptainStateEnum.Refining, 999999));
+                await fixture.Coordinator.RecoverSessionsAsync();
+                Captain stored = (await testDb.Driver.Captains.ReadAsync(captain.Id))!;
+                AssertEqual("new-owner", stored.CurrentSessionId); AssertEqual(999999, stored.ProcessId); AssertNull(stored.Assignment);
+                AssertEqual(ObjectiveRefinementSessionStatusEnum.Failed, (await testDb.Driver.ObjectiveRefinementSessions.ReadAsync(session.Id))!.Status);
+            }));
+
             return new TestSuiteDescriptor(
                 suiteId: SuiteId,
                 displayName: "Objective Refinement Coordinator",
@@ -374,7 +406,7 @@ namespace Test.Shared.Suites.Services
                     UserId = userId,
                     State = state
                 };
-                return await Database.Captains.CreateAsync(captain).ConfigureAwait(false);
+                return await CaptainAssignmentFixture.CreateAsync(Database, captain).ConfigureAwait(false);
             }
 
             public async Task<ObjectiveRefinementSession> CreateSessionAsync(
@@ -398,7 +430,10 @@ namespace Test.Shared.Suites.Services
                     CreatedUtc = DateTime.UtcNow,
                     LastUpdateUtc = DateTime.UtcNow
                 };
-                return await Database.ObjectiveRefinementSessions.CreateAsync(session).ConfigureAwait(false);
+                session = await Database.ObjectiveRefinementSessions.CreateAsync(session).ConfigureAwait(false);
+                AssertTrue(await Database.Captains.TryClaimExclusiveAsync(captain.Id, session.Id, CaptainStateEnum.Refining, recover: true));
+                AssertTrue(await Database.Captains.TryUpdateExclusiveAsync(captain.Id, session.Id, CaptainStateEnum.Refining, processId));
+                return session;
             }
 
             public async Task<ObjectiveRefinementMessage> CreateMessageAsync(

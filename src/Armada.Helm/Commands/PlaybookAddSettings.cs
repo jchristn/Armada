@@ -19,21 +19,21 @@ namespace Armada.Helm.Commands
         /// Optional description.
         /// </summary>
         [Description("Optional description")]
-        [CommandOption("--description|-d")]
+        [CommandOption("--description|-d <TEXT>")]
         public string? Description { get; set; }
 
         /// <summary>
         /// Inline markdown content.
         /// </summary>
         [Description("Inline markdown content")]
-        [CommandOption("--content|-c")]
+        [CommandOption("--content|-c <TEXT>")]
         public string? Content { get; set; }
 
         /// <summary>
         /// Path to a markdown file to upload.
         /// </summary>
         [Description("Path to a markdown file to upload")]
-        [CommandOption("--from-file|-f")]
+        [CommandOption("--from-file|-f <PATH>")]
         public string? FromFile { get; set; }
 
         /// <summary>

@@ -54,51 +54,21 @@ namespace Armada.Core.Services
             if (auth == null) throw new ArgumentNullException(nameof(auth));
             if (query == null) throw new ArgumentNullException(nameof(query));
 
-            List<Runbook> runbooks = (await ReadPlaybooksAsync(auth, token).ConfigureAwait(false))
-                .Select(ParseRunbook)
-                .ToList();
-
+            // Runbooks are playbook rows: filtered, paged, and counted in the playbooks table, inside the caller's scope.
             if (!auth.IsAdmin)
-                runbooks = runbooks.Where(item => ScopedVisibility.CanView(auth, item.Scope, item.TenantId, item.UserId)).ToList();
-
-            IEnumerable<Runbook> filtered = runbooks;
-            if (!String.IsNullOrWhiteSpace(query.WorkflowProfileId))
-                filtered = filtered.Where(item => String.Equals(item.WorkflowProfileId, query.WorkflowProfileId, StringComparison.OrdinalIgnoreCase));
-            if (!String.IsNullOrWhiteSpace(query.EnvironmentId))
-                filtered = filtered.Where(item => String.Equals(item.EnvironmentId, query.EnvironmentId, StringComparison.OrdinalIgnoreCase));
-            if (query.DefaultCheckType.HasValue)
-                filtered = filtered.Where(item => item.DefaultCheckType == query.DefaultCheckType.Value);
-            if (query.Active.HasValue)
-                filtered = filtered.Where(item => item.Active == query.Active.Value);
-
-            string? search = Normalize(query.Search);
-            if (!String.IsNullOrWhiteSpace(search))
             {
-                filtered = filtered.Where(item =>
-                    ContainsIgnoreCase(item.Title, search)
-                    || ContainsIgnoreCase(item.Description, search)
-                    || ContainsIgnoreCase(item.FileName, search)
-                    || ContainsIgnoreCase(item.OverviewMarkdown, search)
-                    || item.Steps.Any(step => ContainsIgnoreCase(step.Title, search) || ContainsIgnoreCase(step.Instructions, search)));
+                query.TenantId = auth.TenantId;
+                query.VisibleToUserId = auth.IsTenantAdmin ? null : auth.UserId;
             }
 
-            List<Runbook> ordered = filtered
-                .OrderBy(item => item.Title, StringComparer.OrdinalIgnoreCase)
-                .ThenBy(item => item.FileName, StringComparer.OrdinalIgnoreCase)
-                .ToList();
-
-            int pageSize = query.PageSize < 1 ? 50 : Math.Min(query.PageSize, 500);
-            int pageNumber = query.PageNumber < 1 ? 1 : query.PageNumber;
-            int offset = (pageNumber - 1) * pageSize;
-            List<Runbook> page = ordered.Skip(offset).Take(pageSize).ToList();
-
+            EnumerationResult<Playbook> playbooks = await _Database.Runbooks.EnumerateAsync(query, token).ConfigureAwait(false);
             return new EnumerationResult<Runbook>
             {
-                PageNumber = pageNumber,
-                PageSize = pageSize,
-                TotalRecords = ordered.Count,
-                TotalPages = pageSize > 0 ? (int)Math.Ceiling((double)ordered.Count / pageSize) : 0,
-                Objects = page,
+                PageNumber = playbooks.PageNumber,
+                PageSize = playbooks.PageSize,
+                TotalRecords = playbooks.TotalRecords,
+                TotalPages = playbooks.TotalPages,
+                Objects = playbooks.Objects.Select(ParseRunbook).ToList(),
                 TotalMs = 0
             };
         }
@@ -124,6 +94,7 @@ namespace Armada.Core.Services
         {
             if (auth == null) throw new ArgumentNullException(nameof(auth));
             if (request == null) throw new ArgumentNullException(nameof(request));
+            CollectionBounds.Validate(request);
 
             Playbook playbook = BuildPlaybook(auth, request, null);
             playbook.Scope = ScopedVisibility.ResolveCreateScope(auth, request.Scope);
@@ -147,6 +118,7 @@ namespace Armada.Core.Services
             if (auth == null) throw new ArgumentNullException(nameof(auth));
             if (String.IsNullOrWhiteSpace(id)) throw new ArgumentNullException(nameof(id));
             if (request == null) throw new ArgumentNullException(nameof(request));
+            CollectionBounds.Validate(request);
 
             Playbook existing = await ReadPlaybookAsync(auth, id, token).ConfigureAwait(false)
                 ?? throw new KeyNotFoundException("Runbook not found.");
@@ -204,46 +176,9 @@ namespace Armada.Core.Services
             if (auth == null) throw new ArgumentNullException(nameof(auth));
             if (query == null) throw new ArgumentNullException(nameof(query));
 
-            List<RunbookExecution> executions = await ReadAllExecutionsAsync(auth, token).ConfigureAwait(false);
-            IEnumerable<RunbookExecution> filtered = executions;
-
-            if (!String.IsNullOrWhiteSpace(query.RunbookId))
-                filtered = filtered.Where(item => String.Equals(item.RunbookId, query.RunbookId, StringComparison.OrdinalIgnoreCase));
-            if (!String.IsNullOrWhiteSpace(query.DeploymentId))
-                filtered = filtered.Where(item => String.Equals(item.DeploymentId, query.DeploymentId, StringComparison.OrdinalIgnoreCase));
-            if (!String.IsNullOrWhiteSpace(query.IncidentId))
-                filtered = filtered.Where(item => String.Equals(item.IncidentId, query.IncidentId, StringComparison.OrdinalIgnoreCase));
-            if (query.Status.HasValue)
-                filtered = filtered.Where(item => item.Status == query.Status.Value);
-
-            string? search = Normalize(query.Search);
-            if (!String.IsNullOrWhiteSpace(search))
-            {
-                filtered = filtered.Where(item =>
-                    ContainsIgnoreCase(item.Title, search)
-                    || ContainsIgnoreCase(item.EnvironmentName, search)
-                    || ContainsIgnoreCase(item.Notes, search));
-            }
-
-            List<RunbookExecution> ordered = filtered
-                .OrderByDescending(item => item.LastUpdateUtc)
-                .ThenByDescending(item => item.Id, StringComparer.Ordinal)
-                .ToList();
-
-            int pageSize = query.PageSize < 1 ? 50 : Math.Min(query.PageSize, 500);
-            int pageNumber = query.PageNumber < 1 ? 1 : query.PageNumber;
-            int offset = (pageNumber - 1) * pageSize;
-            List<RunbookExecution> page = ordered.Skip(offset).Take(pageSize).ToList();
-
-            return new EnumerationResult<RunbookExecution>
-            {
-                PageNumber = pageNumber,
-                PageSize = pageSize,
-                TotalRecords = ordered.Count,
-                TotalPages = pageSize > 0 ? (int)Math.Ceiling((double)ordered.Count / pageSize) : 0,
-                Objects = page,
-                TotalMs = 0
-            };
+            // Paged, filtered, and counted in the database, inside the caller's scope.
+            ApplyExecutionScope(auth, query);
+            return await _Database.RunbookExecutions.EnumerateAsync(query, token).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -254,8 +189,7 @@ namespace Armada.Core.Services
             if (auth == null) throw new ArgumentNullException(nameof(auth));
             if (String.IsNullOrWhiteSpace(id)) throw new ArgumentNullException(nameof(id));
 
-            List<ArmadaEvent> snapshots = await ReadExecutionSnapshotEventsAsync(auth, id, token).ConfigureAwait(false);
-            return ProjectLatestExecution(snapshots);
+            return await _Database.RunbookExecutions.ReadAsync(id, BuildExecutionScope(auth), token).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -270,6 +204,7 @@ namespace Armada.Core.Services
             if (auth == null) throw new ArgumentNullException(nameof(auth));
             if (String.IsNullOrWhiteSpace(runbookId)) throw new ArgumentNullException(nameof(runbookId));
             if (request == null) throw new ArgumentNullException(nameof(request));
+            CollectionBounds.Validate(request);
 
             Runbook runbook = await ReadAsync(auth, runbookId, token).ConfigureAwait(false)
                 ?? throw new KeyNotFoundException("Runbook not found.");
@@ -297,6 +232,8 @@ namespace Armada.Core.Services
                 LastUpdateUtc = DateTime.UtcNow
             };
 
+            CollectionBounds.Validate(execution);
+            await _Database.RunbookExecutions.CreateAsync(execution, token).ConfigureAwait(false);
             await WriteExecutionSnapshotAsync(auth, execution, token).ConfigureAwait(false);
             OnRunbookExecutionChanged?.Invoke(execution);
             return execution;
@@ -314,6 +251,7 @@ namespace Armada.Core.Services
             if (auth == null) throw new ArgumentNullException(nameof(auth));
             if (String.IsNullOrWhiteSpace(id)) throw new ArgumentNullException(nameof(id));
             if (request == null) throw new ArgumentNullException(nameof(request));
+            CollectionBounds.Validate(request);
 
             RunbookExecution execution = await ReadExecutionAsync(auth, id, token).ConfigureAwait(false)
                 ?? throw new KeyNotFoundException("Runbook execution not found.");
@@ -336,6 +274,8 @@ namespace Armada.Core.Services
             if (execution.Status == RunbookExecutionStatusEnum.Running)
                 execution.CompletedUtc = null;
 
+            CollectionBounds.Validate(execution);
+            await _Database.RunbookExecutions.UpdateAsync(execution, token).ConfigureAwait(false);
             await WriteExecutionSnapshotAsync(auth, execution, token).ConfigureAwait(false);
             OnRunbookExecutionChanged?.Invoke(execution);
             return execution;
@@ -349,27 +289,37 @@ namespace Armada.Core.Services
             if (auth == null) throw new ArgumentNullException(nameof(auth));
             if (String.IsNullOrWhiteSpace(id)) throw new ArgumentNullException(nameof(id));
 
-            List<ArmadaEvent> snapshots = await ReadExecutionSnapshotEventsAsync(auth, id, token).ConfigureAwait(false);
-            if (snapshots.Count == 0)
+            RunbookExecution? existing = await ReadExecutionAsync(auth, id, token).ConfigureAwait(false);
+            if (existing == null)
                 throw new KeyNotFoundException("Runbook execution not found.");
 
+            await _Database.RunbookExecutions.DeleteAsync(id, token).ConfigureAwait(false);
+            List<ArmadaEvent> snapshots = await ReadExecutionSnapshotEventsAsync(auth, id, token).ConfigureAwait(false);
             foreach (ArmadaEvent snapshot in snapshots)
             {
                 await DeleteEventAsync(auth, snapshot.Id, token).ConfigureAwait(false);
             }
         }
 
-        private async Task<List<Playbook>> ReadPlaybooksAsync(AuthContext auth, CancellationToken token)
+        /// <summary>
+        /// One-time import of runbook executions recorded before the runbook_executions table existed: when the table
+        /// is empty, the latest runbook-execution.snapshot event of each execution becomes its row (a newer snapshot
+        /// wins; equal timestamps fall back to the larger event id). Later calls do nothing.
+        /// </summary>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>Number of executions imported.</returns>
+        public async Task<int> ImportLegacyExecutionSnapshotsAsync(CancellationToken token = default)
         {
-            EnumerationQuery query = new EnumerationQuery
+            if (await _Database.RunbookExecutions.CountAsync(token).ConfigureAwait(false) > 0) return 0;
+            AuthContext system = new AuthContext { IsAuthenticated = true, IsAdmin = true, AuthMethod = "system" };
+            List<RunbookExecution> executions = await ReadLatestExecutionSnapshotsAsync(system, token).ConfigureAwait(false);
+            foreach (RunbookExecution execution in executions)
             {
-                PageNumber = 1,
-                PageSize = 1000
-            };
+                if (await _Database.RunbookExecutions.ReadAsync(execution.Id, null, token).ConfigureAwait(false) == null)
+                    await _Database.RunbookExecutions.CreateAsync(execution, token).ConfigureAwait(false);
+            }
 
-            if (auth.IsAdmin)
-                return (await _Database.Playbooks.EnumerateAsync(query, token).ConfigureAwait(false)).Objects;
-            return (await _Database.Playbooks.EnumerateAsync(auth.TenantId!, query, token).ConfigureAwait(false)).Objects;
+            return executions.Count;
         }
 
         private async Task<Playbook?> ReadPlaybookAsync(AuthContext auth, string id, CancellationToken token)
@@ -389,6 +339,14 @@ namespace Armada.Core.Services
                 ? NormalizeParameters(metadata.Parameters)
                 : DetectParameters(overviewMarkdown, steps);
 
+            // A playbook written outside the runbook API can yield more steps or parameters than a runbook may list.
+            // The list is cut at MaxConfigItems and the count of the rest is reported, never dropped silently; the full
+            // text stays in OverviewMarkdown and the playbook content.
+            int omittedSteps = Math.Max(0, steps.Count - CollectionLimits.MaxConfigItems);
+            if (omittedSteps > 0) steps = steps.Take(CollectionLimits.MaxConfigItems).ToList();
+            int omittedParameters = Math.Max(0, parameters.Count - CollectionLimits.MaxConfigItems);
+            if (omittedParameters > 0) parameters = parameters.Take(CollectionLimits.MaxConfigItems).ToList();
+
             return new Runbook
             {
                 Id = playbook.Id,
@@ -405,6 +363,8 @@ namespace Armada.Core.Services
                 DefaultCheckType = metadata.DefaultCheckType,
                 Parameters = parameters,
                 Steps = steps,
+                OmittedParameterCount = omittedParameters,
+                OmittedStepCount = omittedSteps,
                 OverviewMarkdown = overviewMarkdown,
                 Active = playbook.Active,
                 CreatedUtc = playbook.CreatedUtc,
@@ -459,7 +419,7 @@ namespace Armada.Core.Services
             return playbook;
         }
 
-        private async Task<List<RunbookExecution>> ReadAllExecutionsAsync(AuthContext auth, CancellationToken token)
+        private async Task<List<RunbookExecution>> ReadLatestExecutionSnapshotsAsync(AuthContext auth, CancellationToken token)
         {
             List<ArmadaEvent> snapshots = await ReadExecutionSnapshotEventsAsync(auth, null, token).ConfigureAwait(false);
             Dictionary<string, ArmadaEvent> latestByExecutionId = new Dictionary<string, ArmadaEvent>(StringComparer.OrdinalIgnoreCase);
@@ -560,15 +520,6 @@ namespace Armada.Core.Services
                 await _Database.Events.DeleteAsync(auth.TenantId!, id, token).ConfigureAwait(false);
             else
                 await _Database.Events.DeleteAsync(auth.TenantId!, auth.UserId!, id, token).ConfigureAwait(false);
-        }
-
-        private static RunbookExecution? ProjectLatestExecution(List<ArmadaEvent> snapshots)
-        {
-            ArmadaEvent? latest = snapshots
-                .OrderByDescending(item => item.CreatedUtc)
-                .ThenByDescending(item => item.Id, StringComparer.Ordinal)
-                .FirstOrDefault();
-            return latest != null ? DeserializeExecution(latest) : null;
         }
 
         private static RunbookExecution? DeserializeExecution(ArmadaEvent snapshot)
@@ -842,11 +793,19 @@ namespace Armada.Core.Services
             return withoutExtension.Replace('_', ' ').Replace('-', ' ').Trim();
         }
 
-        private static bool ContainsIgnoreCase(string? value, string? search)
+        private static void ApplyExecutionScope(AuthContext auth, RunbookExecutionQuery query)
         {
-            if (String.IsNullOrWhiteSpace(value) || String.IsNullOrWhiteSpace(search))
-                return false;
-            return value.IndexOf(search, StringComparison.OrdinalIgnoreCase) >= 0;
+            if (auth.IsAdmin) return;
+            query.TenantId = auth.TenantId;
+            if (!auth.IsTenantAdmin) query.UserId = auth.UserId;
+        }
+
+        private static RunbookExecutionQuery? BuildExecutionScope(AuthContext auth)
+        {
+            if (auth.IsAdmin) return null;
+            RunbookExecutionQuery scope = new RunbookExecutionQuery();
+            ApplyExecutionScope(auth, scope);
+            return scope;
         }
 
         private static string? Normalize(string? value)

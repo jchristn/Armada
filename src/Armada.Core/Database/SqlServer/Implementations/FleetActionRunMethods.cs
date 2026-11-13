@@ -53,9 +53,9 @@ namespace Armada.Core.Database.SqlServer.Implementations
             await SqlServerCommandHelper.WriteAsync(_ConnectionString, _WriteLock, async (SqlConnection conn, SqlTransaction tx) =>
             {
                 await SqlServerCommandHelper.ExecuteAsync(conn, tx, @"INSERT INTO fleet_action_runs
-                    (id, tenant_id, user_id, action_id, action_name, kind, command_text, prompt_template, pipeline_id, persona, timeout_seconds, requires_clean_working_tree, concurrency, status, target_count, succeeded_count, failed_count, skipped_count, cancelled_count, started_utc, completed_utc, created_utc, last_update_utc, approval_options_json, command_windows, output_parser, scan_source_action_key, required_tools_json, requires_network, input_values_json, findings_count, inputs_json)
+                    (id, tenant_id, user_id, action_id, action_name, kind, command_text, prompt_template, pipeline_id, persona, timeout_seconds, requires_clean_working_tree, concurrency, status, target_count, succeeded_count, failed_count, skipped_count, cancelled_count, started_utc, completed_utc, created_utc, last_update_utc, approval_options_json, command_windows, output_parser, scan_source_action_key, applicability_command, applicability_command_windows, mission_mode, required_tools_json, requires_network, input_values_json, findings_count, inputs_json)
                     VALUES
-                    (@id, @tenant_id, @user_id, @action_id, @action_name, @kind, @command_text, @prompt_template, @pipeline_id, @persona, @timeout_seconds, @requires_clean_working_tree, @concurrency, @status, @target_count, @succeeded_count, @failed_count, @skipped_count, @cancelled_count, @started_utc, @completed_utc, @created_utc, @last_update_utc, @approval_options_json, @command_windows, @output_parser, @scan_source_action_key, @required_tools_json, @requires_network, @input_values_json, @findings_count, @inputs_json);",
+                    (@id, @tenant_id, @user_id, @action_id, @action_name, @kind, @command_text, @prompt_template, @pipeline_id, @persona, @timeout_seconds, @requires_clean_working_tree, @concurrency, @status, @target_count, @succeeded_count, @failed_count, @skipped_count, @cancelled_count, @started_utc, @completed_utc, @created_utc, @last_update_utc, @approval_options_json, @command_windows, @output_parser, @scan_source_action_key, @applicability_command, @applicability_command_windows, @mission_mode, @required_tools_json, @requires_network, @input_values_json, @findings_count, @inputs_json);",
                     cmd => Bind(cmd, run), token).ConfigureAwait(false);
             }, token).ConfigureAwait(false);
 
@@ -106,7 +106,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
                     status = @status, target_count = @target_count, succeeded_count = @succeeded_count,
                     failed_count = @failed_count, skipped_count = @skipped_count, cancelled_count = @cancelled_count,
                     started_utc = @started_utc, completed_utc = @completed_utc, created_utc = @created_utc,
-                    command_windows = @command_windows, output_parser = @output_parser, scan_source_action_key = @scan_source_action_key, required_tools_json = @required_tools_json, requires_network = @requires_network, inputs_json = @inputs_json, input_values_json = @input_values_json, findings_count = @findings_count, last_update_utc = @last_update_utc, approval_options_json = @approval_options_json
+                    command_windows = @command_windows, output_parser = @output_parser, scan_source_action_key = @scan_source_action_key, applicability_command = @applicability_command, applicability_command_windows = @applicability_command_windows, mission_mode = @mission_mode, required_tools_json = @required_tools_json, requires_network = @requires_network, inputs_json = @inputs_json, input_values_json = @input_values_json, findings_count = @findings_count, last_update_utc = @last_update_utc, approval_options_json = @approval_options_json
                     WHERE id = @id;", cmd => Bind(cmd, run), token).ConfigureAwait(false);
             }, token).ConfigureAwait(false);
 
@@ -224,6 +224,9 @@ namespace Armada.Core.Database.SqlServer.Implementations
             SqlServerCommandHelper.Add(cmd, "@command_windows", run.CommandWindows);
             SqlServerCommandHelper.Add(cmd, "@output_parser", run.OutputParser);
             SqlServerCommandHelper.Add(cmd, "@scan_source_action_key", run.ScanSourceActionKey);
+            SqlServerCommandHelper.Add(cmd, "@applicability_command", run.ApplicabilityCommand);
+            SqlServerCommandHelper.Add(cmd, "@applicability_command_windows", run.ApplicabilityCommandWindows);
+            SqlServerCommandHelper.Add(cmd, "@mission_mode", run.MissionMode.ToString());
             SqlServerCommandHelper.Add(cmd, "@required_tools_json", System.Text.Json.JsonSerializer.Serialize(run.RequiredTools));
             SqlServerCommandHelper.Add(cmd, "@requires_network", run.RequiresNetwork);
             SqlServerCommandHelper.Add(cmd, "@inputs_json", System.Text.Json.JsonSerializer.Serialize(run.Inputs));
@@ -262,6 +265,9 @@ namespace Armada.Core.Database.SqlServer.Implementations
             run.CommandWindows = SqlServerCommandHelper.ReadString(reader["command_windows"]);
             run.OutputParser = SqlServerCommandHelper.ReadString(reader["output_parser"]);
             run.ScanSourceActionKey = SqlServerCommandHelper.ReadString(reader["scan_source_action_key"]);
+            run.ApplicabilityCommand = SqlServerCommandHelper.ReadString(reader["applicability_command"]);
+            run.ApplicabilityCommandWindows = SqlServerCommandHelper.ReadString(reader["applicability_command_windows"]);
+            run.MissionMode = SqlServerCommandHelper.ReadEnum(reader["mission_mode"], MissionModeEnum.Implementation);
             run.RequiredTools = System.Text.Json.JsonSerializer.Deserialize<System.Collections.Generic.List<string>>(SqlServerCommandHelper.ReadString(reader["required_tools_json"]) ?? "[]") ?? new();
             run.RequiresNetwork = SqlServerCommandHelper.ReadBool(reader["requires_network"], false);
             run.InputValues = System.Text.Json.JsonSerializer.Deserialize<System.Collections.Generic.Dictionary<string, string>>(SqlServerCommandHelper.ReadString(reader["input_values_json"]) ?? "{}") ?? new();

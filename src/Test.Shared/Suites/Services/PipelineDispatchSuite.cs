@@ -88,7 +88,7 @@ namespace Test.Shared.Suites.Services
 
                     Captain captain = new Captain("Setup Captain");
                     captain.State = CaptainStateEnum.Idle;
-                    await testDb.Driver.Captains.CreateAsync(captain).ConfigureAwait(false);
+                    await CaptainAssignmentFixture.CreateAsync(testDb.Driver, captain).ConfigureAwait(false);
 
                     Mission mission = new Mission("Repository onboarding survey", "Inspect the repository without changing files.");
                     mission.VesselId = vessel.Id;
@@ -119,12 +119,13 @@ namespace Test.Shared.Suites.Services
 
                     Vessel vessel = new Vessel("wildcard-vessel", "https://github.com/test/repo.git");
                     vessel.DefaultBranch = "main";
-                    vessel.AllowConcurrentMissions = true;
+                    vessel.MaxParallelVoyages = 0;
+                    vessel.MaxParallelMissionsPerVoyage = 0;
                     vessel = await testDb.Driver.Vessels.CreateAsync(vessel).ConfigureAwait(false);
 
                     Captain target = new Captain("Target Captain");
                     target.State = CaptainStateEnum.Idle;
-                    target = await testDb.Driver.Captains.CreateAsync(target).ConfigureAwait(false);
+                    target = await CaptainAssignmentFixture.CreateAsync(testDb.Driver, target).ConfigureAwait(false);
 
                     Armada.Core.Models.Voyage voyage = new Armada.Core.Models.Voyage("wildcard voyage", "d");
                     voyage.CaptainOverridesJson = MissionService.SerializeCaptainOverrides(new List<Armada.Core.Models.CaptainAssignmentOverride>
@@ -174,7 +175,7 @@ namespace Test.Shared.Suites.Services
 
                         Captain captain = new Captain("shared-path-captain");
                         captain.State = CaptainStateEnum.Idle;
-                        captain = await testDb.Driver.Captains.CreateAsync(captain).ConfigureAwait(false);
+                        captain = await CaptainAssignmentFixture.CreateAsync(testDb.Driver, captain).ConfigureAwait(false);
 
                         Mission mission = new Mission("Shared path dispatch probe");
                         mission.VesselId = vessel.Id;
@@ -352,7 +353,7 @@ namespace Test.Shared.Suites.Services
                     // Create an idle captain
                     Captain captain = new Captain("dep-captain");
                     captain.State = CaptainStateEnum.Idle;
-                    await testDb.Driver.Captains.CreateAsync(captain).ConfigureAwait(false);
+                    await CaptainAssignmentFixture.CreateAsync(testDb.Driver, captain).ConfigureAwait(false);
 
                     // Create mission A (Pending, no dependency)
                     Mission missionA = new Mission("Mission A");
@@ -392,7 +393,7 @@ namespace Test.Shared.Suites.Services
 
                     Captain captain = new Captain("cancelled-voyage-captain");
                     captain.State = CaptainStateEnum.Idle;
-                    captain = await testDb.Driver.Captains.CreateAsync(captain).ConfigureAwait(false);
+                    captain = await CaptainAssignmentFixture.CreateAsync(testDb.Driver, captain).ConfigureAwait(false);
 
                     Voyage voyage = new Voyage("cancelled-voyage");
                     voyage.Status = VoyageStatusEnum.Cancelled;
@@ -432,7 +433,7 @@ namespace Test.Shared.Suites.Services
                     captainService.OnLaunchAgent = (Captain c, Mission m, Dock d) => Task.FromResult(12345);
 
                     // Create vessel
-                    Vessel vessel = new Vessel("handoff-vessel", "https://github.com/test/repo.git");
+                    Vessel vessel = new Vessel("handoff-vessel", "https://github.com/test/repo.git") { MaxParallelVoyages = 0 };
                     vessel.LocalPath = Path.Combine(Path.GetTempPath(), "armada_test_bare_" + Guid.NewGuid().ToString("N"));
                     vessel.WorkingDirectory = Path.Combine(Path.GetTempPath(), "armada_test_work_" + Guid.NewGuid().ToString("N"));
                     vessel.DefaultBranch = "main";
@@ -441,7 +442,7 @@ namespace Test.Shared.Suites.Services
                     // Create an idle captain
                     Captain captain = new Captain("handoff-captain");
                     captain.State = CaptainStateEnum.Idle;
-                    await testDb.Driver.Captains.CreateAsync(captain).ConfigureAwait(false);
+                    await CaptainAssignmentFixture.CreateAsync(testDb.Driver, captain).ConfigureAwait(false);
 
                     // Upstream mission has finished but downstream handoff has not yet marked the
                     // worker mission as architect-prepared.
@@ -502,7 +503,7 @@ namespace Test.Shared.Suites.Services
                     vessel.LocalPath = Path.Combine(Path.GetTempPath(), "armada_test_bare_" + Guid.NewGuid().ToString("N"));
                     vessel.WorkingDirectory = Path.Combine(Path.GetTempPath(), "armada_test_work_" + Guid.NewGuid().ToString("N"));
                     vessel = await testDb.Driver.Vessels.CreateAsync(vessel).ConfigureAwait(false);
-                    Captain captain = await testDb.Driver.Captains.CreateAsync(new Captain("blocked-captain") { State = CaptainStateEnum.Working }).ConfigureAwait(false);
+                    Captain captain = await CaptainAssignmentFixture.CreateAsync(testDb.Driver, new Captain("blocked-captain") { State = CaptainStateEnum.Working }).ConfigureAwait(false);
                     Voyage voyage = await testDb.Driver.Voyages.CreateAsync(new Voyage("blocked-voyage")).ConfigureAwait(false);
                     Dock dock = await testDb.Driver.Docks.CreateAsync(new Dock(vessel.Id)
                     {
@@ -520,9 +521,9 @@ namespace Test.Shared.Suites.Services
                     {
                         VesselId = vessel.Id, VoyageId = voyage.Id, Persona = "Judge", DependsOnMissionId = worker.Id
                     }).ConfigureAwait(false);
-                    captain.CurrentMissionId = architect.Id;
-                    captain.CurrentDockId = dock.Id;
-                    await testDb.Driver.Captains.UpdateAsync(captain).ConfigureAwait(false);
+                    captain.Assignment = architect;
+                    captain.Assignment ??= new Mission("fixture assignment"); captain.Assignment.DockId = dock.Id;
+                    await CaptainAssignmentFixture.UpdateAsync(testDb.Driver, captain).ConfigureAwait(false);
 
                     await missionService.HandleCompletionAsync(captain, architect.Id).ConfigureAwait(false);
 
@@ -572,7 +573,7 @@ namespace Test.Shared.Suites.Services
 
                     Captain captain = new Captain("architect-failure-captain");
                     captain.State = CaptainStateEnum.Working;
-                    captain = await testDb.Driver.Captains.CreateAsync(captain).ConfigureAwait(false);
+                    captain = await CaptainAssignmentFixture.CreateAsync(testDb.Driver, captain).ConfigureAwait(false);
 
                     Voyage voyage = new Voyage("architect-failure-voyage");
                     voyage = await testDb.Driver.Voyages.CreateAsync(voyage).ConfigureAwait(false);
@@ -602,9 +603,9 @@ namespace Test.Shared.Suites.Services
                     workerMission.DependsOnMissionId = architectMission.Id;
                     workerMission = await testDb.Driver.Missions.CreateAsync(workerMission).ConfigureAwait(false);
 
-                    captain.CurrentMissionId = architectMission.Id;
-                    captain.CurrentDockId = dock.Id;
-                    await testDb.Driver.Captains.UpdateAsync(captain).ConfigureAwait(false);
+                    captain.Assignment = architectMission;
+                    captain.Assignment ??= new Mission("fixture assignment"); captain.Assignment.DockId = dock.Id;
+                    await CaptainAssignmentFixture.UpdateAsync(testDb.Driver, captain).ConfigureAwait(false);
 
                     try
                     {
@@ -667,7 +668,7 @@ namespace Test.Shared.Suites.Services
 
                     Captain captain = new Captain("architect-failure-captain");
                     captain.State = CaptainStateEnum.Working;
-                    captain = await testDb.Driver.Captains.CreateAsync(captain).ConfigureAwait(false);
+                    captain = await CaptainAssignmentFixture.CreateAsync(testDb.Driver, captain).ConfigureAwait(false);
 
                     Voyage voyage = new Voyage("architect-failure-voyage");
                     voyage = await testDb.Driver.Voyages.CreateAsync(voyage).ConfigureAwait(false);
@@ -697,9 +698,9 @@ namespace Test.Shared.Suites.Services
                     workerMission.DependsOnMissionId = architectMission.Id;
                     workerMission = await testDb.Driver.Missions.CreateAsync(workerMission).ConfigureAwait(false);
 
-                    captain.CurrentMissionId = architectMission.Id;
-                    captain.CurrentDockId = dock.Id;
-                    await testDb.Driver.Captains.UpdateAsync(captain).ConfigureAwait(false);
+                    captain.Assignment = architectMission;
+                    captain.Assignment ??= new Mission("fixture assignment"); captain.Assignment.DockId = dock.Id;
+                    await CaptainAssignmentFixture.UpdateAsync(testDb.Driver, captain).ConfigureAwait(false);
 
                     try
                     {
@@ -762,7 +763,7 @@ namespace Test.Shared.Suites.Services
 
                     Captain captain = new Captain("architect-failure-captain");
                     captain.State = CaptainStateEnum.Working;
-                    captain = await testDb.Driver.Captains.CreateAsync(captain).ConfigureAwait(false);
+                    captain = await CaptainAssignmentFixture.CreateAsync(testDb.Driver, captain).ConfigureAwait(false);
 
                     Voyage voyage = new Voyage("architect-failure-voyage");
                     voyage = await testDb.Driver.Voyages.CreateAsync(voyage).ConfigureAwait(false);
@@ -792,9 +793,9 @@ namespace Test.Shared.Suites.Services
                     workerMission.DependsOnMissionId = architectMission.Id;
                     workerMission = await testDb.Driver.Missions.CreateAsync(workerMission).ConfigureAwait(false);
 
-                    captain.CurrentMissionId = architectMission.Id;
-                    captain.CurrentDockId = dock.Id;
-                    await testDb.Driver.Captains.UpdateAsync(captain).ConfigureAwait(false);
+                    captain.Assignment = architectMission;
+                    captain.Assignment ??= new Mission("fixture assignment"); captain.Assignment.DockId = dock.Id;
+                    await CaptainAssignmentFixture.UpdateAsync(testDb.Driver, captain).ConfigureAwait(false);
 
                     try
                     {
@@ -850,11 +851,11 @@ namespace Test.Shared.Suites.Services
 
                     Captain architectCaptain = new Captain("architect-summary-captain");
                     architectCaptain.State = CaptainStateEnum.Working;
-                    architectCaptain = await testDb.Driver.Captains.CreateAsync(architectCaptain).ConfigureAwait(false);
+                    architectCaptain = await CaptainAssignmentFixture.CreateAsync(testDb.Driver, architectCaptain).ConfigureAwait(false);
 
                     Captain workerCaptain = new Captain("architect-summary-worker");
                     workerCaptain.State = CaptainStateEnum.Idle;
-                    workerCaptain = await testDb.Driver.Captains.CreateAsync(workerCaptain).ConfigureAwait(false);
+                    workerCaptain = await CaptainAssignmentFixture.CreateAsync(testDb.Driver, workerCaptain).ConfigureAwait(false);
 
                     Voyage voyage = new Voyage("architect-summary-voyage");
                     voyage = await testDb.Driver.Voyages.CreateAsync(voyage).ConfigureAwait(false);
@@ -901,9 +902,9 @@ namespace Test.Shared.Suites.Services
                     judge.DependsOnMissionId = testEngineer.Id;
                     judge = await testDb.Driver.Missions.CreateAsync(judge).ConfigureAwait(false);
 
-                    architectCaptain.CurrentMissionId = architect.Id;
-                    architectCaptain.CurrentDockId = architectDock.Id;
-                    await testDb.Driver.Captains.UpdateAsync(architectCaptain).ConfigureAwait(false);
+                    architectCaptain.Assignment = architect;
+                    architectCaptain.Assignment ??= new Mission("fixture assignment"); architectCaptain.Assignment.DockId = architectDock.Id;
+                    await CaptainAssignmentFixture.UpdateAsync(testDb.Driver, architectCaptain).ConfigureAwait(false);
 
                     missionService.OnGetMissionOutput = _ =>
                         "Vessel context updated. The architect mission is complete. Here's a summary of the 7 missions decomposed:\n" +
@@ -937,7 +938,7 @@ namespace Test.Shared.Suites.Services
                     AssertNull(repaired.AgentOutput, "The unusable output is cleared before the repair turn");
 
                     Captain? releasedArchitect = await testDb.Driver.Captains.ReadAsync(architectCaptain.Id).ConfigureAwait(false);
-                    AssertTrue(releasedArchitect!.CurrentMissionId != architect.Id || releasedArchitect.State == CaptainStateEnum.Working,
+                    AssertTrue(releasedArchitect!.ActiveMissionIds.SingleOrDefault() != architect.Id || releasedArchitect.State == CaptainStateEnum.Working,
                         "The Architect captain is released from the unusable attempt (or re-assigned to the repair turn)");
                 }
             }));
@@ -963,11 +964,11 @@ namespace Test.Shared.Suites.Services
 
                     Captain architectCaptain = new Captain("architect-markdown-captain");
                     architectCaptain.State = CaptainStateEnum.Working;
-                    architectCaptain = await testDb.Driver.Captains.CreateAsync(architectCaptain).ConfigureAwait(false);
+                    architectCaptain = await CaptainAssignmentFixture.CreateAsync(testDb.Driver, architectCaptain).ConfigureAwait(false);
 
                     Captain workerCaptain = new Captain("architect-markdown-worker");
                     workerCaptain.State = CaptainStateEnum.Idle;
-                    workerCaptain = await testDb.Driver.Captains.CreateAsync(workerCaptain).ConfigureAwait(false);
+                    workerCaptain = await CaptainAssignmentFixture.CreateAsync(testDb.Driver, workerCaptain).ConfigureAwait(false);
 
                     Voyage voyage = new Voyage("architect-markdown-voyage");
                     voyage = await testDb.Driver.Voyages.CreateAsync(voyage).ConfigureAwait(false);
@@ -1014,9 +1015,9 @@ namespace Test.Shared.Suites.Services
                     judge.DependsOnMissionId = testEngineer.Id;
                     judge = await testDb.Driver.Missions.CreateAsync(judge).ConfigureAwait(false);
 
-                    architectCaptain.CurrentMissionId = architect.Id;
-                    architectCaptain.CurrentDockId = architectDock.Id;
-                    await testDb.Driver.Captains.UpdateAsync(architectCaptain).ConfigureAwait(false);
+                    architectCaptain.Assignment = architect;
+                    architectCaptain.Assignment ??= new Mission("fixture assignment"); architectCaptain.Assignment.DockId = architectDock.Id;
+                    await CaptainAssignmentFixture.UpdateAsync(testDb.Driver, architectCaptain).ConfigureAwait(false);
 
                     missionService.OnGetMissionOutput = _ =>
                         "Architect mission complete. Here is the summary of 2 missions decomposed:\n" +
@@ -1075,11 +1076,11 @@ namespace Test.Shared.Suites.Services
 
                     Captain captain1 = new Captain("fanout-captain-1");
                     captain1.State = CaptainStateEnum.Idle;
-                    captain1 = await testDb.Driver.Captains.CreateAsync(captain1).ConfigureAwait(false);
+                    captain1 = await CaptainAssignmentFixture.CreateAsync(testDb.Driver, captain1).ConfigureAwait(false);
 
                     Captain captain2 = new Captain("fanout-captain-2");
                     captain2.State = CaptainStateEnum.Idle;
-                    captain2 = await testDb.Driver.Captains.CreateAsync(captain2).ConfigureAwait(false);
+                    captain2 = await CaptainAssignmentFixture.CreateAsync(testDb.Driver, captain2).ConfigureAwait(false);
 
                     Voyage voyage = new Voyage("fanout-voyage");
                     voyage = await testDb.Driver.Voyages.CreateAsync(voyage).ConfigureAwait(false);
@@ -1126,9 +1127,9 @@ namespace Test.Shared.Suites.Services
                     judge.DependsOnMissionId = testEngineer.Id;
                     judge = await testDb.Driver.Missions.CreateAsync(judge).ConfigureAwait(false);
 
-                    captain1.CurrentMissionId = architect.Id;
-                    captain1.CurrentDockId = architectDock.Id;
-                    await testDb.Driver.Captains.UpdateAsync(captain1).ConfigureAwait(false);
+                    captain1.Assignment = architect;
+                    captain1.Assignment ??= new Mission("fixture assignment"); captain1.Assignment.DockId = architectDock.Id;
+                    await CaptainAssignmentFixture.UpdateAsync(testDb.Driver, captain1).ConfigureAwait(false);
 
                     missionService.OnGetMissionOutput = _ =>
                         "[ARMADA:MISSION] Add API endpoint\nImplement endpoint\n" +
@@ -1240,15 +1241,15 @@ namespace Test.Shared.Suites.Services
 
                     Captain architectCaptain = new Captain("sequenced-architect");
                     architectCaptain.State = CaptainStateEnum.Idle;
-                    architectCaptain = await testDb.Driver.Captains.CreateAsync(architectCaptain).ConfigureAwait(false);
+                    architectCaptain = await CaptainAssignmentFixture.CreateAsync(testDb.Driver, architectCaptain).ConfigureAwait(false);
 
                     Captain workerCaptain = new Captain("sequenced-worker");
                     workerCaptain.State = CaptainStateEnum.Idle;
-                    workerCaptain = await testDb.Driver.Captains.CreateAsync(workerCaptain).ConfigureAwait(false);
+                    workerCaptain = await CaptainAssignmentFixture.CreateAsync(testDb.Driver, workerCaptain).ConfigureAwait(false);
 
                     Captain reviewerCaptain = new Captain("sequenced-reviewer");
                     reviewerCaptain.State = CaptainStateEnum.Idle;
-                    reviewerCaptain = await testDb.Driver.Captains.CreateAsync(reviewerCaptain).ConfigureAwait(false);
+                    reviewerCaptain = await CaptainAssignmentFixture.CreateAsync(testDb.Driver, reviewerCaptain).ConfigureAwait(false);
 
                     Voyage voyage = new Voyage("sequenced-fanout-voyage");
                     voyage = await testDb.Driver.Voyages.CreateAsync(voyage).ConfigureAwait(false);
@@ -1295,9 +1296,9 @@ namespace Test.Shared.Suites.Services
                     judge.DependsOnMissionId = testEngineer.Id;
                     judge = await testDb.Driver.Missions.CreateAsync(judge).ConfigureAwait(false);
 
-                    architectCaptain.CurrentMissionId = architect.Id;
-                    architectCaptain.CurrentDockId = architectDock.Id;
-                    await testDb.Driver.Captains.UpdateAsync(architectCaptain).ConfigureAwait(false);
+                    architectCaptain.Assignment = architect;
+                    architectCaptain.Assignment ??= new Mission("fixture assignment"); architectCaptain.Assignment.DockId = architectDock.Id;
+                    await CaptainAssignmentFixture.UpdateAsync(testDb.Driver, architectCaptain).ConfigureAwait(false);
 
                     ArchitectPlan plan = new ArchitectPlan
                     {
@@ -1312,6 +1313,8 @@ namespace Test.Shared.Suites.Services
                         Description = "Update relevant components; run dotnet run --project src/Test.Automated.",
                         Kind = i == 2 ? "integration" : "implementation",
                         DependsOn = i == 1 ? 1 : null,
+                        OwnedPaths = new List<string> { i == 0 ? "src/Core/Models/" : i == 1 ? "./src/Backends/" : "docs/" },
+                        ReadsPaths = i == 1 ? new List<string> { "src/Core/Models/" } : new List<string>(),
                         WaitForOtherMissions = i == 2,
                         ValidationCommands = new List<string> { "dotnet run --project src/Test.Automated" },
                         AcceptanceCriteria = new List<ArchitectAcceptanceCriterion> { new ArchitectAcceptanceCriterion
@@ -1348,7 +1351,13 @@ namespace Test.Shared.Suites.Services
                     AssertNotNull(backendWorker, "Dependent worker should exist");
                     AssertNotNull(docsWorker, "Deferred docs worker should exist");
                     AssertNull(ignored, "Legacy marker blocks are not read when a structured plan is present");
-                    AssertEqual(coreJudge!.Id, backendWorker!.DependsOnMissionId, "dependsOn: 1 waits for mission 1's terminal stage, not the text in the description");
+                    AssertEqual(coreWorker!.Id, backendWorker!.ParentMissionId, "dependsOn: 1 makes mission 1 the parent, not the text in the description");
+                    AssertNull(backendWorker.DependsOnMissionId, "a child waits through its parent link, not a dependency on the architect");
+                    AssertEqual(1, backendWorker.Depth);
+                    AssertEqual("[\"src/Backends/\"]", backendWorker.OwnedPathsJson, "owned paths are stored normalized on the slice");
+                    AssertEqual("[\"src/Core/Models/\"]", backendWorker.ReadsPathsJson);
+                    AssertEqual("[\"src/Core/Models/\"]", coreJudge.OwnedPathsJson, "every stage of the slice carries its ownership");
+                    AssertContains("## Owned paths (change only these)", coreWorker.Description ?? String.Empty, "the slice description names its paths");
                     AssertFalse(coreWorker!.WaitForVoyageWorkers, "missions without waitForOtherMissions are not deferred");
                     AssertTrue(docsWorker!.WaitForVoyageWorkers, "waitForOtherMissions sets the structured flag");
                     AssertEqual(MissionStatusEnum.InProgress, coreWorker.Status, "Primary worker should auto-dispatch after architect completion");
@@ -1430,7 +1439,7 @@ namespace Test.Shared.Suites.Services
                     Mission secondAfter = repaired.Single(m => m.Id == second.Id);
                     AssertTrue(repaired.Any(m => m.DependsOnMissionId == second.Id && m.Persona == "Judge"), "the slice that lost its chain gets one");
                     Mission coreJudge = repaired.Single(m => m.DependsOnMissionId == first.Id && m.Persona == "Judge");
-                    AssertEqual(coreJudge.Id, secondAfter.DependsOnMissionId, "dependsOn: 1 is applied to the slice that has not started");
+                    AssertEqual(first.Id, secondAfter.ParentMissionId, "dependsOn: 1 makes mission 1 the parent of the slice that has not started");
                     Mission firstAfter = repaired.Single(m => m.Id == first.Id);
                     AssertEqual(MissionStatusEnum.InProgress, firstAfter.Status);
                     AssertEqual("armada/core", firstAfter.BranchName, "a started slice is never rewired");
@@ -1470,15 +1479,15 @@ namespace Test.Shared.Suites.Services
 
                     Captain architectCaptain = new Captain("sequenced-architect");
                     architectCaptain.State = CaptainStateEnum.Idle;
-                    architectCaptain = await testDb.Driver.Captains.CreateAsync(architectCaptain).ConfigureAwait(false);
+                    architectCaptain = await CaptainAssignmentFixture.CreateAsync(testDb.Driver, architectCaptain).ConfigureAwait(false);
 
                     Captain workerCaptain = new Captain("sequenced-worker");
                     workerCaptain.State = CaptainStateEnum.Idle;
-                    workerCaptain = await testDb.Driver.Captains.CreateAsync(workerCaptain).ConfigureAwait(false);
+                    workerCaptain = await CaptainAssignmentFixture.CreateAsync(testDb.Driver, workerCaptain).ConfigureAwait(false);
 
                     Captain reviewerCaptain = new Captain("sequenced-reviewer");
                     reviewerCaptain.State = CaptainStateEnum.Idle;
-                    reviewerCaptain = await testDb.Driver.Captains.CreateAsync(reviewerCaptain).ConfigureAwait(false);
+                    reviewerCaptain = await CaptainAssignmentFixture.CreateAsync(testDb.Driver, reviewerCaptain).ConfigureAwait(false);
 
                     Voyage voyage = new Voyage("sequenced-fanout-voyage");
                     voyage = await testDb.Driver.Voyages.CreateAsync(voyage).ConfigureAwait(false);
@@ -1525,9 +1534,9 @@ namespace Test.Shared.Suites.Services
                     judge.DependsOnMissionId = testEngineer.Id;
                     judge = await testDb.Driver.Missions.CreateAsync(judge).ConfigureAwait(false);
 
-                    architectCaptain.CurrentMissionId = architect.Id;
-                    architectCaptain.CurrentDockId = architectDock.Id;
-                    await testDb.Driver.Captains.UpdateAsync(architectCaptain).ConfigureAwait(false);
+                    architectCaptain.Assignment = architect;
+                    architectCaptain.Assignment ??= new Mission("fixture assignment"); architectCaptain.Assignment.DockId = architectDock.Id;
+                    await CaptainAssignmentFixture.UpdateAsync(testDb.Driver, architectCaptain).ConfigureAwait(false);
 
                     missionService.OnGetMissionOutput = _ =>
                         "[ARMADA:MISSION] Add core model properties\n" +
@@ -1578,15 +1587,15 @@ namespace Test.Shared.Suites.Services
 
                     Captain architectCaptain = new Captain("sequenced-architect");
                     architectCaptain.State = CaptainStateEnum.Idle;
-                    architectCaptain = await testDb.Driver.Captains.CreateAsync(architectCaptain).ConfigureAwait(false);
+                    architectCaptain = await CaptainAssignmentFixture.CreateAsync(testDb.Driver, architectCaptain).ConfigureAwait(false);
 
                     Captain workerCaptain = new Captain("sequenced-worker");
                     workerCaptain.State = CaptainStateEnum.Idle;
-                    workerCaptain = await testDb.Driver.Captains.CreateAsync(workerCaptain).ConfigureAwait(false);
+                    workerCaptain = await CaptainAssignmentFixture.CreateAsync(testDb.Driver, workerCaptain).ConfigureAwait(false);
 
                     Captain reviewerCaptain = new Captain("sequenced-reviewer");
                     reviewerCaptain.State = CaptainStateEnum.Idle;
-                    reviewerCaptain = await testDb.Driver.Captains.CreateAsync(reviewerCaptain).ConfigureAwait(false);
+                    reviewerCaptain = await CaptainAssignmentFixture.CreateAsync(testDb.Driver, reviewerCaptain).ConfigureAwait(false);
 
                     Voyage voyage = new Voyage("sequenced-fanout-voyage");
                     voyage = await testDb.Driver.Voyages.CreateAsync(voyage).ConfigureAwait(false);
@@ -1633,9 +1642,9 @@ namespace Test.Shared.Suites.Services
                     judge.DependsOnMissionId = testEngineer.Id;
                     judge = await testDb.Driver.Missions.CreateAsync(judge).ConfigureAwait(false);
 
-                    architectCaptain.CurrentMissionId = architect.Id;
-                    architectCaptain.CurrentDockId = architectDock.Id;
-                    await testDb.Driver.Captains.UpdateAsync(architectCaptain).ConfigureAwait(false);
+                    architectCaptain.Assignment = architect;
+                    architectCaptain.Assignment ??= new Mission("fixture assignment"); architectCaptain.Assignment.DockId = architectDock.Id;
+                    await CaptainAssignmentFixture.UpdateAsync(testDb.Driver, architectCaptain).ConfigureAwait(false);
 
                     missionService.OnGetMissionOutput = _ =>
                         "[ARMADA:MISSION] Add core model properties\n" +
@@ -1660,7 +1669,8 @@ namespace Test.Shared.Suites.Services
                     AssertNotNull(backendWorker, "Dependent worker should exist");
                     AssertNotNull(backendTest, "Dependent test stage should exist");
                     AssertNotNull(backendJudge, "Dependent judge stage should exist");
-                    AssertEqual(coreJudge!.Id, backendWorker!.DependsOnMissionId, "Dependent worker should wait for the upstream chain's terminal stage");
+                    AssertEqual(coreWorker!.Id, backendWorker!.ParentMissionId, "A legacy Depends on line makes the upstream slice the parent");
+                    AssertNull(backendWorker.DependsOnMissionId, "the child waits for its parent's terminal stage through the hierarchy gate");
                     AssertFalse((backendWorker.Description ?? String.Empty).Contains("Depends on:", StringComparison.OrdinalIgnoreCase),
                         "Dependency metadata should be removed from the worker description after parsing");
                     AssertEqual(MissionStatusEnum.InProgress, coreWorker!.Status, "Primary worker should auto-dispatch after architect completion");
@@ -1701,9 +1711,11 @@ namespace Test.Shared.Suites.Services
 
                     coreJudge = await testDb.Driver.Missions.ReadAsync(coreJudge.Id).ConfigureAwait(false);
                     backendWorker = await testDb.Driver.Missions.ReadAsync(backendWorker.Id).ConfigureAwait(false);
-                    AssertEqual(MissionStatusEnum.WorkProduced, coreJudge!.Status, "Upstream judge should remain WorkProduced while dependent stages still exist");
-                    AssertEqual(0, landingCalls, "Upstream judge should not land while a dependent worker chain remains");
+                    // D16: the child of a finished parent starts at once; as the only child it continues the parent's branch.
+                    AssertTrue(coreJudge!.Status == MissionStatusEnum.WorkProduced || coreJudge.Status == MissionStatusEnum.Complete,
+                        "the parent's terminal stage finished, got " + coreJudge.Status);
                     AssertEqual(MissionStatusEnum.InProgress, backendWorker!.Status, "Dependent worker should start once the upstream chain completes");
+                    AssertEqual(MissionBranchStrategyEnum.ContinueParent, backendWorker.BranchStrategy, "an only child continues its parent");
                     AssertEqual(coreJudge.BranchName, backendWorker.BranchName, "Dependent worker should inherit the approved upstream branch");
                 }
             }));
@@ -1728,11 +1740,11 @@ namespace Test.Shared.Suites.Services
 
                     Captain architectCaptain = new Captain("dedupe-architect");
                     architectCaptain.State = CaptainStateEnum.Working;
-                    architectCaptain = await testDb.Driver.Captains.CreateAsync(architectCaptain).ConfigureAwait(false);
+                    architectCaptain = await CaptainAssignmentFixture.CreateAsync(testDb.Driver, architectCaptain).ConfigureAwait(false);
 
                     Captain workerCaptain = new Captain("dedupe-worker");
                     workerCaptain.State = CaptainStateEnum.Idle;
-                    workerCaptain = await testDb.Driver.Captains.CreateAsync(workerCaptain).ConfigureAwait(false);
+                    workerCaptain = await CaptainAssignmentFixture.CreateAsync(testDb.Driver, workerCaptain).ConfigureAwait(false);
 
                     Voyage voyage = new Voyage("dedupe-voyage");
                     voyage = await testDb.Driver.Voyages.CreateAsync(voyage).ConfigureAwait(false);
@@ -1779,9 +1791,9 @@ namespace Test.Shared.Suites.Services
                     judge.DependsOnMissionId = testEngineer.Id;
                     judge = await testDb.Driver.Missions.CreateAsync(judge).ConfigureAwait(false);
 
-                    architectCaptain.CurrentMissionId = architect.Id;
-                    architectCaptain.CurrentDockId = architectDock.Id;
-                    await testDb.Driver.Captains.UpdateAsync(architectCaptain).ConfigureAwait(false);
+                    architectCaptain.Assignment = architect;
+                    architectCaptain.Assignment ??= new Mission("fixture assignment"); architectCaptain.Assignment.DockId = architectDock.Id;
+                    await CaptainAssignmentFixture.UpdateAsync(testDb.Driver, architectCaptain).ConfigureAwait(false);
 
                     missionService.OnGetMissionOutput = _ =>
                         "[ARMADA:MISSION] Add ops endpoint note to README\n" +
@@ -1832,11 +1844,11 @@ namespace Test.Shared.Suites.Services
 
                     Captain architectCaptain = new Captain("architect-title-only-captain");
                     architectCaptain.State = CaptainStateEnum.Working;
-                    architectCaptain = await testDb.Driver.Captains.CreateAsync(architectCaptain).ConfigureAwait(false);
+                    architectCaptain = await CaptainAssignmentFixture.CreateAsync(testDb.Driver, architectCaptain).ConfigureAwait(false);
 
                     Captain workerCaptain = new Captain("architect-title-only-worker");
                     workerCaptain.State = CaptainStateEnum.Idle;
-                    workerCaptain = await testDb.Driver.Captains.CreateAsync(workerCaptain).ConfigureAwait(false);
+                    workerCaptain = await CaptainAssignmentFixture.CreateAsync(testDb.Driver, workerCaptain).ConfigureAwait(false);
 
                     Voyage voyage = new Voyage("architect-title-only-voyage");
                     voyage = await testDb.Driver.Voyages.CreateAsync(voyage).ConfigureAwait(false);
@@ -1883,9 +1895,9 @@ namespace Test.Shared.Suites.Services
                     judge.DependsOnMissionId = testEngineer.Id;
                     judge = await testDb.Driver.Missions.CreateAsync(judge).ConfigureAwait(false);
 
-                    architectCaptain.CurrentMissionId = architect.Id;
-                    architectCaptain.CurrentDockId = architectDock.Id;
-                    await testDb.Driver.Captains.UpdateAsync(architectCaptain).ConfigureAwait(false);
+                    architectCaptain.Assignment = architect;
+                    architectCaptain.Assignment ??= new Mission("fixture assignment"); architectCaptain.Assignment.DockId = architectDock.Id;
+                    await CaptainAssignmentFixture.UpdateAsync(testDb.Driver, architectCaptain).ConfigureAwait(false);
 
                     missionService.OnGetMissionOutput = _ =>
                         "[ARMADA:MISSION] REST and Postman examples for captain model validation and mission total runtime.\n\n" +
@@ -1925,11 +1937,11 @@ namespace Test.Shared.Suites.Services
 
                     Captain architectCaptain = new Captain("signal-scrub-architect");
                     architectCaptain.State = CaptainStateEnum.Working;
-                    architectCaptain = await testDb.Driver.Captains.CreateAsync(architectCaptain).ConfigureAwait(false);
+                    architectCaptain = await CaptainAssignmentFixture.CreateAsync(testDb.Driver, architectCaptain).ConfigureAwait(false);
 
                     Captain workerCaptain = new Captain("signal-scrub-worker");
                     workerCaptain.State = CaptainStateEnum.Idle;
-                    workerCaptain = await testDb.Driver.Captains.CreateAsync(workerCaptain).ConfigureAwait(false);
+                    workerCaptain = await CaptainAssignmentFixture.CreateAsync(testDb.Driver, workerCaptain).ConfigureAwait(false);
 
                     Voyage voyage = new Voyage("signal-scrub-voyage");
                     voyage = await testDb.Driver.Voyages.CreateAsync(voyage).ConfigureAwait(false);
@@ -1976,9 +1988,9 @@ namespace Test.Shared.Suites.Services
                     judge.DependsOnMissionId = testEngineer.Id;
                     judge = await testDb.Driver.Missions.CreateAsync(judge).ConfigureAwait(false);
 
-                    architectCaptain.CurrentMissionId = architect.Id;
-                    architectCaptain.CurrentDockId = architectDock.Id;
-                    await testDb.Driver.Captains.UpdateAsync(architectCaptain).ConfigureAwait(false);
+                    architectCaptain.Assignment = architect;
+                    architectCaptain.Assignment ??= new Mission("fixture assignment"); architectCaptain.Assignment.DockId = architectDock.Id;
+                    await CaptainAssignmentFixture.UpdateAsync(testDb.Driver, architectCaptain).ConfigureAwait(false);
 
                     missionService.OnGetMissionOutput = _ =>
                         "[ARMADA:MISSION] Version bumps and release metadata\n" +
@@ -2019,7 +2031,7 @@ namespace Test.Shared.Suites.Services
 
                     Captain architectCaptain = new Captain("placeholder-architect");
                     architectCaptain.State = CaptainStateEnum.Working;
-                    architectCaptain = await testDb.Driver.Captains.CreateAsync(architectCaptain).ConfigureAwait(false);
+                    architectCaptain = await CaptainAssignmentFixture.CreateAsync(testDb.Driver, architectCaptain).ConfigureAwait(false);
 
                     Voyage voyage = new Voyage("placeholder-voyage");
                     voyage = await testDb.Driver.Voyages.CreateAsync(voyage).ConfigureAwait(false);
@@ -2107,12 +2119,13 @@ namespace Test.Shared.Suites.Services
                     vessel.LocalPath = Path.Combine(Path.GetTempPath(), "armada_test_bare_" + Guid.NewGuid().ToString("N"));
                     vessel.WorkingDirectory = Path.Combine(Path.GetTempPath(), "armada_test_work_" + Guid.NewGuid().ToString("N"));
                     vessel.DefaultBranch = "main";
-                    vessel.AllowConcurrentMissions = true;
+                    vessel.MaxParallelVoyages = 0;
+                    vessel.MaxParallelMissionsPerVoyage = 0;
                     vessel = await testDb.Driver.Vessels.CreateAsync(vessel).ConfigureAwait(false);
 
                     Captain architectCaptain = new Captain("fanout-architect");
                     architectCaptain.State = CaptainStateEnum.Working;
-                    architectCaptain = await testDb.Driver.Captains.CreateAsync(architectCaptain).ConfigureAwait(false);
+                    architectCaptain = await CaptainAssignmentFixture.CreateAsync(testDb.Driver, architectCaptain).ConfigureAwait(false);
 
                     Voyage voyage = new Voyage("fanout-branch-voyage");
                     voyage = await testDb.Driver.Voyages.CreateAsync(voyage).ConfigureAwait(false);
@@ -2134,9 +2147,9 @@ namespace Test.Shared.Suites.Services
                     architect.BranchName = architectDock.BranchName;
                     architect = await testDb.Driver.Missions.CreateAsync(architect).ConfigureAwait(false);
 
-                    architectCaptain.CurrentMissionId = architect.Id;
-                    architectCaptain.CurrentDockId = architectDock.Id;
-                    await testDb.Driver.Captains.UpdateAsync(architectCaptain).ConfigureAwait(false);
+                    architectCaptain.Assignment = architect;
+                    architectCaptain.Assignment ??= new Mission("fixture assignment"); architectCaptain.Assignment.DockId = architectDock.Id;
+                    await CaptainAssignmentFixture.UpdateAsync(testDb.Driver, architectCaptain).ConfigureAwait(false);
 
                     Mission worker = new Mission("[Worker] Template worker", "Template");
                     worker.VesselId = vessel.Id;
@@ -2176,7 +2189,7 @@ namespace Test.Shared.Suites.Services
                         Captain mux = new Captain("fanout-mux-" + index, AgentRuntimeEnum.Mux);
                         mux.Model = "gpt-oss:120b";
                         mux.RuntimeOptionsJson = "{\"endpoint\":\"fanout\"}";
-                        await testDb.Driver.Captains.CreateAsync(mux).ConfigureAwait(false);
+                        await CaptainAssignmentFixture.CreateAsync(testDb.Driver, mux).ConfigureAwait(false);
                     }
                     foreach (Mission workerMission in workerMissions)
                     {
@@ -2206,12 +2219,13 @@ namespace Test.Shared.Suites.Services
                     vessel.LocalPath = Path.Combine(Path.GetTempPath(), "armada_test_bare_" + Guid.NewGuid().ToString("N"));
                     vessel.WorkingDirectory = Path.Combine(Path.GetTempPath(), "armada_test_work_" + Guid.NewGuid().ToString("N"));
                     vessel.DefaultBranch = "main";
-                    vessel.AllowConcurrentMissions = true;
+                    vessel.MaxParallelVoyages = 0;
+                    vessel.MaxParallelMissionsPerVoyage = 0;
                     vessel = await testDb.Driver.Vessels.CreateAsync(vessel).ConfigureAwait(false);
 
                     Captain workerCaptain = new Captain("sequenced-worker");
                     workerCaptain.State = CaptainStateEnum.Idle;
-                    workerCaptain = await testDb.Driver.Captains.CreateAsync(workerCaptain).ConfigureAwait(false);
+                    workerCaptain = await CaptainAssignmentFixture.CreateAsync(testDb.Driver, workerCaptain).ConfigureAwait(false);
 
                     Voyage voyage = new Voyage("sequenced-voyage");
                     voyage = await testDb.Driver.Voyages.CreateAsync(voyage).ConfigureAwait(false);
@@ -2300,12 +2314,13 @@ namespace Test.Shared.Suites.Services
                     vessel.LocalPath = Path.Combine(Path.GetTempPath(), "armada_test_bare_" + Guid.NewGuid().ToString("N"));
                     vessel.WorkingDirectory = Path.Combine(Path.GetTempPath(), "armada_test_work_" + Guid.NewGuid().ToString("N"));
                     vessel.DefaultBranch = "main";
-                    vessel.AllowConcurrentMissions = true;
+                    vessel.MaxParallelVoyages = 0;
+                    vessel.MaxParallelMissionsPerVoyage = 0;
                     vessel = await testDb.Driver.Vessels.CreateAsync(vessel).ConfigureAwait(false);
 
                     Captain workerCaptain = new Captain("sequenced-worker");
                     workerCaptain.State = CaptainStateEnum.Idle;
-                    workerCaptain = await testDb.Driver.Captains.CreateAsync(workerCaptain).ConfigureAwait(false);
+                    workerCaptain = await CaptainAssignmentFixture.CreateAsync(testDb.Driver, workerCaptain).ConfigureAwait(false);
 
                     Voyage voyage = new Voyage("sequenced-voyage");
                     voyage = await testDb.Driver.Voyages.CreateAsync(voyage).ConfigureAwait(false);
@@ -2366,7 +2381,7 @@ namespace Test.Shared.Suites.Services
 
                     Captain judgeCaptain = new Captain("judge-captain");
                     judgeCaptain.State = CaptainStateEnum.Working;
-                    judgeCaptain = await testDb.Driver.Captains.CreateAsync(judgeCaptain).ConfigureAwait(false);
+                    judgeCaptain = await CaptainAssignmentFixture.CreateAsync(testDb.Driver, judgeCaptain).ConfigureAwait(false);
 
                     Voyage voyage = new Voyage("judge-voyage");
                     voyage = await testDb.Driver.Voyages.CreateAsync(voyage).ConfigureAwait(false);
@@ -2390,9 +2405,9 @@ namespace Test.Shared.Suites.Services
                     judge.DockId = judgeDock.Id;
                     await testDb.Driver.Missions.UpdateAsync(judge).ConfigureAwait(false);
 
-                    judgeCaptain.CurrentMissionId = judge.Id;
-                    judgeCaptain.CurrentDockId = judgeDock.Id;
-                    await testDb.Driver.Captains.UpdateAsync(judgeCaptain).ConfigureAwait(false);
+                    judgeCaptain.Assignment = judge;
+                    judgeCaptain.Assignment ??= new Mission("fixture assignment"); judgeCaptain.Assignment.DockId = judgeDock.Id;
+                    await CaptainAssignmentFixture.UpdateAsync(testDb.Driver, judgeCaptain).ConfigureAwait(false);
 
                     missionService.OnGetMissionOutput = _ =>
                         "[ARMADA:VERDICT] NEEDS_REVISION\n" +
@@ -2435,7 +2450,7 @@ namespace Test.Shared.Suites.Services
 
                     Captain judgeCaptain = new Captain("judge-captain");
                     judgeCaptain.State = CaptainStateEnum.Working;
-                    judgeCaptain = await testDb.Driver.Captains.CreateAsync(judgeCaptain).ConfigureAwait(false);
+                    judgeCaptain = await CaptainAssignmentFixture.CreateAsync(testDb.Driver, judgeCaptain).ConfigureAwait(false);
 
                     Voyage voyage = new Voyage("judge-voyage");
                     voyage = await testDb.Driver.Voyages.CreateAsync(voyage).ConfigureAwait(false);
@@ -2459,9 +2474,9 @@ namespace Test.Shared.Suites.Services
                     judge.DockId = judgeDock.Id;
                     await testDb.Driver.Missions.UpdateAsync(judge).ConfigureAwait(false);
 
-                    judgeCaptain.CurrentMissionId = judge.Id;
-                    judgeCaptain.CurrentDockId = judgeDock.Id;
-                    await testDb.Driver.Captains.UpdateAsync(judgeCaptain).ConfigureAwait(false);
+                    judgeCaptain.Assignment = judge;
+                    judgeCaptain.Assignment ??= new Mission("fixture assignment"); judgeCaptain.Assignment.DockId = judgeDock.Id;
+                    await CaptainAssignmentFixture.UpdateAsync(testDb.Driver, judgeCaptain).ConfigureAwait(false);
 
                     missionService.OnGetMissionOutput = _ =>
                         "Verdict options:\n" +
@@ -2513,7 +2528,7 @@ namespace Test.Shared.Suites.Services
 
                     Captain judgeCaptain = new Captain("judge-captain");
                     judgeCaptain.State = CaptainStateEnum.Working;
-                    judgeCaptain = await testDb.Driver.Captains.CreateAsync(judgeCaptain).ConfigureAwait(false);
+                    judgeCaptain = await CaptainAssignmentFixture.CreateAsync(testDb.Driver, judgeCaptain).ConfigureAwait(false);
 
                     Voyage voyage = new Voyage("judge-voyage");
                     voyage = await testDb.Driver.Voyages.CreateAsync(voyage).ConfigureAwait(false);
@@ -2537,9 +2552,9 @@ namespace Test.Shared.Suites.Services
                     judge.DockId = judgeDock.Id;
                     await testDb.Driver.Missions.UpdateAsync(judge).ConfigureAwait(false);
 
-                    judgeCaptain.CurrentMissionId = judge.Id;
-                    judgeCaptain.CurrentDockId = judgeDock.Id;
-                    await testDb.Driver.Captains.UpdateAsync(judgeCaptain).ConfigureAwait(false);
+                    judgeCaptain.Assignment = judge;
+                    judgeCaptain.Assignment ??= new Mission("fixture assignment"); judgeCaptain.Assignment.DockId = judgeDock.Id;
+                    await CaptainAssignmentFixture.UpdateAsync(testDb.Driver, judgeCaptain).ConfigureAwait(false);
 
                     missionService.OnGetMissionOutput = _ =>
                         "## Blast Radius\n" +
@@ -2592,7 +2607,7 @@ namespace Test.Shared.Suites.Services
 
                     Captain judgeCaptain = new Captain("judge-captain");
                     judgeCaptain.State = CaptainStateEnum.Working;
-                    judgeCaptain = await testDb.Driver.Captains.CreateAsync(judgeCaptain).ConfigureAwait(false);
+                    judgeCaptain = await CaptainAssignmentFixture.CreateAsync(testDb.Driver, judgeCaptain).ConfigureAwait(false);
 
                     Voyage voyage = new Voyage("judge-voyage");
                     voyage = await testDb.Driver.Voyages.CreateAsync(voyage).ConfigureAwait(false);
@@ -2616,9 +2631,9 @@ namespace Test.Shared.Suites.Services
                     judge.DockId = judgeDock.Id;
                     await testDb.Driver.Missions.UpdateAsync(judge).ConfigureAwait(false);
 
-                    judgeCaptain.CurrentMissionId = judge.Id;
-                    judgeCaptain.CurrentDockId = judgeDock.Id;
-                    await testDb.Driver.Captains.UpdateAsync(judgeCaptain).ConfigureAwait(false);
+                    judgeCaptain.Assignment = judge;
+                    judgeCaptain.Assignment ??= new Mission("fixture assignment"); judgeCaptain.Assignment.DockId = judgeDock.Id;
+                    await CaptainAssignmentFixture.UpdateAsync(testDb.Driver, judgeCaptain).ConfigureAwait(false);
 
                     missionService.OnGetMissionOutput = _ =>
                         "## Blast Radius\n" +
@@ -2672,7 +2687,7 @@ namespace Test.Shared.Suites.Services
 
                     Captain judgeCaptain = new Captain("judge-captain");
                     judgeCaptain.State = CaptainStateEnum.Working;
-                    judgeCaptain = await testDb.Driver.Captains.CreateAsync(judgeCaptain).ConfigureAwait(false);
+                    judgeCaptain = await CaptainAssignmentFixture.CreateAsync(testDb.Driver, judgeCaptain).ConfigureAwait(false);
 
                     Voyage voyage = new Voyage("judge-voyage");
                     voyage = await testDb.Driver.Voyages.CreateAsync(voyage).ConfigureAwait(false);
@@ -2696,9 +2711,9 @@ namespace Test.Shared.Suites.Services
                     judge.DockId = judgeDock.Id;
                     await testDb.Driver.Missions.UpdateAsync(judge).ConfigureAwait(false);
 
-                    judgeCaptain.CurrentMissionId = judge.Id;
-                    judgeCaptain.CurrentDockId = judgeDock.Id;
-                    await testDb.Driver.Captains.UpdateAsync(judgeCaptain).ConfigureAwait(false);
+                    judgeCaptain.Assignment = judge;
+                    judgeCaptain.Assignment ??= new Mission("fixture assignment"); judgeCaptain.Assignment.DockId = judgeDock.Id;
+                    await CaptainAssignmentFixture.UpdateAsync(testDb.Driver, judgeCaptain).ConfigureAwait(false);
 
                     missionService.OnGetMissionOutput = _ =>
                         "## Blast Radius\n" +
@@ -2748,7 +2763,7 @@ namespace Test.Shared.Suites.Services
 
                     Captain judgeCaptain = new Captain("judge-captain");
                     judgeCaptain.State = CaptainStateEnum.Working;
-                    judgeCaptain = await testDb.Driver.Captains.CreateAsync(judgeCaptain).ConfigureAwait(false);
+                    judgeCaptain = await CaptainAssignmentFixture.CreateAsync(testDb.Driver, judgeCaptain).ConfigureAwait(false);
 
                     Voyage voyage = new Voyage("judge-voyage");
                     voyage = await testDb.Driver.Voyages.CreateAsync(voyage).ConfigureAwait(false);
@@ -2772,9 +2787,9 @@ namespace Test.Shared.Suites.Services
                     judge.DockId = judgeDock.Id;
                     await testDb.Driver.Missions.UpdateAsync(judge).ConfigureAwait(false);
 
-                    judgeCaptain.CurrentMissionId = judge.Id;
-                    judgeCaptain.CurrentDockId = judgeDock.Id;
-                    await testDb.Driver.Captains.UpdateAsync(judgeCaptain).ConfigureAwait(false);
+                    judgeCaptain.Assignment = judge;
+                    judgeCaptain.Assignment ??= new Mission("fixture assignment"); judgeCaptain.Assignment.DockId = judgeDock.Id;
+                    await CaptainAssignmentFixture.UpdateAsync(testDb.Driver, judgeCaptain).ConfigureAwait(false);
 
                     missionService.OnGetMissionOutput = _ =>
                         "## Blast Radius\n" +
@@ -2844,7 +2859,7 @@ namespace Test.Shared.Suites.Services
 
                     Captain judgeCaptain = new Captain("judge-captain");
                     judgeCaptain.State = CaptainStateEnum.Working;
-                    judgeCaptain = await testDb.Driver.Captains.CreateAsync(judgeCaptain).ConfigureAwait(false);
+                    judgeCaptain = await CaptainAssignmentFixture.CreateAsync(testDb.Driver, judgeCaptain).ConfigureAwait(false);
 
                     Voyage voyage = new Voyage("judge-voyage");
                     voyage = await testDb.Driver.Voyages.CreateAsync(voyage).ConfigureAwait(false);
@@ -2868,9 +2883,9 @@ namespace Test.Shared.Suites.Services
                     judge.DockId = judgeDock.Id;
                     await testDb.Driver.Missions.UpdateAsync(judge).ConfigureAwait(false);
 
-                    judgeCaptain.CurrentMissionId = judge.Id;
-                    judgeCaptain.CurrentDockId = judgeDock.Id;
-                    await testDb.Driver.Captains.UpdateAsync(judgeCaptain).ConfigureAwait(false);
+                    judgeCaptain.Assignment = judge;
+                    judgeCaptain.Assignment ??= new Mission("fixture assignment"); judgeCaptain.Assignment.DockId = judgeDock.Id;
+                    await CaptainAssignmentFixture.UpdateAsync(testDb.Driver, judgeCaptain).ConfigureAwait(false);
 
                     missionService.OnGetMissionOutput = _ =>
                         "Looks good overall.\n" +
@@ -2906,7 +2921,7 @@ namespace Test.Shared.Suites.Services
 
                     Captain workerCaptain = new Captain("stage-lag-worker");
                     workerCaptain.State = CaptainStateEnum.Working;
-                    workerCaptain = await testDb.Driver.Captains.CreateAsync(workerCaptain).ConfigureAwait(false);
+                    workerCaptain = await CaptainAssignmentFixture.CreateAsync(testDb.Driver, workerCaptain).ConfigureAwait(false);
 
                     Voyage voyage = new Voyage("stage-lag-voyage");
                     voyage = await testDb.Driver.Voyages.CreateAsync(voyage).ConfigureAwait(false);
@@ -2931,9 +2946,9 @@ namespace Test.Shared.Suites.Services
                     worker.DockId = workerDock.Id;
                     await testDb.Driver.Missions.UpdateAsync(worker).ConfigureAwait(false);
 
-                    workerCaptain.CurrentMissionId = worker.Id;
-                    workerCaptain.CurrentDockId = workerDock.Id;
-                    await testDb.Driver.Captains.UpdateAsync(workerCaptain).ConfigureAwait(false);
+                    workerCaptain.Assignment = worker;
+                    workerCaptain.Assignment ??= new Mission("fixture assignment"); workerCaptain.Assignment.DockId = workerDock.Id;
+                    await CaptainAssignmentFixture.UpdateAsync(testDb.Driver, workerCaptain).ConfigureAwait(false);
 
                     // A dependent Judge stage that reuses the same branch -- this is the stage that would read
                     // stale code if the shared branch ref were not advanced to the worker dock's produced commit.
@@ -2981,7 +2996,7 @@ namespace Test.Shared.Suites.Services
 
                     Captain workerCaptain = new Captain("stage-lag-worker");
                     workerCaptain.State = CaptainStateEnum.Working;
-                    workerCaptain = await testDb.Driver.Captains.CreateAsync(workerCaptain).ConfigureAwait(false);
+                    workerCaptain = await CaptainAssignmentFixture.CreateAsync(testDb.Driver, workerCaptain).ConfigureAwait(false);
 
                     Voyage voyage = new Voyage("stage-lag-voyage");
                     voyage = await testDb.Driver.Voyages.CreateAsync(voyage).ConfigureAwait(false);
@@ -3006,9 +3021,9 @@ namespace Test.Shared.Suites.Services
                     worker.DockId = workerDock.Id;
                     await testDb.Driver.Missions.UpdateAsync(worker).ConfigureAwait(false);
 
-                    workerCaptain.CurrentMissionId = worker.Id;
-                    workerCaptain.CurrentDockId = workerDock.Id;
-                    await testDb.Driver.Captains.UpdateAsync(workerCaptain).ConfigureAwait(false);
+                    workerCaptain.Assignment = worker;
+                    workerCaptain.Assignment ??= new Mission("fixture assignment"); workerCaptain.Assignment.DockId = workerDock.Id;
+                    await CaptainAssignmentFixture.UpdateAsync(testDb.Driver, workerCaptain).ConfigureAwait(false);
 
                     // A dependent Judge stage that reuses the same branch -- this is the stage that would read
                     // stale code if the shared branch ref were not advanced to the worker dock's produced commit.
@@ -3058,7 +3073,7 @@ namespace Test.Shared.Suites.Services
 
                     Captain workerCaptain = new Captain("stage-lag-worker");
                     workerCaptain.State = CaptainStateEnum.Working;
-                    workerCaptain = await testDb.Driver.Captains.CreateAsync(workerCaptain).ConfigureAwait(false);
+                    workerCaptain = await CaptainAssignmentFixture.CreateAsync(testDb.Driver, workerCaptain).ConfigureAwait(false);
 
                     Voyage voyage = new Voyage("stage-lag-voyage");
                     voyage = await testDb.Driver.Voyages.CreateAsync(voyage).ConfigureAwait(false);
@@ -3083,9 +3098,9 @@ namespace Test.Shared.Suites.Services
                     worker.DockId = workerDock.Id;
                     await testDb.Driver.Missions.UpdateAsync(worker).ConfigureAwait(false);
 
-                    workerCaptain.CurrentMissionId = worker.Id;
-                    workerCaptain.CurrentDockId = workerDock.Id;
-                    await testDb.Driver.Captains.UpdateAsync(workerCaptain).ConfigureAwait(false);
+                    workerCaptain.Assignment = worker;
+                    workerCaptain.Assignment ??= new Mission("fixture assignment"); workerCaptain.Assignment.DockId = workerDock.Id;
+                    await CaptainAssignmentFixture.UpdateAsync(testDb.Driver, workerCaptain).ConfigureAwait(false);
 
                     // A dependent Judge stage that reuses the same branch -- this is the stage that would read
                     // stale code if the shared branch ref were not advanced to the worker dock's produced commit.
@@ -3137,7 +3152,7 @@ namespace Test.Shared.Suites.Services
 
                     Captain workerCaptain = new Captain("stage-lag-worker");
                     workerCaptain.State = CaptainStateEnum.Working;
-                    workerCaptain = await testDb.Driver.Captains.CreateAsync(workerCaptain).ConfigureAwait(false);
+                    workerCaptain = await CaptainAssignmentFixture.CreateAsync(testDb.Driver, workerCaptain).ConfigureAwait(false);
 
                     Voyage voyage = new Voyage("stage-lag-voyage");
                     voyage = await testDb.Driver.Voyages.CreateAsync(voyage).ConfigureAwait(false);
@@ -3162,9 +3177,9 @@ namespace Test.Shared.Suites.Services
                     worker.DockId = workerDock.Id;
                     await testDb.Driver.Missions.UpdateAsync(worker).ConfigureAwait(false);
 
-                    workerCaptain.CurrentMissionId = worker.Id;
-                    workerCaptain.CurrentDockId = workerDock.Id;
-                    await testDb.Driver.Captains.UpdateAsync(workerCaptain).ConfigureAwait(false);
+                    workerCaptain.Assignment = worker;
+                    workerCaptain.Assignment ??= new Mission("fixture assignment"); workerCaptain.Assignment.DockId = workerDock.Id;
+                    await CaptainAssignmentFixture.UpdateAsync(testDb.Driver, workerCaptain).ConfigureAwait(false);
 
                     // A dependent Judge stage that reuses the same branch -- this is the stage that would read
                     // stale code if the shared branch ref were not advanced to the worker dock's produced commit.
@@ -3207,11 +3222,11 @@ namespace Test.Shared.Suites.Services
 
                     Captain workerCaptain = new Captain("branch-backfill-worker");
                     workerCaptain.State = CaptainStateEnum.Working;
-                    workerCaptain = await testDb.Driver.Captains.CreateAsync(workerCaptain).ConfigureAwait(false);
+                    workerCaptain = await CaptainAssignmentFixture.CreateAsync(testDb.Driver, workerCaptain).ConfigureAwait(false);
 
                     Captain reviewerCaptain = new Captain("branch-backfill-reviewer");
                     reviewerCaptain.State = CaptainStateEnum.Idle;
-                    reviewerCaptain = await testDb.Driver.Captains.CreateAsync(reviewerCaptain).ConfigureAwait(false);
+                    reviewerCaptain = await CaptainAssignmentFixture.CreateAsync(testDb.Driver, reviewerCaptain).ConfigureAwait(false);
 
                     Voyage voyage = new Voyage("branch-backfill-voyage");
                     voyage = await testDb.Driver.Voyages.CreateAsync(voyage).ConfigureAwait(false);
@@ -3235,9 +3250,9 @@ namespace Test.Shared.Suites.Services
                     worker.LastUpdateUtc = DateTime.UtcNow;
                     await testDb.Driver.Missions.UpdateAsync(worker).ConfigureAwait(false);
 
-                    workerCaptain.CurrentMissionId = worker.Id;
-                    workerCaptain.CurrentDockId = workerDock.Id;
-                    await testDb.Driver.Captains.UpdateAsync(workerCaptain).ConfigureAwait(false);
+                    workerCaptain.Assignment = worker;
+                    workerCaptain.Assignment ??= new Mission("fixture assignment"); workerCaptain.Assignment.DockId = workerDock.Id;
+                    await CaptainAssignmentFixture.UpdateAsync(testDb.Driver, workerCaptain).ConfigureAwait(false);
 
                     Mission testEngineer = new Mission("[Test Engineer] Review branch handoff", "Write tests");
                     testEngineer.VesselId = vessel.Id;
@@ -3296,7 +3311,7 @@ namespace Test.Shared.Suites.Services
 
                     Captain workerCaptain = new Captain("scope-worker");
                     workerCaptain.State = CaptainStateEnum.Working;
-                    workerCaptain = await testDb.Driver.Captains.CreateAsync(workerCaptain).ConfigureAwait(false);
+                    workerCaptain = await CaptainAssignmentFixture.CreateAsync(testDb.Driver, workerCaptain).ConfigureAwait(false);
 
                     Voyage voyage = new Voyage("scope-voyage");
                     voyage = await testDb.Driver.Voyages.CreateAsync(voyage).ConfigureAwait(false);
@@ -3322,9 +3337,9 @@ namespace Test.Shared.Suites.Services
                     worker.LastUpdateUtc = DateTime.UtcNow;
                     await testDb.Driver.Missions.UpdateAsync(worker).ConfigureAwait(false);
 
-                    workerCaptain.CurrentMissionId = worker.Id;
-                    workerCaptain.CurrentDockId = workerDock.Id;
-                    await testDb.Driver.Captains.UpdateAsync(workerCaptain).ConfigureAwait(false);
+                    workerCaptain.Assignment = worker;
+                    workerCaptain.Assignment ??= new Mission("fixture assignment"); workerCaptain.Assignment.DockId = workerDock.Id;
+                    await CaptainAssignmentFixture.UpdateAsync(testDb.Driver, workerCaptain).ConfigureAwait(false);
 
                     Mission dependent = new Mission("[Test Engineer] Downstream should be cancelled", "Write tests");
                     dependent.VesselId = vessel.Id;
@@ -3384,7 +3399,7 @@ namespace Test.Shared.Suites.Services
 
                     Captain workerCaptain = new Captain("scope-worker");
                     workerCaptain.State = CaptainStateEnum.Working;
-                    workerCaptain = await testDb.Driver.Captains.CreateAsync(workerCaptain).ConfigureAwait(false);
+                    workerCaptain = await CaptainAssignmentFixture.CreateAsync(testDb.Driver, workerCaptain).ConfigureAwait(false);
 
                     Voyage voyage = new Voyage("scope-voyage");
                     voyage = await testDb.Driver.Voyages.CreateAsync(voyage).ConfigureAwait(false);
@@ -3410,9 +3425,9 @@ namespace Test.Shared.Suites.Services
                     worker.LastUpdateUtc = DateTime.UtcNow;
                     await testDb.Driver.Missions.UpdateAsync(worker).ConfigureAwait(false);
 
-                    workerCaptain.CurrentMissionId = worker.Id;
-                    workerCaptain.CurrentDockId = workerDock.Id;
-                    await testDb.Driver.Captains.UpdateAsync(workerCaptain).ConfigureAwait(false);
+                    workerCaptain.Assignment = worker;
+                    workerCaptain.Assignment ??= new Mission("fixture assignment"); workerCaptain.Assignment.DockId = workerDock.Id;
+                    await CaptainAssignmentFixture.UpdateAsync(testDb.Driver, workerCaptain).ConfigureAwait(false);
 
                     Mission dependent = new Mission("[Test Engineer] Downstream should be cancelled", "Write tests");
                     dependent.VesselId = vessel.Id;
@@ -3462,12 +3477,12 @@ namespace Test.Shared.Suites.Services
                     // Create two idle captains: one with PreferredPersona=Judge, one without
                     Captain genericCaptain = new Captain("generic-captain");
                     genericCaptain.State = CaptainStateEnum.Idle;
-                    await testDb.Driver.Captains.CreateAsync(genericCaptain).ConfigureAwait(false);
+                    await CaptainAssignmentFixture.CreateAsync(testDb.Driver, genericCaptain).ConfigureAwait(false);
 
                     Captain judgeCaptain = new Captain("judge-captain");
                     judgeCaptain.State = CaptainStateEnum.Idle;
                     judgeCaptain.PreferredPersona = "Judge";
-                    await testDb.Driver.Captains.CreateAsync(judgeCaptain).ConfigureAwait(false);
+                    await CaptainAssignmentFixture.CreateAsync(testDb.Driver, judgeCaptain).ConfigureAwait(false);
 
                     // Create a Judge mission
                     Mission judgeMission = new Mission("Review code");
@@ -3517,12 +3532,12 @@ namespace Test.Shared.Suites.Services
                     Captain workerOnlyCaptain = new Captain("worker-only");
                     workerOnlyCaptain.State = CaptainStateEnum.Idle;
                     workerOnlyCaptain.AllowedPersonas = "[\"Worker\"]";
-                    await testDb.Driver.Captains.CreateAsync(workerOnlyCaptain).ConfigureAwait(false);
+                    await CaptainAssignmentFixture.CreateAsync(testDb.Driver, workerOnlyCaptain).ConfigureAwait(false);
 
                     // Create captain that can handle any persona
                     Captain anyCaptain = new Captain("any-captain");
                     anyCaptain.State = CaptainStateEnum.Idle;
-                    await testDb.Driver.Captains.CreateAsync(anyCaptain).ConfigureAwait(false);
+                    await CaptainAssignmentFixture.CreateAsync(testDb.Driver, anyCaptain).ConfigureAwait(false);
 
                     // Create a Judge mission
                     Mission judgeMission = new Mission("Judge work");
@@ -3571,7 +3586,7 @@ namespace Test.Shared.Suites.Services
                     Captain architectOnly = new Captain("architect-only");
                     architectOnly.State = CaptainStateEnum.Idle;
                     architectOnly.AllowedPersonas = "[\"Architect\"]";
-                    await testDb.Driver.Captains.CreateAsync(architectOnly).ConfigureAwait(false);
+                    await CaptainAssignmentFixture.CreateAsync(testDb.Driver, architectOnly).ConfigureAwait(false);
 
                     Mission workerMission = new Mission("Implement worker task");
                     workerMission.VesselId = vessel.Id;
@@ -3611,7 +3626,7 @@ namespace Test.Shared.Suites.Services
                     architectOnly.State = CaptainStateEnum.Idle;
                     // Not valid JSON. The old fallback searched the raw text for "\"Worker\"" and matched.
                     architectOnly.AllowedPersonas = "[\"Architect\", \"Worker\"";
-                    await testDb.Driver.Captains.CreateAsync(architectOnly).ConfigureAwait(false);
+                    await CaptainAssignmentFixture.CreateAsync(testDb.Driver, architectOnly).ConfigureAwait(false);
 
                     Mission workerMission = new Mission("Implement worker task");
                     workerMission.VesselId = vessel.Id;
@@ -3650,7 +3665,7 @@ namespace Test.Shared.Suites.Services
                     Captain workerCaptain = new Captain("launch-failure-worker");
                     workerCaptain.State = CaptainStateEnum.Idle;
                     workerCaptain.AllowedPersonas = "[\"Worker\"]";
-                    workerCaptain = await testDb.Driver.Captains.CreateAsync(workerCaptain).ConfigureAwait(false);
+                    workerCaptain = await CaptainAssignmentFixture.CreateAsync(testDb.Driver, workerCaptain).ConfigureAwait(false);
 
                     Mission workerMission = new Mission("Launch failure mission");
                     workerMission.VesselId = vessel.Id;
@@ -3696,7 +3711,7 @@ namespace Test.Shared.Suites.Services
                     Captain workerCaptain = new Captain("launch-failure-worker");
                     workerCaptain.State = CaptainStateEnum.Idle;
                     workerCaptain.AllowedPersonas = "[\"Worker\"]";
-                    workerCaptain = await testDb.Driver.Captains.CreateAsync(workerCaptain).ConfigureAwait(false);
+                    workerCaptain = await CaptainAssignmentFixture.CreateAsync(testDb.Driver, workerCaptain).ConfigureAwait(false);
 
                     Mission workerMission = new Mission("Launch failure mission");
                     workerMission.VesselId = vessel.Id;
@@ -3710,7 +3725,7 @@ namespace Test.Shared.Suites.Services
                     workerMission.UserId = owner.Id;
                     workerCaptain.TenantId = workerMission.TenantId;
                     workerCaptain.UserId = owner.Id;
-                    await testDb.Driver.Captains.UpdateAsync(workerCaptain).ConfigureAwait(false);
+                    await CaptainAssignmentFixture.UpdateAsync(testDb.Driver, workerCaptain).ConfigureAwait(false);
                     vessel.TenantId = workerMission.TenantId;
                     vessel.UserId = owner.Id;
                     await testDb.Driver.Vessels.UpdateAsync(vessel).ConfigureAwait(false);
@@ -3746,7 +3761,7 @@ namespace Test.Shared.Suites.Services
                     AssertNull(reloadedMission.CaptainId, "Mission should clear the captain after launch failure");
                     AssertNull(reloadedMission.DockId, "Mission should clear the dock after launch failure");
                     AssertNotNull(reloadedCaptain, "Captain should remain readable after launch failure");
-                    AssertNull(reloadedCaptain!.CurrentMissionId, "The captain no longer holds the failed mission");
+                    AssertNull(reloadedCaptain!.ActiveMissionIds.SingleOrDefault(), "The captain no longer holds the failed mission");
                     AssertEqual(CaptainStateEnum.Quarantined, reloadedCaptain.State, "A deterministic configuration failure quarantines the captain instead of handing it the next mission");
                     AssertEqual(0, docks.Count(d => d.Active), "Launch failure should not leave behind an active dock");
                 }
@@ -3786,7 +3801,7 @@ namespace Test.Shared.Suites.Services
                     Captain workerCaptain = new Captain("duplicate-worker");
                     workerCaptain.State = CaptainStateEnum.Idle;
                     workerCaptain.AllowedPersonas = "[\"Worker\"]";
-                    workerCaptain = await testDb.Driver.Captains.CreateAsync(workerCaptain).ConfigureAwait(false);
+                    workerCaptain = await CaptainAssignmentFixture.CreateAsync(testDb.Driver, workerCaptain).ConfigureAwait(false);
 
                     Mission workerMission = new Mission("Duplicate assignment probe");
                     workerMission.VesselId = vessel.Id;

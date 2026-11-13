@@ -17,12 +17,15 @@ namespace Armada.Core.Services
     public interface IVesselCheckoutFiles
     {
         /// <summary>
-        /// List one directory with Workspace rules.
+        /// List one page of one directory with Workspace rules (directories first, then files, by name). The page is cut
+        /// on the host that has the checkout. Walk every page with <see cref="WorkspaceTreeReader"/> when every entry is
+        /// needed.
         /// </summary>
         /// <param name="path">Relative directory path, or null for the checkout root.</param>
+        /// <param name="page">Paging (page size 1 to 1000).</param>
         /// <param name="token">Cancellation token.</param>
-        /// <returns>The listing.</returns>
-        Task<WorkspaceTreeResult> GetTreeAsync(string? path, CancellationToken token = default);
+        /// <returns>The listing page.</returns>
+        Task<WorkspaceTreeResult> GetTreeAsync(string? path, EnumerationQuery page, CancellationToken token = default);
 
         /// <summary>
         /// Read one file for Workspace.

@@ -51,6 +51,16 @@ namespace Armada.Core.Database.Interfaces
         Task<EnumerationResult<PromptTemplate>> EnumerateAsync(EnumerationQuery query, CancellationToken token = default);
 
         /// <summary>
+        /// Enumerate the prompt templates one caller may see, paged in the data source with the visibility, category
+        /// filter and ordering of <paramref name="query"/> applied before counting.
+        /// </summary>
+        /// <param name="query">Visibility, filters, ordering and paging.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>One page of visible templates.</returns>
+        /// <exception cref="System.ArgumentNullException">Thrown when <paramref name="query"/> is null.</exception>
+        Task<EnumerationResult<PromptTemplate>> EnumerateVisibleAsync(PromptTemplateQuery query, CancellationToken token = default);
+
+        /// <summary>
         /// Check if a prompt template exists by identifier.
         /// </summary>
         Task<bool> ExistsAsync(string id, CancellationToken token = default);

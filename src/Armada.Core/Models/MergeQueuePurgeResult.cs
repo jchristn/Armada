@@ -1,6 +1,7 @@
 namespace Armada.Core.Models
 {
     using System.Collections.Generic;
+    using Armada.Core.Services;
 
     /// <summary>
     /// Result of a batch merge queue purge operation.
@@ -22,6 +23,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// Entries that were skipped (not found or not in terminal state).
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxRequestItems, Reason = "At most one per requested id (EntryIds is limited to MaxRequestItems)")]
         public List<MergeQueuePurgeSkipped> Skipped { get; set; } = new List<MergeQueuePurgeSkipped>();
 
         #endregion

@@ -42,6 +42,7 @@ namespace Armada.Core.Services
         {
             if (String.IsNullOrWhiteSpace(tenantId)) throw new ArgumentNullException(nameof(tenantId));
             if (selections == null) return new List<Playbook>();
+            CollectionLimits.RequireConfigItems(selections, "SelectedPlaybooks");
 
             List<Playbook> resolved = new List<Playbook>();
             HashSet<string> seen = new HashSet<string>(StringComparer.Ordinal);

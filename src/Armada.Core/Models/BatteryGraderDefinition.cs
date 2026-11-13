@@ -2,6 +2,7 @@ namespace Armada.Core.Models
 {
     using System.Collections.Generic;
     using Armada.Core.Enums;
+    using Armada.Core.Services;
 
     /// <summary>
     /// How a battery task is graded. Which fields apply depends on Type; see battery/README.md.
@@ -24,6 +25,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// Command and Mutation: commands run in the worktree, in order.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxConfigItems)]
         public List<BatteryCommand> Commands
         {
             get => _Commands;
@@ -33,6 +35,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// ByteComparison: files that must match their expected bytes.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxConfigItems)]
         public List<BatteryExpectedFile> Files
         {
             get => _Files;
@@ -42,6 +45,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// SeededSet: the seeded defects or violations.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxConfigItems)]
         public List<BatterySeededItem> Seeded
         {
             get => _Seeded;
@@ -51,6 +55,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// SeededSet: accepted Judge verdicts (PASS, FAIL, NEEDS_REVISION); empty accepts any.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxConfigItems)]
         public List<string> ExpectedVerdicts
         {
             get => _ExpectedVerdicts;
@@ -61,6 +66,7 @@ namespace Armada.Core.Models
         /// SeededSet: headings whose content is the blocking findings (each list item, or the whole section).
         /// Empty means every list item outside non-blocking sections is a finding.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxConfigItems)]
         public List<string> BlockingSections
         {
             get => _BlockingSections;
@@ -86,6 +92,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// Mutation: source changes the tests must detect.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxConfigItems)]
         public List<BatteryMutant> Mutants
         {
             get => _Mutants;

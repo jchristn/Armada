@@ -38,8 +38,15 @@ namespace Armada.Core.Services
         }
 
         /// <summary>
-        /// Enumerate objectives visible to the caller.
+        /// Enumerate one page of the objectives visible to the caller, most recently updated first. Scope and every
+        /// filter are applied in the database before counting, so TotalRecords is exact. Page size 1 to 1000. A global
+        /// admin may narrow to a tenant or user with TenantId and UserId; a tenant admin to a user with UserId.
         /// </summary>
+        /// <param name="auth">Caller.</param>
+        /// <param name="query">Filters and paging.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>One page.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when auth or query is null.</exception>
         public async Task<EnumerationResult<Objective>> EnumerateAsync(
             AuthContext auth,
             ObjectiveQuery query,
@@ -49,93 +56,11 @@ namespace Armada.Core.Services
             if (query == null) throw new ArgumentNullException(nameof(query));
 
             await EnsureBackfilledAsync(token).ConfigureAwait(false);
-            List<Objective> objectives = await ReadAllObjectivesAsync(auth, token).ConfigureAwait(false);
-            IEnumerable<Objective> filtered = objectives;
-
-            if (!String.IsNullOrWhiteSpace(query.Owner))
-                filtered = filtered.Where(item => ContainsIgnoreCase(item.Owner, query.Owner));
-            if (!String.IsNullOrWhiteSpace(query.Category))
-                filtered = filtered.Where(item => ContainsIgnoreCase(item.Category, query.Category));
-            if (!String.IsNullOrWhiteSpace(query.ParentObjectiveId))
-                filtered = filtered.Where(item => String.Equals(item.ParentObjectiveId, query.ParentObjectiveId, StringComparison.OrdinalIgnoreCase));
-            if (!String.IsNullOrWhiteSpace(query.VesselId))
-                filtered = filtered.Where(item => item.VesselIds.Contains(query.VesselId, StringComparer.OrdinalIgnoreCase));
-            if (!String.IsNullOrWhiteSpace(query.FleetId))
-                filtered = filtered.Where(item => item.FleetIds.Contains(query.FleetId, StringComparer.OrdinalIgnoreCase));
-            if (!String.IsNullOrWhiteSpace(query.PlanningSessionId))
-                filtered = filtered.Where(item => item.PlanningSessionIds.Contains(query.PlanningSessionId, StringComparer.OrdinalIgnoreCase));
-            if (!String.IsNullOrWhiteSpace(query.VoyageId))
-                filtered = filtered.Where(item => item.VoyageIds.Contains(query.VoyageId, StringComparer.OrdinalIgnoreCase));
-            if (!String.IsNullOrWhiteSpace(query.MissionId))
-                filtered = filtered.Where(item => item.MissionIds.Contains(query.MissionId, StringComparer.OrdinalIgnoreCase));
-            if (!String.IsNullOrWhiteSpace(query.CheckRunId))
-                filtered = filtered.Where(item => item.CheckRunIds.Contains(query.CheckRunId, StringComparer.OrdinalIgnoreCase));
-            if (!String.IsNullOrWhiteSpace(query.ReleaseId))
-                filtered = filtered.Where(item => item.ReleaseIds.Contains(query.ReleaseId, StringComparer.OrdinalIgnoreCase));
-            if (!String.IsNullOrWhiteSpace(query.DeploymentId))
-                filtered = filtered.Where(item => item.DeploymentIds.Contains(query.DeploymentId, StringComparer.OrdinalIgnoreCase));
-            if (!String.IsNullOrWhiteSpace(query.IncidentId))
-                filtered = filtered.Where(item => item.IncidentIds.Contains(query.IncidentId, StringComparer.OrdinalIgnoreCase));
-            if (!String.IsNullOrWhiteSpace(query.Tag))
-                filtered = filtered.Where(item => item.Tags.Contains(query.Tag, StringComparer.OrdinalIgnoreCase));
-            if (query.Status.HasValue)
-                filtered = filtered.Where(item => item.Status == query.Status.Value);
-            if (query.BacklogState.HasValue)
-                filtered = filtered.Where(item => item.BacklogState == query.BacklogState.Value);
-            if (query.Kind.HasValue)
-                filtered = filtered.Where(item => item.Kind == query.Kind.Value);
-            if (query.Priority.HasValue)
-                filtered = filtered.Where(item => item.Priority == query.Priority.Value);
-            if (query.Effort.HasValue)
-                filtered = filtered.Where(item => item.Effort == query.Effort.Value);
-            if (!String.IsNullOrWhiteSpace(query.TargetVersion))
-                filtered = filtered.Where(item => String.Equals(item.TargetVersion, query.TargetVersion, StringComparison.OrdinalIgnoreCase));
-            if (query.FromUtc.HasValue)
-                filtered = filtered.Where(item => item.CreatedUtc >= query.FromUtc.Value.ToUniversalTime());
-            if (query.ToUtc.HasValue)
-                filtered = filtered.Where(item => item.CreatedUtc <= query.ToUtc.Value.ToUniversalTime());
-
-            string? search = Normalize(query.Search);
-            if (!String.IsNullOrWhiteSpace(search))
-            {
-                filtered = filtered.Where(item =>
-                    ContainsIgnoreCase(item.Title, search)
-                    || ContainsIgnoreCase(item.Description, search)
-                    || ContainsIgnoreCase(item.Owner, search)
-                    || ContainsIgnoreCase(item.Category, search)
-                    || ContainsIgnoreCase(item.TargetVersion, search)
-                    || ContainsIgnoreCase(item.RefinementSummary, search)
-                    || ContainsIgnoreCase(item.SourceProvider, search)
-                    || ContainsIgnoreCase(item.SourceType, search)
-                    || ContainsIgnoreCase(item.SourceId, search)
-                    || ContainsIgnoreCase(item.SourceUrl, search)
-                    || item.Tags.Any(tag => ContainsIgnoreCase(tag, search))
-                    || item.AcceptanceCriteria.Any(criteria => ContainsIgnoreCase(criteria, search))
-                    || item.NonGoals.Any(nonGoal => ContainsIgnoreCase(nonGoal, search))
-                    || item.RolloutConstraints.Any(constraint => ContainsIgnoreCase(constraint, search))
-                    || item.EvidenceLinks.Any(link => ContainsIgnoreCase(link, search))
-                    || item.BlockedByObjectiveIds.Any(blockedBy => ContainsIgnoreCase(blockedBy, search)));
-            }
-
-            List<Objective> ordered = filtered
-                .OrderByDescending(item => item.LastUpdateUtc)
-                .ThenByDescending(item => item.Id, StringComparer.Ordinal)
-                .ToList();
-
-            int pageSize = query.PageSize < 1 ? 50 : Math.Min(query.PageSize, 500);
-            int pageNumber = query.PageNumber < 1 ? 1 : query.PageNumber;
-            int offset = (pageNumber - 1) * pageSize;
-            List<Objective> page = ordered.Skip(offset).Take(pageSize).ToList();
-
-            return new EnumerationResult<Objective>
-            {
-                PageNumber = pageNumber,
-                PageSize = pageSize,
-                TotalRecords = ordered.Count,
-                TotalPages = pageSize > 0 ? (int)Math.Ceiling((double)ordered.Count / pageSize) : 0,
-                Objects = page,
-                TotalMs = 0
-            };
+            if (auth.IsAdmin)
+                return await _Database.Objectives.EnumeratePageAsync(query.TenantId, query.UserId, query, token).ConfigureAwait(false);
+            if (auth.IsTenantAdmin)
+                return await _Database.Objectives.EnumeratePageAsync(auth.TenantId, query.UserId, query, token).ConfigureAwait(false);
+            return await _Database.Objectives.EnumeratePageAsync(auth.TenantId, auth.UserId, query, token).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -165,6 +90,7 @@ namespace Armada.Core.Services
         {
             if (auth == null) throw new ArgumentNullException(nameof(auth));
             if (request == null) throw new ArgumentNullException(nameof(request));
+            CollectionBounds.Validate(request);
             await EnsureBackfilledAsync(token).ConfigureAwait(false);
 
             Objective objective = new Objective
@@ -208,6 +134,7 @@ namespace Armada.Core.Services
             };
 
             SanitizeObjective(objective);
+            CollectionBounds.Validate(objective);
             await ValidateLinksAsync(auth, objective, token).ConfigureAwait(false);
             ApplyLifecycleTimestamps(objective);
             await PersistObjectiveAsync(auth, objective, token).ConfigureAwait(false);
@@ -223,6 +150,7 @@ namespace Armada.Core.Services
             if (auth == null) throw new ArgumentNullException(nameof(auth));
             if (String.IsNullOrWhiteSpace(id)) throw new ArgumentNullException(nameof(id));
             if (request == null) throw new ArgumentNullException(nameof(request));
+            CollectionBounds.Validate(request);
             await EnsureBackfilledAsync(token).ConfigureAwait(false);
 
             Objective objective = await ReadAsync(auth, id, token).ConfigureAwait(false)
@@ -263,6 +191,7 @@ namespace Armada.Core.Services
             objective.LastUpdateUtc = DateTime.UtcNow;
 
             SanitizeObjective(objective);
+            CollectionBounds.Validate(objective);
             await ValidateLinksAsync(auth, objective, token).ConfigureAwait(false);
             ApplyLifecycleTimestamps(objective);
             await PersistObjectiveAsync(auth, objective, token).ConfigureAwait(false);
@@ -271,9 +200,18 @@ namespace Armada.Core.Services
         }
 
         /// <summary>
-        /// Apply a batch of backlog rank updates.
+        /// Apply a batch of backlog rank updates. The request holds 1 to <see cref="CollectionLimits.MaxRequestItems"/>
+        /// items; the result names each updated objective with its new rank, ordered by rank then id.
         /// </summary>
-        public async Task<List<Objective>> ReorderAsync(
+        /// <param name="auth">Caller.</param>
+        /// <param name="request">Rank updates.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The count and the applied ranks.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when auth or request is null.</exception>
+        /// <exception cref="InvalidOperationException">Thrown when the request is empty or repeats an id or rank.</exception>
+        /// <exception cref="CollectionLimitExceededException">Thrown when the request holds more than MaxRequestItems items.</exception>
+        /// <exception cref="KeyNotFoundException">Thrown when an objective is not found.</exception>
+        public async Task<ObjectiveReorderResult> ReorderAsync(
             AuthContext auth,
             ObjectiveReorderRequest request,
             CancellationToken token = default)
@@ -284,6 +222,7 @@ namespace Armada.Core.Services
 
             if (request.Items == null || request.Items.Count < 1)
                 throw new InvalidOperationException("At least one reorder item is required.");
+            CollectionLimits.RequireRequestItems(request.Items, nameof(request.Items));
 
             HashSet<string> objectiveIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             HashSet<int> ranks = new HashSet<int>();
@@ -308,6 +247,7 @@ namespace Armada.Core.Services
                 objective.LastUpdateUtc = now;
 
                 SanitizeObjective(objective);
+                CollectionBounds.Validate(objective);
                 await ValidateLinksAsync(auth, objective, token).ConfigureAwait(false);
                 ApplyLifecycleTimestamps(objective);
                 await PersistObjectiveAsync(auth, objective, token).ConfigureAwait(false);
@@ -315,10 +255,14 @@ namespace Armada.Core.Services
                 updated.Add(objective);
             }
 
-            return updated
+            ObjectiveReorderResult result = new ObjectiveReorderResult();
+            result.Updated = updated.Count;
+            result.Items = updated
                 .OrderBy(item => item.Rank)
                 .ThenBy(item => item.Id, StringComparer.Ordinal)
+                .Select(item => new ObjectiveReorderItem { ObjectiveId = item.Id, Rank = item.Rank })
                 .ToList();
+            return result;
         }
 
         /// <summary>
@@ -332,6 +276,7 @@ namespace Armada.Core.Services
 
             objective.LastUpdateUtc = DateTime.UtcNow;
             SanitizeObjective(objective);
+            CollectionBounds.Validate(objective);
             await ValidateLinksAsync(auth, objective, token).ConfigureAwait(false);
             ApplyLifecycleTimestamps(objective);
             await PersistObjectiveAsync(auth, objective, token).ConfigureAwait(false);
@@ -365,8 +310,15 @@ namespace Armada.Core.Services
         }
 
         /// <summary>
-        /// Enumerate objectives linked to a planning session.
+        /// Enumerate every objective linked to a planning session, reading bounded pages of 1000 until the last one.
+        /// For server-side work that must touch each linked objective (dispatch linking); responses use a page or
+        /// <see cref="CountByPlanningSessionAsync"/> instead.
         /// </summary>
+        /// <param name="auth">Caller.</param>
+        /// <param name="planningSessionId">Planning session identifier.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The linked objectives.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when auth or planningSessionId is null.</exception>
         public async Task<List<Objective>> EnumerateByPlanningSessionAsync(
             AuthContext auth,
             string planningSessionId,
@@ -375,14 +327,44 @@ namespace Armada.Core.Services
             if (auth == null) throw new ArgumentNullException(nameof(auth));
             if (String.IsNullOrWhiteSpace(planningSessionId)) throw new ArgumentNullException(nameof(planningSessionId));
 
-            EnumerationResult<Objective> results = await EnumerateAsync(auth, new ObjectiveQuery
+            List<Objective> all = new List<Objective>();
+            int pageNumber = 1;
+            while (true)
+            {
+                token.ThrowIfCancellationRequested();
+                EnumerationResult<Objective> page = await EnumerateAsync(auth, new ObjectiveQuery
+                {
+                    PageNumber = pageNumber,
+                    PageSize = CollectionLimits.MaxPageSize,
+                    PlanningSessionId = planningSessionId
+                }, token).ConfigureAwait(false);
+                all.AddRange(page.Objects);
+                if (page.Objects.Count == 0 || pageNumber >= page.TotalPages) break;
+                pageNumber++;
+            }
+
+            return all;
+        }
+
+        /// <summary>
+        /// Count the objectives linked to a planning session that the caller can see.
+        /// </summary>
+        /// <param name="auth">Caller.</param>
+        /// <param name="planningSessionId">Planning session identifier.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The number of linked objectives.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when auth or planningSessionId is null.</exception>
+        public async Task<long> CountByPlanningSessionAsync(AuthContext auth, string planningSessionId, CancellationToken token = default)
+        {
+            if (auth == null) throw new ArgumentNullException(nameof(auth));
+            if (String.IsNullOrWhiteSpace(planningSessionId)) throw new ArgumentNullException(nameof(planningSessionId));
+            EnumerationResult<Objective> page = await EnumerateAsync(auth, new ObjectiveQuery
             {
                 PageNumber = 1,
-                PageSize = 500,
+                PageSize = 1,
                 PlanningSessionId = planningSessionId
             }, token).ConfigureAwait(false);
-
-            return results.Objects;
+            return page.TotalRecords;
         }
 
         /// <summary>
@@ -598,15 +580,6 @@ namespace Armada.Core.Services
             AddIfMissing(objective.VesselIds, incident.VesselId);
             await AppendFleetForVesselAsync(auth, objective, incident.VesselId, token).ConfigureAwait(false);
             return await PersistLinkedObjectiveAsync(auth, objective, token).ConfigureAwait(false);
-        }
-
-        private async Task<List<Objective>> ReadAllObjectivesAsync(AuthContext auth, CancellationToken token)
-        {
-            if (auth.IsAdmin)
-                return await _Database.Objectives.EnumerateAsync(token).ConfigureAwait(false);
-            if (auth.IsTenantAdmin)
-                return await _Database.Objectives.EnumerateAsync(auth.TenantId!, token).ConfigureAwait(false);
-            return await _Database.Objectives.EnumerateAsync(auth.TenantId!, auth.UserId!, token).ConfigureAwait(false);
         }
 
         private async Task<Objective?> ReadObjectiveRowAsync(AuthContext auth, string id, CancellationToken token)
@@ -974,6 +947,7 @@ namespace Armada.Core.Services
         {
             objective.LastUpdateUtc = DateTime.UtcNow;
             SanitizeObjective(objective);
+            CollectionBounds.Validate(objective);
             await ValidateLinksAsync(auth, objective, token).ConfigureAwait(false);
             ApplyLifecycleTimestamps(objective);
             await PersistObjectiveAsync(auth, objective, token).ConfigureAwait(false);
@@ -1115,8 +1089,11 @@ namespace Armada.Core.Services
             if (requestedRank.HasValue)
                 return requestedRank.Value;
 
-            List<Objective> existing = await ReadAllObjectivesAsync(auth, token).ConfigureAwait(false);
-            return existing.Count == 0 ? 0 : existing.Max(item => item.Rank) + 1;
+            int? max;
+            if (auth.IsAdmin) max = await _Database.Objectives.ReadMaxRankAsync(null, null, token).ConfigureAwait(false);
+            else if (auth.IsTenantAdmin) max = await _Database.Objectives.ReadMaxRankAsync(auth.TenantId, null, token).ConfigureAwait(false);
+            else max = await _Database.Objectives.ReadMaxRankAsync(auth.TenantId, auth.UserId, token).ConfigureAwait(false);
+            return max.HasValue ? max.Value + 1 : 0;
         }
 
         private static void SanitizeObjective(Objective objective)

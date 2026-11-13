@@ -263,7 +263,13 @@ namespace Armada.Core.Database.Mysql.Implementations
         /// <returns>Paginated enumeration result.</returns>
         public async Task<EnumerationResult<PromptTemplate>> EnumerateAsync(EnumerationQuery query, CancellationToken token = default)
         {
-            if (query == null) query = new EnumerationQuery();
+            return await EnumerateVisibleAsync(PromptTemplateQuery.From(query), token).ConfigureAwait(false);
+        }
+
+        /// <inheritdoc />
+        public async Task<EnumerationResult<PromptTemplate>> EnumerateVisibleAsync(PromptTemplateQuery query, CancellationToken token = default)
+        {
+            if (query == null) throw new ArgumentNullException(nameof(query));
 
             using (MySqlConnection conn = new MySqlConnection(_ConnectionString))
             {
@@ -271,6 +277,30 @@ namespace Armada.Core.Database.Mysql.Implementations
 
                 List<string> conditions = new List<string>();
                 List<MySqlParameter> parameters = new List<MySqlParameter>();
+
+                List<string> scoped = new List<string>();
+                if (!String.IsNullOrEmpty(query.TenantId))
+                {
+                    scoped.Add("tenant_id = @tenant_id");
+                    parameters.Add(new MySqlParameter("@tenant_id", query.TenantId));
+                }
+                if (!String.IsNullOrEmpty(query.ViewerUserId))
+                {
+                    // A regular user sees tenant-wide rows plus their own (ScopedVisibility.CanView), counted in the data source.
+                    scoped.Add("(scope = @tenant_wide_scope OR user_id = @viewer_user_id)");
+                    parameters.Add(new MySqlParameter("@tenant_wide_scope", ScopeEnum.TenantWide.ToString()));
+                    parameters.Add(new MySqlParameter("@viewer_user_id", query.ViewerUserId));
+                }
+                if (scoped.Count > 0)
+                {
+                    string scopedClause = String.Join(" AND ", scoped);
+                    conditions.Add(query.IncludeUntenanted ? "(tenant_id IS NULL OR tenant_id = '' OR (" + scopedClause + "))" : scopedClause);
+                }
+                if (!String.IsNullOrWhiteSpace(query.Category))
+                {
+                    conditions.Add("LOWER(category) = @category");
+                    parameters.Add(new MySqlParameter("@category", query.Category.Trim().ToLowerInvariant()));
+                }
 
                 if (query.CreatedAfter.HasValue)
                 {
@@ -285,6 +315,9 @@ namespace Armada.Core.Database.Mysql.Implementations
 
                 string whereClause = conditions.Count > 0 ? " WHERE " + string.Join(" AND ", conditions) : "";
                 string orderDirection = query.Order == EnumerationOrderEnum.CreatedAscending ? "ASC" : "DESC";
+                string orderClause = query.OrderByCategoryAndName
+                    ? " ORDER BY LOWER(COALESCE(category, '')) ASC, LOWER(name) ASC, id ASC"
+                    : " ORDER BY created_utc " + orderDirection + ", id " + orderDirection;
 
                 // Count
                 long totalCount = 0;
@@ -300,7 +333,7 @@ namespace Armada.Core.Database.Mysql.Implementations
                 using (MySqlCommand cmd = conn.CreateCommand())
                 {
                     cmd.CommandText = "SELECT * FROM prompt_templates" + whereClause +
-                        " ORDER BY created_utc " + orderDirection +
+                        orderClause +
                         " LIMIT " + query.PageSize + " OFFSET " + query.Offset + ";";
                     foreach (MySqlParameter p in parameters) cmd.Parameters.Add(new MySqlParameter(p.ParameterName, p.Value));
                     using (MySqlDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))

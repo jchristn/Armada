@@ -50,7 +50,7 @@ namespace Armada.Core.Storage
                     }
                     report.Locations.Add(new StorageLocation { Path = path, Category = root.Category, EntityId = root.EntityId, Activity = root.Activity });
                 }
-                catch (ArgumentException) { report.Warnings.Add("InvalidPath"); report.Status = "Partial"; }
+                catch (ArgumentException) { AddReportWarning(report, "InvalidPath"); report.Status = "Partial"; }
             }
             report.Locations = report.Locations.OrderByDescending(r => r.Path.Length).ToList();
             long examined = 0;
@@ -137,6 +137,7 @@ namespace Armada.Core.Storage
                 {
                     DriveInfo? drive = drives.FirstOrDefault(d => IsUnder(location.Path, Path.TrimEndingDirectorySeparator(d.RootDirectory.FullName)));
                     if (drive == null || !measuredMounts.Add(drive.RootDirectory.FullName)) continue;
+                    if (report.Volumes.Count >= StorageHostReport.MaxVolumes) { AddReportWarning(report, "VolumeLimit"); break; }
                     StorageVolume volume = new StorageVolume { Path = drive.RootDirectory.FullName };
                     try { volume.TotalBytes = drive.TotalSize; volume.AvailableBytes = drive.AvailableFreeSpace; volume.Status = "Complete"; }
                     catch (IOException) { }
@@ -144,7 +145,7 @@ namespace Armada.Core.Storage
                     report.Volumes.Add(volume);
                 }
             }
-            catch (IOException) { report.Warnings.Add("VolumesUnavailable"); }
+            catch (IOException) { AddReportWarning(report, "VolumesUnavailable"); }
             report.MeasuredUtc = DateTime.UtcNow;
             return report;
         }
@@ -167,6 +168,11 @@ namespace Armada.Core.Storage
         {
             location.Status = "Partial";
             if (location.Warnings.Count < 10 && !location.Warnings.Contains(code)) location.Warnings.Add(code);
+        }
+
+        private static void AddReportWarning(StorageHostReport report, string code)
+        {
+            if (report.Warnings.Count < StorageHostReport.MaxWarnings && !report.Warnings.Contains(code)) report.Warnings.Add(code);
         }
     }
 }

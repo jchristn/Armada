@@ -66,5 +66,17 @@ namespace Armada.Core.Database.Interfaces
         /// Whether a model endpoint with the given id exists.
         /// </summary>
         Task<bool> ExistsAsync(string id, CancellationToken token = default);
+
+        /// <summary>
+        /// One page of model endpoints visible through <paramref name="filter"/>, counted and cut in the data source (COUNT plus
+        /// LIMIT/OFFSET over the same filter), ordered by creation time in the query's direction with the id as the
+        /// tie-break. CreatedAfter and CreatedBefore apply.
+        /// </summary>
+        /// <param name="query">Paging, order, and created-time filters.</param>
+        /// <param name="filter">Caller visibility.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The page with exact totals.</returns>
+        /// <exception cref="System.ArgumentNullException">Thrown when query or filter is null.</exception>
+        Task<EnumerationResult<ModelEndpoint>> EnumeratePageAsync(EnumerationQuery query, ScopedEnumerationFilter filter, CancellationToken token = default);
     }
 }

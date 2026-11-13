@@ -31,6 +31,12 @@ namespace Armada.Server.Routes
         private readonly ObjectiveRefinementCoordinator? _objectiveRefinementSessions;
 
         /// <summary>
+        /// Invoked after a captain create or update stored a usage capture configuration that differs from the
+        /// previous one, so in-flight captures computed under the old configuration are discarded and schedules rebuild.
+        /// </summary>
+        public Func<Task>? OnUsageCaptureConfigurationChanged { get; set; }
+
+        /// <summary>
         /// Instantiate.
         /// </summary>
         /// <param name="database">Database driver.</param>
@@ -82,6 +88,32 @@ namespace Armada.Server.Routes
                 lines.Add(line);
             }
             return lines.ToArray();
+        }
+
+        private async Task<object?> DescribeCaptainToolsAsync(ApiRequest req, Func<WatsonWebserver.Core.HttpContextBase, Task<AuthContext>> authenticate, IAuthorizationService authz, CaptainToolsQuery query)
+        {
+            AuthContext ctx = await authenticate(req.Http).ConfigureAwait(false);
+            if (!authz.IsAuthorized(ctx, req.Http.Request.Method.ToString(), req.Http.Request.Url.RawWithoutQuery))
+            {
+                req.Http.Response.StatusCode = ctx.IsAuthenticated ? 403 : 401;
+                return new ApiErrorResponse { Error = ctx.IsAuthenticated ? ApiResultEnum.Forbidden : ApiResultEnum.NotAuthorized, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
+            }
+
+            string id = req.Parameters["id"];
+            Captain? captain = ctx.IsAdmin
+                ? await _database.Captains.ReadAsync(id).ConfigureAwait(false)
+                : ctx.IsTenantAdmin
+                    ? await _database.Captains.ReadAsync(ctx.TenantId!, id).ConfigureAwait(false)
+                    : await _database.Captains.ReadAsync(ctx.TenantId!, ctx.UserId!, id).ConfigureAwait(false);
+            if (captain == null) { req.Http.Response.StatusCode = 404; return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Captain not found" }; }
+            try
+            {
+                return await _captainTools.DescribeAsync(captain, query).ConfigureAwait(false);
+            }
+            catch (CollectionLimitExceededException ex)
+            {
+                return RouteErrorMapper.LimitExceeded(req, ex);
+            }
         }
 
         /// <summary>
@@ -150,9 +182,21 @@ namespace Armada.Server.Routes
                 }
                 Captain captain = JsonSerializer.Deserialize<Captain>(req.Http.Request.DataAsString, _jsonOptions)
                     ?? throw new InvalidOperationException("Request body could not be deserialized as Captain.");
+                captain.MaxConcurrency = captain.MaxConcurrencySpecified
+                    ? ConcurrencyClamp.CaptainLimit(captain.MaxConcurrency, _settings.Concurrency.MaxCaptainConcurrency)
+                    : CaptainConcurrencyDefaults.For(captain.Runtime, _settings.Concurrency);
+                captain.ActiveMissionCount = 0;
+                captain.ActiveMissionIds.Clear();
+                captain.CurrentSessionId = null;
                 captain.TenantId = ctx.TenantId;
                 captain.UserId = ctx.UserId;
                 EntityUpdateMerger.NormalizeCaptainRuntimeOptions(captain);
+                string? createUsageError = await CaptainUsageCaptureValidator.ValidateAsync(_database, captain).ConfigureAwait(false);
+                if (createUsageError != null)
+                {
+                    req.Http.Response.StatusCode = 400;
+                    return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = createUsageError };
+                }
                 CaptainModelValidationFailure? createValidationError = await _agentLifecycle.ValidateCaptainModelDetailedAsync(captain).ConfigureAwait(false);
                 if (createValidationError != null)
                 {
@@ -161,6 +205,8 @@ namespace Armada.Server.Routes
                 }
                 await DuplicateEntityGuard.EnsureCaptainNameAvailableAsync(_database, captain).ConfigureAwait(false);
                 captain = await _database.Captains.CreateAsync(captain).ConfigureAwait(false);
+                if (captain.UsageCaptureActive && OnUsageCaptureConfigurationChanged != null)
+                    await OnUsageCaptureConfigurationChanged().ConfigureAwait(false);
                 req.Http.Response.StatusCode = 201;
                 return captain;
             },
@@ -202,27 +248,58 @@ namespace Armada.Server.Routes
 
             app.Get("/api/v1/captains/{id}/tools", async (ApiRequest req) =>
             {
-                AuthContext ctx = await authenticate(req.Http).ConfigureAwait(false);
-                if (!authz.IsAuthorized(ctx, req.Http.Request.Method.ToString(), req.Http.Request.Url.RawWithoutQuery))
+                CaptainToolsQuery query = new CaptainToolsQuery();
+                try
                 {
-                    req.Http.Response.StatusCode = ctx.IsAuthenticated ? 403 : 401;
-                    return new ApiErrorResponse { Error = ctx.IsAuthenticated ? ApiResultEnum.Forbidden : ApiResultEnum.NotAuthorized, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
+                    query.ApplyToolQuerystring(key => req.Query.GetValueOrDefault(key));
                 }
-                string id = req.Parameters["id"];
-                Captain? captain = ctx.IsAdmin
-                    ? await _database.Captains.ReadAsync(id).ConfigureAwait(false)
-                    : ctx.IsTenantAdmin
-                        ? await _database.Captains.ReadAsync(ctx.TenantId!, id).ConfigureAwait(false)
-                        : await _database.Captains.ReadAsync(ctx.TenantId!, ctx.UserId!, id).ConfigureAwait(false);
-                if (captain == null) { req.Http.Response.StatusCode = 404; return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Captain not found" }; }
-                return await _captainTools.DescribeAsync(captain).ConfigureAwait(false);
+                catch (ArgumentException ex)
+                {
+                    req.Http.Response.StatusCode = 400;
+                    return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = ex.Message };
+                }
+
+                return await DescribeCaptainToolsAsync(req, authenticate, authz, query).ConfigureAwait(false);
             },
             api => api
                 .WithTag("Captains")
                 .WithSummary("Describe captain tools")
-                .WithDescription("Returns the runtime-visible tool sources and named tools available to the selected captain, including runtime-specific availability notes.")
+                .WithDescription("Returns the runtime-visible tool sources (Servers, at most 256) and tool counts for the selected captain, with runtime-specific availability notes, and one page of its named tools (Tools: an EnumerationResult ordered by source kind, source, and name). Querystring: pageNumber, pageSize (1 to 1000, default 10), sourceKind (McpServer, RuntimeBuiltIn, or Internal), refresh (true probes again; otherwise a snapshot from the last 60 seconds is reused so paging does not probe again).")
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Captain ID (cpt_ prefix)"))
-                .WithResponse(200, OpenApiJson.For<CaptainToolAccessResult>("Captain runtime tool availability and inventory"))
+                .WithParameter(OpenApiParameterMetadata.Query("pageNumber", "One-based page of Tools (default 1)", false, OpenApiSchemaMetadata.Integer()))
+                .WithParameter(OpenApiParameterMetadata.Query("pageSize", "Tools per page, 1 to 1000 (default 10)", false, OpenApiSchemaMetadata.Integer()))
+                .WithParameter(OpenApiParameterMetadata.Query("sourceKind", "Only tools of this source kind: McpServer, RuntimeBuiltIn, or Internal", false))
+                .WithParameter(OpenApiParameterMetadata.Query("refresh", "true to probe the runtime again instead of reusing the recent snapshot", false))
+                .WithResponse(200, OpenApiJson.For<CaptainToolAccessResult>("Captain runtime tool availability and one page of tools"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
+                .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithSecurity("ApiKey"));
+
+            app.Post("/api/v1/captains/{id}/tools/enumerate", async (ApiRequest req) =>
+            {
+                CaptainToolsQuery query;
+                try
+                {
+                    string body = req.Http.Request.DataAsString;
+                    query = String.IsNullOrWhiteSpace(body) ? new CaptainToolsQuery() : JsonSerializer.Deserialize<CaptainToolsQuery>(body, _jsonOptions) ?? new CaptainToolsQuery();
+                    query.ApplyToolQuerystring(key => req.Query.GetValueOrDefault(key));
+                }
+                catch (Exception ex) when (ex is JsonException || ex is ArgumentException)
+                {
+                    req.Http.Response.StatusCode = 400;
+                    return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Invalid tools query: " + ex.Message };
+                }
+
+                return await DescribeCaptainToolsAsync(req, authenticate, authz, query).ConfigureAwait(false);
+            },
+            api => api
+                .WithTag("Captains")
+                .WithSummary("Enumerate captain tools")
+                .WithDescription("The POST twin of GET /api/v1/captains/{id}/tools: the query (CaptainToolsQuery: PageNumber, PageSize 1 to 1000 default 10, SourceKind, Refresh) comes from the JSON body with querystring values applied on top.")
+                .WithParameter(OpenApiParameterMetadata.Path("id", "Captain ID (cpt_ prefix)"))
+                .WithRequestBody(OpenApiJson.BodyFor<CaptainToolsQuery>("Tools paging and filter", false))
+                .WithResponse(200, OpenApiJson.For<CaptainToolAccessResult>("Captain runtime tool availability and one page of tools"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())
                 .WithSecurity("ApiKey"));
 
@@ -247,6 +324,13 @@ namespace Armada.Server.Routes
                 // that does not edit personas) keeps its stored value. An explicit null still clears it.
                 CaptainUpdateFieldPresence presence = CaptainUpdateFieldPresence.FromJson(req.Http.Request.DataAsString, _jsonOptions);
                 updated = EntityUpdateMerger.MergeCaptain(existing, updated, presence);
+                string? updateUsageError = await CaptainUsageCaptureValidator.ValidateAsync(_database, updated).ConfigureAwait(false);
+                if (updateUsageError != null)
+                {
+                    req.Http.Response.StatusCode = 400;
+                    return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = updateUsageError };
+                }
+                bool usageConfigurationChanged = CaptainUsageCaptureValidator.ConfigurationChanged(existing, updated);
                 CaptainModelValidationFailure? updateValidationError = await _agentLifecycle.ValidateCaptainModelDetailedAsync(updated).ConfigureAwait(false);
                 if (updateValidationError != null)
                 {
@@ -254,13 +338,16 @@ namespace Armada.Server.Routes
                     return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = updateValidationError.Message, Data = updateValidationError };
                 }
                 await DuplicateEntityGuard.EnsureCaptainNameAvailableAsync(_database, updated).ConfigureAwait(false);
-                updated = await _database.Captains.UpdateAsync(updated).ConfigureAwait(false);
+                updated.MaxConcurrency = ConcurrencyClamp.CaptainLimit(updated.MaxConcurrency, _settings.Concurrency.MaxCaptainConcurrency);
+                updated = await _database.Captains.UpdateAsync(updated, updateActive: presence.Has(nameof(Captain.Active)), updateConcurrency: presence.Has(nameof(Captain.MaxConcurrency))).ConfigureAwait(false);
+                if (usageConfigurationChanged && OnUsageCaptureConfigurationChanged != null)
+                    await OnUsageCaptureConfigurationChanged().ConfigureAwait(false);
                 return (object)updated;
             },
             api => api
                 .WithTag("Captains")
                 .WithSummary("Update a captain")
-                .WithDescription("Partially updates a captain: only the configuration fields present in the body change (an explicit null clears a field); omitted fields keep their stored values. Operational fields (state, process, mission) are preserved.")
+                .WithDescription("Partially updates a captain: only the configuration fields present in the body change (an explicit null clears a field); omitted fields keep their stored values, including the usage capture fields. Custom usage capture requires a valid executable/argument command (400 otherwise, nothing stored). Operational fields (state, process, mission) are preserved.")
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Captain ID (cpt_ prefix)"))
                 .WithRequestBody(OpenApiJson.BodyFor<Captain>("Updated captain data", true))
                 .WithResponse(200, OpenApiJson.For<Captain>("Updated captain"))
@@ -608,6 +695,14 @@ namespace Armada.Server.Routes
                 DeleteMultipleRequest? body = JsonSerializer.Deserialize<DeleteMultipleRequest>(req.Http.Request.DataAsString, _jsonOptions);
                 if (body == null || body.Ids == null || body.Ids.Count == 0)
                     { req.Http.Response.StatusCode = 400; return (object)new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Ids is required and must not be empty" }; }
+                try
+                {
+                    CollectionLimits.RequireRequestItems(body.Ids, "Ids");
+                }
+                catch (CollectionLimitExceededException ex)
+                {
+                    return RouteErrorMapper.LimitExceeded(req, ex);
+                }
 
                 DeleteMultipleResult result = new DeleteMultipleResult();
                 foreach (string id in body.Ids)
@@ -659,7 +754,7 @@ namespace Armada.Server.Routes
             api => api
                 .WithTag("Captains")
                 .WithSummary("Batch delete multiple captains")
-                .WithDescription("Permanently deletes multiple captains from the database by ID. Captains that are Working or have active missions are skipped. Returns a summary of deleted and skipped entries. This cannot be undone.")
+                .WithDescription("Permanently deletes multiple captains from the database by ID. Captains that are Working or have active missions are skipped. Ids may hold at most 1000 entries (400 with Data.Code CollectionLimitExceeded otherwise), which also bounds Skipped. Returns a summary of deleted and skipped entries. This cannot be undone.")
                 .WithRequestBody(OpenApiJson.BodyFor<DeleteMultipleRequest>("List of captain IDs to delete"))
                 .WithResponse(200, OpenApiJson.For<DeleteMultipleResult>("Delete result summary"))
                 .WithResponse(400, OpenApiResponseMetadata.BadRequest())

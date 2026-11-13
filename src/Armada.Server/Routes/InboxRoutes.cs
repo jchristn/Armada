@@ -48,12 +48,12 @@ namespace Armada.Server.Routes
                     };
                 }
                 EnumerationQuery query = EnumerationRequestReader.Read(req, _jsonOptions);
-                return EnumerationResult<InboxItem>.Page(query, await _inbox.GetInboxAsync(ctx).ConfigureAwait(false));
+                return await _inbox.EnumerateAsync(ctx, query).ConfigureAwait(false);
             },
             api => api
                 .WithTag("Inbox")
                 .WithSummary("Enumerate the needs-you inbox")
-                .WithDescription("One page of the items awaiting operator attention, most urgent first; TotalRecords is the whole count. Paging and filters come from the JSON body (EnumerationQuery) or the querystring (pageNumber, pageSize 1 to 1000, default 10).")
+                .WithDescription("One page of the items awaiting operator attention, paged at each source (missions, merge entries, and deployments are paged and counted in the database). Kinds are listed in a fixed urgency order (review, landing_failed, merge_failed, deployment_failed, deployment_approval, ask_proposal, cli_permission, failed, stalled_captain), newest first within a kind; TotalRecords is the exact count. Paging and filters come from the JSON body (EnumerationQuery) or the querystring (pageNumber, pageSize 1 to 1000, default 10).")
                 .WithRequestBody(OpenApiJson.BodyFor<EnumerationQuery>("Paging and filters", false))
                 .WithResponse(200, OpenApiJson.For<EnumerationResult<InboxItem>>("One page"))
                 .WithSecurity("ApiKey"));

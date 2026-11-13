@@ -66,12 +66,43 @@ namespace Armada.Core.Services
         }
 
         /// <summary>
-        /// List one directory.
+        /// List one page of one directory: directories first, then files, each by name (case-insensitive). The file
+        /// system has no paging of its own, so the directory is read and sorted and the page is cut from it.
         /// </summary>
         /// <param name="rootPath">Checkout root.</param>
         /// <param name="path">Relative directory path, or null for the root.</param>
-        /// <returns>The listing (VesselId is left empty for the caller to set).</returns>
-        public static WorkspaceTreeResult GetTree(string rootPath, string? path)
+        /// <param name="page">Paging (page size 1 to 1000).</param>
+        /// <returns>The listing page (VesselId is left empty for the caller to set).</returns>
+        /// <exception cref="ArgumentNullException">Thrown when page is null.</exception>
+        public static WorkspaceTreeResult GetTree(string rootPath, string? path, EnumerationQuery page)
+        {
+            if (page == null) throw new ArgumentNullException(nameof(page));
+            return PageTree(ListDirectory(rootPath, path), page);
+        }
+
+        /// <summary>
+        /// Cut one page from a directory listing that holds every entry (for example one from a Harbor that predates
+        /// paged listings). A listing that is already a page is returned as it is.
+        /// </summary>
+        /// <param name="full">Listing with every entry, or a page.</param>
+        /// <param name="page">Paging (page size 1 to 1000).</param>
+        /// <returns>The page.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when an argument is null.</exception>
+        public static WorkspaceTreeResult PageTree(WorkspaceTreeResult full, EnumerationQuery page)
+        {
+            if (full == null) throw new ArgumentNullException(nameof(full));
+            if (page == null) throw new ArgumentNullException(nameof(page));
+            if (full.TotalRecords > 0 && full.Entries.Count <= full.PageSize) return full;
+            List<WorkspaceTreeEntry> entries = full.Entries ?? new List<WorkspaceTreeEntry>();
+            full.TotalRecords = entries.Count;
+            full.PageNumber = page.PageNumber;
+            full.PageSize = page.PageSize;
+            full.TotalPages = (int)Math.Ceiling((double)entries.Count / page.PageSize);
+            full.Entries = entries.Skip(page.Offset).Take(page.PageSize).ToList();
+            return full;
+        }
+
+        private static WorkspaceTreeResult ListDirectory(string rootPath, string? path)
         {
             string root = RequireRoot(rootPath);
             string directoryPath = ResolvePath(root, path, mustExist: true, expectDirectory: true);
@@ -332,7 +363,7 @@ namespace Armada.Core.Services
             string root = RequireRoot(rootPath);
             List<WorkspaceSearchMatch> matches = new List<WorkspaceSearchMatch>();
             bool truncated = false;
-            int limit = maxResults < 1 ? 1 : maxResults;
+            int limit = maxResults < 1 ? 1 : Math.Min(maxResults, CollectionLimits.MaxPageSize);
 
             foreach (string filePath in EnumerateVisibleFiles(root, token))
             {

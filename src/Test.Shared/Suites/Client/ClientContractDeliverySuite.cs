@@ -91,8 +91,10 @@ namespace Test.Shared.Suites.Client
                 AssertTrue((await c.EnumerateReleasesAsync(new ReleaseQuery { VesselId = setup.Vessel.Id }))!.Objects.Any(r => r.Id == created.Id), "enumerate releases");
                 try
                 {
-                    List<GitHubPullRequestDetail>? prs = await c.GetReleaseGitHubPullRequestsAsync(created.Id);
-                    AssertEqual(0, prs?.Count ?? 0, "no pull requests for a local vessel");
+                    EnumerationResult<GitHubPullRequestDetail>? prs = await c.GetReleaseGitHubPullRequestsAsync(created.Id, new EnumerationQuery { PageSize = 5 });
+                    AssertEqual(0, prs?.Objects.Count ?? 0, "no pull requests for a local vessel");
+                    AssertEqual(0L, prs?.TotalRecords ?? 0, "exact total");
+                    AssertEqual(5, prs?.PageSize ?? 0, "requested page size");
                 }
                 catch (ArmadaApiException ex)
                 {

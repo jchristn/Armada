@@ -48,6 +48,7 @@ namespace Armada.Server
         /// <returns>The result.</returns>
         /// <exception cref="ArgumentNullException">Thrown when caller or persona is null.</exception>
         /// <exception cref="DuplicateEntityException">Thrown when a persona with that name already exists.</exception>
+        /// <exception cref="CollectionLimitExceededException">Thrown when CaptainPriorities holds more than <see cref="CollectionLimits.MaxConfigItems"/> entries.</exception>
         public async Task<PersonaWriteResult> CreateAsync(AuthContext caller, Persona persona, CancellationToken token = default)
         {
             if (caller == null) throw new ArgumentNullException(nameof(caller));
@@ -55,6 +56,7 @@ namespace Armada.Server
 
             if (String.IsNullOrWhiteSpace(persona.Name)) return PersonaWriteResult.Fail(PersonaWriteStatusEnum.Invalid, "Name is required");
             if (String.IsNullOrWhiteSpace(persona.PromptTemplateName)) return PersonaWriteResult.Fail(PersonaWriteStatusEnum.Invalid, "PromptTemplateName is required");
+            CollectionBounds.Validate(persona);
             PersonaWriteResult? captainError = await CheckDefaultCaptainAsync(caller, persona.DefaultCaptainId).ConfigureAwait(false);
             if (captainError != null) return captainError;
             string? routingError = PersonaCaptainPrioritySelector.Validate(persona);
@@ -80,10 +82,12 @@ namespace Armada.Server
         /// <param name="token">Cancellation token.</param>
         /// <returns>The result.</returns>
         /// <exception cref="ArgumentNullException">Thrown when caller or update is null.</exception>
+        /// <exception cref="CollectionLimitExceededException">Thrown when CaptainPriorities holds more than <see cref="CollectionLimits.MaxConfigItems"/> entries.</exception>
         public async Task<PersonaWriteResult> UpdateAsync(AuthContext caller, string name, PersonaUpdateRequest update, bool defaultCaptainIdPresent, CancellationToken token = default)
         {
             if (caller == null) throw new ArgumentNullException(nameof(caller));
             if (update == null) throw new ArgumentNullException(nameof(update));
+            CollectionLimits.RequireConfigItems(update.CaptainPriorities, "CaptainPriorities");
 
             Persona? existing = await ReadVisibleAsync(caller, name, token).ConfigureAwait(false);
             if (existing == null) return PersonaWriteResult.Fail(PersonaWriteStatusEnum.NotFound, "Persona not found: " + name);

@@ -2,6 +2,7 @@ namespace Armada.Core.Models
 {
     using System;
     using System.Collections.Generic;
+    using Armada.Core.Services;
 
     /// <summary>
     /// One page of a vessel's commit history, newest first (GET /api/v1/vessels/{id}/history/commits).
@@ -23,6 +24,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// Commits, newest commit date first. Never null.
         /// </summary>
+        [CollectionBound(Constants.VesselHistoryMaxPageSize, Reason = "limit is 1-200; NextCursor continues")]
         public List<VesselCommit> Commits { get; set; } = new List<VesselCommit>();
 
         /// <summary>

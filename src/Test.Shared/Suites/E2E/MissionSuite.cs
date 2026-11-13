@@ -161,8 +161,11 @@ namespace Test.Shared.Suites.E2E
 
                 string voyageId = await CreateVoyageAsync(authClient, createdVoyageIds, "FullMissionVoyage");
 
-                Mission parentMission = await CreateMissionAsync(authClient, createdMissionIds, vesselId, "Parent Mission");
-                string parentMissionId = parentMission.Id;
+                // A hierarchy parent must be in the child's voyage (D17).
+                HttpResponseMessage parentResponse = await authClient.PostAsync("/api/v1/missions", JsonHelper.ToJsonContent(new { Title = "Parent Mission", VesselId = vesselId, VoyageId = voyageId }));
+                AssertEqual(HttpStatusCode.Created, parentResponse.StatusCode);
+                string parentMissionId = JsonHelper.Deserialize<Mission>(await parentResponse.Content.ReadAsStringAsync()).Id;
+                createdMissionIds.Add(parentMissionId);
 
                 StringContent content = JsonHelper.ToJsonContent(new
                 {

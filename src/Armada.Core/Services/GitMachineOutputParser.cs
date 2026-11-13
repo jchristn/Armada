@@ -3,6 +3,7 @@ namespace Armada.Core.Services
     using System;
     using System.Collections.Generic;
     using System.Globalization;
+    using System.Linq;
     using Armada.Core.Enums;
     using Armada.Core.Models;
 
@@ -334,8 +335,10 @@ namespace Armada.Core.Services
             commit.Sha = Part(parts, 0);
             commit.ShortSha = Part(parts, 1);
             string parents = Part(parts, 2);
-            commit.ParentShas = new List<string>(parents.Split(' ', StringSplitOptions.RemoveEmptyEntries));
-            commit.IsMerge = commit.ParentShas.Count > 1;
+            string[] parentShas = parents.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            commit.ParentCount = parentShas.Length;
+            commit.ParentShas = parentShas.Take(Constants.VesselHistoryMaxParentsPerCommit).ToList();
+            commit.IsMerge = parentShas.Length > 1;
             commit.AuthorName = Part(parts, 3);
             commit.AuthorEmail = Part(parts, 4);
             commit.AuthoredUtc = FromUnixSeconds(Part(parts, 5));

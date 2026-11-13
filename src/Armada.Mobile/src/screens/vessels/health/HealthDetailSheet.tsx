@@ -1,8 +1,8 @@
 import { useRouter, type Href } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { deleteVesselHealthOverride, getVesselHealth, setVesselHealthOverride } from '@dashboard/api/client';
-import type { VesselHealthCriterion, VesselHealthDetail, VesselHealthOverride, VesselHealthStatus } from '@dashboard/types/models';
+import { deleteVesselHealthOverride, getVesselHealth, listVesselDependencies, setVesselHealthOverride } from '@dashboard/api/client';
+import type { VesselDependency, VesselHealthCriterion, VesselHealthDetail, VesselHealthOverride, VesselHealthStatus } from '@dashboard/types/models';
 import {
   HEALTH_CRITERIA,
   HEALTH_STATUSES,
@@ -48,8 +48,11 @@ export interface HealthDetailSheetProps {
 const LAST_RUN_LABELS: Record<string, string> = { Passed: 'Passed', Failed: 'Failed', Canceled: 'Canceled', Cancelled: 'Cancelled' };
 
 function normalize(detail: VesselHealthDetail): VesselHealthDetail {
-  return { health: detail.health, findings: detail.findings ?? [], dependencies: detail.dependencies ?? [], overrides: detail.overrides ?? [] };
+  return { health: detail.health, findings: detail.findings ?? [], dependencyCount: detail.dependencyCount ?? 0, overrides: detail.overrides ?? [] };
 }
+
+/** Dependency rows per page read from the server (the detail carries only dependencyCount). */
+export const DEPENDENCY_PAGE_SIZE = 100;
 
 /**
  * The vessel health inspector (the dashboard's VesselHealthDetailModal) as a bottom sheet: summary numbers, every
@@ -70,18 +73,41 @@ export function HealthDetailSheet(props: HealthDetailSheetProps) {
   const [formError, setFormError] = useState('');
   const [saving, setSaving] = useState(false);
   const [confirmRemove, setConfirmRemove] = useState<VesselHealthOverride | null>(null);
+  const [deps, setDeps] = useState<VesselDependency[]>([]);
+  const [depsPage, setDepsPage] = useState(0);
+  const [depsPages, setDepsPages] = useState(0);
+  const [depsTotal, setDepsTotal] = useState(0);
+  const [depsLoading, setDepsLoading] = useState(false);
+
+  const loadDependencies = useCallback(async (pageNumber: number) => {
+    setDepsLoading(true);
+    try {
+      const page = await listVesselDependencies(vesselId, { pageNumber, pageSize: DEPENDENCY_PAGE_SIZE });
+      setDeps((prev) => (pageNumber <= 1 ? page.objects ?? [] : [...prev, ...(page.objects ?? [])]));
+      setDepsPage(page.pageNumber ?? pageNumber);
+      setDepsPages(page.totalPages ?? 0);
+      setDepsTotal(page.totalRecords ?? 0);
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      setDepsLoading(false);
+    }
+  }, [vesselId]);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
-      setDetail(normalize(await getVesselHealth(vesselId)));
+      const next = normalize(await getVesselHealth(vesselId));
+      setDetail(next);
+      if (next.dependencyCount > 0) void loadDependencies(1);
+      else { setDeps([]); setDepsPage(0); setDepsPages(0); setDepsTotal(0); }
     } catch (e) {
       setError(errorMessage(e));
     } finally {
       setLoading(false);
     }
-  }, [vesselId]);
+  }, [vesselId, loadDependencies]);
 
   // eslint-disable-next-line react-hooks/set-state-in-effect -- a fetch keyed on the vessel and refresh token; it sets loading state first
   useEffect(() => { void load(); }, [load, refreshToken]);
@@ -260,9 +286,9 @@ export function HealthDetailSheet(props: HealthDetailSheetProps) {
       ) : null}
 
       {detail && section === 'dependencies' ? (
-        detail.dependencies.length === 0 ? <AppText muted>{t('No outdated or vulnerable dependencies were found.')}</AppText> : (
+        detail.dependencyCount === 0 && deps.length === 0 ? <AppText muted>{t('No outdated or vulnerable dependencies were found.')}</AppText> : (
           <View>
-            {detail.dependencies.map((d) => (
+            {deps.map((d) => (
               <View key={d.id ?? `${d.projectPath}-${d.packageName}-${d.currentVersion}`} style={[styles.item, { borderColor: colors.border }]}>
                 <AppText variant="label" style={typography.mono}>{d.packageName}</AppText>
                 <AppText variant="caption" muted>{`${d.ecosystem}${d.projectPath ? ` - ${d.projectPath}` : ''}`}</AppText>
@@ -276,6 +302,12 @@ export function HealthDetailSheet(props: HealthDetailSheetProps) {
                 </View>
               </View>
             ))}
+            {depsPage < depsPages ? (
+              <View style={styles.itemHead}>
+                <AppText variant="caption" muted>{`${formatCount(locale, deps.length)} / ${formatCount(locale, depsTotal)}`}</AppText>
+                <Button label={t('Load more')} variant="ghost" disabled={depsLoading} onPress={() => { void loadDependencies(depsPage + 1); }} testID="health-dependencies-more" />
+              </View>
+            ) : null}
           </View>
         )
       ) : null}

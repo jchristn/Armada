@@ -8,6 +8,7 @@ import * as auth from '../auth/AuthContext';
 import ObjectivesRoute from '../app/(app)/(work)/objectives/index';
 import BacklogItemRoute from '../app/(app)/(work)/backlog/[id]';
 import { BuildProviders, buildSockets, page } from '../test/buildFixtures';
+import { serveTranscriptsFromDetails } from '../test/transcripts';
 
 jest.mock('@dashboard/api/client', () => require('../test/buildClientMock').buildClientMockFactory());
 // An iPad in landscape (1180 x 820).
@@ -17,6 +18,8 @@ jest.mock('react-native/Libraries/Utilities/useWindowDimensions', () => ({
 }));
 
 const api = client as jest.Mocked<typeof client>;
+
+beforeEach(() => serveTranscriptsFromDetails(api as unknown as Record<string, jest.Mock>));
 const realUseAuth = auth.useAuth;
 
 function objective(over: Partial<Objective>): Objective {
@@ -40,7 +43,7 @@ describe('backlog on tablets', () => {
     api.listVessels.mockResolvedValue(page([]));
     api.listCaptains.mockResolvedValue(page([]));
     api.listPipelines.mockResolvedValue(page([]));
-    api.listBacklogRefinementSessions.mockResolvedValue([]);
+    api.listBacklogRefinementSessions.mockResolvedValue(page([]));
     api.getBacklogItem.mockResolvedValue(objective({}));
   });
   afterEach(() => jest.restoreAllMocks());

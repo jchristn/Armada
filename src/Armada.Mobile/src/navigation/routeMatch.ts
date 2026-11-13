@@ -1,6 +1,9 @@
 import { DASHBOARD_ROUTES } from './dashboardRoutes.generated';
 import type { DashboardRoute } from './routeTypes';
 
+/** Every route a link may open: the generated dashboard table (App.tsx lists the black box routes too). */
+export const APP_ROUTE_TABLE: DashboardRoute[] = DASHBOARD_ROUTES;
+
 export interface RouteMatch {
   route: DashboardRoute;
   params: Record<string, string>;
@@ -30,7 +33,7 @@ export function decodeParam(segment: string): string | null {
  * Find the dashboard route for an app path; static segments beat parameters (as in both routers). A parameter that
  * does not decode to a single safe segment matches nothing (see decodeParam).
  */
-export function matchRoute(path: string, routes: DashboardRoute[] = DASHBOARD_ROUTES): RouteMatch | null {
+export function matchRoute(path: string, routes: DashboardRoute[] = APP_ROUTE_TABLE): RouteMatch | null {
   const clean = path.split(/[?#]/)[0];
   const parts = split(clean);
   let best: RouteMatch | null = null;
@@ -66,5 +69,5 @@ export function matchRoute(path: string, routes: DashboardRoute[] = DASHBOARD_RO
 
 /** The route entry for a pattern (for screens that know their own pattern). */
 export function routeByPattern(pattern: string): DashboardRoute | undefined {
-  return DASHBOARD_ROUTES.find((r) => r.pattern === pattern);
+  return APP_ROUTE_TABLE.find((r) => r.pattern === pattern);
 }

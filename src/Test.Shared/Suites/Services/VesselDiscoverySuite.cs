@@ -307,6 +307,46 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(Norm(root), child.Parent);
             }));
 
+            cases.Add(CaseAsync("browse_pages_by_name", "Browse returns one page of a directory by name with exact totals, an empty page past the end, a capped page size, and Truncated when the scan cap is reached", TestTags.Positive, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                string root = TestTemp.NewDirectory("browsepage");
+                for (int i = 0; i < 23; i++) Directory.CreateDirectory(Path.Combine(root, "dir" + i.ToString("D2")));
+                VesselDiscoveryService service = NewService(testDb, NewSettings(root));
+
+                List<string> seen = new List<string>();
+                for (int page = 1; page <= 3; page++)
+                {
+                    VesselBrowseResult result = await service.BrowseAsync(root, new EnumerationQuery { PageNumber = page, PageSize = 10 }).ConfigureAwait(false);
+                    AssertEqual(23L, result.TotalRecords, "exact total");
+                    AssertEqual(3, result.TotalPages, "pages of ten");
+                    AssertEqual(page < 3 ? 10 : 3, result.Entries.Count, "rows on page " + page);
+                    seen.AddRange(result.Entries.Select(e => e.Name));
+                }
+
+                AssertEqual(String.Join(",", Enumerable.Range(0, 23).Select(i => "dir" + i.ToString("D2"))), String.Join(",", seen), "by name without gaps or duplicates");
+                VesselBrowseResult past = await service.BrowseAsync(root, new EnumerationQuery { PageNumber = 9, PageSize = 10 }).ConfigureAwait(false);
+                AssertEqual(0, past.Entries.Count, "past the end is empty");
+                AssertFalse(past.Truncated, "not truncated");
+                VesselBrowseResult capped = await service.BrowseAsync(root, new EnumerationQuery { PageSize = 1000000 }).ConfigureAwait(false);
+                AssertEqual(1000, capped.PageSize, "page size capped");
+                AssertEqual(23, capped.Entries.Count, "everything fits on one capped page");
+
+                service.MaxBrowseEntries = 5;
+                VesselBrowseResult truncated = await service.BrowseAsync(root, new EnumerationQuery { PageSize = 100 }).ConfigureAwait(false);
+                AssertTrue(truncated.Truncated, "the scan cap is reported, not hidden");
+                AssertEqual(5L, truncated.TotalRecords, "TotalRecords counts the examined entries");
+
+                service.MaxCandidates = 100000;
+                AssertEqual(CollectionLimits.MaxRequestItems, service.MaxCandidates, "candidates are capped at the request limit");
+                List<string> tooMany = Enumerable.Range(0, CollectionLimits.MaxRequestItems + 1).Select(i => Path.Combine(root, "x" + i)).ToList();
+                CollectionLimitExceededException? error = null;
+                try { await service.DiscoverAsync(Armada.Core.Constants.DefaultTenantId, new VesselDiscoveryRequest { Directories = tooMany }).ConfigureAwait(false); }
+                catch (CollectionLimitExceededException ex) { error = ex; }
+                AssertNotNull(error, "more than 1000 paths is a typed limit error");
+                AssertEqual("Paths", error!.Field, "field");
+            }));
+
             cases.Add(CaseAsync("thousand_empty_directories_under_five_seconds", "A root with 1,000 empty directories is scanned in under 5 seconds", TestTags.Reliability, async () =>
             {
                 using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);

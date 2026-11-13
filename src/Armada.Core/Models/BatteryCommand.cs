@@ -1,6 +1,7 @@
 namespace Armada.Core.Models
 {
     using System.Collections.Generic;
+    using Armada.Core.Services;
 
     /// <summary>
     /// A command a grader runs in the task's worktree.
@@ -17,6 +18,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// Arguments.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxConfigItems)]
         public List<string> Arguments
         {
             get => _Arguments;

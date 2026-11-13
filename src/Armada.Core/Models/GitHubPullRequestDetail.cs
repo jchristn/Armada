@@ -2,6 +2,7 @@ namespace Armada.Core.Models
 {
     using System;
     using System.Collections.Generic;
+    using Armada.Core.Services;
 
     /// <summary>
     /// Normalized GitHub pull-request detail returned by Armada.
@@ -89,14 +90,32 @@ namespace Armada.Core.Models
         public string? MergedByLogin { get; set; } = null;
 
         /// <summary>
-        /// Requested reviewer logins.
+        /// Requested reviewer logins: the first <see cref="MaxListed"/> GitHub reports, de-duplicated.
+        /// <see cref="RequestedReviewerCount"/> is the full count.
         /// </summary>
+        [CollectionBound(MaxListed, Reason = "The first MaxListed reviewers; RequestedReviewerCount carries the full count")]
         public List<string> RequestedReviewers { get; set; } = new List<string>();
 
         /// <summary>
-        /// Label names.
+        /// Number of distinct requested reviewers on the pull request.
         /// </summary>
+        public int RequestedReviewerCount { get; set; } = 0;
+
+        /// <summary>
+        /// Label names: the first <see cref="MaxListed"/>, de-duplicated. <see cref="LabelCount"/> is the full count.
+        /// </summary>
+        [CollectionBound(MaxListed, Reason = "The first MaxListed labels; LabelCount carries the full count")]
         public List<string> Labels { get; set; } = new List<string>();
+
+        /// <summary>
+        /// Number of distinct labels on the pull request.
+        /// </summary>
+        public int LabelCount { get; set; } = 0;
+
+        /// <summary>
+        /// Most entries listed in <see cref="RequestedReviewers"/> and <see cref="Labels"/> (GitHub's largest page).
+        /// </summary>
+        public const int MaxListed = 100;
 
         /// <summary>
         /// Total changed files count.
@@ -119,19 +138,28 @@ namespace Armada.Core.Models
         public int CommitCount { get; set; } = 0;
 
         /// <summary>
-        /// Review decisions attached to the pull request.
+        /// Number of reviews submitted on the pull request. The reviews are read one page at a time from
+        /// POST /api/v1/missions/{id}/github/pull-request/reviews/enumerate.
         /// </summary>
-        public List<GitHubPullRequestReview> Reviews { get; set; } = new List<GitHubPullRequestReview>();
+        public int ReviewCount { get; set; } = 0;
 
         /// <summary>
-        /// Issue comments attached to the pull request.
+        /// Number of issue comments on the pull request. The comments are read one page at a time from
+        /// POST /api/v1/missions/{id}/github/pull-request/comments/enumerate.
         /// </summary>
-        public List<GitHubPullRequestComment> Comments { get; set; } = new List<GitHubPullRequestComment>();
+        public int CommentCount { get; set; } = 0;
 
         /// <summary>
-        /// Provider check statuses for the latest head commit.
+        /// Number of provider checks on the head commit. The checks are read one page at a time from
+        /// POST /api/v1/missions/{id}/github/pull-request/checks/enumerate.
         /// </summary>
-        public List<GitHubPullRequestCheck> Checks { get; set; } = new List<GitHubPullRequestCheck>();
+        public int CheckCount { get; set; } = 0;
+
+        /// <summary>
+        /// True when <see cref="ReviewStatus"/> was computed from every review. False when the pull request has more
+        /// reviews than the server reads to compute it (1000, in pages of 100); the status then reflects the first 1000.
+        /// </summary>
+        public bool ReviewStatusComplete { get; set; } = true;
 
         /// <summary>
         /// Creation timestamp in UTC when available.

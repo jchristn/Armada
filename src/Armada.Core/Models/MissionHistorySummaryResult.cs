@@ -2,6 +2,7 @@ namespace Armada.Core.Models
 {
     using System;
     using System.Collections.Generic;
+    using Armada.Core.Services;
 
     /// <summary>
     /// Aggregate mission-history summary for charts.
@@ -46,6 +47,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// Summary buckets in chronological order.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxSummaryBuckets, Reason = "The query is rejected when its window would produce more buckets")]
         public List<MissionHistoryBucket> Buckets { get; set; } = new List<MissionHistoryBucket>();
     }
 }

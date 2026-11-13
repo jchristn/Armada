@@ -76,6 +76,37 @@ namespace Test.Shared.Infrastructure
         }
 
         /// <summary>
+        /// Add one more commit writing <paramref name="file"/> on top of an existing branch in the vessel repository, as a
+        /// child mission continuing that branch would.
+        /// </summary>
+        /// <param name="branch">Existing branch name.</param>
+        /// <param name="file">Relative file path.</param>
+        /// <param name="content">File content.</param>
+        /// <returns>The new branch head commit id.</returns>
+        public string ExtendBranch(string branch, string file, string content)
+        {
+            Git(Work, "fetch", "-q", VesselRepo, branch);
+            Git(Work, "checkout", "-q", "-B", branch, "FETCH_HEAD");
+            File.WriteAllText(Path.Combine(Work, file), content);
+            Git(Work, "add", file);
+            Git(Work, "commit", "-q", "-m", "Extend " + branch + " with " + file);
+            Git(Work, "push", "-q", VesselRepo, branch + ":refs/heads/" + branch);
+            string head = Git(Work, "rev-parse", "HEAD").Trim();
+            Git(Work, "checkout", "-q", "--detach", "origin/main");
+            return head;
+        }
+
+        /// <summary>
+        /// Head commit of a branch in the vessel repository.
+        /// </summary>
+        /// <param name="branch">Branch name.</param>
+        /// <returns>Commit id.</returns>
+        public string VesselHead(string branch)
+        {
+            return Git(VesselRepo, "rev-parse", "refs/heads/" + branch).Trim();
+        }
+
+        /// <summary>
         /// Commit a change on origin's main.
         /// </summary>
         /// <param name="file">Relative file path.</param>

@@ -19,21 +19,21 @@ namespace Armada.Helm.Commands
         /// Roots to scan for git repositories (repeatable).
         /// </summary>
         [Description("Root to scan for git repositories (repeatable)")]
-        [CommandOption("--root|-r")]
+        [CommandOption("--root|-r <DIR>")]
         public string[]? Roots { get; set; }
 
         /// <summary>
         /// Fleet name or ID to assign imported vessels to.
         /// </summary>
         [Description("Fleet name or ID for the imported vessels")]
-        [CommandOption("--fleet|-f")]
+        [CommandOption("--fleet|-f <FLEET>")]
         public string? Fleet { get; set; }
 
         /// <summary>
         /// Maximum scan depth (1-16).
         /// </summary>
         [Description("Maximum scan depth below each root (1-16)")]
-        [CommandOption("--depth")]
+        [CommandOption("--depth <N>")]
         public int? Depth { get; set; }
 
         /// <summary>
@@ -61,14 +61,14 @@ namespace Armada.Helm.Commands
         /// Captain ID that recommends fleets.
         /// </summary>
         [Description("Captain ID (cpt_) that recommends fleets")]
-        [CommandOption("--captain")]
+        [CommandOption("--captain <CAPTAIN>")]
         public string? Captain { get; set; }
 
         /// <summary>
         /// File with categorization instructions.
         /// </summary>
         [Description("File with categorization instructions (default: the import.fleet_categorization prompt template)")]
-        [CommandOption("--prompt-file")]
+        [CommandOption("--prompt-file <PATH>")]
         public string? PromptFile { get; set; }
 
         /// <summary>

@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
-import { createCaptain, listModelEndpoints, setCaptainCliPermissionPolicy, updateCaptain } from '@dashboard/api/client';
+import { StyleSheet } from 'react-native';
+import { createCaptain, enumerateModelEndpoints, setCaptainCliPermissionPolicy, updateCaptain } from '@dashboard/api/client';
+import { listAll } from '@dashboard/api/paging';
 import { supportsAutoApproveSwitch } from '@dashboard/lib/captainApproval';
 import {
   buildCaptainCreatePayload,
@@ -21,12 +23,15 @@ import { SwitchField } from '../../build/fields';
 import { errorMessage } from '../../build/useLiveResource';
 import { useAuth } from '../../auth/AuthContext';
 import { CliPermissionPolicyField } from '../../components/cliPermissions/CliPermissionPolicyField';
-import { BottomSheet, Button, FormActions, TextField } from '../../components/ui';
+import { AppText, BottomSheet, Button, FormActions, TextField } from '../../components/ui';
 import { Banner } from '../../components/ui/Banner';
 import { SelectField, type SelectOption } from '../../components/ui/SelectSheet';
 import { useLocale } from '../../i18n/LocaleContext';
 import { useNotifications } from '../../notifications/NotificationContext';
+import { UsageCaptureFields } from '../usage/UsageCaptureFields';
+import { buildUsageCapturePayload, usageCaptureFormFromCaptain, usageCaptureFormError, USAGE_CAPTURE_FORM_ERROR_TEXT } from '@dashboard/lib/usageCaptureForm';
 import { MuxFields } from './MuxFields';
+import { spacing } from '../../theme/typography';
 
 export interface CaptainFormSheetProps {
   open: boolean;
@@ -44,9 +49,10 @@ export interface CaptainFormSheetProps {
  */
 export function CaptainFormSheet({ open, captain, onClose, onSaved }: CaptainFormSheetProps) {
   const { t } = useLocale();
-  const { isAdmin, isTenantAdmin } = useAuth();
+  const { isAdmin, isTenantAdmin, user } = useAuth();
   const { pushToast } = useNotifications();
   const canManageCliPolicy = isAdmin || isTenantAdmin;
+  const [usage, setUsage] = useState(() => usageCaptureFormFromCaptain(captain ?? {}));
   const [form, setForm] = useState<CaptainFormState>(emptyCaptainForm());
   const [endpoints, setEndpoints] = useState<ModelEndpoint[]>([]);
   const [saving, setSaving] = useState(false);
@@ -55,10 +61,12 @@ export function CaptainFormSheet({ open, captain, onClose, onSaved }: CaptainFor
   useEffect(() => {
     if (!open) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- opening the sheet resets the form to the captain
+    setUsage(usageCaptureFormFromCaptain(captain ?? {}));
     setForm(captain ? captainFormFromCaptain(captain, { withEndpoint: true, withPersonas: true }) : { ...emptyCaptainForm(), allowedPersonas: '', preferredPersona: '' });
     setError(null);
-    listModelEndpoints()
-      .then((result) => setEndpoints((result ?? []).filter((e) => e.kind === 'Inference')))
+    // A picker needs every endpoint: read the pages explicitly (bounded by listAll's safety stop).
+    listAll(enumerateModelEndpoints)
+      .then((result) => setEndpoints((result?.objects ?? []).filter((e) => e.kind === 'Inference')))
       .catch(() => setEndpoints([]));
   }, [open, captain]);
 
@@ -74,6 +82,8 @@ export function CaptainFormSheet({ open, captain, onClose, onSaved }: CaptainFor
     if (saving) return;
     if (!form.name.trim()) { setError(t('Name is required.')); return; }
     if (!form.runtime) { setError(t('Select runtime...')); return; }
+    const usageError = usageCaptureFormError(usage);
+    if (usageError) { setError(t(USAGE_CAPTURE_FORM_ERROR_TEXT[usageError])); return; }
     const formError = captainFormError(form);
     if (formError) { setError(t(captainFormErrorMessage(formError))); return; }
     setSaving(true);
@@ -81,11 +91,11 @@ export function CaptainFormSheet({ open, captain, onClose, onSaved }: CaptainFor
     try {
       let saved: Captain | null;
       if (captain) {
-        saved = (await updateCaptain(captain.id, buildCaptainPayload(form))) ?? null;
+        saved = (await updateCaptain(captain.id, { ...buildCaptainPayload(form), ...buildUsageCapturePayload(usage) })) ?? null;
         if (cliPolicyChanged(captain, form)) await setCaptainCliPermissionPolicy(captain.id, form.cliPermissionPolicy);
         pushToast('success', t('Captain "{{name}}" saved.', { name: form.name }));
       } else {
-        saved = (await createCaptain(buildCaptainCreatePayload(form))) ?? null;
+        saved = (await createCaptain({ ...buildCaptainCreatePayload(form), ...buildUsageCapturePayload(usage) })) ?? null;
         pushToast('success', t('Captain "{{name}}" created.', { name: form.name }));
       }
       onSaved(saved);
@@ -145,6 +155,8 @@ export function CaptainFormSheet({ open, captain, onClose, onSaved }: CaptainFor
         hint={t('Missions requiring a tier route to captains at or above it. Leave on Auto to classify from the model name.')}
         testID="captain-form-tier"
       />
+      <TextField label={t('Maximum concurrent missions')} value={form.maxConcurrency ?? ''} onChangeText={maxConcurrency => patch({ maxConcurrency })} keyboardType="number-pad" placeholder={form.runtime === 'ApiEndpoint' || form.runtime === 'Mux' ? '4' : '1'} hint={t('Most missions this captain can run at once. Blank uses the server default on create. Planning sessions remain exclusive.')} testID="captain-form-concurrency" />
+      <SwitchField label={t('Active')} value={form.active ?? true} onChange={(v) => patch({ active: v })} testID="captain-form-active" />
       {supportsAutoApproveSwitch(form.runtime) ? (
         <SwitchField
           label={t('Auto-approve agent tool use (runs the CLI with its permission-bypass flag)')}
@@ -182,6 +194,12 @@ export function CaptainFormSheet({ open, captain, onClose, onSaved }: CaptainFor
         numberOfLines={4}
         testID="captain-form-systemInstructions"
       />
+      <AppText variant="subheading" muted accessibilityRole="header" style={styles.group}>{t('Usage capture')}</AppText>
+      <UsageCaptureFields tenantId={captain?.tenantId ?? user?.tenant?.id} value={usage} onChange={setUsage} />
     </BottomSheet>
   );
 }
+
+const styles = StyleSheet.create({
+  group: { textTransform: 'uppercase', marginTop: spacing.md, marginBottom: spacing.sm },
+});

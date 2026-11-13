@@ -3,6 +3,8 @@ namespace Armada.Core.Models
     using System;
     using System.Collections.Generic;
     using Armada.Core.Enums;
+    using Armada.Core.Metrics;
+    using Armada.Core.Services;
 
     /// <summary>
     /// Charts for one Harbor over a window (GET /api/v1/harbors/{id}/metrics): jobs over time, slot usage, launch speed per runtime, link health, and token usage. Every series shares the same buckets (FromUtc, BucketMinutes, BucketCount), so a client can line them up by index. The Admiral computes every number, so every surface shows the same data.
@@ -69,6 +71,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// Time to first output and total runtime per runtime, for jobs that ended in the window, most jobs first.
         /// </summary>
+        [CollectionBound(HarborMetricsRanges.MaxLaunchSpeedRuntimes, Reason = "Top runtimes by job count; the rest aggregated into one IsOther entry")]
         public List<HarborLaunchSpeed> LaunchSpeed { get; set; } = new List<HarborLaunchSpeed>();
 
         /// <summary>

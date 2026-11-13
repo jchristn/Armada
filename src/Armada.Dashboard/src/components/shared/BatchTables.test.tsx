@@ -6,7 +6,7 @@ import WorkflowCommandPreview from './WorkflowCommandPreview';
 import TemplateVariableHelp from '../fleetActions/TemplateVariableHelp';
 import VesselPickerModal from '../fleetActions/VesselPickerModal';
 import VesselHealthDetailModal from '../vessels/health/VesselHealthDetailModal';
-import { getVesselHealth, listFleets, listVessels } from '../../api/client';
+import { getVesselHealth, listFleets, listVesselDependencies, listVessels } from '../../api/client';
 import { translateTemplate } from '../../i18n/runtime';
 import type { CaptainToolAccessResult } from '../../types/models';
 
@@ -14,6 +14,7 @@ vi.mock('../../api/client', () => ({
   listVessels: vi.fn(),
   listFleets: vi.fn(),
   getVesselHealth: vi.fn(),
+  listVesselDependencies: vi.fn(),
   setVesselHealthOverride: vi.fn(),
   deleteVesselHealthOverride: vi.fn(),
 }));
@@ -42,7 +43,8 @@ describe('CaptainToolViewer tables', () => {
       command: null, target: null, reachable: true, enabled: true, status: 'Reachable', toolCount: 3, workingDirectory: null,
       startupTimeoutSeconds: 0, toolTimeoutSeconds: 0, headerCount: 0, environmentVariableCount: 0, enabledToolFilterCount: 0, disabledToolFilterCount: 0, errorMessage: null,
     }],
-    tools: [{ name: 'search', sourceKind: 'McpServer', registrationSource: 'docs', description: 'Search the docs' }],
+    toolCount: 1, mcpToolCount: 1, runtimeBuiltInToolCount: 0,
+    tools: { success: true, pageNumber: 1, pageSize: 10, totalPages: 1, totalRecords: 1, totalMs: 0, objects: [{ name: 'search', sourceKind: 'McpServer', registrationSource: 'docs', description: 'Search the docs' }] },
   } as unknown as CaptainToolAccessResult;
 
   it('shows the endpoint on one line with the full value in its title, and locks Source and Tool', async () => {
@@ -111,8 +113,13 @@ describe('VesselHealthDetailModal tables', () => {
     vi.mocked(getVesselHealth).mockResolvedValue({
       health: { vesselId: 'vsl_1', vesselName: 'gateway', overallStatus: 'Warn' },
       findings: [{ vesselId: 'vsl_1', criterion: 'Readme', status: 'Fail' }],
-      dependencies: [{ vesselId: 'vsl_1', ecosystem: 'NuGet', projectPath: 'src/App/App.csproj', packageName: 'Newtonsoft.Json', currentVersion: '12.0.1', latestVersion: '13.0.3', drift: 'Major' }],
+      dependencyCount: 1,
       overrides: [{ vesselId: 'vsl_1', criterion: 'Readme', status: 'Pass', note: 'Docs live in the wiki' }],
+    } as never);
+    vi.mocked(listVesselDependencies).mockReset();
+    vi.mocked(listVesselDependencies).mockResolvedValue({
+      pageNumber: 1, pageSize: 100, totalPages: 1, totalRecords: 1,
+      objects: [{ vesselId: 'vsl_1', ecosystem: 'NuGet', projectPath: 'src/App/App.csproj', packageName: 'Newtonsoft.Json', currentVersion: '12.0.1', latestVersion: '13.0.3', drift: 'Major' }],
     } as never);
   });
 
@@ -131,5 +138,22 @@ describe('VesselHealthDetailModal tables', () => {
     expect(path).toHaveAttribute('title', 'src/App/App.csproj');
     await openChooser();
     expect(screen.getByRole('menuitemcheckbox', { name: /Package/ })).toHaveAttribute('aria-disabled', 'true');
+  });
+
+  it('reads dependency rows from the paged enumeration and loads more pages instead of stopping at the first', async () => {
+    vi.mocked(getVesselHealth).mockResolvedValue({
+      health: { vesselId: 'vsl_1', vesselName: 'gateway', overallStatus: 'Warn' }, findings: [], dependencyCount: 2, overrides: [],
+    } as never);
+    vi.mocked(listVesselDependencies)
+      .mockResolvedValueOnce({ pageNumber: 1, pageSize: 100, totalPages: 2, totalRecords: 2, objects: [{ id: 'vdp_1', vesselId: 'vsl_1', ecosystem: 'npm', packageName: 'left-pad', drift: 'Major' }] } as never)
+      .mockResolvedValueOnce({ pageNumber: 2, pageSize: 100, totalPages: 2, totalRecords: 2, objects: [{ id: 'vdp_2', vesselId: 'vsl_1', ecosystem: 'npm', packageName: 'right-pad', drift: 'Minor' }] } as never);
+    render(<MemoryRouter><VesselHealthDetailModal vesselId="vsl_1" canAdmin={false} onClose={() => undefined} initialSection="dependencies" /></MemoryRouter>);
+    await screen.findByText('left-pad');
+    expect(screen.queryByText('right-pad')).toBeNull();
+    expect(listVesselDependencies).toHaveBeenCalledWith('vsl_1', { pageNumber: 1, pageSize: 100 });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Load more' })); });
+    expect(listVesselDependencies).toHaveBeenCalledWith('vsl_1', { pageNumber: 2, pageSize: 100 });
+    expect(await screen.findByText('right-pad')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Load more' })).toBeNull();
   });
 });

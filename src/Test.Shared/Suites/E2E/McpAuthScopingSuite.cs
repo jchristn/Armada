@@ -9,6 +9,8 @@ namespace Test.Shared.Suites.E2E
     using System.Threading;
     using System.Threading.Tasks;
     using Armada.Core.Models;
+    using Armada.Core.Database;
+    using SyslogLogging;
     using Test.Shared.Infrastructure;
     using Touchstone.Core;
     using static Test.Shared.Infrastructure.Asserts;
@@ -171,6 +173,41 @@ namespace Test.Shared.Suites.E2E
                 AssertToolResultValid(result);
                 bool found = EnumerateContainsId(GetToolResultText(result), _FleetAId);
                 AssertFalse(found, "Expected user A's fleet " + _FleetAId + " to be hidden from user B over MCP.");
+            }));
+
+            cases.Add(CaseAsync("waiting_advice_respects_reader_permissions", "REST and MCP retain waiting advice text but omit configuration actions for tenant readers", TestTags.Positive, async () =>
+            {
+                E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this);
+                string sessionId = await InitMcpSessionAsync(_McpA!);
+                LoggingModule quiet = new LoggingModule(); quiet.Settings.EnableConsole = false;
+                using DatabaseDriver db = DatabaseDriverFactory.Create(fx.Settings.Database, quiet);
+                await db.InitializeAsync();
+                // Arrange owned data directly: creating vessels is deliberately not granted to this reader.
+                Vessel vessel = await db.Vessels.CreateAsync(new Vessel("advice-vessel", "https://github.com/test/fixture") { TenantId = _TenantAId, UserId = _UserAId });
+                Mission mission = await db.Missions.CreateAsync(new Mission("waiting advice") { VesselId = vessel.Id, TenantId = _TenantAId, UserId = _UserAId });
+                try
+                {
+                    JsonElement status = await CallToolAsync(_McpA!, sessionId, "mission_status", new { missionId = mission.Id });
+                    AssertToolResultValid(status);
+                    Mission reader = JsonHelper.Deserialize<Mission>(GetToolResultText(status));
+                    AssertNotNull(reader.AssignmentBlocker);
+                    AssertTrue(reader.AssignmentBlocker!.Advice.Count > 0);
+                    AssertTrue(reader.AssignmentBlocker.Advice.All(a => a.Action == null));
+                    using HttpClient user = new HttpClient { BaseAddress = fx.AuthClient.BaseAddress };
+                    user.DefaultRequestHeaders.Authorization = _McpA!.DefaultRequestHeaders.Authorization;
+                    using HttpResponseMessage response = await user.GetAsync("/api/v1/missions/" + mission.Id);
+                    response.EnsureSuccessStatusCode();
+                    Mission restReader = await JsonHelper.DeserializeAsync<Mission>(response);
+                    AssertTrue(restReader.AssignmentBlocker!.Advice.All(a => a.Action == null));
+                    using HttpResponseMessage adminResponse = await fx.AuthClient.GetAsync("/api/v1/missions/" + mission.Id);
+                    Mission admin = await JsonHelper.DeserializeAsync<Mission>(adminResponse);
+                    AssertTrue(admin.AssignmentBlocker!.Advice.Any(a => a.Action != null));
+                }
+                finally
+                {
+                    await fx.AuthClient.DeleteAsync("/api/v1/missions/" + mission.Id);
+                    await fx.AuthClient.DeleteAsync("/api/v1/vessels/" + vessel.Id);
+                }
             }));
 
             cases.Add(CaseAsync("cleanup_delete_scoping_resources", "Delete the credentials, users, and tenants created by this suite", TestTags.Positive, async () =>

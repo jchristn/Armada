@@ -1,0 +1,320 @@
+[
+  {
+    "page": "endpoint",
+    "theme": "light",
+    "width": 1440,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Activity>Events>evt_mvzzq91l_XFDMxFMi4Ci",
+    "links": [
+      "/dashboard/configuration?tab=endpoints&editEndpoint=mep_outer_fixture"
+    ],
+    "dialog": null,
+    "payloadColors": {
+      "color": "rgb(30, 41, 59)",
+      "background": "rgb(241, 245, 249)"
+    },
+    "payloadContrast": 13.35
+  },
+  {
+    "page": "editor",
+    "theme": "light",
+    "width": 1440,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Configuration>Endpoints",
+    "links": [],
+    "dialog": "Edit EndpointNameKindEmbeddingInferenceProviderOllamaOpenAIOpenAICompatibleAnthropicGeminiVoyageAIAzureOpenAIVertexAIBed",
+    "payloadColors": null
+  },
+  {
+    "page": "stuck",
+    "theme": "light",
+    "width": 1440,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Activity>Events>evt_stuck_fixture",
+    "links": [
+      "/dashboard/missions/msn_stuck_fixture",
+      "/dashboard/missions/msn_stuck_fixture"
+    ],
+    "dialog": null,
+    "payloadColors": {
+      "color": "rgb(30, 41, 59)",
+      "background": "rgb(241, 245, 249)"
+    },
+    "payloadContrast": 13.35
+  },
+  {
+    "page": "list",
+    "theme": "light",
+    "width": 1440,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Activity>Events",
+    "links": [],
+    "dialog": null,
+    "payloadColors": null
+  },
+  {
+    "page": "endpoint",
+    "theme": "light",
+    "width": 768,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Activity>Events>evt_mvzzq91l_XFDMxFMi4Ci",
+    "links": [
+      "/dashboard/configuration?tab=endpoints&editEndpoint=mep_outer_fixture"
+    ],
+    "dialog": null,
+    "payloadColors": {
+      "color": "rgb(30, 41, 59)",
+      "background": "rgb(241, 245, 249)"
+    },
+    "payloadContrast": 13.35
+  },
+  {
+    "page": "editor",
+    "theme": "light",
+    "width": 768,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Configuration>Endpoints",
+    "links": [],
+    "dialog": "Edit EndpointNameKindEmbeddingInferenceProviderOllamaOpenAIOpenAICompatibleAnthropicGeminiVoyageAIAzureOpenAIVertexAIBed",
+    "payloadColors": null
+  },
+  {
+    "page": "stuck",
+    "theme": "light",
+    "width": 768,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Activity>Events>evt_stuck_fixture",
+    "links": [
+      "/dashboard/missions/msn_stuck_fixture",
+      "/dashboard/missions/msn_stuck_fixture"
+    ],
+    "dialog": null,
+    "payloadColors": {
+      "color": "rgb(30, 41, 59)",
+      "background": "rgb(241, 245, 249)"
+    },
+    "payloadContrast": 13.35
+  },
+  {
+    "page": "list",
+    "theme": "light",
+    "width": 768,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Activity>Events",
+    "links": [],
+    "dialog": null,
+    "payloadColors": null
+  },
+  {
+    "page": "endpoint",
+    "theme": "light",
+    "width": 390,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Activity>Events>evt_mvzzq91l_XFDMxFMi4Ci",
+    "links": [
+      "/dashboard/configuration?tab=endpoints&editEndpoint=mep_outer_fixture"
+    ],
+    "dialog": null,
+    "payloadColors": {
+      "color": "rgb(30, 41, 59)",
+      "background": "rgb(241, 245, 249)"
+    },
+    "payloadContrast": 13.35
+  },
+  {
+    "page": "editor",
+    "theme": "light",
+    "width": 390,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Configuration>Endpoints",
+    "links": [],
+    "dialog": "Edit EndpointNameKindEmbeddingInferenceProviderOllamaOpenAIOpenAICompatibleAnthropicGeminiVoyageAIAzureOpenAIVertexAIBed",
+    "payloadColors": null
+  },
+  {
+    "page": "stuck",
+    "theme": "light",
+    "width": 390,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Activity>Events>evt_stuck_fixture",
+    "links": [
+      "/dashboard/missions/msn_stuck_fixture",
+      "/dashboard/missions/msn_stuck_fixture"
+    ],
+    "dialog": null,
+    "payloadColors": {
+      "color": "rgb(30, 41, 59)",
+      "background": "rgb(241, 245, 249)"
+    },
+    "payloadContrast": 13.35
+  },
+  {
+    "page": "list",
+    "theme": "light",
+    "width": 390,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Activity>Events",
+    "links": [],
+    "dialog": null,
+    "payloadColors": null
+  },
+  {
+    "page": "endpoint",
+    "theme": "dark",
+    "width": 1440,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Activity>Events>evt_mvzzq91l_XFDMxFMi4Ci",
+    "links": [
+      "/dashboard/configuration?tab=endpoints&editEndpoint=mep_outer_fixture"
+    ],
+    "dialog": null,
+    "payloadColors": {
+      "color": "rgb(241, 245, 249)",
+      "background": "rgb(30, 41, 59)"
+    },
+    "payloadContrast": 13.35
+  },
+  {
+    "page": "editor",
+    "theme": "dark",
+    "width": 1440,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Configuration>Endpoints",
+    "links": [],
+    "dialog": "Edit EndpointNameKindEmbeddingInferenceProviderOllamaOpenAIOpenAICompatibleAnthropicGeminiVoyageAIAzureOpenAIVertexAIBed",
+    "payloadColors": null
+  },
+  {
+    "page": "stuck",
+    "theme": "dark",
+    "width": 1440,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Activity>Events>evt_stuck_fixture",
+    "links": [
+      "/dashboard/missions/msn_stuck_fixture",
+      "/dashboard/missions/msn_stuck_fixture"
+    ],
+    "dialog": null,
+    "payloadColors": {
+      "color": "rgb(241, 245, 249)",
+      "background": "rgb(30, 41, 59)"
+    },
+    "payloadContrast": 13.35
+  },
+  {
+    "page": "list",
+    "theme": "dark",
+    "width": 1440,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Activity>Events",
+    "links": [],
+    "dialog": null,
+    "payloadColors": null
+  },
+  {
+    "page": "endpoint",
+    "theme": "dark",
+    "width": 768,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Activity>Events>evt_mvzzq91l_XFDMxFMi4Ci",
+    "links": [
+      "/dashboard/configuration?tab=endpoints&editEndpoint=mep_outer_fixture"
+    ],
+    "dialog": null,
+    "payloadColors": {
+      "color": "rgb(241, 245, 249)",
+      "background": "rgb(30, 41, 59)"
+    },
+    "payloadContrast": 13.35
+  },
+  {
+    "page": "editor",
+    "theme": "dark",
+    "width": 768,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Configuration>Endpoints",
+    "links": [],
+    "dialog": "Edit EndpointNameKindEmbeddingInferenceProviderOllamaOpenAIOpenAICompatibleAnthropicGeminiVoyageAIAzureOpenAIVertexAIBed",
+    "payloadColors": null
+  },
+  {
+    "page": "stuck",
+    "theme": "dark",
+    "width": 768,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Activity>Events>evt_stuck_fixture",
+    "links": [
+      "/dashboard/missions/msn_stuck_fixture",
+      "/dashboard/missions/msn_stuck_fixture"
+    ],
+    "dialog": null,
+    "payloadColors": {
+      "color": "rgb(241, 245, 249)",
+      "background": "rgb(30, 41, 59)"
+    },
+    "payloadContrast": 13.35
+  },
+  {
+    "page": "list",
+    "theme": "dark",
+    "width": 768,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Activity>Events",
+    "links": [],
+    "dialog": null,
+    "payloadColors": null
+  },
+  {
+    "page": "endpoint",
+    "theme": "dark",
+    "width": 390,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Activity>Events>evt_mvzzq91l_XFDMxFMi4Ci",
+    "links": [
+      "/dashboard/configuration?tab=endpoints&editEndpoint=mep_outer_fixture"
+    ],
+    "dialog": null,
+    "payloadColors": {
+      "color": "rgb(241, 245, 249)",
+      "background": "rgb(30, 41, 59)"
+    },
+    "payloadContrast": 13.35
+  },
+  {
+    "page": "editor",
+    "theme": "dark",
+    "width": 390,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Configuration>Endpoints",
+    "links": [],
+    "dialog": "Edit EndpointNameKindEmbeddingInferenceProviderOllamaOpenAIOpenAICompatibleAnthropicGeminiVoyageAIAzureOpenAIVertexAIBed",
+    "payloadColors": null
+  },
+  {
+    "page": "stuck",
+    "theme": "dark",
+    "width": 390,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Activity>Events>evt_stuck_fixture",
+    "links": [
+      "/dashboard/missions/msn_stuck_fixture",
+      "/dashboard/missions/msn_stuck_fixture"
+    ],
+    "dialog": null,
+    "payloadColors": {
+      "color": "rgb(241, 245, 249)",
+      "background": "rgb(30, 41, 59)"
+    },
+    "payloadContrast": 13.35
+  },
+  {
+    "page": "list",
+    "theme": "dark",
+    "width": 390,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Activity>Events",
+    "links": [],
+    "dialog": null,
+    "payloadColors": null
+  }
+]

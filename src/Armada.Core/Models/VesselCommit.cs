@@ -2,6 +2,7 @@ namespace Armada.Core.Models
 {
     using System;
     using System.Collections.Generic;
+    using Armada.Core.Services;
 
     /// <summary>
     /// One commit in a vessel's history with what it changed.
@@ -61,9 +62,17 @@ namespace Armada.Core.Models
         public DateTime CommittedUtc { get; set; } = DateTime.MinValue;
 
         /// <summary>
-        /// Parent SHAs (two or more for a merge). Never null.
+        /// Parent SHAs (two or more for a merge), at most <see cref="Constants.VesselHistoryMaxParentsPerCommit"/>
+        /// (the first parents in git order). <see cref="ParentCount"/> is the full count. Never null.
         /// </summary>
+        [CollectionBound(Constants.VesselHistoryMaxParentsPerCommit, Reason = "First parents only; ParentCount is the full count")]
         public List<string> ParentShas { get; set; } = new List<string>();
+
+        /// <summary>
+        /// Number of parents of the commit (all of them, even when <see cref="ParentShas"/> lists only the first
+        /// <see cref="Constants.VesselHistoryMaxParentsPerCommit"/>).
+        /// </summary>
+        public int ParentCount { get; set; } = 0;
 
         /// <summary>
         /// True when the commit has more than one parent. File stats for a merge are against its first parent.
@@ -88,6 +97,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// Changed files, at most 200. Never null.
         /// </summary>
+        [CollectionBound(Constants.VesselHistoryMaxFilesPerCommit, Reason = "Files beyond the cap are counted in FilesChanged and FilesTruncated is set")]
         public List<GitChangedFile> Files { get; set; } = new List<GitChangedFile>();
 
         /// <summary>

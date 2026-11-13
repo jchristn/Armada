@@ -1323,6 +1323,7 @@ function dashboard() {
                 }
                 let captain = await this.api('POST', '/api/v1/captains', {
                     name: this.modalData.name,
+                    active: this.modalData.active ?? true,
                     runtime: this.modalData.runtime || 'ClaudeCode',
                     model: this.modalData.model && this.modalData.model.trim() ? this.modalData.model.trim() : null,
                     runtimeOptionsJson: this.buildMuxCaptainRuntimeOptions(this.modalData)
@@ -1342,6 +1343,7 @@ function dashboard() {
                 }
                 await this.api('PUT', '/api/v1/captains/' + this.modalData.id, {
                     name: this.modalData.name,
+                    active: this.modalData.active ?? true,
                     runtime: this.modalData.runtime,
                     model: this.modalData.model && this.modalData.model.trim() ? this.modalData.model.trim() : null,
                     runtimeOptionsJson: this.buildMuxCaptainRuntimeOptions(this.modalData)
@@ -1722,6 +1724,7 @@ function dashboard() {
         openAddCaptain() {
             this.modal = 'add-captain';
             this.modalData = {
+                active: true,
                 name: '',
                 runtime: 'ClaudeCode',
                 model: '',
@@ -1741,6 +1744,7 @@ function dashboard() {
         openEditCaptain(c) {
             this.modal = 'edit-captain';
             this.modalData = {
+                active: c.active ?? true,
                 id: c.id,
                 name: c.name,
                 runtime: c.runtime || 'ClaudeCode',

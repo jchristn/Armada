@@ -2,12 +2,19 @@ namespace Armada.Core.Models
 {
     using System.Collections.Generic;
     using Armada.Core.Enums;
+    using Armada.Core.Services;
 
     /// <summary>
     /// Predictive landing summary for a vessel or mission.
     /// </summary>
     public class LandingPreviewResult
     {
+        /// <summary>
+        /// Most issues a preview carries: the number of distinct checks LandingPreviewService runs, each adding at most
+        /// one issue.
+        /// </summary>
+        public const int MaxIssues = 12;
+
         /// <summary>
         /// Vessel identifier.
         /// </summary>
@@ -118,6 +125,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// Landing preview issues and warnings.
         /// </summary>
+        [CollectionBound(LandingPreviewResult.MaxIssues, Reason = "LandingPreviewService adds each of its MaxIssues checks at most once")]
         public List<LandingPreviewIssue> Issues { get; set; } = new List<LandingPreviewIssue>();
     }
 }

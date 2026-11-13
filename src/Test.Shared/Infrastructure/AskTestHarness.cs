@@ -6,6 +6,7 @@ namespace Test.Shared.Infrastructure
     using System.Text.Json;
     using System.Threading.Tasks;
     using Armada.Core;
+    using Armada.Core.Enums;
     using Armada.Core.Models;
     using Armada.Core.Services.Ask;
     using Armada.Core.Settings;
@@ -92,6 +93,7 @@ namespace Test.Shared.Infrastructure
             Tracker.Narrate = Turns.NarrateAsync;
             Tracker.ReportResult = request => Turns.ScheduleReportAsync(request);
             Tracker.ExpireProposals = Actions.ExpireDueAsync;
+            Turns.OnConversationText = (thread, text) => Actions.LinkMentionedBlackBoxesAsync(thread, text);
 
             RegisterStub("status", _ => new { Captains = 0, Health = "ok" });
             RegisterStub("enumerate", _ => new { Objects = new List<object>() });
@@ -99,6 +101,29 @@ namespace Test.Shared.Infrastructure
             RegisterStub("cancel_voyage", _ => new { Status = "Cancelled" });
             RegisterStub("delete_vessel", _ => McpToolError.NotFound("Vessel not found"));
             RegisterStub("explode", _ => throw new InvalidOperationException("boom"));
+        }
+
+        /// <summary>
+        /// Use a black box service: cards are read through it, mentioned missions link their cards, and the real black box
+        /// MCP tools are registered behind the Ask gate (replacing any stub of the same name).
+        /// </summary>
+        /// <param name="service">Black box service.</param>
+        public void UseBlackBox(Armada.Core.BlackBox.IBlackBoxService service)
+        {
+            Actions.BlackBox = service;
+            Threads.Snapshots.BlackBox = service;
+            Armada.Server.Mcp.Tools.McpBlackBoxTools.Register((name, description, schema, handler) =>
+            {
+                Func<JsonElement?, Task<object>> recorded = async (JsonElement? args) =>
+                {
+                    Dictionary<string, string> claims = new Dictionary<string, string>();
+                    RpcCallContext? ctx = RpcCallContext.Current;
+                    if (ctx != null) foreach (KeyValuePair<string, string> kvp in ctx.Claims) claims[kvp.Key] = kvp.Value;
+                    lock (Invocations) Invocations.Add(new AskToolInvocation { ToolName = name, ArgumentsJson = args.HasValue ? args.Value.GetRawText() : "{}", Claims = claims });
+                    return await handler(args).ConfigureAwait(false);
+                };
+                Gated[name] = Actions.WrapTool(name, recorded);
+            }, service);
         }
 
         /// <summary>
@@ -175,6 +200,29 @@ namespace Test.Shared.Infrastructure
         public List<AskRecordedEvent> EventsFor(string userId, string eventType)
         {
             lock (Events) return Events.Where(e => e.UserId == userId && e.EventType == eventType).ToList();
+        }
+
+        /// <summary>
+        /// Every tool call of a message, read from the paged enumeration in the order they were made.
+        /// </summary>
+        /// <param name="owner">Thread owner.</param>
+        /// <param name="message">Message.</param>
+        /// <returns>Tool calls.</returns>
+        public async Task<List<AskMessageToolCall>> ToolCallsAsync(AuthContext owner, AskMessage message)
+        {
+            List<AskMessageToolCall> all = new List<AskMessageToolCall>();
+            int pageNumber = 1;
+            while (true)
+            {
+                EnumerationQuery query = new EnumerationQuery { PageNumber = pageNumber, PageSize = 1000, Order = EnumerationOrderEnum.CreatedAscending };
+                EnumerationResult<AskMessageToolCall>? page = await Threads.EnumerateToolCallsAsync(owner, message.ThreadId, message.Id, query).ConfigureAwait(false);
+                if (page == null || page.Objects.Count == 0) break;
+                all.AddRange(page.Objects);
+                if (pageNumber >= page.TotalPages) break;
+                pageNumber++;
+            }
+
+            return all;
         }
 
         /// <summary>

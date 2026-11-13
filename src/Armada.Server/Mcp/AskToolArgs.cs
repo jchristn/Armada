@@ -22,6 +22,15 @@ namespace Armada.Server.Mcp
         /// <summary>Tracked work ID.</summary>
         public string? WorkId { get; set; } = null;
 
+        /// <summary>Message ID (amg_ prefix) whose tool calls to read.</summary>
+        public string? MessageId { get; set; } = null;
+
+        /// <summary>Status or state filter of a paged read.</summary>
+        public string? Status { get; set; } = null;
+
+        /// <summary>CreatedAscending or CreatedDescending (default) for a paged read.</summary>
+        public string? Order { get; set; } = null;
+
         /// <summary>Conversation title.</summary>
         public string? Title { get; set; } = null;
 

@@ -18,6 +18,11 @@ interface PlanningTranscriptCardProps {
   failureReason?: string | null;
   updatedUtc: string;
   messages: PlanningSessionMessage[];
+  /** Transcript length on the server (every page); defaults to the loaded count. */
+  messageTotal?: number;
+  /** Loads the next older transcript page; offered while fewer than messageTotal are loaded. */
+  onLoadOlder?: () => void;
+  loadingOlder?: boolean;
   messageTools?: Record<string, ToolEvent[]>;
   messageThinking?: Record<string, string>;
   thinkingMessage?: string;
@@ -57,6 +62,9 @@ export default function PlanningTranscriptCard(props: PlanningTranscriptCardProp
     failureReason,
     updatedUtc,
     messages,
+    messageTotal,
+    onLoadOlder,
+    loadingOlder,
     messageTools,
     messageThinking,
     thinkingMessage,
@@ -159,7 +167,7 @@ export default function PlanningTranscriptCard(props: PlanningTranscriptCardProp
         </div>
         <div className="planning-current-session-summary-item">
           <span title={t('Number of messages in the transcript, yours and the captain\'s.')}>{t('Messages')}</span>
-          <strong>{messages.length}</strong>
+          <strong>{messageTotal ?? messages.length}</strong>
         </div>
       </div>
 
@@ -169,6 +177,13 @@ export default function PlanningTranscriptCard(props: PlanningTranscriptCardProp
         </div>
       )}
 
+      {onLoadOlder && (messageTotal ?? 0) > messages.length && (
+        <div className="planning-chat-older">
+          <button type="button" className="btn btn-sm" onClick={onLoadOlder} disabled={loadingOlder} title={t('Load the next older page of the transcript.')}>
+            {loadingOlder ? t('Loading earlier messages...') : t('Load earlier messages ({{shown}} of {{total}})', { shown: messages.length, total: messageTotal ?? messages.length })}
+          </button>
+        </div>
+      )}
       <div className="planning-chat-shell">
         <CaptainChatPanel
           t={t}

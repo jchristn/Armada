@@ -9,7 +9,7 @@ const { sharedRoots } = require('./sharing.config');
 const projectRoot = __dirname;
 const config = getDefaultConfig(projectRoot);
 
-config.watchFolders = [...(config.watchFolders || []), sharedRoots.dashboardSrc, sharedRoots.i18nDir];
+config.watchFolders = [...(config.watchFolders || []), sharedRoots.dashboardSrc, sharedRoots.i18nDir, sharedRoots.usageMessagesDir];
 
 // Aliases are resolved here rather than from tsconfig paths (app.config.ts turns that off): tsconfig also maps
 // react for the type checker, which must not reach the bundler.

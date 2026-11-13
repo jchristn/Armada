@@ -4,9 +4,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as client from '../api/client';
 import { translateTemplate } from '../i18n/runtime';
 import Endpoints from './Endpoints';
+import { asPage } from '../test/asPage';
 
 vi.mock('../api/client', () => ({
-  createCaptain: vi.fn(), listModelEndpoints: vi.fn(), duplicateModelEndpoint: vi.fn(), createModelEndpoint: vi.fn(), updateModelEndpoint: vi.fn(), deleteModelEndpoint: vi.fn(),
+  createCaptain: vi.fn(), listModelEndpoints: vi.fn(), enumerateModelEndpoints: vi.fn(), duplicateModelEndpoint: vi.fn(), createModelEndpoint: vi.fn(), updateModelEndpoint: vi.fn(), deleteModelEndpoint: vi.fn(),
   validateModelEndpoint: vi.fn(), healthCheckModelEndpoints: vi.fn(),
 }));
 
@@ -37,6 +38,7 @@ const STORED = {
 beforeEach(() => {
   localStorage.clear();
   vi.mocked(client.listModelEndpoints).mockResolvedValue([STORED] as never);
+  vi.mocked(client.enumerateModelEndpoints).mockImplementation((async () => asPage(await client.listModelEndpoints())) as never);
   vi.mocked(client.updateModelEndpoint).mockResolvedValue(STORED as never);
   vi.mocked(client.createModelEndpoint).mockResolvedValue(STORED as never);
 });

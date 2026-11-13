@@ -1,6 +1,6 @@
 import { useRouter, type Href } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { WebSocketMessage } from '@dashboard/types/models';
 import { CLI_PERMISSION_EVENT_PREFIX } from '@dashboard/lib/cliPermissions';
@@ -106,17 +106,17 @@ export function NeedsYouScreen({ testID = 'approvals' }: { testID?: string }) {
               {unreadAlerts.map((n) => {
                 const href = notificationHref(n);
                 return (
-                  <View key={n.id} style={[styles.alert, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                    <AppText
-                      variant="label"
-                      accessibilityRole={href ? 'link' : 'text'}
-                      onPress={() => { markRead(n.id); if (href) router.push(href as Href); }}
-                    >
-                      {n.title}
-                    </AppText>
+                  <Pressable
+                    key={n.id}
+                    accessibilityRole={href ? 'link' : 'button'}
+                    accessibilityLabel={[n.title, n.message, formatRelativeTime(n.timestampUtc)].filter(Boolean).join(', ')}
+                    onPress={() => { markRead(n.id); if (href) router.push(href as Href); }}
+                    style={({ pressed }) => [styles.alert, { backgroundColor: colors.surface, borderColor: colors.border, opacity: pressed ? 0.75 : 1 }]}
+                  >
+                    <AppText variant="label" color={href ? 'primary' : 'text'}>{n.title}</AppText>
                     <AppText variant="caption" muted numberOfLines={2}>{n.message}</AppText>
                     <AppText variant="caption" muted>{formatRelativeTime(n.timestampUtc)}</AppText>
-                  </View>
+                  </Pressable>
                 );
               })}
             </View>

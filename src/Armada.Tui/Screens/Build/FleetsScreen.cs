@@ -122,7 +122,7 @@ namespace Armada.Tui.Screens.Build
             ArmadaPageQuery all = new ArmadaPageQuery(1, 9999);
             Task<EnumerationResult<Fleet>?> fleets = Context.Client.ListFleetsAsync(all, token);
             Task<EnumerationResult<Vessel>?> vessels = Context.Client.ListVesselsAsync(new ArmadaPageQuery(1, 9999), token);
-            Task<EnumerationResult<Pipeline>?> pipelines = Context.Client.ListPipelinesAsync(new ArmadaPageQuery(1, 9999), token);
+            Task<List<Pipeline>> pipelines = ArmadaPaging.ReadAllAsync<Pipeline>((p, ct) => Context.Client.ListPipelinesAsync(new ArmadaPageQuery(p, 1000), ct), ArmadaPaging.DefaultMaxPages, token);
             await Task.WhenAll(fleets, vessels, pipelines).ConfigureAwait(false);
             Dictionary<string, int> counts = new Dictionary<string, int>(StringComparer.Ordinal);
             foreach (Vessel v in vessels.Result?.Objects ?? new List<Vessel>())
@@ -132,7 +132,7 @@ namespace Armada.Tui.Screens.Build
             }
 
             _VesselCounts = counts;
-            _LoadedPipelines = pipelines.Result?.Objects ?? new List<Pipeline>();
+            _LoadedPipelines = pipelines.Result;
             List<Fleet> rows = fleets.Result?.Objects ?? new List<Fleet>();
             return new GridPage<Fleet>(rows, rows.Count);
         }

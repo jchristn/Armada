@@ -84,6 +84,9 @@ namespace Armada.Core.Services
 
         #region Private-Members
 
+        private const string _WorkerOnlyPipelineName = "WorkerOnly";
+        private const int _ApplicabilityTimeoutMs = 120000;
+        private const int _FailureSummaryBytes = 8192;
         private readonly string _Header = "[FleetActionRunner] ";
         private readonly DatabaseDriver _Database;
         private readonly ArmadaSettings _Settings;
@@ -441,6 +444,36 @@ namespace Armada.Core.Services
         }
 
         /// <summary>
+        /// Keep the first <paramref name="maxBytes"/> UTF-8 bytes of a string (a captain's report reads from the top),
+        /// never splitting a character.
+        /// </summary>
+        /// <param name="value">Text; null returns null.</param>
+        /// <param name="maxBytes">Maximum bytes, minimum 1.</param>
+        /// <param name="truncated">Set true when text was dropped.</param>
+        /// <returns>The possibly shortened text.</returns>
+        public static string? TruncateHead(string? value, int maxBytes, out bool truncated)
+        {
+            truncated = false;
+            if (value == null) return null;
+            if (maxBytes < 1) maxBytes = 1;
+            if (Encoding.UTF8.GetByteCount(value) <= maxBytes) return value;
+
+            truncated = true;
+            int bytes = 0;
+            int end = 0;
+            while (end < value.Length)
+            {
+                int charLength = (end + 1 < value.Length && Char.IsHighSurrogate(value[end]) && Char.IsLowSurrogate(value[end + 1])) ? 2 : 1;
+                int charBytes = Encoding.UTF8.GetByteCount(value.Substring(end, charLength));
+                if (bytes + charBytes > maxBytes) break;
+                bytes += charBytes;
+                end += charLength;
+            }
+
+            return value.Substring(0, end);
+        }
+
+        /// <summary>
         /// Keep the last <paramref name="maxBytes"/> UTF-8 bytes of a string (the end of process output is usually
         /// where errors are), never splitting a character.
         /// </summary>
@@ -681,24 +714,22 @@ namespace Armada.Core.Services
                 }
             }
 
-            if (FleetActionTemplateRenderer.References(commandTemplate, FleetActionTemplateRenderer.BuildCommandVariable)
-                && String.IsNullOrWhiteSpace(vessel.DefinitionOfDoneBuildCommand))
-            {
-                await CompleteTargetAsync(run.Kind, target, FleetActionTargetStatusEnum.Skipped, FleetActionReasonCodes.NoBuildCommand, null,
-                    "Vessel " + vessel.Name + " has no definition-of-done build command.", token).ConfigureAwait(false);
-                return;
-            }
+            string? applicabilityTemplate = FleetActionShellCommandBuilder.SelectCommand(run.ApplicabilityCommand, run.ApplicabilityCommandWindows, windows);
+            FleetActionTemplateContext context = await BuildContextAsync(new string?[] { commandTemplate, applicabilityTemplate }, vessel, tenantId, run, token).ConfigureAwait(false);
+            if (await SkipUnresolvedCommandAsync(run, target, vessel, commandTemplate, context, token).ConfigureAwait(false)) return;
 
             string rendered;
             try
             {
-                rendered = await RenderAsync(commandTemplate, vessel, tenantId, run, token).ConfigureAwait(false);
+                rendered = FleetActionTemplateRenderer.Render(commandTemplate, context);
             }
             catch (FleetActionTemplateException e)
             {
                 await CompleteTargetAsync(run.Kind, target, FleetActionTargetStatusEnum.Failed, null, FleetActionReasonCodes.TemplateError, e.Message, token).ConfigureAwait(false);
                 return;
             }
+
+            if (!await IsApplicableAsync(run, target, vessel, selection, workingDirectory, applicabilityTemplate, context, token).ConfigureAwait(false)) return;
 
             target.RenderedText = rendered;
             if (String.IsNullOrWhiteSpace(rendered))
@@ -759,7 +790,8 @@ namespace Armada.Core.Services
             long executionStarted = System.Diagnostics.Stopwatch.GetTimestamp();
             HostCommandResult result = await selection.Executor.RunAsync(request, token).ConfigureAwait(false);
 
-            bool secretReport = run.OutputParser == "gitleaks-json";
+            string? parserId = run.OutputParser == FleetActionOutputParsers.FleetActionParserRegistry.AutoParserId ? context.AuditParserId : run.OutputParser;
+            bool secretReport = parserId == "gitleaks-json";
             string safeOutput = secretReport ? "Secret scan raw output redacted." : result.StandardOutput;
             string safeError = secretReport ? "Secret scan diagnostics redacted." : result.StandardError;
             target.OutputText = TruncateTail(safeOutput, maxBytes, out bool outputTruncated);
@@ -775,7 +807,7 @@ namespace Armada.Core.Services
 
             token.ThrowIfCancellationRequested();
             FleetActionOutputParsers.FleetActionParseResult? parsed = null;
-            FleetActionOutputParsers.IFleetActionOutputParser? parser = _OutputParserResolver(run.OutputParser);
+            FleetActionOutputParsers.IFleetActionOutputParser? parser = _OutputParserResolver(parserId);
             if (parser != null)
             {
                 double elapsedMs = (System.Diagnostics.Stopwatch.GetTimestamp() - executionStarted) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
@@ -796,6 +828,10 @@ namespace Armada.Core.Services
             }
             token.ThrowIfCancellationRequested();
             target.ScanSummary = parsed?.Summary;
+            // Without a parser, the command's output (a failing test run, an outdated report) is what a follow-up mission
+            // needs through {{scan.summary}}.
+            if (parser == null && !secretReport)
+                target.ScanSummary = BuildOutputSummary(result.ExitCode, result.StandardOutput, result.StandardError);
             target.ExitCode = result.ExitCode;
             if (parsed?.Parsed == true && parsed.Total > 0)
             {
@@ -823,15 +859,101 @@ namespace Armada.Core.Services
             return new FleetActionExecutorSelection(new RemoteHostCommandExecutor(_Harbors, harborId), true, harbor?.OsPlatform);
         }
 
-        private async Task<string> RenderAsync(string? template, Vessel vessel, string tenantId, FleetActionRun run, CancellationToken token)
+        private async Task<FleetActionTemplateContext> BuildContextAsync(IEnumerable<string?> templates, Vessel vessel, string tenantId, FleetActionRun run, CancellationToken token)
         {
+            List<string?> list = templates.ToList();
             FleetActionTemplateContext context = FleetActionTemplateContext.FromVessel(vessel);
-            if (FleetActionTemplateRenderer.References(template, FleetActionTemplateRenderer.HealthSummaryVariable))
+            if (list.Any(t => FleetActionTemplateRenderer.References(t, FleetActionTemplateRenderer.HealthSummaryVariable)))
                 context.HealthSummary = await _HealthSummary.BuildAsync(tenantId, vessel.Id, token).ConfigureAwait(false);
             context.InputValues = run.InputValues;
-            if (run.Kind == FleetActionKindEnum.Mission && FleetActionTemplateRenderer.References(template, "scan.summary") && !String.IsNullOrWhiteSpace(run.ScanSourceActionKey))
+            if (run.Kind == FleetActionKindEnum.Mission && list.Any(t => FleetActionTemplateRenderer.References(t, "scan.summary")) && !String.IsNullOrWhiteSpace(run.ScanSourceActionKey))
                 context.ScanSummary = await FindScanSummaryAsync(tenantId, vessel.Id, run.ScanSourceActionKey!, token).ConfigureAwait(false);
-            return FleetActionTemplateRenderer.Render(template, context);
+            return context;
+        }
+
+        // A Command template that names an ecosystem command which resolved to nothing has nothing to run.
+        private async Task<bool> SkipUnresolvedCommandAsync(FleetActionRun run, FleetActionRunTarget target, Vessel vessel, string? template, FleetActionTemplateContext context, CancellationToken token)
+        {
+            if (FleetActionTemplateRenderer.References(template, FleetActionTemplateRenderer.BuildCommandVariable) && String.IsNullOrWhiteSpace(context.BuildCommand))
+            {
+                await CompleteTargetAsync(run.Kind, target, FleetActionTargetStatusEnum.Skipped, FleetActionReasonCodes.NoBuildCommand, null,
+                    "Vessel " + vessel.Name + " has no build command: none is configured and no detected ecosystem supplies one.", token).ConfigureAwait(false);
+                return true;
+            }
+
+            if (run.Kind != FleetActionKindEnum.Command) return false;
+            foreach (string variable in FleetActionTemplateRenderer.ResolvedCommandVariables)
+            {
+                if (variable == FleetActionTemplateRenderer.BuildCommandVariable || !FleetActionTemplateRenderer.References(template, variable)) continue;
+                string value = FleetActionTemplateRenderer.Render("{{" + variable + "}}", context);
+                if (!String.IsNullOrWhiteSpace(value)) continue;
+                await CompleteTargetAsync(run.Kind, target, FleetActionTargetStatusEnum.Skipped, FleetActionReasonCodes.NoMatchingEcosystem, null,
+                    "No command resolves for {{" + variable + "}} on vessel " + vessel.Name + " (detected ecosystems: "
+                    + (String.IsNullOrEmpty(context.Ecosystems) ? "none" : context.Ecosystems) + ").", token).ConfigureAwait(false);
+                return true;
+            }
+
+            return false;
+        }
+
+        // Runs the action's applicability check; false means the target was completed as Skipped NotApplicable (or failed).
+        private async Task<bool> IsApplicableAsync(FleetActionRun run, FleetActionRunTarget target, Vessel vessel, FleetActionExecutorSelection selection, string workingDirectory,
+            string? applicabilityTemplate, FleetActionTemplateContext context, CancellationToken token)
+        {
+            if (String.IsNullOrWhiteSpace(applicabilityTemplate)) return true;
+
+            string check;
+            try
+            {
+                check = FleetActionTemplateRenderer.Render(applicabilityTemplate, context);
+            }
+            catch (FleetActionTemplateException e)
+            {
+                await CompleteTargetAsync(run.Kind, target, FleetActionTargetStatusEnum.Failed, null, FleetActionReasonCodes.TemplateError, e.Message, token).ConfigureAwait(false);
+                return false;
+            }
+
+            HostCommandRequest request = selection.IsRemote
+                ? FleetActionShellCommandBuilder.BuildRemote(check, workingDirectory, _ApplicabilityTimeoutMs, selection.HarborOsPlatform)
+                : FleetActionShellCommandBuilder.BuildLocal(check, workingDirectory, _ApplicabilityTimeoutMs);
+            request.Kind = HostCommandKindEnum.Command;
+            request.Label = "Fleet action applicability";
+            await CommandAudit.RecordAsync(_Database, new CommandAuditRecord
+            {
+                Source = "FleetAction",
+                Command = check,
+                WorkingDirectory = workingDirectory,
+                Host = selection.IsRemote ? ("Harbor " + vessel.PreferredHarborId) : "Admiral",
+                TenantId = run.TenantId,
+                UserId = run.UserId,
+                VesselId = vessel.Id,
+                EntityType = "FleetActionRun",
+                EntityId = run.Id
+            }, _Logging, token).ConfigureAwait(false);
+
+            HostCommandResult result = await selection.Executor.RunAsync(request, token).ConfigureAwait(false);
+            if (!result.TimedOut && result.ExitCode == 0) return true;
+
+            string detail = result.TimedOut
+                ? "The applicability check timed out."
+                : ("The applicability check exited with code " + result.ExitCode + "; the action does not apply to this vessel.");
+            await CompleteTargetAsync(run.Kind, target, FleetActionTargetStatusEnum.Skipped, FleetActionReasonCodes.NotApplicable, null,
+                TruncateTail((detail + "\n" + result.StandardError).Trim(), _Settings.FleetActions.MaxOutputBytes, out bool _), token).ConfigureAwait(false);
+            return false;
+        }
+
+        private async Task<string?> ResolveWorkerOnlyPipelineIdAsync(string tenantId, CancellationToken token)
+        {
+            Pipeline? pipeline = await _Database.Pipelines.ReadByNameAsync(tenantId, _WorkerOnlyPipelineName, token).ConfigureAwait(false)
+                ?? await _Database.Pipelines.ReadByNameAsync(_WorkerOnlyPipelineName, token).ConfigureAwait(false);
+            return pipeline?.Id;
+        }
+
+        private static string BuildOutputSummary(int exitCode, string? standardOutput, string? standardError)
+        {
+            string combined = ((standardOutput ?? String.Empty).TrimEnd() + "\n" + (standardError ?? String.Empty).TrimEnd()).Trim();
+            string tail = TruncateTail(combined, _FailureSummaryBytes, out bool truncated) ?? String.Empty;
+            return "Exit code " + exitCode + "." + (tail.Length == 0 ? " No output." : ("\n" + (truncated ? "Last output (truncated):\n" : "Output:\n") + tail));
         }
 
         private async Task<string> FindScanSummaryAsync(string tenantId, string vesselId, string sourceKey, CancellationToken token)
@@ -937,6 +1059,17 @@ namespace Armada.Core.Services
             if (_MissionDispatcher == null) return false;
 
             FleetActionVoyageOutcomeEnum outcome = await _MissionDispatcher.GetOutcomeAsync(target.VoyageId!, token).ConfigureAwait(false);
+            if (outcome == FleetActionVoyageOutcomeEnum.Succeeded || outcome == FleetActionVoyageOutcomeEnum.Failed)
+            {
+                // The captain's final message is the target's output: for a report-only action it is the report.
+                string? report = await _MissionDispatcher.GetReportAsync(target.VoyageId!, token).ConfigureAwait(false);
+                if (!String.IsNullOrWhiteSpace(report))
+                {
+                    target.OutputText = TruncateHead(report, _Settings.FleetActions.MaxOutputBytes, out bool reportTruncated);
+                    target.OutputTruncated = reportTruncated;
+                }
+            }
+
             switch (outcome)
             {
                 case FleetActionVoyageOutcomeEnum.Succeeded:
@@ -981,18 +1114,26 @@ namespace Armada.Core.Services
                 return false;
             }
 
-            if (FleetActionTemplateRenderer.References(run.PromptTemplate, FleetActionTemplateRenderer.BuildCommandVariable)
-                && String.IsNullOrWhiteSpace(vessel.DefinitionOfDoneBuildCommand))
+            FleetActionExecutorSelection? checkSelection = null;
+            bool checkWindows = OperatingSystem.IsWindows();
+            bool canCheck = !String.IsNullOrWhiteSpace(run.ApplicabilityCommand) || !String.IsNullOrWhiteSpace(run.ApplicabilityCommandWindows);
+            if (canCheck && !String.IsNullOrWhiteSpace(vessel.WorkingDirectory))
             {
-                await CompleteTargetAsync(run.Kind, target, FleetActionTargetStatusEnum.Skipped, FleetActionReasonCodes.NoBuildCommand, null,
-                    "Vessel " + vessel.Name + " has no definition-of-done build command.", token).ConfigureAwait(false);
-                return false;
+                // The check is best effort for Mission targets: a vessel whose checkout cannot be reached is dispatched,
+                // and the prompt still tells the captain what to do when the change does not apply.
+                checkSelection = await ResolveExecutorAsync(vessel, token).ConfigureAwait(false);
+                if (checkSelection != null && !checkSelection.IsRemote && !Directory.Exists(vessel.WorkingDirectory)) checkSelection = null;
+                if (checkSelection != null && checkSelection.IsRemote) checkWindows = FleetActionShellCommandBuilder.IsWindowsPlatform(checkSelection.HarborOsPlatform);
             }
+
+            string? applicabilityTemplate = checkSelection == null ? null : FleetActionShellCommandBuilder.SelectCommand(run.ApplicabilityCommand, run.ApplicabilityCommandWindows, checkWindows);
+            FleetActionTemplateContext context = await BuildContextAsync(new string?[] { run.PromptTemplate, applicabilityTemplate }, vessel, tenantId, run, token).ConfigureAwait(false);
+            if (await SkipUnresolvedCommandAsync(run, target, vessel, run.PromptTemplate, context, token).ConfigureAwait(false)) return false;
 
             string prompt;
             try
             {
-                prompt = await RenderAsync(run.PromptTemplate, vessel, tenantId, run, token).ConfigureAwait(false);
+                prompt = FleetActionTemplateRenderer.Render(run.PromptTemplate, context);
             }
             catch (FleetActionTemplateException e)
             {
@@ -1001,8 +1142,14 @@ namespace Armada.Core.Services
             }
 
             target.RenderedText = prompt;
+            if (checkSelection != null && !await IsApplicableAsync(run, target, vessel, checkSelection, vessel.WorkingDirectory!, applicabilityTemplate, context, token).ConfigureAwait(false))
+                return false;
 
-            DispatchValidationResult validation = await _MissionDispatcher.ValidateAsync(vessel, run.PipelineId, token).ConfigureAwait(false);
+            bool readOnly = MissionModeContract.IsReadOnly(run.MissionMode);
+            string? pipelineId = run.PipelineId;
+            if (readOnly && String.IsNullOrWhiteSpace(pipelineId)) pipelineId = await ResolveWorkerOnlyPipelineIdAsync(tenantId, token).ConfigureAwait(false);
+
+            DispatchValidationResult validation = await _MissionDispatcher.ValidateAsync(vessel, pipelineId, token).ConfigureAwait(false);
             if (!validation.IsValid)
             {
                 await CompleteTargetAsync(run.Kind, target, FleetActionTargetStatusEnum.Skipped, FleetActionReasonCodes.DispatchRejected, null,
@@ -1016,7 +1163,18 @@ namespace Armada.Core.Services
             string voyageId;
             try
             {
-                voyageId = await _MissionDispatcher.DispatchAsync(vessel, title, prompt, validation.ResolvedPipelineId ?? run.PipelineId, run.Persona, run.ApprovalOptions, token).ConfigureAwait(false);
+                FleetActionMissionDispatch dispatch = new FleetActionMissionDispatch(vessel)
+                {
+                    Title = title,
+                    Prompt = prompt,
+                    PipelineId = validation.ResolvedPipelineId ?? pipelineId,
+                    Persona = run.Persona,
+                    ApprovalOptions = run.ApprovalOptions,
+                    MissionMode = run.MissionMode,
+                    // A report-only mission has nothing to land.
+                    LandingMode = readOnly ? LandingModeEnum.None : null
+                };
+                voyageId = await _MissionDispatcher.DispatchAsync(dispatch, token).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (token.IsCancellationRequested)
             {

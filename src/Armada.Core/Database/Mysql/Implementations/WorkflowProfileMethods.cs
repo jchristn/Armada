@@ -188,7 +188,7 @@ namespace Armada.Core.Database.Mysql.Implementations
                 using (MySqlCommand cmd = conn.CreateCommand())
                 {
                     cmd.CommandText = "SELECT * FROM workflow_profiles" + whereClause
-                        + " ORDER BY is_default DESC, last_update_utc DESC, name ASC LIMIT " + pageSize + " OFFSET " + offset + ";";
+                        + " ORDER BY is_default DESC, last_update_utc DESC, name ASC, id ASC LIMIT " + pageSize + " OFFSET " + offset + ";";
                     foreach (MySqlParameter parameter in parameters) cmd.Parameters.Add(CloneParameter(parameter));
                     using (MySqlDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
                     {
@@ -222,7 +222,7 @@ namespace Armada.Core.Database.Mysql.Implementations
                     List<MySqlParameter> parameters = new List<MySqlParameter>();
                     ApplyQueryFilters(query, conditions, parameters);
                     string whereClause = conditions.Count > 0 ? " WHERE " + String.Join(" AND ", conditions) : String.Empty;
-                    cmd.CommandText = "SELECT * FROM workflow_profiles" + whereClause + " ORDER BY is_default DESC, last_update_utc DESC, name ASC;";
+                    cmd.CommandText = "SELECT * FROM workflow_profiles" + whereClause + " ORDER BY is_default DESC, last_update_utc DESC, name ASC, id ASC;";
                     foreach (MySqlParameter parameter in parameters) cmd.Parameters.Add(parameter);
 
                     List<WorkflowProfile> results = new List<WorkflowProfile>();
@@ -250,6 +250,13 @@ namespace Armada.Core.Database.Mysql.Implementations
             {
                 conditions.Add("user_id = @user_id");
                 parameters.Add(new MySqlParameter("@user_id", query.UserId));
+            }
+            if (!String.IsNullOrWhiteSpace(query.ViewerUserId))
+            {
+                // A regular user sees tenant-wide rows plus their own (ScopedVisibility.CanView), counted in the data source.
+                conditions.Add("(ownership_scope = @tenant_wide_scope OR user_id = @viewer_user_id)");
+                parameters.Add(new MySqlParameter("@tenant_wide_scope", Armada.Core.Enums.ScopeEnum.TenantWide.ToString()));
+                parameters.Add(new MySqlParameter("@viewer_user_id", query.ViewerUserId));
             }
             if (query.Scope.HasValue)
             {

@@ -130,6 +130,20 @@ namespace Armada.Client
         }
 
         /// <summary>
+        /// Dashboard <c>listVesselCleanupResources</c>: POST /api/v1/vessels/{id}/cleanup/resources/enumerate. One page of
+        /// the vessel's cleanup inventory (the inventory read carries only counts).
+        /// </summary>
+        /// <param name="id">Vessel id.</param>
+        /// <param name="query">Paging (page size 1 to 1000); Status filters by disposition (Safe, InUse, Unknown). Null is the first page of 10.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The page.</returns>
+        /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
+        public Task<EnumerationResult<VesselCleanupResource>?> ListVesselCleanupResourcesAsync(string id, EnumerationQuery? query = null, CancellationToken token = default)
+        {
+            return PostAsync<EnumerationResult<VesselCleanupResource>>($"/api/v1/vessels/{E(id)}/cleanup/resources/enumerate", query ?? new EnumerationQuery(), ArmadaRequestOptions.WithTimeout(300000), token);
+        }
+
+        /// <summary>
         /// Dashboard <c>runVesselCleanup</c>: POST /api/v1/vessels/{id}/cleanup. Removes the selected inventory resources
         /// that are still safe after server-side revalidation.
         /// </summary>

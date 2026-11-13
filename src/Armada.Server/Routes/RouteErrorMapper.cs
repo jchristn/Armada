@@ -2,6 +2,7 @@ namespace Armada.Server.Routes
 {
     using System;
     using System.Collections.Generic;
+    using System.Text.Json;
     using WatsonWebserver;
     using WatsonWebserver.Core;
     using Armada.Core.Database;
@@ -89,6 +90,7 @@ namespace Armada.Server.Routes
             DuplicateEntityException? duplicate = UniqueConstraintViolation.Translate(ex);
             if (duplicate != null) return Conflict(req, duplicate);
             if (ex is VesselCheckoutUnavailableException checkout) return CheckoutUnavailable(req, checkout);
+            if (ex is CollectionLimitExceededException limit) return LimitExceeded(req, limit);
             int statusCode = StatusCodeFor(ex, invalidOperationStatusCode);
             req.Http.Response.StatusCode = statusCode;
             return new ApiErrorResponse { Error = ResultFor(statusCode), Message = ex.Message };
@@ -128,6 +130,85 @@ namespace Armada.Server.Routes
         }
 
         /// <summary>
+        /// Set a 400 status and build the error body for a collection over its limit: <c>Error</c> BadRequest, the
+        /// exception's message (which names the field and the limit), and a <see cref="CollectionLimitErrorDetail"/>
+        /// (Code CollectionLimitExceeded) in <c>Data</c>.
+        /// </summary>
+        /// <param name="req">Request.</param>
+        /// <param name="ex">Exception.</param>
+        /// <returns>Error body.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when an argument is null.</exception>
+        public static ApiErrorResponse LimitExceeded(ApiRequest req, CollectionLimitExceededException ex)
+        {
+            if (req == null) throw new ArgumentNullException(nameof(req));
+            if (ex == null) throw new ArgumentNullException(nameof(ex));
+            req.Http.Response.StatusCode = 400;
+            return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = ex.Message, Data = CollectionLimitErrorDetail.FromException(ex) };
+        }
+
+        /// <summary>
+        /// True when <paramref name="ex"/> is one the black box routes translate to a client or service error: every
+        /// <see cref="Armada.Core.BlackBox.BlackBoxException"/>, <see cref="NotSupportedException"/> (a storage target
+        /// that is not implemented), and everything <see cref="IsMapped"/> accepts.
+        /// </summary>
+        /// <param name="ex">Exception.</param>
+        /// <returns>True when mapped.</returns>
+        public static bool IsBlackBoxMapped(Exception? ex)
+        {
+            if (ex == null) return false;
+            return ex is Armada.Core.BlackBox.BlackBoxException
+                || ex is NotSupportedException
+                || IsMapped(ex);
+        }
+
+        /// <summary>
+        /// Set the response status for a black box error and build the body. Codes (in <c>Data.Code</c>, a
+        /// <see cref="BlackBoxErrorDetail"/>): 404 BlackBoxNotFound (missing or not visible, never 403, so nothing leaks
+        /// whether another tenant's entry exists), 409 BlackBoxDeleting, 409 BlackBoxObjectCorrupt, 409
+        /// BlackBoxConfirmationRequired, 410 BlackBoxObjectMissing, 503 BlackBoxStoreUnavailable, 503
+        /// BlackBoxActionsUnavailable, 400 InvalidArgument (with the field) and 400 CollectionLimitExceeded (a <see cref="CollectionLimitErrorDetail"/>).
+        /// Anything else follows <see cref="ToResponse"/>.
+        /// </summary>
+        /// <param name="req">Request.</param>
+        /// <param name="ex">Exception.</param>
+        /// <returns>Error body (an <see cref="ApiErrorResponse"/>, or an <see cref="Armada.Server.ApiStatusErrorResponse"/> for 503).</returns>
+        /// <exception cref="ArgumentNullException">Thrown when an argument is null.</exception>
+        public static object ToBlackBoxResponse(ApiRequest req, Exception ex)
+        {
+            if (req == null) throw new ArgumentNullException(nameof(req));
+            if (ex == null) throw new ArgumentNullException(nameof(ex));
+            if (ex is Armada.Core.BlackBox.BlackBoxNotFoundException notFound) return BlackBoxError(req, 404, ApiResultEnum.NotFound, notFound.Code, notFound.Message);
+            if (ex is Armada.Core.BlackBox.BlackBoxObjectMissingException missing) return BlackBoxError(req, 410, ApiResultEnum.NotFound, missing.Code, missing.Message);
+            if (ex is Armada.Core.BlackBox.BlackBoxStoreUnavailableException || ex is Armada.Core.BlackBox.BlackBoxActionsUnavailableException)
+            {
+                Armada.Core.BlackBox.BlackBoxException unavailable = (Armada.Core.BlackBox.BlackBoxException)ex;
+                req.Http.Response.StatusCode = 503;
+                return new Armada.Server.ApiStatusErrorResponse(Armada.Core.Enums.ApiStatusErrorCodeEnum.ServiceUnavailable, unavailable.Message) { Data = new BlackBoxErrorDetail(unavailable.Code) };
+            }
+
+            if (ex is Armada.Core.BlackBox.BlackBoxException conflict) return BlackBoxError(req, 409, ApiResultEnum.Conflict, conflict.Code, conflict.Message);
+
+            if (ex is NotSupportedException notSupported)
+            {
+                req.Http.Response.StatusCode = 503;
+                return new Armada.Server.ApiStatusErrorResponse(Armada.Core.Enums.ApiStatusErrorCodeEnum.ServiceUnavailable, notSupported.Message) { Data = new BlackBoxErrorDetail(Armada.Core.BlackBox.BlackBoxStoreUnavailableException.ErrorCode) };
+            }
+
+            if (ex is CollectionLimitExceededException limit) return LimitExceeded(req, limit);
+            if (ex is ArgumentException argument && UniqueConstraintViolation.Translate(ex) == null)
+            {
+                string? field = String.IsNullOrEmpty(argument.ParamName) || String.Equals(argument.ParamName, "request", StringComparison.Ordinal) ? null : argument.ParamName;
+                string message = argument.ParamName != null && argument.Message.EndsWith(" (Parameter '" + argument.ParamName + "')", StringComparison.Ordinal)
+                    ? argument.Message.Substring(0, argument.Message.Length - (" (Parameter '" + argument.ParamName + "')").Length)
+                    : argument.Message;
+                req.Http.Response.StatusCode = 400;
+                return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = message, Data = new BlackBoxErrorDetail("InvalidArgument", field) };
+            }
+
+            return ToResponse(req, ex, 409);
+        }
+
+        /// <summary>
         /// Watson middleware that turns a <see cref="DuplicateEntityException"/> (or a provider unique-constraint
         /// violation) escaping any API route into a 409 Conflict with a <see cref="DuplicateEntityErrorDetail"/>, instead
         /// of the generic 500 that would carry the exception's message. Anything else propagates unchanged.
@@ -150,6 +231,40 @@ namespace Armada.Server.Routes
                 conflict.Data = DuplicateEntityErrorDetail.FromException(duplicate);
                 throw conflict;
             }
+            catch (CollectionLimitExceededException limit)
+            {
+                // A collection over its limit escaping any API route is a typed 400, never a 500.
+                WebserverException badRequest = new WebserverException(ApiResultEnum.BadRequest, limit.Message, limit);
+                badRequest.Data = CollectionLimitErrorDetail.FromException(limit);
+                throw badRequest;
+            }
+            catch (JsonException json)
+            {
+                // A body value that does not bind says which field and what it accepts, never a .NET type name.
+                throw InvalidJson(json);
+            }
+            catch (WebserverException wrapped) when (wrapped.InnerException is JsonException json)
+            {
+                throw InvalidJson(json);
+            }
+        }
+
+        #endregion
+
+        #region Private-Methods
+
+        private static WebserverException InvalidJson(JsonException json)
+        {
+            JsonValueError described = JsonValueErrorTranslator.Describe(json);
+            WebserverException badRequest = new WebserverException(ApiResultEnum.BadRequest, described.Message, json);
+            badRequest.Data = described;
+            return badRequest;
+        }
+
+        private static ApiErrorResponse BlackBoxError(ApiRequest req, int status, ApiResultEnum result, string code, string message)
+        {
+            req.Http.Response.StatusCode = status;
+            return new ApiErrorResponse { Error = result, Message = message, Data = new BlackBoxErrorDetail(code) };
         }
 
         #endregion

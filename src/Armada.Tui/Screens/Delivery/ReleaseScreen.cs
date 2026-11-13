@@ -91,7 +91,7 @@ namespace Armada.Tui.Screens.Delivery
         private Dictionary<string, string> _Checks = new Dictionary<string, string>();
         private List<Deployment> _Deployments = new List<Deployment>();
         private List<Objective> _Objectives = new List<Objective>();
-        private List<GitHubPullRequestDetail> _PullRequests = new List<GitHubPullRequestDetail>();
+        private string? _ReleaseId = null;
         private bool _Saving = false;
         private bool _Refreshing = false;
 
@@ -167,15 +167,14 @@ namespace Armada.Tui.Screens.Delivery
             Task<List<CheckRun>> checks = SafeAll<CheckRun>((p, ct) => Context.Client.ListCheckRunsAsync(new ArmadaPageQuery(p, EntityLookups.PageSize), ct), token);
             Task<List<Deployment>> deployments = SafeAll<Deployment>((p, ct) => Context.Client.ListDeploymentsAsync(new DeploymentQuery { ReleaseId = entity.Id, PageNumber = p, PageSize = EntityLookups.PageSize }, ct), token);
             Task<List<Objective>> objectives = SafeAll<Objective>((p, ct) => Context.Client.ListObjectivesAsync(new ObjectiveQuery { ReleaseId = entity.Id, PageNumber = p, PageSize = EntityLookups.PageSize }, ct), token);
-            Task<List<GitHubPullRequestDetail>> prs = SafePullRequests(entity.Id, token);
-            await Task.WhenAll(vessels, profiles, voyages, checks, deployments, objectives, prs).ConfigureAwait(false);
+            await Task.WhenAll(vessels, profiles, voyages, checks, deployments, objectives).ConfigureAwait(false);
             _Vessels = vessels.Result;
             _Profiles = profiles.Result;
             _Voyages = voyages.Result.ToDictionary(v => v.Id, v => String.IsNullOrEmpty(v.Title) ? v.Id : v.Title);
             _Checks = checks.Result.ToDictionary(c => c.Id, c => String.IsNullOrEmpty(c.Label) ? c.Type.ToString() : c.Label!);
             _Deployments = deployments.Result.Where(d => d.ReleaseId == entity.Id).ToList();
             _Objectives = objectives.Result.Where(o => o.ReleaseIds.Contains(entity.Id)).ToList();
-            _PullRequests = prs.Result;
+            _ReleaseId = entity.Id;
         }
 
         /// <inheritdoc />
@@ -251,12 +250,13 @@ namespace Armada.Tui.Screens.Delivery
             AddPanel("artifacts", "Artifacts", Artifacts);
 
             Prepare(PullRequests, "No linked GitHub pull requests were found for this release yet.");
-            PullRequests.AddColumn(new GridColumn<GitHubPullRequestDetail>("title", "Title", p => p.Title) { Weight = 3, Sortable = true });
-            PullRequests.AddColumn(new GridColumn<GitHubPullRequestDetail>("repo", "Repository", p => p.Repository + " #" + p.Number.ToString(CultureInfo.InvariantCulture)) { Weight = 2, Sortable = true });
+            PullRequests.Loader = LoadPullRequestsAsync;
+            PullRequests.AddColumn(new GridColumn<GitHubPullRequestDetail>("title", "Title", p => p.Title) { Weight = 3 });
+            PullRequests.AddColumn(new GridColumn<GitHubPullRequestDetail>("repo", "Repository", p => p.Repository + " #" + p.Number.ToString(CultureInfo.InvariantCulture)) { Weight = 2 });
             PullRequests.AddColumn(new GridColumn<GitHubPullRequestDetail>("state", "State", p => StatusBadge.Label(p.State)) { Width = 12, Style = (p, t) => StatusBadge.Style(p.State, t) });
             PullRequests.AddColumn(new GridColumn<GitHubPullRequestDetail>("review", "Review", p => StatusBadge.Label(p.ReviewStatus)) { Width = 18, Style = (p, t) => StatusBadge.Style(p.ReviewStatus, t) });
-            PullRequests.AddColumn(new GridColumn<GitHubPullRequestDetail>("checks", "Checks", p => p.Checks.Count.ToString(CultureInfo.InvariantCulture)) { Width = 7 });
-            PullRequests.AddColumn(new GridColumn<GitHubPullRequestDetail>("reviews", "Reviews", p => p.Reviews.Count.ToString(CultureInfo.InvariantCulture)) { Width = 8 });
+            PullRequests.AddColumn(new GridColumn<GitHubPullRequestDetail>("checks", "Checks", p => p.CheckCount.ToString(CultureInfo.InvariantCulture)) { Width = 7 });
+            PullRequests.AddColumn(new GridColumn<GitHubPullRequestDetail>("reviews", "Reviews", p => p.ReviewCount.ToString(CultureInfo.InvariantCulture)) { Width = 8 });
             PullRequests.AddColumn(new GridColumn<GitHubPullRequestDetail>("reviewers", "Reviewers", p => p.RequestedReviewers.Count > 0 ? String.Join(", ", p.RequestedReviewers) : "-") { Weight = 2 });
             PullRequests.AddColumn(new GridColumn<GitHubPullRequestDetail>("updated", "Updated", p => EntityUi.When(Context, p.UpdatedUtc)) { Width = 12 });
             PullRequests.Activated += (s, p) => Context.External.OpenUrl(p.Url);
@@ -345,7 +345,7 @@ namespace Armada.Tui.Screens.Delivery
                 BacklogItems.SetLocalRows(_Objectives);
                 Deployments.SetLocalRows(_Deployments);
                 Artifacts.SetLocalRows(r.Artifacts);
-                PullRequests.SetLocalRows(_PullRequests);
+                PullRequests.Reload();
             }
 
             if (Editor != null)
@@ -380,15 +380,23 @@ namespace Armada.Tui.Screens.Delivery
             }
         }
 
-        private async Task<List<GitHubPullRequestDetail>> SafePullRequests(string id, CancellationToken token)
+        private async Task<GridPage<GitHubPullRequestDetail>> LoadPullRequestsAsync(GridQuery query, CancellationToken token)
         {
+            // Paged on the server: each pull request on a page is read from GitHub, and the total says how many exist.
+            string? releaseId = _ReleaseId;
+            if (String.IsNullOrEmpty(releaseId)) return new GridPage<GitHubPullRequestDetail>();
             try
             {
-                return await Context.Client.GetReleaseGitHubPullRequestsAsync(id, token).ConfigureAwait(false) ?? new List<GitHubPullRequestDetail>();
+                EnumerationResult<GitHubPullRequestDetail>? page = await Context.Client.GetReleaseGitHubPullRequestsAsync(
+                    releaseId,
+                    new EnumerationQuery { PageNumber = query.PageNumber, PageSize = query.PageSize },
+                    token).ConfigureAwait(false);
+                List<GitHubPullRequestDetail> rows = page?.Objects ?? new List<GitHubPullRequestDetail>();
+                return new GridPage<GitHubPullRequestDetail>(rows, page?.TotalRecords ?? rows.Count);
             }
             catch (ArmadaApiException)
             {
-                return new List<GitHubPullRequestDetail>();
+                return new GridPage<GitHubPullRequestDetail>();
             }
         }
 

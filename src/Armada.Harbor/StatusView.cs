@@ -223,7 +223,9 @@ namespace Armada.Harbor
                     }
                     catch (ArmadaApiException ex)
                     {
-                        _HealthValue.Text = "Cannot reach the Admiral: " + ex.Message;
+                        _HealthValue.Text = ex.StatusCode == 0
+                            ? "Cannot reach the Admiral: " + HarborUi.ApiErrorDetail(ex)
+                            : "The Admiral answered " + ex.StatusCode + ": " + ex.Message;
                         ClearAdmiral();
                         return;
                     }

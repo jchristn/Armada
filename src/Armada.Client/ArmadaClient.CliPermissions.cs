@@ -73,6 +73,21 @@ namespace Armada.Client
         }
 
         /// <summary>
+        /// Dashboard <c>enumerateCliPermissionRules</c>: POST /api/v1/cli-permissions/rules/enumerate, one page of the rules
+        /// visible to the caller with the exact total.
+        /// </summary>
+        /// <param name="query">Filters (scope, vessel, captain), or null.</param>
+        /// <param name="pageNumber">One-based page number.</param>
+        /// <param name="pageSize">Page size, 1 to 1000.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The page.</returns>
+        /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
+        public Task<EnumerationResult<CliPermissionRule>?> EnumerateCliPermissionRulesAsync(CliPermissionRuleQuery? query = null, int pageNumber = 1, int pageSize = 10, CancellationToken token = default)
+        {
+            return PostAsync<EnumerationResult<CliPermissionRule>>($"/api/v1/cli-permissions/rules/enumerate{ArmadaQueryString.FromObject(query)}", new EnumerationQuery { PageNumber = pageNumber, PageSize = pageSize }, null, token);
+        }
+
+        /// <summary>
         /// GET /api/v1/cli-permissions/rules/{id}.
         /// </summary>
         /// <param name="id">Rule id.</param>

@@ -23,8 +23,6 @@ function captain(id: string, name: string, tier?: string | null): Captain {
     allowedPersonas: null,
     preferredPersona: null,
     state: 'Idle',
-    currentMissionId: null,
-    currentDockId: null,
     processId: null,
   } as Captain;
 }
@@ -42,6 +40,11 @@ describe('CaptainTierBadge', () => {
 });
 
 describe('CaptainPicker', () => {
+  it('disables inactive captains even when the caller allows all runtime states', () => {
+    render(<CaptainPicker captains={[{ ...captain('cpt_a', 'Disabled'), active: false }, captain('cpt_b', 'Enabled')]} value={null} onChange={() => undefined} isOptionDisabled={() => false} />);
+    expect(screen.getByRole('option', { name: /Disabled/ })).toBeDisabled();
+    expect(screen.getByRole('option', { name: /Enabled/ })).not.toBeDisabled();
+  });
   it('offers an auto option plus a labeled option per captain, and reports selection', async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();

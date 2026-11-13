@@ -90,6 +90,8 @@ export interface ServerSettings {
   permissions?: CliPermissionSettingsData;
   /** Absent on servers older than the Ask settings group. */
   ask?: AskSettingsData;
+  /** Mission and voyage black box (storage target and retention); storage secrets read back masked. */
+  blackBox?: import('../types/blackbox').BlackBoxSettingsData;
 }
 
 /** English tooltip of the Require Harbor for Launch setting (translate with t()). */

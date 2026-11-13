@@ -59,7 +59,9 @@ namespace Armada.Core.Services
             evt.MissionId = mission.Id;
             evt.VesselId = mission.VesselId;
             evt.VoyageId = mission.VoyageId;
-            evt.Payload = JsonSerializer.Serialize(result, _JsonOptions);
+            var payload = JsonSerializer.SerializeToNode(result, _JsonOptions)!.AsObject();
+            if (mission.Status == MissionStatusEnum.Verifying) payload["verificationVersion"] = mission.LastUpdateUtc;
+            evt.Payload = payload.ToJsonString(_JsonOptions);
             return evt;
         }
 

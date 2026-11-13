@@ -36,6 +36,7 @@ namespace Armada.Core.Services
             _Logging.Info(_Header + "architect created additional worker mission " + worker.Id + ": " + parsed[index].Title);
 
             await CloneDependentChainAsync(voyageMissions, template, worker, parsed[index].Title, parsed[index].Description, token).ConfigureAwait(false);
+            await ApplyArchitectWorkerEnvelopeAsync(architect, worker, parsed[index], voyageMissions, token).ConfigureAwait(false);
             return worker;
         }
 

@@ -136,7 +136,7 @@ namespace Test.Shared.Suites.Tui
                         "{\"sessionId\":\"ors_1\",\"objectiveId\":\"obj_a\",\"message\":{\"id\":\"orm_9\",\"objectiveRefinementSessionId\":\"ors_1\",\"objectiveId\":\"obj_a\",\"role\":\"Assistant\",\"sequence\":9,\"content\":\"Live streamed reply\",\"createdUtc\":\"2026-10-04T10:00:00Z\",\"lastUpdateUtc\":\"2026-10-04T10:00:00Z\"}}"));
                     AssertTrue(host.WaitForText("Live streamed reply"), "live message\n" + host.Screen());
                     AssertTrue(host.SettleRequests(), "requests settled");
-                    AssertTrue(screen.Detail!.Messages.Any(m => m.Id == "orm_9"), "live message kept after the reload Apply started and the send response\n" + host.Screen());
+                    AssertTrue(screen.Messages.Any(m => m.Id == "orm_9"), "live message kept after the reload Apply started and the send response\n" + host.Screen());
                     host.Press("x");
                     AssertTrue(host.PumpUntil(() => stub.CountFor("POST", "/api/v1/objective-refinement-sessions/ors_1/stop") == 1), "stop");
                     host.Tui.Context.Events.Inject(AskFixtures.EventJson("objective-refinement-session.deleted", "{\"sessionId\":\"ors_1\",\"objectiveId\":\"obj_a\"}"));
@@ -188,7 +188,7 @@ namespace Test.Shared.Suites.Tui
                         releaseSend.Set();
                         AssertTrue(host.PumpUntil(() => screen.Composer.Text.Length == 0), "send response applied");
                         host.Pump();
-                        AssertTrue(screen.Detail!.Messages.Any(m => m.Id == "orm_9"), "live reply kept after the send response");
+                        AssertTrue(screen.Messages.Any(m => m.Id == "orm_9"), "live reply kept after the send response");
                         TuiCase.Contains(host.Screen(), "Fast live reply", "live reply still on screen");
                     }
                 }
@@ -232,7 +232,7 @@ namespace Test.Shared.Suites.Tui
                         Volatile.Write(ref holdReload, 0);
                         releaseReload.Set();
                         AssertTrue(host.SettleRequests(), "reload applied");
-                        AssertTrue(screen.Detail!.Messages.Any(m => m.Id == "orm_9"), "live reply kept after the reload\n" + host.Screen());
+                        AssertTrue(screen.Messages.Any(m => m.Id == "orm_9"), "live reply kept after the reload\n" + host.Screen());
                         TuiCase.Contains(host.Screen(), "Reply during reload", "live reply still on screen");
                     }
                 }
@@ -285,8 +285,10 @@ namespace Test.Shared.Suites.Tui
             stub.Page("/api/v1/backlog/obj_a/refinement-sessions/enumerate", "[" + session + "]");
             string messages = "[{\"Id\":\"orm_1\",\"ObjectiveRefinementSessionId\":\"ors_1\",\"ObjectiveId\":\"obj_a\",\"Role\":\"User\",\"Sequence\":1,\"Content\":\"Sharpen this\",\"CreatedUtc\":\"2026-10-04T09:00:00Z\",\"LastUpdateUtc\":\"2026-10-04T09:00:00Z\"},"
                 + "{\"Id\":\"orm_2\",\"ObjectiveRefinementSessionId\":\"ors_1\",\"ObjectiveId\":\"obj_a\",\"Role\":\"Assistant\",\"Sequence\":2,\"Content\":\"Here is a sharper scope.\",\"CreatedUtc\":\"2026-10-04T09:01:00Z\",\"LastUpdateUtc\":\"2026-10-04T09:01:00Z\"}]";
-            string detail = "{\"Session\":" + session + ",\"Messages\":" + messages + ",\"Captain\":{\"Id\":\"cpt_1\",\"Name\":\"claude-1\",\"Runtime\":\"ClaudeCode\",\"State\":\"Idle\"},\"Vessel\":{\"Id\":\"vsl_demo\",\"Name\":\"DemoRepo\"}}";
+            string detail = "{\"Session\":" + session + ",\"MessageCount\":2,\"Captain\":{\"Id\":\"cpt_1\",\"Name\":\"claude-1\",\"Runtime\":\"ClaudeCode\",\"State\":\"Idle\"},\"Vessel\":{\"Id\":\"vsl_demo\",\"Name\":\"DemoRepo\"}}";
             stub.Json("GET", "/api/v1/objective-refinement-sessions/ors_1", detail);
+            stub.Page("/api/v1/objective-refinement-sessions/ors_1/messages/enumerate", messages);
+            stub.Page("/api/v1/objective-refinement-sessions/ors_2/messages/enumerate", messages.Replace("ors_1", "ors_2"));
             stub.Json("POST", "/api/v1/objective-refinement-sessions/ors_1/messages", detail);
             stub.Json("POST", "/api/v1/objective-refinement-sessions/ors_1/stop", detail);
             string summary = "{\"SessionId\":\"ors_1\",\"MessageId\":\"orm_2\",\"Summary\":\"Narrow scope to retries\",\"AcceptanceCriteria\":[\"Retry works\"],\"NonGoals\":[],\"RolloutConstraints\":[],\"SuggestedPipelineId\":\"ppl_1\",\"Method\":\"heuristic\"}";

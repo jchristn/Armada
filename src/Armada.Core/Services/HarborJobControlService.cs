@@ -45,7 +45,8 @@ namespace Armada.Core.Services
         #region Public-Methods
 
         /// <summary>
-        /// One page of a Harbor's recorded jobs, newest launch first.
+        /// One page of a Harbor's recorded jobs, newest launch first (Order CreatedAscending for oldest first), counted and
+        /// cut in the database.
         /// </summary>
         /// <param name="auth">Caller.</param>
         /// <param name="harborId">Harbor identifier.</param>
@@ -63,10 +64,11 @@ namespace Armada.Core.Services
             Harbor? harbor = await _Harbors.ReadAsync(auth, harborId, token).ConfigureAwait(false);
             if (harbor == null) return null;
 
-            List<HarborJobRecord> jobs = openOnly
-                ? await _Database.HarborJobs.EnumerateOpenAsync(harbor.Id, token).ConfigureAwait(false)
-                : await _Database.HarborJobs.EnumerateAsync(harbor.Id, query.CreatedAfter ?? DateTime.UtcNow.AddDays(-7), query.CreatedBefore ?? DateTime.MaxValue, token).ConfigureAwait(false);
-            return EnumerationResult<HarborJobRecord>.Page(query, jobs.OrderByDescending(j => j.LaunchedUtc).ToList());
+            // Counted and cut in the database. DateTime.MaxValue is not a portable SQL timestamp, so "no upper bound" is a
+            // far-future instant instead.
+            DateTime fromUtc = query.CreatedAfter ?? DateTime.UtcNow.AddDays(-7);
+            DateTime toUtc = query.CreatedBefore ?? new DateTime(9999, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+            return await _Database.HarborJobs.EnumeratePageAsync(harbor.Id, openOnly, fromUtc, toUtc, query, token).ConfigureAwait(false);
         }
 
         /// <summary>

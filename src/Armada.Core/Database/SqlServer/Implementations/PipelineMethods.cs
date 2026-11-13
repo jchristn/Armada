@@ -279,6 +279,18 @@ namespace Armada.Core.Database.SqlServer.Implementations
         /// <inheritdoc />
         public async Task<EnumerationResult<Pipeline>> EnumerateAsync(EnumerationQuery query, CancellationToken token = default)
         {
+            return await EnumerateInternalAsync(null, null, query, token).ConfigureAwait(false);
+        }
+
+        /// <inheritdoc />
+        public async Task<EnumerationResult<Pipeline>> EnumerateVisibleAsync(string tenantId, string? viewerUserId, EnumerationQuery query, CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(tenantId)) throw new ArgumentNullException(nameof(tenantId));
+            return await EnumerateInternalAsync(tenantId, viewerUserId, query, token).ConfigureAwait(false);
+        }
+
+        private async Task<EnumerationResult<Pipeline>> EnumerateInternalAsync(string? tenantId, string? viewerUserId, EnumerationQuery query, CancellationToken token)
+        {
             if (query == null) query = new EnumerationQuery();
 
             using (SqlConnection conn = new SqlConnection(_Driver.ConnectionString))
@@ -287,6 +299,19 @@ namespace Armada.Core.Database.SqlServer.Implementations
 
                 List<string> conditions = new List<string>();
                 List<SqlParameter> parameters = new List<SqlParameter>();
+
+                if (!String.IsNullOrEmpty(tenantId))
+                {
+                    conditions.Add("tenant_id = @tenant_id");
+                    parameters.Add(new SqlParameter("@tenant_id", tenantId));
+                }
+                if (!String.IsNullOrEmpty(viewerUserId))
+                {
+                    // A regular user sees tenant-wide rows plus their own (ScopedVisibility.CanView), counted in the data source.
+                    conditions.Add("(scope = @tenant_wide_scope OR user_id = @viewer_user_id)");
+                    parameters.Add(new SqlParameter("@tenant_wide_scope", ScopeEnum.TenantWide.ToString()));
+                    parameters.Add(new SqlParameter("@viewer_user_id", viewerUserId));
+                }
 
                 if (query.CreatedAfter.HasValue)
                 {
@@ -316,7 +341,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
                 using (SqlCommand cmd = conn.CreateCommand())
                 {
                     cmd.CommandText = "SELECT * FROM pipelines" + whereClause +
-                        " ORDER BY created_utc " + orderDirection +
+                        " ORDER BY created_utc " + orderDirection + ", id " + orderDirection +
                         " OFFSET " + query.Offset + " ROWS FETCH NEXT " + query.PageSize + " ROWS ONLY;";
                     foreach (SqlParameter p in parameters) cmd.Parameters.Add(new SqlParameter(p.ParameterName, p.Value));
                     using (SqlDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))

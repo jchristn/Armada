@@ -1,0 +1,254 @@
+[
+  {
+    "page": "waiting",
+    "theme": "light",
+    "width": 1440,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Missions>Waiting for an exclusive session to finish",
+    "card": "Why This Mission Is WaitingWaiting for a captainPendingWaiting for a captain: every captain is busy.Exclusive planner: in planning session 'Plan exclusive session ownership'Exclusive refiner: refining backlog item 'Clarify concurrent session ownership' (stop the refinement session to free it) Open backlog item",
+    "reason": "NoIdleCaptain",
+    "links": [
+      {
+        "text": "Exclusive planner",
+        "href": "/dashboard/captains/cpt_mw02amxw_gnZ6RankVoR"
+      },
+      {
+        "text": "Exclusive refiner",
+        "href": "/dashboard/captains/cpt_mw02amyb_VyXk5Y9hAxd"
+      },
+      {
+        "text": "Open backlog item",
+        "href": "/dashboard/backlog/obj_mw02amwt_E4wV27vn27a"
+      }
+    ],
+    "url": "/dashboard/missions/msn_mw02anui_U2FPkfKcEJF"
+  },
+  {
+    "page": "planning",
+    "theme": "light",
+    "width": 1440,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Dispatch>Planning",
+    "links": [],
+    "url": "/dashboard/dispatch?tab=planning&session=psn_mw02amyh_aEKJlGSlKT6"
+  },
+  {
+    "page": "refinement",
+    "theme": "light",
+    "width": 1440,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Dispatch>Backlog>Clarify concurrent session ownership",
+    "links": [],
+    "url": "/dashboard/backlog/obj_mw02amwt_E4wV27vn27a?refinementSessionId=ors_mw02anty_n2nsdJ6cXti"
+  },
+  {
+    "page": "waiting",
+    "theme": "light",
+    "width": 768,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Missions>Waiting for an exclusive session to finish",
+    "card": "Why This Mission Is WaitingWaiting for a captainPendingWaiting for a captain: every captain is busy.Exclusive planner: in planning session 'Plan exclusive session ownership'Exclusive refiner: refining backlog item 'Clarify concurrent session ownership' (stop the refinement session to free it) Open backlog item",
+    "reason": "NoIdleCaptain",
+    "links": [
+      {
+        "text": "Exclusive planner",
+        "href": "/dashboard/captains/cpt_mw02amxw_gnZ6RankVoR"
+      },
+      {
+        "text": "Exclusive refiner",
+        "href": "/dashboard/captains/cpt_mw02amyb_VyXk5Y9hAxd"
+      },
+      {
+        "text": "Open backlog item",
+        "href": "/dashboard/backlog/obj_mw02amwt_E4wV27vn27a"
+      }
+    ],
+    "url": "/dashboard/missions/msn_mw02anui_U2FPkfKcEJF"
+  },
+  {
+    "page": "planning",
+    "theme": "light",
+    "width": 768,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Dispatch>Planning",
+    "links": [],
+    "url": "/dashboard/dispatch?tab=planning&session=psn_mw02amyh_aEKJlGSlKT6"
+  },
+  {
+    "page": "refinement",
+    "theme": "light",
+    "width": 768,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Dispatch>Backlog>Clarify concurrent session ownership",
+    "links": [],
+    "url": "/dashboard/backlog/obj_mw02amwt_E4wV27vn27a?refinementSessionId=ors_mw02anty_n2nsdJ6cXti"
+  },
+  {
+    "page": "waiting",
+    "theme": "light",
+    "width": 390,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Missions>Waiting for an exclusive session to finish",
+    "card": "Why This Mission Is WaitingWaiting for a captainPendingWaiting for a captain: every captain is busy.Exclusive planner: in planning session 'Plan exclusive session ownership'Exclusive refiner: refining backlog item 'Clarify concurrent session ownership' (stop the refinement session to free it) Open backlog item",
+    "reason": "NoIdleCaptain",
+    "links": [
+      {
+        "text": "Exclusive planner",
+        "href": "/dashboard/captains/cpt_mw02amxw_gnZ6RankVoR"
+      },
+      {
+        "text": "Exclusive refiner",
+        "href": "/dashboard/captains/cpt_mw02amyb_VyXk5Y9hAxd"
+      },
+      {
+        "text": "Open backlog item",
+        "href": "/dashboard/backlog/obj_mw02amwt_E4wV27vn27a"
+      }
+    ],
+    "url": "/dashboard/missions/msn_mw02anui_U2FPkfKcEJF"
+  },
+  {
+    "page": "planning",
+    "theme": "light",
+    "width": 390,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Dispatch>Planning",
+    "links": [],
+    "url": "/dashboard/dispatch?tab=planning&session=psn_mw02amyh_aEKJlGSlKT6"
+  },
+  {
+    "page": "refinement",
+    "theme": "light",
+    "width": 390,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Dispatch>Backlog>Clarify concurrent session ownership",
+    "links": [],
+    "url": "/dashboard/backlog/obj_mw02amwt_E4wV27vn27a?refinementSessionId=ors_mw02anty_n2nsdJ6cXti"
+  },
+  {
+    "page": "waiting",
+    "theme": "dark",
+    "width": 1440,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Missions>Waiting for an exclusive session to finish",
+    "card": "Why This Mission Is WaitingWaiting for a captainPendingWaiting for a captain: every captain is busy.Exclusive planner: in planning session 'Plan exclusive session ownership'Exclusive refiner: refining backlog item 'Clarify concurrent session ownership' (stop the refinement session to free it) Open backlog item",
+    "reason": "NoIdleCaptain",
+    "links": [
+      {
+        "text": "Exclusive planner",
+        "href": "/dashboard/captains/cpt_mw02amxw_gnZ6RankVoR"
+      },
+      {
+        "text": "Exclusive refiner",
+        "href": "/dashboard/captains/cpt_mw02amyb_VyXk5Y9hAxd"
+      },
+      {
+        "text": "Open backlog item",
+        "href": "/dashboard/backlog/obj_mw02amwt_E4wV27vn27a"
+      }
+    ],
+    "url": "/dashboard/missions/msn_mw02anui_U2FPkfKcEJF"
+  },
+  {
+    "page": "planning",
+    "theme": "dark",
+    "width": 1440,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Dispatch>Planning",
+    "links": [],
+    "url": "/dashboard/dispatch?tab=planning&session=psn_mw02amyh_aEKJlGSlKT6"
+  },
+  {
+    "page": "refinement",
+    "theme": "dark",
+    "width": 1440,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Dispatch>Backlog>Clarify concurrent session ownership",
+    "links": [],
+    "url": "/dashboard/backlog/obj_mw02amwt_E4wV27vn27a?refinementSessionId=ors_mw02anty_n2nsdJ6cXti"
+  },
+  {
+    "page": "waiting",
+    "theme": "dark",
+    "width": 768,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Missions>Waiting for an exclusive session to finish",
+    "card": "Why This Mission Is WaitingWaiting for a captainPendingWaiting for a captain: every captain is busy.Exclusive planner: in planning session 'Plan exclusive session ownership'Exclusive refiner: refining backlog item 'Clarify concurrent session ownership' (stop the refinement session to free it) Open backlog item",
+    "reason": "NoIdleCaptain",
+    "links": [
+      {
+        "text": "Exclusive planner",
+        "href": "/dashboard/captains/cpt_mw02amxw_gnZ6RankVoR"
+      },
+      {
+        "text": "Exclusive refiner",
+        "href": "/dashboard/captains/cpt_mw02amyb_VyXk5Y9hAxd"
+      },
+      {
+        "text": "Open backlog item",
+        "href": "/dashboard/backlog/obj_mw02amwt_E4wV27vn27a"
+      }
+    ],
+    "url": "/dashboard/missions/msn_mw02anui_U2FPkfKcEJF"
+  },
+  {
+    "page": "planning",
+    "theme": "dark",
+    "width": 768,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Dispatch>Planning",
+    "links": [],
+    "url": "/dashboard/dispatch?tab=planning&session=psn_mw02amyh_aEKJlGSlKT6"
+  },
+  {
+    "page": "refinement",
+    "theme": "dark",
+    "width": 768,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Dispatch>Backlog>Clarify concurrent session ownership",
+    "links": [],
+    "url": "/dashboard/backlog/obj_mw02amwt_E4wV27vn27a?refinementSessionId=ors_mw02anty_n2nsdJ6cXti"
+  },
+  {
+    "page": "waiting",
+    "theme": "dark",
+    "width": 390,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Missions>Waiting for an exclusive session to finish",
+    "card": "Why This Mission Is WaitingWaiting for a captainPendingWaiting for a captain: every captain is busy.Exclusive planner: in planning session 'Plan exclusive session ownership'Exclusive refiner: refining backlog item 'Clarify concurrent session ownership' (stop the refinement session to free it) Open backlog item",
+    "reason": "NoIdleCaptain",
+    "links": [
+      {
+        "text": "Exclusive planner",
+        "href": "/dashboard/captains/cpt_mw02amxw_gnZ6RankVoR"
+      },
+      {
+        "text": "Exclusive refiner",
+        "href": "/dashboard/captains/cpt_mw02amyb_VyXk5Y9hAxd"
+      },
+      {
+        "text": "Open backlog item",
+        "href": "/dashboard/backlog/obj_mw02amwt_E4wV27vn27a"
+      }
+    ],
+    "url": "/dashboard/missions/msn_mw02anui_U2FPkfKcEJF"
+  },
+  {
+    "page": "planning",
+    "theme": "dark",
+    "width": 390,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Dispatch>Planning",
+    "links": [],
+    "url": "/dashboard/dispatch?tab=planning&session=psn_mw02amyh_aEKJlGSlKT6"
+  },
+  {
+    "page": "refinement",
+    "theme": "dark",
+    "width": 390,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Dispatch>Backlog>Clarify concurrent session ownership",
+    "links": [],
+    "url": "/dashboard/backlog/obj_mw02amwt_E4wV27vn27a?refinementSessionId=ors_mw02anty_n2nsdJ6cXti"
+  }
+]

@@ -44,6 +44,9 @@ namespace Armada.Core.Database.Postgresql.Implementations
         /// <inheritdoc />
         public Task<PlanningSession> UpdateAsync(PlanningSession session, CancellationToken token = default) => throw NotSupported();
 
+        /// <inheritdoc />
+        public Task<EnumerationResult<PlanningSession>> EnumeratePageAsync(string? tenantId, string? userId, EnumerationQuery query, CancellationToken token = default) => throw NotSupported();
+
         private static NotSupportedException NotSupported()
         {
             return new NotSupportedException("Planning sessions are currently implemented for SQLite-backed Armada deployments.");

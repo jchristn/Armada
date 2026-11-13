@@ -58,7 +58,7 @@ describe('ReleaseDetail artifacts table', () => {
     for (const fn of [listCheckRuns, listDeployments, listObjectives, listVessels, listVoyages, listWorkflowProfiles]) {
       vi.mocked(fn).mockResolvedValue(page as never);
     }
-    vi.mocked(getReleaseGitHubPullRequests).mockResolvedValue([] as never);
+    vi.mocked(getReleaseGitHubPullRequests).mockResolvedValue({ objects: [], pageNumber: 1, pageSize: 25, totalPages: 0, totalRecords: 0 } as never);
     vi.mocked(getRelease).mockResolvedValue({
       id: 'rel_1', tenantId: 'default', userId: null, vesselId: null, workflowProfileId: null, title: 'v1.2.0',
       version: '1.2.0', tagName: null, summary: null, notes: null, status: 'Draft', voyageIds: [], missionIds: [], checkRunIds: [],
@@ -84,5 +84,40 @@ describe('ReleaseDetail artifacts table', () => {
     const menu = screen.getByRole('menu', { name: 'Choose visible columns' });
     expect(within(menu).getByRole('menuitemcheckbox', { name: /Path/ })).toHaveAttribute('aria-disabled', 'true');
     expect(within(menu).getByRole('menuitemcheckbox', { name: /Size/ })).not.toHaveAttribute('aria-disabled');
+  });
+});
+
+describe('ReleaseDetail GitHub pull requests', () => {
+  const pr = (n: number) => ({ repository: 'org/repo', number: n, title: 'PR ' + n, url: 'https://example.test/' + n, state: 'open', reviewStatus: 'Approved', checks: [], reviews: [], requestedReviewers: [], updatedUtc: null });
+
+  beforeEach(() => {
+    localStorage.clear();
+    for (const fn of [listCheckRuns, listDeployments, listObjectives, listVessels, listVoyages, listWorkflowProfiles]) {
+      vi.mocked(fn).mockResolvedValue(page as never);
+    }
+    vi.mocked(getRelease).mockResolvedValue({
+      id: 'rel_2', tenantId: 'default', userId: null, vesselId: null, workflowProfileId: null, title: 'v2', version: '2.0.0', tagName: null,
+      summary: null, notes: null, status: 'Draft', voyageIds: [], missionIds: [], checkRunIds: [], artifacts: [],
+      createdUtc: '2026-10-01T00:00:00Z', lastUpdateUtc: '2026-10-01T00:00:00Z', publishedUtc: null,
+    } as never);
+  });
+
+  it('reads one page at a time and loads the next page on demand until the total is reached', async () => {
+    vi.mocked(getReleaseGitHubPullRequests).mockReset();
+    vi.mocked(getReleaseGitHubPullRequests)
+      .mockResolvedValueOnce({ objects: [pr(3), pr(2)], pageNumber: 1, pageSize: 25, totalPages: 2, totalRecords: 3 } as never)
+      .mockResolvedValueOnce({ objects: [pr(1)], pageNumber: 2, pageSize: 25, totalPages: 2, totalRecords: 3 } as never);
+    render(
+      <MemoryRouter initialEntries={['/releases/rel_2']}>
+        <Routes><Route path="/releases/:id" element={<ReleaseDetail />} /></Routes>
+      </MemoryRouter>,
+    );
+    expect(await screen.findByText('PR 3')).toBeTruthy();
+    expect(screen.queryByText('PR 1')).toBeNull();
+    expect(vi.mocked(getReleaseGitHubPullRequests)).toHaveBeenCalledWith('rel_2', { pageNumber: 1, pageSize: 25 });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Load more' })); });
+    expect(await screen.findByText('PR 1')).toBeTruthy();
+    expect(vi.mocked(getReleaseGitHubPullRequests)).toHaveBeenLastCalledWith('rel_2', { pageNumber: 2, pageSize: 25 });
+    expect(screen.queryByRole('button', { name: 'Load more' })).toBeNull();
   });
 });

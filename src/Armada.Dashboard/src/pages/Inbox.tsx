@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { apiErrorMessage, getInbox, retryMissionLanding } from '../api/client';
+import { apiErrorMessage, getInbox, getMissionBlackBox, getMissionBlackBoxBrief, retryMissionLanding } from '../api/client';
+import { copyToClipboard } from '../components/shared/CopyButton';
+import { blackBoxAskHref, blackBoxAskPrompt, blackBoxAskState, blackBoxErrorStatus } from '../lib/blackbox';
 import type { InboxItem, InboxSeverity } from '../types/models';
 import { useLocale } from '../context/LocaleContext';
 import { useNotifications } from '../context/NotificationContext';
@@ -15,6 +17,7 @@ import { useLiveRefresh } from '../lib/useLiveRefresh';
 import { CLI_PERMISSION_EVENT_PREFIX, isPendingRequest } from '../lib/cliPermissions';
 import CliPermissionDecisionControls from '../components/cliPermissions/CliPermissionDecisionControls';
 import CliPermissionCountdown from '../components/cliPermissions/CliPermissionCountdown';
+import ModelAlertActions from '../components/ModelAlertActions';
 import { APPROVAL_KINDS, CLI_PERMISSION_KIND, INBOX_KINDS, inboxActionLabel, inboxItemKey, splitInbox } from '../lib/inboxKinds';
 
 
@@ -73,6 +76,36 @@ export default function Inbox() {
     void load();
   }
 
+  // Failed missions have a black box entry: copy its brief as Markdown for a coding agent, copy the entry as JSON, or ask Armada about it.
+  async function copyFixThis(missionId: string) {
+    try {
+      const brief = await getMissionBlackBoxBrief(missionId);
+      await copyToClipboard(brief);
+      pushToast('success', t('Black box Markdown copied. Paste it into your coding agent.'));
+    } catch (err: unknown) {
+      pushToast('error', blackBoxErrorStatus(err) === 404
+        ? t('This mission has no black box entry yet.')
+        : t('The brief could not be copied: {{message}}', { message: err instanceof Error ? err.message : String(err) }));
+    }
+  }
+
+  async function copyJson(missionId: string) {
+    try {
+      const entry = await getMissionBlackBox(missionId);
+      await copyToClipboard(JSON.stringify(entry, null, 2));
+      pushToast('success', t('Black box JSON copied.'));
+    } catch (err: unknown) {
+      pushToast('error', blackBoxErrorStatus(err) === 404
+        ? t('This mission has no black box entry yet.')
+        : t('The JSON could not be copied: {{message}}', { message: err instanceof Error ? err.message : String(err) }));
+    }
+  }
+
+  function askAboutFailure(missionId: string) {
+    const prompt = blackBoxAskPrompt(missionId);
+    navigate(blackBoxAskHref(prompt), { state: blackBoxAskState(prompt) });
+  }
+
   function renderItem(item: InboxItem, i: number) {
     const cli = item.kind === CLI_PERMISSION_KIND ? item.cliPermission ?? null : null;
     const decidable = !!cli && !!cli.canDecide && isPendingRequest(cli);
@@ -93,10 +126,16 @@ export default function Inbox() {
               <div className="text-dim" style={{ marginTop: '0.2rem' }}>{item.detail}</div>
             )}
             {cli && cli.summaryText && <code className="inbox-cli-command">{cli.summaryText}</code>}
+            {item.kind === INBOX_KINDS.modelAlert && item.modelAlert && (
+              <ModelAlertActions alert={item.modelAlert} onApplied={(result) => {
+                if (result?.record?.result) pushToast('success', result.record.result);
+                void load();
+              }} />
+            )}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             <span
-              className="badge"
+              className="tag"
               style={{ color: severityColor(item.severity), borderColor: severityColor(item.severity), whiteSpace: 'nowrap' }}
               title={t('How urgent this is. Critical items block work now; Warning items need attention soon.')}
             >
@@ -116,6 +155,39 @@ export default function Inbox() {
                 title={t('Rebase the mission branch onto its target branch and land it using the vessel\'s landing mode (merge, pull request or merge queue).')}
               >
                 {t('Retry Landing')}
+              </button>
+            )}
+            {(item.kind === INBOX_KINDS.failed || item.kind === INBOX_KINDS.landingFailed) && item.entityId && (
+              <>
+                <button
+                  type="button"
+                  className="btn btn-sm inbox-copy-fix-this"
+                  onClick={(e) => { e.stopPropagation(); void copyFixThis(item.entityId as string); }}
+                  title={t('Copy the black box brief as Markdown, ready to paste into a coding agent.')}
+                >
+                  {t('Copy Markdown')}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-sm inbox-copy-json"
+                  onClick={(e) => { e.stopPropagation(); void copyJson(item.entityId as string); }}
+                  title={t('Copy the entry and its versioned record as JSON.')}
+                >
+                  {t('Copy JSON')}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-sm inbox-ask-armada"
+                  onClick={(e) => { e.stopPropagation(); askAboutFailure(item.entityId as string); }}
+                  title={t('Open Ask Armada with a prompt about this failure; nothing is sent until you press Send.')}
+                >
+                  {t('Ask Armada')}
+                </button>
+              </>
+            )}
+            {item.kind === INBOX_KINDS.backgroundJobFailed && (
+              <button type="button" className="btn btn-sm" onClick={(e) => { e.stopPropagation(); navigate(item.href); }} title={t('Click to open the page where you can act on this item.')}>
+                {t('Open')}
               </button>
             )}
             {APPROVAL_KINDS.has(item.kind) && !decidable && (

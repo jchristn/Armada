@@ -9,6 +9,20 @@ namespace Armada.Client.Models
     {
         #region Public-Members
 
+        /// <summary>Global account capture choices and bounds.</summary>
+        public Armada.Core.Settings.UsageCaptureSettings? UsageCapture { get; set; }
+
+        /// <summary>Live usage-aware selection policy; null leaves it unchanged on update.</summary>
+        public Armada.Core.Settings.UsageSelectionSettings? UsageSelection { get; set; }
+        /// <summary>Current persisted policy update revision.</summary>
+        public long UsageSelectionRevision { get; set; }
+        /// <summary>Optional optimistic revision on a policy group update.</summary>
+        public long? ExpectedUsageSelectionRevision { get; set; }
+        /// <summary>Available modes/strategies and environment source metadata.</summary>
+        public Armada.Core.Models.UsageSelectionCapabilities? UsageSelectionCapabilities { get; set; }
+
+
+
         /// <summary>Mission/event/signal retention in days; zero disables expiry. Null leaves it unchanged on update.</summary>
         public int? DataRetentionDays { get; set; } = null;
 
@@ -161,6 +175,12 @@ namespace Armada.Client.Models
         /// Push notification settings (ExpoAccessToken redacted when set).
         /// </summary>
         public Armada.Core.Settings.PushSettings? Push { get; set; } = null;
+
+        /// <summary>
+        /// Black box settings (capture, storage target with masked secrets, retention, sweeper), or null when the server
+        /// predates them. A PUT replaces the whole object; a masked secret keeps the stored one.
+        /// </summary>
+        public Armada.Core.Settings.BlackBoxSettings? BlackBox { get; set; } = null;
 
         #endregion
 

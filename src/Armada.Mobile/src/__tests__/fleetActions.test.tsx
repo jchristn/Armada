@@ -226,7 +226,7 @@ describe('Runs tab and run detail', () => {
   });
 
   it('shows a run, its targets and output, and cancels it', async () => {
-    api.getFleetActionRun.mockResolvedValue({ run: run(), targets: [] });
+    api.getFleetActionRun.mockResolvedValue({ run: run() });
     api.enumerateFleetActionRunTargets.mockResolvedValue(page([target(), target({ id: 'fat_2', vesselName: 'web', status: 'Skipped', skipReason: 'DirtyTree', failureReason: null, exitCode: null })]));
     api.getFleetActionRunTarget.mockResolvedValue({ ...target(), tenantId: null, renderedText: 'git pull', outputText: 'pulled', errorText: 'boom' } as FleetActionRunTarget);
     api.cancelFleetActionRun.mockResolvedValue(run({ status: 'Cancelled' }));
@@ -248,7 +248,7 @@ describe('Runs tab and run detail', () => {
   });
 
   it('re-runs failed targets with the saved action, or its snapshot when the action is gone', async () => {
-    api.getFleetActionRun.mockResolvedValue({ run: run({ status: 'CompletedWithFailures', completedUtc: NOW }), targets: [] });
+    api.getFleetActionRun.mockResolvedValue({ run: run({ status: 'CompletedWithFailures', completedUtc: NOW }) });
     api.enumerateFleetActionRunTargets.mockImplementation(async (_id, q) => page(q?.status === 'Failed' ? [target()] : q?.status === 'TimedOut' ? [target({ id: 'fat_3', vesselId: 'vsl_3' })] : [target()]));
     api.getFleetAction.mockRejectedValue(new Error('gone'));
     await render(<BuildProviders><FleetActionRunDetailView id="far_1" /></BuildProviders>);
@@ -261,7 +261,7 @@ describe('Runs tab and run detail', () => {
   });
 
   it('opens the voyage of a Mission target', async () => {
-    api.getFleetActionRun.mockResolvedValue({ run: run({ kind: 'Mission' }), targets: [] });
+    api.getFleetActionRun.mockResolvedValue({ run: run({ kind: 'Mission' }) });
     api.enumerateFleetActionRunTargets.mockResolvedValue(page([target({ status: 'Running', voyageId: 'vyg_1', failureReason: null })]));
     await render(<BuildProviders><FleetActionRunDetailView id="far_1" /></BuildProviders>);
     await waitFor(() => expect(screen.getByTestId('fleet-action-target-row-api')).toBeTruthy());

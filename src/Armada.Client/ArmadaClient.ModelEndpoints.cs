@@ -29,6 +29,19 @@ namespace Armada.Client
         }
 
         /// <summary>
+        /// Dashboard <c>enumerateModelEndpoints</c>: POST /api/v1/model-endpoints/enumerate, one page of the endpoints visible
+        /// to the caller with the exact total.
+        /// </summary>
+        /// <param name="query">Paging (PageSize 1 to 1000) and created-time filters, or null for the first page of 10.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The page.</returns>
+        /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
+        public Task<EnumerationResult<ModelEndpoint>?> EnumerateModelEndpointsAsync(EnumerationQuery? query = null, CancellationToken token = default)
+        {
+            return PostAsync<EnumerationResult<ModelEndpoint>>("/api/v1/model-endpoints/enumerate", query ?? new EnumerationQuery(), null, token);
+        }
+
+        /// <summary>
         /// Dashboard <c>getModelEndpoint</c>: GET `/api/v1/model-endpoints/${encodeURIComponent(id)}`.
         /// </summary>
         /// <param name="id">id.</param>

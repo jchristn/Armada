@@ -3,6 +3,8 @@ namespace Armada.Core.Services
     using System;
     using System.Collections.Concurrent;
     using System.Collections.Generic;
+    using System.Linq;
+    using System.Text.Json;
     using System.Threading;
     using System.Threading.Tasks;
     using Armada.Core.Database;
@@ -13,7 +15,8 @@ namespace Armada.Core.Services
     /// <summary>
     /// Seeds the built-in fleet actions into each tenant as ordinary, editable rows identified by BuiltInKey. A key
     /// that already exists in a tenant (including a soft-deleted, inactive row) is never seeded again, so deleting a
-    /// built-in is permanent. Command bodies are chosen for the Admiral's platform at seed time: POSIX shell on Linux
+    /// built-in is permanent. A built-in that still matches an earlier shipped version exactly (nobody edited it) is
+    /// upgraded to the current definition; an edited one keeps its edits. Command bodies are chosen for the Admiral's platform at seed time: POSIX shell on Linux
     /// and macOS, PowerShell on Windows.
     /// Thread-safe.
     /// </summary>
@@ -45,6 +48,106 @@ namespace Armada.Core.Services
         /// Built-in key: Mission that adds a test project.
         /// </summary>
         public const string AddTestProjectKey = "add-test-project";
+
+        /// <summary>
+        /// Built-in key: a read-only status snapshot of each checkout.
+        /// </summary>
+        public const string RepositoryStatusKey = "repo-status";
+
+        /// <summary>
+        /// Built-in key: update one named dependency where it is referenced.
+        /// </summary>
+        public const string UpdatePackageKey = "update-package";
+
+        /// <summary>
+        /// Built-in key: upgrade the runtime or framework version.
+        /// </summary>
+        public const string UpgradeRuntimeKey = "upgrade-runtime";
+
+        /// <summary>
+        /// Built-in key: add or align shared repository files.
+        /// </summary>
+        public const string StandardizeFilesKey = "standardize-files";
+
+        /// <summary>
+        /// Built-in key: bring the documentation in line with the code.
+        /// </summary>
+        public const string SyncDocsKey = "sync-docs";
+
+        /// <summary>
+        /// Built-in key: run the test command.
+        /// </summary>
+        public const string RunTestsKey = "run-tests";
+
+        /// <summary>
+        /// Built-in key: fix the failures from the latest Run tests result.
+        /// </summary>
+        public const string FixFailingTestsKey = "fix-failing-tests";
+
+        /// <summary>
+        /// Built-in key: add tests for untested behavior.
+        /// </summary>
+        public const string ImproveCoverageKey = "improve-coverage";
+
+        /// <summary>
+        /// Built-in key: run the lint command.
+        /// </summary>
+        public const string LintKey = "lint";
+
+        /// <summary>
+        /// Built-in key: fix the findings from the latest Lint result.
+        /// </summary>
+        public const string FixLintKey = "fix-lint";
+
+        /// <summary>
+        /// Built-in key: report-only code cleanliness review.
+        /// </summary>
+        public const string CleanlinessReviewKey = "cleanliness-review";
+
+        /// <summary>
+        /// Built-in key: remove dead code and unused dependencies.
+        /// </summary>
+        public const string RemoveDeadCodeKey = "remove-dead-code";
+
+        /// <summary>
+        /// Built-in key: report-only performance review.
+        /// </summary>
+        public const string PerformanceReviewKey = "performance-review";
+
+        /// <summary>
+        /// Built-in key: apply approved performance findings.
+        /// </summary>
+        public const string ApplyPerformanceFixesKey = "apply-performance-fixes";
+
+        /// <summary>
+        /// Built-in key: dependency vulnerability audit with parsed findings.
+        /// </summary>
+        public const string VulnerabilityAuditKey = "vulnerability-audit";
+
+        /// <summary>
+        /// Built-in key: upgrade the packages from the latest Vulnerability audit.
+        /// </summary>
+        public const string FixVulnerabilitiesKey = "fix-vulnerabilities";
+
+        /// <summary>
+        /// Built-in key: the package manager's outdated report.
+        /// </summary>
+        public const string OutdatedReportKey = "outdated-report";
+
+        /// <summary>
+        /// Built-in key: gitleaks secrets scan with parsed findings.
+        /// </summary>
+        public const string SecretsScanKey = "secrets-scan";
+
+        /// <summary>
+        /// Built-in key: report-only security review.
+        /// </summary>
+        public const string SecurityReviewKey = "security-review";
+
+        /// <summary>
+        /// Built-in key: license report checked against a policy.
+        /// </summary>
+        public const string LicenseComplianceKey = "license-compliance";
 
         #endregion
 
@@ -122,19 +225,34 @@ namespace Armada.Core.Services
             await _Gate.WaitAsync(token).ConfigureAwait(false);
             try
             {
+                bool windows = OperatingSystem.IsWindows();
+                List<FleetAction> previous = FleetActionBuiltInCatalog.PreviousVersions(windows);
                 int created = 0;
-                foreach (FleetAction builtIn in BuildDefaults(OperatingSystem.IsWindows()))
+                int upgraded = 0;
+                foreach (FleetAction builtIn in BuildDefaults(windows))
                 {
                     FleetAction? existing = await _Database.FleetActions.ReadByBuiltInKeyAsync(tenantId, builtIn.BuiltInKey!, token).ConfigureAwait(false);
-                    if (existing != null) continue;
+                    if (existing == null)
+                    {
+                        builtIn.TenantId = tenantId;
+                        await _Database.FleetActions.CreateAsync(builtIn, token).ConfigureAwait(false);
+                        created++;
+                        continue;
+                    }
 
-                    builtIn.TenantId = tenantId;
-                    await _Database.FleetActions.CreateAsync(builtIn, token).ConfigureAwait(false);
-                    created++;
+                    // A built-in nobody edited (it still matches an earlier shipped version) takes the current definition;
+                    // an edited or deleted one is left alone.
+                    if (!existing.Active || MatchesDefinition(existing, builtIn)) continue;
+                    if (!previous.Any(p => p.BuiltInKey == builtIn.BuiltInKey && MatchesDefinition(existing, p))) continue;
+                    CopyDefinition(builtIn, existing);
+                    existing.LastUpdateUtc = DateTime.UtcNow;
+                    await _Database.FleetActions.UpdateAsync(existing, token).ConfigureAwait(false);
+                    upgraded++;
                 }
 
                 _SeededTenants[tenantId] = true;
                 if (created > 0) _Logging.Info(_Header + "seeded " + created + " built-in fleet action(s) for tenant " + tenantId);
+                if (upgraded > 0) _Logging.Info(_Header + "upgraded " + upgraded + " unedited built-in fleet action(s) for tenant " + tenantId);
                 return created;
             }
             finally
@@ -144,119 +262,73 @@ namespace Armada.Core.Services
         }
 
         /// <summary>
-        /// Build fresh (unsaved, tenant-less) instances of the five built-in actions.
+        /// Build fresh (unsaved, tenant-less) instances of every built-in action (see <see cref="FleetActionBuiltInCatalog"/>).
         /// </summary>
         /// <param name="windows">True to use PowerShell command bodies, false for POSIX shell.</param>
         /// <returns>Built-in actions.</returns>
         public static List<FleetAction> BuildDefaults(bool windows)
         {
-            List<FleetAction> actions = new List<FleetAction>();
+            return FleetActionBuiltInCatalog.Build(windows);
+        }
 
-            actions.Add(new FleetAction
-            {
-                Name = "Fast-forward default branch",
-                Description = "Runs git pull --ff-only in each working directory. Skips vessels with uncommitted changes; never creates merge commits.",
-                Kind = FleetActionKindEnum.Command,
-                CommandText = "git pull --ff-only",
-                TimeoutSeconds = 300,
-                DefaultConcurrency = 4,
-                RequiresCleanWorkingTree = true,
-                IsBuiltIn = true,
-                BuiltInKey = FastForwardKey
-            });
-
-            actions.Add(new FleetAction
-            {
-                Name = "Prune merged branches",
-                Description = "Fetches with --prune, then deletes local branches already merged into the vessel's default branch with git branch -d. Never deletes the current branch or the default branch.",
-                Kind = FleetActionKindEnum.Command,
-                CommandText = windows ? PruneMergedPowerShell : PruneMergedPosix,
-                TimeoutSeconds = 300,
-                DefaultConcurrency = 4,
-                RequiresCleanWorkingTree = true,
-                IsBuiltIn = true,
-                BuiltInKey = PruneMergedBranchesKey
-            });
-
-            actions.Add(new FleetAction
-            {
-                Name = "Build",
-                Description = "Runs the vessel's definition-of-done build command in its working directory. Vessels without a build command are skipped with reason NoBuildCommand.",
-                Kind = FleetActionKindEnum.Command,
-                CommandText = "{{vessel.buildCommand}}",
-                TimeoutSeconds = 1800,
-                DefaultConcurrency = 2,
-                RequiresCleanWorkingTree = false,
-                IsBuiltIn = true,
-                BuiltInKey = BuildKey
-            });
-
-            actions.Add(new FleetAction
-            {
-                Name = "Update outdated dependencies",
-                Description = "Dispatches one voyage per vessel asking a captain to update the outdated and vulnerable packages listed in the vessel's health findings.",
-                Kind = FleetActionKindEnum.Mission,
-                PromptTemplate =
-                    "Update the outdated dependencies in the {{vessel.name}} repository (default branch {{vessel.defaultBranch}})." + "\n\n"
-                    + "Current health findings for this repository:" + "\n"
-                    + "{{health.summary}}" + "\n\n"
-                    + "Update each outdated or vulnerable package to its latest compatible version. Prefer patch and minor updates; "
-                    + "take a major upgrade only when you can adapt the code safely, and explain any major upgrade you skip. "
-                    + "Build the solution and run the existing tests after updating, and fix anything the updates break. "
-                    + "Do not change unrelated code.",
-                DefaultConcurrency = 2,
-                RequiresCleanWorkingTree = false,
-                IsBuiltIn = true,
-                BuiltInKey = UpdateDependenciesKey
-            });
-
-            actions.Add(new FleetAction
-            {
-                Name = "Add a test project",
-                Description = "Dispatches one voyage per vessel asking a captain to add an automated test project that follows the repository's conventions.",
-                Kind = FleetActionKindEnum.Mission,
-                PromptTemplate =
-                    "Add automated tests to the {{vessel.name}} repository if it does not already have a test project." + "\n\n"
-                    + "Follow the conventions of the repository's primary language and build system. Add a test project (or test "
-                    + "directory) wired into the existing build so the standard test command runs it, and write a small number of "
-                    + "meaningful tests that cover existing behavior. Make sure the build and the new tests pass. "
-                    + "Do not change production code except where a test exposes a real bug, and describe any such change." + "\n\n"
-                    + "Current health findings for this repository:" + "\n"
-                    + "{{health.summary}}",
-                DefaultConcurrency = 2,
-                RequiresCleanWorkingTree = false,
-                IsBuiltIn = true,
-                BuiltInKey = AddTestProjectKey
-            });
-
-            return actions;
+        /// <summary>
+        /// Whether a stored built-in still matches a shipped definition exactly in every field a tenant can edit.
+        /// </summary>
+        /// <param name="stored">Stored row.</param>
+        /// <param name="shipped">Shipped definition.</param>
+        /// <returns>True when nothing was edited.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when an argument is null.</exception>
+        public static bool MatchesDefinition(FleetAction stored, FleetAction shipped)
+        {
+            if (stored == null) throw new ArgumentNullException(nameof(stored));
+            if (shipped == null) throw new ArgumentNullException(nameof(shipped));
+            return stored.Name == shipped.Name
+                && stored.Description == shipped.Description
+                && stored.Kind == shipped.Kind
+                && stored.CommandText == shipped.CommandText
+                && stored.CommandWindows == shipped.CommandWindows
+                && stored.PromptTemplate == shipped.PromptTemplate
+                && stored.PipelineId == shipped.PipelineId
+                && stored.Persona == shipped.Persona
+                && stored.TimeoutSeconds == shipped.TimeoutSeconds
+                && stored.DefaultConcurrency == shipped.DefaultConcurrency
+                && stored.RequiresCleanWorkingTree == shipped.RequiresCleanWorkingTree
+                && stored.OutputParser == shipped.OutputParser
+                && stored.ScanSourceActionKey == shipped.ScanSourceActionKey
+                && stored.RequiresNetwork == shipped.RequiresNetwork
+                && stored.ApplicabilityCommand == shipped.ApplicabilityCommand
+                && stored.ApplicabilityCommandWindows == shipped.ApplicabilityCommandWindows
+                && stored.MissionMode == shipped.MissionMode
+                && stored.RequiredTools.SequenceEqual(shipped.RequiredTools, StringComparer.Ordinal)
+                && JsonSerializer.Serialize(stored.Inputs) == JsonSerializer.Serialize(shipped.Inputs);
         }
 
         #endregion
 
-        #region Private-Members
+        #region Private-Methods
 
-        private static readonly string PruneMergedPosix =
-            "git fetch --prune || echo \"git fetch failed; pruning against local refs\"" + "\n"
-            + "default_branch=\"{{vessel.defaultBranch}}\"" + "\n"
-            + "current_branch=\"$(git symbolic-ref --quiet --short HEAD || true)\"" + "\n"
-            + "base=\"origin/$default_branch\"" + "\n"
-            + "git rev-parse --verify --quiet \"$base\" >/dev/null || base=\"$default_branch\"" + "\n"
-            + "git for-each-ref --format='%(refname:short)' --merged \"$base\" refs/heads | while IFS= read -r branch; do" + "\n"
-            + "  if [ \"$branch\" != \"$current_branch\" ] && [ \"$branch\" != \"$default_branch\" ]; then" + "\n"
-            + "    git branch -d -- \"$branch\" || echo \"could not delete $branch\"" + "\n"
-            + "  fi" + "\n"
-            + "done";
-
-        private static readonly string PruneMergedPowerShell =
-            "git fetch --prune; if ($LASTEXITCODE -ne 0) { Write-Output 'git fetch failed; pruning against local refs' }; "
-            + "$defaultBranch = '{{vessel.defaultBranch}}'; "
-            + "$currentBranch = git symbolic-ref --quiet --short HEAD; "
-            + "$base = 'origin/' + $defaultBranch; "
-            + "git rev-parse --verify --quiet $base *> $null; if ($LASTEXITCODE -ne 0) { $base = $defaultBranch }; "
-            + "git for-each-ref --format='%(refname:short)' --merged $base refs/heads | ForEach-Object { "
-            + "if ($_ -ne $currentBranch -and $_ -ne $defaultBranch) { git branch -d -- $_; if ($LASTEXITCODE -ne 0) { Write-Output ('could not delete ' + $_) } } }; "
-            + "exit 0";
+        private static void CopyDefinition(FleetAction source, FleetAction target)
+        {
+            target.Name = source.Name;
+            target.Description = source.Description;
+            target.Kind = source.Kind;
+            target.CommandText = source.CommandText;
+            target.CommandWindows = source.CommandWindows;
+            target.PromptTemplate = source.PromptTemplate;
+            target.PipelineId = source.PipelineId;
+            target.Persona = source.Persona;
+            target.TimeoutSeconds = source.TimeoutSeconds;
+            target.DefaultConcurrency = source.DefaultConcurrency;
+            target.RequiresCleanWorkingTree = source.RequiresCleanWorkingTree;
+            target.OutputParser = source.OutputParser;
+            target.ScanSourceActionKey = source.ScanSourceActionKey;
+            target.RequiresNetwork = source.RequiresNetwork;
+            target.ApplicabilityCommand = source.ApplicabilityCommand;
+            target.ApplicabilityCommandWindows = source.ApplicabilityCommandWindows;
+            target.MissionMode = source.MissionMode;
+            target.RequiredTools = new List<string>(source.RequiredTools);
+            target.Inputs = new List<FleetActionInput>(source.Inputs);
+        }
 
         #endregion
     }

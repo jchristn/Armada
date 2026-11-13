@@ -1,5 +1,6 @@
 namespace Armada.Helm.Rendering
 {
+    using System;
     using Spectre.Console;
     using Armada.Core.Enums;
 
@@ -37,9 +38,13 @@ namespace Armada.Helm.Rendering
             {
                 CaptainStateEnum.Idle => "dodgerblue1",
                 CaptainStateEnum.Working => "green",
+                CaptainStateEnum.Planning => "green",
+                CaptainStateEnum.Refining => "green",
+                CaptainStateEnum.Analyzing => "green",
                 CaptainStateEnum.Stalled => "red",
+                CaptainStateEnum.Quarantined => "red",
                 CaptainStateEnum.Stopping => "gold1",
-                _ => "white"
+                _ => "default"
             };
         }
 
@@ -71,10 +76,14 @@ namespace Armada.Helm.Rendering
                 "Testing" => "mediumpurple2",
                 "Review" => "darkorange",
                 "PullRequestOpen" => "dodgerblue1",
+                "WorkProduced" => "deepskyblue1",
+                "Verifying" => "mediumpurple2",
                 "Failed" => "red",
+                "LandingFailed" => "red",
+                "Blocked" => "darkorange",
                 "Cancelled" => "grey",
                 "Pending" => "dim",
-                _ => "white"
+                _ => "default"
             };
         }
 
@@ -91,7 +100,11 @@ namespace Armada.Helm.Rendering
                 "Testing" => "🧪",
                 "Review" => "👀",
                 "PullRequestOpen" => "🔀",
+                "WorkProduced" => "📦",
+                "Verifying" => "🧪",
                 "Failed" => "❌",
+                "LandingFailed" => "❌",
+                "Blocked" => "⛔",
                 "Cancelled" => "🚫",
                 "Pending" => "📋",
                 _ => "📋"
@@ -110,7 +123,7 @@ namespace Armada.Helm.Rendering
                 VoyageStatusEnum.Complete => "dim",
                 VoyageStatusEnum.Failed => "red",
                 VoyageStatusEnum.Cancelled => "grey",
-                _ => "white"
+                _ => "default"
             };
         }
 
@@ -152,8 +165,10 @@ namespace Armada.Helm.Rendering
         /// </summary>
         public static void RenderPaginationHeader(int pageNumber, int totalPages, long totalRecords, double totalMs)
         {
+            // Routes that do not time their reads report zero; omit the timing rather than print "0.0ms".
+            string timing = totalMs > 0 ? $" · {totalMs:F1}ms" : "";
             AnsiConsole.MarkupLine(
-                $"[dim]Page {pageNumber} of {totalPages} · {totalRecords} total records · {totalMs:F1}ms[/]");
+                $"[dim]Page {pageNumber} of {Math.Max(totalPages, 1)} · {totalRecords} total records{timing}[/]");
         }
 
         /// <summary>

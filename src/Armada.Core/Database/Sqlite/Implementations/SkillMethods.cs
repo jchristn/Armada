@@ -138,7 +138,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
             using (SqliteCommand cmd = conn.CreateCommand())
             {
                 cmd.CommandText = "SELECT * FROM skills" + whereClause +
-                    " ORDER BY name ASC" +
+                    " ORDER BY name ASC, id ASC" +
                     " LIMIT " + query.PageSize + " OFFSET " + query.Offset + ";";
                 foreach (SqliteParameter parameter in parameters) cmd.Parameters.Add(new SqliteParameter(parameter.ParameterName, parameter.Value));
                 using SqliteDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false);
@@ -169,7 +169,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
             List<SqliteParameter> parameters = new List<SqliteParameter>();
             ApplyQueryFilters(query, conditions, parameters);
             string whereClause = conditions.Count > 0 ? " WHERE " + String.Join(" AND ", conditions) : String.Empty;
-            cmd.CommandText = "SELECT * FROM skills" + whereClause + " ORDER BY name ASC;";
+            cmd.CommandText = "SELECT * FROM skills" + whereClause + " ORDER BY name ASC, id ASC;";
             foreach (SqliteParameter parameter in parameters) cmd.Parameters.Add(parameter);
 
             List<Skill> results = new List<Skill>();
@@ -192,6 +192,13 @@ namespace Armada.Core.Database.Sqlite.Implementations
             {
                 conditions.Add("user_id = @user_id");
                 parameters.Add(new SqliteParameter("@user_id", query.UserId));
+            }
+            if (query.RestrictToViewer)
+            {
+                // Tenant-wide skills plus the viewer's own (ScopedVisibility.CanView); a missing scope reads as TenantWide.
+                conditions.Add("(scope IS NULL OR scope <> @scope_user_specific OR " + (query.ViewerUserId == null ? "user_id IS NULL" : "user_id = @viewer_user_id") + ")");
+                parameters.Add(new SqliteParameter("@scope_user_specific", Armada.Core.Enums.ScopeEnum.UserSpecific.ToString()));
+                if (query.ViewerUserId != null) parameters.Add(new SqliteParameter("@viewer_user_id", query.ViewerUserId));
             }
             if (!String.IsNullOrWhiteSpace(query.Category))
             {

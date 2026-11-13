@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { getCaptainTools } from '@dashboard/api/client';
-import type { CaptainToolAccessResult, CaptainToolServerSummary, CaptainToolSummary } from '@dashboard/types/models';
+import type { CaptainToolAccessResult, CaptainToolServerSummary, CaptainToolSummary, EnumerationResult } from '@dashboard/types/models';
+import { TruncationNote } from '../../components/resource/TruncationNote';
 import { AppText, Button, ListRow, Section, StatusBadge } from '../../components/ui';
 import { useLocale } from '../../i18n/LocaleContext';
 import { spacing } from '../../theme/typography';
@@ -16,12 +17,23 @@ export function CaptainToolsView({ captainId }: { captainId: string }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [data, setData] = useState<CaptainToolAccessResult | null>(null);
+  const [internalPage, setInternalPage] = useState<EnumerationResult<CaptainToolSummary> | null>(null);
+  const [mcpPage, setMcpPage] = useState<EnumerationResult<CaptainToolSummary> | null>(null);
 
   async function load() {
     setLoading(true);
     setError('');
     try {
-      setData(await getCaptainTools(captainId));
+      // Probe once (refresh) for the summary and sources, then read one bounded page (1000) of each tool kind from the
+      // same snapshot; each section says when the runtime exposes more tools than the page holds.
+      const summary = await getCaptainTools(captainId, { refresh: true, pageSize: 1 });
+      const [internal, mcp] = await Promise.all([
+        getCaptainTools(captainId, { sourceKind: 'RuntimeBuiltIn', pageSize: 1000 }),
+        getCaptainTools(captainId, { sourceKind: 'McpServer', pageSize: 1000 }),
+      ]);
+      setInternalPage(internal?.tools ?? null);
+      setMcpPage(mcp?.tools ?? null);
+      setData(summary);
     } catch {
       setData(null);
       setError(t('Failed to load captain tools.'));
@@ -31,11 +43,10 @@ export function CaptainToolsView({ captainId }: { captainId: string }) {
   }
 
   const servers = data?.servers ?? [];
-  const tools = data?.tools ?? [];
   const mcpServers = servers.filter((s) => s.sourceKind === 'McpServer');
   const runtimeSources = servers.filter((s) => s.sourceKind !== 'McpServer');
-  const internalTools = tools.filter((tool) => tool.sourceKind === 'RuntimeBuiltIn');
-  const mcpTools = tools.filter((tool) => tool.sourceKind === 'McpServer');
+  const internalTools = (internalPage?.objects ?? []).filter((tool) => tool.sourceKind === 'RuntimeBuiltIn');
+  const mcpTools = (mcpPage?.objects ?? []).filter((tool) => tool.sourceKind === 'McpServer');
   const runtimeReported = runtimeSources.reduce((total, s) => total + Math.max(0, s.toolCount), 0);
 
   function notes(server: CaptainToolServerSummary): string {
@@ -68,12 +79,13 @@ export function CaptainToolsView({ captainId }: { captainId: string }) {
     );
   }
 
-  function toolList(title: string, list: CaptainToolSummary[], empty: string, key: string) {
+  function toolList(title: string, list: CaptainToolSummary[], empty: string, key: string, total: number) {
     return (
       <Section title={title}>
         {list.length === 0 ? <ListRow title={empty} /> : list.map((tool) => (
           <ListRow key={`${key}:${tool.registrationSource || 'internal'}:${tool.name}`} title={tool.name} subtitle={[tool.registrationSource || t('Internal'), tool.description].filter(Boolean).join(' \u00b7 ')} />
         ))}
+        <TruncationNote shown={list.length} total={total} />
       </Section>
     );
   }
@@ -109,6 +121,7 @@ export function CaptainToolsView({ captainId }: { captainId: string }) {
               ? t('This runtime reports {{count}} internal tool(s), but it does not expose individual tool names for every internal source.', { count: runtimeReported })
               : t('No named runtime-internal tools are currently exposed for this captain runtime.'),
             'internal',
+            internalPage?.totalRecords ?? internalTools.length,
           )}
           {toolList(
             t('MCP Tools'),
@@ -117,6 +130,7 @@ export function CaptainToolsView({ captainId }: { captainId: string }) {
               ? t('No named MCP tools were returned from the captain runtime\'s reachable MCP servers.')
               : t('No MCP tool inventory is available for this captain runtime.'),
             'mcptools',
+            mcpPage?.totalRecords ?? mcpTools.length,
           )}
         </>
       ) : null}

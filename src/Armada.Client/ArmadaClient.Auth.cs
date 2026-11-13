@@ -99,15 +99,18 @@ namespace Armada.Client
         }
 
         /// <summary>
-        /// Dashboard <c>lookupTenants</c>: POST '/api/v1/tenants/lookup'.
+        /// Dashboard <c>lookupTenants</c>: POST '/api/v1/tenants/lookup'. Returns one page of the tenants where the
+        /// email exists; use TotalRecords and TotalPages to read the rest.
         /// </summary>
         /// <param name="email">email.</param>
+        /// <param name="pageNumber">One-based page number (default 1).</param>
+        /// <param name="pageSize">Tenants per page (default 10, 1 to 1000).</param>
         /// <param name="token">Cancellation token.</param>
-        /// <returns>The response.</returns>
+        /// <returns>One page of tenants.</returns>
         /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
-        public Task<TenantLookupResult?> LookupTenantsAsync(string email, CancellationToken token = default)
+        public Task<TenantLookupResult?> LookupTenantsAsync(string email, int pageNumber = 1, int pageSize = 10, CancellationToken token = default)
         {
-            return PostAsync<TenantLookupResult>("/api/v1/tenants/lookup", new { Email = email }, null, token);
+            return PostAsync<TenantLookupResult>("/api/v1/tenants/lookup", new { Email = email, PageNumber = pageNumber, PageSize = pageSize }, null, token);
         }
 
         #endregion

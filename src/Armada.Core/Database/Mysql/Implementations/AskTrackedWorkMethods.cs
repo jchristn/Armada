@@ -161,6 +161,47 @@ namespace Armada.Core.Database.Mysql.Implementations
                 }, FromReader, token).ConfigureAwait(false);
         }
 
+        /// <inheritdoc />
+        public async Task<EnumerationResult<AskTrackedWork>> EnumeratePageByThreadAsync(string tenantId, string threadId, AskTrackedWorkStateEnum? state, EnumerationQuery query, CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(tenantId)) throw new ArgumentNullException(nameof(tenantId));
+            if (String.IsNullOrEmpty(threadId)) throw new ArgumentNullException(nameof(threadId));
+            if (query == null) throw new ArgumentNullException(nameof(query));
+            string direction = query.Order == EnumerationOrderEnum.CreatedAscending ? "ASC" : "DESC";
+            using (MySqlConnection conn = new MySqlConnection(_ConnectionString))
+            {
+                await conn.OpenAsync(token).ConfigureAwait(false);
+                return await MysqlBoundedPage.ReadAsync(conn,
+                    "FROM ask_tracked_work WHERE tenant_id = @tenant_id AND thread_id = @thread_id" + (state.HasValue ? " AND state = @state" : String.Empty),
+                    "created_utc " + direction + ", id " + direction,
+                    cmd =>
+                    {
+                        MysqlCommandHelper.Add(cmd, "@tenant_id", tenantId);
+                        MysqlCommandHelper.Add(cmd, "@thread_id", threadId);
+                        if (state.HasValue) MysqlCommandHelper.Add(cmd, "@state", state.Value.ToString());
+                    }, FromReader, query, token).ConfigureAwait(false);
+            }
+        }
+
+        /// <inheritdoc />
+        public async Task<long> CountByThreadAsync(string tenantId, string threadId, AskTrackedWorkStateEnum? state, CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(tenantId)) throw new ArgumentNullException(nameof(tenantId));
+            if (String.IsNullOrEmpty(threadId)) throw new ArgumentNullException(nameof(threadId));
+            using (MySqlConnection conn = new MySqlConnection(_ConnectionString))
+            {
+                await conn.OpenAsync(token).ConfigureAwait(false);
+                return await MysqlCommandHelper.CountAsync(conn,
+                    "SELECT COUNT(*) FROM ask_tracked_work WHERE tenant_id = @tenant_id AND thread_id = @thread_id" + (state.HasValue ? " AND state = @state" : String.Empty) + ";",
+                    cmd =>
+                    {
+                        MysqlCommandHelper.Add(cmd, "@tenant_id", tenantId);
+                        MysqlCommandHelper.Add(cmd, "@thread_id", threadId);
+                        if (state.HasValue) MysqlCommandHelper.Add(cmd, "@state", state.Value.ToString());
+                    }, token).ConfigureAwait(false);
+            }
+        }
+
         #endregion
 
         #region Private-Methods

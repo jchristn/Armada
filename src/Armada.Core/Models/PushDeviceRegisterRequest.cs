@@ -3,6 +3,7 @@ namespace Armada.Core.Models
     using System;
     using System.Collections.Generic;
     using Armada.Core.Enums;
+    using Armada.Core.Services;
 
     /// <summary>
     /// Body of POST /api/v1/push/devices: registers (or refreshes) the calling user's device by its Expo push token.
@@ -40,6 +41,7 @@ namespace Armada.Core.Models
         /// Enabled categories. Null keeps the categories of a device the caller already registered, and uses the
         /// server's Push.Categories defaults for a new device (including a token another user registered before).
         /// </summary>
+        [CollectionBound(8, Reason = "At most one entry per PushCategoryEnum value")]
         public List<PushCategoryEnum>? Categories { get; set; } = null;
 
         #endregion

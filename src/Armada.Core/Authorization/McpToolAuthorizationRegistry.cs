@@ -28,7 +28,9 @@ namespace Armada.Core.Authorization
             Add("status", "Status", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("get_backlog_item", "Objective", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("get_backlog_planning_session", "PlanningSession", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("list_backlog_planning_session_messages", "PlanningSession", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("get_backlog_refinement_session", "ObjectiveRefinementSession", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("list_backlog_refinement_session_messages", "ObjectiveRefinementSession", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("get_captain_log", "Captain", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("get_captain_tools", "Captain", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("get_captain", "Captain", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
@@ -73,6 +75,11 @@ namespace Armada.Core.Authorization
             Add("approve_ask_proposal", "AskThread", ResourceOperationEnum.Execute, PermissionLevel.Authenticated);
             Add("reject_ask_proposal", "AskThread", ResourceOperationEnum.Execute, PermissionLevel.Authenticated);
             Add("get_ask_work", "AskThread", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("list_ask_work", "AskThread", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("list_ask_work_missions", "AskThread", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("list_ask_work_targets", "AskThread", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("list_ask_proposals", "AskThread", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("list_ask_tool_calls", "AskThread", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("list_backlog_refinement_sessions", "ObjectiveRefinementSession", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("list_backlog", "Objective", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("list_objectives", "Objective", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
@@ -80,12 +87,36 @@ namespace Armada.Core.Authorization
             Add("mission_status", "Mission", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("papercut_summary", "Mission", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("search_memory", "Memory", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("authorize_captain_selection_recovery", "Mission", ResourceOperationEnum.Update, PermissionLevel.TenantAdmin);
+            Add("get_captain_selection", "Mission", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("preview_captain_selection", "Mission", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("get_captain_selection_history", "Mission", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("get_captain_selection_decision", "Mission", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("get_usage_selection_settings", "Server", ResourceOperationEnum.Admin, PermissionLevel.AdminOnly);
+            Add("update_usage_selection_settings", "Server", ResourceOperationEnum.Admin, PermissionLevel.AdminOnly);
+            Add("usage_status", "Usage", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("capture_captain_usage", "Usage", ResourceOperationEnum.Create, PermissionLevel.TenantAdmin);
             Add("token_usage_summary", "TokenUsage", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("vessel_health", "VesselHealth", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("list_vessel_dependencies", "VesselHealth", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("voyage_status", "Voyage", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("voyage_tree", "Voyage", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("vessel_concurrency", "Vessel", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("list_voyage_progress", "Voyage", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("fleet_action_run_status", "FleetActionRun", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("evaluate_autoland", "Mission", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("get_cli_permission_request", "CliPermission", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+
+            // Black box prevention, forensics and operations (read-only; BlackBoxInsightService scopes to the caller).
+            Add("preview_mission_overlap", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("list_vessel_reservations", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("lint_mission_brief", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("get_vessel_blackbox_doctor", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("diff_blackbox_entries", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("list_blackbox_nearby_successes", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("get_blackbox_timeline", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("get_voyage_blackbox_cascade", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("get_blackbox_recovery_stats", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
 
             // CLI tool permissions. The prompt tool is callable only by a captain's scoped session and deciding only by a
             // person (checked in the handlers); rule and policy changes need an admin.
@@ -109,13 +140,61 @@ namespace Armada.Core.Authorization
             Add("create_failure_cause_rule", "FailureCauseRule", ResourceOperationEnum.Create, PermissionLevel.Authenticated);
             Add("update_failure_cause_rule", "FailureCauseRule", ResourceOperationEnum.Update, PermissionLevel.Authenticated);
             Add("delete_failure_cause_rule", "FailureCauseRule", ResourceOperationEnum.Delete, PermissionLevel.Authenticated);
-            // evaluate_captain covers captains (the service requires a global or tenant admin) and model endpoints (read access).
+            // evaluate_captain covers captains (the service requires a global or tenant admin) and model endpoints (read access
+            // for Quick, an admin for Full).
             Add("evaluate_captain", "ModelProbeRun", ResourceOperationEnum.Execute, PermissionLevel.Authenticated);
             Add("get_model_probe_run", "ModelProbeRun", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("list_model_probe_runs", "ModelProbeRun", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("cancel_model_probe_run", "ModelProbeRun", ResourceOperationEnum.Execute, PermissionLevel.TenantAdmin);
+            Add("get_model_profile", "ModelProfile", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("list_model_profiles", "ModelProfile", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("get_model_scorecard", "ModelProfile", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("list_model_alerts", "ModelAlert", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("get_model_alert", "ModelAlert", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("evaluate_model_alerts", "ModelAlert", ResourceOperationEnum.Update, PermissionLevel.Authenticated);
+            Add("get_model_alert_thresholds", "ModelAlert", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("update_model_alert_thresholds", "ModelAlert", ResourceOperationEnum.Update, PermissionLevel.Authenticated);
+            Add("apply_model_alert_action", "ModelAlert", ResourceOperationEnum.Update, PermissionLevel.Authenticated);
+            Add("ignore_model_alert", "ModelAlert", ResourceOperationEnum.Update, PermissionLevel.Authenticated);
+            Add("get_battery_pack", "BatteryPack", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("read_battery_pack_file", "BatteryPack", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("write_battery_pack_file", "BatteryPack", ResourceOperationEnum.Update, PermissionLevel.AdminOnly);
+            Add("delete_battery_pack_file", "BatteryPack", ResourceOperationEnum.Delete, PermissionLevel.AdminOnly);
+            Add("create_battery_pack", "BatteryPack", ResourceOperationEnum.Create, PermissionLevel.AdminOnly);
+            Add("update_battery_pack_manifest", "BatteryPack", ResourceOperationEnum.Update, PermissionLevel.AdminOnly);
+            Add("delete_battery_pack", "BatteryPack", ResourceOperationEnum.Delete, PermissionLevel.AdminOnly);
+            Add("validate_battery_pack", "BatteryPack", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("list_battery_packs", "BatteryPack", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("run_battery", "BatteryRun", ResourceOperationEnum.Execute, PermissionLevel.Authenticated);
             Add("get_battery_run", "BatteryRun", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("list_battery_results", "BatteryRun", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+
+            // Mission and voyage black box (entry visibility is checked by IBlackBoxService: an invisible entry is NotFound;
+            // recovery and recommendation steps are authorized as the underlying tool)
+            Add("get_blackbox", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("read_blackbox_section", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("list_blackbox_objects", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("read_blackbox_object", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("list_blackbox_entries", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("search_blackbox", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("list_blackbox_notes", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("get_blackbox_bundle", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("list_blackbox_hotspots", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("list_blackbox_fingerprints", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("list_blackbox_resilience_gaps", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("get_blackbox_retention", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.TenantAdmin);
+            Add("get_blackbox_storage", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.AdminOnly);
+            Add("annotate_blackbox", "BlackBox", ResourceOperationEnum.Create, PermissionLevel.Authenticated);
+            Add("resolve_blackbox", "BlackBox", ResourceOperationEnum.Update, PermissionLevel.Authenticated);
+            Add("run_blackbox_recovery", "BlackBox", ResourceOperationEnum.Execute, PermissionLevel.Authenticated);
+            Add("apply_blackbox_recommendation", "BlackBox", ResourceOperationEnum.Execute, PermissionLevel.Authenticated);
+            Add("pin_blackbox", "BlackBox", ResourceOperationEnum.Update, PermissionLevel.Authenticated);
+            Add("delete_blackbox_entries", "BlackBox", ResourceOperationEnum.Delete, PermissionLevel.TenantAdmin);
+            Add("purge_blackbox", "BlackBox", ResourceOperationEnum.Delete, PermissionLevel.AdminOnly);
+            Add("run_blackbox_gc", "BlackBox", ResourceOperationEnum.Execute, PermissionLevel.AdminOnly);
+            Add("reanalyze_blackbox", "BlackBox", ResourceOperationEnum.Execute, PermissionLevel.TenantAdmin);
+            Add("get_blackbox_fingerprint_trend", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("export_blackbox_fixture", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.AdminOnly);
 
             // Writes to caller-owned resources (memories, model endpoints, harbors), scoped to the caller in the tool handlers
             Add("create_memory", "Memory", ResourceOperationEnum.Create, PermissionLevel.Authenticated);

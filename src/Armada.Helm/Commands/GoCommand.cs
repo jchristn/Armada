@@ -9,6 +9,7 @@ namespace Armada.Helm.Commands
     using Armada.Core.Hosting;
     using Armada.Core.Models;
     using Armada.Core.Services;
+    using Armada.Helm.Infrastructure;
 
     /// <summary>
     /// Quick dispatch: create a voyage with one or more missions.
@@ -27,7 +28,7 @@ namespace Armada.Helm.Commands
                 if (!Enum.TryParse<LandingModeEnum>(settings.LandingMode.Trim(), true, out LandingModeEnum parsedMode)
                     || !Enum.IsDefined(typeof(LandingModeEnum), parsedMode))
                 {
-                    AnsiConsole.MarkupLine("[red]Invalid --landing-mode:[/] " + Markup.Escape(settings.LandingMode)
+                    HelmConsole.Error.MarkupLine("[red]Invalid --landing-mode:[/] " + Markup.Escape(settings.LandingMode)
                         + ". Use one of: " + String.Join(", ", Enum.GetNames(typeof(LandingModeEnum))) + ".");
                     return 1;
                 }
@@ -43,7 +44,7 @@ namespace Armada.Helm.Commands
             List<Captain> captains = await EnsureCaptainsAsync().ConfigureAwait(false);
             if (captains.Count == 0)
             {
-                if (IsLocalTarget()) AnsiConsole.MarkupLine("[red]No captains available and auto-creation failed.[/]");
+                if (IsLocalTarget()) HelmConsole.Error.MarkupLine("[red]No captains available and auto-creation failed.[/]");
                 return 1;
             }
 
@@ -51,7 +52,7 @@ namespace Armada.Helm.Commands
             List<string> tasks = GoTaskList.Build(settings.Prompt, settings.Tasks);
             if (tasks.Count == 0)
             {
-                AnsiConsole.MarkupLine("[red]Provide a prompt, or one or more --task values.[/]");
+                HelmConsole.Error.MarkupLine("[red]Provide a prompt, or one or more --task values.[/]");
                 return 1;
             }
 
@@ -119,7 +120,7 @@ namespace Armada.Helm.Commands
 
                 if (vessels == null || vessels.Count == 0)
                 {
-                    AnsiConsole.MarkupLine("[red]No vessels registered.[/]");
+                    HelmConsole.Error.MarkupLine("[red]No vessels registered.[/]");
                     AnsiConsole.MarkupLine("Register one with [green]armada vessel add <name> <repoUrl>[/] or use [green]--repo[/].");
                     return null;
                 }
@@ -127,7 +128,7 @@ namespace Armada.Helm.Commands
                 Vessel? match = EntityResolver.ResolveVessel(vessels, settings.Vessel);
                 if (match != null) return match.Id;
 
-                AnsiConsole.MarkupLine($"[red]Vessel not found:[/] {Markup.Escape(settings.Vessel)}");
+                HelmConsole.Error.MarkupLine($"[red]Vessel not found:[/] {Markup.Escape(settings.Vessel)}");
                 AnsiConsole.MarkupLine("[dim]Available vessels:[/]");
                 foreach (Vessel v in vessels)
                 {
@@ -167,7 +168,7 @@ namespace Armada.Helm.Commands
                 AgentRuntimeEnum runtimeValue = AgentRuntimeEnum.ClaudeCode;
                 if (!String.IsNullOrEmpty(armadaSettings.DefaultRuntime) && !AgentRuntimeParser.TryParse(armadaSettings.DefaultRuntime, out runtimeValue))
                 {
-                    AnsiConsole.MarkupLine("[red]DefaultRuntime setting: " + Markup.Escape(AgentRuntimeParser.DescribeInvalid(armadaSettings.DefaultRuntime)) + "[/]");
+                    HelmConsole.Error.MarkupLine("[red]DefaultRuntime setting: " + Markup.Escape(AgentRuntimeParser.DescribeInvalid(armadaSettings.DefaultRuntime)) + "[/]");
                     break;
                 }
 
@@ -210,14 +211,15 @@ namespace Armada.Helm.Commands
                 await Task.Delay(2000, token).ConfigureAwait(false);
 
                 // Check voyage status
-                VoyageDetailResponse? detail = await GetAsync<VoyageDetailResponse>($"/api/v1/voyages/{voyageId}").ConfigureAwait(false);
+                VoyageProgress? detail = await GetAsync<VoyageProgress>($"/api/v1/voyages/{voyageId}").ConfigureAwait(false);
                 if (detail?.Voyage == null) continue;
 
-                // Find mission log path from the first mission
-                if (captainLogPath == null && detail.Missions != null)
+                // Find mission log path from the voyage's first missions (one bounded page)
+                if (captainLogPath == null)
                 {
+                    EnumerationResult<Mission>? firstMissions = await GetAsync<EnumerationResult<Mission>>($"/api/v1/missions?voyageId={voyageId}&pageSize=10&order=CreatedAscending").ConfigureAwait(false);
                     ArmadaLogPaths logPaths = ArmadaLogPaths.ForDefaultDataDirectory();
-                    foreach (Mission m in detail.Missions)
+                    foreach (Mission m in firstMissions?.Objects ?? new List<Mission>())
                     {
                         // The mission's own log, else the current log of its captain.
                         captainLogPath = logPaths.ResolveMissionLog(m.Id, m.CaptainId);

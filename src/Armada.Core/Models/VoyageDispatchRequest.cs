@@ -2,6 +2,7 @@ namespace Armada.Core.Models
 {
     using System;
     using System.Collections.Generic;
+    using Armada.Core.Services;
 
     /// <summary>
     /// Request payload for dispatching a voyage with mission descriptions and optional playbooks.
@@ -39,11 +40,13 @@ namespace Armada.Core.Models
         /// <summary>
         /// Missions to dispatch.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxRequestItems)]
         public List<MissionDescription> Missions { get; set; } = new List<MissionDescription>();
 
         /// <summary>
         /// Ordered playbooks to apply during dispatch.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxConfigItems)]
         public List<SelectedPlaybook> SelectedPlaybooks { get; set; } = new List<SelectedPlaybook>();
 
         /// <summary>

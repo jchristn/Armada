@@ -1,7 +1,10 @@
 namespace Armada.Core.Models
 {
+    using Armada.Core.Services;
+
     /// <summary>
-    /// Result of listing one workspace directory.
+    /// Result of listing one workspace directory: one page of its direct children (directories first, then files, each
+    /// by name). The page is cut on the host that has the checkout (the Admiral or a Harbor).
     /// </summary>
     public class WorkspaceTreeResult
     {
@@ -27,8 +30,29 @@ namespace Armada.Core.Models
         public string? ParentPath { get; set; }
 
         /// <summary>
-        /// Direct child entries of the current directory.
+        /// Page number of <see cref="Entries"/> (1-based).
         /// </summary>
+        public int PageNumber { get; set; } = 1;
+
+        /// <summary>
+        /// Page size used for <see cref="Entries"/> (1 to 1000).
+        /// </summary>
+        public int PageSize { get; set; } = CollectionLimits.DefaultPageSize;
+
+        /// <summary>
+        /// Number of pages.
+        /// </summary>
+        public int TotalPages { get; set; } = 0;
+
+        /// <summary>
+        /// Number of direct children in total, across every page.
+        /// </summary>
+        public long TotalRecords { get; set; } = 0;
+
+        /// <summary>
+        /// One page of the direct child entries of the current directory.
+        /// </summary>
+        [CollectionBound(CollectionLimits.MaxPageSize, Reason = "One page; PageNumber, PageSize, TotalPages, TotalRecords describe the rest")]
         public List<WorkspaceTreeEntry> Entries { get; set; } = new List<WorkspaceTreeEntry>();
     }
 }

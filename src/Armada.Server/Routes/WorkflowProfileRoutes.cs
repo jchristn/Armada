@@ -64,7 +64,6 @@ namespace Armada.Server.Routes
                 Stopwatch sw = Stopwatch.StartNew();
                 EnumerationResult<WorkflowProfile> result = await _database.WorkflowProfiles.EnumerateAsync(query).ConfigureAwait(false);
                 result.TotalMs = Math.Round(sw.Elapsed.TotalMilliseconds, 2);
-                if (!ctx.IsAdmin) result.Objects = result.Objects.Where(p => ScopedVisibility.CanView(ctx, p.OwnershipScope, p.TenantId, p.UserId)).ToList();
                 return result;
             },
             api => api
@@ -94,7 +93,6 @@ namespace Armada.Server.Routes
                 Stopwatch sw = Stopwatch.StartNew();
                 EnumerationResult<WorkflowProfile> result = await _database.WorkflowProfiles.EnumerateAsync(query).ConfigureAwait(false);
                 result.TotalMs = Math.Round(sw.Elapsed.TotalMilliseconds, 2);
-                if (!ctx.IsAdmin) result.Objects = result.Objects.Where(p => ScopedVisibility.CanView(ctx, p.OwnershipScope, p.TenantId, p.UserId)).ToList();
                 return result;
             },
             api => api
@@ -302,7 +300,7 @@ namespace Armada.Server.Routes
             api => api
                 .WithTag("WorkflowProfiles")
                 .WithSummary("Batch delete multiple workflow profiles")
-                .WithDescription("Permanently deletes multiple workflow profiles by ID. Ids that are missing, outside the caller's scope, or not editable by the caller are skipped with a reason. This cannot be undone.")
+                .WithDescription("Permanently deletes multiple workflow profiles by ID (at most 1000 ids; more is 400 CollectionLimitExceeded). Ids that are missing, outside the caller's scope, or not editable by the caller are skipped with a reason. This cannot be undone.")
                 .WithRequestBody(OpenApiJson.BodyFor<DeleteMultipleRequest>("List of workflow profile IDs to delete"))
                 .WithResponse(200, OpenApiJson.For<DeleteMultipleResult>("Delete result summary"))
                 .WithResponse(400, OpenApiResponseMetadata.BadRequest())
@@ -347,7 +345,7 @@ namespace Armada.Server.Routes
             if (int.TryParse(req.Query.GetValueOrDefault("pageNumber"), out int pageNumber))
                 query.PageNumber = Math.Max(1, pageNumber);
             if (int.TryParse(req.Query.GetValueOrDefault("pageSize"), out int pageSize))
-                query.PageSize = Math.Clamp(pageSize, 1, 500);
+                query.PageSize = pageSize;
             if (Enum.TryParse(req.Query.GetValueOrDefault("scope"), true, out WorkflowProfileScopeEnum scope))
                 query.Scope = scope;
             if (DateTime.TryParse(req.Query.GetValueOrDefault("fromUtc"), out DateTime fromUtc))
@@ -368,6 +366,9 @@ namespace Armada.Server.Routes
             if (ctx.IsAdmin) return;
             query.TenantId = ctx.TenantId;
             query.UserId = null;
+            // A regular user sees tenant-wide rows plus their own; the data source applies it before counting, so
+            // TotalRecords and every page are exact for the caller.
+            query.ViewerUserId = ctx.IsTenantAdmin ? null : ctx.UserId;
         }
 
         private static bool TryParseNullableBool(string? value, out bool? result)

@@ -2,6 +2,7 @@ namespace Armada.Core.Models
 {
     using System;
     using System.Collections.Generic;
+    using Armada.Core.Services;
 
     /// <summary>
     /// Per-day commit counts for a vessel branch over a date range (GET /api/v1/vessels/{id}/history/activity), for the history heatmap.
@@ -38,6 +39,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// One entry per day from From to To inclusive, in date order, including days with zero commits. Never null.
         /// </summary>
+        [CollectionBound(Constants.VesselHistoryMaxActivityRangeDays + 1, Reason = "One per day of a range of at most 1830 days")]
         public List<VesselCommitActivityDay> Days { get; set; } = new List<VesselCommitActivityDay>();
 
         /// <summary>

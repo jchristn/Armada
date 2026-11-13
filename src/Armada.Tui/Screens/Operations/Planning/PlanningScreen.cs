@@ -42,9 +42,24 @@ namespace Armada.Tui.Screens.Operations
         public string? SessionId { get; }
 
         /// <summary>
-        /// Recent sessions, newest update first.
+        /// The page of recent sessions shown in the grid, newest update first (paged by the server).
         /// </summary>
         public List<PlanningSession> Sessions { get; private set; } = new List<PlanningSession>();
+
+        /// <summary>
+        /// Number of planning sessions visible to the caller (every page).
+        /// </summary>
+        public long SessionsTotal { get; private set; } = 0;
+
+        /// <summary>
+        /// Number of messages in the open session's transcript (every page).
+        /// </summary>
+        public long MessageTotal { get; private set; } = 0;
+
+        /// <summary>
+        /// Transcript messages read per page.
+        /// </summary>
+        public const int MessagePageSize = 100;
 
         /// <summary>
         /// The open session, or null.
@@ -52,11 +67,20 @@ namespace Armada.Tui.Screens.Operations
         public PlanningSessionDetail? Detail { get; private set; } = null;
 
         /// <summary>
-        /// Messages of the open session.
+        /// The loaded messages of the open session, oldest first. The newest page loads with the session; older pages
+        /// load on request (Load older messages) until every one of <see cref="MessageTotal"/> is loaded.
         /// </summary>
         public List<PlanningSessionMessage> Messages
         {
-            get { return Detail?.Messages ?? new List<PlanningSessionMessage>(); }
+            get { return _Messages; }
+        }
+
+        /// <summary>
+        /// True when older transcript messages remain on the server.
+        /// </summary>
+        public bool HasOlderMessages
+        {
+            get { return _Messages.Count < MessageTotal; }
         }
 
         /// <summary>
@@ -249,6 +273,9 @@ namespace Armada.Tui.Screens.Operations
         #region Private-Members
 
         private bool _SessionsLoaded = false;
+        private List<PlanningSessionMessage> _Messages = new List<PlanningSessionMessage>();
+        private int _NextOlderPage = 2;
+        private bool _LoadingOlder = false;
         private bool _Deleting = false;
         private string? _EndingSessionId = null;
         private PlanningDispatchSeed? _Seed = null;
@@ -343,6 +370,7 @@ namespace Armada.Tui.Screens.Operations
             SessionsGrid.AddColumn(updated);
             SessionsGrid.Activated += (s, p) => Context.Navigate(TabLinks.Planning(p.Id));
             SessionsGrid.MenuRequested += (s, p) => ShowSessionMenu(p);
+            SessionsGrid.Loader = LoadSessionsAsync;
 
             StartPanel = new PlanningStartPanel(this);
             TranscriptPanel = new PlanningTranscriptPanel(this);
@@ -370,7 +398,9 @@ namespace Armada.Tui.Screens.Operations
             Action("json", "View JSON", () => ShowJson(Tr("Planning Session") + ": " + (Detail?.Session?.Title ?? ""), Detail), "j", () => Detail != null);
             Action("clear", "Clear conversation", ConfirmDeleteCurrent, null, () => Detail?.Session != null && !Busy, false, true);
             Action("delete", "Delete Session", ConfirmDeleteCurrent, "del", () => Detail?.Session != null, false, true);
-            Action("delete-all", "Delete All", ConfirmDeleteAll, "X", () => Sessions.Count > 0, false, true);
+            Action("delete-all", "Delete All", ConfirmDeleteAll, "X", () => SessionsTotal > 0, false, true);
+            OpsScreenAction older = Action("older", "Load older messages", LoadOlderMessages, "alt+o", () => Detail?.Session != null && HasOlderMessages && !_LoadingOlder);
+            older.DynamicLabel = () => Tr("Load older messages ({{loaded}} of {{total}})", LocalizationArgs.Of("loaded", _Messages.Count, "total", MessageTotal));
             Action("manage-pipelines", "Manage pipelines", () => Context.Navigate("/configuration?tab=pipelines"));
 
             Reference.Changed += (s, name) => ReferenceArrived(name);
@@ -389,17 +419,7 @@ namespace Armada.Tui.Screens.Operations
         public override void Load()
         {
             Reference.Ensure(true, "captains", "fleets", "vessels", "pipelines", "playbooks");
-            Call((c, t) => c.ListPlanningSessionsAsync(t), list =>
-            {
-                Sessions = (list ?? new List<PlanningSession>()).OrderByDescending(s => s.LastUpdateUtc).ToList();
-                _SessionsLoaded = true;
-                LoadError = null;
-                SyncGrid();
-            }, null, ex =>
-            {
-                _SessionsLoaded = true;
-                LoadError = String.IsNullOrEmpty(ex.Message) ? Tr("Failed to load planning data.") : ex.Message;
-            });
+            SessionsGrid.Reload();
             if (SessionId != null) LoadDetail();
         }
 
@@ -463,7 +483,7 @@ namespace Armada.Tui.Screens.Operations
             view.Pipeline = PipelineName(s.PipelineId);
             view.PlaybookCount = s.SelectedPlaybooks?.Count ?? 0;
             view.Updated = Context.Loc.FormatRelative(s.LastUpdateUtc, Context.Clock.UtcNow);
-            view.MessageCount = Messages.Count;
+            view.MessageCount = (int)Math.Min(int.MaxValue, MessageTotal);
             view.FailureReason = s.FailureReason;
             return view;
         }
@@ -743,8 +763,7 @@ namespace Armada.Tui.Screens.Operations
             DeleteProgress.RunVoid(Context, "Deleting planning session", t => Context.Client.DeletePlanningSessionAsync(id, t), () =>
             {
                 _Deleting = false;
-                Sessions = Sessions.Where(s => s.Id != id).ToList();
-                SyncGrid();
+                SessionsGrid.Reload();
                 if (SessionId == id)
                 {
                     Detail = null;
@@ -892,7 +911,7 @@ namespace Armada.Tui.Screens.Operations
                 DeleteProgress.RunVoid(Context, "Deleting planning session", t => Context.Client.DeletePlanningSessionAsync(id, t), () =>
                 {
                     _Deleting = false;
-                    Sessions = Sessions.Where(s => s.Id != id).ToList();
+                    SessionsGrid.Reload();
                     Detail = null;
                     SelectedMessageId = "";
                     DispatchTitle.Value = "";
@@ -906,18 +925,40 @@ namespace Armada.Tui.Screens.Operations
 
         private void ConfirmDeleteAll()
         {
-            List<PlanningSession> targets = Sessions.ToList();
-            if (targets.Count == 0) return;
-            Confirm("Delete All Planning Sessions", Tr("Delete all {{count}} planning session(s) and their transcripts? This cannot be undone.", LocalizationArgs.Of("count", targets.Count)), () =>
+            long total = SessionsTotal;
+            if (total == 0) return;
+            Confirm("Delete All Planning Sessions", Tr("Delete all {{count}} planning session(s) and their transcripts? This cannot be undone.", LocalizationArgs.Of("count", total)), () =>
             {
                 _Deleting = true;
                 DeleteProgress.Run(Context, "{count, plural, one {Deleting # planning session} other {Deleting # planning sessions}}", async t =>
                 {
+                    // Every session is deleted by reading bounded pages until none is left; a session that cannot be
+                    // deleted (still running) is skipped by paging past it.
                     int failures = 0;
-                    foreach (PlanningSession s in targets)
+                    int pageNumber = 1;
+                    HashSet<string> attempted = new HashSet<string>(StringComparer.Ordinal);
+                    while (!t.IsCancellationRequested)
                     {
-                        try { await Context.Client.DeletePlanningSessionAsync(s.Id, t).ConfigureAwait(false); }
-                        catch (ArmadaApiException) { failures++; }
+                        EnumerationQuery query = new EnumerationQuery();
+                        query.PageNumber = pageNumber;
+                        query.PageSize = 100;
+                        EnumerationResult<PlanningSession>? page = await Context.Client.ListPlanningSessionsAsync(query, t).ConfigureAwait(false);
+                        if (page == null || page.Objects.Count == 0) break;
+                        bool progressed = false;
+                        foreach (PlanningSession s in page.Objects)
+                        {
+                            if (!attempted.Add(s.Id)) continue;
+                            progressed = true;
+                            try { await Context.Client.DeletePlanningSessionAsync(s.Id, t).ConfigureAwait(false); }
+                            catch (ArmadaApiException) { failures++; }
+                        }
+
+                        // Sessions that could not be deleted stay on the page; move past them once each was tried.
+                        if (!progressed)
+                        {
+                            if (pageNumber >= page.TotalPages) break;
+                            pageNumber++;
+                        }
                     }
 
                     return failures;
@@ -930,7 +971,7 @@ namespace Armada.Tui.Screens.Operations
                         : Tr("All planning sessions deleted."));
                     if (SessionId != null) Context.Navigate(TabLinks.PlanningPath);
                     else Load();
-                }, "Failed to delete planning sessions.", targets.Count, () => _Deleting = false);
+                }, "Failed to delete planning sessions.", (int)Math.Min(total, int.MaxValue), () => _Deleting = false);
             }, "Delete All", "delete");
         }
 
@@ -966,27 +1007,113 @@ namespace Armada.Tui.Screens.Operations
         private void ApplyDetail(PlanningSessionDetail detail)
         {
             if (detail.Session == null) return;
-            if (Detail != null && Detail.Session != null && Detail.Session.Id == detail.Session.Id)
+            bool sameSession = Detail != null && Detail.Session != null && Detail.Session.Id == detail.Session.Id;
+            if (sameSession)
             {
-                if (detail.Captain == null) detail.Captain = Detail.Captain;
-                if (detail.Vessel == null) detail.Vessel = Detail.Vessel;
+                if (detail.Captain == null) detail.Captain = Detail!.Captain;
+                if (detail.Vessel == null) detail.Vessel = Detail!.Vessel;
+            }
+            else
+            {
+                _Messages = new List<PlanningSessionMessage>();
+                _NextOlderPage = 2;
             }
 
             Detail = detail;
+            MessageTotal = Math.Max(detail.MessageCount, _Messages.Count);
             Status = detail.Session.Status.ToString();
             UpsertSession(detail.Session);
+            LoadNewestMessages(detail.Session.Id);
             SyncSeed();
+        }
+
+        private void LoadNewestMessages(string sessionId)
+        {
+            EnumerationQuery query = new EnumerationQuery();
+            query.PageNumber = 1;
+            query.PageSize = MessagePageSize;
+            query.Order = EnumerationOrderEnum.CreatedDescending;
+            Call((c, t) => c.ListPlanningSessionMessagesAsync(sessionId, query, t), page =>
+            {
+                if (page == null || Detail?.Session == null || Detail.Session.Id != sessionId) return;
+                foreach (PlanningSessionMessage m in page.Objects) _Messages = PlanningLogic.UpsertMessage(_Messages, m);
+                MessageTotal = Math.Max(page.TotalRecords, _Messages.Count);
+                SyncSeed();
+            }, "Failed to load the planning transcript.");
+        }
+
+        private void LoadOlderMessages()
+        {
+            PlanningSession? session = Detail?.Session;
+            if (session == null || !HasOlderMessages || _LoadingOlder) return;
+            string sessionId = session.Id;
+            EnumerationQuery query = new EnumerationQuery();
+            query.PageNumber = _NextOlderPage;
+            query.PageSize = MessagePageSize;
+            query.Order = EnumerationOrderEnum.CreatedDescending;
+            _LoadingOlder = true;
+            Call((c, t) => c.ListPlanningSessionMessagesAsync(sessionId, query, t), page =>
+            {
+                _LoadingOlder = false;
+                if (page == null || Detail?.Session == null || Detail.Session.Id != sessionId) return;
+                foreach (PlanningSessionMessage m in page.Objects) _Messages = PlanningLogic.UpsertMessage(_Messages, m);
+                MessageTotal = Math.Max(page.TotalRecords, _Messages.Count);
+                if (page.Objects.Count > 0) _NextOlderPage++;
+            }, null, ex =>
+            {
+                _LoadingOlder = false;
+                ShowMessage(String.IsNullOrEmpty(ex.Message) ? Tr("Failed to load older messages.") : ex.Message);
+            });
+        }
+
+        private async Task<GridPage<PlanningSession>> LoadSessionsAsync(GridQuery grid, CancellationToken token)
+        {
+            EnumerationQuery query = new EnumerationQuery();
+            query.PageNumber = grid.PageNumber;
+            query.PageSize = grid.PageSize;
+            query.Order = EnumerationOrderEnum.CreatedDescending;
+            try
+            {
+                EnumerationResult<PlanningSession>? page = await Context.Client.ListPlanningSessionsAsync(query, token).ConfigureAwait(false);
+                List<PlanningSession> rows = page?.Objects ?? new List<PlanningSession>();
+                long total = page?.TotalRecords ?? rows.Count;
+                Post(() =>
+                {
+                    Sessions = rows;
+                    SessionsTotal = total;
+                    _SessionsLoaded = true;
+                    LoadError = null;
+                });
+                return new GridPage<PlanningSession>(rows, total);
+            }
+            catch (ArmadaApiException ex)
+            {
+                Post(() =>
+                {
+                    _SessionsLoaded = true;
+                    LoadError = String.IsNullOrEmpty(ex.Message) ? Tr("Failed to load planning data.") : ex.Message;
+                });
+                throw;
+            }
         }
 
         private void UpsertSession(PlanningSession session)
         {
-            Sessions = PlanningLogic.UpsertSession(Sessions, session);
+            int idx = Sessions.FindIndex(x => x.Id == session.Id);
+            if (idx < 0)
+            {
+                // A session not on the shown page (new, or another page) changes the order: read the page again.
+                SessionsGrid.Reload();
+                return;
+            }
+
+            Sessions[idx] = session;
             SyncGrid();
         }
 
         private void SyncGrid()
         {
-            SessionsGrid.SetLocalRows(Sessions);
+            SessionsGrid.SetPage(new GridPage<PlanningSession>(Sessions, SessionsTotal), SessionsGrid.PageNumber);
         }
 
         private void SyncSeed()
@@ -1033,7 +1160,9 @@ namespace Armada.Tui.Screens.Operations
                 case ArmadaEventTypes.PlanningSessionMessageCreated:
                 case ArmadaEventTypes.PlanningSessionMessageUpdated:
                     if (e.Message == null || String.IsNullOrEmpty(e.SessionId) || Detail?.Session == null || Detail.Session.Id != e.SessionId) return;
-                    Detail.Messages = PlanningLogic.UpsertMessage(Detail.Messages, e.Message);
+                    bool known = _Messages.Any(m => m.Id == e.Message.Id);
+                    _Messages = PlanningLogic.UpsertMessage(_Messages, e.Message);
+                    if (!known) MessageTotal = Math.Max(MessageTotal + 1, _Messages.Count);
                     SyncSeed();
                     return;
                 case ArmadaEventTypes.PlanningSessionTool:
@@ -1057,8 +1186,7 @@ namespace Armada.Tui.Screens.Operations
                     return;
                 case ArmadaEventTypes.PlanningSessionDeleted:
                     if (String.IsNullOrEmpty(e.SessionId)) return;
-                    Sessions = Sessions.Where(s => s.Id != e.SessionId).ToList();
-                    SyncGrid();
+                    SessionsGrid.Reload();
                     if (e.SessionId == SessionId)
                     {
                         Detail = null;

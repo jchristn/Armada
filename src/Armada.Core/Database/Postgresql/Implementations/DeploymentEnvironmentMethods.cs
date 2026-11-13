@@ -170,7 +170,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
                 using (NpgsqlCommand cmd = conn.CreateCommand())
                 {
                     cmd.CommandText = "SELECT * FROM environments" + whereClause
-                        + " ORDER BY is_default DESC, active DESC, name ASC, created_utc DESC LIMIT @page_size OFFSET @offset;";
+                        + " ORDER BY is_default DESC, active DESC, name ASC, created_utc DESC, id DESC LIMIT @page_size OFFSET @offset;";
                     foreach (NpgsqlParameter parameter in parameters) cmd.Parameters.Add(CloneParameter(parameter));
                     cmd.Parameters.AddWithValue("@page_size", pageSize);
                     cmd.Parameters.AddWithValue("@offset", offset);
@@ -209,7 +209,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
                 List<DeploymentEnvironment> results = new List<DeploymentEnvironment>();
                 using (NpgsqlCommand cmd = conn.CreateCommand())
                 {
-                    cmd.CommandText = "SELECT * FROM environments" + whereClause + " ORDER BY is_default DESC, active DESC, name ASC, created_utc DESC;";
+                    cmd.CommandText = "SELECT * FROM environments" + whereClause + " ORDER BY is_default DESC, active DESC, name ASC, created_utc DESC, id DESC;";
                     foreach (NpgsqlParameter parameter in parameters) cmd.Parameters.Add(CloneParameter(parameter));
                     using (NpgsqlDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
                     {

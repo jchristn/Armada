@@ -52,6 +52,7 @@ namespace Test.Shared.Suites.Services
             {
                 string record = await RunShimLaunchAsync(null, "http://127.0.0.1:7891/mcp").ConfigureAwait(false);
                 AssertContains("TOKEN=\n", record.Replace("\r\n", "\n"), "no token in the environment");
+                AssertContains("URL=\n", record.Replace("\r\n", "\n"), "no inherited MCP URL");
                 AssertFalse(record.Contains("ARG=--strict-mcp-config", StringComparison.Ordinal), "no MCP binding arguments");
             }));
 
@@ -140,6 +141,11 @@ namespace Test.Shared.Suites.Services
                     WorkingDirectory = workDir,
                     Prompt = "Respond with OK.",
                     McpSessionToken = token,
+                    Environment = new Dictionary<string, string>
+                    {
+                        { "ARMADA_MCP_TOKEN", "tok-unrelated-parent" },
+                        { "ARMADA_MCP_URL", "http://unrelated.invalid/mcp" }
+                    },
                     AutoApprove = policy.HasValue ? false : null,
                     CliPermissionPolicy = policy,
                     PermissionPromptTimeoutSeconds = policy.HasValue ? 300 : null

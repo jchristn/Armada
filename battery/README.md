@@ -192,3 +192,22 @@ missing tool is named.
 3. Check it with `list_battery_packs`. It must show `valid: true`.
 4. Add a real-toolchain test like `Battery.CSharpPack`, so the baseline fails and a reference solution passes for each
    task.
+
+## Managing packs in the dashboard
+
+Open **Battery packs** (`/battery`) near Captains, or use **Manage packs** in the Full Evaluate pack picker.
+The paged list shows the directory id, name, domain/language, task count and validation state; hover over Invalid
+for errors. View/Edit opens the manifest JSON editor and a relative file tree with byte sizes. Global admins can
+create packs, save the manifest, and create, edit or delete UTF-8 text files under `fixture/` and `tasks/`.
+Deleting a file or pack requires confirmation. Other signed-in people can inspect and validate packs.
+
+New pack takes a safe lowercase directory slug and raw manifest JSON, and creates `battery-pack.json`, `fixture/`
+and `tasks/`. Save manifest accepts parseable JSON even if validation fails, so a pack can be built in steps.
+Validate checks the saved on-disk pack without writing; save your draft first. Invalid JSON is rejected without
+replacing the manifest. File edits are capped at 1 MiB, binary content and symlinks are refused, and the manifest
+cannot be deleted through the file editor. The management tree is limited to 256 files/directories.
+
+Set `Evaluation.BatteryDirectory` to a writable persistent directory. A pack used by an in-process queued or
+running battery cannot be changed or deleted (409); wait for the run to finish. This is a best-effort local check:
+external filesystem writers, another Admiral sharing the directory, and a run starting concurrently with a save
+can still race. Avoid editing a shared directory while runs are starting.

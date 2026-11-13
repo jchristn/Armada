@@ -35,6 +35,12 @@ namespace Armada.Tui.Screens.Operations
         /// </summary>
         public Func<bool>? When { get; set; } = null;
 
+        /// <summary>Whether a visible action can execute. False keeps a dimmed button with its reason label.</summary>
+        public Func<bool>? EnabledWhen { get; set; } = null;
+
+        /// <summary>Whether visibility and enabled conditions permit execution.</summary>
+        public bool CanExecute => Available && (EnabledWhen == null || EnabledWhen());
+
         /// <summary>
         /// Handler.
         /// </summary>
@@ -54,6 +60,12 @@ namespace Armada.Tui.Screens.Operations
         /// Owner data (for example the button drawn for the action).
         /// </summary>
         public object? Tag { get; set; } = null;
+
+        /// <summary>
+        /// Key of the panel the action belongs to, or null for a screen-wide action. A detail screen lists the keys of
+        /// the current panel's actions first in its status bar hints, so they are discoverable from that panel.
+        /// </summary>
+        public string? Panel { get; set; } = null;
 
         /// <summary>
         /// True when available now.

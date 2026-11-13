@@ -9,10 +9,5 @@ namespace Armada.Server.Mcp
         /// Vessel identifier (vsl_ prefix).
         /// </summary>
         public string VesselId { get; set; } = string.Empty;
-
-        /// <summary>
-        /// Whether to include the dependency rows (default false; a dependencyCount hint is always returned).
-        /// </summary>
-        public bool IncludeDependencies { get; set; } = false;
     }
 }

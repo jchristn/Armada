@@ -57,7 +57,7 @@ namespace Test.Shared.Suites.E2E
                 AssertToolResultValid(result);
                 Voyage voyage = JsonHelper.Deserialize<Voyage>(GetToolResultText(result));
                 JsonElement status = await CallToolAsync(mcp, session, "voyage_status", new { voyageId = voyage.Id }).ConfigureAwait(false);
-                Voyage persisted = JsonHelper.Deserialize<VoyageDetailResponse>(GetToolResultText(status)).Voyage!;
+                Voyage persisted = JsonHelper.Deserialize<VoyageProgress>(GetToolResultText(status)).Voyage!;
                 AssertTrue(persisted.ApprovalOptions!.ApproveAll);
                 AssertEqual(40, persisted.ApprovalOptions.TimeoutSeconds);
                 string fleetId = await RestCreateFleetAsync(mcp, session, "ApprovalFleet").ConfigureAwait(false);
@@ -206,15 +206,15 @@ namespace Test.Shared.Suites.E2E
             cases.Add(CaseAsync("tools_list_contains_all_expected_tool_names", "ToolsList_ContainsAllExpectedToolNames", TestTags.Positive, async () =>
             {
                 E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this);
-                HttpClient mcpClient = fx.McpClient;
-                string sessionId = await InitMcpSessionAsync(mcpClient);
-
-                JsonElement result = await SendMcpRequestAsync(mcpClient, sessionId, "tools/list", new { }).ConfigureAwait(false);
-                JsonElement tools = result.GetProperty("tools");
                 List<string> toolNames = new List<string>();
-                foreach (JsonElement tool in tools.EnumerateArray())
+                Dictionary<string, string> headers = new Dictionary<string, string> { ["X-Api-Key"] = fx.ApiKey };
+                using (Armada.Runtimes.Mcp.McpToolClient client = new Armada.Runtimes.Mcp.McpToolClient("http://127.0.0.1:" + fx.McpPort + "/mcp", null, headers, null, 60))
                 {
-                    toolNames.Add(tool.GetProperty("name").GetString()!);
+                    // tools/list is paginated (100 per page); the client follows nextCursor so a tool on a later page
+                    // is not reported missing when the catalog grows.
+                    await client.InitializeAsync().ConfigureAwait(false);
+                    foreach (Armada.Runtimes.Mcp.McpRemoteTool tool in await client.ListToolsAsync().ConfigureAwait(false))
+                        toolNames.Add(tool.Name);
                 }
 
                 string[] expected = new string[]
@@ -257,7 +257,9 @@ namespace Test.Shared.Suites.E2E
                     "cancel_merge",
                     "process_merge_queue",
                     "get_release",
-                    "create_release"
+                    "create_release",
+                    "usage_status",
+                    "capture_captain_usage"
                 };
 
                 foreach (string name in expected)
@@ -666,9 +668,9 @@ namespace Test.Shared.Suites.E2E
                     }
                 }).ConfigureAwait(false);
                 AssertToolResultValid(reorderResult);
-                List<Objective> reordered = JsonHelper.Deserialize<List<Objective>>(GetToolResultText(reorderResult));
-                AssertEqual(1, reordered.Count);
-                AssertEqual(5, reordered[0].Rank);
+                ObjectiveReorderResult reordered = JsonHelper.Deserialize<ObjectiveReorderResult>(GetToolResultText(reorderResult));
+                AssertEqual(1, reordered.Updated);
+                AssertEqual(5, reordered.Items[0].Rank);
 
                 JsonElement getResult = await CallToolAsync(mcpClient, sessionId, "get_backlog_item", new
                 {
@@ -757,12 +759,14 @@ namespace Test.Shared.Suites.E2E
                 AssertToolResultValid(result);
                 Voyage voyage = JsonHelper.Deserialize<Voyage>(GetToolResultText(result));
                 AssertTrue(voyage.IsEvaluation, "dispatch reply flagged");
-                VoyageDetailResponse detail = JsonHelper.Deserialize<VoyageDetailResponse>(GetToolResultText(await CallToolAsync(mcpClient, sessionId, "voyage_status", new { voyageId = voyage.Id, summary = false, includeMissions = true }).ConfigureAwait(false)));
+                VoyageProgress detail = JsonHelper.Deserialize<VoyageProgress>(GetToolResultText(await CallToolAsync(mcpClient, sessionId, "voyage_status", new { voyageId = voyage.Id, summary = false }).ConfigureAwait(false)));
                 AssertTrue(detail.Voyage!.IsEvaluation, "persisted voyage flagged");
                 JsonElement summaryStatus = await CallToolAsync(mcpClient, sessionId, "voyage_status", new { voyageId = voyage.Id }).ConfigureAwait(false);
-                AssertTrue(JsonHelper.Deserialize<VoyageDetailResponse>(GetToolResultText(summaryStatus)).Voyage!.IsEvaluation, "the summary-mode voyage carries the flag");
-                AssertEqual(2, detail.Missions!.Count, "both missions created");
-                AssertTrue(detail.Missions.All(m => m.IsEvaluation), "every mission inherits the voyage flag");
+                AssertTrue(JsonHelper.Deserialize<VoyageProgress>(GetToolResultText(summaryStatus)).Voyage!.IsEvaluation, "the summary-mode voyage carries the flag");
+                AssertEqual(2, detail.TotalMissions, "both missions created");
+                List<Mission> evalMissions = await VoyageDetailView.ReadMissionsAsync(fx.AuthClient, voyage.Id).ConfigureAwait(false);
+                AssertEqual(2, evalMissions.Count, "both missions listed through the paged missions read");
+                AssertTrue(evalMissions.All(m => m.IsEvaluation), "every mission inherits the voyage flag");
 
                 JsonElement added = await CallToolAsync(mcpClient, sessionId, "create_mission", new { title = "Added", description = "x", vesselId = vesselId, voyageId = voyage.Id }).ConfigureAwait(false);
                 AssertToolResultValid(added);
@@ -777,9 +781,9 @@ namespace Test.Shared.Suites.E2E
                     missions = new[] { new { title = "Prod A", description = "Desc A" } }
                 }).ConfigureAwait(false);
                 Voyage prod = JsonHelper.Deserialize<Voyage>(GetToolResultText(normal));
-                VoyageDetailResponse prodDetail = JsonHelper.Deserialize<VoyageDetailResponse>(GetToolResultText(await CallToolAsync(mcpClient, sessionId, "voyage_status", new { voyageId = prod.Id, summary = false, includeMissions = true }).ConfigureAwait(false)));
+                VoyageProgress prodDetail = JsonHelper.Deserialize<VoyageProgress>(GetToolResultText(await CallToolAsync(mcpClient, sessionId, "voyage_status", new { voyageId = prod.Id, summary = false }).ConfigureAwait(false)));
                 AssertFalse(prodDetail.Voyage!.IsEvaluation, "a normal dispatch is not evaluation");
-                AssertTrue(prodDetail.Missions!.All(m => !m.IsEvaluation), "normal missions are not evaluation");
+                AssertTrue((await VoyageDetailView.ReadMissionsAsync(fx.AuthClient, prod.Id).ConfigureAwait(false)).All(m => !m.IsEvaluation), "normal missions are not evaluation");
                 JsonElement plain = await CallToolAsync(mcpClient, sessionId, "create_mission", new { title = "Plain", description = "x", vesselId = vesselId }).ConfigureAwait(false);
                 AssertFalse(Armada.Client.Models.MissionDispatchResult.Parse(GetToolResultText(plain))!.Mission!.IsEvaluation, "create_mission defaults to production");
             }));
@@ -1020,8 +1024,8 @@ namespace Test.Shared.Suites.E2E
                 string text = GetToolResultText(result);
                 FleetDetailResponse data = JsonHelper.Deserialize<FleetDetailResponse>(text);
                 AssertNotNull(data.Fleet);
-                AssertNotNull(data.Vessels);
-                AssertTrue(data.Vessels!.Count >= 2);
+                AssertTrue(data.VesselCount >= 2, "vessel count covers both vessels");
+                AssertFalse(text.Contains("\"vessels\"", StringComparison.OrdinalIgnoreCase), "vessels are not embedded in get_fleet");
             }));
 
             cases.Add(CaseAsync("armada_add_vessel_creates_vessel", "ArmadaAddVessel_CreatesVessel", TestTags.Positive, async () =>
@@ -1321,7 +1325,7 @@ namespace Test.Shared.Suites.E2E
                 // Verify via MCP tool instead of REST (different ports)
                 JsonElement getResult = await CallToolAsync(mcpClient, sessionId, "voyage_status", new { voyageId = voyageId }).ConfigureAwait(false);
                 string getBody = GetToolResultText(getResult);
-                VoyageDetailResponse voyageResult = JsonHelper.Deserialize<VoyageDetailResponse>(getBody);
+                VoyageProgress voyageResult = JsonHelper.Deserialize<VoyageProgress>(getBody);
                 AssertEqual("Cancelled", voyageResult.Voyage!.Status.ToString());
             }));
 
@@ -2259,17 +2263,9 @@ namespace Test.Shared.Suites.E2E
                 await CallToolAsync(mcpClient, sessionId, "cancel_voyage", new { voyageId = voyageId }).ConfigureAwait(false);
 
                 // Also cancel any InProgress missions individually (cancel_voyage only cancels Pending/Assigned)
-                JsonElement statusResult = await CallToolAsync(mcpClient, sessionId, "voyage_status", new
+                List<Mission> purgeMissions = await VoyageDetailView.ReadMissionsAsync(fx.AuthClient, voyageId).ConfigureAwait(false);
                 {
-                    voyageId = voyageId,
-                    summary = false,
-                    includeMissions = true
-                }).ConfigureAwait(false);
-                string statusText = GetToolResultText(statusResult);
-                VoyageDetailResponse detail = JsonHelper.Deserialize<VoyageDetailResponse>(statusText);
-                if (detail.Missions != null)
-                {
-                    foreach (Mission m in detail.Missions)
+                    foreach (Mission m in purgeMissions)
                     {
                         if (m.Status == Armada.Core.Enums.MissionStatusEnum.InProgress ||
                             m.Status == Armada.Core.Enums.MissionStatusEnum.Assigned)
@@ -2539,7 +2535,7 @@ namespace Test.Shared.Suites.E2E
                 // Verify via MCP tool instead of REST (different ports)
                 JsonElement getResult = await CallToolAsync(mcpClient, sessionId, "voyage_status", new { voyageId = voyageId }).ConfigureAwait(false);
                 string getBody = GetToolResultText(getResult);
-                VoyageDetailResponse voyageData = JsonHelper.Deserialize<VoyageDetailResponse>(getBody);
+                VoyageProgress voyageData = JsonHelper.Deserialize<VoyageProgress>(getBody);
                 AssertEqual(voyageId, voyageData.Voyage!.Id);
             }));
 
@@ -2789,7 +2785,7 @@ namespace Test.Shared.Suites.E2E
                 AssertNull(JsonShape.TopLevelProperty(text, "Missions"), "Summary mode should not include a Missions property");
             }));
 
-            cases.Add(CaseAsync("armada_voyage_status_non_summary_with_missions_returns_missions_array", "ArmadaVoyageStatus_NonSummaryWithMissions_ReturnsMissionsArray", TestTags.Positive, async () =>
+            cases.Add(CaseAsync("armada_voyage_status_include_missions_is_rejected", "ArmadaVoyageStatus_IncludeMissions_IsRejectedWithReplacement", TestTags.Negative, async () =>
             {
                 E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this);
                 HttpClient mcpClient = fx.McpClient;
@@ -2806,14 +2802,12 @@ namespace Test.Shared.Suites.E2E
                 }).ConfigureAwait(false);
                 AssertToolResultValid(result);
                 string text = GetToolResultText(result);
-                McpVoyageStatusResult status = JsonHelper.Deserialize<McpVoyageStatusResult>(text);
-                AssertNotNull(status.Missions, "Non-summary with includeMissions should have a Missions array");
-                AssertEqual(1, status.Missions!.Count, "the voyage's one mission");
-                AssertEqual(voyageId, status.Missions[0].VoyageId, "mission belongs to the voyage");
-                AssertEqual("VoyageMission1", status.Missions[0].Title, "mission title");
+                McpToolResultProbe probe = McpToolResultProbe.FromText(text);
+                AssertEqual(Armada.Core.Enums.McpToolErrorCodeEnum.InvalidArgument, probe.ErrorCode, "includeMissions is rejected: " + text);
+                AssertContains("enumerate", probe.Error ?? "", "the error names the paged replacement");
             }));
 
-            cases.Add(CaseAsync("armada_voyage_status_non_summary_with_description_returns_mission_description", "ArmadaVoyageStatus_NonSummaryWithDescription_ReturnsMissionDescription", TestTags.Positive, async () =>
+            cases.Add(CaseAsync("armada_voyage_status_non_summary_returns_counts_without_missions", "ArmadaVoyageStatus_NonSummary_ReturnsCountsWithoutMissions", TestTags.Positive, async () =>
             {
                 E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this);
                 HttpClient mcpClient = fx.McpClient;
@@ -2822,19 +2816,45 @@ namespace Test.Shared.Suites.E2E
                 string fleetId = await RestCreateFleetAsync(mcpClient, sessionId, "VoyDescFleet").ConfigureAwait(false);
                 string vesselId = await RestCreateVesselAsync(mcpClient, sessionId, fleetId, "VoyDescVessel").ConfigureAwait(false);
                 string voyageId = await RestCreateVoyageAsync(mcpClient, sessionId, vesselId).ConfigureAwait(false);
-                JsonElement result = await CallToolAsync(mcpClient, sessionId, "voyage_status", new
-                {
-                    voyageId = voyageId,
-                    summary = false,
-                    includeMissions = true,
-                    includeDescription = true
-                }).ConfigureAwait(false);
+                JsonElement result = await CallToolAsync(mcpClient, sessionId, "voyage_status", new { voyageId = voyageId, summary = false }).ConfigureAwait(false);
                 AssertToolResultValid(result);
                 string text = GetToolResultText(result);
                 McpVoyageStatusResult status = JsonHelper.Deserialize<McpVoyageStatusResult>(text);
-                AssertNotNull(status.Missions, "Should have a Missions array");
-                AssertEqual(1, status.Missions!.Count, "the voyage's one mission");
-                AssertEqual("Desc1", status.Missions[0].Description, "Missions include the Description when includeDescription=true");
+                AssertEqual(voyageId, status.Voyage?.Id, "full voyage returned");
+                AssertEqual(1, status.TotalMissions, "the voyage's one mission is counted");
+                AssertEqual(1, status.MissionCountsByStatus?.Values.Sum() ?? 0, "counts by status cover it");
+                AssertNull(status.Missions, "missions are never embedded");
+
+                // The missions themselves come from enumerate with voyageId.
+                JsonElement page = await CallToolAsync(mcpClient, sessionId, "enumerate", new { entityType = "missions", voyageId = voyageId, pageSize = 10 }).ConfigureAwait(false);
+                AssertContains("VoyageMission1", GetToolResultText(page), "enumerate lists the voyage's mission");
+            }));
+
+            cases.Add(CaseAsync("armada_list_voyage_progress_pages_active_voyages", "ArmadaListVoyageProgress_PagesActiveVoyages", TestTags.Positive, async () =>
+            {
+                E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this);
+                HttpClient mcpClient = fx.McpClient;
+                string sessionId = await InitMcpSessionAsync(mcpClient);
+
+                string fleetId = await RestCreateFleetAsync(mcpClient, sessionId, "VoyProgressFleet").ConfigureAwait(false);
+                string vesselId = await RestCreateVesselAsync(mcpClient, sessionId, fleetId, "VoyProgressVessel").ConfigureAwait(false);
+                await RestCreateVoyageAsync(mcpClient, sessionId, vesselId).ConfigureAwait(false);
+                await RestCreateVoyageAsync(mcpClient, sessionId, vesselId).ConfigureAwait(false);
+
+                EnumerationResult<VoyageProgress> first = JsonHelper.Deserialize<EnumerationResult<VoyageProgress>>(GetToolResultText(await CallToolAsync(mcpClient, sessionId, "list_voyage_progress", new { pageNumber = 1, pageSize = 1 }).ConfigureAwait(false)));
+                AssertTrue(first.TotalRecords >= 2, "both active voyages counted");
+                AssertEqual(1, first.Objects.Count, "one per page");
+                AssertTrue(first.TotalPages >= 2, "more than one page");
+                EnumerationResult<VoyageProgress> second = JsonHelper.Deserialize<EnumerationResult<VoyageProgress>>(GetToolResultText(await CallToolAsync(mcpClient, sessionId, "list_voyage_progress", new { pageNumber = 2, pageSize = 1 }).ConfigureAwait(false)));
+                AssertEqual(1, second.Objects.Count);
+                AssertTrue(first.Objects[0].Voyage.Id != second.Objects[0].Voyage.Id, "pages do not overlap");
+                AssertTrue(first.Objects.Concat(second.Objects).All(p => p.Voyage.Status == Armada.Core.Enums.VoyageStatusEnum.Open || p.Voyage.Status == Armada.Core.Enums.VoyageStatusEnum.InProgress), "only active voyages");
+                EnumerationResult<VoyageProgress> past = JsonHelper.Deserialize<EnumerationResult<VoyageProgress>>(GetToolResultText(await CallToolAsync(mcpClient, sessionId, "list_voyage_progress", new { pageNumber = 100000, pageSize = 1000 }).ConfigureAwait(false)));
+                AssertEqual(0, past.Objects.Count, "past the end is empty");
+                AssertEqual(first.TotalRecords, past.TotalRecords, "accurate total past the end");
+
+                McpToolResultProbe bad = McpToolResultProbe.FromText(GetToolResultText(await CallToolAsync(mcpClient, sessionId, "list_voyage_progress", new { status = "Sideways" }).ConfigureAwait(false)));
+                AssertEqual(Armada.Core.Enums.McpToolErrorCodeEnum.InvalidArgument, bad.ErrorCode, "unknown status rejected");
             }));
 
             cases.Add(CaseAsync("all_tools_armada_process_merge_queue_executes", "AllTools_ArmadaProcessMergeQueue_Executes", TestTags.Positive, async () =>

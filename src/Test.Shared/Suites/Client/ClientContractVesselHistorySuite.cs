@@ -189,7 +189,7 @@ namespace Test.Shared.Suites.Client
 
                 HelmCliRun missing = await HelmCliHarness.RunCapturedAsync(Args(new[] { "vessel", "history", "no-such-vessel-" + ClientContract.Suffix() }, target)).ConfigureAwait(false);
                 AssertEqual(1, missing.ExitCode);
-                AssertContains("Vessel not found", missing.Output);
+                AssertContains("Vessel not found", missing.StandardError, "errors are on stderr");
             }));
 
             return new TestSuiteDescriptor(suiteId: Suite, displayName: "Armada.Client contract: vessel history (live server, CLI)", cases: cases);

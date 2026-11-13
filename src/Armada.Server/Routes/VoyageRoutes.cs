@@ -117,6 +117,35 @@ namespace Armada.Server.Routes
                 .WithSummary("Enumerate voyages")
                 .WithDescription("Paginated enumeration of voyages with optional filtering and sorting.")
                 .WithRequestBody(OpenApiJson.BodyFor<EnumerationQuery>("Enumeration query", false))
+                .WithResponse(200, OpenApiJson.For<EnumerationResult<Voyage>>("Paginated voyage list"))
+                .WithSecurity("ApiKey"));
+
+            app.Post<EnumerationQuery>("/api/v1/voyages/progress/enumerate", async (ApiRequest req) =>
+            {
+                AuthContext ctx = await authenticate(req.Http).ConfigureAwait(false);
+                if (!authz.IsAuthorized(ctx, req.Http.Request.Method.ToString(), req.Http.Request.Url.RawWithoutQuery))
+                {
+                    req.Http.Response.StatusCode = ctx.IsAuthenticated ? 403 : 401;
+                    return new ApiErrorResponse { Error = ctx.IsAuthenticated ? ApiResultEnum.Forbidden : ApiResultEnum.NotAuthorized, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
+                }
+                EnumerationQuery query = EnumerationRequestReader.Read(req, _jsonOptions);
+                try
+                {
+                    return await VoyageProgressReader.EnumerateAsync(_database, ctx, query).ConfigureAwait(false);
+                }
+                catch (ArgumentException ex) when (!(ex is CollectionLimitExceededException))
+                {
+                    req.Http.Response.StatusCode = 400;
+                    return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = ex.Message };
+                }
+            },
+            api => api
+                .WithTag("Voyages")
+                .WithSummary("Enumerate voyage progress")
+                .WithDescription("One page of voyages with mission counts (VoyageProgress), paged in the database. With no status filter the view is the active voyages: InProgress first, then Open, newest first within each (the voyages the status snapshot counts in ActiveVoyages). A status filter selects one voyage status. Paging and filters come from the JSON body (EnumerationQuery) or the querystring (pageNumber, pageSize 1 to 1000, default 10, status, order). The missions of a voyage are read with POST /api/v1/missions/enumerate and voyageId.")
+                .WithRequestBody(OpenApiJson.BodyFor<EnumerationQuery>("Paging and filters", false))
+                .WithResponse(200, OpenApiJson.For<EnumerationResult<VoyageProgress>>("One page of voyage progress"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
                 .WithSecurity("ApiKey"));
 
             app.Post<VoyageRequest>("/api/v1/voyages", async (ApiRequest req) =>
@@ -129,14 +158,19 @@ namespace Armada.Server.Routes
                 }
                 VoyageRequest voyageReq = JsonSerializer.Deserialize<VoyageRequest>(req.Http.Request.DataAsString, _jsonOptions)
                     ?? throw new InvalidOperationException("Request body could not be deserialized as VoyageRequest.");
-                try { voyageReq.ApprovalOptions?.ValidateFor(ctx); }
+                try
+                {
+                    voyageReq.ApprovalOptions?.ValidateFor(ctx);
+                    CollectionLimits.RequireRequestItems(voyageReq.Missions, "Missions");
+                    CollectionLimits.RequireConfigItems(voyageReq.SelectedPlaybooks, "SelectedPlaybooks");
+                }
                 catch (Exception ex) when (RouteErrorMapper.IsMapped(ex)) { return RouteErrorMapper.ToResponse(req, ex); }
                 List<MissionDescription> missions = new List<MissionDescription>();
                 if (voyageReq.Missions != null)
                 {
                     foreach (MissionRequest m in voyageReq.Missions)
                     {
-                        missions.Add(new MissionDescription(m.Title, m.Description) { Tier = m.Tier, RequestedCaptainId = m.RequestedCaptainId });
+                        missions.Add(new MissionDescription(m.Title, m.Description) { Tier = m.Tier, RequestedCaptainId = m.RequestedCaptainId, Key = m.Key, ParentKey = m.ParentKey, BranchStrategy = m.BranchStrategy, OwnedPaths = m.OwnedPaths });
                     }
                 }
 
@@ -183,15 +217,19 @@ namespace Armada.Server.Routes
                         ? MissionService.SerializeCaptainOverrides(voyageReq.CaptainAssignments)
                         : null;
 
-                    voyage = await _admiral.DispatchVoyageAsync(
-                        voyageReq.Title,
-                        voyageReq.Description,
-                        voyageReq.VesselId,
-                        missions,
-                        pipelineId,
-                        voyageReq.SelectedPlaybooks,
-                        overridesJson,
-                        voyageReq.LandingMode, approvalOptions: voyageReq.ApprovalOptions, isEvaluation: voyageReq.IsEvaluation).ConfigureAwait(false);
+                    try
+                    {
+                        voyage = await _admiral.DispatchVoyageAsync(
+                            voyageReq.Title,
+                            voyageReq.Description,
+                            voyageReq.VesselId,
+                            missions,
+                            pipelineId,
+                            voyageReq.SelectedPlaybooks,
+                            overridesJson,
+                            voyageReq.LandingMode, approvalOptions: voyageReq.ApprovalOptions, isEvaluation: voyageReq.IsEvaluation).ConfigureAwait(false);
+                    }
+                    catch (ArgumentException ex) { return RouteErrorMapper.ToResponse(req, ex); }
                 }
 
                 if (!String.IsNullOrWhiteSpace(voyageReq.ObjectiveId))
@@ -213,7 +251,7 @@ namespace Armada.Server.Routes
             api => api
                 .WithTag("Voyages")
                 .WithSummary("Create a voyage")
-                .WithDescription("Creates a new voyage with optional missions. Missions are automatically dispatched to the target vessel.")
+                .WithDescription("Creates a new voyage with optional missions. Missions are automatically dispatched to the target vessel. A mission can name a Key, and a later mission can name it as ParentKey to become its child (it starts once the parent's last stage finishes; BranchStrategy sets whether it continues or forks the parent's branch). An unknown or later ParentKey returns 400 and creates nothing.")
                 .WithRequestBody(OpenApiJson.BodyFor<VoyageRequest>("Voyage with missions", true))
                 .WithResponse(201, OpenApiJson.For<Voyage>("Created voyage"))
                 .WithResponse(400, OpenApiResponseMetadata.BadRequest())
@@ -236,31 +274,13 @@ namespace Armada.Server.Routes
                         : await _database.Voyages.ReadAsync(ctx.TenantId!, ctx.UserId!, id).ConfigureAwait(false);
                 if (voyage == null) { req.Http.Response.StatusCode = 404; return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Voyage not found" }; }
                 voyage.SelectedPlaybooks = await _database.Playbooks.GetVoyageSelectionsAsync(id).ConfigureAwait(false);
-                List<Mission> missions = ctx.IsAdmin
-                    ? await _database.Missions.EnumerateByVoyageAsync(id).ConfigureAwait(false)
-                    : await _database.Missions.EnumerateByVoyageAsync(ctx.TenantId!, id).ConfigureAwait(false);
-                foreach (Mission mission in missions)
-                {
-                    mission.PlaybookSnapshots = await _database.Playbooks.GetMissionSnapshotsAsync(mission.Id).ConfigureAwait(false);
-                    if (mission.Status == MissionStatusEnum.Pending && _missionService != null)
-                    {
-                        try
-                        {
-                            mission.AssignmentBlocker = await _missionService.GetAssignmentBlockerAsync(mission).ConfigureAwait(false);
-                        }
-                        catch (Exception ex)
-                        {
-                            _logging.Warn("[VoyageRoutes] could not compute the assignment blocker for mission " + mission.Id + ": " + ex.Message);
-                        }
-                    }
-                }
-                return (object)new { Voyage = voyage, Missions = missions };
+                return (object)await VoyageProgressReader.ReadAsync(_database, voyage).ConfigureAwait(false);
             },
             api => api
-                .WithResponse(200, OpenApiResponseMetadata.Create("Successful response"))
+                .WithResponse(200, OpenApiJson.For<VoyageProgress>("The voyage with mission counts"))
                 .WithTag("Voyages")
                 .WithSummary("Get a voyage")
-                .WithDescription("Returns a voyage and all its associated missions. Pending missions carry AssignmentBlocker, the server's explanation of why no captain has taken them yet.")
+                .WithDescription("Returns a voyage with counts of its missions (VoyageProgress: TotalMissions, CompletedMissions, FailedMissions, InProgressMissions, MissionCountsByStatus, VesselId, VesselCount). The missions are not embedded: read them one page at a time with GET /api/v1/missions?voyageId= or POST /api/v1/missions/enumerate with VoyageId; a Pending mission's AssignmentBlocker comes from GET /api/v1/missions/{id}.")
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Voyage ID (vyg_ prefix)"))
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())
                 .WithSecurity("ApiKey"));
@@ -280,51 +300,24 @@ namespace Armada.Server.Routes
                         ? await _database.Voyages.ReadAsync(ctx.TenantId!, id).ConfigureAwait(false)
                         : await _database.Voyages.ReadAsync(ctx.TenantId!, ctx.UserId!, id).ConfigureAwait(false);
                 if (voyage == null) { req.Http.Response.StatusCode = 404; return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Voyage not found" }; }
-                voyage.Status = VoyageStatusEnum.Cancelled;
-                voyage.CompletedUtc = DateTime.UtcNow;
-                voyage.LastUpdateUtc = DateTime.UtcNow;
-                voyage = await _database.Voyages.UpdateAsync(voyage).ConfigureAwait(false);
-                // Cancel all pending/assigned missions in the voyage
-                List<Mission> missions = ctx.IsAdmin
-                    ? await _database.Missions.EnumerateByVoyageAsync(id).ConfigureAwait(false)
-                    : await _database.Missions.EnumerateByVoyageAsync(ctx.TenantId!, id).ConfigureAwait(false);
-                int cancelledCount = 0;
-                List<object> notCancelled = new List<object>();
-                foreach (Mission m in missions)
-                {
-                    if (m.Status == MissionStatusEnum.Pending || m.Status == MissionStatusEnum.Assigned || m.Status == MissionStatusEnum.Blocked)
-                    {
-                        try
-                        {
-                            await _admiral.CancelMissionAsync(m).ConfigureAwait(false);
-                            cancelledCount++;
-                        }
-                        catch (InvalidOperationException ex)
-                        {
-                            notCancelled.Add(new { MissionId = m.Id, Reason = ex.Message });
-                        }
-                    }
-                }
+                VoyageCancelResult cancel = await VoyageCancellation.CancelAsync(_database, _admiral, voyage, ctx.IsAdmin ? null : ctx.TenantId).ConfigureAwait(false);
                 // Broadcast voyage and mission cancellations for dashboard toast notifications
                 if (_webSocketHub != null)
                 {
-                    _webSocketHub.BroadcastVoyageChange(voyage, VoyageStatusEnum.Cancelled.ToString());
-                    foreach (Mission cm in missions)
+                    _webSocketHub.BroadcastVoyageChange(cancel.Voyage, VoyageStatusEnum.Cancelled.ToString());
+                    foreach (Mission cm in cancel.Cancelled)
                     {
-                        if (cm.Status == MissionStatusEnum.Cancelled)
-                        {
-                            _webSocketHub.BroadcastMissionChange(cm, MissionStatusEnum.Cancelled.ToString());
-                        }
+                        _webSocketHub.BroadcastMissionChange(cm, MissionStatusEnum.Cancelled.ToString());
                     }
                 }
 
-                return (object)new { Voyage = voyage, CancelledMissions = cancelledCount, NotCancelled = notCancelled };
+                return (object)cancel;
             },
             api => api
-                .WithResponse(200, OpenApiResponseMetadata.Create("Successful response"))
+                .WithResponse(200, OpenApiJson.For<VoyageCancelResult>("The cancelled voyage with counts"))
                 .WithTag("Voyages")
                 .WithSummary("Cancel a voyage")
-                .WithDescription("Cancels a voyage and all its pending/assigned missions.")
+                .WithDescription("Cancels a voyage and its Pending, Assigned, and Blocked missions. Returns the voyage with CancelledMissions and NotCancelledMissions counts (and FirstNotCancelledReason); which missions remain is read through the missions enumeration filtered by voyageId and status.")
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Voyage ID (vyg_ prefix)"))
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())
                 .WithSecurity("ApiKey"));
@@ -403,6 +396,8 @@ namespace Armada.Server.Routes
                 DeleteMultipleRequest? body = JsonSerializer.Deserialize<DeleteMultipleRequest>(req.Http.Request.DataAsString, _jsonOptions);
                 if (body == null || body.Ids == null || body.Ids.Count == 0)
                     { req.Http.Response.StatusCode = 400; return (object)new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Ids is required and must not be empty" }; }
+                try { body.RequireWithinLimit(); }
+                catch (CollectionLimitExceededException limit) { return RouteErrorMapper.LimitExceeded(req, limit); }
 
                 DeleteMultipleResult result = new DeleteMultipleResult();
                 foreach (string id in body.Ids)
@@ -453,7 +448,7 @@ namespace Armada.Server.Routes
             api => api
                 .WithTag("Voyages")
                 .WithSummary("Batch delete multiple voyages")
-                .WithDescription("Permanently deletes multiple voyages and their associated missions from the database by ID. Voyages that are Open/InProgress or have active missions are skipped. Returns a summary of deleted and skipped entries. This cannot be undone.")
+                .WithDescription("Permanently deletes multiple voyages and their associated missions from the database by ID (at most 1000 ids; more is a 400 with Data.Code CollectionLimitExceeded). Voyages that are Open/InProgress or have active missions are skipped. Returns a summary of deleted and skipped entries. This cannot be undone.")
                 .WithRequestBody(OpenApiJson.BodyFor<DeleteMultipleRequest>("List of voyage IDs to delete"))
                 .WithResponse(200, OpenApiJson.For<DeleteMultipleResult>("Delete result summary"))
                 .WithResponse(400, OpenApiResponseMetadata.BadRequest())

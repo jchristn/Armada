@@ -19,14 +19,14 @@ namespace Armada.Helm.Commands
         /// Refresh interval in seconds.
         /// </summary>
         [Description("Refresh interval in seconds (default: 5)")]
-        [CommandOption("--interval|-i")]
+        [CommandOption("--interval|-i <SECONDS>")]
         public int? Interval { get; set; }
 
         /// <summary>
         /// Filter to a specific captain.
         /// </summary>
         [Description("Filter to a specific captain")]
-        [CommandOption("--captain|-c")]
+        [CommandOption("--captain|-c <CAPTAIN>")]
         public string? Captain { get; set; }
     }
 }

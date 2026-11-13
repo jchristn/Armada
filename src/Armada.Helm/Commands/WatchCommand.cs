@@ -55,8 +55,9 @@ namespace Armada.Helm.Commands
                             Task<EnumerationResult<Vessel>?> vesselsTask = GetAsync<EnumerationResult<Vessel>>("/api/v1/vessels");
                             Task<EnumerationResult<Voyage>?> voyagesTask = GetAsync<EnumerationResult<Voyage>>("/api/v1/voyages");
                             Task<EnumerationResult<ArmadaEvent>?> eventsTask = GetAsync<EnumerationResult<ArmadaEvent>>("/api/v1/events?limit=10");
+                            Task<EnumerationResult<VoyageProgress>?> progressTask = PostAsync<EnumerationResult<VoyageProgress>>("/api/v1/voyages/progress/enumerate", new EnumerationQuery { PageSize = 10 });
 
-                            await Task.WhenAll(statusTask, captainsTask, missionsTask, vesselsTask, voyagesTask, eventsTask).ConfigureAwait(false);
+                            await Task.WhenAll(statusTask, captainsTask, missionsTask, vesselsTask, voyagesTask, eventsTask, progressTask).ConfigureAwait(false);
 
                             ArmadaStatus? status = statusTask.Result;
                             if (status == null)
@@ -71,6 +72,7 @@ namespace Armada.Helm.Commands
                             List<Vessel> vessels = vesselsTask.Result?.Objects ?? new List<Vessel>();
                             List<Voyage> voyages = voyagesTask.Result?.Objects ?? new List<Voyage>();
                             List<ArmadaEvent> events = eventsTask.Result?.Objects ?? new List<ArmadaEvent>();
+                            EnumerationResult<VoyageProgress>? progressPage = progressTask.Result;
 
                             // Build lookup dictionaries
                             Dictionary<string, Vessel> vesselLookup = new Dictionary<string, Vessel>();
@@ -85,7 +87,7 @@ namespace Armada.Helm.Commands
                             Dictionary<string, Mission> missionLookup = new Dictionary<string, Mission>();
                             foreach (Mission m in missions) missionLookup[m.Id] = m;
 
-                            Table dashboard = BuildDashboard(status, settings.Captain, captains, missions, events, vesselLookup, voyageLookup, captainLookup, missionLookup);
+                            Table dashboard = BuildDashboard(status, settings.Captain, captains, missions, events, vesselLookup, voyageLookup, captainLookup, missionLookup, progressPage);
                             ctx.UpdateTarget(dashboard);
 
                             // Detect new completions and failures for notifications
@@ -168,7 +170,8 @@ namespace Armada.Helm.Commands
             Dictionary<string, Vessel> vesselLookup,
             Dictionary<string, Voyage> voyageLookup,
             Dictionary<string, Captain> captainLookup,
-            Dictionary<string, Mission> missionLookup)
+            Dictionary<string, Mission> missionLookup,
+            EnumerationResult<VoyageProgress>? progressPage)
         {
             Table outer = new Table();
             outer.Border(TableBorder.Heavy);
@@ -263,11 +266,13 @@ namespace Armada.Helm.Commands
             }
 
             // Voyage progress (if any active)
-            List<VoyageProgress> activeVoyages = status.Voyages.FindAll(vp => vp.Voyage != null &&
+            List<VoyageProgress> activeVoyages = (progressPage?.Objects ?? new List<VoyageProgress>()).FindAll(vp => vp.Voyage != null &&
                 (vp.Voyage.Status == VoyageStatusEnum.InProgress || vp.Voyage.Status == VoyageStatusEnum.Open));
             if (activeVoyages.Count > 0)
             {
                 outer.AddRow(new Markup(""));
+                if (progressPage != null && progressPage.TotalRecords > activeVoyages.Count)
+                    outer.AddRow(new Markup($"  [dim]Active voyages: {activeVoyages.Count} of {progressPage.TotalRecords}[/]"));
                 foreach (VoyageProgress vp in activeVoyages)
                 {
                     string title = Markup.Escape(Truncate(vp.Voyage!.Title, 50));
@@ -352,7 +357,7 @@ namespace Armada.Helm.Commands
             {
                 if (captain.State != CaptainStateEnum.Stalled) continue;
 
-                string chain = BuildChain(captain, captain.CurrentMissionId, missionLookup, vesselLookup);
+                string chain = captain.ActiveMissionIds.Count == 0 ? BuildChain(captain, null, missionLookup, vesselLookup) : String.Join("; ", captain.ActiveMissionIds.Select(id => BuildChain(captain, id, missionLookup, vesselLookup)));
                 string heartbeatAge = captain.LastHeartbeatUtc.HasValue
                     ? FormatAge(now - captain.LastHeartbeatUtc.Value)
                     : "never";

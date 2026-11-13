@@ -18,7 +18,7 @@ namespace Test.Shared.Infrastructure
         public static readonly HashSet<string> NonServerExports = new HashSet<string>(StringComparer.Ordinal)
         {
             "ApiError", "apiErrorCode", "apiErrorMessage", "isApiStatus", "setAuthToken", "setOnUnauthorized", "camelizeKeys", "encodeBrowsePath",
-            "configureClient", "getClientBaseUrl"
+            "configureClient", "getClientBaseUrl", "BULK_DELETE_CHUNK", "CLEANUP_KEY_CHUNK", "MAX_WORKSPACE_PAGES", "deleteInChunks"
         };
 
         /// <summary>
@@ -101,7 +101,7 @@ namespace Test.Shared.Infrastructure
 
         /// <summary>
         /// The requests each server-calling api/client.ts export sends, parsed from the URL literals passed to
-        /// get/post/put/del/patch, enumerateFirstPage (a POST), request, proxyRequest, and fetch. String constants and one-line path helpers are expanded; an
+        /// get/post/put/del/patch, enumerateFirstPage and enumeratePage (POSTs), request, proxyRequest, and fetch. String constants and one-line path helpers are expanded; an
         /// interpolated path segment becomes <c>x</c> and an interpolation that is not a whole segment (a query builder)
         /// is dropped. An export that only calls other exports yields no request.
         /// </summary>
@@ -115,7 +115,7 @@ namespace Test.Shared.Infrastructure
                 .ToDictionary(m => m.Groups[1].Value, m => m.Groups[2].Value, StringComparer.Ordinal);
 
             List<Match> exports = Regex.Matches(src, "^export (?:const|async function|function) (\\w+)", RegexOptions.Multiline).ToList();
-            Regex verbCall = new Regex("\\b(get|post|put|del|patch|enumerateFirstPage)\\s*(?:<[^()]*?>)?\\s*\\(\\s*(?:([`'\"])((?:\\\\.|(?!\\2).)*)\\2|(\\w+)\\()", RegexOptions.Singleline);
+            Regex verbCall = new Regex("\\b(get|post|put|del|patch|enumerateFirstPage|enumeratePage)\\s*(?:<[^()]*?>)?\\s*\\(\\s*(?:([`'\"])((?:\\\\.|(?!\\2).)*)\\2|(\\w+)\\()", RegexOptions.Singleline);
             Regex proxyCall = new Regex("(?:proxyRequest|\\brequest)(?:<[^()]*?>)?\\(\\s*'(\\w+)'\\s*,\\s*'([^']*)'");
             Regex fetchCall = new Regex("fetch\\w*\\(\\s*`\\$\\{BASE_URL\\}([^`]*)`\\s*,\\s*\\{\\s*method:\\s*'(\\w+)'");
 
@@ -133,7 +133,7 @@ namespace Test.Shared.Infrastructure
                         : helpers.TryGetValue(m.Groups[4].Value, out string? helper) ? helper : "";
                     // Only a path is a request: res.headers.get('Content-Type') and similar are not.
                     if (url.Length == 0 || !(url.StartsWith("/", StringComparison.Ordinal) || url.StartsWith("${", StringComparison.Ordinal))) continue;
-                    string verb = m.Groups[1].Value == "del" ? "DELETE" : m.Groups[1].Value == "enumerateFirstPage" ? "POST" : m.Groups[1].Value.ToUpperInvariant();
+                    string verb = m.Groups[1].Value == "del" ? "DELETE" : (m.Groups[1].Value == "enumerateFirstPage" || m.Groups[1].Value == "enumeratePage") ? "POST" : m.Groups[1].Value.ToUpperInvariant();
                     string path = NormalizePath(url, constants, helpers);
                     bool hasQuery = url.Contains('?') || System.Text.RegularExpressions.Regex.IsMatch(url, "[^/]\\$\\{[^}]*(?:Query|query)");
                     calls.Add(new DashboardApiCall { Export = name, Method = verb, Path = path, HasQuery = hasQuery });
@@ -154,7 +154,7 @@ namespace Test.Shared.Infrastructure
         /// </summary>
         public static List<string> Events()
         {
-            Regex re = new Regex("'((?:mission|voyage|captain|deployment|objective|incident|planning-session|objective-refinement-session|ask)\\.[a-z][a-z.\\-]*)'");
+            Regex re = new Regex("'((?:mission|voyage|captain|captain-selection|deployment|objective|incident|planning-session|objective-refinement-session|ask)\\.[a-z][a-z.\\-]*)'");
             HashSet<string> found = new HashSet<string>(StringComparer.Ordinal);
             foreach (string file in Directory.EnumerateFiles(Src(), "*.*", SearchOption.AllDirectories))
             {

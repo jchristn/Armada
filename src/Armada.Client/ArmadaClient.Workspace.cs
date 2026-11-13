@@ -30,16 +30,52 @@ namespace Armada.Client
         }
 
         /// <summary>
-        /// Dashboard <c>getWorkspaceTree</c>: GET /api/v1/workspace/vessels/{vesselId}/tree.
+        /// Dashboard <c>getWorkspaceTree</c>: GET /api/v1/workspace/vessels/{vesselId}/tree. One page of one directory
+        /// (directories first, then files); PageNumber, PageSize, TotalPages, and TotalRecords describe the rest. Use
+        /// <see cref="ListWorkspaceDirectoryAsync"/> to read every entry.
+        /// </summary>
+        /// <param name="vesselId">Vessel id.</param>
+        /// <param name="path">Directory, or null for the root.</param>
+        /// <param name="page">Paging (page size 1 to 1000); null is the server default (first page of 10).</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The response.</returns>
+        /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
+        public Task<WorkspaceTreeResult?> GetWorkspaceTreeAsync(string vesselId, string? path, EnumerationQuery? page, CancellationToken token = default)
+        {
+            List<string> parts = new List<string>();
+            if (!String.IsNullOrEmpty(path)) parts.Add("path=" + ArmadaQueryString.EscapePath(path));
+            if (page != null)
+            {
+                parts.Add("pageNumber=" + page.PageNumber);
+                parts.Add("pageSize=" + page.PageSize);
+            }
+
+            return GetAsync<WorkspaceTreeResult>($"/api/v1/workspace/vessels/{E(vesselId)}/tree" + (parts.Count == 0 ? "" : "?" + String.Join("&", parts)), null, token);
+        }
+
+        /// <summary>
+        /// Read every entry of one workspace directory by walking its pages (1000 per page) explicitly.
         /// </summary>
         /// <param name="vesselId">Vessel id.</param>
         /// <param name="path">Directory, or null for the root.</param>
         /// <param name="token">Cancellation token.</param>
-        /// <returns>The response.</returns>
+        /// <returns>Every entry, directories first, then files.</returns>
         /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
-        public Task<WorkspaceTreeResult?> GetWorkspaceTreeAsync(string vesselId, string? path = null, CancellationToken token = default)
+        public async Task<List<WorkspaceTreeEntry>> ListWorkspaceDirectoryAsync(string vesselId, string? path = null, CancellationToken token = default)
         {
-            return GetAsync<WorkspaceTreeResult>($"/api/v1/workspace/vessels/{E(vesselId)}/tree" + (String.IsNullOrEmpty(path) ? "" : "?path=" + ArmadaQueryString.EscapePath(path)), null, token);
+            List<WorkspaceTreeEntry> entries = new List<WorkspaceTreeEntry>();
+            int pageNumber = 1;
+            while (true)
+            {
+                token.ThrowIfCancellationRequested();
+                WorkspaceTreeResult? tree = await GetWorkspaceTreeAsync(vesselId, path, new EnumerationQuery { PageNumber = pageNumber, PageSize = 1000 }, token).ConfigureAwait(false);
+                if (tree == null || tree.Entries == null || tree.Entries.Count == 0) break;
+                entries.AddRange(tree.Entries);
+                if (pageNumber >= tree.TotalPages) break;
+                pageNumber++;
+            }
+
+            return entries;
         }
 
         /// <summary>
@@ -123,14 +159,78 @@ namespace Armada.Client
 
         /// <summary>
         /// Dashboard <c>getWorkspaceChanges</c>: GET `/api/v1/workspace/vessels/${encodeURIComponent(vesselId)}/changes`.
+        /// Branch state and one page of changed files; TotalRecords counts every changed file.
         /// </summary>
         /// <param name="vesselId">vesselId.</param>
+        /// <param name="page">Paging (page size 1 to 1000); null is the server default (first page of 10).</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>The response.</returns>
         /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
-        public Task<WorkspaceChangesResult?> GetWorkspaceChangesAsync(string vesselId, CancellationToken token = default)
+        public Task<WorkspaceChangesResult?> GetWorkspaceChangesAsync(string vesselId, EnumerationQuery? page = null, CancellationToken token = default)
         {
-            return GetAsync<WorkspaceChangesResult>($"/api/v1/workspace/vessels/{E(vesselId)}/changes", null, token);
+            string query = page == null ? "" : "?pageNumber=" + page.PageNumber + "&pageSize=" + page.PageSize;
+            return GetAsync<WorkspaceChangesResult>($"/api/v1/workspace/vessels/{E(vesselId)}/changes" + query, null, token);
+        }
+
+        /// <summary>
+        /// Dashboard <c>listAllWorkspaceChanges</c>: every changed file, read in explicit pages of 1000 (at most 100
+        /// pages); the branch fields come from the first page.
+        /// </summary>
+        /// <param name="vesselId">vesselId.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The changes, or null.</returns>
+        /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
+        public async Task<WorkspaceChangesResult?> ListAllWorkspaceChangesAsync(string vesselId, CancellationToken token = default)
+        {
+            WorkspaceChangesResult? first = await GetWorkspaceChangesAsync(vesselId, new EnumerationQuery { PageNumber = 1, PageSize = 1000 }, token).ConfigureAwait(false);
+            if (first == null) return null;
+            int pages = Math.Min(first.TotalPages, 100);
+            for (int pageNumber = 2; pageNumber <= pages; pageNumber++)
+            {
+                token.ThrowIfCancellationRequested();
+                WorkspaceChangesResult? next = await GetWorkspaceChangesAsync(vesselId, new EnumerationQuery { PageNumber = pageNumber, PageSize = 1000 }, token).ConfigureAwait(false);
+                if (next == null || next.Changes.Count == 0) break;
+                first.Changes.AddRange(next.Changes);
+            }
+
+            return first;
+        }
+
+        /// <summary>
+        /// Dashboard <c>listAllWorkspaceActiveMissions</c>: every active mission on the vessel, read in explicit pages of
+        /// 1000 (at most 100 pages).
+        /// </summary>
+        /// <param name="vesselId">vesselId.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The missions.</returns>
+        /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
+        public async Task<List<WorkspaceActiveMission>> ListAllWorkspaceActiveMissionsAsync(string vesselId, CancellationToken token = default)
+        {
+            List<WorkspaceActiveMission> all = new List<WorkspaceActiveMission>();
+            for (int pageNumber = 1; pageNumber <= 100; pageNumber++)
+            {
+                token.ThrowIfCancellationRequested();
+                EnumerationResult<WorkspaceActiveMission>? result = await ListWorkspaceActiveMissionsAsync(vesselId, new EnumerationQuery { PageNumber = pageNumber, PageSize = 1000 }, token).ConfigureAwait(false);
+                if (result == null || result.Objects == null || result.Objects.Count == 0) break;
+                all.AddRange(result.Objects);
+                if (pageNumber >= result.TotalPages) break;
+            }
+
+            return all;
+        }
+
+        /// <summary>
+        /// Dashboard <c>listWorkspaceActiveMissions</c>: POST `/api/v1/workspace/vessels/${encodeURIComponent(vesselId)}/active-missions/enumerate`.
+        /// One page of the vessel's active missions with their scoped files (the status read carries only ActiveMissionCount).
+        /// </summary>
+        /// <param name="vesselId">vesselId.</param>
+        /// <param name="query">Paging (page size 1 to 1000); null is the first page of 10.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The page.</returns>
+        /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
+        public Task<EnumerationResult<WorkspaceActiveMission>?> ListWorkspaceActiveMissionsAsync(string vesselId, EnumerationQuery? query = null, CancellationToken token = default)
+        {
+            return PostAsync<EnumerationResult<WorkspaceActiveMission>>($"/api/v1/workspace/vessels/{E(vesselId)}/active-missions/enumerate", query ?? new EnumerationQuery(), null, token);
         }
 
         /// <summary>

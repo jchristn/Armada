@@ -3,8 +3,10 @@ import { duplicateDisplayName } from '../lib/duplicates';
 import { defaultInferenceOptions, parseAllowedTools, validateInferenceOptions } from '../lib/inferenceOptions';
 import type { InferenceOptions } from '../types/models';
 import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
-  listModelEndpoints,
+  getModelEndpoint,
+  enumerateModelEndpoints,
   createModelEndpoint,
   createCaptain,
   updateModelEndpoint,
@@ -52,6 +54,7 @@ import {
   type LocalizedText,
 } from '../lib/endpointAuth';
 import { useDeleteProgress } from '../lib/useDeleteProgress';
+import TruncationNote from '../components/shared/TruncationNote';
 
 const PROVIDERS = MODEL_PROVIDERS;
 const KINDS = MODEL_ENDPOINT_KINDS;
@@ -118,11 +121,13 @@ const EP_ENABLED_TIP = 'On: the endpoint is available for use and is health-chec
 
 export default function Endpoints() {
   const { isAdmin, isTenantAdmin, user } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
   const viewer: ScopeViewer = { isAdmin, isTenantAdmin, tenantId: user?.user?.tenantId, userId: user?.user?.id };
   const { t, formatRelativeTime, formatDateTime } = useLocale();
   const { pushToast } = useNotifications();
   const deletion = useDeleteProgress();
   const [endpoints, setEndpoints] = useState<ModelEndpoint[]>([]);
+  const [endpointTotal, setEndpointTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
@@ -186,6 +191,15 @@ export default function Endpoints() {
     setForm((current) => ({ ...current, headers: [...current.headers, newHeaderRow()] }));
   }
 
+  useEffect(() => {
+    const endpointId = searchParams.get('editEndpoint');
+    if (!isAdmin || !endpointId) return;
+    let cancelled = false;
+    getModelEndpoint(endpointId).then(endpoint => { if (!cancelled) openEdit(endpoint); })
+      .catch(() => { if (!cancelled) setError(t('Failed to load endpoint.')); });
+    return () => { cancelled = true; };
+  }, [isAdmin, searchParams]);
+
   function openCreate() {
     setCreateLinkedCaptain(false);
     setCaptainName('');
@@ -196,6 +210,7 @@ export default function Endpoints() {
   }
 
   function openEdit(endpoint: ModelEndpoint) {
+    if (searchParams.has('editEndpoint')) setSearchParams(current => { const next = new URLSearchParams(current); next.delete('editEndpoint'); return next; }, { replace: true });
     setCreateLinkedCaptain(false);
     setCaptainName('');
     setDuplicateSource(null);
@@ -290,8 +305,10 @@ export default function Endpoints() {
   async function load() {
     try {
       setLoading(true);
-      const result = await listModelEndpoints();
-      setEndpoints(result || []);
+      // One bounded page of the largest size; the note above the table says when more endpoints exist.
+      const result = await enumerateModelEndpoints();
+      setEndpoints(result?.objects ?? []);
+      setEndpointTotal(result?.totalRecords ?? (result?.objects?.length ?? 0));
       setError('');
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : t('Failed to load endpoints.'));
@@ -681,7 +698,7 @@ export default function Endpoints() {
               </label>}
             </fieldset>}
             <ScopeSelect viewer={viewer} value={form.scope} onChange={(scope) => setForm({ ...form, scope })} />
-            <label className="checkbox-row" title={t(EP_ENABLED_TIP)}>
+            <label className="checkbox-row" style={{ display: 'flex' }} title={t(EP_ENABLED_TIP)}>
               <input type="checkbox" title={t(EP_ENABLED_TIP)} checked={form.enabled} onChange={(e) => setForm({ ...form, enabled: e.target.checked })} />
               <span>{t('Enabled')}</span>
             </label>
@@ -800,7 +817,7 @@ export default function Endpoints() {
       <div className="playbook-overview-grid">
         <div className="card playbook-overview-card" title={t('All endpoints you can see, enabled and disabled.')}>
           <span>{t('Total Endpoints')}</span>
-          <strong>{endpoints.length}</strong>
+          <strong>{Math.max(endpointTotal, endpoints.length)}</strong>
         </div>
         <div className="card playbook-overview-card" title={t('Endpoints whose latest health check passed.')}>
           <span>{t('Healthy')}</span>
@@ -826,6 +843,7 @@ export default function Endpoints() {
         </div>
       </div>
 
+      <TruncationNote shown={endpoints.length} total={endpointTotal} />
       <DataTable
         tableKey="model-endpoints"
         columns={columns}

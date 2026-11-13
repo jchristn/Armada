@@ -1,7 +1,7 @@
 import { duplicateDisplayName } from '../lib/duplicates';
 import { useEffect, useMemo, useState } from 'react';
 import {
-  listHarbors,
+  enumerateHarbors,
   createHarbor,
   updateHarbor,
   deleteHarbor,
@@ -22,6 +22,7 @@ import { useAutoRefresh } from '../lib/useAutoRefresh';
 import PageHeader from '../components/shared/PageHeader';
 import HarborMetricsPanel from '../components/harbors/HarborMetricsPanel';
 import { useDeleteProgress } from '../lib/useDeleteProgress';
+import TruncationNote from '../components/shared/TruncationNote';
 
 interface HarborForm {
   name: string;
@@ -47,6 +48,7 @@ export default function Harbors() {
   const { pushToast } = useNotifications();
   const deletion = useDeleteProgress();
   const [harbors, setHarbors] = useState<Harbor[]>([]);
+  const [harborTotal, setHarborTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
@@ -115,8 +117,10 @@ export default function Harbors() {
   async function load() {
     try {
       setLoading(true);
-      const result = await listHarbors();
-      setHarbors(result || []);
+      // One bounded page of the largest size; the note below says when more Harbors exist than this view holds.
+      const result = await enumerateHarbors();
+      setHarbors(result?.objects ?? []);
+      setHarborTotal(result?.totalRecords ?? (result?.objects?.length ?? 0));
       setError('');
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : t('Failed to load harbors.'));
@@ -310,7 +314,7 @@ export default function Harbors() {
       <div className="playbook-overview-grid">
         <div className="card playbook-overview-card" title={t('All registered Harbors, connected or not.')}>
           <span>{t('Total Harbors')}</span>
-          <strong>{harbors.length}</strong>
+          <strong>{Math.max(harborTotal, harbors.length)}</strong>
         </div>
         <div className="card playbook-overview-card" title={t('Harbors with an open link and recent heartbeats.')}>
           <span>{t('Connected')}</span>
@@ -339,6 +343,7 @@ export default function Harbors() {
         </div>
       </div>
 
+      <TruncationNote shown={harbors.length} total={harborTotal} />
       <DataTable
         tableKey="harbors"
         columns={columns}

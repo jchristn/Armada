@@ -4,6 +4,7 @@ namespace Armada.Core.Models
     using System.Collections.Generic;
     using System.Text.Json.Serialization;
     using Armada.Core.Enums;
+    using Armada.Core.Services;
 
     /// <summary>
     /// Typed filter, sort, and paging request for vessel health enumeration. Filtering, sorting, and paging all run
@@ -67,6 +68,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// Overall status filter (any of). Empty means no filter. Never null.
         /// </summary>
+        [CollectionBound(16, Reason = "Status filter over VesselHealthStatusEnum; validated by VesselHealthService.EnumerateAsync")]
         public List<VesselHealthStatusEnum> OverallStatus
         {
             get => _OverallStatus;
@@ -76,6 +78,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// Dependency status filter (any of). Empty means no filter. Never null.
         /// </summary>
+        [CollectionBound(16, Reason = "Status filter over VesselHealthStatusEnum; validated by VesselHealthService.EnumerateAsync")]
         public List<VesselHealthStatusEnum> DependencyStatus
         {
             get => _DependencyStatus;
@@ -85,6 +88,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// Test infrastructure status filter (any of). Empty means no filter. Never null.
         /// </summary>
+        [CollectionBound(16, Reason = "Status filter over VesselHealthStatusEnum; validated by VesselHealthService.EnumerateAsync")]
         public List<VesselHealthStatusEnum> TestInfraStatus
         {
             get => _TestInfraStatus;

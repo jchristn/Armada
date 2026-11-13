@@ -142,9 +142,59 @@ namespace Armada.Server.Routes
             api => api
                 .WithTag("Vessels")
                 .WithSummary("Get vessel health")
-                .WithDescription("Returns the vessel's health row (effective statuses), raw findings, outdated or vulnerable dependencies, and overrides.")
+                .WithDescription("Returns the vessel's health row (effective statuses), raw findings, the number of outdated or vulnerable dependencies (DependencyCount), and overrides. Dependency rows are not embedded: page them with GET /api/v1/vessels/{id}/health/dependencies or POST .../health/dependencies/enumerate.")
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Vessel ID (vsl_ prefix)"))
                 .WithResponse(200, OpenApiJson.For<VesselHealthDetail>("Vessel health detail"))
+                .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithSecurity("ApiKey"));
+
+            app.Get("/api/v1/vessels/{id}/health/dependencies", async (ApiRequest req) =>
+            {
+                AuthContext? ctx = await AuthorizeAsync(req, authenticate, authz).ConfigureAwait(false);
+                if (ctx == null) return BuildAuthError(req);
+                EnumerationQuery query = new EnumerationQuery();
+                query.ApplyQuerystringOverrides(key => req.Query.GetValueOrDefault(key));
+                EnumerationResult<VesselDependency>? page = await _Health.EnumerateDependenciesAsync(ctx.TenantId!, req.Parameters["id"], query).ConfigureAwait(false);
+                if (page == null) return NotFound(req);
+                return (object)page;
+            },
+            api => api
+                .WithTag("Vessels")
+                .WithSummary("List vessel dependencies")
+                .WithDescription("One page of the vessel's outdated or vulnerable dependency rows from its last health evaluation, cut in the database and ordered by ecosystem, package name, project path, then id. pageNumber (default 1) and pageSize (1 to 1000, default 10) come from the querystring; out-of-range values are normalized.")
+                .WithParameter(OpenApiParameterMetadata.Path("id", "Vessel ID (vsl_ prefix)"))
+                .WithParameter(OpenApiParameterMetadata.Query("pageNumber", "Page number (default 1)", false))
+                .WithParameter(OpenApiParameterMetadata.Query("pageSize", "Page size, 1 to 1000 (default 10)", false))
+                .WithResponse(200, OpenApiJson.For<EnumerationResult<VesselDependency>>("Dependency rows"))
+                .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithSecurity("ApiKey"));
+
+            app.Post("/api/v1/vessels/{id}/health/dependencies/enumerate", async (ApiRequest req) =>
+            {
+                AuthContext? ctx = await AuthorizeAsync(req, authenticate, authz).ConfigureAwait(false);
+                if (ctx == null) return BuildAuthError(req);
+                EnumerationQuery query;
+                try
+                {
+                    query = EnumerationRequestReader.Read(req, _BodyJsonOptions);
+                }
+                catch (JsonException ex)
+                {
+                    return BadRequest(req, "Request body is not valid: " + ex.Message);
+                }
+
+                EnumerationResult<VesselDependency>? page = await _Health.EnumerateDependenciesAsync(ctx.TenantId!, req.Parameters["id"], query).ConfigureAwait(false);
+                if (page == null) return NotFound(req);
+                return (object)page;
+            },
+            api => api
+                .WithTag("Vessels")
+                .WithSummary("Enumerate vessel dependencies")
+                .WithDescription("POST form of GET /api/v1/vessels/{id}/health/dependencies: the EnumerationQuery (pageNumber, pageSize) comes from the body, and querystring values override it.")
+                .WithParameter(OpenApiParameterMetadata.Path("id", "Vessel ID (vsl_ prefix)"))
+                .WithRequestBody(OpenApiJson.BodyFor<EnumerationQuery>("Paging query", false))
+                .WithResponse(200, OpenApiJson.For<EnumerationResult<VesselDependency>>("Dependency rows"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())
                 .WithSecurity("ApiKey"));
 

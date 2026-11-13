@@ -21,7 +21,6 @@ const api = client as jest.Mocked<typeof client>;
 const STATUS: DashboardStatusData = {
   totalCaptains: 3, idleCaptains: 1, workingCaptains: 1, stalledCaptains: 1, activeVoyages: 1,
   missionsByStatus: { InProgress: 2, Failed: 1 },
-  voyages: [{ voyage: { id: 'vyg_1', title: 'Batch one', status: 'InProgress' }, totalMissions: 4, completedMissions: 1, failedMissions: 1, vesselIds: ['vsl_1'] }],
   recentSignals: [{ id: 'sig_1', type: 'Progress', message: 'Halfway there', createdUtc: '2026-10-07T10:00:00Z' }],
 };
 
@@ -35,6 +34,8 @@ beforeEach(() => {
   mockWindow.height = 844;
   api.getStatus.mockResolvedValue(STATUS as unknown as Awaited<ReturnType<typeof client.getStatus>>);
   api.listMissionSummaries.mockResolvedValue(page(MISSIONS as never[]) as never);
+  // The status snapshot carries only counts; the active voyages come from the paged progress enumeration.
+  api.enumerateVoyageProgress.mockResolvedValue(page([{ voyage: { id: 'vyg_1', title: 'Batch one', status: 'InProgress' }, totalMissions: 4, completedMissions: 1, failedMissions: 1, vesselId: 'vsl_1', vesselCount: 1 }]) as never);
   api.enumerateFleetActionRuns.mockImplementation(async (q) => ({ ...page([]), totalRecords: q?.status === 'Running' ? 2 : 5 }) as never);
   api.getHealth.mockResolvedValue({ status: 'healthy', version: '1.0.0', uptime: '0.01:00:00' });
   api.getVesselHealthSummary.mockResolvedValue({ totalVessels: 2, fail: 1, warn: 0, notEvaluated: 1, outdatedMajorVessels: 0, highOrCriticalVulnerabilityVessels: 1 } as never);

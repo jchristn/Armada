@@ -2,11 +2,14 @@ namespace Armada.Core.Models
 {
     using System;
     using System.Collections.Generic;
+    using System.Text.Json.Serialization;
     using Armada.Core.Enums;
+    using Armada.Core.Services;
 
     /// <summary>
     /// One run of the fixture battery against a captain: the packs, the run count, the seed, the sampling
-    /// settings, the battery version and the full configuration revision, plus per-task results. Battery missions are
+    /// settings, the battery version and the full configuration revision, plus outcome counts (the per-task results are a
+    /// separate paged enumeration). Battery missions are
     /// evaluation work: their stage outcomes are tagged IsEvaluation and never count in production stage outcomes or
     /// scorecards (docs/MODEL_HETEROGENEITY.md, Part 2).
     /// </summary>
@@ -46,6 +49,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// Packs run (identifiers).
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxConfigItems)]
         public List<string> Packs
         {
             get => _Packs;
@@ -177,8 +181,12 @@ namespace Armada.Core.Models
         public DateTime LastUpdateUtc { get; set; } = DateTime.UtcNow;
 
         /// <summary>
-        /// Per-task results (filled by get_battery_run).
+        /// Per-task results, filled only in-process by <c>BatteryRunService.WaitAsync</c> and <c>ReadAsync</c>. Never
+        /// serialized: a run read over REST or MCP does not embed its results (docs/ENUMERATION.md); page them with
+        /// <c>GET /api/v1/battery/runs/{id}/results</c> (or <c>POST .../results/enumerate</c>, MCP
+        /// <c>list_battery_results</c>).
         /// </summary>
+        [JsonIgnore]
         public List<BatteryTaskResult> Results
         {
             get => _Results;

@@ -2,6 +2,7 @@ namespace Armada.Core.Models
 {
     using System;
     using System.Collections.Generic;
+    using Armada.Core.Services;
 
     /// <summary>
     /// The durable, versioned record one stage attempt hands to the next stage (docs/MODEL_HETEROGENEITY.md, 3.1): the
@@ -105,6 +106,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// Numbered findings, in the order the stage reported them.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxConfigItems, Reason = "HandoffArtifactBuilder keeps the first entries and a final marker entry with the omitted count")]
         public List<HandoffFinding> Findings
         {
             get => _Findings;
@@ -114,6 +116,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// Acceptance criteria of the stage's task, as written in its description.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxConfigItems, Reason = "HandoffArtifactBuilder keeps the first entries and a final marker entry with the omitted count")]
         public List<string> AcceptanceCriteria
         {
             get => _AcceptanceCriteria;
@@ -123,6 +126,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// Actions the next stage must take (resolve findings, fix a failing check), most important first.
         /// </summary>
+        [CollectionBound(8, Reason = "HandoffArtifactBuilder adds at most two finding actions, one specification-conflict action and one per check result")]
         public List<string> RequiredActions
         {
             get => _RequiredActions;
@@ -133,6 +137,7 @@ namespace Armada.Core.Models
         /// Results of the mechanical checks run after the stage (passed, failed, skipped with a reason, could not run).
         /// Empty when no check result was recorded.
         /// </summary>
+        [CollectionBound(1, Reason = "One stage check result per stage attempt")]
         public List<StageCheckResult> CheckResults
         {
             get => _CheckResults;
@@ -142,6 +147,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// Commits the stage produced or cited: the produced commit first.
         /// </summary>
+        [CollectionBound(20, Reason = "HandoffArtifactBuilder stops at 20 commit references")]
         public List<string> CommitReferences
         {
             get => _CommitReferences;
@@ -151,6 +157,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// The protocol lines the stage emitted ([ARMADA:RESULT], [ARMADA:VERDICT], [ARMADA:STAGE-OUTCOME]).
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxConfigItems, Reason = "HandoffArtifactBuilder keeps the first lines and a final [ARMADA:TRUNCATED] marker with the omitted count")]
         public List<string> CompletionLines
         {
             get => _CompletionLines;

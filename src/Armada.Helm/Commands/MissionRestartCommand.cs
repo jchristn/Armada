@@ -9,6 +9,7 @@ namespace Armada.Helm.Commands
     using Armada.Core.Models;
     using Armada.Core.Services;
     using Armada.Helm.Rendering;
+    using Armada.Helm.Infrastructure;
 
     /// <summary>
     /// Restart a failed or cancelled mission, resetting it to Pending, or start a Pending one; the Admiral dispatches it when a captain is free.
@@ -24,7 +25,7 @@ namespace Armada.Helm.Commands
             Mission? mission = await GetAsync<Mission>($"/api/v1/missions/{missionId}").ConfigureAwait(false);
             if (mission == null)
             {
-                AnsiConsole.MarkupLine($"[red]Mission not found:[/] {Markup.Escape(missionId)}");
+                HelmConsole.Error.MarkupLine($"[red]Mission not found:[/] {Markup.Escape(missionId)}");
                 return 1;
             }
 

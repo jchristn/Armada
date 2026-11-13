@@ -1,10 +1,11 @@
 namespace Armada.Core.Models
 {
     using System;
-    using System.Collections.Generic;
 
     /// <summary>
-    /// Read-only cleanup inventory of one vessel's docks, worktrees, and Armada-managed branches.
+    /// Read-only cleanup inventory summary of one vessel's docks, worktrees, and Armada-managed branches. The resources
+    /// themselves are not embedded; page them with GET /api/v1/vessels/{id}/cleanup/resources (or POST
+    /// .../cleanup/resources/enumerate), optionally filtered by disposition.
     /// </summary>
     public class VesselCleanupInventory
     {
@@ -24,9 +25,9 @@ namespace Armada.Core.Models
         public DateTime ScannedUtc { get; set; } = DateTime.UtcNow;
 
         /// <summary>
-        /// Every inventoried resource.
+        /// Number of inventoried resources (SafeCount + InUseCount + UnknownCount).
         /// </summary>
-        public List<VesselCleanupResource> Resources { get; set; } = new List<VesselCleanupResource>();
+        public int ResourceCount { get; set; } = 0;
 
         /// <summary>
         /// Number of resources safe to clean up.

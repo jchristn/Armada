@@ -57,7 +57,7 @@ describe('sign-in', () => {
 
   it('one tenant: email goes straight to password, then signs in', async () => {
     const user = userEvent.setup();
-    api.lookupTenants.mockResolvedValue({ tenants: [{ id: 'ten_1', name: 'Default' }] });
+    api.lookupTenants.mockResolvedValue({ tenants: [{ id: 'ten_1', name: 'Default' }], pageNumber: 1, pageSize: 100, totalPages: 1, totalRecords: 1 });
     api.authenticate.mockResolvedValue({ success: true, token: 'tok_pw' } as never);
     await renderSignIn();
     await user.type(screen.getByTestId('sign-in-email'), 'admin@armada');
@@ -73,7 +73,7 @@ describe('sign-in', () => {
 
   it('several tenants: the user picks one before the password', async () => {
     const user = userEvent.setup();
-    api.lookupTenants.mockResolvedValue({ tenants: [{ id: 'ten_a', name: 'Alpha' }, { id: 'ten_b', name: 'Beta' }] });
+    api.lookupTenants.mockResolvedValue({ tenants: [{ id: 'ten_a', name: 'Alpha' }, { id: 'ten_b', name: 'Beta' }], pageNumber: 1, pageSize: 100, totalPages: 1, totalRecords: 2 });
     await renderSignIn();
     await user.type(screen.getByTestId('sign-in-email'), 'me@x.com');
     await user.press(screen.getByTestId('sign-in-continue'));
@@ -84,9 +84,22 @@ describe('sign-in', () => {
     expect(await screen.findByTestId('sign-in-context')).toHaveTextContent('Signing in as me@x.com to Beta');
   });
 
+  it('tenant lookup reads every page instead of trusting the first one', async () => {
+    const user = userEvent.setup();
+    api.lookupTenants
+      .mockResolvedValueOnce({ tenants: [{ id: 'ten_a', name: 'Alpha' }], pageNumber: 1, pageSize: 1, totalPages: 2, totalRecords: 2 })
+      .mockResolvedValueOnce({ tenants: [{ id: 'ten_z', name: 'Zulu' }], pageNumber: 2, pageSize: 1, totalPages: 2, totalRecords: 2 });
+    await renderSignIn();
+    await user.type(screen.getByTestId('sign-in-email'), 'me@x.com');
+    await user.press(screen.getByTestId('sign-in-continue'));
+    expect(await screen.findByTestId('sign-in-tenant-ten_z')).toBeTruthy();
+    expect(api.lookupTenants).toHaveBeenCalledTimes(2);
+    expect(api.lookupTenants).toHaveBeenLastCalledWith('me@x.com', { pageNumber: 2, pageSize: 100 });
+  });
+
   it('no tenant for the email is reported', async () => {
     const user = userEvent.setup();
-    api.lookupTenants.mockResolvedValue({ tenants: [] });
+    api.lookupTenants.mockResolvedValue({ tenants: [], pageNumber: 1, pageSize: 100, totalPages: 0, totalRecords: 0 });
     await renderSignIn();
     await user.type(screen.getByTestId('sign-in-email'), 'nobody@x.com');
     await user.press(screen.getByTestId('sign-in-continue'));
@@ -113,7 +126,7 @@ describe('sign-in', () => {
 
   it('rate limiting (429) has its own message, by status not text', async () => {
     const user = userEvent.setup();
-    api.lookupTenants.mockResolvedValue({ tenants: [{ id: 'ten_1', name: 'Default' }] });
+    api.lookupTenants.mockResolvedValue({ tenants: [{ id: 'ten_1', name: 'Default' }], pageNumber: 1, pageSize: 100, totalPages: 1, totalRecords: 1 });
     api.authenticate.mockRejectedValue(new client.ApiError('anything', 429, null));
     await renderSignIn();
     await user.type(screen.getByTestId('sign-in-email'), 'admin@armada');

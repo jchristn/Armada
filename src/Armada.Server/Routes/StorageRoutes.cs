@@ -33,8 +33,48 @@ namespace Armada.Server.Routes
                 if (!authz.IsAuthorized(context, "GET", "/api/v1/storage")) return Denied(req, context);
                 return (object)_Inventory.Read();
             }, api => api.WithTag("Storage").WithSummary("Read cached storage inventory")
-                .WithDescription("Global administrators only. Returns bounded cached host, filesystem, database, retention and process-local history measurements. Does not trigger scans. Logical file bytes and database allocation are separate quantities.")
+                .WithDescription("Global administrators only. Returns bounded cached database, retention and process-local history measurements with host totals (HostCount, FreshHostCount, ObservedFileBytes). Host reports are not embedded: page them with GET /api/v1/storage/hosts. History breakdowns keep the 24 largest entries and fold the rest into one (other) entry. Does not trigger scans. Logical file bytes and database allocation are separate quantities.")
                 .WithResponse(200, OpenApiJson.For<StorageSnapshot>("Cached storage snapshot"))
+                .WithResponse(401, OpenApiResponseMetadata.Create("Authentication required"))
+                .WithResponse(403, OpenApiResponseMetadata.Create("Global administrator required"))
+                .WithSecurity("ApiKey"));
+
+            app.Get("/api/v1/storage/hosts", async (ApiRequest req) =>
+            {
+                AuthContext context = await authenticate(req.Http).ConfigureAwait(false);
+                if (!authz.IsAuthorized(context, "GET", "/api/v1/storage/hosts")) return Denied(req, context);
+                EnumerationQuery query = new EnumerationQuery();
+                query.ApplyQuerystringOverrides(key => req.Query.GetValueOrDefault(key));
+                return (object)_Inventory.EnumerateHosts(query);
+            }, api => api.WithTag("Storage").WithSummary("List cached storage host reports")
+                .WithDescription("Global administrators only. One page of the cached host reports (the Admiral first, then each Harbor by name): locations (at most StorageSettings.MaxLocations), volumes, warnings, and largest files. Querystring: pageNumber (default 1), pageSize (1 to 1000, default 10). Does not trigger scans.")
+                .WithParameter(OpenApiParameterMetadata.Query("pageNumber", "Page number (default 1)", false))
+                .WithParameter(OpenApiParameterMetadata.Query("pageSize", "Page size, 1 to 1000 (default 10)", false))
+                .WithResponse(200, OpenApiJson.For<EnumerationResult<StorageHostReport>>("Host reports"))
+                .WithResponse(401, OpenApiResponseMetadata.Create("Authentication required"))
+                .WithResponse(403, OpenApiResponseMetadata.Create("Global administrator required"))
+                .WithSecurity("ApiKey"));
+
+            app.Post("/api/v1/storage/hosts/enumerate", async (ApiRequest req) =>
+            {
+                AuthContext context = await authenticate(req.Http).ConfigureAwait(false);
+                if (!authz.IsAuthorized(context, "POST", "/api/v1/storage/hosts/enumerate")) return Denied(req, context);
+                EnumerationQuery query;
+                try
+                {
+                    query = EnumerationRequestReader.Read(req, _JsonOptions);
+                }
+                catch (JsonException ex)
+                {
+                    req.Http.Response.StatusCode = 400;
+                    return (object)new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Request body is not valid: " + ex.Message };
+                }
+                return (object)_Inventory.EnumerateHosts(query);
+            }, api => api.WithTag("Storage").WithSummary("Enumerate cached storage host reports")
+                .WithDescription("POST form of GET /api/v1/storage/hosts: the EnumerationQuery (pageNumber, pageSize) comes from the body, and querystring values override it. Global administrators only.")
+                .WithRequestBody(OpenApiJson.BodyFor<EnumerationQuery>("Paging query", false))
+                .WithResponse(200, OpenApiJson.For<EnumerationResult<StorageHostReport>>("Host reports"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
                 .WithResponse(401, OpenApiResponseMetadata.Create("Authentication required"))
                 .WithResponse(403, OpenApiResponseMetadata.Create("Global administrator required"))
                 .WithSecurity("ApiKey"));

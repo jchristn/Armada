@@ -201,6 +201,8 @@ Compile clean (no errors, no warnings) before reporting work complete. Prefer ex
 
 Captains do not require unique runtimes - register as many variants as you need. They share the fleet's vessels and playbooks; only the dispatch policy decides who gets a given mission.
 
+Each running mission takes one captain slot. A CLI captain (Claude Code, Codex, Gemini, Cursor, OpenCode, pi) has one slot by default, so running N missions in parallel needs N CLI captains. An `ApiEndpoint` or `Mux` captain has four slots by default and runs several missions at once; set `maxConcurrency` on `create_captain` to change it (1 to 256). The vessel's `maxParallelMissionsPerVoyage` (default 4) and `maxParallelVoyages` (default 1, 0 means unlimited) also cap parallel work. See [SCHEDULING.md](docs/SCHEDULING.md#capacity).
+
 ### Verifying
 
 After registration, ask the agent for an `enumerate entityType=captains` summary. You should see one row per captain you registered with the right `Runtime`, `Model`, and a non-empty system-instructions length.

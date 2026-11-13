@@ -2,11 +2,12 @@ import { act, fireEvent, screen, waitFor } from '@testing-library/react-native';
 import { Slot, Stack } from 'expo-router';
 import { renderRouter } from 'expo-router/testing-library';
 import * as client from '@dashboard/api/client';
-import type { Captain, PlanningSession, PlanningSessionDetail } from '@dashboard/types/models';
+import type { Captain, PlanningSession, PlanningSessionView } from '@dashboard/types/models';
 import PlanningIndexRoute from '../app/(app)/(work)/planning/index';
 import PlanningSessionRoute from '../app/(app)/(work)/planning/[id]';
 import DispatchRoute from '../app/(app)/(work)/dispatch';
 import { BuildProviders, buildSockets, page } from '../test/buildFixtures';
+import { serveTranscriptsFromDetails } from '../test/transcripts';
 
 jest.mock('@dashboard/api/client', () => require('../test/buildClientMock').buildClientMockFactory());
 // An iPad in landscape (1180 x 820).
@@ -25,8 +26,8 @@ function session(id: string, title: string): PlanningSession {
   };
 }
 
-function detail(s: PlanningSession): PlanningSessionDetail {
-  return { session: s, messages: [], captain: { id: 'cpt_1', name: 'Ada', runtime: 'ClaudeCode', state: 'Idle' } as Captain, vessel: null };
+function detail(s: PlanningSession): PlanningSessionView {
+  return { session: s, messages: [], messageCount: 0, captain: { id: 'cpt_1', name: 'Ada', runtime: 'ClaudeCode', state: 'Idle' } as Captain, vessel: null };
 }
 
 const ROUTES = {
@@ -38,11 +39,12 @@ const ROUTES = {
 };
 
 beforeEach(() => {
+  serveTranscriptsFromDetails(api as unknown as Record<string, jest.Mock>);
   api.listCaptains.mockResolvedValue(page([]));
   api.listFleets.mockResolvedValue(page([]));
   api.listVessels.mockResolvedValue(page([]));
   api.listPipelines.mockResolvedValue(page([]));
-  api.listPlanningSessions.mockResolvedValue([session('pls_1', 'First plan'), session('pls_2', 'Second plan')]);
+  api.listPlanningSessions.mockResolvedValue(page([session('pls_1', 'First plan'), session('pls_2', 'Second plan')]));
   api.getPlanningSession.mockImplementation(async (id: string) => detail(session(id, id === 'pls_1' ? 'First plan' : 'Second plan')));
 });
 

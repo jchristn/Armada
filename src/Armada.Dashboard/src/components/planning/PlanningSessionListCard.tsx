@@ -7,6 +7,11 @@ import DataTable, { type DataTableColumn } from '../shared/DataTable';
 interface PlanningSessionListCardProps {
   t: (value: string, vars?: Record<string, string | number>) => string;
   sessions: PlanningSession[];
+  /** Number of sessions on the server (every page); defaults to the loaded count. */
+  totalCount?: number;
+  /** Loads the next page of sessions; shown while fewer than totalCount are loaded. */
+  onLoadMore?: () => void;
+  loadingMore?: boolean;
   activeSessionId?: string;
   endingSessionId?: string | null;
   formatRelativeTime: (value: string) => string;
@@ -24,6 +29,9 @@ export default function PlanningSessionListCard(props: PlanningSessionListCardPr
   const {
     t,
     sessions,
+    totalCount,
+    onLoadMore,
+    loadingMore,
     activeSessionId,
     endingSessionId,
     formatRelativeTime,
@@ -96,9 +104,9 @@ export default function PlanningSessionListCard(props: PlanningSessionListCardPr
         >
           <span className="collapsible-caret" aria-hidden="true">{expanded ? '\u25BE' : '\u25B8'}</span>
           <span className="collapsible-title">{t('Recent Sessions')}</span>
-          <span className="text-muted" style={{ marginLeft: 'auto' }}>{t('{{count}} total', { count: sessions.length })}</span>
+          <span className="text-muted" style={{ marginLeft: 'auto' }}>{t('{{count}} total', { count: totalCount ?? sessions.length })}</span>
         </button>
-        {sessions.length > 0 && (
+        {(totalCount ?? sessions.length) > 0 && (
           <button
             type="button"
             className="btn btn-sm btn-danger"
@@ -126,6 +134,18 @@ export default function PlanningSessionListCard(props: PlanningSessionListCardPr
               rowClassName={(session) => `planning-session-row${activeSessionId === session.id ? ' is-active' : ''}`}
               columns={columns}
             />
+            {onLoadMore && (totalCount ?? 0) > sessions.length && (
+              <button
+                type="button"
+                className="btn btn-sm"
+                style={{ marginTop: '0.5rem' }}
+                onClick={onLoadMore}
+                disabled={loadingMore}
+                title={t('Load the next page of planning sessions.')}
+              >
+                {loadingMore ? t('Loading...') : t('Load more ({{shown}} of {{total}})', { shown: sessions.length, total: totalCount ?? sessions.length })}
+              </button>
+            )}
           </div>
         )
       )}

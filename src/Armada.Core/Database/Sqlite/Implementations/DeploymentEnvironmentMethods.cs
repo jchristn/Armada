@@ -155,7 +155,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
             using (SqliteCommand cmd = conn.CreateCommand())
             {
                 cmd.CommandText = "SELECT * FROM environments" + whereClause
-                    + " ORDER BY is_default DESC, active DESC, name ASC, created_utc DESC"
+                    + " ORDER BY is_default DESC, active DESC, name ASC, created_utc DESC, id DESC"
                     + " LIMIT " + query.PageSize + " OFFSET " + query.Offset + ";";
                 foreach (SqliteParameter parameter in parameters) cmd.Parameters.Add(new SqliteParameter(parameter.ParameterName, parameter.Value));
                 using SqliteDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false);
@@ -186,7 +186,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
             List<SqliteParameter> parameters = new List<SqliteParameter>();
             ApplyQueryFilters(query, conditions, parameters);
             string whereClause = conditions.Count > 0 ? " WHERE " + String.Join(" AND ", conditions) : String.Empty;
-            cmd.CommandText = "SELECT * FROM environments" + whereClause + " ORDER BY is_default DESC, active DESC, name ASC, created_utc DESC;";
+            cmd.CommandText = "SELECT * FROM environments" + whereClause + " ORDER BY is_default DESC, active DESC, name ASC, created_utc DESC, id DESC;";
             foreach (SqliteParameter parameter in parameters) cmd.Parameters.Add(parameter);
 
             List<DeploymentEnvironment> results = new List<DeploymentEnvironment>();

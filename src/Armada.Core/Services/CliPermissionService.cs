@@ -565,19 +565,28 @@ namespace Armada.Core.Services
         }
 
         /// <summary>
-        /// List rules visible to the caller (the caller's tenant plus rules for every tenant; a global admin sees all).
+        /// One page of the rules visible to the caller: the caller's tenant plus rules for every tenant (global admins see
+        /// all), newest first, counted and cut in the database. A captain session sees no rules.
         /// </summary>
         /// <param name="caller">Caller.</param>
-        /// <param name="query">Filters.</param>
+        /// <param name="query">Filters, or null for none.</param>
+        /// <param name="pageNumber">One-based page number.</param>
+        /// <param name="pageSize">Page size, 1 to 1000 (other values are normalized).</param>
         /// <param name="token">Cancellation token.</param>
-        /// <returns>Rules.</returns>
-        public async Task<List<CliPermissionRule>> ListRulesAsync(AuthContext caller, CliPermissionRuleQuery? query, CancellationToken token = default)
+        /// <returns>The page with exact totals for the caller.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when caller is null.</exception>
+        public async Task<EnumerationResult<CliPermissionRule>> EnumerateRulesAsync(AuthContext caller, CliPermissionRuleQuery? query, int pageNumber, int pageSize, CancellationToken token = default)
         {
             if (caller == null) throw new ArgumentNullException(nameof(caller));
-            if (CliPermissionAccess.IsCaptainSession(caller)) return new List<CliPermissionRule>();
             CliPermissionRuleQuery effective = query ?? new CliPermissionRuleQuery();
+            if (CliPermissionAccess.IsCaptainSession(caller))
+            {
+                EnumerationQuery normalized = new EnumerationQuery { PageNumber = pageNumber, PageSize = pageSize };
+                return EnumerationResult<CliPermissionRule>.Create(normalized, new List<CliPermissionRule>(), 0);
+            }
+
             if (!caller.IsAdmin) effective.TenantId = caller.TenantId;
-            return await _Database.CliPermissionRules.EnumerateAsync(effective, token).ConfigureAwait(false);
+            return await _Database.CliPermissionRules.EnumeratePageAsync(effective, pageNumber, pageSize, token).ConfigureAwait(false);
         }
 
         /// <summary>

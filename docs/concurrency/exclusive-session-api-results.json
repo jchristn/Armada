@@ -1,0 +1,97 @@
+[
+  {
+    "path": "/api/v1/authenticate",
+    "status": 200,
+    "expected": 200
+  },
+  {
+    "path": "/api/v1/vessels",
+    "status": 201,
+    "expected": 201
+  },
+  {
+    "path": "/api/v1/objectives",
+    "status": 201,
+    "expected": 201
+  },
+  {
+    "path": "/api/v1/captains",
+    "status": 201,
+    "expected": 201
+  },
+  {
+    "path": "/api/v1/captains",
+    "status": 201,
+    "expected": 201
+  },
+  {
+    "path": "/api/v1/planning-sessions",
+    "status": 201,
+    "expected": 201
+  },
+  {
+    "path": "/api/v1/objectives/obj_mw02amwt_E4wV27vn27a/refinement-sessions",
+    "status": 201,
+    "expected": 201
+  },
+  {
+    "path": "/api/v1/objectives/obj_mw02amwt_E4wV27vn27a/refinement-sessions",
+    "status": 409,
+    "expected": 409
+  },
+  {
+    "path": "/api/v1/planning-sessions",
+    "status": 409,
+    "expected": 409
+  },
+  {
+    "path": "/api/v1/captains/cpt_mw02amxw_gnZ6RankVoR",
+    "status": 200,
+    "expected": 200
+  },
+  {
+    "path": "/api/v1/captains/cpt_mw02amyb_VyXk5Y9hAxd",
+    "status": 200,
+    "expected": 200
+  },
+  {
+    "path": "/api/v1/objective-refinement-sessions/ors_mw02anrr_dQfrz0Xpa0l/stop",
+    "status": 200,
+    "expected": 200
+  },
+  {
+    "path": "/api/v1/captains/cpt_mw02amyb_VyXk5Y9hAxd",
+    "status": 200,
+    "expected": 200
+  },
+  {
+    "path": "/api/v1/captains/cpt_mw02amyb_VyXk5Y9hAxd",
+    "status": 200,
+    "expected": 200
+  },
+  {
+    "path": "/api/v1/objectives/obj_mw02amwt_E4wV27vn27a/refinement-sessions",
+    "status": 201,
+    "expected": 201
+  },
+  {
+    "path": "/api/v1/objective-refinement-sessions/ors_mw02anrr_dQfrz0Xpa0l/stop",
+    "status": 200,
+    "expected": 200
+  },
+  {
+    "path": "/api/v1/captains/cpt_mw02amyb_VyXk5Y9hAxd",
+    "status": 200,
+    "expected": 200
+  },
+  {
+    "path": "/api/v1/missions",
+    "status": 201,
+    "expected": 201
+  },
+  {
+    "path": "/api/v1/missions/msn_mw02anui_U2FPkfKcEJF",
+    "status": 200,
+    "expected": 200
+  }
+]

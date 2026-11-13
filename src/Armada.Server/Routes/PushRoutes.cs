@@ -90,7 +90,7 @@ namespace Armada.Server.Routes
                 try
                 {
                     EnumerationQuery query = EnumerationRequestReader.Read(req, _JsonOptions);
-                    return EnumerationResult<PushDevice>.Page(query, await _Devices.ListAsync(ctx, Blank(query.UserId), Blank(query.TenantId)).ConfigureAwait(false));
+                    return await _Devices.EnumerateAsync(ctx, Blank(query.UserId), Blank(query.TenantId), query).ConfigureAwait(false);
                 }
                 catch (Exception ex) when (RouteErrorMapper.IsMapped(ex))
                 {

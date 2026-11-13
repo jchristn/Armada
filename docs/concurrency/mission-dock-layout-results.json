@@ -1,0 +1,236 @@
+[
+  {
+    "page": "own-diff",
+    "theme": "light",
+    "width": 1440,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Missions>Read the correct mission worktree",
+    "hasSibling": false,
+    "noModifiedFiles": false,
+    "modalText": "Diff: Read the correct mission worktree2 files changed+2-1Copy RawCloseFiles (2)CLAUDE.md+1-0report.txt+1-1diff --git a/CLAUDE.md b/CLAUDE.mdnew file mode 100644index 0000000..dfce495--- /dev/null+++ b/CLAUDE.md@@ -0,0 +1 @@1+OWN_ONLY instructionsdiff --git a/report.txt b/report.txtindex df967b9..0ef000f 100644--- a/report.txt+++ b/report.txt@@ -1 +1 @@1-base1+OWN_ONLY"
+  },
+  {
+    "page": "missing-diff",
+    "theme": "light",
+    "width": 1440,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Missions>Mission worktree unavailable",
+    "hasSibling": false,
+    "alert": "No diff available: no mission worktree or saved diff exists",
+    "noModifiedFiles": false,
+    "modalText": "Diff: Mission worktree unavailableCloseNo diff available: no mission worktree or saved diff exists"
+  },
+  {
+    "page": "own-instructions",
+    "theme": "light",
+    "width": 1440,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Missions>Read the correct mission worktree",
+    "hasSibling": false,
+    "noModifiedFiles": false
+  },
+  {
+    "page": "missing-instructions",
+    "theme": "light",
+    "width": 1440,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Missions>Mission worktree unavailable",
+    "hasSibling": false,
+    "noModifiedFiles": false
+  },
+  {
+    "page": "own-diff",
+    "theme": "light",
+    "width": 768,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Missions>Read the correct mission worktree",
+    "hasSibling": false,
+    "noModifiedFiles": false,
+    "modalText": "Diff: Read the correct mission worktree2 files changed+2-1Copy RawCloseFiles (2)CLAUDE.md+1-0report.txt+1-1diff --git a/CLAUDE.md b/CLAUDE.mdnew file mode 100644index 0000000..dfce495--- /dev/null+++ b/CLAUDE.md@@ -0,0 +1 @@1+OWN_ONLY instructionsdiff --git a/report.txt b/report.txtindex df967b9..0ef000f 100644--- a/report.txt+++ b/report.txt@@ -1 +1 @@1-base1+OWN_ONLY"
+  },
+  {
+    "page": "missing-diff",
+    "theme": "light",
+    "width": 768,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Missions>Mission worktree unavailable",
+    "hasSibling": false,
+    "alert": "No diff available: no mission worktree or saved diff exists",
+    "noModifiedFiles": false,
+    "modalText": "Diff: Mission worktree unavailableCloseNo diff available: no mission worktree or saved diff exists"
+  },
+  {
+    "page": "own-instructions",
+    "theme": "light",
+    "width": 768,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Missions>Read the correct mission worktree",
+    "hasSibling": false,
+    "noModifiedFiles": false
+  },
+  {
+    "page": "missing-instructions",
+    "theme": "light",
+    "width": 768,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Missions>Mission worktree unavailable",
+    "hasSibling": false,
+    "noModifiedFiles": false
+  },
+  {
+    "page": "own-diff",
+    "theme": "light",
+    "width": 390,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Missions>Read the correct mission worktree",
+    "hasSibling": false,
+    "noModifiedFiles": false,
+    "modalText": "Diff: Read the correct mission worktree2 files changed+2-1Copy RawCloseFiles (2)CLAUDE.md+1-0report.txt+1-1diff --git a/CLAUDE.md b/CLAUDE.mdnew file mode 100644index 0000000..dfce495--- /dev/null+++ b/CLAUDE.md@@ -0,0 +1 @@1+OWN_ONLY instructionsdiff --git a/report.txt b/report.txtindex df967b9..0ef000f 100644--- a/report.txt+++ b/report.txt@@ -1 +1 @@1-base1+OWN_ONLY"
+  },
+  {
+    "page": "missing-diff",
+    "theme": "light",
+    "width": 390,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Missions>Mission worktree unavailable",
+    "hasSibling": false,
+    "alert": "No diff available: no mission worktree or saved diff exists",
+    "noModifiedFiles": false,
+    "modalText": "Diff: Mission worktree unavailableCloseNo diff available: no mission worktree or saved diff exists"
+  },
+  {
+    "page": "own-instructions",
+    "theme": "light",
+    "width": 390,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Missions>Read the correct mission worktree",
+    "hasSibling": false,
+    "noModifiedFiles": false
+  },
+  {
+    "page": "missing-instructions",
+    "theme": "light",
+    "width": 390,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Missions>Mission worktree unavailable",
+    "hasSibling": false,
+    "noModifiedFiles": false
+  },
+  {
+    "page": "own-diff",
+    "theme": "dark",
+    "width": 1440,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Missions>Read the correct mission worktree",
+    "hasSibling": false,
+    "noModifiedFiles": false,
+    "modalText": "Diff: Read the correct mission worktree2 files changed+2-1Copy RawCloseFiles (2)CLAUDE.md+1-0report.txt+1-1diff --git a/CLAUDE.md b/CLAUDE.mdnew file mode 100644index 0000000..dfce495--- /dev/null+++ b/CLAUDE.md@@ -0,0 +1 @@1+OWN_ONLY instructionsdiff --git a/report.txt b/report.txtindex df967b9..0ef000f 100644--- a/report.txt+++ b/report.txt@@ -1 +1 @@1-base1+OWN_ONLY"
+  },
+  {
+    "page": "missing-diff",
+    "theme": "dark",
+    "width": 1440,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Missions>Mission worktree unavailable",
+    "hasSibling": false,
+    "alert": "No diff available: no mission worktree or saved diff exists",
+    "noModifiedFiles": false,
+    "modalText": "Diff: Mission worktree unavailableCloseNo diff available: no mission worktree or saved diff exists"
+  },
+  {
+    "page": "own-instructions",
+    "theme": "dark",
+    "width": 1440,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Missions>Read the correct mission worktree",
+    "hasSibling": false,
+    "noModifiedFiles": false
+  },
+  {
+    "page": "missing-instructions",
+    "theme": "dark",
+    "width": 1440,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Missions>Mission worktree unavailable",
+    "hasSibling": false,
+    "noModifiedFiles": false
+  },
+  {
+    "page": "own-diff",
+    "theme": "dark",
+    "width": 768,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Missions>Read the correct mission worktree",
+    "hasSibling": false,
+    "noModifiedFiles": false,
+    "modalText": "Diff: Read the correct mission worktree2 files changed+2-1Copy RawCloseFiles (2)CLAUDE.md+1-0report.txt+1-1diff --git a/CLAUDE.md b/CLAUDE.mdnew file mode 100644index 0000000..dfce495--- /dev/null+++ b/CLAUDE.md@@ -0,0 +1 @@1+OWN_ONLY instructionsdiff --git a/report.txt b/report.txtindex df967b9..0ef000f 100644--- a/report.txt+++ b/report.txt@@ -1 +1 @@1-base1+OWN_ONLY"
+  },
+  {
+    "page": "missing-diff",
+    "theme": "dark",
+    "width": 768,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Missions>Mission worktree unavailable",
+    "hasSibling": false,
+    "alert": "No diff available: no mission worktree or saved diff exists",
+    "noModifiedFiles": false,
+    "modalText": "Diff: Mission worktree unavailableCloseNo diff available: no mission worktree or saved diff exists"
+  },
+  {
+    "page": "own-instructions",
+    "theme": "dark",
+    "width": 768,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Missions>Read the correct mission worktree",
+    "hasSibling": false,
+    "noModifiedFiles": false
+  },
+  {
+    "page": "missing-instructions",
+    "theme": "dark",
+    "width": 768,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Missions>Mission worktree unavailable",
+    "hasSibling": false,
+    "noModifiedFiles": false
+  },
+  {
+    "page": "own-diff",
+    "theme": "dark",
+    "width": 390,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Missions>Read the correct mission worktree",
+    "hasSibling": false,
+    "noModifiedFiles": false,
+    "modalText": "Diff: Read the correct mission worktree2 files changed+2-1Copy RawCloseFiles (2)CLAUDE.md+1-0report.txt+1-1diff --git a/CLAUDE.md b/CLAUDE.mdnew file mode 100644index 0000000..dfce495--- /dev/null+++ b/CLAUDE.md@@ -0,0 +1 @@1+OWN_ONLY instructionsdiff --git a/report.txt b/report.txtindex df967b9..0ef000f 100644--- a/report.txt+++ b/report.txt@@ -1 +1 @@1-base1+OWN_ONLY"
+  },
+  {
+    "page": "missing-diff",
+    "theme": "dark",
+    "width": 390,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Missions>Mission worktree unavailable",
+    "hasSibling": false,
+    "alert": "No diff available: no mission worktree or saved diff exists",
+    "noModifiedFiles": false,
+    "modalText": "Diff: Mission worktree unavailableCloseNo diff available: no mission worktree or saved diff exists"
+  },
+  {
+    "page": "own-instructions",
+    "theme": "dark",
+    "width": 390,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Missions>Read the correct mission worktree",
+    "hasSibling": false,
+    "noModifiedFiles": false
+  },
+  {
+    "page": "missing-instructions",
+    "theme": "dark",
+    "width": 390,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Missions>Mission worktree unavailable",
+    "hasSibling": false,
+    "noModifiedFiles": false
+  }
+]

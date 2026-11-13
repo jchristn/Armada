@@ -16,6 +16,7 @@ namespace Armada.Core.Models
         /// <summary>Safe summary of the latest completed source scan for this vessel.</summary>
         public string ScanSummary { get; set; } = "";
         /// <summary>Validated runtime input values.</summary>
+        [CollectionBound(CollectionLimits.MaxConfigItems, Reason = "One per declared fleet action input")]
         public System.Collections.Generic.Dictionary<string, string> InputValues { get; set; } = new();
 
         /// <summary>
@@ -55,7 +56,8 @@ namespace Armada.Core.Models
         }
 
         /// <summary>
-        /// Value of {{vessel.buildCommand}} (the vessel's definition-of-done build command). Never null; empty when unset.
+        /// Value of {{vessel.buildCommand}}: the vessel's definition-of-done build command, else the repository's build
+        /// script or the catalog default for its detected ecosystem. Never null; empty when nothing resolves.
         /// </summary>
         public string BuildCommand
         {
@@ -103,6 +105,30 @@ namespace Armada.Core.Models
         }
 
         /// <summary>
+        /// Resolved outdated-dependency report command, or empty when the vessel's ecosystems have none.
+        /// </summary>
+        public string OutdatedCommand
+        {
+            get => _OutdatedCommand;
+            set => _OutdatedCommand = value ?? String.Empty;
+        }
+
+        /// <summary>
+        /// Resolved license report command, or empty when the vessel's ecosystems have none.
+        /// </summary>
+        public string LicensesCommand
+        {
+            get => _LicensesCommand;
+            set => _LicensesCommand = value ?? String.Empty;
+        }
+
+        /// <summary>
+        /// Output parser identifier that matches the resolved audit command (for example npm-audit-json), or null. A
+        /// run whose OutputParser is <c>auto</c> uses it.
+        /// </summary>
+        public string? AuditParserId { get; set; } = null;
+
+        /// <summary>
         /// Value of {{health.summary}}. Never null.
         /// </summary>
         public string HealthSummary
@@ -124,6 +150,8 @@ namespace Armada.Core.Models
         private string _TestCommand = String.Empty;
         private string _LintCommand = String.Empty;
         private string _AuditCommand = String.Empty;
+        private string _OutdatedCommand = String.Empty;
+        private string _LicensesCommand = String.Empty;
         private string _HealthSummary = String.Empty;
 
         #endregion
@@ -164,17 +192,21 @@ namespace Armada.Core.Models
         public static FleetActionTemplateContext FromVessel(Vessel vessel, IReadOnlyList<DetectedEcosystem>? ecosystems, bool windows)
         {
             if (vessel == null) throw new ArgumentNullException(nameof(vessel));
+            ResolvedEcosystemCommand audit = EcosystemCommandResolver.Resolve(vessel, ecosystems, EcosystemCommandIntentEnum.Audit, vessel.WorkingDirectory, windows);
             return new FleetActionTemplateContext
             {
                 VesselName = vessel.Name,
                 VesselId = vessel.Id,
                 DefaultBranch = vessel.DefaultBranch,
                 WorkingDirectory = vessel.WorkingDirectory ?? String.Empty,
-                BuildCommand = vessel.DefinitionOfDoneBuildCommand ?? String.Empty,
+                BuildCommand = ResolveLine(vessel, ecosystems, EcosystemCommandIntentEnum.Build, windows),
                 Ecosystems = VesselEcosystemDetector.Format(ecosystems),
                 TestCommand = ResolveLine(vessel, ecosystems, EcosystemCommandIntentEnum.Test, windows),
                 LintCommand = ResolveLine(vessel, ecosystems, EcosystemCommandIntentEnum.Lint, windows),
-                AuditCommand = ResolveLine(vessel, ecosystems, EcosystemCommandIntentEnum.Audit, windows)
+                AuditCommand = EcosystemCommandResolver.ToShellLine(audit, windows),
+                OutdatedCommand = ResolveLine(vessel, ecosystems, EcosystemCommandIntentEnum.Outdated, windows),
+                LicensesCommand = ResolveLine(vessel, ecosystems, EcosystemCommandIntentEnum.Licenses, windows),
+                AuditParserId = audit.AuditParserId
             };
         }
 

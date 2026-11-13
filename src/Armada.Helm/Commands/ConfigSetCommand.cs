@@ -53,7 +53,7 @@ namespace Armada.Helm.Commands
                 case "admiralport":
                     if (!int.TryParse(value, out int admiralPort))
                     {
-                        AnsiConsole.MarkupLine("[red]Invalid port number.[/]");
+                        HelmConsole.Error.MarkupLine("[red]Invalid port number.[/]");
                         return 1;
                     }
                     armadaSettings.AdmiralPort = admiralPort;
@@ -61,7 +61,7 @@ namespace Armada.Helm.Commands
                 case "mcpport":
                     if (!int.TryParse(value, out int mcpPort))
                     {
-                        AnsiConsole.MarkupLine("[red]Invalid port number.[/]");
+                        HelmConsole.Error.MarkupLine("[red]Invalid port number.[/]");
                         return 1;
                     }
                     armadaSettings.McpPort = mcpPort;
@@ -69,7 +69,7 @@ namespace Armada.Helm.Commands
                 case "heartbeatintervalseconds":
                     if (!int.TryParse(value, out int hbInterval))
                     {
-                        AnsiConsole.MarkupLine("[red]Invalid number.[/]");
+                        HelmConsole.Error.MarkupLine("[red]Invalid number.[/]");
                         return 1;
                     }
                     armadaSettings.HeartbeatIntervalSeconds = hbInterval;
@@ -77,7 +77,7 @@ namespace Armada.Helm.Commands
                 case "stallthresholdminutes":
                     if (!int.TryParse(value, out int stallThreshold))
                     {
-                        AnsiConsole.MarkupLine("[red]Invalid number.[/]");
+                        HelmConsole.Error.MarkupLine("[red]Invalid number.[/]");
                         return 1;
                     }
                     armadaSettings.StallThresholdMinutes = stallThreshold;
@@ -85,7 +85,7 @@ namespace Armada.Helm.Commands
                 case "stagechecktimeoutminutes":
                     if (!int.TryParse(value, out int stageCheckTimeout) || stageCheckTimeout < 1 || stageCheckTimeout > 240)
                     {
-                        AnsiConsole.MarkupLine("[red]Invalid number. Use 1 to 240.[/]");
+                        HelmConsole.Error.MarkupLine("[red]Invalid number. Use 1 to 240.[/]");
                         return 1;
                     }
                     armadaSettings.StageCheckTimeoutMinutes = stageCheckTimeout;
@@ -94,7 +94,7 @@ namespace Armada.Helm.Commands
                     if (!Enum.TryParse<LandingModeEnum>(value.Trim(), true, out LandingModeEnum landingMode)
                         || !Enum.IsDefined(typeof(LandingModeEnum), landingMode))
                     {
-                        AnsiConsole.MarkupLine("[red]Invalid landing mode. Use one of: " + String.Join(", ", Enum.GetNames(typeof(LandingModeEnum))) + ".[/]");
+                        HelmConsole.Error.MarkupLine("[red]Invalid landing mode. Use one of: " + String.Join(", ", Enum.GetNames(typeof(LandingModeEnum))) + ".[/]");
                         return 1;
                     }
                     armadaSettings.LandingMode = landingMode;
@@ -105,7 +105,7 @@ namespace Armada.Helm.Commands
                 case "defaultruntime":
                     if (!AgentRuntimeParser.TryParse(value, out AgentRuntimeEnum defaultRuntime))
                     {
-                        AnsiConsole.MarkupLine("[red]" + Markup.Escape(AgentRuntimeParser.DescribeInvalid(value)) + "[/]");
+                        HelmConsole.Error.MarkupLine("[red]" + Markup.Escape(AgentRuntimeParser.DescribeInvalid(value)) + "[/]");
                         return 1;
                     }
                     armadaSettings.DefaultRuntime = defaultRuntime.ToString();
@@ -113,7 +113,7 @@ namespace Armada.Helm.Commands
                 case "notifications":
                     if (!bool.TryParse(value, out bool notif))
                     {
-                        AnsiConsole.MarkupLine("[red]Invalid boolean. Use true or false.[/]");
+                        HelmConsole.Error.MarkupLine("[red]Invalid boolean. Use true or false.[/]");
                         return 1;
                     }
                     armadaSettings.Notifications = notif;
@@ -121,7 +121,7 @@ namespace Armada.Helm.Commands
                 case "terminalbell":
                     if (!bool.TryParse(value, out bool bell))
                     {
-                        AnsiConsole.MarkupLine("[red]Invalid boolean. Use true or false.[/]");
+                        HelmConsole.Error.MarkupLine("[red]Invalid boolean. Use true or false.[/]");
                         return 1;
                     }
                     armadaSettings.TerminalBell = bell;
@@ -129,7 +129,7 @@ namespace Armada.Helm.Commands
                 case "idlecaptaintimeoutseconds":
                     if (!int.TryParse(value, out int idleTimeout))
                     {
-                        AnsiConsole.MarkupLine("[red]Invalid number.[/]");
+                        HelmConsole.Error.MarkupLine("[red]Invalid number.[/]");
                         return 1;
                     }
                     armadaSettings.IdleCaptainTimeoutSeconds = idleTimeout;
@@ -137,7 +137,7 @@ namespace Armada.Helm.Commands
                 case "maxcaptains":
                     if (!int.TryParse(value, out int maxCaptains))
                     {
-                        AnsiConsole.MarkupLine("[red]Invalid number.[/]");
+                        HelmConsole.Error.MarkupLine("[red]Invalid number.[/]");
                         return 1;
                     }
                     armadaSettings.MaxCaptains = maxCaptains;
@@ -145,7 +145,7 @@ namespace Armada.Helm.Commands
                 case "messagetemplates.enablecommitmetadata":
                     if (!bool.TryParse(value, out bool enableCommit))
                     {
-                        AnsiConsole.MarkupLine("[red]Invalid boolean. Use true or false.[/]");
+                        HelmConsole.Error.MarkupLine("[red]Invalid boolean. Use true or false.[/]");
                         return 1;
                     }
                     armadaSettings.MessageTemplates.EnableCommitMetadata = enableCommit;
@@ -153,7 +153,7 @@ namespace Armada.Helm.Commands
                 case "messagetemplates.enableprmetadata":
                     if (!bool.TryParse(value, out bool enablePr))
                     {
-                        AnsiConsole.MarkupLine("[red]Invalid boolean. Use true or false.[/]");
+                        HelmConsole.Error.MarkupLine("[red]Invalid boolean. Use true or false.[/]");
                         return 1;
                     }
                     armadaSettings.MessageTemplates.EnablePrMetadata = enablePr;
@@ -168,7 +168,7 @@ namespace Armada.Helm.Commands
                     armadaSettings.MessageTemplates.MergeCommitTemplate = value;
                     break;
                 default:
-                    AnsiConsole.MarkupLine($"[red]Unknown configuration key:[/] [bold]{Markup.Escape(settings.Key)}[/]");
+                    HelmConsole.Error.MarkupLine($"[red]Unknown configuration key:[/] [bold]{Markup.Escape(settings.Key)}[/]");
                     AnsiConsole.MarkupLine("[dim]Valid keys: dataDirectory, databasePath, logDirectory, docksDirectory, reposDirectory, admiralPort, mcpPort, heartbeatIntervalSeconds, stallThresholdMinutes, stageCheckTimeoutMinutes, landingMode, apiKey, defaultRuntime, notifications, terminalBell, idleCaptainTimeoutSeconds, maxCaptains, messageTemplates.enableCommitMetadata, messageTemplates.enablePrMetadata, messageTemplates.commitMessageTemplate, messageTemplates.prDescriptionTemplate, messageTemplates.mergeCommitTemplate[/]");
                     return 1;
             }

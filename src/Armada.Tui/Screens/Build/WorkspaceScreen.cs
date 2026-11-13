@@ -3,6 +3,7 @@ namespace Armada.Tui.Screens.Build
     using System;
     using System.Collections.Generic;
     using System.Linq;
+    using System.Threading;
     using System.Threading.Tasks;
     using Armada.Client;
     using Armada.Client.Models;
@@ -56,6 +57,11 @@ namespace Armada.Tui.Screens.Build
         /// Workspace status.
         /// </summary>
         public WorkspaceStatusResult? Status { get; private set; } = null;
+
+        /// <summary>
+        /// Active missions on the vessel with their scoped files, read page by page (the status carries only a count).
+        /// </summary>
+        public List<WorkspaceActiveMission> ActiveMissions { get; private set; } = new List<WorkspaceActiveMission>();
 
         /// <summary>
         /// Readiness.
@@ -251,8 +257,8 @@ namespace Armada.Tui.Screens.Build
             {
                 WorkspaceLoad load = new WorkspaceLoad();
                 load.Status = await c.GetWorkspaceStatusAsync(vesselId, t).ConfigureAwait(false);
-                WorkspaceTreeResult? root = await c.GetWorkspaceTreeAsync(vesselId, null, t).ConfigureAwait(false);
-                load.Entries[""] = Normalize(root?.Entries);
+                load.ActiveMissions = await LoadActiveMissionsAsync(c, vesselId, t).ConfigureAwait(false);
+                load.Entries[""] = Normalize(await c.ListWorkspaceDirectoryAsync(vesselId, null, t).ConfigureAwait(false));
                 HashSet<string> expanded = new HashSet<string>(StringComparer.Ordinal) { "" };
                 foreach (string path in paths)
                 {
@@ -260,8 +266,7 @@ namespace Armada.Tui.Screens.Build
                     if (parent.Length > 0 && !expanded.Contains(parent)) continue;
                     try
                     {
-                        WorkspaceTreeResult? tree = await c.GetWorkspaceTreeAsync(vesselId, path, t).ConfigureAwait(false);
-                        load.Entries[path] = Normalize(tree?.Entries);
+                        load.Entries[path] = Normalize(await c.ListWorkspaceDirectoryAsync(vesselId, path, t).ConfigureAwait(false));
                         expanded.Add(path);
                     }
                     catch (ArmadaApiException)
@@ -276,6 +281,7 @@ namespace Armada.Tui.Screens.Build
             {
                 _Loading = false;
                 Status = load.Status;
+                ActiveMissions = load.ActiveMissions;
                 Tree.Entries.Clear();
                 foreach (KeyValuePair<string, List<WorkspaceTreeEntry>> kv in load.Entries) Tree.Entries[kv.Key] = kv.Value;
                 Tree.Expanded.Clear();
@@ -462,7 +468,7 @@ namespace Armada.Tui.Screens.Build
             if (width < 20 || height < 8) return;
             Vessel? vessel = CurrentVessel;
             int y = 0;
-            string title = vessel?.Name ?? (Vessels.Count == 0 ? Tr("Loading...") : VesselId);
+            string title = vessel?.Name ?? (Vessels.Count == 0 && Error == null ? Tr("Loading...") : VesselId);
             int x = SurfaceText.Draw(surface, 0, y, title, Theme.Accent.WithAttribute(CellAttributes.Bold, true), width);
             SurfaceText.Draw(surface, x + 2, y, Tr("Workspace") + "  (" + Tr("Workspace") + " > " + title + ")", Theme.Muted, Math.Max(0, width - x - 2));
             y++;
@@ -491,7 +497,7 @@ namespace Armada.Tui.Screens.Build
             int editorTop = RenderEditorPane(surface, new Rect(treeWidth + 1, bodyTop, Math.Max(1, width - treeWidth - 1), bodyHeight));
             // Above the boxes the column between the panes is a plain divider.
             int boxesTop = Math.Min(treeTop, editorTop) - 1;
-            for (int r = bodyTop; r < Math.Min(boxesTop, height); r++) SurfaceText.Draw(surface, treeWidth, r, "|", Theme.Border, 1);
+            for (int r = bodyTop; r < Math.Min(boxesTop, height); r++) SurfaceText.Draw(surface, treeWidth, r, "\u2502", Theme.Border, 1);
         }
 
         #endregion
@@ -527,6 +533,8 @@ namespace Armada.Tui.Screens.Build
         {
             int y = rect.Y;
             string head = Tr("Files") + "  n " + Tr("New File") + "  N " + Tr("New Folder");
+            // A narrow tree keeps both keys readable rather than cutting the folder key off.
+            if (TextCells.Width(head) > rect.Width) head = Tr("Files") + "  n " + Tr("File") + "  N " + Tr("Folder");
             SurfaceText.Draw(surface, rect.X, y++, head, ReferenceEquals(Scope.Focused, Tree) ? Theme.Accent : Theme.Muted, rect.Width);
             y++;
             List<string> selection = Tree.Selected.ToList();
@@ -598,11 +606,38 @@ namespace Armada.Tui.Screens.Build
             return y;
         }
 
+        private static async Task<List<WorkspaceActiveMission>> LoadActiveMissionsAsync(ArmadaClient client, string vesselId, CancellationToken token)
+        {
+            List<WorkspaceActiveMission> all = new List<WorkspaceActiveMission>();
+            int page = 1;
+            while (true)
+            {
+                token.ThrowIfCancellationRequested();
+                EnumerationResult<WorkspaceActiveMission>? result;
+                try
+                {
+                    result = await client.ListWorkspaceActiveMissionsAsync(vesselId, new EnumerationQuery { PageNumber = page, PageSize = 1000 }, token).ConfigureAwait(false);
+                }
+                catch (ArmadaApiException)
+                {
+                    // Overlap hints are optional: a server without the active-missions page just shows none.
+                    break;
+                }
+
+                if (result == null || result.Objects == null || result.Objects.Count == 0) break;
+                all.AddRange(result.Objects);
+                if (page >= result.TotalPages) break;
+                page++;
+            }
+
+            return all;
+        }
+
         private List<WorkspaceActiveMission> Overlapping()
         {
             List<string> paths = ActionablePaths();
-            if (Status?.ActiveMissions == null || Status.ActiveMissions.Count == 0 || paths.Count == 0) return new List<WorkspaceActiveMission>();
-            return Status.ActiveMissions.Where(m => (m.ScopedFiles ?? new List<string>()).Any(f => paths.Contains(WorkspacePaths.Normalize(f)))).ToList();
+            if (ActiveMissions.Count == 0 || paths.Count == 0) return new List<WorkspaceActiveMission>();
+            return ActiveMissions.Where(m => (m.ScopedFiles ?? new List<string>()).Any(f => paths.Contains(WorkspacePaths.Normalize(f)))).ToList();
         }
 
         private void Activate(string path, bool focusEditor)
@@ -709,10 +744,10 @@ namespace Armada.Tui.Screens.Build
 
             if (Tree.Loading.Contains(p)) return;
             Tree.Loading.Add(p);
-            Call((c, t) => c.GetWorkspaceTreeAsync(VesselId, p.Length > 0 ? p : null, t), tree =>
+            Call((c, t) => c.ListWorkspaceDirectoryAsync(VesselId, p.Length > 0 ? p : null, t), entries =>
             {
                 Tree.Loading.Remove(p);
-                Tree.Entries[p] = Normalize(tree?.Entries);
+                Tree.Entries[p] = Normalize(entries);
                 Tree.Expanded.Add(p);
                 Error = null;
                 SavePrefs();

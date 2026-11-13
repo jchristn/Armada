@@ -3,6 +3,7 @@ namespace Armada.Core.Models
     using System;
     using System.Collections.Generic;
     using Armada.Core.Enums;
+    using Armada.Core.Services;
 
     /// <summary>
     /// Event-backed execution record for a runbook.
@@ -93,16 +94,19 @@ namespace Armada.Core.Models
         /// <summary>
         /// Parameter values for the execution.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxConfigItems)]
         public Dictionary<string, string> ParameterValues { get; set; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
         /// <summary>
         /// Completed step identifiers.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxConfigItems)]
         public List<string> CompletedStepIds { get; set; } = new List<string>();
 
         /// <summary>
         /// Optional per-step notes.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxConfigItems)]
         public Dictionary<string, string> StepNotes { get; set; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
         /// <summary>

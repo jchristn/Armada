@@ -48,9 +48,9 @@ namespace Armada.Client
         /// <param name="token">Cancellation token.</param>
         /// <returns>The response.</returns>
         /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
-        public Task<List<Objective>?> ReorderObjectivesAsync(ObjectiveReorderRequest data, CancellationToken token = default)
+        public Task<ObjectiveReorderResult?> ReorderObjectivesAsync(ObjectiveReorderRequest data, CancellationToken token = default)
         {
-            return PostAsync<List<Objective>>("/api/v1/objectives/reorder", data, null, token);
+            return PostAsync<ObjectiveReorderResult>("/api/v1/objectives/reorder", data, null, token);
         }
 
         /// <summary>
@@ -144,9 +144,9 @@ namespace Armada.Client
         /// <param name="token">Cancellation token.</param>
         /// <returns>The response.</returns>
         /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
-        public Task<List<Objective>?> ReorderBacklogAsync(ObjectiveReorderRequest data, CancellationToken token = default)
+        public Task<ObjectiveReorderResult?> ReorderBacklogAsync(ObjectiveReorderRequest data, CancellationToken token = default)
         {
-            return PostAsync<List<Objective>>("/api/v1/backlog/reorder", data, null, token);
+            return PostAsync<ObjectiveReorderResult>("/api/v1/backlog/reorder", data, null, token);
         }
 
         /// <summary>
@@ -198,27 +198,45 @@ namespace Armada.Client
         }
 
         /// <summary>
-        /// Dashboard <c>listObjectiveRefinementSessions</c>: GET `/api/v1/objectives/${encodeURIComponent(objectiveId)}/refinement-sessions`.
+        /// Dashboard <c>listObjectiveRefinementSessions</c>: POST `/api/v1/objectives/${objectiveId}/refinement-sessions/enumerate`.
+        /// One page of the objective's refinement sessions, most recently updated first.
         /// </summary>
-        /// <param name="objectiveId">objectiveId.</param>
+        /// <param name="objectiveId">Objective ID.</param>
+        /// <param name="query">Paging, order, and filters, or null for the first page.</param>
         /// <param name="token">Cancellation token.</param>
-        /// <returns>The response.</returns>
+        /// <returns>One page with exact totals.</returns>
         /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
-        public Task<List<ObjectiveRefinementSession>?> ListObjectiveRefinementSessionsAsync(string objectiveId, CancellationToken token = default)
+        public Task<EnumerationResult<ObjectiveRefinementSession>?> ListObjectiveRefinementSessionsAsync(string objectiveId, EnumerationQuery? query = null, CancellationToken token = default)
         {
-            return EnumerateAllAsync<ObjectiveRefinementSession>($"/api/v1/objectives/{E(objectiveId)}/refinement-sessions/enumerate", null, token);
+            return PostAsync<EnumerationResult<ObjectiveRefinementSession>>($"/api/v1/objectives/{E(objectiveId)}/refinement-sessions/enumerate", query ?? new EnumerationQuery(), null, token);
         }
 
         /// <summary>
-        /// Dashboard <c>listBacklogRefinementSessions</c>: GET `/api/v1/backlog/${encodeURIComponent(objectiveId)}/refinement-sessions`.
+        /// Dashboard <c>listBacklogRefinementSessions</c>: POST `/api/v1/backlog/${objectiveId}/refinement-sessions/enumerate`.
+        /// One page of the backlog item's refinement sessions, most recently updated first.
         /// </summary>
-        /// <param name="objectiveId">objectiveId.</param>
+        /// <param name="objectiveId">Backlog item ID.</param>
+        /// <param name="query">Paging, order, and filters, or null for the first page.</param>
         /// <param name="token">Cancellation token.</param>
-        /// <returns>The response.</returns>
+        /// <returns>One page with exact totals.</returns>
         /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
-        public Task<List<ObjectiveRefinementSession>?> ListBacklogRefinementSessionsAsync(string objectiveId, CancellationToken token = default)
+        public Task<EnumerationResult<ObjectiveRefinementSession>?> ListBacklogRefinementSessionsAsync(string objectiveId, EnumerationQuery? query = null, CancellationToken token = default)
         {
-            return EnumerateAllAsync<ObjectiveRefinementSession>($"/api/v1/backlog/{E(objectiveId)}/refinement-sessions/enumerate", null, token);
+            return PostAsync<EnumerationResult<ObjectiveRefinementSession>>($"/api/v1/backlog/{E(objectiveId)}/refinement-sessions/enumerate", query ?? new EnumerationQuery(), null, token);
+        }
+
+        /// <summary>
+        /// Dashboard <c>listObjectiveRefinementMessages</c>: POST `/api/v1/objective-refinement-sessions/${sessionId}/messages/enumerate`.
+        /// One page of the session's transcript, newest first by default (CreatedAscending for oldest first).
+        /// </summary>
+        /// <param name="sessionId">Refinement session ID.</param>
+        /// <param name="query">Paging and order, or null for the newest page of 10.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>One page with exact totals.</returns>
+        /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
+        public Task<EnumerationResult<ObjectiveRefinementMessage>?> ListObjectiveRefinementMessagesAsync(string sessionId, EnumerationQuery? query = null, CancellationToken token = default)
+        {
+            return PostAsync<EnumerationResult<ObjectiveRefinementMessage>>($"/api/v1/objective-refinement-sessions/{E(sessionId)}/messages/enumerate", query ?? new EnumerationQuery(), null, token);
         }
 
         /// <summary>

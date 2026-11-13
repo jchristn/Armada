@@ -134,7 +134,7 @@ namespace Armada.Server.Mcp.Tools
                     type = "object",
                     properties = new
                     {
-                        ids = new { type = "array", items = new { type = "string" }, description = "List of workflow profile IDs to delete (wfp_ prefix)" }
+                        ids = new { type = "array", items = new { type = "string" }, description = "List of workflow profile IDs to delete (wfp_ prefix), at most 1000" }
                     },
                     required = new[] { "ids" }
                 },

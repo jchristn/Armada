@@ -2,6 +2,7 @@ namespace Armada.Core.Storage
 {
     using System;
     using System.Collections.Generic;
+    using Armada.Core.Services;
 
     /// <summary>
     /// Storage Location measurement contract.
@@ -36,9 +37,11 @@ namespace Armada.Core.Storage
         public string Status { get; set; } = "Pending";
 
         /// <summary>Bounded collection warnings.</summary>
+        [CollectionBound(16, Reason = "At most one stop warning plus AddWarning's cap of 10 distinct codes; Receive rejects more than 10")]
         public List<string> Warnings { get; set; } = new List<string>();
 
         /// <summary>Bounded largest-file detail.</summary>
+        [CollectionBound(100, Reason = "StorageSettings.LargestFileLimit (1..100); Receive rejects more than 100")]
         public List<StorageFile> LargestFiles { get; set; } = new List<StorageFile>();
 
     }

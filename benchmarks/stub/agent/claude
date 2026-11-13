@@ -1,0 +1,39 @@
+#!/usr/bin/env python3
+"""Stub Claude Code CLI for the admission benchmark: no model, no network.
+
+start-bench-server.sh puts this directory first on the bench Admiral's PATH, so every ClaudeCode captain launch runs
+this script. It drains stdin in the background, waits ARMADA_BENCH_STUB_SECONDS (default 1), and prints stream-json the
+way `claude --print --output-format stream-json` does: an init event, one assistant message and a success result.
+`claude --version` prints a version. Standard library only.
+"""
+import json
+import os
+import sys
+import threading
+import time
+import uuid
+
+
+def emit(event):
+    sys.stdout.write(json.dumps(event) + "\n")
+    sys.stdout.flush()
+
+
+def main():
+    if "--version" in sys.argv[1:]:
+        print("2.0.0 (Claude Code)")
+        return 0
+    threading.Thread(target=lambda: sys.stdin.read(), daemon=True).start()
+    seconds = max(0.0, float(os.environ.get("ARMADA_BENCH_STUB_SECONDS", "1")))
+    session = str(uuid.uuid4())
+    emit({"type": "system", "subtype": "init", "session_id": session, "model": "stub", "tools": []})
+    time.sleep(seconds)
+    text = "Benchmark report: nothing to change."
+    emit({"type": "assistant", "session_id": session, "message": {"role": "assistant", "content": [{"type": "text", "text": text}]}})
+    emit({"type": "result", "subtype": "success", "is_error": False, "session_id": session, "result": text,
+          "duration_ms": int(seconds * 1000), "num_turns": 1, "total_cost_usd": 0, "usage": {"input_tokens": 1, "output_tokens": 1}})
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -256,10 +256,10 @@ namespace Test.Shared.Suites.Tui
                 AssertNull(new HarborLaunchRequest { Runtime = "1" }.RuntimeType, "numeric harbor runtime rejected (was Codex)");
                 AssertEqual<AgentRuntimeEnum?>(AgentRuntimeEnum.ClaudeCode, new HarborLaunchRequest { Runtime = "claudecode" }.RuntimeType, "name accepted");
 
-                CaptainToolAccessResult? access = ArmadaJson.Deserialize<CaptainToolAccessResult>("{\"Runtime\":\"ApiEndpoint\",\"Servers\":[{\"Name\":\"armada\",\"SourceKind\":\"McpServer\"}],\"Tools\":[{\"Name\":\"t\",\"SourceKind\":\"RuntimeBuiltIn\"}]}");
+                CaptainToolAccessResult? access = ArmadaJson.Deserialize<CaptainToolAccessResult>("{\"Runtime\":\"ApiEndpoint\",\"Servers\":[{\"Name\":\"armada\",\"SourceKind\":\"McpServer\"}],\"Tools\":{\"Objects\":[{\"Name\":\"t\",\"SourceKind\":\"RuntimeBuiltIn\"}]}}");
                 AssertEqual<AgentRuntimeEnum?>(AgentRuntimeEnum.ApiEndpoint, access!.Runtime, "tool access runtime");
                 AssertEqual(CaptainToolSourceKindEnum.McpServer, access.Servers.Single().SourceKind, "server source kind");
-                AssertEqual(CaptainToolSourceKindEnum.RuntimeBuiltIn, access.Tools.Single().SourceKind, "tool source kind");
+                AssertEqual(CaptainToolSourceKindEnum.RuntimeBuiltIn, access.Tools.Objects.Single().SourceKind, "tool source kind");
             }));
 
             cases.Add(TuiCase.Sync(Suite, "doctor_status_typed", "Doctor check status is an enum on the wire names", () =>

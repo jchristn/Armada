@@ -4,6 +4,7 @@ namespace Test.Shared.Infrastructure.ApiSurface
     using System.Collections.Generic;
     using System.Linq;
     using System.Text;
+    using System.Text.RegularExpressions;
 
     /// <summary>
     /// Compares a live API surface to the frozen baseline (docs/api-surface-1.0.json) under the rules of
@@ -12,6 +13,12 @@ namespace Test.Shared.Infrastructure.ApiSurface
     /// </summary>
     public static class ApiSurfaceComparer
     {
+        #region Private-Members
+
+        private static readonly Regex _EnumArrayLabel = new Regex(@"^array<enum ([A-Za-z0-9_]+) \(([^)]*)\)>\??$", RegexOptions.CultureInvariant);
+
+        #endregion
+
         #region Public-Methods
 
         /// <summary>
@@ -288,6 +295,18 @@ namespace Test.Shared.Infrastructure.ApiSurface
             {
                 HashSet<string> liveValues = new HashSet<string>(live.EnumValues, StringComparer.Ordinal);
                 List<string> removed = baseline.EnumValues.Where(v => !liveValues.Contains(v)).ToList();
+                if (removed.Count > 0) diff.Breaking.Add(what + ": enum values removed: " + String.Join(", ", removed));
+                else diff.Additions.Add(what + ": enum values added (" + live.Type + ")");
+                return;
+            }
+
+            // The same rule for arrays of an enum (for example push.categories), whose value list is only in the label.
+            Match oldArray = _EnumArrayLabel.Match(baseline.Type ?? String.Empty);
+            Match liveArray = _EnumArrayLabel.Match(live.Type ?? String.Empty);
+            if (oldArray.Success && liveArray.Success && String.Equals(oldArray.Groups[1].Value, liveArray.Groups[1].Value, StringComparison.Ordinal))
+            {
+                HashSet<string> liveValues = new HashSet<string>(liveArray.Groups[2].Value.Split('|'), StringComparer.Ordinal);
+                List<string> removed = oldArray.Groups[2].Value.Split('|').Where(v => !liveValues.Contains(v)).ToList();
                 if (removed.Count > 0) diff.Breaking.Add(what + ": enum values removed: " + String.Join(", ", removed));
                 else diff.Additions.Add(what + ": enum values added (" + live.Type + ")");
                 return;

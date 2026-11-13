@@ -59,9 +59,7 @@ namespace Armada.Server.Routes
                 Stopwatch sw = Stopwatch.StartNew();
                 EnumerationResult<Playbook> result = ctx.IsAdmin
                     ? await _database.Playbooks.EnumerateAsync(query).ConfigureAwait(false)
-                    : await _database.Playbooks.EnumerateAsync(ctx.TenantId!, query).ConfigureAwait(false);
-                if (!ctx.IsAdmin && !ctx.IsTenantAdmin)
-                    result.Objects = result.Objects.Where(p => ScopedVisibility.CanView(ctx, p.Scope, p.TenantId, p.UserId)).ToList();
+                    : await _database.Playbooks.EnumerateVisibleAsync(ctx.TenantId!, ctx.IsTenantAdmin ? null : ctx.UserId, query).ConfigureAwait(false);
                 result.TotalMs = Math.Round(sw.Elapsed.TotalMilliseconds, 2);
                 return result;
             },
@@ -90,9 +88,7 @@ namespace Armada.Server.Routes
                 Stopwatch sw = Stopwatch.StartNew();
                 EnumerationResult<Playbook> result = ctx.IsAdmin
                     ? await _database.Playbooks.EnumerateAsync(query).ConfigureAwait(false)
-                    : await _database.Playbooks.EnumerateAsync(ctx.TenantId!, query).ConfigureAwait(false);
-                if (!ctx.IsAdmin && !ctx.IsTenantAdmin)
-                    result.Objects = result.Objects.Where(p => ScopedVisibility.CanView(ctx, p.Scope, p.TenantId, p.UserId)).ToList();
+                    : await _database.Playbooks.EnumerateVisibleAsync(ctx.TenantId!, ctx.IsTenantAdmin ? null : ctx.UserId, query).ConfigureAwait(false);
                 result.TotalMs = Math.Round(sw.Elapsed.TotalMilliseconds, 2);
                 return result;
             },
@@ -101,6 +97,7 @@ namespace Armada.Server.Routes
                 .WithSummary("Enumerate playbooks")
                 .WithDescription("Paginated enumeration of tenant-scoped playbooks.")
                 .WithRequestBody(OpenApiJson.BodyFor<EnumerationQuery>("Enumeration query", false))
+                .WithResponse(200, OpenApiJson.For<EnumerationResult<Playbook>>("Paginated playbooks visible to the caller"))
                 .WithSecurity("ApiKey"));
 
             app.Post<Playbook>("/api/v1/playbooks", async (ApiRequest req) =>

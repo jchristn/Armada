@@ -139,11 +139,21 @@ namespace Test.Shared.Suites.E2E
                         })).ConfigureAwait(false);
                     AssertEqual(HttpStatusCode.OK, firstSyncResponse.StatusCode);
 
-                    GitHubActionsSyncResult firstSync = await JsonHelper.DeserializeAsync<GitHubActionsSyncResult>(firstSyncResponse).ConfigureAwait(false);
+                    string firstSyncBody = await firstSyncResponse.Content.ReadAsStringAsync().ConfigureAwait(false);
+                    GitHubActionsSyncResult firstSync = JsonHelper.Deserialize<GitHubActionsSyncResult>(firstSyncBody);
                     AssertEqual(1, firstSync.CreatedCount);
                     AssertEqual(0, firstSync.UpdatedCount);
-                    AssertEqual(1, firstSync.CheckRuns.Count);
-                    AssertEqual("GitHubActions", firstSync.CheckRuns[0].ProviderName);
+                    AssertEqual(1, firstSync.CheckRunIds.Count);
+                    AssertEqual(1, firstSync.PageNumber);
+                    AssertEqual(10, firstSync.PageSize);
+                    AssertEqual(1, firstSync.FetchedCount);
+                    AssertEqual(0, firstSync.FilteredOutCount);
+                    AssertEqual(1L, firstSync.SourceTotalCount);
+                    AssertEqual(1, firstSync.SourceTotalPages);
+                    AssertFalse(firstSyncBody.Contains("\"CheckRuns\"", StringComparison.Ordinal), "the sync result carries ids, not embedded check runs");
+                    HttpResponseMessage importedRunResponse = await authClient.GetAsync("/api/v1/check-runs/" + firstSync.CheckRunIds[0]).ConfigureAwait(false);
+                    CheckRun importedRun = await JsonHelper.DeserializeAsync<CheckRun>(importedRunResponse).ConfigureAwait(false);
+                    AssertEqual("GitHubActions", importedRun.ProviderName);
 
                     HttpResponseMessage secondSyncResponse = await authClient.PostAsync("/api/v1/check-runs/sync/github-actions",
                         JsonHelper.ToJsonContent(new
@@ -221,7 +231,13 @@ namespace Test.Shared.Suites.E2E
                     AssertEqual("octo/armada-test", missionPullRequest.Repository);
                     AssertEqual(45, missionPullRequest.Number);
                     AssertEqual("ChangesRequested", missionPullRequest.ReviewStatus);
-                    AssertEqual(1, missionPullRequest.Checks.Count);
+                    AssertEqual(1, missionPullRequest.CheckCount);
+                    AssertEqual(2, missionPullRequest.ReviewCount);
+                    AssertEqual(1, missionPullRequest.CommentCount);
+                    AssertEqual(1, missionPullRequest.RequestedReviewerCount);
+                    AssertTrue(missionPullRequest.ReviewStatusComplete, "review status computed from every review");
+                    string detailJson = await missionPullRequestResponse.Content.ReadAsStringAsync().ConfigureAwait(false);
+                    AssertFalse(detailJson.Contains("\"Reviews\"", StringComparison.OrdinalIgnoreCase) || detailJson.Contains("\"Checks\"", StringComparison.OrdinalIgnoreCase) || detailJson.Contains("\"Comments\"", StringComparison.OrdinalIgnoreCase), "detail embeds no review, comment, or check list: " + detailJson);
 
                     HttpResponseMessage releasePullRequestsResponse = await authClient.PostAsync("/api/v1/releases/" + releaseId + "/github/pull-requests/enumerate", JsonHelper.ToJsonContent(new { PageSize = 100 })).ConfigureAwait(false);
                     AssertEqual(HttpStatusCode.OK, releasePullRequestsResponse.StatusCode);
@@ -238,6 +254,76 @@ namespace Test.Shared.Suites.E2E
                     {
                         try { await authClient.DeleteAsync("/api/v1/releases/" + releaseId).ConfigureAwait(false); } catch { }
                     }
+                    if (!String.IsNullOrWhiteSpace(missionId))
+                    {
+                        try { await authClient.DeleteAsync("/api/v1/missions/" + missionId).ConfigureAwait(false); } catch { }
+                    }
+                    if (!String.IsNullOrWhiteSpace(vesselId))
+                    {
+                        try { await authClient.DeleteAsync("/api/v1/vessels/" + vesselId).ConfigureAwait(false); } catch { }
+                    }
+                    TryDeleteDirectory(workingDirectory);
+                }
+            }));
+
+            cases.Add(CaseAsync("github_pull_request_lists_page_from_github", "GitHubPullRequestLists_PageFromGitHubWithExactTotals", TestTags.Positive, async () =>
+            {
+                E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this);
+                HttpClient authClient = fx.AuthClient;
+
+                using FakeGitHubServer fakeGitHub = new FakeGitHubServer("ghp_vessel_token");
+                fakeGitHub.ExtraReviewCount = 248;
+                fakeGitHub.ExtraCheckCount = 104;
+                string vesselId = String.Empty;
+                string missionId = String.Empty;
+                string workingDirectory = Path.Combine(Path.GetTempPath(), "armada-github-pages-" + Guid.NewGuid().ToString("N"));
+                Directory.CreateDirectory(workingDirectory);
+
+                try
+                {
+                    vesselId = await CreateVesselAsync(authClient, "GitHub Paging Vessel", fakeGitHub.RepositoryUrl, workingDirectory, fakeGitHub.ExpectedToken).ConfigureAwait(false);
+                    missionId = await CreateMissionAsync(authClient, vesselId, fakeGitHub.PullRequestUrl).ConfigureAwait(false);
+                    string prefix = "/api/v1/missions/" + missionId + "/github/pull-request";
+
+                    GitHubPullRequestDetail detail = await JsonHelper.DeserializeAsync<GitHubPullRequestDetail>(await authClient.GetAsync(prefix).ConfigureAwait(false)).ConfigureAwait(false);
+                    AssertEqual(250, detail.ReviewCount, "every review counted, beyond GitHub's default page of 30");
+                    AssertEqual(105, detail.CheckCount, "check total from total_count");
+                    AssertEqual("ChangesRequested", detail.ReviewStatus, "status computed over all pages");
+
+                    // Ascending: GitHub's order, pages of 100, exact totals, a short last page and an empty page past the end.
+                    EnumerationResult<GitHubPullRequestReview> first = await PostPageAsync<GitHubPullRequestReview>(authClient, prefix + "/reviews/enumerate", new { PageNumber = 1, PageSize = 100, Order = "CreatedAscending" }).ConfigureAwait(false);
+                    AssertEqual(250L, first.TotalRecords, "review total");
+                    AssertEqual(3, first.TotalPages, "review pages");
+                    AssertEqual(100, first.Objects.Count, "full first page");
+                    AssertEqual("reviewer1", first.Objects[0].ReviewerLogin, "oldest first");
+                    EnumerationResult<GitHubPullRequestReview> last = await PostPageAsync<GitHubPullRequestReview>(authClient, prefix + "/reviews/enumerate", new { PageNumber = 3, PageSize = 100, Order = "CreatedAscending" }).ConfigureAwait(false);
+                    AssertEqual(50, last.Objects.Count, "short last page");
+                    AssertEqual("extra247", last.Objects[49].ReviewerLogin, "last review last");
+                    EnumerationResult<GitHubPullRequestReview> past = await PostPageAsync<GitHubPullRequestReview>(authClient, prefix + "/reviews/enumerate", new { PageNumber = 4, PageSize = 100, Order = "CreatedAscending" }).ConfigureAwait(false);
+                    AssertEqual(0, past.Objects.Count, "empty page past the end");
+                    AssertEqual(250L, past.TotalRecords, "accurate total past the end");
+
+                    // Descending (the default) mirrors the order; an unaligned page size still pages without gaps.
+                    EnumerationResult<GitHubPullRequestReview> newest = await PostPageAsync<GitHubPullRequestReview>(authClient, prefix + "/reviews/enumerate", new { PageNumber = 2, PageSize = 7 }).ConfigureAwait(false);
+                    AssertEqual(7, newest.Objects.Count);
+                    AssertEqual("extra240", newest.Objects[0].ReviewerLogin, "descending page 2 of 7 starts at the 8th newest");
+
+                    // An oversized page size is normalized to GitHub's 100, and GitHub is never asked for more.
+                    EnumerationResult<GitHubPullRequestCheck> checks = await PostPageAsync<GitHubPullRequestCheck>(authClient, prefix + "/checks/enumerate", new { PageNumber = 1, PageSize = 5000, Order = "CreatedAscending" }).ConfigureAwait(false);
+                    AssertEqual(100, checks.PageSize, "page size normalized to 100");
+                    AssertEqual(100, checks.Objects.Count);
+                    AssertEqual(105L, checks.TotalRecords);
+                    AssertTrue(fakeGitHub.MaxPerPageSeen <= 100, "never more than per_page=100 from GitHub");
+
+                    EnumerationResult<GitHubPullRequestComment> comments = await PostPageAsync<GitHubPullRequestComment>(authClient, prefix + "/comments/enumerate", new { }).ConfigureAwait(false);
+                    AssertEqual(1L, comments.TotalRecords);
+                    AssertEqual("reviewer1", comments.Objects[0].AuthorLogin);
+
+                    HttpResponseMessage missing = await authClient.PostAsync("/api/v1/missions/msn_missing/github/pull-request/reviews/enumerate", JsonHelper.ToJsonContent(new { })).ConfigureAwait(false);
+                    AssertEqual(HttpStatusCode.NotFound, missing.StatusCode, "unknown mission is 404");
+                }
+                finally
+                {
                     if (!String.IsNullOrWhiteSpace(missionId))
                     {
                         try { await authClient.DeleteAsync("/api/v1/missions/" + missionId).ConfigureAwait(false); } catch { }
@@ -433,6 +519,13 @@ namespace Test.Shared.Suites.E2E
 
         #region Nested-Types
 
+        private static async Task<EnumerationResult<T>> PostPageAsync<T>(HttpClient client, string route, object body)
+        {
+            HttpResponseMessage response = await client.PostAsync(route, JsonHelper.ToJsonContent(body)).ConfigureAwait(false);
+            AssertEqual(HttpStatusCode.OK, response.StatusCode, route + ": " + await response.Content.ReadAsStringAsync().ConfigureAwait(false));
+            return await JsonHelper.DeserializeAsync<EnumerationResult<T>>(response).ConfigureAwait(false);
+        }
+
         private sealed class FakeGitHubServer : IDisposable
         {
             private readonly HttpListener _Listener;
@@ -444,6 +537,12 @@ namespace Test.Shared.Suites.E2E
             public string Issue123Title { get; set; } = "GitHub Issue 123";
 
             public string Issue123State { get; set; } = "open";
+
+            public int ExtraReviewCount { get; set; } = 0;
+
+            public int ExtraCheckCount { get; set; } = 0;
+
+            public int MaxPerPageSeen { get; private set; } = 0;
 
             public int Port { get; }
 
@@ -545,29 +644,37 @@ namespace Test.Shared.Suites.E2E
 
                     if (String.Equals(path, "/api/v3/repos/octo/armada-test/actions/runs", StringComparison.OrdinalIgnoreCase))
                     {
-                        string body = "{\"workflow_runs\":[{\"id\":9001,\"name\":\"CI Build\",\"display_title\":\"CI Build\",\"status\":\"completed\",\"conclusion\":\"success\",\"event\":\"push\",\"html_url\":\"http://localhost:" + Port + "/octo/armada-test/actions/runs/9001\",\"head_branch\":\"main\",\"head_sha\":\"abc123\",\"created_at\":\"2026-05-06T09:00:00Z\",\"run_started_at\":\"2026-05-06T09:01:00Z\",\"updated_at\":\"2026-05-06T09:02:00Z\"}]}";
+                        string body = "{\"total_count\":1,\"workflow_runs\":[{\"id\":9001,\"name\":\"CI Build\",\"display_title\":\"CI Build\",\"status\":\"completed\",\"conclusion\":\"success\",\"event\":\"push\",\"html_url\":\"http://localhost:" + Port + "/octo/armada-test/actions/runs/9001\",\"head_branch\":\"main\",\"head_sha\":\"abc123\",\"created_at\":\"2026-05-06T09:00:00Z\",\"run_started_at\":\"2026-05-06T09:01:00Z\",\"updated_at\":\"2026-05-06T09:02:00Z\"}]}";
                         await WriteJsonAsync(context.Response, body).ConfigureAwait(false);
                         return;
                     }
 
                     if (String.Equals(path, "/api/v3/repos/octo/armada-test/pulls/45/reviews", StringComparison.OrdinalIgnoreCase))
                     {
-                        string body = "[{\"state\":\"APPROVED\",\"body\":\"Looks good\",\"submitted_at\":\"2026-05-06T11:05:00Z\",\"user\":{\"login\":\"reviewer1\"}},{\"state\":\"CHANGES_REQUESTED\",\"body\":\"Please rename one method\",\"submitted_at\":\"2026-05-06T10:30:00Z\",\"user\":{\"login\":\"reviewer2\"}}]";
-                        await WriteJsonAsync(context.Response, body).ConfigureAwait(false);
+                        List<string> reviews = new List<string>
+                        {
+                            "{\"state\":\"APPROVED\",\"body\":\"Looks good\",\"submitted_at\":\"2026-05-06T11:05:00Z\",\"user\":{\"login\":\"reviewer1\"}}",
+                            "{\"state\":\"CHANGES_REQUESTED\",\"body\":\"Please rename one method\",\"submitted_at\":\"2026-05-06T10:30:00Z\",\"user\":{\"login\":\"reviewer2\"}}"
+                        };
+                        for (int i = 0; i < ExtraReviewCount; i++)
+                            reviews.Add("{\"state\":\"COMMENTED\",\"body\":\"note " + i + "\",\"submitted_at\":\"2026-05-07T10:00:00Z\",\"user\":{\"login\":\"extra" + i + "\"}}");
+                        await WritePageAsync(context, reviews, null).ConfigureAwait(false);
                         return;
                     }
 
                     if (String.Equals(path, "/api/v3/repos/octo/armada-test/issues/45/comments", StringComparison.OrdinalIgnoreCase))
                     {
-                        string body = "[{\"body\":\"Need one more check\",\"html_url\":\"http://localhost:" + Port + "/octo/armada-test/issues/45#issuecomment-1\",\"created_at\":\"2026-05-06T10:10:00Z\",\"user\":{\"login\":\"reviewer1\"}}]";
-                        await WriteJsonAsync(context.Response, body).ConfigureAwait(false);
+                        List<string> comments = new List<string> { "{\"body\":\"Need one more check\",\"html_url\":\"http://localhost:" + Port + "/octo/armada-test/issues/45#issuecomment-1\",\"created_at\":\"2026-05-06T10:10:00Z\",\"user\":{\"login\":\"reviewer1\"}}" };
+                        await WritePageAsync(context, comments, null).ConfigureAwait(false);
                         return;
                     }
 
                     if (String.Equals(path, "/api/v3/repos/octo/armada-test/commits/abc123/check-runs", StringComparison.OrdinalIgnoreCase))
                     {
-                        string body = "{\"check_runs\":[{\"name\":\"build-and-test\",\"status\":\"completed\",\"conclusion\":\"success\",\"details_url\":\"http://localhost:" + Port + "/octo/armada-test/actions/runs/9001\"}]}";
-                        await WriteJsonAsync(context.Response, body).ConfigureAwait(false);
+                        List<string> checks = new List<string> { "{\"name\":\"build-and-test\",\"status\":\"completed\",\"conclusion\":\"success\",\"details_url\":\"http://localhost:" + Port + "/octo/armada-test/actions/runs/9001\"}" };
+                        for (int i = 0; i < ExtraCheckCount; i++)
+                            checks.Add("{\"name\":\"check-" + i + "\",\"status\":\"completed\",\"conclusion\":\"success\",\"details_url\":null}");
+                        await WritePageAsync(context, checks, "check_runs").ConfigureAwait(false);
                         return;
                     }
 
@@ -584,6 +691,24 @@ namespace Test.Shared.Suites.E2E
                     {
                     }
                 }
+            }
+
+            private async Task WritePageAsync(HttpListenerContext context, List<string> items, string? envelope)
+            {
+                // GitHub paging: per_page (default 30, at most 100) and page; a Link header names the last page when there
+                // is more than one; check-runs wrap the page in an envelope with total_count.
+                int perPage = 30;
+                int page = 1;
+                if (Int32.TryParse(context.Request.QueryString["per_page"], out int requestedPerPage)) perPage = Math.Clamp(requestedPerPage, 1, 100);
+                if (Int32.TryParse(context.Request.QueryString["page"], out int requestedPage)) page = Math.Max(1, requestedPage);
+                lock (this) MaxPerPageSeen = Math.Max(MaxPerPageSeen, perPage);
+                int lastPage = Math.Max(1, (items.Count + perPage - 1) / perPage);
+                List<string> slice = items.Skip((page - 1) * perPage).Take(perPage).ToList();
+                if (lastPage > 1)
+                    context.Response.AddHeader("Link", "<http://localhost:" + Port + context.Request.Url!.AbsolutePath + "?per_page=" + perPage + "&page=" + lastPage + ">; rel=\"last\"");
+                string array = "[" + String.Join(",", slice) + "]";
+                string body = envelope == null ? array : "{\"total_count\":" + items.Count + ",\"" + envelope + "\":" + array + "}";
+                await WriteJsonAsync(context.Response, body).ConfigureAwait(false);
             }
 
             private static async Task WriteJsonAsync(HttpListenerResponse response, string body)

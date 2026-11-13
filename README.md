@@ -7,7 +7,7 @@
 <p align="center">
   <strong>Run a fleet of AI coding agents across all of your repositories: in parallel, isolated, reviewed, and on the record.</strong>
   <br />
-  <em>v1.2.0</em>
+  <em>v1.3.0</em>
 </p>
 
 <p align="center">
@@ -17,6 +17,7 @@
   <a href="#quick-start">Quick Start</a> |
   <a href="#how-it-works">How It Works</a> |
   <a href="#ask-armada">Ask Armada</a> |
+  <a href="#black-box-why-did-it-fail-and-what-now">Black Box</a> |
   <a href="#pipelines">Pipelines</a> |
   <a href="#terminal-ui">TUI</a> |
   <a href="#mobile-app">Mobile</a> |
@@ -36,7 +37,7 @@
 Armada is a self-hosted coordinator for the coding agents you already use: Claude Code, Codex, Gemini CLI, Cursor, Mux, OpenCode, pi, and any model behind an API endpoint. You describe the work. Armada hands it to agents, gives each one its own git worktree and branch, runs it through the stages you choose (plan, implement, test, review), lands the result the way you choose (merge, pull request, or merge queue), and records every log, diff, and decision in a database you can query later.
 
 - **The problem.** One agent in one terminal is easy. Five agents across twelve repositories is not: you juggle branches and worktrees, babysit sessions, lose track of what landed and what failed, and rebuild context every time you switch projects.
-- **What Armada does.** It turns agent work into durable, tracked units (missions) that run in parallel, in isolation, through review gates, with automatic recovery when an agent stalls or fails.
+- **What Armada does.** It turns agent work into durable, tracked units (missions) that run in parallel, in isolation, through review gates, with automatic recovery when an agent stalls or fails. When something does fail, the [black box](#black-box-why-did-it-fail-and-what-now) records where, how and why, and hands you a FIX THIS brief with ranked recovery paths.
 - **Why not just run the CLIs.** Armada runs those same CLIs, and adds the parts you otherwise do by hand: worktree isolation, queueing and routing, quality gates, landing, retries, history, and approvals from a browser, terminal, or phone.
 - **Who it's for.** Developers who work across several repositories, tech leads who want parallel agent work with a record of what changed, and AI engineers comparing runtimes and models on real tasks.
 
@@ -147,8 +148,28 @@ Armada does not replace your agent. It runs it. The comparison is with the work 
 
 ---
 
+## v1.3.0: concurrency and built-in fleet actions
+
+v1.3.0 has two marquee features: **parallelization and concurrency**, and **out-of-the-box fleet actions for common repository tasks**.
+
+**Parallelization and concurrency.** Each vessel limits how many voyages run at once (`MaxParallelVoyages`, default 1) and how many missions of a voyage run at once (`MaxParallelMissionsPerVoyage`, default 4). Each captain runs up to `MaxConcurrency` missions in slots, each with its own dock and process: a CLI captain runs one mission, so four parallel missions need four CLI captains, while one ApiEndpoint or Mux captain runs four by default. Architects split work into a hierarchy of small missions: a child starts after its parent finishes and builds on its branch, siblings run in parallel, and each mission declares the files it owns so parallel missions do not collide. Every wait is recorded with its reason, and a Pending mission explains which limit holds it and the smallest change that would admit it. The dashboard, TUI and Mobile show each voyage as a tree, each mission's wait time and children, and each vessel's slots and waiting work. See [Capacity](docs/SCHEDULING.md#capacity), the [mission hierarchy](docs/PIPELINES.md#mission-hierarchy) and the [end-to-end test guide](docs/CONCURRENCY_TESTING.md).
+
+**Usage-based captain selection.** v1.3.0 can choose among qualified captains using captured account allowance, and records why each captain was chosen or why a mission waits. Observe is the default: it records what the configured strategy (First available, Most remaining allowance or Most used allowance) would have chosen without changing routing. Enforce is an explicit opt-in that commits the assignment, captain slot, decision and usage reservations atomically before launch on all four database providers. Dashboard, TUI, Mobile, Helm (`armada mission selection`), REST and MCP show each mission's decision, captain comparison, history and read-only preview, and administrators can grant audited recovery permissions. See the [operator guide](docs/usage-selection/OPERATIONS.md) and the [enforcement and mission inspection guide](docs/usage-selection/ENFORCEMENT_AND_MISSION_INSPECTION.md).
+
+The [built-in fleet action catalog](docs/FLEET_ACTIONS.md#built-in-actions) ships 25 actions (20 new), available in every tenant without creating action templates. Run performance reviews and fixes, code cleanliness reviews and dead-code cleanup, vulnerability audits and security reviews, secrets scans, and license compliance checks across selected repositories. The catalog also covers builds, tests, linting, dependency updates, framework upgrades, and documentation upkeep. Report-only actions collect findings without changing repositories; follow-up runs can target only repositories with findings or failures. New built-ins are added at startup, while tenant edits and deleted built-ins are respected.
+
+v1.3.0 removes `Vessel.AllowConcurrentMissions`, `Captain.CurrentMissionId`, `Captain.CurrentDockId` and Helm `--allow-concurrent` with no deprecation period. Back up before upgrading; see [UPGRADING.md](docs/UPGRADING.md#v120-to-v130).
+
 ## What's New in v1.2.0
 
+Two anchor features help you understand a captain's available capacity and a model's fit for the work you assign:
+
+- **Check and monitor captain usage.** Check a captain's account usage on demand with **Capture now**, enable recurring capture, and monitor reported account limits, utilization, and reset windows over time. The dashboard brings usage checks and monitoring into the captain's detail page and **Activity > Captain Usage**, which combines usage charts with the current account limits table.
+- **Evaluate model fit for purpose by persona.** Evaluate a captain or model endpoint before assigning it a role such as Worker, Architect, or Judge. Quick probes check runtime behavior, including output contracts, tool calling, speed, and answer consistency. Full evaluations add task battery packs and selected personas, with per-persona outcomes and a report to help you judge suitability for your workload. Start an evaluation from Captains or a captain's Evaluations page, and follow its results while it runs or afterward.
+
+The release also includes:
+
+- **Mission and voyage black box.** Every failure, of any kind and including landing failures, writes an entry at the moment of failure: where, how and why it failed, the missions, files and directories it collided with, the configuration that would have prevented it, and ranked recovery paths with exact commands. Copy the **FIX THIS** brief into any coding agent, run a recovery path with a dry run and a confirmation, or ask Ask Armada for its opinion. Entries live in the database by default, or on disk, S3 and S3-compatible stores, Azure Blob, Google Cloud Storage, CIFS or NFS, with retention and garbage collection. See [Black box](#black-box-why-did-it-fail-and-what-now) and [docs/BLACKBOX.md](docs/BLACKBOX.md).
 - **pi runtime support.** [pi](https://pi.dev) (the pi coding agent) is a first-class captain runtime: missions, Ask turns, and planning sessions run `pi -p --mode json` with exact token usage and cost, provider-error detection (pi exits 0 on provider errors in JSON mode), and the scoped Armada MCP binding. `armada mcp install` configures pi's `~/.pi/agent/mcp.json`; Approve in Armada works through a shipped pi extension that sends each shell command to the Approvals center and Ask (it fails closed); Refuse removes both of pi's shell tools (`bash` and Windows `powershell`). Add one with:
 
   ```bash
@@ -156,30 +177,11 @@ Armada does not replace your agent. It runs it. The comparison is with the work 
   ```
 
   See [docs/INSTRUCTIONS_FOR_PI.md](docs/INSTRUCTIONS_FOR_PI.md) (captain setup, permissions) and [docs/PI_AS_ORCHESTRATOR.md](docs/PI_AS_ORCHESTRATOR.md) (pi driving Armada over MCP).
-- **Model evaluation.** Every stage attempt is recorded as a stage outcome with its provenance (runtime version, model digest, escalation record) and a suspected cause, with editable failure-cause rules over REST, MCP, and the clients.
-- **Evaluate a captain or model endpoint.** Quick probes check served context, output contract, format rules, tool calling, speed, and determinism; the fixture battery runs data-defined task packs (starting with C#) through real dispatch and grades the results.
+- **Stage outcome evidence.** Every stage attempt is recorded as a stage outcome with its provenance (runtime version, model digest, escalation record) and a suspected cause, with editable failure-cause rules over REST, MCP, and the clients.
 - **Reader-aware handoffs.** Work is handed to the next stage in a form suited to the model that reads it.
-- **Captain usage visibility and management**, and mobile interfaces for the new surfaces.
+- **Mobile interfaces** for the new surfaces.
 
-Every change is in [CHANGELOG.md](CHANGELOG.md#v120-2026-10-27).
-
-## What's New in v1.1.0
-
-- **Frontier models plan and review, local models do the work.** Personas carry ordered captain priorities, so one pipeline can route an Architect and Judge to a cloud model and its Workers to local ones.
-- **Harbor (experimental split mode).** Captains, git, and docks run on your own machine while the Admiral runs elsewhere, with a macOS menu bar, metrics, and a Harbor-side merge queue.
-- **Mobile app** for iOS and Android at parity with the dashboard, plus Ask Armada over MCP, CLI permission cards, Workspace, token activity calendars, and an administrator storage inventory.
-- **Delivery and handoff hardening for mixed runtimes.** A fleet that mixes Claude Code, Codex, Mux, and API endpoints with local and cloud models now fails narrowly and recovers on its own:
-  - Dispatch is claim-first and compare-and-swap, so a mission never runs twice and a captain is never left Working with no process.
-  - Failures are classified (infrastructure, model, contract, mechanical) and each kind is retried, repaired, or escalated on its own terms; a cancelled mission stays cancelled.
-  - Every work stage is built and tested before it hands off, whatever runtime ran it, and the next stage receives the exact commit that was checked.
-  - API captains can stream (opt in per endpoint), report liveness, compact their context before it overflows, and ride through an endpoint outage for `TransientOutageGraceMinutes`.
-  - Judge, Architect, and verifier output that breaks its contract gets one repair turn; a verifier can report `BLOCKED` instead of a false pass.
-  - An integration slice merges its sibling slices, an Architect fan-out recovers from a lost child, and the optional `BlockDependentsOfFailedStages` setting shows dependents as Blocked until the failed stage is restarted.
-  - Admiral restarts and killed Harbor processes are recovered without orphaned agents or stuck captains.
-
-Every change is in [CHANGELOG.md](CHANGELOG.md#v110-2026-10-15).
-
----
+Every change is in [CHANGELOG.md](CHANGELOG.md#v120-2026-10-29).
 
 ## What You Get
 
@@ -190,6 +192,11 @@ Every change is in [CHANGELOG.md](CHANGELOG.md#v110-2026-10-15).
 - [Playbooks](#playbooks): reusable markdown guidance attached at dispatch time.
 - Planning sessions: chat with a captain, then dispatch the agreed plan without copy and paste.
 - Backlog of scoped objectives with acceptance criteria, optionally imported from GitHub issues or PRs.
+
+**Black box: failure forensics**
+- Every mission or voyage failure, of any kind and including landing failures, writes a [black box entry](#black-box-why-did-it-fail-and-what-now) at the moment of failure: where (phase, step, host, code site), how (exception, exit code, failing command, git error), status before and after, why (rule ids and confidence), conflicting missions with the files and directories they collided on, the configuration in effect, and ranked recovery paths with exact commands.
+- A **FIX THIS** brief for any coding agent, a plain account for you, and a maintainer view for Armada itself; recovery paths run with a dry run and a confirmation.
+- Stored in the database by default, or on disk, S3 and S3-compatible stores (Less3, MinIO), Azure Blob, Google Cloud Storage, CIFS or NFS, with retention and garbage collection ([docs/BLACKBOX.md](docs/BLACKBOX.md)).
 
 **Safety and control**
 - Git isolation: one worktree and branch per mission; your checkout is untouched until landing.
@@ -230,7 +237,7 @@ Every change is in [CHANGELOG.md](CHANGELOG.md#v110-2026-10-15).
 - Local install, Docker Compose, prebuilt installers for Windows, macOS, and Linux, and the CLI as a .NET tool.
 - SQLite (default), PostgreSQL, SQL Server, or MySQL, with automatic migrations and pre-migration backups.
 - Remote use: an Admiral on another machine ([docs/REMOTE_SERVER.md](docs/REMOTE_SERVER.md)), Armada.Proxy for remote browsers and phones, and Harbors for split mode (experimental).
-- OpenTelemetry export with a Prometheus, Loki, and Grafana stack ([docs/TELEMETRY.md](docs/TELEMETRY.md)).
+- OpenTelemetry export with a collector, Prometheus, Tempo, Loki, and Grafana stack ([docs/TELEMETRY.md](docs/TELEMETRY.md)).
 - [Internationalized](#internationalization) dashboard, TUI, and mobile app (English plus eight beta locales).
 - [Self-rebuild](#rebuilding-armada-from-the-dashboard) from the dashboard when Armada's own source is a vessel.
 
@@ -258,6 +265,14 @@ git clone https://github.com/jchristn/armada.git
 cd armada
 ./scripts/macos/install.sh      # Linux: ./scripts/linux/install.sh   Windows: scripts\windows\install.bat
 ```
+
+On WSL, use `scripts/wsl2/` (WSL 2) or `scripts/wsl/` (WSL 1). They have the same script names as `scripts/linux/` and fix what breaks under WSL: Windows `dotnet`/`node`/`claude` shims on the PATH, `~/.dotnet/tools` missing from the PATH, CRLF checkouts, and (WSL 2) an Admiral on Windows that is not reachable at `localhost`.
+
+**Native libraries on Linux and WSL.** Building never loads these, so a missing one only shows when a program starts. The install-type scripts (`install`, `reinstall`, `update`, `install-startup`, `update-startup`) install what is missing themselves, with `sudo apt-get install -y` (or `dnf install -y`): ICU always, plus `xclip` for the TUI's clipboard and, on WSL, `wslu xdg-utils` for opening links. Set `INSTALL_SYSTEM_PACKAGES=0` to have them only list the packages (they still stop when ICU is missing). The `run-*` scripts only check, with `ldconfig`, and print the command:
+
+- .NET itself needs ICU. Without it `dotnet` fails with "Couldn't find a valid ICU package installed on the system": `sudo apt install libicu-dev` (or the `libicuNN` package; Fedora: `sudo dnf install libicu`). The Admiral server needs nothing else.
+- Harbor (an Avalonia desktop app) needs the X11 client libraries. WSLg supplies only the display, and the stock WSL images lack them, so Harbor fails with "Unable to load shared library 'libICE.so.6'" (or another of these): `sudo apt install libx11-6 libice6 libsm6 libxext6 libxrandr2 libxi6 libxcursor1 libxfixes3 libfontconfig1` (Fedora: `sudo dnf install libX11 libICE libSM libXext libXrandr libXi libXcursor libXfixes fontconfig`). `run-harbor` and `run-local` stop before building when they are missing; Harbor itself prints the same command and keeps running headless.
+- The terminal UI (`armada tui`) copies with `wl-copy`, `xclip` or `xsel` (`sudo apt install xclip`) and opens links with `xdg-open`; under WSL install `sudo apt install wslu xdg-utils` so links reach the Windows browser through `wslview`.
 
 The install script builds the solution, deploys the dashboard, and installs the `armada` CLI as a global .NET tool. The default target is `net10.0`. With only .NET 8 installed, use `./scripts/macos/install.sh --framework net8.0` (Linux uses the same flag) or `scripts\windows\install.bat net8.0`. Prebuilt installers and Docker images are listed under [Deployment](#deployment).
 
@@ -513,6 +528,54 @@ The design, REST routes (`/api/v1/ask/threads/...`), events, and settings are in
 
 ---
 
+## Black box: why did it fail, and what now?
+
+When a mission or voyage fails, for any reason (dispatch, execution, completion gates, review, handoff, landing, the merge queue, recovery, voyage settlement), Armada writes a **black box entry** at the moment of failure, before anything can erase the evidence. Restarting or rescuing the mission later never deletes it; each attempt keeps its own entry.
+
+**What an entry contains**
+
+- **Which** mission and voyage failed, on which vessel, captain, dock and host.
+- **Where** it failed: phase and step (for example `Landing / DirtyCheckout`), host (Admiral or a Harbor), the code site and the Armada build.
+- **How** it failed: the exception, exit code, failing command and its output, or the git operation and its error.
+- **Status** before and after, and the status timeline.
+- **Why**: findings from a versioned rule catalog, each with a rule id, confidence and the evidence it rests on, and a triage verdict: your configuration (`UserConfig`), the mission brief (`MissionBrief`), a `Transient` condition, an `ArmadaDefect`, or something `External`.
+- **Conflicts**: the missions that landed on the target since this one started and touched the same files (found by commit trailer), the conflicted files and the directories they cluster in.
+- **Configuration** in effect, with where each value came from, and what would have prevented the failure.
+- **What Armada could change**, with source pointers. For failures in Armada's own handoff and landing the black box is biased toward Armada: it assumes Armada could have been more resilient, says whether Armada could have healed the failure by itself, and writes the Armada change, with the test that would have caught it, as a mission brief (see [Resilience bias](docs/BLACKBOX.md#11-resilience-bias)).
+- **Recovery paths**, ranked, each step with its MCP call, REST request and CLI command.
+- Bounded, redacted **evidence**: agent output, the diff, the mission log tail, check output, `git status` of the worktree and target, the target commits and the events.
+
+**Three ways to get the FIX THIS brief** (paste it into any coding agent and say "FIX THIS"):
+
+1. The dashboard black box panel on the mission page: **Copy Markdown**.
+2. The terminal: `armada blackbox show <id> --brief | pbcopy` once the Helm black box commands land; today, the REST route: `curl -s -H "Authorization: Bearer $TOKEN" http://localhost:7890/api/v1/missions/<id>/blackbox/brief | pbcopy`.
+3. MCP: `get_blackbox {"missionId": "<id>"}` for the 2 KB summary, or `{"missionId": "<id>", "format": "brief"}` for the brief.
+
+The panel shows the same sections as the brief, **Copy Markdown**, **Copy JSON**, a `.zip` download, recovery buttons that dry run and then confirm, Resolve, Pin, notes, links to the conflicting missions and similar failures, and **Ask Armada about this failure**. The **Black Box** tab on the Missions page lists every entry with filters, fingerprints, hotspots and retention (with a garbage collection preview), and server settings choose the storage target and retention. The VS Code extension (`src/Armada.VSCode`) and the mobile app show the same entry. The TUI has a Failure tab on mission and voyage screens and a Black Box tab on the Missions screen (`g b`), and the Helm CLI has `armada blackbox` commands (for example `armada blackbox show <id> --brief | pbcopy`).
+
+
+Over MCP, an agent can take "Review the black box for mission msn_x and fix it" end to end: read the summary, read the sections and evidence it needs, dry run a recorded recovery path, confirm it with the token, and resolve the entry. It can only run actions recorded in the entry, each authorized as if you had called that tool, and anything that risks data loss needs an explicit acknowledgement.
+
+In Ask Armada, ask:
+
+```
+Show me the pertinent details from the black box for mission msn_x and give me your opinion
+on why it failed and what could have been done differently.
+```
+
+The captain reads the entry (read tools need no approval), answers with what happened, why, its opinion clearly labeled, and what you or Armada could change, and offers the recovery paths as confirm cards.
+
+**Storage and retention**
+
+| | Default | Options |
+|---|---|---|
+| Storage target | Database (BLOBs indexed by mission, voyage, vessel, captain and other ids; included in backups) | Disk, S3 and S3-compatible (AWS, Less3, MinIO), Azure Blob, Google Cloud Storage, CIFS, NFS; per-entry target, migration between targets, fallback to the database |
+| Retention | 180 days (`blackBox.retention.retentionDays`; 0 keeps forever), resolved entries 30 days, the latest entry of each mission kept | Per-vessel override, pinning, 1000 entries per vessel, 1 GB total, garbage collection every 60 minutes, manual GC, purge by filter (dry run first) |
+
+Everything is in [docs/BLACKBOX.md](docs/BLACKBOX.md) (user guide and developer contract) and [docs/BLACKBOX_SCHEMA.md](docs/BLACKBOX_SCHEMA.md) (the record schema for consumers).
+
+---
+
 ## Pipelines
 
 Pipelines run work through explicit stages instead of treating every task as one agent session. Each stage is a **persona** with its own prompt template.
@@ -574,7 +637,7 @@ Every prompt Armada sends is backed by an editable template, and the dashboard h
 
 ### Persona Prompts and Handoffs
 
-Default persona guidance requires explicit evidence, tool limitations, self-contained Architect missions, executable acceptance checks, and actionable reviewer/test handoffs. See [Prompt and Handoff Improvements](PROMPT_AND_HANDOFF_IMPROVEMENTS.md) for the ranked plan, validation, live-template rollout, and replication procedure. Existing untouched defaults upgrade on startup; customized templates remain intact.
+Default persona guidance requires explicit evidence, tool limitations, self-contained Architect missions, executable acceptance checks, and actionable reviewer/test handoffs. See [Prompt and Handoff Improvements](archive/PROMPT_AND_HANDOFF_IMPROVEMENTS.md) for the ranked plan, validation, live-template rollout, and replication procedure. Existing untouched defaults upgrade on startup; customized templates remain intact.
 
 ## Playbooks
 
@@ -604,7 +667,7 @@ armada tui --server http://127.0.0.1:7890  # a specific server (saved as a profi
 armada tui --profile work --route /missions
 ```
 
-Every dashboard screen opens a real TUI screen (Ask Armada, Home, Needs You, Dispatch with its Planning and Backlog tabs, Fleet Actions, Missions, Voyages, Merge Queue, Activity with its Jobs tab, Vessels, Captains and Docks, Delivery, Configuration, API Explorer, Settings with its Storage and CLI Tool Permissions tabs), plus an Approvals center. Profiles live in `~/.armada/tui.json` with tokens in the OS keychain, and are shared with `armada profile`.
+Every dashboard screen opens a real TUI screen (Ask Armada, Home, Needs You, Dispatch with its Planning and Backlog tabs, Fleet Actions, Missions, Voyages, Merge Queue, Activity, Vessels, Captains and Docks, Delivery, Configuration, API Explorer, Settings with its Storage and CLI Tool Permissions tabs), plus an Approvals center. Profiles live in `~/.armada/tui.json` with tokens in the OS keychain, and are shared with `armada profile`.
 
 | Key | Does |
 |-----|------|
@@ -681,7 +744,7 @@ The app is not yet in the App Store or Google Play; install a build from whoever
 
 ## Activity and Monitoring
 
-Mission history on the dashboard shows completed and failed work over time. Activity gathers the cross-entity timeline, API requests, events, signals, and model usage. Harbor Charts show jobs, concurrency, launch speed, link health, and tokens for one host.
+Mission history on the dashboard shows completed and failed work over time. Activity gathers the cross-entity timeline, API requests, events, signals, and model usage. Background task outcomes appear in Events; failures also emit error signals and the latest actionable failure appears in Needs You. Harbor Charts show jobs, concurrency, launch speed, link health, and tokens for one host.
 
 Token calendars supplement the existing monitoring charts in dashboard/mobile Activity → Token Usage and Harbor Charts. The TUI Token Usage tab shows daily activity; `u` opens the navigable calendar. See [token heatmaps and screenshot data](archive/TOKEN_USAGE_HEATMAP.md).
 
@@ -780,7 +843,7 @@ Browse the dashboard, Harbor desktop app, and terminal UI. Expand a section to v
 
 - **Import.** **Import repositories** on the Vessels page (or `armada vessel import --root ~/Code --dry-run`) scans directories on the Admiral host, shows every git repository it found with a status (new, already onboarded, worktree, and so on), and creates vessels only for the ones you keep. Imported vessels point at your existing checkout and never set `LocalPath`, so removing a vessel never touches your clone. Scanning is limited to `Import.AllowedRoots`. A captain can also recommend fleet groupings.
 - **Vessel Health** (the Health tab, or `armada health`) grades each vessel: commits ahead of or behind the default branch, uncommitted changes, stale `armada/*` branches, outdated and vulnerable NuGet and npm packages, tests and the latest check run, CI configuration, and recent mission failures. Evaluations run every 6 hours (`RepositoryHealth.IntervalMinutes`) or on demand; a check that cannot run shows as Unknown, not healthy.
-- **Fleet Actions** apply one action across many vessels: a Command action runs a shell command in each working directory and records the output; a Mission action dispatches one voyage per vessel, paced.
+- **Fleet Actions** apply one action across many vessels: a Command action runs a shell command in each working directory and records the output; a Mission action dispatches one voyage per vessel, paced. v1.3.0 ships [25 built-in actions](docs/FLEET_ACTIONS.md#built-in-actions) for common repository tasks, including performance, cleanliness, security, and license compliance.
 - **View History** (`H` in the TUI, or `armada vessel history <vessel>`) shows a commit heatmap and the commits behind it, with authors, line counts, and files changed.
 
 See [docs/FLEET_ACTIONS.md](docs/FLEET_ACTIONS.md), [docs/VESSEL_HEALTH.md](docs/VESSEL_HEALTH.md), and the Vessel Import section of [docs/REST_API.md](docs/REST_API.md).
@@ -828,7 +891,7 @@ Installing from source (above) is the path the project uses day to day. Release 
 | Windows | Harbor `.exe` (Inno Setup) and the Admiral server `.msi` (WiX) |
 | macOS | `Armada Harbor.app` in a `.dmg`, and the Admiral server `.pkg` |
 | Linux | `.deb` and `.rpm` packages for the CLI, Harbor, and the server |
-| Docker | Admiral, dashboard, and proxy images on Docker Hub (`jchristn77/armada-server`, `jchristn77/armada-dashboard`, `jchristn77/armada-proxy`; tags `v1.2.0` and `latest`). `docker/update.sh` or `docker/update.bat` pulls them and recreates the stack without touching its data |
+| Docker | Admiral, dashboard, and proxy images on Docker Hub (`jchristn77/armada-server`, `jchristn77/armada-dashboard`, `jchristn77/armada-proxy`; tags `v1.3.0` and `latest`). `docker/update.sh` or `docker/update.bat` pulls them and recreates the stack without touching its data |
 
 Each release carries a `SHA256SUMS` file. Installers are code-signed only when the release was built with signing credentials; an unsigned Windows installer shows a SmartScreen prompt ("More info", then "Run anyway"), and an unsigned macOS app or package must be allowed once in **System Settings > Privacy & Security** ("Open Anyway"). See [BUILDING_INSTALLERS.md](BUILDING_INSTALLERS.md).
 
@@ -841,10 +904,14 @@ To run the server as a user-scoped background service from your checkout, use th
 | Task | Linux | macOS | Windows |
 |------|-------|-------|---------|
 | Publish server and dashboard only | `./scripts/linux/publish-server.sh` | `./scripts/macos/publish-server.sh` | `scripts\windows\publish-server.bat` |
-| Install and register at startup | `./scripts/linux/install-systemd-user.sh` | `./scripts/macos/install-launchd-agent.sh` | `scripts\windows\install-windows-task.bat` |
-| Update from the current checkout | `./scripts/linux/update-systemd-user.sh` | `./scripts/macos/update-launchd-agent.sh` | `scripts\windows\update-windows-task.bat` |
+| Install and register at startup | `./scripts/linux/install-startup.sh` | `./scripts/macos/install-startup.sh` | `scripts\windows\install-startup.bat` |
+| Update from the current checkout | `./scripts/linux/update-startup.sh` | `./scripts/macos/update-startup.sh` | `scripts\windows\update-startup.bat` |
 | Verify the running deployment | `./scripts/linux/healthcheck-server.sh` | `./scripts/macos/healthcheck-server.sh` | `scripts\windows\healthcheck-server.bat` |
-| Remove the startup registration | `./scripts/linux/remove-systemd-user.sh` | `./scripts/macos/remove-launchd-agent.sh` | `scripts\windows\remove-windows-task.bat` |
+| Remove the startup registration | `./scripts/linux/remove-startup.sh` | `./scripts/macos/remove-startup.sh` | `scripts\windows\remove-startup.bat` |
+
+On WSL, run the same scripts from `scripts/wsl2/` (WSL 2) or `scripts/wsl/` (WSL 1). Their `install-startup.sh` puts a hidden launcher in the Windows Startup folder that starts the server through `wsl.exe` at Windows login (systemd units and desktop autostart entries do not run at Windows login). The earlier per-OS names (`install-systemd-user.sh` on Linux, `install-launchd-agent.sh` on macOS, `install-windows-task.bat` on Windows, and their `update-`/`remove-` partners) still work and forward to the `*-startup` scripts; see [docs/RUN_ON_STARTUP.md](docs/RUN_ON_STARTUP.md#script-names).
+
+Every script directory (`scripts/macos`, `scripts/linux`, `scripts/wsl2`, `scripts/wsl`, `scripts/windows`) has the same set: `install`, `reinstall`, `remove`, `update`, `install-mcp`, `remove-mcp`, `install-startup`, `update-startup`, `remove-startup`, `publish-server`, `deploy-dashboard`, `healthcheck-server`, `start-armada-server`, `stop-armada-server`, `stop-repo-mcp-hosts`, `factory-reset`, `run-local`, `run-harbor`, `run-tui`, `build-server`, `build-dashboard`, `build-proxy`, `build-all`, `run-db-parity-tests`, `run-upgrade-test`, `e2e-split-mode`, `generate-api-surface` and `generate-blackbox-schema`. They are `.sh` on macOS, Linux and WSL and `.bat` on Windows, where `start-armada-server`, `stop-armada-server` and `stop-repo-mcp-hosts` are PowerShell (`.ps1`). Each prints its usage with `-h` and rejects arguments it does not know. `install` fails when the `armada` tool is already installed (use `reinstall`), `reinstall` works whether or not it is installed, `remove` succeeds with "nothing to remove", and all three refuse while an Armada server is running (stop it with `stop-armada-server`). macOS also has `build-harbor-app.sh`, which builds the Harbor `.app` bundle.
 
 These publish `Armada.Server` into `~/.armada/bin` (`%USERPROFILE%\.armada\bin` on Windows) and the dashboard into `~/.armada/dashboard`. The remove scripts unregister the startup entry but keep the published files. `scripts/<os>/run-local.sh` (or `.bat`) builds and starts the server, then runs a Harbor in the foreground for exercising the Harbor link. See [docs/RUN_ON_STARTUP.md](docs/RUN_ON_STARTUP.md).
 
@@ -857,21 +924,21 @@ Docker Compose runs the server (and an optional standalone dashboard) in contain
 ```bash
 cd docker/armada
 export ARMADA_INITIAL_ADMIN_PASSWORD='choose-a-strong-password'   # required; 8+ characters
+export ARMADA_GRAFANA_ADMIN_PASSWORD='choose-another-strong-password'
 docker compose up -d       # start
 docker compose down        # stop (data is kept)
 ```
 
-Sign in as `admin@armada` with the password you set. The compose file refuses to start without `ARMADA_INITIAL_ADMIN_PASSWORD`.
+Sign in as `admin@armada` with the password you set. The compose file requires `ARMADA_INITIAL_ADMIN_PASSWORD` and `ARMADA_GRAFANA_ADMIN_PASSWORD`. Observability ports bind to loopback; use an authenticated proxy or tunnel for remote access.
 
 | Service | Port | URL | Description |
 |---------|------|-----|-------------|
 | `armada-server` | 7890 | `http://localhost:7890/dashboard` | REST API, WebSocket (`/ws`), dashboard |
 | `armada-server` | 7891 | `http://localhost:7891/mcp` | MCP server (send a credential; the container is not loopback-bound) |
-| `armada-server` | 9464 | `http://localhost:9464/metrics` | Prometheus scrape endpoint |
 | `armada-dashboard` | 3000 | `http://localhost:3000/dashboard/` | Standalone React dashboard (nginx, proxies the API to `armada-server`) |
-| `prometheus` / `loki` / `grafana` | 9090 / 3100 / 3001 | `http://localhost:3001` | Observability stack (Grafana login `admin` / `admin`) |
+| `prometheus` / `loki` / `grafana` / `tempo` | loopback 9090 / 3100 / 3001 / 3200 | `http://localhost:3001` | Observability stack (Grafana login `admin` / configured password) |
 
-Data persists under `docker/armada/` (`db/`, `logs/`), and configuration is `docker/armada/armada.json` (restart `armada-server` after editing). `docker/armada/factory/reset.sh` (or `reset.bat`) deletes the local database and logs while keeping configuration. The compose files run the published `v1.2.0` images; to build images from source (`src/Armada.Server/Dockerfile`, `src/Armada.Dashboard/Dockerfile`, `src/Armada.Proxy/Dockerfile`) and for the volume layout, split mode, and the proxy stack, see [docs/DOCKER.md](docs/DOCKER.md).
+Data persists under `docker/armada/` (`db/`, `logs/`), and configuration is `docker/armada/armada.json` (restart `armada-server` after editing). `docker/armada/factory/reset.sh` (or `reset.bat`) deletes the local database and logs while keeping configuration. The compose files run the published `v1.3.0` images; to build images from source (`src/Armada.Server/Dockerfile`, `src/Armada.Dashboard/Dockerfile`, `src/Armada.Proxy/Dockerfile`) and for the volume layout, split mode, and the proxy stack, see [docs/DOCKER.md](docs/DOCKER.md).
 
 ### Harbor: run agents on your machine
 
@@ -909,7 +976,7 @@ Split mode is **experimental** in 1.0 (decision D3 in [archive/V1_READINESS.md](
 
 ```bash
 cd docker/armada
-ARMADA_INITIAL_ADMIN_PASSWORD='choose-a-password' docker compose -f compose.split.yaml up -d
+ARMADA_INITIAL_ADMIN_PASSWORD='choose-a-password' ARMADA_GRAFANA_ADMIN_PASSWORD='choose-another-password' docker compose -f compose.split.yaml up -d
 ```
 
 Sign in, create a credential under Server > Credentials, put it in the Harbor's `AccessKey`, start Harbor on the host, and check that it shows Connected on `Configuration > Harbors`. The Harbor self-registers on its first handshake. Captains launched by the Harbor call Armada's MCP server at `harbor.advertisedMcpBaseUrl`, which must be reachable from the Harbor host.
@@ -930,7 +997,7 @@ When Armada's own source is one of its vessels, set **Self Vessel ID** on the Se
 
 ### Upgrading / Migration
 
-Schema migrations run automatically at startup, and SQLite is backed up first. Upgrade any 0.9.x release directly to 1.0, any 1.0.x release directly to 1.1.0, and any 1.1.x release directly to 1.2.0 (their migrations run automatically; update each Harbor along with the Admiral); downgrades are not supported. Backups, restores, supported paths, and the upgrade test are in [docs/UPGRADING.md](docs/UPGRADING.md), and the release-by-release notes (v0.1.0 through v1.2.0) are in [Version-by-version upgrade notes](docs/UPGRADING.md#version-by-version-upgrade-notes). Every change is in [CHANGELOG.md](CHANGELOG.md).
+Schema migrations run automatically at startup, and SQLite is backed up first. Upgrade any 0.9.x release directly to 1.0, any 1.0.x release directly to 1.1.0, any 1.1.x release directly to 1.2.0, and any 1.2.x release directly to 1.3.0 (their migrations run automatically; update each Harbor along with the Admiral); downgrades are not supported. Backups, restores, supported paths, and the upgrade test are in [docs/UPGRADING.md](docs/UPGRADING.md), and the release-by-release notes (v0.1.0 through v1.3.0) are in [Version-by-version upgrade notes](docs/UPGRADING.md#version-by-version-upgrade-notes). Every change is in [CHANGELOG.md](CHANGELOG.md).
 
 **From 1.0.0 to 1.0.1: check your landing modes.** `LocalMerge` no longer pushes; the new `MergeAndPush` mode merges and then pushes (what `LocalMerge` did in 1.0.0) and is the global default. Nothing is migrated, so switch any vessel, voyage, or global `landingMode` that should keep pushing from `LocalMerge` to `MergeAndPush`. See [docs/MERGING.md](docs/MERGING.md#upgrading-from-100-landing-modes-fixed-in-101).
 
@@ -1002,6 +1069,16 @@ armada captain stop-all
 # Retry a failed mission, or every failed mission in a voyage
 armada mission retry msn_abc123
 armada voyage retry "API Hardening"
+
+# Read a failure's black box, copy its FIX THIS brief for an agent, and dry run a recovery path
+armada mission failure msn_abc123
+armada blackbox show msn_abc123 --brief | pbcopy
+armada blackbox recover bbx_abc123 <pathId>            # add --execute to run it
+
+# Before dispatch: preview a brief's overlaps on a vessel and lint it; after a failure: compare attempts and see the cascade
+armada vessel overlap-preview my-repo --brief-file brief.md
+armada blackbox diff bbx_abc123 bbx_def456
+armada voyage cascade vyg_abc123
 ```
 
 `--runtime` (on `captain add`, `captain update`, and `config set DefaultRuntime`) also accepts the enum names such as `ClaudeCode`; an unknown value is an error. An `api` captain needs an inference endpoint, chosen with `--model-endpoint <endpoint-id>`, in the dashboard or TUI, or through the REST and MCP captain APIs. Mux captains require a named endpoint, validated through `mux probe --require-tools`, and can target a non-default Mux config directory with `--mux-config-dir`. See [docs/CAPTAINS.md](docs/CAPTAINS.md) for what each runtime supports.
@@ -1024,6 +1101,7 @@ armada config init              # Interactive setup (optional)
 | `StageCheckTimeoutMinutes` | 15 | Minutes each stage-check command (the vessel workflow profile's build and unit-test commands, run in the dock after an API-endpoint or Mux stage) may take before it is reported as timed out (1 to 240). Set it above the slowest command, or give the profile a narrower test command |
 | `MaxRecoveryAttempts` | 3 | Stall recovery attempts before the mission fails |
 | `TransientOutageGraceMinutes` | 10 | How long transient model or endpoint failures keep resuming in place, past `MaxRecoveryAttempts`, before the mission fails (0 turns this off, maximum 120) |
+| `HarborDisconnectGraceMinutes` | 60 | How long a captain whose Harbor lost its link is held as unreachable (no stall, no recovery, no attempt counted) before normal stall recovery applies; the stall clock restarts when the Harbor reconnects (0 turns the grace off, maximum 1440) |
 | `BlockDependentsOfFailedStages` | `false` | Also on Server > Agent settings in the dashboard and TUI. When on, the stages waiting on a failed stage (and a final integration slice whose sibling slice failed) show `Blocked` instead of `Cancelled`, and the voyage stays open until the failed stage is restarted (they return to Pending) or the voyage is cancelled. When off, they are cancelled and the voyage settles as Failed; restarting the failed stage restores them either way |
 | `ExcludeReviewAuthorsFromJudge` | `false` | When on, a Judge is never assigned to a captain that ran an earlier stage (Worker, Test Engineer and so on) of the chain it reviews, even when that captain is requested, so the Judge waits for an independent captain. When off, an idle non-author captain is still preferred, but an author reviews the work when no other eligible captain is idle, and a requested (or persona default) author captain is honored |
 | `MaxMissionRecoveryAttempts` | 2 | Rescue missions per incident for recoverable failures (0 disables, maximum 5) |
@@ -1108,7 +1186,7 @@ When the Admiral listens on another address (for example in Docker), MCP require
 
 You do not need any of this for Ask Armada or missions: Ask captains get a thread-scoped token for every turn, and every mission captain gets a mission-scoped MCP token (`mcp.missionScopedTokens`, default true) bound to the mission's tenant, owner, and captain, valid only while the mission is assigned or in progress (Gemini and Cursor captains get it only with `isolateCaptainLaunch`). See [docs/MCP_API.md](docs/MCP_API.md#mission-scoped-captain-calls).
 
-MCP clients can call `status`, `dispatch`, `enumerate`, `voyage_status`, `cancel_voyage`, and tools for checks, releases, objectives, deployments, runbooks, playbooks, personas, pipelines, prompt templates, memory, model endpoints, Harbors, vessel import (`discover_vessels`, `import_vessels`), fleet actions (`run_fleet_action`, `fleet_action_run_status`), and vessel health (`vessel_health`, `evaluate_vessel_health`). A failed call returns `isError` with a machine-readable `ErrorCode` (`NotFound`, `InvalidArgument`, `Conflict`, `Forbidden`, `Unavailable`, `Failed`); branch on the code, not the text. Tool calls are rate limited per client (`mcp.toolCallsPerSecond`, default 100). See [docs/MCP_API.md](docs/MCP_API.md).
+MCP clients can call `status`, `dispatch`, `enumerate`, `voyage_status`, `cancel_voyage`, the black box tools (`get_blackbox`, `read_blackbox_section`, `read_blackbox_object`, `list_blackbox_entries`, `search_blackbox`, `run_blackbox_recovery`, `apply_blackbox_recommendation`, `resolve_blackbox`, `annotate_blackbox` and the retention and storage tools, plus the `armada://blackbox/...` resources and the `review_blackbox` and `explain_blackbox` prompts), and tools for checks, releases, objectives, deployments, runbooks, playbooks, personas, pipelines, prompt templates, memory, model endpoints, Harbors, vessel import (`discover_vessels`, `import_vessels`), fleet actions (`run_fleet_action`, `fleet_action_run_status`), and vessel health (`vessel_health`, `evaluate_vessel_health`). A failed call returns `isError` with a machine-readable `ErrorCode` (`NotFound`, `InvalidArgument`, `Conflict`, `Forbidden`, `Unavailable`, `Failed`); branch on the code, not the text. Tool calls are rate limited per client (`mcp.toolCallsPerSecond`, default 100). See [docs/MCP_API.md](docs/MCP_API.md).
 
 ### Papercuts
 
@@ -1227,6 +1305,7 @@ ID prefixes include `flt_` (fleet), `vsl_` (vessel), `cpt_` (captain), `msn_` (m
 | Runtimes and captains | [docs/CAPTAINS.md](docs/CAPTAINS.md), [docs/CAPTAIN_ROUTING.md](docs/CAPTAIN_ROUTING.md), [docs/SCHEDULING.md](docs/SCHEDULING.md) |
 | Pipelines and personas | [docs/PIPELINES.md](docs/PIPELINES.md), [docs/PERSONAS_GUIDE.md](docs/PERSONAS_GUIDE.md), [docs/PERSONAS.md](docs/PERSONAS.md) |
 | Landing and the merge queue | [docs/MERGING.md](docs/MERGING.md) |
+| Why a mission failed (black box) | [docs/BLACKBOX.md](docs/BLACKBOX.md), [docs/BLACKBOX_SCHEMA.md](docs/BLACKBOX_SCHEMA.md) |
 | Many repositories | [docs/FLEET_ACTIONS.md](docs/FLEET_ACTIONS.md), [docs/VESSEL_HEALTH.md](docs/VESSEL_HEALTH.md) |
 | Delivery workflows | [docs/DELIVERY_OPERATIONS.md](docs/DELIVERY_OPERATIONS.md) |
 | Terminal UI and mobile | [docs/TUI.md](docs/TUI.md), [docs/MOBILE.md](docs/MOBILE.md) |

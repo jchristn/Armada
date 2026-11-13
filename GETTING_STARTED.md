@@ -53,12 +53,12 @@ If you want Armada managed as a local deployment on your machine instead of a fo
 | Task | Linux | macOS | Windows |
 |------|-------|-------|---------|
 | Publish server and dashboard only | `./scripts/linux/publish-server.sh` | `./scripts/macos/publish-server.sh` | `scripts\windows\publish-server.bat` |
-| Install and register a user-scoped local deployment | `./scripts/linux/install-systemd-user.sh` | `./scripts/macos/install-launchd-agent.sh` | `scripts\windows\install-windows-task.bat` |
-| Update the deployed server from the current checkout | `./scripts/linux/update-systemd-user.sh` | `./scripts/macos/update-launchd-agent.sh` | `scripts\windows\update-windows-task.bat` |
+| Install and register a user-scoped local deployment | `./scripts/linux/install-startup.sh` | `./scripts/macos/install-startup.sh` | `scripts\windows\install-startup.bat` |
+| Update the deployed server from the current checkout | `./scripts/linux/update-startup.sh` | `./scripts/macos/update-startup.sh` | `scripts\windows\update-startup.bat` |
 | Verify the running deployment | `./scripts/linux/healthcheck-server.sh` | `./scripts/macos/healthcheck-server.sh` | `scripts\windows\healthcheck-server.bat` |
-| Remove the startup-managed deployment | `./scripts/linux/remove-systemd-user.sh` | `./scripts/macos/remove-launchd-agent.sh` | `scripts\windows\remove-windows-task.bat` |
+| Remove the startup-managed deployment | `./scripts/linux/remove-startup.sh` | `./scripts/macos/remove-startup.sh` | `scripts\windows\remove-startup.bat` |
 
-On Windows, the install and update wrappers also accept a framework override when the machine only has one SDK, for example `scripts\windows\install-windows-task.bat net8.0` or `scripts\windows\update-windows-task.bat --framework net8.0`.
+On Windows, the install and update wrappers also accept a framework override when the machine only has one SDK, for example `scripts\windows\install-startup.bat net8.0` or `scripts\windows\update-startup.bat --framework net8.0`.
 
 These scripts publish `Armada.Server` into `~/.armada/bin` on Linux and macOS, or `%USERPROFILE%\.armada\bin` on Windows, and deploy dashboard assets into `~/.armada/dashboard` or `%USERPROFILE%\.armada\dashboard`.
 
@@ -66,9 +66,9 @@ The remove scripts unregister the user-scoped startup entry or service, but they
 
 Repo-relative deployment script paths:
 
-- Linux: `scripts/linux/install-systemd-user.sh`, `scripts/linux/update-systemd-user.sh`, `scripts/linux/healthcheck-server.sh`
-- macOS: `scripts/macos/install-launchd-agent.sh`, `scripts/macos/update-launchd-agent.sh`, `scripts/macos/healthcheck-server.sh`
-- Windows: `scripts/windows/install-windows-task.bat`, `scripts/windows/update-windows-task.bat`, `scripts/windows/healthcheck-server.bat`
+- Linux: `scripts/linux/install-startup.sh`, `scripts/linux/update-startup.sh`, `scripts/linux/healthcheck-server.sh`
+- macOS: `scripts/macos/install-startup.sh`, `scripts/macos/update-startup.sh`, `scripts/macos/healthcheck-server.sh`
+- Windows: `scripts/windows/install-startup.bat`, `scripts/windows/update-startup.bat`, `scripts/windows/healthcheck-server.bat`
 
 ## First mission with the setup wizard
 
@@ -85,7 +85,7 @@ time you sign in to an empty Armada (and later from Dashboard, Setup Wizard).
    one. Leave Landing Mode on None if you would rather review the branch yourself; the mission then stops at
    WorkProduced with its branch kept for you. Select Register Vessel.
 5. **Captain:** the runtime defaults to Claude Code. Pick another runtime if that is the CLI you have installed and
-   signed in, then select Create Captain.
+   signed in. Leave "How many missions should run at once?" at 1 for this first mission, then select Create Captain.
 6. **Dispatch:** the default mission only inspects the repository. For a first landed change, replace it with
    something small, for example "Append the line 'Armada was here.' to README.md and commit the change." Select
    Dispatch Mission.
@@ -239,6 +239,8 @@ Now three agents work simultaneously on non-overlapping parts of the codebase:
 
 Three captains spin up in isolated worktrees, each working on their own files.
 
+Each running mission takes one captain slot. A CLI captain such as Claude Code has one slot, so three parallel missions need three CLI captains; with fewer, the rest wait as Pending until a slot frees. An `ApiEndpoint` or `Mux` captain has four slots by default and can run several missions at once. The vessel's per-voyage limit (`MaxParallelMissionsPerVoyage`, default 4) also applies. See [SCHEDULING.md](docs/SCHEDULING.md#capacity).
+
 ## Monitor progress
 
 > Check voyage status.
@@ -264,6 +266,19 @@ Review the changes. When you're satisfied:
 > Enqueue all completed mission branches to the merge queue, then process it.
 
 Armada tests and merges each branch into main in order. Your project is built.
+
+## When a mission fails
+
+Every failed mission or voyage gets a black box entry that says where it failed, how, why, and what to do next. Open
+the mission in the dashboard and read its Black box panel; **Copy FIX THIS** copies a brief you can paste straight into
+a coding agent, and **Ask Armada about this failure** opens Ask Armada with the question already written. Without the
+dashboard, `curl -H "Authorization: Bearer <token>" "http://localhost:7890/api/v1/missions/msn_mvu1fjp0_9Wd6Uuyp262/blackbox/brief"`
+returns the same brief as Markdown, and from Claude Code you can ask:
+
+> Why did mission msn_mvu1fjp0_9Wd6Uuyp262 fail?
+
+which calls the MCP tool `get_blackbox {"missionId": "msn_mvu1fjp0_9Wd6Uuyp262"}`. Recovery paths in the entry run as
+a dry run first and only run for real when you confirm. See [docs/BLACKBOX.md](docs/BLACKBOX.md).
 
 ---
 

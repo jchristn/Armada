@@ -233,10 +233,10 @@ namespace Test.Shared.Suites.E2E
                         dock = await db.Docks.CreateAsync(new Dock(vessel.Id) { HarborId = harbor.Id, BranchName = "armada/original", WorktreePath = Path.Combine(tempDir, "preserved-dock") }).ConfigureAwait(false);
                         Directory.CreateDirectory(dock.WorktreePath!);
                         File.WriteAllText(Path.Combine(dock.WorktreePath!, "uncommitted.txt"), "survives rollout");
-                        captain = await db.Captains.CreateAsync(new Captain("Remote API captain", AgentRuntimeEnum.ApiEndpoint) { State = CaptainStateEnum.Working, ProcessId = 2000000007, CurrentDockId = dock.Id }).ConfigureAwait(false);
+                        captain = await CaptainAssignmentFixture.CreateAsync(db, new Captain("Remote API captain", AgentRuntimeEnum.ApiEndpoint) { State = CaptainStateEnum.Working, ProcessId = 2000000007}).ConfigureAwait(false);
                         mission = await db.Missions.CreateAsync(new Mission("Keep running") { Status = MissionStatusEnum.InProgress, CaptainId = captain.Id, VesselId = vessel.Id, DockId = dock.Id, BranchName = dock.BranchName, StartedUtc = DateTime.UtcNow.AddMinutes(-1), ProcessId = captain.ProcessId }).ConfigureAwait(false);
-                        captain.CurrentMissionId = mission.Id;
-                        await db.Captains.UpdateAsync(captain).ConfigureAwait(false);
+                        captain.Assignment = mission;
+                        await CaptainAssignmentFixture.UpdateAsync(db, captain).ConfigureAwait(false);
                         await db.HarborJobs.CreateAsync(new HarborJobRecord { JobId = "rollout-existing-job", HarborId = harbor.Id, MissionId = mission.Id, CaptainId = captain.Id, Kind = Armada.Core.Harbor.HarborJobKindEnum.Mission, Runtime = captain.Runtime.ToString(), StartedUtc = mission.StartedUtc }).ConfigureAwait(false);
                     }
 
@@ -305,10 +305,10 @@ namespace Test.Shared.Suites.E2E
                         Harbor harbor = await db.Harbors.CreateAsync(new Harbor { Name = "Diff Harbor" }).ConfigureAwait(false);
                         Vessel vessel = await db.Vessels.CreateAsync(new Vessel("Diff vessel", "https://github.com/test/diff.git") { DefaultBranch = "acceptance-base" }).ConfigureAwait(false);
                         dock = await db.Docks.CreateAsync(new Dock(vessel.Id) { HarborId = harbor.Id, RepositoryPath = "/remote/repo", BranchName = "armada/remote", WorktreePath = Path.Combine(tempDir, "only-on-harbor") }).ConfigureAwait(false);
-                        Captain captain = await db.Captains.CreateAsync(new Captain("Remote diff captain", AgentRuntimeEnum.ApiEndpoint) { State = CaptainStateEnum.Working, ProcessId = 2000000007, CurrentDockId = dock.Id }).ConfigureAwait(false);
+                        Captain captain = await CaptainAssignmentFixture.CreateAsync(db, new Captain("Remote diff captain", AgentRuntimeEnum.ApiEndpoint) { State = CaptainStateEnum.Working, ProcessId = 2000000007}).ConfigureAwait(false);
                         mission = await db.Missions.CreateAsync(new Mission("Read remote diff") { Status = MissionStatusEnum.InProgress, CaptainId = captain.Id, VesselId = vessel.Id, DockId = dock.Id, BranchName = dock.BranchName, StartedUtc = DateTime.UtcNow, ProcessId = captain.ProcessId }).ConfigureAwait(false);
-                        captain.CurrentMissionId = mission.Id;
-                        await db.Captains.UpdateAsync(captain).ConfigureAwait(false);
+                        captain.Assignment = mission;
+                        await CaptainAssignmentFixture.UpdateAsync(db, captain).ConfigureAwait(false);
                         await db.HarborJobs.CreateAsync(new HarborJobRecord { JobId = "rollout-existing-job", HarborId = harbor.Id, MissionId = mission.Id, CaptainId = captain.Id, Kind = Armada.Core.Harbor.HarborJobKindEnum.Mission, Runtime = captain.Runtime.ToString(), StartedUtc = mission.StartedUtc }).ConfigureAwait(false);
                     }
                     AssertFalse(Directory.Exists(dock.WorktreePath), "remote path deliberately does not exist on Admiral");

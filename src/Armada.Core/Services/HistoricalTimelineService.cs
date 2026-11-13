@@ -59,6 +59,7 @@ namespace Armada.Core.Services
         {
             if (auth == null) throw new ArgumentNullException(nameof(auth));
             if (query == null) throw new ArgumentNullException(nameof(query));
+            CollectionBounds.Validate(query);
 
             Stopwatch stopwatch = Stopwatch.StartNew();
 

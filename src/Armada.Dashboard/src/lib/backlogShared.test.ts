@@ -111,7 +111,7 @@ describe('backlog list logic (shared with the mobile app)', () => {
     expect(backlogRankSwap(all, 'obj_b', -1)).toBeNull();
     expect(backlogRankSwap(all, 'obj_c', 1)).toBeNull();
     expect(backlogRankSwap(all, 'missing', 1)).toBeNull();
-    const updated = applyBacklogReorder(all, [{ ...a, rank: 1 }]);
+    const updated = applyBacklogReorder(all, { updated: 1, items: [{ objectiveId: a.id, rank: 1 }] });
     expect(updated.find((o) => o.id === 'obj_a')?.rank).toBe(1);
     expect(updated).toHaveLength(3);
   });

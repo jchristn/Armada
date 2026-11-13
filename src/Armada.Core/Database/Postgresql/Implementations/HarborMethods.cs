@@ -213,6 +213,24 @@ namespace Armada.Core.Database.Postgresql.Implementations
         }
 
         /// <inheritdoc />
+        public async Task<EnumerationResult<Harbor>> EnumeratePageAsync(EnumerationQuery query, ScopedEnumerationFilter filter, CancellationToken token = default)
+        {
+            if (query == null) throw new ArgumentNullException(nameof(query));
+            if (filter == null) throw new ArgumentNullException(nameof(filter));
+            ScopedEnumerationSqlQuery sql = ScopedEnumerationQueryBuilder.Build(query, filter, false);
+            using (NpgsqlConnection conn = _Driver.CreateConnection())
+            {
+                await conn.OpenAsync(token).ConfigureAwait(false);
+                long total = await PostgresqlCommandHelper.CountAsync(conn, "SELECT COUNT(*) FROM harbors" + sql.Where + ";", cmd => PostgresqlCommandHelper.Bind(cmd, sql.Parameters), token).ConfigureAwait(false);
+                List<Harbor> rows = await PostgresqlCommandHelper.QueryAsync(conn,
+                    "SELECT * FROM harbors" + sql.Where + sql.OrderBy + PostgresqlCommandHelper.Page(query.Offset, query.PageSize) + ";",
+                    cmd => PostgresqlCommandHelper.Bind(cmd, sql.Parameters), HarborFromReader, token).ConfigureAwait(false);
+                foreach (Harbor row in rows) row.Capabilities = await LoadCapabilitiesAsync(conn, row.Id, token).ConfigureAwait(false);
+                return EnumerationResult<Harbor>.Create(query, rows, total);
+            }
+        }
+
+        /// <inheritdoc />
         public async Task<bool> ExistsAsync(string id, CancellationToken token = default)
         {
             if (String.IsNullOrWhiteSpace(id)) throw new ArgumentNullException(nameof(id));

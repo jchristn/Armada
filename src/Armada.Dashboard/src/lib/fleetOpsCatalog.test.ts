@@ -16,6 +16,8 @@ import runProgressSource from '../components/fleetActions/RunProgress.tsx?raw';
 import targetDrawerSource from '../components/fleetActions/TargetDetailDrawer.tsx?raw';
 import templateHelpSource from '../components/fleetActions/TemplateVariableHelp.tsx?raw';
 import vesselPickerSource from '../components/fleetActions/VesselPickerModal.tsx?raw';
+import runReportSource from '../components/fleetActions/RunReport.tsx?raw';
+import followUpPickerSource from '../components/fleetActions/FollowUpPickerModal.tsx?raw';
 import settingsSource from '../components/settings/ImportFleetActionSettings.tsx?raw';
 import listEditorSource from '../components/settings/ListEditor.tsx?raw';
 import dialogShellSource from '../components/shared/DialogShell.tsx?raw';
@@ -25,6 +27,7 @@ import runDetailSource from '../pages/FleetActionRunDetail.tsx?raw';
 import fleetActionLabelsSource from './fleetActionLabels.ts?raw';
 import vesselImportLabelsSource from './vesselImportLabels.ts?raw';
 import fleetActionFormSource from './fleetActionForm.ts?raw';
+import fleetActionReportSource from './fleetActionReport.ts?raw';
 import vesselImportSource from './vesselImport.ts?raw';
 import dashboardSource from '../pages/Dashboard.tsx?raw';
 import vesselsSource from '../pages/Vessels.tsx?raw';
@@ -51,10 +54,10 @@ const FEATURE_SOURCES = [
   browseTreeSource, importHistorySource, importResultsSource, importReviewSource, importWizardSource,
   importCategorizationSource, fleetRecommendationsSource, backgroundActivitySource,
   actionFormSource, runsTableSource, actionsTableSource, runActionSource, runProgressSource, targetDrawerSource,
-  templateHelpSource, vesselPickerSource, settingsSource, listEditorSource, dialogShellSource, stateBlocksSource,
+  templateHelpSource, vesselPickerSource, runReportSource, followUpPickerSource, settingsSource, listEditorSource, dialogShellSource, stateBlocksSource,
   fleetActionsPageSource, runDetailSource,
   // Pure logic moved out of the components above into shared lib modules (used by the mobile app too).
-  fleetActionFormSource, vesselImportSource,
+  fleetActionFormSource, fleetActionReportSource, vesselImportSource,
 ];
 const LABEL_SOURCES = [fleetActionLabelsSource, vesselImportLabelsSource];
 
@@ -87,6 +90,11 @@ const SHARED_PAGE_KEYS: Array<{ source: string; keys: string[] }> = [
       'Run action...',
       '{count, plural, one {# vessel selected} other {# vessels selected}}',
     ],
+  },
+  {
+    // Run-time input messages keyed by input name (errors[name] = ...), which the errors.field pattern misses.
+    source: fleetActionFormSource,
+    keys: ['This input is required.', 'Use a package name such as Newtonsoft.Json or @scope/name.'],
   },
   {
     source: navModelSource,

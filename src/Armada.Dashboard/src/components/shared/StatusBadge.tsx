@@ -4,9 +4,11 @@ import { statusDescription } from '../../lib/statusDescriptions';
 interface StatusBadgeProps {
   status: string;
   className?: string;
+  /** Tooltip that replaces the status description, for example the reasons behind an Invalid status. */
+  title?: string;
 }
 
-export default function StatusBadge({ status, className = '' }: StatusBadgeProps) {
+export default function StatusBadge({ status, className = '', title }: StatusBadgeProps) {
   const { t } = useLocale();
   const normalized = (status || '').toLowerCase();
   const description = statusDescription(normalized);
@@ -15,7 +17,7 @@ export default function StatusBadge({ status, className = '' }: StatusBadgeProps
   return (
     <span
       className={`tag ${normalized} ${className}`.trim()}
-      title={tooltip}
+      title={title || tooltip}
     >
       {t(status)}
     </span>

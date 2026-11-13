@@ -29,14 +29,13 @@ namespace Armada.Server.Mcp.Tools
         {
             register(
                 "vessel_health",
-                "Get one vessel's health: the row with effective (override-aware) statuses, raw findings (criterion, status, detailCode, valueA, valueB), and manual overrides. Dependency rows are excluded by default (dependencyCount hint returned); set includeDependencies to include them.",
+                "Get one vessel's health: the row with effective (override-aware) statuses, raw findings (criterion, status, detailCode, valueA, valueB), manual overrides, and dependencyCount. Dependency rows are not embedded; page them with list_vessel_dependencies.",
                 new
                 {
                     type = "object",
                     properties = new
                     {
-                        vesselId = new { type = "string", description = "Vessel ID (vsl_ prefix)" },
-                        includeDependencies = new { type = "boolean", description = "Include outdated/vulnerable dependency rows (default false)" }
+                        vesselId = new { type = "string", description = "Vessel ID (vsl_ prefix)" }
                     },
                     required = new[] { "vesselId" }
                 },
@@ -47,14 +46,34 @@ namespace Armada.Server.Mcp.Tools
                     AuthContext auth = McpToolHelpers.ResolveCallerContext();
                     VesselHealthDetail? detail = await health.GetDetailAsync(auth.TenantId!, request.VesselId).ConfigureAwait(false);
                     if (detail == null) return (object)McpToolError.NotFound("Vessel not found");
-                    return (object)new
+                    return (object)detail;
+                });
+
+            register(
+                "list_vessel_dependencies",
+                "List one page of a vessel's outdated or vulnerable dependency rows from its last health evaluation (ecosystem, packageName, projectPath, currentVersion, latestVersion, drift, isVulnerable, severity, advisoryUrl), ordered by ecosystem, package name, then project path. Returns the standard page shape (objects, pageNumber, pageSize, totalPages, totalRecords).",
+                new
+                {
+                    type = "object",
+                    properties = new
                     {
-                        Health = detail.Health,
-                        Findings = detail.Findings,
-                        Overrides = detail.Overrides,
-                        DependencyCount = detail.Dependencies.Count,
-                        Dependencies = request.IncludeDependencies ? detail.Dependencies : null
-                    };
+                        vesselId = new { type = "string", description = "Vessel ID (vsl_ prefix)" },
+                        pageNumber = new { type = "integer", description = "Page number (default 1)" },
+                        pageSize = new { type = "integer", description = "Page size, 1 to 1000 (default 10)" }
+                    },
+                    required = new[] { "vesselId" }
+                },
+                async (args) =>
+                {
+                    VesselDependencyListArgs request = JsonSerializer.Deserialize<VesselDependencyListArgs>(args!.Value, _JsonOptions)
+                        ?? throw new InvalidOperationException("Could not deserialize VesselDependencyListArgs.");
+                    AuthContext auth = McpToolHelpers.ResolveCallerContext();
+                    EnumerationQuery query = new EnumerationQuery();
+                    if (request.PageNumber.HasValue) query.PageNumber = request.PageNumber.Value;
+                    if (request.PageSize.HasValue) query.PageSize = request.PageSize.Value;
+                    EnumerationResult<VesselDependency>? page = await health.EnumerateDependenciesAsync(auth.TenantId!, request.VesselId, query).ConfigureAwait(false);
+                    if (page == null) return (object)McpToolError.NotFound("Vessel not found");
+                    return (object)page;
                 });
 
             register(

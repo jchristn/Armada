@@ -183,18 +183,21 @@ namespace Test.Shared.Suites.Tui
             stub.Json("GET", "/api/v1/playbooks", "{\"Success\":true,\"Objects\":[{\"Id\":\"pbk_1\",\"FileName\":\"style.md\",\"Content\":\"x\",\"Active\":true}],\"TotalRecords\":1}");
             stub.Json("GET", "/api/v1/vessels/vsl_demo/readiness", "{\"VesselId\":\"vsl_demo\",\"HasWorkingDirectory\":true,\"HasRepositoryContext\":true,\"AvailableCheckTypes\":[\"Build\"],\"Issues\":[],\"ErrorCount\":0,\"WarningCount\":0}");
             stub.Page("/api/v1/planning-sessions/enumerate", "[" + Session("ps_1", "Active") + "]");
-            string detail = "{\"Session\":" + Session("ps_1", "Active") + ",\"Captain\":{\"Id\":\"cpt_1\",\"Name\":\"claude-1\",\"Runtime\":\"ClaudeCode\",\"State\":\"Planning\"},\"Vessel\":{\"Id\":\"vsl_demo\",\"Name\":\"DemoRepo\"},\"Messages\":[" +
+            string messages = "[" +
                 "{\"Id\":\"pm_1\",\"PlanningSessionId\":\"ps_1\",\"Role\":\"User\",\"Sequence\":1,\"Content\":\"Plan the work\",\"CreatedUtc\":\"2026-10-04T09:10:00Z\"}," +
-                "{\"Id\":\"pm_2\",\"PlanningSessionId\":\"ps_1\",\"Role\":\"Assistant\",\"Sequence\":2,\"Content\":\"Here is the plan\",\"CreatedUtc\":\"2026-10-04T09:11:00Z\",\"Metrics\":{\"TimeToFirstTokenMs\":800,\"TotalMs\":2500,\"CompletionTokens\":40,\"TokensPerSecond\":16.5}}]}";
+                "{\"Id\":\"pm_2\",\"PlanningSessionId\":\"ps_1\",\"Role\":\"Assistant\",\"Sequence\":2,\"Content\":\"Here is the plan\",\"CreatedUtc\":\"2026-10-04T09:11:00Z\",\"Metrics\":{\"TimeToFirstTokenMs\":800,\"TotalMs\":2500,\"CompletionTokens\":40,\"TokensPerSecond\":16.5}}]";
+            string detail = "{\"Session\":" + Session("ps_1", "Active") + ",\"Captain\":{\"Id\":\"cpt_1\",\"Name\":\"claude-1\",\"Runtime\":\"ClaudeCode\",\"State\":\"Planning\"},\"Vessel\":{\"Id\":\"vsl_demo\",\"Name\":\"DemoRepo\"},\"MessageCount\":2}";
+            stub.Page("/api/v1/planning-sessions/ps_1/messages/enumerate", messages);
+            stub.Page("/api/v1/planning-sessions/ps_new/messages/enumerate", "[]");
             stub.Json("GET", "/api/v1/planning-sessions/ps_1", detail);
             stub.Json("POST", "/api/v1/planning-sessions/ps_1/messages", detail);
-            stub.Json("POST", "/api/v1/planning-sessions/ps_1/stop", "{\"Session\":" + Session("ps_1", "Stopping") + ",\"Messages\":[]}");
+            stub.Json("POST", "/api/v1/planning-sessions/ps_1/stop", "{\"Session\":" + Session("ps_1", "Stopping") + "}");
             stub.Json("POST", "/api/v1/planning-sessions/ps_1/stop-turn", detail);
             stub.Json("POST", "/api/v1/planning-sessions/ps_1/summarize", "{\"SessionId\":\"ps_1\",\"MessageId\":\"pm_2\",\"Title\":\"Summarized title\",\"Description\":\"Summarized body\",\"Method\":\"Captain\"}");
             stub.Json("POST", "/api/v1/planning-sessions/ps_1/dispatch", "{\"Id\":\"vyg_9\",\"Title\":\"Event title\"}");
             stub.On("DELETE", "/api/v1/planning-sessions/ps_1", b => StubHttpHandler.Response(HttpStatusCode.NoContent, ""));
-            stub.Json("POST", "/api/v1/planning-sessions", "{\"Session\":" + Session("ps_new", "Active") + ",\"Messages\":[]}");
-            stub.Json("GET", "/api/v1/planning-sessions/ps_new", "{\"Session\":" + Session("ps_new", "Active") + ",\"Messages\":[]}");
+            stub.Json("POST", "/api/v1/planning-sessions", "{\"Session\":" + Session("ps_new", "Active") + "}");
+            stub.Json("GET", "/api/v1/planning-sessions/ps_new", "{\"Session\":" + Session("ps_new", "Active") + "}");
             stub.Json("GET", "/api/v1/voyages/vyg_9", "{\"Id\":\"vyg_9\",\"Title\":\"Event title\"}");
             return stub;
         }

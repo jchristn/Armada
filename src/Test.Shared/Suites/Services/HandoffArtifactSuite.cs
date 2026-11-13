@@ -124,6 +124,33 @@ namespace Test.Shared.Suites.Services
                 return Task.CompletedTask;
             }));
 
+            cases.Add(CaseAsync("builder_bounds_agent_lists_with_marker", "Findings, acceptance criteria and protocol lines over 256 keep 255 entries plus a marker naming the omitted count; actions and verdict use the full lists", TestTags.Negative, () =>
+            {
+                System.Text.StringBuilder output = new System.Text.StringBuilder("Reviewed.\n## Findings\n");
+                for (int i = 1; i <= 300; i++) output.Append(i).Append(". File: src/F").Append(i).Append(".cs:").Append(i).Append(" Severity: Blocking. Problem ").Append(i).Append(".\n");
+                output.Append("\n");
+                for (int i = 0; i < 299; i++) output.Append("[ARMADA:STAGE-OUTCOME] note ").Append(i).Append('\n');
+                output.Append("[ARMADA:VERDICT] NEEDS_REVISION\n");
+                System.Text.StringBuilder description = new System.Text.StringBuilder("Fix it.\n## Acceptance criteria\n");
+                for (int i = 0; i < 270; i++) description.Append("- criterion ").Append(i).Append('\n');
+                Mission judge = JudgeMission(output.ToString());
+                judge.Description = description.ToString();
+
+                HandoffArtifact artifact = HandoffArtifactBuilder.Build(judge);
+                AssertEqual("NEEDS_REVISION", artifact.Verdict, "verdict decided from the full protocol lines");
+                AssertEqual(256, artifact.Findings.Count, "findings bounded");
+                AssertContains("45 more findings", artifact.Findings[255].Summary);
+                AssertContains("of 300", artifact.Findings[255].Summary);
+                AssertEqual(256, artifact.CompletionLines.Count, "protocol lines bounded");
+                AssertStartsWith(HandoffArtifactBuilder.TruncatedLinePrefix, artifact.CompletionLines[255]);
+                AssertContains("45 more of 300", artifact.CompletionLines[255]);
+                AssertEqual(256, artifact.AcceptanceCriteria.Count, "criteria bounded");
+                AssertContains("15 more of 270", artifact.AcceptanceCriteria[255]);
+                AssertContains("300 blocking finding", String.Join(" ", artifact.RequiredActions));
+                CollectionBounds.Validate(artifact);
+                return Task.CompletedTask;
+            }));
+
             cases.Add(CaseAsync("renderer_budget_respected", "Across budgets the rendering never exceeds the budget once the budget covers the pointer and did-not-fit floor", TestTags.Positive, () =>
             {
                 HandoffArtifact artifact = BigArtifact();
@@ -274,7 +301,7 @@ namespace Test.Shared.Suites.Services
             cases.Add(CaseAsync("outcome_links_artifact_without_duplicates", "Recording a stage outcome stores the attempt's artifact with the check result, completing an artifact a launch stored first instead of duplicating it", TestTags.Positive, async () =>
             {
                 using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
-                Captain captain = await testDb.Driver.Captains.CreateAsync(new Captain("judge-cpt", AgentRuntimeEnum.ClaudeCode)).ConfigureAwait(false);
+                Captain captain = await CaptainAssignmentFixture.CreateAsync(testDb.Driver, new Captain("judge-cpt", AgentRuntimeEnum.ClaudeCode)).ConfigureAwait(false);
                 Mission judge = JudgeMission(JudgeOutput(0));
                 judge.CaptainId = captain.Id;
                 judge.Status = MissionStatusEnum.WorkProduced;
@@ -524,7 +551,7 @@ namespace Test.Shared.Suites.Services
 
                 Captain judgeCaptain = new Captain("judge-cpt", AgentRuntimeEnum.Codex);
                 judgeCaptain.State = CaptainStateEnum.Working;
-                judgeCaptain = await testDb.Driver.Captains.CreateAsync(judgeCaptain).ConfigureAwait(false);
+                judgeCaptain = await CaptainAssignmentFixture.CreateAsync(testDb.Driver, judgeCaptain).ConfigureAwait(false);
                 Mission judge = new Mission("[Judge] Parser fix", "Review the parser fix.");
                 judge.VesselId = flow.Vessel.Id;
                 judge.VoyageId = voyage.Id;
@@ -543,9 +570,9 @@ namespace Test.Shared.Suites.Services
                 dock = await testDb.Driver.Docks.CreateAsync(dock).ConfigureAwait(false);
                 judge.DockId = dock.Id;
                 await testDb.Driver.Missions.UpdateAsync(judge).ConfigureAwait(false);
-                judgeCaptain.CurrentMissionId = judge.Id;
-                judgeCaptain.CurrentDockId = dock.Id;
-                await testDb.Driver.Captains.UpdateAsync(judgeCaptain).ConfigureAwait(false);
+                judgeCaptain.Assignment = judge;
+                judgeCaptain.Assignment ??= new Mission("fixture assignment"); judgeCaptain.Assignment.DockId = dock.Id;
+                await CaptainAssignmentFixture.UpdateAsync(testDb.Driver, judgeCaptain).ConfigureAwait(false);
 
                 await flow.Missions.HandleCompletionAsync(judgeCaptain, judge.Id).ConfigureAwait(false);
                 flow.Judge = (await testDb.Driver.Missions.ReadAsync(judge.Id).ConfigureAwait(false))!;
@@ -556,7 +583,7 @@ namespace Test.Shared.Suites.Services
                 AssertContains(PipelineHandoffContext.ArtifactPlaceholder, flow.Rework.Description, "the persisted handoff carries the placeholder, not an excerpt");
                 AssertFalse(flow.Rework.Description!.Contains("src/Parser.cs:42", StringComparison.Ordinal), "no excerpt persisted on the description");
 
-                flow.Reader = await testDb.Driver.Captains.CreateAsync(new Captain("rework-cpt", readerRuntime)).ConfigureAwait(false);
+                flow.Reader = await CaptainAssignmentFixture.CreateAsync(testDb.Driver, new Captain("rework-cpt", readerRuntime)).ConfigureAwait(false);
                 flow.WorktreePath = Path.Combine(Path.GetTempPath(), "armada_handoff_rework_" + Guid.NewGuid().ToString("N"));
                 Directory.CreateDirectory(flow.WorktreePath);
                 return flow;

@@ -22,6 +22,20 @@ namespace Armada.Core.Services.Interfaces
         Task<Dock?> ProvisionAsync(Vessel vessel, Captain captain, string branchName, string? missionId = null, CancellationToken token = default);
 
         /// <summary>
+        /// Provision a local dock whose new branch starts at <paramref name="baseBranch"/> instead of the vessel's default
+        /// branch (a hierarchy child that forks from its parent's head). Implementations without fork support ignore it.
+        /// </summary>
+        /// <param name="vessel">Vessel.</param>
+        /// <param name="captain">Captain.</param>
+        /// <param name="branchName">Branch to create or attach.</param>
+        /// <param name="missionId">Mission identifier, or null.</param>
+        /// <param name="baseBranch">Start point for a new branch, or null for the vessel default.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The dock, or null when provisioning failed.</returns>
+        Task<Dock?> ProvisionAsync(Vessel vessel, Captain captain, string branchName, string? missionId, string? baseBranch, CancellationToken token = default)
+            => ProvisionAsync(vessel, captain, branchName, missionId, token);
+
+        /// <summary>
         /// Have a Harbor create a mission dock on its own host: a git worktree of the vessel's checkout there (or of the
         /// Harbor's own clone) under the Harbor's docks directory. The dock records the Harbor and the repository on that
         /// host, so every later operation on it runs on that Harbor.
@@ -36,6 +50,21 @@ namespace Armada.Core.Services.Interfaces
         /// <exception cref="Armada.Core.Services.DockProvisioningException">Thrown when the Harbor could not create the dock;
         /// the message says why and what to change.</exception>
         Task<Dock> ProvisionOnHarborAsync(Vessel vessel, Captain captain, string branchName, string missionId, string harborId, CancellationToken token = default);
+
+        /// <summary>
+        /// Provision a Harbor-hosted dock whose new branch starts at <paramref name="baseBranch"/> (which must exist on that
+        /// host) instead of the vessel's default branch. Implementations without fork support ignore it.
+        /// </summary>
+        /// <param name="vessel">Vessel.</param>
+        /// <param name="captain">Captain.</param>
+        /// <param name="branchName">Branch to create or attach.</param>
+        /// <param name="missionId">Mission identifier.</param>
+        /// <param name="harborId">Harbor identifier.</param>
+        /// <param name="baseBranch">Start point for a new branch, or null for the vessel default.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The dock.</returns>
+        Task<Dock> ProvisionOnHarborAsync(Vessel vessel, Captain captain, string branchName, string missionId, string harborId, string? baseBranch, CancellationToken token = default)
+            => ProvisionOnHarborAsync(vessel, captain, branchName, missionId, harborId, token);
 
         /// <summary>
         /// Reclaim a dock by removing the worktree. A dock is leased while a mission that references it is WorkProduced,
@@ -61,6 +90,14 @@ namespace Armada.Core.Services.Interfaces
         /// <param name="token">Cancellation token.</param>
         /// <returns>True or false, or null when it cannot be told (for example the dock's Harbor does not answer).</returns>
         Task<bool?> WorktreeExistsAsync(Dock dock, CancellationToken token = default) => Task.FromResult<bool?>(null);
+
+        /// <summary>
+        /// Take (and forget) why the last provisioning for a mission failed, or null when none is recorded. ProvisionAsync
+        /// returns null on failure; this says which step failed and with what exception.
+        /// </summary>
+        /// <param name="missionId">Mission identifier.</param>
+        /// <returns>The failure, or null.</returns>
+        DockProvisionFailure? TakeProvisionFailure(string missionId) => null;
 
         /// <summary>
         /// Recreate a dock's missing worktree from its branch, on the dock's own host, at the dock's recorded path. Never

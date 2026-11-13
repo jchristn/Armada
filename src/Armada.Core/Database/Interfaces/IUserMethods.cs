@@ -33,6 +33,16 @@ namespace Armada.Core.Database.Interfaces
         Task<List<UserMaster>> ReadByEmailAnyTenantAsync(string email, CancellationToken token = default);
 
         /// <summary>
+        /// Enumerate one page of the active, non-system tenants in which a user with this email exists, ordered by
+        /// tenant name then id, paged and counted in the database (for the login tenant picker).
+        /// </summary>
+        /// <param name="email">Email address, already normalized to lower case.</param>
+        /// <param name="query">Paging (PageNumber, PageSize).</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>One page of tenants.</returns>
+        Task<EnumerationResult<TenantListEntry>> EnumerateTenantsByEmailAsync(string email, EnumerationQuery query, CancellationToken token = default);
+
+        /// <summary>
         /// Update a user.
         /// </summary>
         Task<UserMaster> UpdateAsync(UserMaster user, CancellationToken token = default);

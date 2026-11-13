@@ -50,12 +50,12 @@ namespace Armada.Server.Routes
                 AuthContext? ctx = await AuthorizeAsync(req, authenticate, authz).ConfigureAwait(false);
                 if (ctx == null) return BuildAuthError(req);
                 EnumerationQuery query = EnumerationRequestReader.Read(req, _BodyJsonOptions);
-                return EnumerationResult<ModelEndpoint>.Page(query, await _Endpoints.EnumerateAsync(ctx).ConfigureAwait(false));
+                return await _Endpoints.EnumeratePageAsync(ctx, query).ConfigureAwait(false);
             },
             api => api
                 .WithTag("Model Endpoints")
                 .WithSummary("Enumerate model endpoints")
-                .WithDescription("One page of the managed embedding and inference endpoints visible to the caller. API keys are never returned. Paging and filters come from the JSON body (EnumerationQuery) or the querystring (pageNumber, pageSize 1 to 1000, default 10).")
+                .WithDescription("One page of the managed embedding and inference endpoints visible to the caller, counted and cut in the database, newest first (Order CreatedAscending for oldest first; ties break by id). API keys are never returned. Each endpoint carries at most 500 HealthHistory records. Paging and filters (CreatedAfter, CreatedBefore) come from the JSON body (EnumerationQuery) or the querystring (pageNumber, pageSize 1 to 1000, default 10).")
                 .WithRequestBody(OpenApiJson.BodyFor<EnumerationQuery>("Paging and filters", false))
                 .WithResponse(200, OpenApiJson.For<EnumerationResult<ModelEndpoint>>("One page"))
                 .WithSecurity("ApiKey"));
@@ -73,6 +73,10 @@ namespace Armada.Server.Routes
                     ModelEndpoint created = await _Endpoints.CreateAsync(ctx, request).ConfigureAwait(false);
                     req.Http.Response.StatusCode = 201;
                     return created;
+                }
+                catch (CollectionLimitExceededException ex)
+                {
+                    return RouteErrorMapper.LimitExceeded(req, ex);
                 }
                 catch (Exception ex) when (ex is ArgumentException || ex is InvalidOperationException)
                 {
@@ -103,6 +107,10 @@ namespace Armada.Server.Routes
                 }
                 catch (KeyNotFoundException ex) { req.Http.Response.StatusCode = 404; return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = ex.Message }; }
                 catch (UnauthorizedAccessException ex) { req.Http.Response.StatusCode = 403; return new ApiErrorResponse { Error = ApiResultEnum.Forbidden, Message = ex.Message }; }
+                catch (CollectionLimitExceededException ex)
+                {
+                    return RouteErrorMapper.LimitExceeded(req, ex);
+                }
                 catch (Exception ex) when (ex is ArgumentException || ex is InvalidOperationException || ex is JsonException)
                 { req.Http.Response.StatusCode = 400; return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = ex.Message }; }
             }, api => api.WithTag("Model Endpoints").WithSummary("Duplicate a model endpoint")
@@ -158,6 +166,10 @@ namespace Armada.Server.Routes
                 {
                     req.Http.Response.StatusCode = 403;
                     return new ApiErrorResponse { Error = ApiResultEnum.Forbidden, Message = ex.Message };
+                }
+                catch (CollectionLimitExceededException ex)
+                {
+                    return RouteErrorMapper.LimitExceeded(req, ex);
                 }
                 catch (Exception ex) when (ex is ArgumentException || ex is InvalidOperationException)
                 {

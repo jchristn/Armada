@@ -41,5 +41,23 @@ namespace Armada.Core.Database.Interfaces
         /// Enumerates refinement transcript messages for an objective.
         /// </summary>
         Task<List<ObjectiveRefinementMessage>> EnumerateByObjectiveAsync(string objectiveId, CancellationToken token = default);
+
+        /// <summary>
+        /// Read one page of a session's transcript. CreatedAscending is oldest first (by sequence), CreatedDescending
+        /// (the default) newest first; the id breaks ties. The page is cut in the database.
+        /// </summary>
+        /// <param name="objectiveRefinementSessionId">Refinement session identifier.</param>
+        /// <param name="query">Page number, page size (1 to 1000), and order.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>One page of messages.</returns>
+        Task<EnumerationResult<ObjectiveRefinementMessage>> EnumeratePageBySessionAsync(string objectiveRefinementSessionId, EnumerationQuery query, CancellationToken token = default);
+
+        /// <summary>
+        /// Count the messages of a session's transcript.
+        /// </summary>
+        /// <param name="objectiveRefinementSessionId">Refinement session identifier.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The number of messages.</returns>
+        Task<long> CountBySessionAsync(string objectiveRefinementSessionId, CancellationToken token = default);
     }
 }

@@ -18,7 +18,9 @@ export interface StorageHistoryPoint {
 }
 export interface StorageSnapshot {
   measuredUtc: string | null; collecting: boolean; lastError: string | null;
-  database: StorageDatabase; hosts: StorageHostReport[]; history: StorageHistoryPoint[];
+  database: StorageDatabase; history: StorageHistoryPoint[];
+  /** Host reports are paged with listStorageHosts; these summarize every host. */
+  hostCount: number; freshHostCount: number; observedFileBytes: number;
   retention: Record<string, number>; intervalSeconds: number; historyCapacity: number;
 }
 

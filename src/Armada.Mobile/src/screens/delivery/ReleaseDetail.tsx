@@ -36,7 +36,14 @@ interface ReleaseData {
   release: Release;
   objectives: Objective[];
   pullRequests: GitHubPullRequestDetail[];
+  /** Every linked pull request (the list holds the pages read so far). */
+  pullRequestTotal: number;
+  /** Last pull-request page read. */
+  pullRequestPage: number;
 }
+
+/** Pull requests read per page; each one is a GitHub read. */
+const PULL_REQUEST_PAGE_SIZE = 25;
 
 /**
  * One release (the dashboard's /releases/:id): status, version, notes, linked voyages / missions / checks, backlog
@@ -60,16 +67,31 @@ export function ReleaseDetailView({ id, embedded, onDeleted, onChanged }: Releas
   const [editing, setEditing] = useState(false);
   const [jsonOpen, setJsonOpen] = useState(false);
   const [refreshingDerived, setRefreshingDerived] = useState(false);
+  const [loadingMorePullRequests, setLoadingMorePullRequests] = useState(false);
 
   const { data, loading, refreshing, error, reload, refresh, setData } = useLoad<ReleaseData>(async () => {
     const [release, objectives, pullRequests] = await Promise.all([
       getRelease(id),
       listObjectives({ ...ALL, releaseId: id }).then((r) => r.objects ?? []).catch(() => [] as Objective[]),
-      getReleaseGitHubPullRequests(id).then((r) => r ?? []).catch(() => [] as GitHubPullRequestDetail[]),
+      getReleaseGitHubPullRequests(id, { pageNumber: 1, pageSize: PULL_REQUEST_PAGE_SIZE }).catch(() => null),
     ]);
-    return { release, objectives, pullRequests };
+    return { release, objectives, pullRequests: pullRequests?.objects ?? [], pullRequestTotal: pullRequests?.totalRecords ?? 0, pullRequestPage: 1 };
   }, [id], { fallbackError: t('Failed to load release.') });
   useReloadOnFocus(reload);
+
+  async function loadMorePullRequests() {
+    if (!data || loadingMorePullRequests) return;
+    const next = data.pullRequestPage + 1;
+    setLoadingMorePullRequests(true);
+    try {
+      const page = await getReleaseGitHubPullRequests(id, { pageNumber: next, pageSize: PULL_REQUEST_PAGE_SIZE });
+      setData({ ...data, pullRequests: [...data.pullRequests, ...(page?.objects ?? [])], pullRequestTotal: page?.totalRecords ?? data.pullRequestTotal, pullRequestPage: next });
+    } catch (err) {
+      pushToast('error', errorText(err, t('Failed to load more linked pull requests.')));
+    } finally {
+      setLoadingMorePullRequests(false);
+    }
+  }
 
   if (!data) return <DetailPending loading={loading} error={error} onRetry={() => void reload()} />;
   const r = data.release;
@@ -202,17 +224,20 @@ export function ReleaseDetailView({ id, embedded, onDeleted, onChanged }: Releas
           />
         ))}
       </FieldCard>
-      <FieldCard title={`${t('GitHub Pull Requests')} (${data.pullRequests.length})`} testID="release-pull-requests">
+      <FieldCard title={`${t('GitHub Pull Requests')} (${data.pullRequests.length < data.pullRequestTotal ? `${data.pullRequests.length}/${data.pullRequestTotal}` : data.pullRequestTotal})`} testID="release-pull-requests">
         {data.pullRequests.length === 0 ? <AppText muted style={resourceStyles.pad}>{t('No linked GitHub pull requests were found for this release yet.')}</AppText> : data.pullRequests.map((pr) => (
           <ResourceRow
             key={`${pr.repository}-${pr.number}`}
             title={pr.title}
-            subtitle={`${pr.repository} #${pr.number} \u2022 ${t('Checks')}: ${pr.checks.length} \u2022 ${t('Reviews')}: ${pr.reviews.length} \u2022 ${t('Reviewers')}: ${pr.requestedReviewers.length > 0 ? pr.requestedReviewers.join(', ') : '-'}`}
+            subtitle={`${pr.repository} #${pr.number} \u2022 ${t('Checks')}: ${pr.checkCount} \u2022 ${t('Reviews')}: ${pr.reviewCount} \u2022 ${t('Reviewers')}: ${pr.requestedReviewers.length > 0 ? pr.requestedReviewers.join(', ') : '-'}`}
             badge={statusBadge(t, pr.state)}
             meta={`${t(pr.reviewStatus)}${pr.updatedUtc ? ` \u2022 ${formatRelativeTime(pr.updatedUtc)}` : ''}`}
             onPress={() => { confirmOpenExternalUrl(pr.url, t); }}
           />
         ))}
+        {data.pullRequests.length < data.pullRequestTotal
+          ? <Button label={loadingMorePullRequests ? t('Loading...') : t('Load more')} variant="secondary" disabled={loadingMorePullRequests} onPress={() => void loadMorePullRequests()} testID="release-pull-requests-load-more" />
+          : null}
       </FieldCard>
 
       <FormSheet

@@ -1,6 +1,7 @@
 namespace Armada.Core.Models
 {
     using System.Collections.Generic;
+    using Armada.Core.Services;
 
     /// <summary>
     /// Result of probing a workspace for the toolchain a battery task needs.
@@ -12,6 +13,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// Toolchain names whose probe failed.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxConfigItems, Reason = "Subset of the pack toolchain (validated to MaxConfigItems)")]
         public List<string> Missing
         {
             get => _Missing;

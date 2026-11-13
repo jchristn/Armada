@@ -32,7 +32,7 @@ namespace Armada.Server.Mcp.Tools
         {
             register(
                 "token_usage_summary",
-                "Summarize model token usage over a time window: time buckets with a per-model breakdown, a whole-window per-model aggregate ordered most-used first, and grand totals (input, output, cached, total). Counts are real where the runtime reports usage (for example Claude Code) and estimated otherwise -- estimatedCount reports how many aggregated records were estimated.",
+                "Summarize model token usage over a time window: time buckets with a per-model breakdown, a whole-window per-model aggregate ordered most-used first, and grand totals (input, output, cached, total). Counts are real where the runtime reports usage (for example Claude Code) and estimated otherwise; estimatedCount reports how many aggregated records were estimated. At most 1000 buckets: a window and bucketMinutes that would produce more fails with InvalidArgument (Code CollectionLimitExceeded). byModel and each bucket's models list the modelLimit most-used models; the rest are summed into otherModels (otherModelCount says how many).",
                 new
                 {
                     type = "object",
@@ -41,7 +41,8 @@ namespace Armada.Server.Mcp.Tools
                         sinceHours = new { type = "integer", description = "Only include usage newer than this many hours (default 24; ignored when fromUtc is set)" },
                         fromUtc = new { type = "string", description = "Explicit UTC window start (ISO-8601); overrides sinceHours" },
                         toUtc = new { type = "string", description = "Explicit UTC window end (ISO-8601; default now)" },
-                        bucketMinutes = new { type = "number", description = "Time-bucket width in minutes; fractional allowed, e.g. 0.5 for 30-second buckets (default 60)" },
+                        bucketMinutes = new { type = "number", description = "Time-bucket width in minutes; fractional allowed, e.g. 0.5 for 30-second buckets (default 60, at most 527040)" },
+                        modelLimit = new { type = "integer", description = "Most models broken out by name (default 10, 1 to 100); the rest are summed into otherModels" },
                         model = new { type = "string", description = "Filter to one model" },
                         runtime = new { type = "string", description = "Filter to one runtime (for example claudecode, codex, mux)" },
                         source = new { type = "string", description = "Filter to one source: mission, chat, planning, or synthetic" },
@@ -82,6 +83,7 @@ namespace Armada.Server.Mcp.Tools
                     query.FromUtc = fromUtc;
                     query.ToUtc = toUtc;
                     query.BucketMinutes = request.BucketMinutes.HasValue && request.BucketMinutes.Value > 0 ? request.BucketMinutes.Value : _DefaultBucketMinutes;
+                    if (request.ModelLimit.HasValue) query.ModelLimit = request.ModelLimit.Value;
                     query.Model = String.IsNullOrWhiteSpace(request.Model) ? null : request.Model;
                     query.Runtime = String.IsNullOrWhiteSpace(request.Runtime) ? null : request.Runtime;
                     query.Source = String.IsNullOrWhiteSpace(request.Source) ? null : request.Source;
@@ -97,6 +99,15 @@ namespace Armada.Server.Mcp.Tools
                     {
                         query.TenantId = caller.TenantId;
                         if (!caller.IsTenantAdmin) query.UserId = caller.UserId;
+                    }
+
+                    try
+                    {
+                        TokenUsageSummaryBuilder.ValidateWindow(query);
+                    }
+                    catch (ArgumentOutOfRangeException ex)
+                    {
+                        return (object)McpToolError.FromException(ex);
                     }
 
                     List<TokenUsageRecord> records = await database.TokenUsage.EnumerateForSummaryAsync(query).ConfigureAwait(false);

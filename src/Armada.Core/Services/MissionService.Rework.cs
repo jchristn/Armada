@@ -17,7 +17,8 @@ namespace Armada.Core.Services
     {
         #region Private-Methods
 
-        private async Task<bool> TryScheduleReworkAsync(Mission judge, CancellationToken token, Action<string>? onUnavailable = null)
+        private async Task<bool> TryScheduleReworkAsync(Mission judge, CancellationToken token, Action<string>? onUnavailable = null,
+            bool operatorRestart = false, Action<string>? onReviewerCreated = null, string? operatorGuidance = null)
         {
             bool Unavailable(string reason) { onUnavailable?.Invoke(reason); return false; }
             if (String.IsNullOrEmpty(judge.VoyageId) || String.IsNullOrEmpty(judge.DependsOnMissionId))
@@ -52,7 +53,9 @@ namespace Armada.Core.Services
 
             // Give the Worker bounded rework, then try one different captain. Unchanged rejected work
             // switches earlier. Escalation also works in voyages with no planning stage.
-            if (escalated || rounds > _MaxJudgeReworkRounds)
+            // An operator restart of a blocked stage is an explicit decision to spend another round: the automatic
+            // budget and the automatic captain escalation do not apply to it (normal routing picks the captain).
+            if (!operatorRestart && (escalated || rounds > _MaxJudgeReworkRounds))
                 return Unavailable("Automatic Judge rework limit reached after " + rounds + " rework round(s)" + (escalated ? ", including an escalated attempt." : "."));
             string? escalateTo = null;
             Mission? previousWorker = voyageMissions.FirstOrDefault(m => m.Id != worker.Id && PersonaCatalog.Matches(m.Persona, PersonaCatalog.Worker)
@@ -63,7 +66,7 @@ namespace Armada.Core.Services
             bool repeatedCase = previousJudge != null && currentCase != null
                 && String.Equals(currentCase, JudgeContract.AffectedCaseKey(previousJudge.AgentOutput), StringComparison.Ordinal);
             bool stagnant = (previousWorker != null || repeatedCase) && !MissionModeContract.IsReadOnly(worker.Mode);
-            if (rounds == _MaxJudgeReworkRounds || stagnant)
+            if (!operatorRestart && (rounds == _MaxJudgeReworkRounds || stagnant))
             {
                 string escalationTrigger = rounds == _MaxJudgeReworkRounds
                     ? "Automatic Judge rework budget exhausted for this slice (" + rounds + " of " + _MaxJudgeReworkRounds + " rounds). "
@@ -89,12 +92,14 @@ namespace Armada.Core.Services
             string taskSpec = ReworkPromptBuilder.StripSection(StripPipelineHandoff(worker.Description));
             Mission rework = new Mission(_ReworkTitlePrefix + round + (escalateTo != null ? _EscalatedMarker : "") + ": " + baseTitle,
                 // Numbered demands, one per line; the reviewer's findings are filled in from its handoff artifact at launch.
-                taskSpec + ReworkPromptBuilder.BuildSection(round, judge.Persona));
+                taskSpec + ReworkPromptBuilder.BuildSection(round, judge.Persona)
+                + (String.IsNullOrWhiteSpace(operatorGuidance) ? String.Empty : "\n\n## Operator restart guidance\n" + operatorGuidance!.Trim() + "\n"));
             rework.TenantId = judge.TenantId;
             rework.UserId = judge.UserId;
             rework.VoyageId = judge.VoyageId;
             rework.VesselId = judge.VesselId;
             rework.IsEvaluation = judge.IsEvaluation;
+            rework.WorkerEnvelope = worker.WorkerEnvelope ?? judge.WorkerEnvelope;
             rework.Persona = PersonaCatalog.Worker;
             rework.ReworkRound = round;
             rework.ReworkEscalated = escalateTo != null;
@@ -128,6 +133,7 @@ namespace Armada.Core.Services
                 repeated.VoyageId = original.VoyageId;
                 repeated.VesselId = original.VesselId;
                 repeated.IsEvaluation = original.IsEvaluation;
+                repeated.WorkerEnvelope = original.WorkerEnvelope;
                 repeated.Persona = original.Persona;
                 repeated.Mode = original.Mode;
                 repeated.Tier = original.Tier;
@@ -148,6 +154,7 @@ namespace Armada.Core.Services
             nextJudge.VoyageId = judge.VoyageId;
             nextJudge.VesselId = judge.VesselId;
             nextJudge.IsEvaluation = judge.IsEvaluation;
+            nextJudge.WorkerEnvelope = judge.WorkerEnvelope;
             nextJudge.Persona = reviewerIsJudge ? PersonaCatalog.Judge : judge.Persona;
             nextJudge.Tier = judge.Tier;
             nextJudge.DependsOnMissionId = reworkParentId;
@@ -159,6 +166,7 @@ namespace Armada.Core.Services
             List<MissionDependencyUpdate> repointed = voyageMissions.Where(m => m.DependsOnMissionId == judge.Id)
                 .Select(m => new MissionDependencyUpdate(m.Id, nextJudge.Id)).ToList();
             await _Database.Missions.CreateChainAsync(chain, repointed, token).ConfigureAwait(false);
+            onReviewerCreated?.Invoke(nextJudge.Id);
 
             _Logging.Info(_Header + "judge " + judge.Id + ": rework round " + round + " as Worker mission " + rework.Id + ", re-review " + nextJudge.Id
                 + (escalateTo != null ? "; escalating to " + escalateTo + (stagnant ? " after unchanged work" : " after the rework budget") : ""));

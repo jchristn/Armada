@@ -475,6 +475,14 @@ CREATE INDEX idx_missions_depends_on ON missions(depends_on_mission_id);
 - [x] Admiral health check / assignment loop: skip missions whose dependency is not yet satisfied
   - Dependency check in `TryAssignAsync` -- skips if dependency not Complete/WorkProduced
 
+Current (v1.3.0): `DependsOnMissionId` still orders the stages of one pipeline. A separate `ParentMissionId` links
+logical missions into a tree (stored `Depth`, at most `Concurrency.MaxHierarchyDepth`, default 4). A child's first
+stage waits with `ParentNotFinished` until its parent's terminal stage finishes; the first child continues the
+parent's branch and later children fork from it (`BranchStrategy` `New`, `ContinueParent`, `ForkFromParent`), and the
+merge queue holds a child until its parent lands. A failed, cancelled or unlanded parent cancels its Pending
+descendants with `FailureKind` `ParentFailed`. See [PIPELINES.md](PIPELINES.md) and
+[SCHEDULING.md](SCHEDULING.md#capacity).
+
 ### 4.3 Stage Handoff
 
 - [x] When a mission completes successfully and another mission depends on it:
@@ -508,6 +516,15 @@ CREATE INDEX idx_missions_depends_on ON missions(depends_on_mission_id);
 - [x] Architect persona template embedded in PromptTemplateService with [ARMADA:MISSION] output format
 - [x] ParseArchitectOutput parses markers into structured mission definitions
 - [x] TryHandoffToNextStageAsync creates Worker missions from architect output
+
+Current (v1.3.0): the Architect emits an `armada-plan` block with `contractVersion` 4 (the `[ARMADA:MISSION]` markers
+remain a fallback and accept `Parent: n` and `Owns: a, b`). Each mission may set `parent` (the 1-based index of an
+earlier mission), `ownedPaths`, `readsPaths` and `branchStrategy` (`continue` or `fork`, only with a parent). A v4
+plan in which two missions that can run in parallel own overlapping paths is rejected and sent back for repair; a v3
+plan only gets a warning, and a v3 or v4 `dependsOn` is read as `parent` with a warning. A slice's `parent` becomes
+`ParentMissionId` on the parent slice's first stage, and its owned and read paths are stored on every stage. The
+built-in Architect templates receive `{MaxParallelMissionsPerVoyage}`; see
+[PERSONAS_GUIDE.md](PERSONAS_GUIDE.md#available-placeholders).
 
 ### 5.3 Judge Persona Template (`persona.judge`)
 

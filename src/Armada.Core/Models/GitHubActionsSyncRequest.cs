@@ -53,8 +53,14 @@ namespace Armada.Core.Models
         public CheckRunTypeEnum? TypeOverride { get; set; } = null;
 
         /// <summary>
-        /// Maximum number of runs to inspect per sync call.
+        /// Runs to read from GitHub per sync call (one GitHub page). Normalized to 1..100.
         /// </summary>
         public int RunCount { get; set; } = 20;
+
+        /// <summary>
+        /// GitHub page of runs to read, starting at 1 (newest first). Values below 1 are normalized to 1. The result's
+        /// SourceTotalCount and SourceTotalPages say how many runs and pages exist.
+        /// </summary>
+        public int PageNumber { get; set; } = 1;
     }
 }

@@ -17,7 +17,7 @@ namespace Armada.Core.Services
         /// <summary>
         /// Version of the probe set (prompts and scoring rules).
         /// </summary>
-        public const string ProbeSetVersion = "quick-1";
+        public const string ProbeSetVersion = "quick-2";
 
         /// <summary>
         /// Fence info string of the tool-calling probe's answer block.
@@ -28,6 +28,12 @@ namespace Armada.Core.Services
         /// Repeats of the determinism probe.
         /// </summary>
         public const int DeterminismRepeats = 3;
+
+        /// <summary>
+        /// Probes in the quick set, and so the most results one run records (output contract, served context, ASCII,
+        /// tool calling, speed, determinism).
+        /// </summary>
+        public const int ProbeCount = 6;
 
         /// <summary>
         /// Approximate input tokens of the small speed exchange.
@@ -170,8 +176,8 @@ namespace Armada.Core.Services
         public static string DeterminismPrompt()
         {
             return _Preamble + "Do not call any tools and do not modify any files.\n\n" +
-                "Reply with one line that starts with `ANSWER:` followed by the first five prime numbers greater than 100, " +
-                "comma-separated with no spaces, then one sentence saying how you checked them.\n" + AsciiRules;
+                "Reply with exactly one line that starts with ANSWER: followed by the first five prime numbers greater than 100, " +
+                "comma-separated with no spaces. Do not include an explanation, Markdown, or any other text.\n" + AsciiRules;
         }
 
         /// <summary>

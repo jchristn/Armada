@@ -58,9 +58,10 @@ namespace Armada.Server.Routes
                 EnumerationQuery query = new EnumerationQuery();
                 query.ApplyQuerystringOverrides(key => req.Query.GetValueOrDefault(key));
                 Stopwatch sw = Stopwatch.StartNew();
-                EnumerationResult<Pipeline> result = await _database.Pipelines.EnumerateAsync(query).ConfigureAwait(false);
+                EnumerationResult<Pipeline> result = ctx.IsAdmin
+                    ? await _database.Pipelines.EnumerateAsync(query).ConfigureAwait(false)
+                    : await _database.Pipelines.EnumerateVisibleAsync(ctx.TenantId!, ctx.IsTenantAdmin ? null : ctx.UserId, query).ConfigureAwait(false);
                 result.TotalMs = Math.Round(sw.Elapsed.TotalMilliseconds, 2);
-                if (!ctx.IsAdmin) result.Objects = result.Objects.Where(p => ScopedVisibility.CanView(ctx, p.Scope, p.TenantId, p.UserId)).ToList();
                 return result;
             },
             api => api
@@ -82,9 +83,10 @@ namespace Armada.Server.Routes
                 EnumerationQuery query = JsonSerializer.Deserialize<EnumerationQuery>(req.Http.Request.DataAsString, _jsonOptions) ?? new EnumerationQuery();
                 query.ApplyQuerystringOverrides(key => req.Query.GetValueOrDefault(key));
                 Stopwatch sw = Stopwatch.StartNew();
-                EnumerationResult<Pipeline> result = await _database.Pipelines.EnumerateAsync(query).ConfigureAwait(false);
+                EnumerationResult<Pipeline> result = ctx.IsAdmin
+                    ? await _database.Pipelines.EnumerateAsync(query).ConfigureAwait(false)
+                    : await _database.Pipelines.EnumerateVisibleAsync(ctx.TenantId!, ctx.IsTenantAdmin ? null : ctx.UserId, query).ConfigureAwait(false);
                 result.TotalMs = Math.Round(sw.Elapsed.TotalMilliseconds, 2);
-                if (!ctx.IsAdmin) result.Objects = result.Objects.Where(p => ScopedVisibility.CanView(ctx, p.Scope, p.TenantId, p.UserId)).ToList();
                 return result;
             },
             api => api
@@ -92,6 +94,7 @@ namespace Armada.Server.Routes
                 .WithSummary("Enumerate pipelines")
                 .WithDescription("Paginated enumeration of pipelines with optional filtering and sorting.")
                 .WithRequestBody(OpenApiJson.BodyFor<EnumerationQuery>("Enumeration query", false))
+                .WithResponse(200, OpenApiJson.For<EnumerationResult<Pipeline>>("Paginated pipelines visible to the caller"))
                 .WithSecurity("ApiKey"));
 
             // Get pipeline by name
@@ -131,6 +134,7 @@ namespace Armada.Server.Routes
                 pipeline.TenantId = ctx.TenantId;
                 pipeline.UserId = ctx.UserId;
                 pipeline.Scope = ScopedVisibility.ResolveCreateScope(ctx, pipeline.Scope);
+                CollectionBounds.Validate(pipeline);
                 await DuplicateEntityGuard.EnsurePipelineNameAvailableAsync(_database, pipeline).ConfigureAwait(false);
                 pipeline = await _database.Pipelines.CreateAsync(pipeline).ConfigureAwait(false);
                 req.Http.Response.StatusCode = 201;
@@ -164,6 +168,7 @@ namespace Armada.Server.Routes
                 if (body.Stages != null && body.Stages.Count > 0) existing.Stages = body.Stages;
                 if (ctx.IsAdmin || ctx.IsTenantAdmin) existing.Scope = body.Scope;
                 existing.LastUpdateUtc = DateTime.UtcNow;
+                CollectionBounds.Validate(existing);
                 Pipeline updated = await _database.Pipelines.UpdateAsync(existing).ConfigureAwait(false);
                 return (object)updated;
             },

@@ -116,13 +116,11 @@ namespace Armada.Core.Models
         public DateTime LastUpdateUtc { get; set; } = DateTime.UtcNow;
 
         /// <summary>
-        /// Tool calls the captain made while writing this message (populated on read; not a column).
+        /// Number of tool calls the captain made while writing this message (populated on read; not a column). The calls
+        /// are read one page at a time with POST /api/v1/ask/threads/{id}/messages/{messageId}/tool-calls/enumerate (MCP
+        /// list_ask_tool_calls).
         /// </summary>
-        public List<AskMessageToolCall> ToolCalls
-        {
-            get => _ToolCalls;
-            set => _ToolCalls = value ?? new List<AskMessageToolCall>();
-        }
+        public int ToolCallCount { get; set; } = 0;
 
         /// <summary>
         /// The linked proposal (populated on read when ProposalId is set).
@@ -147,7 +145,6 @@ namespace Armada.Core.Models
         private string _Id = Constants.IdGenerator.GenerateKSortable(Constants.AskMessageIdPrefix, 24);
         private string _ThreadId = String.Empty;
         private string _ContentText = String.Empty;
-        private List<AskMessageToolCall> _ToolCalls = new List<AskMessageToolCall>();
 
         #endregion
 

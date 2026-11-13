@@ -11,6 +11,7 @@ import ProjectProfiles from './ProjectProfiles';
 import WorkflowProfiles from './WorkflowProfiles';
 import Harbors from './Harbors';
 import Objectives from './Objectives';
+import { asPage } from '../test/asPage';
 
 // Shared-DataTable migrations for the catalog-style list pages (playbooks, skills, runbooks, profiles, harbors) and
 // the backlog: the column chooser is present with the identity columns locked, refresh lives in the table toolbar,
@@ -22,7 +23,7 @@ vi.mock('../api/client', () => ({
   listRunbooks: vi.fn(), listRunbookExecutions: vi.fn(), listEnvironments: vi.fn(), createRunbook: vi.fn(), deleteRunbook: vi.fn(),
   listWorkflowProfiles: vi.fn(), createWorkflowProfile: vi.fn(), updateWorkflowProfile: vi.fn(), deleteWorkflowProfile: vi.fn(),
   listProjectProfiles: vi.fn(), createProjectProfile: vi.fn(), updateProjectProfile: vi.fn(), deleteProjectProfile: vi.fn(),
-  listHarbors: vi.fn(), createHarbor: vi.fn(), updateHarbor: vi.fn(), deleteHarbor: vi.fn(), enableHarbor: vi.fn(), disableHarbor: vi.fn(), getHarborMetrics: vi.fn(),
+  listHarbors: vi.fn(), enumerateHarbors: vi.fn(), createHarbor: vi.fn(), updateHarbor: vi.fn(), deleteHarbor: vi.fn(), enableHarbor: vi.fn(), disableHarbor: vi.fn(), getHarborMetrics: vi.fn(),
   listBacklog: vi.fn(), createBacklogItem: vi.fn(), deleteBacklogItem: vi.fn(), importObjectiveFromGitHub: vi.fn(), reorderBacklog: vi.fn(),
   listFleets: vi.fn(), listVessels: vi.fn(), listUsers: vi.fn(),
 }));
@@ -84,6 +85,7 @@ beforeEach(() => {
   m.listWorkflowProfiles.mockResolvedValue(page([workflowProfile]) as never);
   m.listProjectProfiles.mockResolvedValue(page([projectProfile]) as never);
   m.listHarbors.mockResolvedValue([harbor] as never);
+  m.enumerateHarbors.mockImplementation((async () => asPage(await m.listHarbors())) as never);
   m.listBacklog.mockResolvedValue(page([objective]) as never);
   m.listFleets.mockResolvedValue(page([]) as never);
   m.listVessels.mockResolvedValue(page([]) as never);

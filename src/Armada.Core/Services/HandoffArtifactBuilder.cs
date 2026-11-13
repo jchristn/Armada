@@ -28,6 +28,20 @@ namespace Armada.Core.Services
         /// </summary>
         public const int MaxStoredDiffChars = 1000000;
 
+        /// <summary>
+        /// Most entries stored in each of <see cref="HandoffArtifact.Findings"/>, <see cref="HandoffArtifact.AcceptanceCriteria"/>
+        /// and <see cref="HandoffArtifact.CompletionLines"/> (docs/ENUMERATION.md). These come from agent output and the
+        /// task description, which cannot be rejected, so a longer list keeps its first entries and ends with one marker
+        /// entry that says how many more there were; the full text stays in <see cref="HandoffArtifact.Output"/> and on the
+        /// mission.
+        /// </summary>
+        public const int MaxStoredListItems = CollectionLimits.MaxConfigItems;
+
+        /// <summary>
+        /// Prefix of the marker entry that ends a CompletionLines list that was cut to <see cref="MaxStoredListItems"/>.
+        /// </summary>
+        public const string TruncatedLinePrefix = "[ARMADA:TRUNCATED]";
+
         #endregion
 
         #region Private-Members
@@ -106,6 +120,11 @@ namespace Armada.Core.Services
             if (check != null) artifact.CheckResults.Add(check);
             artifact.CommitReferences = ExtractCommitReferences(stage.CommitHash, output);
             artifact.RequiredActions = BuildRequiredActions(artifact);
+
+            // Bound the agent-derived lists after the verdict and required actions were decided from the full lists.
+            artifact.Findings = CapFindings(artifact.Findings);
+            artifact.AcceptanceCriteria = CapLines(artifact.AcceptanceCriteria, "acceptance criteria were not stored; read them in the mission description.");
+            artifact.CompletionLines = CapLines(artifact.CompletionLines, "protocol lines were not stored; read them in the stage output.", TruncatedLinePrefix + " ");
 
             artifact.OutputLength = output.Length;
             artifact.OutputComplete = output.Length <= MaxStoredOutputChars;
@@ -401,6 +420,30 @@ namespace Armada.Core.Services
             }
 
             return actions;
+        }
+
+        private static List<HandoffFinding> CapFindings(List<HandoffFinding> findings)
+        {
+            if (findings.Count <= MaxStoredListItems) return findings;
+            List<HandoffFinding> kept = findings.Take(MaxStoredListItems - 1).ToList();
+            int omitted = findings.Count - kept.Count;
+            kept.Add(new HandoffFinding
+            {
+                Number = kept.Count + 1,
+                Severity = HandoffFindingSeverityEnum.Unknown,
+                Summary = omitted + " more findings (" + (kept.Count + 1) + " to " + findings.Count + " of " + findings.Count
+                    + ") were not stored; read them in the stage output."
+            });
+            return kept;
+        }
+
+        private static List<string> CapLines(List<string> lines, string what, string prefix = "")
+        {
+            if (lines.Count <= MaxStoredListItems) return lines;
+            List<string> kept = lines.Take(MaxStoredListItems - 1).ToList();
+            int omitted = lines.Count - kept.Count;
+            kept.Add(prefix + omitted + " more of " + lines.Count + " " + what);
+            return kept;
         }
 
         private static string BuildDiffPointer(Mission stage)

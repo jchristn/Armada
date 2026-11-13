@@ -128,8 +128,9 @@ namespace Armada.Tui.Screens.Activity
             {
                 Event = e;
                 Banner = e == null ? Context.Loc.T("Failed to load event.") : "";
+                if (e == null) ShowUnavailable();
                 Rebuild();
-            }, "Failed to load event.", ex => { Banner = Context.Loc.T("Failed to load event."); });
+            }, "Failed to load event.", ex => { Banner = Context.Loc.T("Failed to load event."); ShowUnavailable(); });
             ScreenOps.Quiet(Context, () => Context.Client.ListCaptainsAsync(new ArmadaPageQuery(1, 1000)), r =>
             {
                 _CaptainNames = (r?.Objects ?? new List<Captain>()).ToDictionary(c => c.Id, c => c.Name, StringComparer.Ordinal);
@@ -166,6 +167,13 @@ namespace Armada.Tui.Screens.Activity
         #endregion
 
         #region Private-Methods
+
+        private void ShowUnavailable()
+        {
+            // Replace the "Loading..." row, which would otherwise stay under the error banner.
+            Details.Clear();
+            Details.Add("Press F5 to retry.", "");
+        }
 
         private void Rebuild()
         {

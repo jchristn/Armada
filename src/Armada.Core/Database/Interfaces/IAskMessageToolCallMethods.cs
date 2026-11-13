@@ -29,5 +29,27 @@ namespace Armada.Core.Database.Interfaces
         /// <param name="token">Cancellation token.</param>
         /// <returns>Tool calls of those messages.</returns>
         Task<List<AskMessageToolCall>> EnumerateByMessagesAsync(string tenantId, string threadId, List<string> messageIds, CancellationToken token = default);
+
+        /// <summary>
+        /// Read one page of one message's tool calls. CreatedAscending is the order the calls were made in,
+        /// CreatedDescending (the default) the reverse; the id breaks ties. The page is cut in the database.
+        /// </summary>
+        /// <param name="tenantId">Tenant identifier.</param>
+        /// <param name="threadId">Thread identifier.</param>
+        /// <param name="messageId">Message identifier.</param>
+        /// <param name="query">Page number, page size (1 to 1000), and order.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>One page of tool calls.</returns>
+        Task<EnumerationResult<AskMessageToolCall>> EnumeratePageByMessageAsync(string tenantId, string threadId, string messageId, EnumerationQuery query, CancellationToken token = default);
+
+        /// <summary>
+        /// Count the tool calls of each of several messages of a thread. Messages without tool calls are absent.
+        /// </summary>
+        /// <param name="tenantId">Tenant identifier.</param>
+        /// <param name="threadId">Thread identifier.</param>
+        /// <param name="messageIds">Message identifiers.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>Tool call count by message id.</returns>
+        Task<Dictionary<string, int>> CountByMessagesAsync(string tenantId, string threadId, List<string> messageIds, CancellationToken token = default);
     }
 }

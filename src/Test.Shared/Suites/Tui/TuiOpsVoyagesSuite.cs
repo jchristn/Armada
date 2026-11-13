@@ -47,7 +47,7 @@ namespace Test.Shared.Suites.Tui
                     AssertEqual("vyg_g", screen.Grid.Current!.Id, "first row");
                     host.Press("u");
                     AssertTrue(host.WaitForText("Voyage Status"), "status viewer");
-                    TuiCase.Contains(host.Screen(), "\"Status\": \"Complete\"", "status json (voyage with its missions)");
+                    TuiCase.Contains(host.Screen(), "\"MissionCountsByStatus\"", "status json (voyage with its mission counts)");
                     host.Press("esc");
                     host.Press("x");
                     TuiCase.Contains(host.Screen(), "Cancel voyage \"Greeting rollout\"? All pending missions will be", "cancel text");
@@ -190,19 +190,22 @@ namespace Test.Shared.Suites.Tui
             stub.Json("GET", "/api/v1/voyages", "{\"Success\":true,\"PageNumber\":1,\"PageSize\":25,\"TotalPages\":1,\"TotalRecords\":2,\"Objects\":[" +
                 "{\"Id\":\"vyg_g\",\"Title\":\"Greeting rollout\",\"Status\":\"InProgress\",\"AutoPush\":true,\"AutoCreatePullRequests\":false,\"LandingMode\":\"PullRequest\",\"CreatedUtc\":\"2026-10-04T10:00:00Z\",\"LastUpdateUtc\":\"2026-10-04T10:00:00Z\"}," +
                 "{\"Id\":\"vyg_b\",\"Title\":\"Billing cleanup\",\"Status\":\"Complete\",\"CreatedUtc\":\"2026-10-04T09:00:00Z\",\"LastUpdateUtc\":\"2026-10-04T09:00:00Z\"}]}");
-            stub.Json("GET", "/api/v1/voyages/vyg_g", "{\"Voyage\":{\"Id\":\"vyg_g\",\"Title\":\"Greeting rollout\",\"Status\":\"InProgress\"},\"Missions\":[{\"Id\":\"msn_g1\",\"Title\":\"Greeting\",\"Status\":\"Complete\"}]}");
+            stub.Json("GET", "/api/v1/voyages/vyg_g", "{\"Voyage\":{\"Id\":\"vyg_g\",\"Title\":\"Greeting rollout\",\"Status\":\"InProgress\"},\"TotalMissions\":1,\"CompletedMissions\":1,\"MissionCountsByStatus\":{\"Complete\":1}}");
+            stub.Json("GET", "/api/v1/missions?pageNumber=1&pageSize=25&voyageId=vyg_g&order=CreatedAscending", StubHttpHandler.PageJson("[{\"Id\":\"msn_g1\",\"Title\":\"Greeting\",\"Status\":\"Complete\"}]"));
             stub.On("DELETE", "/api/v1/voyages/vyg_g", b => StubHttpHandler.Response(HttpStatusCode.NoContent, ""));
             stub.On("DELETE", "/api/v1/voyages/vyg_b", b => StubHttpHandler.Response(HttpStatusCode.NoContent, ""));
             stub.On("DELETE", "/api/v1/voyages/vyg_g/purge", b => StubHttpHandler.Response(HttpStatusCode.NoContent, ""));
             stub.On("DELETE", "/api/v1/voyages/vyg_b/purge", b => StubHttpHandler.Response(HttpStatusCode.NoContent, ""));
-            stub.Json("GET", "/api/v1/voyages/vyg_b", "{\"Voyage\":{\"Id\":\"vyg_b\",\"Title\":\"Billing cleanup\",\"Status\":\"Complete\",\"Description\":\"Tidy billing\",\"AutoPush\":true,\"CaptainOverridesJson\":\"[{\\\"Persona\\\":\\\"Worker\\\",\\\"CaptainId\\\":\\\"cpt_1\\\",\\\"FallbackTier\\\":\\\"Premium\\\"}]\",\"CreatedUtc\":\"2026-10-04T09:00:00Z\",\"LastUpdateUtc\":\"2026-10-04T09:00:00Z\"},\"Missions\":[" +
+            stub.Json("GET", "/api/v1/voyages/vyg_b", "{\"Voyage\":{\"Id\":\"vyg_b\",\"Title\":\"Billing cleanup\",\"Status\":\"Complete\",\"Description\":\"Tidy billing\",\"AutoPush\":true,\"CaptainOverridesJson\":\"[{\\\"Persona\\\":\\\"Worker\\\",\\\"CaptainId\\\":\\\"cpt_1\\\",\\\"FallbackTier\\\":\\\"Premium\\\"}]\",\"CreatedUtc\":\"2026-10-04T09:00:00Z\",\"LastUpdateUtc\":\"2026-10-04T09:00:00Z\"},\"TotalMissions\":3,\"CompletedMissions\":1,\"FailedMissions\":1,\"InProgressMissions\":1,\"MissionCountsByStatus\":{\"Complete\":1,\"Failed\":1,\"InProgress\":1},\"VesselId\":\"vsl_demo\",\"VesselCount\":1}");
+            stub.Json("GET", "/api/v1/missions?pageNumber=1&pageSize=25&voyageId=vyg_b&order=CreatedAscending", StubHttpHandler.PageJson("[" +
                 "{\"Id\":\"msn_1\",\"Title\":\"Done task\",\"Status\":\"Complete\",\"VesselId\":\"vsl_demo\",\"CaptainId\":\"cpt_1\",\"VoyageId\":\"vyg_b\",\"Priority\":100,\"CreatedUtc\":\"2026-10-04T09:00:00Z\",\"LastUpdateUtc\":\"2026-10-04T09:00:00Z\"}," +
                 "{\"Id\":\"msn_2\",\"Title\":\"Broken task\",\"Description\":\"Fix it\",\"Status\":\"Failed\",\"VesselId\":\"vsl_demo\",\"VoyageId\":\"vyg_b\",\"Priority\":50,\"CreatedUtc\":\"2026-10-04T09:00:00Z\",\"LastUpdateUtc\":\"2026-10-04T09:00:00Z\"}," +
-                "{\"Id\":\"msn_3\",\"Title\":\"Running task\",\"Status\":\"InProgress\",\"VesselId\":\"vsl_demo\",\"VoyageId\":\"vyg_b\",\"Priority\":100,\"CreatedUtc\":\"2026-10-04T09:00:00Z\",\"LastUpdateUtc\":\"2026-10-04T09:00:00Z\"}]}");
+                "{\"Id\":\"msn_3\",\"Title\":\"Running task\",\"Status\":\"InProgress\",\"VesselId\":\"vsl_demo\",\"VoyageId\":\"vyg_b\",\"Priority\":100,\"CreatedUtc\":\"2026-10-04T09:00:00Z\",\"LastUpdateUtc\":\"2026-10-04T09:00:00Z\"}]"));
+            stub.Json("GET", "/api/v1/missions?pageNumber=1&pageSize=100&voyageId=vyg_b&status=Failed", StubHttpHandler.PageJson("[{\"Id\":\"msn_2\",\"Title\":\"Broken task\",\"Description\":\"Fix it\",\"Status\":\"Failed\",\"VesselId\":\"vsl_demo\",\"VoyageId\":\"vyg_b\",\"Priority\":50,\"CreatedUtc\":\"2026-10-04T09:00:00Z\",\"LastUpdateUtc\":\"2026-10-04T09:00:00Z\"}]"));
             stub.Json("GET", "/api/v1/missions/msn_2/diff", "{\"Diff\":\"diff --git a/y b/y\\n+change\\n\"}");
             stub.Json("POST", "/api/v1/missions", "{\"Id\":\"msn_9\",\"Title\":\"Broken task\",\"Status\":\"Pending\"}");
             stub.Json("POST", "/api/v1/voyages", "{\"Id\":\"vyg_new\",\"Title\":\"Docs sweep\",\"Status\":\"Open\"}");
-            stub.Json("GET", "/api/v1/voyages/vyg_new", "{\"Voyage\":{\"Id\":\"vyg_new\",\"Title\":\"Docs sweep\",\"Status\":\"Open\",\"CreatedUtc\":\"2026-10-04T09:00:00Z\",\"LastUpdateUtc\":\"2026-10-04T09:00:00Z\"},\"Missions\":[]}");
+            stub.Json("GET", "/api/v1/voyages/vyg_new", "{\"Voyage\":{\"Id\":\"vyg_new\",\"Title\":\"Docs sweep\",\"Status\":\"Open\",\"CreatedUtc\":\"2026-10-04T09:00:00Z\",\"LastUpdateUtc\":\"2026-10-04T09:00:00Z\"},\"TotalMissions\":0}");
             stub.Json("GET", "/api/v1/vessels", "{\"Success\":true,\"Objects\":[{\"Id\":\"vsl_demo\",\"Name\":\"DemoRepo\",\"DefaultBranch\":\"main\"}],\"TotalRecords\":1}");
             stub.Json("GET", "/api/v1/captains", "{\"Success\":true,\"Objects\":[{\"Id\":\"cpt_1\",\"Name\":\"claude-1\",\"Runtime\":\"ClaudeCode\",\"State\":\"Idle\"}],\"TotalRecords\":1}");
             stub.Json("GET", "/api/v1/pipelines", "{\"Success\":true,\"Objects\":[],\"TotalRecords\":0}");

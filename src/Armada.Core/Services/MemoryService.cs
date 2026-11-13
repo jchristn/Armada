@@ -148,11 +148,13 @@ namespace Armada.Core.Services
         /// <param name="memory">Memory to create.</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>The created memory.</returns>
+        /// <exception cref="CollectionLimitExceededException">Thrown when Tags holds more than MaxConfigItems entries.</exception>
         public async Task<Memory> CreateAsync(AuthContext auth, Memory memory, CancellationToken token = default)
         {
             if (auth == null) throw new ArgumentNullException(nameof(auth));
             if (memory == null) throw new ArgumentNullException(nameof(memory));
             if (String.IsNullOrWhiteSpace(memory.Content)) throw new ArgumentException("Memory content is required.");
+            CollectionBounds.Validate(memory);
 
             memory.TenantId = auth.TenantId;
             memory.UserId = auth.UserId;
@@ -198,10 +200,12 @@ namespace Armada.Core.Services
         /// <param name="memory">Memory carrying updated fields (its Id selects the record).</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>The updated memory.</returns>
+        /// <exception cref="CollectionLimitExceededException">Thrown when Tags holds more than MaxConfigItems entries.</exception>
         public async Task<Memory> UpdateAsync(AuthContext auth, Memory memory, CancellationToken token = default)
         {
             if (auth == null) throw new ArgumentNullException(nameof(auth));
             if (memory == null) throw new ArgumentNullException(nameof(memory));
+            CollectionBounds.Validate(memory);
 
             Memory? existing = await _Database.Memories.ReadAsync(memory.Id, token).ConfigureAwait(false);
             if (existing == null || !ScopedVisibility.CanView(auth, existing.Scope, existing.TenantId, existing.UserId)) throw new KeyNotFoundException("Memory not found: " + memory.Id);

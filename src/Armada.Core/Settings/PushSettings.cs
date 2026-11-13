@@ -4,6 +4,7 @@ namespace Armada.Core.Settings
     using System.Collections.Generic;
     using System.Linq;
     using Armada.Core.Enums;
+    using Armada.Core.Services;
 
     /// <summary>
     /// Settings for push notifications to the Armada mobile apps, delivered through the Expo Push Service (which relays
@@ -30,10 +31,11 @@ namespace Armada.Core.Settings
         /// Categories enabled on a newly registered device when the app does not choose. Default: every category.
         /// Never null; setting null restores the default.
         /// </summary>
+        [CollectionBound(32, Reason = "Distinct defined PushCategoryEnum values (the setter drops duplicates and undefined values); headroom for new categories")]
         public List<PushCategoryEnum> Categories
         {
             get => _Categories;
-            set => _Categories = value == null ? AllCategories() : value.Distinct().ToList();
+            set => _Categories = value == null ? AllCategories() : value.Where(category => Enum.IsDefined(typeof(PushCategoryEnum), category)).Distinct().ToList();
         }
 
         /// <summary>

@@ -8,6 +8,7 @@ namespace Armada.Helm.Commands
     using Armada.Core.Models;
     using Armada.Core.Services;
     using Armada.Helm.Rendering;
+    using Armada.Helm.Infrastructure;
 
     /// <summary>
     /// Show Armada dashboard status.
@@ -16,6 +17,11 @@ namespace Armada.Helm.Commands
     [Description("Show Armada status dashboard")]
     public class StatusCommand : BaseCommand<StatusSettings>
     {
+        /// <summary>
+        /// Active voyages listed with progress (the table title gives the total when there are more).
+        /// </summary>
+        public const int ActiveVoyagePageSize = 25;
+
         /// <inheritdoc />
         public override async Task<int> ExecuteAsync(CommandContext context, StatusSettings settings, CancellationToken cancellationToken)
         {
@@ -29,7 +35,7 @@ namespace Armada.Helm.Commands
 
             if (status == null)
             {
-                AnsiConsole.MarkupLine("[red]Unable to retrieve status.[/] Is the Admiral running? Try [green]armada server start[/].");
+                HelmConsole.Error.MarkupLine("[red]Unable to retrieve status.[/] Is the Admiral running? Try [green]armada server start[/].");
                 return 1;
             }
 
@@ -106,15 +112,20 @@ namespace Armada.Helm.Commands
                 AnsiConsole.WriteLine();
             }
 
-            // Active voyages with progress
-            if (status.Voyages.Count > 0)
+            // Active voyages with progress: one page (the status snapshot carries only the counts).
+            EnumerationResult<VoyageProgress>? voyagePage = status.ActiveVoyages > 0
+                ? await PostAsync<EnumerationResult<VoyageProgress>>("/api/v1/voyages/progress/enumerate", new EnumerationQuery { PageSize = ActiveVoyagePageSize }).ConfigureAwait(false)
+                : null;
+            List<VoyageProgress> activeVoyages = voyagePage?.Objects ?? new List<VoyageProgress>();
+            if (activeVoyages.Count > 0)
             {
-                Table voyageTable = TableRenderer.CreateTable($"Active Voyages ({status.ActiveVoyages})", null);
+                string shown = voyagePage!.TotalRecords > activeVoyages.Count ? activeVoyages.Count + " of " + voyagePage.TotalRecords : voyagePage.TotalRecords.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                Table voyageTable = TableRenderer.CreateTable($"Active Voyages ({shown})", null);
                 voyageTable.AddColumn("Voyage");
                 voyageTable.AddColumn("Progress");
                 voyageTable.AddColumn("Status");
 
-                foreach (VoyageProgress vp in status.Voyages)
+                foreach (VoyageProgress vp in activeVoyages)
                 {
                     string statusColor = vp.CompletedMissions == vp.TotalMissions ? "green" : "dodgerblue1";
                     string bar = $"[{statusColor}]{vp.CompletedMissions}/{vp.TotalMissions}[/]";

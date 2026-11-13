@@ -56,12 +56,30 @@ namespace Armada.Core.Services
         /// </summary>
         /// <param name="manifest">Manifest.</param>
         /// <param name="packDirectory">Absolute pack directory (files are resolved against it).</param>
-        /// <returns>Errors; empty when the manifest is valid.</returns>
+        /// <returns>Errors, at most <see cref="CollectionLimits.MaxConfigItems"/> (the last one says how many more were
+        /// found); empty when the manifest is valid.</returns>
         /// <exception cref="ArgumentNullException">Thrown when manifest or packDirectory is null.</exception>
         public static List<string> Validate(BatteryPackManifest manifest, string packDirectory)
         {
             if (manifest == null) throw new ArgumentNullException(nameof(manifest));
             if (packDirectory == null) throw new ArgumentNullException(nameof(packDirectory));
+
+            // Every list in a manifest is a configuration list (docs/ENUMERATION.md): a pack over the limit is malformed
+            // and is not validated further, so its errors stay bounded too.
+            try
+            {
+                CollectionBounds.Validate(manifest);
+            }
+            catch (CollectionLimitExceededException limit)
+            {
+                return new List<string> { limit.Field + " has " + limit.Actual + " entries; the most allowed is " + limit.Limit + "." };
+            }
+
+            return Cap(ValidateWithinLimits(manifest, packDirectory));
+        }
+
+        private static List<string> ValidateWithinLimits(BatteryPackManifest manifest, string packDirectory)
+        {
             List<string> errors = new List<string>();
 
             if (manifest.SchemaVersion != SchemaVersion)
@@ -138,6 +156,14 @@ namespace Armada.Core.Services
         #endregion
 
         #region Private-Methods
+
+        private static List<string> Cap(List<string> errors)
+        {
+            if (errors.Count <= CollectionLimits.MaxConfigItems) return errors;
+            List<string> capped = errors.Take(CollectionLimits.MaxConfigItems - 1).ToList();
+            capped.Add("... and " + (errors.Count - capped.Count) + " more errors.");
+            return capped;
+        }
 
         private static void ValidateTask(List<string> errors, BatteryTaskDefinition task, string where, string packDirectory, HashSet<string> toolchain, HashSet<string> taskIds)
         {

@@ -396,6 +396,18 @@ namespace Armada.Core.Services
             result.ErrorCount = result.Issues.Count(issue => issue.Severity == ReadinessSeverityEnum.Error);
             result.WarningCount = result.Issues.Count(issue => issue.Severity == ReadinessSeverityEnum.Warning);
             result.IsReady = result.ErrorCount == 0;
+            result.IssueCount = result.Issues.Count;
+            if (result.Issues.Count > Constants.VesselReadinessMaxIssues)
+            {
+                // Bounded response (docs/ENUMERATION.md): keep the most severe issues; the counts above cover all of them.
+                result.Issues = result.Issues
+                    .Select((issue, index) => new KeyValuePair<int, VesselReadinessIssue>(index, issue))
+                    .OrderByDescending(pair => (int)pair.Value.Severity)
+                    .ThenBy(pair => pair.Key)
+                    .Take(Constants.VesselReadinessMaxIssues)
+                    .Select(pair => pair.Value)
+                    .ToList();
+            }
         }
 
         private static void PopulateChecklist(VesselReadinessResult result, Vessel vessel, WorkflowProfile? profile)
@@ -774,8 +786,8 @@ namespace Armada.Core.Services
             HashSet<string> rootFiles = new HashSet<string>(StringComparer.Ordinal);
             try
             {
-                WorkspaceTreeResult tree = await host.Files.GetTreeAsync(null, token).ConfigureAwait(false);
-                foreach (WorkspaceTreeEntry entry in tree.Entries)
+                List<WorkspaceTreeEntry> rootEntries = await WorkspaceTreeReader.ReadAllEntriesAsync(host.Files, null, token).ConfigureAwait(false);
+                foreach (WorkspaceTreeEntry entry in rootEntries)
                 {
                     if (!entry.IsDirectory) rootFiles.Add(entry.Name);
                 }

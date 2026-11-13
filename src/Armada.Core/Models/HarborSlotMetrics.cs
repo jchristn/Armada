@@ -2,6 +2,7 @@ namespace Armada.Core.Models
 {
     using System.Collections.Generic;
     using Armada.Core.Metrics;
+    using Armada.Core.Services;
 
     /// <summary>
     /// How many of a Harbor's job slots were in use over a metrics window. A job occupies a slot from when the Harbor started it (or from launch, until the Harbor reports the start) until it ends.
@@ -18,6 +19,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// One entry per bucket, oldest first: the peak and the time-weighted average of concurrent jobs.
         /// </summary>
+        [CollectionBound(HarborMetricsRanges.MaxBucketCount, Reason = "One per window bucket; the fixed ranges produce at most 60")]
         public List<ConcurrencyBucket> Buckets { get; set; } = new List<ConcurrencyBucket>();
 
         /// <summary>

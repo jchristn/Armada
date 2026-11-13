@@ -71,7 +71,9 @@ namespace Test.Shared.Suites.E2E
             AssertEqual("Bash", first.ToolName, "pi's bash is reported as Bash");
             AssertTrue(first.CanDecide, "the tenant admin can decide it");
             AskThreadDetail detail = await JsonHelper.DeserializeAsync<AskThreadDetail>(await o.GetAsync("/api/v1/ask/threads/" + thread.Id).ConfigureAwait(false)).ConfigureAwait(false);
-            AssertTrue(detail.PendingCliPermissions.Any(p => p.Id == first.Id), "pending on the Ask thread");
+            AssertTrue(detail.PendingCliPermissionCount >= 1, "pending counted on the Ask thread");
+            EnumerationResult<CliPermissionRequest> threadPending = await JsonHelper.DeserializeAsync<EnumerationResult<CliPermissionRequest>>(await o.PostAsync("/api/v1/cli-permissions/requests/enumerate", JsonHelper.ToJsonContent(new { ThreadId = thread.Id, Status = "Pending" })).ConfigureAwait(false)).ConfigureAwait(false);
+            AssertTrue(threadPending.Objects.Any(p => p.Id == first.Id), "pending on the Ask thread");
             AskMessagePage page = await JsonHelper.DeserializeAsync<AskMessagePage>(await o.PostAsync("/api/v1/ask/threads/" + thread.Id + "/messages/enumerate", JsonHelper.ToJsonContent(new { })).ConfigureAwait(false)).ConfigureAwait(false);
             AssertTrue(page.Messages.Any(m => m.Kind == AskMessageKindEnum.CliPermission && m.CliPermissionRequest?.Id == first.Id), "the Ask conversation shows the approval card");
             AssertFalse(allowRun.IsCompleted, "the tool waits for the decision");

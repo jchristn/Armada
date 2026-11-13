@@ -295,7 +295,7 @@ namespace Armada.Tui.Screens.Operations
                             Apply(name, () => Fleets = fleets);
                             break;
                         case "pipelines":
-                            List<Pipeline> pipelines = (await client.ListPipelinesAsync(q).ConfigureAwait(false))?.Objects ?? new List<Pipeline>();
+                            List<Pipeline> pipelines = await ArmadaPaging.ReadAllAsync<Pipeline>((p, ct) => client.ListPipelinesAsync(new ArmadaPageQuery(p, 1000), ct)).ConfigureAwait(false);
                             Apply(name, () => Pipelines = pipelines);
                             break;
                         case "personas":
@@ -317,7 +317,7 @@ namespace Armada.Tui.Screens.Operations
                             Apply(name, () => Users = users);
                             break;
                         case "playbooks":
-                            List<Playbook> playbooks = (await client.ListPlaybooksAsync(q).ConfigureAwait(false))?.Objects ?? new List<Playbook>();
+                            List<Playbook> playbooks = await ArmadaPaging.ReadAllAsync<Playbook>((p, ct) => client.ListPlaybooksAsync(new ArmadaPageQuery(p, 1000), ct)).ConfigureAwait(false);
                             Apply(name, () => Playbooks = playbooks);
                             break;
                     }

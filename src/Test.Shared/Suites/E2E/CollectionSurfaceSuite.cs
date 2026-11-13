@@ -32,54 +32,69 @@ namespace Test.Shared.Suites.E2E
         private static readonly Dictionary<string, string> _UnpagedListRoutes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             ["GET /api/v1/ask/quick-actions"] = "Fixed catalog defined in code",
-            ["POST /api/v1/objectives/reorder"] = "Echoes the items in the request body",
-            ["POST /api/v1/backlog/reorder"] = "Echoes the items in the request body",
         };
 
         // GET routes shaped like a collection (no trailing path parameter) that are not paged, with why they are a
         // single object, a summary, or a bounded read rather than a collection of stored rows.
         private static readonly Dictionary<string, string> _SingleObjectReads = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
+            ["GET /api/v1/battery/packs/{packId}/files"] = "One text file selected by the required path query; UTF-8 content capped at 1 MiB",
             ["GET /openapi.json"] = "API document",
             ["GET /swagger"] = "API document viewer",
             ["GET /api/v1/ask/quick-actions"] = "Fixed catalog defined in code",
             ["GET /api/v1/whoami"] = "The caller",
-            ["GET /api/v1/storage"] = "Storage snapshot",
+            ["GET /api/v1/storage"] = "Storage snapshot with host totals; host reports page through GET /api/v1/storage/hosts",
             ["GET /api/v1/backup"] = "Backup archive download",
-            ["GET /api/v1/captains/{id}/tools"] = "One captain's tool inventory",
+            ["GET /api/v1/captains/{id}/tools"] = "One captain's tool sources (at most 256) and counts; its tools are one EnumerationResult page (POST .../tools/enumerate twin)",
             ["GET /api/v1/captains/{id}/log"] = "Log read bounded by lines (1-5000) with offset paging",
             ["GET /api/v1/harbors/{id}/metrics"] = "One Harbor's metrics",
+            ["GET /api/v1/missions/{id}/captain-selection"] = "One current-attempt/latest-retained decision summary; history is separately paginated",
             ["GET /api/v1/missions/history"] = "Aggregated summary buckets",
+            ["GET /api/v1/metrics/concurrency"] = "Aggregated wait buckets (at most 48) and per-gate totals for one window",
+            ["GET /api/v1/model-profiles/{id}/scorecard"] = "One profile's aggregated scorecard for one persona",
+            ["GET /api/v1/model-alerts/thresholds"] = "The alert thresholds (defaults and per-persona overrides), one settings object",
             ["GET /api/v1/missions/{id}/github/pull-request"] = "One pull request",
             ["GET /api/v1/missions/{id}/landing-preview"] = "One preview",
+            ["GET /api/v1/missions/{id}/blackbox"] = "The mission's current black box entry (its record is bounded by construction)",
+            ["GET /api/v1/missions/{id}/blackbox/brief"] = "One Markdown brief (at most 40 KB)",
+            ["GET /api/v1/voyages/{id}/blackbox"] = "The voyage's current black box entry",
+            ["GET /api/v1/voyages/{id}/blackbox/brief"] = "One Markdown brief (at most 40 KB)",
+            ["GET /api/v1/blackbox/{id}/brief"] = "One Markdown brief (at most 40 KB)",
+            ["GET /api/v1/blackbox/{id}/download"] = "One entry's zip (at most 128 objects of bounded size)",
+            ["GET /api/v1/blackbox/retention"] = "Retention status snapshot (counts and the last report)",
+            ["GET /api/v1/blackbox/storage"] = "Storage status snapshot (at most one usage row per target)",
+            ["GET /api/v1/blackbox/fingerprints/{fingerprint}/trend"] = "One failure mode's counts per Armada version (at most 100 versions)",
             ["GET /api/v1/missions/{id}/evaluate-autoland"] = "One decision",
             ["GET /api/v1/missions/{id}/diff"] = "One mission's diff",
             ["GET /api/v1/missions/{id}/log"] = "Log read bounded by lines (1-5000) with offset paging",
             ["GET /api/v1/missions/{id}/instructions"] = "One instructions file",
             ["GET /api/v1/request-history/summary"] = "Aggregated summary buckets",
-            ["GET /api/v1/runtimes/mux/endpoints"] = "Endpoints of one Mux configuration file, read from the mux CLI",
             ["GET /api/v1/status"] = "Admiral status snapshot",
             ["GET /api/v1/status/health"] = "Health probe",
             ["GET /api/v1/doctor"] = "Diagnostics report",
             ["GET /api/v1/server/rebuild/status"] = "One rebuild status",
             ["GET /api/v1/settings"] = "Settings object",
+            ["GET /api/v1/usage/series"] = "Bounded chart summary: at most 20 independent series with 576 points each; no stored row collection",
             ["GET /api/v1/token-usage/summary"] = "Aggregated summary buckets",
             ["GET /api/v1/vessel-health/summary"] = "Aggregated summary",
-            ["GET /api/v1/vessels/import/browse"] = "One directory listing",
+            ["GET /api/v1/vessels/import/browse"] = "One page of one directory listing (VesselBrowseResult carries PageNumber, PageSize, TotalPages, TotalRecords)",
             ["GET /api/v1/vessels/import/categorization/default-prompt"] = "One prompt",
-            ["GET /api/v1/vessels/{id}/cleanup"] = "One vessel's cleanup inventory (VesselCleanupInventory)",
+            ["GET /api/v1/vessels/{id}/cleanup"] = "One vessel's cleanup inventory summary (counts); resources page through GET .../cleanup/resources",
             ["GET /api/v1/vessels/{id}/git-status"] = "One working tree status",
-            ["GET /api/v1/vessels/{id}/health"] = "One vessel's health",
+            ["GET /api/v1/voyages/{id}/blackbox/cascade"] = "One voyage's cascade graph, fixed at 200 nodes and 1000 edges with MissionCount and Truncated; the missions page through POST /api/v1/missions/enumerate",
+            ["GET /api/v1/vessels/{id}/health"] = "One vessel's health with DependencyCount; dependencies page through GET .../health/dependencies",
             ["GET /api/v1/vessels/{id}/history/activity"] = "Aggregated commit activity buckets",
             ["GET /api/v1/vessels/{id}/history/commits"] = "Paged commit history (VesselCommitPage)",
             ["GET /api/v1/vessels/{id}/readiness"] = "One readiness report",
+            ["GET /api/v1/vessels/{id}/concurrency"] = "One vessel's concurrency report: counts, the 100 busiest holding voyages and the 100 longest waits",
+            ["GET /api/v1/voyages/{id}/tree"] = "One voyage's mission tree, at most 1000 missions with TotalMissions and Truncated; the missions page through POST /api/v1/missions/enumerate",
             ["GET /api/v1/vessels/{id}/landing-preview"] = "One preview",
-            ["GET /api/v1/workspace/vessels/{vesselId}/tree"] = "One directory of one working tree",
+            ["GET /api/v1/workspace/vessels/{vesselId}/tree"] = "One page of one directory of one working tree (WorkspaceTreeResult carries PageNumber, PageSize, TotalPages, TotalRecords)",
             ["GET /api/v1/workspace/vessels/{vesselId}/diff"] = "One diff",
             ["GET /api/v1/workspace/vessels/{vesselId}/file"] = "One file",
             ["GET /api/v1/workspace/vessels/{vesselId}/search"] = "Search bounded by maxResults (1-1000, default 200)",
-            ["GET /api/v1/workspace/vessels/{vesselId}/changes"] = "One working tree's changes",
-            ["GET /api/v1/workspace/vessels/{vesselId}/status"] = "One working tree status",
+            ["GET /api/v1/workspace/vessels/{vesselId}/changes"] = "One page of one working tree's changes (WorkspaceChangesResult carries PageNumber, PageSize, TotalPages, TotalRecords)",
+            ["GET /api/v1/workspace/vessels/{vesselId}/status"] = "One working tree status with ActiveMissionCount; missions page through GET .../active-missions",
         };
 
         // MCP tools named like a list that do not take paging arguments, with why.
@@ -125,7 +140,7 @@ namespace Test.Shared.Suites.E2E
                     if (last.StartsWith("{", StringComparison.Ordinal)) continue;
                     string key = "GET " + route.Route;
                     string response = route.Responses.TryGetValue("200", out string? ok) ? ok ?? "" : "";
-                    if (response.StartsWith("EnumerationResult<", StringComparison.Ordinal)) continue;
+                    if (IsPageResponse(response)) continue;
                     if (route.Route == "/api/v1/jobs") continue;
                     if (!_SingleObjectReads.ContainsKey(key)) problems.Append(key).Append(" -> ").Append(response.Length == 0 ? "(undeclared)" : response).Append('\n');
                 }
@@ -141,7 +156,7 @@ namespace Test.Shared.Suites.E2E
                 foreach (ApiRestRoute route in routes.Where(r => String.Equals(r.Method, "GET", StringComparison.OrdinalIgnoreCase)))
                 {
                     string response = route.Responses.TryGetValue("200", out string? ok) ? ok ?? "" : "";
-                    bool paged = response.StartsWith("EnumerationResult<", StringComparison.Ordinal) || route.Route == "/api/v1/jobs";
+                    bool paged = IsPageResponse(response) || route.Route == "/api/v1/jobs";
                     if (!paged) continue;
                     if (!keys.Contains("POST " + route.Route + "/enumerate")) problems.Append("GET ").Append(route.Route).Append(" has no POST ").Append(route.Route).Append("/enumerate\n");
                 }
@@ -340,6 +355,21 @@ namespace Test.Shared.Suites.E2E
         {
             E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this).ConfigureAwait(false);
             return ApiSurfaceBuilder.Build(fx.Server).Rest;
+        }
+
+        // A declared 200 type is a page when it is EnumerationResult<T> or an Armada model derived from it (for example
+        // MuxEndpointPage, a page that also says which Harbor's mux answered).
+        private static bool IsPageResponse(string response)
+        {
+            if (response.StartsWith("EnumerationResult<", StringComparison.Ordinal)) return true;
+            if (String.IsNullOrEmpty(response) || response.Contains('<')) return false;
+            Type? type = typeof(EnumerationQuery).Assembly.GetType("Armada.Core.Models." + response, false);
+            for (Type? t = type?.BaseType; t != null; t = t.BaseType)
+            {
+                if (t.IsGenericType && t.GetGenericTypeDefinition() == typeof(EnumerationResult<>)) return true;
+            }
+
+            return false;
         }
 
         private static async Task<EnumerationResult<T>> PostPageAsync<T>(HttpClient client, string route, object? body)

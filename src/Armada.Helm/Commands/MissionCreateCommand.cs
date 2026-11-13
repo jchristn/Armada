@@ -10,6 +10,7 @@ namespace Armada.Helm.Commands
     using Armada.Core.Models;
     using Armada.Core.Services;
     using Armada.Helm.Rendering;
+    using Armada.Helm.Infrastructure;
 
     /// <summary>
     /// Create a standalone mission.
@@ -37,13 +38,34 @@ namespace Armada.Helm.Commands
 
             if (!string.IsNullOrEmpty(settings.Voyage)) mission.VoyageId = settings.Voyage;
             if (settings.Priority.HasValue) mission.Priority = settings.Priority.Value;
+            if (!string.IsNullOrEmpty(settings.Parent)) mission.ParentMissionId = settings.Parent;
+            if (!string.IsNullOrEmpty(settings.BranchStrategy))
+            {
+                if (!Enum.TryParse<MissionBranchStrategyEnum>(settings.BranchStrategy, true, out MissionBranchStrategyEnum strategy) || !Enum.IsDefined(typeof(MissionBranchStrategyEnum), strategy))
+                {
+                    HelmConsole.Error.MarkupLine("[red]--branch-strategy must be New, ContinueParent or ForkFromParent.[/]");
+                    return 1;
+                }
+                mission.BranchStrategy = strategy;
+            }
+            if (settings.MaxFiles.HasValue || settings.MaxSteps.HasValue || settings.MinServedContextTokens.HasValue || (settings.RequiredTools != null && settings.RequiredTools.Length > 0))
+            {
+                // The server validates the envelope (it may only tighten the vessel default) and answers 400 with the reason.
+                mission.WorkerEnvelope = new WorkerEnvelope
+                {
+                    MaxFiles = settings.MaxFiles,
+                    MaxSteps = settings.MaxSteps,
+                    MinServedContextTokens = settings.MinServedContextTokens,
+                    RequiredTools = settings.RequiredTools != null ? new List<string>(settings.RequiredTools) : new List<string>()
+                };
+            }
 
             MissionDispatchResult? result = await CreateMissionAsync(mission).ConfigureAwait(false);
             Mission? created = result?.Mission;
 
             if (created == null)
             {
-                AnsiConsole.MarkupLine("[red]Failed to create mission.[/]");
+                HelmConsole.Error.MarkupLine("[red]Failed to create mission.[/]");
                 return 1;
             }
 

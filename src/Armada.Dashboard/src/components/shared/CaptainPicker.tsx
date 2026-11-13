@@ -44,7 +44,7 @@ export default function CaptainPicker({ captains, value, onChange, autoLabel, di
     >
       <option value="">{autoLabel ?? t('Auto (default routing)')}</option>
       {captains.map((captain) => (
-        <option key={captain.id} value={captain.id} disabled={isOptionDisabled ? isOptionDisabled(captain) : undefined}>
+        <option key={captain.id} value={captain.id} disabled={captain.active === false || (isOptionDisabled ? isOptionDisabled(captain) : false)}>
           {captain.name}
           {captain.tier ? ` - ${t(captain.tier)}` : ''}
           {captain.runtime ? ` (${captain.runtime})` : ''}

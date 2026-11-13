@@ -132,7 +132,9 @@ namespace Test.Shared.Suites.Services
                 AssertTrue(h.EventsFor("usr_prop", "ask.proposal").Any(), "ask.proposal sent");
 
                 AskThreadDetail detail = (await h.Threads.GetThreadDetailAsync(owner, thread.Id).ConfigureAwait(false))!;
-                AssertEqual(1, detail.PendingProposals.Count, "pending in detail");
+                AssertEqual(1L, detail.PendingProposalCount, "pending counted in detail");
+                EnumerationResult<AskActionProposal> pendingPage = (await h.Threads.EnumerateProposalsAsync(owner, thread.Id, new EnumerationQuery { Status = "Pending" }).ConfigureAwait(false))!;
+                AssertEqual(proposal.Id, pendingPage.Objects.Single().Id, "pending proposal read from its page");
             }));
 
             cases.Add(CaseAsync("auto_approve_executes_and_records", "With auto-approve the tool runs immediately and is recorded as Executed", TestTags.Positive, async () =>

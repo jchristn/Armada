@@ -2,6 +2,7 @@ namespace Armada.Tui.Shell
 {
     using System;
     using System.Collections.Generic;
+    using System.Linq;
     using Armada.Tui.Routing;
     using Armada.Tui.Screens;
     using Armada.Tui.Text;
@@ -530,8 +531,11 @@ namespace Armada.Tui.Shell
             hints.Add(new KeyHint(typing ? "F1" : "?", "Help"));
             hints.Add(new KeyHint("Ctrl+K", "Palette"));
             hints.Add(new KeyHint("F10", "Menu"));
-            hints.Add(new KeyHint(typing ? "F6" : "Tab", "Next pane"));
-            hints.Add(new KeyHint("F5", "Refresh"));
+            // When the focused control already gives Tab a meaning (next field, next section), the pane key is F6, so
+            // the bar never lists one key twice with two meanings.
+            bool tabTaken = hints.Take(StatusBar.HelpIndex).Any(h => h.Key == "Tab");
+            hints.Add(new KeyHint(typing || tabTaken ? "F6" : "Tab", "Next pane"));
+            if (!hints.Take(StatusBar.HelpIndex).Any(h => h.Key == "F5")) hints.Add(new KeyHint("F5", "Refresh"));
             return hints;
         }
 

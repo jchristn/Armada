@@ -2,6 +2,7 @@ namespace Armada.Core.Models
 {
     using System;
     using System.Collections.Generic;
+    using Armada.Core.Services;
 
     /// <summary>
     /// Response to an import request. An inline import returns the finished batch and every item; a background
@@ -38,6 +39,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// Every item with its outcome (inline imports only). Never null.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxRequestItems, Reason = "One per requested path (Paths is limited to 1000)")]
         public List<VesselImportItem> Items
         {
             get => _Items;

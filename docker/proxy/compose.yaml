@@ -2,7 +2,7 @@ services:
   armada-proxy:
     # Published release image. To run a locally built image instead, build it with this tag first
     # (scripts/common/build-*.sh) or change the tag.
-    image: jchristn77/armada-proxy:v1.2.0
+    image: jchristn77/armada-proxy:v1.3.0
     ports:
       - "7893:7893"
     environment:

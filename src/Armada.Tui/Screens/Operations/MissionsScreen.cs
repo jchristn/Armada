@@ -214,6 +214,7 @@ namespace Armada.Tui.Screens.Operations
                 if (name == "vessels") vessel.Options = Reference.VesselOptions();
             };
             Reference.Changed += vesselsArrived;
+            dialog.EnablePreview("Preview overlaps", () => BlackBoxDispatchPreview.Run(this, vessel.Value, new List<KeyValuePair<string, string>> { new KeyValuePair<string, string>(title.Value, description.Text) }));
             dialog.Submit = d =>
             {
                 Mission mission = new Mission(title.Value.Trim(), description.Text);
@@ -225,6 +226,7 @@ namespace Armada.Tui.Screens.Operations
                 {
                     d.Complete();
                     Toast(NotificationSeverityEnum.Success, Tr("Mission \"{{title}}\" created.", LocalizationArgs.Of("title", created)));
+                    if (r != null) BlackBoxDispatchPreview.ShowWarnings(this, r.OverlapWarnings, r.BriefLintWarnings);
                     Refresh();
                 }, null, ex => d.Fail(ex, Tr("Create failed.")));
                 return false;

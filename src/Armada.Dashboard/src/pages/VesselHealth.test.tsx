@@ -30,6 +30,7 @@ vi.mock('../api/client', () => ({
   listFleets: vi.fn(),
   listVessels: vi.fn(),
   getVesselHealth: vi.fn(),
+  listVesselDependencies: vi.fn(),
   getVesselBranches: vi.fn(),
 }));
 

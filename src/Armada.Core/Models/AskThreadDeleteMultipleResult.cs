@@ -2,6 +2,7 @@ namespace Armada.Core.Models
 {
     using System.Collections.Generic;
     using Armada.Core.Enums;
+    using Armada.Core.Services;
 
     /// <summary>
     /// Result of POST /api/v1/ask/threads/delete/multiple: the IDs that were deleted and the IDs that were skipped,
@@ -26,11 +27,13 @@ namespace Armada.Core.Models
         /// <summary>
         /// IDs of the threads that were deleted, in request order.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxRequestItems, Reason = "One entry per id of the request, which is limited to MaxRequestItems.")]
         public List<string> DeletedIds { get; set; } = new List<string>();
 
         /// <summary>
         /// IDs that were skipped (missing, empty, or owned by another user) with the reason.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxRequestItems, Reason = "One entry per id of the request, which is limited to MaxRequestItems.")]
         public List<DeleteMultipleSkipped> Skipped { get; set; } = new List<DeleteMultipleSkipped>();
 
         #endregion

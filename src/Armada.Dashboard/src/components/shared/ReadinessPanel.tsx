@@ -177,8 +177,8 @@ export default function ReadinessPanel(props: ReadinessPanelProps) {
                   <div key={item.code} className={`readiness-checklist-item${item.isSatisfied ? ' satisfied' : ''}`}>
                     <div className="readiness-checklist-title-row">
                       <strong>{item.title}</strong>
-                      <span className={`readiness-issue-severity ${item.severity.toLowerCase()}`} title={t('Done: satisfied. Error: blocks work until fixed. Warning: recommended. Info: for your information.')}>
-                        {item.isSatisfied ? 'Done' : item.severity}
+                      <span className={`readiness-issue-severity ${item.isSatisfied ? 'done' : item.severity.toLowerCase()}`} title={t('Done: satisfied. Error: blocks work until fixed. Warning: recommended. Info: for your information.')}>
+                        {item.isSatisfied ? t('Done') : t(item.severity)}
                       </span>
                     </div>
                     <div className="text-dim">{item.message}</div>
@@ -195,6 +195,9 @@ export default function ReadinessPanel(props: ReadinessPanelProps) {
             </div>
           )}
 
+          {(readiness.issueCount ?? 0) > readiness.issues.length && (
+            <p className="text-dim readiness-issues-capped">{t('Showing the {{shown}} most severe of {{total}} issues.', { shown: String(readiness.issues.length), total: String(readiness.issueCount) })}</p>
+          )}
           {readiness.issues.length > 0 ? (
             <div className="readiness-issues">
               {readiness.issues.map((issue, index) => {

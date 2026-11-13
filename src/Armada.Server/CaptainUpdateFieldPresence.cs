@@ -16,6 +16,12 @@ namespace Armada.Server
     {
         #region Public-Members
 
+        /// <summary>Active eligibility (presence only).</summary>
+        public bool? Active { get => null; set => Mark(nameof(Active)); }
+
+        /// <summary>Mission capacity (presence only).</summary>
+        public int? MaxConcurrency { get => null; set => Mark(nameof(MaxConcurrency)); }
+
         /// <summary>Captain name (presence only).</summary>
         public string? Name { get => null; set => Mark(nameof(Name)); }
 
@@ -45,6 +51,20 @@ namespace Armada.Server
 
         /// <summary>Runtime options JSON (presence only).</summary>
         public string? RuntimeOptionsJson { get => null; set => Mark(nameof(RuntimeOptionsJson)); }
+
+        /// <summary>Usage capture enabled switch (presence only; any JSON shape counts as present).</summary>
+        public object? UsageCaptureEnabled { get => null; set => Mark(nameof(UsageCaptureEnabled)); }
+
+        /// <summary>Usage capture interval in seconds (presence only).</summary>
+        public object? UsageCaptureIntervalSeconds { get => null; set => Mark(nameof(UsageCaptureIntervalSeconds)); }
+
+        /// <summary>Usage capture mode (presence only).</summary>
+        public object? UsageCaptureMode { get => null; set => Mark(nameof(UsageCaptureMode)); }
+
+        /// <summary>Credential Harbor selection (presence only).</summary>
+        public object? UsageCaptureHarborId { get => null; set => Mark(nameof(UsageCaptureHarborId)); }
+        /// <summary>Whether the usage command was supplied.</summary>
+        public object? UsageCaptureCommand { get => null; set => Mark(nameof(UsageCaptureCommand)); }
 
         #endregion
 

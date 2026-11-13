@@ -123,13 +123,17 @@ The following controls remain future work and are not implied by enabling functi
 
 ## Busy classes and exhausted hierarchies
 
-`priorityAvailability` defaults to `FallThrough`: Armada selects an eligible idle captain from the first entry with an available match, trying lower entries when earlier ones are busy, missing, quarantined, or otherwise ineligible. `WaitForFirstPriority` considers only the first entry and waits for it, including when no configured captain matches. It never falls through and ignores the exhaustion setting.
+`priorityAvailability` defaults to `FallThrough`: Armada selects an eligible captain with a free slot from the first entry with an available match, trying lower entries when earlier ones are busy, missing, quarantined, or otherwise ineligible. `WaitForFirstPriority` considers only the first entry and waits for it, including when no configured captain matches. It never falls through and ignores the exhaustion setting.
 
 With `FallThrough`, `priorityExhaustion: Wait` keeps unmatched work Pending until a later scheduling tick. `UseEligibleCaptain` explicitly permits normal persona/tier routing after every entry is exhausted. Empty priorities preserve legacy behavior regardless of these policies.
 
 **Effective tier.** A captain's explicit `tier` is used as declared. Without one, the tier comes from the model name: 8B parameters or fewer (`:7b`, `-3b`) and families such as Haiku, mini, flash and gpt-oss are Economy; Opus, GPT-5, o3/o4 and Gemini Pro are Premium; everything else, including an unknown model, is Standard. A Claude Code, Codex or Gemini captain with no model runs its vendor's default flagship model, so it meets any tier floor (`minimumTier`, a mission tier) but still ranks as Standard when dispatch prefers the cheapest captain that qualifies. No configuration is needed; set `tier` only to override the inference.
 
-All hierarchy candidates must satisfy mission ownership/tenant boundaries, AllowedPersonas, the mission's tier floor, and availability. Within a matched class, PreferredPersona breaks ties, followed by stable captain ID order. Hierarchy choices are reevaluated on every assignment attempt and are not saved as RequestedCaptainId.
+All hierarchy candidates must satisfy mission ownership/tenant boundaries, AllowedPersonas, the mission's tier floor, and availability. Within a matched class, PreferredPersona breaks ties, followed by the fewest active missions and then stable captain ID order. Hierarchy choices are reevaluated on every assignment attempt and are not saved as RequestedCaptainId.
+
+## Captain slots
+
+Each captain has `MaxConcurrency` slots, one per running mission: 4 by default for ApiEndpoint and Mux captains and 1 for every other runtime (see [CAPTAINS.md](CAPTAINS.md#captain-capacity)). Routing considers only captains with a free slot that are active, `Idle` or `Working`, and not in an exclusive Planning, Refining or Analyzing session; a `Stopping`, `Stalled` or `Quarantined` captain takes no new missions while its running missions continue. Inside each routing bucket (requested captain, persona default, hierarchy entry, tier), captains whose PreferredPersona matches come first, then the captain with the fewest active missions, then (outside a hierarchy) the least recently updated, then captain ID. Equivalent work therefore spreads across captains instead of filling one captain's slots first. When every eligible captain is full, the mission waits with `CaptainConcurrencyLimit`; see [SCHEDULING.md](SCHEDULING.md#capacity).
 
 ## Missions without a persona
 

@@ -5,6 +5,7 @@ namespace Armada.Tui.Screens.Operations
     using System.Globalization;
     using System.Linq;
     using Armada.Client.Models;
+    using Armada.Client.Socket;
     using Armada.Core;
     using Armada.Core.Enums;
     using Armada.Core.Models;
@@ -19,13 +20,28 @@ namespace Armada.Tui.Screens.Operations
     /// Mark Complete, Diff, Log, Instructions, Run Check, Land or Retry Landing), the More menu (Edit, Transition
     /// Status, View JSON, Restart, Purge, Delete, and the rest), and panels for the overview (Landing Preview, GitHub
     /// Pull Request with refresh and open, every field, failure reason, review comment), the description (Markdown, copy
-    /// raw), linked checks and deployments, and playbook snapshots; the overview also shows the CLI tool permission
+    /// raw), linked checks and deployments, playbook snapshots, and captain selection (see <see cref="MissionSelectionPanel"/>); the overview also shows the CLI tool permission
     /// policy the captain launched with (the note the Admiral writes at the top of the mission log). Reloads on
     /// <c>mission.changed</c>. Not thread-safe.
     /// </summary>
     public class MissionScreen : OpsDetailScreen
     {
         #region Public-Members
+
+        /// <summary>
+        /// The mission's recorded scheduling waits (the first 100, oldest first), or empty.
+        /// </summary>
+        public List<MissionWaitInterval> Waits { get; private set; } = new List<MissionWaitInterval>();
+
+        /// <summary>
+        /// Child missions that build on this one (the first 50), or empty.
+        /// </summary>
+        public List<MissionSummary> Children { get; private set; } = new List<MissionSummary>();
+
+        /// <summary>
+        /// Total child missions.
+        /// </summary>
+        public long ChildCount { get; private set; } = 0;
 
         /// <summary>
         /// Mission id from the route.
@@ -46,6 +62,21 @@ namespace Armada.Tui.Screens.Operations
         /// Pull request evidence, or null.
         /// </summary>
         public GitHubPullRequestDetail? PullRequest { get; private set; } = null;
+
+        /// <summary>
+        /// Newest reviews of the pull request (one page of <see cref="PullRequestPageSize"/>).
+        /// </summary>
+        public List<GitHubPullRequestReview> PullRequestReviews { get; private set; } = new List<GitHubPullRequestReview>();
+
+        /// <summary>
+        /// Checks of the pull request head commit (one page of <see cref="PullRequestPageSize"/>).
+        /// </summary>
+        public List<GitHubPullRequestCheck> PullRequestChecks { get; private set; } = new List<GitHubPullRequestCheck>();
+
+        /// <summary>
+        /// Reviews and checks shown per pull request (the counts say how many there are in all).
+        /// </summary>
+        public const int PullRequestPageSize = 10;
 
         /// <summary>
         /// Linked check runs.
@@ -91,6 +122,16 @@ namespace Armada.Tui.Screens.Operations
         /// Playbook snapshots panel.
         /// </summary>
         public OpsDocumentView Playbooks { get; } = new OpsDocumentView();
+
+        /// <summary>
+        /// Failure panel: the mission's black box entry (user brief, recovery paths) with its own keys.
+        /// </summary>
+        public BlackBoxFailurePanel Failure { get; }
+
+        /// <summary>
+        /// Captain Selection panel: selection summary, comparison, history, preview and recovery permissions.
+        /// </summary>
+        public MissionSelectionPanel Selection { get; }
 
         #endregion
 
@@ -138,11 +179,16 @@ namespace Armada.Tui.Screens.Operations
             Action("voyage", "Open Voyage", () => Context.Navigate("/voyages/" + Uri.EscapeDataString(Mission!.VoyageId!)), "V", () => Mission != null && !String.IsNullOrEmpty(Mission.VoyageId));
             Action("vessel", "Open Vessel", () => Context.Navigate("/vessels/" + Uri.EscapeDataString(Mission!.VesselId!)), "v", () => Mission != null && !String.IsNullOrEmpty(Mission.VesselId));
             Action("captain", "Open Captain", () => Context.Navigate("/captains/" + Uri.EscapeDataString(Mission!.CaptainId!)), "C", () => Mission != null && !String.IsNullOrEmpty(Mission.CaptainId));
+            Action("rescue-origin", "Rescue of", () => Context.Navigate("/missions/" + Uri.EscapeDataString(Mission!.RescueOfMissionId!)), null, () => !String.IsNullOrEmpty(Mission?.RescueOfMissionId));
             Action("parent", "Open Parent Mission", () => Context.Navigate("/missions/" + Uri.EscapeDataString(Mission!.ParentMissionId!)), null, () => Mission != null && !String.IsNullOrEmpty(Mission.ParentMissionId));
             Action("depends-on", "Open Depends On", () => Context.Navigate("/missions/" + Uri.EscapeDataString(Mission!.DependsOnMissionId!)), null, () => Mission != null && !String.IsNullOrEmpty(Mission.DependsOnMissionId));
             Action("dock", "Open Dock", () => Context.Navigate("/docks/" + Uri.EscapeDataString(Mission!.DockId!)), null, () => Mission != null && !String.IsNullOrEmpty(Mission.DockId));
             Action("purge", "Purge", () => Ops.Purge(MissionId, Mission!.Title, true, Load), "P", () => Mission != null, false, true);
             Action("delete", "Delete", () => Ops.Delete(MissionId, Mission!.Title, () => Context.Navigate("/missions")), "del", () => Mission != null, false, true);
+            Failure = new BlackBoxFailurePanel(this, BlackBoxPanelSourceEnum.Mission, () => MissionId);
+            Failure.Changed = Load;
+            AddFailureActions(this, Failure);
+            Selection = new MissionSelectionPanel(this, () => MissionId, () => Mission?.Status.ToString());
 
             Overview.Builder = BuildOverview;
             Description.Builder = BuildDescription;
@@ -154,8 +200,17 @@ namespace Armada.Tui.Screens.Operations
             AddPanel("description", "Description", Description);
             AddPanel("linked", "Linked Checks and Deployments", Linked);
             AddPanel("playbooks", "Playbooks", Playbooks);
+            AddPanel("selection", "Captain Selection", Selection);
+            AddPanel("failure", "Failure", Failure);
+            Tabs.SelectedChanged += (s, e) =>
+            {
+                if (ReferenceEquals(CurrentPanel, Failure)) Failure.Ensure();
+                if (ReferenceEquals(CurrentPanel, Selection)) Selection.Ensure();
+            };
 
             SubscribeCoalesced("mission.changed", Load);
+            SubscribeCoalesced("blackbox.", () => { if (Failure.Loaded) Failure.Reload(); });
+            Track(Context.Events.Subscribe(ArmadaEventTypes.CaptainSelectionChanged, Selection.OnSocketMessage));
             Load();
             LoadLinked();
         }
@@ -238,14 +293,41 @@ namespace Armada.Tui.Screens.Operations
                 Status = m.Status.ToString();
                 SubtitleText = Tr("Missions") + " > " + m.Title + "   " + m.Id;
                 Invalidate();
+                if (!String.IsNullOrEmpty(m.LastBlackBoxEntryId) && (Failure.Entry == null || Failure.Entry.Id != m.LastBlackBoxEntryId)) Failure.Reload();
                 LoadPreview();
                 LoadPolicyNote();
+                LoadHierarchyAndWaits();
                 if (!String.IsNullOrEmpty(m.PrUrl) && _PullRequestFor != m.Id + m.PrUrl) LoadPullRequest(false);
                 if (String.IsNullOrEmpty(m.PrUrl)) PullRequest = null;
             }, null, ex =>
             {
                 if (initial) LoadError = Tr("Failed to load mission: {{message}}", LocalizationArgs.Of("message", ex.Message));
             });
+        }
+
+        /// <summary>
+        /// Add the Failure panel's actions to a detail screen's action menu (no keys: the panel's own keys run them while
+        /// it has focus, and the menu and palette reach them from anywhere).
+        /// </summary>
+        /// <param name="screen">Screen.</param>
+        /// <param name="panel">Failure panel.</param>
+        /// <param name="panelKey">The panel's tab key.</param>
+        /// <exception cref="ArgumentNullException">Thrown when an argument is null.</exception>
+        public static void AddFailureActions(OpsDetailScreen screen, BlackBoxFailurePanel panel, string panelKey = "failure")
+        {
+            if (screen == null) throw new ArgumentNullException(nameof(screen));
+            if (panel == null) throw new ArgumentNullException(nameof(panel));
+            Func<bool> has = () => panel.Entry != null;
+            screen.Actions.Add(new OpsScreenAction("failure-open", "Open Failure tab", () => { screen.SelectPanel(panelKey); panel.Ensure(); }, null, () => panel.Entry != null || !panel.Loaded) { Toolbar = false });
+            screen.Actions.Add(new OpsScreenAction("failure-copy", "Copy FIX THIS brief", () => panel.CopyBrief(), null, has) { Toolbar = false });
+            screen.Actions.Add(new OpsScreenAction("failure-export", "Export failure brief", panel.ExportBrief, null, has) { Toolbar = false });
+            screen.Actions.Add(new OpsScreenAction("failure-recovery", "Failure recovery paths", panel.ShowRecovery, null, has) { Toolbar = false });
+            screen.Actions.Add(new OpsScreenAction("failure-ask", "Ask Armada about this failure", panel.AskArmada, null, has) { Toolbar = false });
+            screen.Actions.Add(new OpsScreenAction("failure-json", "Black box JSON", panel.ShowJson, null, has) { Toolbar = false });
+            screen.Actions.Add(new OpsScreenAction("failure-resolve", "Resolve failure", () => panel.Resolve(), null, has) { Toolbar = false });
+            screen.Actions.Add(new OpsScreenAction("failure-pin", "Pin or unpin black box entry", panel.TogglePin, null, has) { Toolbar = false });
+            screen.Actions.Add(new OpsScreenAction("failure-note", "Add failure note", () => panel.AddNote(), null, has) { Toolbar = false });
+            screen.Actions.Add(new OpsScreenAction("failure-armada-fix", "Draft Armada fix mission", () => panel.DraftArmadaFix(), null, () => BlackBoxResilienceText.TopChange(panel.Entry) != null) { Toolbar = false });
         }
 
         #endregion
@@ -297,9 +379,19 @@ namespace Armada.Tui.Screens.Operations
             _PullRequestFor = Mission.Id + Mission.PrUrl;
             _LoadingPullRequest = true;
             Invalidate();
-            Call((c, t) => c.GetMissionGitHubPullRequestAsync(MissionId, t), pr =>
+            Call(async (c, t) =>
             {
-                PullRequest = pr;
+                GitHubPullRequestDetail? pr = await c.GetMissionGitHubPullRequestAsync(MissionId, t).ConfigureAwait(false);
+                EnumerationQuery page = new EnumerationQuery();
+                page.PageSize = PullRequestPageSize;
+                EnumerationResult<GitHubPullRequestReview>? reviews = pr == null || pr.ReviewCount == 0 ? null : await c.EnumerateMissionPullRequestReviewsAsync(MissionId, page, t).ConfigureAwait(false);
+                EnumerationResult<GitHubPullRequestCheck>? checks = pr == null || pr.CheckCount == 0 ? null : await c.EnumerateMissionPullRequestChecksAsync(MissionId, page, t).ConfigureAwait(false);
+                return new PullRequestEvidence(pr, reviews?.Objects, checks?.Objects);
+            }, evidence =>
+            {
+                PullRequest = evidence.Detail;
+                PullRequestReviews = evidence.Reviews;
+                PullRequestChecks = evidence.Checks;
                 _LoadingPullRequest = false;
                 Invalidate();
             }, null, ex =>
@@ -332,6 +424,21 @@ namespace Armada.Tui.Screens.Operations
             }, r =>
             {
                 LinkedDeployments = r?.Objects ?? new List<Deployment>();
+                Invalidate();
+            }, null, ex => { });
+        }
+
+        private void LoadHierarchyAndWaits()
+        {
+            Call((c, t) => c.GetMissionWaitsAsync(MissionId, 1, 100, t), page =>
+            {
+                Waits = page?.Objects ?? new List<MissionWaitInterval>();
+                Invalidate();
+            }, null, ex => { });
+            Call((c, t) => c.ListMissionSummariesAsync(new ArmadaPageQuery(1, 50).With("parentMissionId", MissionId).With("order", "CreatedAscending"), t), page =>
+            {
+                Children = page?.Objects ?? new List<MissionSummary>();
+                ChildCount = page?.TotalRecords ?? 0;
                 Invalidate();
             }, null, ex => { });
         }
@@ -375,6 +482,25 @@ namespace Armada.Tui.Screens.Operations
                 ? LandingPreview.SourceBranch + " -> " + LandingPreview.TargetBranch
                 : (m.BranchName ?? Tr("No branch selected"));
             if (m.Status == MissionStatusEnum.Pending && m.AssignmentBlocker != null) RenderBlocker(doc, m.AssignmentBlocker);
+            string? waitLine = MissionWaitText.Summary(Waits, now, Tr);
+            if (waitLine != null)
+            {
+                doc.Section("Wait Time");
+                doc.Text(waitLine);
+                double? slot = MissionWaitText.SlotWait(m.ReadyUtc, m.AssignedUtc);
+                if (slot.HasValue) doc.Note(Tr("Slot wait") + " " + MissionWaitText.Duration(slot.Value));
+                foreach (MissionWaitInterval w in Waits.Skip(Math.Max(0, Waits.Count - 10)))
+                    doc.Text("  " + Tr(MissionWaitText.GateLabel(w.Gate)) + "  " + MissionWaitText.Duration(MissionWaitText.Seconds(w, now))
+                        + (w.EndedUtc.HasValue ? "" : " " + Tr("(ongoing)")) + (String.IsNullOrEmpty(w.Detail) ? "" : "  " + Tr(MissionWaitText.Detail(w.Detail)!)), doc.Theme.Muted);
+                if (Waits.Count > 10) doc.Note(Tr("Showing the last 10 of {{count}} waits.", LocalizationArgs.Of("count", Waits.Count)));
+            }
+            if (Children.Count > 0)
+            {
+                doc.Section("Children");
+                foreach (MissionSummary child in Children)
+                    doc.Text("  " + StatusBadge.Label(child.Status) + "  " + MissionTreeText.BaseTitle(child.Title) + "  " + Tr(MissionTreeText.Branch(child)) + "  " + child.Id);
+                if (ChildCount > Children.Count) doc.Note(Tr("Showing the first {{shown}} of {{count}} children.", LocalizationArgs.Of("shown", Children.Count, "count", ChildCount)));
+            }
             OpsLandingPreview.Render(doc, LandingPreview, _LoadingPreview, meta, true);
 
             if (!String.IsNullOrEmpty(m.PrUrl))
@@ -391,12 +517,12 @@ namespace Armada.Tui.Screens.Operations
                     doc.Field("State", pr.State);
                     doc.Field("Mergeability", pr.MergeableState);
                     doc.Text(pr.Title, doc.Theme.Muted);
-                    doc.Note("Reviews", doc.Theme.Accent);
-                    if (pr.Reviews == null || pr.Reviews.Count == 0) doc.Note("No reviews");
-                    else foreach (GitHubPullRequestReview r in pr.Reviews) doc.Text("  " + (r.ReviewerLogin ?? Tr("Unknown")) + "  " + r.State);
-                    doc.Note("Checks", doc.Theme.Accent);
-                    if (pr.Checks == null || pr.Checks.Count == 0) doc.Note("No provider checks");
-                    else foreach (GitHubPullRequestCheck c in pr.Checks) doc.Text("  " + c.Name + "  " + c.Status + (String.IsNullOrEmpty(c.Conclusion) ? "" : " / " + c.Conclusion));
+                    doc.Note(Tr("Reviews") + (pr.ReviewCount > PullRequestReviews.Count ? " (" + PullRequestReviews.Count + "/" + pr.ReviewCount + ")" : ""), doc.Theme.Accent);
+                    if (PullRequestReviews.Count == 0) doc.Note("No reviews");
+                    else foreach (GitHubPullRequestReview r in PullRequestReviews) doc.Text("  " + (r.ReviewerLogin ?? Tr("Unknown")) + "  " + r.State);
+                    doc.Note(Tr("Checks") + (pr.CheckCount > PullRequestChecks.Count ? " (" + PullRequestChecks.Count + "/" + pr.CheckCount + ")" : ""), doc.Theme.Accent);
+                    if (PullRequestChecks.Count == 0) doc.Note("No provider checks");
+                    else foreach (GitHubPullRequestCheck c in PullRequestChecks) doc.Text("  " + c.Name + "  " + c.Status + (String.IsNullOrEmpty(c.Conclusion) ? "" : " / " + c.Conclusion));
                 }
             }
 
@@ -417,6 +543,7 @@ namespace Armada.Tui.Screens.Operations
             if (!String.IsNullOrEmpty(m.RequestedCaptainId) && !String.IsNullOrEmpty(m.CaptainId) && m.CaptainId != m.RequestedCaptainId) preferred += "  " + Tr("(fell back to tier)");
             doc.Field("Preferred Captain", preferred);
             doc.Field("Actual Captain", CaptainRef(m.CaptainId));
+            if (m.RescueOfMissionId != null) doc.Field("Rescue of", m.RescueOfMissionId);
             doc.Field("Parent Mission", m.ParentMissionId);
             doc.Field("Persona", String.IsNullOrEmpty(m.Persona) ? Tr("Worker") : m.Persona);
             if (!String.IsNullOrEmpty(m.DependsOnMissionId)) doc.Field("Depends On", m.DependsOnMissionId);
@@ -460,6 +587,10 @@ namespace Armada.Tui.Screens.Operations
         {
             doc.Section("Why This Mission Is Waiting");
             doc.Text(blocker.Summary, blocker.Reason == MissionAssignmentBlockerReasonEnum.AwaitingDispatch ? doc.Theme.Text : doc.Theme.Warning);
+            if (blocker.Advice.Count > 0)
+            {
+                doc.Field("Next steps", String.Join(Environment.NewLine, blocker.Advice.Select(advice => advice.Text)));
+            }
             if (blocker.UntilUtc.HasValue) doc.Field("Expected to clear", Context.Loc.FormatDateTime(blocker.UntilUtc.Value));
             if (!String.IsNullOrEmpty(blocker.DependsOnMissionId)) doc.Field("Depends On", blocker.DependsOnMissionId);
             if (blocker.BlockingMissionIds.Count > 0) doc.Field("Held by", String.Join(", ", blocker.BlockingMissionIds));

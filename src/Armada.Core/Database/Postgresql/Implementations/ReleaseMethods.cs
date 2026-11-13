@@ -165,7 +165,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
                 using (NpgsqlCommand cmd = conn.CreateCommand())
                 {
                     cmd.CommandText = "SELECT * FROM releases" + whereClause
-                        + " ORDER BY COALESCE(published_utc, last_update_utc) DESC, created_utc DESC LIMIT @page_size OFFSET @offset;";
+                        + " ORDER BY COALESCE(published_utc, last_update_utc) DESC, created_utc DESC, id DESC LIMIT @page_size OFFSET @offset;";
                     foreach (NpgsqlParameter parameter in parameters) cmd.Parameters.Add(CloneParameter(parameter));
                     cmd.Parameters.AddWithValue("@page_size", pageSize);
                     cmd.Parameters.AddWithValue("@offset", offset);
@@ -204,7 +204,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
                 List<Release> results = new List<Release>();
                 using (NpgsqlCommand cmd = conn.CreateCommand())
                 {
-                    cmd.CommandText = "SELECT * FROM releases" + whereClause + " ORDER BY COALESCE(published_utc, last_update_utc) DESC, created_utc DESC;";
+                    cmd.CommandText = "SELECT * FROM releases" + whereClause + " ORDER BY COALESCE(published_utc, last_update_utc) DESC, created_utc DESC, id DESC;";
                     foreach (NpgsqlParameter parameter in parameters) cmd.Parameters.Add(CloneParameter(parameter));
                     using (NpgsqlDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
                     {

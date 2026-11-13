@@ -58,6 +58,7 @@ namespace Armada.Core.Services
         private readonly Func<EvaluationSettings> _Settings;
         private readonly EvaluationConcurrencyGate _Gate;
         private readonly string _ArmadaVersion;
+        private readonly ConcurrentDictionary<string, string[]> _ActivePackDirectories = new ConcurrentDictionary<string, string[]>(StringComparer.Ordinal);
         private readonly ConcurrentDictionary<string, Task<BatteryRun>> _Running = new ConcurrentDictionary<string, Task<BatteryRun>>(StringComparer.Ordinal);
 
         private static readonly JsonSerializerOptions _Json = new JsonSerializerOptions
@@ -107,13 +108,54 @@ namespace Armada.Core.Services
 
         #region Public-Methods
 
+        /// <summary>The resolved server-wide battery directory used by pack management.</summary>
+        public string? BatteryDirectory => _Catalog.ResolveDirectory();
+
+        /// <summary>Whether an in-process queued or running battery uses this pack folder.</summary>
+        public bool IsPackInUse(string directory) => _ActivePackDirectories.Values.Any(paths => paths.Contains(directory, StringComparer.Ordinal));
+
         /// <summary>
-        /// Every pack, valid or not.
+        /// One page of packs, valid or not, ordered by pack directory name. Only the page's manifests are read.
+        /// </summary>
+        /// <param name="pageNumber">Page number (1-based).</param>
+        /// <param name="pageSize">Page size (1 to 1000).</param>
+        /// <returns>One page of packs.</returns>
+        public EnumerationResult<BatteryPack> ListPacks(int pageNumber, int pageSize)
+        {
+            return _Catalog.LoadPage(pageNumber, pageSize);
+        }
+
+        /// <summary>
+        /// Every pack, valid or not, ordered by pack directory name.
         /// </summary>
         /// <returns>Packs.</returns>
-        public List<BatteryPack> ListPacks()
+        public List<BatteryPack> LoadPacks()
         {
             return _Catalog.LoadAll();
+        }
+
+        /// <summary>
+        /// The evaluator rubric of a task (the text of its rubric file), or null when the task has none or it cannot be read.
+        /// </summary>
+        /// <param name="packId">Pack.</param>
+        /// <param name="taskId">Task.</param>
+        /// <returns>Rubric text, or null.</returns>
+        public string? RubricFor(string? packId, string? taskId)
+        {
+            if (String.IsNullOrWhiteSpace(packId) || String.IsNullOrWhiteSpace(taskId)) return null;
+            BatteryPack? pack = _Catalog.Find(packId);
+            BatteryTaskDefinition? task = pack?.Manifest?.Tasks.FirstOrDefault(t => String.Equals(t.Id, taskId, StringComparison.Ordinal));
+            string? rubric = task?.Grader?.Rubric;
+            if (pack == null || String.IsNullOrWhiteSpace(rubric)) return null;
+            try
+            {
+                return File.ReadAllText(pack.Resolve(rubric!));
+            }
+            catch (Exception ex)
+            {
+                _Logging.Debug(_Header + "could not read the rubric of " + packId + "/" + taskId + ": " + ex.Message);
+                return null;
+            }
         }
 
         /// <summary>
@@ -166,7 +208,7 @@ namespace Armada.Core.Services
         /// <exception cref="ArgumentNullException">Thrown when captain or packIds is null.</exception>
         /// <exception cref="ArgumentException">Thrown for no packs, an unknown or malformed pack, a run count outside 1 to 10,
         /// an undefined prompt variant, or a missing fixture vessel that was not asked to be created.</exception>
-        public async Task<BatteryRun> StartAsync(
+        public Task<BatteryRun> StartAsync(
             Captain captain,
             ModelEndpoint? endpoint,
             List<string> packIds,
@@ -178,8 +220,46 @@ namespace Armada.Core.Services
             PromptVariantEnum? promptVariant,
             CancellationToken token = default)
         {
+            return StartAsync(captain, endpoint, packIds, runCount, seed, createFixtureVessels, tenantId, userId, promptVariant, null, token);
+        }
+
+        /// <summary>
+        /// Start a battery run for a Full Evaluate: as the other overloads, plus a persona filter, a token budget, a
+        /// cancellation token and the shared evaluation slot (see <see cref="BatteryRunOptions"/>). A run stopped by the
+        /// cancellation token or the budget ends Cancelled with what finished kept, and its open mission is cancelled.
+        /// </summary>
+        /// <param name="captain">Captain to run the tasks.</param>
+        /// <param name="endpoint">The captain's model endpoint, or null.</param>
+        /// <param name="packIds">Packs to run.</param>
+        /// <param name="runCount">Runs of each task, or null for 3.</param>
+        /// <param name="seed">Seed to record, or null to pick one.</param>
+        /// <param name="createFixtureVessels">Whether to create missing fixture vessels.</param>
+        /// <param name="tenantId">Tenant the run and fixture vessels belong to.</param>
+        /// <param name="userId">Caller.</param>
+        /// <param name="promptVariant">Prompt variant for every task, or null for the captain's own setting.</param>
+        /// <param name="options">Full Evaluate options, or null.</param>
+        /// <param name="token">Cancellation token (for starting the run, not for the background work).</param>
+        /// <returns>The queued run.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when captain or packIds is null.</exception>
+        /// <exception cref="ArgumentException">Thrown for no packs, an unknown or malformed pack, a run count outside 1 to 10,
+        /// an undefined prompt variant, a persona filter no task of the packs matches, or a missing fixture vessel that was
+        /// not asked to be created.</exception>
+        public async Task<BatteryRun> StartAsync(
+            Captain captain,
+            ModelEndpoint? endpoint,
+            List<string> packIds,
+            int? runCount,
+            int? seed,
+            bool createFixtureVessels,
+            string? tenantId,
+            string? userId,
+            PromptVariantEnum? promptVariant,
+            BatteryRunOptions? options,
+            CancellationToken token = default)
+        {
             if (captain == null) throw new ArgumentNullException(nameof(captain));
             if (packIds == null) throw new ArgumentNullException(nameof(packIds));
+            CollectionLimits.RequireConfigItems(packIds, "Packs");
             List<string> ids = packIds.Where(p => !String.IsNullOrWhiteSpace(p)).Select(p => p.Trim()).Distinct(StringComparer.Ordinal).ToList();
             if (ids.Count == 0) throw new ArgumentException("Name at least one pack.", nameof(packIds));
             int count = runCount ?? DefaultRunCount;
@@ -196,6 +276,10 @@ namespace Armada.Core.Services
                 if (!pack.IsValid) throw new ArgumentException("Battery pack '" + id + "' is malformed: " + String.Join(" ", pack.Errors), nameof(packIds));
                 packs.Add(pack);
             }
+
+            int tasksPerRun = packs.Sum(p => p.Manifest!.Tasks.Count(t => Selected(t, options)));
+            if (tasksPerRun == 0)
+                throw new ArgumentException("No task of the packs tests the selected personas (" + String.Join(", ", options?.Personas ?? new List<string>()) + ").", nameof(options));
 
             string runTenant = captain.TenantId ?? tenantId ?? Constants.DefaultTenantId;
             Dictionary<string, Vessel> vessels = new Dictionary<string, Vessel>(StringComparer.Ordinal);
@@ -219,7 +303,7 @@ namespace Armada.Core.Services
                 Model = !String.IsNullOrWhiteSpace(captain.Model) ? captain.Model : endpoint?.Model,
                 ModelEndpointId = endpoint?.Id,
                 InferenceHost = ModelProbeService.InferenceHostFor(captain, endpoint),
-                TotalTasks = packs.Sum(p => p.Manifest!.Tasks.Count) * count
+                TotalTasks = tasksPerRun * count
             };
             run.SamplingJson = JsonSerializer.Serialize(BuildSampling(captain, endpoint), _Json);
             run.ConfigurationJson = JsonSerializer.Serialize(BuildConfiguration(run, captain, endpoint, packs, promptVariant), _Json);
@@ -230,9 +314,14 @@ namespace Armada.Core.Services
 
             BatteryRun returned = await _Database.BatteryRuns.ReadAsync(run.Id, token).ConfigureAwait(false) ?? run;
             BatteryRun created = run;
-            Task<BatteryRun> execution = Task.Run(() => ExecuteAsync(created, captain, packs, vessels, promptVariant));
+            _ActivePackDirectories[run.Id] = packs.Select(p => p.Directory).ToArray();
+            Task<BatteryRun> execution = Task.Run(() => ExecuteAsync(created, captain, packs, vessels, promptVariant, options ?? new BatteryRunOptions()));
             _Running[run.Id] = execution;
-            _ = execution.ContinueWith(t => _Running.TryRemove(created.Id, out Task<BatteryRun>? _), TaskScheduler.Default);
+            _ = execution.ContinueWith(t =>
+            {
+                _Running.TryRemove(created.Id, out Task<BatteryRun>? _);
+                _ActivePackDirectories.TryRemove(created.Id, out string[]? _);
+            }, TaskScheduler.Default);
             return returned;
         }
 
@@ -265,6 +354,43 @@ namespace Armada.Core.Services
             if (run == null) return null;
             run.Results = await _Database.BatteryTaskResults.ReadByRunAsync(runId, token).ConfigureAwait(false);
             return run;
+        }
+
+        /// <summary>
+        /// Read a run without its results (the REST and MCP run read).
+        /// </summary>
+        /// <param name="runId">Run identifier.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The run, or null.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when runId is null or empty.</exception>
+        public async Task<BatteryRun?> ReadRunAsync(string runId, CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(runId)) throw new ArgumentNullException(nameof(runId));
+            return await _Database.BatteryRuns.ReadAsync(runId, token).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// One page of a run's results, paged in the database. query.Status filters by outcome (Passed, Failed,
+        /// CouldNotRun, PendingEvaluation); query.Order orders by creation with the id as the tie-break.
+        /// </summary>
+        /// <param name="runId">Run identifier.</param>
+        /// <param name="query">Paging query.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>One page of results.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when runId or query is null.</exception>
+        /// <exception cref="ArgumentException">Thrown for an unknown outcome filter.</exception>
+        public async Task<EnumerationResult<BatteryTaskResult>> EnumerateResultsAsync(string runId, EnumerationQuery query, CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(runId)) throw new ArgumentNullException(nameof(runId));
+            if (query == null) throw new ArgumentNullException(nameof(query));
+            if (!String.IsNullOrWhiteSpace(query.Status))
+            {
+                if (!Enum.TryParse(query.Status.Trim(), true, out BatteryTaskOutcomeEnum outcome) || !Enum.IsDefined(outcome))
+                    throw new ArgumentException("Unknown outcome: " + query.Status + ". Use Passed, Failed, CouldNotRun or PendingEvaluation.", nameof(query));
+                query.Status = outcome.ToString();
+            }
+
+            return await _Database.BatteryTaskResults.EnumerateByRunAsync(runId, query, token).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -331,11 +457,12 @@ namespace Armada.Core.Services
             return _Settings() ?? new EvaluationSettings();
         }
 
-        private async Task<BatteryRun> ExecuteAsync(BatteryRun run, Captain captain, List<BatteryPack> packs, Dictionary<string, Vessel> vessels, PromptVariantEnum? promptVariant)
+        private async Task<BatteryRun> ExecuteAsync(BatteryRun run, Captain captain, List<BatteryPack> packs, Dictionary<string, Vessel> vessels, PromptVariantEnum? promptVariant, BatteryRunOptions options)
         {
             try
             {
-                using (await _Gate.AcquireAsync(run.InferenceHost).ConfigureAwait(false))
+                // A Full Evaluate already holds the slot for this inference host; waiting for a second one would deadlock it.
+                using (options.HoldsEvaluationSlot ? null : await _Gate.AcquireAsync(run.InferenceHost, options.Cancellation).ConfigureAwait(false))
                 {
                     run.Status = BatteryRunStatusEnum.Running;
                     run.StartedUtc = DateTime.UtcNow;
@@ -345,11 +472,21 @@ namespace Armada.Core.Services
                     string? missingReason = null;
                     foreach (BatteryPack pack in packs)
                     {
-                        for (int attempt = 1; attempt <= run.RunCount; attempt++)
+                        for (int attempt = 1; attempt <= run.RunCount && options.StoppedEarlyReason == null; attempt++)
                         {
                             foreach (BatteryTaskDefinition task in pack.Manifest!.Tasks)
                             {
-                                BatteryTaskResult result = await RunTaskAsync(run, captain, pack, vessels[pack.Id], task, attempt, missingToolchain, missingReason, promptVariant).ConfigureAwait(false);
+                                if (!Selected(task, options)) continue;
+                                options.StoppedEarlyReason = StopReasonFor(options);
+                                if (options.StoppedEarlyReason != null) break;
+
+                                BatteryTaskResult? result = await RunTaskAsync(run, captain, pack, vessels[pack.Id], task, attempt, missingToolchain, missingReason, promptVariant, options).ConfigureAwait(false);
+                                if (result == null)
+                                {
+                                    options.StoppedEarlyReason = StopReasonFor(options) ?? "The run was cancelled.";
+                                    break;
+                                }
+
                                 if (result.Outcome == BatteryTaskOutcomeEnum.CouldNotRun && missingReason == null && missingToolchain.Count > 0)
                                     missingReason = result.Reason;
 
@@ -358,6 +495,16 @@ namespace Armada.Core.Services
                                 run = await _Database.BatteryRuns.UpdateAsync(run).ConfigureAwait(false);
                             }
                         }
+                    }
+
+                    if (options.StoppedEarlyReason != null)
+                    {
+                        run.Status = BatteryRunStatusEnum.Cancelled;
+                        run.FailureReason = options.StoppedEarlyReason;
+                        run.CompletedUtc = DateTime.UtcNow;
+                        run = await _Database.BatteryRuns.UpdateAsync(run).ConfigureAwait(false);
+                        _Logging.Info(_Header + run.Id + " stopped early: " + options.StoppedEarlyReason);
+                        return run;
                     }
 
                     run.Status = BatteryRunStatusEnum.Completed;
@@ -370,11 +517,13 @@ namespace Armada.Core.Services
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + run.Id + " failed: " + ex.Message);
+                bool stopped = ex is OperationCanceledException && options.Cancellation.IsCancellationRequested;
+                if (stopped) options.StoppedEarlyReason ??= StopReasonFor(options) ?? "The run was cancelled.";
+                _Logging.Warn(_Header + run.Id + (stopped ? " stopped: " + options.StoppedEarlyReason : " failed: " + ex.Message));
                 try
                 {
-                    run.Status = BatteryRunStatusEnum.Failed;
-                    run.FailureReason = ex.Message;
+                    run.Status = stopped ? BatteryRunStatusEnum.Cancelled : BatteryRunStatusEnum.Failed;
+                    run.FailureReason = stopped ? options.StoppedEarlyReason : ex.Message;
                     run.CompletedUtc = DateTime.UtcNow;
                     run = await _Database.BatteryRuns.UpdateAsync(run).ConfigureAwait(false);
                 }
@@ -387,7 +536,7 @@ namespace Armada.Core.Services
             }
         }
 
-        private async Task<BatteryTaskResult> RunTaskAsync(
+        private async Task<BatteryTaskResult?> RunTaskAsync(
             BatteryRun run,
             Captain captain,
             BatteryPack pack,
@@ -396,7 +545,8 @@ namespace Armada.Core.Services
             int attempt,
             HashSet<string> missingToolchain,
             string? missingReason,
-            PromptVariantEnum? promptVariant)
+            PromptVariantEnum? promptVariant,
+            BatteryRunOptions options)
         {
             Stopwatch watch = Stopwatch.StartNew();
             BatteryTaskResult result = new BatteryTaskResult
@@ -443,7 +593,10 @@ namespace Armada.Core.Services
                     {
                         PromptVariant = promptVariant
                     };
-                    BatteryDispatchResult dispatched = await _Dispatcher.RunAsync(request).ConfigureAwait(false);
+                    string description = request.Description;
+                    BatteryDispatchResult dispatched = await _Dispatcher.RunAsync(request, options.Cancellation).ConfigureAwait(false);
+                    options.TokensUsed += ModelProbeCatalog.EstimateTokens(description) + ModelProbeCatalog.EstimateTokens(dispatched.Mission?.AgentOutput);
+                    if (dispatched.Cancelled || options.Cancellation.IsCancellationRequested) return null;
                     result.VoyageId = dispatched.VoyageId;
                     result.MissionId = dispatched.Mission?.Id;
                     result.MissionStatus = dispatched.Mission?.Status.ToString();
@@ -452,6 +605,10 @@ namespace Armada.Core.Services
                     BatteryGrade grade = await GradeAsync(pack, task, dispatched, timeoutMinutes, missingToolchain).ConfigureAwait(false);
                     Apply(result, grade);
                 }
+            }
+            catch (OperationCanceledException) when (options.Cancellation.IsCancellationRequested)
+            {
+                return null;
             }
             catch (Exception ex)
             {
@@ -507,6 +664,20 @@ namespace Armada.Core.Services
                 return Failed("The mission ended " + mission.Status + (String.IsNullOrWhiteSpace(mission.FailureReason) ? "." : ": " + mission.FailureReason), "Mission " + mission.Status + ".");
 
             return await BatteryTaskGrader.GradeAsync(pack, task, mission.AgentOutput, workspace).ConfigureAwait(false);
+        }
+
+        private static bool Selected(BatteryTaskDefinition task, BatteryRunOptions? options)
+        {
+            if (options?.Personas == null || options.Personas.Count == 0) return true;
+            return options.Personas.Any(p => PersonaCatalog.Matches(p, task.Persona));
+        }
+
+        private static string? StopReasonFor(BatteryRunOptions options)
+        {
+            if (options.Cancellation.IsCancellationRequested) return options.StopReason ?? "The run was cancelled.";
+            if (options.TokenBudget > 0 && options.TokensUsed >= options.TokenBudget)
+                return "The evaluation token budget (" + options.TokenBudget + ") is spent: about " + options.TokensUsed + " tokens used.";
+            return null;
         }
 
         private static BatteryGrade Failed(string reason, string summary)

@@ -67,7 +67,7 @@ namespace Armada.Server.Mcp.Tools
                         authUsername = new { type = "string", description = "User name for Basic authentication" },
                         authHeaderName = new { type = "string", description = "Header that carries apiKey for Header authentication, e.g. X-API-Key" },
                         authQueryParameter = new { type = "string", description = "Query parameter that carries apiKey for QueryParameter authentication, e.g. key" },
-                        headers = new { type = "array", description = "Extra headers sent with every request, e.g. Cloudflare Access headers. Values are stored but never returned.", items = new { type = "object", properties = new { name = new { type = "string" }, value = new { type = "string" } }, required = new[] { "name" } } },
+                        headers = new { type = "array", description = "Extra headers sent with every request, e.g. Cloudflare Access headers (at most 256). Values are stored but never returned.", items = new { type = "object", properties = new { name = new { type = "string" }, value = new { type = "string" } }, required = new[] { "name" } } },
                         dimensionality = new { type = "integer", description = "Optional embedding dimensionality hint" },
                         timeoutMs = new { type = "integer", description = "Per-request timeout in milliseconds (default 120000, clamped to 1000-600000)" },
                         inferenceOptions = new { type = "object", description = "Inference defaults and enforced tool policy; omit on update to preserve.", properties = new {
@@ -137,7 +137,7 @@ namespace Armada.Server.Mcp.Tools
                         authUsername = new { type = "string", description = "User name for Basic authentication" },
                         authHeaderName = new { type = "string", description = "Header that carries apiKey for Header authentication, e.g. X-API-Key" },
                         authQueryParameter = new { type = "string", description = "Query parameter that carries apiKey for QueryParameter authentication, e.g. key" },
-                        headers = new { type = "array", description = "Extra headers (replaces the stored list; omit to keep it). A header without a value keeps the stored value of the header with the same name.", items = new { type = "object", properties = new { name = new { type = "string" }, value = new { type = "string" } }, required = new[] { "name" } } },
+                        headers = new { type = "array", description = "Extra headers, at most 256 (replaces the stored list; omit to keep it). A header without a value keeps the stored value of the header with the same name.", items = new { type = "object", properties = new { name = new { type = "string" }, value = new { type = "string" } }, required = new[] { "name" } } },
                         dimensionality = new { type = "integer", description = "Embedding dimensionality hint" },
                         timeoutMs = new { type = "integer", description = "Per-request timeout in milliseconds" },
                         inferenceOptions = new { type = "object", description = "Inference defaults and enforced tool policy; omit on update to preserve.", properties = new {

@@ -246,8 +246,11 @@ namespace Armada.Core.Settings
         private int _StageCheckConcurrencyPerHarbor = 1;
 
         /// <summary>
-        /// Maximum number of automatic landing retries when landing fails due to target-branch drift.
-        /// Set to 0 to disable auto-retry. Must be in range [0, 10].
+        /// Maximum number of automatic landing retries per deferred landing: a LocalMerge landing refused because the
+        /// target checkout had tracked changes is retried by the health-loop sweep once the checkout is clean, at most
+        /// this many times for one deferral (and never after <see cref="LandingDeferralDeadlineHours"/>). Target-branch
+        /// drift needs no retry: landing integrates the current target before it publishes. Set to 0 to disable
+        /// automatic retries. Values outside [0, 10] are clamped.
         /// </summary>
         public int MaxLandingRetries
         {
@@ -413,6 +416,25 @@ namespace Armada.Core.Settings
                 if (value < 0) value = 0;
                 if (value > 120) value = 120;
                 _TransientOutageGraceMinutes = value;
+            }
+        }
+
+        /// <summary>
+        /// How long, in minutes, a captain whose process runs on a Harbor that lost its link to the Admiral is held as
+        /// unreachable instead of stalled. While held, missing output is not judged a stall: no recovery starts, no recovery
+        /// attempt is counted, and the mission stays InProgress, because the captain may still be working on the Harbor.
+        /// When the Harbor reconnects the stall clock restarts at the reconnect. After this grace the unreachable captain is
+        /// handed to normal stall recovery. 0 turns the grace off (an unreachable captain is judged by the stall threshold
+        /// at once). Must be in range [0, 1440].
+        /// </summary>
+        public int HarborDisconnectGraceMinutes
+        {
+            get => _HarborDisconnectGraceMinutes;
+            set
+            {
+                if (value < 0) value = 0;
+                if (value > 1440) value = 1440;
+                _HarborDisconnectGraceMinutes = value;
             }
         }
 
@@ -608,15 +630,16 @@ namespace Armada.Core.Settings
 
         /// <summary>
         /// Global ceiling on missions (working captains) that may run simultaneously, enforced at
-        /// dispatch admission as backpressure against unbounded concurrency. 0 = unlimited. Must be >= 0.
+        /// dispatch admission as backpressure against unbounded concurrency. 0 = unlimited; negatives clamp to 1, values above 10000 to 10000.
         /// </summary>
         public int MaxConcurrentMissions
         {
             get => _MaxConcurrentMissions;
             set
             {
-                if (value < 0) throw new ArgumentOutOfRangeException(nameof(MaxConcurrentMissions), "Must be >= 0");
-                _MaxConcurrentMissions = value;
+                int effective = ConcurrencyClamp.GlobalMissionLimit(value);
+                if (effective != value) _ConcurrencyWarnings.Add("MaxConcurrentMissions clamped from " + value + " to " + effective + ".");
+                _MaxConcurrentMissions = effective;
             }
         }
 
@@ -887,6 +910,16 @@ namespace Armada.Core.Settings
         }
 
         /// <summary>
+        /// Model alert settings: the periodic scorecard evaluation pass, the optional push and the thresholds (defaults
+        /// and per-persona overrides). Never null; setting null restores the defaults.
+        /// </summary>
+        public ModelAlertSettings ModelAlerts
+        {
+            get => _ModelAlerts;
+            set => _ModelAlerts = value ?? new ModelAlertSettings();
+        }
+
+        /// <summary>
         /// Vessel health evaluation settings (schedule, concurrency, freshness, scored criteria, thresholds).
         /// Never null; setting null restores the defaults.
         /// </summary>
@@ -906,6 +939,18 @@ namespace Armada.Core.Settings
         private StorageSettings _Storage = new StorageSettings();
 
         /// <summary>
+        /// Mission and voyage black box: capture, storage target, retention and sweeper (docs/BLACKBOX.md). Never null;
+        /// setting null restores the defaults. Storage secrets are masked on every settings read.
+        /// </summary>
+        public BlackBoxSettings BlackBox
+        {
+            get => _BlackBox;
+            set => _BlackBox = value ?? new BlackBoxSettings();
+        }
+
+        private BlackBoxSettings _BlackBox = new BlackBoxSettings();
+
+        /// <summary>
         /// Retention for Ask threads, finished background jobs, and finished import batches, pruned on the
         /// health-check loop's slow cadence. Never null; setting null restores the defaults.
         /// </summary>
@@ -923,6 +968,81 @@ namespace Armada.Core.Settings
         {
             get => _Push;
             set => _Push = value ?? new PushSettings();
+        }
+
+        /// <summary>v1.3 concurrency defaults and bounds: vessel and captain slot defaults, hierarchy depth, starvation, admission lock timeout and wait retention.</summary>
+        public ConcurrencySettings Concurrency
+        {
+            get => _Concurrency;
+            set => _Concurrency = value ?? new ConcurrencySettings();
+        }
+
+        private ConcurrencySettings _Concurrency = new ConcurrencySettings();
+        private long _ConcurrencyRevision;
+
+        /// <summary>Persisted optimistic-update revision of <see cref="Concurrency"/>. Zero means no API update has been recorded.</summary>
+        public long ConcurrencyRevision
+        {
+            get => System.Threading.Interlocked.Read(ref _ConcurrencyRevision);
+            set => System.Threading.Interlocked.Exchange(ref _ConcurrencyRevision, Math.Max(0, value));
+        }
+        private readonly List<string> _ConcurrencyWarnings = new List<string>();
+
+        /// <summary>Usage-aware selection policy. Defaults to Observe/FirstAvailable; null restores defaults. A complete group is validated before replacement.</summary>
+        public UsageSelectionSettings UsageSelection
+        {
+            get => _UsageSelection;
+            set
+            {
+                UsageSelectionSettings incoming = value ?? new UsageSelectionSettings();
+                incoming.Validate();
+                _UsageSelection = incoming;
+            }
+        }
+
+        /// <summary>Whether startup restored a policy settings write that did not finish committing.</summary>
+        [JsonIgnore]
+        public bool UsageSelectionRecoveryPerformed { get; private set; }
+
+        internal string SerializeForStorage()
+        {
+            UsageSelection.Validate();
+            NormalizeConcurrency();
+            NormalizePaths();
+            return JsonSerializer.Serialize(this, _SerializerOptions);
+        }
+
+        private UsageSelectionSettings _UsageSelection = new UsageSelectionSettings();
+        private UsageSelectionSettings? _UsageSelectionOverride;
+        private long _UsageSelectionRevision;
+
+        /// <summary>Effective environment policy when present, otherwise file-backed policy. Never serialized into the settings file.</summary>
+        [JsonIgnore]
+        public UsageSelectionSettings EffectiveUsageSelection => _UsageSelectionOverride ?? UsageSelection;
+
+        /// <summary>Persisted optimistic-update revision. Zero means no API policy update has been recorded.</summary>
+        public long UsageSelectionRevision
+        {
+            get => System.Threading.Interlocked.Read(ref _UsageSelectionRevision);
+            set => System.Threading.Interlocked.Exchange(ref _UsageSelectionRevision, Math.Max(0, value));
+        }
+
+        /// <summary>Install a validated startup environment override without replacing its file-backed value.</summary>
+        public void SetUsageSelectionOverride(UsageSelectionSettings? policy)
+        {
+            policy?.Validate();
+            _UsageSelectionOverride = policy?.Copy();
+        }
+
+
+        /// <summary>
+        /// Account usage capture settings (server switch, interval floor, probe concurrency and timeouts,
+        /// excerpt cap, raw/rollup retention days). Never null; setting null restores the defaults.
+        /// </summary>
+        public UsageCaptureSettings UsageCapture
+        {
+            get => _UsageCapture;
+            set => _UsageCapture = value ?? new UsageCaptureSettings();
         }
 
         /// <summary>
@@ -993,6 +1113,7 @@ namespace Armada.Core.Settings
         private int _MaxMissionRecoveryAttempts = 2;
         private int _TransientResumeDelaySeconds = 5;
         private int _TransientOutageGraceMinutes = 10;
+        private int _HarborDisconnectGraceMinutes = 60;
         private int _LandingDeferralDeadlineHours = 24;
         private int _MinIdleCaptains = 0;
         private int _MaxCaptains = 0;
@@ -1006,11 +1127,13 @@ namespace Armada.Core.Settings
         private VesselImportSettings _Import = new VesselImportSettings();
         private FleetActionSettings _FleetActions = new FleetActionSettings();
         private EvaluationSettings _Evaluation = new EvaluationSettings();
+        private ModelAlertSettings _ModelAlerts = new ModelAlertSettings();
         private AskSettings _Ask = new AskSettings();
         private CliPermissionSettings _Permissions = new CliPermissionSettings();
         private RepositoryHealthSettings _RepositoryHealth = new RepositoryHealthSettings();
         private RetentionSettings _Retention = new RetentionSettings();
         private PushSettings _Push = new PushSettings();
+        private UsageCaptureSettings _UsageCapture = new UsageCaptureSettings();
         private DatabaseSettings _Database = new DatabaseSettings();
         private bool _DatabasePathConfigured = false;
 
@@ -1068,6 +1191,7 @@ namespace Armada.Core.Settings
         /// </summary>
         public void InitializeDirectories()
         {
+            NormalizeConcurrency();
             NormalizePaths();
             Directory.CreateDirectory(DataDirectory);
             string? dbDirectory = Path.GetDirectoryName(DatabasePath);
@@ -1085,6 +1209,8 @@ namespace Armada.Core.Settings
         /// loaded from, else ~/.armada/settings.json).</param>
         public async Task SaveAsync(string? path = null)
         {
+            UsageSelection.Validate();
+            NormalizeConcurrency();
             NormalizePaths();
             path ??= EffectiveSettingsFilePath;
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
@@ -1100,19 +1226,43 @@ namespace Armada.Core.Settings
         public static async Task<ArmadaSettings> LoadAsync(string? path = null)
         {
             path ??= DefaultSettingsPath;
+            bool selectionRecovered = await UsageSelectionSettingsFileStore.RecoverPendingAsync(path).ConfigureAwait(false);
             if (!File.Exists(path))
             {
                 ArmadaSettings defaults = new ArmadaSettings();
                 defaults.SettingsFilePath = path;
+                defaults.UsageSelectionRecoveryPerformed = selectionRecovered;
+                defaults.NormalizeConcurrency();
                 defaults.NormalizePaths();
                 defaults.ApplyDerivedDefaults();
                 return defaults;
             }
-            string json = await File.ReadAllTextAsync(path).ConfigureAwait(false);
+            string json;
+            try { json = await File.ReadAllTextAsync(path).ConfigureAwait(false); }
+            catch (IOException) when (UsageSelectionSettingsFileStore.HasPendingRecovery(path))
+            {
+                selectionRecovered |= await UsageSelectionSettingsFileStore.RecoverPendingAsync(path).ConfigureAwait(false);
+                json = await File.ReadAllTextAsync(path).ConfigureAwait(false);
+            }
+            if (UsageSelectionSettingsFileStore.HasPendingRecovery(path))
+            {
+                selectionRecovered |= await UsageSelectionSettingsFileStore.RecoverPendingAsync(path).ConfigureAwait(false);
+                json = await File.ReadAllTextAsync(path).ConfigureAwait(false);
+            }
             ArmadaSettings settings = Parse(json);
+            settings.UsageSelectionRecoveryPerformed = selectionRecovered;
             settings.SettingsFilePath = path;
+            settings.NormalizeConcurrency();
             settings.NormalizePaths();
             settings.ApplyDerivedDefaults();
+            UsageDefaultsFile? previous = JsonSerializer.Deserialize<UsageDefaultsFile>(json, _SerializerOptions);
+            if ((previous?.UsageCapture?.DefaultsRevision ?? 0) < 2)
+            {
+                settings.UsageCapture.Enabled = null;
+                settings.UsageCapture.AllowPtyFallback = null;
+                settings.UsageCapture.DefaultsRevision = 2;
+                settings.WriteBack(path);
+            }
             return settings;
         }
 
@@ -1127,10 +1277,22 @@ namespace Armada.Core.Settings
         /// <exception cref="IOException">The file could not be written.</exception>
         public bool WriteBack(string? path = null)
         {
+            UsageSelection.Validate();
+            NormalizeConcurrency();
             NormalizePaths();
             path ??= EffectiveSettingsFilePath;
             string json = JsonSerializer.Serialize(this, _SerializerOptions);
             return SettingsFileStore.SaveInPlace(path, json);
+        }
+
+        /// <summary>Normalize concurrency values after binding and log adjustments before persisting or using them.</summary>
+        /// <param name="warning">Warning sink; defaults to stderr during settings-file loading before the server logger exists.</param>
+        public void NormalizeConcurrency(Action<string>? warning = null)
+        {
+            warning ??= message => Console.Error.WriteLine("[Concurrency] Warning: " + message);
+            foreach (string message in _ConcurrencyWarnings) warning(message);
+            _ConcurrencyWarnings.Clear();
+            foreach (string message in Concurrency.Normalize()) warning(message);
         }
 
         /// <summary>
@@ -1148,7 +1310,7 @@ namespace Armada.Core.Settings
 
         /// <summary>
         /// Parse settings JSON exactly as <see cref="LoadAsync"/> does (including the legacy landing fields), so an
-        /// editor can validate text before writing it. Property setters validate values, so out-of-range values throw.
+        /// editor can validate text before writing it. Existing validation guards remain; concurrency values clamp to their documented bounds.
         /// </summary>
         /// <param name="json">Settings JSON.</param>
         /// <returns>Parsed settings. <see cref="SettingsFilePath"/> is not set.</returns>
@@ -1161,6 +1323,8 @@ namespace Armada.Core.Settings
             settings ??= new ArmadaSettings();
             LegacyLandingSettings? legacy = JsonSerializer.Deserialize<LegacyLandingSettings>(json, _SerializerOptions);
             if (legacy != null && !legacy.LandingMode.HasValue) settings.LandingMode = legacy.ResolveLandingMode();
+            settings.NormalizeConcurrency();
+            settings.UsageSelection.Validate();
             settings.NormalizePaths();
             return settings;
         }

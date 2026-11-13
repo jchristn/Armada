@@ -15,6 +15,18 @@ namespace Armada.Server
     {
         #region Public-Methods
 
+        /// <summary>Clear server-derived concurrency metadata supplied by an external mission creator.</summary>
+        public static void ResetMissionConcurrencyMetadata(Mission mission)
+        {
+            mission.RescueOfMissionId = null;
+            mission.BaseBranchName = null;
+            mission.ReadyUtc = null;
+            mission.AssignedUtc = null;
+            mission.Depth = 0;
+            mission.OwnedPathsJson = null;
+            mission.ReadsPathsJson = null;
+        }
+
         /// <summary>
         /// Apply a fleet replacement body: the body supplies the editable fields; id, tenant, owner, and creation time
         /// come from the stored record.
@@ -88,7 +100,7 @@ namespace Armada.Server
 
         /// <summary>
         /// Apply a captain replacement body: the body supplies the configuration fields (name, runtime, model, persona
-        /// and runtime options); id, tenant, owner, operational state (state, current mission and dock, process,
+        /// and runtime options); id, tenant, owner, operational state (state, active mission identities, exclusive session, process,
         /// recovery attempts, quarantine, heartbeats), and creation time come from the stored record. Runtime options
         /// are normalized for the runtime as on create.
         /// </summary>
@@ -119,6 +131,11 @@ namespace Armada.Server
             if (presence == null) throw new ArgumentNullException(nameof(presence));
 
             if (!presence.Has(nameof(Captain.Name)) || String.IsNullOrEmpty(incoming.Name)) incoming.Name = existing.Name;
+            if (!presence.Has(nameof(Captain.Active))) incoming.Active = existing.Active;
+            if (!presence.Has(nameof(Captain.MaxConcurrency))) incoming.MaxConcurrency = existing.MaxConcurrency;
+            incoming.ActiveMissionCount = existing.ActiveMissionCount;
+            incoming.ActiveMissionIds = existing.ActiveMissionIds;
+            incoming.CurrentSessionId = existing.CurrentSessionId;
             if (!presence.Has(nameof(Captain.Runtime))) incoming.Runtime = existing.Runtime;
             if (!presence.Has(nameof(Captain.Model))) incoming.Model = existing.Model;
             if (!presence.Has(nameof(Captain.ModelEndpointId))) incoming.ModelEndpointId = existing.ModelEndpointId;
@@ -128,19 +145,32 @@ namespace Armada.Server
             if (!presence.Has(nameof(Captain.ReasoningEffort))) incoming.ReasoningEffort = existing.ReasoningEffort;
             if (!presence.Has(nameof(Captain.Tier))) incoming.Tier = existing.Tier;
             if (!presence.Has(nameof(Captain.RuntimeOptionsJson))) incoming.RuntimeOptionsJson = existing.RuntimeOptionsJson;
+            // Usage capture configuration: an omitted field keeps the stored value, so an unrelated edit (for example a
+            // rename) never disables capture or drops a Custom command. Mode is restored before the command because
+            // leaving Custom clears the command; an omitted command in a body that switches into Custom keeps the
+            // stored command only when one exists.
+            if (!presence.Has(nameof(Captain.UsageCaptureEnabled))) incoming.UsageCaptureEnabled = existing.UsageCaptureEnabled;
+            if (!presence.Has(nameof(Captain.UsageCaptureIntervalSeconds))) incoming.UsageCaptureIntervalSeconds = existing.UsageCaptureIntervalSeconds;
+            if (!presence.Has(nameof(Captain.UsageCaptureMode))) incoming.UsageCaptureMode = existing.UsageCaptureMode;
+            if (!presence.Has(nameof(Captain.UsageCaptureHarborId))) incoming.UsageCaptureHarborId = existing.UsageCaptureHarborId;
+            if (!presence.Has(nameof(Captain.UsageCaptureCommand)))
+            {
+                string? storedCommand = existing.UsageCaptureCommand;
+                if (storedCommand != null) incoming.UsageCaptureCommand = storedCommand;
+            }
 
             incoming.Id = existing.Id;
             incoming.TenantId = existing.TenantId;
             incoming.UserId = existing.UserId;
             incoming.State = existing.State;
-            incoming.CurrentMissionId = existing.CurrentMissionId;
-            incoming.CurrentDockId = existing.CurrentDockId;
             incoming.ProcessId = existing.ProcessId;
             incoming.RecoveryAttempts = existing.RecoveryAttempts;
             incoming.QuarantineUntilUtc = existing.QuarantineUntilUtc;
             incoming.QuarantineReason = existing.QuarantineReason;
             // The CLI permission policy changes only through its own endpoint (PUT /api/v1/captains/{id}/cli-permission-policy).
             incoming.CliPermissionPolicy = existing.CliPermissionPolicy;
+            // The model profile reference is set by Armada when it observes the captain's model, never by a client.
+            incoming.ModelProfileId = existing.ModelProfileId;
             incoming.LastHeartbeatUtc = existing.LastHeartbeatUtc;
             incoming.LastProcessAliveUtc = existing.LastProcessAliveUtc;
             incoming.CreatedUtc = existing.CreatedUtc;

@@ -20,7 +20,8 @@ namespace Armada.Core.Services
     {
         #region Private-Members
 
-        private const int _MaxHistoryRecords = 500;
+        private const int _MaxHistoryRecords = ModelEndpoint.MaxHealthHistoryRecords;
+        private const int _MaxNamedReferencingCaptains = 10;
 
         private readonly string _Header = "[ModelEndpointService] ";
         private readonly DatabaseDriver _Database;
@@ -73,6 +74,27 @@ namespace Armada.Core.Services
         }
 
         /// <summary>
+        /// One page of the model endpoints visible to the caller, counted and cut in the database (the same visibility as
+        /// <see cref="EnumerateAsync(AuthContext, CancellationToken)"/>: everything for an admin or a caller without a
+        /// tenant, the tenant for a tenant admin, otherwise the tenant's tenant-wide endpoints plus the caller's own),
+        /// newest first by default with the id as the tie-break.
+        /// </summary>
+        /// <param name="auth">Authentication context.</param>
+        /// <param name="query">Paging (PageSize 1 to 1000, default 10), Order, CreatedAfter, and CreatedBefore.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The page with exact totals for the caller.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when auth or query is null.</exception>
+        public async Task<EnumerationResult<ModelEndpoint>> EnumeratePageAsync(AuthContext auth, EnumerationQuery query, CancellationToken token = default)
+        {
+            if (auth == null) throw new ArgumentNullException(nameof(auth));
+            if (query == null) throw new ArgumentNullException(nameof(query));
+            ScopedEnumerationFilter filter = auth.IsAdmin || String.IsNullOrEmpty(auth.TenantId)
+                ? new ScopedEnumerationFilter()
+                : ScopedEnumerationFilter.ForScopedEntity(auth);
+            return await _Database.ModelEndpoints.EnumeratePageAsync(query, filter, token).ConfigureAwait(false);
+        }
+
+        /// <summary>
         /// Read a single model endpoint within the caller scope, or null when not found or not visible.
         /// </summary>
         /// <param name="auth">Authentication context.</param>
@@ -98,6 +120,8 @@ namespace Armada.Core.Services
         /// <param name="endpoint">Endpoint to create.</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>The created endpoint (with the API key redacted from serialization).</returns>
+        /// <exception cref="ArgumentException">Thrown for an invalid provider, kind, or option.</exception>
+        /// <exception cref="CollectionLimitExceededException">Thrown when Headers or InferenceOptions.AllowedTools holds more than <see cref="CollectionLimits.MaxConfigItems"/> entries.</exception>
         public async Task<ModelEndpoint> CreateAsync(AuthContext auth, ModelEndpoint endpoint, CancellationToken token = default)
         {
             if (auth == null) throw new ArgumentNullException(nameof(auth));
@@ -105,6 +129,9 @@ namespace Armada.Core.Services
 
             ValidateShape(endpoint);
             ModelEndpointAuth.Validate(endpoint);
+            // Health history is server-owned: a create never stores a caller-supplied history.
+            endpoint.HealthHistory = new List<ModelEndpointHealthRecord>();
+            CollectionBounds.Validate(endpoint);
 
             endpoint.TenantId = auth.TenantId;
             endpoint.UserId = auth.UserId;
@@ -155,6 +182,9 @@ namespace Armada.Core.Services
         /// <param name="endpoint">Endpoint carrying updated fields (its Id selects the record).</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>The updated endpoint.</returns>
+        /// <exception cref="KeyNotFoundException">Thrown when the endpoint is missing or not visible.</exception>
+        /// <exception cref="UnauthorizedAccessException">Thrown when the caller may not edit it.</exception>
+        /// <exception cref="CollectionLimitExceededException">Thrown when the merged Headers or InferenceOptions.AllowedTools holds more than <see cref="CollectionLimits.MaxConfigItems"/> entries.</exception>
         public async Task<ModelEndpoint> UpdateAsync(AuthContext auth, ModelEndpoint endpoint, CancellationToken token = default)
         {
             if (auth == null) throw new ArgumentNullException(nameof(auth));
@@ -189,6 +219,7 @@ namespace Armada.Core.Services
             existing.AuthQueryParameter = endpoint.AuthQueryParameter;
             ModelEndpointAuth.MergeHeaders(existing, endpoint);
             ModelEndpointAuth.Validate(existing);
+            CollectionBounds.Validate(existing);
             existing.LastUpdateUtc = DateTime.UtcNow;
 
             _Logging.Info(_Header + "updating endpoint " + existing.Id);
@@ -216,9 +247,10 @@ namespace Armada.Core.Services
             if (referencing.Count > 0)
             {
                 List<string> names = new List<string>();
-                foreach (Captain captain in referencing) names.Add(captain.Name);
+                foreach (Captain captain in referencing.Take(_MaxNamedReferencingCaptains)) names.Add(captain.Name);
+                string more = referencing.Count > names.Count ? " and " + (referencing.Count - names.Count) + " more" : String.Empty;
                 throw new InvalidOperationException(
-                    "Cannot delete endpoint " + id + ": it is used by " + referencing.Count + " captain(s): " + String.Join(", ", names) +
+                    "Cannot delete endpoint " + id + ": it is used by " + referencing.Count + " captain(s): " + String.Join(", ", names) + more +
                     ". Repoint or delete those captains first.");
             }
 

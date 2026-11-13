@@ -1,6 +1,7 @@
 namespace Armada.Core.Models
 {
     using System.Collections.Generic;
+    using Armada.Core.Services;
 
     /// <summary>
     /// One battery task: the mission prompt, the persona it tests and how it is graded.
@@ -37,6 +38,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// Files, relative to the pack directory, appended to the mission description in fenced blocks.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxConfigItems)]
         public List<string> Attachments
         {
             get => _Attachments;
@@ -52,6 +54,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// Names of the toolchain entries the task needs; null means every entry of the pack, an empty list none.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxConfigItems)]
         public List<string>? Toolchain { get; set; } = null;
 
         /// <summary>

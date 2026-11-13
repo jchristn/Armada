@@ -4,6 +4,8 @@ namespace Armada.Tui.Screens.Operations
     using System.Collections.Generic;
     using System.Globalization;
     using System.Linq;
+    using System.Threading;
+    using System.Threading.Tasks;
     using Armada.Client.Socket;
     using Armada.Core;
     using Armada.Core.Enums;
@@ -90,6 +92,25 @@ namespace Armada.Tui.Screens.Operations
         public RefinementTranscriptView Transcript { get; } = new RefinementTranscriptView();
 
         /// <summary>
+        /// The loaded messages of the selected session, oldest first. The newest page loads with the session; older pages
+        /// load on request until every one of <see cref="MessageTotal"/> is loaded.
+        /// </summary>
+        public List<ObjectiveRefinementMessage> Messages
+        {
+            get { return _Messages; }
+        }
+
+        /// <summary>
+        /// Number of messages in the selected session's transcript (every page).
+        /// </summary>
+        public long MessageTotal { get; private set; } = 0;
+
+        /// <summary>
+        /// Transcript messages read per page.
+        /// </summary>
+        public const int MessagePageSize = 100;
+
+        /// <summary>
         /// Refinement composer.
         /// </summary>
         public OpsTextArea Composer { get; } = new OpsTextArea();
@@ -148,6 +169,10 @@ namespace Armada.Tui.Screens.Operations
         private List<string> _VesselIds = new List<string>();
         private List<string> _FleetIds = new List<string>();
         private List<ObjectiveRefinementSession> _SessionList = new List<ObjectiveRefinementSession>();
+        private string? _PreferredSessionId = null;
+        private List<ObjectiveRefinementMessage> _Messages = new List<ObjectiveRefinementMessage>();
+        private int _NextOlderPage = 2;
+        private bool _LoadingOlder = false;
         private string _SelectedSessionId = "";
         private bool _Busy = false;
         private bool _SessionsRequested = false;
@@ -491,8 +516,8 @@ namespace Armada.Tui.Screens.Operations
             string sessionId = d.Session.Id;
             DeleteProgress.RunVoid(Context, "Deleting refinement session", t => Context.Client.DeleteObjectiveRefinementSessionAsync(sessionId, t), () =>
             {
-                _SessionList = _SessionList.Where(s => s.Id != sessionId).ToList();
                 _SelectedSessionId = "";
+                Sessions.Reload();
                 ShowDetail(null);
                 SummaryDraft = null;
                 _SummaryView.Invalidate();
@@ -645,6 +670,7 @@ namespace Armada.Tui.Screens.Operations
             Sessions.Dispatcher = Context.Dispatcher;
             Sessions.ModalHost = Context.Modals;
             Sessions.EmptyText = "No refinement sessions yet.";
+            Sessions.Loader = LoadSessionsPageAsync;
             Sessions.AddColumn(new GridColumn<ObjectiveRefinementSession>("title", "Title", x => (x.Id == _SelectedSessionId ? "> " : "") + x.Title) { Weight = 3 });
             Sessions.AddColumn(new GridColumn<ObjectiveRefinementSession>("status", "Status", x => StatusBadge.Label(x.Status)) { Width = 14, Style = (x, t) => StatusBadge.Style(x.Status, t) });
             Sessions.AddColumn(new GridColumn<ObjectiveRefinementSession>("captain", "Captain", x => Reference.CaptainName(x.CaptainId)) { Weight = 2 });
@@ -716,6 +742,8 @@ namespace Armada.Tui.Screens.Operations
             Action("apply", "Apply To Backlog Item", Apply, "A", () => Detail != null && CanManage && Transcript.SelectedId.Length > 0);
             Action("stop-session", "Stop Session", StopSession, "x", () => Detail != null);
             Action("delete-session", "Delete Session", DeleteSession, "X", () => Detail != null, false, true);
+            OpsScreenAction older = Action("older-messages", "Load older messages", LoadOlderMessages, "alt+o", () => Detail != null && _Messages.Count < MessageTotal && !_LoadingOlder);
+            older.DynamicLabel = () => Tr("Load older messages ({{loaded}} of {{total}})", LocalizationArgs.Of("loaded", _Messages.Count, "total", MessageTotal));
         }
 
         private void Hydrate(Objective next)
@@ -980,58 +1008,147 @@ namespace Armada.Tui.Screens.Operations
 
         private void LoadSessions(string? preferred)
         {
+            if (Item == null) return;
+            _PreferredSessionId = preferred;
+            Sessions.Reload();
+        }
+
+        private async Task<GridPage<ObjectiveRefinementSession>> LoadSessionsPageAsync(GridQuery grid, CancellationToken token)
+        {
             Objective? o = Item;
-            if (o == null) return;
-            Call((c, t) => c.ListBacklogRefinementSessionsAsync(o.Id, t), list =>
+            if (o == null) return new GridPage<ObjectiveRefinementSession>(new List<ObjectiveRefinementSession>(), 0);
+            EnumerationQuery query = new EnumerationQuery();
+            query.PageNumber = grid.PageNumber;
+            query.PageSize = grid.PageSize;
+            EnumerationResult<ObjectiveRefinementSession>? page = await Context.Client.ListBacklogRefinementSessionsAsync(o.Id, query, token).ConfigureAwait(false);
+            List<ObjectiveRefinementSession> rows = page?.Objects ?? new List<ObjectiveRefinementSession>();
+            long total = page?.TotalRecords ?? rows.Count;
+            Post(() =>
             {
-                _SessionList = (list ?? new List<ObjectiveRefinementSession>()).ToList();
-                Sessions.SetLocalRows(_SessionList);
+                _SessionList = rows;
+                string? preferred = _PreferredSessionId;
+                _PreferredSessionId = null;
                 string selected = !String.IsNullOrEmpty(preferred) ? preferred!
-                    : _SessionList.Any(s => s.Id == _SelectedSessionId) ? _SelectedSessionId
-                    : _SessionList.FirstOrDefault()?.Id ?? "";
-                _SelectedSessionId = selected;
+                    : !String.IsNullOrEmpty(_SelectedSessionId) ? _SelectedSessionId
+                    : rows.FirstOrDefault()?.Id ?? "";
                 if (selected.Length > 0) SelectSession(selected);
                 else ShowDetail(null);
-            }, null, ex => { });
+            });
+            return new GridPage<ObjectiveRefinementSession>(rows, total);
         }
 
         private void UpsertSession(ObjectiveRefinementSession session)
         {
             if (session == null) return;
             int idx = _SessionList.FindIndex(s => s.Id == session.Id);
-            if (idx >= 0) _SessionList[idx] = session;
-            else _SessionList.Insert(0, session);
-            _SessionList = _SessionList.OrderByDescending(s => s.LastUpdateUtc).ToList();
-            Sessions.SetLocalRows(_SessionList);
+            if (idx < 0)
+            {
+                // Not on the shown page (new, or on another page): read the page again so the order stays the server's.
+                Sessions.Reload();
+                return;
+            }
+
+            _SessionList[idx] = session;
+            Sessions.SetPage(new GridPage<ObjectiveRefinementSession>(_SessionList, Sessions.TotalRecords), Sessions.PageNumber);
+        }
+
+        private void LoadNewestMessages(string sessionId)
+        {
+            EnumerationQuery query = new EnumerationQuery();
+            query.PageNumber = 1;
+            query.PageSize = MessagePageSize;
+            query.Order = EnumerationOrderEnum.CreatedDescending;
+            Call((c, t) => c.ListObjectiveRefinementMessagesAsync(sessionId, query, t), page =>
+            {
+                if (page == null || Detail == null || Detail.Session.Id != sessionId) return;
+                MergeMessages(page.Objects);
+                MessageTotal = Math.Max(page.TotalRecords, _Messages.Count);
+                RefreshTranscript();
+            }, "Failed to load the refinement transcript.");
+        }
+
+        private void LoadOlderMessages()
+        {
+            ObjectiveRefinementSessionDetail? d = Detail;
+            if (d == null || _Messages.Count >= MessageTotal || _LoadingOlder) return;
+            string sessionId = d.Session.Id;
+            EnumerationQuery query = new EnumerationQuery();
+            query.PageNumber = _NextOlderPage;
+            query.PageSize = MessagePageSize;
+            query.Order = EnumerationOrderEnum.CreatedDescending;
+            _LoadingOlder = true;
+            Call((c, t) => c.ListObjectiveRefinementMessagesAsync(sessionId, query, t), page =>
+            {
+                _LoadingOlder = false;
+                if (page == null || Detail == null || Detail.Session.Id != sessionId) return;
+                MergeMessages(page.Objects);
+                MessageTotal = Math.Max(page.TotalRecords, _Messages.Count);
+                if (page.Objects.Count > 0) _NextOlderPage++;
+                RefreshTranscript();
+            }, null, ex =>
+            {
+                _LoadingOlder = false;
+                ShowMessage(String.IsNullOrEmpty(ex.Message) ? Tr("Failed to load older messages.") : ex.Message);
+            });
+        }
+
+        private void MergeMessages(IEnumerable<ObjectiveRefinementMessage> incoming)
+        {
+            Dictionary<string, ObjectiveRefinementMessage> byId = new Dictionary<string, ObjectiveRefinementMessage>(StringComparer.Ordinal);
+            foreach (ObjectiveRefinementMessage m in _Messages) byId[m.Id] = m;
+            foreach (ObjectiveRefinementMessage m in incoming)
+            {
+                if (!byId.TryGetValue(m.Id, out ObjectiveRefinementMessage? other) || m.LastUpdateUtc >= other.LastUpdateUtc) byId[m.Id] = m;
+            }
+
+            _Messages = byId.Values.OrderBy(m => m.Sequence).ToList();
+        }
+
+        private void RefreshTranscript()
+        {
+            Transcript.SetMessages(_Messages);
+            if (Transcript.SelectedId.Length == 0 || !_Messages.Any(m => m.Id == Transcript.SelectedId))
+            {
+                ObjectiveRefinementMessage? latest = _Messages.LastOrDefault(m => String.Equals(m.Role, "assistant", StringComparison.OrdinalIgnoreCase) && m.Content.Trim().Length > 0);
+                Transcript.Select(latest?.Id ?? "");
+            }
+
+            SyncTranscriptHelper();
+            _TranscriptHeader.Invalidate();
         }
 
         /// <summary>
-        /// Fold a detail from a request response (send, stop, or a transcript reload) into what live events already
-        /// delivered for the same session. The response can be built before a fast captain reply arrives over the
-        /// WebSocket, so replacing the transcript with it would drop that reply; for each message and for the session,
-        /// the copy with the later <c>LastUpdateUtc</c> wins.
+        /// Fold a detail from a request response (send, stop, or a reload) into what live events already delivered for the
+        /// same session: the session copy with the later <c>LastUpdateUtc</c> wins. Transcript messages are paged
+        /// separately and merged by id.
         /// </summary>
         private ObjectiveRefinementSessionDetail MergeWithLive(ObjectiveRefinementSessionDetail incoming)
         {
             ObjectiveRefinementSessionDetail? current = Detail;
             if (current == null || current.Session.Id != incoming.Session.Id) return incoming;
-            Dictionary<string, ObjectiveRefinementMessage> byId = new Dictionary<string, ObjectiveRefinementMessage>(StringComparer.Ordinal);
-            foreach (ObjectiveRefinementMessage m in incoming.Messages) byId[m.Id] = m;
-            foreach (ObjectiveRefinementMessage m in current.Messages)
-            {
-                if (!byId.TryGetValue(m.Id, out ObjectiveRefinementMessage? other) || m.LastUpdateUtc > other.LastUpdateUtc) byId[m.Id] = m;
-            }
-
-            incoming.Messages = byId.Values.OrderBy(m => m.Sequence).ToList();
             if (current.Session.LastUpdateUtc > incoming.Session.LastUpdateUtc) incoming.Session = current.Session;
             return incoming;
         }
 
         private void ShowDetail(ObjectiveRefinementSessionDetail? detail)
         {
+            bool sameSession = detail != null && Detail != null && Detail.Session.Id == detail.Session.Id;
+            if (!sameSession)
+            {
+                _Messages = new List<ObjectiveRefinementMessage>();
+                _NextOlderPage = 2;
+                MessageTotal = 0;
+            }
+
             Detail = detail;
-            if (detail != null) _SelectedSessionId = detail.Session.Id;
-            Transcript.SetMessages(detail?.Messages);
+            if (detail != null)
+            {
+                _SelectedSessionId = detail.Session.Id;
+                MessageTotal = Math.Max(detail.MessageCount, _Messages.Count);
+                LoadNewestMessages(detail.Session.Id);
+            }
+
+            Transcript.SetMessages(detail != null ? _Messages : null);
             Transcript.Visible = detail != null;
             Composer.Visible = detail != null && CanManage;
             _TranscriptButtons.Visible = detail != null;
@@ -1128,12 +1245,10 @@ namespace Armada.Tui.Screens.Operations
                     RefinementSessionEvent? e = message.GetData<RefinementSessionEvent>();
                     if (e == null || String.IsNullOrEmpty(e.SessionId) || e.ObjectiveId != o.Id || e.Message == null) return;
                     if (Detail == null || Detail.Session.Id != e.SessionId) return;
-                    int idx = Detail.Messages.FindIndex(m => m.Id == e.Message.Id);
-                    if (idx >= 0) Detail.Messages[idx] = e.Message;
-                    else Detail.Messages.Add(e.Message);
-                    Detail.Messages = Detail.Messages.OrderBy(m => m.Sequence).ToList();
-                    Transcript.SetMessages(Detail.Messages);
-                    if (Transcript.SelectedId.Length == 0) ShowDetail(Detail);
+                    bool known = _Messages.Any(m => m.Id == e.Message.Id);
+                    MergeMessages(new List<ObjectiveRefinementMessage> { e.Message });
+                    if (!known) MessageTotal = Math.Max(MessageTotal + 1, _Messages.Count);
+                    RefreshTranscript();
                     return;
                 }
 
@@ -1158,8 +1273,7 @@ namespace Armada.Tui.Screens.Operations
                 {
                     RefinementSessionEvent? e = message.GetData<RefinementSessionEvent>();
                     if (e == null || String.IsNullOrEmpty(e.SessionId) || e.ObjectiveId != o.Id) return;
-                    _SessionList = _SessionList.Where(s => s.Id != e.SessionId).ToList();
-                    Sessions.SetLocalRows(_SessionList);
+                    Sessions.Reload();
                     if (_SelectedSessionId == e.SessionId)
                     {
                         _SelectedSessionId = "";

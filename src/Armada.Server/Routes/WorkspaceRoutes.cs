@@ -19,19 +19,12 @@ namespace Armada.Server.Routes
     /// </summary>
     public class WorkspaceRoutes
     {
-        private static readonly Regex _ScopedFilesDirectiveRegex =
-            new Regex(@"^\s*(?:Touch|Edit|Modify)\s+only\s+(?<files>.+)$",
-                RegexOptions.IgnoreCase | RegexOptions.Multiline | RegexOptions.Compiled);
-        private static readonly Regex _ScopedFileTokenRegex =
-            new Regex(
-                @"(?<path>(?:[A-Za-z0-9_.-]+[\\/])+[A-Za-z0-9_.-]+|[A-Za-z0-9_.-]+\.(?:cs|csproj|sln|md|json|yaml|yml|ts|tsx|js|jsx|css|html|sh|bat))",
-                RegexOptions.IgnoreCase | RegexOptions.Compiled);
-
         private readonly DatabaseDriver _database;
         private readonly IWorkspaceService _workspace;
         private readonly JsonSerializerOptions _jsonOptions;
         private readonly VesselHostResolver _hosts;
         private readonly WorkspaceTerminalService _terminals;
+        private readonly WorkspaceActiveMissionReader _activeMissions;
 
         /// <summary>
         /// Instantiate.
@@ -51,6 +44,7 @@ namespace Armada.Server.Routes
             _jsonOptions = jsonOptions ?? throw new ArgumentNullException(nameof(jsonOptions));
             _hosts = hosts ?? new VesselHostResolver(database, new Armada.Core.Settings.ArmadaSettings(), new SyslogLogging.LoggingModule { Settings = { EnableConsole = false } }, null);
             _terminals = new WorkspaceTerminalService(_hosts);
+            _activeMissions = new WorkspaceActiveMissionReader(database);
         }
 
         /// <summary>
@@ -84,7 +78,9 @@ namespace Armada.Server.Routes
                 try
                 {
                     string? path = req.Query.GetValueOrDefault("path");
-                    return await _workspace.GetTreeAsync(await _hosts.ResolveAsync(vessel, ctx.UserId).ConfigureAwait(false), path).ConfigureAwait(false);
+                    EnumerationQuery page = new EnumerationQuery();
+                    page.ApplyQuerystringOverrides(key => req.Query.GetValueOrDefault(key));
+                    return await _workspace.GetTreeAsync(await _hosts.ResolveAsync(vessel, ctx.UserId).ConfigureAwait(false), path, page).ConfigureAwait(false);
                 }
                 catch (Exception ex) when (TryMapWorkspaceException(req, ex, out ApiErrorResponse error))
                 {
@@ -94,9 +90,11 @@ namespace Armada.Server.Routes
             api => api
                 .WithTag("Workspace")
                 .WithSummary("List one workspace directory")
-                .WithDescription("Returns one directory of the vessel working tree with direct child files and folders.")
+                .WithDescription("Returns one page of one directory of the vessel working tree: direct child folders first, then files, each by name. The page is cut on the host that has the checkout (the Admiral or a Harbor); PageNumber, PageSize, TotalPages, and TotalRecords describe the whole directory.")
                 .WithParameter(OpenApiParameterMetadata.Path("vesselId", "Vessel ID (vsl_ prefix)"))
                 .WithParameter(OpenApiParameterMetadata.Query("path", "Optional repository-relative directory path", false))
+                .WithParameter(OpenApiParameterMetadata.Query("pageNumber", "Page number (default 1)", false))
+                .WithParameter(OpenApiParameterMetadata.Query("pageSize", "Page size, 1 to 1000 (default 10)", false))
                 .WithResponse(200, OpenApiJson.For<WorkspaceTreeResult>("Workspace directory listing"))
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())
                 .WithSecurity("ApiKey"));
@@ -463,7 +461,9 @@ namespace Armada.Server.Routes
 
                 try
                 {
-                    return await _workspace.GetChangesAsync(await _hosts.ResolveAsync(vessel, ctx.UserId).ConfigureAwait(false)).ConfigureAwait(false);
+                    EnumerationQuery page = new EnumerationQuery();
+                    page.ApplyQuerystringOverrides(key => req.Query.GetValueOrDefault(key));
+                    return await _workspace.GetChangesAsync(await _hosts.ResolveAsync(vessel, ctx.UserId).ConfigureAwait(false), page).ConfigureAwait(false);
                 }
                 catch (Exception ex) when (TryMapWorkspaceException(req, ex, out ApiErrorResponse error))
                 {
@@ -473,8 +473,10 @@ namespace Armada.Server.Routes
             api => api
                 .WithTag("Workspace")
                 .WithSummary("Get workspace changes")
-                .WithDescription("Returns branch status and changed files from the vessel working tree.")
+                .WithDescription("Returns branch status and one page of changed files (git status order) from the vessel working tree. git status has no paging, so the whole status is read and the page is cut from it; PageNumber, PageSize, TotalPages, and TotalRecords describe every changed file.")
                 .WithParameter(OpenApiParameterMetadata.Path("vesselId", "Vessel ID (vsl_ prefix)"))
+                .WithParameter(OpenApiParameterMetadata.Query("pageNumber", "Page number (default 1)", false))
+                .WithParameter(OpenApiParameterMetadata.Query("pageSize", "Page size, 1 to 1000 (default 10)", false))
                 .WithResponse(200, OpenApiJson.For<WorkspaceChangesResult>("Workspace change summary"))
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())
                 .WithSecurity("ApiKey"));
@@ -493,11 +495,11 @@ namespace Armada.Server.Routes
 
                 try
                 {
-                    List<WorkspaceActiveMission> activeMissions = await GetActiveMissionSummariesAsync(ctx, vessel.Id).ConfigureAwait(false);
+                    int activeMissionCount = await _activeMissions.CountAsync(ctx.IsAdmin ? null : ctx.TenantId, vessel.Id).ConfigureAwait(false);
                     VesselHostResolution resolution = await _hosts.TryResolveAsync(vessel, ctx.UserId).ConfigureAwait(false);
                     if (resolution.Host == null)
-                        return WorkspaceService.Unavailable(vessel, activeMissions, resolution.Message ?? "No working directory configured or directory does not exist.", vessel.WorkingDirectory);
-                    return await _workspace.GetStatusAsync(resolution.Host, activeMissions).ConfigureAwait(false);
+                        return WorkspaceService.Unavailable(vessel, activeMissionCount, resolution.Message ?? "No working directory configured or directory does not exist.", vessel.WorkingDirectory);
+                    return await _workspace.GetStatusAsync(resolution.Host, activeMissionCount).ConfigureAwait(false);
                 }
                 catch (Exception ex) when (TryMapWorkspaceException(req, ex, out ApiErrorResponse error))
                 {
@@ -507,9 +509,72 @@ namespace Armada.Server.Routes
             api => api
                 .WithTag("Workspace")
                 .WithSummary("Get workspace status")
-                .WithDescription("Returns high-level workspace status, git branch state, and active mission overlap context.")
+                .WithDescription("Returns high-level workspace status, git branch state, and the number of active missions (ActiveMissionCount). The active missions and their scoped files are paged with GET /api/v1/workspace/vessels/{vesselId}/active-missions.")
                 .WithParameter(OpenApiParameterMetadata.Path("vesselId", "Vessel ID (vsl_ prefix)"))
                 .WithResponse(200, OpenApiJson.For<WorkspaceStatusResult>("Workspace status"))
+                .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithSecurity("ApiKey"));
+
+            app.Get("/api/v1/workspace/vessels/{vesselId}/active-missions", async (ApiRequest req) =>
+            {
+                AuthContext? ctx = await AuthorizeAsync(req, authenticate, authz).ConfigureAwait(false);
+                if (ctx == null) return BuildAuthError(req);
+
+                Vessel? vessel = await ReadVesselForContextAsync(ctx, req.Parameters["vesselId"]).ConfigureAwait(false);
+                if (vessel == null)
+                {
+                    req.Http.Response.StatusCode = 404;
+                    return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Vessel not found" };
+                }
+
+                EnumerationQuery query = new EnumerationQuery();
+                query.ApplyQuerystringOverrides(key => req.Query.GetValueOrDefault(key));
+                return await _activeMissions.EnumerateAsync(ctx.IsAdmin ? null : ctx.TenantId, vessel.Id, query).ConfigureAwait(false);
+            },
+            api => api
+                .WithTag("Workspace")
+                .WithSummary("List workspace active missions")
+                .WithDescription("One page of the vessel's active missions (Pending, Assigned, InProgress, Review, Testing), newest first, each with the scoped files parsed from its description (at most 256; ScopedFileCount is the full count). Read from the database one bounded page per status. Querystring: pageNumber (default 1), pageSize (1 to 1000, default 10).")
+                .WithParameter(OpenApiParameterMetadata.Path("vesselId", "Vessel ID (vsl_ prefix)"))
+                .WithParameter(OpenApiParameterMetadata.Query("pageNumber", "Page number (default 1)", false))
+                .WithParameter(OpenApiParameterMetadata.Query("pageSize", "Page size, 1 to 1000 (default 10)", false))
+                .WithResponse(200, OpenApiJson.For<EnumerationResult<WorkspaceActiveMission>>("Active missions"))
+                .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithSecurity("ApiKey"));
+
+            app.Post("/api/v1/workspace/vessels/{vesselId}/active-missions/enumerate", async (ApiRequest req) =>
+            {
+                AuthContext? ctx = await AuthorizeAsync(req, authenticate, authz).ConfigureAwait(false);
+                if (ctx == null) return BuildAuthError(req);
+
+                Vessel? vessel = await ReadVesselForContextAsync(ctx, req.Parameters["vesselId"]).ConfigureAwait(false);
+                if (vessel == null)
+                {
+                    req.Http.Response.StatusCode = 404;
+                    return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Vessel not found" };
+                }
+
+                EnumerationQuery query;
+                try
+                {
+                    query = EnumerationRequestReader.Read(req, _jsonOptions);
+                }
+                catch (JsonException ex)
+                {
+                    req.Http.Response.StatusCode = 400;
+                    return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Request body is not valid: " + ex.Message };
+                }
+
+                return await _activeMissions.EnumerateAsync(ctx.IsAdmin ? null : ctx.TenantId, vessel.Id, query).ConfigureAwait(false);
+            },
+            api => api
+                .WithTag("Workspace")
+                .WithSummary("Enumerate workspace active missions")
+                .WithDescription("POST form of GET /api/v1/workspace/vessels/{vesselId}/active-missions: the EnumerationQuery (pageNumber, pageSize) comes from the body, and querystring values override it.")
+                .WithParameter(OpenApiParameterMetadata.Path("vesselId", "Vessel ID (vsl_ prefix)"))
+                .WithRequestBody(OpenApiJson.BodyFor<EnumerationQuery>("Paging query", false))
+                .WithResponse(200, OpenApiJson.For<EnumerationResult<WorkspaceActiveMission>>("Active missions"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())
                 .WithSecurity("ApiKey"));
         }
@@ -559,59 +624,6 @@ namespace Armada.Server.Routes
             if (ctx.IsAdmin) return await _database.Vessels.ReadAsync(vesselId).ConfigureAwait(false);
             if (ctx.IsTenantAdmin) return await _database.Vessels.ReadAsync(ctx.TenantId!, vesselId).ConfigureAwait(false);
             return await _database.Vessels.ReadAsync(ctx.TenantId!, ctx.UserId!, vesselId).ConfigureAwait(false);
-        }
-
-        private async Task<List<WorkspaceActiveMission>> GetActiveMissionSummariesAsync(AuthContext ctx, string vesselId)
-        {
-            List<Mission> missions = ctx.IsAdmin
-                ? await _database.Missions.EnumerateByVesselAsync(vesselId).ConfigureAwait(false)
-                : await _database.Missions.EnumerateByVesselAsync(ctx.TenantId!, vesselId).ConfigureAwait(false);
-
-            return missions
-                .Where(IsActiveMission)
-                .OrderByDescending(mission => mission.LastUpdateUtc)
-                .Select(mission => new WorkspaceActiveMission
-                {
-                    MissionId = mission.Id,
-                    Title = mission.Title ?? String.Empty,
-                    Status = mission.Status.ToString(),
-                    ScopedFiles = ParseMissionScopedFiles(mission.Description ?? String.Empty).ToList()
-                })
-                .ToList();
-        }
-
-        private static bool IsActiveMission(Mission mission)
-        {
-            return mission.Status == MissionStatusEnum.Pending
-                || mission.Status == MissionStatusEnum.Assigned
-                || mission.Status == MissionStatusEnum.InProgress
-                || mission.Status == MissionStatusEnum.Review
-                || mission.Status == MissionStatusEnum.Testing;
-        }
-
-        private static HashSet<string> ParseMissionScopedFiles(string description)
-        {
-            HashSet<string> files = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            if (String.IsNullOrWhiteSpace(description))
-                return files;
-
-            foreach (Match directiveMatch in _ScopedFilesDirectiveRegex.Matches(description))
-            {
-                string fileSegment = directiveMatch.Groups["files"].Value;
-                foreach (Match pathMatch in _ScopedFileTokenRegex.Matches(fileSegment))
-                {
-                    string normalizedPath = NormalizeMissionPath(pathMatch.Groups["path"].Value);
-                    if (!String.IsNullOrWhiteSpace(normalizedPath))
-                        files.Add(normalizedPath);
-                }
-            }
-
-            return files;
-        }
-
-        private static string NormalizeMissionPath(string path)
-        {
-            return (path ?? String.Empty).Trim().Replace('\\', '/');
         }
 
         private static bool TryMapWorkspaceException(ApiRequest req, Exception ex, out ApiErrorResponse error)

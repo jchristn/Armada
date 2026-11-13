@@ -21,6 +21,13 @@ namespace Armada.Server
         [JsonPropertyName("description")]
         public string? Description { get; set; } = null;
 
+        /// <summary>
+        /// Optional missions of a multi-mission draft: key, parentKey, title, description and ownedPaths each.
+        /// </summary>
+        [JsonPropertyName("missions")]
+        [Armada.Core.Services.CollectionBound(Armada.Core.Services.CollectionLimits.MaxRequestItems)]
+        public List<Armada.Core.Models.PlanningDraftMission>? Missions { get; set; } = null;
+
         #endregion
     }
 }

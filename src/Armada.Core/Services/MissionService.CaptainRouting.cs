@@ -42,12 +42,6 @@ namespace Armada.Core.Services
             return authors;
         }
 
-        private async Task<bool> IsAnyCaptainEligibleAsync(List<Captain> idleCaptains, Mission mission, CancellationToken token)
-        {
-            CaptainEligibilityContext context = await BuildCaptainEligibilityContextAsync(mission, token).ConfigureAwait(false);
-            return idleCaptains.Any(c => CaptainIneligibilityReason(c, mission, context) == null);
-        }
-
         /// <summary>
         /// Why an idle captain may not take a mission, or null when it may. Uses the same rules as the assignment
         /// blocker's eligibility check, so the two cannot disagree.
@@ -61,6 +55,8 @@ namespace Armada.Core.Services
         {
             if (captain == null) throw new ArgumentNullException(nameof(captain));
             if (mission == null) throw new ArgumentNullException(nameof(mission));
+            mission = mission.AdmissionView();
+            await ResolvePreferredCaptainAsync(mission, token, persist: false).ConfigureAwait(false);
             CaptainEligibilityContext context = await BuildCaptainEligibilityContextAsync(mission, token).ConfigureAwait(false);
             return CaptainIneligibilityReason(captain, mission, context);
         }
@@ -69,37 +65,55 @@ namespace Armada.Core.Services
         {
             CaptainEligibilityContext context = new CaptainEligibilityContext();
             context.RoutingPersona = RoutingPersona(mission);
+            if (!String.IsNullOrEmpty(mission.RequestedCaptainId))
+            {
+                Captain? requested = await _Database.Captains.ReadAsync(mission.RequestedCaptainId, token).ConfigureAwait(false);
+                context.InactiveRequestedCaptain = requested?.Active == false;
+            }
             // Review authors only change eligibility when they are excluded; otherwise they are merely less preferred.
             if (_Settings.ExcludeReviewAuthorsFromJudge)
                 context.ExcludedAuthors = await ReviewAuthorCaptainIdsAsync(mission, token).ConfigureAwait(false);
             context.EscalatedToRequestedCaptain = !String.IsNullOrEmpty(mission.RequestedCaptainId) && (IntegrationBarrier.IsEscalatedRework(mission)
                 || (mission.Description ?? "").Contains("## Escalated to ", StringComparison.Ordinal));
+            context.UsageFallbackAuthorized = _Settings.EffectiveUsageSelection.Mode == UsageSelectionModeEnum.Enforce && mission.UsageRecovery?.AllowFallback == true;
+            context.UsageFallbackRequired = _Settings.EffectiveUsageSelection.Mode == UsageSelectionModeEnum.Enforce
+                && !String.IsNullOrEmpty(mission.RequestedCaptainId) && mission.UsageRecovery?.AllowFallback != true;
             context.StrictCaptainOverride = await HasStrictCaptainOverrideAsync(mission, token).ConfigureAwait(false);
             if (String.IsNullOrEmpty(mission.RequestedCaptainId))
             {
                 context.DefaultCaptainId = await PersonaDefaultCaptainIdAsync(mission, context.RoutingPersona, token).ConfigureAwait(false);
                 context.Persona = await ReadPersonaByNameAsync(mission.TenantId, context.RoutingPersona, token, mission.UserId).ConfigureAwait(false);
             }
+            context.EnvelopeGate = await BuildWorkerEnvelopeGateAsync(mission, token).ConfigureAwait(false);
             return context;
         }
 
         private static string? CaptainIneligibilityReason(Captain captain, Mission mission, CaptainEligibilityContext context)
+            => EvaluateCaptainIneligibility(captain, mission, context)?.Summary;
+
+        private static CaptainEligibilityFailure? EvaluateCaptainIneligibility(Captain captain, Mission mission, CaptainEligibilityContext context)
         {
-            // Mirrors FindAvailableCaptainAsync: a requested (dictated) captain that is idle is always eligible, as is the
-            // persona's default captain; otherwise the persona fence, the tier floor and the persona's priorities apply.
-            if (context.ExcludedAuthors.Contains(captain.Id)) return "authored an earlier stage";
-            if (!CaptainVisibleToMission(captain, mission)) return "belongs to another tenant or user";
-            if (captain.QuarantineUntilUtc.HasValue && captain.QuarantineUntilUtc > DateTime.UtcNow) return "quarantined";
+            CaptainEligibilityFailure Failure(string code, string summary) => new CaptainEligibilityFailure { Code = code, Summary = summary };
+            // The selector, diagnostics and repair admission all apply this predicate. Requested and persona-default
+            // captains bypass the ordinary persona/tier fence; safety, scope, authorship and envelopes still apply.
+            if (context.InactiveRequestedCaptain && (!context.UsageFallbackAuthorized || captain.Id == mission.RequestedCaptainId)) return Failure("RequestedCaptainInactive", "requested captain is inactive; enable Active before assigning new work");
+            if (!captain.Active) return Failure("CaptainInactive", "inactive; enable Active before assigning new work");
+            if (context.ExcludedAuthors.Contains(captain.Id)) return Failure("ReviewAuthorExcluded", "authored an earlier stage");
+            if (!CaptainVisibleToMission(captain, mission)) return Failure("CaptainScopeMismatch", "belongs to another tenant or user");
+            if (captain.QuarantineUntilUtc.HasValue && captain.QuarantineUntilUtc > DateTime.UtcNow) return Failure(UsageQuotaHold.IsQuotaOwned(captain.QuarantineReason) ? "AccountQuotaExhausted" : "CaptainQuarantined", "quarantined");
+            if (context.EnvelopeGate != null && context.EnvelopeGate.Exclusions.TryGetValue(captain.Id, out string? envelopeReason)) return Failure("WorkerEnvelopeIncompatible", envelopeReason);
             if (!String.IsNullOrEmpty(mission.RequestedCaptainId) && captain.Id == mission.RequestedCaptainId) return null;
-            if (context.EscalatedToRequestedCaptain) return "escalated to another captain";
-            if (context.StrictCaptainOverride) return "the voyage requires another captain";
+            if (context.EscalatedToRequestedCaptain) return Failure("RequestedCaptainEscalation", "escalated to another captain");
+            if (context.StrictCaptainOverride) return Failure("StrictCaptainOverride", "the voyage requires another captain");
+            if (context.UsageFallbackRequired) return Failure("FallbackPermissionRequired", "preferred captain fallback requires administrator authorization");
             if (context.DefaultCaptainId != null && captain.Id == context.DefaultCaptainId) return null;
-            if (!String.IsNullOrEmpty(captain.AllowedPersonas) && !CaptainAllowsPersona(captain, context.RoutingPersona)) return "persona not allowed";
-            if (mission.Tier.HasValue && !CaptainTierSelector.CanHandle(captain, mission.Tier.Value)) return "tier below " + mission.Tier.Value;
+            if (!String.IsNullOrEmpty(captain.AllowedPersonas) && !CaptainAllowsPersona(captain, context.RoutingPersona)) return Failure("PersonaNotAllowed", "persona not allowed");
+            if (mission.Tier.HasValue && !CaptainTierSelector.CanHandle(captain, mission.Tier.Value)) return Failure("TierBelowRequirement", "tier below " + mission.Tier.Value);
             if (context.Persona != null && context.Persona.CaptainPriorities.Count > 0
                 && !PersonaCaptainPrioritySelector.AllowsGeneralFallback(context.Persona)
-                && PersonaCaptainPrioritySelector.Select(context.Persona, new List<Captain> { captain }) == null)
-                return "not in persona " + context.Persona.Name + "'s captain priorities";
+                && PersonaCaptainPrioritySelector.Select(context.Persona, new List<Captain> { captain }) == null
+                && !(context.EnvelopeGate != null && context.EnvelopeGate.CanEscalateTo(captain, mission)))
+                return Failure("PersonaPriorityMismatch", "not in persona " + context.Persona.Name + "'s captain priorities");
             return null;
         }
 
@@ -109,8 +123,9 @@ namespace Armada.Core.Services
         }
 
         /// <summary>
-        /// Add what each of the mission's tenant's captains is doing to a blocker. Idle captains also say whether they
-        /// may take the mission, for example "idle (not assigned: persona not allowed)".
+        /// Add what each of the mission's tenant's captains is doing to a blocker (the first
+        /// <see cref="MissionAssignmentBlocker.MaxListed"/> by name; the full count goes in CaptainCount). Idle captains
+        /// also say whether they may take the mission, for example "idle (not assigned: persona not allowed)".
         /// </summary>
         /// <param name="blocker">Blocker to add captain statuses to.</param>
         /// <param name="captains">Captains to describe.</param>
@@ -122,13 +137,17 @@ namespace Armada.Core.Services
             if (blocker == null) throw new ArgumentNullException(nameof(blocker));
             if (captains == null) throw new ArgumentNullException(nameof(captains));
             if (mission == null) throw new ArgumentNullException(nameof(mission));
+            mission = mission.AdmissionView();
+            await ResolvePreferredCaptainAsync(mission, token, persist: false).ConfigureAwait(false);
             // Only captains in the mission's tenant are described, so the explanation never names another tenant's work.
             string? tenantId = mission.TenantId;
             IEnumerable<Captain> visible = String.IsNullOrEmpty(tenantId)
                 ? captains
                 : captains.Where(c => String.Equals(c.TenantId, tenantId, StringComparison.Ordinal));
             CaptainEligibilityContext? eligibility = null;
-            foreach (Captain captain in visible.OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase))
+            List<Captain> ordered = visible.OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase).ThenBy(c => c.Id, StringComparer.Ordinal).ToList();
+            blocker.CaptainCount = ordered.Count;
+            foreach (Captain captain in ordered.Take(MissionAssignmentBlocker.MaxListed))
             {
                 MissionAssignmentCaptainStatus status = new MissionAssignmentCaptainStatus
                 {
@@ -146,23 +165,29 @@ namespace Armada.Core.Services
                         status.Detail = ineligibleReason == null ? "idle (assigned)" : "idle (not assigned: " + ineligibleReason + ")";
                         break;
                     case CaptainStateEnum.Working:
-                        status.MissionId = captain.CurrentMissionId;
-                        Mission? current = String.IsNullOrEmpty(captain.CurrentMissionId) ? null : await _Database.Missions.ReadAsync(captain.CurrentMissionId, token).ConfigureAwait(false);
+                        status.MissionId = captain.ActiveMissionIds.Count == 1 ? captain.ActiveMissionIds[0] : null;
+                        Mission? current = status.MissionId == null ? null : await _Database.Missions.ReadAsync(status.MissionId, token).ConfigureAwait(false);
                         status.Detail = current != null ? "working on mission '" + current.Title + "'" : "working on another mission";
                         break;
                     case CaptainStateEnum.Planning:
-                        PlanningSession? planning = (await _Database.PlanningSessions.EnumerateByCaptainAsync(captain.Id, token).ConfigureAwait(false))
+                        PlanningSession? planning = !String.IsNullOrEmpty(captain.CurrentSessionId)
+                            ? await _Database.PlanningSessions.ReadAsync(captain.CurrentSessionId, token).ConfigureAwait(false)
+                            : (await _Database.PlanningSessions.EnumerateByCaptainAsync(captain.Id, token).ConfigureAwait(false))
                             .Where(p => p.Status == PlanningSessionStatusEnum.Created || p.Status == PlanningSessionStatusEnum.Active || p.Status == PlanningSessionStatusEnum.Responding || p.Status == PlanningSessionStatusEnum.Stopping)
                             .OrderByDescending(p => p.LastUpdateUtc)
                             .FirstOrDefault();
+                        if (planning != null && (planning.CaptainId != captain.Id || planning.TenantId != mission.TenantId || (planning.UserId != null && planning.UserId != mission.UserId))) planning = null;
                         status.PlanningSessionId = planning?.Id;
                         status.Detail = planning != null ? "in planning session '" + planning.Title + "'" : "reserved by a planning session";
                         break;
                     case CaptainStateEnum.Refining:
-                        ObjectiveRefinementSession? refinement = (await _Database.ObjectiveRefinementSessions.EnumerateByCaptainAsync(captain.Id, token).ConfigureAwait(false))
+                        ObjectiveRefinementSession? refinement = !String.IsNullOrEmpty(captain.CurrentSessionId)
+                            ? await _Database.ObjectiveRefinementSessions.ReadAsync(captain.CurrentSessionId, token).ConfigureAwait(false)
+                            : (await _Database.ObjectiveRefinementSessions.EnumerateByCaptainAsync(captain.Id, token).ConfigureAwait(false))
                             .Where(r => r.Status == ObjectiveRefinementSessionStatusEnum.Created || r.Status == ObjectiveRefinementSessionStatusEnum.Active || r.Status == ObjectiveRefinementSessionStatusEnum.Responding || r.Status == ObjectiveRefinementSessionStatusEnum.Stopping)
                             .OrderByDescending(r => r.LastUpdateUtc)
                             .FirstOrDefault();
+                        if (refinement != null && (refinement.CaptainId != captain.Id || refinement.TenantId != mission.TenantId || (refinement.UserId != null && refinement.UserId != mission.UserId))) refinement = null;
                         status.RefinementSessionId = refinement?.Id;
                         status.ObjectiveId = refinement?.ObjectiveId;
                         Objective? objective = refinement == null || String.IsNullOrEmpty(refinement.ObjectiveId) ? null : await _Database.Objectives.ReadAsync(refinement.ObjectiveId, token).ConfigureAwait(false);
@@ -192,23 +217,32 @@ namespace Armada.Core.Services
                         break;
                 }
 
+                if (captain.State == CaptainStateEnum.Working && captain.ActiveMissionCount > 0)
+                {
+                    status.Detail = captain.ActiveMissionCount + " / " + captain.MaxConcurrency + " mission slots in use";
+                    if (captain.HasMissionCapacity)
+                    {
+                        eligibility ??= await BuildCaptainEligibilityContextAsync(mission, token).ConfigureAwait(false);
+                        string? reason = CaptainIneligibilityReason(captain, mission, eligibility);
+                        status.EligibleForMission = reason == null;
+                        status.Detail += reason == null ? " (available for this mission)" : " (not assigned: " + reason + ")";
+                    }
+                }
                 blocker.Captains.Add(status);
             }
         }
 
-        private async Task<Captain?> FindAvailableCaptainAsync(Mission mission, CancellationToken token)
+        private async Task<Captain?> FindRoutedCaptainAsync(Mission mission, WorkerEnvelopeGate? envelopeGate, CaptainAdmissionSelection selection, CancellationToken token)
         {
             string? persona = RoutingPersona(mission);
             CaptainTierEnum? requiredTier = mission.Tier;
             string? requestedCaptainId = mission.RequestedCaptainId;
-            // Only idle captains are eligible for assignment
-            List<Captain> idleCaptains = await _Database.Captains.EnumerateByStateAsync(CaptainStateEnum.Idle, token).ConfigureAwait(false);
-            idleCaptains = idleCaptains.Where(c => CaptainVisibleToMission(c, mission) &&
-                (!c.QuarantineUntilUtc.HasValue || c.QuarantineUntilUtc <= DateTime.UtcNow)).ToList();
+            CaptainEligibilityContext context = selection.Eligibility;
+            List<Captain> idleCaptains = selection.Available.Where(c => CaptainIneligibilityReason(c, mission, context) == null).ToList();
+            selection.RoutingEligible = idleCaptains.ToList();
             HashSet<string> reviewAuthors = await ReviewAuthorCaptainIdsAsync(mission, token).ConfigureAwait(false);
-            if (_Settings.ExcludeReviewAuthorsFromJudge)
-                idleCaptains.RemoveAll(c => reviewAuthors.Contains(c.Id));
-            idleCaptains = await ApplyCapacityLimitsAsync(idleCaptains, mission, token).ConfigureAwait(false);
+            idleCaptains = await ApplyCapacityLimitsAsync(idleCaptains, mission, token, selection.CapacityExclusions).ConfigureAwait(false);
+            if (envelopeGate != null) envelopeGate.IdlePool = idleCaptains;
             if (idleCaptains.Count == 0)
                 return null;
 
@@ -223,128 +257,82 @@ namespace Armada.Core.Services
                 {
                     _Logging.Info(_Header + "mission " + mission.Id + " skips " + (idleCaptains.Count - untried.Count) + " captain(s) that already failed to start it");
                     idleCaptains = untried;
+                    if (envelopeGate != null) envelopeGate.IdlePool = idleCaptains;
                 }
             }
 
-            // Preferred (dictated) captain: honor it when it is idle, bypassing the AllowedPersonas fence and
-            // tier routing since the operator explicitly chose it. When it is busy (or has been deleted), fall
-            // through to persona/tier routing using requiredTier as the fallback tier.
+            List<CaptainRoutingBucket> groups = selection.RoutingBuckets;
+            HashSet<string> grouped = new HashSet<string>(StringComparer.Ordinal);
+            void AddGroup(string reason, IEnumerable<Captain> captains)
+            {
+                List<Captain> members = captains.Where(c => grouped.Add(c.Id)).ToList();
+                if (members.Count > 0) groups.Add(new CaptainRoutingBucket { ReasonCode = reason, Captains = members });
+            }
+            void AddGeneral(IEnumerable<Captain> captains)
+            {
+                foreach (CaptainRoutingBucket group in BuildGeneralRoutingBuckets(mission, persona, requiredTier, requestedCaptainId,
+                    captains.Where(c => !grouped.Contains(c.Id)).ToList(), context)) AddGroup(group.ReasonCode, group.Captains);
+            }
+
             if (!String.IsNullOrEmpty(requestedCaptainId))
             {
-                Captain? preferred = idleCaptains.FirstOrDefault(c => c.Id == requestedCaptainId);
-                if (preferred != null)
-                    return preferred;
-
-                // Recovery must wait for its chosen alternative, never silently rerun the failed captain.
-                if (IntegrationBarrier.IsEscalatedRework(mission) || (mission.Description ?? "").Contains("## Escalated to ", StringComparison.Ordinal)) return null;
-                if (await HasStrictCaptainOverrideAsync(mission, token).ConfigureAwait(false)) return null;
-                Captain? requested = await _Database.Captains.ReadAsync(requestedCaptainId, token).ConfigureAwait(false);
-                if (requested == null)
-                    _Logging.Warn(_Header + "requested captain " + requestedCaptainId + " not found; falling back to normal persona/tier routing");
-                else
-                    _Logging.Info(_Header + "requested captain " + requestedCaptainId + " is busy; falling back by tier for this dispatch tick");
+                AddGroup("RequestedCaptain", idleCaptains.Where(c => c.Id == requestedCaptainId));
+                // Strict and recovery assignments have no fallback buckets, including when their captain is absent.
+                if (IntegrationBarrier.IsEscalatedRework(mission) || (mission.Description ?? "").Contains("## Escalated to ", StringComparison.Ordinal)
+                    || await HasStrictCaptainOverrideAsync(mission, token).ConfigureAwait(false))
+                    return groups.FirstOrDefault()?.Captains.FirstOrDefault();
             }
+            else if (context.DefaultCaptainId != null)
+                AddGroup("PersonaDefaultCaptain", idleCaptains.Where(c => c.Id == context.DefaultCaptainId));
 
-            // A persona's default captain is preferred when idle, like a requested captain, but is never persisted, so
-            // when it is busy the mission falls through to normal routing with no tier floor taken from it.
-            if (String.IsNullOrEmpty(requestedCaptainId))
-            {
-                string? defaultCaptainId = await PersonaDefaultCaptainIdAsync(mission, persona, token).ConfigureAwait(false);
-                Captain? personaDefault = defaultCaptainId == null ? null : idleCaptains.FirstOrDefault(c => c.Id == defaultCaptainId);
-                if (personaDefault != null) return personaDefault;
-            }
-
-            // With review authors not excluded, a Judge still prefers a captain that did not author the work it reviews
-            // and falls back to an author only when routing finds no other captain.
             if (reviewAuthors.Count > 0 && !_Settings.ExcludeReviewAuthorsFromJudge)
-            {
-                List<Captain> independent = idleCaptains.Where(c => !reviewAuthors.Contains(c.Id)).ToList();
-                if (independent.Count > 0 && independent.Count < idleCaptains.Count)
-                {
-                    Captain? reviewer = await SelectRoutedCaptainAsync(mission, persona, requiredTier, requestedCaptainId, independent, token).ConfigureAwait(false);
-                    if (reviewer != null) return reviewer;
-                    _Logging.Info(_Header + "judge mission " + mission.Id + " has no eligible captain besides the authors of the reviewed work; an author reviews it");
-                }
-            }
-
-            return await SelectRoutedCaptainAsync(mission, persona, requiredTier, requestedCaptainId, idleCaptains, token).ConfigureAwait(false);
+                AddGeneral(idleCaptains.Where(c => !reviewAuthors.Contains(c.Id)));
+            AddGeneral(idleCaptains);
+            return groups.FirstOrDefault()?.Captains.FirstOrDefault();
         }
 
-        private async Task<Captain?> SelectRoutedCaptainAsync(Mission mission, string? persona, CaptainTierEnum? requiredTier, string? requestedCaptainId, List<Captain> idleCaptains, CancellationToken token)
+        private static List<CaptainRoutingBucket> BuildGeneralRoutingBuckets(Mission mission, string? persona, CaptainTierEnum? requiredTier,
+            string? requestedCaptainId, List<Captain> candidates, CaptainEligibilityContext context)
         {
-            // Filter by AllowedPersonas (null persona = any; null AllowedPersonas = fills any persona).
-            List<Captain> eligible;
-            if (String.IsNullOrEmpty(persona))
+            List<CaptainRoutingBucket> groups = new List<CaptainRoutingBucket>();
+            HashSet<string> grouped = new HashSet<string>(StringComparer.Ordinal);
+            void Add(string reason, IEnumerable<Captain> source, bool priority)
             {
-                eligible = new List<Captain>(idleCaptains);
-            }
-            else
-            {
-                eligible = new List<Captain>();
-                foreach (Captain captain in idleCaptains)
+                List<Captain> available = source.Where(c => !grouped.Contains(c.Id)).ToList();
+                // Priority definitions use active count then ID, whereas general routing also uses last update.
+                foreach (bool preferred in new[] { true, false })
                 {
-                    if (String.IsNullOrEmpty(captain.AllowedPersonas) || CaptainAllowsPersona(captain, persona))
-                        eligible.Add(captain);
+                    IEnumerable<Captain> pool = available.Where(c => (!String.IsNullOrEmpty(persona) && PersonaCatalog.Matches(c.PreferredPersona, persona)) == preferred);
+                    List<Captain> ordered = priority
+                        ? pool.OrderBy(c => c.ActiveMissionCount).ThenBy(c => c.Id, StringComparer.Ordinal).ToList()
+                        : pool.OrderBy(c => c.ActiveMissionCount).ThenBy(c => c.LastUpdateUtc).ThenBy(c => c.Id, StringComparer.Ordinal).ToList();
+                    if (ordered.Count == 0) continue;
+                    foreach (Captain captain in ordered) grouped.Add(captain.Id);
+                    groups.Add(new CaptainRoutingBucket { ReasonCode = reason + (preferred ? "PreferredPersona" : ""), Captains = ordered });
                 }
             }
-
-            if (eligible.Count == 0)
+            if (String.IsNullOrEmpty(requestedCaptainId) && !String.IsNullOrEmpty(persona) && context.Persona != null && context.Persona.CaptainPriorities.Count > 0)
             {
-                return null;
-            }
-
-            // Hierarchies apply only when dispatch did not explicitly request a captain.
-            if (String.IsNullOrEmpty(requestedCaptainId) && !String.IsNullOrEmpty(persona))
-            {
-                Persona? definition = await ReadPersonaByNameAsync(mission.TenantId, persona, token, mission.UserId).ConfigureAwait(false);
-                if (definition != null && definition.CaptainPriorities.Count > 0)
+                Persona definition = context.Persona;
+                if (PersonaCaptainPrioritySelector.Validate(definition) != null) return groups;
+                IEnumerable<PersonaCaptainPriority> priorities = definition.PriorityAvailability == PersonaPriorityAvailabilityEnum.WaitForFirstPriority
+                    ? definition.CaptainPriorities.Take(1) : definition.CaptainPriorities;
+                int index = 0;
+                foreach (PersonaCaptainPriority priority in priorities)
                 {
-                    List<Captain> priorityEligible = eligible.Where(c => !requiredTier.HasValue ||
-                        CaptainTierSelector.CanHandle(c, requiredTier.Value)).ToList();
-                    Captain? selected = PersonaCaptainPrioritySelector.Select(definition, priorityEligible);
-                    if (selected != null)
-                    {
-                        int matchedIndex = definition.CaptainPriorities.FindIndex(p => PersonaCaptainPrioritySelector.Matches(p, selected));
-                        _Logging.Info(_Header + "persona " + persona + " selected captain " + selected.Id +
-                            " at priority " + (matchedIndex + 1));
-                        return selected;
-                    }
-                    if (!PersonaCaptainPrioritySelector.AllowsGeneralFallback(definition)) return null;
+                    Add("PersonaPriority" + (++index), candidates.Where(c => c.Active && PersonaCaptainPrioritySelector.Matches(priority, c)
+                        && (!requiredTier.HasValue || CaptainTierSelector.CanHandle(c, requiredTier.Value))), true);
                 }
+                if (!PersonaCaptainPrioritySelector.AllowsGeneralFallback(definition)) return groups;
             }
-
-            // Tier routing -- only when the mission explicitly requires a tier (so default dispatch is
-            // unchanged). Narrow to captains at/above the required tier, preferring the lowest eligible
-            // tier so strong captains are not consumed by cheaper work (upward-only fallback).
             if (requiredTier.HasValue)
             {
-                List<Captain> tierEligible = eligible
-                    .Where(c => CaptainTierSelector.CanHandle(c, requiredTier.Value))
-                    .ToList();
-                if (tierEligible.Count == 0)
-                {
-                    // No idle captain is strong enough for this mission's tier; leave it pending.
-                    return null;
-                }
-                CaptainTierEnum bestTier = tierEligible.Min(CaptainTierSelector.EffectiveTier);
-                eligible = tierEligible.Where(c => CaptainTierSelector.EffectiveTier(c) == bestTier).ToList();
+                foreach (CaptainTierEnum tier in candidates.Where(c => CaptainTierSelector.CanHandle(c, requiredTier.Value))
+                    .Select(CaptainTierSelector.EffectiveTier).Distinct().OrderBy(t => t))
+                    Add("Tier" + tier, candidates.Where(c => CaptainTierSelector.EffectiveTier(c) == tier), false);
             }
-
-            // Prefer captains whose PreferredPersona matches
-            if (!String.IsNullOrEmpty(persona))
-            {
-                foreach (Captain captain in eligible)
-                {
-                    if (!String.IsNullOrEmpty(captain.PreferredPersona) &&
-                        PersonaCatalog.Matches(captain.PreferredPersona, persona))
-                    {
-                        return captain;
-                    }
-                }
-            }
-
-            // No preferred match -- return first eligible
-            return eligible[0];
+            else Add("EligibleCaptain", candidates, false);
+            return groups;
         }
 
         /// <summary>
@@ -355,7 +343,7 @@ namespace Armada.Core.Services
         /// reference is left as-is and degrades to normal routing at assignment time. Best-effort: never throws for a
         /// missing persona/voyage.
         /// </summary>
-        private async Task ResolvePreferredCaptainAsync(Mission mission, CancellationToken token)
+        private async Task ResolvePreferredCaptainAsync(Mission mission, CancellationToken token, bool persist = true)
         {
             if (mission == null) return;
             if (!String.IsNullOrEmpty(mission.RequestedCaptainId)) return;
@@ -420,7 +408,7 @@ namespace Armada.Core.Services
                 }
             }
 
-            if (changed)
+            if (changed && persist)
             {
                 mission.LastUpdateUtc = DateTime.UtcNow;
                 await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
@@ -428,16 +416,33 @@ namespace Armada.Core.Services
         }
 
         /// <summary>
-        /// The vessel's Assigned and InProgress missions, the only ones the vessel lock, broad-scope and branch checks look
+        /// The vessel's execution and verification missions, which the broad-scope and branch safety checks look
         /// at. Read by status rather than as the vessel's whole history (with its stored outputs and diffs), which every
         /// pending mission used to load on every dispatch tick (D17).
         /// </summary>
         private async Task<List<Mission>> ActiveMissionsOnVesselAsync(string vesselId, CancellationToken token)
         {
             List<Mission> active = new List<Mission>();
-            foreach (MissionStatusEnum status in new[] { MissionStatusEnum.Assigned, MissionStatusEnum.InProgress })
+            foreach (MissionStatusEnum status in new[] { MissionStatusEnum.Assigned, MissionStatusEnum.InProgress, MissionStatusEnum.Verifying })
                 active.AddRange((await _Database.Missions.EnumerateByStatusAsync(status, token).ConfigureAwait(false)).Where(m => m.VesselId == vesselId));
             return active;
+        }
+
+        private async Task<MissionAssignmentBlocker?> EvaluateGlobalAdmissionAsync(CancellationToken token)
+        {
+            int limit = _Settings.MaxConcurrentMissions;
+            if (limit == 0) return null;
+            int running = await _Database.Missions.CountExecutionSlotsAsync(token).ConfigureAwait(false);
+            if (running < limit) return null;
+            // Do not expose other tenants' mission IDs through a deployment-wide limit.
+            return MissionAdmissionEvaluator.Capacity(MissionAssignmentBlockerReasonEnum.GlobalMissionLimit,
+                "Armada", running, limit, AssignmentBlockerActionEnum.EditSettings, "settings", null, "MaxConcurrentMissions", Constants.GlobalMissionConcurrencyCeiling);
+        }
+
+        private async Task<MissionAssignmentBlocker?> EvaluateVesselAdmissionAsync(Mission mission, Vessel vessel, CancellationToken token)
+        {
+            List<MissionAdmissionSnapshot> missions = await _Database.Missions.EnumerateAdmissionSnapshotsAsync(vessel.Id, token).ConfigureAwait(false);
+            return VesselAdmission.EvaluateSnapshots(mission, vessel, missions);
         }
 
         private static List<Mission> BranchHolders(Mission mission, IEnumerable<Mission> vesselMissions)
@@ -575,10 +580,14 @@ namespace Armada.Core.Services
         {
             public string RoutingPersona { get; set; } = "";
             public HashSet<string> ExcludedAuthors { get; set; } = new HashSet<string>(StringComparer.Ordinal);
+            public bool UsageFallbackAuthorized { get; set; }
+            public bool UsageFallbackRequired { get; set; }
             public bool EscalatedToRequestedCaptain { get; set; } = false;
             public bool StrictCaptainOverride { get; set; } = false;
+            public bool InactiveRequestedCaptain { get; set; } = false;
             public string? DefaultCaptainId { get; set; } = null;
             public Persona? Persona { get; set; } = null;
+            public WorkerEnvelopeGate? EnvelopeGate { get; set; } = null;
         }
 
         #endregion

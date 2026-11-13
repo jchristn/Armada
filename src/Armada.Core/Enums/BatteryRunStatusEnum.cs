@@ -26,6 +26,11 @@ namespace Armada.Core.Enums
         /// <summary>
         /// The run stopped before finishing (for example the Admiral restarted).
         /// </summary>
-        Failed
+        Failed,
+
+        /// <summary>
+        /// Stopped before it finished (cancelled, timed out or out of budget); what finished is kept.
+        /// </summary>
+        Cancelled
     }
 }

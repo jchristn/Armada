@@ -164,7 +164,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
                 using (SqlCommand cmd = conn.CreateCommand())
                 {
                     cmd.CommandText = "SELECT * FROM releases" + whereClause
-                        + " ORDER BY COALESCE(published_utc, last_update_utc) DESC, created_utc DESC OFFSET @offset ROWS FETCH NEXT @page_size ROWS ONLY;";
+                        + " ORDER BY COALESCE(published_utc, last_update_utc) DESC, created_utc DESC, id DESC OFFSET @offset ROWS FETCH NEXT @page_size ROWS ONLY;";
                     foreach (SqlParameter parameter in parameters) cmd.Parameters.Add(CloneParameter(parameter));
                     cmd.Parameters.AddWithValue("@offset", query.Offset);
                     cmd.Parameters.AddWithValue("@page_size", pageSize);
@@ -203,7 +203,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
                 List<Release> results = new List<Release>();
                 using (SqlCommand cmd = conn.CreateCommand())
                 {
-                    cmd.CommandText = "SELECT * FROM releases" + whereClause + " ORDER BY COALESCE(published_utc, last_update_utc) DESC, created_utc DESC;";
+                    cmd.CommandText = "SELECT * FROM releases" + whereClause + " ORDER BY COALESCE(published_utc, last_update_utc) DESC, created_utc DESC, id DESC;";
                     foreach (SqlParameter parameter in parameters) cmd.Parameters.Add(CloneParameter(parameter));
                     using (SqlDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
                     {

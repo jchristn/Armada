@@ -201,7 +201,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
                 using (SqliteCommand cmd = conn.CreateCommand())
                 {
                     cmd.CommandText = "SELECT * FROM signals" + whereClause +
-                        " ORDER BY created_utc " + orderDirection +
+                        " ORDER BY created_utc " + orderDirection + ", id " + orderDirection +
                         " LIMIT " + query.PageSize + " OFFSET " + query.Offset + ";";
                     foreach (SqliteParameter p in parameters) cmd.Parameters.Add(new SqliteParameter(p.ParameterName, p.Value));
                     using (SqliteDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
@@ -381,7 +381,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
                 List<Signal> results = new List<Signal>();
                 using (SqliteCommand cmd = conn.CreateCommand())
                 {
-                    cmd.CommandText = "SELECT * FROM signals" + whereClause + " ORDER BY created_utc " + orderDirection + " LIMIT " + query.PageSize + " OFFSET " + query.Offset + ";";
+                    cmd.CommandText = "SELECT * FROM signals" + whereClause + " ORDER BY created_utc " + orderDirection + ", id " + orderDirection + " LIMIT " + query.PageSize + " OFFSET " + query.Offset + ";";
                     foreach (SqliteParameter p in parameters) cmd.Parameters.Add(new SqliteParameter(p.ParameterName, p.Value));
                     using (SqliteDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
                     {
@@ -559,7 +559,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
                 List<Signal> results = new List<Signal>();
                 using (SqliteCommand cmd = conn.CreateCommand())
                 {
-                    cmd.CommandText = "SELECT * FROM signals" + whereClause + " ORDER BY created_utc " + orderDirection + " LIMIT " + query.PageSize + " OFFSET " + query.Offset + ";";
+                    cmd.CommandText = "SELECT * FROM signals" + whereClause + " ORDER BY created_utc " + orderDirection + ", id " + orderDirection + " LIMIT " + query.PageSize + " OFFSET " + query.Offset + ";";
                     foreach (SqliteParameter p in parameters) cmd.Parameters.Add(new SqliteParameter(p.ParameterName, p.Value));
                     using (SqliteDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
                     {

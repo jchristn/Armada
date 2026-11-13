@@ -5,6 +5,7 @@ import type {
   ObjectiveKind,
   ObjectivePriority,
   ObjectiveReorderRequest,
+  ObjectiveReorderResult,
   ObjectiveStatus,
   SelectedPlaybook,
 } from '../types/models';
@@ -326,7 +327,8 @@ export function backlogRankSwap(objectives: Objective[], objectiveId: string, di
   };
 }
 
-/** Replace the reordered items (the reorder response) in a list. */
-export function applyBacklogReorder(objectives: Objective[], updated: Objective[]): Objective[] {
-  return objectives.map((objective) => updated.find((item) => item.id === objective.id) || objective);
+/** Apply the ranks a reorder returned (one item per objective it changed) to a list. */
+export function applyBacklogReorder(objectives: Objective[], result: ObjectiveReorderResult | null | undefined): Objective[] {
+  const ranks = new Map<string, number>((result?.items ?? []).map((item) => [item.objectiveId, item.rank]));
+  return objectives.map((objective) => (ranks.has(objective.id) ? { ...objective, rank: ranks.get(objective.id)! } : objective));
 }

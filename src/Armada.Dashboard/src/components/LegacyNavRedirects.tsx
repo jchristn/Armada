@@ -1,4 +1,5 @@
 import { Navigate, useLocation, useParams } from 'react-router-dom';
+import { BLACKBOX_SECTION_PARAM } from '../lib/navTargets';
 
 /**
  * Redirects for pages that became hub tabs (v1.2.0 nav consolidation). Plain `<Navigate>` drops the query string and
@@ -28,4 +29,26 @@ export function PlanningRedirect() {
   if (id) next.set('session', id);
   params.forEach((value, key) => next.set(key, value));
   return <Navigate to={`/dispatch?${next.toString()}`} state={location.state} replace />;
+}
+
+/** `/blackbox[?tab=fingerprints&vesselId=...]` -> Missions > Black Box; the old `tab` becomes `bbtab`, filters are kept. */
+export function BlackBoxRedirect() {
+  const location = useLocation();
+  const params = new URLSearchParams(location.search);
+  const section = params.get('tab');
+  params.delete('tab');
+  const next = new URLSearchParams({ tab: 'blackbox' });
+  if (section) next.set(BLACKBOX_SECTION_PARAM, section);
+  params.forEach((value, key) => { if (!next.has(key)) next.set(key, value); });
+  return <Navigate to={`/missions?${next.toString()}`} state={location.state} replace />;
+}
+
+/** Retired list URLs retain filters, hashes and navigation state while opening their canonical hub. */
+export function LegacyPageRedirect({ to }: { to: string }) {
+  const location = useLocation();
+  const target = new URL(to, 'https://dashboard.invalid');
+  const params = new URLSearchParams(location.search);
+  target.searchParams.forEach((value, key) => params.set(key, value));
+  const query = params.toString();
+  return <Navigate to={`${target.pathname}${query ? `?${query}` : ''}${target.hash || location.hash}`} state={location.state} replace />;
 }

@@ -21,8 +21,8 @@ namespace Armada.Core.Settings
         public int LargestFileLimit { get => _LargestFileLimit; set => _LargestFileLimit = Math.Clamp(value, 1, 100); }
         private int _LargestFileLimit = 20;
 
-        /// <summary>Process-local samples; default 288, range 2..2016.</summary>
-        public int HistoryCapacity { get => _HistoryCapacity; set => _HistoryCapacity = Math.Clamp(value, 2, 2016); }
+        /// <summary>Process-local samples; default 288, range 2..1000 (CollectionLimits.MaxSummaryBuckets; larger values are normalized to 1000).</summary>
+        public int HistoryCapacity { get => _HistoryCapacity; set => _HistoryCapacity = Math.Clamp(value, 2, Armada.Core.Services.CollectionLimits.MaxSummaryBuckets); }
         private int _HistoryCapacity = 288;
 
         /// <summary>Maximum reported locations per host; default 1000, range 10..5000.</summary>

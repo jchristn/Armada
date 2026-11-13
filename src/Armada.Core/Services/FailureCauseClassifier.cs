@@ -135,12 +135,15 @@ namespace Armada.Core.Services
         /// </summary>
         /// <param name="rule">Rule.</param>
         /// <returns>Null when valid, else what is wrong.</returns>
+        /// <exception cref="CollectionLimitExceededException">Thrown when a Match list holds more than
+        /// <see cref="CollectionLimits.MaxConfigItems"/> entries.</exception>
         public static string? Validate(FailureCauseRule? rule)
         {
             if (rule == null) return "A rule is required.";
             if (String.IsNullOrWhiteSpace(rule.Name)) return "Name is required.";
             if (rule.Name.Trim().Length > 200) return "Name must be at most 200 characters.";
             if (rule.Match == null || !HasCriteria(rule.Match)) return "Match must set at least one criterion.";
+            CollectionBounds.Validate(rule);
             if (rule.Cause == FailureCauseEnum.None) return "Cause must not be None.";
             if (!Enum.IsDefined(typeof(FailureCauseEnum), rule.Cause)) return "Cause is not a known value.";
             if (!String.IsNullOrWhiteSpace(rule.Match.TextPattern))

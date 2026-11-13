@@ -1,6 +1,8 @@
 namespace Armada.Core.Models
 {
     using System.Collections.Generic;
+    using Armada.Core.Metrics;
+    using Armada.Core.Services;
 
     /// <summary>
     /// Tokens used by captains run on a Harbor over a metrics window: the token-usage records the Admiral attributed to the Harbor, aggregated per bucket and per runtime and model. Armada records token counts, not prices, so there is no cost series.
@@ -12,11 +14,13 @@ namespace Armada.Core.Models
         /// <summary>
         /// One entry per bucket, oldest first.
         /// </summary>
+        [CollectionBound(HarborMetricsRanges.MaxBucketCount, Reason = "One per window bucket; the fixed ranges produce at most 60")]
         public List<HarborTokenBucket> Buckets { get; set; } = new List<HarborTokenBucket>();
 
         /// <summary>
         /// Totals per runtime and model over the window, most tokens first.
         /// </summary>
+        [CollectionBound(HarborMetricsRanges.MaxTokenSeries, Reason = "Top series by tokens; the rest aggregated into one IsOther entry")]
         public List<HarborTokenSeries> Series { get; set; } = new List<HarborTokenSeries>();
 
         /// <summary>

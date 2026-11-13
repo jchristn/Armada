@@ -34,10 +34,11 @@ namespace Armada.Core.Services
         #region Public-Methods
 
         /// <inheritdoc />
-        public Task<WorkspaceTreeResult> GetTreeAsync(string? path, CancellationToken token = default)
+        public Task<WorkspaceTreeResult> GetTreeAsync(string? path, EnumerationQuery page, CancellationToken token = default)
         {
+            if (page == null) throw new ArgumentNullException(nameof(page));
             token.ThrowIfCancellationRequested();
-            return Task.FromResult(WorkspaceFileEngine.GetTree(_Root, path));
+            return Task.FromResult(WorkspaceFileEngine.GetTree(_Root, path, page));
         }
 
         /// <inheritdoc />

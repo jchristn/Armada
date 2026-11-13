@@ -82,11 +82,14 @@ namespace Armada.Core.Services
             try { result.HarborMetricsDeleted = await PruneHarborMetricsAsync(token).ConfigureAwait(false); }
             catch (Exception ex) when (!(ex is OperationCanceledException)) { _Logging.Warn(_Header + "Harbor metrics pruning error: " + ex.Message); }
 
+            try { result.UsageSnapshotsDeleted = await PruneUsageSnapshotsAsync(token).ConfigureAwait(false); }
+            catch (Exception ex) when (!(ex is OperationCanceledException)) { _Logging.Warn(_Header + "usage snapshot pruning error: " + ex.Message); }
+
             if (result.Total > 0)
             {
                 _Logging.Info(_Header + "archived " + result.AskThreadsArchived + " and deleted " + result.AskThreadsDeleted + " Ask thread(s); deleted " +
                     result.JobsDeleted + " job(s), " + result.ImportBatchesDeleted + " import batch(es), " + result.CliPermissionRequestsDeleted + " CLI permission request(s), and " +
-                    result.HarborMetricsDeleted + " Harbor metrics row(s)");
+                    result.HarborMetricsDeleted + " Harbor metrics row(s), " + result.UsageSnapshotsDeleted + " usage snapshot(s)");
             }
 
             return result;
@@ -279,6 +282,28 @@ namespace Armada.Core.Services
             if (days <= 0) return 0;
             DateTime cutoff = _Clock().AddDays(-days);
             return await _Database.CliPermissionRequests.DeleteFinishedBeforeAsync(cutoff, token).ConfigureAwait(false);
+        }
+
+        /// <summary>Prune raw observations in retry-safe batches, preserving latest-state age and windows.</summary>
+        public async Task<int> PruneUsageSnapshotsAsync(CancellationToken token = default)
+        {
+            using UsageTelemetryOperation telemetry = UsageTelemetry.Start("retention");
+            DateTime cutoff = UsageRollupBuilder.Hour(_Clock().AddDays(-_Settings.UsageCapture.RawSnapshotRetentionDays));
+            int total = 0;
+            for (int batch = 0; batch < _MaxBatchesPerPass; batch++)
+            {
+                token.ThrowIfCancellationRequested();
+                int deleted = await _Database.UsageSnapshots.DeleteOlderThanAsync(cutoff, token).ConfigureAwait(false);
+                total += deleted;
+                UsageTelemetry.Deleted("raw", deleted);
+                if (deleted < _BatchSize) break;
+            }
+            int rollupsDeleted = await _Database.UsageRollups.DeleteOlderThanAsync(UsageRollupBuilder.Hour(_Clock().AddDays(-_Settings.UsageCapture.RollupRetentionDays)), token).ConfigureAwait(false);
+            UsageTelemetry.Deleted("rollup", rollupsDeleted);
+            int metadataDeleted = await _Database.UsageSnapshots.PruneInactiveStateAsync(UsageRollupBuilder.Hour(_Clock().AddDays(-_Settings.UsageCapture.RollupRetentionDays)), token).ConfigureAwait(false);
+            UsageTelemetry.Deleted("metadata", metadataDeleted);
+            telemetry.Complete();
+            return total;
         }
 
         #endregion

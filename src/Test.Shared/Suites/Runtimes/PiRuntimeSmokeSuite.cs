@@ -53,7 +53,7 @@ namespace Test.Shared.Suites.Runtimes
                     Git(root, "init", "-q");
                     string finalMessage = Path.Combine(Path.GetTempPath(), "armada-pi-smoke-" + Guid.NewGuid().ToString("N") + ".txt");
                     ChatTurnTelemetryRecorder telemetry = new ChatTurnTelemetryRecorder();
-                    PiRuntime runtime = new PiRuntime(Logging());
+                    PiRuntime runtime = new SmokePiRuntime(Logging());
                     runtime.OnStdoutReceived += (int pid, string line) => telemetry.ObserveLine(AgentRuntimeEnum.Pi, line);
                     int? code = await RunAsync(runtime, root, "Create a file named hello.txt containing exactly the text hi (no newline is fine). Then reply with exactly: DONE", model, finalMessage).ConfigureAwait(false);
 
@@ -102,7 +102,7 @@ namespace Test.Shared.Suites.Runtimes
                         : FakePermissionPromptMcpServer.Deny("ARMADA-DENIED-BY-TEST"));
                     string finalMessage = Path.Combine(Path.GetTempPath(), "armada-pi-smoke-gate-" + Guid.NewGuid().ToString("N") + ".txt");
                     List<string> stdout = new List<string>();
-                    PiRuntime runtime = new PiRuntime(Logging());
+                    PiRuntime runtime = new SmokePiRuntime(Logging());
                     runtime.OnStdoutReceived += (int pid, string line) => { lock (stdout) stdout.Add(line); };
                     AssertTrue(CliPermissionPromptSetup.Configure(runtime, CliPermissionPolicyEnum.ApproveInArmada, 60), "the gate is configured");
                     Captain captain = CaptainRuntimeOptions.WithEffectiveAutoApprove(new Captain("pi-gate", AgentRuntimeEnum.Pi), false);
@@ -187,11 +187,20 @@ namespace Test.Shared.Suites.Runtimes
         private static async Task<int?> RunAsync(PiRuntime runtime, string work, string prompt, string? model, string? finalMessage)
         {
             TaskCompletionSource<int?> exited = new TaskCompletionSource<int?>(TaskCreationOptions.RunContinuationsAsynchronously);
+            List<string> output = new();
+            int? ownedProcess = null;
+            runtime.OnStdoutReceived += (_, line) => { lock (output) { output.Add(line); if (output.Count>20) output.RemoveAt(0); } };
             runtime.OnProcessExited += (int pid, int? code) => exited.TrySetResult(code);
-            await runtime.StartAsync(work, prompt, finalMessageFilePath: finalMessage, model: model).ConfigureAwait(false);
-            Task finished = await Task.WhenAny(exited.Task, Task.Delay(TimeSpan.FromMinutes(4))).ConfigureAwait(false);
-            AssertTrue(finished == exited.Task, "pi did not finish within 4 minutes");
-            return await exited.Task.ConfigureAwait(false);
+            try
+            {
+                ownedProcess = await runtime.StartAsync(work, prompt, finalMessageFilePath: finalMessage, model: model).ConfigureAwait(false);
+                Task finished = await Task.WhenAny(exited.Task, Task.Delay(TimeSpan.FromMinutes(4))).ConfigureAwait(false);
+                string tail; lock (output) tail = String.Join("\n", output);
+                if (tail.Length>2000) tail=tail.Substring(tail.Length-2000);
+                AssertTrue(finished == exited.Task, "pi did not finish within 4 minutes; recent output: " + tail);
+                return await exited.Task.ConfigureAwait(false);
+            }
+            finally { if (ownedProcess.HasValue) await runtime.StopAsync(ownedProcess.Value).ConfigureAwait(false); }
         }
 
         private static void Git(string workingDirectory, params string[] args)
@@ -226,7 +235,21 @@ namespace Test.Shared.Suites.Runtimes
 
         #region Private-Classes
 
-        private sealed class BadKeyPiRuntime : PiRuntime
+        // Keep real provider/tool/permission execution, but do not load the developer's MCP servers,
+        // extensions or repository instructions into a disposable smoke fixture. Explicit gate -e still loads.
+        private class SmokePiRuntime : PiRuntime
+        {
+            public SmokePiRuntime(LoggingModule logging) : base(logging) { }
+
+            protected override List<string> BuildArguments(string workingDirectory, string prompt, string? model, string? finalMessageFilePath, Captain? captain)
+            {
+                List<string> args = base.BuildArguments(workingDirectory, prompt, model, finalMessageFilePath, captain);
+                args.AddRange(new[] { "--no-mcp", "--no-extensions", "--no-skills", "--no-prompt-templates", "--no-context-files" });
+                return args;
+            }
+        }
+
+        private sealed class BadKeyPiRuntime : SmokePiRuntime
         {
             public BadKeyPiRuntime(LoggingModule logging) : base(logging) { }
 

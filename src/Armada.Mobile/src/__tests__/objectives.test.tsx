@@ -4,7 +4,7 @@ import { Slot } from 'expo-router';
 import { renderRouter } from 'expo-router/testing-library';
 import { Alert, Linking, Text } from 'react-native';
 import * as client from '@dashboard/api/client';
-import type { Objective, ObjectiveRefinementMessage, ObjectiveRefinementSession, ObjectiveRefinementSessionDetail } from '@dashboard/types/models';
+import type { Objective, ObjectiveRefinementMessage, ObjectiveRefinementSession, ObjectiveRefinementSessionView } from '@dashboard/types/models';
 import { DEFAULT_BACKLOG_FILTERS } from '@dashboard/lib/backlogUtils';
 import { emptyObjectiveForm } from '@dashboard/lib/backlogForm';
 import * as auth from '../auth/AuthContext';
@@ -18,6 +18,7 @@ import { armadaLinkGroups, backlogItemPath, dispatchHref, historyHref, planningH
 import { dispatchPrefillFromParams } from '../screens/operations/w24/dispatchLink';
 import { prefillFromParams } from '../screens/planning/PlanningScreen';
 import { BuildProviders, buildSockets, deliver, page } from '../test/buildFixtures';
+import { serveTranscriptsFromDetails } from '../test/transcripts';
 import { rowActionTarget } from '../test/a11y';
 
 jest.mock('@dashboard/api/client', () => require('../test/buildClientMock').buildClientMockFactory());
@@ -56,8 +57,8 @@ function message(over: Partial<ObjectiveRefinementMessage> = {}): ObjectiveRefin
   };
 }
 
-function detail(over: Partial<ObjectiveRefinementSessionDetail> = {}): ObjectiveRefinementSessionDetail {
-  return { session: session(), messages: [message()], captain: { id: 'cpt_1', name: 'Ada', state: 'Idle' } as never, vessel: null, objective: null, ...over };
+function detail(over: Partial<ObjectiveRefinementSessionView> = {}): ObjectiveRefinementSessionView {
+  return { session: session(), messages: [message()], messageCount: 0, captain: { id: 'cpt_1', name: 'Ada', state: 'Idle' } as never, vessel: null, objective: null, ...over };
 }
 
 const ROUTES = {
@@ -78,6 +79,7 @@ async function renderAt(url: string) {
 let admin = true;
 
 beforeEach(async () => {
+  serveTranscriptsFromDetails(api as unknown as Record<string, jest.Mock>);
   await AsyncStorage.clear();
   admin = true;
   jest.spyOn(auth, 'useAuth').mockImplementation(() => ({ ...realUseAuth(), isTenantAdmin: admin, isAdmin: admin }));
@@ -88,7 +90,7 @@ beforeEach(async () => {
   api.listPipelines.mockResolvedValue(page([]));
   api.listUsers.mockResolvedValue(page([]));
   api.getBacklogItem.mockResolvedValue(A);
-  api.listBacklogRefinementSessions.mockResolvedValue([]);
+  api.listBacklogRefinementSessions.mockResolvedValue(page([]));
 });
 afterEach(() => jest.restoreAllMocks());
 
@@ -176,7 +178,7 @@ describe('backlog list', () => {
   });
 
   it('moves an item up by swapping ranks and deletes after confirmation (swipe actions)', async () => {
-    api.reorderBacklog.mockResolvedValue([{ ...A, rank: 1 }, { ...B, rank: 2 }]);
+    api.reorderBacklog.mockResolvedValue({ updated: 2, items: [{ objectiveId: A.id, rank: 1 }, { objectiveId: B.id, rank: 2 }] });
     await renderAt('/objectives');
     await waitFor(() => expect(screen.getByTestId('objective-row-Alpha')).toBeTruthy());
     await act(async () => { fireEvent(rowActionTarget(screen.getByTestId('objective-swipe-Alpha'), 'up'), 'accessibilityAction', { nativeEvent: { actionName: 'up' } }); });
@@ -293,7 +295,7 @@ describe('backlog item', () => {
 
   it('starts a refinement session, streams the transcript live, summarizes, and applies', async () => {
     api.createBacklogRefinementSession.mockResolvedValue(detail({ messages: [] }));
-    api.listBacklogRefinementSessions.mockResolvedValueOnce([]).mockResolvedValue([session()]);
+    api.listBacklogRefinementSessions.mockResolvedValueOnce(page([])).mockResolvedValue(page([session()]));
     api.getObjectiveRefinementSession.mockResolvedValue(detail({ messages: [] }));
     api.applyObjectiveRefinementSummary.mockResolvedValue({
       summary: { sessionId: 'ors_1', messageId: 'orm_1', summary: 'Applied', acceptanceCriteria: [], nonGoals: [], rolloutConstraints: [], suggestedPipelineId: null, method: 'Assistant' },
@@ -327,7 +329,7 @@ describe('backlog item', () => {
   });
 
   it('sends a refinement message and keeps the newer live state', async () => {
-    api.listBacklogRefinementSessions.mockResolvedValue([session()]);
+    api.listBacklogRefinementSessions.mockResolvedValue(page([session()]));
     api.getObjectiveRefinementSession.mockResolvedValue(detail());
     api.sendObjectiveRefinementMessage.mockResolvedValue(detail({ messages: [message(), message({ id: 'orm_2', role: 'User', sequence: 2, content: 'Tighten it' })] }));
     await renderAt('/backlog/obj_a?refinementSessionId=ors_1');

@@ -1,5 +1,6 @@
 namespace Armada.Core.Database.SqlServer.Implementations
 {
+    using System.Text;
     using System;
     using System.Collections.Generic;
     using System.Threading;
@@ -194,6 +195,38 @@ namespace Armada.Core.Database.SqlServer.Implementations
                 "SELECT * FROM objective_refinement_sessions WHERE status = @status ORDER BY last_update_utc DESC;",
                 cmd => cmd.Parameters.AddWithValue("@status", status.ToString()),
                 token).ConfigureAwait(false);
+        }
+
+        /// <inheritdoc />
+        public async Task<EnumerationResult<ObjectiveRefinementSession>> EnumeratePageByObjectiveAsync(string objectiveId, string? tenantId, string? userId, EnumerationQuery query, CancellationToken token = default)
+        {
+            if (String.IsNullOrWhiteSpace(objectiveId)) throw new ArgumentNullException(nameof(objectiveId));
+            if (query == null) throw new ArgumentNullException(nameof(query));
+            string direction = query.Order == EnumerationOrderEnum.CreatedAscending ? "ASC" : "DESC";
+            StringBuilder where = new StringBuilder("FROM objective_refinement_sessions WHERE objective_id = @objective_id");
+            if (!String.IsNullOrEmpty(tenantId)) where.Append(" AND tenant_id = @tenant_id");
+            if (!String.IsNullOrEmpty(userId)) where.Append(" AND user_id = @user_id");
+            if (!String.IsNullOrEmpty(query.Status)) where.Append(" AND status = @status");
+            if (!String.IsNullOrEmpty(query.CaptainId)) where.Append(" AND captain_id = @captain_id");
+            if (!String.IsNullOrEmpty(query.VesselId)) where.Append(" AND vessel_id = @vessel_id");
+            if (query.CreatedAfter.HasValue) where.Append(" AND created_utc > @created_after");
+            if (query.CreatedBefore.HasValue) where.Append(" AND created_utc < @created_before");
+            using (SqlConnection conn = new SqlConnection(_Driver.ConnectionString))
+            {
+                await conn.OpenAsync(token).ConfigureAwait(false);
+                return await SqlServerBoundedPage.ReadAsync(conn, where.ToString(), "last_update_utc " + direction + ", id " + direction,
+                    cmd =>
+                    {
+                        SqlServerCommandHelper.Add(cmd, "@objective_id", objectiveId);
+                        if (!String.IsNullOrEmpty(tenantId)) SqlServerCommandHelper.Add(cmd, "@tenant_id", tenantId);
+                        if (!String.IsNullOrEmpty(userId)) SqlServerCommandHelper.Add(cmd, "@user_id", userId);
+                        if (!String.IsNullOrEmpty(query.Status)) SqlServerCommandHelper.Add(cmd, "@status", query.Status);
+                        if (!String.IsNullOrEmpty(query.CaptainId)) SqlServerCommandHelper.Add(cmd, "@captain_id", query.CaptainId);
+                        if (!String.IsNullOrEmpty(query.VesselId)) SqlServerCommandHelper.Add(cmd, "@vessel_id", query.VesselId);
+                        if (query.CreatedAfter.HasValue) cmd.Parameters.AddWithValue("@created_after", SqlServerDatabaseDriver.ToIso8601(query.CreatedAfter.Value.ToUniversalTime()));
+                        if (query.CreatedBefore.HasValue) cmd.Parameters.AddWithValue("@created_before", SqlServerDatabaseDriver.ToIso8601(query.CreatedBefore.Value.ToUniversalTime()));
+                    }, FromReader, query, token).ConfigureAwait(false);
+            }
         }
 
         private async Task<ObjectiveRefinementSession?> ReadInternalAsync(string sql, Action<SqlCommand> parameterize, CancellationToken token)

@@ -43,6 +43,11 @@ namespace Armada.Tui.Screens.Admin
         public Button SaveButton { get; }
 
         /// <summary>
+        /// English Save label the group was created with (restored after a save finishes).
+        /// </summary>
+        public string SaveLabel { get; }
+
+        /// <summary>
         /// Discard button, or null when the group has none.
         /// </summary>
         public Button? DiscardButton { get; }
@@ -105,6 +110,7 @@ namespace Armada.Tui.Screens.Admin
         public ServerSettingsGroup(string key, string saveLabel, Action onSave, Action? onDiscard = null)
         {
             Key = key ?? throw new ArgumentNullException(nameof(key));
+            SaveLabel = saveLabel;
             SaveButton = Buttons.Add(new Button(saveLabel, onSave));
             if (onDiscard != null)
             {

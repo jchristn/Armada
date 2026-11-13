@@ -252,7 +252,9 @@ namespace Armada.Tui.Widgets
             SurfaceText.FillRect(surface, new Rect(0, 0, width, body), style);
             if (_Editor.Text.Length == 0 && !IsFocused && Placeholder.Length > 0)
             {
-                SurfaceText.Draw(surface, 0, 0, T(Placeholder), style.WithForeground(Theme.Muted.Foreground), width);
+                string[] lines = T(Placeholder).Split('\n');
+                for (int i = 0; i < lines.Length && i < body; i++)
+                    SurfaceText.Draw(surface, 0, i, lines[i], style.WithForeground(Theme.Muted.Foreground), width);
             }
             else
             {

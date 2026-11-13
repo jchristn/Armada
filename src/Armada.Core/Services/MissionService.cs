@@ -4,6 +4,7 @@ namespace Armada.Core.Services
     using System.Text.Json;
     using SyslogLogging;
     using Armada.Core;
+    using Armada.Core.BlackBox;
     using Armada.Core.Database;
     using Armada.Core.Enums;
     using Armada.Core.Models;
@@ -50,17 +51,31 @@ namespace Armada.Core.Services
         public Func<Mission, Captain, Task<bool>>? CanAssignMissionAsync { get; set; }
 
         /// <summary>
+        /// Invoked after a captain-selection decision commits (admission, repair or a new material waiting state).
+        /// Best effort: exceptions are logged and never affect admission.
+        /// </summary>
+        public Action<CaptainSelectionChange>? OnCaptainSelectionChanged { get; set; }
+
+        /// <summary>
         /// Chooses where a mission's dock is created before it is provisioned: on a Harbor that can serve the vessel, on
         /// the Admiral's host, or nowhere yet (the mission stays Pending). When null every dock is created on the
         /// Admiral's host.
         /// </summary>
         public Func<Mission, Captain, Vessel, Task<DockPlacement>>? ResolveDockPlacementAsync { get; set; }
 
+        /// <summary>Optional placement preserving the verified usage credential host; existing branch and permission rules remain authoritative.</summary>
+        public Func<Mission, Captain, Vessel, string, Task<DockPlacement>>? ResolveUsageDockPlacementAsync { get; set; }
+
         /// <summary>
         /// Where docks live. Operations on a Harbor-hosted dock (instruction files, git, the Definition-of-Done gate) run
         /// on its Harbor through this; without it every dock is treated as local.
         /// </summary>
         public DockHostResolver? DockHosts { get; set; }
+
+        /// <summary>
+        /// Black box capture called at mission failure sites, or null when the black box is not wired (no capture).
+        /// </summary>
+        public IBlackBoxCapture? BlackBox { get; set; }
 
         #endregion
 
@@ -112,11 +127,23 @@ namespace Armada.Core.Services
             "AGENTS.override.md"
         };
 
+        // Lock order is vessel, then capacity. Release both before provisioning/launching:
+        // completion callbacks may dispatch more work synchronously.
+        private readonly VesselAdmissionLockRegistry _VesselAdmissionLocks = new VesselAdmissionLockRegistry();
+        private readonly SemaphoreSlim _CapacityLock = new SemaphoreSlim(1, 1);
+
         /// <summary>
         /// Tracks in-flight mission assignment operations by mission ID.
         /// Prevents duplicate provisioning/launch when multiple dispatch paths
         /// race on the same mission.
         /// </summary>
+        private const int _TransientAssignmentAttempts = 3;
+        private readonly MissionWaitTracker _WaitTracker;
+        private readonly System.Collections.Concurrent.ConcurrentDictionary<string, Task> _BackgroundLaunches =
+            new System.Collections.Concurrent.ConcurrentDictionary<string, Task>(StringComparer.Ordinal);
+        // The gate each failed admission attempt stopped at, recorded by the public wrapper once the locks are released.
+        private readonly System.Collections.Concurrent.ConcurrentDictionary<string, MissionWaitObservation> _AttemptWaits =
+            new System.Collections.Concurrent.ConcurrentDictionary<string, MissionWaitObservation>(StringComparer.Ordinal);
         private System.Collections.Concurrent.ConcurrentDictionary<string, byte> _InFlightAssignments =
             new System.Collections.Concurrent.ConcurrentDictionary<string, byte>(StringComparer.Ordinal);
 
@@ -125,6 +152,11 @@ namespace Armada.Core.Services
         /// </summary>
         private class ParsedArchitectMission
         {
+            /// <summary>
+            /// Worker eligibility envelope the Architect set for this mission (structured armada-plan format), or null.
+            /// </summary>
+            public WorkerEnvelope? WorkerEnvelope { get; set; } = null;
+
             /// <summary>
             /// Mission title.
             /// </summary>
@@ -149,6 +181,15 @@ namespace Armada.Core.Services
             /// Whether the mission waits until the other Worker missions in the voyage settle.
             /// </summary>
             public bool WaitForOtherMissions { get; set; } = false;
+
+            /// <summary>Files or directories the mission may change (plan ownedPaths or a legacy "Owns:" line).</summary>
+            public List<string> OwnedPaths { get; set; } = new List<string>();
+
+            /// <summary>Context the mission must not change (plan readsPaths).</summary>
+            public List<string> ReadsPaths { get; set; } = new List<string>();
+
+            /// <summary>Plan branchStrategy (continue or fork), or null for the default rule.</summary>
+            public string? BranchStrategy { get; set; } = null;
         }
 
         private sealed class WorktreePlaybookLocation
@@ -212,6 +253,7 @@ namespace Armada.Core.Services
             _Captains = captains ?? throw new ArgumentNullException(nameof(captains));
             _PromptTemplates = promptTemplates;
             _DefinitionOfDone = definitionOfDone;
+            _WaitTracker = new MissionWaitTracker(_Database, _Settings, _Logging);
         }
 
         #endregion
@@ -219,7 +261,11 @@ namespace Armada.Core.Services
         #region Public-Methods
 
         /// <inheritdoc />
-        public async Task<MissionAssignmentBlocker?> GetAssignmentBlockerAsync(Mission mission, CancellationToken token = default)
+        public Task<MissionAssignmentBlocker?> GetAssignmentBlockerAsync(Mission mission, CancellationToken token = default)
+            => GetAssignmentBlockerCoreAsync(mission, token);
+
+        private async Task<MissionAssignmentBlocker?> GetAssignmentBlockerCoreAsync(Mission mission, CancellationToken token,
+            Action<CaptainAdmissionSelection>? observeSelection = null)
         {
             if (mission == null) throw new ArgumentNullException(nameof(mission));
             if (mission.Status != MissionStatusEnum.Pending) return null;
@@ -252,136 +298,92 @@ namespace Armada.Core.Services
                 return blocker;
             }
 
-            if (!String.IsNullOrEmpty(mission.DependsOnMissionId))
+            var readiness = await EvaluateReadinessAdmissionAsync(mission, token).ConfigureAwait(false);
+            if (readiness.Blocker != null) return readiness.Blocker;
+
+            MissionAssignmentBlocker? admission = await EvaluateSafetyAdmissionAsync(mission, vessel, token).ConfigureAwait(false);
+            if (admission != null) return admission;
+            MissionAssignmentBlocker? globalAdmission = await EvaluateGlobalAdmissionAsync(token).ConfigureAwait(false);
+            if (globalAdmission != null) return globalAdmission;
+
+            if (_Settings.EffectiveUsageSelection.Mode != UsageSelectionModeEnum.Disabled
+                && _UsageSelectionBlockers.TryGetValue(mission.Id, out UsageSelectionTransientBlocker? usageFailure)
+                && usageFailure.PolicyKey == UsagePolicyKey() && usageFailure.RetryUtc > DateTime.UtcNow) return usageFailure.Blocker;
+
+            CaptainAdmissionSelection selection = await SelectCaptainAdmissionAsync(mission, token).ConfigureAwait(false);
+            if (_Settings.EffectiveUsageSelection.Mode == UsageSelectionModeEnum.Enforce && selection.Visible.Count > 0 && !String.IsNullOrWhiteSpace(mission.TenantId))
             {
-                Mission? dependency = await _Database.Missions.ReadAsync(mission.DependsOnMissionId, token).ConfigureAwait(false);
-                blocker.DependsOnMissionId = mission.DependsOnMissionId;
-                if (dependency == null)
+                try
                 {
-                    blocker.Reason = MissionAssignmentBlockerReasonEnum.DependencyNotFinished;
-                    blocker.Summary = "Waiting for mission " + mission.DependsOnMissionId + ", which no longer exists.";
-                    return blocker;
+                    UsageSelectionSnapshot usage = await BuildUsageSelectionAsync(selection, _Settings.EffectiveUsageSelection.Copy(), token).ConfigureAwait(false);
+                    if (usage.Evaluation.SelectedCaptainId == null)
+                        return AddRecoveryAdvice(new MissionAssignmentBlocker { Reason = MissionAssignmentBlockerReasonEnum.NoEligibleCaptain,
+                            SelectionReasonCode = usage.Evaluation.ReasonCode, Summary = "No captain currently satisfies the configured usage policy.",
+                            SelectionNextReconsiderUtc = usage.Evaluation.Candidates.FirstOrDefault()?.NextReconsiderUtc }, mission, usage);
+                    selection.Selected = selection.Visible.Single(c => c.Id == usage.Evaluation.SelectedCaptainId);
                 }
-
-                if (dependency.Status != MissionStatusEnum.Complete && dependency.Status != MissionStatusEnum.WorkProduced)
-                {
-                    blocker.Reason = MissionAssignmentBlockerReasonEnum.DependencyNotFinished;
-                    blocker.Summary = "Waiting for mission '" + dependency.Title + "' (" + dependency.Status + ") to finish.";
-                    return blocker;
-                }
-
-                if (dependency.Status == MissionStatusEnum.WorkProduced && !IsPipelineHandoffPrepared(mission, dependency))
-                {
-                    blocker.Reason = MissionAssignmentBlockerReasonEnum.DependencyHandoffPending;
-                    blocker.Summary = "Mission '" + dependency.Title + "' finished; Armada is preparing the handoff to this stage.";
-                    return blocker;
-                }
-
-                blocker.DependsOnMissionId = null;
+                catch (System.Data.Common.DbException)
+                { return new MissionAssignmentBlocker { Reason = MissionAssignmentBlockerReasonEnum.NoEligibleCaptain, SelectionReasonCode = "SelectionPersistenceUnavailable", Summary = "Selection evidence is temporarily unavailable." }; }
             }
-
-            IntegrationBarrierState barrier = await EvaluateIntegrationBarrierAsync(mission, token).ConfigureAwait(false);
-            if (barrier.FailedMission != null)
-            {
-                blocker.Reason = MissionAssignmentBlockerReasonEnum.WaitingForVoyageWorkers;
-                blocker.BlockingMissionIds = new List<string> { barrier.FailedMission.Id };
-                blocker.Summary = "Mission '" + barrier.FailedMission.Title + "' in another slice ended " + barrier.FailedMission.Status
-                    + "; this integration will not run without it and is cancelled on the next dispatch pass. Restart that mission to continue.";
-                return blocker;
-            }
-            if (barrier.Waiting)
-            {
-                blocker.Reason = MissionAssignmentBlockerReasonEnum.WaitingForVoyageWorkers;
-                blocker.Summary = barrier.WaitingSummary ?? "Waiting for the voyage's other implementation pipelines, including reviews and checks, to settle.";
-                return blocker;
-            }
-
-            List<Mission> vesselMissions = await ActiveMissionsOnVesselAsync(vessel.Id, token).ConfigureAwait(false);
-            List<Mission> activeMissions = vesselMissions
-                .Where(m => m.Id != mission.Id && (m.Status == MissionStatusEnum.Assigned || m.Status == MissionStatusEnum.InProgress))
-                .ToList();
-            List<Mission> broadMissions = activeMissions.Where(m => IsBroadScope(m)).ToList();
-            if (broadMissions.Count > 0)
-            {
-                blocker.Reason = MissionAssignmentBlockerReasonEnum.VesselBroadScopeMissionActive;
-                blocker.BlockingMissionIds = broadMissions.Select(m => m.Id).ToList();
-                blocker.Summary = "Broad-scope mission '" + broadMissions[0].Title + "' holds vessel " + vessel.Name + " until it finishes.";
-                return blocker;
-            }
-
-            if (activeMissions.Count > 0 && IsBroadScope(mission))
-            {
-                blocker.Reason = MissionAssignmentBlockerReasonEnum.BroadScopeWaitingForVessel;
-                blocker.BlockingMissionIds = activeMissions.Select(m => m.Id).ToList();
-                blocker.Summary = "This is a broad-scope mission; it waits until vessel " + vessel.Name + " has no active missions (" + activeMissions.Count + " running).";
-                return blocker;
-            }
-
-            List<Mission> sameBranch = BranchHolders(mission, activeMissions);
-            if (sameBranch.Count > 0)
-            {
-                blocker.Reason = MissionAssignmentBlockerReasonEnum.BranchInUse;
-                blocker.BlockingMissionIds = sameBranch.Select(m => m.Id).ToList();
-                blocker.Summary = "Branch " + mission.BranchName + " is in use by '" + sameBranch[0].Title + "'. This mission continues that branch and starts when it finishes.";
-                return blocker;
-            }
-
-            if (activeMissions.Count > 0 && !vessel.AllowConcurrentMissions)
-            {
-                blocker.Reason = MissionAssignmentBlockerReasonEnum.VesselConcurrencyLimit;
-                blocker.BlockingMissionIds = activeMissions.Select(m => m.Id).ToList();
-                blocker.Summary = "Vessel " + vessel.Name + " runs one mission at a time and is busy with '" + activeMissions[0].Title + "'. Turn on Allow Concurrent Missions on the vessel to run more at once.";
-                return blocker;
-            }
-
-            // Captain availability: the same pool FindAvailableCaptainAsync draws from (idle captains), checked
-            // without resolving or persisting a preferred captain.
-            List<Captain> allCaptains = (await _Database.Captains.EnumerateAsync(token).ConfigureAwait(false))
-                .Where(c => CaptainVisibleToMission(c, mission)).ToList();
+            observeSelection?.Invoke(selection);
+            Mission routingView = selection.Mission;
+            List<Captain> allCaptains = selection.Visible;
             if (allCaptains.Count == 0)
             {
                 blocker.Reason = MissionAssignmentBlockerReasonEnum.NoCaptains;
                 blocker.Summary = "Waiting for a captain: there are no captains. Create one to run missions.";
+                blocker.Advice.Add(new AssignmentBlockerAdvice { Text = "Add an eligible captain to run this mission.", Action = AssignmentBlockerActionEnum.AddCaptain, TargetType = "captain" });
                 return blocker;
             }
-
-            List<Captain> idleCaptains = allCaptains.Where(c => c.State == CaptainStateEnum.Idle).ToList();
-            if (idleCaptains.Count > 0)
+            if (selection.Selected != null)
             {
-                bool eligible = await IsAnyCaptainEligibleAsync(idleCaptains, mission, token).ConfigureAwait(false);
-                if (eligible && _PlacementWaitReasons.TryGetValue(mission.Id, out string? placementReason))
+                if (_PlacementWaitReasons.TryGetValue(mission.Id, out string? placementReason))
                 {
                     blocker.Reason = MissionAssignmentBlockerReasonEnum.PlacementWaiting;
                     blocker.Summary = "A captain is free, but the mission's dock cannot be placed yet: " + placementReason;
-                    return blocker;
                 }
-
-                if (eligible)
+                else
                 {
                     blocker.Reason = MissionAssignmentBlockerReasonEnum.AwaitingDispatch;
                     blocker.Summary = "A captain is free; the mission is assigned on the next dispatch cycle.";
-                    return blocker;
                 }
-
-                // Authors of the reviewed work are named as a cause only when the exclusion is what removed them.
-                HashSet<string> excludedAuthors = _Settings.ExcludeReviewAuthorsFromJudge
-                    ? await ReviewAuthorCaptainIdsAsync(mission, token).ConfigureAwait(false)
-                    : new HashSet<string>(StringComparer.Ordinal);
-                bool authorsIdle = idleCaptains.Any(c => excludedAuthors.Contains(c.Id));
-                blocker.Reason = MissionAssignmentBlockerReasonEnum.NoEligibleCaptain;
-                blocker.Summary = "Waiting for a captain: no idle captain may take this mission"
-                    + (!String.IsNullOrEmpty(mission.Persona) ? " (persona " + mission.Persona + ")" : "")
-                    + (mission.Tier.HasValue ? " (tier " + mission.Tier.Value + " or higher)" : "")
-                    + ". Check the persona's captain priorities and the captains' allowed personas and tiers."
-                    + (authorsIdle ? " Idle captains that ran an earlier stage of the reviewed work are excluded because ExcludeReviewAuthorsFromJudge is on." : "");
-                await DescribeCaptainsAsync(blocker, allCaptains, mission, token).ConfigureAwait(false);
                 return blocker;
             }
-
-            blocker.Reason = MissionAssignmentBlockerReasonEnum.NoIdleCaptain;
-            await DescribeCaptainsAsync(blocker, allCaptains, mission, token).ConfigureAwait(false);
-            List<DateTime> quarantineEnds = blocker.Captains
-                .Where(c => c.QuarantineUntilUtc.HasValue)
+            if (selection.RoutingEligible.Count > 0 && selection.CapacityExclusions.Count == selection.RoutingEligible.Count)
+            {
+                MissionAssignmentBlocker capacity = selection.CapacityExclusions[selection.RoutingEligible[0].Id];
+                foreach (AssignmentBlockerAdvice advice in selection.CapacityExclusions.Values.SelectMany(item => item.Advice)
+                    .DistinctBy(item => new { item.Action, item.TargetId, item.Setting }).Take(MissionAssignmentBlocker.MaxListed).ToList())
+                    if (!capacity.Advice.Contains(advice)) capacity.Advice.Add(advice);
+                return capacity;
+            }
+            List<Captain> full = allCaptains.Where(c => c.State == CaptainStateEnum.Working && c.ActiveMissionCount > 0
+                && c.CurrentSessionId == null && CaptainIneligibilityReason(c, routingView, selection.Eligibility) == null).ToList();
+            if (full.Count == 0 && selection.Available.Count > 0)
+            {
+                blocker.Reason = MissionAssignmentBlockerReasonEnum.NoEligibleCaptain;
+                blocker.Summary = "Waiting for a captain: no available captain may take this mission"
+                    + (!String.IsNullOrEmpty(routingView.Persona) ? " (persona " + routingView.Persona + ")" : "")
+                    + (routingView.Tier.HasValue ? " (tier " + routingView.Tier.Value + " or higher)" : "")
+                    + ". Check the persona's captain priorities and the captains' allowed personas and tiers."
+                    + (selection.Eligibility.ExcludedAuthors.Count > 0 && selection.Available.Any(c => selection.Eligibility.ExcludedAuthors.Contains(c.Id))
+                        ? " Available captains that ran an earlier stage of the reviewed work are excluded because ExcludeReviewAuthorsFromJudge is on." : "");
+                if (selection.Eligibility.EnvelopeGate != null && !selection.Eligibility.EnvelopeGate.AnyCompatibleCaptain())
+                    blocker.Summary = "Waiting for a captain: no captain meets the Worker eligibility envelope or may run the Worker persona. "
+                        + WorkerEnvelopeRules.Describe(selection.Eligibility.EnvelopeGate.Envelope)
+                        + " Give a captain a model profile that meets it, or change the vessel's envelope.";
+                await DescribeCaptainsAsync(blocker, allCaptains, routingView, token).ConfigureAwait(false);
+                return blocker;
+            }
+            blocker.Reason = full.Count > 0 ? MissionAssignmentBlockerReasonEnum.CaptainConcurrencyLimit : MissionAssignmentBlockerReasonEnum.NoIdleCaptain;
+            if (full.Count > 0)
+            {
+                blocker.SetBlockingMissions(full.SelectMany(c => c.ActiveMissionIds));
+                AddCaptainCapacityAdvice(blocker, full);
+            }
+            await DescribeCaptainsAsync(blocker, allCaptains, routingView, token).ConfigureAwait(false);
+            List<DateTime> quarantineEnds = allCaptains
+                .Where(c => c.State == CaptainStateEnum.Quarantined && c.QuarantineUntilUtc.HasValue)
                 .Select(c => c.QuarantineUntilUtc!.Value)
                 .ToList();
             if (allCaptains.All(c => c.State == CaptainStateEnum.Quarantined) && quarantineEnds.Count > 0)
@@ -389,7 +391,7 @@ namespace Armada.Core.Services
                 blocker.UntilUtc = quarantineEnds.Min();
             }
 
-            if (blocker.Captains.Count == 1)
+            if (blocker.CaptainCount == 1 && blocker.Captains.Count == 1)
             {
                 blocker.Summary = "Waiting for a captain: " + (blocker.Captains[0].CaptainName ?? blocker.Captains[0].CaptainId) + " is " + blocker.Captains[0].Detail + ".";
             }
@@ -398,14 +400,48 @@ namespace Armada.Core.Services
                 blocker.Summary = "Waiting for a captain: every captain is busy.";
             }
 
+            if (blocker.Reason == MissionAssignmentBlockerReasonEnum.CaptainConcurrencyLimit)
+                blocker.Summary = "Eligible captains have no free mission slots: " + String.Join("; ", full.Take(MissionAssignmentBlocker.MaxListed)
+                    .Select(c => c.Name + " " + c.ActiveMissionCount + " running / limit " + c.MaxConcurrency
+                        + (c.ActiveMissionCount > c.MaxConcurrency ? " (limit below current usage; running work continues)" : ""))) + ".";
             return blocker;
         }
 
         /// <inheritdoc />
-        public async Task<bool> TryAssignAsync(Mission mission, Vessel vessel, CancellationToken token = default)
+        public Task<bool> TryAssignAsync(Mission mission, Vessel vessel, CancellationToken token = default)
+            => TryAssignAsync(mission, vessel, false, token);
+
+        /// <inheritdoc />
+        public async Task<bool> TryAssignAsync(Mission mission, Vessel vessel, bool launchInBackground, CancellationToken token = default)
         {
             if (mission == null) throw new ArgumentNullException(nameof(mission));
             if (vessel == null) throw new ArgumentNullException(nameof(vessel));
+            // A server database can pick an admission read or write as a deadlock victim under concurrent dispatch. Every
+            // admission write is its own atomic statement or transaction, so a retry re-reads current state; after that
+            // the mission stays Pending for the next dispatch cycle instead of failing the caller.
+            for (int attempt = 1; ; attempt++)
+            {
+                try
+                {
+                    bool assigned = await TryAssignAsync(mission, vessel, launchInBackground, singleAttempt: true, token).ConfigureAwait(false);
+                    await RecordAttemptWaitAsync(mission.Id, token).ConfigureAwait(false);
+                    return assigned;
+                }
+                catch (Exception ex) when (TransientDatabaseError.IsTransient(ex) && !token.IsCancellationRequested)
+                {
+                    if (attempt >= _TransientAssignmentAttempts)
+                    {
+                        _Logging.Warn(_Header + "assignment of mission " + mission.Id + " hit a transient database error " + attempt + " times; retrying next dispatch cycle: " + ex.Message);
+                        return false;
+                    }
+                    await Task.Delay(TimeSpan.FromMilliseconds(25 * attempt + Random.Shared.Next(0, 50)), token).ConfigureAwait(false);
+                }
+            }
+        }
+
+        // One admission attempt. Named TryAssignAsync so failure records keep their original origin (CallerMemberName).
+        private async Task<bool> TryAssignAsync(Mission mission, Vessel vessel, bool launchInBackground, bool singleAttempt, CancellationToken token)
+        {
 
             if (!_InFlightAssignments.TryAdd(mission.Id, 0))
             {
@@ -413,8 +449,21 @@ namespace Armada.Core.Services
                 return false;
             }
 
+            IDisposable? vesselAdmission = null;
+            bool capacityHeld = false;
+            bool launchDeferred = false;
             try
             {
+                TimeSpan admissionTimeout = TimeSpan.FromSeconds(_Settings.Concurrency.AdmissionLockTimeoutSeconds);
+                long vesselLockStart = System.Diagnostics.Stopwatch.GetTimestamp();
+                vesselAdmission = await _VesselAdmissionLocks.TryEnterAsync(vessel.Id, admissionTimeout, token).ConfigureAwait(false);
+                ArmadaMetrics.AdmissionLockWaitSeconds.Record(System.Diagnostics.Stopwatch.GetElapsedTime(vesselLockStart).TotalSeconds, new KeyValuePair<string, object?>("lock", "vessel"));
+                if (vesselAdmission == null)
+                {
+                    ArmadaMetrics.AdmissionLockTimeouts.Add(1, new KeyValuePair<string, object?>("gate", "vessel"));
+                    _Logging.Warn(_Header + "vessel admission lock timed out for mission " + mission.Id + "; retrying next dispatch cycle");
+                    return false;
+                }
                 Mission? latestMission = null;
                 if (!String.IsNullOrEmpty(mission.TenantId))
                 {
@@ -429,10 +478,12 @@ namespace Armada.Core.Services
                     mission = latestMission;
                 }
 
+                if (!String.IsNullOrEmpty(mission.VesselId) && mission.VesselId != vessel.Id) return false;
                 if (mission.Status != MissionStatusEnum.Pending)
                 {
                     _Logging.Debug(_Header + "mission " + mission.Id + " is " + mission.Status +
                         " in the database -- skipping assignment");
+                    NoteLeftPending(mission);
                     return false;
                 }
 
@@ -440,6 +491,7 @@ namespace Armada.Core.Services
                     && !await HasUntriedIdleCaptainAsync(mission, backoff, token).ConfigureAwait(false))
                 {
                     _Logging.Debug(_Header + "mission " + mission.Id + " backing off after " + backoff.Count + " failed launch(es) until " + backoff.NextAttemptUtc.ToString("o"));
+                    NoteWait(mission, MissionWaitGateEnum.LaunchBackoff, backoff.Count + " failed launch(es)");
                     return false;
                 }
 
@@ -468,6 +520,12 @@ namespace Armada.Core.Services
                         await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
                         _Logging.Info(_Header + "mission " + mission.Id + " belongs to terminal voyage " + voyage.Id +
                             " (" + voyage.Status + ") -- cancelling instead of assigning");
+                        await RecordFailureAsync(mission, MissionStatusEnum.Pending, BlackBoxStepEnum.VoyageParentNotRunnable, null, context =>
+                        {
+                            context.Voyage = voyage;
+                            context.Vessel = vessel;
+                        }, token).ConfigureAwait(false);
+                        NoteLeftPending(mission);
                         return false;
                     }
                 }
@@ -478,100 +536,54 @@ namespace Armada.Core.Services
                         " uses the same path for LocalPath and WorkingDirectory (" +
                         (vessel.WorkingDirectory ?? vessel.LocalPath ?? "unknown") +
                         ") -- skipping mission assignment because dock provisioning requires a separate bare repository path");
+                    NoteWait(mission, MissionWaitGateEnum.Other, "VesselMisconfigured");
                     return false;
                 }
 
-            // Check pipeline dependency -- skip if the mission depends on another that hasn't completed
-            // or if the downstream handoff has not yet populated the mission's branch/context.
-            if (!String.IsNullOrEmpty(mission.DependsOnMissionId))
+            var readiness = await EvaluateReadinessAdmissionAsync(mission, token).ConfigureAwait(false);
+            if (readiness.Blocker != null)
             {
-                Mission? dependency = await _Database.Missions.ReadAsync(mission.DependsOnMissionId, token).ConfigureAwait(false);
-                if (dependency == null)
+                if (readiness.FailedSlice != null)
                 {
-                    _Logging.Warn(_Header + "mission " + mission.Id + " depends on " + mission.DependsOnMissionId + " which was not found -- skipping assignment");
-                    return false;
+                    await CancelIntegrationForFailedSliceAsync(mission, readiness.FailedSlice, token).ConfigureAwait(false);
+                    NoteLeftPending(mission);
                 }
-
-                if (dependency.Status != MissionStatusEnum.Complete &&
-                    dependency.Status != MissionStatusEnum.WorkProduced)
+                else if (readiness.Blocker.Reason == MissionAssignmentBlockerReasonEnum.ParentNotFinished
+                    && (await EvaluateParentReadinessAsync(mission, token).ConfigureAwait(false)).FailedParent is Mission failedParent)
                 {
-                    // Dependency not yet satisfied -- don't assign
-                    return false;
+                    await CancelDescendantsForFailedParentAsync(mission, failedParent, token).ConfigureAwait(false);
+                    NoteLeftPending(mission);
                 }
-
-                // A dependency in WorkProduced means the upstream agent finished, but the
-                // synchronous completion flow may still be preparing the downstream mission.
-                // Do not launch the next stage until it has been explicitly handed the same
-                // branch as the dependency. This prevents workers from starting with the
-                // original top-level dispatch prompt before architect/test/judge handoff runs.
-                if (dependency.Status == MissionStatusEnum.WorkProduced &&
-                    !IsPipelineHandoffPrepared(mission, dependency))
+                else
                 {
-                    _Logging.Debug(_Header + "mission " + mission.Id + " depends on " + dependency.Id +
-                        " which is WorkProduced, but handoff is not prepared yet -- deferring assignment");
-                    return false;
+                    _Logging.Debug(_Header + "mission " + mission.Id + " waits: " + readiness.Blocker.Summary);
+                    NoteWait(mission, readiness.Blocker);
                 }
-            }
-
-            IntegrationBarrierState barrier = await EvaluateIntegrationBarrierAsync(mission, token).ConfigureAwait(false);
-            if (barrier.FailedMission != null)
-            {
-                await CancelIntegrationForFailedSliceAsync(mission, barrier.FailedMission, token).ConfigureAwait(false);
-                return false;
-            }
-            if (barrier.Waiting)
-            {
-                _Logging.Debug(_Header + "mission " + mission.Id + " is the voyage's final integration slice -- deferring assignment: " + barrier.WaitingSummary);
                 return false;
             }
 
-            // Check for vessel-level lock (broad-scope missions block new assignments)
-            List<Mission> activeMissions = await ActiveMissionsOnVesselAsync(vessel.Id, token).ConfigureAwait(false);
-            List<Mission> broadMissions = activeMissions.Where(m =>
-                (m.Status == MissionStatusEnum.InProgress || m.Status == MissionStatusEnum.Assigned) &&
-                IsBroadScope(m)).ToList();
-
-            if (broadMissions.Count > 0)
+            MissionAssignmentBlocker? admission = await EvaluateSafetyAdmissionAsync(mission, vessel, token).ConfigureAwait(false);
+            if (admission != null)
             {
-                _Logging.Warn(_Header + "vessel " + vessel.Id + " has a broad-scope mission in progress — deferring assignment of " + mission.Id);
+                _Logging.Debug(_Header + "mission " + mission.Id + " waits: " + admission.Summary);
+                NoteWait(mission, admission);
                 return false;
             }
 
-            // Check if this mission is broad-scope and vessel already has active work
-            // Only count truly active missions (agent running or assigned).
-            // WorkProduced and PullRequestOpen are post-agent states where the agent
-            // has finished -- they should NOT block new mission dispatch.
-            int concurrentCount = activeMissions.Count(m =>
-                m.Status == MissionStatusEnum.Assigned ||
-                m.Status == MissionStatusEnum.InProgress);
-
-            if (IsBroadScope(mission) && concurrentCount > 0)
+            // Only shared capacity checks and the claim serialize across vessels. Vessel gates
+            // above run independently, so a blocked voyage cannot stall unrelated vessels.
+            long capacityLockStart = System.Diagnostics.Stopwatch.GetTimestamp();
+            bool capacityEntered = await _CapacityLock.WaitAsync(admissionTimeout, token).ConfigureAwait(false);
+            ArmadaMetrics.AdmissionLockWaitSeconds.Record(System.Diagnostics.Stopwatch.GetElapsedTime(capacityLockStart).TotalSeconds, new KeyValuePair<string, object?>("lock", "capacity"));
+            if (!capacityEntered)
             {
-                _Logging.Warn(_Header + "broad-scope mission " + mission.Id + " deferred — vessel " + vessel.Id + " has " + concurrentCount + " active mission(s)");
+                ArmadaMetrics.AdmissionLockTimeouts.Add(1, new KeyValuePair<string, object?>("gate", "capacity"));
+                _Logging.Warn(_Header + "capacity admission lock timed out for mission " + mission.Id + "; retrying next dispatch cycle");
                 return false;
             }
-
-            // Enforce per-vessel serialization unless explicitly allowed
-            if (!vessel.AllowConcurrentMissions && concurrentCount > 0)
-            {
-                _Logging.Info(_Header + "vessel " + vessel.Id + " already has " + concurrentCount + " active mission(s); deferring " + mission.Id + " (AllowConcurrentMissions=false)");
-                return false;
-            }
-
-            // Two missions continuing one branch (two slices that both build on an earlier slice) cannot share it: git
-            // refuses a second worktree for a checked-out branch. The later one waits and then stacks on the first.
-            List<Mission> branchHolders = BranchHolders(mission, activeMissions);
-            if (branchHolders.Count > 0)
-            {
-                _Logging.Info(_Header + "mission " + mission.Id + " waits: branch " + mission.BranchName + " is in use by " + branchHolders[0].Id);
-                return false;
-            }
-
-            // Warn about concurrent missions on same vessel when allowed
-            if (vessel.AllowConcurrentMissions && concurrentCount > 0)
-            {
-                _Logging.Warn(_Header + "vessel " + vessel.Id + " already has " + concurrentCount + " active mission(s) — potential for conflicts (AllowConcurrentMissions=true)");
-            }
+            capacityHeld = true;
+            MissionAssignmentBlocker? globalBlocker = await EvaluateGlobalAdmissionAsync(token).ConfigureAwait(false);
+            if (globalBlocker != null) { NoteWait(mission, globalBlocker); return false; }
 
             // Resolve the mission's preferred captain + fallback tier (per-persona default / voyage override)
             // before assignment, so per-step captain selection applies to every mission of a step, including
@@ -579,11 +591,52 @@ namespace Armada.Core.Services
             await ResolvePreferredCaptainAsync(mission, token).ConfigureAwait(false);
 
             // Find an idle captain: the preferred captain when idle, otherwise fall back by persona/tier.
-            Captain? captain = await FindAvailableCaptainAsync(mission, token).ConfigureAwait(false);
+            if (_Settings.EffectiveUsageSelection.Mode != UsageSelectionModeEnum.Disabled && UsageRetryPending(mission))
+            { NoteWait(mission, MissionWaitGateEnum.CaptainSlot, "UsageRetryPending"); return false; }
+            CaptainAdmissionSelection captainSelection = await SelectCaptainAdmissionAsync(mission, token, recordEnvelope: true).ConfigureAwait(false);
+            Captain? captain = captainSelection.Selected;
+            UsageSelectionSnapshot? usageSelection = null;
+            if (_Settings.EffectiveUsageSelection.Mode == UsageSelectionModeEnum.Enforce && String.IsNullOrWhiteSpace(mission.TenantId))
+            { UsageWait(mission, "MissionScopeUnavailable", "Usage selection requires a tenant-scoped mission."); return false; }
+            if (_Settings.EffectiveUsageSelection.Mode != UsageSelectionModeEnum.Disabled && !String.IsNullOrEmpty(mission.TenantId))
+            {
+                // One detached policy revision governs this attempt. Observe never changes legacy routing.
+                try { usageSelection = await BuildUsageSelectionAsync(captainSelection, _Settings.EffectiveUsageSelection.Copy(), token).ConfigureAwait(false); }
+                catch (System.Data.Common.DbException)
+                {
+                    CaptainSelectionTelemetry.PersistenceFailure("Evidence");
+                    UsageWait(mission, "SelectionPersistenceUnavailable", "Selection evidence is temporarily unavailable. Armada will retry without starting a process.");
+                    return false;
+                }
+                if (usageSelection.Settings.Mode == UsageSelectionModeEnum.Enforce)
+                {
+                    captain = usageSelection.Evaluation.SelectedCaptainId == null ? null : usageSelection.Captains[usageSelection.Evaluation.SelectedCaptainId];
+                    usageSelection.ActualCaptainId = captain?.Id;
+                }
+                if (usageSelection.Evaluation.CandidateLimitExceeded)
+                {
+                    UsageWait(mission, "CandidateLimitExceeded", "The complete captain comparison exceeds the configured candidate bound. An administrator can increase MaximumCandidates.");
+                    return false;
+                }
+                _UsageSelectionBlockers.TryRemove(mission.Id, out _);
+                if (captain == null && !await RecordUsageSelectionWaitAsync(usageSelection, mission, token).ConfigureAwait(false))
+                { NoteWait(mission, MissionWaitGateEnum.CaptainSlot, usageSelection.Evaluation.ReasonCode); return false; }
+            }
             if (captain == null)
             {
+                if (usageSelection?.Settings.Mode == UsageSelectionModeEnum.Enforce)
+                {
+                    UsageSelectionCandidateResult? blocked = usageSelection.Evaluation.Candidates.FirstOrDefault();
+                    _UsageSelectionBlockers[mission.Id] = new UsageSelectionTransientBlocker { PolicyKey = UsagePolicyKey(), RetryUtc = DateTime.MinValue,
+                        Blocker = AddRecoveryAdvice(new MissionAssignmentBlocker { Reason = MissionAssignmentBlockerReasonEnum.NoEligibleCaptain,
+                            SelectionReasonCode = usageSelection.Evaluation.ReasonCode, Summary = "No captain currently satisfies the configured usage policy.",
+                            SelectionNextReconsiderUtc = blocked?.NextReconsiderUtc }, mission, usageSelection) };
+                }
                 _Logging.Warn(_Header + "no idle captains available for mission " + mission.Id +
                     (mission.Persona != null ? " (persona: " + mission.Persona + ")" : ""));
+                if (captainSelection.RoutingEligible.Count > 0 && captainSelection.CapacityExclusions.TryGetValue(captainSelection.RoutingEligible[0].Id, out MissionAssignmentBlocker? capacityBlocker))
+                    NoteWait(mission, capacityBlocker);
+                else NoteWait(mission, MissionWaitGateEnum.CaptainSlot, usageSelection?.Evaluation.ReasonCode);
                 return false;
             }
 
@@ -595,7 +648,9 @@ namespace Armada.Core.Services
                 bool allowed = await CanAssignMissionAsync(mission, captain).ConfigureAwait(false);
                 if (!allowed)
                 {
+                    if (usageSelection != null) await RecordUsageSelectionWaitAsync(usageSelection, mission, token, "PlacementWaiting").ConfigureAwait(false);
                     _Logging.Info(_Header + "deferring mission " + mission.Id + ": launch policy requires the requesting user's Harbor to be connected and eligible, and none is yet");
+                    NoteWait(mission, MissionWaitGateEnum.Placement, "HarborRequired");
                     return false;
                 }
             }
@@ -603,11 +658,16 @@ namespace Armada.Core.Services
             // Choose where the dock lives before creating it: a Harbor that can serve the vessel, the Admiral's host, or
             // nowhere yet (the mission stays Pending and is retried on the next dispatch cycle).
             DockPlacement placement = DockPlacement.OnAdmiral("no Harbor placement is configured");
-            if (ResolveDockPlacementAsync != null)
+            if (ResolveDockPlacementAsync != null || ResolveUsageDockPlacementAsync != null)
             {
-                placement = await ResolveDockPlacementAsync(mission, captain, vessel).ConfigureAwait(false);
+                UsageSelectionCandidate? chosenUsage = usageSelection?.Evaluation.Candidates.SingleOrDefault(c => c.Candidate.CaptainId == captain.Id)?.Candidate;
+                if (usageSelection?.Settings.Mode == UsageSelectionModeEnum.Enforce && chosenUsage?.IdentityVerified == true && chosenUsage.ConfigurationMatches
+                    && usageSelection.Evidence.TryGetValue(captain.Id, out UsageSelectionAccountEvidence? credentialSource) && ResolveUsageDockPlacementAsync != null)
+                    placement = await ResolveUsageDockPlacementAsync(mission, captain, vessel, credentialSource.HostId).ConfigureAwait(false);
+                else if (ResolveDockPlacementAsync != null) placement = await ResolveDockPlacementAsync(mission, captain, vessel).ConfigureAwait(false);
                 if (placement.Wait)
                 {
+                    if (usageSelection != null) await RecordUsageSelectionWaitAsync(usageSelection, mission, token, "PlacementWaiting").ConfigureAwait(false);
                     // Log a reason once per mission until it changes, not on every dispatch cycle.
                     string previousReason = _PlacementWaitReasons.TryGetValue(mission.Id, out string? known) ? known : String.Empty;
                     if (!String.Equals(previousReason, placement.Reason, StringComparison.Ordinal))
@@ -616,11 +676,30 @@ namespace Armada.Core.Services
                         _Logging.Warn(_Header + "mission " + mission.Id + " waits: " + placement.Reason);
                     }
 
+                    NoteWait(mission, MissionWaitGateEnum.Placement, placement.Reason);
                     return false;
                 }
             }
 
+            string? usageExecutionHost = placement.HarborId ?? UsageSelectionLocalHostId;
+            if (usageSelection?.Settings.Mode == UsageSelectionModeEnum.Enforce)
+            {
+                if (String.IsNullOrWhiteSpace(usageExecutionHost))
+                { UsageWait(mission, "UsageHostUnresolved", "The execution credential host is not known. Configure the host before enforcing usage selection."); return false; }
+                UsageSelectionCandidate? selectedUsage = usageSelection.Evaluation.Candidates.Single(c => c.Candidate.CaptainId == captain.Id).Candidate;
+                if (selectedUsage.IdentityVerified && selectedUsage.ConfigurationMatches && usageSelection.Evidence.TryGetValue(captain.Id, out UsageSelectionAccountEvidence? observedHost) && observedHost.HostId != usageExecutionHost)
+                { UsageWait(mission, "UsageHostMismatch", "Captured usage belongs to a different credential host than this execution. Capture usage on the selected execution host."); return false; }
+            }
+
             _PlacementWaitReasons.TryRemove(mission.Id, out string? _);
+
+            // A hierarchy child continues its parent's branch or forks from its head (D16), decided when it starts.
+            if (!String.IsNullOrEmpty(mission.ParentMissionId) && String.IsNullOrEmpty(mission.DependsOnMissionId)
+                && String.IsNullOrEmpty(mission.BranchName) && String.IsNullOrEmpty(mission.BaseBranchName))
+            {
+                HierarchyReadiness hierarchy = await EvaluateParentReadinessAsync(mission, token).ConfigureAwait(false);
+                if (hierarchy.ParentTerminal != null) await ApplyHierarchyBranchAsync(mission, hierarchy.ParentTerminal, token).ConfigureAwait(false);
+            }
 
             // Missions with an existing branch continue work on that branch. This covers
             // downstream pipeline stages, review rework loops, and resumed missions.
@@ -632,28 +711,97 @@ namespace Armada.Core.Services
             // Claim the captain before any slow work. The claim is atomic (only an Idle captain is taken), so a
             // concurrent dispatcher can never take it in the gap, and from here on the captain names this mission,
             // which keeps orphan recovery from reverting the assignment while its dock is being provisioned.
-            bool claimed = await _Database.Captains.TryClaimAsync(captain.Id, mission.Id, null, token).ConfigureAwait(false);
+            bool claimed;
+            if (usageSelection != null)
+            {
+                // Evidence and the actual compatibility choice commit with the slot, before any process/dock work.
+                // An attempt after an earlier one ended without work or was interrupted is Armada's own retry.
+                string trigger = mission.NoOpRedispatchAttempts > 0 || mission.RedispatchAttempts > 0 ? CaptainSelectionTriggers.Redispatch : CaptainSelectionTriggers.Dispatch;
+                CaptainSelectionRecordSet decision = UsageSelectionRecordBuilder.Build(usageSelection, mission, trigger, admitted: true);
+                decision.AdmissionHostId = usageExecutionHost;
+                CaptainSelectionAdmissionReceipt receipt;
+                // A policy update that completed before this check makes this snapshot obsolete. An
+                // overlapping later update may linearize after this attempt; history retains its exact policy.
+                if (UsagePolicyKey() != System.Text.Json.JsonSerializer.Serialize(usageSelection.Settings)) return false;
+                using CaptainSelectionStage admissionStage = CaptainSelectionTelemetry.Stage("transaction", mission.Id);
+                try { receipt = usageSelection.Settings.Mode == UsageSelectionModeEnum.Enforce
+                    ? await _Database.CaptainSelections.TryAdmitEnforcedAsync(decision, ceiling: _Settings.Concurrency.MaxCaptainConcurrency, token: token).ConfigureAwait(false)
+                    : await _Database.CaptainSelections.TryAdmitObservedAsync(decision, ceiling: _Settings.Concurrency.MaxCaptainConcurrency, token: token).ConfigureAwait(false); }
+                catch (Exception ex) when (ex is System.Data.Common.DbException || TransientDatabaseError.IsTransient(ex))
+                {
+                    CaptainSelectionTelemetry.PersistenceFailure("Admission");
+                    UsageWait(mission, UsageSelectionReasonCodes.SelectionPersistenceUnavailable, "Selection admission could not be confirmed. Armada will reconcile the recorded attempt before starting any process.");
+                    return false;
+                }
+                claimed = receipt.Claimed;
+                RecordAdmissionTelemetry(admissionStage, usageSelection, decision, receipt);
+                if (claimed)
+                {
+                    _NoOpRedispatchCarry.TryRemove(mission.Id, out _);
+                    mission.UsageAdmissionExecutionKey = decision.Decision.ExecutionAttemptId;
+                    NotifySelectionChanged(mission, decision.Decision.Id, CaptainSelectionOutcomes.Admitted);
+                }
+                // A replay is recovered by the normal mission-owned lifecycle, never launched a second time here.
+                if (receipt.AlreadyCommitted) return false;
+            }
+            else claimed = await _Database.CaptainSelections.TryAdmitLegacyAsync(captain.Id, mission.Id, usageExecutionHost, _Settings.Concurrency.MaxCaptainConcurrency, token).ConfigureAwait(false);
             if (!claimed)
             {
                 _Logging.Info(_Header + "captain " + captain.Id + " was claimed by another mission before " + mission.Id + " could take it; retrying next cycle");
                 return false;
             }
 
+            if (usageSelection == null && !String.IsNullOrEmpty(mission.TenantId))
+                mission.UsageAdmissionExecutionKey = await _Database.CaptainSelections.ReadUsageExecutionKeyAsync(mission.TenantId, mission.Id, token).ConfigureAwait(false);
+            _UsageSelectionBlockers.TryRemove(mission.Id, out _);
             mission.BranchName = branchName;
             mission.CaptainId = captain.Id;
             mission.Status = MissionStatusEnum.Assigned;
             mission.LastUpdateUtc = DateTime.UtcNow;
-            bool assignmentRecorded = await _Database.Missions.TryUpdateIfStatusAsync(mission, new MissionStatusEnum[] { MissionStatusEnum.Pending }, token).ConfigureAwait(false);
+            DateTime? previousReadyUtc = mission.ReadyUtc;
+            DateTime? previousAssignedUtc = mission.AssignedUtc;
+            AssignmentWaitTiming waitTiming = await _WaitTracker.PrepareAssignmentAsync(mission, token).ConfigureAwait(false);
+            bool assignmentRecorded = await _Database.Missions.TryUpdateIfStatusAsync(mission, new MissionStatusEnum[] { MissionStatusEnum.Assigned }, token).ConfigureAwait(false);
             if (!assignmentRecorded)
             {
                 // Someone else moved the mission (cancelled, or assigned by another caller) after it was read.
                 _Logging.Info(_Header + "mission " + mission.Id + " left Pending before its assignment was recorded; releasing captain " + captain.Id);
                 await _Database.Captains.TryReleaseFromMissionAsync(captain.Id, mission.Id, CancellationToken.None).ConfigureAwait(false);
+                mission.ReadyUtc = previousReadyUtc;
+                mission.AssignedUtc = previousAssignedUtc;
                 return false;
             }
 
+            _CapacityLock.Release();
+            capacityHeld = false;
+            vesselAdmission.Dispose();
+            vesselAdmission = null;
+            try { await _WaitTracker.CompleteAssignmentAsync(mission, waitTiming, token).ConfigureAwait(false); }
+            catch (Exception ex) when (!(ex is OperationCanceledException)) { _Logging.Warn(_Header + "could not close the wait of mission " + mission.Id + ": " + ex.Message); }
+
+            if (launchInBackground)
+            {
+                // The mission is saved and admitted: it is Assigned and its captain slot is claimed. Dock provisioning and
+                // launch are serialized per repository, so a create request returns now instead of queueing behind other
+                // missions' git work. A failure still rolls back to Pending and the next dispatch cycle retries.
+                launchDeferred = true;
+                string deferredMissionId = mission.Id;
+                Task background = Task.Run(async () =>
+                {
+                    try { await ProvisionAndLaunchAsync(CancellationToken.None).ConfigureAwait(false); }
+                    catch (Exception ex) { _Logging.Warn(_Header + "background launch of mission " + deferredMissionId + " failed: " + ex.Message); }
+                    finally { _InFlightAssignments.TryRemove(deferredMissionId, out _); }
+                });
+                _BackgroundLaunches[deferredMissionId] = background;
+                _ = background.ContinueWith(_ => _BackgroundLaunches.TryRemove(new KeyValuePair<string, Task>(deferredMissionId, background)), TaskScheduler.Default);
+                return true;
+            }
+            return await ProvisionAndLaunchAsync(token).ConfigureAwait(false);
+
+            async Task<bool> ProvisionAndLaunchAsync(CancellationToken token)
+            {
             captain.State = CaptainStateEnum.Working;
-            captain.CurrentMissionId = mission.Id;
+            captain = captain.ForMission(mission);
             captain.LastHeartbeatUtc = DateTime.UtcNow;
             captain.LastUpdateUtc = DateTime.UtcNow;
 
@@ -666,15 +814,16 @@ namespace Armada.Core.Services
                 {
                     _Logging.Debug(_Header + "provisioning dock for mission " + mission.Id + " on vessel " + vessel.Id + " with captain " + captain.Id);
                     if (placement.HarborId != null)
-                        dock = await _Docks.ProvisionOnHarborAsync(vessel, captain, branchName, mission.Id, placement.HarborId, token).ConfigureAwait(false);
+                        dock = await _Docks.ProvisionOnHarborAsync(vessel, captain, branchName, mission.Id, placement.HarborId, mission.BaseBranchName, token).ConfigureAwait(false);
                     else
-                        dock = await _Docks.ProvisionAsync(vessel, captain, branchName, mission.Id, token).ConfigureAwait(false);
+                        dock = await _Docks.ProvisionAsync(vessel, captain, branchName, mission.Id, mission.BaseBranchName, token).ConfigureAwait(false);
                 }
                 catch (Exception ex) when (!(ex is OperationCanceledException && token.IsCancellationRequested))
                 {
                     _Logging.Warn(_Header + "dock provisioning threw for mission " + mission.Id + " vessel " + vessel.Id + " captain " + captain.Id + ": "
                         + (ex is DockProvisioningException ? ex.Message : ex.ToString()));
                     await RollbackAssignmentAsync(mission, captain, null, preserveExistingBranch).ConfigureAwait(false);
+                    await RecordProvisionFailureAsync(mission, captain, placement.HarborId, ex, CancellationToken.None).ConfigureAwait(false);
                     return false;
                 }
 
@@ -682,11 +831,15 @@ namespace Armada.Core.Services
                 {
                     _Logging.Warn(_Header + "dock provisioning failed for captain " + captain.Id + " vessel " + vessel.Id + " mission " + mission.Id + " -- reverting to Pending");
                     await RollbackAssignmentAsync(mission, captain, null, preserveExistingBranch).ConfigureAwait(false);
+                    await RecordProvisionFailureAsync(mission, captain, placement.HarborId, null, CancellationToken.None).ConfigureAwait(false);
                     return false;
                 }
 
-                // Track the dock on the mission and the captain, each only while they still describe this assignment.
+                // Track the dock on the mission and the captain, each only while they still describe this assignment. The
+                // mission keeps the commit its dock started from (durable evidence for scope checks and the black box).
+                _ProvisionFailureCaptures.TryRemove(mission.Id, out string? _);
                 mission.DockId = dock.Id;
+                mission.StartCommit = DockStartCommit.FromDock(dock) ?? mission.StartCommit;
                 mission.LastUpdateUtc = DateTime.UtcNow;
                 bool dockRecorded = await _Database.Missions.TryUpdateIfStatusAsync(mission, new MissionStatusEnum[] { MissionStatusEnum.Assigned }, token).ConfigureAwait(false);
                 bool captainHasDock = dockRecorded && await _Database.Captains.TrySetDockAsync(captain.Id, mission.Id, dock.Id, token).ConfigureAwait(false);
@@ -697,7 +850,7 @@ namespace Armada.Core.Services
                     return false;
                 }
 
-                captain.CurrentDockId = dock.Id;
+                captain = captain.ForMission(mission);
 
                 // Commit continuity: a later stage must start from exactly the commit the stage before it produced. A dock
                 // that lacks it (the branch lived on another host and this one created it from the default branch) would
@@ -706,7 +859,7 @@ namespace Armada.Core.Services
                 if (continuityFailure != null)
                 {
                     _Logging.Warn(_Header + "mission " + mission.Id + " refused: " + continuityFailure);
-                    await FailAssignmentAsync(mission, captain, dock, continuityFailure).ConfigureAwait(false);
+                    await FailAssignmentAsync(mission, captain, dock, continuityFailure, BlackBoxStepEnum.BranchCreate).ConfigureAwait(false);
                     return false;
                 }
 
@@ -715,7 +868,7 @@ namespace Armada.Core.Services
                 if (integrationFailure != null)
                 {
                     _Logging.Warn(_Header + "mission " + mission.Id + " refused: " + integrationFailure);
-                    await FailAssignmentAsync(mission, captain, dock, integrationFailure).ConfigureAwait(false);
+                    await FailAssignmentAsync(mission, captain, dock, integrationFailure, BlackBoxStepEnum.IntegrationBarrier).ConfigureAwait(false);
                     return false;
                 }
 
@@ -754,14 +907,17 @@ namespace Armada.Core.Services
             int processId;
             try
             {
+                if (!String.IsNullOrEmpty(mission.TenantId) && !await _Database.CaptainSelections.MarkLaunchAttemptedAsync(mission.TenantId, mission.Id, captain.Id, mission.UsageAdmissionExecutionKey ?? String.Empty, CancellationToken.None).ConfigureAwait(false))
+                    throw new InvalidOperationException("The execution no longer owns an un-released usage admission receipt.");
                 processId = await _Captains.OnLaunchAgent.Invoke(captain, mission, dock).ConfigureAwait(false);
+                await RecordSelectionExecutionStartedAsync(mission, CancellationToken.None).ConfigureAwait(false);
             }
             catch (MissionLaunchConfigurationException configuration)
             {
                 // A deterministic policy/configuration problem cannot be repaired by repeatedly launching.
                 // Keep it visible as a terminal operational failure, without a provider call or rescue loop.
                 _LaunchFailures.TryRemove(mission.Id, out MissionLaunchFailure? _);
-                await FailAssignmentAsync(mission, captain, dock, configuration.Message).ConfigureAwait(false);
+                await FailAssignmentAsync(mission, captain, dock, configuration.Message, BlackBoxStepEnum.AssignmentFailed, configuration).ConfigureAwait(false);
 
                 // The same configuration fails every mission this captain is given; take it out of the pool for the
                 // quarantine window instead of letting it be picked first again.
@@ -775,7 +931,7 @@ namespace Armada.Core.Services
                 // on every dispatch cycle, so the mission fails with the actionable reason instead, and its dependents
                 // and voyage settle like any other terminal failure.
                 _Logging.Warn(_Header + "mission " + mission.Id + " failed at launch: " + dockMissing.Message);
-                await FailAssignmentAsync(mission, captain, dock, dockMissing.Message).ConfigureAwait(false);
+                await FailAssignmentAsync(mission, captain, dock, dockMissing.Message, BlackBoxStepEnum.HarborUnavailable, dockMissing).ConfigureAwait(false);
                 return false;
             }
             catch (Exception ex) when (!(ex is OperationCanceledException && token.IsCancellationRequested))
@@ -791,7 +947,8 @@ namespace Armada.Core.Services
                     _LaunchFailures.TryRemove(mission.Id, out MissionLaunchFailure? _);
                     await FailAssignmentAsync(mission, captain, dock,
                         "Captain " + captain.Name + " could not be started " + failure.Count + " times: " + failure.Reason
-                        + " If this mission should run on your Harbor, connect it and turn on Require Harbor for launch (Server settings), then restart the mission.").ConfigureAwait(false);
+                        + " If this mission should run on your Harbor, connect it and turn on Require Harbor for launch (Server settings), then restart the mission.",
+                        BlackBoxStepEnum.AssignmentFailed, ex).ConfigureAwait(false);
                     return false;
                 }
 
@@ -856,9 +1013,12 @@ namespace Armada.Core.Services
             _Logging.Info(_Header + "assigned mission " + mission.Id + " to captain " + captain.Id + " at " + dock.WorktreePath);
             return true;
             }
+            }
             finally
             {
-                _InFlightAssignments.TryRemove(mission.Id, out _);
+                if (capacityHeld) _CapacityLock.Release();
+                vesselAdmission?.Dispose();
+                if (!launchDeferred) _InFlightAssignments.TryRemove(mission.Id, out _);
             }
         }
 
@@ -866,9 +1026,9 @@ namespace Armada.Core.Services
         public async Task HandleCompletionAsync(Captain captain, CancellationToken token = default)
         {
             if (captain == null) throw new ArgumentNullException(nameof(captain));
-            if (String.IsNullOrEmpty(captain.CurrentMissionId)) return;
+            if (String.IsNullOrEmpty(captain.Assignment?.Id)) return;
 
-            await HandleCompletionAsync(captain, captain.CurrentMissionId, token).ConfigureAwait(false);
+            await HandleCompletionAsync(captain, captain.Assignment!.Id!, token).ConfigureAwait(false);
         }
 
         /// <inheritdoc />
@@ -1006,9 +1166,9 @@ namespace Armada.Core.Services
         {
             // Backoff protects against relaunching the same broken captain; it should not hold a mission back when a
             // captain that has not failed it is idle and could start it now.
-            List<Captain> idle = await _Database.Captains.EnumerateByStateAsync(CaptainStateEnum.Idle, token).ConfigureAwait(false);
+            Captain? candidate = (await SelectCaptainAdmissionAsync(mission, token).ConfigureAwait(false)).Selected;
             lock (failure.FailedCaptainIds)
-                return idle.Any(c => CaptainVisibleToMission(c, mission) && !failure.FailedCaptainIds.Contains(c.Id));
+                return candidate != null && !failure.FailedCaptainIds.Contains(candidate.Id);
         }
 
         private async Task QuarantineMisconfiguredCaptainAsync(Captain captain, string reason)
@@ -1028,7 +1188,7 @@ namespace Armada.Core.Services
                 if (current == null) return;
                 if (String.IsNullOrEmpty(captain.TenantId))
                 {
-                    if (current.State != CaptainStateEnum.Idle || !String.IsNullOrEmpty(current.CurrentMissionId)) return;
+                    if (current.State != CaptainStateEnum.Idle || current.ActiveMissionCount > 0 || current.CurrentSessionId != null) return;
                     current.State = CaptainStateEnum.Quarantined;
                 }
                 else if (current.State != CaptainStateEnum.Quarantined)
@@ -1047,24 +1207,20 @@ namespace Armada.Core.Services
             }
         }
 
-        private async Task<List<Captain>> ApplyCapacityLimitsAsync(List<Captain> idleCaptains, Mission mission, CancellationToken token)
+        private async Task<List<Captain>> ApplyCapacityLimitsAsync(List<Captain> idleCaptains, Mission mission, CancellationToken token,
+            Dictionary<string, MissionAssignmentBlocker>? excluded = null)
         {
             if (idleCaptains.Count == 0) return idleCaptains;
 
             // Per-runtime caps (AgentSettings.MaxConcurrent, 0 = unlimited) and per-endpoint caps
-            // (InferenceOptions.MaxConcurrentMissions) count every Working captain, so several captains pointed at one
+            // (InferenceOptions.MaxConcurrentMissions) count occupied execution slots, so several captains pointed at one
             // local model server share its budget instead of each starting a run against it.
-            Dictionary<AgentRuntimeEnum, int> runtimeLimits = new Dictionary<AgentRuntimeEnum, int>();
-            foreach (AgentSettings agent in _Settings.Agents ?? new List<AgentSettings>())
-            {
-                if (agent.MaxConcurrent > 0 && (!runtimeLimits.TryGetValue(agent.Runtime, out int existing) || agent.MaxConcurrent < existing))
-                    runtimeLimits[agent.Runtime] = agent.MaxConcurrent;
-            }
+            Dictionary<AgentRuntimeEnum, int> runtimeLimits = ConcurrencyCapacityPolicy.RuntimeLimits(_Settings.Agents);
 
             bool anyEndpoint = idleCaptains.Any(c => !String.IsNullOrEmpty(c.ModelEndpointId));
             if (runtimeLimits.Count == 0 && !anyEndpoint) return idleCaptains;
 
-            List<Captain> working = await _Database.Captains.EnumerateByStateAsync(CaptainStateEnum.Working, token).ConfigureAwait(false);
+            List<Captain> working = (await _Database.Captains.EnumerateAsync(token).ConfigureAwait(false)).Where(c => c.ActiveMissionCount > 0 || c.State == CaptainStateEnum.Working).ToList();
             Dictionary<string, ModelEndpoint?> endpoints = new Dictionary<string, ModelEndpoint?>(StringComparer.Ordinal);
             async Task<ModelEndpoint?> EndpointOf(Captain captain)
             {
@@ -1085,15 +1241,23 @@ namespace Armada.Core.Services
                     ModelEndpoint? endpoint = await EndpointOf(busy).ConfigureAwait(false);
                     if (endpoint == null) continue;
                     string key = EndpointCapacityKey(endpoint);
-                    workingByEndpoint[key] = (workingByEndpoint.TryGetValue(key, out int count) ? count : 0) + 1;
+                    workingByEndpoint[key] = (workingByEndpoint.TryGetValue(key, out int count) ? count : 0) + ConcurrencyCapacityPolicy.Occupancy(busy);
                 }
             }
 
             List<Captain> admitted = new List<Captain>();
             foreach (Captain candidate in idleCaptains)
             {
-                if (runtimeLimits.TryGetValue(candidate.Runtime, out int runtimeLimit) && working.Count(w => w.Runtime == candidate.Runtime) >= runtimeLimit)
+                if (runtimeLimits.TryGetValue(candidate.Runtime, out int runtimeLimit) && working.Where(w => w.Runtime == candidate.Runtime).Sum(w => ConcurrencyCapacityPolicy.Occupancy(w)) >= runtimeLimit)
                 {
+                    if (excluded != null) excluded[candidate.Id] = MissionAdmissionEvaluator.Capacity(MissionAssignmentBlockerReasonEnum.RuntimeMissionLimit,
+                        candidate.Runtime + " runtime", working.Where(w => w.Runtime == candidate.Runtime).Sum(w => ConcurrencyCapacityPolicy.Occupancy(w)), runtimeLimit,
+                        AssignmentBlockerActionEnum.EditSettings, "settings", null, "Agents." + candidate.Runtime + ".MaxConcurrent");
+                    if (excluded != null)
+                    {
+                        excluded[candidate.Id].Advice[0].Action = null;
+                        excluded[candidate.Id].Advice[0].Text += " Update this runtime cap in settings.json, or wait for running work to finish.";
+                    }
                     _Logging.Debug(_Header + "captain " + candidate.Id + " skipped for mission " + mission.Id + ": " + candidate.Runtime + " is at its MaxConcurrent of " + runtimeLimit);
                     continue;
                 }
@@ -1103,6 +1267,7 @@ namespace Armada.Core.Services
                 {
                     if (!endpoint.Enabled)
                     {
+                        if (excluded != null) excluded[candidate.Id] = EndpointUnavailable(endpoint, "disabled");
                         _Logging.Debug(_Header + "captain " + candidate.Id + " skipped for mission " + mission.Id + ": its model endpoint " + endpoint.Id + " is disabled");
                         continue;
                     }
@@ -1112,6 +1277,7 @@ namespace Armada.Core.Services
                     if (endpoint.HealthStatus == EndpointHealthStatusEnum.Unhealthy && endpoint.LastHealthCheckUtc.HasValue
                         && DateTime.UtcNow - endpoint.LastHealthCheckUtc.Value <= _UnhealthyEndpointWindow)
                     {
+                        if (excluded != null) excluded[candidate.Id] = EndpointUnavailable(endpoint, "unhealthy");
                         _Logging.Debug(_Header + "captain " + candidate.Id + " skipped for mission " + mission.Id + ": endpoint " + endpoint.BaseUrl + " failed its health check at "
                             + endpoint.LastHealthCheckUtc.Value.ToString("o") + (String.IsNullOrEmpty(endpoint.LastHealthError) ? String.Empty : " (" + endpoint.LastHealthError + ")"));
                         continue;
@@ -1123,6 +1289,7 @@ namespace Armada.Core.Services
                         lock (breaker) open = breaker.OpenUntilUtc.HasValue && breaker.OpenUntilUtc.Value > DateTime.UtcNow;
                         if (open)
                         {
+                            if (excluded != null) excluded[candidate.Id] = EndpointUnavailable(endpoint, "temporarily unavailable after repeated failures");
                             _Logging.Debug(_Header + "captain " + candidate.Id + " skipped for mission " + mission.Id + ": endpoint " + endpoint.BaseUrl + " circuit is open after repeated failures");
                             continue;
                         }
@@ -1131,6 +1298,9 @@ namespace Armada.Core.Services
                     int? endpointLimit = endpoint.InferenceOptions?.MaxConcurrentMissions;
                     if (endpointLimit.HasValue && (workingByEndpoint.TryGetValue(EndpointCapacityKey(endpoint), out int busyCount) ? busyCount : 0) >= endpointLimit.Value)
                     {
+                        if (excluded != null) excluded[candidate.Id] = MissionAdmissionEvaluator.Capacity(MissionAssignmentBlockerReasonEnum.EndpointMissionLimit,
+                            "Endpoint " + endpoint.Name, workingByEndpoint.TryGetValue(EndpointCapacityKey(endpoint), out int count) ? count : 0, endpointLimit.Value,
+                            AssignmentBlockerActionEnum.EditEndpoint, "endpoint", endpoint.Id, "InferenceOptions.MaxConcurrentMissions", 64);
                         _Logging.Debug(_Header + "captain " + candidate.Id + " skipped for mission " + mission.Id + ": endpoint " + endpoint.BaseUrl + " is at its limit of " + endpointLimit.Value + " concurrent mission(s)");
                         continue;
                     }
@@ -1142,11 +1312,7 @@ namespace Armada.Core.Services
             return admitted;
         }
 
-        private static string EndpointCapacityKey(ModelEndpoint endpoint)
-        {
-            string url = (endpoint.BaseUrl ?? String.Empty).Trim().TrimEnd('/');
-            return String.IsNullOrEmpty(url) ? "endpoint:" + endpoint.Id : url.ToLowerInvariant();
-        }
+        private static string EndpointCapacityKey(ModelEndpoint endpoint) => ConcurrencyCapacityPolicy.EndpointKey(endpoint);
 
         private async Task<string?> ReadDockHeadAsync(Dock dock, CancellationToken token)
         {
@@ -1308,6 +1474,10 @@ namespace Armada.Core.Services
 
         private async Task RollbackAssignmentAsync(Mission mission, Captain captain, Dock? dock, bool preserveExistingBranch)
         {
+            if (!await OwnsSelectionCleanupAsync(mission).ConfigureAwait(false)) return;
+            // Only durable no-launch proof permits releasing estimated consumption. Ambiguous launcher failures stay unsettled.
+            if (!String.IsNullOrEmpty(mission.TenantId))
+                await ReleaseSelectionIfUnstartedAsync(mission, captain).ConfigureAwait(false);
             // Cleanup runs with no cancellation: a shutdown mid-assignment must not strand a claimed captain.
             try
             {
@@ -1332,8 +1502,12 @@ namespace Armada.Core.Services
             await ReclaimAssignmentDockAsync(mission, dock).ConfigureAwait(false);
         }
 
-        private async Task FailAssignmentAsync(Mission mission, Captain captain, Dock dock, string reason)
+        private async Task FailAssignmentAsync(Mission mission, Captain captain, Dock dock, string reason, BlackBoxStepEnum step, Exception? exception = null)
         {
+            if (!await OwnsSelectionCleanupAsync(mission).ConfigureAwait(false)) return;
+            bool failed = false;
+            if (!String.IsNullOrEmpty(mission.TenantId))
+                await ReleaseSelectionIfUnstartedAsync(mission, captain).ConfigureAwait(false);
             try
             {
                 mission.Status = MissionStatusEnum.Failed;
@@ -1344,7 +1518,7 @@ namespace Armada.Core.Services
                 mission.ProcessId = null;
                 mission.CompletedUtc = DateTime.UtcNow;
                 mission.LastUpdateUtc = DateTime.UtcNow;
-                bool failed = await _Database.Missions.TryUpdateIfStatusAsync(mission, new MissionStatusEnum[] { MissionStatusEnum.Assigned }, CancellationToken.None).ConfigureAwait(false);
+                failed = await _Database.Missions.TryUpdateIfStatusAsync(mission, new MissionStatusEnum[] { MissionStatusEnum.Assigned }, CancellationToken.None).ConfigureAwait(false);
                 if (failed)
                     ArmadaMetrics.MissionsFailed.Add(1);
                 else
@@ -1353,6 +1527,15 @@ namespace Armada.Core.Services
             catch (Exception ex)
             {
                 _Logging.Warn(_Header + "could not mark mission " + mission.Id + " failed: " + ex.Message);
+            }
+
+            if (failed)
+            {
+                await RecordFailureAsync(mission, MissionStatusEnum.Assigned, step, dock, context =>
+                {
+                    context.Captain = captain;
+                    BlackBoxSiteFacts.ApplyException(context, exception);
+                }, CancellationToken.None).ConfigureAwait(false);
             }
 
             await ReleaseClaimedCaptainAsync(mission, captain).ConfigureAwait(false);
@@ -1390,8 +1573,7 @@ namespace Armada.Core.Services
                 if (released)
                 {
                     captain.State = CaptainStateEnum.Idle;
-                    captain.CurrentMissionId = null;
-                    captain.CurrentDockId = null;
+                    captain.Assignment = null;
                     captain.ProcessId = null;
                     captain.RecoveryAttempts = 0;
                     _Logging.Info(_Header + "released captain " + captain.Id + " from mission " + mission.Id);
@@ -1548,7 +1730,7 @@ namespace Armada.Core.Services
                 return false;
             }
 
-            string? startCommit = TryReadDockStartCommit(dock.Id);
+            string? startCommit = TryReadDockStartCommit(dock, mission);
             if (String.IsNullOrEmpty(startCommit))
             {
                 _Logging.Warn(_Header + "scope validation skipped for mission " + mission.Id +
@@ -1576,6 +1758,7 @@ namespace Armada.Core.Services
                 return false;
             }
 
+            MissionStatusEnum statusBefore = mission.Status;
             mission.Status = MissionStatusEnum.Failed;
             mission.CompletedUtc = DateTime.UtcNow;
             mission.LastUpdateUtc = DateTime.UtcNow;
@@ -1583,6 +1766,16 @@ namespace Armada.Core.Services
             mission.FailureKind = MissionFailureKindEnum.ScopeViolation;
             await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
             _Logging.Warn(_Header + "mission " + mission.Id + " failed scope validation: " + mission.FailureReason);
+
+            // Black box reference capture site: update the row first, then record the failure in one line. The capture
+            // never throws and records this method, file and line as the failure site.
+            await BlackBox.RecordMissionFailureAsync(mission, statusBefore, BlackBoxStepEnum.ScopeViolation, context =>
+            {
+                context.Dock = dock;
+                context.ScopedFiles.AddRange(allowedFiles.OrderBy(f => f, StringComparer.Ordinal));
+                context.OutOfScopeFiles.AddRange(outOfScopeFiles);
+                context.Note = "Scope check base: dock start commit " + startCommit + ".";
+            }, token).ConfigureAwait(false);
             return true;
         }
 
@@ -1610,23 +1803,28 @@ namespace Armada.Core.Services
             return files;
         }
 
-        private string? TryReadDockStartCommit(string dockId)
+        private string? TryReadDockStartCommit(Dock dock, Mission? mission = null)
         {
+            // The .start file is written at provision on the Admiral; the dock's anchors snapshot and the mission row hold
+            // the same commit durably (they survive a lost log directory, and exist for Harbor-hosted docks).
+            string? fromFile = null;
             try
             {
-                string metadataPath = Path.Combine(_Settings.LogDirectory, "docks", dockId + ".start");
-                if (!File.Exists(metadataPath))
-                {
-                    return null;
-                }
-
-                return File.ReadAllText(metadataPath).Trim();
+                string metadataPath = Path.Combine(_Settings.LogDirectory, "docks", dock.Id + ".start");
+                if (File.Exists(metadataPath)) fromFile = File.ReadAllText(metadataPath).Trim();
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "could not read dock start commit metadata for " + dockId + ": " + ex.ToString());
-                return null;
+                _Logging.Warn(_Header + "could not read dock start commit metadata for " + dock.Id + ": " + ex.ToString());
             }
+
+            if (!String.IsNullOrEmpty(fromFile)) return fromFile;
+            string? durable = DockStartCommit.FromDock(dock);
+            if (!String.IsNullOrEmpty(durable)) return durable;
+            if (mission != null && !String.IsNullOrEmpty(mission.StartCommit)
+                && (String.IsNullOrEmpty(mission.DockId) || String.Equals(mission.DockId, dock.Id, StringComparison.Ordinal)))
+                return mission.StartCommit;
+            return null;
         }
 
         /// <summary>

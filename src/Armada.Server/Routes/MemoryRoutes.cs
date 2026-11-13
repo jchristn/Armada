@@ -113,6 +113,10 @@ namespace Armada.Server.Routes
                     req.Http.Response.StatusCode = 201;
                     return saved;
                 }
+                catch (CollectionLimitExceededException ex)
+                {
+                    return RouteErrorMapper.LimitExceeded(req, ex);
+                }
                 catch (Exception ex) when (ex is ArgumentException || ex is InvalidOperationException)
                 {
                     req.Http.Response.StatusCode = 400;
@@ -173,6 +177,10 @@ namespace Armada.Server.Routes
                 {
                     req.Http.Response.StatusCode = 403;
                     return new ApiErrorResponse { Error = ApiResultEnum.Forbidden, Message = ex.Message };
+                }
+                catch (CollectionLimitExceededException ex)
+                {
+                    return RouteErrorMapper.LimitExceeded(req, ex);
                 }
                 catch (Exception ex) when (ex is ArgumentException || ex is InvalidOperationException)
                 {

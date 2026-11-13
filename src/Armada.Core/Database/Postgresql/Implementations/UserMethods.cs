@@ -183,6 +183,47 @@ namespace Armada.Core.Database.Postgresql.Implementations
         }
 
         /// <inheritdoc />
+        public async Task<EnumerationResult<TenantListEntry>> EnumerateTenantsByEmailAsync(string email, EnumerationQuery query, CancellationToken token = default)
+        {
+            if (string.IsNullOrEmpty(email)) throw new ArgumentNullException(nameof(email));
+            query ??= new EnumerationQuery();
+
+            const string fromWhere = " FROM users u INNER JOIN tenants t ON t.id = u.tenant_id"
+                + " WHERE u.email = @email AND t.active = true AND t.id <> @system_id";
+            using (NpgsqlConnection conn = new NpgsqlConnection(_Settings.GetConnectionString()))
+            {
+                await conn.OpenAsync(token).ConfigureAwait(false);
+
+                long totalCount;
+                using (NpgsqlCommand cmd = new NpgsqlCommand())
+                {
+                    cmd.Connection = conn;
+                    cmd.CommandText = "SELECT COUNT(*)" + fromWhere + ";";
+                    cmd.Parameters.AddWithValue("@email", email);
+                    cmd.Parameters.AddWithValue("@system_id", Armada.Core.Constants.SystemTenantId);
+                    totalCount = Convert.ToInt64(await cmd.ExecuteScalarAsync(token).ConfigureAwait(false));
+                }
+
+                List<TenantListEntry> results = new List<TenantListEntry>();
+                using (NpgsqlCommand cmd = new NpgsqlCommand())
+                {
+                    cmd.Connection = conn;
+                    cmd.CommandText = "SELECT t.id AS tenant_id, t.name AS tenant_name" + fromWhere
+                        + " ORDER BY t.name ASC, t.id ASC" + " LIMIT " + query.PageSize + " OFFSET " + query.Offset + ";";
+                    cmd.Parameters.AddWithValue("@email", email);
+                    cmd.Parameters.AddWithValue("@system_id", Armada.Core.Constants.SystemTenantId);
+                    using (NpgsqlDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
+                    {
+                        while (await reader.ReadAsync(token).ConfigureAwait(false))
+                            results.Add(new TenantListEntry(reader["tenant_id"].ToString() ?? string.Empty, reader["tenant_name"].ToString() ?? string.Empty));
+                    }
+                }
+
+                return EnumerationResult<TenantListEntry>.Create(query, results, totalCount);
+            }
+        }
+
+        /// <inheritdoc />
         public async Task<UserMaster> UpdateAsync(UserMaster user, CancellationToken token = default)
         {
             if (user == null) throw new ArgumentNullException(nameof(user));

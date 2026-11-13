@@ -36,5 +36,23 @@ namespace Armada.Core.Database.Interfaces
         /// Enumerate planning session messages for a session.
         /// </summary>
         Task<List<PlanningSessionMessage>> EnumerateBySessionAsync(string planningSessionId, CancellationToken token = default);
+
+        /// <summary>
+        /// Read one page of a session's transcript. CreatedAscending is oldest first (by sequence), CreatedDescending
+        /// (the default) newest first; the id breaks ties. The page is cut in the database.
+        /// </summary>
+        /// <param name="planningSessionId">Planning session identifier.</param>
+        /// <param name="query">Page number, page size (1 to 1000), and order.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>One page of messages.</returns>
+        Task<EnumerationResult<PlanningSessionMessage>> EnumeratePageBySessionAsync(string planningSessionId, EnumerationQuery query, CancellationToken token = default);
+
+        /// <summary>
+        /// Count the messages of a session's transcript.
+        /// </summary>
+        /// <param name="planningSessionId">Planning session identifier.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The number of messages.</returns>
+        Task<long> CountBySessionAsync(string planningSessionId, CancellationToken token = default);
     }
 }

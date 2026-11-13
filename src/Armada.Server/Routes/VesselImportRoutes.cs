@@ -78,7 +78,9 @@ namespace Armada.Server.Routes
                 string? path = DecodeBrowsePath(req.Query.GetValueOrDefault("path"));
                 try
                 {
-                    VesselBrowseResult result = await _Import.BrowseAsync(path).ConfigureAwait(false);
+                    EnumerationQuery page = new EnumerationQuery();
+                    page.ApplyQuerystringOverrides(key => req.Query.GetValueOrDefault(key));
+                    VesselBrowseResult result = await _Import.BrowseAsync(path, page).ConfigureAwait(false);
                     return (object)result;
                 }
                 catch (VesselImportPathNotAllowedException ex)
@@ -93,7 +95,7 @@ namespace Armada.Server.Routes
                 {
                     return Error(req, 403, ApiResultEnum.Forbidden, "Directory cannot be read: " + ex.Message, VesselImportCodes.PathNotAllowed, path);
                 }
-                catch (ArgumentException ex)
+                catch (ArgumentException ex) when (!(ex is CollectionLimitExceededException))
                 {
                     return Error(req, 400, ApiResultEnum.BadRequest, ex.Message, VesselImportRequestException.CodeFor(ex), path);
                 }
@@ -101,8 +103,10 @@ namespace Armada.Server.Routes
             api => api
                 .WithTag("Vessel Import")
                 .WithSummary("Browse directories for import")
-                .WithDescription("Lists the browsable subdirectories of a directory on the Admiral host, flagging git repositories and worktrees. Without a path, lists the allowed roots (Import.AllowedRoots, or the user profile directory when none are configured). Excluded and dot-prefixed names are skipped. Requires TenantAdmin.")
+                .WithDescription("Lists one page of the browsable subdirectories of a directory on the Admiral host by name, flagging git repositories and worktrees (only the page is inspected). Without a path, lists the allowed roots (Import.AllowedRoots, or the user profile directory when none are configured). Excluded and dot-prefixed names are skipped. PageNumber, PageSize, TotalPages, and TotalRecords describe the directory; Truncated is set when it has more entries than the browse examines. Requires TenantAdmin.")
                 .WithParameter(OpenApiParameterMetadata.Query("path", "Directory to list, base64url-encoded (UTF-8). A plain absolute path is also accepted. Omit to list the allowed roots.", false))
+                .WithParameter(OpenApiParameterMetadata.Query("pageNumber", "Page number (default 1)", false))
+                .WithParameter(OpenApiParameterMetadata.Query("pageSize", "Page size, 1 to 1000 (default 10)", false))
                 .WithResponse(200, OpenApiJson.For<VesselBrowseResult>("Directory listing"))
                 .WithResponse(400, OpenApiResponseMetadata.BadRequest())
                 .WithResponse(403, OpenApiJson.For<ApiErrorResponse>("Not a tenant admin, or the path is outside the allowed roots"))
@@ -132,7 +136,7 @@ namespace Armada.Server.Routes
                 {
                     return Error(req, 400, ApiResultEnum.BadRequest, ex.Message, VesselImportCodes.HarborNotSupported, null);
                 }
-                catch (ArgumentException ex)
+                catch (ArgumentException ex) when (!(ex is CollectionLimitExceededException))
                 {
                     return Error(req, 400, ApiResultEnum.BadRequest, ex.Message, VesselImportRequestException.CodeFor(ex), null);
                 }
@@ -171,7 +175,7 @@ namespace Armada.Server.Routes
                 {
                     return Error(req, 409, ApiResultEnum.Conflict, ex.Message, VesselImportCodes.BatchBusy, null);
                 }
-                catch (ArgumentException ex)
+                catch (ArgumentException ex) when (!(ex is CollectionLimitExceededException))
                 {
                     return Error(req, 400, ApiResultEnum.BadRequest, ex.Message, VesselImportRequestException.CodeFor(ex), null);
                 }
@@ -275,7 +279,7 @@ namespace Armada.Server.Routes
                 {
                     return Error(req, 409, ApiResultEnum.Conflict, ex.Message, VesselImportCodes.BatchBusy, null);
                 }
-                catch (ArgumentException ex)
+                catch (ArgumentException ex) when (!(ex is CollectionLimitExceededException))
                 {
                     return Error(req, 400, ApiResultEnum.BadRequest, ex.Message, VesselImportRequestException.CodeFor(ex), null);
                 }
@@ -317,7 +321,7 @@ namespace Armada.Server.Routes
                 {
                     return Error(req, 409, ApiResultEnum.Conflict, ex.Message, VesselImportCodes.BatchBusy, null);
                 }
-                catch (ArgumentException ex)
+                catch (ArgumentException ex) when (!(ex is CollectionLimitExceededException))
                 {
                     return Error(req, 400, ApiResultEnum.BadRequest, ex.Message, VesselImportRequestException.CodeFor(ex), null);
                 }

@@ -93,7 +93,7 @@ export function ObjectivesList({ embedded = false, testID = 'objectives-list' }:
     if (!request) return;
     void run(`move-${objective.id}`, async () => {
       const updated = await reorderBacklog(request);
-      list.setData((prev) => applyBacklogReorder(prev ?? [], updated ?? []));
+      list.setData((prev) => applyBacklogReorder(prev ?? [], updated));
     }, t('Backlog ranking updated.'));
   };
 

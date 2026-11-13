@@ -6,7 +6,7 @@ import type { Job } from '../../types/models';
 import { useLocale } from '../../context/LocaleContext';
 import { useNotifications } from '../../context/NotificationContext';
 import { jobFriendlyName, jobRoute } from '../../lib/vesselImportLabels';
-import { JOBS_PATH } from '../../lib/navTargets';
+import { BACKGROUND_ACTIVITY_PATH } from '../../lib/navTargets';
 
 /** Poll interval while at least one background job is running, in milliseconds. */
 export const ACTIVITY_FAST_POLL_MS = 5000;
@@ -83,7 +83,7 @@ export default function BackgroundActivityIndicator() {
         (pageNumber, pageSize) => listJobs(pageNumber > 1 ? { status: ['Queued', 'Running'], pageNumber, pageSize } : { status: ['Queued', 'Running'], pageSize }),
         { pageSize: ACTIVITY_PAGE_SIZE },
       );
-      active = (result.objects || []).filter(isActive);
+      active = (result.objects || []).filter(job => job.kind !== 'UsageProbe' && isActive(job));
       if (!mounted.current) return;
       const before = previous.current;
       const now = new Map(active.map((j) => [j.id, j]));
@@ -170,7 +170,7 @@ export default function BackgroundActivityIndicator() {
               </li>
             ))}
           </ul>
-          <Link to={JOBS_PATH} className="bg-activity-all" onClick={() => setOpen(false)} title={t('Open the Jobs page, which lists every background task with its status and history.')}>{t('Open the Jobs page')}</Link>
+          <Link to={BACKGROUND_ACTIVITY_PATH} className="bg-activity-all" onClick={() => setOpen(false)} title={t('View recorded background task outcomes in Events.')}>{t('View activity')}</Link>
         </div>
       )}
     </div>

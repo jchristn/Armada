@@ -155,6 +155,7 @@ namespace Armada.Core.Services.Ask
             {
                 Captain? captain = await ReadVisibleCaptainAsync(auth, request.CaptainId!, token).ConfigureAwait(false);
                 if (captain == null) throw new ArgumentException("Captain not found: " + request.CaptainId, nameof(request));
+                CaptainEligibility.RequireActive(captain);
                 thread.CaptainId = captain.Id;
             }
 
@@ -180,7 +181,9 @@ namespace Armada.Core.Services.Ask
         }
 
         /// <summary>
-        /// Read a thread with its tracked work (each with its latest snapshot) and pending proposals.
+        /// Read a thread with counts of its tracked work, pending proposals, and pending CLI permission requests, and the
+        /// running turn's progress. The collections themselves are read with <see cref="EnumerateTrackedWorkAsync"/>,
+        /// <see cref="EnumerateProposalsAsync"/>, and <see cref="EnumerateActiveTurnToolCallsAsync"/>.
         /// </summary>
         /// <param name="auth">Caller.</param>
         /// <param name="threadId">Thread identifier.</param>
@@ -192,28 +195,130 @@ namespace Armada.Core.Services.Ask
             if (thread == null) return null;
 
             AskThreadDetail detail = new AskThreadDetail();
-            detail.TrackedWork = await _Database.AskTrackedWork.EnumerateByThreadAsync(thread.TenantId!, thread.Id, token).ConfigureAwait(false);
-            foreach (AskTrackedWork work in detail.TrackedWork)
-            {
-                work.Snapshot = await TryBuildSnapshotAsync(work, token).ConfigureAwait(false);
-            }
+            detail.TrackedWorkCount = await _Database.AskTrackedWork.CountByThreadAsync(thread.TenantId!, thread.Id, null, token).ConfigureAwait(false);
+            detail.PendingProposalCount = await _Database.AskActionProposals.CountByThreadAsync(thread.TenantId!, thread.Id, AskProposalStatusEnum.Pending, token).ConfigureAwait(false);
+            EnumerationResult<CliPermissionRequest> cli = await _Database.CliPermissionRequests.EnumeratePageAsync(new CliPermissionRequestQuery { TenantId = thread.TenantId, ThreadId = thread.Id, Status = CliPermissionRequestStatusEnum.Pending }, 1, 1, token).ConfigureAwait(false);
+            detail.PendingCliPermissionCount = cli.TotalRecords;
 
-            detail.PendingProposals = await _Database.AskActionProposals.EnumerateByThreadAsync(thread.TenantId!, thread.Id, AskProposalStatusEnum.Pending, token).ConfigureAwait(false);
-            detail.PendingCliPermissions = await _Database.CliPermissionRequests.EnumerateAsync(new CliPermissionRequestQuery { TenantId = thread.TenantId, ThreadId = thread.Id, Status = CliPermissionRequestStatusEnum.Pending }, token).ConfigureAwait(false);
-            foreach (AskActionProposal proposal in detail.PendingProposals) Decorate(proposal);
-            foreach (CliPermissionRequest request in detail.PendingCliPermissions) AnnotateCliPermission(auth, request);
-
-            thread.ActiveWorkCount = detail.TrackedWork.Count(w => w.State == AskTrackedWorkStateEnum.Active);
+            thread.ActiveWorkCount = (int)await _Database.AskTrackedWork.CountByThreadAsync(thread.TenantId!, thread.Id, AskTrackedWorkStateEnum.Active, token).ConfigureAwait(false);
             thread.ActiveTurnId = ActiveTurnResolver?.Invoke(thread.Id);
             if (thread.ActiveTurnId != null)
             {
                 AskTurnProgress? progress = ActiveTurnProgressResolver?.Invoke(thread.Id);
-                if (progress != null && String.Equals(progress.TurnId, thread.ActiveTurnId, StringComparison.Ordinal)) detail.ActiveTurn = progress;
+                if (progress != null && String.Equals(progress.TurnId, thread.ActiveTurnId, StringComparison.Ordinal))
+                {
+                    progress.ToolCallCount = progress.ToolCalls.Count;
+                    detail.ActiveTurn = progress;
+                }
             }
 
             thread.CliPermission = await ResolveCliPermissionAsync(thread, token).ConfigureAwait(false);
             detail.Thread = thread;
             return detail;
+        }
+
+        /// <summary>
+        /// Read one page of the work a caller's thread tracks, each item with a freshly built snapshot (counts only; the
+        /// mission and target rows are paged separately). Paged in the database: newest first (CreatedDescending, the
+        /// default) or oldest first, id as the tie-break. Query.Status filters by state (Active, Succeeded, Failed,
+        /// Cancelled).
+        /// </summary>
+        /// <param name="auth">Caller.</param>
+        /// <param name="threadId">Thread identifier.</param>
+        /// <param name="query">Paging, order, and state filter.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The page, or null when the thread is not found or not owned.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when query is null.</exception>
+        /// <exception cref="ArgumentException">Thrown when Status is not a tracked work state.</exception>
+        public async Task<EnumerationResult<AskTrackedWork>?> EnumerateTrackedWorkAsync(AuthContext auth, string threadId, EnumerationQuery query, CancellationToken token = default)
+        {
+            if (query == null) throw new ArgumentNullException(nameof(query));
+            AskThread? thread = await ReadOwnedAsync(auth, threadId, token).ConfigureAwait(false);
+            if (thread == null) return null;
+            AskTrackedWorkStateEnum? state = null;
+            if (!String.IsNullOrWhiteSpace(query.Status))
+            {
+                if (!Enum.TryParse<AskTrackedWorkStateEnum>(query.Status, true, out AskTrackedWorkStateEnum parsed))
+                    throw new ArgumentException("Status must be one of " + String.Join(", ", Enum.GetNames(typeof(AskTrackedWorkStateEnum))) + ".", nameof(query));
+                state = parsed;
+            }
+
+            EnumerationResult<AskTrackedWork> page = await _Database.AskTrackedWork.EnumeratePageByThreadAsync(thread.TenantId!, thread.Id, state, query, token).ConfigureAwait(false);
+            foreach (AskTrackedWork work in page.Objects) work.Snapshot = await TryBuildSnapshotAsync(work, token).ConfigureAwait(false);
+            return page;
+        }
+
+        /// <summary>
+        /// Read one page of a caller's thread's proposals, paged in the database: newest first (CreatedDescending, the
+        /// default) or oldest first, id as the tie-break. Query.Status filters by proposal status (for example Pending).
+        /// </summary>
+        /// <param name="auth">Caller.</param>
+        /// <param name="threadId">Thread identifier.</param>
+        /// <param name="query">Paging, order, and status filter.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The page, or null when the thread is not found or not owned.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when query is null.</exception>
+        /// <exception cref="ArgumentException">Thrown when Status is not a proposal status.</exception>
+        public async Task<EnumerationResult<AskActionProposal>?> EnumerateProposalsAsync(AuthContext auth, string threadId, EnumerationQuery query, CancellationToken token = default)
+        {
+            if (query == null) throw new ArgumentNullException(nameof(query));
+            AskThread? thread = await ReadOwnedAsync(auth, threadId, token).ConfigureAwait(false);
+            if (thread == null) return null;
+            AskProposalStatusEnum? status = null;
+            if (!String.IsNullOrWhiteSpace(query.Status))
+            {
+                if (!Enum.TryParse<AskProposalStatusEnum>(query.Status, true, out AskProposalStatusEnum parsed))
+                    throw new ArgumentException("Status must be one of " + String.Join(", ", Enum.GetNames(typeof(AskProposalStatusEnum))) + ".", nameof(query));
+                status = parsed;
+            }
+
+            EnumerationResult<AskActionProposal> page = await _Database.AskActionProposals.EnumeratePageByThreadAsync(thread.TenantId!, thread.Id, status, query, token).ConfigureAwait(false);
+            foreach (AskActionProposal proposal in page.Objects) Decorate(proposal);
+            return page;
+        }
+
+        /// <summary>
+        /// Read one page of the tool calls of one message of a caller's thread, paged in the database: the order they were
+        /// made in (CreatedAscending) or the reverse (CreatedDescending, the default), id as the tie-break.
+        /// </summary>
+        /// <param name="auth">Caller.</param>
+        /// <param name="threadId">Thread identifier.</param>
+        /// <param name="messageId">Message identifier.</param>
+        /// <param name="query">Paging and order.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The page, or null when the thread or message is not found or not owned.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when query is null.</exception>
+        public async Task<EnumerationResult<AskMessageToolCall>?> EnumerateToolCallsAsync(AuthContext auth, string threadId, string messageId, EnumerationQuery query, CancellationToken token = default)
+        {
+            if (query == null) throw new ArgumentNullException(nameof(query));
+            AskThread? thread = await ReadOwnedAsync(auth, threadId, token).ConfigureAwait(false);
+            if (thread == null || String.IsNullOrWhiteSpace(messageId)) return null;
+            AskMessage? message = await _Database.AskMessages.ReadAsync(thread.TenantId!, messageId, token).ConfigureAwait(false);
+            if (message == null || !String.Equals(message.ThreadId, thread.Id, StringComparison.Ordinal)) return null;
+            return await _Database.AskMessageToolCalls.EnumeratePageByMessageAsync(thread.TenantId!, thread.Id, message.Id, query, token).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Read one page of the tool calls the running turn of a caller's thread has made so far: first-seen order
+        /// (CreatedAscending) or the reverse (CreatedDescending, the default). The calls are the turn's in-memory live
+        /// state until the turn ends and they are stored with its reply; an idle thread returns an empty page.
+        /// </summary>
+        /// <param name="auth">Caller.</param>
+        /// <param name="threadId">Thread identifier.</param>
+        /// <param name="query">Paging and order.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The page, or null when the thread is not found or not owned.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when query is null.</exception>
+        public async Task<EnumerationResult<AskMessageToolCall>?> EnumerateActiveTurnToolCallsAsync(AuthContext auth, string threadId, EnumerationQuery query, CancellationToken token = default)
+        {
+            if (query == null) throw new ArgumentNullException(nameof(query));
+            AskThread? thread = await ReadOwnedAsync(auth, threadId, token).ConfigureAwait(false);
+            if (thread == null) return null;
+            List<AskMessageToolCall> calls = new List<AskMessageToolCall>();
+            AskTurnProgress? progress = ActiveTurnProgressResolver?.Invoke(thread.Id);
+            if (progress != null) calls = progress.ToolCalls;
+            if (query.Order != EnumerationOrderEnum.CreatedAscending) calls = Enumerable.Reverse(calls).ToList();
+            return CollectionLimits.Page(query, calls);
         }
 
         /// <summary>
@@ -260,6 +365,7 @@ namespace Armada.Core.Services.Ask
                 {
                     Captain? captain = await ReadVisibleCaptainAsync(auth, request.CaptainId!, token).ConfigureAwait(false);
                     if (captain == null) throw new ArgumentException("Captain not found: " + request.CaptainId, nameof(request));
+                    CaptainEligibility.RequireActive(captain);
                     thread.CaptainId = captain.Id;
                 }
             }
@@ -322,8 +428,9 @@ namespace Armada.Core.Services.Ask
         }
 
         /// <summary>
-        /// Read a page of a thread's messages, newest page first when BeforeSequence is null, each with its tool calls,
-        /// proposal, and tracked work (with snapshot) populated. Messages within the page are in ascending sequence.
+        /// Read a page of a thread's messages, newest page first when BeforeSequence is null, each with its tool call count,
+        /// proposal, and tracked work (with a counts-only snapshot) populated. Messages within the page are in ascending
+        /// sequence; the page holds at most 200 messages.
         /// </summary>
         /// <param name="auth">Caller.</param>
         /// <param name="threadId">Thread identifier.</param>
@@ -654,11 +761,44 @@ namespace Armada.Core.Services.Ask
         /// <returns>The snapshot, or null when the thread or item is not found or not owned.</returns>
         public async Task<AskWorkSnapshot?> GetWorkSnapshotAsync(AuthContext auth, string threadId, string workId, CancellationToken token = default)
         {
-            AskThread? thread = await ReadOwnedAsync(auth, threadId, token).ConfigureAwait(false);
-            if (thread == null || String.IsNullOrWhiteSpace(workId)) return null;
-            AskTrackedWork? work = await _Database.AskTrackedWork.ReadAsync(thread.TenantId!, workId, token).ConfigureAwait(false);
-            if (work == null || !String.Equals(work.ThreadId, thread.Id, StringComparison.Ordinal)) return null;
+            AskTrackedWork? work = await ReadOwnedWorkAsync(auth, threadId, workId, token).ConfigureAwait(false);
+            if (work == null) return null;
             return await _Snapshots.BuildAsync(work, token).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Read one page of the mission rows of one tracked work item of a caller's thread (a voyage's missions, or the
+        /// mission itself), paged in the database.
+        /// </summary>
+        /// <param name="auth">Caller.</param>
+        /// <param name="threadId">Thread identifier.</param>
+        /// <param name="workId">Tracked work identifier.</param>
+        /// <param name="query">Paging and order.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The page, or null when the thread or item is not found or not owned.</returns>
+        /// <exception cref="ArgumentException">Thrown when the tracked item has no mission rows.</exception>
+        public async Task<EnumerationResult<AskWorkMissionSnapshot>?> EnumerateWorkMissionsAsync(AuthContext auth, string threadId, string workId, EnumerationQuery query, CancellationToken token = default)
+        {
+            AskTrackedWork? work = await ReadOwnedWorkAsync(auth, threadId, workId, token).ConfigureAwait(false);
+            if (work == null) return null;
+            return await _Snapshots.EnumerateMissionRowsAsync(work, query, token).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Read one page of the target rows of one tracked fleet action run of a caller's thread, paged in the database.
+        /// </summary>
+        /// <param name="auth">Caller.</param>
+        /// <param name="threadId">Thread identifier.</param>
+        /// <param name="workId">Tracked work identifier.</param>
+        /// <param name="query">Paging.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The page, or null when the thread or item is not found or not owned.</returns>
+        /// <exception cref="ArgumentException">Thrown when the tracked item is not a fleet action run.</exception>
+        public async Task<EnumerationResult<AskWorkTargetSnapshot>?> EnumerateWorkTargetsAsync(AuthContext auth, string threadId, string workId, EnumerationQuery query, CancellationToken token = default)
+        {
+            AskTrackedWork? work = await ReadOwnedWorkAsync(auth, threadId, workId, token).ConfigureAwait(false);
+            if (work == null) return null;
+            return await _Snapshots.EnumerateTargetRowsAsync(work, query, token).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -749,6 +889,15 @@ namespace Armada.Core.Services.Ask
             return await _Database.AskThreads.ReadAsync(auth.TenantId!, auth.UserId!, threadId, token).ConfigureAwait(false);
         }
 
+        private async Task<AskTrackedWork?> ReadOwnedWorkAsync(AuthContext auth, string threadId, string workId, CancellationToken token)
+        {
+            AskThread? thread = await ReadOwnedAsync(auth, threadId, token).ConfigureAwait(false);
+            if (thread == null || String.IsNullOrWhiteSpace(workId)) return null;
+            AskTrackedWork? work = await _Database.AskTrackedWork.ReadAsync(thread.TenantId!, workId, token).ConfigureAwait(false);
+            if (work == null || !String.Equals(work.ThreadId, thread.Id, StringComparison.Ordinal)) return null;
+            return work;
+        }
+
         private async Task<Captain?> ReadVisibleCaptainAsync(AuthContext auth, string captainId, CancellationToken token)
         {
             // Same visibility as captain chat: a global admin any, a tenant admin any in their tenant, a user their own.
@@ -759,8 +908,7 @@ namespace Armada.Core.Services.Ask
 
         private async Task DecorateAsync(AskThread thread, CancellationToken token)
         {
-            List<AskTrackedWork> work = await _Database.AskTrackedWork.EnumerateByThreadAsync(thread.TenantId!, thread.Id, token).ConfigureAwait(false);
-            thread.ActiveWorkCount = work.Count(w => w.State == AskTrackedWorkStateEnum.Active);
+            thread.ActiveWorkCount = (int)await _Database.AskTrackedWork.CountByThreadAsync(thread.TenantId!, thread.Id, AskTrackedWorkStateEnum.Active, token).ConfigureAwait(false);
             thread.ActiveTurnId = ActiveTurnResolver?.Invoke(thread.Id);
             thread.CliPermission = await ResolveCliPermissionAsync(thread, token).ConfigureAwait(false);
         }
@@ -828,14 +976,14 @@ namespace Armada.Core.Services.Ask
         private async Task PopulateAsync(AskThread thread, List<AskMessage> messages, CancellationToken token, AuthContext? caller = null)
         {
             if (messages.Count == 0) return;
-            List<AskMessageToolCall> calls = await _Database.AskMessageToolCalls.EnumerateByMessagesAsync(thread.TenantId!, thread.Id, messages.Select(m => m.Id).ToList(), token).ConfigureAwait(false);
+            Dictionary<string, int> callCounts = await _Database.AskMessageToolCalls.CountByMessagesAsync(thread.TenantId!, thread.Id, messages.Select(m => m.Id).ToList(), token).ConfigureAwait(false);
             Dictionary<string, AskActionProposal?> proposals = new Dictionary<string, AskActionProposal?>(StringComparer.Ordinal);
             Dictionary<string, AskTrackedWork?> works = new Dictionary<string, AskTrackedWork?>(StringComparer.Ordinal);
             List<CliPermissionRequest>? cliRequests = null;
 
             foreach (AskMessage message in messages)
             {
-                message.ToolCalls = calls.Where(c => String.Equals(c.MessageId, message.Id, StringComparison.Ordinal)).ToList();
+                message.ToolCallCount = callCounts.TryGetValue(message.Id, out int callCount) ? callCount : 0;
 
                 if (!String.IsNullOrEmpty(message.ProposalId))
                 {

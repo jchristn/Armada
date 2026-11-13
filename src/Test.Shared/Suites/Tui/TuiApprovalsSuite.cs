@@ -13,6 +13,7 @@ namespace Test.Shared.Suites.Tui
     using Armada.Core.Models;
     using Armada.Tui.Approvals;
     using Armada.Tui.Services;
+    using Armada.Tui.Widgets;
     using TUIKit.Widgets;
     using Test.Shared.Infrastructure;
     using Test.Shared.Infrastructure.ApiSurface;
@@ -363,6 +364,69 @@ namespace Test.Shared.Suites.Tui
                     AssertTrue(host.PumpUntil(() => fx.Stub.CountFor("POST", "/api/v1/ask/threads/ath_2/proposals/aap_7/approve") == 1), "Approve sends the approve call");
                     AssertEqual(0, fx.Stub.CountFor("POST", "/api/v1/ask/threads/ath_2/proposals/aap_7/reject"), "no reject");
                 }
+            }));
+
+            cases.Add(TuiCase.Sync(Suite, "model_alert_suggested_actions", "Needs You lists a model alert's suggested actions; an unavailable one is disabled with its reason, nothing is applied until one is chosen, and the alert stays out of the approvals queue", () =>
+            {
+                ModelAlert alert = new ModelAlert();
+                alert.Id = "mal_1";
+                alert.Title = "qwen3-coder:30b as Worker on Armada: first pass 4 of 11";
+                alert.Actions.Add(new ModelAlertActionRecord { Action = ModelAlertActionEnum.Reevaluate, Changed = true, Result = "Queued probe run mpr_1." });
+                alert.SuggestedActions.Add(new ModelAlertSuggestedAction { Action = ModelAlertActionEnum.MoveDown, Label = "Move captains down", Available = true, Recommended = true });
+                alert.SuggestedActions.Add(new ModelAlertSuggestedAction { Action = ModelAlertActionEnum.CompactTemplate, Label = "Use the compact template", Available = false, UnavailableReason = "No compact variant exists." });
+                alert.SuggestedActions.Add(new ModelAlertSuggestedAction { Action = ModelAlertActionEnum.Ignore, Label = "Ignore for 7 days", Available = true });
+
+                List<ModelAlertSuggestedAction> applied = new List<ModelAlertSuggestedAction>();
+                List<ActionMenuItem> rows = Armada.Tui.Screens.Operations.InboxScreen.ModelAlertMenuItems(null, alert, a => applied.Add(a));
+                AssertEqual(3, rows.Count, "one row per suggested action");
+                AssertEqual("Move captains down (Recommended)", rows[0].Label, "recommended label");
+                AssertTrue(rows[0].Enabled, "available action is enabled");
+                AssertFalse(rows[1].Enabled, "unavailable action is disabled");
+                AssertEqual("Use the compact template - No compact variant exists.", rows[1].Label, "unavailable label names the reason");
+                AssertEqual(0, applied.Count, "building the menu applies nothing");
+                rows[2].Action();
+                AssertEqual(ModelAlertActionEnum.Ignore, applied.Single().Action, "a row applies its own action");
+
+                InboxItem inbox = new InboxItem { Kind = InboxItemKinds.ModelAlert, Severity = InboxSeverityEnum.Info, Title = alert.Title, Detail = "First pass 4 of 11 is below 50%.", EntityType = "model_alert", EntityId = "mal_1", Href = "/inbox?modelAlert=mal_1", ModelAlert = alert };
+                AssertEqual("First pass 4 of 11 is below 50%. | Last action: Queued probe run mpr_1.", Armada.Tui.Screens.Operations.InboxScreen.DetailFor(null, inbox), "detail carries the latest applied action");
+                AssertNull(ApprovalSources.FromInbox(inbox, null), "a model alert is not an approval");
+
+                StubHttpHandler stub = TuiFixtures.SignedInServer();
+                stub.Page("/api/v1/inbox/enumerate", "[" + System.Text.Json.JsonSerializer.Serialize(inbox) + "]");
+                stub.Json("POST", "/api/v1/model-alerts/mal_1/apply", "{\"Record\":{\"Action\":\"MoveDown\",\"Changed\":true,\"Result\":\"Moved captain cpt_1 down.\"},\"Alert\":{\"Id\":\"mal_1\"}}");
+                using (TuiTestHost host = TuiCase.SignedIn(160, 45, "/inbox", stub))
+                {
+                    AssertTrue(host.WaitForText("| Last action: Queued"), "the grid shows the latest applied action\n" + host.Screen());
+                    TuiCase.Contains(host.Screen(), "a Suggested actions", "the key hint names the suggested actions");
+                    TuiCase.Contains(host.Screen(), alert.Title, "alert title");
+                    host.Press("enter");
+                    AssertTrue(host.PumpUntil(() => host.App.Modals.IsActive), "Enter on a model alert opens its suggested actions\n" + host.Screen());
+                    AssertEqual("/inbox", host.Tui.Context.Router.Current!.FullPath, "Enter does not navigate away");
+                    string frame = host.Screen();
+                    TuiCase.Contains(frame, "Move captains down (Recommended)", "available action listed");
+                    TuiCase.Contains(frame, "Use the compact template - No compact variant exists.", "unavailable action listed with its reason");
+                    AssertEqual(0, stub.CountFor("POST", "/api/v1/model-alerts/mal_1/apply"), "opening the menu applies nothing");
+                    host.Press("enter");
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("POST", "/api/v1/model-alerts/mal_1/apply") == 1), "choosing the action applies it");
+                    AssertEqual(ModelAlertActionEnum.MoveDown, stub.LastBody<ModelAlertApplyRequest>("POST", "/api/v1/model-alerts/mal_1/apply").Action, "the chosen action is sent");
+                    AssertEqual(0, stub.CountFor("POST", "/api/v1/model-alerts/mal_1/ignore"), "no ignore");
+                }
+            }));
+
+            cases.Add(TuiCase.Sync(Suite, "helm_inbox_model_alert_actions", "armada inbox prints a model alert's suggested actions with availability and its latest applied action; other kinds print none", () =>
+            {
+                ModelAlert alert = new ModelAlert();
+                alert.Actions.Add(new ModelAlertActionRecord { Action = ModelAlertActionEnum.Ignore, Result = "Ignored for 7 days." });
+                alert.SuggestedActions.Add(new ModelAlertSuggestedAction { Action = ModelAlertActionEnum.MoveDown, Label = "Move captains down", Available = true, Recommended = true });
+                alert.SuggestedActions.Add(new ModelAlertSuggestedAction { Action = ModelAlertActionEnum.CompactTemplate, Label = "Use the compact template", Available = false, UnavailableReason = "No compact variant exists." });
+                InboxItem item = new InboxItem { Kind = InboxItemKinds.ModelAlert, Title = "alert", ModelAlert = alert };
+                List<string> lines = Armada.Helm.Commands.InboxCommand.ModelAlertActionLines(item);
+                AssertEqual(3, lines.Count, "two actions and the last result");
+                AssertEqual("- Move captains down [MoveDown] (recommended) (available)", lines[0], "available action");
+                AssertEqual("- Use the compact template [CompactTemplate] (unavailable: No compact variant exists.)", lines[1], "unavailable action with reason");
+                AssertEqual("Last action: Ignored for 7 days.", lines[2], "latest applied action");
+                AssertEqual(0, Armada.Helm.Commands.InboxCommand.ModelAlertActionLines(new InboxItem { Kind = InboxItemKinds.Review, Title = "Review" }).Count, "other kinds");
+                AssertEqual(0, Armada.Helm.Commands.InboxCommand.ModelAlertActionLines(new InboxItem { Kind = InboxItemKinds.ModelAlert, Title = "no payload" }).Count, "model alert without its payload");
             }));
 
             return new TestSuiteDescriptor(suiteId: Suite, displayName: "TUI approvals center", cases: cases);

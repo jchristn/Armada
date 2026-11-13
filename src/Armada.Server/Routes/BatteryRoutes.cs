@@ -13,8 +13,8 @@ namespace Armada.Server.Routes
     using Armada.Core.Services.Interfaces;
 
     /// <summary>
-    /// REST routes for the fixture battery: GET /api/v1/battery/packs, POST /api/v1/battery/runs and
-    /// GET /api/v1/battery/runs/{id}. Rules live in <see cref="BatteryAccessService"/>, shared with MCP.
+    /// REST routes for the fixture battery: GET /api/v1/battery/packs, POST /api/v1/battery/runs,
+    /// GET /api/v1/battery/runs/{id} and its paged results (GET .../results, POST .../results/enumerate). Rules live in <see cref="BatteryAccessService"/>, shared with MCP.
     /// </summary>
     public class BatteryRoutes
     {
@@ -70,7 +70,7 @@ namespace Armada.Server.Routes
             api => api
                 .WithTag("Battery")
                 .WithSummary("List battery packs")
-                .WithDescription("One page of fixture battery packs (each a fixture repository plus its tasks, defined as data in battery/<pack>/battery-pack.json), ordered by identifier, with each task's persona, grader and toolchain. Malformed packs are listed with valid false and their validation errors; only valid packs can run.")
+                .WithDescription("One page of fixture battery packs (each a fixture repository plus its tasks, defined as data in battery/<pack>/battery-pack.json), ordered by pack directory name (only the page's manifests are read), with each task's persona, grader and toolchain. Malformed packs are listed with valid false and their validation errors; only valid packs can run.")
                 .WithParameter(OpenApiParameterMetadata.Query("pageNumber", "Page number (default 1)", false, OpenApiSchemaMetadata.Integer()))
                 .WithParameter(OpenApiParameterMetadata.Query("pageSize", "Page size (1-1000, default 100)", false, OpenApiSchemaMetadata.Integer()))
                 .WithResponse(200, OpenApiJson.For<EnumerationResult<BatteryPackInfo>>("One page of packs"))
@@ -104,6 +104,187 @@ namespace Armada.Server.Routes
                 .WithRequestBody(OpenApiJson.BodyFor<EnumerationQuery>("Paging", false))
                 .WithResponse(200, OpenApiJson.For<EnumerationResult<BatteryPackInfo>>("One page"))
                 .WithResponse(400, OpenApiResponseMetadata.BadRequest())
+                .WithSecurity("ApiKey"));
+
+            app.Get("/api/v1/battery/packs/{packId}", async (ApiRequest req) =>
+            {
+                AuthContext ctx = await authenticate(req.Http).ConfigureAwait(false);
+                ApiErrorResponse? denied = Deny(req, ctx, authz);
+                if (denied != null) return denied;
+                try
+                {
+                    return (object)_Service.GetPack(ctx, req.Parameters["packId"]);
+                }
+                catch (Exception ex) when (RouteErrorMapper.IsMapped(ex))
+                {
+                    return RouteErrorMapper.ToResponse(req, ex, 409);
+                }
+            }, api => api.WithTag("Battery").WithSummary("Get battery pack")
+                .WithParameter(OpenApiParameterMetadata.Path("packId", "Pack directory slug"))
+                .WithResponse(200, OpenApiJson.For<BatteryPackDetail>("Result"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
+                .WithResponse(403, OpenApiJson.For<ApiErrorResponse>("Global admin required for writes"))
+                .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithResponse(409, OpenApiJson.For<ApiErrorResponse>("Pack conflict"))
+                .WithSecurity("ApiKey"));
+
+            app.Get("/api/v1/battery/packs/{packId}/files", async (ApiRequest req) =>
+            {
+                AuthContext ctx = await authenticate(req.Http).ConfigureAwait(false);
+                ApiErrorResponse? denied = Deny(req, ctx, authz);
+                if (denied != null) return denied;
+                try
+                {
+                    return (object)_Service.ReadPackFile(ctx, req.Parameters["packId"], ReadPackPath(req));
+                }
+                catch (Exception ex) when (RouteErrorMapper.IsMapped(ex))
+                {
+                    return RouteErrorMapper.ToResponse(req, ex, 409);
+                }
+            }, api => api.WithTag("Battery").WithSummary("Read battery pack file")
+                .WithParameter(OpenApiParameterMetadata.Path("packId", "Pack directory slug"))
+                .WithParameter(OpenApiParameterMetadata.Query("path", "Relative path inside the pack", true, OpenApiSchemaMetadata.String()))
+                .WithResponse(200, OpenApiJson.For<BatteryPackTextFile>("Result"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
+                .WithResponse(403, OpenApiJson.For<ApiErrorResponse>("Global admin required for writes"))
+                .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithResponse(409, OpenApiJson.For<ApiErrorResponse>("Pack conflict"))
+                .WithSecurity("ApiKey"));
+
+            app.Post("/api/v1/battery/packs", async (ApiRequest req) =>
+            {
+                AuthContext ctx = await authenticate(req.Http).ConfigureAwait(false);
+                ApiErrorResponse? denied = Deny(req, ctx, authz);
+                if (denied != null) return denied;
+                try
+                {
+                    return (object)_Service.CreatePack(ctx, ReadPackBody<BatteryPackEditRequest>(req));
+                }
+                catch (Exception ex) when (RouteErrorMapper.IsMapped(ex))
+                {
+                    return RouteErrorMapper.ToResponse(req, ex, 409);
+                }
+            }, api => api.WithTag("Battery").WithSummary("Create battery pack")
+                .WithRequestBody(OpenApiJson.BodyFor<BatteryPackEditRequest>("Pack edit", true))
+                .WithResponse(200, OpenApiJson.For<BatteryPackDetail>("Result"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
+                .WithResponse(403, OpenApiJson.For<ApiErrorResponse>("Global admin required for writes"))
+                .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithResponse(409, OpenApiJson.For<ApiErrorResponse>("Pack conflict"))
+                .WithSecurity("ApiKey"));
+
+            app.Put("/api/v1/battery/packs/{packId}/manifest", async (ApiRequest req) =>
+            {
+                AuthContext ctx = await authenticate(req.Http).ConfigureAwait(false);
+                ApiErrorResponse? denied = Deny(req, ctx, authz);
+                if (denied != null) return denied;
+                try
+                {
+                    return (object)_Service.UpdatePackManifest(ctx, req.Parameters["packId"], ReadPackBody<BatteryPackEditRequest>(req).ManifestJson);
+                }
+                catch (Exception ex) when (RouteErrorMapper.IsMapped(ex))
+                {
+                    return RouteErrorMapper.ToResponse(req, ex, 409);
+                }
+            }, api => api.WithTag("Battery").WithSummary("Update battery pack manifest")
+                .WithParameter(OpenApiParameterMetadata.Path("packId", "Pack directory slug"))
+                .WithRequestBody(OpenApiJson.BodyFor<BatteryPackEditRequest>("Pack edit", true))
+                .WithResponse(200, OpenApiJson.For<BatteryPackDetail>("Result"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
+                .WithResponse(403, OpenApiJson.For<ApiErrorResponse>("Global admin required for writes"))
+                .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithResponse(409, OpenApiJson.For<ApiErrorResponse>("Pack conflict"))
+                .WithSecurity("ApiKey"));
+
+            app.Put("/api/v1/battery/packs/{packId}/files", async (ApiRequest req) =>
+            {
+                AuthContext ctx = await authenticate(req.Http).ConfigureAwait(false);
+                ApiErrorResponse? denied = Deny(req, ctx, authz);
+                if (denied != null) return denied;
+                try
+                {
+                    return (object)_Service.WritePackFile(ctx, req.Parameters["packId"], ReadPackPath(req), ReadPackBody<BatteryPackTextFile>(req).Content);
+                }
+                catch (Exception ex) when (RouteErrorMapper.IsMapped(ex))
+                {
+                    return RouteErrorMapper.ToResponse(req, ex, 409);
+                }
+            }, api => api.WithTag("Battery").WithSummary("Write battery pack file")
+                .WithParameter(OpenApiParameterMetadata.Path("packId", "Pack directory slug"))
+                .WithParameter(OpenApiParameterMetadata.Query("path", "Relative path inside the pack", true, OpenApiSchemaMetadata.String()))
+                .WithRequestBody(OpenApiJson.BodyFor<BatteryPackTextFile>("Pack edit", true))
+                .WithResponse(200, OpenApiJson.For<BatteryPackDetail>("Result"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
+                .WithResponse(403, OpenApiJson.For<ApiErrorResponse>("Global admin required for writes"))
+                .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithResponse(409, OpenApiJson.For<ApiErrorResponse>("Pack conflict"))
+                .WithSecurity("ApiKey"));
+
+            app.Delete("/api/v1/battery/packs/{packId}/files", async (ApiRequest req) =>
+            {
+                AuthContext ctx = await authenticate(req.Http).ConfigureAwait(false);
+                ApiErrorResponse? denied = Deny(req, ctx, authz);
+                if (denied != null) return denied;
+                try
+                {
+                    return (object)_Service.DeletePackFile(ctx, req.Parameters["packId"], ReadPackPath(req));
+                }
+                catch (Exception ex) when (RouteErrorMapper.IsMapped(ex))
+                {
+                    return RouteErrorMapper.ToResponse(req, ex, 409);
+                }
+            }, api => api.WithTag("Battery").WithSummary("Delete battery pack file")
+                .WithParameter(OpenApiParameterMetadata.Path("packId", "Pack directory slug"))
+                .WithParameter(OpenApiParameterMetadata.Query("path", "Relative path inside the pack", true, OpenApiSchemaMetadata.String()))
+                .WithResponse(200, OpenApiJson.For<BatteryPackDetail>("Result"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
+                .WithResponse(403, OpenApiJson.For<ApiErrorResponse>("Global admin required for writes"))
+                .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithResponse(409, OpenApiJson.For<ApiErrorResponse>("Pack conflict"))
+                .WithSecurity("ApiKey"));
+
+            app.Delete("/api/v1/battery/packs/{packId}", async (ApiRequest req) =>
+            {
+                AuthContext ctx = await authenticate(req.Http).ConfigureAwait(false);
+                ApiErrorResponse? denied = Deny(req, ctx, authz);
+                if (denied != null) return denied;
+                try
+                {
+                    return (object)_Service.DeletePack(ctx, req.Parameters["packId"]);
+                }
+                catch (Exception ex) when (RouteErrorMapper.IsMapped(ex))
+                {
+                    return RouteErrorMapper.ToResponse(req, ex, 409);
+                }
+            }, api => api.WithTag("Battery").WithSummary("Delete battery pack")
+                .WithParameter(OpenApiParameterMetadata.Path("packId", "Pack directory slug"))
+                .WithResponse(200, OpenApiJson.For<object>("Result"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
+                .WithResponse(403, OpenApiJson.For<ApiErrorResponse>("Global admin required for writes"))
+                .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithResponse(409, OpenApiJson.For<ApiErrorResponse>("Pack conflict"))
+                .WithSecurity("ApiKey"));
+
+            app.Post("/api/v1/battery/packs/{packId}/validate", async (ApiRequest req) =>
+            {
+                AuthContext ctx = await authenticate(req.Http).ConfigureAwait(false);
+                ApiErrorResponse? denied = Deny(req, ctx, authz);
+                if (denied != null) return denied;
+                try
+                {
+                    return (object)_Service.ValidatePack(ctx, req.Parameters["packId"]);
+                }
+                catch (Exception ex) when (RouteErrorMapper.IsMapped(ex))
+                {
+                    return RouteErrorMapper.ToResponse(req, ex, 409);
+                }
+            }, api => api.WithTag("Battery").WithSummary("Validate battery pack")
+                .WithParameter(OpenApiParameterMetadata.Path("packId", "Pack directory slug"))
+                .WithResponse(200, OpenApiJson.For<BatteryPackInfo>("Result"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
+                .WithResponse(403, OpenApiJson.For<ApiErrorResponse>("Global admin required for writes"))
+                .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithResponse(409, OpenApiJson.For<ApiErrorResponse>("Pack conflict"))
                 .WithSecurity("ApiKey"));
 
             app.Post("/api/v1/battery/runs", async (ApiRequest req) =>
@@ -151,9 +332,74 @@ namespace Armada.Server.Routes
             api => api
                 .WithTag("Battery")
                 .WithSummary("Get a battery run")
-                .WithDescription("The run with its provenance (seed, sampling settings, battery version, configuration revision) and one result per task attempt (Passed, Failed, CouldNotRun or PendingEvaluation, with the grader's evidence and the captain's raw output). 404 when the run does not exist or belongs to another tenant.")
+                .WithDescription("The run with its provenance (seed, sampling settings, battery version, configuration revision) and outcome counts. The per-task results are not embedded: page them with GET /api/v1/battery/runs/{id}/results or POST /api/v1/battery/runs/{id}/results/enumerate. 404 when the run does not exist or belongs to another tenant.")
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Run ID (bat_ prefix)"))
                 .WithResponse(200, OpenApiJson.For<BatteryRun>("The run"))
+                .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithSecurity("ApiKey"));
+
+            app.Get("/api/v1/battery/runs/{id}/results", async (ApiRequest req) =>
+            {
+                AuthContext ctx = await authenticate(req.Http).ConfigureAwait(false);
+                ApiErrorResponse? denied = Deny(req, ctx, authz);
+                if (denied != null) return denied;
+                try
+                {
+                    EnumerationQuery query = EnumerationRequestReader.Read(req, _JsonOptions);
+                    return await _Service.EnumerateResultsAsync(ctx, req.Parameters["id"], query).ConfigureAwait(false);
+                }
+                catch (JsonException ex)
+                {
+                    req.Http.Response.StatusCode = 400;
+                    return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Invalid request body: " + ex.Message };
+                }
+                catch (Exception ex) when (RouteErrorMapper.IsMapped(ex))
+                {
+                    return RouteErrorMapper.ToResponse(req, ex);
+                }
+            },
+            api => api
+                .WithTag("Battery")
+                .WithSummary("List a battery run's results")
+                .WithDescription("One page of the run's per-task results (Passed, Failed, CouldNotRun or PendingEvaluation, with the grader's evidence and the captain's raw output), paged in the database. status filters by outcome; order is CreatedDescending (default) or CreatedAscending, with the id as the tie-break. pageSize 1-1000 (default 10). 404 when the run does not exist or belongs to another tenant.")
+                .WithParameter(OpenApiParameterMetadata.Path("id", "Run ID (bat_ prefix)"))
+                .WithParameter(OpenApiParameterMetadata.Query("pageNumber", "Page number (default 1)", false, OpenApiSchemaMetadata.Integer()))
+                .WithParameter(OpenApiParameterMetadata.Query("pageSize", "Page size (1-1000, default 10)", false, OpenApiSchemaMetadata.Integer()))
+                .WithParameter(OpenApiParameterMetadata.Query("status", "Outcome filter: Passed, Failed, CouldNotRun or PendingEvaluation", false))
+                .WithParameter(OpenApiParameterMetadata.Query("order", "CreatedDescending (default) or CreatedAscending", false))
+                .WithResponse(200, OpenApiJson.For<EnumerationResult<BatteryTaskResult>>("One page of results"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
+                .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithSecurity("ApiKey"));
+
+            app.Post<EnumerationQuery>("/api/v1/battery/runs/{id}/results/enumerate", async (ApiRequest req) =>
+            {
+                AuthContext ctx = await authenticate(req.Http).ConfigureAwait(false);
+                ApiErrorResponse? denied = Deny(req, ctx, authz);
+                if (denied != null) return denied;
+                try
+                {
+                    EnumerationQuery query = EnumerationRequestReader.Read(req, _JsonOptions);
+                    return await _Service.EnumerateResultsAsync(ctx, req.Parameters["id"], query).ConfigureAwait(false);
+                }
+                catch (JsonException ex)
+                {
+                    req.Http.Response.StatusCode = 400;
+                    return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Invalid request body: " + ex.Message };
+                }
+                catch (Exception ex) when (RouteErrorMapper.IsMapped(ex))
+                {
+                    return RouteErrorMapper.ToResponse(req, ex);
+                }
+            },
+            api => api
+                .WithTag("Battery")
+                .WithSummary("Enumerate a battery run's results")
+                .WithDescription("One page of the run's per-task results (Passed, Failed, CouldNotRun or PendingEvaluation, with the grader's evidence and the captain's raw output), paged in the database. status filters by outcome; order is CreatedDescending (default) or CreatedAscending, with the id as the tie-break. pageSize 1-1000 (default 10). 404 when the run does not exist or belongs to another tenant." + " The JSON body is an EnumerationQuery; querystring values override it.")
+                .WithParameter(OpenApiParameterMetadata.Path("id", "Run ID (bat_ prefix)"))
+                .WithRequestBody(OpenApiJson.BodyFor<EnumerationQuery>("Paging, order and outcome filter (Status)", false))
+                .WithResponse(200, OpenApiJson.For<EnumerationResult<BatteryTaskResult>>("One page of results"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())
                 .WithSecurity("ApiKey"));
         }
@@ -161,6 +407,22 @@ namespace Armada.Server.Routes
         #endregion
 
         #region Private-Methods
+
+        private static string? ReadPackPath(ApiRequest req)
+        {
+            string? path = req.Query.GetValueOrDefault("path");
+            return path == null ? null : Uri.UnescapeDataString(path.Replace("+", " "));
+        }
+
+        private T ReadPackBody<T>(ApiRequest req) where T : class
+        {
+            try
+            {
+                return JsonSerializer.Deserialize<T>(req.Http.Request.DataAsString ?? "", _JsonOptions)
+                    ?? throw new ArgumentException("A request body is required.");
+            }
+            catch (JsonException ex) { throw new ArgumentException("Invalid request body: " + ex.Message, ex); }
+        }
 
         private BatteryRunRequest? ReadBody(ApiRequest req)
         {

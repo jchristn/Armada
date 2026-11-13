@@ -8,6 +8,7 @@
 # next start comes up empty as if freshly deployed. By default it KEEPS the deployed server bin and dashboard so
 # the deployment still runs; pass --all to remove those too.
 #
+# Usage: scripts/macos/factory-reset.sh [-y|--yes|--force] [--all]
 # Flags:
 #   -y | --yes | --force   skip the confirmation prompt
 #   --all                  also delete bin and dashboard (whole ~/.armada)
@@ -18,6 +19,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+die() { echo "ERROR: $*" >&2; exit 1; }
+[ "$(uname -s)" = Darwin ] || die "This script is for macOS. Use scripts/linux on Linux, scripts/wsl2 or scripts/wsl on WSL, or scripts\\windows on Windows."
 ARMADA_DIR="${HOME}/.armada"
 LABEL="com.armada.admiral"
 FORCE=0
@@ -27,6 +30,7 @@ for arg in "$@"; do
     case "$arg" in
         -y|--yes|--force) FORCE=1 ;;
         --all) WIPE_ALL=1 ;;
+        -h|--help) awk 'NR == 1 { next } /^#/ { sub(/^# ?/, ""); print; next } { exit }' "${BASH_SOURCE[0]}"; exit 0 ;;
         *) echo "[factory-reset] Unknown argument: $arg" >&2
            echo "Usage: scripts/macos/factory-reset.sh [-y|--yes|--force] [--all]" >&2
            exit 2 ;;
@@ -49,7 +53,8 @@ if [ "$FORCE" -ne 1 ]; then
     fi
     echo
     printf 'Type YES to continue: '
-    read -r CONFIRM
+    CONFIRM=""
+    read -r CONFIRM || true
     if [ "$CONFIRM" != "YES" ]; then
         echo "[factory-reset] Aborted."
         exit 1
@@ -58,7 +63,9 @@ fi
 
 echo
 echo "[factory-reset] Stopping the Armada Admiral..."
-launchctl bootout "gui/$(id -u)/${LABEL}" 2>/dev/null || launchctl stop "$LABEL" 2>/dev/null || true
+# Unload the agent first: it has KeepAlive, so launchd would restart a server stopped by signal. It loads again
+# at the next login (or with update-startup.sh).
+launchctl bootout "gui/$(id -u)/${LABEL}" 2>/dev/null || true
 # Then stop any other Admiral by PID (the published Armada.Server, or a dotnet host of Armada.Server.dll), waiting
 # for it to exit. Matching is by executable, never a loose command-line pattern, so unrelated processes that merely
 # mention Armada.Server are not touched. A still-running server can keep writing to (or recreate) the database,
@@ -76,14 +83,16 @@ rm -rf "$ARMADA_DIR"/docks "$ARMADA_DIR"/repos "$ARMADA_DIR"/logs
 
 if [ "$WIPE_ALL" -eq 1 ]; then
     echo "[factory-reset] Removing deployed server bin and dashboard..."
-    rm -rf "$ARMADA_DIR"/bin "$ARMADA_DIR"/dashboard
+    rm -rf "${ARMADA_DIR:?}"/bin "${ARMADA_DIR:?}"/dashboard
 fi
 
 echo
 echo "[factory-reset] Done. Armada state wiped at $ARMADA_DIR."
-if [ "$WIPE_ALL" -eq 1 ]; then
-    echo "Reinstall to redeploy: ./scripts/macos/install-launchd-agent.sh"
+if [ -f "${HOME}/Library/LaunchAgents/${LABEL}.plist" ]; then
+    echo "Publish and start it factory-fresh: ./scripts/macos/update-startup.sh"
+elif [ "$WIPE_ALL" -eq 1 ]; then
+    echo "Publish and register it again: ./scripts/macos/install-startup.sh"
 else
-    echo "Start it factory-fresh: ./scripts/macos/update-launchd-agent.sh (or: launchctl start $LABEL)"
+    echo "Start it factory-fresh: ./scripts/macos/start-armada-server.sh (or ./scripts/macos/install-startup.sh to start it at login)"
 fi
 exit 0

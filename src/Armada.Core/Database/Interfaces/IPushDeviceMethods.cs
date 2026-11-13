@@ -85,5 +85,15 @@ namespace Armada.Core.Database.Interfaces
         /// <param name="token">Cancellation token.</param>
         /// <returns>Devices.</returns>
         Task<List<PushDevice>> EnumerateAsync(PushDeviceQuery query, CancellationToken token = default);
+
+        /// <summary>
+        /// Enumerate one page of devices matching a filter, oldest first (created time, then id), paged and counted in
+        /// the database.
+        /// </summary>
+        /// <param name="query">Filter.</param>
+        /// <param name="page">Paging (PageNumber, PageSize).</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>One page of devices.</returns>
+        Task<EnumerationResult<PushDevice>> EnumeratePageAsync(PushDeviceQuery query, EnumerationQuery page, CancellationToken token = default);
     }
 }

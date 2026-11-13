@@ -102,15 +102,17 @@ namespace Armada.Client
         }
 
         /// <summary>
-        /// Dashboard <c>getReleaseGitHubPullRequests</c>: GET `/api/v1/releases/${encodeURIComponent(id)}/github/pull-requests`.
+        /// Dashboard <c>getReleaseGitHubPullRequests</c>: POST `/api/v1/releases/{id}/github/pull-requests/enumerate`. One page
+        /// of the release's pull requests (only that page is read from GitHub), with the total.
         /// </summary>
-        /// <param name="id">id.</param>
+        /// <param name="id">Release id.</param>
+        /// <param name="query">Paging, or null for the first page of 10.</param>
         /// <param name="token">Cancellation token.</param>
-        /// <returns>The response.</returns>
+        /// <returns>One page.</returns>
         /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
-        public Task<List<GitHubPullRequestDetail>?> GetReleaseGitHubPullRequestsAsync(string id, CancellationToken token = default)
+        public Task<EnumerationResult<GitHubPullRequestDetail>?> GetReleaseGitHubPullRequestsAsync(string id, EnumerationQuery? query = null, CancellationToken token = default)
         {
-            return EnumerateAllAsync<GitHubPullRequestDetail>($"/api/v1/releases/{E(id)}/github/pull-requests/enumerate", null, token);
+            return PostAsync<EnumerationResult<GitHubPullRequestDetail>>($"/api/v1/releases/{E(id)}/github/pull-requests/enumerate", query ?? new EnumerationQuery(), null, token);
         }
 
         #endregion

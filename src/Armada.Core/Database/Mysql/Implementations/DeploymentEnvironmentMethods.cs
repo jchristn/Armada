@@ -170,7 +170,7 @@ namespace Armada.Core.Database.Mysql.Implementations
                 using (MySqlCommand cmd = conn.CreateCommand())
                 {
                     cmd.CommandText = "SELECT * FROM environments" + whereClause
-                        + " ORDER BY is_default DESC, active DESC, name ASC, created_utc DESC LIMIT " + pageSize + " OFFSET " + offset + ";";
+                        + " ORDER BY is_default DESC, active DESC, name ASC, created_utc DESC, id DESC LIMIT " + pageSize + " OFFSET " + offset + ";";
                     foreach (MySqlParameter parameter in parameters) cmd.Parameters.Add(CloneParameter(parameter));
                     using (MySqlDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
                     {
@@ -207,7 +207,7 @@ namespace Armada.Core.Database.Mysql.Implementations
                 List<DeploymentEnvironment> results = new List<DeploymentEnvironment>();
                 using (MySqlCommand cmd = conn.CreateCommand())
                 {
-                    cmd.CommandText = "SELECT * FROM environments" + whereClause + " ORDER BY is_default DESC, active DESC, name ASC, created_utc DESC;";
+                    cmd.CommandText = "SELECT * FROM environments" + whereClause + " ORDER BY is_default DESC, active DESC, name ASC, created_utc DESC, id DESC;";
                     foreach (MySqlParameter parameter in parameters) cmd.Parameters.Add(CloneParameter(parameter));
                     using (MySqlDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
                     {

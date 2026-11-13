@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import TokenUsage from './TokenUsage';
@@ -44,6 +44,31 @@ describe('Token usage page', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Last Month' }));
     await waitFor(() => expect(getTokenUsage).toHaveBeenCalledWith(expect.objectContaining({ bucketMinutes: 1440, model: 'opus' })));
+  });
+
+  it('refreshes totals, charts, heatmap and captain choices while preserving the selected range and filter', async () => {
+    render(<MemoryRouter initialEntries={['/token-usage?captainId=cpt_ada&harborId=hbr_1']}><Routes><Route path="/token-usage" element={<><TokenUsage /><Where /></>} /></Routes></MemoryRouter>);
+    await screen.findByRole('grid');
+    fireEvent.click(screen.getByRole('button', { name: 'Last Month' }));
+    await waitFor(() => expect(getTokenUsage).toHaveBeenCalledWith(expect.objectContaining({ modelLimit: 20, bucketMinutes: 360 })));
+    await screen.findByRole('grid');
+    const before = vi.mocked(getTokenUsage).mock.calls.length;
+    const captainCalls = vi.mocked(listCaptains).mock.calls.length;
+    const releases: Array<() => void> = [];
+    vi.mocked(getTokenUsage).mockImplementation(() => new Promise(resolve => { releases.push(() => resolve(summary as never)); }));
+    const refresh = screen.getByRole('button', { name: 'Refresh token usage' });
+    fireEvent.click(refresh);
+    await waitFor(() => expect(getTokenUsage).toHaveBeenCalledTimes(before + 2));
+    expect(refresh).toHaveClass('refreshing');
+    await act(async () => { releases[0](); });
+    expect(refresh).toHaveClass('refreshing');
+    await act(async () => { releases[1](); });
+    await waitFor(() => expect(refresh).toHaveClass('refresh-success'));
+    expect(listCaptains).toHaveBeenCalledTimes(captainCalls + 1);
+    expect(screen.getByRole('button', { name: 'Last Month' })).toHaveClass('active');
+    expect(screen.getByTestId('where')).toHaveTextContent('captainId=cpt_ada');
+    expect(screen.getByTestId('where')).toHaveTextContent('harborId=hbr_1');
+    expect(getTokenUsage).toHaveBeenLastCalledWith(expect.objectContaining({ captainId: 'cpt_ada', harborId: 'hbr_1' }));
   });
 
   it('always splits usage by model into token types that add up to the total', async () => {

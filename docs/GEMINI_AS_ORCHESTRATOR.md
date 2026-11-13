@@ -63,6 +63,10 @@ Gemini will call `status` and report active captains, missions, and voyages.
 
 For Gemini to effectively orchestrate Armada, paste the contents of [`INSTRUCTIONS_FOR_GEMINI.md`](INSTRUCTIONS_FOR_GEMINI.md) into your system prompt or project instructions. That document contains the complete tool reference, workflow patterns, and decision-making guidance Gemini needs to manage fleets, voyages, missions, and captains.
 
+## Dispatching a Mission Tree
+
+When one mission needs another's code, dispatch both in one `dispatch` call: give the first a `key` and the dependent one a matching `parentKey`. The child starts after its parent finishes and builds on its branch; missions without a `parentKey` run in parallel. Give each mission `ownedPaths` (the files or directories it may change), and never let two missions that can run at the same time own the same file. Before adding more work, call `vessel_concurrency` to see the vessel's free voyage slots and waiting missions, and `voyage_tree` to see a voyage's missions as a tree. A CLI captain runs one mission at a time, so N parallel missions need N captains. See [`INSTRUCTIONS_FOR_GEMINI.md`](INSTRUCTIONS_FOR_GEMINI.md#dispatching-a-mission-tree) and [SCHEDULING.md](SCHEDULING.md#capacity).
+
 ## Quick Start
 
 > "Register this repository as a vessel in the default fleet, then dispatch a voyage to add input validation to all REST API endpoints."

@@ -169,7 +169,7 @@ namespace Test.Shared.Suites.Tui
                 call.ResultText = "{\"count\":2}";
                 call.Ok = true;
                 call.ElapsedMs = 120;
-                reply.ToolCalls.Add(call);
+                fx.SetToolCalls(reply, call);
                 AskMessage empty = AskFixtures.Message("amg_3", "ath_1", 3, AskMessageRoleEnum.Assistant, AskMessageKindEnum.Text, "");
                 AskMessage proposal = AskFixtures.Message("amg_4", "ath_1", 4, AskMessageRoleEnum.Assistant, AskMessageKindEnum.ActionProposal, "");
                 proposal.ProposalId = "aap_1";
@@ -185,7 +185,7 @@ namespace Test.Shared.Suites.Tui
                 using (TuiTestHost host = TuiCase.SignedIn(140, 80, "/ask/ath_1", fx.Stub))
                 {
                     AskScreen screen = (AskScreen)host.Tui.Shell.Screen!;
-                    AssertTrue(host.PumpUntil(() => host.Tui.Ask.Conversation.Messages.Count == 9), "loaded");
+                    AssertTrue(host.PumpUntil(() => host.Tui.Ask.Conversation.Messages.Count == 9 && host.Tui.Ask.Conversation.ToolCalls.ContainsKey("amg_2")), "loaded with the paged tool calls");
                     screen.Transcript.Layout(110);
                     string text = String.Join("\n", screen.Transcript.PlainLines());
                     TuiCase.Contains(text, "You", "user label");
@@ -265,11 +265,11 @@ namespace Test.Shared.Suites.Tui
                 AskMessage older = AskFixtures.Message("amg_2", "ath_1", 2, AskMessageRoleEnum.Assistant, AskMessageKindEnum.Text, "Older reply.");
                 older.CaptainId = "cpt_1";
                 older.DurationMs = 900;
-                older.ToolCalls = new List<AskMessageToolCall> { new AskMessageToolCall { CallId = "c9", ToolName = "armada_status", Ok = true, ResultText = "{}", ElapsedMs = 120 } };
+                fx.SetToolCalls(older, new AskMessageToolCall { CallId = "c9", ToolName = "armada_status", Ok = true, ResultText = "{}", ElapsedMs = 120 });
                 AskMessage reply = AskFixtures.Message("amg_3", "ath_1", 3, AskMessageRoleEnum.Assistant, AskMessageKindEnum.Text, "All quiet.");
                 reply.CaptainId = "cpt_1";
                 reply.DurationMs = 2500;
-                reply.ToolCalls = new List<AskMessageToolCall> { new AskMessageToolCall { CallId = "c1", ToolName = "armada_status", Ok = true, ResultText = "{}", ElapsedMs = 250 } };
+                fx.SetToolCalls(reply, new AskMessageToolCall { CallId = "c1", ToolName = "armada_status", Ok = true, ResultText = "{}", ElapsedMs = 250 });
                 reply.Metrics = new CaptainChatMetrics
                 {
                     TimeToFirstTokenMs = 400,
@@ -291,7 +291,7 @@ namespace Test.Shared.Suites.Tui
                 {
                     AskController ask = host.Tui.Ask;
                     AskScreen screen = (AskScreen)host.Tui.Shell.Screen!;
-                    AssertTrue(host.PumpUntil(() => ask.Conversation.Messages.Count == 3), "loaded");
+                    AssertTrue(host.PumpUntil(() => ask.Conversation.Messages.Count == 3 && ask.Conversation.ToolCalls.Count == 2), "loaded with the paged tool calls");
                     host.Press("esc");
                     AssertTrue(ReferenceEquals(screen.Scope.Focused, screen.Transcript), "Esc moves to the transcript");
                     TuiCase.NotContains(StatusLine(host), "Statistics", "nothing selected yet");
@@ -314,7 +314,7 @@ namespace Test.Shared.Suites.Tui
                     AssertEqual("amg_2", screen.Transcript.SelectedKey, "the older reply");
                     TuiCase.Contains(StatusLine(host), "i Statistics", "an older reply has statistics too");
                     host.Press("i");
-                    List<AskTurnStatistic> fallback = AskTurnStatistics.Rows(older);
+                    List<AskTurnStatistic> fallback = AskTurnStatistics.Rows(older, ask.Conversation.ToolCallsFor(older));
                     AssertEqual("total,toolCalls,toolTime", String.Join(",", fallback.Select(r => r.Key)), "older reply: total and its tool calls");
                     frame = host.Screen();
                     TuiCase.Contains(frame, "900ms", "older reply total");
@@ -475,27 +475,28 @@ namespace Test.Shared.Suites.Tui
                 milestone.TrackedWorkId = "atw_1";
                 fx.AddThread(AskFixtures.Thread("ath_1", "TUIKit fixes"), result, milestone);
                 fx.Work["ath_1"] = new List<AskTrackedWork> { work };
-                fx.Stub.On("GET", "/api/v1/ask/threads/ath_1/work/atw_1", body => StubHttpHandler.Response(System.Net.HttpStatusCode.OK, Armada.Client.ArmadaJson.Serialize(AskFixtures.VoyageSnapshot("atw_1", "ath_1", "InProgress", true, "InProgress", "Pending"))));
+                AskWorkSnapshot first = fx.ServeWorkRows("ath_1", "atw_1", AskFixtures.VoyageSnapshot("atw_1", "ath_1", "InProgress", true, "InProgress", "Pending"));
+                fx.Stub.On("GET", "/api/v1/ask/threads/ath_1/work/atw_1", body => StubHttpHandler.Response(System.Net.HttpStatusCode.OK, Armada.Client.ArmadaJson.Serialize(first)));
                 using (TuiTestHost host = TuiCase.SignedIn(140, 60, "/ask/ath_1", fx.Stub))
                 {
                     AskController ask = host.Tui.Ask;
                     AskScreen screen = (AskScreen)host.Tui.Shell.Screen!;
-                    AssertTrue(host.PumpUntil(() => ask.Conversation.Snapshots.ContainsKey("atw_1")), "snapshot fetched for the card");
+                    AssertTrue(host.PumpUntil(() => ask.Conversation.Snapshots.ContainsKey("atw_1") && ask.Conversation.WorkRowsFor("atw_1")?.Missions.Count == 2), "snapshot and its paged rows fetched for the card");
                     string frame = host.Screen();
                     TuiCase.Contains(frame, "Voyage  Fix tables", "card heading");
                     TuiCase.Contains(frame, "0 of 2 finished", "progress");
                     TuiCase.Contains(frame, "Work in this conversation (1 active of 1, w)", "work strip");
                     TuiCase.Contains(frame, "[Show live card] Enter", "milestone links to the card");
-                    AskWorkSnapshot next = AskFixtures.VoyageSnapshot("atw_1", "ath_1", "InProgress", true, "Landed", "Failed");
+                    AskWorkSnapshot next = fx.ServeWorkRows("ath_1", "atw_1", AskFixtures.VoyageSnapshot("atw_1", "ath_1", "InProgress", true, "Landed", "Failed"));
                     host.Tui.Context.Events.Inject(AskFixtures.Event("ask.work", new AskWorkEvent { ThreadId = "ath_1", TrackedWorkId = "atw_1", Snapshot = next }));
-                    host.Pump();
+                    AssertTrue(host.PumpUntil(() => ask.Conversation.WorkRowsFor("atw_1")?.Missions.Any(m => m.Status == "Failed") == true), "rows read again after ask.work");
                     frame = host.Screen();
                     TuiCase.Contains(frame, "2 of 2 finished, 1 failed", "progress update");
                     TuiCase.Contains(frame, "Landed 1", "counts by status");
                     TuiCase.Contains(frame, "Tests failed", "failure reason");
                     TuiCase.Contains(frame, "Landing: Landed", "landing outcome");
                     TuiCase.Contains(frame, "https://example.com/pr/1", "pull request");
-                    AskWorkSnapshot done = AskFixtures.VoyageSnapshot("atw_1", "ath_1", "Complete", false, "Landed", "Landed");
+                    AskWorkSnapshot done = fx.ServeWorkRows("ath_1", "atw_1", AskFixtures.VoyageSnapshot("atw_1", "ath_1", "Complete", false, "Landed", "Landed"));
                     host.Tui.Context.Events.Inject(AskFixtures.Event("ask.work", new AskWorkEvent { ThreadId = "ath_1", TrackedWorkId = "atw_1", Snapshot = done }));
                     host.Pump();
                     AssertTrue(host.WaitForText("1 finished"), "strip shows finished");
@@ -555,21 +556,73 @@ namespace Test.Shared.Suites.Tui
                 Armada.Tui.Theming.ArmadaTheme theme = Armada.Tui.Theming.ThemePalettes.Dark();
                 LocalizationService loc = new LocalizationService();
                 AskBlock b1 = new AskBlock();
-                string r = String.Join("\n", AskCardRenderer.WorkCard(b1, null, run, false, 0, theme, loc, DateTime.UtcNow, 90).Select(l => l.ToPlainString()));
+                string r = String.Join("\n", AskCardRenderer.WorkCard(b1, null, run, new AskWorkRows { Targets = run.Targets.ToList(), TotalRecords = 2 }, false, 0, theme, loc, DateTime.UtcNow, 90).Select(l => l.ToPlainString()));
                 TuiCase.Contains(r, "Fleet action run  Bump deps", "run heading");
                 TuiCase.Contains(r, "2 of 2 finished, 1 failed", "run progress counts terminal targets");
                 TuiCase.Contains(r, "Alpha", "target row");
                 TuiCase.Contains(r, "exit 2", "target reason");
                 AssertEqual(2, b1.RowLines.Count, "target rows selectable");
                 AssertEqual("/missions/msn_7", b1.RowRoutes[0], "target row opens its mission");
-                string j = String.Join("\n", AskCardRenderer.WorkCard(new AskBlock(), null, job, false, 0, theme, loc, DateTime.UtcNow, 90).Select(l => l.ToPlainString()));
+                TuiCase.NotContains(r, "Showing", "every row is on the card");
+                string partial = String.Join("\n", AskCardRenderer.WorkCard(new AskBlock(), null, run, new AskWorkRows { Targets = run.Targets.ToList(), TotalRecords = 5 }, false, 0, theme, loc, DateTime.UtcNow, 90).Select(l => l.ToPlainString()));
+                TuiCase.Contains(partial, "Showing 2 of 5 rows", "a card with more rows than its first page says so");
+                string j = String.Join("\n", AskCardRenderer.WorkCard(new AskBlock(), null, job, null, false, 0, theme, loc, DateTime.UtcNow, 90).Select(l => l.ToPlainString()));
                 TuiCase.Contains(j, "Background job  Evaluate health", "job heading");
                 TuiCase.Contains(j, "4 of 10 finished", "job counters");
-                string i = String.Join("\n", AskCardRenderer.WorkCard(new AskBlock(), null, import, false, 0, theme, loc, DateTime.UtcNow, 90).Select(l => l.ToPlainString()));
+                string i = String.Join("\n", AskCardRenderer.WorkCard(new AskBlock(), null, import, null, false, 0, theme, loc, DateTime.UtcNow, 90).Select(l => l.ToPlainString()));
                 TuiCase.Contains(i, "Vessel import  Import repos", "import heading");
                 TuiCase.Contains(i, "Root not allowed", "error text");
-                string loading = String.Join("\n", AskCardRenderer.WorkCard(new AskBlock(), null, null, false, 0, theme, loc, DateTime.UtcNow, 90).Select(l => l.ToPlainString()));
+                string loading = String.Join("\n", AskCardRenderer.WorkCard(new AskBlock(), null, null, null, false, 0, theme, loc, DateTime.UtcNow, 90).Select(l => l.ToPlainString()));
                 TuiCase.Contains(loading, "Loading live status...", "loading state");
+            }));
+
+            cases.Add(TuiCase.Sync(Suite, "black_box_card", "A black box card shows its chips, where and why, conflicting missions (rows that open the mission), recovery paths and follow-ups, and opens the entry", () =>
+            {
+                AskWorkSnapshot bb = new AskWorkSnapshot();
+                bb.EntityType = AskTrackedEntityTypeEnum.BlackBox;
+                bb.EntityId = "bbx_1";
+                bb.Title = "Add retry";
+                bb.Status = "LandingFailed";
+                bb.State = AskTrackedWorkStateEnum.Failed;
+                bb.ErrorText = "merge conflict in src/Sync/Runner.cs";
+                AskBlackBoxCard card = new AskBlackBoxCard();
+                card.Digest.EntryId = "bbx_1";
+                card.Digest.MissionId = "msn_1";
+                card.Digest.Phase = BlackBoxPhaseEnum.Landing;
+                card.Digest.Step = BlackBoxStepEnum.TargetIntegration;
+                card.Digest.Triage = BlackBoxTriageEnum.UserConfig;
+                card.Digest.CaptureMode = BlackBoxCaptureModeEnum.Sweeper;
+                card.Digest.SourceFile = "src/Armada.Core/Services/MissionLandingHandler.cs";
+                card.Digest.Reason = "merge conflict in src/Sync/Runner.cs";
+                card.Digest.Why.Add(new BlackBoxFinding { RuleId = "bbx-land-003", Statement = "Two missions edited the same file.", Confidence = BlackBoxConfidenceEnum.High });
+                card.Digest.RecoveryPaths.Add(new BlackBoxRecoveryPath { Id = "bbx-land-003.rebase-retry", Rank = 1, Title = "Rebase and retry" });
+                card.ConflictingMissions.Add(new BlackBoxConflictingMission { MissionId = "msn_2", Title = "Rename Sync.Run", CommitHash = "9b8e7d6c5a4f3e2d" });
+                card.FollowUps.Add(new AskBlackBoxFollowUp { Name = "fix", Label = "Fix it", ToolName = "run_blackbox_recovery" });
+                bb.BlackBox = card;
+                AskBlock block = new AskBlock();
+                string text = String.Join("\n", AskCardRenderer.WorkCard(block, null, bb, null, false, 0, Armada.Tui.Theming.ThemePalettes.Dark(), new LocalizationService(), DateTime.UtcNow, 100).Select(l => l.ToPlainString()));
+                TuiCase.Contains(text, "Black box  Add retry", "heading");
+                TuiCase.Contains(text, "Triage UserConfig", "triage chip");
+                TuiCase.Contains(text, "Captured by Sweeper", "a sweeper capture says so");
+                TuiCase.Contains(text, "MissionLandingHandler.cs", "where");
+                TuiCase.Contains(text, "bbx-land-003", "why");
+                TuiCase.Contains(text, "Rename Sync.Run 9b8e7d6c5a", "conflicting mission");
+                TuiCase.Contains(text, "1. Rebase and retry (bbx-land-003.rebase-retry)", "recovery path");
+                TuiCase.Contains(text, "Follow-ups: Fix it", "follow-ups");
+                AssertEqual(1, block.RowRoutes.Count, "the conflicting mission is a selectable row");
+                AssertEqual("/missions/msn_2", block.RowRoutes[0]);
+                AssertEqual("/blackbox/bbx_1", AskWorkLogic.Route(AskTrackedEntityTypeEnum.BlackBox, "bbx_1"), "Enter opens the entry");
+                AssertEqual("Black box", AskWorkLogic.EntityLabel(AskTrackedEntityTypeEnum.BlackBox));
+
+                AskQuickAction blackBox = new AskQuickAction { Name = "blackbox", Command = "/blackbox", ToolName = "get_blackbox" };
+                AssertEqual(AskQuickActionFormEnum.BlackBox, AskQuickActions.FormFor(blackBox));
+                AssertTrue(AskQuickActions.TryParseBlackBox(" msn_1ab_C why did it fail? ", out string missionId, out string question), "mission id and question");
+                AssertEqual("msn_1ab_C", missionId);
+                AssertEqual("why did it fail?", question);
+                AssertTrue(AskQuickActions.TryParseBlackBox("msn_only", out missionId, out question), "mission id only");
+                AssertEqual("", question);
+                AssertFalse(AskQuickActions.TryParseBlackBox("why did msn_1 fail", out missionId, out question), "the mission id comes first");
+                AssertEqual("<missionId> [question]", AskCommands.Catalog(new List<AskQuickAction> { blackBox }).First(i => i.Action != null).Usage);
             }));
 
             cases.Add(TuiCase.Sync(Suite, "quick_action_forms", "Dispatch and Fleet action forms build the MCP arguments; Status runs at once; Import opens the import route", () =>
@@ -750,11 +803,12 @@ namespace Test.Shared.Suites.Tui
                 AskThreadDetail detail = new AskThreadDetail();
                 detail.Thread = AskFixtures.Thread("ath_1", "TUIKit fixes");
                 detail.Thread.ActiveTurnId = "atn_1";
-                conv.Loaded("ath_1", detail, new List<AskMessage>(), false, DateTime.UtcNow);
+                AskThreadState state = new AskThreadState { Detail = detail };
+                conv.Loaded("ath_1", state, new List<AskMessage>(), false, DateTime.UtcNow);
                 AssertFalse(conv.TurnActive, "stale snapshot ignored for a finished turn");
                 AssertNull(conv.Streaming, "no stream");
                 detail.Thread.ActiveTurnId = "atn_2";
-                conv.Loaded("ath_1", detail, new List<AskMessage>(), false, DateTime.UtcNow);
+                conv.Loaded("ath_1", state, new List<AskMessage>(), false, DateTime.UtcNow);
                 AssertTrue(conv.TurnActive, "a different running turn is still followed");
             }));
 

@@ -76,6 +76,17 @@ namespace Armada.Core.Harbor
         public int MaxResults { get; set; } = 200;
 
         /// <summary>
+        /// Page number of a directory listing (List), 1-based. Null means 1.
+        /// </summary>
+        public int? PageNumber { get; set; } = null;
+
+        /// <summary>
+        /// Page size of a directory listing (List), 1 to 1000. Null means 1000 (an Admiral that predates paged
+        /// listings); out-of-range values are normalized.
+        /// </summary>
+        public int? PageSize { get; set; } = null;
+
+        /// <summary>
         /// Largest file returned by Read with a <see cref="Root"/>, in bytes; a larger file is reported with
         /// <see cref="HarborFileResult.Truncated"/> and no content. 0 means the Harbor's default (8 MB).
         /// </summary>

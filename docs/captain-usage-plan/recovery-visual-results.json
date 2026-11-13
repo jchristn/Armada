@@ -1,0 +1,1151 @@
+{
+  "scope": "Representative markup with production CSS; not authenticated application pages",
+  "results": [
+    {
+      "theme": "light",
+      "width": 1280,
+      "surface": "captains",
+      "clipped": [],
+      "pageOverflow": false,
+      "font": "14px",
+      "accent": "#2563eb",
+      "badges": [
+        {
+          "state": "Idle",
+          "bg": "rgb(226, 232, 240)",
+          "fg": "rgb(71, 85, 105)"
+        },
+        {
+          "state": "Working",
+          "bg": "rgb(219, 234, 254)",
+          "fg": "rgb(29, 78, 216)"
+        },
+        {
+          "state": "Stalled",
+          "bg": "rgb(254, 226, 226)",
+          "fg": "rgb(153, 27, 27)"
+        },
+        {
+          "state": "Quarantined",
+          "bg": "rgb(241, 245, 249)",
+          "fg": "rgb(91, 107, 128)"
+        }
+      ],
+      "focus": [
+        {
+          "control": "Status",
+          "visible": true,
+          "outline": "rgb(37, 99, 235) solid 2px",
+          "outlineWidth": "2px",
+          "outlineStyle": "solid"
+        },
+        {
+          "control": "Add captain",
+          "visible": true,
+          "outline": "rgb(37, 99, 235) solid 2px",
+          "outlineWidth": "2px",
+          "outlineStyle": "solid"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "theme": "light",
+      "width": 1280,
+      "surface": "captainEdit",
+      "clipped": [],
+      "pageOverflow": false,
+      "font": "14px",
+      "accent": "#2563eb",
+      "badges": [],
+      "focus": [
+        {
+          "control": "Name",
+          "visible": true,
+          "outline": "rgb(37, 99, 235) solid 2px",
+          "outlineWidth": "2px",
+          "outlineStyle": "solid"
+        },
+        {
+          "control": "Runtime",
+          "visible": true,
+          "outline": "rgb(37, 99, 235) solid 2px",
+          "outlineWidth": "2px",
+          "outlineStyle": "solid"
+        },
+        {
+          "control": "Save",
+          "visible": true,
+          "outline": "rgb(37, 99, 235) solid 2px",
+          "outlineWidth": "2px",
+          "outlineStyle": "solid"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "theme": "light",
+      "width": 1280,
+      "surface": "tokenUsage",
+      "clipped": [],
+      "pageOverflow": false,
+      "font": "14px",
+      "accent": "#2563eb",
+      "badges": [],
+      "focus": [
+        {
+          "control": "24 hours",
+          "visible": true,
+          "outline": "rgb(37, 99, 235) solid 2px",
+          "outlineWidth": "2px",
+          "outlineStyle": "solid"
+        },
+        {
+          "control": "7 days",
+          "visible": true,
+          "outline": "rgb(37, 99, 235) solid 2px",
+          "outlineWidth": "2px",
+          "outlineStyle": "solid"
+        },
+        {
+          "control": "Captain",
+          "visible": true,
+          "outline": "rgb(37, 99, 235) solid 2px",
+          "outlineWidth": "2px",
+          "outlineStyle": "solid"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "theme": "light",
+      "width": 1280,
+      "surface": "jobs",
+      "clipped": [],
+      "pageOverflow": false,
+      "font": "14px",
+      "accent": "#2563eb",
+      "badges": [
+        {
+          "state": "Running",
+          "bg": "rgb(219, 234, 254)",
+          "fg": "rgb(29, 78, 216)"
+        },
+        {
+          "state": "Succeeded",
+          "bg": "rgb(220, 252, 231)",
+          "fg": "rgb(22, 101, 52)"
+        },
+        {
+          "state": "Failed",
+          "bg": "rgb(254, 226, 226)",
+          "fg": "rgb(153, 27, 27)"
+        },
+        {
+          "state": "Cancelled",
+          "bg": "rgb(243, 244, 246)",
+          "fg": "rgb(95, 102, 115)"
+        }
+      ],
+      "focus": [
+        {
+          "control": "Cancel",
+          "visible": true,
+          "outline": "rgb(37, 99, 235) solid 2px",
+          "outlineWidth": "2px",
+          "outlineStyle": "solid"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "theme": "light",
+      "width": 1280,
+      "surface": "settings",
+      "clipped": [],
+      "pageOverflow": false,
+      "font": "14px",
+      "accent": "#2563eb",
+      "badges": [],
+      "focus": [
+        {
+          "control": "Retention days",
+          "visible": true,
+          "outline": "rgb(37, 99, 235) solid 2px",
+          "outlineWidth": "2px",
+          "outlineStyle": "solid"
+        },
+        {
+          "control": "Notes",
+          "visible": true,
+          "outline": "rgb(37, 99, 235) solid 2px",
+          "outlineWidth": "2px",
+          "outlineStyle": "solid"
+        },
+        {
+          "control": "Save",
+          "visible": true,
+          "outline": "rgb(37, 99, 235) solid 2px",
+          "outlineWidth": "2px",
+          "outlineStyle": "solid"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "theme": "light",
+      "width": 768,
+      "surface": "captains",
+      "clipped": [],
+      "pageOverflow": false,
+      "font": "14px",
+      "accent": "#2563eb",
+      "badges": [
+        {
+          "state": "Idle",
+          "bg": "rgb(226, 232, 240)",
+          "fg": "rgb(71, 85, 105)"
+        },
+        {
+          "state": "Working",
+          "bg": "rgb(219, 234, 254)",
+          "fg": "rgb(29, 78, 216)"
+        },
+        {
+          "state": "Stalled",
+          "bg": "rgb(254, 226, 226)",
+          "fg": "rgb(153, 27, 27)"
+        },
+        {
+          "state": "Quarantined",
+          "bg": "rgb(241, 245, 249)",
+          "fg": "rgb(91, 107, 128)"
+        }
+      ],
+      "focus": [
+        {
+          "control": "Status",
+          "visible": true,
+          "outline": "rgb(37, 99, 235) solid 2px",
+          "outlineWidth": "2px",
+          "outlineStyle": "solid"
+        },
+        {
+          "control": "Add captain",
+          "visible": true,
+          "outline": "rgb(37, 99, 235) solid 2px",
+          "outlineWidth": "2px",
+          "outlineStyle": "solid"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "theme": "light",
+      "width": 768,
+      "surface": "captainEdit",
+      "clipped": [],
+      "pageOverflow": false,
+      "font": "14px",
+      "accent": "#2563eb",
+      "badges": [],
+      "focus": [
+        {
+          "control": "Name",
+          "visible": true,
+          "outline": "rgb(37, 99, 235) solid 2px",
+          "outlineWidth": "2px",
+          "outlineStyle": "solid"
+        },
+        {
+          "control": "Runtime",
+          "visible": true,
+          "outline": "rgb(37, 99, 235) solid 2px",
+          "outlineWidth": "2px",
+          "outlineStyle": "solid"
+        },
+        {
+          "control": "Save",
+          "visible": true,
+          "outline": "rgb(37, 99, 235) solid 2px",
+          "outlineWidth": "2px",
+          "outlineStyle": "solid"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "theme": "light",
+      "width": 768,
+      "surface": "tokenUsage",
+      "clipped": [],
+      "pageOverflow": false,
+      "font": "14px",
+      "accent": "#2563eb",
+      "badges": [],
+      "focus": [
+        {
+          "control": "24 hours",
+          "visible": true,
+          "outline": "rgb(37, 99, 235) solid 2px",
+          "outlineWidth": "2px",
+          "outlineStyle": "solid"
+        },
+        {
+          "control": "7 days",
+          "visible": true,
+          "outline": "rgb(37, 99, 235) solid 2px",
+          "outlineWidth": "2px",
+          "outlineStyle": "solid"
+        },
+        {
+          "control": "Captain",
+          "visible": true,
+          "outline": "rgb(37, 99, 235) solid 2px",
+          "outlineWidth": "2px",
+          "outlineStyle": "solid"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "theme": "light",
+      "width": 768,
+      "surface": "jobs",
+      "clipped": [],
+      "pageOverflow": false,
+      "font": "14px",
+      "accent": "#2563eb",
+      "badges": [
+        {
+          "state": "Running",
+          "bg": "rgb(219, 234, 254)",
+          "fg": "rgb(29, 78, 216)"
+        },
+        {
+          "state": "Succeeded",
+          "bg": "rgb(220, 252, 231)",
+          "fg": "rgb(22, 101, 52)"
+        },
+        {
+          "state": "Failed",
+          "bg": "rgb(254, 226, 226)",
+          "fg": "rgb(153, 27, 27)"
+        },
+        {
+          "state": "Cancelled",
+          "bg": "rgb(243, 244, 246)",
+          "fg": "rgb(95, 102, 115)"
+        }
+      ],
+      "focus": [
+        {
+          "control": "Cancel",
+          "visible": true,
+          "outline": "rgb(37, 99, 235) solid 2px",
+          "outlineWidth": "2px",
+          "outlineStyle": "solid"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "theme": "light",
+      "width": 768,
+      "surface": "settings",
+      "clipped": [],
+      "pageOverflow": false,
+      "font": "14px",
+      "accent": "#2563eb",
+      "badges": [],
+      "focus": [
+        {
+          "control": "Retention days",
+          "visible": true,
+          "outline": "rgb(37, 99, 235) solid 2px",
+          "outlineWidth": "2px",
+          "outlineStyle": "solid"
+        },
+        {
+          "control": "Notes",
+          "visible": true,
+          "outline": "rgb(37, 99, 235) solid 2px",
+          "outlineWidth": "2px",
+          "outlineStyle": "solid"
+        },
+        {
+          "control": "Save",
+          "visible": true,
+          "outline": "rgb(37, 99, 235) solid 2px",
+          "outlineWidth": "2px",
+          "outlineStyle": "solid"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "theme": "light",
+      "width": 390,
+      "surface": "captains",
+      "clipped": [],
+      "pageOverflow": false,
+      "font": "14px",
+      "accent": "#2563eb",
+      "badges": [
+        {
+          "state": "Idle",
+          "bg": "rgb(226, 232, 240)",
+          "fg": "rgb(71, 85, 105)"
+        },
+        {
+          "state": "Working",
+          "bg": "rgb(219, 234, 254)",
+          "fg": "rgb(29, 78, 216)"
+        },
+        {
+          "state": "Stalled",
+          "bg": "rgb(254, 226, 226)",
+          "fg": "rgb(153, 27, 27)"
+        },
+        {
+          "state": "Quarantined",
+          "bg": "rgb(241, 245, 249)",
+          "fg": "rgb(91, 107, 128)"
+        }
+      ],
+      "focus": [
+        {
+          "control": "Status",
+          "visible": true,
+          "outline": "rgb(37, 99, 235) solid 2px",
+          "outlineWidth": "2px",
+          "outlineStyle": "solid"
+        },
+        {
+          "control": "Add captain",
+          "visible": true,
+          "outline": "rgb(37, 99, 235) solid 2px",
+          "outlineWidth": "2px",
+          "outlineStyle": "solid"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "theme": "light",
+      "width": 390,
+      "surface": "captainEdit",
+      "clipped": [],
+      "pageOverflow": false,
+      "font": "14px",
+      "accent": "#2563eb",
+      "badges": [],
+      "focus": [
+        {
+          "control": "Name",
+          "visible": true,
+          "outline": "rgb(37, 99, 235) solid 2px",
+          "outlineWidth": "2px",
+          "outlineStyle": "solid"
+        },
+        {
+          "control": "Runtime",
+          "visible": true,
+          "outline": "rgb(37, 99, 235) solid 2px",
+          "outlineWidth": "2px",
+          "outlineStyle": "solid"
+        },
+        {
+          "control": "Save",
+          "visible": true,
+          "outline": "rgb(37, 99, 235) solid 2px",
+          "outlineWidth": "2px",
+          "outlineStyle": "solid"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "theme": "light",
+      "width": 390,
+      "surface": "tokenUsage",
+      "clipped": [],
+      "pageOverflow": false,
+      "font": "14px",
+      "accent": "#2563eb",
+      "badges": [],
+      "focus": [
+        {
+          "control": "24 hours",
+          "visible": true,
+          "outline": "rgb(37, 99, 235) solid 2px",
+          "outlineWidth": "2px",
+          "outlineStyle": "solid"
+        },
+        {
+          "control": "7 days",
+          "visible": true,
+          "outline": "rgb(37, 99, 235) solid 2px",
+          "outlineWidth": "2px",
+          "outlineStyle": "solid"
+        },
+        {
+          "control": "Captain",
+          "visible": true,
+          "outline": "rgb(37, 99, 235) solid 2px",
+          "outlineWidth": "2px",
+          "outlineStyle": "solid"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "theme": "light",
+      "width": 390,
+      "surface": "jobs",
+      "clipped": [],
+      "pageOverflow": false,
+      "font": "14px",
+      "accent": "#2563eb",
+      "badges": [
+        {
+          "state": "Running",
+          "bg": "rgb(219, 234, 254)",
+          "fg": "rgb(29, 78, 216)"
+        },
+        {
+          "state": "Succeeded",
+          "bg": "rgb(220, 252, 231)",
+          "fg": "rgb(22, 101, 52)"
+        },
+        {
+          "state": "Failed",
+          "bg": "rgb(254, 226, 226)",
+          "fg": "rgb(153, 27, 27)"
+        },
+        {
+          "state": "Cancelled",
+          "bg": "rgb(243, 244, 246)",
+          "fg": "rgb(95, 102, 115)"
+        }
+      ],
+      "focus": [
+        {
+          "control": "Cancel",
+          "visible": true,
+          "outline": "rgb(37, 99, 235) solid 2px",
+          "outlineWidth": "2px",
+          "outlineStyle": "solid"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "theme": "light",
+      "width": 390,
+      "surface": "settings",
+      "clipped": [],
+      "pageOverflow": false,
+      "font": "14px",
+      "accent": "#2563eb",
+      "badges": [],
+      "focus": [
+        {
+          "control": "Retention days",
+          "visible": true,
+          "outline": "rgb(37, 99, 235) solid 2px",
+          "outlineWidth": "2px",
+          "outlineStyle": "solid"
+        },
+        {
+          "control": "Notes",
+          "visible": true,
+          "outline": "rgb(37, 99, 235) solid 2px",
+          "outlineWidth": "2px",
+          "outlineStyle": "solid"
+        },
+        {
+          "control": "Save",
+          "visible": true,
+          "outline": "rgb(37, 99, 235) solid 2px",
+          "outlineWidth": "2px",
+          "outlineStyle": "solid"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "theme": "dark",
+      "width": 1280,
+      "surface": "captains",
+      "clipped": [],
+      "pageOverflow": false,
+      "font": "14px",
+      "accent": "#60a5fa",
+      "badges": [
+        {
+          "state": "Idle",
+          "bg": "rgb(30, 41, 59)",
+          "fg": "rgb(148, 163, 184)"
+        },
+        {
+          "state": "Working",
+          "bg": "rgb(23, 37, 84)",
+          "fg": "rgb(96, 165, 250)"
+        },
+        {
+          "state": "Stalled",
+          "bg": "rgb(69, 10, 10)",
+          "fg": "rgb(252, 165, 165)"
+        },
+        {
+          "state": "Quarantined",
+          "bg": "rgb(30, 41, 59)",
+          "fg": "rgb(148, 163, 184)"
+        }
+      ],
+      "focus": [
+        {
+          "control": "Status",
+          "visible": true,
+          "outline": "rgb(96, 165, 250) solid 2px",
+          "outlineWidth": "2px",
+          "outlineStyle": "solid"
+        },
+        {
+          "control": "Add captain",
+          "visible": true,
+          "outline": "rgb(96, 165, 250) solid 2px",
+          "outlineWidth": "2px",
+          "outlineStyle": "solid"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "theme": "dark",
+      "width": 1280,
+      "surface": "captainEdit",
+      "clipped": [],
+      "pageOverflow": false,
+      "font": "14px",
+      "accent": "#60a5fa",
+      "badges": [],
+      "focus": [
+        {
+          "control": "Name",
+          "visible": true,
+          "outline": "rgb(96, 165, 250) solid 2px",
+          "outlineWidth": "2px",
+          "outlineStyle": "solid"
+        },
+        {
+          "control": "Runtime",
+          "visible": true,
+          "outline": "rgb(96, 165, 250) solid 2px",
+          "outlineWidth": "2px",
+          "outlineStyle": "solid"
+        },
+        {
+          "control": "Save",
+          "visible": true,
+          "outline": "rgb(96, 165, 250) solid 2px",
+          "outlineWidth": "2px",
+          "outlineStyle": "solid"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "theme": "dark",
+      "width": 1280,
+      "surface": "tokenUsage",
+      "clipped": [],
+      "pageOverflow": false,
+      "font": "14px",
+      "accent": "#60a5fa",
+      "badges": [],
+      "focus": [
+        {
+          "control": "24 hours",
+          "visible": true,
+          "outline": "rgb(96, 165, 250) solid 2px",
+          "outlineWidth": "2px",
+          "outlineStyle": "solid"
+        },
+        {
+          "control": "7 days",
+          "visible": true,
+          "outline": "rgb(96, 165, 250) solid 2px",
+          "outlineWidth": "2px",
+          "outlineStyle": "solid"
+        },
+        {
+          "control": "Captain",
+          "visible": true,
+          "outline": "rgb(96, 165, 250) solid 2px",
+          "outlineWidth": "2px",
+          "outlineStyle": "solid"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "theme": "dark",
+      "width": 1280,
+      "surface": "jobs",
+      "clipped": [],
+      "pageOverflow": false,
+      "font": "14px",
+      "accent": "#60a5fa",
+      "badges": [
+        {
+          "state": "Running",
+          "bg": "rgb(23, 37, 84)",
+          "fg": "rgb(96, 165, 250)"
+        },
+        {
+          "state": "Succeeded",
+          "bg": "rgb(5, 46, 22)",
+          "fg": "rgb(74, 222, 128)"
+        },
+        {
+          "state": "Failed",
+          "bg": "rgb(69, 10, 10)",
+          "fg": "rgb(252, 165, 165)"
+        },
+        {
+          "state": "Cancelled",
+          "bg": "rgb(28, 25, 23)",
+          "fg": "rgb(168, 162, 158)"
+        }
+      ],
+      "focus": [
+        {
+          "control": "Cancel",
+          "visible": true,
+          "outline": "rgb(96, 165, 250) solid 2px",
+          "outlineWidth": "2px",
+          "outlineStyle": "solid"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "theme": "dark",
+      "width": 1280,
+      "surface": "settings",
+      "clipped": [],
+      "pageOverflow": false,
+      "font": "14px",
+      "accent": "#60a5fa",
+      "badges": [],
+      "focus": [
+        {
+          "control": "Retention days",
+          "visible": true,
+          "outline": "rgb(96, 165, 250) solid 2px",
+          "outlineWidth": "2px",
+          "outlineStyle": "solid"
+        },
+        {
+          "control": "Notes",
+          "visible": true,
+          "outline": "rgb(96, 165, 250) solid 2px",
+          "outlineWidth": "2px",
+          "outlineStyle": "solid"
+        },
+        {
+          "control": "Save",
+          "visible": true,
+          "outline": "rgb(96, 165, 250) solid 2px",
+          "outlineWidth": "2px",
+          "outlineStyle": "solid"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "theme": "dark",
+      "width": 768,
+      "surface": "captains",
+      "clipped": [],
+      "pageOverflow": false,
+      "font": "14px",
+      "accent": "#60a5fa",
+      "badges": [
+        {
+          "state": "Idle",
+          "bg": "rgb(30, 41, 59)",
+          "fg": "rgb(148, 163, 184)"
+        },
+        {
+          "state": "Working",
+          "bg": "rgb(23, 37, 84)",
+          "fg": "rgb(96, 165, 250)"
+        },
+        {
+          "state": "Stalled",
+          "bg": "rgb(69, 10, 10)",
+          "fg": "rgb(252, 165, 165)"
+        },
+        {
+          "state": "Quarantined",
+          "bg": "rgb(30, 41, 59)",
+          "fg": "rgb(148, 163, 184)"
+        }
+      ],
+      "focus": [
+        {
+          "control": "Status",
+          "visible": true,
+          "outline": "rgb(96, 165, 250) solid 2px",
+          "outlineWidth": "2px",
+          "outlineStyle": "solid"
+        },
+        {
+          "control": "Add captain",
+          "visible": true,
+          "outline": "rgb(96, 165, 250) solid 2px",
+          "outlineWidth": "2px",
+          "outlineStyle": "solid"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "theme": "dark",
+      "width": 768,
+      "surface": "captainEdit",
+      "clipped": [],
+      "pageOverflow": false,
+      "font": "14px",
+      "accent": "#60a5fa",
+      "badges": [],
+      "focus": [
+        {
+          "control": "Name",
+          "visible": true,
+          "outline": "rgb(96, 165, 250) solid 2px",
+          "outlineWidth": "2px",
+          "outlineStyle": "solid"
+        },
+        {
+          "control": "Runtime",
+          "visible": true,
+          "outline": "rgb(96, 165, 250) solid 2px",
+          "outlineWidth": "2px",
+          "outlineStyle": "solid"
+        },
+        {
+          "control": "Save",
+          "visible": true,
+          "outline": "rgb(96, 165, 250) solid 2px",
+          "outlineWidth": "2px",
+          "outlineStyle": "solid"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "theme": "dark",
+      "width": 768,
+      "surface": "tokenUsage",
+      "clipped": [],
+      "pageOverflow": false,
+      "font": "14px",
+      "accent": "#60a5fa",
+      "badges": [],
+      "focus": [
+        {
+          "control": "24 hours",
+          "visible": true,
+          "outline": "rgb(96, 165, 250) solid 2px",
+          "outlineWidth": "2px",
+          "outlineStyle": "solid"
+        },
+        {
+          "control": "7 days",
+          "visible": true,
+          "outline": "rgb(96, 165, 250) solid 2px",
+          "outlineWidth": "2px",
+          "outlineStyle": "solid"
+        },
+        {
+          "control": "Captain",
+          "visible": true,
+          "outline": "rgb(96, 165, 250) solid 2px",
+          "outlineWidth": "2px",
+          "outlineStyle": "solid"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "theme": "dark",
+      "width": 768,
+      "surface": "jobs",
+      "clipped": [],
+      "pageOverflow": false,
+      "font": "14px",
+      "accent": "#60a5fa",
+      "badges": [
+        {
+          "state": "Running",
+          "bg": "rgb(23, 37, 84)",
+          "fg": "rgb(96, 165, 250)"
+        },
+        {
+          "state": "Succeeded",
+          "bg": "rgb(5, 46, 22)",
+          "fg": "rgb(74, 222, 128)"
+        },
+        {
+          "state": "Failed",
+          "bg": "rgb(69, 10, 10)",
+          "fg": "rgb(252, 165, 165)"
+        },
+        {
+          "state": "Cancelled",
+          "bg": "rgb(28, 25, 23)",
+          "fg": "rgb(168, 162, 158)"
+        }
+      ],
+      "focus": [
+        {
+          "control": "Cancel",
+          "visible": true,
+          "outline": "rgb(96, 165, 250) solid 2px",
+          "outlineWidth": "2px",
+          "outlineStyle": "solid"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "theme": "dark",
+      "width": 768,
+      "surface": "settings",
+      "clipped": [],
+      "pageOverflow": false,
+      "font": "14px",
+      "accent": "#60a5fa",
+      "badges": [],
+      "focus": [
+        {
+          "control": "Retention days",
+          "visible": true,
+          "outline": "rgb(96, 165, 250) solid 2px",
+          "outlineWidth": "2px",
+          "outlineStyle": "solid"
+        },
+        {
+          "control": "Notes",
+          "visible": true,
+          "outline": "rgb(96, 165, 250) solid 2px",
+          "outlineWidth": "2px",
+          "outlineStyle": "solid"
+        },
+        {
+          "control": "Save",
+          "visible": true,
+          "outline": "rgb(96, 165, 250) solid 2px",
+          "outlineWidth": "2px",
+          "outlineStyle": "solid"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "theme": "dark",
+      "width": 390,
+      "surface": "captains",
+      "clipped": [],
+      "pageOverflow": false,
+      "font": "14px",
+      "accent": "#60a5fa",
+      "badges": [
+        {
+          "state": "Idle",
+          "bg": "rgb(30, 41, 59)",
+          "fg": "rgb(148, 163, 184)"
+        },
+        {
+          "state": "Working",
+          "bg": "rgb(23, 37, 84)",
+          "fg": "rgb(96, 165, 250)"
+        },
+        {
+          "state": "Stalled",
+          "bg": "rgb(69, 10, 10)",
+          "fg": "rgb(252, 165, 165)"
+        },
+        {
+          "state": "Quarantined",
+          "bg": "rgb(30, 41, 59)",
+          "fg": "rgb(148, 163, 184)"
+        }
+      ],
+      "focus": [
+        {
+          "control": "Status",
+          "visible": true,
+          "outline": "rgb(96, 165, 250) solid 2px",
+          "outlineWidth": "2px",
+          "outlineStyle": "solid"
+        },
+        {
+          "control": "Add captain",
+          "visible": true,
+          "outline": "rgb(96, 165, 250) solid 2px",
+          "outlineWidth": "2px",
+          "outlineStyle": "solid"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "theme": "dark",
+      "width": 390,
+      "surface": "captainEdit",
+      "clipped": [],
+      "pageOverflow": false,
+      "font": "14px",
+      "accent": "#60a5fa",
+      "badges": [],
+      "focus": [
+        {
+          "control": "Name",
+          "visible": true,
+          "outline": "rgb(96, 165, 250) solid 2px",
+          "outlineWidth": "2px",
+          "outlineStyle": "solid"
+        },
+        {
+          "control": "Runtime",
+          "visible": true,
+          "outline": "rgb(96, 165, 250) solid 2px",
+          "outlineWidth": "2px",
+          "outlineStyle": "solid"
+        },
+        {
+          "control": "Save",
+          "visible": true,
+          "outline": "rgb(96, 165, 250) solid 2px",
+          "outlineWidth": "2px",
+          "outlineStyle": "solid"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "theme": "dark",
+      "width": 390,
+      "surface": "tokenUsage",
+      "clipped": [],
+      "pageOverflow": false,
+      "font": "14px",
+      "accent": "#60a5fa",
+      "badges": [],
+      "focus": [
+        {
+          "control": "24 hours",
+          "visible": true,
+          "outline": "rgb(96, 165, 250) solid 2px",
+          "outlineWidth": "2px",
+          "outlineStyle": "solid"
+        },
+        {
+          "control": "7 days",
+          "visible": true,
+          "outline": "rgb(96, 165, 250) solid 2px",
+          "outlineWidth": "2px",
+          "outlineStyle": "solid"
+        },
+        {
+          "control": "Captain",
+          "visible": true,
+          "outline": "rgb(96, 165, 250) solid 2px",
+          "outlineWidth": "2px",
+          "outlineStyle": "solid"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "theme": "dark",
+      "width": 390,
+      "surface": "jobs",
+      "clipped": [],
+      "pageOverflow": false,
+      "font": "14px",
+      "accent": "#60a5fa",
+      "badges": [
+        {
+          "state": "Running",
+          "bg": "rgb(23, 37, 84)",
+          "fg": "rgb(96, 165, 250)"
+        },
+        {
+          "state": "Succeeded",
+          "bg": "rgb(5, 46, 22)",
+          "fg": "rgb(74, 222, 128)"
+        },
+        {
+          "state": "Failed",
+          "bg": "rgb(69, 10, 10)",
+          "fg": "rgb(252, 165, 165)"
+        },
+        {
+          "state": "Cancelled",
+          "bg": "rgb(28, 25, 23)",
+          "fg": "rgb(168, 162, 158)"
+        }
+      ],
+      "focus": [
+        {
+          "control": "Cancel",
+          "visible": true,
+          "outline": "rgb(96, 165, 250) solid 2px",
+          "outlineWidth": "2px",
+          "outlineStyle": "solid"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "theme": "dark",
+      "width": 390,
+      "surface": "settings",
+      "clipped": [],
+      "pageOverflow": false,
+      "font": "14px",
+      "accent": "#60a5fa",
+      "badges": [],
+      "focus": [
+        {
+          "control": "Retention days",
+          "visible": true,
+          "outline": "rgb(96, 165, 250) solid 2px",
+          "outlineWidth": "2px",
+          "outlineStyle": "solid"
+        },
+        {
+          "control": "Notes",
+          "visible": true,
+          "outline": "rgb(96, 165, 250) solid 2px",
+          "outlineWidth": "2px",
+          "outlineStyle": "solid"
+        },
+        {
+          "control": "Save",
+          "visible": true,
+          "outline": "rgb(96, 165, 250) solid 2px",
+          "outlineWidth": "2px",
+          "outlineStyle": "solid"
+        }
+      ],
+      "passed": true
+    }
+  ]
+}

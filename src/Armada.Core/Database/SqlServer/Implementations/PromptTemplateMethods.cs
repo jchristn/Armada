@@ -232,7 +232,13 @@ namespace Armada.Core.Database.SqlServer.Implementations
         /// <inheritdoc />
         public async Task<EnumerationResult<PromptTemplate>> EnumerateAsync(EnumerationQuery query, CancellationToken token = default)
         {
-            if (query == null) query = new EnumerationQuery();
+            return await EnumerateVisibleAsync(PromptTemplateQuery.From(query), token).ConfigureAwait(false);
+        }
+
+        /// <inheritdoc />
+        public async Task<EnumerationResult<PromptTemplate>> EnumerateVisibleAsync(PromptTemplateQuery query, CancellationToken token = default)
+        {
+            if (query == null) throw new ArgumentNullException(nameof(query));
 
             using (SqlConnection conn = new SqlConnection(_Driver.ConnectionString))
             {
@@ -240,6 +246,30 @@ namespace Armada.Core.Database.SqlServer.Implementations
 
                 List<string> conditions = new List<string>();
                 List<SqlParameter> parameters = new List<SqlParameter>();
+
+                List<string> scoped = new List<string>();
+                if (!String.IsNullOrEmpty(query.TenantId))
+                {
+                    scoped.Add("tenant_id = @tenant_id");
+                    parameters.Add(new SqlParameter("@tenant_id", query.TenantId));
+                }
+                if (!String.IsNullOrEmpty(query.ViewerUserId))
+                {
+                    // A regular user sees tenant-wide rows plus their own (ScopedVisibility.CanView), counted in the data source.
+                    scoped.Add("(scope = @tenant_wide_scope OR user_id = @viewer_user_id)");
+                    parameters.Add(new SqlParameter("@tenant_wide_scope", ScopeEnum.TenantWide.ToString()));
+                    parameters.Add(new SqlParameter("@viewer_user_id", query.ViewerUserId));
+                }
+                if (scoped.Count > 0)
+                {
+                    string scopedClause = String.Join(" AND ", scoped);
+                    conditions.Add(query.IncludeUntenanted ? "(tenant_id IS NULL OR tenant_id = '' OR (" + scopedClause + "))" : scopedClause);
+                }
+                if (!String.IsNullOrWhiteSpace(query.Category))
+                {
+                    conditions.Add("LOWER(category) = @category");
+                    parameters.Add(new SqlParameter("@category", query.Category.Trim().ToLowerInvariant()));
+                }
 
                 if (query.CreatedAfter.HasValue)
                 {
@@ -254,6 +284,9 @@ namespace Armada.Core.Database.SqlServer.Implementations
 
                 string whereClause = conditions.Count > 0 ? " WHERE " + string.Join(" AND ", conditions) : "";
                 string orderDirection = query.Order == EnumerationOrderEnum.CreatedAscending ? "ASC" : "DESC";
+                string orderClause = query.OrderByCategoryAndName
+                    ? " ORDER BY LOWER(COALESCE(category, '')) ASC, LOWER(name) ASC, id ASC"
+                    : " ORDER BY created_utc " + orderDirection + ", id " + orderDirection;
 
                 // Count
                 long totalCount = 0;
@@ -269,7 +302,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
                 using (SqlCommand cmd = conn.CreateCommand())
                 {
                     cmd.CommandText = "SELECT * FROM prompt_templates" + whereClause +
-                        " ORDER BY created_utc " + orderDirection +
+                        orderClause +
                         " OFFSET " + query.Offset + " ROWS FETCH NEXT " + query.PageSize + " ROWS ONLY;";
                     foreach (SqlParameter p in parameters) cmd.Parameters.Add(new SqlParameter(p.ParameterName, p.Value));
                     using (SqlDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))

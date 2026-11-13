@@ -3,6 +3,7 @@ namespace Armada.Tui.Screens.Build
     using System;
     using System.Collections.Generic;
     using System.Linq;
+    using System.Threading;
     using System.Threading.Tasks;
     using Armada.Client;
     using Armada.Client.Models;
@@ -99,14 +100,14 @@ namespace Armada.Tui.Screens.Build
             bool initial = !Loaded;
             Call(async (c, t) =>
             {
-                Task<EnumerationResult<Fleet>?> fleets = c.ListFleetsAsync(new ArmadaPageQuery(1, 9999), t);
-                Task<EnumerationResult<Vessel>?> vessels = c.ListVesselsAsync(new ArmadaPageQuery(1, 9999), t);
-                Task<EnumerationResult<Pipeline>?> pipelines = c.ListPipelinesAsync(new ArmadaPageQuery(1, 9999), t);
-                await Task.WhenAll(fleets, vessels, pipelines).ConfigureAwait(false);
+                Task<FleetDetail?> fleet = c.GetFleetAsync(FleetId, t);
+                Task<List<Vessel>> vessels = LoadFleetVesselsAsync(c, t);
+                Task<List<Pipeline>> pipelines = ArmadaPaging.ReadAllAsync<Pipeline>((p, ct) => c.ListPipelinesAsync(new ArmadaPageQuery(p, 1000), ct), ArmadaPaging.DefaultMaxPages, t);
+                await Task.WhenAll(fleet, vessels, pipelines).ConfigureAwait(false);
                 FleetLoad result = new FleetLoad();
-                result.Fleet = (fleets.Result?.Objects ?? new List<Fleet>()).FirstOrDefault(f => f.Id == FleetId);
-                result.Vessels = (vessels.Result?.Objects ?? new List<Vessel>()).Where(v => v.FleetId == FleetId).ToList();
-                result.Pipelines = pipelines.Result?.Objects ?? new List<Pipeline>();
+                result.Fleet = fleet.Result?.Fleet;
+                result.Vessels = vessels.Result;
+                result.Pipelines = pipelines.Result;
                 return result;
             }, r =>
             {
@@ -134,6 +135,24 @@ namespace Armada.Tui.Screens.Build
         #endregion
 
         #region Private-Methods
+
+        private async Task<List<Vessel>> LoadFleetVesselsAsync(ArmadaClient client, CancellationToken token)
+        {
+            // The fleet read carries only a vessel count; walk the fleet's vessels one bounded page at a time.
+            List<Vessel> all = new List<Vessel>();
+            int page = 1;
+            while (true)
+            {
+                token.ThrowIfCancellationRequested();
+                EnumerationResult<Vessel>? result = await client.ListVesselsAsync(new ArmadaPageQuery(page, 1000).With("fleetId", FleetId), token).ConfigureAwait(false);
+                if (result == null || result.Objects == null || result.Objects.Count == 0) break;
+                all.AddRange(result.Objects);
+                if (page >= result.TotalPages) break;
+                page++;
+            }
+
+            return all;
+        }
 
         private void Edit()
         {

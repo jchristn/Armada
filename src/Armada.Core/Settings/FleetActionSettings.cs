@@ -1,5 +1,7 @@
 namespace Armada.Core.Settings
 {
+    using Armada.Core.Services;
+
     /// <summary>
     /// Settings for fleet actions (one action applied across many vessels). All values apply live.
     /// </summary>
@@ -10,7 +12,8 @@ namespace Armada.Core.Settings
         /// <summary>Skip actions declaring RequiresNetwork while the execution host is offline.</summary>
         public bool Offline { get; set; }
 
-        /// <summary>Harbor IDs explicitly configured without network access. Applies live to network actions.</summary>
+        /// <summary>Harbor IDs explicitly configured without network access. Applies live to network actions. At most 256 entries (CollectionLimits.MaxConfigItems); a settings update with more is rejected.</summary>
+        [CollectionBound(CollectionLimits.MaxConfigItems)]
         public System.Collections.Generic.List<string> OfflineHarborIds { get => _OfflineHarborIds; set => _OfflineHarborIds = value ?? new(); }
         private System.Collections.Generic.List<string> _OfflineHarborIds = new();
 

@@ -115,7 +115,8 @@ namespace Armada.Client
         }
 
         /// <summary>
-        /// Dashboard <c>getFleetActionRun</c>: GET `/api/v1/fleet-action-runs/${encodeURIComponent(id)}`.
+        /// Dashboard <c>getFleetActionRun</c>: GET `/api/v1/fleet-action-runs/${encodeURIComponent(id)}`. The run carries
+        /// its target counts; the targets are not embedded, page them with <see cref="EnumerateFleetActionRunTargetsAsync"/>.
         /// </summary>
         /// <param name="id">id.</param>
         /// <param name="token">Cancellation token.</param>

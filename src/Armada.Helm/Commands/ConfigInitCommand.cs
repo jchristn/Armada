@@ -84,7 +84,7 @@ namespace Armada.Helm.Commands
                             }
                             catch (IOException ex)
                             {
-                                AnsiConsole.MarkupLine($"[red]Could not delete data directory:[/] {Markup.Escape(ex.Message)}");
+                                HelmConsole.Error.MarkupLine($"[red]Could not delete data directory:[/] {Markup.Escape(ex.Message)}");
                                 AnsiConsole.MarkupLine("[gold1]Close any running armada commands (watch, go --log) and try again.[/]");
                                 return 1;
                             }

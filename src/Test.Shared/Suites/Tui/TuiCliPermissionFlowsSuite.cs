@@ -785,12 +785,12 @@ namespace Test.Shared.Suites.Tui
                 AskThread thread = AskFixtures.Thread("ath_1", "Refused");
                 thread.CliPermission = new CliPermissionResolution { Requested = CliPermissionPolicyEnum.Refuse, Effective = CliPermissionPolicyEnum.Refuse, Source = CliPermissionPolicySourceEnum.ServerDefault };
                 AskMessage reply = AskFixtures.Message("amg_2", "ath_1", 2, AskMessageRoleEnum.Assistant, AskMessageKindEnum.Text, "I could not run it.");
-                reply.ToolCalls.Add(new AskMessageToolCall { ToolName = "Bash", Ok = null, ResultText = "This command requires approval", PermissionDenied = true });
+                fx.SetToolCalls(reply, new AskMessageToolCall { ToolName = "Bash", Ok = null, ResultText = "This command requires approval", PermissionDenied = true });
                 fx.AddThread(thread, AskFixtures.Message("amg_1", "ath_1", 1, AskMessageRoleEnum.User, AskMessageKindEnum.Text, "run it"), reply);
                 using (TuiTestHost host = TuiCase.SignedIn(160, 50, "/ask/ath_1", fx.Stub))
                 {
                     AskScreen screen = (AskScreen)host.Tui.Shell.Screen!;
-                    AssertTrue(host.PumpUntil(() => host.Tui.Ask.Conversation.Messages.Count == 2 && host.Tui.Ask.Conversation.Thread?.CliPermission != null), "loaded");
+                    AssertTrue(host.PumpUntil(() => host.Tui.Ask.Conversation.Messages.Count == 2 && host.Tui.Ask.Conversation.Thread?.CliPermission != null && host.Tui.Ask.Conversation.ToolCalls.ContainsKey("amg_2")), "loaded");
                     screen.Transcript.Layout(150);
                     string text = String.Join("\n", screen.Transcript.PlainLines());
                     TuiCase.Contains(text, "[x!] Bash", "refused row");
@@ -900,7 +900,7 @@ namespace Test.Shared.Suites.Tui
             }
 
             AskMessage reply = AskFixtures.Message("amg_r", "ath_1", 10, AskMessageRoleEnum.Assistant, AskMessageKindEnum.Text, "I proposed the dispatch; approve it to start.");
-            reply.ToolCalls.Add(new AskMessageToolCall { ToolName = "mcp__armada__dispatch", Ok = true, ResultText = "proposed" });
+            fx.SetToolCalls(reply, new AskMessageToolCall { ToolName = "mcp__armada__dispatch", Ok = true, ResultText = "proposed" });
             messages.Add(reply);
             fx.AddThread(AskFixtures.Thread("ath_1", "TUIKit fixes"), messages.ToArray());
             fx.Pending["ath_1"] = proposals;

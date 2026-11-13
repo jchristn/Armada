@@ -56,6 +56,12 @@ namespace Armada.Core.Enums
         /// A voyage finished (completed or failed).
         /// </summary>
         [EnumMember(Value = "VoyageFinished")]
-        VoyageFinished
+        VoyageFinished,
+
+        /// <summary>
+        /// A model scorecard alert was raised or reopened (sent only when ModelAlerts.PushEnabled is true; default false).
+        /// </summary>
+        [EnumMember(Value = "ModelAlert")]
+        ModelAlert
     }
 }

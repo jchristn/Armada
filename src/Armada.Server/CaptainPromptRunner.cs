@@ -81,6 +81,7 @@ namespace Armada.Server
             CancellationToken token = default)
         {
             if (captain == null) throw new ArgumentNullException(nameof(captain));
+            Armada.Core.Services.CaptainEligibility.RequireActive(captain);
             if (String.IsNullOrEmpty(workingDirectory)) throw new ArgumentNullException(nameof(workingDirectory));
             if (prompt == null) throw new ArgumentNullException(nameof(prompt));
 

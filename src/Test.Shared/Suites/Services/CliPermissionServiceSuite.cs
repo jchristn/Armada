@@ -224,10 +224,10 @@ namespace Test.Shared.Suites.Services
                 AssertTrue(events.Contains(CliPermissionService.ResolvedEvent + " " + outcome.Request!.Id), "the resolution is announced");
 
                 InboxService inbox = new InboxService(h.Db.Driver, h.Logging, h.Settings);
-                AssertFalse((await inbox.GetInboxAsync(TenantAdmin("usr_cpa14")).ConfigureAwait(false)).Any(i => i.Kind == InboxItemKinds.CliPermission), "no inbox item for the admin");
-                AssertFalse((await inbox.GetInboxAsync(owner).ConfigureAwait(false)).Any(i => i.Kind == InboxItemKinds.CliPermission), "no inbox item for the owner");
+                AssertFalse((await InboxTestPages.AllAsync(inbox, TenantAdmin("usr_cpa14")).ConfigureAwait(false)).Any(i => i.Kind == InboxItemKinds.CliPermission), "no inbox item for the admin");
+                AssertFalse((await InboxTestPages.AllAsync(inbox, owner).ConfigureAwait(false)).Any(i => i.Kind == InboxItemKinds.CliPermission), "no inbox item for the owner");
                 AskThreadDetail? detail = await h.Threads.GetThreadDetailAsync(owner, thread.Id).ConfigureAwait(false);
-                AssertEqual(0, detail!.PendingCliPermissions.Count, "nothing pending on the thread");
+                AssertEqual(0L, detail!.PendingCliPermissionCount, "nothing pending on the thread");
                 AssertEqual(0, await svc.SweepAsync().ConfigureAwait(false), "nothing left for the sweep");
             }));
 
@@ -468,7 +468,7 @@ namespace Test.Shared.Suites.Services
                 CliPermissionPromptOutcome next = await svc.PromptAsync(ThreadContext(thread, null), "WebFetch", "{\"url\":\"https://example.com/other\"}").ConfigureAwait(false);
                 AssertTrue(next.Allowed, "the remembered rule allows the next call without waiting");
                 AssertEqual(remembered.Id, next.Request!.RuleId);
-                AssertEqual(0, (await svc.ListRulesAsync(stranger, null).ConfigureAwait(false)).Count, "another tenant does not see the rule");
+                AssertEqual(0L, (await svc.EnumerateRulesAsync(stranger, null, 1, 10).ConfigureAwait(false)).TotalRecords, "another tenant does not see the rule");
                 await AssertThrowsAsync<KeyNotFoundException>(() => svc.DeleteRuleAsync(stranger, remembered.Id), "another tenant cannot delete it").ConfigureAwait(false);
             }));
 
@@ -583,20 +583,20 @@ namespace Test.Shared.Suites.Services
                 InboxService inbox = new InboxService(h.Db.Driver, h.Logging, h.Settings);
 
                 AuthContext admin = TenantAdmin("usr_cpa10");
-                InboxItem adminItem = (await inbox.GetInboxAsync(admin).ConfigureAwait(false)).Single(i => i.Kind == InboxItemKinds.CliPermission);
+                InboxItem adminItem = (await InboxTestPages.AllAsync(inbox, admin).ConfigureAwait(false)).Single(i => i.Kind == InboxItemKinds.CliPermission);
                 AssertEqual(InboxSeverityEnum.Warning, adminItem.Severity);
                 AssertEqual(pending.Id, adminItem.EntityId);
                 AssertTrue(adminItem.CliPermission!.CanDecide, "admin can decide");
                 AssertNotNull(adminItem.ExpiresUtc, "expiry for a countdown");
                 AssertEqual("/server?tab=cli-permissions&request=" + pending.Id, adminItem.Href);
-                InboxItem ownerItem = (await inbox.GetInboxAsync(owner).ConfigureAwait(false)).Single(i => i.Kind == InboxItemKinds.CliPermission);
+                InboxItem ownerItem = (await InboxTestPages.AllAsync(inbox, owner).ConfigureAwait(false)).Single(i => i.Kind == InboxItemKinds.CliPermission);
                 AssertFalse(ownerItem.CliPermission!.CanDecide, "owner sees it but cannot decide");
                 AssertEqual("/ask/" + thread.Id, ownerItem.Href);
-                AssertFalse((await inbox.GetInboxAsync(AskTestHarness.User("usr_cpq10", false)).ConfigureAwait(false)).Any(i => i.Kind == InboxItemKinds.CliPermission), "other users do not see it");
+                AssertFalse((await InboxTestPages.AllAsync(inbox, AskTestHarness.User("usr_cpq10", false)).ConfigureAwait(false)).Any(i => i.Kind == InboxItemKinds.CliPermission), "other users do not see it");
 
                 await svc.DecideAsync(admin, pending.Id, new CliPermissionDecisionRequest { Decision = CliPermissionDecisionEnum.Deny }).ConfigureAwait(false);
                 await prompt.ConfigureAwait(false);
-                AssertFalse((await inbox.GetInboxAsync(admin).ConfigureAwait(false)).Any(i => i.Kind == InboxItemKinds.CliPermission), "gone once decided");
+                AssertFalse((await InboxTestPages.AllAsync(inbox, admin).ConfigureAwait(false)).Any(i => i.Kind == InboxItemKinds.CliPermission), "gone once decided");
             }));
 
             cases.Add(Case("ask_turns_carry_the_policy", "Ask turns hand the runner the resolved policy, persist permission denials, and cancel pending prompts when the turn ends", async () =>
@@ -616,7 +616,9 @@ namespace Test.Shared.Suites.Services
                 AssertFalse(CaptainRuntimeOptions.GetAutoApprove(first.Captain), "no bypass flag");
                 AssertEqual(h.Settings.Permissions.PromptTimeoutSeconds, first.PermissionPromptTimeoutSeconds);
                 AskMessagePage page = (await h.Threads.EnumerateMessagesAsync(owner, thread.Id, new AskMessageEnumerateRequest()).ConfigureAwait(false))!;
-                AskMessageToolCall persisted = page.Messages.SelectMany(m => m.ToolCalls).Single(c => c.CallId == "toolu_9");
+                List<AskMessageToolCall> allCalls = new List<AskMessageToolCall>();
+                foreach (AskMessage m in page.Messages.Where(x => x.ToolCallCount > 0)) allCalls.AddRange(await h.ToolCallsAsync(owner, m).ConfigureAwait(false));
+                AskMessageToolCall persisted = allCalls.Single(c => c.CallId == "toolu_9");
                 AssertEqual(true, persisted.PermissionDenied, "permission denial persisted with the reply");
 
                 await svc.SetThreadPolicyAsync(owner, thread.Id, CliPermissionPolicyEnum.Bypass).ConfigureAwait(false);

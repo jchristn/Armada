@@ -149,11 +149,14 @@ export interface TokenSeriesDef {
   color: string;
 }
 
-/** The runtime/model series of the token chart, most tokens first (from the whole-window totals). */
-export function tokenSeries(metrics: HarborMetrics): TokenSeriesDef[] {
+/**
+ * The runtime/model series of the token chart, most tokens first (from the whole-window totals). The server lists at
+ * most 20 and aggregates the rest into one isOther entry, labelled `otherLabel`.
+ */
+export function tokenSeries(metrics: HarborMetrics, otherLabel = 'Other'): TokenSeriesDef[] {
   return metrics.tokens.series.map((s, i) => ({
     key: `${s.runtime}|${s.model}`,
-    label: `${s.runtime} / ${s.model}`,
+    label: s.isOther ? otherLabel : `${s.runtime} / ${s.model}`,
     color: TOKEN_SERIES_COLORS[i % TOKEN_SERIES_COLORS.length],
   }));
 }

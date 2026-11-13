@@ -63,13 +63,12 @@ namespace Armada.Server.Routes
                 }
 
                 EnumerationQuery query = EnumerationRequestReader.Read(req, _jsonOptions);
-                List<ObjectiveRefinementSession> sessions = await EnumerateSessionsByObjectiveAsync(ctx, objective.Id).ConfigureAwait(false);
-                return EnumerationResult<ObjectiveRefinementSession>.Page(query, sessions.OrderByDescending(s => s.LastUpdateUtc).ToList());
+                return await EnumerateSessionsByObjectiveAsync(ctx, objective.Id, query).ConfigureAwait(false);
             },
             api => api
                 .WithTag("Objectives")
                 .WithSummary("Enumerate refinement sessions for a objective")
-                .WithDescription("One page of the refinement sessions of one objective, most recently updated first. Paging and filters come from the JSON body (EnumerationQuery) or the querystring (pageNumber, pageSize 1 to 1000, default 10).")
+                .WithDescription("One page of the refinement sessions of one objective, paged in the database: most recently updated first (CreatedDescending, the default) or least recently updated first (CreatedAscending), id as the tie-break. Filters: status, captainId, vesselId, createdAfter, createdBefore; a global admin may narrow with tenantId and userId, a tenant admin with userId. Paging and filters come from the JSON body (EnumerationQuery) or the querystring (pageNumber, pageSize 1 to 1000, default 10).")
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Objective ID (obj_ prefix)"))
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())
                 .WithRequestBody(OpenApiJson.BodyFor<EnumerationQuery>("Paging and filters", false))
@@ -177,13 +176,12 @@ namespace Armada.Server.Routes
                 }
 
                 EnumerationQuery query = EnumerationRequestReader.Read(req, _jsonOptions);
-                List<ObjectiveRefinementSession> sessions = await EnumerateSessionsByObjectiveAsync(ctx, objective.Id).ConfigureAwait(false);
-                return EnumerationResult<ObjectiveRefinementSession>.Page(query, sessions.OrderByDescending(s => s.LastUpdateUtc).ToList());
+                return await EnumerateSessionsByObjectiveAsync(ctx, objective.Id, query).ConfigureAwait(false);
             },
             api => api
                 .WithTag("Backlog")
                 .WithSummary("Enumerate refinement sessions for a backlog item")
-                .WithDescription("One page of the refinement sessions of one backlog item, most recently updated first. Paging and filters come from the JSON body (EnumerationQuery) or the querystring (pageNumber, pageSize 1 to 1000, default 10).")
+                .WithDescription("One page of the refinement sessions of one backlog item, paged in the database: most recently updated first (CreatedDescending, the default) or least recently updated first (CreatedAscending), id as the tie-break. Filters: status, captainId, vesselId, createdAfter, createdBefore; a global admin may narrow with tenantId and userId, a tenant admin with userId. Paging and filters come from the JSON body (EnumerationQuery) or the querystring (pageNumber, pageSize 1 to 1000, default 10).")
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Objective ID (obj_ prefix)"))
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())
                 .WithRequestBody(OpenApiJson.BodyFor<EnumerationQuery>("Paging and filters", false))
@@ -308,11 +306,45 @@ namespace Armada.Server.Routes
             api => api
                 .WithTag("Objectives")
                 .WithSummary("Get an objective refinement session")
-                .WithDescription("Returns an objective refinement session, its transcript, and linked captain/objective context.")
+                .WithDescription("Returns an objective refinement session with its captain, vessel, and objective, and the transcript's MessageCount. The transcript itself is read with POST /api/v1/objective-refinement-sessions/{id}/messages/enumerate.")
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Objective refinement session ID (ors_ prefix)"))
                 .WithResponse(200, OpenApiJson.For<ObjectiveRefinementSessionDetail>("Objective refinement session detail"))
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())
                 .WithResponse(501, OpenApiJson.For<ApiStatusErrorResponse>("Not supported for the captain's runtime (Error NotImplemented)"))
+                .WithSecurity("ApiKey"));
+
+            app.Post("/api/v1/objective-refinement-sessions/{id}/messages/enumerate", async (ApiRequest req) =>
+            {
+                AuthContext ctx = await authenticate(req.Http).ConfigureAwait(false);
+                if (!authz.IsAuthorized(ctx, req.Http.Request.Method.ToString(), req.Http.Request.Url.RawWithoutQuery))
+                {
+                    req.Http.Response.StatusCode = ctx.IsAuthenticated ? 403 : 401;
+                    return new ApiErrorResponse
+                    {
+                        Error = ctx.IsAuthenticated ? ApiResultEnum.Forbidden : ApiResultEnum.NotAuthorized,
+                        Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required"
+                    };
+                }
+
+                EnumerationQuery query = EnumerationRequestReader.Read(req, _jsonOptions);
+                ObjectiveRefinementSession? session = await ReadSessionForContextAsync(ctx, req.Parameters["id"]).ConfigureAwait(false);
+                if (session == null)
+                {
+                    req.Http.Response.StatusCode = 404;
+                    return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Objective refinement session not found" };
+                }
+
+                return await _database.ObjectiveRefinementMessages.EnumeratePageBySessionAsync(session.Id, query).ConfigureAwait(false);
+            },
+            api => api
+                .WithTag("Objectives")
+                .WithSummary("Enumerate an objective refinement session's transcript")
+                .WithDescription("One page of the session's messages, paged in the database: newest first (CreatedDescending, the default) or oldest first (CreatedAscending), by sequence with the id as the tie-break. TotalRecords is the transcript length. Paging comes from the JSON body (EnumerationQuery) or the querystring (pageNumber, pageSize 1 to 1000, default 10, order).")
+                .WithParameter(OpenApiParameterMetadata.Path("id", "Objective refinement session ID (ors_ prefix)"))
+                .WithRequestBody(OpenApiJson.BodyFor<EnumerationQuery>("Paging and order", false))
+                .WithResponse(200, OpenApiJson.For<EnumerationResult<ObjectiveRefinementMessage>>("One page of messages"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
+                .WithResponse(404, OpenApiResponseMetadata.NotFound())
                 .WithSecurity("ApiKey"));
 
             app.Post<ObjectiveRefinementMessageRequest>("/api/v1/objective-refinement-sessions/{id}/messages", async (ApiRequest req) =>
@@ -573,17 +605,13 @@ namespace Armada.Server.Routes
                 .WithSecurity("ApiKey"));
         }
 
-        private async Task<List<ObjectiveRefinementSession>> EnumerateSessionsByObjectiveAsync(AuthContext ctx, string objectiveId)
+        private async Task<EnumerationResult<ObjectiveRefinementSession>> EnumerateSessionsByObjectiveAsync(AuthContext ctx, string objectiveId, EnumerationQuery query)
         {
-            List<ObjectiveRefinementSession> sessions = ctx.IsAdmin
-                ? await _database.ObjectiveRefinementSessions.EnumerateAsync().ConfigureAwait(false)
-                : ctx.IsTenantAdmin
-                    ? await _database.ObjectiveRefinementSessions.EnumerateAsync(ctx.TenantId!).ConfigureAwait(false)
-                    : await _database.ObjectiveRefinementSessions.EnumerateAsync(ctx.TenantId!, ctx.UserId!).ConfigureAwait(false);
-
-            return sessions
-                .Where(session => String.Equals(session.ObjectiveId, objectiveId, StringComparison.OrdinalIgnoreCase))
-                .ToList();
+            if (ctx.IsAdmin)
+                return await _database.ObjectiveRefinementSessions.EnumeratePageByObjectiveAsync(objectiveId, query.TenantId, query.UserId, query).ConfigureAwait(false);
+            if (ctx.IsTenantAdmin)
+                return await _database.ObjectiveRefinementSessions.EnumeratePageByObjectiveAsync(objectiveId, ctx.TenantId!, query.UserId, query).ConfigureAwait(false);
+            return await _database.ObjectiveRefinementSessions.EnumeratePageByObjectiveAsync(objectiveId, ctx.TenantId!, ctx.UserId!, query).ConfigureAwait(false);
         }
 
         private async Task<ObjectiveRefinementSession?> ReadSessionForContextAsync(AuthContext ctx, string id)
@@ -619,9 +647,7 @@ namespace Armada.Server.Routes
             if (refreshed == null)
                 throw new KeyNotFoundException("Objective refinement session not found: " + session.Id);
 
-            List<ObjectiveRefinementMessage> messages = await _database.ObjectiveRefinementMessages
-                .EnumerateBySessionAsync(refreshed.Id)
-                .ConfigureAwait(false);
+            long messageCount = await _database.ObjectiveRefinementMessages.CountBySessionAsync(refreshed.Id).ConfigureAwait(false);
             Captain? captain = await ReadCaptainForContextAsync(ctx, refreshed.CaptainId).ConfigureAwait(false);
             Vessel? vessel = !String.IsNullOrWhiteSpace(refreshed.VesselId)
                 ? await ReadVesselForContextAsync(ctx, refreshed.VesselId!).ConfigureAwait(false)
@@ -631,7 +657,7 @@ namespace Armada.Server.Routes
             return new ObjectiveRefinementSessionDetail
             {
                 Session = refreshed,
-                Messages = messages.OrderBy(message => message.Sequence).ToList(),
+                MessageCount = messageCount,
                 Captain = captain,
                 Vessel = vessel,
                 Objective = objective

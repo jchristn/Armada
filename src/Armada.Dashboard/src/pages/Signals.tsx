@@ -204,7 +204,7 @@ export default function Signals() {
     {
       key: 'id', label: t('ID'), required: true, sortKey: 'id', headerTitle: t('Unique signal ID (sig_ prefix). Click to sort.'), cellClassName: 'mono table-id-cell',
       render: (sig) => (
-        <span className="id-display" style={{ color: 'var(--primary)' }}>
+        <span className="id-display" style={{ color: 'var(--accent)' }}>
           <span className="id-value" title={sig.id}>{sig.id}</span>
           <CopyButton text={sig.id} onClick={e => e.stopPropagation()} />
         </span>

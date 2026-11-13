@@ -8,11 +8,13 @@ import {
   listCaptains,
   listCliPermissionRequests,
   listCliPermissionRules,
+  enumerateCliPermissionRules,
   listVessels,
   updateCliPermissionRule,
 } from '../api/client';
 import { translateTemplate } from '../i18n/runtime';
 import type { CliPermissionRequest, CliPermissionRule, EnumerationResult, WebSocketMessage } from '../types/models';
+import { asPage } from '../test/asPage';
 
 vi.mock('../api/client', () => ({
   createCliPermissionRule: vi.fn(),
@@ -22,6 +24,7 @@ vi.mock('../api/client', () => ({
   listCaptains: vi.fn(),
   listCliPermissionRequests: vi.fn(),
   listCliPermissionRules: vi.fn(),
+  enumerateCliPermissionRules: vi.fn(),
   listVessels: vi.fn(),
   updateCliPermissionRule: vi.fn(),
 }));
@@ -73,11 +76,19 @@ beforeEach(() => {
   authValue.isAdmin = true;
   vi.mocked(listCliPermissionRequests).mockResolvedValue([pending]);
   vi.mocked(listCliPermissionRules).mockResolvedValue(rules);
+  vi.mocked(enumerateCliPermissionRules).mockImplementation((async (query: unknown) => asPage(await vi.mocked(listCliPermissionRules)(query as never))) as never);
   vi.mocked(listVessels).mockResolvedValue(page([{ id: 'vsl_1', name: 'payments-api' } as never]));
   vi.mocked(listCaptains).mockResolvedValue(page([{ id: 'cpt_1', name: 'Ada' } as never]));
 });
 
 describe('CLI Tool Permissions page', () => {
+  it('says when the rules list holds one page of a larger set', async () => {
+    vi.mocked(enumerateCliPermissionRules).mockResolvedValue({ ...asPage(rules), totalRecords: 1500, totalPages: 2 });
+    renderAt('/server?tab=cli-permissions&section=rules');
+    expect(await screen.findByText('Bash(git status:*)')).toBeInTheDocument();
+    expect(screen.getByTestId('truncation-note')).toHaveTextContent(`Showing ${rules.length} of 1500`);
+  });
+
   it('fits in the Settings tab: no page header, Requests and Rules as sub-sections synced to ?section=', async () => {
     renderAt('/server?tab=cli-permissions&request=cpr_1');
     await screen.findByRole('group', { name: 'CLI permission: Bash' });

@@ -9,6 +9,7 @@ namespace Test.Shared.Suites.E2E
     using System.Threading.Tasks;
     using Armada.Core.Enums;
     using Armada.Core.Models;
+    using Armada.Core.Services.Ask;
     using Test.Shared.Infrastructure;
     using Touchstone.Core;
     using static Test.Shared.Infrastructure.Asserts;
@@ -229,12 +230,16 @@ namespace Test.Shared.Suites.E2E
                 AssertEqual(AskProposalStatusEnum.Executed, proposal.Status, proposal.ErrorText ?? "");
 
                 AskThreadDetail detail = await JsonHelper.DeserializeAsync<AskThreadDetail>(await a.GetAsync("/api/v1/ask/threads/" + thread.Id).ConfigureAwait(false)).ConfigureAwait(false);
-                AskTrackedWork work = detail.TrackedWork.Single();
+                AssertEqual(1L, detail.TrackedWorkCount, "one tracked item counted");
+                EnumerationResult<AskTrackedWork> workPage = await JsonHelper.DeserializeAsync<EnumerationResult<AskTrackedWork>>(await a.PostAsync("/api/v1/ask/threads/" + thread.Id + "/work/enumerate", JsonHelper.ToJsonContent(new { })).ConfigureAwait(false)).ConfigureAwait(false);
+                AskTrackedWork work = workPage.Objects.Single();
                 AssertEqual(AskTrackedEntityTypeEnum.Voyage, work.EntityType);
                 AssertNotNull(work.Snapshot, "snapshot embedded");
                 AssertEqual("Ask dispatch", work.Snapshot!.Title);
                 AssertEqual(1, work.Snapshot.TotalCount, "one mission");
-                AssertEqual("Add a README line", work.Snapshot.Missions.Single().Title);
+                AssertEqual(1, work.Snapshot.MissionCount, "one mission row");
+                EnumerationResult<AskWorkMissionSnapshot> missionRows = await JsonHelper.DeserializeAsync<EnumerationResult<AskWorkMissionSnapshot>>(await a.PostAsync("/api/v1/ask/threads/" + thread.Id + "/work/" + work.Id + "/missions/enumerate", JsonHelper.ToJsonContent(new { })).ConfigureAwait(false)).ConfigureAwait(false);
+                AssertEqual("Add a README line", missionRows.Objects.Single().Title);
 
                 AssertStatusCode(HttpStatusCode.OK, await a.GetAsync("/api/v1/voyages/" + work.EntityId).ConfigureAwait(false), "the voyage is visible in the caller's tenant");
 
@@ -334,27 +339,70 @@ namespace Test.Shared.Suites.E2E
                 }
 
                 AskThreadDetail detail = await JsonHelper.DeserializeAsync<AskThreadDetail>(await a.GetAsync("/api/v1/ask/threads/" + thread.Id).ConfigureAwait(false)).ConfigureAwait(false);
-                AskActionProposal pending = detail.PendingProposals.Single();
+                AssertEqual(1L, detail.PendingProposalCount, "one pending proposal counted");
+                EnumerationResult<AskActionProposal> pendingPage = await JsonHelper.DeserializeAsync<EnumerationResult<AskActionProposal>>(await a.PostAsync("/api/v1/ask/threads/" + thread.Id + "/proposals/enumerate", JsonHelper.ToJsonContent(new { Status = "Pending" })).ConfigureAwait(false)).ConfigureAwait(false);
+                AskActionProposal pending = pendingPage.Objects.Single();
                 AssertEqual(String.Format(Armada.Server.Ask.AskActionService.ProposedResultFormat, pending.Id), proposed, "dispatch becomes this proposal (the tool replies with the proposal's own id)");
                 AssertEqual("dispatch", pending.ToolName);
                 AssertNotNull(pending.ExpiresUtc, "ExpiresUtc");
-                AssertEqual(0, detail.TrackedWork.Count, "nothing ran yet");
+                AssertEqual(0L, detail.TrackedWorkCount, "nothing ran yet");
 
                 HttpResponseMessage approved = await a.PostAsync("/api/v1/ask/threads/" + thread.Id + "/proposals/" + pending.Id + "/approve", JsonHelper.ToJsonContent(new { })).ConfigureAwait(false);
                 AssertStatusCode(HttpStatusCode.OK, approved);
                 AskActionProposal executed = await JsonHelper.DeserializeAsync<AskActionProposal>(approved).ConfigureAwait(false);
                 AssertEqual(AskProposalStatusEnum.Executed, executed.Status, executed.ErrorText ?? "");
                 AskThreadDetail after = await JsonHelper.DeserializeAsync<AskThreadDetail>(await a.GetAsync("/api/v1/ask/threads/" + thread.Id).ConfigureAwait(false)).ConfigureAwait(false);
-                AssertEqual(AskTrackedEntityTypeEnum.Voyage, after.TrackedWork.Single().EntityType, "voyage tracked after approval");
-                await a.DeleteAsync("/api/v1/voyages/" + after.TrackedWork.Single().EntityId).ConfigureAwait(false);
+                AssertEqual(1L, after.TrackedWorkCount, "one item tracked after approval");
+                EnumerationResult<AskTrackedWork> afterWork = await JsonHelper.DeserializeAsync<EnumerationResult<AskTrackedWork>>(await a.PostAsync("/api/v1/ask/threads/" + thread.Id + "/work/enumerate", JsonHelper.ToJsonContent(new { })).ConfigureAwait(false)).ConfigureAwait(false);
+                AssertEqual(AskTrackedEntityTypeEnum.Voyage, afterWork.Objects.Single().EntityType, "voyage tracked after approval");
+                await a.DeleteAsync("/api/v1/voyages/" + afterWork.Objects.Single().EntityId).ConfigureAwait(false);
+            }));
+
+            cases.Add(CaseAsync("admin_reads_keep_caller_authorization", "Admin-level black box reads on the Ask allowlist (get_blackbox_retention: TenantAdmin, get_blackbox_storage: AdminOnly) run without a proposal but still check the thread owner's own authorization", async () =>
+            {
+                E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this).ConfigureAwait(false);
+                E2ETenantUser member = await E2ETenantUser.CreateAsync(fx.AuthClient, "askbbuser", false).ConfigureAwait(false);
+                E2ETenantUser tenantAdmin = await E2ETenantUser.CreateAsync(fx.AuthClient, "askbbadmin", true, member.TenantId).ConfigureAwait(false);
+                Armada.Core.Services.SessionTokenService tokens = new Armada.Core.Services.SessionTokenService(fx.SessionTokenEncryptionKey);
+                foreach (string tool in new[] { "get_blackbox_retention", "get_blackbox_storage" })
+                    AssertTrue(AskToolPolicy.IsReadOnly(tool), tool + " is on the read-only allowlist");
+
+                async Task<string> ThreadCallAsync(E2ETenantUser user, string tool)
+                {
+                    string threadId;
+                    using (Armada.Runtimes.Mcp.McpToolClient plain = new Armada.Runtimes.Mcp.McpToolClient("http://127.0.0.1:" + fx.McpPort + "/mcp", tokens.CreateToken(user.TenantId, user.UserId).Token!))
+                    {
+                        await plain.InitializeAsync().ConfigureAwait(false);
+                        threadId = JsonHelper.Deserialize<AskThread>(await plain.CallToolAsync("create_ask_thread", "{}").ConfigureAwait(false)).Id;
+                    }
+
+                    string threadToken = tokens.CreateThreadScopedToken(user.TenantId, user.UserId, threadId, TimeSpan.FromMinutes(10)).Token!;
+                    using (Armada.Runtimes.Mcp.McpToolClient thread = new Armada.Runtimes.Mcp.McpToolClient("http://127.0.0.1:" + fx.McpPort + "/mcp", threadToken))
+                    {
+                        await thread.InitializeAsync().ConfigureAwait(false);
+                        return await thread.CallToolAsync(tool, "{}").ConfigureAwait(false);
+                    }
+                }
+
+                string memberRetention = await ThreadCallAsync(member, "get_blackbox_retention").ConfigureAwait(false);
+                AssertContains("Forbidden", memberRetention, "a regular user is refused retention from Ask");
+                AssertFalse(memberRetention.Contains("Proposed as", StringComparison.Ordinal), "refused, not proposed");
+                string adminRetention = await ThreadCallAsync(tenantAdmin, "get_blackbox_retention").ConfigureAwait(false);
+                AssertFalse(adminRetention.Contains("Forbidden", StringComparison.Ordinal) || adminRetention.Contains("Proposed as", StringComparison.Ordinal), "a tenant admin reads retention at once: " + adminRetention);
+                string adminStorage = await ThreadCallAsync(tenantAdmin, "get_blackbox_storage").ConfigureAwait(false);
+                AssertContains("Forbidden", adminStorage, "storage needs a global admin, also from Ask");
+                AssertFalse(adminStorage.Contains("Proposed as", StringComparison.Ordinal), "refused, not proposed");
             }));
 
             cases.Add(CaseAsync("quick_action_catalog", "GET quick-actions returns the catalog", async () =>
             {
                 E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this).ConfigureAwait(false);
                 List<AskQuickAction> actions = await JsonHelper.DeserializeAsync<List<AskQuickAction>>(await fx.AuthClient.GetAsync("/api/v1/ask/quick-actions").ConfigureAwait(false)).ConfigureAwait(false);
-                AssertEqual("dispatch,fleet-action,status,health,import", String.Join(",", actions.Select(a => a.Name)));
+                AssertEqual("dispatch,fleet-action,status,health,import,blackbox", String.Join(",", actions.Select(a => a.Name)));
                 AssertTrue(actions.All(a => a.ArgumentsSchema != null), "schemas");
+                AskQuickAction blackBox = actions.Single(a => a.Name == "blackbox");
+                AssertEqual("get_blackbox", blackBox.ToolName);
+                AssertTrue(blackBox.ReadOnly, "/blackbox reads only");
             }));
 
             return new TestSuiteDescriptor(suiteId: SuiteId, displayName: "Ask Threads API", cases: cases);

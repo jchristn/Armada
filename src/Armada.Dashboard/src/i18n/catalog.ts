@@ -1,3 +1,4 @@
+import { usageSelectionMessages } from './usageSelectionMessages';
 import { storageMessages } from './storageMessages';
 
 /**
@@ -442,6 +443,7 @@ function applyDynamicPatterns(locale: string, text: string, catalog: I18nCatalog
 }
 
 export function translateText(locale: string, text: string, catalog: I18nCatalog | null | undefined): string {
+  if (text.startsWith('usageSelection.')) return translateExactPhrase(locale, text, catalog) ?? translateText(locale, usageSelectionMessages[text] ?? text, catalog);
   if (text.startsWith('storage.')) return translateExactPhrase(locale, text, catalog) ?? translateText(locale, storageMessages[text] ?? storageMessages['storage.unavailable'], catalog);
   if (!text || locale === 'en') return text;
   const trimmed = text.trim();
@@ -612,7 +614,8 @@ export async function fetchCatalog(url: string, init?: RequestInit): Promise<I18
 
 export function formatAbsoluteDateTime(locale: string, utc: string | null | undefined): string {
   if (!utc) return '';
-  return new Date(parseUtcMs(utc)).toLocaleString(locale);
+  // Times are shown in the viewer's zone, so the zone is named (for example "PST"); other clients print UTC.
+  return new Date(parseUtcMs(utc)).toLocaleString(locale, { year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit', second: '2-digit', timeZoneName: 'short' });
 }
 
 export function formatDateOnly(locale: string, utc: string | null | undefined): string {

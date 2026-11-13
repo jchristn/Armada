@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
-import { execWorkspaceCommand, getWorkspaceChanges, getWorkspaceDiff, searchWorkspace } from '@dashboard/api/client';
+import { execWorkspaceCommand, getWorkspaceDiff, listAllWorkspaceChanges, searchWorkspace } from '@dashboard/api/client';
 import type { WorkspaceChangesResult, WorkspaceSearchResult } from '@dashboard/types/models';
 import { parseUnifiedDiff, type UnifiedDiffLineKind } from '@dashboard/lib/unifiedDiff';
 import { ActionRow } from '../../build/fields';
@@ -88,7 +88,8 @@ export function ChangesPanel({ vesselId, onOpenDiff, onOpenFile }: { vesselId: s
   async function load() {
     setLoading(true);
     try {
-      setData(await getWorkspaceChanges(vesselId));
+      // Changes are paged by the server; every page is read explicitly (1000 per page).
+      setData(await listAllWorkspaceChanges(vesselId));
       setError('');
     } catch (e) {
       setError(errorMessage(e));

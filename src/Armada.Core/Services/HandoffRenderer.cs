@@ -312,7 +312,10 @@ namespace Armada.Core.Services
             rendering.FindingsText = findings.ToString();
             rendering.Findings = evidenceUnits.Where(u => u.Finding != null).Select(u => u.Finding!).ToList();
             rendering.Diff = DiffText(included, final);
-            rendering.DidNotFit = new List<string>(didNotFit);
+            // One entry per unit left out (diff sections grow with the diff): keep the first MaxConfigItems, in delivery
+            // order (findings before diffs), and count every one.
+            rendering.DidNotFitCount = didNotFit.Count;
+            rendering.DidNotFit = didNotFit.Take(CollectionLimits.MaxConfigItems).ToList();
             rendering.EstimatedTokens = EstimateTokens(rendering.Evidence) + EstimateTokens(rendering.Diff);
             return rendering;
         }

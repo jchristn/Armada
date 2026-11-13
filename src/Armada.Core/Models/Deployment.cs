@@ -3,6 +3,7 @@ namespace Armada.Core.Models
     using System;
     using System.Collections.Generic;
     using Armada.Core.Enums;
+    using Armada.Core.Services;
 
     /// <summary>
     /// First-class deployment execution record with approval, verification, and rollback state.
@@ -158,6 +159,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// All linked check-run identifiers associated with the deployment lifecycle.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxLinkedIds)]
         public List<string> CheckRunIds { get; set; } = new List<string>();
 
         /// <summary>

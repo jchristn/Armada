@@ -1,6 +1,8 @@
 namespace Armada.Core.Models
 {
     using System.Collections.Generic;
+    using Armada.Core.Metrics;
+    using Armada.Core.Services;
 
     /// <summary>
     /// Jobs a Harbor finished and failed over a metrics window. Missions are counted apart from every other launch (Ask turns and captain chat, planning, refinement, context builds, and other launches), which the series calls interactive. A job counts in the bucket in which it ended: Succeeded and Stopped count as finished, Failed and Lost as failed.
@@ -12,6 +14,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// One entry per bucket, oldest first.
         /// </summary>
+        [CollectionBound(HarborMetricsRanges.MaxBucketCount, Reason = "One per window bucket; the fixed ranges produce at most 60")]
         public List<HarborJobBucket> Buckets { get; set; } = new List<HarborJobBucket>();
 
         /// <summary>

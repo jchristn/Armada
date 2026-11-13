@@ -8,6 +8,7 @@ namespace Test.Shared.Suites.Services
     using Armada.Core.Database;
     using Armada.Core.Enums;
     using Armada.Core.Models;
+    using Armada.Core.Services;
     using Armada.Core.Services.Push;
     using Armada.Core.Settings;
     using SyslogLogging;
@@ -86,7 +87,7 @@ namespace Test.Shared.Suites.Services
                 AssertEqual("usr_b", moved.Device.UserId);
                 AssertNull(moved.Device.DeviceName, "the previous owner's name is not carried over");
                 AssertEqual(PushSettings.AllCategories().Count, moved.Device.Categories.Count, "categories reset to the defaults");
-                List<PushDevice> oldOwner = await service.ListAsync(Auth("ten_a", "usr_a", false, false), null, null).ConfigureAwait(false);
+                List<PushDevice> oldOwner = (await service.EnumerateAsync(Auth("ten_a", "usr_a", false, false), null, null, new EnumerationQuery { PageSize = 1000 }).ConfigureAwait(false)).Objects;
                 AssertEqual(0, oldOwner.Count, "the previous owner no longer has the device");
             }));
 
@@ -121,12 +122,12 @@ namespace Test.Shared.Suites.Services
                 PushDevice aliceDevice = (await service.RegisterAsync(alice, Register(NewToken(), "alice")).ConfigureAwait(false)).Device;
                 await service.RegisterAsync(bob, Register(NewToken(), "bob")).ConfigureAwait(false);
 
-                AssertEqual("alice", String.Join(",", (await service.ListAsync(alice, null, null).ConfigureAwait(false)).Select(d => d.DeviceName)), "own devices only");
-                await AssertThrowsAsync<UnauthorizedAccessException>(() => service.ListAsync(bob, "usr_alice", null), "a user cannot list another user").ConfigureAwait(false);
-                AssertEqual("alice", String.Join(",", (await service.ListAsync(admin, "usr_alice", null).ConfigureAwait(false)).Select(d => d.DeviceName)), "tenant admin lists a user");
-                AssertEqual(0, (await service.ListAsync(foreignAdmin, "usr_alice", null).ConfigureAwait(false)).Count, "other tenant's admin sees nothing");
-                await AssertThrowsAsync<UnauthorizedAccessException>(() => service.ListAsync(foreignAdmin, "usr_alice", "ten_s1"), "tenant admin cannot name another tenant").ConfigureAwait(false);
-                AssertEqual("alice", String.Join(",", (await service.ListAsync(global, "usr_alice", null).ConfigureAwait(false)).Select(d => d.DeviceName)), "global admin lists any user");
+                AssertEqual("alice", String.Join(",", (await service.EnumerateAsync(alice, null, null, new EnumerationQuery { PageSize = 1000 }).ConfigureAwait(false)).Objects.Select(d => d.DeviceName)), "own devices only");
+                await AssertThrowsAsync<UnauthorizedAccessException>(() => service.EnumerateAsync(bob, "usr_alice", null, new EnumerationQuery()), "a user cannot list another user").ConfigureAwait(false);
+                AssertEqual("alice", String.Join(",", (await service.EnumerateAsync(admin, "usr_alice", null, new EnumerationQuery { PageSize = 1000 }).ConfigureAwait(false)).Objects.Select(d => d.DeviceName)), "tenant admin lists a user");
+                AssertEqual(0, (await service.EnumerateAsync(foreignAdmin, "usr_alice", null, new EnumerationQuery { PageSize = 1000 }).ConfigureAwait(false)).Objects.Count, "other tenant's admin sees nothing");
+                await AssertThrowsAsync<UnauthorizedAccessException>(() => service.EnumerateAsync(foreignAdmin, "usr_alice", "ten_s1", new EnumerationQuery()), "tenant admin cannot name another tenant").ConfigureAwait(false);
+                AssertEqual("alice", String.Join(",", (await service.EnumerateAsync(global, "usr_alice", null, new EnumerationQuery { PageSize = 1000 }).ConfigureAwait(false)).Objects.Select(d => d.DeviceName)), "global admin lists any user");
 
                 await AssertThrowsAsync<KeyNotFoundException>(() => service.UpdateAsync(bob, aliceDevice.Id, new PushDeviceUpdateRequest { DeviceName = "x" }), "other user cannot update").ConfigureAwait(false);
                 await AssertThrowsAsync<KeyNotFoundException>(() => service.DeleteAsync(foreignAdmin, aliceDevice.Id), "other tenant cannot delete").ConfigureAwait(false);
@@ -492,6 +493,19 @@ namespace Test.Shared.Suites.Services
 
                 List<PushMessage> tooMany = Enumerable.Range(0, 101).Select(i => message).ToList();
                 await AssertThrowsAsync<ArgumentException>(() => transport.SendAsync(tooMany, null), "more than 100").ConfigureAwait(false);
+            }));
+
+            cases.Add(CaseAsync("category_bounds_cover_every_category", "Push settings and device category bounds admit every defined category, so a settings GET can be PUT back", () =>
+            {
+                int defined = PushSettings.AllCategories().Count;
+                AssertTrue(CollectionBounds.BoundOf(typeof(PushSettings).GetProperty(nameof(PushSettings.Categories))!)!.Limit >= defined, "settings bound admits every category");
+                AssertTrue(CollectionBounds.BoundOf(typeof(PushDevice).GetProperty(nameof(PushDevice.Categories))!)!.Limit >= defined, "device bound admits every category");
+                ArmadaSettings settings = new ArmadaSettings();
+                CollectionBounds.Validate(settings.Push);
+                PushDevice device = new PushDevice();
+                device.Categories = PushSettings.AllCategories();
+                CollectionBounds.Validate(device);
+                return Task.CompletedTask;
             }));
 
             return new TestSuiteDescriptor(

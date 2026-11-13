@@ -17,6 +17,11 @@ namespace Armada.Tui.Screens.Build
         public WorkspaceStatusResult? Status { get; set; } = null;
 
         /// <summary>
+        /// Active missions on the vessel with their scoped files (every page).
+        /// </summary>
+        public List<WorkspaceActiveMission> ActiveMissions { get; set; } = new List<WorkspaceActiveMission>();
+
+        /// <summary>
         /// Folder listings by folder path ("" is the root).
         /// </summary>
         public Dictionary<string, List<WorkspaceTreeEntry>> Entries { get; set; } = new Dictionary<string, List<WorkspaceTreeEntry>>();

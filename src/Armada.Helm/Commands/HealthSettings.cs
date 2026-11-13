@@ -12,14 +12,14 @@ namespace Armada.Helm.Commands
         /// Optional overall status filter (Pass, Warn, Fail, NotApplicable, Unknown).
         /// </summary>
         [Description("Filter by overall status: Pass, Warn, Fail, NotApplicable, or Unknown")]
-        [CommandOption("--status|-s")]
+        [CommandOption("--status|-s <STATUS>")]
         public string? Status { get; set; }
 
         /// <summary>
         /// Optional fleet filter.
         /// </summary>
         [Description("Filter by fleet ID")]
-        [CommandOption("--fleet|-f")]
+        [CommandOption("--fleet|-f <FLEET>")]
         public string? Fleet { get; set; }
 
         /// <summary>

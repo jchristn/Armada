@@ -22,6 +22,12 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+usage() { awk 'NR == 1 { next } /^#/ { sub(/^# ?/, ""); print; next } { exit }' "${BASH_SOURCE[0]}"; }
+case "${1:-}" in -h|--help) usage; exit 0 ;; esac
+if [ "$#" -gt 0 ]; then
+    echo "ERROR: Unexpected argument: $1 (this script takes no arguments; run with -h for usage)" >&2
+    exit 2
+fi
 
 IMAGE_TAG="armada-server:e2e-split"
 CONTAINER_NAME="armada-e2e-split"
@@ -31,6 +37,14 @@ ADMIN_PASSWORD="${ARMADA_INITIAL_ADMIN_PASSWORD:-E2e-Split-${RANDOM}${RANDOM}-Pw
 
 if ! command -v docker >/dev/null 2>&1; then
     echo "[e2e-split] ERROR: docker is not installed or not on PATH." >&2
+    exit 1
+fi
+if ! docker info >/dev/null 2>&1; then
+    echo "[e2e-split] ERROR: the Docker engine is not reachable. Start Docker and try again." >&2
+    exit 1
+fi
+if ! command -v curl >/dev/null 2>&1; then
+    echo "[e2e-split] ERROR: curl is not installed or not on PATH." >&2
     exit 1
 fi
 
@@ -61,7 +75,9 @@ docker run -d --rm \
 echo "[e2e-split] Waiting for Admiral health at ${HEALTH_URL}..."
 HEALTHY=0
 for _ in $(seq 1 60); do
-    if ! docker ps --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
+    # Capture first: under pipefail, grep -q exiting early can fail the docker ps side of a pipe.
+    RUNNING_NAMES="$(docker ps --format '{{.Names}}' 2>/dev/null || true)"
+    if ! printf '%s\n' "$RUNNING_NAMES" | awk -v n="${CONTAINER_NAME}" '$0 == n { found = 1 } END { exit !found }'; then
         echo "[e2e-split] ERROR: container exited before becoming healthy. Logs:" >&2
         docker logs "${CONTAINER_NAME}" 2>&1 | tail -40 >&2 || true
         exit 1
@@ -84,7 +100,8 @@ echo "[e2e-split] PASS: containerized Admiral is healthy."
 # probe is expected to be rejected at the JSON-RPC layer (not connection-refused); either a response or a
 # well-formed error means the port is served.
 echo "[e2e-split] Probing MCP endpoint at ${MCP_URL}..."
-if curl -sf -o /dev/null "${MCP_URL}" || curl -s -o /dev/null -w '%{http_code}' "${MCP_URL}" | grep -qE '^[0-9]{3}$'; then
+MCP_STATUS="$(curl -s -o /dev/null -w '%{http_code}' "${MCP_URL}" 2>/dev/null || true)"
+if [ -n "$MCP_STATUS" ] && [ "$MCP_STATUS" != "000" ]; then
     echo "[e2e-split] PASS: MCP endpoint is reachable from the host."
 else
     echo "[e2e-split] WARNING: MCP endpoint did not answer; a host Harbor's captains could not call home." >&2

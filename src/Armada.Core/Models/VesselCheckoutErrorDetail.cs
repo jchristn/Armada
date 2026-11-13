@@ -2,6 +2,7 @@ namespace Armada.Core.Models
 {
     using System;
     using System.Collections.Generic;
+    using System.Linq;
     using Armada.Core.Enums;
     using Armada.Core.Services;
 
@@ -34,9 +35,21 @@ namespace Armada.Core.Models
         public string VesselName { get; set; } = String.Empty;
 
         /// <summary>
-        /// Why each connected Harbor could not serve the vessel.
+        /// Most entries listed in <see cref="HarborReasons"/>.
         /// </summary>
+        public const int MaxHarborReasons = 50;
+
+        /// <summary>
+        /// Why each connected Harbor could not serve the vessel: the first <see cref="MaxHarborReasons"/>, in the
+        /// order the Harbors were asked. <see cref="HarborReasonCount"/> is the full count.
+        /// </summary>
+        [CollectionBound(MaxHarborReasons, Reason = "First Harbors only; HarborReasonCount is the full count")]
         public List<string> HarborReasons { get; set; } = new List<string>();
+
+        /// <summary>
+        /// Number of Harbors that were asked and could not serve the vessel.
+        /// </summary>
+        public int HarborReasonCount { get; set; } = 0;
 
         #endregion
 
@@ -63,7 +76,8 @@ namespace Armada.Core.Models
                 Reason = ex.Code,
                 VesselId = ex.VesselId,
                 VesselName = ex.VesselName,
-                HarborReasons = new List<string>(ex.HarborReasons)
+                HarborReasons = ex.HarborReasons.Take(MaxHarborReasons).ToList(),
+                HarborReasonCount = ex.HarborReasons.Count
             };
         }
 

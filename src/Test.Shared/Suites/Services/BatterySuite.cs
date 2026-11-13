@@ -165,6 +165,58 @@ namespace Test.Shared.Suites.Services
                 AssertNotNull(new BatteryPackCatalog(() => null).ResolveDirectory(), "the repository battery folder is found without configuration");
             }));
 
+            cases.Add(Case("catalog_pages_from_disk", "The catalog reads one page of pack directories at a time with an exact total, a partial last page and an empty page past the end", TestTags.Positive, () =>
+            {
+                using TempDir dir = new TempDir();
+                foreach (string id in new[] { "pa", "pb", "pc" }) WriteSyntheticPack(dir, id);
+                dir.Write("pd/battery-pack.json", "{\"schemaVersion\":2}");
+                Directory.CreateDirectory(Path.Combine(dir.Path, "no-manifest"));
+                BatteryPackCatalog catalog = new BatteryPackCatalog(() => dir.Path);
+                EnumerationResult<BatteryPack> first = catalog.LoadPage(1, 3);
+                AssertEqual(4L, first.TotalRecords, "directories with a manifest");
+                AssertEqual(2, first.TotalPages);
+                AssertEqual("pa,pb,pc", String.Join(",", first.Objects.Select(p => p.Id)));
+                EnumerationResult<BatteryPack> last = catalog.LoadPage(2, 3);
+                AssertEqual("pd", String.Join(",", last.Objects.Select(p => p.Id)), "partial last page");
+                AssertEqual(0, catalog.LoadPage(3, 3).Objects.Count, "past the end");
+                AssertEqual(1000, catalog.LoadPage(1, 5000).PageSize, "oversized page size normalized");
+            }));
+
+            cases.Add(Case("manifest_over_limits_is_malformed", "A manifest with more than 256 tasks is malformed with one error naming the limit; its info lists 256 tasks and the true count", TestTags.Negative, () =>
+            {
+                using TempDir dir = new TempDir();
+                dir.Write("big/fixture/a.txt", "a");
+                System.Text.StringBuilder tasks = new System.Text.StringBuilder();
+                for (int i = 0; i < 300; i++)
+                {
+                    if (i > 0) tasks.Append(',');
+                    tasks.Append("{ \"id\": \"t").Append(i).Append("\", \"title\": \"T\", \"persona\": \"Worker\", \"prompt\": \"p\", \"grader\": { \"type\": \"rubric\", \"rubric\": \"r.md\" } }");
+                }
+
+                dir.Write("big/battery-pack.json", "{ \"schemaVersion\": 1, \"id\": \"big\", \"name\": \"Big\", \"version\": 1, \"fixture\": { \"path\": \"fixture\" }, \"tasks\": [" + tasks + "] }");
+                BatteryPack pack = BatteryPackLoader.Load(Path.Combine(dir.Path, "big"));
+                AssertFalse(pack.IsValid, "over the limit is malformed");
+                AssertEqual(1, pack.Errors.Count, "one bounded error");
+                AssertContains("Tasks has 300 entries; the most allowed is 256", pack.Errors[0]);
+                BatteryPackInfo info = pack.ToInfo();
+                AssertEqual(256, info.Tasks.Count, "listed tasks bounded");
+                AssertEqual(300, info.TaskCount, "true count recorded");
+                CollectionBounds.Validate(info);
+            }));
+
+            cases.Add(Case("seeded_false_positives_bounded_and_counted", "More than 256 false positives keep the first 256 in the evidence and count every one for the grade", TestTags.Negative, () =>
+            {
+                BatteryGraderDefinition grader = CSharpTask("lint-diff").Grader!;
+                System.Text.StringBuilder output = new System.Text.StringBuilder("Violations:\n");
+                for (int i = 0; i < 300; i++) output.Append("- Invented rule ").Append(i).Append(": the widget is shaped oddly.\n");
+                BatteryGrade grade = BatterySeededSetGrader.Grade(output.ToString(), grader);
+                AssertEqual(BatteryTaskOutcomeEnum.Failed, grade.Outcome);
+                AssertEqual(300, grade.Details.FalsePositiveCount, "every false positive counted");
+                AssertEqual(256, grade.Details.FalsePositives.Count, "evidence bounded");
+                AssertContains("300 false positives", grade.Reason!);
+                CollectionBounds.Validate(grade.Details);
+            }));
+
             // ---- Seeded-set grading ----
 
             cases.Add(Case("seeded_negative_control_all_found", "Negative control: three seeded defects found, no false positives, FAIL verdict passes", TestTags.Positive, () =>

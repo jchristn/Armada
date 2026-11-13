@@ -1,5 +1,5 @@
 import type { BadgeIcon, BadgeTone } from './badgeTypes';
-import type { FleetActionKind, FleetActionRunStatus, FleetActionTargetStatus } from '../types/models';
+import type { FleetActionKind, FleetActionRunStatus, FleetActionTargetStatus, MissionMode } from '../types/models';
 
 /** Translator signature shared with `useLocale().t`. */
 export type Translate = (text: string, params?: Record<string, string | number | null | undefined>) => string;
@@ -41,6 +41,7 @@ export const SKIP_REASON_LABELS: Record<string, string> = {
   'ToolMissing:': 'Tool missing',
   NotConfigured: 'Not configured',
   NoMatchingEcosystem: 'No matching ecosystem',
+  NotApplicable: 'Not applicable',
   NoForgeCredentials: 'No forge credentials',
   NetworkUnavailable: 'Network unavailable',
   DirtyTree: 'Working tree has uncommitted changes',
@@ -76,17 +77,33 @@ export const KIND_DESCRIPTIONS: Record<FleetActionKind, string> = {
   Mission: 'Dispatches one voyage per vessel with the rendered prompt as the mission description.',
 };
 
+export const MISSION_MODES: MissionMode[] = ['Implementation', 'Audit', 'Research'];
+
+/** Mission modes of a Mission action mapped to English source labels. */
+export const MISSION_MODE_LABELS: Record<MissionMode, string> = {
+  Implementation: 'Implementation',
+  Audit: 'Audit (read-only)',
+  Research: 'Research (read-only)',
+};
+
+/** True when the action or run is report-only: an Audit or Research Mission whose captains change nothing. */
+export function isReportOnly(item: { kind: FleetActionKind; missionMode?: MissionMode | null } | null | undefined): boolean {
+  return Boolean(item && item.kind === 'Mission' && (item.missionMode === 'Audit' || item.missionMode === 'Research'));
+}
+
 /** Template variables the server renders, with English source descriptions. */
 export const TEMPLATE_VARIABLES: Array<{ name: string; description: string }> = [
   { name: 'vessel.name', description: 'The vessel name' },
   { name: 'vessel.id', description: 'The vessel ID (vsl_ prefix)' },
   { name: 'vessel.defaultBranch', description: 'The vessel default branch' },
   { name: 'vessel.workingDirectory', description: 'The vessel working directory, or empty' },
-  { name: 'vessel.buildCommand', description: 'The definition-of-done build command, or empty (vessels without one are skipped)' },
+  { name: 'vessel.buildCommand', description: 'The definition-of-done build command, else the repo build script or ecosystem default (vessels with none are skipped)' },
   { name: 'vessel.ecosystems', description: 'Detected ecosystems, comma-separated, or empty; rendered on the server' },
   { name: 'vessel.testCommand', description: 'The resolved test command (vessel override, repo script, then ecosystem default); rendered on the server' },
   { name: 'vessel.lintCommand', description: 'The resolved lint command (vessel override, repo script, then ecosystem default); rendered on the server' },
   { name: 'vessel.auditCommand', description: 'The resolved audit command (vessel override, repo script, ecosystem default, then osv-scanner); rendered on the server' },
+  { name: 'vessel.outdatedCommand', description: 'The outdated-dependency report command for the detected ecosystem; rendered on the server' },
+  { name: 'vessel.licensesCommand', description: 'The license report command for the detected ecosystem; rendered on the server' },
   { name: 'health.summary', description: 'Failing, warning, and unknown health findings; rendered on the server' },
 ];
 

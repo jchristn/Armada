@@ -3,6 +3,7 @@ namespace Armada.Core.Models
     using System;
     using System.Collections.Generic;
     using Armada.Core.Enums;
+    using Armada.Core.Services;
 
     /// <summary>
     /// Request to import an externally-executed check run into Armada.
@@ -112,6 +113,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// Optional imported artifact metadata.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxConfigItems)]
         public List<CheckRunArtifact> Artifacts { get; set; } = new List<CheckRunArtifact>();
 
         /// <summary>

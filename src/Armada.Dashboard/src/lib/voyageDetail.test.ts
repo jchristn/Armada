@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { Mission, Voyage } from '../types/models';
-import { formatDeliveryMode, isVoyageActive, parseCaptainOverrides, retryMissionPayload, splitVoyageResponse, voyageProgress } from './voyageDetail';
+import type { Mission, Voyage, VoyageProgress } from '../types/models';
+import { formatDeliveryMode, isVoyageActive, parseCaptainOverrides, retryMissionPayload, splitVoyageResponse, voyageProgress, voyageProgressFromDetail } from './voyageDetail';
 
 describe('voyage detail helpers', () => {
   it('summarizes progress', () => {
@@ -32,10 +32,16 @@ describe('voyage detail helpers', () => {
       .toEqual({ title: 'T', description: undefined, vesselId: 'vsl_1', voyageId: 'vyg_1', priority: 5 });
   });
 
-  it('splits both getVoyage response shapes', () => {
+  it('splits the voyage detail (counts, no embedded missions) and a bare voyage', () => {
     const voyage = { id: 'vyg_1' } as Voyage;
-    expect(splitVoyageResponse({ voyage, missions: [{ id: 'msn_1' }] })).toEqual({ voyage, missions: [{ id: 'msn_1' }] });
-    expect(splitVoyageResponse({ voyage })).toEqual({ voyage, missions: [] });
-    expect(splitVoyageResponse(voyage)).toEqual({ voyage, missions: null });
+    const detail = { voyage, totalMissions: 3, completedMissions: 1, failedMissions: 1, inProgressMissions: 1, missionCountsByStatus: { Complete: 1, Failed: 1, InProgress: 1 }, vesselId: 'vsl_1', vesselCount: 1 } as VoyageProgress;
+    expect(splitVoyageResponse(detail)).toEqual({ voyage, detail });
+    expect(splitVoyageResponse({ voyage })?.detail?.missionCountsByStatus).toEqual({});
+    expect(splitVoyageResponse(voyage)).toEqual({ voyage, detail: null });
+  });
+
+  it('computes progress from the server counts, not from one page of missions', () => {
+    expect(voyageProgressFromDetail(null)).toEqual({ total: 0, completed: 0, failed: 0, percent: 0 });
+    expect(voyageProgressFromDetail({ totalMissions: 2500, missionCountsByStatus: { Complete: 1250, Failed: 10 } })).toEqual({ total: 2500, completed: 1250, failed: 10, percent: 50 });
   });
 });

@@ -49,7 +49,7 @@ namespace Armada.Core.Services
             ContractRepairKindEnum completion = ContractRepair.ClassifyCompletionLine(mission.AgentOutput);
             if (completion == ContractRepairKindEnum.None || blockedVerifier || dock == null) return;
 
-            string? startCommit = TryReadDockStartCommit(dock.Id);
+            string? startCommit = TryReadDockStartCommit(dock, mission);
             if (!ContractRepair.HasNewWork(mission.DiffSnapshot, startCommit, mission.CommitHash)) return;
 
             string evidence = !String.IsNullOrEmpty(startCommit) && !String.IsNullOrEmpty(mission.CommitHash)

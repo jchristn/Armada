@@ -8,14 +8,16 @@ namespace Armada.Core.Services.Ask
     using System.Text.Json;
     using System.Threading;
     using System.Threading.Tasks;
+    using Armada.Core.BlackBox;
     using Armada.Core.Database;
     using Armada.Core.Enums;
     using Armada.Core.Models;
 
     /// <summary>
     /// Builds the live data of an Ask Armada work card (<see cref="AskWorkSnapshot"/>) for a tracked voyage, mission,
-    /// fleet action run, job, or vessel import batch, reading only rows of the tracked item's tenant. Also computes the
-    /// snapshot hash used to detect changes.
+    /// fleet action run, job, vessel import batch, or black box entry, reading only rows of the tracked item's tenant
+    /// (a black box entry is read through <see cref="BlackBox"/> as the thread's owner). Also computes the snapshot hash
+    /// used to detect changes.
     /// </summary>
     public class AskWorkSnapshotBuilder
     {
@@ -29,6 +31,12 @@ namespace Armada.Core.Services.Ask
             get => _MaxLinkedMissionRows;
             set => _MaxLinkedMissionRows = value < 0 ? 0 : (value > 500 ? 500 : value);
         }
+
+        /// <summary>
+        /// Black box service that BlackBox cards are read through (as the thread's owner, so the card shows only what the
+        /// owner may see). Null when the server has no black box: such a card reads as not found.
+        /// </summary>
+        public IBlackBoxService? BlackBox { get; set; } = null;
 
         #endregion
 
@@ -93,6 +101,9 @@ namespace Armada.Core.Services.Ask
                 case AskTrackedEntityTypeEnum.VesselImportBatch:
                     await BuildImportBatchAsync(tenantId, snapshot, token).ConfigureAwait(false);
                     break;
+                case AskTrackedEntityTypeEnum.BlackBox:
+                    await BuildBlackBoxAsync(tenantId, work.UserId, snapshot, token).ConfigureAwait(false);
+                    break;
             }
 
             if (!snapshot.Found)
@@ -101,13 +112,16 @@ namespace Armada.Core.Services.Ask
                 if (String.IsNullOrEmpty(snapshot.ErrorText)) snapshot.ErrorText = work.EntityType + " " + work.EntityId + " no longer exists.";
             }
 
+            snapshot.MissionCount = work.EntityType == AskTrackedEntityTypeEnum.FleetActionRun ? 0 : snapshot.Missions.Count;
+            snapshot.TargetCount = snapshot.Targets.Count;
             snapshot.CapturedUtc = DateTime.UtcNow;
             snapshot.Progress = snapshot.TotalCount > 0 ? (int)Math.Round(100.0 * (snapshot.CompletedCount + snapshot.FailedCount) / snapshot.TotalCount) : (snapshot.State == AskTrackedWorkStateEnum.Active ? 0 : 100);
             return snapshot;
         }
 
         /// <summary>
-        /// Deterministic hash of a snapshot's content (SHA-256 of its JSON, hex).
+        /// Deterministic hash of a snapshot's content (SHA-256 of its JSON plus its mission and target rows, which are not
+        /// serialized with it, hex).
         /// </summary>
         /// <param name="snapshot">Snapshot.</param>
         /// <returns>Lowercase hex hash.</returns>
@@ -118,10 +132,104 @@ namespace Armada.Core.Services.Ask
             DateTime? captured = snapshot.CapturedUtc;
             snapshot.CapturedUtc = null;
             string json;
-            try { json = JsonSerializer.Serialize(snapshot, _HashOptions); }
+            try
+            {
+                json = JsonSerializer.Serialize(snapshot, _HashOptions)
+                    + JsonSerializer.Serialize(snapshot.Missions, _HashOptions)
+                    + JsonSerializer.Serialize(snapshot.Targets, _HashOptions);
+            }
             finally { snapshot.CapturedUtc = captured; }
             byte[] hash = SHA256.HashData(Encoding.UTF8.GetBytes(json));
             return Convert.ToHexString(hash).ToLowerInvariant();
+        }
+
+        /// <summary>
+        /// Read one page of the mission rows of tracked work, paged in the database: a voyage's missions in creation order
+        /// (CreatedAscending) or newest first (CreatedDescending, the default), or the single row of mission work. Only
+        /// rows of the tracked item's tenant are read.
+        /// </summary>
+        /// <param name="work">Tracked work row.</param>
+        /// <param name="query">Page number, page size (1 to 1000), and order.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>One page of mission rows.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when work or query is null.</exception>
+        /// <exception cref="ArgumentException">Thrown when the tracked entity has no mission rows (fleet action runs page
+        /// targets instead; jobs and import batches have neither).</exception>
+        public async Task<EnumerationResult<AskWorkMissionSnapshot>> EnumerateMissionRowsAsync(AskTrackedWork work, EnumerationQuery query, CancellationToken token = default)
+        {
+            if (work == null) throw new ArgumentNullException(nameof(work));
+            if (query == null) throw new ArgumentNullException(nameof(query));
+            string tenantId = work.TenantId ?? Constants.DefaultTenantId;
+            Dictionary<string, string?> captainNames = new Dictionary<string, string?>(StringComparer.Ordinal);
+
+            if (work.EntityType == AskTrackedEntityTypeEnum.Voyage)
+            {
+                EnumerationQuery missionQuery = new EnumerationQuery();
+                missionQuery.PageNumber = query.PageNumber;
+                missionQuery.PageSize = query.PageSize;
+                missionQuery.Order = query.Order;
+                missionQuery.VoyageId = work.EntityId;
+                EnumerationResult<Mission> missions = await _Database.Missions.EnumerateAsync(tenantId, missionQuery, token).ConfigureAwait(false);
+                List<AskWorkMissionSnapshot> rows = new List<AskWorkMissionSnapshot>();
+                foreach (Mission mission in missions.Objects)
+                    rows.Add(await BuildMissionRowAsync(tenantId, mission, captainNames, token).ConfigureAwait(false));
+                return EnumerationResult<AskWorkMissionSnapshot>.Create(missionQuery, rows, missions.TotalRecords);
+            }
+
+            if (work.EntityType == AskTrackedEntityTypeEnum.Mission)
+            {
+                Mission? mission = await _Database.Missions.ReadAsync(tenantId, work.EntityId, token).ConfigureAwait(false);
+                List<AskWorkMissionSnapshot> all = new List<AskWorkMissionSnapshot>();
+                if (mission != null) all.Add(await BuildMissionRowAsync(tenantId, mission, captainNames, token).ConfigureAwait(false));
+                return CollectionLimits.Page(query, all);
+            }
+
+            throw new ArgumentException(work.EntityType + " work has no mission rows" + (work.EntityType == AskTrackedEntityTypeEnum.FleetActionRun ? "; read its targets instead." : "."), nameof(work));
+        }
+
+        /// <summary>
+        /// Read one page of the target rows of a tracked fleet action run, paged in the database (vessel name, then id).
+        /// Each row names the target's voyage and its first mission.
+        /// </summary>
+        /// <param name="work">Tracked work row.</param>
+        /// <param name="query">Page number and page size (1 to 1000).</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>One page of target rows.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when work or query is null.</exception>
+        /// <exception cref="ArgumentException">Thrown when the tracked entity is not a fleet action run.</exception>
+        public async Task<EnumerationResult<AskWorkTargetSnapshot>> EnumerateTargetRowsAsync(AskTrackedWork work, EnumerationQuery query, CancellationToken token = default)
+        {
+            if (work == null) throw new ArgumentNullException(nameof(work));
+            if (query == null) throw new ArgumentNullException(nameof(query));
+            if (work.EntityType != AskTrackedEntityTypeEnum.FleetActionRun)
+                throw new ArgumentException(work.EntityType + " work has no target rows; only fleet action runs do.", nameof(work));
+            string tenantId = work.TenantId ?? Constants.DefaultTenantId;
+
+            EnumerationResult<FleetActionRunTarget> targets = await _Database.FleetActionRunTargets.EnumerateByRunAsync(tenantId, work.EntityId, null, query.PageNumber, query.PageSize, token).ConfigureAwait(false);
+            List<AskWorkTargetSnapshot> rows = new List<AskWorkTargetSnapshot>();
+            foreach (FleetActionRunTarget target in targets.Objects)
+            {
+                AskWorkTargetSnapshot row = ToTargetRow(target);
+                if (!String.IsNullOrEmpty(target.VoyageId))
+                {
+                    EnumerationQuery first = new EnumerationQuery();
+                    first.VoyageId = target.VoyageId;
+                    first.PageSize = 1;
+                    first.Order = EnumerationOrderEnum.CreatedAscending;
+                    EnumerationResult<Mission> missions = await _Database.Missions.EnumerateAsync(tenantId, first, token).ConfigureAwait(false);
+                    row.MissionId = missions.Objects.Select(m => m.Id).FirstOrDefault();
+                }
+
+                rows.Add(row);
+            }
+
+            EnumerationResult<AskWorkTargetSnapshot> result = new EnumerationResult<AskWorkTargetSnapshot>();
+            result.PageNumber = targets.PageNumber;
+            result.PageSize = targets.PageSize;
+            result.TotalPages = targets.TotalPages;
+            result.TotalRecords = targets.TotalRecords;
+            result.Objects = rows;
+            return result;
         }
 
         /// <summary>
@@ -160,6 +268,105 @@ namespace Armada.Core.Services.Ask
         #endregion
 
         #region Private-Methods
+
+        private async Task BuildBlackBoxAsync(string tenantId, string? userId, AskWorkSnapshot snapshot, CancellationToken token)
+        {
+            IBlackBoxService? service = BlackBox;
+            if (service == null)
+            {
+                snapshot.Found = false;
+                snapshot.ErrorText = "The black box is not available on this server.";
+                return;
+            }
+
+            AuthContext? owner = await OwnerAsync(tenantId, userId, token).ConfigureAwait(false);
+            if (owner == null)
+            {
+                snapshot.Found = false;
+                return;
+            }
+
+            BlackBoxEntry entry;
+            BlackBoxDigest digest;
+            try
+            {
+                entry = await service.GetEntryAsync(owner, snapshot.EntityId, true, token).ConfigureAwait(false);
+                digest = await service.GetDigestAsync(owner, entry.Id, token).ConfigureAwait(false);
+            }
+            catch (BlackBoxNotFoundException)
+            {
+                snapshot.Found = false;
+                snapshot.ErrorText = "Black box entry " + snapshot.EntityId + " no longer exists.";
+                return;
+            }
+            catch (BlackBoxException ex)
+            {
+                // The entry exists but its record cannot be read right now (store unavailable, being deleted): keep the
+                // card with what the row knows and say why.
+                snapshot.Status = "Unavailable";
+                snapshot.State = AskTrackedWorkStateEnum.Failed;
+                snapshot.ErrorText = ex.Message;
+                return;
+            }
+
+            BlackBoxRecord? record = entry.Record;
+            AskBlackBoxCard card = new AskBlackBoxCard();
+            card.Digest = digest;
+            card.Fingerprint = entry.Fingerprint;
+            if (record?.Conflict != null)
+            {
+                card.ConflictingMissions = record.Conflict.ConflictingMissions.Take(BlackBoxLimits.MaxConflictingMissions).ToList();
+                card.ConflictedFiles = record.Conflict.ConflictedFiles.Take(AskBlackBoxCard.MaxConflictedFiles).ToList();
+            }
+
+            if (record?.Analysis != null)
+            {
+                foreach (BlackBoxConfigRecommendation recommendation in record.Analysis.ConfigRecommendations.Take(AskBlackBoxCard.MaxRecommendations))
+                {
+                    AskBlackBoxRecommendation item = new AskBlackBoxRecommendation();
+                    item.Id = recommendation.Id;
+                    item.Setting = recommendation.Setting;
+                    item.Scope = recommendation.Scope;
+                    item.CurrentValue = recommendation.CurrentValue;
+                    item.SuggestedValue = recommendation.SuggestedValue;
+                    item.Rationale = recommendation.Rationale;
+                    item.RuleId = recommendation.RuleId;
+                    item.CanApply = recommendation.ApplyAction != null;
+                    item.HowToApply = recommendation.HowToApply;
+                    card.Recommendations.Add(item);
+                }
+            }
+
+            try
+            {
+                EnumerationQuery notes = new EnumerationQuery();
+                notes.PageSize = 1;
+                card.NoteCount = (await service.EnumerateNotesAsync(owner, entry.Id, notes, token).ConfigureAwait(false)).TotalRecords;
+            }
+            catch (BlackBoxException)
+            {
+                card.NoteCount = 0;
+            }
+
+            card.FollowUps = AskBlackBoxGuidance.FollowUps(card);
+            snapshot.BlackBox = card;
+            snapshot.Title = !String.IsNullOrWhiteSpace(entry.MissionTitle) ? entry.MissionTitle! : (entry.MissionId ?? entry.VoyageId ?? entry.Id);
+            snapshot.Status = !String.IsNullOrWhiteSpace(entry.StatusAfter) ? entry.StatusAfter : "Failed";
+            snapshot.State = entry.Resolution == BlackBoxResolutionEnum.Resolved || entry.Resolution == BlackBoxResolutionEnum.ArmadaFixed
+                ? AskTrackedWorkStateEnum.Succeeded
+                : AskTrackedWorkStateEnum.Failed;
+            snapshot.StartedUtc = entry.CreatedUtc;
+            snapshot.CompletedUtc = entry.ResolvedUtc ?? entry.CreatedUtc;
+            snapshot.ErrorText = digest.Reason;
+        }
+
+        private async Task<AuthContext?> OwnerAsync(string tenantId, string? userId, CancellationToken token)
+        {
+            if (String.IsNullOrEmpty(userId)) return null;
+            UserMaster? owner = await _Database.Users.ReadAsync(tenantId, userId, token).ConfigureAwait(false);
+            if (owner == null) return null;
+            return AuthContext.Authenticated(tenantId, userId, owner.IsAdmin, owner.IsTenantAdmin, "AskThreadOwner");
+        }
 
         private async Task BuildVoyageAsync(string tenantId, AskWorkSnapshot snapshot, CancellationToken token)
         {
@@ -245,14 +452,7 @@ namespace Armada.Core.Services.Ask
             int linkedMissionRows = 0;
             foreach (FleetActionRunTarget target in targets.Where(t => String.Equals(t.TenantId ?? tenantId, tenantId, StringComparison.Ordinal)).OrderBy(t => t.VesselName, StringComparer.OrdinalIgnoreCase).ThenBy(t => t.Id, StringComparer.Ordinal))
             {
-                AskWorkTargetSnapshot row = new AskWorkTargetSnapshot();
-                row.Id = target.Id;
-                row.VesselId = target.VesselId;
-                row.VesselName = target.VesselName;
-                row.Status = target.Status.ToString();
-                row.Reason = !String.IsNullOrEmpty(target.FailureReason) ? target.FailureReason : target.SkipReason;
-                row.VoyageId = target.VoyageId;
-                row.ExitCode = target.ExitCode;
+                AskWorkTargetSnapshot row = ToTargetRow(target);
                 snapshot.Targets.Add(row);
                 Count(snapshot.Counts, row.Status);
 
@@ -362,6 +562,19 @@ namespace Armada.Core.Services.Ask
             }
 
             snapshot.Counts = Sorted(snapshot.Counts);
+        }
+
+        private static AskWorkTargetSnapshot ToTargetRow(FleetActionRunTarget target)
+        {
+            AskWorkTargetSnapshot row = new AskWorkTargetSnapshot();
+            row.Id = target.Id;
+            row.VesselId = target.VesselId;
+            row.VesselName = target.VesselName;
+            row.Status = target.Status.ToString();
+            row.Reason = !String.IsNullOrEmpty(target.FailureReason) ? target.FailureReason : target.SkipReason;
+            row.VoyageId = target.VoyageId;
+            row.ExitCode = target.ExitCode;
+            return row;
         }
 
         private async Task<AskWorkMissionSnapshot> BuildMissionRowAsync(string tenantId, Mission mission, Dictionary<string, string?> captainNames, CancellationToken token)

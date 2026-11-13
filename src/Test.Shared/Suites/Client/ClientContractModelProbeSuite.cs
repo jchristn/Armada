@@ -16,8 +16,8 @@ namespace Test.Shared.Suites.Client
     using static Test.Shared.Infrastructure.Asserts;
 
     /// <summary>
-    /// Armada.Client contract against a live server for Evaluate: evaluate a captain and a model endpoint (Quick; Full is
-    /// refused), read a run with its results, and list runs with filters and paging. Probe answers are canned; no model
+    /// Armada.Client contract against a live server for Evaluate: evaluate a captain and a model endpoint (Quick; Full
+    /// parameters are sent and validated), read a run with its results, cancel a run, and list runs with filters and paging. Probe answers are canned; no model
     /// runs.
     /// </summary>
     public sealed class ClientContractModelProbeSuite : IArmadaTestSuite
@@ -35,7 +35,7 @@ namespace Test.Shared.Suites.Client
         {
             List<TestCaseDescriptor> cases = new List<TestCaseDescriptor>();
 
-            cases.Add(Case("evaluate", "Evaluate a captain and an endpoint, get a run, list runs; Full and unknown ids fail", async (c, fx) =>
+            cases.Add(Case("evaluate", "Evaluate a captain and an endpoint, get and cancel a run, list runs; invalid Full parameters and unknown ids fail", async (c, fx) =>
             {
                 string tenantId = Armada.Core.Constants.DefaultTenantId;
                 Captain captain;
@@ -59,9 +59,12 @@ namespace Test.Shared.Suites.Client
                 AssertEqual(endpoint.Id, endpointRun.ModelEndpointId, "endpoint run");
                 AssertEqual(ModelProbeTargetEnum.ModelEndpoint, endpointRun.TargetKind, "endpoint target");
 
-                ArmadaApiException full = await ClientContract.ExpectErrorAsync(() => c.EvaluateCaptainAsync(captain.Id, ModelProbeDepthEnum.Full), "Full", 400, 400);
-                AssertContains("Phase 5", full.Message);
-                await ClientContract.ExpectErrorAsync(() => c.EvaluateModelEndpointAsync(endpoint.Id, ModelProbeDepthEnum.Full), "Full endpoint", 400, 400);
+                // Full parameters reach the server: an unknown pack is a 400 naming it, an unknown evaluator a 404.
+                ArmadaApiException badPack = await ClientContract.ExpectErrorAsync(() => c.EvaluateCaptainWithRequestAsync(captain.Id,
+                    new EvaluateCaptainRequest { Depth = ModelProbeDepthEnum.Full, Packs = new List<string> { "no-such-pack" } }), "Full unknown pack", 400, 400);
+                AssertContains("no-such-pack", badPack.Message);
+                await ClientContract.ExpectErrorAsync(() => c.EvaluateCaptainWithRequestAsync(captain.Id,
+                    new EvaluateCaptainRequest { Depth = ModelProbeDepthEnum.Full, EvaluatorCaptainId = "cpt_missing_evaluator" }), "Full unknown evaluator", 404, 404);
                 await ClientContract.ExpectErrorAsync(() => c.EvaluateCaptainAsync("cpt_missing"), "unknown captain", 404, 404);
                 await ClientContract.ExpectErrorAsync(() => c.EvaluateModelEndpointAsync("mep_missing"), "unknown endpoint", 404, 404);
 
@@ -70,6 +73,9 @@ namespace Test.Shared.Suites.Client
                 AssertEqual(6, done.Results.Count, "one result per probe");
                 await WaitAsync(c, endpointRun.Id).ConfigureAwait(false);
                 await ClientContract.ExpectErrorAsync(() => c.GetModelProbeRunAsync("mpr_missing"), "unknown run", 404, 404);
+                ModelProbeRun unchanged = (await c.CancelModelProbeRunAsync(queued.Id))!;
+                AssertEqual(ModelProbeRunStatusEnum.Completed, unchanged.Status, "cancelling a finished run leaves it as it was");
+                await ClientContract.ExpectErrorAsync(() => c.CancelModelProbeRunAsync("mpr_missing"), "cancel unknown run", 404, 404);
 
                 EnumerationResult<ModelProbeRun> byCaptain = (await c.ListModelProbeRunsAsync(new ModelProbeRunQuery { CaptainId = captain.Id, PageSize = 5 }))!;
                 AssertEqual(1, (int)byCaptain.TotalRecords, "captain filter sent");

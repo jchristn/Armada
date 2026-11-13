@@ -379,7 +379,12 @@ namespace Armada.Tui.Screens.Operations
 
             if (!Filters.IsEmpty)
             {
+                // On a short terminal the filters give way so the grid keeps a few rows (header, three rows, footer,
+                // and its box); the filter bar then scrolls to the focused field and says how many rows are hidden.
                 int fh = Filters.PreferredHeight(width);
+                int aboveRows = AboveHeight(width);
+                int room = stack.Remaining - stack.Cost(Filters, 0) - (aboveRows > 0 ? aboveRows + 1 : 0) - 8;
+                fh = Math.Max(Math.Min(2, fh), Math.Min(fh, room));
                 Scope.RenderChild(surface, Filters, stack.Place(Filters, fh));
             }
 

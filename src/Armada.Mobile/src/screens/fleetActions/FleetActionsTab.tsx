@@ -114,7 +114,7 @@ export function FleetActionsTab() {
           </View>
         )}
         emptyTitle={t('No fleet actions yet')}
-        emptyMessage={`${t('Armada seeds five built-in actions into each tenant the first time actions are listed: Fast-forward default branch, Prune merged branches, Build, Update outdated dependencies, and Add a test project.')} ${t('Deleted built-ins are hidden for good and never re-seeded. Create your own action to get started.')}`}
+        emptyMessage={`${t('Armada seeds built-in actions into each tenant the first time actions are listed, such as Build, Run tests, Vulnerability audit, and their paired fixes.')} ${t('Deleted built-ins are hidden for good and never re-seeded. Create your own action to get started.')}`}
         emptyAction={isTenantAdmin ? { label: t('Action'), onPress: openCreate } : undefined}
         renderItem={({ item }) => {
           const swipe: SwipeAction[] = [];

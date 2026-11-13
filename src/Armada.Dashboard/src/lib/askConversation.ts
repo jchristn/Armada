@@ -2,7 +2,7 @@ import type {
   AskActionProposal,
   AskMessage,
   AskThread,
-  AskThreadDetail,
+  AskThreadView,
   AskTrackedWork,
   AskTurnProgress,
   AskWorkSnapshot,
@@ -54,10 +54,10 @@ export const CLOSED_TURN_LIMIT = 50;
 
 export type ConversationAction =
   | { type: 'reset'; threadId: string | null }
-  | { type: 'loaded'; threadId: string; detail: AskThreadDetail; messages: AskMessage[]; hasMore: boolean }
+  | { type: 'loaded'; threadId: string; detail: AskThreadView; messages: AskMessage[]; hasMore: boolean }
   | { type: 'older'; threadId: string; messages: AskMessage[]; hasMore: boolean }
   | { type: 'latest'; threadId: string; messages: AskMessage[] }
-  | { type: 'detail'; threadId: string; detail: AskThreadDetail }
+  | { type: 'detail'; threadId: string; detail: AskThreadView }
   | { type: 'event'; event: AskEvent }
   | { type: 'optimisticUser'; message: AskMessage }
   | { type: 'confirmUser'; localId: string; messageId: string | null; turnId: string | null }
@@ -211,7 +211,7 @@ export function mergeStreamTools(snapshot: ToolEvent[], live: ToolEvent[]): Tool
 function hydrateStream(stream: StreamingTurn, progress: AskTurnProgress, messages: AskMessage[]): StreamingTurn {
   if (progress.turnId !== stream.turnId || stream.finished) return stream;
   const reply = progress.messageId ? messages.find((m) => m.id === progress.messageId) : undefined;
-  if (reply && ((reply.contentText ?? '').trim() || (reply.toolCalls?.length ?? 0) > 0)) return stream;
+  if (reply && ((reply.contentText ?? '').trim() || (reply.toolCalls?.length ?? 0) > 0 || (reply.toolCallCount ?? 0) > 0)) return stream;
   return {
     ...stream,
     text: mergeStreamText(progress.text ?? '', stream.text),

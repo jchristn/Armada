@@ -22,6 +22,14 @@ namespace Armada.Core.Database.Interfaces
         Task<List<VesselDependency>> ReadByVesselAsync(string tenantId, string vesselId, CancellationToken token = default);
 
         /// <summary>
+        /// Read one page of a vessel's dependency rows within a tenant, cut in the database (LIMIT/OFFSET with a COUNT
+        /// over the same filter). Ordered by ecosystem, package name, project path, then id; the query's Order is not
+        /// used. A page past the end is empty with accurate totals.
+        /// </summary>
+        /// <exception cref="ArgumentNullException">Thrown when tenantId or vesselId is null or empty.</exception>
+        Task<EnumerationResult<VesselDependency>> EnumerateByVesselAsync(string tenantId, string vesselId, EnumerationQuery query, CancellationToken token = default);
+
+        /// <summary>
         /// Delete every dependency row for a vessel within a tenant.
         /// </summary>
         Task DeleteByVesselAsync(string tenantId, string vesselId, CancellationToken token = default);

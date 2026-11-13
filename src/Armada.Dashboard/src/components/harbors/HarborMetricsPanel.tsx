@@ -92,12 +92,12 @@ export default function HarborMetricsPanel({ harborId, initialRange = '24h' }: H
 
   const slotRows = (metrics?.slots.buckets ?? []).map((b) => [b.peak, b.average]);
   const rttRows = (metrics?.link.roundTrip ?? []).map((b) => [b.averageMs, b.maxMs]);
-  const tokenDefs = metrics ? tokenSeries(metrics) : [];
+  const tokenDefs = metrics ? tokenSeries(metrics, t('Other')) : [];
   const tokenValueRows = metrics ? tokenRows(metrics.tokens.buckets, tokenDefs) : [];
   const strip = metrics ? linkStrip(metrics.link.segments, metrics.fromUtc, metrics.toUtc) : [];
 
   const speedColumns: DataTableColumn<HarborLaunchSpeed>[] = [
-    { key: 'runtime', label: t('Runtime'), required: true, headerTitle: t('Agent runtime the jobs used, such as ClaudeCode or Codex.'), cellClassName: 'cell-nowrap', render: (row) => <strong>{row.runtime}</strong> },
+    { key: 'runtime', label: t('Runtime'), required: true, headerTitle: t('Agent runtime the jobs used, such as ClaudeCode or Codex.'), cellClassName: 'cell-nowrap', render: (row) => <strong>{row.isOther ? `${t('Other')} (${row.runtimeCount ?? 0})` : row.runtime}</strong> },
     { key: 'jobs', label: t('Jobs'), headerTitle: t('Jobs of this runtime that ended in this range.'), cellClassName: 'text-dim', render: (row) => row.jobCount },
     { key: 'firstMedian', label: t('First output (median)'), headerTitle: t('Typical time from launch until the agent produced its first output. Lower means faster starts.'), cellClassName: 'cell-nowrap', render: (row) => formatDurationMs(row.firstOutputMedianMs) },
     { key: 'firstP95', label: t('First output (p95)'), headerTitle: t('Time to first output that 95 percent of jobs beat. Shows the slow starts.'), cellClassName: 'cell-nowrap', render: (row) => formatDurationMs(row.firstOutputP95Ms) },
@@ -190,6 +190,9 @@ export default function HarborMetricsPanel({ harborId, initialRange = '24h' }: H
                 </rect>
               ))}
             </svg>
+            {metrics.link.segmentsCoalesced && (
+              <p className="text-dim" data-testid="harbor-link-coalesced">{t('Too many link changes to draw one by one; each time slice shows its main state.')}</p>
+            )}
             <div className="mission-history-legend harbor-metrics-legend">
               {LINK_STATES.map((state) => (
                 <span key={state}><span className="mission-history-legend-color" style={{ backgroundColor: LINK_STATE_COLORS[state] }} /> {t(LINK_STATE_LABELS[state])}</span>
@@ -223,7 +226,7 @@ export default function HarborMetricsPanel({ harborId, initialRange = '24h' }: H
               tableKey="harbor-launch-speed"
               columns={speedColumns}
               rows={metrics.launchSpeed}
-              rowKey={(row) => row.runtime}
+              rowKey={(row) => (row.isOther ? '__other' : row.runtime)}
               ariaLabel={t('Launch speed per runtime')}
               emptyMessage={<span className="text-dim">{t('No jobs ended on this Harbor in this time range.')}</span>}
             />

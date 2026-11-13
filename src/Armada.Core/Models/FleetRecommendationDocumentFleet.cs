@@ -2,6 +2,7 @@ namespace Armada.Core.Models
 {
     using System;
     using System.Collections.Generic;
+    using Armada.Core.Services;
 
     /// <summary>
     /// One fleet entry of a captain-written fleet-recommendations.json file. Values are untrusted and validated
@@ -29,6 +30,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// Vessel identifiers (vsl_ prefix) in the fleet, or null.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxRequestItems, Reason = "Validated when the captain's file is parsed; a larger file is a format error")]
         public List<string>? VesselIds { get; set; } = null;
 
         #endregion

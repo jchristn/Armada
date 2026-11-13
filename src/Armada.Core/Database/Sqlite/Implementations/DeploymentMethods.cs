@@ -181,7 +181,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
             using (SqliteCommand cmd = conn.CreateCommand())
             {
                 cmd.CommandText = "SELECT * FROM deployments" + whereClause
-                    + " ORDER BY COALESCE(completed_utc, started_utc, last_update_utc) DESC, created_utc DESC"
+                    + " ORDER BY COALESCE(completed_utc, started_utc, last_update_utc) DESC, created_utc DESC, id DESC"
                     + " LIMIT " + query.PageSize + " OFFSET " + query.Offset + ";";
                 foreach (SqliteParameter parameter in parameters) cmd.Parameters.Add(new SqliteParameter(parameter.ParameterName, parameter.Value));
                 using SqliteDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false);
@@ -212,7 +212,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
             List<SqliteParameter> parameters = new List<SqliteParameter>();
             ApplyQueryFilters(query, conditions, parameters, false);
             string whereClause = conditions.Count > 0 ? " WHERE " + String.Join(" AND ", conditions) : String.Empty;
-            cmd.CommandText = "SELECT * FROM deployments" + whereClause + " ORDER BY COALESCE(completed_utc, started_utc, last_update_utc) DESC, created_utc DESC;";
+            cmd.CommandText = "SELECT * FROM deployments" + whereClause + " ORDER BY COALESCE(completed_utc, started_utc, last_update_utc) DESC, created_utc DESC, id DESC;";
             foreach (SqliteParameter parameter in parameters) cmd.Parameters.Add(parameter);
 
             List<Deployment> results = new List<Deployment>();

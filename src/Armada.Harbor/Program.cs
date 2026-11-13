@@ -65,6 +65,7 @@ namespace Armada.Harbor
             }
             catch (Exception ex) when (!UiStarted)
             {
+                ReportMissingNativeLibrary(ex);
                 // The desktop UI could not start (a sleeping display fails the render timer). Keep this computer
                 // linked to the Admiral without a window rather than exiting and leaving its work unserved.
                 return HarborHeadlessRunner.Run("the desktop UI could not start (" + ex.GetType().Name + ": " + ex.Message + ")");
@@ -85,6 +86,25 @@ namespace Armada.Harbor
                 .UsePlatformDetect()
                 .With(new MacOSPlatformOptions { ShowInDock = !StartMinimized })
                 .LogToTrace();
+        }
+
+        private static void ReportMissingNativeLibrary(Exception ex)
+        {
+            // On Linux (and WSL, where WSLg supplies only the display) a missing X11 client library surfaces here as
+            // "Unable to load shared library 'libICE.so.6'". Name the packages, then fall back to the headless link.
+            if (!OperatingSystem.IsLinux()) return;
+            for (Exception? current = ex; current != null; current = current.InnerException)
+            {
+                if (current is DllNotFoundException)
+                {
+                    Console.Error.WriteLine("Error: the Harbor window needs X11 client libraries this system lacks (" + current.Message + ").");
+                    Console.Error.WriteLine("Install them with:");
+                    Console.Error.WriteLine("  Debian/Ubuntu: sudo apt install libx11-6 libice6 libsm6 libxext6 libxrandr2 libxi6 libxcursor1 libxfixes3 libfontconfig1");
+                    Console.Error.WriteLine("  Fedora:        sudo dnf install libX11 libICE libSM libXext libXrandr libXi libXcursor libXfixes fontconfig");
+                    Console.Error.WriteLine("Continuing without a window: this computer stays linked to the Admiral.");
+                    return;
+                }
+            }
         }
 
         private static int RunRegistration(RegistrationCommandLine registration)

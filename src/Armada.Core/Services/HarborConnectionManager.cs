@@ -183,6 +183,17 @@ namespace Armada.Core.Services
                     Reason = "Harbor id is registered to a different identity."
                 };
             }
+            catch (CollectionLimitExceededException ex)
+            {
+                // Reject, never truncate: the Harbor must advertise a bounded capability list.
+                _Logging.Warn(_Header + "refused harbor " + handshake.HarborId + ": " + ex.Message);
+                return new HarborHandshakeAck
+                {
+                    CorrelationId = handshake.CorrelationId,
+                    Accepted = false,
+                    Reason = ex.Message
+                };
+            }
 
             DateTime now = _Clock();
             HarborConnection connection = new HarborConnection(handshake.HarborId, tenantId, userId, send);
@@ -190,10 +201,12 @@ namespace Armada.Core.Services
             connection.HostsDocks = HasAvailableCapability(handshake.Capabilities, HarborProtocol.DockCapability);
             connection.HostsCheckouts = connection.HostsDocks && HasAvailableCapability(handshake.Capabilities, HarborProtocol.CheckoutCapability);
             connection.OpensTerminals = connection.HostsCheckouts && HasAvailableCapability(handshake.Capabilities, HarborProtocol.OpenTerminalCapability);
+            connection.HostsUsageProbes = HasAvailableCapability(handshake.Capabilities, HarborProtocol.UsageProbeCapability);
             connection.PromptRuntimes = ReadPromptRuntimes(handshake.Capabilities);
             connection.Name = handshake.Name;
             connection.HeartbeatIntervalMs = handshake.HeartbeatIntervalMs;
             connection.LastSeenUtc = now;
+            connection.LinkedUtc = now;
             connection.CloseLink = closeLink;
 
             // Requests sent over the link this handshake replaces can never be answered (the Harbor does not replay RPC
@@ -420,6 +433,90 @@ namespace Armada.Core.Services
         }
 
         /// <summary>
+        /// Send a usage probe request to a connected Harbor and await its reply, with request-specific
+        /// cancellation: when <paramref name="token"/> is cancelled while the probe is outstanding, the Harbor
+        /// is sent a cancel message naming this request only (<see cref="HarborGitRequest.CancelsRequestId"/>),
+        /// so it stops that probe's process tree while unrelated concurrent requests keep running, and this
+        /// method keeps waiting up to <paramref name="cancelConfirmMs"/> for the cancelled probe's own reply,
+        /// which confirms the remote execution ended. Returns the reply (after a cancellation, the Harbor's
+        /// confirmation, normally ProbeCancelled), or null when the round-trip deadline passed or the
+        /// cancellation was not confirmed in time; the caller tells them apart by its token.
+        /// </summary>
+        /// <param name="harborId">Target Harbor identifier.</param>
+        /// <param name="request">Usage probe request (its RequestId correlates the reply).</param>
+        /// <param name="timeoutMs">Round-trip deadline in milliseconds; values below 1 mean wait indefinitely.</param>
+        /// <param name="cancelConfirmMs">How long to wait for the Harbor to confirm a cancellation, in milliseconds.</param>
+        /// <param name="token">Cancellation token; cancelling it cancels the probe on the Harbor.</param>
+        /// <returns>The probe reply, or null on timeout or an unconfirmed cancellation.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when the Harbor id or request is missing.</exception>
+        /// <exception cref="ArgumentException">Thrown when the request has no request id.</exception>
+        /// <exception cref="InvalidOperationException">Thrown when the Harbor is not connected, or its link closes before it
+        /// replies.</exception>
+        public async Task<HarborGitResult?> SendUsageProbeAsync(string harborId, HarborGitRequest request, int timeoutMs, int cancelConfirmMs, CancellationToken token = default)
+        {
+            if (String.IsNullOrWhiteSpace(harborId)) throw new ArgumentNullException(nameof(harborId));
+            if (request == null) throw new ArgumentNullException(nameof(request));
+            if (String.IsNullOrWhiteSpace(request.RequestId)) throw new ArgumentException("Usage probe request is missing a request id.");
+            if (!_Connections.TryGetValue(harborId, out HarborConnection? connection))
+                throw new InvalidOperationException("Harbor " + harborId + " is not connected.");
+
+            TaskCompletionSource<HarborGitResult> completion = new TaskCompletionSource<HarborGitResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+            _PendingGit[request.RequestId] = completion;
+            _PendingOwners[request.RequestId] = harborId;
+
+            try
+            {
+                try
+                {
+                    // The probe request is written in full (never abandoned half-written): a cancellation that
+                    // arrives during the send is handled below as a cancellation of a delivered probe.
+                    await connection!.SendAsync(request, CancellationToken.None).ConfigureAwait(false);
+
+                    Task delay = Task.Delay(timeoutMs < 1 ? Timeout.Infinite : timeoutMs, token);
+                    Task finished = await Task.WhenAny(completion.Task, delay).ConfigureAwait(false);
+                    if (finished == completion.Task)
+                        return await completion.Task.ConfigureAwait(false);
+                    if (!token.IsCancellationRequested)
+                        return null;
+                }
+                catch (OperationCanceledException) when (token.IsCancellationRequested)
+                {
+                }
+
+                // Cancelled while the Harbor still runs the probe: cancel exactly this request there, then wait
+                // (bounded) for the probe's own reply so the caller learns the remote process tree is stopped
+                // before it releases any slot the probe held.
+                if (completion.Task.IsCompleted) return await completion.Task.ConfigureAwait(false);
+                if (!_Connections.TryGetValue(harborId, out HarborConnection? current)) return null;
+                HarborGitRequest cancel = new HarborGitRequest
+                {
+                    RequestId = Guid.NewGuid().ToString("N"),
+                    Kind = request.Kind,
+                    Label = request.Label,
+                    CancelsRequestId = request.RequestId
+                };
+                using (CancellationTokenSource confirm = new CancellationTokenSource(Math.Max(1, cancelConfirmMs)))
+                {
+                    try
+                    {
+                        await current!.SendAsync(cancel, confirm.Token).ConfigureAwait(false);
+                        return await completion.Task.WaitAsync(confirm.Token).ConfigureAwait(false);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        _Logging.Warn(_Header + "Harbor " + harborId + " did not confirm cancellation of usage probe " + request.RequestId + " within " + cancelConfirmMs + "ms");
+                        return null;
+                    }
+                }
+            }
+            finally
+            {
+                _PendingGit.TryRemove(request.RequestId, out TaskCompletionSource<HarborGitResult>? _);
+                _PendingOwners.TryRemove(request.RequestId, out string? _);
+            }
+        }
+
+        /// <summary>
         /// Send a dock request (resolve a vessel's repository, create or remove a dock) to a connected Harbor and await
         /// its result. Returns null when the Harbor does not reply within the timeout.
         /// </summary>
@@ -503,6 +600,28 @@ namespace Armada.Core.Services
         public bool OpensTerminals(string harborId)
         {
             return !String.IsNullOrWhiteSpace(harborId) && _Connections.TryGetValue(harborId, out HarborConnection? connection) && connection!.OpensTerminals;
+        }
+
+        /// <summary>
+        /// Whether any Harbor is currently connected.
+        /// </summary>
+        /// <returns>True when at least one Harbor link is up.</returns>
+        public bool HasConnectedHarbors()
+        {
+            return !_Connections.IsEmpty;
+        }
+
+        /// <summary>
+        /// Whether a connected Harbor can run account usage capture probes on its host (it advertised
+        /// <see cref="HarborProtocol.UsageProbeCapability"/> in its handshake). An Admiral sends a usage
+        /// probe request only to such a Harbor; for an older Harbor the capture answers Unsupported with
+        /// HostUpgradeRequired instead of probing.
+        /// </summary>
+        /// <param name="harborId">Harbor identifier.</param>
+        /// <returns>True when connected and able to probe.</returns>
+        public bool HostsUsageProbes(string harborId)
+        {
+            return !String.IsNullOrWhiteSpace(harborId) && _Connections.TryGetValue(harborId, out HarborConnection? connection) && connection!.HostsUsageProbes;
         }
 
         /// <summary>
@@ -979,6 +1098,72 @@ namespace Armada.Core.Services
         {
             if (String.IsNullOrWhiteSpace(harborId)) return false;
             return _Connections.ContainsKey(harborId);
+        }
+
+        /// <summary>
+        /// The state of a Harbor's link right now: Linked when it was heard from recently, Silent when it has been quiet
+        /// for more than half of its stale-link timeout (the sweep drops it at the full timeout), NotLinked otherwise.
+        /// </summary>
+        /// <param name="harborId">Harbor identifier.</param>
+        /// <returns>The link state.</returns>
+        public HarborLinkStateEnum GetLinkState(string harborId)
+        {
+            if (String.IsNullOrWhiteSpace(harborId)) return HarborLinkStateEnum.Unknown;
+            if (!_Connections.TryGetValue(harborId, out HarborConnection? connection) || connection == null) return HarborLinkStateEnum.NotLinked;
+            TimeSpan? staleAfter = connection.StaleAfter(_MinimumStaleLinkTimeout);
+            if (!staleAfter.HasValue) return HarborLinkStateEnum.Linked;
+            TimeSpan silence = _Clock() - connection.LastSeenUtc;
+            return silence > TimeSpan.FromTicks(staleAfter.Value.Ticks / 2) ? HarborLinkStateEnum.Silent : HarborLinkStateEnum.Linked;
+        }
+
+        /// <summary>
+        /// When a linked Harbor was last heard from, or null when it is not linked.
+        /// </summary>
+        /// <param name="harborId">Harbor identifier.</param>
+        /// <returns>The last time the link carried a message (UTC), or null.</returns>
+        public DateTime? GetLinkLastSeenUtc(string harborId)
+        {
+            if (String.IsNullOrWhiteSpace(harborId)) return null;
+            if (_Connections.TryGetValue(harborId, out HarborConnection? connection) && connection != null) return connection.LastSeenUtc;
+            return null;
+        }
+
+        /// <summary>
+        /// When the current link of a Harbor was established by its handshake, or null when it is not linked.
+        /// </summary>
+        /// <param name="harborId">Harbor identifier.</param>
+        /// <returns>The time the link was established (UTC), or null.</returns>
+        public DateTime? GetLinkedSinceUtc(string harborId)
+        {
+            if (String.IsNullOrWhiteSpace(harborId)) return null;
+            if (_Connections.TryGetValue(harborId, out HarborConnection? connection) && connection != null) return connection.LinkedUtc;
+            return null;
+        }
+
+        /// <summary>
+        /// Whether a linked Harbor has sent a heartbeat on its current link. The Harbor replays its job outbox (which may
+        /// carry a job's exit) before its first heartbeat, so a first heartbeat means the Admiral has heard everything the
+        /// Harbor queued while the link was down and knows which jobs still run.
+        /// </summary>
+        /// <param name="harborId">Harbor identifier.</param>
+        /// <returns>True when a heartbeat arrived on the current link.</returns>
+        public bool HasReportedSinceLink(string harborId)
+        {
+            if (String.IsNullOrWhiteSpace(harborId)) return false;
+            return _Connections.TryGetValue(harborId, out HarborConnection? connection) && connection != null && connection.LastHeartbeatUtc.HasValue;
+        }
+
+        /// <summary>
+        /// Whether the Harbor running a delegated job reports it running right now, by the job's Admiral process handle.
+        /// </summary>
+        /// <param name="processId">Admiral process handle of the job.</param>
+        /// <returns>True when the owning Harbor is linked and lists the job as running, false when it is linked and does
+        /// not, null when the handle is unknown or the Harbor is not linked.</returns>
+        public bool? IsProcessLive(int processId)
+        {
+            if (!_JobsByProcessId.TryGetValue(processId, out HarborJobHandle? job) || job == null) return null;
+            if (!_Connections.TryGetValue(job.HarborId, out HarborConnection? connection) || connection == null) return null;
+            return connection.HasJob(job.JobId);
         }
 
         /// <summary>

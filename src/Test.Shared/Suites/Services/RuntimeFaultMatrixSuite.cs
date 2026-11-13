@@ -206,11 +206,11 @@ namespace Test.Shared.Suites.Services
             while (!deadline.Passed)
             {
                 captain = await s.Db.Driver.Captains.ReadAsync(captainId).ConfigureAwait(false);
-                if (captain != null && captain.State == CaptainStateEnum.Idle && captain.CurrentMissionId == null) return;
+                if (captain != null && captain.State == CaptainStateEnum.Idle && captain.ActiveMissionIds.Count == 0) return;
                 await Task.Delay(50).ConfigureAwait(false);
             }
 
-            throw new AssertionException("captain " + captainId + " was not released: " + captain?.State + " holding " + captain?.CurrentMissionId);
+            throw new AssertionException("captain " + captainId + " was not released: " + captain?.State + " holding " + captain?.ActiveMissionIds.SingleOrDefault());
         }
 
         private static TestCaseDescriptor CaseAsync(string caseId, string displayName, string tag, Func<Task> body)
@@ -296,7 +296,7 @@ namespace Test.Shared.Suites.Services
             {
                 Captain captain = new Captain(name + "-" + Guid.NewGuid().ToString("N").Substring(0, 6), AgentRuntimeEnum.ClaudeCode);
                 captain.State = CaptainStateEnum.Idle;
-                return await Db.Driver.Captains.CreateAsync(captain).ConfigureAwait(false);
+                return await CaptainAssignmentFixture.CreateAsync(Db.Driver, captain).ConfigureAwait(false);
             }
 
             public async Task<Mission> CreateMissionAsync(Vessel vessel, string? voyageId, string? persona, string? dependsOn = null)

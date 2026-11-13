@@ -77,6 +77,9 @@ namespace Test.Shared.Suites.Client
                 AssertNotNull(await c.GetMissionInstructionsAsync(done.Id), "instructions");
                 AssertEqual(setup.Vessel.Id, (await c.GetMissionLandingPreviewAsync(done.Id))?.VesselId, "landing preview");
                 await ClientContract.ExpectErrorAsync(() => c.GetMissionGitHubPullRequestAsync(done.Id), "no pull request for a local merge");
+                await ClientContract.ExpectErrorAsync(() => c.EnumerateMissionPullRequestReviewsAsync(done.Id, new EnumerationQuery { PageSize = 5 }), "no pull request reviews for a local merge");
+                await ClientContract.ExpectErrorAsync(() => c.EnumerateMissionPullRequestCommentsAsync(done.Id), "no pull request comments for a local merge");
+                await ClientContract.ExpectErrorAsync(() => c.EnumerateMissionPullRequestChecksAsync(done.Id), "no pull request checks for a local merge");
                 await ClientContract.ExpectErrorAsync(() => c.RetryMissionLandingAsync(done.Id), "a landed mission cannot retry landing", 400, 409);
 
                 Mission review = (await c.CreateMissionAsync(new Mission("Contract review approve", "Needs review.") { VesselId = setup.Vessel.Id, RequiresReview = true }))!;
@@ -131,7 +134,7 @@ namespace Test.Shared.Suites.Client
                 Voyage voyage = (await c.CreateVoyageAsync(create))!;
                 AssertEqual(LandingModeEnum.LocalMerge, voyage.LandingMode, "the create reply carries the voyage landing mode");
                 AssertEqual(LandingModeEnum.LocalMerge, (await c.GetVoyageAsync(voyage.Id))?.LandingMode, "persisted");
-                AssertTrue(await LiveServerSetup.WaitUntilAsync(async () => ((await c.GetVoyageDetailAsync(voyage.Id))?.Missions ?? new List<Mission>()).Any(m => m.Status == MissionStatusEnum.Complete), LiveTimeoutMs), "voyage mission landed");
+                AssertTrue(await LiveServerSetup.WaitUntilAsync(async () => (await VoyageMissionsAsync(c, voyage.Id)).Any(m => m.Status == MissionStatusEnum.Complete), LiveTimeoutMs), "voyage mission landed");
                 AssertTrue(LiveServerSetup.CheckoutHasStubCommit(setup.WorkingDirectory), "merged into the working checkout");
                 AssertFalse(LiveServerSetup.OriginHasStubCommit(setup.BarePath), "the voyage's LocalMerge did not push");
 
@@ -159,9 +162,10 @@ namespace Test.Shared.Suites.Client
                 evaluation.Missions.Add(new DispatchRequest { VesselId = setup.Vessel.Id, Title = "Evaluation mission", Description = "Add a file." });
                 Voyage evalVoyage = (await c.CreateVoyageAsync(evaluation))!;
                 AssertTrue(evalVoyage.IsEvaluation, "the create reply carries the evaluation flag");
-                VoyageDetail? evalDetail = await c.GetVoyageDetailAsync(evalVoyage.Id);
+                VoyageProgress? evalDetail = await c.GetVoyageDetailAsync(evalVoyage.Id);
                 AssertTrue(evalDetail?.Voyage?.IsEvaluation == true, "persisted voyage flagged");
-                AssertTrue(evalDetail!.Missions.Count > 0 && evalDetail.Missions.All(m => m.IsEvaluation), "every voyage mission inherits the flag");
+                List<Mission> evalMissions = await VoyageMissionsAsync(c, evalVoyage.Id);
+                AssertTrue(evalMissions.Count > 0 && evalMissions.All(m => m.IsEvaluation), "every voyage mission inherits the flag");
 
                 VoyageCreateRequest bareEval = new VoyageCreateRequest();
                 bareEval.Title = "Contract bare evaluation voyage";
@@ -178,9 +182,10 @@ namespace Test.Shared.Suites.Client
                 production.VesselId = setup.Vessel.Id;
                 production.Missions.Add(new DispatchRequest { VesselId = setup.Vessel.Id, Title = "Production mission", Description = "Add a file." });
                 Voyage prodVoyage = (await c.CreateVoyageAsync(production))!;
-                VoyageDetail? prodDetail = await c.GetVoyageDetailAsync(prodVoyage.Id);
+                VoyageProgress? prodDetail = await c.GetVoyageDetailAsync(prodVoyage.Id);
                 AssertFalse(prodDetail!.Voyage!.IsEvaluation, "a normal dispatch is not evaluation");
-                AssertTrue(prodDetail.Missions.Count > 0 && prodDetail.Missions.All(m => !m.IsEvaluation), "normal missions are not evaluation");
+                List<Mission> prodMissions = await VoyageMissionsAsync(c, prodVoyage.Id);
+                AssertTrue(prodMissions.Count > 0 && prodMissions.All(m => !m.IsEvaluation), "normal missions are not evaluation");
             }));
 
             cases.Add(Case("voyages", "Voyage create, get, detail, status; cancel and purge", async (c, fx) =>
@@ -192,13 +197,18 @@ namespace Test.Shared.Suites.Client
                 create.Missions.Add(new DispatchRequest { VesselId = setup.Vessel.Id, Title = "Voyage mission", Description = "Add a file." });
                 Voyage voyage = (await c.CreateVoyageAsync(create))!;
                 AssertStartsWith("vyg_", voyage.Id, "voyage id");
-                AssertEqual("Contract voyage", (await c.GetVoyageAsync(voyage.Id))?.Title, "GetVoyageAsync unwraps { Voyage, Missions }");
-                AssertTrue(await LiveServerSetup.WaitUntilAsync(async () => ((await c.GetVoyageDetailAsync(voyage.Id))?.Missions ?? new List<Mission>()).Any(m => m.Status == MissionStatusEnum.Complete), LiveTimeoutMs), "voyage mission landed");
+                AssertEqual("Contract voyage", (await c.GetVoyageAsync(voyage.Id))?.Title, "GetVoyageAsync unwraps the voyage detail");
+                VoyageProgress? progress = await c.GetVoyageDetailAsync(voyage.Id);
+                AssertEqual(1, progress?.TotalMissions, "the detail counts the voyage's missions");
+                AssertTrue(await LiveServerSetup.WaitUntilAsync(async () => (await VoyageMissionsAsync(c, voyage.Id)).Any(m => m.Status == MissionStatusEnum.Complete), LiveTimeoutMs), "voyage mission landed");
                 ArmadaRawJson? statusJson = await c.GetVoyageStatusAsync(voyage.Id);
                 AssertNotNull(statusJson, "status JSON");
-                VoyageDetail statusDetail = JsonHelper.Deserialize<VoyageDetail>(statusJson!.Json);
+                VoyageProgress statusDetail = JsonHelper.Deserialize<VoyageProgress>(statusJson!.Json);
                 AssertEqual(voyage.Id, statusDetail.Voyage?.Id, "status JSON voyage");
-                AssertTrue(statusDetail.Missions != null && statusDetail.Missions.Count > 0, "status JSON lists the missions");
+                AssertTrue(statusDetail.TotalMissions > 0, "status JSON counts the missions");
+                AssertFalse(statusJson.Json.Contains("\"Missions\"", StringComparison.Ordinal), "status JSON embeds no mission list");
+                EnumerationResult<VoyageProgress>? active = await c.EnumerateVoyageProgressAsync(new EnumerationQuery { PageSize = 1000 });
+                AssertNotNull(active, "voyage progress page");
 
                 _Behavior.MissionsSucceed = false;
                 VoyageCreateRequest second = new VoyageCreateRequest();
@@ -206,13 +216,15 @@ namespace Test.Shared.Suites.Client
                 second.VesselId = setup.Vessel.Id;
                 second.Missions.Add(new DispatchRequest { VesselId = setup.Vessel.Id, Title = "Cancelled mission", Description = "x" });
                 Voyage toCancel = (await c.CreateVoyageAsync(second))!;
-                await c.CancelVoyageAsync(toCancel.Id);
+                VoyageCancelResult? cancelResult = await c.CancelVoyageAsync(toCancel.Id);
+                AssertEqual(VoyageStatusEnum.Cancelled, cancelResult?.Voyage?.Status, "cancel returns the cancelled voyage");
+                AssertTrue(cancelResult!.CancelledMissions + cancelResult.NotCancelledMissions <= 1, "cancel returns counts");
                 _Behavior.MissionsSucceed = true;
                 AssertTrue(await LiveServerSetup.WaitUntilAsync(async () =>
                 {
-                    VoyageDetail? detail = await c.GetVoyageDetailAsync(toCancel.Id);
+                    VoyageProgress? detail = await c.GetVoyageDetailAsync(toCancel.Id);
                     return detail?.Voyage != null && detail.Voyage.Status != VoyageStatusEnum.InProgress
-                        && detail.Missions.All(m => m.Status != MissionStatusEnum.Assigned && m.Status != MissionStatusEnum.InProgress);
+                        && (await VoyageMissionsAsync(c, toCancel.Id)).All(m => m.Status != MissionStatusEnum.Assigned && m.Status != MissionStatusEnum.InProgress);
                 }, LiveTimeoutMs), "voyage and its missions stopped");
                 await c.PurgeVoyageAsync(toCancel.Id);
                 await ClientContract.ExpectErrorAsync(() => c.GetVoyageAsync(toCancel.Id), "purged", 404, 404);
@@ -225,6 +237,11 @@ namespace Test.Shared.Suites.Client
                 captain.SystemInstructions = "Be brief.";
                 AssertEqual("Be brief.", (await c.UpdateCaptainAsync(captain.Id, captain))?.SystemInstructions, "update captain");
                 AssertEqual(captain.Id, (await c.GetCaptainToolsAsync(captain.Id))?.CaptainId, "tools");
+                CaptainToolAccessResult? toolPage = await c.EnumerateCaptainToolsAsync(captain.Id, 2, 1, CaptainToolSourceKindEnum.McpServer);
+                AssertNotNull(toolPage, "paged tools");
+                AssertEqual(2, toolPage!.Tools.PageNumber, "tools page number");
+                AssertEqual(1, toolPage.Tools.PageSize, "tools page size");
+                AssertTrue(toolPage.Tools.Objects.All(t => t.SourceKind == CaptainToolSourceKindEnum.McpServer), "source kind filter");
                 try
                 {
                     AssertNotNull(await c.GetCaptainLogAsync(captain.Id, 50), "log");
@@ -336,6 +353,21 @@ namespace Test.Shared.Suites.Client
         #endregion
 
         #region Private-Methods
+
+        private static async Task<List<Mission>> VoyageMissionsAsync(ArmadaClient c, string voyageId)
+        {
+            // The voyage detail no longer embeds missions: read them through bounded pages of the missions list.
+            List<Mission> missions = new List<Mission>();
+            for (int pageNumber = 1; pageNumber <= 100; pageNumber++)
+            {
+                EnumerationResult<Mission>? page = await c.ListMissionsAsync(new ArmadaPageQuery(pageNumber, 100).With("voyageId", voyageId)).ConfigureAwait(false);
+                if (page == null || page.Objects.Count == 0) break;
+                missions.AddRange(page.Objects);
+                if (pageNumber >= page.TotalPages) break;
+            }
+
+            return missions;
+        }
 
         private TestCaseDescriptor Case(string id, string name, Func<ArmadaClient, E2EServerFixture, Task> body)
         {

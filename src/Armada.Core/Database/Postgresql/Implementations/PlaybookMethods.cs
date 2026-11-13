@@ -204,7 +204,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
         /// <inheritdoc />
         public async Task<EnumerationResult<Playbook>> EnumerateAsync(EnumerationQuery query, CancellationToken token = default)
         {
-            return await EnumerateInternalAsync(null, query, token).ConfigureAwait(false);
+            return await EnumerateInternalAsync(null, null, query, token).ConfigureAwait(false);
         }
 
         /// <inheritdoc />
@@ -235,7 +235,14 @@ namespace Armada.Core.Database.Postgresql.Implementations
         public async Task<EnumerationResult<Playbook>> EnumerateAsync(string tenantId, EnumerationQuery query, CancellationToken token = default)
         {
             if (String.IsNullOrEmpty(tenantId)) throw new ArgumentNullException(nameof(tenantId));
-            return await EnumerateInternalAsync(tenantId, query, token).ConfigureAwait(false);
+            return await EnumerateInternalAsync(tenantId, null, query, token).ConfigureAwait(false);
+        }
+
+        /// <inheritdoc />
+        public async Task<EnumerationResult<Playbook>> EnumerateVisibleAsync(string tenantId, string? viewerUserId, EnumerationQuery query, CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(tenantId)) throw new ArgumentNullException(nameof(tenantId));
+            return await EnumerateInternalAsync(tenantId, viewerUserId, query, token).ConfigureAwait(false);
         }
 
         /// <inheritdoc />
@@ -425,7 +432,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
             return results;
         }
 
-        private async Task<EnumerationResult<Playbook>> EnumerateInternalAsync(string? tenantId, EnumerationQuery query, CancellationToken token)
+        private async Task<EnumerationResult<Playbook>> EnumerateInternalAsync(string? tenantId, string? viewerUserId, EnumerationQuery query, CancellationToken token)
         {
             query ??= new EnumerationQuery();
 
@@ -440,6 +447,13 @@ namespace Armada.Core.Database.Postgresql.Implementations
                 {
                     conditions.Add("tenant_id = @tenant_id");
                     parameters.Add(new NpgsqlParameter("@tenant_id", tenantId));
+                }
+                if (!String.IsNullOrEmpty(viewerUserId))
+                {
+                    // A regular user sees tenant-wide rows plus their own (ScopedVisibility.CanView), counted in the data source.
+                    conditions.Add("(scope = @tenant_wide_scope OR user_id = @viewer_user_id)");
+                    parameters.Add(new NpgsqlParameter("@tenant_wide_scope", ScopeEnum.TenantWide.ToString()));
+                    parameters.Add(new NpgsqlParameter("@viewer_user_id", viewerUserId));
                 }
                 if (query.CreatedAfter.HasValue)
                 {
@@ -467,7 +481,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
                 using (NpgsqlCommand cmd = conn.CreateCommand())
                 {
                     cmd.CommandText = "SELECT * FROM playbooks" + whereClause +
-                        " ORDER BY created_utc " + orderDirection +
+                        " ORDER BY created_utc " + orderDirection + ", id " + orderDirection +
                         " LIMIT " + query.PageSize + " OFFSET " + query.Offset + ";";
                     foreach (NpgsqlParameter p in parameters) cmd.Parameters.Add(new NpgsqlParameter(p.ParameterName!, p.Value));
                     using (NpgsqlDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))

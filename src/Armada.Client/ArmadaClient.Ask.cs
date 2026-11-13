@@ -250,6 +250,93 @@ namespace Armada.Client
         }
 
         /// <summary>
+        /// Dashboard <c>listAskWork</c>: POST `/api/v1/ask/threads/${id}/work/enumerate`. One page of the work the thread
+        /// tracks, newest first, each item with a counts-only snapshot. Query.Status filters by state.
+        /// </summary>
+        /// <param name="id">Thread ID.</param>
+        /// <param name="query">Paging, order, and state filter, or null for the first page.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>One page with exact totals.</returns>
+        /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
+        public Task<EnumerationResult<AskTrackedWork>?> EnumerateAskWorkAsync(string id, EnumerationQuery? query = null, CancellationToken token = default)
+        {
+            return PostAsync<EnumerationResult<AskTrackedWork>>($"/api/v1/ask/threads/{E(id)}/work/enumerate", query ?? new EnumerationQuery(), null, token);
+        }
+
+        /// <summary>
+        /// Dashboard <c>listAskWorkMissions</c>: POST `/api/v1/ask/threads/${id}/work/${workId}/missions/enumerate`. One
+        /// page of the mission rows of tracked work.
+        /// </summary>
+        /// <param name="id">Thread ID.</param>
+        /// <param name="workId">Tracked work ID.</param>
+        /// <param name="query">Paging and order, or null for the first page.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>One page with exact totals.</returns>
+        /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
+        public Task<EnumerationResult<AskWorkMissionSnapshot>?> EnumerateAskWorkMissionsAsync(string id, string workId, EnumerationQuery? query = null, CancellationToken token = default)
+        {
+            return PostAsync<EnumerationResult<AskWorkMissionSnapshot>>($"/api/v1/ask/threads/{E(id)}/work/{E(workId)}/missions/enumerate", query ?? new EnumerationQuery(), null, token);
+        }
+
+        /// <summary>
+        /// Dashboard <c>listAskWorkTargets</c>: POST `/api/v1/ask/threads/${id}/work/${workId}/targets/enumerate`. One page
+        /// of the target rows of a tracked fleet action run.
+        /// </summary>
+        /// <param name="id">Thread ID.</param>
+        /// <param name="workId">Tracked work ID.</param>
+        /// <param name="query">Paging, or null for the first page.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>One page with exact totals.</returns>
+        /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
+        public Task<EnumerationResult<AskWorkTargetSnapshot>?> EnumerateAskWorkTargetsAsync(string id, string workId, EnumerationQuery? query = null, CancellationToken token = default)
+        {
+            return PostAsync<EnumerationResult<AskWorkTargetSnapshot>>($"/api/v1/ask/threads/{E(id)}/work/{E(workId)}/targets/enumerate", query ?? new EnumerationQuery(), null, token);
+        }
+
+        /// <summary>
+        /// Dashboard <c>listAskProposals</c>: POST `/api/v1/ask/threads/${id}/proposals/enumerate`. One page of the
+        /// thread's proposals, newest first. Query.Status filters by proposal status.
+        /// </summary>
+        /// <param name="id">Thread ID.</param>
+        /// <param name="query">Paging, order, and status filter, or null for the first page.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>One page with exact totals.</returns>
+        /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
+        public Task<EnumerationResult<AskActionProposal>?> EnumerateAskProposalsAsync(string id, EnumerationQuery? query = null, CancellationToken token = default)
+        {
+            return PostAsync<EnumerationResult<AskActionProposal>>($"/api/v1/ask/threads/{E(id)}/proposals/enumerate", query ?? new EnumerationQuery(), null, token);
+        }
+
+        /// <summary>
+        /// Dashboard <c>listAskToolCalls</c>: POST `/api/v1/ask/threads/${id}/messages/${messageId}/tool-calls/enumerate`.
+        /// One page of one message's tool calls.
+        /// </summary>
+        /// <param name="id">Thread ID.</param>
+        /// <param name="messageId">Message ID.</param>
+        /// <param name="query">Paging and order, or null for the first page.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>One page with exact totals.</returns>
+        /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
+        public Task<EnumerationResult<AskMessageToolCall>?> EnumerateAskToolCallsAsync(string id, string messageId, EnumerationQuery? query = null, CancellationToken token = default)
+        {
+            return PostAsync<EnumerationResult<AskMessageToolCall>>($"/api/v1/ask/threads/{E(id)}/messages/{E(messageId)}/tool-calls/enumerate", query ?? new EnumerationQuery(), null, token);
+        }
+
+        /// <summary>
+        /// Dashboard <c>listAskTurnToolCalls</c>: POST `/api/v1/ask/threads/${id}/turn/tool-calls/enumerate`. One page of
+        /// the tool calls the running turn has made so far (empty when no turn runs).
+        /// </summary>
+        /// <param name="id">Thread ID.</param>
+        /// <param name="query">Paging and order, or null for the first page.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>One page with exact totals.</returns>
+        /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
+        public Task<EnumerationResult<AskMessageToolCall>?> EnumerateAskTurnToolCallsAsync(string id, EnumerationQuery? query = null, CancellationToken token = default)
+        {
+            return PostAsync<EnumerationResult<AskMessageToolCall>>($"/api/v1/ask/threads/{E(id)}/turn/tool-calls/enumerate", query ?? new EnumerationQuery(), null, token);
+        }
+
+        /// <summary>
         /// Dashboard <c>getAskQuickActions</c>: GET /api/v1/ask/quick-actions. Tolerates a bare array or a QuickActions/Actions/Objects wrapper.
         /// </summary>
         /// <param name="token">Cancellation token.</param>

@@ -1,6 +1,7 @@
 namespace Armada.Core.Models
 {
     using System.Collections.Generic;
+    using Armada.Core.Services;
 
     /// <summary>
     /// A tool the Harbor needs, with the command that proves it is installed.
@@ -22,6 +23,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// Arguments of the probe command; exit code 0 means the tool is installed.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxConfigItems)]
         public List<string> Arguments
         {
             get => _Arguments;

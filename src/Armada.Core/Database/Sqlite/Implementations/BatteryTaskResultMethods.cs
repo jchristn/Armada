@@ -80,6 +80,41 @@ namespace Armada.Core.Database.Sqlite.Implementations
         }
 
         /// <inheritdoc />
+        public async Task<EnumerationResult<BatteryTaskResult>> EnumerateByRunAsync(string runId, EnumerationQuery query, CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(runId)) throw new ArgumentNullException(nameof(runId));
+            if (query == null) throw new ArgumentNullException(nameof(query));
+            int pageSize = query.PageSize < 1 ? 1 : (query.PageSize > 1000 ? 1000 : query.PageSize);
+            int pageNumber = query.PageNumber < 1 ? 1 : query.PageNumber;
+            int offset = (pageNumber - 1) * pageSize;
+
+            string where = " WHERE run_id = @run_id" + (String.IsNullOrWhiteSpace(query.Status) ? String.Empty : " AND outcome = @outcome");
+            Action<SqliteCommand> bind = cmd =>
+            {
+                SqliteCommandHelper.Add(cmd, "@run_id", runId);
+                if (!String.IsNullOrWhiteSpace(query.Status)) SqliteCommandHelper.Add(cmd, "@outcome", query.Status);
+            };
+            string direction = query.Order == EnumerationOrderEnum.CreatedAscending ? "ASC" : "DESC";
+
+            using (SqliteConnection conn = new SqliteProviderConnection(_ConnectionString))
+            {
+                await conn.OpenAsync(token).ConfigureAwait(false);
+                long total = await SqliteCommandHelper.CountAsync(conn, "SELECT COUNT(*) FROM battery_task_results" + where + ";", bind, token).ConfigureAwait(false);
+                List<BatteryTaskResult> rows = await SqliteCommandHelper.QueryAsync(conn,
+                    "SELECT * FROM battery_task_results" + where + " ORDER BY created_utc " + direction + ", id " + direction + SqliteCommandHelper.Page(offset, pageSize) + ";",
+                    bind, FromReader, token).ConfigureAwait(false);
+
+                EnumerationResult<BatteryTaskResult> result = new EnumerationResult<BatteryTaskResult>();
+                result.PageNumber = pageNumber;
+                result.PageSize = pageSize;
+                result.TotalRecords = total;
+                result.TotalPages = (int)Math.Ceiling((double)total / pageSize);
+                result.Objects = rows;
+                return result;
+            }
+        }
+
+        /// <inheritdoc />
         public async Task<int> DeleteByRunAsync(string runId, CancellationToken token = default)
         {
             if (String.IsNullOrEmpty(runId)) throw new ArgumentNullException(nameof(runId));

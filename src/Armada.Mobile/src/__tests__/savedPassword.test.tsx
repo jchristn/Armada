@@ -261,7 +261,7 @@ describe('sign-in screen', () => {
   }
 
   async function toPasswordStep(user: ReturnType<typeof userEvent.setup>) {
-    api.lookupTenants.mockResolvedValue({ tenants: [{ id: 'ten_1', name: 'Default' }] });
+    api.lookupTenants.mockResolvedValue({ tenants: [{ id: 'ten_1', name: 'Default' }], pageNumber: 1, pageSize: 100, totalPages: 1, totalRecords: 1 });
     await user.clear(screen.getByTestId('sign-in-email'));
     await user.type(screen.getByTestId('sign-in-email'), 'admin@armada');
     await user.press(screen.getByTestId('sign-in-continue'));

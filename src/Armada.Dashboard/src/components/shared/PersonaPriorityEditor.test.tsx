@@ -2,9 +2,11 @@ import { useState } from 'react';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import PersonaPriorityEditor from './PersonaPriorityEditor';
-import { listModelEndpoints } from '../../api/client';
+import { enumerateModelEndpoints, listModelEndpoints } from '../../api/client';
+import { asPage } from '../../test/asPage';
 
-vi.mock('../../api/client', () => ({ listModelEndpoints: vi.fn() }));
+vi.mock('../../api/client', () => ({ listModelEndpoints: vi.fn(), enumerateModelEndpoints: vi.fn() }));
+beforeEach(() => vi.mocked(enumerateModelEndpoints).mockImplementation((async () => asPage(await listModelEndpoints())) as never));
 beforeEach(() => vi.mocked(listModelEndpoints).mockResolvedValue([
   { id: 'mep_one', name: 'First API', kind: 'Inference', provider: 'XAI', model: 'same-model' },
   { id: 'mep_two', name: 'Second API', kind: 'Inference', provider: 'XAI', model: 'same-model' },

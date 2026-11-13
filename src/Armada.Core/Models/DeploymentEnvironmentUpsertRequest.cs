@@ -2,6 +2,7 @@ namespace Armada.Core.Models
 {
     using System.Collections.Generic;
     using Armada.Core.Enums;
+    using Armada.Core.Services;
 
     /// <summary>
     /// Create or update request for a deployment environment.
@@ -56,6 +57,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// Optional reusable verification definitions.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxConfigItems)]
         public List<DeploymentVerificationDefinition>? VerificationDefinitions { get; set; } = null;
 
         /// <summary>

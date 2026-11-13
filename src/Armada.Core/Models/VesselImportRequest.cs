@@ -2,6 +2,7 @@ namespace Armada.Core.Models
 {
     using System;
     using System.Collections.Generic;
+    using Armada.Core.Services;
 
     /// <summary>
     /// Request to import the candidates an operator kept from a discovered batch.
@@ -23,6 +24,7 @@ namespace Armada.Core.Models
         /// Candidate paths to import, exactly as returned in the batch items. Candidates not listed are recorded as
         /// skipped. Never null.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxRequestItems)]
         public List<string> Paths
         {
             get => _Paths;

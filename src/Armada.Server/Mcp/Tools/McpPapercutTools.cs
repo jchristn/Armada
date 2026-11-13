@@ -22,7 +22,7 @@ namespace Armada.Server.Mcp.Tools
         };
 
         private const int _DefaultLimit = 25;
-        private const int _MaxLimit = 200;
+        private const int _MaxLimit = PapercutSummaryResult.MaxRows;
         private const int _DefaultScanLimit = 500;
         private const int _MaxScanLimit = 5000;
 
@@ -138,7 +138,7 @@ namespace Armada.Server.Mcp.Tools
 
                     if (request.Ungrouped == true)
                     {
-                        return (object)new
+                        return (object)new PapercutSummaryResult
                         {
                             Scanned = events.Count,
                             Matched = papercuts.Count,
@@ -150,7 +150,7 @@ namespace Armada.Server.Mcp.Tools
                     }
 
                     List<PapercutGroup> groups = PapercutService.Group(papercuts);
-                    return (object)new
+                    return (object)new PapercutSummaryResult
                     {
                         Scanned = events.Count,
                         Matched = papercuts.Count,

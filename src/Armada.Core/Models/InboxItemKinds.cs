@@ -35,6 +35,15 @@ namespace Armada.Core.Models
         /// <summary>A CLI captain's permission prompt (for example a shell command) is waiting for an approver.</summary>
         public const string CliPermission = "cli_permission";
 
+        /// <summary>A model scorecard alert threshold was crossed (advisory; carries suggested actions).</summary>
+        public const string ModelAlert = "model_alert";
+
+        /// <summary>The latest attempt of background work failed and needs intervention.</summary>
+        public const string BackgroundJobFailed = "background_job_failed";
+
+        /// <summary>A Pending mission has waited for captain selection for a reason an operator must fix.</summary>
+        public const string SelectionBlocked = "selection_blocked";
+
         #endregion
     }
 }

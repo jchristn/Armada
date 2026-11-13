@@ -3,6 +3,7 @@ namespace Armada.Core.Models
     using System;
     using System.Collections.Generic;
     using Armada.Core.Enums;
+    using Armada.Core.Services;
 
     /// <summary>
     /// Structured record of a build, test, deploy, or related check execution.
@@ -153,6 +154,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// Discovered artifacts.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxConfigItems, Reason = "At most one per workflow profile ExpectedArtifacts entry; imports are validated on write")]
         public List<CheckRunArtifact> Artifacts { get; set; } = new List<CheckRunArtifact>();
 
         /// <summary>

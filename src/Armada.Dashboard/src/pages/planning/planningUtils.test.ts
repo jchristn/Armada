@@ -52,8 +52,6 @@ function captain(id: string, state: string, name = `Captain ${id}`): Captain {
     allowedPersonas: null,
     preferredPersona: null,
     state,
-    currentMissionId: null,
-    currentDockId: null,
     processId: null,
     recoveryAttempts: 0,
     lastHeartbeatUtc: null,

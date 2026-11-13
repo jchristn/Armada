@@ -8,8 +8,8 @@ namespace Armada.Core.Services
     /// <summary>Checks the integrated commit on its owning host and records an immutable verification receipt.</summary>
     public static class LandingVerification
     {
-        /// <summary>The integration gate for Armada itself, in addition to its configured checks.</summary>
-        public const string ArmadaCommand = "dotnet run --project \"src/Test.Automated\" -c Release -f net10.0 -- --suites Services.HandoffResilience,Services.Landing,Services.MergeQueue,Services.ReviewGate,Services.StallRecovery,Services.NoOpCompletion,E2E.LandingPipeline,E2E.WebSocket";
+        /// <summary>The smoke test gate for Armada itself (src/Test.Smoke), run in addition to its configured checks.</summary>
+        public const string ArmadaCommand = "dotnet test \"src/Test.Smoke/Test.Smoke.csproj\" -c Release -f net10.0";
 
         /// <summary>Resolve landing checks without changing the user's workflow profile.</summary>
         public static List<string> Commands(WorkflowProfile? profile, Vessel? vessel)
@@ -83,8 +83,9 @@ namespace Armada.Core.Services
                 bool passed = !result.TimedOut && result.ExitCode == 0 && unchanged && clean;
                 string status = result.TimedOut ? "TimedOut" : passed ? "Passed" : "Failed";
                 await RecordAsync(status, command, result.ExitCode, output, started).ConfigureAwait(false);
-                if (!passed) throw new InvalidOperationException("Landing verification " + status + " for commit " + sha + ": " + command
-                    + (!unchanged || !clean ? ". The check changed the commit or working tree; preserve and review the changes before retrying." : ". " + output[^Math.Min(4000, output.Length)..]));
+                if (!passed) throw new LandingVerificationException("Landing verification " + status + " for commit " + sha + ": " + command
+                    + (!unchanged || !clean ? ". The check changed the commit or working tree; preserve and review the changes before retrying." : ". " + output[^Math.Min(4000, output.Length)..]),
+                    status, command, result.TimedOut ? null : result.ExitCode, sha, !unchanged || !clean);
             }
             return sha;
 

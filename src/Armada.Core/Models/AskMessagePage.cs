@@ -1,6 +1,7 @@
 namespace Armada.Core.Models
 {
     using System.Collections.Generic;
+    using Armada.Core.Services;
 
     /// <summary>
     /// A page of thread messages in ascending sequence order.
@@ -12,6 +13,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// Messages, oldest first, each with ToolCalls, Proposal, and TrackedWork populated.
         /// </summary>
+        [CollectionBound(200, Reason = "AskMessageEnumerateRequest.PageSize is clamped to 1..200; send_ask_message recent messages hold at most 10.")]
         public List<AskMessage> Messages
         {
             get => _Messages;

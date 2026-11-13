@@ -41,6 +41,12 @@ namespace Armada.Server
         public Action? OnStopping { get; set; }
 
         /// <summary>
+        /// The mission and voyage black box (capture, sweeper, garbage collection, and the service every surface calls),
+        /// or null before <see cref="StartAsync"/>.
+        /// </summary>
+        public Armada.Core.BlackBox.BlackBoxRuntime? BlackBox => _BlackBox;
+
+        /// <summary>
         /// Replaces what an authorized <c>POST /api/v1/server/restart</c> does: when set, it runs instead of launching a
         /// replacement process and stopping this one, and returns true when the restart started. The route still
         /// requires a global admin before calling it. Null (the default) restarts for real. Tests set it so nothing
@@ -161,6 +167,7 @@ namespace Armada.Server
         private DataExpiryService? _DataExpiry = null;
         private RetentionService _Retention = null!;
         private StorageInventoryService _StorageInventory = null!;
+        private Armada.Core.BlackBox.BlackBoxRuntime? _BlackBox = null;
         private RemoteTunnelManager _RemoteTunnel = null!;
         private RemoteDashboardRelayService _RemoteDashboardRelay = null!;
         private PlanningSessionCoordinator _PlanningSessions = null!;
@@ -178,8 +185,12 @@ namespace Armada.Server
         private StageOutcomeAccessService _StageOutcomeAccess = null!;
         private ModelProbeService _ModelProbeService = null!;
         private ModelProbeAccessService _ModelProbeAccess = null!;
+        private ModelProfileAccessService _ModelProfileAccess = null!;
+        private ModelAlertService _ModelAlertService = null!;
+        private ModelAlertAccessService _ModelAlertAccess = null!;
         private BatteryRunService _BatteryRunService = null!;
         private BatteryAccessService _BatteryAccess = null!;
+        private UsageAccessService _UsageAccess = null!;
         private CheckRunService _CheckRunService = null!;
         private ObjectiveService _ObjectiveService = null!;
         private ReleaseService _ReleaseService = null!;
@@ -197,6 +208,8 @@ namespace Armada.Server
         private HarborMetricsService _HarborMetricsService = null!;
         private HarborJobControlService _HarborJobControl = null!;
         private HarborConnectionManager _HarborConnectionManager = null!;
+        private Armada.Core.Services.UsageCaptureService _UsageCapture = null!;
+        private Armada.Core.Services.UsageCaptureScheduler _UsageCaptureScheduler = null!;
         private CaptainLaunchRouter _LaunchRouter = null!;
         private HarborLinkEndpoint _HarborLinkEndpoint = null!;
         private IVesselService _VesselService = null!;
@@ -210,6 +223,7 @@ namespace Armada.Server
         private LoginRateLimiter _LoginRateLimiter = null!;
         private IAuthorizationService _AuthorizationService = null!;
         private IMissionService _MissionService = null!;
+        private UsageSelectionConfigurationService _UsageSelectionConfiguration = null!;
         private CaptainToolService _CaptainTools = null!;
 
         private Armada.Core.Services.Ask.AskThreadService _AskThreads = null!;
@@ -226,6 +240,7 @@ namespace Armada.Server
 
         private CancellationTokenSource _TokenSource = new CancellationTokenSource();
         private Task _HealthCheckTask = null!;
+        private Task _UsageCaptureTask = Task.CompletedTask;
         private Task? _McpListenTask = null;
         private int _HealthCheckCycles = 0;
         private DateTime _StartUtc = DateTime.UtcNow;
@@ -293,6 +308,8 @@ namespace Armada.Server
             await EnforceDefaultCredentialPolicyAsync().ConfigureAwait(false);
 
             // Initialize services
+            _UsageSelectionConfiguration = new UsageSelectionConfigurationService(_Settings, _Database, _Logging, enforcementAvailable: true);
+            await _UsageSelectionConfiguration.RecordRecoveryAsync().ConfigureAwait(false);
             _Git = new GitService(_Logging);
             IDockService dockService = new DockService(_Logging, _Database, _Settings, _Git);
             _Docks = dockService;
@@ -303,9 +320,24 @@ namespace Armada.Server
             IDefinitionOfDoneGate definitionOfDoneGate = new DefinitionOfDoneGate(_Logging);
             MissionService missionService = new MissionService(_Logging, _Database, _Settings, dockService, captainService, _PromptTemplateService, _Git, definitionOfDoneGate);
             _MissionService = missionService;
+
+            // Mission and voyage black box: one runtime shared by capture sites, background loops and every surface.
+            Armada.Core.BlackBox.DatabaseBlackBoxEventSink blackBoxEvents = new Armada.Core.BlackBox.DatabaseBlackBoxEventSink(_Database, _Logging);
+            blackBoxEvents.OnEmitted = (evt, payload) =>
+            {
+                _WebSocketHub?.BroadcastToTenant(evt.TenantId, evt.EventType, evt.Message, payload);
+                return Task.CompletedTask;
+            };
+            _BlackBox = Armada.Core.BlackBox.BlackBoxRuntime.Create(_Database, _Settings, _Logging, new BuildIdentityBlackBoxVersionProvider(), blackBoxEvents);
+            missionService.BlackBox = _BlackBox.Capture;
             IVoyageService voyageService = new VoyageService(_Logging, _Database);
             IEscalationService escalationService = new EscalationService(_Logging, _Database, _Settings);
             AdmiralService admiralService = new AdmiralService(_Logging, _Database, _Settings, captainService, missionService, voyageService, dockService, escalationService);
+            // Dispatch returns once a mission is admitted; dock provisioning and launch continue in the background, so neither
+            // create requests nor the health check wait on per-repository git work.
+            admiralService.LaunchInBackground = true;
+            // Concurrency limit overruns reach the owning tenant's sockets; one without a tenant reaches only global admins.
+            admiralService.OnConcurrencyEvent = evt => _WebSocketHub?.BroadcastToTenant(evt.TenantId, evt.EventType, evt.Message, evt);
             _Admiral = admiralService;
             _MergeQueue = new MergeQueueService(_Logging, _Database, _Settings, _Git);
             _JobService = new Armada.Core.Services.JobService(_Database, _Logging);
@@ -411,6 +443,13 @@ namespace Armada.Server
             _Logging.Debug(_Header + "persona and pipeline seeding completed");
 
             await _EnvironmentService.SeedDefaultsAsync().ConfigureAwait(false);
+
+            // Incidents and runbook executions recorded only as snapshot events (before their tables existed) are
+            // imported once, so their lists page in the database.
+            int importedIncidents = await _IncidentService.ImportLegacySnapshotsAsync().ConfigureAwait(false);
+            int importedExecutions = await _RunbookService.ImportLegacyExecutionSnapshotsAsync().ConfigureAwait(false);
+            if (importedIncidents > 0 || importedExecutions > 0)
+                _Logging.Info(_Header + "imported " + importedIncidents + " incident(s) and " + importedExecutions + " runbook execution(s) from snapshot events");
             _Logging.Debug(_Header + "deployment environment seeding completed");
 
             _StageOutcomeService = new StageOutcomeService(_Database, _Logging);
@@ -421,6 +460,36 @@ namespace Armada.Server
             // Fleet actions: runner (owned here, started below) and service; seed built-ins into every tenant.
             FleetActionSeedService fleetActionSeeder = new FleetActionSeedService(_Database, _Logging);
             _FleetActionRunner = new FleetActionRunner(_Database, _Settings, _Logging, new AdmiralFleetActionMissionDispatcher(_Database, _Admiral), new LocalHostCommandExecutor(), _HarborConnectionManager);
+
+            // Account usage capture (disabled by default): the Admiral host runs the probe helper in-process
+            // for local captures, Harbor captures go over the link, and every attempt owns its own dedicated
+            // UsageProbe job. Auto mode runs only the verified read-only runtime probes of the registry (phase 3:
+            // Codex app-server; every other runtime answers Unsupported with its reason); a Custom command runs
+            // through the host helper as specified.
+            Armada.Core.Services.UsageAccountResolver usageAccounts = new Armada.Core.Services.UsageAccountResolver(_Settings.DataDirectory, _Logging);
+            missionService.UsageSelectionLocalHostId = usageAccounts.HostId;
+            while (await _Database.CaptainSelections.AdoptUntrackedExecutionsAsync(1000, usageAccounts.HostId, _TokenSource.Token).ConfigureAwait(false) == 1000)
+                _TokenSource.Token.ThrowIfCancellationRequested();
+            Armada.Runtimes.Usage.UsageProbeRegistry usageProbes = new Armada.Runtimes.Usage.UsageProbeRegistry(_Logging, usageAccounts);
+            Armada.Runtimes.UsageProbeHostRunner usageProbeHostRunner = new Armada.Runtimes.UsageProbeHostRunner(_Logging, usageAccounts, usageProbes.Resolve);
+            Armada.Core.Services.LocalHostCommandExecutor usageLocalCommands = new Armada.Core.Services.LocalHostCommandExecutor { UsageProbe = usageProbeHostRunner };
+            _UsageCapture = new Armada.Core.Services.UsageCaptureService(
+                _Database,
+                _Settings,
+                usageAccounts,
+                usageLocalCommands,
+                _HarborConnectionManager,
+                _Logging,
+                lifetime: _TokenSource.Token);
+            _UsageCaptureScheduler = new Armada.Core.Services.UsageCaptureScheduler(
+                _UsageCapture,
+                _Database,
+                usageAccounts,
+                _Settings,
+                _HarborConnectionManager,
+                _Logging);
+            _UsageAccess = new UsageAccessService(_Database, _UsageCapture, _UsageCaptureScheduler, _Settings.UsageCapture, _HarborConnectionManager);
+            _UsageCapture.SnapshotCommitted += (snapshot, captainIds) => _WebSocketHub?.BroadcastToTenant(snapshot.TenantId, "usage.snapshot", new { tenantId = snapshot.TenantId, snapshotId = snapshot.Id, hostId = snapshot.HostId, runtime = snapshot.Runtime, provider = snapshot.Provider, captainIds, capturedUtc = snapshot.CapturedUtc, status = snapshot.Status });
             _FleetActionService = new FleetActionService(_Database, _Settings, _FleetActionRunner, fleetActionSeeder, _Logging);
             try
             {
@@ -492,6 +561,11 @@ namespace Armada.Server
             admiralService.OnGetToolWaitStartedUtc = _AgentLifecycle.GetToolWaitStartedUtc;
             admiralService.OnIsRemoteProcessTracked = _HarborConnectionManager.IsProcessTracked;
             admiralService.OnIsProcessAwaitingReconnect = _HarborConnectionManager.IsProcessAwaitingReconnect;
+            // A captain on a Harbor that lost its link is held as unreachable, not judged stalled, and reconciled on reconnect.
+            admiralService.HarborLinks = _HarborConnectionManager;
+            // Starvation and gate changes reach the owning tenant's sockets.
+            missionService.OnConcurrencyEvent = evt => _WebSocketHub?.BroadcastToTenant(evt.TenantId, evt.EventType, evt.Message, evt);
+            missionService.OnWaitingGateChanged = change => _WebSocketHub?.BroadcastToTenant(change.TenantId, "mission.waiting_gate_changed", change);
             missionService.OnGetMissionOutput = _AgentLifecycle.GetAndClearMissionOutput;
             missionService.OnPeekMissionOutput = _AgentLifecycle.PeekMissionOutput;
             missionService.OnTakeMissionTelemetry = _AgentLifecycle.TakeMissionTelemetry;
@@ -509,10 +583,13 @@ namespace Armada.Server
             // Split mode: a mission's dock goes on the Harbor routing picks for it (when that Harbor can serve the vessel),
             // and every later operation on a Harbor-hosted dock (instruction files, git, landing, reclaim) runs there.
             DockHostResolver dockHosts = new DockHostResolver(_Git, _Logging, _HarborConnectionManager);
+            if (_BlackBox != null) _BlackBox.Inspector.Hosts = dockHosts;
             if (dockService is DockService dockServiceImpl) dockServiceImpl.Hosts = dockHosts;
             if (captainService is CaptainService captainServiceImpl) captainServiceImpl.DockHosts = dockHosts;
             missionService.DockHosts = dockHosts;
             missionService.ResolveDockPlacementAsync = _AgentLifecycle.ResolveDockPlacementAsync;
+            missionService.ResolveUsageDockPlacementAsync = (mission, captain, vessel, host) =>
+                _AgentLifecycle.ResolveUsageDockPlacementAsync(mission, captain, vessel, host, usageAccounts.HostId, _TokenSource.Token);
             _MissionLanding.DockHosts = dockHosts;
             _LandingService.DockHosts = dockHosts;
             _LandingService.Docks = dockService;
@@ -525,6 +602,23 @@ namespace Armada.Server
                 IsCompletionInFlight = missionService.IsCompletionInFlight
             };
             admiralService.OnLandingIntegritySweep = landingIntegrity.SweepAsync;
+
+            // Every service that writes a mission or voyage failure records it in the black box.
+            Armada.Core.BlackBox.IBlackBoxCapture blackBoxCapture = _BlackBox!.Capture;
+            if (blackBoxCapture is Armada.Core.BlackBox.BlackBoxCapture concreteCapture)
+            {
+                concreteCapture.Harbors = _HarborConnectionManager;
+                concreteCapture.MissionStatusChanged = EmitMissionStatusChangedAsync;
+            }
+            admiralService.BlackBox = blackBoxCapture;
+            admiralService.DispatchAdvisor = _BlackBox.Insights.DispatchAdvisor;
+            if (captainService is CaptainService concreteCaptains) concreteCaptains.BlackBox = blackBoxCapture;
+            if (voyageService is VoyageService concreteVoyages) concreteVoyages.BlackBox = blackBoxCapture;
+            if (_MergeQueue is MergeQueueService concreteQueue) concreteQueue.BlackBox = blackBoxCapture;
+            _LandingService.BlackBox = blackBoxCapture;
+            _MissionRecovery.BlackBox = blackBoxCapture;
+            _MissionLanding.BlackBox = blackBoxCapture;
+            landingIntegrity.BlackBox = blackBoxCapture;
 
             // Evaluate (probe-only model probes): each probe runs through the captain's own runtime as a Harbor job,
             // under the evaluation budget and concurrency limits. Nothing it records changes routing or captain settings.
@@ -541,6 +635,9 @@ namespace Armada.Server
             });
             _ModelProbeService = new ModelProbeService(_Database, _Logging, modelProbeExecutor, () => _Settings.Evaluation, modelProbeProvenance);
             _ModelProbeAccess = new ModelProbeAccessService(_Database, _ModelProbeService, _ModelEndpointService, _Logging);
+            _ModelProfileAccess = new ModelProfileAccessService(_Database, _Logging);
+            _ModelAlertService = new ModelAlertService(_Database, _Logging, () => _Settings.ModelAlerts);
+            _ModelAlertAccess = new ModelAlertAccessService(_Database, _ModelAlertService, () => _Settings.ModelAlerts, () => _Settings.SaveAsync(), _ModelProbeAccess, _Logging);
             try
             {
                 int interrupted = await _ModelProbeService.RecoverInterruptedAsync().ConfigureAwait(false);
@@ -554,6 +651,7 @@ namespace Armada.Server
             // Fixture battery: packs are data under battery/; each task is reset, dispatched as a real mission on the pack's
             // fixture vessel under the ModelEvaluation pipeline, and graded. It shares Evaluate's concurrency gate.
             BatteryPackCatalog batteryCatalog = new BatteryPackCatalog(() => _Settings.Evaluation.BatteryDirectory);
+            SeedBundledBatteryPacks(batteryCatalog);
             BatteryFixtureService batteryFixtures = new BatteryFixtureService(_Database, _Logging, Path.Combine(_Settings.DataDirectory, "battery"));
             AdmiralBatteryTaskDispatcher batteryDispatcher = new AdmiralBatteryTaskDispatcher(_Admiral, _Database, _Logging)
             {
@@ -562,6 +660,8 @@ namespace Armada.Server
             };
             _BatteryRunService = new BatteryRunService(_Database, _Logging, batteryCatalog, batteryFixtures, batteryDispatcher, () => _Settings.Evaluation, _ModelProbeService.Gate);
             _BatteryAccess = new BatteryAccessService(_Database, _BatteryRunService, _Logging);
+            // Full Evaluate runs its battery through this service, under the Evaluate run's evaluation slot.
+            _ModelProbeService.Battery = _BatteryRunService;
             try
             {
                 int interruptedBattery = await _BatteryRunService.RecoverInterruptedAsync().ConfigureAwait(false);
@@ -599,6 +699,8 @@ namespace Armada.Server
 
             _App = new Webserver(wsSettings, DashboardDefaultRouteAsync);
             _App.Events.Logger = (string message) => _Logging.Debug(_Header + message);
+            // Request bodies that do not bind name the field and the accepted values instead of .NET types.
+            _App.Serializer = new FriendlyJsonSerializationHelper(_App.Serializer);
             // A duplicate name/email/key (or a provider unique-constraint violation) escaping any API route is a typed
             // 409 Conflict, never a 500 carrying provider text.
             _App.Middleware.Add(RouteErrorMapper.DuplicateEntityMiddlewareAsync);
@@ -712,6 +814,7 @@ namespace Armada.Server
             _WebSocketHub.MissionActivityLookup = _AgentLifecycle.MissionActivity.Get;
             _MissionLanding.SetWebSocketHub(_WebSocketHub);
             missionService.OnReviewRequested = _WebSocketHub.BroadcastApprovalNeeded;
+            missionService.OnCaptainSelectionChanged = _WebSocketHub.BroadcastCaptainSelectionChange;
             _CheckRunService.OnCheckRunChanged = _WebSocketHub.BroadcastCheckRunChange;
             _ObjectiveService.OnObjectiveChanged = _WebSocketHub.BroadcastObjectiveChange;
             _DeploymentService.OnDeploymentChanged = _WebSocketHub.BroadcastDeploymentChange;
@@ -779,6 +882,12 @@ namespace Armada.Server
             _AgentLifecycle.SetCliPermissionService(_CliPermissions);
             _WebSocketHub.SetCliPermissionService(_CliPermissions);
             _WebSocketHub.SetMissionService(_MissionService);
+            _WebSocketHub.SetBlackBoxService(_BlackBox?.Service, _BlackBox?.Capture);
+
+            // Ask Armada black box cards: read as the thread's owner; mentioned missions with an entry link their card.
+            _AskThreads.Snapshots.BlackBox = _BlackBox?.Service;
+            _AskActions.BlackBox = _BlackBox?.Service;
+            _AskTurns.OnConversationText = (thread, text) => _AskActions.LinkMentionedBlackBoxesAsync(thread, text);
             _AskThreads.SessionTokensAvailable = _SessionTokenService != null;
             _AskThreads.HarborPromptSupport = (tenantId, runtime) => _HarborConnectionManager != null && _HarborConnectionManager.AnyHarborCanPrompt(tenantId, runtime);
 
@@ -789,6 +898,10 @@ namespace Armada.Server
             _PushDevices = new Armada.Core.Services.Push.PushDeviceService(_Database, _Settings, _Logging);
             _WebSocketHub.SetPushNotificationService(_PushNotifications);
             Armada.Core.Services.Push.PushNotificationService pushNotifications = _PushNotifications;
+            _ModelAlertService.AlertRaised = alert =>
+            {
+                if (_Settings.ModelAlerts.PushEnabled) pushNotifications.OnModelAlertRaised(alert);
+            };
             _AskThreads.OnProposalCreated = proposal => pushNotifications.OnAskProposalCreated(proposal);
             _PushNotifications.Start();
             _AskTracker.ExpireProposals = async (CancellationToken expireToken) =>
@@ -856,6 +969,15 @@ namespace Armada.Server
             _McpServer.RateLimits.ToolCallsPerSecond = _Settings.Mcp.ToolCallsPerSecond;
             _McpServer.AuthenticationHandler = AuthenticateMcpRequestAsync;
             RegisterMcpTools();
+            // AC4: a usage tool call that omits a declared required argument is a JSON-RPC invalid-params protocol
+            // error (-32602), not an isError tool result. Other tools keep Voltaic's default dispatch unchanged.
+            if (!Armada.Server.Mcp.McpRequiredArgumentGuard.Install(_McpServer, Armada.Server.Mcp.Tools.McpUsageTools.ProtocolRequiredArguments))
+                _Logging.Warn(_Header + "MCP required-argument guard not installed; the MCP library's tools/call dispatcher could not be captured");
+            // Black box resources and prompts (Voltaic resource templates and prompts; plan 8.2).
+            if (_BlackBox != null) Armada.Server.Mcp.Tools.McpBlackBoxResources.Register(_McpServer, _BlackBox.Service);
+            // Black box recovery runs and recommendation applies execute their recorded action through the registered
+            // MCP tool handlers, as the caller.
+            if (_BlackBox != null) _BlackBox.Service.ActionExecutor = new BlackBoxMcpActionExecutor(_AskActions);
 
             StartMcpListener();
             _Logging.Info(_Header + "MCP server started on port " + _Settings.McpPort);
@@ -917,9 +1039,28 @@ namespace Armada.Server
             }
 
             _StorageInventory.Start();
+            _BlackBox?.Background.Start();
+            _BlackBox?.Insights.Background.Start();
+            _ModelAlertService.Start();
+
+            // Rebuild the default-on capture groups now so the
+            // scheduler starts from a complete picture (with randomized initial due times).
+            try
+            {
+                await _UsageCaptureScheduler.RebuildAsync(_TokenSource.Token).ConfigureAwait(false);
+                if (_Settings.UsageCapture.EffectiveEnabled)
+                    _Logging.Debug(_Header + "usage capture scheduler started with " + _UsageCaptureScheduler.Groups().Count + " group(s)");
+            }
+            catch (Exception ex)
+            {
+                _Logging.Warn(_Header + "usage capture scheduler startup error: " + ex.ToString());
+            }
 
             // Start health check loop
             _HealthCheckTask = HealthCheckLoopAsync(_TokenSource.Token);
+            // Usage capture runs on its own loop: captures must stay fresh even while a health check is busy, because
+            // captain selection treats stale usage as unknown.
+            _UsageCaptureTask = UsageCaptureLoopAsync(_TokenSource.Token);
         }
 
         /// <summary>
@@ -963,6 +1104,17 @@ namespace Armada.Server
             }
 
             _VesselHealthService?.Dispose();
+            try
+            {
+                _BlackBox?.Background.StopAsync().GetAwaiter().GetResult();
+                _BlackBox?.Insights.Background.StopAsync().GetAwaiter().GetResult();
+                _ModelAlertService?.StopAsync().GetAwaiter().GetResult();
+                _BlackBox?.Dispose();
+            }
+            catch (Exception ex)
+            {
+                _Logging.Warn(_Header + "error stopping the black box on shutdown: " + ex.Message);
+            }
             _TokenSource.Cancel();
             _AskTracker?.Stop();
             _PushNotifications?.Dispose();
@@ -971,6 +1123,7 @@ namespace Armada.Server
             _RemoteDashboardRelay?.DisposeAsync().GetAwaiter().GetResult();
             _McpServer?.Stop();
             _StorageInventory?.Dispose();
+            _UsageSelectionConfiguration?.Dispose();
             _Database?.Dispose();
             _TelemetryHost?.Dispose();
             OnStopping?.Invoke();
@@ -1019,6 +1172,28 @@ namespace Armada.Server
         #endregion
 
         #region Private-Methods
+
+        private void SeedBundledBatteryPacks(BatteryPackCatalog catalog)
+        {
+            // A managed battery directory (Evaluation.BatteryDirectory or ARMADA_BATTERY_DIR, which the server image sets
+            // under the data directory) is writable and survives upgrades; fill it with the bundled packs it lacks.
+            string? target = catalog.ResolveExplicitDirectory();
+            if (target == null) return;
+            BatteryPackSeedResult seed = BatteryPackSeeder.Seed(BatteryPackCatalog.BundledDirectory(), target);
+            if (seed.SkippedReason != null)
+            {
+                string message = _Header + "battery packs not seeded into " + target + ": " + seed.SkippedReason;
+                if (seed.SkippedReason.StartsWith("Cannot", StringComparison.Ordinal)) _Logging.Warn(message);
+                else _Logging.Info(message);
+                return;
+            }
+
+            _Logging.Info(_Header + "battery directory " + target + ": seeded " + seed.Added.Count + " bundled pack(s)"
+                + (seed.Added.Count > 0 ? " (" + String.Join(", ", seed.Added) + ")" : "")
+                + ", kept " + seed.Preserved.Count + " existing, " + seed.Retired.Count + " deleted by an operator");
+            foreach (string failure in seed.Failed)
+                _Logging.Warn(_Header + "could not seed battery pack " + failure + " (the directory must be writable by the Admiral's user)");
+        }
 
         private void StartMcpListener()
         {
@@ -1398,13 +1573,22 @@ namespace Armada.Server
                 .Register(_App, authenticate, _AuthorizationService);
 
             // Tenants, users, credentials
-            new TenantRoutes(_Database, _JsonOptions)
+            new TenantRoutes(_Database, _JsonOptions) { BlackBoxHooks = _BlackBox?.Hooks }
                 .Register(_App, authenticate, _AuthorizationService);
 
             // Status, health, doctor, settings, server control
             SlotManager slotManager = new SlotManager(Path.Combine(_Settings.DataDirectory, "bin"), retentionCount: _Settings.RebuildSlotRetentionCount);
             ServerRebuildService rebuildService = new ServerRebuildService(_Database, _Settings, slotManager, new LocalHostCommandExecutor(), _Logging, () => Stop(), _HarborConnectionManager);
             new StatusRoutes(_Database, _Settings, _Admiral, () => Stop(), _StartUtc, _JsonOptions, _Logging, slotManager, rebuildService, _RemoteTunnel.GetStatus, _RemoteTunnel.ReloadAsync, () => RestartOverride?.Invoke())
+            {
+                BlackBox = _BlackBox,
+                UsageSelectionConfiguration = _UsageSelectionConfiguration,
+                OnUsageCaptureSettingsChanged = async () =>
+                {
+                    _UsageCapture.Invalidate();
+                    await _UsageCaptureScheduler.RebuildAsync().ConfigureAwait(false);
+                }
+            }
                 .Register(_App, authenticate, _AuthorizationService);
 
             new StorageRoutes(_StorageInventory, _JsonOptions).Register(_App, authenticate, _AuthorizationService);
@@ -1418,6 +1602,7 @@ namespace Armada.Server
             vesselContextService.LaunchRouter = _LaunchRouter;
             vesselContextService.PlaceDockAsync = _AgentLifecycle.ResolveDockPlacementAsync;
             new VesselRoutes(_Database, _VesselReadinessService, _LandingPreviewService, EmitEventAsync, _JsonOptions, _Docks, vesselContextService, _Git, _Settings, _VesselService, _ManualLandingReconciler, _VesselHosts, _Admiral)
+                { BlackBox = _BlackBox?.Capture, BlackBoxHooks = _BlackBox?.Hooks }
                 .Register(_App, authenticate, _AuthorizationService);
 
             // Vessel import (bulk onboarding)
@@ -1462,6 +1647,14 @@ namespace Armada.Server
 
             // Evaluate (probe-only Quick model probes) and its runs
             new ModelProbeRoutes(_ModelProbeAccess, _JsonOptions)
+                .Register(_App, authenticate, _AuthorizationService);
+
+            // Model profiles (the model as served, with immutable revisions; advisory)
+            new ModelProfileRoutes(_ModelProfileAccess, _JsonOptions)
+                .Register(_App, authenticate, _AuthorizationService);
+
+            // Model alerts (scorecard thresholds crossed, with suggested actions; advisory)
+            new ModelAlertRoutes(_ModelAlertAccess, _JsonOptions)
                 .Register(_App, authenticate, _AuthorizationService);
 
             // Fixture battery packs and runs
@@ -1519,6 +1712,8 @@ namespace Armada.Server
                 .Register(_App, authenticate, _AuthorizationService);
 
             // Token usage
+            new UsageRoutes(_UsageAccess, _JsonOptions).Register(_App, authenticate, _AuthorizationService);
+            new CaptainSelectionRoutes(new CaptainSelectionAccessService(_Database, _MissionService, _Settings), _JsonOptions).Register(_App, authenticate, _AuthorizationService);
             new TokenUsageRoutes(_Database, _JsonOptions)
                 .Register(_App, authenticate, _AuthorizationService);
 
@@ -1530,13 +1725,31 @@ namespace Armada.Server
             new VoyageRoutes(_Database, _Admiral, EmitEventAsync, _WebSocketHub, _Logging, _ObjectiveService, _JsonOptions, _MissionService)
                 .Register(_App, authenticate, _AuthorizationService);
 
+            // Mission tree, waits and concurrency reports
+            new ConcurrencyRoutes(_Database).Register(_App, authenticate, _AuthorizationService);
+
             // Missions
             new MissionRoutes(_Database, _Admiral, _MissionService, _Settings, _Git, _LandingService, _LandingPreviewService, _GitHubIntegrationService, EmitEventAsync, EmitMissionStatusChangedAsync, _MissionLanding.HandleMissionCompleteAsync, _WebSocketHub, _Logging, _JsonOptions)
-                { MissionActivityLookup = _AgentLifecycle.MissionActivity.Get, DockHosts = new DockHostResolver(_Git, _Logging, _HarborConnectionManager) }
+                { MissionActivityLookup = _AgentLifecycle.MissionActivity.Get, DockHosts = new DockHostResolver(_Git, _Logging, _HarborConnectionManager), BlackBox = _BlackBox?.Capture, BlackBoxHooks = _BlackBox?.Hooks }
+                .Register(_App, authenticate, _AuthorizationService);
+
+            // Black box prevention, forensics and operations reads. Registered before BlackBoxRoutes so the literal
+            // /api/v1/blackbox/recovery-stats is matched before GET /api/v1/blackbox/{id}.
+            if (_BlackBox != null) new BlackBoxInsightRoutes(_BlackBox.Insights.Service).Register(_App, authenticate, _AuthorizationService);
+
+            // Mission and voyage black box
+            new BlackBoxRoutes(_BlackBox?.Service, _JsonOptions)
                 .Register(_App, authenticate, _AuthorizationService);
 
             // Captains
             new CaptainRoutes(_Database, _Admiral, _Settings, _AgentLifecycle, _CaptainTools, EmitEventAsync, _JsonOptions, _PlanningSessions, _ObjectiveRefinementSessions)
+            {
+                OnUsageCaptureConfigurationChanged = async () =>
+                {
+                    _UsageCapture.Invalidate();
+                    await _UsageCaptureScheduler.RebuildAsync().ConfigureAwait(false);
+                }
+            }
                 .Register(_App, authenticate, _AuthorizationService);
 
             // Runtime helpers
@@ -1704,14 +1917,25 @@ namespace Armada.Server
 
         private static Dictionary<string, string?> ExtractHeaders(System.Collections.Specialized.NameValueCollection headers)
         {
+            // The captured header map is bounded (RequestHistoryCaptureInput, MaxConfigItems): past the limit the rest are
+            // counted in an explicit marker entry instead of being kept.
             Dictionary<string, string?> results = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+            int omitted = 0;
             foreach (string? key in headers.AllKeys)
             {
                 if (String.IsNullOrWhiteSpace(key)) continue;
+                if (results.Count >= CollectionLimits.MaxConfigItems - 1 && !results.ContainsKey(key))
+                {
+                    omitted++;
+                    continue;
+                }
                 results[key] = headers.Get(key);
             }
+            if (omitted > 0) results[_OmittedHeadersKey] = omitted.ToString(System.Globalization.CultureInfo.InvariantCulture);
             return results;
         }
+
+        private const string _OmittedHeadersKey = "X-Armada-Omitted-Headers";
 
         private string? ReadBodySnapshot(string? contentType, long contentLength, Func<string?> reader)
         {
@@ -1937,7 +2161,16 @@ namespace Armada.Server
                 // The call's token (cancelled when the client cancels or drops the call) flows to handlers that wait,
                 // such as cli_permission_prompt. Set inside this async lambda, so it never leaks to the caller's flow.
                 McpToolHelpers.SetCallToken(callToken);
-                return await handler(args).ConfigureAwait(false);
+                try
+                {
+                    return await handler(args).ConfigureAwait(false);
+                }
+                catch (CollectionLimitExceededException limit)
+                {
+                    // A collection over its limit is a typed InvalidArgument (Code CollectionLimitExceeded), never a
+                    // generic tool failure.
+                    return McpToolError.FromException(limit);
+                }
             });
         }
 
@@ -2016,7 +2249,15 @@ namespace Armada.Server
                 _HarborJobControl,
                 _StageOutcomeAccess,
                 _ModelProbeAccess,
-                _BatteryAccess);
+                _BatteryAccess,
+                _BlackBox?.Service,
+                _BlackBox?.Capture,
+                _BlackBox?.Hooks,
+                _BlackBox?.Insights.Service,
+                _ModelProfileAccess,
+                _ModelAlertAccess,
+                _UsageAccess,
+                _UsageSelectionConfiguration);
         }
 
         /// <summary>
@@ -2194,8 +2435,37 @@ namespace Armada.Server
             return null;
         }
 
+        // Usage capture scheduler: rebuild the groups and start the due captures. Every attempt is its own dedicated
+        // UsageProbe job, never a captain launch slot or state change. The tick is unconditional: a tick that observes the
+        // switch turned off invalidates the generation and cancels the probes it still has in flight, which a call skipped
+        // while capture is disabled could never do.
+        private async Task UsageCaptureLoopAsync(CancellationToken token)
+        {
+            while (!token.IsCancellationRequested)
+            {
+                try
+                {
+                    await Task.Delay(_Settings.HeartbeatIntervalSeconds * 1000, token).ConfigureAwait(false);
+                    await _UsageCaptureScheduler.TickAsync(token).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (token.IsCancellationRequested) { break; }
+                catch (Exception usageEx) { _Logging.Warn(_Header + "usage capture scheduling error: " + usageEx.Message); }
+            }
+        }
+
         private async Task HealthCheckLoopAsync(CancellationToken token)
         {
+            // Waits a previous server run left open end at this restart; the next evaluation opens fresh ones.
+            try
+            {
+                int closed = await _Admiral.CloseInterruptedWaitsAsync(token).ConfigureAwait(false);
+                if (closed > 0) _Logging.Info(_Header + "closed " + closed + " mission wait interval(s) left open by the previous run");
+            }
+            catch (Exception ex)
+            {
+                _Logging.Warn(_Header + "closing interrupted mission waits failed: " + ex.Message);
+            }
+
             // Reset captains left in Working state with dead processes from previous server run
             try
             {
@@ -2278,6 +2548,14 @@ namespace Armada.Server
                             try { _DataExpiry.RetentionDays = _Settings.DataRetentionDays; await _DataExpiry.PurgeExpiredDataAsync(token).ConfigureAwait(false); }
                             catch (Exception expiryEx) when (!(expiryEx is OperationCanceledException)) { _Logging.Warn(_Header + "data expiry error: " + expiryEx.Message); }
                         }
+
+                        // Wait storage uses its independent concurrency retention policy on every provider.
+                        try { await _Database.MissionWaitIntervals.DeleteExpiredAsync(DateTime.UtcNow.AddDays(-_Settings.Concurrency.WaitIntervalRetentionDays), token).ConfigureAwait(false); }
+                        catch (Exception waitExpiryEx) when (!(waitExpiryEx is OperationCanceledException)) { _Logging.Warn(_Header + "mission wait expiry error: " + waitExpiryEx.Message); }
+
+                        // Selection history keeps UsageSelection.DecisionRetentionDays on every provider; live and debt-bearing decisions stay.
+                        try { await new CaptainSelectionRetentionService(_Database).PruneAsync(DateTime.UtcNow, _Settings.EffectiveUsageSelection.DecisionRetentionDays, token: token).ConfigureAwait(false); }
+                        catch (Exception selectionExpiryEx) when (!(selectionExpiryEx is OperationCanceledException)) { _Logging.Warn(_Header + "selection history expiry error: " + selectionExpiryEx.Message); }
 
                         await PurgeExpiredRequestHistoryAsync(token).ConfigureAwait(false);
 

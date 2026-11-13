@@ -2,6 +2,7 @@ namespace Armada.Core.Models
 {
     using System;
     using System.Collections.Generic;
+    using Armada.Core.Services;
 
     /// <summary>
     /// Query for Armada historical timeline aggregation: the standard <see cref="EnumerationQuery"/> paging (PageNumber,
@@ -68,6 +69,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// Optional source-type filters.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxConfigItems)]
         public List<string> SourceTypes { get; set; } = new List<string>();
 
         /// <summary>

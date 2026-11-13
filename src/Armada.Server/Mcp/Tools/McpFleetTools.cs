@@ -30,7 +30,7 @@ namespace Armada.Server.Mcp.Tools
         {
             register(
                 "get_fleet",
-                "Get details of a specific fleet including its vessels",
+                "Get one fleet and its vessel count (VesselCount). Vessels are not embedded: page them with enumerate entityType vessels and fleetId.",
                 new
                 {
                     type = "object",
@@ -47,8 +47,10 @@ namespace Armada.Server.Mcp.Tools
                     AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     Fleet? fleet = await database.Fleets.ReadAsync(fleetId).ConfigureAwait(false);
                     if (fleet == null || !CallerCanAccess(fleet, caller)) return (object)McpToolError.NotFound("Fleet not found");
-                    List<Vessel> vessels = await database.Vessels.EnumerateByFleetAsync(fleetId).ConfigureAwait(false);
-                    return (object)new { Fleet = fleet, Vessels = vessels };
+                    // Vessels are not embedded: count them in the caller's scope; page them with enumerate entityType vessels + fleetId.
+                    EnumerationQuery countQuery = new EnumerationQuery { FleetId = fleetId, PageSize = 1 };
+                    EnumerationResult<Vessel> vesselPage = await EnumerationScope.EnumerateScopedAsync(caller, countQuery, q => database.Vessels.EnumerateAsync(q), (t, q) => database.Vessels.EnumerateAsync(t, q), (t, u, q) => database.Vessels.EnumerateAsync(t, u, q)).ConfigureAwait(false);
+                    return (object)new FleetDetailResponse { Fleet = fleet, VesselCount = vesselPage.TotalRecords };
                 });
 
             register(
@@ -144,7 +146,7 @@ namespace Armada.Server.Mcp.Tools
                     type = "object",
                     properties = new
                     {
-                        ids = new { type = "array", items = new { type = "string" }, description = "List of fleet IDs to delete (flt_ prefix)" }
+                        ids = new { type = "array", items = new { type = "string" }, description = "List of fleet IDs to delete (flt_ prefix; at most 1000)" }
                     },
                     required = new[] { "ids" }
                 },
@@ -153,6 +155,7 @@ namespace Armada.Server.Mcp.Tools
                     DeleteMultipleArgs request = JsonSerializer.Deserialize<DeleteMultipleArgs>(args!.Value, _JsonOptions)!;
                     if (request.Ids == null || request.Ids.Count == 0)
                         return (object)McpToolError.InvalidArgument("ids is required and must not be empty");
+                    CollectionLimits.RequireRequestItems(request.Ids, "ids");
 
                     AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     DeleteMultipleResult result = new DeleteMultipleResult();

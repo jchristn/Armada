@@ -28,7 +28,7 @@ namespace Test.Shared.Suites.Tui.Build
                 stub.Json("POST", "/api/v1/fleets", "{\"Id\":\"flt_new\",\"Name\":\"Data\",\"Active\":true}");
                 stub.Json("PUT", "/api/v1/fleets/flt_web", "{\"Id\":\"flt_web\",\"Name\":\"Web2\",\"Active\":true}");
                 stub.On("DELETE", "/api/v1/fleets/flt_ops", b => BuildStubs.NoContent());
-                stub.Json("GET", "/api/v1/fleets/flt_new", "{\"Fleet\":{\"Id\":\"flt_new\",\"Name\":\"Data\"},\"Vessels\":[]}");
+                stub.Json("GET", "/api/v1/fleets/flt_new", "{\"Fleet\":{\"Id\":\"flt_new\",\"Name\":\"Data\"},\"VesselCount\":0}");
                 using (TuiTestHost host = TuiCase.SignedIn(160, 45, "/vessels?tab=fleets", stub))
                 {
                     AssertTrue(host.WaitForText("Frontend repos"), "rows\n" + host.Screen());

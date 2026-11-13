@@ -29,6 +29,10 @@ namespace Armada.Core.Services.Ask
         {
             if (current == null) throw new ArgumentNullException(nameof(current));
             List<AskMilestone> milestones = new List<AskMilestone>();
+
+            // A black box card is a read-only reference to a failure, not work this conversation started: it posts no
+            // milestones and so never starts a report turn.
+            if (current.EntityType == AskTrackedEntityTypeEnum.BlackBox) return milestones;
             string label = Label(current);
 
             if (previous != null)
@@ -127,6 +131,7 @@ namespace Armada.Core.Services.Ask
                 case AskTrackedEntityTypeEnum.Mission: noun = "Mission"; break;
                 case AskTrackedEntityTypeEnum.FleetActionRun: noun = "Fleet action run"; break;
                 case AskTrackedEntityTypeEnum.Job: noun = "Job"; break;
+                case AskTrackedEntityTypeEnum.BlackBox: noun = "Black box"; break;
                 default: noun = "Import batch"; break;
             }
 

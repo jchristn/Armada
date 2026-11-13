@@ -30,7 +30,7 @@ namespace Armada.Client
         }
 
         /// <summary>
-        /// Dashboard <c>getFleet</c>: GET `/api/v1/fleets/${id}` (returns the fleet with its vessels).
+        /// Dashboard <c>getFleet</c>: GET `/api/v1/fleets/${id}` (returns the fleet and its vessel count).
         /// </summary>
         /// <param name="id">id.</param>
         /// <param name="token">Cancellation token.</param>
@@ -39,6 +39,19 @@ namespace Armada.Client
         public Task<FleetDetail?> GetFleetAsync(string id, CancellationToken token = default)
         {
             return GetAsync<FleetDetail>($"/api/v1/fleets/{E(id)}", null, token);
+        }
+
+        /// <summary>
+        /// Dashboard <c>getFleetDetail</c>: GET `/api/v1/fleets/${id}` (the fleet and its vessel count). Same as
+        /// <see cref="GetFleetAsync"/>.
+        /// </summary>
+        /// <param name="id">id.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The response.</returns>
+        /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
+        public Task<FleetDetail?> GetFleetDetailAsync(string id, CancellationToken token = default)
+        {
+            return GetFleetAsync(id, token);
         }
 
         /// <summary>

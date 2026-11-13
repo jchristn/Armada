@@ -173,7 +173,7 @@ namespace Test.Shared.Suites.E2E
                 AssertStartsWith("GetTestFleet", detail.Fleet!.Name);
                 AssertEqual("Get test description", detail.Fleet!.Description);
                 AssertTrue(detail.Fleet!.Active);
-                Assert(detail.Vessels != null, "Should have Vessels array");
+                AssertEqual(0L, detail.VesselCount, "a new fleet has no vessels");
             }));
 
             cases.Add(CaseAsync("get_fleet_not_found_returns_error_property", "Get Fleet Not Found Returns Error Property", TestTags.Negative, async () =>
@@ -207,7 +207,7 @@ namespace Test.Shared.Suites.E2E
                 FleetDetailResponse detail = await JsonHelper.DeserializeAsync<FleetDetailResponse>(response);
 
                 Assert(detail.Fleet != null, "Should have Fleet");
-                Assert(detail.Vessels != null, "Should have Vessels");
+                Assert(detail.VesselCount >= 0, "Should have VesselCount");
                 Assert(!string.IsNullOrEmpty(detail.Fleet!.Id), "Should have Id");
                 Assert(!string.IsNullOrEmpty(detail.Fleet!.Name), "Should have Name");
                 Assert(detail.Fleet!.Description != null, "Should have Description");

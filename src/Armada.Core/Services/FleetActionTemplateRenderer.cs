@@ -38,8 +38,9 @@ namespace Armada.Core.Services
         public static readonly string WorkingDirectoryVariable = "vessel.workingDirectory";
 
         /// <summary>
-        /// {{vessel.buildCommand}}: the vessel's definition-of-done build command, or empty. A Command target whose
-        /// template references it while it is empty is skipped with reason NoBuildCommand.
+        /// {{vessel.buildCommand}}: the vessel's definition-of-done build command, else the repository's build script or
+        /// the catalog default for its detected ecosystem, or empty. A target whose template references it while it is
+        /// empty is skipped with reason NoBuildCommand.
         /// </summary>
         public static readonly string BuildCommandVariable = "vessel.buildCommand";
 
@@ -62,6 +63,36 @@ namespace Armada.Core.Services
         /// {{vessel.auditCommand}}: the resolved Audit command (vessel override, repo script, ecosystem default, then osv-scanner).
         /// </summary>
         public static readonly string AuditCommandVariable = "vessel.auditCommand";
+
+        /// <summary>
+        /// The vessel's resolved outdated-dependency report command (catalog default for the detected ecosystem).
+        /// </summary>
+        public static readonly string OutdatedCommandVariable = "vessel.outdatedCommand";
+
+        /// <summary>
+        /// The vessel's resolved license report command (catalog default for the detected ecosystem).
+        /// </summary>
+        public static readonly string LicensesCommandVariable = "vessel.licensesCommand";
+
+        /// <summary>
+        /// The run-time variables that hold a resolved ecosystem command. A target whose template references one that
+        /// resolves to nothing is skipped (NoBuildCommand for the build command, NoResolvedCommand otherwise).
+        /// </summary>
+        public static IReadOnlyList<string> ResolvedCommandVariables
+        {
+            get
+            {
+                return new List<string>
+                {
+                    BuildCommandVariable,
+                    TestCommandVariable,
+                    LintCommandVariable,
+                    AuditCommandVariable,
+                    OutdatedCommandVariable,
+                    LicensesCommandVariable
+                };
+            }
+        }
 
         /// <summary>
         /// {{health.summary}}: a plain-text list of the vessel's non-passing health findings and outdated or
@@ -87,6 +118,8 @@ namespace Armada.Core.Services
                     TestCommandVariable,
                     LintCommandVariable,
                     AuditCommandVariable,
+                    OutdatedCommandVariable,
+                    LicensesCommandVariable,
                     "scan.summary",
                     HealthSummaryVariable
                 };
@@ -201,6 +234,8 @@ namespace Armada.Core.Services
             if (name == TestCommandVariable) return context.TestCommand;
             if (name == LintCommandVariable) return context.LintCommand;
             if (name == AuditCommandVariable) return context.AuditCommand;
+            if (name == OutdatedCommandVariable) return context.OutdatedCommand;
+            if (name == LicensesCommandVariable) return context.LicensesCommand;
             if (name == HealthSummaryVariable) return context.HealthSummary;
             throw new FleetActionTemplateException(name);
         }

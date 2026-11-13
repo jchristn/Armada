@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { getPlanningSession } from '@dashboard/api/client';
-import type { PlanningSession, PlanningSessionDetail, PlanningSessionMessage, WebSocketMessage } from '@dashboard/types/models';
+import type { PlanningSession, PlanningSessionMessage, PlanningSessionView, WebSocketMessage } from '@dashboard/types/models';
+import { loadPlanningSessionView, withOlderPlanningMessages } from '@dashboard/lib/sessionViews';
 import { applyToolEvent, type ToolEvent, type ToolEventMessage } from '@dashboard/lib/toolEvents';
 import { upsertMessage } from '@dashboard/lib/planningSessions';
 import { errorMessage } from '../../build/useLiveResource';
@@ -23,8 +23,9 @@ export interface PlanningSessionHandlers {
 }
 
 export interface PlanningSessionState {
-  detail: PlanningSessionDetail | null;
-  setDetail: (next: PlanningSessionDetail | null | ((prev: PlanningSessionDetail | null) => PlanningSessionDetail | null)) => void;
+  /** The session with the transcript pages loaded so far (oldest first); messageCount is the full length. */
+  detail: PlanningSessionView | null;
+  setDetail: (next: PlanningSessionView | null | ((prev: PlanningSessionView | null) => PlanningSessionView | null)) => void;
   loading: boolean;
   error: string | null;
   /** Tool calls streamed for each assistant message (planning-session.tool). */
@@ -32,6 +33,8 @@ export interface PlanningSessionState {
   /** Reasoning streamed for each assistant message (planning-session.thinking). */
   thinking: Record<string, string>;
   reload: () => Promise<void>;
+  /** Loads the next older transcript page (offered while fewer than messageCount messages are loaded). */
+  loadOlder: () => Promise<void>;
 }
 
 /**
@@ -42,7 +45,7 @@ export interface PlanningSessionState {
  */
 export function usePlanningSession(sessionId: string, handlers: PlanningSessionHandlers = {}): PlanningSessionState {
   const { subscribe, reconnectCount } = useSocket();
-  const [detail, setDetail] = useState<PlanningSessionDetail | null>(null);
+  const [detail, setDetail] = useState<PlanningSessionView | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [tools, setTools] = useState<Record<string, ToolEvent[]>>({});
@@ -54,7 +57,7 @@ export function usePlanningSession(sessionId: string, handlers: PlanningSessionH
   const reload = useCallback(async () => {
     const gen = generation.current;
     try {
-      const result = await getPlanningSession(sessionId);
+      const result = await loadPlanningSessionView(sessionId);
       if (gen !== generation.current) return;
       setDetail(result);
       setError(null);
@@ -103,7 +106,11 @@ export function usePlanningSession(sessionId: string, handlers: PlanningSessionH
     if (type === 'planning-session.message.created' || type === 'planning-session.message.updated') {
       const d = msg.data as { sessionId?: string; message?: PlanningSessionMessage } | undefined;
       if (!d?.message || d.sessionId !== sessionId) return;
-      setDetail((current) => (current ? { ...current, messages: upsertMessage(current.messages, d.message!) } : current));
+      setDetail((current) => {
+        if (!current) return current;
+        const known = current.messages.some((m) => m.id === d.message!.id);
+        return { ...current, messages: upsertMessage(current.messages, d.message!), messageCount: known ? current.messageCount : (current.messageCount ?? 0) + 1 };
+      });
       return;
     }
     if (type === 'planning-session.tool') {
@@ -137,5 +144,11 @@ export function usePlanningSession(sessionId: string, handlers: PlanningSessionH
     }
   }), [subscribe, sessionId]);
 
-  return { detail, setDetail, loading, error, tools, thinking, reload };
+  const loadOlder = useCallback(async () => {
+    if (!detail || detail.messages.length >= (detail.messageCount ?? 0)) return;
+    const next = await withOlderPlanningMessages(detail);
+    setDetail((current) => (current && current.session.id === next.session.id ? { ...current, messages: next.messages, messageCount: next.messageCount } : current));
+  }, [detail]);
+
+  return { detail, setDetail, loading, error, tools, thinking, reload, loadOlder };
 }

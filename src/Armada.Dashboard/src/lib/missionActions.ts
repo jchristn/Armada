@@ -141,10 +141,21 @@ export const ASSIGNMENT_BLOCKER_TITLES: Record<MissionAssignmentBlockerReason, s
   WaitingForVoyageWorkers: 'Waiting for the other missions in this voyage',
   VesselBroadScopeMissionActive: 'Vessel is held by a broad-scope mission',
   BroadScopeWaitingForVessel: 'Waiting for the vessel to be free',
+  VesselVoyageLimit: 'Vessel voyage limit',
+  VoyageMissionLimit: 'Voyage mission limit',
+  GlobalMissionLimit: 'Global mission limit',
+  CaptainConcurrencyLimit: 'Captain mission limit',
+  RuntimeMissionLimit: 'Runtime mission limit',
+  EndpointMissionLimit: 'Endpoint mission limit',
+  EndpointUnavailable: 'Endpoint unavailable',
   VesselConcurrencyLimit: 'Vessel runs one mission at a time',
   NoCaptains: 'No captains',
   NoIdleCaptain: 'Waiting for a captain',
   NoEligibleCaptain: 'No captain can take this mission',
+  LaunchFailing: 'Captain launch is failing; retrying automatically',
+  PlacementWaiting: 'Waiting for a host to run the mission',
+  BranchInUse: 'Its branch is in use by another mission',
+  ParentNotFinished: 'Waiting for the parent mission to finish',
 };
 
 export function assignmentBlockerTitle(reason: string): string {

@@ -2,6 +2,8 @@ namespace Armada.Core.Models
 {
     using System;
     using System.Collections.Generic;
+    using Armada.Core.Metrics;
+    using Armada.Core.Services;
 
     /// <summary>
     /// How fast one runtime started producing output and how long its jobs ran on a Harbor, over the jobs that ended in a metrics window.
@@ -19,6 +21,17 @@ namespace Armada.Core.Models
         /// Jobs of this runtime that ended in the window.
         /// </summary>
         public int JobCount { get; set; } = 0;
+
+        /// <summary>
+        /// True for the aggregate of the runtimes past <see cref="Armada.Core.Metrics.HarborMetricsRanges.MaxLaunchSpeedRuntimes"/>
+        /// (Runtime is "Other"); its medians and percentiles are over every job of those runtimes.
+        /// </summary>
+        public bool IsOther { get; set; } = false;
+
+        /// <summary>
+        /// Runtimes this entry combines: 1, or more for the IsOther aggregate.
+        /// </summary>
+        public int RuntimeCount { get; set; } = 1;
 
         /// <summary>
         /// Jobs that reported a time to first output.
@@ -54,6 +67,7 @@ namespace Armada.Core.Models
         /// Median time to first output per bucket (by when the job ended), in milliseconds, null where no job of this
         /// runtime reported one; one entry per bucket, for a sparkline.
         /// </summary>
+        [CollectionBound(HarborMetricsRanges.MaxBucketCount, Reason = "One per window bucket; the fixed ranges produce at most 60")]
         public List<long?> FirstOutputMedianMsByBucket { get; set; } = new List<long?>();
 
         #endregion

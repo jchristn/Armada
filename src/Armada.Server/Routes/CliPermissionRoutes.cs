@@ -150,7 +150,7 @@ namespace Armada.Server.Routes
                         if (!EnumNames.TryParse(scope, true, out CliPermissionRuleScopeEnum parsed)) throw new ArgumentException("Invalid scope: " + scope);
                         query.Scope = parsed;
                     }
-                    return EnumerationResult<CliPermissionRule>.Page(page, await _Service.ListRulesAsync(ctx, query).ConfigureAwait(false));
+                    return await _Service.EnumerateRulesAsync(ctx, query, page.PageNumber, page.PageSize).ConfigureAwait(false);
                 }
                 catch (Exception ex) when (RouteErrorMapper.IsMapped(ex))
                 {
@@ -160,7 +160,7 @@ namespace Armada.Server.Routes
             api => api
                 .WithTag("CliPermissions")
                 .WithSummary("Enumerate CLI permission rules")
-                .WithDescription("One page of the rules visible to the caller (the caller's tenant plus rules for every tenant; global admins see all). Filters: vesselId and captainId (body or querystring) and scope (querystring: Global, Vessel, or Captain). Paging and filters come from the JSON body (EnumerationQuery) or the querystring (pageNumber, pageSize 1 to 1000, default 10).")
+                .WithDescription("One page of the rules visible to the caller (the caller's tenant plus rules for every tenant; global admins see all), newest first, counted and cut in the database. Filters: vesselId and captainId (body or querystring) and scope (querystring: Global, Vessel, or Captain). Paging and filters come from the JSON body (EnumerationQuery) or the querystring (pageNumber, pageSize 1 to 1000, default 10).")
                 .WithRequestBody(OpenApiJson.BodyFor<EnumerationQuery>("Paging and filters", false))
                 .WithResponse(200, OpenApiJson.For<EnumerationResult<CliPermissionRule>>("One page"))
                 .WithSecurity("ApiKey"));

@@ -18,14 +18,30 @@ namespace Armada.Client
         #region Public-Methods
 
         /// <summary>
-        /// Dashboard <c>listPlanningSessions</c>: GET '/api/v1/planning-sessions'.
+        /// Dashboard <c>listPlanningSessions</c>: POST '/api/v1/planning-sessions/enumerate'. One page of the planning
+        /// sessions visible to the caller, most recently updated first (page size 1 to 1000, default 10).
         /// </summary>
+        /// <param name="query">Paging, order, and filters, or null for the first page.</param>
         /// <param name="token">Cancellation token.</param>
-        /// <returns>The response.</returns>
+        /// <returns>One page with exact totals.</returns>
         /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
-        public Task<List<PlanningSession>?> ListPlanningSessionsAsync(CancellationToken token = default)
+        public Task<EnumerationResult<PlanningSession>?> ListPlanningSessionsAsync(EnumerationQuery? query = null, CancellationToken token = default)
         {
-            return EnumerateAllAsync<PlanningSession>("/api/v1/planning-sessions/enumerate", null, token);
+            return PostAsync<EnumerationResult<PlanningSession>>("/api/v1/planning-sessions/enumerate", query ?? new EnumerationQuery(), null, token);
+        }
+
+        /// <summary>
+        /// Dashboard <c>listPlanningSessionMessages</c>: POST `/api/v1/planning-sessions/${id}/messages/enumerate`. One
+        /// page of the session's transcript, newest first by default (CreatedAscending for oldest first).
+        /// </summary>
+        /// <param name="id">Planning session ID.</param>
+        /// <param name="query">Paging and order, or null for the newest page of 10.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>One page with exact totals.</returns>
+        /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
+        public Task<EnumerationResult<PlanningSessionMessage>?> ListPlanningSessionMessagesAsync(string id, EnumerationQuery? query = null, CancellationToken token = default)
+        {
+            return PostAsync<EnumerationResult<PlanningSessionMessage>>($"/api/v1/planning-sessions/{E(id)}/messages/enumerate", query ?? new EnumerationQuery(), null, token);
         }
 
         /// <summary>

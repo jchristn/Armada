@@ -1,7 +1,8 @@
 import { useRouter, type Href } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { getAskThread } from '@dashboard/api/client';
+import { enumerateAskProposals } from '@dashboard/api/client';
+import { ASK_PAGE_SIZE, readAllPages } from '@dashboard/lib/askPaging';
 import type { AskActionProposal, CliPermissionRequest, InboxItem, InboxSeverity } from '@dashboard/types/models';
 import { inboxItemTitle } from '@dashboard/lib/deploymentApprovalLabel';
 import { CLI_PERMISSION_KIND, inboxActionLabel } from '@dashboard/lib/inboxKinds';
@@ -72,10 +73,11 @@ function AskProposalApproval({ item, target, onChanged }: { item: InboxItem; tar
 
   useEffect(() => {
     let active = true;
-    getAskThread(target.threadId)
-      .then((detail) => {
+    // The thread's pending proposals are paged; read them page by page until this one is found or none are left.
+    readAllPages((pageNumber) => enumerateAskProposals(target.threadId, { pageNumber, pageSize: ASK_PAGE_SIZE, status: 'Pending' }))
+      .then((pending) => {
         if (!active) return;
-        setProposal((detail?.pendingProposals ?? []).find((p) => p.id === target.proposalId) ?? null);
+        setProposal(pending.find((p) => p.id === target.proposalId) ?? null);
       })
       .catch(() => { /* the card falls back to the inbox text and the Open link */ })
       .finally(() => { if (active) setLoaded(true); });

@@ -184,6 +184,33 @@ namespace Armada.Core.Database.SqlServer.Implementations
             }, FromReader, token).ConfigureAwait(false);
         }
 
+        /// <inheritdoc />
+        public async Task<EnumerationResult<PushDevice>> EnumeratePageAsync(PushDeviceQuery query, EnumerationQuery page, CancellationToken token = default)
+        {
+            if (query == null) throw new ArgumentNullException(nameof(query));
+            if (page == null) throw new ArgumentNullException(nameof(page));
+            StringBuilder where = new StringBuilder(" WHERE 1 = 1");
+            if (query.TenantId != null) where.Append(" AND tenant_id = @tenant_id");
+            if (query.UserId != null) where.Append(" AND user_id = @user_id");
+            if (query.ActiveOnly) where.Append(" AND active = @active");
+            Action<SqlCommand> bind = cmd =>
+            {
+                if (query.TenantId != null) SqlServerCommandHelper.Add(cmd, "@tenant_id", query.TenantId);
+                if (query.UserId != null) SqlServerCommandHelper.Add(cmd, "@user_id", query.UserId);
+                if (query.ActiveOnly) SqlServerCommandHelper.Add(cmd, "@active", true);
+            };
+
+            using (SqlConnection conn = new SqlConnection(_ConnectionString))
+            {
+                await conn.OpenAsync(token).ConfigureAwait(false);
+                long total = await SqlServerCommandHelper.CountAsync(conn, "SELECT COUNT(*) FROM push_devices" + where + ";", bind, token).ConfigureAwait(false);
+                List<PushDevice> rows = await SqlServerCommandHelper.QueryAsync(conn,
+                    "SELECT * FROM push_devices" + where + " ORDER BY created_utc ASC, id ASC" + SqlServerCommandHelper.Page(page.Offset, page.PageSize) + ";",
+                    bind, FromReader, token).ConfigureAwait(false);
+                return EnumerationResult<PushDevice>.Create(page, rows, total);
+            }
+        }
+
         #endregion
 
         #region Private-Methods

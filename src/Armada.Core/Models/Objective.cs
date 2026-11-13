@@ -3,6 +3,7 @@ namespace Armada.Core.Models
     using System;
     using System.Collections.Generic;
     using Armada.Core.Enums;
+    using Armada.Core.Services;
 
     /// <summary>
     /// First-class cross-repository objective or intake record.
@@ -113,6 +114,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// Objective identifiers that block this backlog item.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxLinkedIds)]
         public List<string> BlockedByObjectiveIds { get; set; } = new List<string>();
 
         /// <summary>
@@ -128,81 +130,97 @@ namespace Armada.Core.Models
         /// <summary>
         /// Optional ordered playbook suggestions for follow-through.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxConfigItems)]
         public List<SelectedPlaybook> SuggestedPlaybooks { get; set; } = new List<SelectedPlaybook>();
 
         /// <summary>
         /// Linked objective refinement session identifiers.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxLinkedIds)]
         public List<string> RefinementSessionIds { get; set; } = new List<string>();
 
         /// <summary>
         /// Freeform tags.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxConfigItems)]
         public List<string> Tags { get; set; } = new List<string>();
 
         /// <summary>
         /// Acceptance criteria captured for the objective.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxConfigItems)]
         public List<string> AcceptanceCriteria { get; set; } = new List<string>();
 
         /// <summary>
         /// Explicit non-goals.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxConfigItems)]
         public List<string> NonGoals { get; set; } = new List<string>();
 
         /// <summary>
         /// Rollout or execution constraints.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxConfigItems)]
         public List<string> RolloutConstraints { get; set; } = new List<string>();
 
         /// <summary>
         /// Evidence or source links.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxConfigItems)]
         public List<string> EvidenceLinks { get; set; } = new List<string>();
 
         /// <summary>
         /// Linked fleet identifiers.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxLinkedIds)]
         public List<string> FleetIds { get; set; } = new List<string>();
 
         /// <summary>
         /// Linked vessel identifiers.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxLinkedIds)]
         public List<string> VesselIds { get; set; } = new List<string>();
 
         /// <summary>
         /// Linked planning-session identifiers.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxLinkedIds)]
         public List<string> PlanningSessionIds { get; set; } = new List<string>();
 
         /// <summary>
         /// Linked voyage identifiers.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxLinkedIds)]
         public List<string> VoyageIds { get; set; } = new List<string>();
 
         /// <summary>
         /// Linked mission identifiers.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxLinkedIds)]
         public List<string> MissionIds { get; set; } = new List<string>();
 
         /// <summary>
         /// Linked check-run identifiers.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxLinkedIds)]
         public List<string> CheckRunIds { get; set; } = new List<string>();
 
         /// <summary>
         /// Linked release identifiers.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxLinkedIds)]
         public List<string> ReleaseIds { get; set; } = new List<string>();
 
         /// <summary>
         /// Linked deployment identifiers.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxLinkedIds)]
         public List<string> DeploymentIds { get; set; } = new List<string>();
 
         /// <summary>
         /// Linked incident identifiers.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxLinkedIds)]
         public List<string> IncidentIds { get; set; } = new List<string>();
 
         /// <summary>

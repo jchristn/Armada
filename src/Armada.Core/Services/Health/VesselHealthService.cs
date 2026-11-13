@@ -11,6 +11,7 @@ namespace Armada.Core.Services.Health
     using Armada.Core.Database;
     using Armada.Core.Enums;
     using Armada.Core.Models;
+    using Armada.Core.Services;
     using Armada.Core.Settings;
     using SyslogLogging;
 
@@ -110,6 +111,7 @@ namespace Armada.Core.Services.Health
         {
             if (String.IsNullOrEmpty(tenantId)) throw new ArgumentNullException(nameof(tenantId));
             Stopwatch watch = Stopwatch.StartNew();
+            CollectionBounds.Validate(request);
             EnumerationResult<VesselHealth> result = await _Database.VesselHealth.EnumerateAsync(tenantId, request ?? new VesselHealthEnumerateRequest(), token).ConfigureAwait(false);
             result.TotalMs = watch.Elapsed.TotalMilliseconds;
             return result;
@@ -129,7 +131,8 @@ namespace Armada.Core.Services.Health
         }
 
         /// <summary>
-        /// Read a vessel's full health (row, findings, dependencies, overrides).
+        /// Read a vessel's health (row, findings, dependency count, overrides). Dependency rows are read one page at a
+        /// time with <see cref="EnumerateDependenciesAsync"/>.
         /// </summary>
         /// <param name="tenantId">Tenant identifier.</param>
         /// <param name="vesselId">Vessel identifier.</param>
@@ -162,9 +165,32 @@ namespace Armada.Core.Services.Health
 
             detail.Health = health;
             detail.Findings = await _Database.VesselHealthFindings.ReadByVesselAsync(tenantId, vesselId, token).ConfigureAwait(false);
-            detail.Dependencies = await _Database.VesselDependencies.ReadByVesselAsync(tenantId, vesselId, token).ConfigureAwait(false);
+            EnumerationResult<VesselDependency> dependencyCount = await _Database.VesselDependencies.EnumerateByVesselAsync(tenantId, vesselId, new EnumerationQuery { PageSize = 1 }, token).ConfigureAwait(false);
+            detail.DependencyCount = dependencyCount.TotalRecords;
             detail.Overrides = await _Database.VesselHealthOverrides.ReadByVesselAsync(tenantId, vesselId, token).ConfigureAwait(false);
             return detail;
+        }
+
+        /// <summary>
+        /// Read one page of a vessel's outdated or vulnerable dependency rows, cut in the database. Ordered by ecosystem,
+        /// package name, project path, then id.
+        /// </summary>
+        /// <param name="tenantId">Tenant identifier.</param>
+        /// <param name="vesselId">Vessel identifier.</param>
+        /// <param name="query">Paging (page size 1 to 1000, default 10); null is the first page.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The page, or null when the vessel does not exist in the tenant.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when tenantId or vesselId is null or empty.</exception>
+        public async Task<EnumerationResult<VesselDependency>?> EnumerateDependenciesAsync(string tenantId, string vesselId, EnumerationQuery? query, CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(tenantId)) throw new ArgumentNullException(nameof(tenantId));
+            if (String.IsNullOrEmpty(vesselId)) throw new ArgumentNullException(nameof(vesselId));
+            Vessel? vessel = await _Database.Vessels.ReadAsync(tenantId, vesselId, token).ConfigureAwait(false);
+            if (vessel == null) return null;
+            Stopwatch sw = Stopwatch.StartNew();
+            EnumerationResult<VesselDependency> page = await _Database.VesselDependencies.EnumerateByVesselAsync(tenantId, vesselId, query ?? new EnumerationQuery(), token).ConfigureAwait(false);
+            page.TotalMs = Math.Round(sw.Elapsed.TotalMilliseconds, 2);
+            return page;
         }
 
         /// <summary>
@@ -305,6 +331,7 @@ namespace Armada.Core.Services.Health
         {
             if (String.IsNullOrEmpty(tenantId)) throw new ArgumentNullException(nameof(tenantId));
             if (_Disposed) throw new ObjectDisposedException(nameof(VesselHealthService));
+            CollectionBounds.Validate(request);
             request = request ?? new VesselHealthEvaluateRequest();
             bool force = !scheduled && (request.Force ?? true);
 

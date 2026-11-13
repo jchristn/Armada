@@ -209,6 +209,7 @@ namespace Armada.Core.Services
 
             Captain? captain = await _Database.Captains.ReadAsync(tenantId, request.CaptainId.Trim(), token).ConfigureAwait(false);
             if (captain == null) throw new VesselImportRequestException(VesselImportCategorizationCodes.CategorizationCaptainNotFound, "Captain not found: " + request.CaptainId, nameof(request));
+            CaptainEligibility.RequireActive(captain);
         }
 
         /// <inheritdoc />
@@ -324,6 +325,7 @@ namespace Armada.Core.Services
             if (String.IsNullOrEmpty(tenantId)) throw new ArgumentNullException(nameof(tenantId));
             if (String.IsNullOrEmpty(batchId)) throw new ArgumentNullException(nameof(batchId));
             if (request == null) throw new ArgumentNullException(nameof(request));
+            CollectionBounds.Validate(request);
 
             VesselImportBatch? batch = await _Database.VesselImportBatches.ReadAsync(tenantId, batchId, token).ConfigureAwait(false);
             if (batch == null) throw new KeyNotFoundException("Import batch not found: " + batchId);
@@ -516,6 +518,14 @@ namespace Armada.Core.Services
 
             if (document == null || document.Fleets == null || document.Fleets.Count == 0)
                 throw new FleetRecommendationFormatException(OutputFileName + " must contain a non-empty \"fleets\" array.");
+            try
+            {
+                CollectionBounds.Validate(document);
+            }
+            catch (CollectionLimitExceededException ex)
+            {
+                throw new FleetRecommendationFormatException(OutputFileName + " is too large: " + ex.Message, ex);
+            }
 
             Dictionary<string, Vessel> known = vessels.GroupBy(v => v.Id, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
             HashSet<string> assigned = new HashSet<string>(StringComparer.Ordinal);
@@ -697,6 +707,7 @@ namespace Armada.Core.Services
 
                     Captain? captain = String.IsNullOrEmpty(captainId) ? null : await _Database.Captains.ReadAsync(tenantId, captainId).ConfigureAwait(false);
                     if (captain == null) throw new KeyNotFoundException("Captain not found: " + (String.IsNullOrEmpty(captainId) ? "(none)" : captainId) + ".");
+                    CaptainEligibility.RequireActive(captain);
 
                     reserved = await _Database.Captains.TryReserveAsync(tenantId, captain.Id, CaptainStateEnum.Analyzing).ConfigureAwait(false);
                     if (!reserved)
@@ -790,7 +801,7 @@ namespace Armada.Core.Services
                     summary.VesselCount = vessels.Count;
                     summary.UncategorizedCount = recommendations.Where(r => r.Name == UncategorizedFleetName).Sum(r => r.VesselIds.Count);
                     summary.Applied = applied;
-                    summary.Warnings = warnings;
+                    summary.Warnings = FleetCategorizationJobSummary.BoundWarnings(warnings);
                     resultJson = JsonSerializer.Serialize(summary, _ResultJsonOptions);
 
                     succeeded = true;
@@ -1082,8 +1093,8 @@ namespace Armada.Core.Services
         {
             try
             {
-                WorkspaceTreeResult tree = await host.Files.GetTreeAsync(null, token).ConfigureAwait(false);
-                return tree.Entries.Where(e => !e.IsDirectory).Select(e => e.Name).ToList();
+                List<WorkspaceTreeEntry> entries = await WorkspaceTreeReader.ReadAllEntriesAsync(host.Files, null, token).ConfigureAwait(false);
+                return entries.Where(e => !e.IsDirectory).Select(e => e.Name).ToList();
             }
             catch (Exception ex) when (ex is InvalidOperationException || ex is UnauthorizedAccessException || ex is IOException)
             {

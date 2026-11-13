@@ -39,6 +39,17 @@ namespace Armada.Core.Models
         /// </summary>
         public long TotalTokens { get; set; } = 0;
 
+        /// <summary>
+        /// True for the aggregate of the series past <see cref="Armada.Core.Metrics.HarborMetricsRanges.MaxTokenSeries"/>
+        /// (Runtime and Model are "other"); <see cref="SeriesCount"/> says how many it combines.
+        /// </summary>
+        public bool IsOther { get; set; } = false;
+
+        /// <summary>
+        /// Runtime and model series this entry combines: 1, or more for the IsOther aggregate.
+        /// </summary>
+        public int SeriesCount { get; set; } = 1;
+
         #endregion
 
         #region Constructors-and-Factories

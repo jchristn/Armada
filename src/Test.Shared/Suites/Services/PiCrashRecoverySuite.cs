@@ -45,7 +45,7 @@ namespace Test.Shared.Suites.Services
             cases.Add(new TestCaseDescriptor(
                 suiteId: SuiteId,
                 caseId: "crashed_pi_mission_is_cleaned_and_recoverable",
-                displayName: "A crashed pi mission's leftover .pi/mcp.json and AGENTS.override.md are removed by the health check and the mission is held as WorkProduced with its work",
+                displayName: "A crashed pi mission cleans stale runtime files and resumes its durable assignment without losing work",
                 executeAsync: (CancellationToken ct) => RunAsync(),
                 tags: new List<string> { TestTags.Reliability },
                 skipReason: OperatingSystem.IsWindows() ? "The recording pi stub is a POSIX shell script." : null));
@@ -63,10 +63,11 @@ namespace Test.Shared.Suites.Services
             LoggingModule logging = new LoggingModule();
             logging.Settings.EnableConsole = false;
             ArmadaSettings settings = new ArmadaSettings();
-            StubGitService git = new StubGitService();
+            StubGitService git = new StubGitService { IsRepositoryResult = true };
             DockService docks = new DockService(logging, db, settings, git);
             CaptainService captains = new CaptainService(logging, db, settings, git, docks);
             MissionService missions = new MissionService(logging, db, settings, docks, captains);
+            captains.OnLaunchAgent = (_, _, _) => Task.FromResult(Environment.ProcessId);
             AdmiralService admiral = new AdmiralService(logging, db, settings, captains, missions, new VoyageService(logging, db), docks);
 
             string root = TestTemp.NewDirectory("pi_crash");
@@ -83,7 +84,7 @@ namespace Test.Shared.Suites.Services
 
                 Vessel vessel = await db.Vessels.CreateAsync(new Vessel("pi-crash", "https://example.invalid/pi-crash.git")).ConfigureAwait(false);
                 Dock dock = await db.Docks.CreateAsync(new Dock(vessel.Id) { WorktreePath = worktree, Active = true }).ConfigureAwait(false);
-                Captain captain = await db.Captains.CreateAsync(new Captain("pi-crash", AgentRuntimeEnum.Pi) { State = CaptainStateEnum.Working }).ConfigureAwait(false);
+                Captain captain = await CaptainAssignmentFixture.CreateAsync(db, new Captain("pi-crash", AgentRuntimeEnum.Pi) { State = CaptainStateEnum.Working }).ConfigureAwait(false);
                 Mission mission = await db.Missions.CreateAsync(new Mission("pi crash") { CaptainId = captain.Id, VesselId = vessel.Id, DockId = dock.Id, Status = MissionStatusEnum.InProgress, StartedUtc = DateTime.UtcNow }).ConfigureAwait(false);
 
                 // The real mission setup: AGENTS.override.md carrying the repository's AGENTS.md, git-excluded.
@@ -120,28 +121,30 @@ namespace Test.Shared.Suites.Services
                 Directory.CreateDirectory(Path.GetDirectoryName(mcpPath)!);
                 File.WriteAllText(mcpPath, leftover);
 
-                // After the restart the captain is no longer on the mission, so the health check sees an orphan.
+                // Reconciliation restores durable mission ownership after the restart.
                 Captain restarted = (await db.Captains.ReadAsync(captain.Id).ConfigureAwait(false))!;
                 restarted.State = CaptainStateEnum.Idle;
-                restarted.CurrentMissionId = null;
-                restarted.CurrentDockId = null;
+                restarted.Assignment = null;
+
                 restarted.ProcessId = null;
-                await db.Captains.UpdateAsync(restarted).ConfigureAwait(false);
+                await CaptainAssignmentFixture.UpdateAsync(db, restarted).ConfigureAwait(false);
                 await admiral.HealthCheckAsync().ConfigureAwait(false);
 
                 AssertFalse(File.Exists(mcpPath), "the leftover .pi/mcp.json was removed");
                 AssertFalse(Directory.Exists(Path.Combine(worktree, ".pi")), "the empty .pi directory was removed");
-                AssertFalse(File.Exists(overridePath), "the leftover generated AGENTS.override.md was removed");
+                AssertTrue(File.Exists(overridePath), "recovery regenerated the mission instructions after cleaning stale files");
                 AssertTrue(File.Exists(Path.Combine(worktree, "AGENTS.md")), "the repository's AGENTS.md is untouched");
                 AssertEqual("", Git(worktree, "status", "--porcelain").Trim(), "the dock is clean");
                 AssertContains("captain work", Git(worktree, "log", "--oneline"), "the captain's commit is intact");
 
                 Mission after = (await db.Missions.ReadAsync(mission.Id).ConfigureAwait(false))!;
-                AssertEqual(MissionStatusEnum.WorkProduced, after.Status, "held for operator recovery, not completed");
-                AssertNull(after.ProcessId, "the dead process was released");
-                AssertContains("not verified", after.FailureReason ?? "");
+                AssertEqual(MissionStatusEnum.InProgress, after.Status, "durable ownership resumes the existing worktree");
+                AssertEqual(Environment.ProcessId, after.ProcessId, "the replacement process belongs to this mission");
+                AssertEqual(dock.Id, after.DockId);
+                AssertEqual(1, after.RedispatchAttempts);
+                AssertNull(after.FailureReason);
                 List<ArmadaEvent> events = await db.Events.EnumerateByMissionAsync(mission.Id).ConfigureAwait(false);
-                AssertTrue(events.Any(e => e.EventType == "mission.orphan_recovered"), "the recovery is recorded");
+                AssertTrue(events.Any(e => e.EventType == "mission.resumed"), "the recovery is recorded");
 
                 // The dock is reusable: the next generation carries the repository's AGENTS.md again (a leftover file would
                 // have been read back as the dock's own instructions) and holds one set of mission instructions.

@@ -2,6 +2,7 @@ namespace Armada.Core.Models
 {
     using System.Collections.Generic;
     using System.Text.Json.Serialization;
+    using Armada.Core.Services;
 
     /// <summary>A falsifiable acceptance criterion and its objective traceability.</summary>
     public class ArchitectAcceptanceCriterion
@@ -12,10 +13,12 @@ namespace Armada.Core.Models
 
         /// <summary>Objective requirement IDs this scenario verifies.</summary>
         [JsonPropertyName("requirementIds")]
+        [CollectionBound(CollectionLimits.MaxConfigItems)]
         public List<string> RequirementIds { get; set; } = new List<string>();
 
         /// <summary>One-based plan decisions verified by this check. Required in version 3; empty means a general check.</summary>
         [JsonPropertyName("decisionIndexes")]
+        [CollectionBound(CollectionLimits.MaxConfigItems)]
         public List<int>? DecisionIndexes { get; set; }
 
         /// <summary>Concrete inputs and action.</summary>
@@ -32,6 +35,7 @@ namespace Armada.Core.Models
 
         /// <summary>Applicable failure and boundary cases with expected outcomes.</summary>
         [JsonPropertyName("negativeCases")]
+        [CollectionBound(CollectionLimits.MaxConfigItems)]
         public List<string> NegativeCases { get; set; } = new List<string>();
 
         /// <summary>Specific reason no negative cases apply, rather than invented cases.</summary>

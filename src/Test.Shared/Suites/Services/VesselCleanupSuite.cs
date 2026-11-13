@@ -5,6 +5,7 @@ namespace Test.Shared.Suites.Services
     using System.Diagnostics;
     using System.IO;
     using System.Linq;
+    using System.Text.Json;
     using System.Threading;
     using System.Threading.Tasks;
     using Armada.Core.Enums;
@@ -44,18 +45,20 @@ namespace Test.Shared.Suites.Services
             cases.Add(CaseAsync("active_dock_in_use", "An active dock held by a captain on an InProgress mission, and its checked-out branch, are in use", TestTags.Positive, async () =>
             {
                 using Harness h = await Harness.CreateAsync().ConfigureAwait(false);
-                Captain captain = await h.Db.Driver.Captains.CreateAsync(new Captain("c1") { State = CaptainStateEnum.Working }).ConfigureAwait(false);
+                Captain captain = await CaptainAssignmentFixture.CreateAsync(h.Db.Driver, new Captain("c1") { State = CaptainStateEnum.Working }).ConfigureAwait(false);
                 Dock dock = await h.AddDockAsync("armada/c1/active", active: true, captainId: captain.Id).ConfigureAwait(false);
                 await h.AddMissionAsync(MissionStatusEnum.InProgress, "armada/c1/active", dock.Id).ConfigureAwait(false);
-                captain.CurrentDockId = dock.Id;
-                await h.Db.Driver.Captains.UpdateAsync(captain).ConfigureAwait(false);
+                captain.Assignment ??= new Mission("fixture assignment"); captain.Assignment.DockId = dock.Id;
+                await CaptainAssignmentFixture.UpdateAsync(h.Db.Driver, captain).ConfigureAwait(false);
 
                 VesselCleanupInventory inv = await h.Service.ScanAsync(h.Vessel).ConfigureAwait(false);
-                VesselCleanupResource d = Find(inv, "dock:" + dock.Id);
+
+                List<VesselCleanupResource> invResources = await AllAsync(h).ConfigureAwait(false);
+                VesselCleanupResource d = Find(invResources, "dock:" + dock.Id);
                 AssertEqual(VesselCleanupDispositionEnum.InUse, d.Disposition, d.Reason);
                 AssertContains("captain", d.Reason);
                 AssertEqual(captain.Id, d.CaptainId);
-                VesselCleanupResource b = FindBranch(inv, "armada/c1/active");
+                VesselCleanupResource b = FindBranch(invResources, "armada/c1/active");
                 AssertEqual(VesselCleanupDispositionEnum.InUse, b.Disposition, b.Reason);
             }));
 
@@ -64,7 +67,7 @@ namespace Test.Shared.Suites.Services
                 using Harness h = await Harness.CreateAsync().ConfigureAwait(false);
                 Dock dock = await h.AddDockAsync("armada/c1/queued").ConfigureAwait(false);
                 Mission m = await h.AddMissionAsync(MissionStatusEnum.Pending, "armada/c1/queued", dock.Id).ConfigureAwait(false);
-                VesselCleanupResource d = Find(await h.Service.ScanAsync(h.Vessel).ConfigureAwait(false), "dock:" + dock.Id);
+                VesselCleanupResource d = Find(await AllAsync(h).ConfigureAwait(false), "dock:" + dock.Id);
                 AssertEqual(VesselCleanupDispositionEnum.InUse, d.Disposition, d.Reason);
                 AssertEqual(m.Id, d.MissionId);
                 AssertEqual(MissionStatusEnum.Pending, d.MissionStatus);
@@ -75,7 +78,7 @@ namespace Test.Shared.Suites.Services
                 using Harness h = await Harness.CreateAsync().ConfigureAwait(false);
                 Dock dock = await h.AddDockAsync("armada/c1/failed").ConfigureAwait(false);
                 await h.AddMissionAsync(MissionStatusEnum.Failed, "armada/c1/failed", dock.Id).ConfigureAwait(false);
-                VesselCleanupResource d = Find(await h.Service.ScanAsync(h.Vessel).ConfigureAwait(false), "dock:" + dock.Id);
+                VesselCleanupResource d = Find(await AllAsync(h).ConfigureAwait(false), "dock:" + dock.Id);
                 AssertEqual(VesselCleanupDispositionEnum.Safe, d.Disposition, d.Reason);
                 AssertEqual(MissionStatusEnum.Failed, d.MissionStatus);
                 AssertTrue(d.SizeBytes.HasValue && d.SizeBytes.Value > 0, "local worktree size is measured");
@@ -88,7 +91,7 @@ namespace Test.Shared.Suites.Services
                 Dock dock = await h.AddDockAsync("armada/c1/dirty").ConfigureAwait(false);
                 await h.AddMissionAsync(MissionStatusEnum.Failed, "armada/c1/dirty", dock.Id).ConfigureAwait(false);
                 File.WriteAllText(Path.Combine(dock.WorktreePath!, "scratch.txt"), "work in progress");
-                VesselCleanupResource d = Find(await h.Service.ScanAsync(h.Vessel).ConfigureAwait(false), "dock:" + dock.Id);
+                VesselCleanupResource d = Find(await AllAsync(h).ConfigureAwait(false), "dock:" + dock.Id);
                 AssertEqual(VesselCleanupDispositionEnum.Unknown, d.Disposition, d.Reason);
                 AssertContains("uncommitted", d.Reason);
             }));
@@ -100,7 +103,7 @@ namespace Test.Shared.Suites.Services
                 await h.AddMissionAsync(MissionStatusEnum.Cancelled, "armada/c1/detached", dock.Id).ConfigureAwait(false);
                 await GitAsync(dock.WorktreePath!, "checkout", "-q", "--detach").ConfigureAwait(false);
                 await CommitAsync(dock.WorktreePath!, "detached.txt").ConfigureAwait(false);
-                VesselCleanupResource d = Find(await h.Service.ScanAsync(h.Vessel).ConfigureAwait(false), "dock:" + dock.Id);
+                VesselCleanupResource d = Find(await AllAsync(h).ConfigureAwait(false), "dock:" + dock.Id);
                 AssertEqual(VesselCleanupDispositionEnum.Unknown, d.Disposition, d.Reason);
             }));
 
@@ -112,7 +115,7 @@ namespace Test.Shared.Suites.Services
                 await CommitAsync(dock.WorktreePath!, "kept.txt").ConfigureAwait(false);
                 VesselCleanupResult result = await h.Service.CleanupAsync(h.Vessel, new VesselCleanupRequest { Keys = new List<string> { "dock:" + dock.Id } }).ConfigureAwait(false);
                 AssertEqual(VesselCleanupItemStatusEnum.Deleted, result.Results[0].Status, result.Results[0].Message);
-                VesselCleanupResource b = FindBranch(result.Inventory, "armada/c1/kept");
+                VesselCleanupResource b = FindBranch(await AllAsync(h).ConfigureAwait(false), "armada/c1/kept");
                 AssertEqual(VesselCleanupDispositionEnum.Unknown, b.Disposition, b.Reason);
                 AssertContains("unmerged", b.Reason);
             }));
@@ -125,10 +128,11 @@ namespace Test.Shared.Suites.Services
                 await h.CreateBranchAsync("armada/c1/landing-copy").ConfigureAwait(false);
                 await h.AddMissionAsync(MissionStatusEnum.LandingFailed, "armada/c1/landing-copy", null).ConfigureAwait(false);
                 VesselCleanupInventory inv = await h.Service.ScanAsync(h.Vessel).ConfigureAwait(false);
-                VesselCleanupResource d = Find(inv, "dock:" + dock.Id);
+                List<VesselCleanupResource> invResources = await AllAsync(h).ConfigureAwait(false);
+                VesselCleanupResource d = Find(invResources, "dock:" + dock.Id);
                 AssertEqual(VesselCleanupDispositionEnum.InUse, d.Disposition, d.Reason);
                 AssertContains("LandingFailed", d.Reason);
-                VesselCleanupResource b = FindBranch(inv, "armada/c1/landing-copy");
+                VesselCleanupResource b = FindBranch(invResources, "armada/c1/landing-copy");
                 AssertEqual(VesselCleanupDispositionEnum.InUse, b.Disposition, b.Reason);
             }));
 
@@ -142,11 +146,12 @@ namespace Test.Shared.Suites.Services
                 await h.Db.Driver.MergeEntries.CreateAsync(new MergeEntry("armada/mq/failed") { VesselId = h.Vessel.Id, Status = MergeStatusEnum.Failed }).ConfigureAwait(false);
                 await h.Db.Driver.MergeEntries.CreateAsync(new MergeEntry("armada/mq/landed") { VesselId = h.Vessel.Id, Status = MergeStatusEnum.Landed }).ConfigureAwait(false);
                 VesselCleanupInventory inv = await h.Service.ScanAsync(h.Vessel).ConfigureAwait(false);
-                AssertEqual(VesselCleanupDispositionEnum.InUse, FindBranch(inv, "armada/mq/queued").Disposition);
-                VesselCleanupResource failed = FindBranch(inv, "armada/mq/failed");
+                List<VesselCleanupResource> invResources = await AllAsync(h).ConfigureAwait(false);
+                AssertEqual(VesselCleanupDispositionEnum.InUse, FindBranch(invResources, "armada/mq/queued").Disposition);
+                VesselCleanupResource failed = FindBranch(invResources, "armada/mq/failed");
                 AssertEqual(VesselCleanupDispositionEnum.InUse, failed.Disposition, failed.Reason);
                 AssertContains("retried", failed.Reason);
-                AssertEqual(VesselCleanupDispositionEnum.Safe, FindBranch(inv, "armada/mq/landed").Disposition);
+                AssertEqual(VesselCleanupDispositionEnum.Safe, FindBranch(invResources, "armada/mq/landed").Disposition);
             }));
 
             cases.Add(CaseAsync("active_voyage_protects", "A terminal mission in a voyage that is still InProgress keeps its branch in use", TestTags.Positive, async () =>
@@ -155,7 +160,7 @@ namespace Test.Shared.Suites.Services
                 Voyage voyage = await h.Db.Driver.Voyages.CreateAsync(new Voyage("v") { Status = VoyageStatusEnum.InProgress }).ConfigureAwait(false);
                 await h.CreateBranchAsync("armada/v/stage1").ConfigureAwait(false);
                 Mission m = await h.AddMissionAsync(MissionStatusEnum.Complete, "armada/v/stage1", null, voyage.Id).ConfigureAwait(false);
-                VesselCleanupResource b = FindBranch(await h.Service.ScanAsync(h.Vessel).ConfigureAwait(false), "armada/v/stage1");
+                VesselCleanupResource b = FindBranch(await AllAsync(h).ConfigureAwait(false), "armada/v/stage1");
                 AssertEqual(VesselCleanupDispositionEnum.InUse, b.Disposition, b.Reason);
                 AssertEqual(voyage.Id, b.VoyageId);
                 AssertEqual(m.Id, b.MissionId);
@@ -168,12 +173,13 @@ namespace Test.Shared.Suites.Services
                 await h.CreateBranchAsync("feature/user-branch").ConfigureAwait(false);
                 await h.CreateUnmergedBranchAsync("armada/x/unmerged").ConfigureAwait(false);
                 VesselCleanupInventory inv = await h.Service.ScanAsync(h.Vessel).ConfigureAwait(false);
-                AssertEqual(VesselCleanupDispositionEnum.Safe, FindBranch(inv, "armada/x/merged").Disposition);
-                VesselCleanupResource unmerged = FindBranch(inv, "armada/x/unmerged");
+                List<VesselCleanupResource> invResources = await AllAsync(h).ConfigureAwait(false);
+                AssertEqual(VesselCleanupDispositionEnum.Safe, FindBranch(invResources, "armada/x/merged").Disposition);
+                VesselCleanupResource unmerged = FindBranch(invResources, "armada/x/unmerged");
                 AssertEqual(VesselCleanupDispositionEnum.Unknown, unmerged.Disposition, unmerged.Reason);
                 AssertNull(unmerged.SizeBytes, "branch sizes are not invented");
-                AssertFalse(inv.Resources.Any(r => r.BranchName == "main" && r.ResourceType == VesselCleanupResourceTypeEnum.Branch), "default branch is not listed");
-                AssertFalse(inv.Resources.Any(r => r.BranchName == "feature/user-branch"), "non-Armada branch is not listed");
+                AssertFalse(invResources.Any(r => r.BranchName == "main" && r.ResourceType == VesselCleanupResourceTypeEnum.Branch), "default branch is not listed");
+                AssertFalse(invResources.Any(r => r.BranchName == "feature/user-branch"), "non-Armada branch is not listed");
                 AssertEqual(1, inv.SafeCount);
                 AssertEqual(1, inv.UnknownCount);
             }));
@@ -193,14 +199,16 @@ namespace Test.Shared.Suites.Services
                 Directory.Delete(stale, true);
 
                 VesselCleanupInventory inv = await h.Service.ScanAsync(h.Vessel).ConfigureAwait(false);
-                VesselCleanupResource c = FindWorktree(inv, clean);
+
+                List<VesselCleanupResource> invResources = await AllAsync(h).ConfigureAwait(false);
+                VesselCleanupResource c = FindWorktree(invResources, clean);
                 AssertEqual(VesselCleanupDispositionEnum.Safe, c.Disposition, c.Reason);
                 AssertTrue(c.SizeBytes.HasValue, "local orphan size measured");
-                AssertEqual(VesselCleanupDispositionEnum.Unknown, FindWorktree(inv, dirty).Disposition);
-                VesselCleanupResource s = FindWorktree(inv, stale);
+                AssertEqual(VesselCleanupDispositionEnum.Unknown, FindWorktree(invResources, dirty).Disposition);
+                VesselCleanupResource s = FindWorktree(invResources, stale);
                 AssertEqual(VesselCleanupDispositionEnum.Safe, s.Disposition, s.Reason);
                 AssertNull(s.SizeBytes);
-                VesselCleanupResource o = FindWorktree(inv, outside);
+                VesselCleanupResource o = FindWorktree(invResources, outside);
                 AssertEqual(VesselCleanupDispositionEnum.Unknown, o.Disposition, o.Reason);
                 AssertContains("outside", o.Reason);
 
@@ -209,8 +217,8 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(1, result.Skipped);
                 AssertFalse(Directory.Exists(clean), "clean orphan removed");
                 AssertTrue(Directory.Exists(outside), "worktree outside docks is never removed");
-                AssertFalse(result.Inventory.Resources.Any(r => r.Key == s.Key), "stale registration pruned");
-                AssertEqual(VesselCleanupDispositionEnum.Safe, FindBranch(result.Inventory, "armada/o/clean").Disposition, "freed branch becomes eligible after refresh");
+                AssertFalse((await AllAsync(h).ConfigureAwait(false)).Any(r => r.Key == s.Key), "stale registration pruned");
+                AssertEqual(VesselCleanupDispositionEnum.Safe, FindBranch(await AllAsync(h).ConfigureAwait(false), "armada/o/clean").Disposition, "freed branch becomes eligible after refresh");
             }));
 
             cases.Add(CaseAsync("shared_path_ambiguous", "Two dock records sharing one worktree path are not safe", TestTags.Negative, async () =>
@@ -219,8 +227,9 @@ namespace Test.Shared.Suites.Services
                 Dock first = await h.AddDockAsync("armada/s/shared").ConfigureAwait(false);
                 Dock second = await h.Db.Driver.Docks.CreateAsync(new Dock(h.Vessel.Id) { WorktreePath = first.WorktreePath, BranchName = "armada/s/shared", Active = false }).ConfigureAwait(false);
                 VesselCleanupInventory inv = await h.Service.ScanAsync(h.Vessel).ConfigureAwait(false);
-                AssertEqual(VesselCleanupDispositionEnum.Unknown, Find(inv, "dock:" + first.Id).Disposition);
-                VesselCleanupResource s = Find(inv, "dock:" + second.Id);
+                List<VesselCleanupResource> invResources = await AllAsync(h).ConfigureAwait(false);
+                AssertEqual(VesselCleanupDispositionEnum.Unknown, Find(invResources, "dock:" + first.Id).Disposition);
+                VesselCleanupResource s = Find(invResources, "dock:" + second.Id);
                 AssertEqual(VesselCleanupDispositionEnum.Unknown, s.Disposition);
                 AssertContains("shared", s.Reason);
             }));
@@ -238,11 +247,12 @@ namespace Test.Shared.Suites.Services
                     Active = false
                 }).ConfigureAwait(false);
                 VesselCleanupInventory inv = await h.Service.ScanAsync(h.Vessel).ConfigureAwait(false);
-                VesselCleanupResource d = Find(inv, "dock:" + dock.Id);
+                List<VesselCleanupResource> invResources = await AllAsync(h).ConfigureAwait(false);
+                VesselCleanupResource d = Find(invResources, "dock:" + dock.Id);
                 AssertEqual(VesselCleanupDispositionEnum.Unknown, d.Disposition, d.Reason);
                 AssertEqual("hbr_offline", d.HarborId);
                 AssertNull(d.SizeBytes, "unreachable sizes are not invented");
-                VesselCleanupResource repo = inv.Resources.Single(r => r.ResourceType == VesselCleanupResourceTypeEnum.Repository);
+                VesselCleanupResource repo = invResources.Single(r => r.ResourceType == VesselCleanupResourceTypeEnum.Repository);
                 AssertEqual(VesselCleanupDispositionEnum.Unknown, repo.Disposition);
                 AssertContains("not connected", repo.Reason);
 
@@ -262,9 +272,11 @@ namespace Test.Shared.Suites.Services
                 Dock bare = await h.Db.Driver.Docks.CreateAsync(new Dock(h.Vessel.Id) { WorktreePath = h.Vessel.LocalPath, Active = false }).ConfigureAwait(false);
 
                 VesselCleanupInventory inv = await h.Service.ScanAsync(h.Vessel).ConfigureAwait(false);
+
+                List<VesselCleanupResource> invResources = await AllAsync(h).ConfigureAwait(false);
                 foreach (Dock d in new[] { primary, stray, bare })
-                    AssertEqual(VesselCleanupDispositionEnum.Unknown, Find(inv, "dock:" + d.Id).Disposition, d.WorktreePath);
-                AssertContains("primary checkout", Find(inv, "dock:" + primary.Id).Reason);
+                    AssertEqual(VesselCleanupDispositionEnum.Unknown, Find(invResources, "dock:" + d.Id).Disposition, d.WorktreePath);
+                AssertContains("primary checkout", Find(invResources, "dock:" + primary.Id).Reason);
 
                 VesselCleanupResult result = await h.Service.CleanupAsync(h.Vessel, new VesselCleanupRequest { Keys = new List<string> { "dock:" + primary.Id, "dock:" + stray.Id, "dock:" + bare.Id } }).ConfigureAwait(false);
                 AssertEqual(3, result.Skipped);
@@ -281,9 +293,11 @@ namespace Test.Shared.Suites.Services
                 await h.AddMissionAsync(MissionStatusEnum.Complete, "armada/r/one", dock.Id).ConfigureAwait(false);
                 await h.CreateBranchAsync("armada/r/two").ConfigureAwait(false);
                 VesselCleanupInventory first = await h.Service.ScanAsync(h.Vessel).ConfigureAwait(false);
+                List<VesselCleanupResource> firstResources = await AllAsync(h).ConfigureAwait(false);
                 VesselCleanupInventory second = await h.Service.ScanAsync(h.Vessel).ConfigureAwait(false);
+                List<VesselCleanupResource> secondResources = await AllAsync(h).ConfigureAwait(false);
                 AssertTrue(first.SafeCount >= 2, "safe resources found");
-                AssertEqual(first.Resources.Count, second.Resources.Count);
+                AssertEqual(firstResources.Count, secondResources.Count);
                 AssertTrue(Directory.Exists(dock.WorktreePath!), "worktree kept");
                 AssertNotNull(await h.Db.Driver.Docks.ReadAsync(dock.Id).ConfigureAwait(false), "dock record kept");
                 AssertTrue((await GitAsync(h.Vessel.LocalPath!, "branch", "--list", "armada/r/two").ConfigureAwait(false)).Contains("armada/r/two"), "branch kept");
@@ -296,9 +310,10 @@ namespace Test.Shared.Suites.Services
                 await h.AddMissionAsync(MissionStatusEnum.Failed, "armada/race/one", dock.Id).ConfigureAwait(false);
                 await h.CreateBranchAsync("armada/race/two").ConfigureAwait(false);
                 VesselCleanupInventory inv = await h.Service.ScanAsync(h.Vessel).ConfigureAwait(false);
-                AssertEqual(VesselCleanupDispositionEnum.Safe, Find(inv, "dock:" + dock.Id).Disposition);
-                string branchKey = FindBranch(inv, "armada/race/two").Key;
-                AssertEqual(VesselCleanupDispositionEnum.Safe, FindBranch(inv, "armada/race/two").Disposition);
+                List<VesselCleanupResource> invResources = await AllAsync(h).ConfigureAwait(false);
+                AssertEqual(VesselCleanupDispositionEnum.Safe, Find(invResources, "dock:" + dock.Id).Disposition);
+                string branchKey = FindBranch(invResources, "armada/race/two").Key;
+                AssertEqual(VesselCleanupDispositionEnum.Safe, FindBranch(invResources, "armada/race/two").Disposition);
 
                 // Concurrent dispatch and landing after the scan.
                 await h.AddMissionAsync(MissionStatusEnum.Assigned, "armada/race/one", dock.Id).ConfigureAwait(false);
@@ -317,7 +332,8 @@ namespace Test.Shared.Suites.Services
                 Dock dock = await h.AddDockAsync("armada/gc/one").ConfigureAwait(false);
                 await h.AddMissionAsync(MissionStatusEnum.Complete, "armada/gc/one", dock.Id).ConfigureAwait(false);
                 VesselCleanupInventory inv = await h.Service.ScanAsync(h.Vessel).ConfigureAwait(false);
-                VesselCleanupResource b = FindBranch(inv, "armada/gc/one");
+                List<VesselCleanupResource> invResources = await AllAsync(h).ConfigureAwait(false);
+                VesselCleanupResource b = FindBranch(invResources, "armada/gc/one");
                 AssertEqual(VesselCleanupDispositionEnum.InUse, b.Disposition, "the branch is checked out by the dock before cleanup");
 
                 VesselCleanupResult result = await h.Service.CleanupAsync(h.Vessel, new VesselCleanupRequest { Keys = new List<string> { b.Key, "dock:" + dock.Id, "dock:dck_missing" } }).ConfigureAwait(false);
@@ -328,7 +344,7 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(VesselCleanupItemStatusEnum.Skipped, result.Results.Single(r => r.Key == "dock:dck_missing").Status);
                 AssertFalse(Directory.Exists(dock.WorktreePath!), "worktree removed");
                 AssertNull(await h.Db.Driver.Docks.ReadAsync(dock.Id).ConfigureAwait(false), "dock record removed");
-                AssertFalse(result.Inventory.Resources.Any(r => r.Key == b.Key || r.Key == "dock:" + dock.Id), "refreshed inventory");
+                AssertFalse((await AllAsync(h).ConfigureAwait(false)).Any(r => r.Key == b.Key || r.Key == "dock:" + dock.Id), "refreshed inventory");
                 AssertTrue((await GitAsync(h.Vessel.LocalPath!, "branch", "--list", "main").ConfigureAwait(false)).Contains("main"), "default branch kept");
             }));
 
@@ -339,7 +355,8 @@ namespace Test.Shared.Suites.Services
                 await h.AddMissionAsync(MissionStatusEnum.Complete, "armada/pf/one", dock.Id).ConfigureAwait(false);
                 await h.CreateBranchAsync("armada/pf/two").ConfigureAwait(false);
                 VesselCleanupInventory inv = await h.Service.ScanAsync(h.Vessel).ConfigureAwait(false);
-                string branchKey = FindBranch(inv, "armada/pf/two").Key;
+                List<VesselCleanupResource> invResources = await AllAsync(h).ConfigureAwait(false);
+                string branchKey = FindBranch(invResources, "armada/pf/two").Key;
 
                 VesselCleanupResult result = await h.Service.CleanupAsync(h.Vessel, new VesselCleanupRequest { Keys = new List<string> { "dock:" + dock.Id, branchKey } }).ConfigureAwait(false);
                 AssertEqual(1, result.Failed);
@@ -347,7 +364,7 @@ namespace Test.Shared.Suites.Services
                 VesselCleanupItemResult failed = result.Results.Single(r => r.Key == "dock:" + dock.Id);
                 AssertEqual(VesselCleanupItemStatusEnum.Failed, failed.Status);
                 AssertContains("simulated purge failure", failed.Message);
-                AssertEqual(VesselCleanupDispositionEnum.Safe, Find(result.Inventory, "dock:" + dock.Id).Disposition, "failed item stays actionable");
+                AssertEqual(VesselCleanupDispositionEnum.Safe, Find(await AllAsync(h).ConfigureAwait(false), "dock:" + dock.Id).Disposition, "failed item stays actionable");
             }));
 
             cases.Add(CaseAsync("empty_selection_rejected", "Cleanup with no keys is rejected before touching anything", TestTags.Negative, async () =>
@@ -355,6 +372,58 @@ namespace Test.Shared.Suites.Services
                 using Harness h = await Harness.CreateAsync().ConfigureAwait(false);
                 await AssertThrowsAsync<ArgumentException>(() => h.Service.CleanupAsync(h.Vessel, new VesselCleanupRequest())).ConfigureAwait(false);
                 await AssertThrowsAsync<ArgumentException>(() => h.Service.CleanupAsync(h.Vessel, new VesselCleanupRequest { Keys = new List<string> { " " } })).ConfigureAwait(false);
+            }));
+
+            cases.Add(CaseAsync("resources_page_with_exact_totals", "The inventory summary embeds no resource list; resources page without gaps or duplicates, a page past the end is empty with the same total, status filters by disposition, and oversized pages are capped", TestTags.Positive, async () =>
+            {
+                using Harness h = await Harness.CreateAsync().ConfigureAwait(false);
+                for (int i = 0; i < 5; i++) await h.AddDockAsync("armada/p" + i + "/work").ConfigureAwait(false);
+                Captain captain = await CaptainAssignmentFixture.CreateAsync(h.Db.Driver, new Captain("cp") { State = CaptainStateEnum.Working }).ConfigureAwait(false);
+                await h.AddDockAsync("armada/p9/active", active: true, captainId: captain.Id).ConfigureAwait(false);
+
+                VesselCleanupInventory inv = await h.Service.ScanAsync(h.Vessel).ConfigureAwait(false);
+                AssertTrue(inv.ResourceCount >= 6, "six docks at least: " + inv.ResourceCount);
+                AssertEqual(inv.ResourceCount, inv.SafeCount + inv.InUseCount + inv.UnknownCount, "every resource is classified");
+                string json = JsonSerializer.Serialize(inv);
+                AssertFalse(json.Contains("\"Resources\"", StringComparison.Ordinal), "summary has no embedded resource list: " + json);
+
+                List<VesselCleanupResource> all = await AllAsync(h).ConfigureAwait(false);
+                AssertEqual(inv.ResourceCount, all.Count, "pages of two add up to ResourceCount");
+                AssertEqual(all.Count, all.Select(r => r.Key).Distinct(StringComparer.Ordinal).Count(), "no duplicates across pages");
+
+                EnumerationResult<VesselCleanupResource> first = await h.Service.EnumerateResourcesAsync(h.Vessel, new EnumerationQuery { PageNumber = 1, PageSize = 4 }).ConfigureAwait(false);
+                AssertEqual(4, first.Objects.Count, "first page is full");
+                AssertEqual((long)inv.ResourceCount, first.TotalRecords, "exact total");
+                AssertEqual((int)Math.Ceiling(inv.ResourceCount / 4.0), first.TotalPages, "pages of four");
+                EnumerationResult<VesselCleanupResource> past = await h.Service.EnumerateResourcesAsync(h.Vessel, new EnumerationQuery { PageNumber = 99, PageSize = 4 }).ConfigureAwait(false);
+                AssertEqual(0, past.Objects.Count, "past the end is empty");
+                AssertEqual((long)inv.ResourceCount, past.TotalRecords, "and keeps the total");
+                EnumerationResult<VesselCleanupResource> capped = await h.Service.EnumerateResourcesAsync(h.Vessel, new EnumerationQuery { PageSize = 1000000 }).ConfigureAwait(false);
+                AssertEqual(1000, capped.PageSize, "page size is capped at 1000");
+
+                EnumerationResult<VesselCleanupResource> inUse = await h.Service.EnumerateResourcesAsync(h.Vessel, new EnumerationQuery { PageSize = 100, Status = "inuse" }).ConfigureAwait(false);
+                AssertEqual((long)inv.InUseCount, inUse.TotalRecords, "status filter counts InUse only");
+                AssertTrue(inUse.Objects.All(r => r.Disposition == VesselCleanupDispositionEnum.InUse), "only InUse rows");
+
+                bool rejected = false;
+                try { await h.Service.EnumerateResourcesAsync(h.Vessel, new EnumerationQuery { Status = "Gone" }).ConfigureAwait(false); }
+                catch (ArgumentException) { rejected = true; }
+                AssertTrue(rejected, "an unknown status is rejected");
+            }));
+
+            cases.Add(CaseAsync("cleanup_rejects_too_many_keys", "A cleanup request with more than MaxRequestItems keys is rejected with CollectionLimitExceeded and removes nothing", TestTags.Negative, async () =>
+            {
+                using Harness h = await Harness.CreateAsync().ConfigureAwait(false);
+                Dock dock = await h.AddDockAsync("armada/k/one").ConfigureAwait(false);
+                List<string> keys = Enumerable.Range(0, CollectionLimits.MaxRequestItems).Select(i => "dock:dck_missing" + i).ToList();
+                keys.Add("dock:" + dock.Id);
+                CollectionLimitExceededException? error = null;
+                try { await h.Service.CleanupAsync(h.Vessel, new VesselCleanupRequest { Keys = keys }).ConfigureAwait(false); }
+                catch (CollectionLimitExceededException ex) { error = ex; }
+                AssertNotNull(error, "over the limit is rejected");
+                AssertEqual("Keys", error!.Field, "field named");
+                AssertEqual(CollectionLimits.MaxRequestItems, error.Limit, "limit reported");
+                AssertNotNull(await h.Db.Driver.Docks.ReadAsync(dock.Id).ConfigureAwait(false), "nothing removed");
             }));
 
             return new TestSuiteDescriptor(
@@ -367,25 +436,39 @@ namespace Test.Shared.Suites.Services
 
         #region Private-Methods
 
-        private static VesselCleanupResource Find(VesselCleanupInventory inv, string key)
+        private static async Task<List<VesselCleanupResource>> AllAsync(Harness h)
         {
-            VesselCleanupResource? r = inv.Resources.FirstOrDefault(x => x.Key == key);
-            if (r == null) throw new InvalidOperationException("resource " + key + " not listed; have: " + String.Join(", ", inv.Resources.Select(x => x.Key)));
+            // Walk the paged resource enumeration with a small page so multi-page traversal is exercised everywhere.
+            List<VesselCleanupResource> all = new List<VesselCleanupResource>();
+            for (int page = 1; page < 500; page++)
+            {
+                EnumerationResult<VesselCleanupResource> result = await h.Service.EnumerateResourcesAsync(h.Vessel, new EnumerationQuery { PageNumber = page, PageSize = 2 }).ConfigureAwait(false);
+                all.AddRange(result.Objects);
+                if (page >= result.TotalPages) break;
+            }
+
+            return all;
+        }
+
+        private static VesselCleanupResource Find(List<VesselCleanupResource> inv, string key)
+        {
+            VesselCleanupResource? r = inv.FirstOrDefault(x => x.Key == key);
+            if (r == null) throw new InvalidOperationException("resource " + key + " not listed; have: " + String.Join(", ", inv.Select(x => x.Key)));
             return r;
         }
 
-        private static VesselCleanupResource FindBranch(VesselCleanupInventory inv, string branch)
+        private static VesselCleanupResource FindBranch(List<VesselCleanupResource> inv, string branch)
         {
-            VesselCleanupResource? r = inv.Resources.FirstOrDefault(x => x.ResourceType == VesselCleanupResourceTypeEnum.Branch && x.BranchName == branch);
-            if (r == null) throw new InvalidOperationException("branch " + branch + " not listed; have: " + String.Join(", ", inv.Resources.Select(x => x.Key)));
+            VesselCleanupResource? r = inv.FirstOrDefault(x => x.ResourceType == VesselCleanupResourceTypeEnum.Branch && x.BranchName == branch);
+            if (r == null) throw new InvalidOperationException("branch " + branch + " not listed; have: " + String.Join(", ", inv.Select(x => x.Key)));
             return r;
         }
 
-        private static VesselCleanupResource FindWorktree(VesselCleanupInventory inv, string path)
+        private static VesselCleanupResource FindWorktree(List<VesselCleanupResource> inv, string path)
         {
-            VesselCleanupResource? r = inv.Resources.FirstOrDefault(x => x.ResourceType == VesselCleanupResourceTypeEnum.Worktree
+            VesselCleanupResource? r = inv.FirstOrDefault(x => x.ResourceType == VesselCleanupResourceTypeEnum.Worktree
                 && Armada.Core.PathCanonicalizer.AreEquivalent(x.Path!, path));
-            if (r == null) throw new InvalidOperationException("worktree " + path + " not listed; have: " + String.Join(", ", inv.Resources.Select(x => x.Key)));
+            if (r == null) throw new InvalidOperationException("worktree " + path + " not listed; have: " + String.Join(", ", inv.Select(x => x.Key)));
             return r;
         }
 

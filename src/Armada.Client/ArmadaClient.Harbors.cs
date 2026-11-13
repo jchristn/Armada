@@ -29,6 +29,19 @@ namespace Armada.Client
         }
 
         /// <summary>
+        /// Dashboard <c>enumerateHarbors</c>: POST /api/v1/harbors/enumerate, one page of the Harbors visible to the caller
+        /// with the exact total.
+        /// </summary>
+        /// <param name="query">Paging (PageSize 1 to 1000) and created-time filters, or null for the first page of 10.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The page.</returns>
+        /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
+        public Task<EnumerationResult<Harbor>?> EnumerateHarborsAsync(EnumerationQuery? query = null, CancellationToken token = default)
+        {
+            return PostAsync<EnumerationResult<Harbor>>("/api/v1/harbors/enumerate", query ?? new EnumerationQuery(), null, token);
+        }
+
+        /// <summary>
         /// Dashboard <c>getHarbor</c>: GET `/api/v1/harbors/${encodeURIComponent(id)}`.
         /// </summary>
         /// <param name="id">id.</param>

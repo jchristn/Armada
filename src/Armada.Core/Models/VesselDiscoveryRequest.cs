@@ -2,6 +2,7 @@ namespace Armada.Core.Models
 {
     using System;
     using System.Collections.Generic;
+    using Armada.Core.Services;
 
     /// <summary>
     /// Request to discover vessel import candidates. At least one entry in <see cref="Directories"/> or
@@ -15,6 +16,7 @@ namespace Armada.Core.Models
         /// Explicit directories. A directory that is a git repository becomes one candidate; a directory that is not
         /// is scanned like a root. Never null.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxRequestItems, Reason = "Directories and Roots together are limited to VesselDiscoveryService.MaxRequestPaths (at most 1000)")]
         public List<string> Directories
         {
             get => _Directories;
@@ -24,6 +26,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// Roots to scan breadth-first for git repositories. Never null.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxRequestItems, Reason = "Directories and Roots together are limited to VesselDiscoveryService.MaxRequestPaths (at most 1000)")]
         public List<string> Roots
         {
             get => _Roots;

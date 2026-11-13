@@ -99,7 +99,7 @@ describe('VoyagesList', () => {
   });
 
   it('cancels from the row menu after confirming, and bulk-cancels a long-press selection', async () => {
-    api.cancelVoyage.mockResolvedValue(undefined);
+    api.cancelVoyage.mockResolvedValue({ voyage: voyage('vyg_1', 'G', { status: 'Cancelled' }), cancelledMissions: 0, notCancelledMissions: 0, firstNotCancelledReason: null });
     await renderScreen(<VoyagesList onSelect={jest.fn()} />);
     await screen.findByText('Gateway hardening');
     await fireEvent.press(screen.getByTestId('voyage-row-menu-vyg_1'));
@@ -230,6 +230,23 @@ describe('VoyageCreateScreen', () => {
   });
 });
 
+/** Serve a voyage the way the server does now: counts on the detail, missions through the paged list. */
+function serveVoyage(v: Voyage, missions: Mission[]) {
+  const counts: Record<string, number> = {};
+  for (const m of missions) counts[m.status] = (counts[m.status] ?? 0) + 1;
+  api.getVoyage.mockResolvedValue({
+    voyage: v, totalMissions: missions.length, completedMissions: counts['Complete'] ?? 0, failedMissions: counts['Failed'] ?? 0,
+    inProgressMissions: counts['InProgress'] ?? 0, missionCountsByStatus: counts, vesselId: missions[0]?.vesselId ?? null, vesselCount: missions.length ? 1 : 0,
+  } as never);
+  api.listMissions.mockImplementation(async (params?: { pageNumber?: number; pageSize?: number; filters?: Record<string, string> }) => {
+    const matching = params?.filters?.status ? missions.filter((m) => m.status === params.filters!.status) : missions;
+    const size = params?.pageSize ?? 25;
+    const number = params?.pageNumber ?? 1;
+    return { ...page(matching.slice((number - 1) * size, number * size), matching.length, size), pageNumber: number } as never;
+  });
+  api.getMission.mockImplementation(async (missionId: string) => (missions.find((m) => m.id === missionId) ?? missions[0]) as never);
+}
+
 describe('VoyageDetail', () => {
   it('shows a connection error, not "not found", when the voyage cannot be loaded offline', async () => {
     api.getVoyage.mockRejectedValue(new client.NetworkError('Network request failed', null));
@@ -239,7 +256,7 @@ describe('VoyageDetail', () => {
   });
 
   it('shows the voyage, progress, landing mode, and missions, and links to them', async () => {
-    api.getVoyage.mockResolvedValue({ voyage: voyage('vyg_1', 'Gateway hardening', { landingMode: 'PullRequest', captainOverridesJson: '[{"persona":"Judge","fallbackTier":"Premium"}]' }), missions: [mission('msn_1', 'Complete'), mission('msn_2', 'Failed')] } as never);
+    serveVoyage(voyage('vyg_1', 'Gateway hardening', { landingMode: 'PullRequest', captainOverridesJson: '[{"persona":"Judge","fallbackTier":"Premium"}]' }), [mission('msn_1', 'Complete'), mission('msn_2', 'Failed')]);
     await renderScreen(<VoyageDetail id="vyg_1" />);
     expect(await screen.findByTestId('voyage-detail-title')).toHaveTextContent('Gateway hardening');
     expect(screen.getByTestId('voyage-progress-text')).toHaveTextContent('1/2 complete, 1 failed');
@@ -256,13 +273,13 @@ describe('VoyageDetail', () => {
     api.listMissions.mockResolvedValue(page([mission('msn_5', 'Complete')]) as never);
     await renderScreen(<VoyageDetail id="vyg_1" />);
     expect(await screen.findByText('Mission msn_5')).toBeTruthy();
-    expect(api.listMissions).toHaveBeenCalledWith({ pageSize: 1000, filters: { voyageId: 'vyg_1' } });
+    expect(api.listMissions).toHaveBeenCalledWith({ pageNumber: 1, pageSize: 50, filters: { voyageId: 'vyg_1', order: 'CreatedAscending' } });
     expect(screen.getByTestId('voyage-delete')).toBeTruthy();
   });
 
   it('cancels, retries failed missions, and deletes after confirming', async () => {
-    api.getVoyage.mockResolvedValue({ voyage: voyage('vyg_1', 'G'), missions: [mission('msn_2', 'Failed', { title: 'Broken', priority: 5 })] } as never);
-    api.cancelVoyage.mockResolvedValue(undefined);
+    serveVoyage(voyage('vyg_1', 'G'), [mission('msn_2', 'Failed', { title: 'Broken', priority: 5 })]);
+    api.cancelVoyage.mockResolvedValue({ voyage: voyage('vyg_1', 'G', { status: 'Cancelled' }), cancelledMissions: 0, notCancelledMissions: 0, firstNotCancelledReason: null });
     api.createMission.mockResolvedValue({} as Mission);
     const { socket } = await renderScreen(<VoyageDetail id="vyg_1" />);
     await screen.findByTestId('voyage-detail-title');
@@ -273,7 +290,7 @@ describe('VoyageDetail', () => {
     await fireEvent.press(screen.getByTestId('voyage-confirm-confirm'));
     expect(api.createMission).toHaveBeenCalledWith({ title: 'Broken', description: undefined, vesselId: 'vsl_1', voyageId: 'vyg_1', priority: 5 });
 
-    api.getVoyage.mockResolvedValue({ voyage: voyage('vyg_1', 'G', { status: 'Cancelled' }), missions: [] } as never);
+    serveVoyage(voyage('vyg_1', 'G', { status: 'Cancelled' }), []);
     api.purgeVoyage.mockResolvedValue(undefined);
     await act(async () => { socket.message({ type: 'voyage.changed', data: { id: 'vyg_1', status: 'Cancelled' } }); });
     await waitFor(() => expect(screen.getByTestId('voyage-delete')).toBeTruthy());
@@ -285,7 +302,7 @@ describe('VoyageDetail', () => {
   });
 
   it('shows a deleted notice in the split pane instead of navigating', async () => {
-    api.getVoyage.mockResolvedValue({ voyage: voyage('vyg_1', 'Old', { status: 'Complete' }), missions: [] } as never);
+    serveVoyage(voyage('vyg_1', 'Old', { status: 'Complete' }), []);
     api.purgeVoyage.mockResolvedValue(undefined);
     await renderScreen(<VoyageDetail id="vyg_1" embedded />);
     await fireEvent.press(await screen.findByTestId('voyage-delete'));
@@ -295,17 +312,29 @@ describe('VoyageDetail', () => {
   });
 
   it('follows mission and voyage events live', async () => {
-    api.getVoyage.mockResolvedValue({ voyage: voyage('vyg_1', 'Live'), missions: [mission('msn_1', 'InProgress')] } as never);
+    serveVoyage(voyage('vyg_1', 'Live'), [mission('msn_1', 'InProgress')]);
     const { socket } = await renderScreen(<VoyageDetail id="vyg_1" />);
     await screen.findByTestId('voyage-detail-title');
-    api.getVoyage.mockResolvedValue({ voyage: voyage('vyg_1', 'Live'), missions: [mission('msn_1', 'Complete')] } as never);
+    serveVoyage(voyage('vyg_1', 'Live'), [mission('msn_1', 'Complete')]);
     await act(async () => { socket.message({ type: 'mission.changed', data: { id: 'msn_1', status: 'Complete' } }); });
     await waitFor(() => expect(screen.getByTestId('voyage-progress-text')).toHaveTextContent('1/1 complete, 0 failed'));
     expect(api.getVoyage).toHaveBeenCalledTimes(2);
   });
 
+  it('pages the missions instead of loading them all, with the total from the server', async () => {
+    const many = Array.from({ length: 120 }, (_, i) => mission(`msn_${i}`, i === 0 ? 'Failed' : 'Complete'));
+    serveVoyage(voyage('vyg_1', 'Big'), many);
+    await renderScreen(<VoyageDetail id="vyg_1" />);
+    expect(await screen.findByTestId('voyage-mission-row-msn_49')).toBeTruthy();
+    expect(screen.queryByTestId('voyage-mission-row-msn_50')).toBeNull();
+    expect(screen.getByTestId('voyage-progress-text')).toHaveTextContent('119/120 complete, 1 failed');
+    await fireEvent.press(screen.getByTestId('voyage-missions-load-more'));
+    expect(await screen.findByTestId('voyage-mission-row-msn_99')).toBeTruthy();
+    expect(screen.queryByTestId('voyage-mission-row-msn_100')).toBeNull();
+  });
+
   it('opens a mission diff from the row menu', async () => {
-    api.getVoyage.mockResolvedValue({ voyage: voyage('vyg_1', 'G'), missions: [mission('msn_1', 'Complete')] } as never);
+    serveVoyage(voyage('vyg_1', 'G'), [mission('msn_1', 'Complete')]);
     api.getMissionDiff.mockResolvedValue({ diff: 'No changes' } as never);
     await renderScreen(<VoyageDetail id="vyg_1" />);
     await fireEvent.press(await screen.findByTestId('voyage-mission-menu-msn_1'));

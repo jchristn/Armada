@@ -8,6 +8,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
     using Npgsql;
     using Armada.Core.Database;
     using Armada.Core.Database.Interfaces;
+    using Armada.Core.Enums;
     using Armada.Core.Models;
     using Armada.Core.Settings;
     using SyslogLogging;
@@ -104,6 +105,63 @@ namespace Armada.Core.Database.Postgresql.Implementations
             }
 
             return results;
+        }
+
+        /// <inheritdoc />
+        public async Task<EnumerationResult<AskMessageToolCall>> EnumeratePageByMessageAsync(string tenantId, string threadId, string messageId, EnumerationQuery query, CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(tenantId)) throw new ArgumentNullException(nameof(tenantId));
+            if (String.IsNullOrEmpty(threadId)) throw new ArgumentNullException(nameof(threadId));
+            if (String.IsNullOrEmpty(messageId)) throw new ArgumentNullException(nameof(messageId));
+            if (query == null) throw new ArgumentNullException(nameof(query));
+            string direction = query.Order == EnumerationOrderEnum.CreatedAscending ? "ASC" : "DESC";
+            using (NpgsqlConnection conn = new NpgsqlConnection(_ConnectionString))
+            {
+                await conn.OpenAsync(token).ConfigureAwait(false);
+                return await PostgresqlBoundedPage.ReadAsync(conn,
+                    "FROM ask_message_tool_calls WHERE tenant_id = @tenant_id AND thread_id = @thread_id AND message_id = @message_id",
+                    "created_utc " + direction + ", id " + direction,
+                    cmd =>
+                    {
+                        PostgresqlCommandHelper.Add(cmd, "@tenant_id", tenantId);
+                        PostgresqlCommandHelper.Add(cmd, "@thread_id", threadId);
+                        PostgresqlCommandHelper.Add(cmd, "@message_id", messageId);
+                    }, FromReader, query, token).ConfigureAwait(false);
+            }
+        }
+
+        /// <inheritdoc />
+        public async Task<Dictionary<string, int>> CountByMessagesAsync(string tenantId, string threadId, List<string> messageIds, CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(tenantId)) throw new ArgumentNullException(nameof(tenantId));
+            if (String.IsNullOrEmpty(threadId)) throw new ArgumentNullException(nameof(threadId));
+            Dictionary<string, int> counts = new Dictionary<string, int>(StringComparer.Ordinal);
+            if (messageIds == null || messageIds.Count == 0) return counts;
+
+            List<string> distinct = messageIds.Where(m => !String.IsNullOrEmpty(m)).Distinct(StringComparer.Ordinal).ToList();
+            using (NpgsqlConnection conn = new NpgsqlConnection(_ConnectionString))
+            {
+                await conn.OpenAsync(token).ConfigureAwait(false);
+                for (int start = 0; start < distinct.Count; start += 200)
+                {
+                    List<string> chunk = distinct.Skip(start).Take(200).ToList();
+                    List<string> names = new List<string>();
+                    for (int i = 0; i < chunk.Count; i++) names.Add("@m" + i);
+                    List<ToolCallCountRow> rows = await PostgresqlCommandHelper.QueryAsync(conn,
+                        "SELECT message_id, COUNT(*) AS call_count FROM ask_message_tool_calls WHERE tenant_id = @tenant_id AND thread_id = @thread_id AND message_id IN (" + String.Join(", ", names) + ") GROUP BY message_id;",
+                        cmd =>
+                        {
+                            PostgresqlCommandHelper.Add(cmd, "@tenant_id", tenantId);
+                            PostgresqlCommandHelper.Add(cmd, "@thread_id", threadId);
+                            for (int i = 0; i < chunk.Count; i++) PostgresqlCommandHelper.Add(cmd, "@m" + i, chunk[i]);
+                        },
+                        reader => new ToolCallCountRow { MessageId = reader["message_id"]?.ToString() ?? String.Empty, Count = Convert.ToInt32(reader["call_count"]) },
+                        token).ConfigureAwait(false);
+                    foreach (ToolCallCountRow row in rows) counts[row.MessageId] = row.Count;
+                }
+            }
+
+            return counts;
         }
 
         #endregion

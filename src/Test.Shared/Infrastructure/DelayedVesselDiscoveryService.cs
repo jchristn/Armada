@@ -59,9 +59,9 @@ namespace Test.Shared.Infrastructure
         }
 
         /// <inheritdoc />
-        public Task<VesselBrowseResult> BrowseAsync(string? path, CancellationToken token = default)
+        public Task<VesselBrowseResult> BrowseAsync(string? path, EnumerationQuery? page = null, CancellationToken token = default)
         {
-            return _Inner.BrowseAsync(path, token);
+            return _Inner.BrowseAsync(path, page, token);
         }
 
         /// <inheritdoc />

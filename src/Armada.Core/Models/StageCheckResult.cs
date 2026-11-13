@@ -3,6 +3,7 @@ namespace Armada.Core.Models
     using System;
     using System.Collections.Generic;
     using Armada.Core.Enums;
+    using Armada.Core.Services;
 
     /// <summary>
     /// The result of a stage check: whether the stage's work was verified, and when it was not, why.
@@ -24,6 +25,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// The commands the check ran or would have run, in order.
         /// </summary>
+        [CollectionBound(2, Reason = "The workflow profile build command and one unit-test command")]
         public List<string> Commands { get; set; } = new List<string>();
 
         /// <summary>
@@ -44,6 +46,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// Commands that failed on the stage's starting commit too, so they did not block the stage.
         /// </summary>
+        [CollectionBound(2, Reason = "A subset of Commands")]
         public List<string> PreExistingFailures { get; set; } = new List<string>();
 
         /// <summary>

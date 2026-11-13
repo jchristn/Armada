@@ -1,6 +1,7 @@
 namespace Armada.Core.Models
 {
     using System.Collections.Generic;
+    using Armada.Core.Services;
 
     /// <summary>
     /// Result of a vessel cleanup: per-item outcomes and the refreshed inventory.
@@ -10,6 +11,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// Per-item outcomes in the order they ran.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxRequestItems, Reason = "One per distinct requested key; Keys is limited to MaxRequestItems")]
         public List<VesselCleanupItemResult> Results { get; set; } = new List<VesselCleanupItemResult>();
 
         /// <summary>

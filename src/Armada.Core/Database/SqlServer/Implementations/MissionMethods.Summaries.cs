@@ -12,7 +12,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
     {
         private const string MissionSummarySelectColumns = @"
 id, tenant_id, user_id, voyage_id, vessel_id, captain_id, title, status, priority,
-parent_mission_id, branch_name, dock_id, process_id, pr_url, commit_hash,
+parent_mission_id, branch_strategy, depth, ready_utc, assigned_utc, wait_for_voyage_workers, branch_name, dock_id, process_id, pr_url, commit_hash,
 persona, depends_on_mission_id, failure_reason, failure_kind, is_evaluation, requires_review, review_deny_action,
 review_comment, reviewed_by_user_id, review_requested_utc, review_deadline_utc, reviewed_utc,
 created_utc, started_utc, completed_utc, total_runtime_ms, last_update_utc,
@@ -80,6 +80,16 @@ LEN(COALESCE(agent_output, '')) AS agent_output_length";
         public async Task<List<MissionHistoryPoint>> EnumerateHistoryPointsAsync(MissionHistoryQuery query, CancellationToken token = default)
         {
             return await EnumerateHistoryPointsCoreAsync(
+                query,
+                Array.Empty<string>(),
+                Array.Empty<KeyValuePair<string, object?>>(),
+                token).ConfigureAwait(false);
+        }
+
+        /// <inheritdoc />
+        public async Task<List<MissionHistoryBucketCount>> CountHistoryBucketsAsync(MissionHistoryQuery query, CancellationToken token = default)
+        {
+            return await CountHistoryBucketsCoreAsync(
                 query,
                 Array.Empty<string>(),
                 Array.Empty<KeyValuePair<string, object?>>(),
@@ -160,6 +170,17 @@ LEN(COALESCE(agent_output, '')) AS agent_output_length";
                 token).ConfigureAwait(false);
         }
 
+        /// <inheritdoc />
+        public async Task<List<MissionHistoryBucketCount>> CountHistoryBucketsAsync(string tenantId, MissionHistoryQuery query, CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(tenantId)) throw new ArgumentNullException(nameof(tenantId));
+            return await CountHistoryBucketsCoreAsync(
+                query,
+                new[] { "tenant_id = @tenant_id" },
+                new[] { new KeyValuePair<string, object?>("@tenant_id", tenantId) },
+                token).ConfigureAwait(false);
+        }
+
         public async Task<MissionSummary?> ReadSummaryAsync(string tenantId, string userId, string id, CancellationToken token = default)
         {
             if (String.IsNullOrEmpty(tenantId)) throw new ArgumentNullException(nameof(tenantId));
@@ -230,6 +251,22 @@ LEN(COALESCE(agent_output, '')) AS agent_output_length";
                 token).ConfigureAwait(false);
         }
 
+        /// <inheritdoc />
+        public async Task<List<MissionHistoryBucketCount>> CountHistoryBucketsAsync(string tenantId, string userId, MissionHistoryQuery query, CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(tenantId)) throw new ArgumentNullException(nameof(tenantId));
+            if (String.IsNullOrEmpty(userId)) throw new ArgumentNullException(nameof(userId));
+            return await CountHistoryBucketsCoreAsync(
+                query,
+                new[] { "tenant_id = @tenant_id", "user_id = @user_id" },
+                new[]
+                {
+                    new KeyValuePair<string, object?>("@tenant_id", tenantId),
+                    new KeyValuePair<string, object?>("@user_id", userId)
+                },
+                token).ConfigureAwait(false);
+        }
+
         private async Task<EnumerationResult<MissionSummary>> EnumerateSummariesCoreAsync(
             EnumerationQuery? query,
             IEnumerable<string> baseConditions,
@@ -259,7 +296,7 @@ LEN(COALESCE(agent_output, '')) AS agent_output_length";
                         selectCmd.CommandText =
                             "SELECT " + MissionSummarySelectColumns +
                             " FROM missions" + BuildWhereClause(selectConditions) +
-                            " ORDER BY created_utc " + orderDirection +
+                            " ORDER BY created_utc " + orderDirection + ", id " + orderDirection +
                             " OFFSET " + query.Offset + " ROWS FETCH NEXT " + query.PageSize + " ROWS ONLY;";
                         List<MissionSummary> results = new List<MissionSummary>();
                         using (SqlDataReader reader = await selectCmd.ExecuteReaderAsync(token).ConfigureAwait(false))
@@ -354,6 +391,66 @@ LEN(COALESCE(agent_output, '')) AS agent_output_length";
             return results;
         }
 
+        private async Task<List<MissionHistoryBucketCount>> CountHistoryBucketsCoreAsync(
+            MissionHistoryQuery? query,
+            IEnumerable<string> baseConditions,
+            IEnumerable<KeyValuePair<string, object?>> baseParameters,
+            CancellationToken token)
+        {
+            query ??= new MissionHistoryQuery();
+            List<MissionHistoryBucketCount> results = new List<MissionHistoryBucketCount>();
+
+            using (SqlConnection conn = new SqlConnection(_Driver.ConnectionString))
+            {
+                await conn.OpenAsync(token).ConfigureAwait(false);
+                using (SqlCommand cmd = conn.CreateCommand())
+                {
+                    List<string> conditions = new List<string>(baseConditions)
+                    {
+                        "created_utc >= @from_utc",
+                        "created_utc < @to_utc"
+                    };
+                    AddParameters(cmd, baseParameters);
+                    cmd.Parameters.AddWithValue("@from_utc", SqlServerDatabaseDriver.ToIso8601(query.FromUtc));
+                    cmd.Parameters.AddWithValue("@to_utc", SqlServerDatabaseDriver.ToIso8601(query.ToUtc));
+                    cmd.Parameters.AddWithValue("@start_epoch", query.AlignedStartEpochSeconds);
+                    cmd.Parameters.AddWithValue("@bucket_seconds", query.BucketSeconds);
+                    if (!String.IsNullOrEmpty(query.VesselId))
+                    {
+                        conditions.Add("vessel_id = @vessel_id");
+                        cmd.Parameters.AddWithValue("@vessel_id", query.VesselId);
+                    }
+                    if (!String.IsNullOrEmpty(query.FleetId))
+                    {
+                        conditions.Add("vessel_id IN (SELECT id FROM vessels WHERE fleet_id = @fleet_id)");
+                        cmd.Parameters.AddWithValue("@fleet_id", query.FleetId);
+                    }
+
+                    // One row per bucket and status, aggregated in the database: the result is bounded by the number of
+                    // buckets times the number of statuses, never by the number of missions.
+                    cmd.CommandText =
+                        "SELECT bucket_index, status, COUNT(*) AS mission_count FROM (" +
+                        "SELECT (DATEDIFF_BIG(SECOND, CAST('1970-01-01T00:00:00' AS DATETIME2), CONVERT(DATETIME2, LEFT(created_utc, 19), 126)) - @start_epoch) / @bucket_seconds AS bucket_index, status FROM missions" +
+                        BuildWhereClause(conditions) +
+                        ") history_rows GROUP BY bucket_index, status ORDER BY bucket_index, status;";
+                    using (SqlDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
+                    {
+                        while (await reader.ReadAsync(token).ConfigureAwait(false))
+                        {
+                            results.Add(new MissionHistoryBucketCount
+                            {
+                                BucketIndex = Convert.ToInt64(reader["bucket_index"], System.Globalization.CultureInfo.InvariantCulture),
+                                Status = Enum.Parse<MissionStatusEnum>(reader["status"].ToString()!),
+                                Count = Convert.ToInt64(reader["mission_count"], System.Globalization.CultureInfo.InvariantCulture)
+                            });
+                        }
+                    }
+                }
+            }
+
+            return results;
+        }
+
         private async Task<List<MissionHistoryPoint>> EnumerateHistoryPointsCoreAsync(
             MissionHistoryQuery? query,
             IEnumerable<string> baseConditions,
@@ -436,6 +533,17 @@ LEN(COALESCE(agent_output, '')) AS agent_output_length";
                 conditions.Add("captain_id = @captain_id");
                 cmd.Parameters.AddWithValue("@captain_id", query.CaptainId);
             }
+            if (!String.IsNullOrEmpty(query.ParentMissionId))
+            {
+                conditions.Add("parent_mission_id = @parent_mission_id");
+                cmd.Parameters.AddWithValue("@parent_mission_id", query.ParentMissionId);
+            }
+            if (query.RootsOnly == true) conditions.Add("parent_mission_id IS NULL AND depends_on_mission_id IS NULL");
+            if (query.WaitingGate.HasValue)
+            {
+                conditions.Add("status = 'Pending' AND id IN (SELECT mission_id FROM mission_wait_intervals WHERE ended_utc IS NULL AND gate = @waiting_gate)");
+                cmd.Parameters.AddWithValue("@waiting_gate", query.WaitingGate.Value.ToString());
+            }
         }
 
         private static void AddParameters(SqlCommand cmd, IEnumerable<KeyValuePair<string, object?>> parameters)
@@ -466,6 +574,11 @@ LEN(COALESCE(agent_output, '')) AS agent_output_length";
                 Status = Enum.Parse<MissionStatusEnum>(reader["status"].ToString()!),
                 Priority = Convert.ToInt32(reader["priority"]),
                 ParentMissionId = SqlServerDatabaseDriver.NullableString(reader["parent_mission_id"]),
+                BranchStrategy = Enum.TryParse(reader["branch_strategy"].ToString(), out MissionBranchStrategyEnum strategy) ? strategy : MissionBranchStrategyEnum.New,
+                Depth = reader["depth"] == DBNull.Value ? 0 : Math.Clamp(Convert.ToInt32(reader["depth"]), 0, 16),
+                ReadyUtc = SqlServerDatabaseDriver.FromIso8601Nullable(reader["ready_utc"]),
+                AssignedUtc = SqlServerDatabaseDriver.FromIso8601Nullable(reader["assigned_utc"]),
+                WaitForVoyageWorkers = reader["wait_for_voyage_workers"] != DBNull.Value && Convert.ToBoolean(reader["wait_for_voyage_workers"]),
                 BranchName = SqlServerDatabaseDriver.NullableString(reader["branch_name"]),
                 DockId = SqlServerDatabaseDriver.NullableString(reader["dock_id"]),
                 ProcessId = reader["process_id"] == DBNull.Value ? null : Convert.ToInt32(reader["process_id"]),

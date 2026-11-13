@@ -2,6 +2,7 @@ namespace Armada.Core.Models
 {
     using System;
     using System.Collections.Generic;
+    using Armada.Core.Services;
 
     /// <summary>
     /// Request to apply fleet recommendations to an import batch. The list may differ from what the captain
@@ -15,6 +16,7 @@ namespace Armada.Core.Models
         /// Fleets to create or reuse and the vessels to assign to each. A vessel may appear in at most one fleet.
         /// Fleets without vessels are skipped. Never null.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxRequestItems)]
         public List<FleetRecommendationApplyFleet> Fleets
         {
             get => _Fleets;

@@ -3,6 +3,7 @@ namespace Armada.Core.Models
     using System;
     using System.Collections.Generic;
     using Armada.Core.Enums;
+    using Armada.Core.Services;
 
     /// <summary>
     /// First-class release record aggregating linked work, checks, notes, and artifacts.
@@ -81,23 +82,29 @@ namespace Armada.Core.Models
         public ReleaseStatusEnum Status { get; set; } = ReleaseStatusEnum.Draft;
 
         /// <summary>
-        /// Linked voyage identifiers.
+        /// Linked voyage identifiers. At most 1000 (CollectionLimits.MaxLinkedIds); a write with more is rejected.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxLinkedIds)]
         public List<string> VoyageIds { get; set; } = new List<string>();
 
         /// <summary>
-        /// Linked mission identifiers.
+        /// Linked mission identifiers: the explicit missions plus every mission of each linked voyage. At most 1000
+        /// (CollectionLimits.MaxLinkedIds); a create, update, or refresh whose expansion exceeds it is rejected.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxLinkedIds)]
         public List<string> MissionIds { get; set; } = new List<string>();
 
         /// <summary>
-        /// Linked check-run identifiers.
+        /// Linked check-run identifiers. At most 1000 (CollectionLimits.MaxLinkedIds); a write with more is rejected.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxLinkedIds)]
         public List<string> CheckRunIds { get; set; } = new List<string>();
 
         /// <summary>
-        /// Linked release artifacts.
+        /// Linked release artifacts, derived from the linked check runs. At most 1000; a write that would derive more
+        /// is rejected.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxLinkedIds)]
         public List<ReleaseArtifact> Artifacts { get; set; } = new List<ReleaseArtifact>();
 
         /// <summary>

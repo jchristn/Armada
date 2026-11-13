@@ -67,5 +67,27 @@ namespace Armada.Core.Database.Interfaces
         /// <param name="token">Cancellation token.</param>
         /// <returns>Pending proposals older than the cutoff.</returns>
         Task<List<AskActionProposal>> EnumeratePendingBeforeAsync(DateTime cutoffUtc, CancellationToken token = default);
+
+        /// <summary>
+        /// Read one page of a thread's proposals. CreatedAscending is oldest first, CreatedDescending (the default) newest
+        /// first; the id breaks ties. The page is cut in the database and TotalRecords counts every matching row.
+        /// </summary>
+        /// <param name="tenantId">Tenant identifier.</param>
+        /// <param name="threadId">Thread identifier.</param>
+        /// <param name="status">Only proposals with this status, or null for every status.</param>
+        /// <param name="query">Page number, page size (1 to 1000), and order.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>One page of proposals.</returns>
+        Task<EnumerationResult<AskActionProposal>> EnumeratePageByThreadAsync(string tenantId, string threadId, AskProposalStatusEnum? status, EnumerationQuery query, CancellationToken token = default);
+
+        /// <summary>
+        /// Count a thread's proposals.
+        /// </summary>
+        /// <param name="tenantId">Tenant identifier.</param>
+        /// <param name="threadId">Thread identifier.</param>
+        /// <param name="status">Only proposals with this status, or null for every status.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The number of proposals.</returns>
+        Task<long> CountByThreadAsync(string tenantId, string threadId, AskProposalStatusEnum? status, CancellationToken token = default);
     }
 }

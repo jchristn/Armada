@@ -46,9 +46,9 @@ namespace Armada.Core.Database.Mysql.Implementations
             await MysqlCommandHelper.WriteAsync(_ConnectionString, _WriteLock, async (MySqlConnection conn, MySqlTransaction tx) =>
             {
                 await MysqlCommandHelper.ExecuteAsync(conn, tx, @"INSERT INTO fleet_action_runs
-                    (id, tenant_id, user_id, action_id, action_name, kind, command_text, prompt_template, pipeline_id, persona, timeout_seconds, requires_clean_working_tree, concurrency, status, target_count, succeeded_count, failed_count, skipped_count, cancelled_count, started_utc, completed_utc, created_utc, last_update_utc, approval_options_json, command_windows, output_parser, scan_source_action_key, required_tools_json, requires_network, input_values_json, findings_count, inputs_json)
+                    (id, tenant_id, user_id, action_id, action_name, kind, command_text, prompt_template, pipeline_id, persona, timeout_seconds, requires_clean_working_tree, concurrency, status, target_count, succeeded_count, failed_count, skipped_count, cancelled_count, started_utc, completed_utc, created_utc, last_update_utc, approval_options_json, command_windows, output_parser, scan_source_action_key, applicability_command, applicability_command_windows, mission_mode, required_tools_json, requires_network, input_values_json, findings_count, inputs_json)
                     VALUES
-                    (@id, @tenant_id, @user_id, @action_id, @action_name, @kind, @command_text, @prompt_template, @pipeline_id, @persona, @timeout_seconds, @requires_clean_working_tree, @concurrency, @status, @target_count, @succeeded_count, @failed_count, @skipped_count, @cancelled_count, @started_utc, @completed_utc, @created_utc, @last_update_utc, @approval_options_json, @command_windows, @output_parser, @scan_source_action_key, @required_tools_json, @requires_network, @input_values_json, @findings_count, @inputs_json);",
+                    (@id, @tenant_id, @user_id, @action_id, @action_name, @kind, @command_text, @prompt_template, @pipeline_id, @persona, @timeout_seconds, @requires_clean_working_tree, @concurrency, @status, @target_count, @succeeded_count, @failed_count, @skipped_count, @cancelled_count, @started_utc, @completed_utc, @created_utc, @last_update_utc, @approval_options_json, @command_windows, @output_parser, @scan_source_action_key, @applicability_command, @applicability_command_windows, @mission_mode, @required_tools_json, @requires_network, @input_values_json, @findings_count, @inputs_json);",
                     cmd => Bind(cmd, run), token).ConfigureAwait(false);
             }, token).ConfigureAwait(false);
 
@@ -99,7 +99,7 @@ namespace Armada.Core.Database.Mysql.Implementations
                     status = @status, target_count = @target_count, succeeded_count = @succeeded_count,
                     failed_count = @failed_count, skipped_count = @skipped_count, cancelled_count = @cancelled_count,
                     started_utc = @started_utc, completed_utc = @completed_utc, created_utc = @created_utc,
-                    command_windows = @command_windows, output_parser = @output_parser, scan_source_action_key = @scan_source_action_key, required_tools_json = @required_tools_json, requires_network = @requires_network, inputs_json = @inputs_json, input_values_json = @input_values_json, findings_count = @findings_count, last_update_utc = @last_update_utc, approval_options_json = @approval_options_json
+                    command_windows = @command_windows, output_parser = @output_parser, scan_source_action_key = @scan_source_action_key, applicability_command = @applicability_command, applicability_command_windows = @applicability_command_windows, mission_mode = @mission_mode, required_tools_json = @required_tools_json, requires_network = @requires_network, inputs_json = @inputs_json, input_values_json = @input_values_json, findings_count = @findings_count, last_update_utc = @last_update_utc, approval_options_json = @approval_options_json
                     WHERE id = @id;", cmd => Bind(cmd, run), token).ConfigureAwait(false);
             }, token).ConfigureAwait(false);
 
@@ -217,6 +217,9 @@ namespace Armada.Core.Database.Mysql.Implementations
             MysqlCommandHelper.Add(cmd, "@command_windows", run.CommandWindows);
             MysqlCommandHelper.Add(cmd, "@output_parser", run.OutputParser);
             MysqlCommandHelper.Add(cmd, "@scan_source_action_key", run.ScanSourceActionKey);
+            MysqlCommandHelper.Add(cmd, "@applicability_command", run.ApplicabilityCommand);
+            MysqlCommandHelper.Add(cmd, "@applicability_command_windows", run.ApplicabilityCommandWindows);
+            MysqlCommandHelper.Add(cmd, "@mission_mode", run.MissionMode.ToString());
             MysqlCommandHelper.Add(cmd, "@required_tools_json", System.Text.Json.JsonSerializer.Serialize(run.RequiredTools));
             MysqlCommandHelper.Add(cmd, "@requires_network", run.RequiresNetwork ? 1 : 0);
             MysqlCommandHelper.Add(cmd, "@inputs_json", System.Text.Json.JsonSerializer.Serialize(run.Inputs));
@@ -255,6 +258,9 @@ namespace Armada.Core.Database.Mysql.Implementations
             run.CommandWindows = MysqlCommandHelper.ReadString(reader["command_windows"]);
             run.OutputParser = MysqlCommandHelper.ReadString(reader["output_parser"]);
             run.ScanSourceActionKey = MysqlCommandHelper.ReadString(reader["scan_source_action_key"]);
+            run.ApplicabilityCommand = MysqlCommandHelper.ReadString(reader["applicability_command"]);
+            run.ApplicabilityCommandWindows = MysqlCommandHelper.ReadString(reader["applicability_command_windows"]);
+            run.MissionMode = MysqlCommandHelper.ReadEnum(reader["mission_mode"], MissionModeEnum.Implementation);
             run.RequiredTools = System.Text.Json.JsonSerializer.Deserialize<System.Collections.Generic.List<string>>(MysqlCommandHelper.ReadString(reader["required_tools_json"]) ?? "[]") ?? new();
             run.RequiresNetwork = MysqlCommandHelper.ReadBool(reader["requires_network"], false);
             run.InputValues = System.Text.Json.JsonSerializer.Deserialize<System.Collections.Generic.Dictionary<string, string>>(MysqlCommandHelper.ReadString(reader["input_values_json"]) ?? "{}") ?? new();

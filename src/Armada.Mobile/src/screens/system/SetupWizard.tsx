@@ -19,7 +19,7 @@ import {
 import type { Captain, DeploymentEnvironment, Fleet, Mission, MuxEndpointInfo, Vessel, VesselReadinessResult, WorkflowProfile } from '@dashboard/types/models';
 import { buildMuxRuntimeOptionsJson, EMPTY_MUX_CAPTAIN_FORM, isMuxRuntime, type MuxCaptainFormFields } from '@dashboard/lib/mux';
 import { SETUP_LANDING_MODES, setupLandingModeHint, setupLandingWorkingDirectoryError } from '@dashboard/lib/setupLanding';
-import { idShort, normalizeMissionResponse, relevantWorkflowProfiles, SETTLED_MISSION_STATUSES, SETUP_STEPS, SETUP_TOOLTIPS, setupBacklogPath, upsertById } from '@dashboard/lib/setupWizard';
+import { idShort, isMultiSlotRuntime, MAX_SETUP_PARALLELISM, normalizeMissionResponse, planSetupCaptains, relevantWorkflowProfiles, SETTLED_MISSION_STATUSES, SETUP_STEPS, SETUP_TOOLTIPS, setupBacklogPath, upsertById } from '@dashboard/lib/setupWizard';
 import { Field, FieldCard } from '../../components/resource/DetailParts';
 import { AppText } from '../../components/ui/AppText';
 import { Banner } from '../../components/ui/Banner';
@@ -93,10 +93,11 @@ export function SetupWizard() {
   const [fleetForm, setFleetForm] = useState(() => ({ name: t('Armada Starter Fleet'), description: t('Created from the setup wizard.') }));
   const [vesselForm, setVesselForm] = useState({
     name: '', repoUrl: '', defaultBranch: 'main', workingDirectory: '', projectContext: '', styleGuide: '', landingMode: 'None',
-    enableModelContext: true, allowConcurrentMissions: false,
+    enableModelContext: true, maxParallelVoyages: '1', maxParallelMissionsPerVoyage: '4',
   });
-  const [captainForm, setCaptainForm] = useState<{ name: string; runtime: string; model: string; tier: string; systemInstructions: string } & MuxCaptainFormFields>(() => ({
+  const [captainForm, setCaptainForm] = useState<{ name: string; runtime: string; model: string; tier: string; systemInstructions: string; parallelism: string } & MuxCaptainFormFields>(() => ({
     name: t('Setup Captain'),
+    parallelism: '1',
     runtime: 'ClaudeCode',
     model: '',
     tier: 'Standard',
@@ -157,7 +158,7 @@ export function SetupWizard() {
       setMuxHint(t('Loading saved Mux endpoints...'));
       const r = await listMuxEndpoints(muxDir || undefined);
       if (!r.success) throw new Error(r.errorMessage || r.errorCode || t('Mux endpoint discovery failed.'));
-      const list = r.endpoints ?? [];
+      const list = r.objects ?? [];
       setMuxEndpoints(list);
       setMuxHint(list.length === 0 ? t('No saved Mux endpoints were found for this config directory.') : t('{{count}} saved Mux endpoint(s) available.', { count: list.length }));
     } catch (e: unknown) {
@@ -257,7 +258,8 @@ export function SetupWizard() {
         repoUrl: vesselForm.repoUrl.trim(),
         defaultBranch: vesselForm.defaultBranch.trim() || 'main',
         enableModelContext: vesselForm.enableModelContext,
-        allowConcurrentMissions: vesselForm.allowConcurrentMissions,
+        maxParallelVoyages: Number(vesselForm.maxParallelVoyages) < 0 ? 1 : Math.min(1000, Math.trunc(Number(vesselForm.maxParallelVoyages) || 0)),
+        maxParallelMissionsPerVoyage: Number(vesselForm.maxParallelMissionsPerVoyage) < 0 ? 1 : Math.min(1000, Math.trunc(Number(vesselForm.maxParallelMissionsPerVoyage) || 0)),
       };
       if (activeFleetId) payload.fleetId = activeFleetId;
       if (vesselForm.workingDirectory.trim()) payload.workingDirectory = vesselForm.workingDirectory.trim();
@@ -293,19 +295,28 @@ export function SetupWizard() {
     if (isMuxRuntime(captainForm.runtime) && !captainForm.muxEndpoint.trim()) { setResult({ kind: 'error', message: t('Mux captains require a named Mux endpoint.') }); return; }
     try {
       setBusy(true);
-      const captain = await createCaptain({
-        name: captainForm.name.trim(),
-        runtime: captainForm.runtime,
-        model: captainForm.model.trim() || null,
-        tier: captainForm.tier || null,
-        systemInstructions: captainForm.systemInstructions.trim() || null,
-        runtimeOptionsJson: buildMuxRuntimeOptionsJson(captainForm.runtime, captainForm),
-      } as Partial<Captain>);
-      setCaptains((items) => upsertById(items, captain));
-      setSelectedCaptainId(captain.id);
-      setActiveCaptainId(captain.id);
+      const planned = planSetupCaptains(captainForm.name, captainForm.runtime, parseInt(captainForm.parallelism, 10));
+      const created: Captain[] = [];
+      for (const plan of planned) {
+        const captain = await createCaptain({
+          name: plan.name,
+          runtime: captainForm.runtime,
+          model: captainForm.model.trim() || null,
+          tier: captainForm.tier || null,
+          systemInstructions: captainForm.systemInstructions.trim() || null,
+          runtimeOptionsJson: buildMuxRuntimeOptionsJson(captainForm.runtime, captainForm),
+          maxConcurrency: plan.maxConcurrency,
+        } as Partial<Captain>);
+        created.push(captain);
+        setCaptains((items) => upsertById(items, captain));
+      }
+      const first = created[0];
+      setSelectedCaptainId(first.id);
+      setActiveCaptainId(first.id);
       setCaptainMode('existing');
-      setResult({ kind: 'success', message: t('Created {{entity}} "{{name}}".', { entity: t('Captain').toLowerCase(), name: captain.name }) });
+      setResult({ kind: 'success', message: created.length > 1
+        ? t('Created {{count}} captains, "{{first}}" to "{{last}}".', { count: created.length, first: first.name, last: created[created.length - 1].name })
+        : t('Created {{entity}} "{{name}}".', { entity: t('Captain').toLowerCase(), name: first.name }) });
       setCurrent(4);
     } catch (e: unknown) {
       setResult({ kind: 'error', message: t('{{entity}} creation failed: {{message}}', { entity: t('Captain'), message: errorText(e, 'Request failed.') }) });
@@ -324,7 +335,7 @@ export function SetupWizard() {
       setBusy(true);
       const parsed = parseInt(dispatchForm.priority, 10);
       const response = await dispatchMission({ vesselId: activeVessel.id, title: dispatchForm.title.trim(), description: dispatchForm.description.trim(), priority: Number.isNaN(parsed) ? 100 : parsed });
-      const normalized = normalizeMissionResponse(response);
+      const normalized = normalizeMissionResponse(response, t('usageSelection.missionWaiting'));
       if (!normalized.mission) { setResult({ kind: 'error', message: t('Dispatch succeeded but no mission was returned.') }); return; }
       setMission(normalized.mission);
       setWarning(normalized.warning || '');
@@ -407,7 +418,8 @@ export function SetupWizard() {
             <TextField label={t('Working Directory')} hint={tip('workingDirectory')} value={vesselForm.workingDirectory} onChangeText={(workingDirectory) => setVesselForm({ ...vesselForm, workingDirectory })} placeholder={t('Optional local checkout path')} autoCapitalize="none" autoCorrect={false} />
             <SelectField label={t('Landing Mode')} hint={t(setupLandingModeHint(vesselForm.landingMode))} value={vesselForm.landingMode} options={SETUP_LANDING_MODES.map((m) => ({ value: m.value, label: t(m.label) }))} onChange={(landingMode) => setVesselForm({ ...vesselForm, landingMode })} closeLabel={t('Close')} testID="setup-vessel-landing" />
             <SwitchField label={t('Enable model context accumulation')} hint={tip('enableModelContext')} value={vesselForm.enableModelContext} onChange={(enableModelContext) => setVesselForm({ ...vesselForm, enableModelContext })} />
-            <SwitchField label={t('Allow concurrent missions on this vessel')} hint={tip('allowConcurrentMissions')} value={vesselForm.allowConcurrentMissions} onChange={(allowConcurrentMissions) => setVesselForm({ ...vesselForm, allowConcurrentMissions })} />
+            <TextField label={t('Parallel voyages')} value={vesselForm.maxParallelVoyages} onChangeText={maxParallelVoyages => setVesselForm({ ...vesselForm, maxParallelVoyages })} keyboardType="number-pad" hint={t('0 means unlimited. Default 1.')} />
+            <TextField label={t('Parallel missions per voyage')} value={vesselForm.maxParallelMissionsPerVoyage} onChangeText={maxParallelMissionsPerVoyage => setVesselForm({ ...vesselForm, maxParallelMissionsPerVoyage })} keyboardType="number-pad" hint={t('0 means unlimited. Default 4.')} />
             <TextField label={t('Project Context')} hint={tip('projectContext')} value={vesselForm.projectContext} onChangeText={(projectContext) => setVesselForm({ ...vesselForm, projectContext })} placeholder={t('Optional architecture, build, or repository notes for captains.')} multiline />
             <TextField label={t('Style Guide')} hint={tip('styleGuide')} value={vesselForm.styleGuide} onChangeText={(styleGuide) => setVesselForm({ ...vesselForm, styleGuide })} placeholder={t('Optional conventions captains should follow.')} multiline />
           </>
@@ -416,6 +428,16 @@ export function SetupWizard() {
       </>
     );
   } else if (current === 3) {
+    const plannedCaptains = planSetupCaptains(captainForm.name || 'x', captainForm.runtime, parseInt(captainForm.parallelism, 10));
+    const vesselLimit = activeVessel?.maxParallelMissionsPerVoyage ?? 0;
+    const parallelismHint = (isMultiSlotRuntime(captainForm.runtime)
+      ? t('One captain is created that runs up to {{count}} missions at once.', { count: plannedCaptains[0].maxConcurrency })
+      : plannedCaptains.length > 1
+        ? t('CLI runtimes run one mission each, so {{count}} captains are created.', { count: plannedCaptains.length })
+        : t('CLI runtimes run one mission each; one captain is created.'))
+      + (vesselLimit > 0 && plannedCaptains.reduce((sum, c) => sum + c.maxConcurrency, 0) > vesselLimit
+        ? ' ' + t('The vessel runs at most {{limit}} missions of a voyage at once.', { limit: vesselLimit }) : '')
+      + ' ' + t('Up to {{max}}.', { max: MAX_SETUP_PARALLELISM });
     content = (
       <>
         <AppText variant="heading" accessibilityRole="header">{t('Prepare a captain for dispatch')}</AppText>
@@ -436,6 +458,14 @@ export function SetupWizard() {
               options={[{ value: '', label: t('Not set') }, { value: 'Economy', label: t('Economy') }, { value: 'Standard', label: t('Standard') }, { value: 'Premium', label: t('Premium') }]}
               onChange={(tier) => setCaptainForm({ ...captainForm, tier })}
               closeLabel={t('Close')}
+            />
+            <TextField
+              label={t('How many missions should run at once?')}
+              value={captainForm.parallelism}
+              onChangeText={(parallelism) => setCaptainForm({ ...captainForm, parallelism: parallelism.replace(/[^0-9]/g, '') })}
+              keyboardType="number-pad"
+              hint={parallelismHint}
+              testID="setup-captain-parallelism"
             />
             <TextField label={t('System Instructions')} hint={tip('systemInstructions')} value={captainForm.systemInstructions} onChangeText={(systemInstructions) => setCaptainForm({ ...captainForm, systemInstructions })} multiline />
             {muxRuntime ? (
@@ -464,7 +494,7 @@ export function SetupWizard() {
             ) : null}
           </>
         )}
-        <Button label={busy ? t('Saving...') : captainMode === 'existing' ? t('Use Captain') : t('Create Captain')} busy={busy} disabled={loading} onPress={() => void submitCaptain()} testID="setup-captain-submit" />
+        <Button label={busy ? t('Saving...') : captainMode === 'existing' ? t('Use Captain') : plannedCaptains.length > 1 ? t('Create {{count}} Captains', { count: plannedCaptains.length }) : t('Create Captain')} busy={busy} disabled={loading} onPress={() => void submitCaptain()} testID="setup-captain-submit" />
       </>
     );
   } else if (current === 4) {

@@ -387,6 +387,48 @@ namespace Test.Shared.Suites.Database
                 AssertEqual(0, (await db.VesselDependencies.ReadByVesselAsync(Constants.DefaultTenantId, a.Id).ConfigureAwait(false)).Count, "DeleteByVessel");
             }));
 
+            cases.Add(CaseAsync("dependencies_enumerate_pages_in_sql", "EnumerateByVesselAsync pages a vessel's dependency rows in SQL with an exact count, stable order, empty past-the-end page, normalized size, and tenant and vessel scope", TestTags.Positive, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                DatabaseDriver db = testDb.Driver;
+                Vessel a = await CreateVesselAsync(db, Constants.DefaultTenantId, "deppage-a", null, true).ConfigureAwait(false);
+                Vessel b = await CreateVesselAsync(db, Constants.DefaultTenantId, "deppage-b", null, true).ConfigureAwait(false);
+                List<VesselDependency> rows = new List<VesselDependency>();
+                // Same ecosystem and package for two rows: the project path and then the id break the tie.
+                rows.Add(NewDependency("npm", "react", DependencyDriftEnum.Minor));
+                rows.Add(NewDependency("npm", "react", DependencyDriftEnum.Major));
+                rows[1].ProjectPath = "web/package.json";
+                rows.Add(NewDependency("NuGet", "Serilog", DependencyDriftEnum.Patch));
+                rows.Add(NewDependency("npm", "axios", DependencyDriftEnum.Major));
+                rows.Add(NewDependency("cargo", "serde", DependencyDriftEnum.Minor));
+                await db.VesselDependencies.ReplaceForVesselAsync(Constants.DefaultTenantId, a.Id, rows).ConfigureAwait(false);
+                await db.VesselDependencies.ReplaceForVesselAsync(Constants.DefaultTenantId, b.Id, new List<VesselDependency> { NewDependency("npm", "other", DependencyDriftEnum.Major) }).ConfigureAwait(false);
+
+                List<string> expected = (await db.VesselDependencies.ReadByVesselAsync(Constants.DefaultTenantId, a.Id).ConfigureAwait(false)).Select(d => d.Id).ToList();
+                List<string> seen = new List<string>();
+                for (int page = 1; page <= 3; page++)
+                {
+                    EnumerationResult<VesselDependency> result = await db.VesselDependencies.EnumerateByVesselAsync(Constants.DefaultTenantId, a.Id, new EnumerationQuery { PageNumber = page, PageSize = 2 }).ConfigureAwait(false);
+                    AssertEqual(5L, result.TotalRecords, "exact count on page " + page);
+                    AssertEqual(3, result.TotalPages, "pages of two");
+                    AssertEqual(page < 3 ? 2 : 1, result.Objects.Count, "rows on page " + page);
+                    AssertTrue(result.Objects.All(d => d.VesselId == a.Id), "only vessel A");
+                    seen.AddRange(result.Objects.Select(d => d.Id));
+                }
+
+                AssertEqual(String.Join(",", expected), String.Join(",", seen), "pages follow the full ordered read without gaps or duplicates");
+
+                EnumerationResult<VesselDependency> past = await db.VesselDependencies.EnumerateByVesselAsync(Constants.DefaultTenantId, a.Id, new EnumerationQuery { PageNumber = 7, PageSize = 2 }).ConfigureAwait(false);
+                AssertEqual(0, past.Objects.Count, "past the end is empty");
+                AssertEqual(5L, past.TotalRecords, "with the total");
+                EnumerationResult<VesselDependency> capped = await db.VesselDependencies.EnumerateByVesselAsync(Constants.DefaultTenantId, a.Id, new EnumerationQuery { PageSize = 5000 }).ConfigureAwait(false);
+                AssertEqual(1000, capped.PageSize, "page size capped");
+                AssertEqual(5, capped.Objects.Count, "all five on one capped page");
+
+                EnumerationResult<VesselDependency> foreign = await db.VesselDependencies.EnumerateByVesselAsync("ten_other", a.Id, new EnumerationQuery()).ConfigureAwait(false);
+                AssertEqual(0L, foreign.TotalRecords, "another tenant counts nothing");
+            }));
+
             cases.Add(CaseAsync("override_upsert_is_unique_per_criterion", "Override UpsertAsync keeps one row per tenant, vessel, and criterion", TestTags.Positive, async () =>
             {
                 using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);

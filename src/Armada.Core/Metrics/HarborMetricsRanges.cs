@@ -17,6 +17,30 @@ namespace Armada.Core.Metrics
         /// </summary>
         public const string DefaultWireName = "24h";
 
+        /// <summary>
+        /// Most buckets any range produces (60, the last hour in 1-minute buckets). Every per-bucket series of a Harbor
+        /// metrics read has at most this many entries.
+        /// </summary>
+        public const int MaxBucketCount = 60;
+
+        /// <summary>
+        /// Most runtimes listed in a Harbor's launch-speed table (16). Further runtimes are aggregated into one entry with
+        /// IsOther set.
+        /// </summary>
+        public const int MaxLaunchSpeedRuntimes = 16;
+
+        /// <summary>
+        /// Most runtime and model series listed in a Harbor's token usage, overall and per bucket (20). Further series are
+        /// aggregated into one entry with IsOther set.
+        /// </summary>
+        public const int MaxTokenSeries = 20;
+
+        /// <summary>
+        /// Most link-state segments a Harbor metrics read returns (1000). A window with more transitions is shown at bucket
+        /// resolution instead, with SegmentsCoalesced set.
+        /// </summary>
+        public const int MaxLinkSegments = 1000;
+
         #endregion
 
         #region Public-Methods

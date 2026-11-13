@@ -20,6 +20,7 @@ namespace Armada.Helm
             @"\__,_|_| |_|_|_\__,_\__,_\__,_|",
         };
         private static readonly string _VersionLabel = "v" + Constants.ProductVersion;
+        private static Grid? _HelpGrid = null;
 
         /// <summary>
         /// Write the Armada banner to the console.
@@ -40,21 +41,25 @@ namespace Armada.Helm
         }
 
         /// <summary>
-        /// Write a section heading in the help menu.
+        /// Add a section heading to the help menu.
         /// </summary>
         private static void HelpHeading(string title)
         {
-            AnsiConsole.WriteLine();
-            AnsiConsole.MarkupLine($"[bold dodgerblue1]{Markup.Escape(title)}[/]");
+            if (_HelpGrid == null) return;
+            _HelpGrid.AddEmptyRow();
+            _HelpGrid.AddRow(new Markup($"[bold dodgerblue1]{Markup.Escape(title)}[/]"), new Text(String.Empty));
         }
 
         /// <summary>
-        /// Write a single command row in the help menu: green command, dim description, aligned.
+        /// Add a command row to the help menu. Rows share one grid so every description starts in the
+        /// same column and long descriptions wrap inside their own column instead of under the command.
         /// </summary>
         private static void HelpRow(string command, string description)
         {
-            string padded = command.Length >= 30 ? command + "  " : command.PadRight(30);
-            AnsiConsole.MarkupLine($"  [green]{Markup.Escape(padded)}[/][dim]{Markup.Escape(description)}[/]");
+            if (_HelpGrid == null) return;
+            _HelpGrid.AddRow(
+                new Markup($"  [green]{Markup.Escape(command)}[/]"),
+                new Markup($"[dim]{Markup.Escape(description)}[/]"));
         }
 
         /// <summary>
@@ -65,6 +70,10 @@ namespace Armada.Helm
             AnsiConsole.MarkupLine("[dim]Usage:[/] armada <command> [[options]]");
             AnsiConsole.MarkupLine("[dim]Per-command help:[/] armada <command> --help   (also -h, /?, -?)");
 
+            _HelpGrid = new Grid();
+            _HelpGrid.AddColumn(new GridColumn().NoWrap().PadRight(2));
+            _HelpGrid.AddColumn(new GridColumn().PadRight(0));
+
             HelpHeading("Common");
             HelpRow("go \"<task>\"", "Dispatch a task in natural language");
             HelpRow("status [--all]", "System status dashboard (--all for everything)");
@@ -73,7 +82,7 @@ namespace Armada.Helm
             HelpRow("log <captain> [--follow]", "Tail a captain's output log");
             HelpRow("diff <mission>", "Show a mission's code changes");
             HelpRow("doctor", "Check system health and report issues");
-            HelpRow("tui [--server URL] [--profile NAME]", "Open the terminal UI (the dashboard in a terminal)");
+            HelpRow("tui [--profile NAME]", "Open the terminal UI (also --server URL)");
             HelpRow("health [--evaluate]", "Show vessel health (dependencies, tests, branches)");
 
             HelpHeading("Missions (armada mission ...)");
@@ -83,6 +92,10 @@ namespace Armada.Helm
             HelpRow("mission cancel <id>", "Cancel a mission");
             HelpRow("mission restart <id>", "Restart a failed mission (edit instructions)");
             HelpRow("mission retry <id>", "Retry a failed mission (new copy)");
+            HelpRow("mission failure <id>", "Show the mission's black box entry (--brief)");
+            HelpRow("mission lint-brief", "Lint a mission brief before dispatch (--brief-file, --vessel)");
+            HelpRow("mission selection <id>", "Captain selection: summary, --history, or --preview");
+            HelpRow("mission selection-recovery <id>", "Allow audited selection recovery (--allow-fallback, --reason)");
 
             HelpHeading("Voyages (armada voyage ...)");
             HelpRow("voyage list", "List all voyages");
@@ -90,6 +103,33 @@ namespace Armada.Helm
             HelpRow("voyage create", "Launch a new voyage with missions");
             HelpRow("voyage cancel <id>", "Cancel a voyage and its pending missions");
             HelpRow("voyage retry <id>", "Retry failed missions in a voyage");
+            HelpRow("voyage failure <id>", "Show the voyage's black box entry");
+            HelpRow("voyage cascade <id>", "Which failure took the voyage's other missions down");
+
+            HelpHeading("Black box (armada blackbox ...)");
+            HelpRow("blackbox show <id> [--brief]", "Failure record of a mission, voyage, or entry (--brief | pbcopy)");
+            HelpRow("blackbox list", "List failures (--vessel, --triage, --since 30d, ...)");
+            HelpRow("blackbox objects <id>", "List an entry's evidence objects");
+            HelpRow("blackbox cat <id> <name>", "Print an evidence object (--offset, --length)");
+            HelpRow("blackbox download <id>", "Download an entry as a .zip (-o file.zip)");
+            HelpRow("blackbox recover <id> <path>", "Dry run a recovery path (--execute to run it)");
+            HelpRow("blackbox resolve <id>", "Resolve an entry (--resolution, --note, --link)");
+            HelpRow("blackbox note <id> \"<text>\"", "Add a note to an entry");
+            HelpRow("blackbox pin|unpin|delete <id...>", "Pin, unpin, or delete entries");
+            HelpRow("blackbox purge [filters]", "Purge by filter (dry run unless --execute)");
+            HelpRow("blackbox gc [--dry-run]", "Run black box garbage collection");
+            HelpRow("blackbox retention", "Retention policy, usage, and GC runs");
+            HelpRow("blackbox storage status|migrate", "Storage target health, or migrate --to <target>");
+            HelpRow("blackbox storage migration <id>", "Show a storage migration job");
+            HelpRow("blackbox bundle [-o bundle.md]", "Maintainer bundle of entries by fingerprint");
+            HelpRow("blackbox backfill [--since 30d]", "Record entries for past failures");
+            HelpRow("blackbox export-fixture <id>", "Write a sanitized regression fixture");
+            HelpRow("blackbox timeline <id>", "Combined timeline of an entry (--newest-first)");
+            HelpRow("blackbox diff <id> <otherId>", "What changed between two attempts");
+            HelpRow("blackbox nearby <id>", "Successful landings near a failure on the same files");
+            HelpRow("blackbox cascade <voyageId>", "Voyage cascade graph (alias of voyage cascade)");
+            HelpRow("blackbox recovery-stats", "Recovery path success rates (--rule, --vessel)");
+            HelpRow("blackbox gaps", "Armada resilience gaps by fingerprint (--vessel, --phase, --since)");
 
             HelpHeading("Fleet actions (armada action ...)");
             HelpRow("action list [--runs]", "List fleet actions (or their runs)");
@@ -115,9 +155,13 @@ namespace Armada.Helm
             HelpRow("vessel list", "List all vessels (repositories)");
             HelpRow("vessel add", "Register a new vessel");
             HelpRow("vessel remove <id|name>", "Decommission a vessel");
-            HelpRow("vessel import <paths...> [--root <dir>]", "Discover repositories and import them as vessels");
+            HelpRow("vessel import <paths...>", "Discover repositories and import them as vessels (--root)");
             HelpRow("vessel history <id|name>", "Commit history by day (--before, --all, --verbose)");
             HelpRow("vessel history <id|name> --heatmap", "Commit activity heatmap for the last year (--from/--to)");
+            HelpRow("vessel update <id|name>", "Change settings (--serialize-overlapping-missions)");
+            HelpRow("vessel overlap-preview <id|name>", "Preview a brief's overlaps and lint (--brief-file)");
+            HelpRow("vessel reservations <id|name>", "Soft directory reservations of active missions");
+            HelpRow("vessel doctor <id|name>", "Recurring black box configuration recommendations");
 
             HelpHeading("Captains (armada captain ...)");
             HelpRow("captain list", "List all captains (agents)");
@@ -141,7 +185,7 @@ namespace Armada.Helm
             HelpHeading("Configuration (armada config ...)");
             HelpRow("config show", "Display current settings");
             HelpRow("config set <key> <value>", "Set a configuration value");
-            HelpRow("config init", "Interactive setup (config auto-initializes)");
+            HelpRow("config init", "Interactive setup (optional; config auto-initializes)");
 
             HelpHeading("Remote Admirals (armada profile ...)");
             HelpRow("profile list", "List saved Admiral profiles and the active target");
@@ -164,6 +208,9 @@ namespace Armada.Helm
             HelpRow("--token <bearer>", "Credential for it (or ARMADA_TOKEN)");
             HelpRow("--profile <name>", "Use a saved profile ('local' for this machine)");
 
+            AnsiConsole.Write(_HelpGrid);
+            _HelpGrid = null;
+
             AnsiConsole.WriteLine();
             AnsiConsole.MarkupLine("[dim]Docs:[/] https://github.com/jchristn/Armada");
             AnsiConsole.WriteLine();
@@ -181,10 +228,12 @@ namespace Armada.Helm
             config.SetApplicationName("armada");
             config.SetApplicationVersion(Constants.ProductVersion);
             config.SetExceptionHandler(HelmErrorHandler.Handle);
+            // Unknown options and stray arguments are errors, so a typo such as --bogus is never silently ignored.
+            config.UseStrictParsing();
 
             // --- Common commands (top-level, used most often) ---
             config.AddCommand<GoCommand>("go")
-                .WithDescription("Quick dispatch -- natural language task assignment")
+                .WithDescription("Dispatch a task in natural language")
                 .WithExample("go", "\"Add input validation to signup\"")
                 .WithExample("go", "\"Fix login bug\"", "--repo", ".");
 
@@ -239,6 +288,12 @@ namespace Armada.Helm
                     .WithDescription("List missions");
                 mission.AddCommand<MissionCreateCommand>("create")
                     .WithDescription("Create a new mission");
+                mission.AddCommand<MissionSelectionCommand>("selection")
+                    .WithDescription("Inspect captain selection, history or a read-only preview")
+                    .WithExample("mission", "selection", "msn_example", "--history", "--json");
+                mission.AddCommand<MissionSelectionRecoveryCommand>("selection-recovery")
+                    .WithDescription("Set audited captain-selection recovery permissions for a Pending mission")
+                    .WithExample("mission", "selection-recovery", "msn_example", "--allow-fallback", "--reason", "\"Preferred captain offline\"");
                 mission.AddCommand<MissionShowCommand>("show")
                     .WithDescription("Show mission details (accepts name or ID)");
                 mission.AddCommand<MissionCancelCommand>("cancel")
@@ -247,6 +302,12 @@ namespace Armada.Helm
                     .WithDescription("Restart a failed mission (with optional instruction edits)");
                 mission.AddCommand<MissionRetryCommand>("retry")
                     .WithDescription("Retry a failed mission (creates a new copy)");
+                mission.AddCommand<MissionFailureCommand>("failure")
+                    .WithDescription("Show the mission's black box entry (alias of blackbox show)")
+                    .WithExample("mission", "failure", "msn_abc123", "--brief");
+                mission.AddCommand<MissionLintBriefCommand>("lint-brief")
+                    .WithDescription("Lint a mission brief (warnings only)")
+                    .WithExample("mission", "lint-brief", "--brief-file", "brief.md", "--vessel", "my-repo");
             });
 
             config.AddBranch("voyage", voyage =>
@@ -258,10 +319,102 @@ namespace Armada.Helm
                     .WithDescription("Launch a new voyage with missions");
                 voyage.AddCommand<VoyageShowCommand>("show")
                     .WithDescription("Show voyage details (accepts name or ID)");
+                voyage.AddCommand<VoyageTreeCommand>("tree")
+                    .WithDescription("Show a voyage's missions as a tree of parents, children and stages")
+                    .WithExample("voyage", "tree", "vyg_abc123");
                 voyage.AddCommand<VoyageCancelCommand>("cancel")
                     .WithDescription("Cancel a voyage");
                 voyage.AddCommand<VoyageRetryCommand>("retry")
                     .WithDescription("Retry failed missions in a voyage");
+                voyage.AddCommand<VoyageFailureCommand>("failure")
+                    .WithDescription("Show the voyage's black box entry (alias of blackbox show)")
+                    .WithExample("voyage", "failure", "vyg_abc123");
+                voyage.AddCommand<BlackBoxCascadeCommand>("cascade")
+                    .WithDescription("Show which failure in a voyage took the others down")
+                    .WithExample("voyage", "cascade", "vyg_abc123");
+            });
+
+            config.AddBranch("blackbox", blackbox =>
+            {
+                blackbox.SetDescription("Mission and voyage black box: failure records, briefs, evidence, and recovery");
+                blackbox.AddCommand<BlackBoxShowCommand>("show")
+                    .WithDescription("Show the black box entry of a mission, voyage, or entry ID")
+                    .WithExample("blackbox", "show", "msn_abc123")
+                    .WithExample("blackbox", "show", "msn_abc123", "--brief")
+                    .WithExample("blackbox", "show", "bbx_abc123", "--json");
+                blackbox.AddCommand<BlackBoxListCommand>("list")
+                    .WithDescription("List black box entries, newest first")
+                    .WithExample("blackbox", "list", "--vessel", "vsl_abc123", "--triage", "ArmadaDefect", "--since", "30d");
+                blackbox.AddCommand<BlackBoxObjectsCommand>("objects")
+                    .WithDescription("List an entry's evidence objects");
+                blackbox.AddCommand<BlackBoxCatCommand>("cat")
+                    .WithDescription("Print an evidence object (or a byte range) to stdout")
+                    .WithExample("blackbox", "cat", "bbx_abc123", "evidence/git-status.txt", "--offset", "0", "--length", "65536");
+                blackbox.AddCommand<BlackBoxDownloadCommand>("download")
+                    .WithDescription("Download an entry as a .zip")
+                    .WithExample("blackbox", "download", "bbx_abc123", "-o", "failure.zip");
+                blackbox.AddCommand<BlackBoxRecoverCommand>("recover")
+                    .WithDescription("Run a recovery path (dry run unless --execute)")
+                    .WithExample("blackbox", "recover", "bbx_abc123", "rp1")
+                    .WithExample("blackbox", "recover", "bbx_abc123", "rp1", "--execute");
+                blackbox.AddCommand<BlackBoxResolveCommand>("resolve")
+                    .WithDescription("Resolve an entry")
+                    .WithExample("blackbox", "resolve", "bbx_abc123", "--resolution", "Resolved", "--note", "\"Fixed the checkout\"");
+                blackbox.AddCommand<BlackBoxNoteCommand>("note")
+                    .WithDescription("Add a note to an entry")
+                    .WithExample("blackbox", "note", "bbx_abc123", "\"Checked the dock by hand\"");
+                blackbox.AddCommand<BlackBoxPinCommand>("pin")
+                    .WithDescription("Pin entries (kept by garbage collection)");
+                blackbox.AddCommand<BlackBoxUnpinCommand>("unpin")
+                    .WithDescription("Unpin entries");
+                blackbox.AddCommand<BlackBoxDeleteCommand>("delete")
+                    .WithDescription("Delete entries and their evidence");
+                blackbox.AddCommand<BlackBoxPurgeCommand>("purge")
+                    .WithDescription("Purge entries by filter (dry run unless --execute)")
+                    .WithExample("blackbox", "purge", "--vessel", "vsl_abc123", "--before", "2026-09-01")
+                    .WithExample("blackbox", "purge", "--vessel", "vsl_abc123", "--before", "2026-09-01", "--execute");
+                blackbox.AddCommand<BlackBoxGcCommand>("gc")
+                    .WithDescription("Run garbage collection now (--dry-run reports what would go)")
+                    .WithExample("blackbox", "gc", "--dry-run");
+                blackbox.AddCommand<BlackBoxRetentionCommand>("retention")
+                    .WithDescription("Show the retention policy, usage, and garbage collection runs");
+                blackbox.AddBranch("storage", storage =>
+                {
+                    storage.SetDescription("Black box storage target");
+                    storage.AddCommand<BlackBoxStorageStatusCommand>("status")
+                        .WithDescription("Show the storage target, health, and usage");
+                    storage.AddCommand<BlackBoxStorageMigrateCommand>("migrate")
+                        .WithDescription("Migrate objects to another storage target")
+                        .WithExample("blackbox", "storage", "migrate", "--to", "Disk");
+                    storage.AddCommand<BlackBoxStorageMigrationCommand>("migration")
+                        .WithDescription("Show a storage migration job");
+                });
+                blackbox.AddCommand<BlackBoxBundleCommand>("bundle")
+                    .WithDescription("Build the maintainer bundle (up to 50 entries by fingerprint)")
+                    .WithExample("blackbox", "bundle", "--triage", "ArmadaDefect", "-o", "bundle.md");
+                blackbox.AddCommand<BlackBoxBackfillCommand>("backfill")
+                    .WithDescription("Backfill entries for past failures")
+                    .WithExample("blackbox", "backfill", "--since", "30d");
+                blackbox.AddCommand<BlackBoxExportFixtureCommand>("export-fixture")
+                    .WithDescription("Export an entry as a sanitized regression fixture")
+                    .WithExample("blackbox", "export-fixture", "bbx_abc123", "--name", "land-003-example");
+                blackbox.AddCommand<BlackBoxTimelineCommand>("timeline")
+                    .WithDescription("Show an entry's combined timeline (oldest first)")
+                    .WithExample("blackbox", "timeline", "bbx_abc123", "--page-size", "50");
+                blackbox.AddCommand<BlackBoxDiffCommand>("diff")
+                    .WithDescription("Show what changed between two entries")
+                    .WithExample("blackbox", "diff", "bbx_abc123", "bbx_def456");
+                blackbox.AddCommand<BlackBoxNearbyCommand>("nearby")
+                    .WithDescription("List the successful landings near a failure that touched the same files");
+                blackbox.AddCommand<BlackBoxCascadeCommand>("cascade")
+                    .WithDescription("Show a voyage's cascade graph (alias of voyage cascade)")
+                    .WithExample("blackbox", "cascade", "vyg_abc123");
+                blackbox.AddCommand<BlackBoxRecoveryStatsCommand>("recovery-stats")
+                    .WithDescription("Show recovery path success rates")
+                    .WithExample("blackbox", "recovery-stats", "--rule", "BBX-LAND-001");
+                blackbox.AddCommand<BlackBoxGapsCommand>("gaps")
+                    .WithDescription("List Armada resilience gaps (handoff and landing failures triaged ArmadaDefect, by fingerprint)")
+                    .WithExample("blackbox", "gaps", "--phase", "Landing", "--since", "30d");
             });
 
             config.AddBranch("action", action =>
@@ -327,6 +480,20 @@ namespace Armada.Helm
                     .WithExample("vessel", "import", "~/Code/my-repo", "--root", "~/Code", "--dry-run");
                 vessel.AddCommand<VesselRemoveCommand>("remove")
                     .WithDescription("Decommission a vessel (accepts name or ID)");
+                vessel.AddCommand<VesselUpdateCommand>("update")
+                    .WithDescription("Update a vessel's settings (accepts name or ID)")
+                    .WithExample("vessel", "update", "my-repo", "--serialize-overlapping-missions", "true");
+                vessel.AddCommand<VesselOverlapPreviewCommand>("overlap-preview")
+                    .WithDescription("Preview a mission's overlaps and brief lint on a vessel (nothing is dispatched)")
+                    .WithExample("vessel", "overlap-preview", "my-repo", "--brief-file", "brief.md");
+                vessel.AddCommand<VesselConcurrencyCommand>("concurrency")
+                    .WithDescription("Show a vessel's voyage slots, waiting missions and slot wait")
+                    .WithExample("vessel", "concurrency", "my-repo");
+                vessel.AddCommand<VesselReservationsCommand>("reservations")
+                    .WithDescription("List a vessel's soft directory reservations");
+                vessel.AddCommand<VesselDoctorCommand>("doctor")
+                    .WithDescription("List a vessel's recurring black box configuration recommendations")
+                    .WithExample("vessel", "doctor", "my-repo", "--window-days", "30");
                 vessel.AddCommand<VesselHistoryCommand>("history")
                     .WithDescription("Show a vessel's commit history or activity heatmap (accepts name or ID)")
                     .WithExample("vessel", "history", "my-repo", "--before", "2026-01-01")
@@ -347,7 +514,7 @@ namespace Armada.Helm
                 captain.AddCommand<CaptainRemoveCommand>("remove")
                     .WithDescription("Remove a captain (accepts name or ID)");
                 captain.AddCommand<CaptainStopAllCommand>("stop-all")
-                    .WithDescription("Emergency recall all captains");
+                    .WithDescription("Emergency recall of all captains");
             });
 
             config.AddBranch("fleet", fleet =>
@@ -364,7 +531,7 @@ namespace Armada.Helm
             // --- Infrastructure ---
             config.AddBranch("server", server =>
             {
-                server.SetDescription("Manage Admiral server");
+                server.SetDescription("Manage the Admiral server");
                 server.AddCommand<ServerStartCommand>("start")
                     .WithDescription("Start the Admiral server");
                 server.AddCommand<ServerStatusCommand>("status")
@@ -383,12 +550,12 @@ namespace Armada.Helm
                 cfg.AddCommand<ConfigSetCommand>("set")
                     .WithDescription("Set a configuration value");
                 cfg.AddCommand<ConfigInitCommand>("init")
-                    .WithDescription("Interactive setup (optional -- config auto-initializes)");
+                    .WithDescription("Interactive setup (optional; config auto-initializes)");
             });
 
             config.AddBranch("profile", profile =>
             {
-                profile.SetDescription("Saved Admiral targets shared with armada tui (remote servers)");
+                profile.SetDescription("Manage saved Admiral targets (remote servers, shared with armada tui)");
                 profile.AddCommand<ProfileListCommand>("list")
                     .WithDescription("List saved Admiral profiles and the active target");
                 profile.AddCommand<ProfileAddCommand>("add")
@@ -401,7 +568,7 @@ namespace Armada.Helm
 
             config.AddBranch("mcp", mcp =>
             {
-                mcp.SetDescription("MCP integration");
+                mcp.SetDescription("Manage MCP integration");
                 mcp.AddCommand<McpInstallCommand>("install")
                     .WithDescription("Configure MCP integration for Claude Code, Codex, Gemini, Cursor, and Mux");
                 mcp.AddCommand<McpRemoveCommand>("remove")
@@ -442,6 +609,11 @@ namespace Armada.Helm
 
         static int Main(string[] args)
         {
+            if (args.Any(arg => arg.Equals("--allow-concurrent", StringComparison.OrdinalIgnoreCase) || arg.StartsWith("--allow-concurrent=", StringComparison.OrdinalIgnoreCase)))
+            {
+                Console.Error.WriteLine("--allow-concurrent was removed in v1.3.0. Use --max-parallel-voyages and --max-parallel-missions-per-voyage instead.");
+                return 1;
+            }
             // Normalize Windows-style help flags (/?  -?) to the standard --help everywhere,
             // so `armada /?`, `armada mission /?`, etc. all work.
             for (int i = 0; i < args.Length; i++)

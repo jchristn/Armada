@@ -63,7 +63,7 @@ namespace Armada.Helm.Commands
 
             if (target == null)
             {
-                AnsiConsole.MarkupLine("[red]Admiral server executable not found.[/]");
+                HelmConsole.Error.MarkupLine("[red]Admiral server executable not found.[/]");
                 AnsiConsole.MarkupLine("[dim]Looked for Armada.Server next to the CLI, armada-server on the PATH, and common source locations.[/]");
                 return 1;
             }
@@ -107,7 +107,7 @@ namespace Armada.Helm.Commands
             bool started = process.Start();
             if (!started)
             {
-                AnsiConsole.MarkupLine("[red]Failed to start server process.[/]");
+                HelmConsole.Error.MarkupLine("[red]Failed to start server process.[/]");
                 return 1;
             }
 
@@ -126,7 +126,7 @@ namespace Armada.Helm.Commands
 
                 if (process.HasExited)
                 {
-                    AnsiConsole.MarkupLine($"[red]Server process exited with code {process.ExitCode}.[/]");
+                    HelmConsole.Error.MarkupLine($"[red]Server process exited with code {process.ExitCode}.[/]");
                     break;
                 }
 
@@ -229,7 +229,7 @@ namespace Armada.Helm.Commands
                     continue;
                 }
 
-                AnsiConsole.MarkupLine("[red]Server build failed.[/]");
+                HelmConsole.Error.MarkupLine("[red]Server build failed.[/]");
                 if (!string.IsNullOrEmpty(buildStderr))
                     AnsiConsole.MarkupLine($"[dim]{Markup.Escape(buildStderr.Trim())}[/]");
                 return null;

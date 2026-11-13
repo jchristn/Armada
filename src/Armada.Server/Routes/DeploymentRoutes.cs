@@ -94,6 +94,7 @@ namespace Armada.Server.Routes
 
                 try
                 {
+                    CollectionBounds.Validate(request);
                     await ValidateObjectivesAsync(ctx, request.ObjectiveIds).ConfigureAwait(false);
                     Deployment deployment = await _Deployments.CreateAsync(ctx, request).ConfigureAwait(false);
                     await LinkObjectivesAsync(ctx, deployment, request.ObjectiveIds).ConfigureAwait(false);
@@ -146,6 +147,7 @@ namespace Armada.Server.Routes
 
                 try
                 {
+                    CollectionBounds.Validate(request);
                     await ValidateObjectivesAsync(ctx, request.ObjectiveIds).ConfigureAwait(false);
                     Deployment deployment = await _Deployments.UpdateAsync(ctx, req.Parameters["id"], request).ConfigureAwait(false);
                     await LinkObjectivesAsync(ctx, deployment, request.ObjectiveIds).ConfigureAwait(false);

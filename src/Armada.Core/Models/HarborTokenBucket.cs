@@ -2,6 +2,8 @@ namespace Armada.Core.Models
 {
     using System;
     using System.Collections.Generic;
+    using Armada.Core.Metrics;
+    using Armada.Core.Services;
 
     /// <summary>
     /// Tokens used on a Harbor in one time bucket, with the runtime and model breakdown.
@@ -38,6 +40,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// Per runtime and model, most tokens first.
         /// </summary>
+        [CollectionBound(HarborMetricsRanges.MaxTokenSeries, Reason = "The top series of the window; the rest aggregated into one IsOther entry")]
         public List<HarborTokenSeries> Series { get; set; } = new List<HarborTokenSeries>();
 
         #endregion

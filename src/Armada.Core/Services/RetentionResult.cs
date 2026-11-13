@@ -36,11 +36,14 @@ namespace Armada.Core.Services
         public int HarborMetricsDeleted { get; set; } = 0;
 
         /// <summary>
-        /// Total rows (threads, jobs, batches, CLI permission requests, Harbor metrics) affected.
+        /// Raw usage observations deleted with their captain links.
         /// </summary>
+        public int UsageSnapshotsDeleted { get; set; }
+
+        /// <summary>Total affected records.</summary>
         public int Total
         {
-            get { return AskThreadsArchived + AskThreadsDeleted + JobsDeleted + ImportBatchesDeleted + CliPermissionRequestsDeleted + HarborMetricsDeleted; }
+            get { return AskThreadsArchived + AskThreadsDeleted + JobsDeleted + ImportBatchesDeleted + CliPermissionRequestsDeleted + HarborMetricsDeleted + UsageSnapshotsDeleted; }
         }
     }
 }

@@ -118,7 +118,9 @@ namespace Test.Shared.Suites.E2E
                     CliPermissionRequest pending = await WaitForPendingAsync(fx, a, thread, call).ConfigureAwait(false);
 
                     AskThreadDetail detail = await JsonHelper.DeserializeAsync<AskThreadDetail>(await o.GetAsync("/api/v1/ask/threads/" + thread.Id).ConfigureAwait(false)).ConfigureAwait(false);
-                    AssertEqual(pending.Id, detail.PendingCliPermissions.Single().Id, "pending list on the thread");
+                    AssertEqual(1L, detail.PendingCliPermissionCount, "pending counted on the thread");
+                    EnumerationResult<CliPermissionRequest> threadPending = await JsonHelper.DeserializeAsync<EnumerationResult<CliPermissionRequest>>(await o.PostAsync("/api/v1/cli-permissions/requests/enumerate", JsonHelper.ToJsonContent(new { ThreadId = thread.Id, Status = "Pending" })).ConfigureAwait(false)).ConfigureAwait(false);
+                    AssertEqual(pending.Id, threadPending.Objects.Single().Id, "pending list for the thread, paged");
                     AskMessagePage page = await JsonHelper.DeserializeAsync<AskMessagePage>(await o.PostAsync("/api/v1/ask/threads/" + thread.Id + "/messages/enumerate", JsonHelper.ToJsonContent(new { })).ConfigureAwait(false)).ConfigureAwait(false);
                     AskMessage card = page.Messages.Single(m => m.Kind == AskMessageKindEnum.CliPermission);
                     AssertEqual(pending.Id, card.CliPermissionRequest!.Id, "card carries its request");

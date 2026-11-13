@@ -51,7 +51,7 @@ namespace Armada.Helm.Commands
                     throw CredentialError(target, response.StatusCode, "POST /api/v1/server/restart");
                 if (!response.IsSuccessStatusCode)
                 {
-                    AnsiConsole.MarkupLine("[red]The Admiral could not restart:[/] HTTP " + (int)response.StatusCode + " " + Markup.Escape(await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false)));
+                    HelmConsole.Error.MarkupLine("[red]The Admiral could not restart:[/] HTTP " + (int)response.StatusCode + " " + Markup.Escape(await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false)));
                     return 1;
                 }
             }

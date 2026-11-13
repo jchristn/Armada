@@ -654,7 +654,7 @@ because Phase C has nothing to grade until vessels exist in bulk.
 
 - [x] **A10 -- Docs.** Update `docs/REST_API.md`, `docs/MCP_API.md`, the Postman
   collection (an "Import" folder), README "Onboarding many repositories", and a
-  CHANGELOG entry under Unreleased.
+  CHANGELOG entry under v1.2.0.
 
 ### Phase B -- Fleet Actions
 
@@ -874,7 +874,7 @@ These items apply to every phase. Tick them off per phase in the progress log.
 
   Write the report to `user-testing/<yyyy-mm-dd>-<label>.md`. Fixes require approval.
 - [x] **VERSIONING.** No version numbers change as part of this work. CHANGELOG
-  entries go under Unreleased.
+  entries for this work go under v1.2.0.
 - [x] **WRITING_DOCUMENTS.** The new guides (`FLEET_ACTIONS.md`, `VESSEL_HEALTH.md`)
   and README sections are written as prose, and contain no em-dashes.
 

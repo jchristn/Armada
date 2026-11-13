@@ -53,9 +53,9 @@ namespace Armada.Server.Routes
             api => api
                 .WithTag("Objectives")
                 .WithSummary("List objectives")
-                .WithDescription("Returns paginated objective and intake-style records tied to repositories, planning, releases, deployments, and incidents.")
+                .WithDescription("Returns one page of objective and intake-style records tied to repositories, planning, releases, deployments, and incidents, paged in the database (most recently updated first, id as the tie-break; pageSize 1 to 1000, default 50). Each list on an objective is bounded: configuration lists by MaxConfigItems (256), link id lists by MaxLinkedIds (1000).")
                 .WithParameter(OpenApiParameterMetadata.Query("pageNumber", "One-based page number", false, OpenApiSchemaMetadata.Integer()))
-                .WithParameter(OpenApiParameterMetadata.Query("pageSize", "Page size", false, OpenApiSchemaMetadata.Integer()))
+                .WithParameter(OpenApiParameterMetadata.Query("pageSize", "Page size, 1 to 1000 (default 50)", false, OpenApiSchemaMetadata.Integer()))
                 .WithParameter(OpenApiParameterMetadata.Query("owner", "Optional owner filter", false))
                 .WithParameter(OpenApiParameterMetadata.Query("category", "Optional category filter", false))
                 .WithParameter(OpenApiParameterMetadata.Query("parentObjectiveId", "Optional parent objective filter", false))
@@ -90,7 +90,7 @@ namespace Armada.Server.Routes
             api => api
                 .WithTag("Objectives")
                 .WithSummary("Enumerate objectives")
-                .WithDescription("Paginated objective enumeration using a JSON body and optional querystring overrides.")
+                .WithDescription("One page of objectives, paged in the database (most recently updated first, id as the tie-break; pageSize 1 to 1000, default 50), from a JSON body and optional querystring overrides.")
                 .WithRequestBody(OpenApiJson.BodyFor<ObjectiveQuery>("Objective query", false))
                 .WithResponse(200, OpenApiJson.For<EnumerationResult<Objective>>("Paginated objectives"))
                 .WithSecurity("ApiKey"));
@@ -114,9 +114,10 @@ namespace Armada.Server.Routes
             api => api
                 .WithTag("Objectives")
                 .WithSummary("Reorder objectives")
-                .WithDescription("Applies one or more explicit backlog rank updates.")
+                .WithDescription("Applies 1 to 1000 explicit backlog rank updates (more is 400 CollectionLimitExceeded). Returns the number updated and each objective id with its new rank, ordered by rank.")
                 .WithRequestBody(OpenApiJson.BodyFor<ObjectiveReorderRequest>("Objective reorder request", true))
-                .WithResponse(200, OpenApiJson.For<List<Objective>>("Updated objectives"))
+                .WithResponse(200, OpenApiJson.For<ObjectiveReorderResult>("Updated count and applied ranks"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
                 .WithSecurity("ApiKey"));
 
             app.Get("/api/v1/objectives/{id}", async (ApiRequest req) =>
@@ -254,9 +255,9 @@ namespace Armada.Server.Routes
             api => api
                 .WithTag("Objectives")
                 .WithSummary("List backlog items")
-                .WithDescription("Returns paginated backlog items using the user-facing backlog terminology.")
+                .WithDescription("Returns one page of backlog items using the user-facing backlog terminology, paged in the database (most recently updated first, id as the tie-break; pageSize 1 to 1000, default 50).")
                 .WithParameter(OpenApiParameterMetadata.Query("pageNumber", "One-based page number", false, OpenApiSchemaMetadata.Integer()))
-                .WithParameter(OpenApiParameterMetadata.Query("pageSize", "Page size", false, OpenApiSchemaMetadata.Integer()))
+                .WithParameter(OpenApiParameterMetadata.Query("pageSize", "Page size, 1 to 1000 (default 50)", false, OpenApiSchemaMetadata.Integer()))
                 .WithParameter(OpenApiParameterMetadata.Query("owner", "Optional owner filter", false))
                 .WithParameter(OpenApiParameterMetadata.Query("category", "Optional category filter", false))
                 .WithParameter(OpenApiParameterMetadata.Query("parentObjectiveId", "Optional parent objective filter", false))
@@ -291,7 +292,7 @@ namespace Armada.Server.Routes
             api => api
                 .WithTag("Objectives")
                 .WithSummary("Enumerate backlog items")
-                .WithDescription("Paginated backlog enumeration using a JSON body and optional querystring overrides.")
+                .WithDescription("One page of backlog items, paged in the database (most recently updated first, id as the tie-break; pageSize 1 to 1000, default 50), from a JSON body and optional querystring overrides.")
                 .WithRequestBody(OpenApiJson.BodyFor<ObjectiveQuery>("Backlog query", false))
                 .WithResponse(200, OpenApiJson.For<EnumerationResult<Objective>>("Paginated backlog items"))
                 .WithSecurity("ApiKey"));
@@ -315,9 +316,10 @@ namespace Armada.Server.Routes
             api => api
                 .WithTag("Objectives")
                 .WithSummary("Reorder backlog items")
-                .WithDescription("Applies one or more explicit backlog rank updates using backlog terminology.")
+                .WithDescription("Applies 1 to 1000 explicit backlog rank updates using backlog terminology (more is 400 CollectionLimitExceeded). Returns the number updated and each item id with its new rank, ordered by rank.")
                 .WithRequestBody(OpenApiJson.BodyFor<ObjectiveReorderRequest>("Backlog reorder request", true))
-                .WithResponse(200, OpenApiJson.For<List<Objective>>("Updated backlog items"))
+                .WithResponse(200, OpenApiJson.For<ObjectiveReorderResult>("Updated count and applied ranks"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
                 .WithSecurity("ApiKey"));
 
             app.Get("/api/v1/backlog/{id}", async (ApiRequest req) =>
@@ -429,9 +431,9 @@ namespace Armada.Server.Routes
         private static void ApplyQuerystringOverrides(ApiRequest req, ObjectiveQuery query)
         {
             if (Int32.TryParse(req.Query.GetValueOrDefault("pageNumber"), out int pageNumber))
-                query.PageNumber = Math.Max(1, pageNumber);
+                query.PageNumber = pageNumber;
             if (Int32.TryParse(req.Query.GetValueOrDefault("pageSize"), out int pageSize))
-                query.PageSize = Math.Clamp(pageSize, 1, 500);
+                query.PageSize = pageSize;
             if (DateTime.TryParse(req.Query.GetValueOrDefault("fromUtc"), out DateTime fromUtc))
                 query.FromUtc = fromUtc.ToUniversalTime();
             if (DateTime.TryParse(req.Query.GetValueOrDefault("toUtc"), out DateTime toUtc))

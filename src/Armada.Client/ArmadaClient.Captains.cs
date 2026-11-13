@@ -42,7 +42,8 @@ namespace Armada.Client
         }
 
         /// <summary>
-        /// Dashboard <c>getCaptainTools</c>: GET `/api/v1/captains/${id}/tools`.
+        /// Dashboard <c>getCaptainTools</c>: GET `/api/v1/captains/${id}/tools`, the captain's tool sources and counts with
+        /// the first page (10) of its tools. Read further pages with <see cref="EnumerateCaptainToolsAsync"/>.
         /// </summary>
         /// <param name="id">id.</param>
         /// <param name="token">Cancellation token.</param>
@@ -50,7 +51,26 @@ namespace Armada.Client
         /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
         public Task<CaptainToolAccessResult?> GetCaptainToolsAsync(string id, CancellationToken token = default)
         {
-            return GetAsync<CaptainToolAccessResult>($"/api/v1/captains/{E(id)}/tools", ArmadaRequestOptions.WithTimeout(120000), token);
+            return EnumerateCaptainToolsAsync(id, 1, 10, null, false, token);
+        }
+
+        /// <summary>
+        /// GET `/api/v1/captains/${id}/tools` with paging: the captain's tool sources and counts with one page of its tools.
+        /// </summary>
+        /// <param name="id">Captain id.</param>
+        /// <param name="pageNumber">One-based page of tools.</param>
+        /// <param name="pageSize">Tools per page, 1 to 1000.</param>
+        /// <param name="sourceKind">Only tools of this source kind, or null for all.</param>
+        /// <param name="refresh">True to probe the runtime again instead of reusing the recent snapshot.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The response.</returns>
+        /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
+        public Task<CaptainToolAccessResult?> EnumerateCaptainToolsAsync(string id, int pageNumber, int pageSize, CaptainToolSourceKindEnum? sourceKind = null, bool refresh = false, CancellationToken token = default)
+        {
+            string query = "?pageNumber=" + pageNumber + "&pageSize=" + pageSize
+                + (sourceKind.HasValue ? "&sourceKind=" + sourceKind.Value : "")
+                + (refresh ? "&refresh=true" : "");
+            return GetAsync<CaptainToolAccessResult>($"/api/v1/captains/{E(id)}/tools" + query, ArmadaRequestOptions.WithTimeout(120000), token);
         }
 
         /// <summary>

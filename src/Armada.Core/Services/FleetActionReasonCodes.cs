@@ -10,8 +10,10 @@ namespace Armada.Core.Services
 
         /// <summary>The vessel has no action configuration.</summary>
         public const string NotConfigured = "NotConfigured";
-        /// <summary>No supported ecosystem matches.</summary>
+        /// <summary>No supported ecosystem matches, so a referenced ecosystem command (test, lint, audit, outdated, licenses) resolved to nothing.</summary>
         public const string NoMatchingEcosystem = "NoMatchingEcosystem";
+        /// <summary>The action's applicability check exited non-zero for the vessel (for example, it does not reference the package).</summary>
+        public const string NotApplicable = "NotApplicable";
         /// <summary>No credentials for the forge are available.</summary>
         public const string NoForgeCredentials = "NoForgeCredentials";
         /// <summary>The execution host is configured offline.</summary>

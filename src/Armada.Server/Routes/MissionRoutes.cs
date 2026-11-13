@@ -28,6 +28,9 @@ namespace Armada.Server.Routes
     /// </summary>
     public class MissionRoutes
     {
+        /// <summary>Response header on a created mission no captain could take yet; the body is still the Mission.</summary>
+        public const string MissionWaitingHeader = "X-Armada-Warning";
+
         private readonly DatabaseDriver _database;
         private readonly IAdmiralService _admiral;
         private readonly IMissionService _missionService;
@@ -55,8 +58,19 @@ namespace Armada.Server.Routes
         /// </summary>
         public Func<string, RuntimeActivity?>? MissionActivityLookup { get; set; } = null;
 
+        /// <summary>
+        /// Black box capture for manual transitions to Failed, LandingFailed, Cancelled or Blocked (step
+        /// OperatorTransition), or null.
+        /// </summary>
+        public Armada.Core.BlackBox.IBlackBoxCapture? BlackBox { get; set; } = null;
+
         /// <summary>Resolve file and git operations on the dock's owning host.</summary>
         public DockHostResolver? DockHosts { get; set; } = null;
+
+        /// <summary>
+        /// Black box lifecycle hooks (retention cascades and expiry recomputes after deletes and updates), or null.
+        /// </summary>
+        public Armada.Core.BlackBox.IBlackBoxLifecycleHooks? BlackBoxHooks { get; set; } = null;
 
         /// <summary>
         /// Instantiate.
@@ -139,16 +153,7 @@ namespace Armada.Server.Routes
                         : await _database.Captains.ReadAsync(ctx.TenantId!, ctx.UserId!, mission.CaptainId).ConfigureAwait(false);
             }
 
-            Dock? dock = null;
-            string? dockId = mission.DockId ?? captain?.CurrentDockId;
-            if (!String.IsNullOrEmpty(dockId))
-            {
-                dock = ctx.IsAdmin
-                    ? await _database.Docks.ReadAsync(dockId).ConfigureAwait(false)
-                    : ctx.IsTenantAdmin
-                        ? await _database.Docks.ReadAsync(ctx.TenantId!, dockId).ConfigureAwait(false)
-                        : await _database.Docks.ReadAsync(ctx.TenantId!, ctx.UserId!, dockId).ConfigureAwait(false);
-            }
+            Dock? dock = await MissionDockResolver.ReadAsync(_database, mission, caller: ctx).ConfigureAwait(false);
 
             if (dock == null || String.IsNullOrEmpty(dock.WorktreePath) || !Directory.Exists(dock.WorktreePath))
                 return null;
@@ -329,40 +334,31 @@ namespace Armada.Server.Routes
                 string? vesselId = req.Query.GetValueOrDefault("vesselId");
                 if (!String.IsNullOrEmpty(vesselId)) query.VesselId = vesselId;
 
-                List<MissionHistoryPoint> points = ctx.IsAdmin
-                    ? await _database.Missions.EnumerateHistoryPointsAsync(query).ConfigureAwait(false)
+                // A window that would produce more than MaxSummaryBuckets buckets is a typed 400.
+                try { query.Validate(); }
+                catch (CollectionLimitExceededException limit) { return RouteErrorMapper.LimitExceeded(req, limit); }
+
+                // Counted in the database per bucket and status (vessel and fleet filters included), so the server never
+                // loads one row per mission.
+                List<MissionHistoryBucketCount> counts = ctx.IsAdmin
+                    ? await _database.Missions.CountHistoryBucketsAsync(query).ConfigureAwait(false)
                     : ctx.IsTenantAdmin
-                        ? await _database.Missions.EnumerateHistoryPointsAsync(ctx.TenantId!, query).ConfigureAwait(false)
-                        : await _database.Missions.EnumerateHistoryPointsAsync(ctx.TenantId!, ctx.UserId!, query).ConfigureAwait(false);
+                        ? await _database.Missions.CountHistoryBucketsAsync(ctx.TenantId!, query).ConfigureAwait(false)
+                        : await _database.Missions.CountHistoryBucketsAsync(ctx.TenantId!, ctx.UserId!, query).ConfigureAwait(false);
 
-                if (!String.IsNullOrEmpty(query.FleetId))
-                {
-                    List<Vessel> vessels = ctx.IsAdmin
-                        ? await _database.Vessels.EnumerateAsync().ConfigureAwait(false)
-                        : ctx.IsTenantAdmin
-                            ? await _database.Vessels.EnumerateAsync(ctx.TenantId!).ConfigureAwait(false)
-                            : await _database.Vessels.EnumerateAsync(ctx.TenantId!, ctx.UserId!).ConfigureAwait(false);
-                    HashSet<string> allowedVesselIds = vessels
-                        .Where(v => String.Equals(v.FleetId, query.FleetId, StringComparison.Ordinal))
-                        .Select(v => v.Id)
-                        .ToHashSet(StringComparer.Ordinal);
-                    points = points
-                        .Where(point => !String.IsNullOrEmpty(point.VesselId) && allowedVesselIds.Contains(point.VesselId!))
-                        .ToList();
-                }
-
-                return BuildMissionHistorySummary(query, points);
+                return BuildMissionHistorySummary(query, counts);
             },
             api => api
                 .WithTag("Missions")
                 .WithSummary("Get aggregated mission history")
-                .WithDescription("Returns aggregated mission counts by time bucket for dashboard history charts.")
+                .WithDescription("Returns aggregated mission counts by time bucket for dashboard history charts. Counted in the database. The window (fromUtc to toUtc) divided by bucketMinutes may produce at most 1000 buckets; a request that would produce more is rejected with 400 and Data.Code CollectionLimitExceeded.")
                 .WithParameter(OpenApiParameterMetadata.Query("fromUtc", "Inclusive UTC start time", false))
                 .WithParameter(OpenApiParameterMetadata.Query("toUtc", "Exclusive UTC end time", false))
                 .WithParameter(OpenApiParameterMetadata.Query("bucketMinutes", "Bucket size in minutes", false))
                 .WithParameter(OpenApiParameterMetadata.Query("fleetId", "Optional fleet filter", false))
                 .WithParameter(OpenApiParameterMetadata.Query("vesselId", "Optional vessel filter", false))
                 .WithResponse(200, OpenApiJson.For<MissionHistorySummaryResult>("Mission history summary"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
                 .WithSecurity("ApiKey"));
 
             app.Post<Mission>("/api/v1/missions", async (ApiRequest req) =>
@@ -377,22 +373,30 @@ namespace Armada.Server.Routes
                     ?? throw new InvalidOperationException("Request body could not be deserialized as Mission.");
                 mission.TenantId = ctx.TenantId;
                 mission.UserId = ctx.UserId;
-                mission = await _admiral.DispatchMissionAsync(mission).ConfigureAwait(false);
-                req.Http.Response.StatusCode = 201;
-                if (mission.Status == MissionStatusEnum.Pending)
+                EntityUpdateMerger.ResetMissionConcurrencyMetadata(mission);
+                if (mission.WorkerEnvelope != null)
                 {
-                    return (object)new
-                    {
-                        Mission = mission,
-                        Warning = "Mission created but could not be assigned to any captain. It will be retried on the next health check cycle."
-                    };
+                    // A mission may only tighten its vessel's Worker envelope; a looser or invalid one is a 400 with the reason.
+                    Vessel? envelopeVessel = String.IsNullOrEmpty(mission.VesselId) ? null
+                        : ctx.IsAdmin || String.IsNullOrEmpty(ctx.TenantId)
+                            ? await _database.Vessels.ReadAsync(mission.VesselId).ConfigureAwait(false)
+                            : await _database.Vessels.ReadAsync(ctx.TenantId!, mission.VesselId).ConfigureAwait(false);
+                    try { mission.WorkerEnvelope = WorkerEnvelopeRules.ValidateMissionEnvelope(envelopeVessel?.WorkerEnvelope, mission.WorkerEnvelope); }
+                    catch (ArgumentException ex) { return RouteErrorMapper.ToResponse(req, ex); }
                 }
+                try { mission = await _admiral.DispatchMissionAsync(mission).ConfigureAwait(false); }
+                catch (ArgumentException ex) { return RouteErrorMapper.ToResponse(req, ex); }
+                req.Http.Response.StatusCode = 201;
+                // Always the documented Mission body. The mission is saved even when no captain can take it yet, so this
+                // stays a 2xx (an error would invite a duplicate retry); the header and the Pending status say it waits.
+                if (mission.Status == MissionStatusEnum.Pending)
+                    req.Http.Response.Headers.Add(MissionWaitingHeader, UsageSelectionText.Get("usageSelection.missionWaiting"));
                 return mission;
             },
             api => api
                 .WithTag("Missions")
                 .WithSummary("Create a mission")
-                .WithDescription("Creates and dispatches a new mission. If a vesselId is provided, the Admiral will assign a captain and set up a worktree.")
+                .WithDescription("Creates and dispatches a new mission and always returns 201 with the Mission. If a vesselId is provided, the Admiral admits it to a captain (status Assigned) and sets up the worktree and launches the agent in the background; poll for InProgress. A mission no captain can take yet stays Pending, is retried automatically and carries an X-Armada-Warning header; GET /api/v1/missions/{id}/captain-selection explains a captain-selection wait.")
                 .WithRequestBody(OpenApiJson.BodyFor<Mission>("Mission data", true))
                 .WithResponse(201, OpenApiJson.For<Mission>("Created mission"))
                 .WithSecurity("ApiKey"));
@@ -414,7 +418,7 @@ namespace Armada.Server.Routes
                 if (mission == null) { req.Http.Response.StatusCode = 404; return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Mission not found" }; }
                 mission.DiffSnapshot = null;
                 mission.PlaybookSnapshots = await _database.Playbooks.GetMissionSnapshotsAsync(id).ConfigureAwait(false);
-                mission.AssignmentBlocker = await ComputeAssignmentBlockerAsync(mission).ConfigureAwait(false);
+                mission.AssignmentBlocker = await ComputeAssignmentBlockerAsync(mission, ctx.IsAdmin).ConfigureAwait(false);
                 mission.Activity = MissionActivityLookup?.Invoke(mission.Id);
                 return (object)mission;
             },
@@ -459,9 +463,132 @@ namespace Armada.Server.Routes
             api => api
                 .WithTag("Missions")
                 .WithSummary("Get GitHub pull-request evidence for a mission")
-                .WithDescription("Returns normalized GitHub pull-request review and check evidence for the mission pull request.")
+                .WithDescription("Returns normalized GitHub pull-request evidence for the mission pull request: state, review status, the first 100 requested reviewers and labels with their full counts, and ReviewCount, CommentCount, and CheckCount. The reviews, comments, and checks themselves are read one page at a time from POST /api/v1/missions/{id}/github/pull-request/reviews/enumerate, .../comments/enumerate, and .../checks/enumerate.")
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Mission ID (msn_ prefix)"))
                 .WithResponse(200, OpenApiJson.For<GitHubPullRequestDetail>("GitHub pull-request evidence"))
+                .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithSecurity("ApiKey"));
+
+            app.Post<EnumerationQuery>("/api/v1/missions/{id}/github/pull-request/reviews/enumerate", async (ApiRequest req) =>
+            {
+                AuthContext ctx = await authenticate(req.Http).ConfigureAwait(false);
+                if (!authz.IsAuthorized(ctx, req.Http.Request.Method.ToString(), req.Http.Request.Url.RawWithoutQuery))
+                {
+                    req.Http.Response.StatusCode = ctx.IsAuthenticated ? 403 : 401;
+                    return new ApiErrorResponse { Error = ctx.IsAuthenticated ? ApiResultEnum.Forbidden : ApiResultEnum.NotAuthorized, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
+                }
+                string missionId = req.Parameters["id"];
+                EnumerationQuery query = EnumerationRequestReader.Read(req, _jsonOptions);
+                Mission? mission = ctx.IsAdmin
+                    ? await _database.Missions.ReadAsync(missionId).ConfigureAwait(false)
+                    : ctx.IsTenantAdmin
+                        ? await _database.Missions.ReadAsync(ctx.TenantId!, missionId).ConfigureAwait(false)
+                        : await _database.Missions.ReadAsync(ctx.TenantId!, ctx.UserId!, missionId).ConfigureAwait(false);
+                if (mission == null)
+                {
+                    req.Http.Response.StatusCode = 404;
+                    return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Mission not found" };
+                }
+
+                try
+                {
+                    return await _gitHub.EnumerateMissionPullRequestReviewsAsync(ctx, mission, query).ConfigureAwait(false);
+                }
+                catch (Exception ex) when (RouteErrorMapper.IsMapped(ex))
+                {
+                    return RouteErrorMapper.ToResponse(req, ex, 400);
+                }
+            },
+            api => api
+                .WithTag("Missions")
+                .WithSummary("Enumerate the reviews of a mission's GitHub pull request")
+                .WithDescription("One page of the reviews submitted on the mission pull request, paged by GitHub with an exact TotalRecords. Page size 1 to 100 (GitHub's largest page; a larger value is normalized to 100), default 10. Order CreatedAscending is GitHub's order (oldest first); CreatedDescending (the default) is newest first.")
+                .WithParameter(OpenApiParameterMetadata.Path("id", "Mission ID (msn_ prefix)"))
+                .WithRequestBody(OpenApiJson.BodyFor<EnumerationQuery>("Paging", false))
+                .WithResponse(200, OpenApiJson.For<EnumerationResult<GitHubPullRequestReview>>("One page"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
+                .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithSecurity("ApiKey"));
+
+            app.Post<EnumerationQuery>("/api/v1/missions/{id}/github/pull-request/comments/enumerate", async (ApiRequest req) =>
+            {
+                AuthContext ctx = await authenticate(req.Http).ConfigureAwait(false);
+                if (!authz.IsAuthorized(ctx, req.Http.Request.Method.ToString(), req.Http.Request.Url.RawWithoutQuery))
+                {
+                    req.Http.Response.StatusCode = ctx.IsAuthenticated ? 403 : 401;
+                    return new ApiErrorResponse { Error = ctx.IsAuthenticated ? ApiResultEnum.Forbidden : ApiResultEnum.NotAuthorized, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
+                }
+                string missionId = req.Parameters["id"];
+                EnumerationQuery query = EnumerationRequestReader.Read(req, _jsonOptions);
+                Mission? mission = ctx.IsAdmin
+                    ? await _database.Missions.ReadAsync(missionId).ConfigureAwait(false)
+                    : ctx.IsTenantAdmin
+                        ? await _database.Missions.ReadAsync(ctx.TenantId!, missionId).ConfigureAwait(false)
+                        : await _database.Missions.ReadAsync(ctx.TenantId!, ctx.UserId!, missionId).ConfigureAwait(false);
+                if (mission == null)
+                {
+                    req.Http.Response.StatusCode = 404;
+                    return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Mission not found" };
+                }
+
+                try
+                {
+                    return await _gitHub.EnumerateMissionPullRequestCommentsAsync(ctx, mission, query).ConfigureAwait(false);
+                }
+                catch (Exception ex) when (RouteErrorMapper.IsMapped(ex))
+                {
+                    return RouteErrorMapper.ToResponse(req, ex, 400);
+                }
+            },
+            api => api
+                .WithTag("Missions")
+                .WithSummary("Enumerate the comments of a mission's GitHub pull request")
+                .WithDescription("One page of the issue comments on the mission pull request, paged by GitHub with an exact TotalRecords. Page size 1 to 100 (GitHub's largest page; a larger value is normalized to 100), default 10. Order CreatedAscending is GitHub's order (oldest first); CreatedDescending (the default) is newest first.")
+                .WithParameter(OpenApiParameterMetadata.Path("id", "Mission ID (msn_ prefix)"))
+                .WithRequestBody(OpenApiJson.BodyFor<EnumerationQuery>("Paging", false))
+                .WithResponse(200, OpenApiJson.For<EnumerationResult<GitHubPullRequestComment>>("One page"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
+                .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithSecurity("ApiKey"));
+
+            app.Post<EnumerationQuery>("/api/v1/missions/{id}/github/pull-request/checks/enumerate", async (ApiRequest req) =>
+            {
+                AuthContext ctx = await authenticate(req.Http).ConfigureAwait(false);
+                if (!authz.IsAuthorized(ctx, req.Http.Request.Method.ToString(), req.Http.Request.Url.RawWithoutQuery))
+                {
+                    req.Http.Response.StatusCode = ctx.IsAuthenticated ? 403 : 401;
+                    return new ApiErrorResponse { Error = ctx.IsAuthenticated ? ApiResultEnum.Forbidden : ApiResultEnum.NotAuthorized, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
+                }
+                string missionId = req.Parameters["id"];
+                EnumerationQuery query = EnumerationRequestReader.Read(req, _jsonOptions);
+                Mission? mission = ctx.IsAdmin
+                    ? await _database.Missions.ReadAsync(missionId).ConfigureAwait(false)
+                    : ctx.IsTenantAdmin
+                        ? await _database.Missions.ReadAsync(ctx.TenantId!, missionId).ConfigureAwait(false)
+                        : await _database.Missions.ReadAsync(ctx.TenantId!, ctx.UserId!, missionId).ConfigureAwait(false);
+                if (mission == null)
+                {
+                    req.Http.Response.StatusCode = 404;
+                    return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Mission not found" };
+                }
+
+                try
+                {
+                    return await _gitHub.EnumerateMissionPullRequestChecksAsync(ctx, mission, query).ConfigureAwait(false);
+                }
+                catch (Exception ex) when (RouteErrorMapper.IsMapped(ex))
+                {
+                    return RouteErrorMapper.ToResponse(req, ex, 400);
+                }
+            },
+            api => api
+                .WithTag("Missions")
+                .WithSummary("Enumerate the checks of a mission's GitHub pull request")
+                .WithDescription("One page of the provider checks on the head commit of the mission pull request, paged by GitHub with an exact TotalRecords. Page size 1 to 100 (GitHub's largest page; a larger value is normalized to 100), default 10. Order CreatedAscending is GitHub's order (oldest first); CreatedDescending (the default) is newest first.")
+                .WithParameter(OpenApiParameterMetadata.Path("id", "Mission ID (msn_ prefix)"))
+                .WithRequestBody(OpenApiJson.BodyFor<EnumerationQuery>("Paging", false))
+                .WithResponse(200, OpenApiJson.For<EnumerationResult<GitHubPullRequestCheck>>("One page"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())
                 .WithSecurity("ApiKey"));
 
@@ -575,18 +702,35 @@ namespace Armada.Server.Routes
 
                 // Merge only metadata fields onto the existing record; operational, ownership, and timestamp fields
                 // are preserved (shared with the WebSocket update_mission command).
+                string? previousParent = existing.ParentMissionId;
                 existing = EntityUpdateMerger.MergeMission(existing, incoming);
+                try { await new MissionHierarchyValidator(_database, _settings).NormalizeAsync(existing, true, previousParent).ConfigureAwait(false); }
+                catch (ArgumentException ex) { return RouteErrorMapper.ToResponse(req, ex); }
+                if (incoming.WorkerEnvelope != null)
+                {
+                    // Omitted or null keeps the stored envelope; {} clears it. A change is validated like dispatch (400)
+                    // and refused once the mission has started (409).
+                    Vessel? envelopeVessel = String.IsNullOrEmpty(existing.VesselId) ? null
+                        : ctx.IsAdmin || String.IsNullOrEmpty(ctx.TenantId)
+                            ? await _database.Vessels.ReadAsync(existing.VesselId).ConfigureAwait(false)
+                            : await _database.Vessels.ReadAsync(ctx.TenantId!, existing.VesselId).ConfigureAwait(false);
+                    try { existing.WorkerEnvelope = WorkerEnvelopeRules.ValidateMissionEnvelopeUpdate(existing, envelopeVessel?.WorkerEnvelope, incoming.WorkerEnvelope); }
+                    catch (ArgumentException ex) { return RouteErrorMapper.ToResponse(req, ex); }
+                    catch (InvalidOperationException ex) { return RouteErrorMapper.ToResponse(req, ex, 409); }
+                }
                 existing = await _database.Missions.UpdateAsync(existing).ConfigureAwait(false);
                 return (object)existing;
             },
             api => api
                 .WithTag("Missions")
                 .WithSummary("Update a mission")
-                .WithDescription("Updates an existing mission by ID.")
+                .WithDescription("Updates an existing mission by ID. workerEnvelope: omitted or null keeps the stored envelope, {} clears it; a changed envelope may only tighten the vessel default (400 otherwise) and only while the mission is Pending or Assigned and not started (409 otherwise).")
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Mission ID (msn_ prefix)"))
                 .WithRequestBody(OpenApiJson.BodyFor<Mission>("Updated mission data", true))
                 .WithResponse(200, OpenApiJson.For<Mission>("Updated mission"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithResponse(409, OpenApiJson.For<ApiErrorResponse>("workerEnvelope changed on a mission that has started"))
                 .WithSecurity("ApiKey"));
 
             app.Put<StatusTransitionRequest>("/api/v1/missions/{id}/status", async (ApiRequest req) =>
@@ -647,6 +791,7 @@ namespace Armada.Server.Routes
                 }
 
                 await _database.Missions.UpdateAsync(mission).ConfigureAwait(false);
+                await BlackBoxOperatorCapture.RecordTransitionAsync(BlackBox, mission, previousStatus, "REST").ConfigureAwait(false);
 
                 // Audit event: manual Complete without an active dock bypasses the landing pipeline.
                 // This is allowed (operators may need it after restarts/cleanup) but should be visible.
@@ -662,7 +807,9 @@ namespace Armada.Server.Routes
                 if (!String.IsNullOrEmpty(mission.CaptainId)) signal.FromCaptainId = mission.CaptainId;
                 await _database.Signals.CreateAsync(signal).ConfigureAwait(false);
 
-                await _emitMissionStatusChanged(mission, previousStatus, "Mission " + id + " transitioned to " + newStatus).ConfigureAwait(false);
+                // The black box capture already emitted mission.status_changed for a transition it captured.
+                if (!BlackBoxOperatorCapture.EmitsStatusChanged(BlackBox, mission.Status))
+                    await _emitMissionStatusChanged(mission, previousStatus, "Mission " + id + " transitioned to " + newStatus).ConfigureAwait(false);
 
                 // Broadcast specific mission change for dashboard toast notifications
                 if (_webSocketHub != null)
@@ -833,6 +980,29 @@ namespace Armada.Server.Routes
                         : await _database.Missions.ReadAsync(ctx.TenantId!, ctx.UserId!, id).ConfigureAwait(false);
                 if (mission == null) { req.Http.Response.StatusCode = 404; return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Mission not found" }; }
 
+                // D17: a parent with unfinished descendants is purged only with cascade=true, which purges the subtree too.
+                MissionHierarchyValidator hierarchy = new MissionHierarchyValidator(_database, _settings);
+                bool cascade = String.Equals(req.Query.GetValueOrDefault("cascade"), "true", StringComparison.OrdinalIgnoreCase);
+                List<Mission> unfinished = await hierarchy.UnfinishedDescendantsAsync(mission).ConfigureAwait(false);
+                if (unfinished.Count > 0 && !cascade)
+                {
+                    req.Http.Response.StatusCode = 409;
+                    return new ApiErrorResponse { Error = ApiResultEnum.Conflict, Message = "Mission " + id + " has " + unfinished.Count
+                        + " unfinished descendant mission(s), for example '" + unfinished[0].Title + "'. Finish or cancel them, or purge with cascade=true to delete the subtree.",
+                        Data = new { Code = "HierarchyHasUnfinishedDescendants", Count = unfinished.Count } };
+                }
+                if (cascade)
+                {
+                    List<Mission> subtree = await hierarchy.AllDescendantsAsync(mission).ConfigureAwait(false);
+                    subtree.Reverse();
+                    foreach (Mission descendant in subtree)
+                    {
+                        await _database.Missions.DeleteAsync(descendant.Id).ConfigureAwait(false);
+                        await CascadeCleanup.RemoveEventsForMissionAsync(_database, descendant.Id).ConfigureAwait(false);
+                        if (BlackBoxHooks != null) await BlackBoxHooks.OnMissionDeletedAsync(descendant.Id).ConfigureAwait(false);
+                    }
+                }
+
                 if (ctx.IsAdmin)
                     await _database.Missions.DeleteAsync(id).ConfigureAwait(false);
                 else if (ctx.IsTenantAdmin)
@@ -842,6 +1012,7 @@ namespace Armada.Server.Routes
 
                 // Remove telemetry events that referenced this mission so they do not dangle.
                 await CascadeCleanup.RemoveEventsForMissionAsync(_database, id).ConfigureAwait(false);
+                if (BlackBoxHooks != null) await BlackBoxHooks.OnMissionDeletedAsync(id).ConfigureAwait(false);
 
                 await _emitEvent("mission.deleted", "Mission " + id + " permanently deleted",
                     "mission", id, null, null, null, null).ConfigureAwait(false);
@@ -851,8 +1022,9 @@ namespace Armada.Server.Routes
             api => api
                 .WithTag("Missions")
                 .WithSummary("Permanently delete a mission")
-                .WithDescription("Permanently deletes a mission from the database. This cannot be undone.")
+                .WithDescription("Permanently deletes a mission from the database. This cannot be undone. A hierarchy parent with unfinished descendants returns 409 unless cascade=true, which also deletes its subtree.")
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Mission ID (msn_ prefix)"))
+                .WithParameter(OpenApiParameterMetadata.Query("cascade", "true also deletes the mission's descendants", false))
                 .WithResponse(200, OpenApiJson.For<object>("Deleted mission"))
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())
                 .WithSecurity("ApiKey"));
@@ -868,6 +1040,8 @@ namespace Armada.Server.Routes
                 DeleteMultipleRequest? body = JsonSerializer.Deserialize<DeleteMultipleRequest>(req.Http.Request.DataAsString, _jsonOptions);
                 if (body == null || body.Ids == null || body.Ids.Count == 0)
                     { req.Http.Response.StatusCode = 400; return (object)new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Ids is required and must not be empty" }; }
+                try { body.RequireWithinLimit(); }
+                catch (CollectionLimitExceededException limit) { return RouteErrorMapper.LimitExceeded(req, limit); }
 
                 DeleteMultipleResult result = new DeleteMultipleResult();
                 foreach (string id in body.Ids)
@@ -893,6 +1067,7 @@ namespace Armada.Server.Routes
                         await _database.Missions.DeleteAsync(ctx.TenantId!, id).ConfigureAwait(false);
                     else
                         await _database.Missions.DeleteAsync(ctx.TenantId!, ctx.UserId!, id).ConfigureAwait(false);
+                    if (BlackBoxHooks != null) await BlackBoxHooks.OnMissionDeletedAsync(id).ConfigureAwait(false);
                     result.Deleted++;
                 }
 
@@ -905,7 +1080,7 @@ namespace Armada.Server.Routes
             api => api
                 .WithTag("Missions")
                 .WithSummary("Batch delete multiple missions")
-                .WithDescription("Permanently deletes multiple missions from the database by ID. Returns a summary of deleted and skipped entries. This cannot be undone.")
+                .WithDescription("Permanently deletes multiple missions from the database by ID (at most 1000 ids; more is a 400 with Data.Code CollectionLimitExceeded). Returns a summary of deleted and skipped entries. This cannot be undone.")
                 .WithRequestBody(OpenApiJson.BodyFor<DeleteMultipleRequest>("List of mission IDs to delete"))
                 .WithResponse(200, OpenApiJson.For<DeleteMultipleResult>("Delete result summary"))
                 .WithResponse(400, OpenApiResponseMetadata.BadRequest())
@@ -967,7 +1142,7 @@ namespace Armada.Server.Routes
             api => api
                 .WithTag("Missions")
                 .WithSummary("Restart a failed or cancelled mission, or start a pending one")
-                .WithDescription("Resets a Failed, LandingFailed, or Cancelled mission back to Pending (clearing captain assignment, branch, PR URL, and timing fields), or keeps a Pending mission as it is, then dispatches it at once when a captain is available. When no captain is available the mission stays Pending and the regular dispatcher picks it up later. Optionally update the title and description (instructions) before restarting. Any other status returns 409.")
+                .WithDescription("Resets a Failed, LandingFailed, or Cancelled mission back to Pending (clearing captain assignment, branch, PR URL, and timing fields), or keeps a Pending mission as it is, then dispatches it at once when a captain is available. When no captain is available the mission stays Pending and the regular dispatcher picks it up later. Optionally update the title and description (instructions) before restarting. RestoredMissionIds lists the other missions the restart returned to Pending: later stages and dependents cancelled because this one failed, and descendants cancelled with ParentFailed. Any other status returns 409.")
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Mission ID (msn_ prefix)"))
                 .WithRequestBody(OpenApiJson.BodyFor<MissionRestartRequest>("Optional updated instructions", false))
                 .WithResponse(200, OpenApiJson.For<Mission>("Restarted mission (Pending, Assigned, or InProgress)"))
@@ -1090,40 +1265,7 @@ namespace Armada.Server.Routes
                 }
 
                 // Fall back to live worktree diff
-                Dock? dock = null;
-                if (!String.IsNullOrEmpty(mission.DockId))
-                {
-                    dock = ctx.IsAdmin
-                        ? await _database.Docks.ReadAsync(mission.DockId).ConfigureAwait(false)
-                        : ctx.IsTenantAdmin
-                            ? await _database.Docks.ReadAsync(ctx.TenantId!, mission.DockId).ConfigureAwait(false)
-                            : await _database.Docks.ReadAsync(ctx.TenantId!, ctx.UserId!, mission.DockId).ConfigureAwait(false);
-                }
-
-                if (dock == null && !String.IsNullOrEmpty(mission.CaptainId))
-                {
-                    Captain? captain = ctx.IsAdmin
-                        ? await _database.Captains.ReadAsync(mission.CaptainId).ConfigureAwait(false)
-                        : ctx.IsTenantAdmin
-                            ? await _database.Captains.ReadAsync(ctx.TenantId!, mission.CaptainId).ConfigureAwait(false)
-                            : await _database.Captains.ReadAsync(ctx.TenantId!, ctx.UserId!, mission.CaptainId).ConfigureAwait(false);
-                    if (captain != null && !String.IsNullOrEmpty(captain.CurrentDockId))
-                    {
-                        dock = ctx.IsAdmin
-                            ? await _database.Docks.ReadAsync(captain.CurrentDockId).ConfigureAwait(false)
-                            : ctx.IsTenantAdmin
-                                ? await _database.Docks.ReadAsync(ctx.TenantId!, captain.CurrentDockId).ConfigureAwait(false)
-                                : await _database.Docks.ReadAsync(ctx.TenantId!, ctx.UserId!, captain.CurrentDockId).ConfigureAwait(false);
-                    }
-                }
-
-                if (dock == null && !String.IsNullOrEmpty(mission.BranchName) && !String.IsNullOrEmpty(mission.VesselId))
-                {
-                    List<Dock> docks = ctx.IsAdmin
-                        ? await _database.Docks.EnumerateByVesselAsync(mission.VesselId).ConfigureAwait(false)
-                        : await _database.Docks.EnumerateByVesselAsync(ctx.TenantId!, mission.VesselId).ConfigureAwait(false);
-                    dock = docks.FirstOrDefault(d => d.BranchName == mission.BranchName && d.Active);
-                }
+                Dock? dock = await MissionDockResolver.ReadAsync(_database, mission, caller: ctx).ConfigureAwait(false);
 
                 if (dock == null || String.IsNullOrEmpty(dock.WorktreePath))
                     { req.Http.Response.StatusCode = 404; return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "No diff available: no mission worktree or saved diff exists" }; }
@@ -1303,11 +1445,14 @@ namespace Armada.Server.Routes
                 .WithSecurity("ApiKey"));
         }
 
-        private async Task<MissionAssignmentBlocker?> ComputeAssignmentBlockerAsync(Mission mission)
+        private async Task<MissionAssignmentBlocker?> ComputeAssignmentBlockerAsync(Mission mission, bool canConfigure)
         {
             try
             {
-                return await _missionService.GetAssignmentBlockerAsync(mission).ConfigureAwait(false);
+                MissionAssignmentBlocker? blocker = await _missionService.GetAssignmentBlockerAsync(mission).ConfigureAwait(false);
+                if (!canConfigure && blocker != null)
+                    foreach (AssignmentBlockerAdvice advice in blocker.Advice) advice.Action = null;
+                return blocker;
             }
             catch (Exception ex)
             {
@@ -1408,13 +1553,12 @@ namespace Armada.Server.Routes
             return collapsed.Length <= max ? collapsed : collapsed.Substring(0, max) + "...";
         }
 
-        private static MissionHistorySummaryResult BuildMissionHistorySummary(MissionHistoryQuery query, IEnumerable<MissionHistoryPoint> points)
+        private static MissionHistorySummaryResult BuildMissionHistorySummary(MissionHistoryQuery query, IEnumerable<MissionHistoryBucketCount> counts)
         {
-            DateTime fromUtc = query.FromUtc.Kind == DateTimeKind.Utc ? query.FromUtc : query.FromUtc.ToUniversalTime();
-            DateTime toUtc = query.ToUtc.Kind == DateTimeKind.Utc ? query.ToUtc : query.ToUtc.ToUniversalTime();
-            int bucketMinutes = query.BucketMinutes > 0 ? query.BucketMinutes : 60;
-            TimeSpan bucketSize = TimeSpan.FromMinutes(bucketMinutes);
-            long bucketTicks = Math.Max(bucketSize.Ticks, TimeSpan.FromMinutes(1).Ticks);
+            DateTime fromUtc = query.FromUtcNormalized;
+            DateTime toUtc = query.ToUtcNormalized;
+            int bucketMinutes = query.EffectiveBucketMinutes;
+            long bucketTicks = TimeSpan.FromMinutes(bucketMinutes).Ticks;
 
             MissionHistorySummaryResult result = new MissionHistorySummaryResult
             {
@@ -1424,46 +1568,40 @@ namespace Armada.Server.Routes
             };
 
             SortedDictionary<long, MissionHistoryBucket> buckets = new SortedDictionary<long, MissionHistoryBucket>();
-            long startTicks = (fromUtc.Ticks / bucketTicks) * bucketTicks;
+            long startTicks = query.AlignedStartUtc.Ticks;
             for (long ticks = startTicks; ticks < toUtc.Ticks; ticks += bucketTicks)
             {
                 buckets[ticks] = new MissionHistoryBucket { StartUtc = new DateTime(ticks, DateTimeKind.Utc) };
             }
 
-            foreach (MissionHistoryPoint point in points)
+            foreach (MissionHistoryBucketCount count in counts)
             {
-                DateTime createdUtc = point.CreatedUtc.Kind == DateTimeKind.Utc ? point.CreatedUtc : point.CreatedUtc.ToUniversalTime();
-                if (createdUtc < fromUtc || createdUtc >= toUtc) continue;
-
-                long bucketStartTicks = (createdUtc.Ticks / bucketTicks) * bucketTicks;
-                if (!buckets.TryGetValue(bucketStartTicks, out MissionHistoryBucket? bucket))
-                {
-                    bucket = new MissionHistoryBucket { StartUtc = new DateTime(bucketStartTicks, DateTimeKind.Utc) };
-                    buckets[bucketStartTicks] = bucket;
-                }
+                long bucketStartTicks = startTicks + count.BucketIndex * bucketTicks;
+                if (!buckets.TryGetValue(bucketStartTicks, out MissionHistoryBucket? bucket)) continue;
+                int n = (int)Math.Min(int.MaxValue, count.Count);
 
                 // "Complete" (green) covers every state where the captain has produced work or gone
                 // further, not just fully-landed missions -- so with landing off, produced/reviewed work
                 // still reads as done. Failed/LandingFailed are red; only genuinely in-flight (Pending/
                 // Assigned/InProgress) and Cancelled are grey "Other".
-                if (point.Status == MissionStatusEnum.WorkProduced
-                    || point.Status == MissionStatusEnum.PullRequestOpen
-                    || point.Status == MissionStatusEnum.Testing
-                    || point.Status == MissionStatusEnum.Review
-                    || point.Status == MissionStatusEnum.Complete)
+                if (count.Status == MissionStatusEnum.WorkProduced
+                    || count.Status == MissionStatusEnum.PullRequestOpen
+                    || count.Status == MissionStatusEnum.Testing
+                    || count.Status == MissionStatusEnum.Review
+                    || count.Status == MissionStatusEnum.Complete)
                 {
-                    bucket.CompleteCount++;
-                    result.CompleteCount++;
+                    bucket.CompleteCount += n;
+                    result.CompleteCount += n;
                 }
-                else if (point.Status == MissionStatusEnum.Failed || point.Status == MissionStatusEnum.LandingFailed)
+                else if (count.Status == MissionStatusEnum.Failed || count.Status == MissionStatusEnum.LandingFailed)
                 {
-                    bucket.FailedCount++;
-                    result.FailedCount++;
+                    bucket.FailedCount += n;
+                    result.FailedCount += n;
                 }
                 else
                 {
-                    bucket.OtherCount++;
-                    result.OtherCount++;
+                    bucket.OtherCount += n;
+                    result.OtherCount += n;
                 }
             }
 

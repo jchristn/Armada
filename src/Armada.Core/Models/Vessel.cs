@@ -3,6 +3,7 @@ namespace Armada.Core.Models
     using System.Collections.Generic;
     using System.Text.Json.Serialization;
     using Armada.Core.Enums;
+    using Armada.Core.Services;
 
     /// <summary>
     /// A git repository registered with Armada.
@@ -171,12 +172,23 @@ namespace Armada.Core.Models
         /// </summary>
         public BranchCleanupPolicyEnum? BranchCleanupPolicy { get; set; } = null;
 
-        /// <summary>
-        /// Whether this vessel allows multiple concurrent missions. Default false.
-        /// When false, only one mission may be in an active state
-        /// (Assigned, InProgress, WorkProduced, PullRequestOpen) at a time.
-        /// </summary>
-        public bool AllowConcurrentMissions { get; set; } = false;
+
+        /// <summary>Maximum admitted voyage groups on this vessel; zero means unlimited.</summary>
+        public int MaxParallelVoyages
+        {
+            get => _MaxParallelVoyages;
+            set => _MaxParallelVoyages = ConcurrencyClamp.VesselLimit(value);
+        }
+
+        /// <summary>Maximum running missions per voyage; zero means unlimited.</summary>
+        public int MaxParallelMissionsPerVoyage
+        {
+            get => _MaxParallelMissionsPerVoyage;
+            set => _MaxParallelMissionsPerVoyage = ConcurrencyClamp.VesselLimit(value);
+        }
+
+        private int _MaxParallelVoyages = Constants.DefaultVesselMaxParallelVoyages;
+        private int _MaxParallelMissionsPerVoyage = Constants.DefaultVesselMaxParallelMissionsPerVoyage;
 
         /// <summary>
         /// Per-vessel override of the captain auto-approve setting for missions on this vessel. Null (the default)
@@ -194,6 +206,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// Optional protected-branch glob or exact-match patterns.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxConfigItems)]
         public List<string> ProtectedBranchPatterns { get; set; } = new List<string>();
 
         /// <summary>
@@ -204,12 +217,14 @@ namespace Armada.Core.Models
         /// <summary>
         /// Protected file-path globs the pre-land scanner blocks a mission from touching (e.g. ".github/**").
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxConfigItems)]
         public List<string> ProtectedPathPatterns { get; set; } = new List<string>();
 
         /// <summary>
         /// Private identifiers (company/domain strings) the pre-land scanner blocks from leaking into
         /// added diff lines for public repos.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxConfigItems)]
         public List<string> PrivateIdentifierDenylist { get; set; } = new List<string>();
 
         /// <summary>
@@ -243,11 +258,13 @@ namespace Armada.Core.Models
         /// Glob patterns a changed path must match to be auto-landable. When non-empty, a mission touching
         /// any path outside this allow-list holds for review.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxConfigItems)]
         public List<string> AutoLandPathAllowGlobs { get; set; } = new List<string>();
 
         /// <summary>
         /// Glob patterns that force a hold: a mission touching any matching path never auto-lands.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxConfigItems)]
         public List<string> AutoLandPathDenyGlobs { get; set; } = new List<string>();
 
         /// <summary>
@@ -285,6 +302,30 @@ namespace Armada.Core.Models
         /// Per-vessel override for the Audit intent (e.g. "osv-scanner -r ."). Null or empty uses detection.
         /// </summary>
         public string? AuditCommand { get; set; } = null;
+
+        /// <summary>
+        /// Default Worker eligibility envelope for this vessel's Worker missions (docs/MODEL_HETEROGENEITY.md, 3.3), or
+        /// null for no envelope (routing unchanged). A mission may tighten it, never loosen it.
+        /// </summary>
+        public WorkerEnvelope? WorkerEnvelope { get; set; } = null;
+
+        /// <summary>
+        /// Per-vessel black box retention override in days (0 keeps entries forever, maximum 3650), or null to use
+        /// <c>BlackBox.Retention.RetentionDays</c>.
+        /// </summary>
+        public int? BlackBoxRetentionDays
+        {
+            get => _BlackBoxRetentionDays;
+            set => _BlackBoxRetentionDays = value.HasValue ? (value.Value < 0 ? 0 : (value.Value > 3650 ? 3650 : value.Value)) : null;
+        }
+
+        /// <summary>
+        /// When true, a mission dispatched to this vessel whose likely files overlap an active mission's files (or a
+        /// directory an active mission reserves because the black box marks it a hotspot) is chained after that mission
+        /// with <see cref="Mission.DependsOnMissionId"/> instead of running in parallel. An explicit DependsOnMissionId is
+        /// never replaced. Default true; set false to report overlaps only as dispatch warnings.
+        /// </summary>
+        public bool SerializeOverlappingMissions { get; set; } = true;
 
         /// <summary>
         /// Per-phase timeout, in seconds, for each Definition-of-Done command. Exceeding it classifies as
@@ -345,6 +386,7 @@ namespace Armada.Core.Models
         private string _Name = "My Vessel";
         private int _AutoLandMaxFiles = 0;
         private int _AutoLandMaxLines = 0;
+        private int? _BlackBoxRetentionDays = null;
         private int _DefinitionOfDoneTimeoutSeconds = Constants.DefaultDefinitionOfDoneTimeoutSeconds;
         private string? _RepoUrl = null;
         private string? _GitHubTokenOverride = null;

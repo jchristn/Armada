@@ -62,5 +62,17 @@ namespace Armada.Core.Database.Interfaces
         /// Enumerate planning sessions for a user within a tenant.
         /// </summary>
         Task<List<PlanningSession>> EnumerateAsync(string tenantId, string userId, CancellationToken token = default);
+
+        /// <summary>
+        /// Read one page of planning sessions, most recently updated first for CreatedDescending (the default) and
+        /// least recently updated first for CreatedAscending; the id breaks ties. Scope and filters apply before the
+        /// count. Filters: Status, CaptainId, VesselId, FleetId, CreatedAfter, CreatedBefore.
+        /// </summary>
+        /// <param name="tenantId">Only this tenant's sessions, or null for every tenant.</param>
+        /// <param name="userId">Only this user's sessions, or null for every user.</param>
+        /// <param name="query">Paging, order, and filters.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>One page of sessions.</returns>
+        Task<EnumerationResult<PlanningSession>> EnumeratePageAsync(string? tenantId, string? userId, EnumerationQuery query, CancellationToken token = default);
     }
 }

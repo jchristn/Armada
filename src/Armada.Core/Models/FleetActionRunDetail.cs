@@ -1,9 +1,10 @@
 namespace Armada.Core.Models
 {
-    using System.Collections.Generic;
-
     /// <summary>
-    /// A fleet action run with summaries of all of its targets (no output text).
+    /// A fleet action run as returned by the run read. The run's targets are not embedded (docs/ENUMERATION.md): the
+    /// run carries the target counts, and the targets are read one page at a time from
+    /// <c>POST /api/v1/fleet-action-runs/{id}/targets/enumerate</c> (MCP <c>enumerate</c> with entityType
+    /// <c>fleet_action_run_target</c>).
     /// </summary>
     public class FleetActionRunDetail
     {
@@ -18,21 +19,11 @@ namespace Armada.Core.Models
             set => _Run = value ?? new FleetActionRun();
         }
 
-        /// <summary>
-        /// Target summaries ordered by creation.
-        /// </summary>
-        public List<FleetActionRunTargetSummary> Targets
-        {
-            get => _Targets;
-            set => _Targets = value ?? new List<FleetActionRunTargetSummary>();
-        }
-
         #endregion
 
         #region Private-Members
 
         private FleetActionRun _Run = new FleetActionRun();
-        private List<FleetActionRunTargetSummary> _Targets = new List<FleetActionRunTargetSummary>();
 
         #endregion
 

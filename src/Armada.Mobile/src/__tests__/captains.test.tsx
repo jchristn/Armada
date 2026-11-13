@@ -41,8 +41,7 @@ const NOW = '2026-10-07T12:00:00Z';
 function captain(over: Partial<Captain> = {}): Captain {
   return {
     id: 'cpt_1', tenantId: 'ten_1', name: 'Ada', runtime: 'ClaudeCode', supportsPlanningSessions: true, planningSessionSupportReason: null,
-    systemInstructions: null, model: null, allowedPersonas: null, preferredPersona: null, state: 'Idle', currentMissionId: null,
-    currentDockId: null, processId: null, recoveryAttempts: 0, lastHeartbeatUtc: NOW, createdUtc: NOW, lastUpdateUtc: NOW,
+    systemInstructions: null, model: null, allowedPersonas: null, preferredPersona: null, state: 'Idle', processId: null, recoveryAttempts: 0, lastHeartbeatUtc: NOW, createdUtc: NOW, lastUpdateUtc: NOW,
     ...over,
   };
 }
@@ -52,7 +51,7 @@ function dock(over: Partial<Dock> = {}): Dock {
 }
 
 const ADA = captain();
-const BOB = captain({ id: 'cpt_2', name: 'Bob', runtime: 'Codex', state: 'Working', currentMissionId: 'msn_123456789', tier: 'Premium' });
+const BOB = captain({ id: 'cpt_2', name: 'Bob', runtime: 'Codex', state: 'Working', activeMissionIds: ['msn_123456789'], activeMissionCount: 1, tier: 'Premium' });
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -114,7 +113,7 @@ describe('Captains tab', () => {
     await act(async () => { fireEvent.changeText(screen.getByTestId('captain-form-name'), 'Neo'); });
     await fireEvent.press(screen.getByTestId('captain-form-runtime'));
     await fireEvent.press(screen.getByTestId('captain-form-runtime-option-Mux'));
-    api.listMuxEndpoints.mockResolvedValue({ contractVersion: 1, success: true, configDirectory: '', errorCode: '', errorMessage: '', endpoints: [] });
+    api.listMuxEndpoints.mockResolvedValue({ contractVersion: 1, success: true, configDirectory: '', errorCode: '', errorMessage: '', pageNumber: 1, pageSize: 1000, totalPages: 0, totalRecords: 0, totalMs: 0, objects: [] });
     await fireEvent.press(screen.getByTestId('captain-form-save'));
     expect(await screen.findByText('Mux captains require a named Mux endpoint.')).toBeTruthy();
     expect(api.createCaptain).not.toHaveBeenCalled();
@@ -154,8 +153,8 @@ describe('Captains tab', () => {
 });
 
 describe('Captain detail', () => {
-  it('shows the captain, current mission and dock, and changes the CLI policy in place', async () => {
-    api.getCaptain.mockResolvedValue(captain({ state: 'Working', currentMissionId: 'msn_1', currentDockId: 'dck_1' }));
+  it('shows active mission links and changes the CLI policy in place', async () => {
+    api.getCaptain.mockResolvedValue(captain({ state: 'Working', activeMissionIds: ['msn_1'], activeMissionCount: 1, }));
     api.getMission.mockResolvedValue({ id: 'msn_1', title: 'Fix login', status: 'InProgress', priority: 1, branchName: 'armada/fix' } as never);
     api.setCaptainCliPermissionPolicy.mockResolvedValue(captain({ cliPermissionPolicy: 'Refuse' }));
     await render(<BuildProviders><CaptainDetailScreen id="cpt_1" /></BuildProviders>);
@@ -163,8 +162,8 @@ describe('Captain detail', () => {
     expect(screen.getByText('Fix login')).toBeTruthy();
     expect(screen.getByTestId('captain-recall')).toBeTruthy();
     expect(screen.getByTestId('captain-stop')).toBeTruthy();
-    await fireEvent.press(screen.getByTestId('captain-current-dock'));
-    expect(mockRouter.push).toHaveBeenCalledWith('/docks/dck_1');
+    await fireEvent.press(screen.getByText('msn_1'));
+    expect(mockRouter.push).toHaveBeenCalledWith('/missions/msn_1');
     await fireEvent.press(screen.getByTestId('captain-cli-policy'));
     await fireEvent.press(screen.getByTestId('captain-cli-policy-option-Refuse'));
     await waitFor(() => expect(api.setCaptainCliPermissionPolicy).toHaveBeenCalledWith('cpt_1', 'Refuse'));
@@ -208,15 +207,23 @@ describe('Captain detail', () => {
       captainId: 'cpt_1', captainName: 'Ada', runtime: 'ClaudeCode', toolsAccessible: true, availabilityVerified: true, availabilitySource: 'probe',
       summary: 'Armada tools reachable', endpointName: null, toolsEnabled: true, effectiveToolCount: 2, armadaToolCount: 2, configuredServerCount: 1, reachableServerCount: 1,
       servers: [{ name: 'armada', sourceKind: 'McpServer', transport: 'http', target: 'x', url: 'http://h/mcp', command: null, workingDirectory: null, enabled: true, reachable: true, toolCount: 2, headerCount: 0, environmentVariableCount: 0, enabledToolFilterCount: 0, disabledToolFilterCount: 0, startupTimeoutSeconds: 0, toolTimeoutSeconds: 0, status: 'Reachable', errorMessage: null }],
-      tools: [{ name: 'armada_dispatch', description: 'Dispatch', inputSchemaJson: null, registrationSource: 'armada', sourceKind: 'McpServer' }],
+      toolCount: 1, mcpToolCount: 1, runtimeBuiltInToolCount: 0, snapshotUtc: '2026-01-01T00:00:00Z',
+      tools: { success: true, pageNumber: 1, pageSize: 1000, totalPages: 1, totalRecords: 1, totalMs: 0, objects: [{ name: 'armada_dispatch', description: 'Dispatch', inputSchemaJson: null, registrationSource: 'armada', sourceKind: 'McpServer' }] },
     };
-    api.getCaptainTools.mockResolvedValue(tools);
+    // The server filters each tool page by source kind; the runtime-internal page of this captain is empty.
+    api.getCaptainTools.mockImplementation(async (_id, query) => (query?.sourceKind === 'RuntimeBuiltIn'
+      ? { ...tools, tools: { ...tools.tools, totalRecords: 0, totalPages: 0, objects: [] } }
+      : tools));
     await render(<BuildProviders><CaptainDetailScreen id="cpt_1" /></BuildProviders>);
     await waitFor(() => expect(screen.getByTestId('captain-tools')).toBeTruthy());
     await fireEvent.press(screen.getByTestId('captain-tools-load'));
     await waitFor(() => expect(screen.getByTestId('captain-tools-summary')).toHaveTextContent('Armada tools reachable'));
     expect(screen.getByText('armada_dispatch')).toBeTruthy();
     expect(screen.getByText('Accessible')).toBeTruthy();
+    // One refreshing probe for the summary, then one bounded page per tool kind from the same snapshot.
+    expect(api.getCaptainTools).toHaveBeenCalledWith('cpt_1', { refresh: true, pageSize: 1 });
+    expect(api.getCaptainTools).toHaveBeenCalledWith('cpt_1', { sourceKind: 'McpServer', pageSize: 1000 });
+    expect(screen.queryByTestId('truncation-note')).toBeNull();
   });
 
   it('removes the captain after the confirmation and returns to the list', async () => {

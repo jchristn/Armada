@@ -20,6 +20,14 @@ import { useNotifications } from '../../notifications/NotificationContext';
 import { spacing } from '../../theme/typography';
 import { PlaybookPicker } from '../../components/app/PlaybookPicker';
 import { effectiveDefaultLandingMode, globalLandingModeFrom } from './voyage/landingDefault';
+import { DispatchWarningsSheet, OverlapPreviewPanel, useOverlapPreview } from '../blackbox/DispatchWarnings';
+import { dispatchWarningsOf, warningCount, type DispatchWarnings } from '../blackbox/insightModel';
+
+/** The live overlap and brief check of one mission row. */
+function MissionRowPreview({ vesselId, title, description, testID }: { vesselId: string; title: string; description: string; testID: string }) {
+  const state = useOverlapPreview(vesselId, title, description);
+  return <OverlapPreviewPanel state={state} testID={testID} />;
+}
 
 /**
  * Create Voyage (the dashboard's /voyages/create): title, description, vessel, pipeline, landing mode, playbooks,
@@ -37,6 +45,7 @@ export function VoyageCreateScreen() {
   const [globalLanding, setGlobalLanding] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [created, setCreated] = useState<{ voyageId: string; warnings: DispatchWarnings } | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -68,7 +77,9 @@ export function VoyageCreateScreen() {
     try {
       const voyage = await createVoyage(buildVoyageCreateRequest(form));
       pushToast('success', t('Voyage "{{title}}" created.', { title: form.title.trim() }), `/voyages/${voyage.id}`);
-      router.replace(`/voyages/${voyage.id}` as Href);
+      const warnings = dispatchWarningsOf(voyage);
+      if (warningCount(warnings) > 0) setCreated({ voyageId: voyage.id, warnings });
+      else router.replace(`/voyages/${voyage.id}` as Href);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : t('Failed to create voyage.'));
     } finally {
@@ -180,6 +191,7 @@ export function VoyageCreateScreen() {
                 placeholder={t('Detailed instructions for the AI captain...')}
                 multiline
               />
+              <MissionRowPreview vesselId={form.vesselId} title={m.title} description={m.description} testID={`voyage-mission-preview-${i}`} />
             </View>
           ))}
           {form.missions.length === 0 ? (
@@ -193,6 +205,13 @@ export function VoyageCreateScreen() {
           />
         </View>
       </Section>
+      <DispatchWarningsSheet
+        warnings={created?.warnings ?? null}
+        continueLabel={t('Open Voyage')}
+        onContinue={() => { const id = created?.voyageId; setCreated(null); if (id) router.replace(`/voyages/${id}` as Href); }}
+        onClose={() => { const id = created?.voyageId; setCreated(null); if (id) router.replace(`/voyages/${id}` as Href); }}
+        testID="voyage-create-warnings"
+      />
     </Screen>
   );
 }

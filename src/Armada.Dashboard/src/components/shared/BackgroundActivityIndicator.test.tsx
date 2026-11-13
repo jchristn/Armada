@@ -52,6 +52,13 @@ describe('BackgroundActivityIndicator', () => {
     expect(listJobs).toHaveBeenCalledTimes(2);
   });
 
+  it('keeps routine captain usage captures out of the running-task indicator', async () => {
+    vi.mocked(listJobs).mockResolvedValue(page([job('job_usage', 'UsageProbe', 'usage-capture:group')]));
+    renderIndicator();
+    await waitFor(() => expect(listJobs).toHaveBeenCalled());
+    expect(screen.queryByRole('button')).not.toBeInTheDocument();
+  });
+
   it('counts every active job across pages instead of stopping at one page', async () => {
     const first = Array.from({ length: ACTIVITY_PAGE_SIZE }, (_, i) => job(`job_a${i}`, 'Generic', `Job ${i}`));
     const second = Array.from({ length: 5 }, (_, i) => job(`job_b${i}`, 'Generic', `Late job ${i}`));
@@ -77,7 +84,7 @@ describe('BackgroundActivityIndicator', () => {
     fireEvent.click(button);
     const popover = screen.getByRole('dialog', { name: 'Background tasks' });
     expect(within(popover).getByRole('link', { name: /Recommending fleets/ })).toHaveAttribute('href', '/vessels/import?batch=vib_abc');
-    expect(within(popover).getByRole('link', { name: /Evaluating vessel health/ })).toHaveAttribute('href', '/activity?source=jobs');
+    expect(within(popover).getByRole('link', { name: /Evaluating vessel health/ })).toHaveAttribute('href', '/vessels/health');
     expect(within(popover).getByText(/Queued/)).toBeInTheDocument();
   });
 

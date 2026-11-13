@@ -102,6 +102,21 @@ namespace Armada.Tui.Screens.Operations
         public ArmadaStatus? Status { get; private set; } = null;
 
         /// <summary>
+        /// The first page of active voyages with progress (at most <see cref="ActiveVoyagePageSize"/>).
+        /// </summary>
+        public List<VoyageProgress> ActiveVoyages { get; private set; } = new List<VoyageProgress>();
+
+        /// <summary>
+        /// Total active voyages (may exceed the page shown).
+        /// </summary>
+        public long ActiveVoyageTotal { get; private set; } = 0;
+
+        /// <summary>
+        /// Active voyages shown on the home screen (one page; the Voyages screen pages the rest).
+        /// </summary>
+        public const int ActiveVoyagePageSize = 8;
+
+        /// <summary>
         /// Recent missions (unfiltered).
         /// </summary>
         public List<MissionSummary> RecentMissions { get; private set; } = new List<MissionSummary>();
@@ -272,7 +287,7 @@ namespace Armada.Tui.Screens.Operations
             Voyages.ModalHost = context.Modals;
             Voyages.AddColumn(new GridColumn<VoyageProgress>("voyage", "Voyage", v => (v.Voyage?.Title ?? v.Voyage?.Id ?? "") + "  " + (v.Voyage?.Id ?? "")) { Weight = 4 });
             Voyages.AddColumn(new GridColumn<VoyageProgress>("status", "Status", v => StatusBadge.Label(v.Voyage?.Status)) { Width = 14, Style = (v, t) => StatusBadge.Style(v.Voyage?.Status, t) });
-            Voyages.AddColumn(new GridColumn<VoyageProgress>("vessel", "Vessel", v => v.VesselIds == null || v.VesselIds.Count == 0 ? "-" : String.Join(", ", v.VesselIds.Select(id => Reference.VesselName(id)))) { Weight = 2 });
+            Voyages.AddColumn(new GridColumn<VoyageProgress>("vessel", "Vessel", v => String.IsNullOrEmpty(v.VesselId) ? "-" : Reference.VesselName(v.VesselId) + (v.VesselCount > 1 ? " +" + (v.VesselCount - 1) : "")) { Weight = 2 });
             Voyages.AddColumn(new GridColumn<VoyageProgress>("progress", "Progress", v => ProgressBar(Percent(v), 10) + " " + Percent(v) + "%") { Width = 17 });
             Voyages.AddColumn(new GridColumn<VoyageProgress>("missions", "Missions", v => v.CompletedMissions + "/" + v.TotalMissions + " " + Tr("done") + (v.FailedMissions > 0 ? ", " + v.FailedMissions + " " + Tr("failed") : "")) { Weight = 2 });
             Voyages.Activated += (s, v) => { if (v.Voyage != null) Context.Navigate("/voyages/" + Uri.EscapeDataString(v.Voyage.Id)); };
@@ -375,7 +390,10 @@ namespace Armada.Tui.Screens.Operations
                 Task<EnumerationResult<FleetActionRun>?> pending = Safe(c.EnumerateFleetActionRunsAsync(pq, t));
                 Task<EnumerationResult<FleetActionRun>?> running = Safe(c.EnumerateFleetActionRunsAsync(rq, t));
                 Task<VesselHealthSummary?> health = Safe(c.GetVesselHealthSummaryAsync(t));
-                await Task.WhenAll(status, missions, pending, running, health).ConfigureAwait(false);
+                EnumerationQuery vq = new EnumerationQuery();
+                vq.PageSize = ActiveVoyagePageSize;
+                Task<EnumerationResult<VoyageProgress>?> voyages = Safe(c.EnumerateVoyageProgressAsync(vq, t));
+                await Task.WhenAll(status, missions, pending, running, health, voyages).ConfigureAwait(false);
                 HomeData data = new HomeData();
                 data.Status = status.Result;
                 data.Missions = missions.Result?.Objects;
@@ -383,12 +401,18 @@ namespace Armada.Tui.Screens.Operations
                 data.Pending = pending.Result;
                 data.Running = running.Result;
                 data.Health = health.Result;
+                data.ActiveVoyages = voyages.Result;
                 return data;
             }, data =>
             {
                 Loading = false;
                 Loads++;
                 if (data.Status != null) Status = data.Status;
+                if (data.ActiveVoyages != null)
+                {
+                    ActiveVoyages = data.ActiveVoyages.Objects ?? new List<VoyageProgress>();
+                    ActiveVoyageTotal = data.ActiveVoyages.TotalRecords;
+                }
                 if (data.MissionsLoaded) RecentMissions = data.Missions ?? new List<MissionSummary>();
                 ActiveRuns = data.Pending != null && data.Running != null ? new int[] { (int)data.Pending.TotalRecords, (int)data.Running.TotalRecords } : null;
                 HealthSummary = data.Health;
@@ -700,7 +724,7 @@ namespace Armada.Tui.Screens.Operations
                 (status.Length == 0 || m.Status.ToString() == status) &&
                 (vessel.Length == 0 || m.VesselId == vessel) &&
                 (captain.Length == 0 || m.CaptainId == captain)).ToList());
-            Voyages.SetLocalRows(Status?.Voyages ?? new List<VoyageProgress>());
+            Voyages.SetLocalRows(ActiveVoyages);
             Signals.Items = (Status?.RecentSignals ?? new List<Signal>()).Take(5).Select(s => new OpsLinkItem(
                 "[" + s.Type + "] " + (s.Payload ?? ""), null, null, Context.Loc.FormatRelative(s.CreatedUtc, Context.Clock.UtcNow))).ToList();
             Alerts.Items = ComputeAlerts(Status).Select(a =>
@@ -757,7 +781,7 @@ namespace Armada.Tui.Screens.Operations
             List<HomeBlock> blocks = new List<HomeBlock>();
             // A section that is not shown is not a Tab stop either, so focus never rests on something off the page.
             Alerts.Visible = Alerts.Items.Count > 0;
-            Voyages.Visible = Status?.Voyages != null && Status.Voyages.Count > 0;
+            Voyages.Visible = ActiveVoyages.Count > 0;
             Signals.Visible = Signals.Items.Count > 0;
             // Every focus region gets a box line above and below it (see RegionStack); blank rows between sections
             // double as those lines.
@@ -836,11 +860,14 @@ namespace Armada.Tui.Screens.Operations
             }));
             st.Spacer();
 
-            if (Status?.Voyages != null && Status.Voyages.Count > 0)
+            if (ActiveVoyages.Count > 0)
             {
                 int vt = st.Content(1);
-                blocks.Add(HomeBlock.Drawn(vt, 1, s => SurfaceText.Draw(s, 0, 0, Tr("Voyage Progress"), Theme.Accent, width)));
-                int rows = Math.Min(Status.Voyages.Count, 8) + 1;
+                string voyageTitle = ActiveVoyageTotal > ActiveVoyages.Count
+                    ? Tr("Voyage Progress") + " (" + ActiveVoyages.Count + "/" + ActiveVoyageTotal + ")"
+                    : Tr("Voyage Progress");
+                blocks.Add(HomeBlock.Drawn(vt, 1, s => SurfaceText.Draw(s, 0, 0, voyageTitle, Theme.Accent, width)));
+                int rows = Math.Min(ActiveVoyages.Count, ActiveVoyagePageSize) + 1;
                 blocks.Add(HomeBlock.For(Voyages, st.Place(Voyages, rows).Y, rows, 0, 0, vt));
                 st.Spacer();
             }

@@ -3,6 +3,7 @@ namespace Armada.Core.Models
     using System;
     using System.Collections.Generic;
     using Armada.Core.Enums;
+    using Armada.Core.Services;
 
     /// <summary>
     /// First-class deployment target metadata for a vessel.
@@ -88,6 +89,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// Reusable HTTP verification definitions for deploy verification and rollout monitoring.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxConfigItems)]
         public List<DeploymentVerificationDefinition> VerificationDefinitions { get; set; } = new List<DeploymentVerificationDefinition>();
 
         /// <summary>

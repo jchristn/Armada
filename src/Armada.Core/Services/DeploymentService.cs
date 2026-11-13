@@ -80,6 +80,7 @@ namespace Armada.Core.Services
         {
             if (auth == null) throw new ArgumentNullException(nameof(auth));
             if (request == null) throw new ArgumentNullException(nameof(request));
+            CollectionBounds.Validate(request);
 
             ResolvedDeploymentDraft draft = await ResolveDraftAsync(auth, null, request, token).ConfigureAwait(false);
             Deployment deployment = new Deployment
@@ -129,6 +130,7 @@ namespace Armada.Core.Services
             if (auth == null) throw new ArgumentNullException(nameof(auth));
             if (String.IsNullOrWhiteSpace(id)) throw new ArgumentNullException(nameof(id));
             if (request == null) throw new ArgumentNullException(nameof(request));
+            CollectionBounds.Validate(request);
 
             Deployment existing = await ReadAsync(auth, id, token).ConfigureAwait(false)
                 ?? throw new KeyNotFoundException("Deployment not found.");
@@ -716,7 +718,19 @@ namespace Armada.Core.Services
                     continue;
                 }
 
-                Deployment updated = await RunRolloutMonitoringPassAsync(deployment, environment, token).ConfigureAwait(false);
+                Deployment updated;
+                try
+                {
+                    updated = await RunRolloutMonitoringPassAsync(deployment, environment, token).ConfigureAwait(false);
+                }
+                catch (CollectionLimitExceededException limit)
+                {
+                    // The deployment has as many linked check runs as it may hold; stop monitoring it rather than run
+                    // checks whose results could not be linked.
+                    _Logging.Warn(_Header + "rollout monitoring skipped for deployment " + deployment.Id + ": " + limit.Message);
+                    continue;
+                }
+
                 monitoredCount += 1;
 
                 if (updated.Status == DeploymentStatusEnum.VerificationFailed
@@ -742,6 +756,8 @@ namespace Armada.Core.Services
             string labelPrefix,
             CancellationToken token)
         {
+            // Refuse before running anything when the runs could not all be linked.
+            EnsureCheckRunCapacity(deployment, definitions.Count);
             List<CheckRun> runs = new List<CheckRun>();
             foreach (DeploymentVerificationDefinition definition in definitions)
             {
@@ -1288,8 +1304,22 @@ namespace Armada.Core.Services
         {
             if (deployment == null || String.IsNullOrWhiteSpace(checkRunId))
                 return;
-            if (!deployment.CheckRunIds.Contains(checkRunId, StringComparer.OrdinalIgnoreCase))
-                deployment.CheckRunIds.Add(checkRunId);
+            if (deployment.CheckRunIds.Contains(checkRunId, StringComparer.OrdinalIgnoreCase))
+                return;
+            // The link list is bounded (docs/ENUMERATION.md): a link past the limit is rejected, never dropped. Every
+            // check run also carries its DeploymentId, so the full set stays readable through the check-run enumeration.
+            EnsureCheckRunCapacity(deployment, 1);
+            deployment.CheckRunIds.Add(checkRunId);
+        }
+
+        private static void EnsureCheckRunCapacity(Deployment deployment, int additional)
+        {
+            long wanted = (long)deployment.CheckRunIds.Count + additional;
+            if (wanted > CollectionLimits.MaxLinkedIds)
+                throw new CollectionLimitExceededException("CheckRunIds", CollectionLimits.MaxLinkedIds, wanted,
+                    "Deployment " + deployment.Id + " already links " + deployment.CheckRunIds.Count + " check runs; linking "
+                    + additional + " more would exceed the limit of " + CollectionLimits.MaxLinkedIds
+                    + ". Read its check runs with the check-run enumeration (deploymentId filter) and start a new deployment.");
         }
 
         private static void AddCandidate(HashSet<string> values, string? value)

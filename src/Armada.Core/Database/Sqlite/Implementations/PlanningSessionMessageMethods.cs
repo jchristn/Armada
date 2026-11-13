@@ -6,6 +6,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
     using System.Threading.Tasks;
     using Microsoft.Data.Sqlite;
     using Armada.Core.Database.Interfaces;
+    using Armada.Core.Enums;
     using Armada.Core.Models;
     using Armada.Core.Settings;
     using SyslogLogging;
@@ -182,6 +183,36 @@ namespace Armada.Core.Database.Sqlite.Implementations
             }
 
             return results;
+        }
+
+        /// <inheritdoc />
+        public async Task<EnumerationResult<PlanningSessionMessage>> EnumeratePageBySessionAsync(string planningSessionId, EnumerationQuery query, CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(planningSessionId)) throw new ArgumentNullException(nameof(planningSessionId));
+            if (query == null) throw new ArgumentNullException(nameof(query));
+            string direction = query.Order == EnumerationOrderEnum.CreatedAscending ? "ASC" : "DESC";
+            using (SqliteConnection conn = new SqliteProviderConnection(_Driver.ConnectionString))
+            {
+                await conn.OpenAsync(token).ConfigureAwait(false);
+                return await SqliteBoundedPage.ReadAsync(conn,
+                    "FROM planning_session_messages WHERE planning_session_id = @planning_session_id",
+                    "sequence " + direction + ", created_utc " + direction + ", id " + direction,
+                    cmd => SqliteCommandHelper.Add(cmd, "@planning_session_id", planningSessionId),
+                    SqliteDatabaseDriver.PlanningSessionMessageFromReader, query, token).ConfigureAwait(false);
+            }
+        }
+
+        /// <inheritdoc />
+        public async Task<long> CountBySessionAsync(string planningSessionId, CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(planningSessionId)) throw new ArgumentNullException(nameof(planningSessionId));
+            using (SqliteConnection conn = new SqliteProviderConnection(_Driver.ConnectionString))
+            {
+                await conn.OpenAsync(token).ConfigureAwait(false);
+                return await SqliteCommandHelper.CountAsync(conn,
+                    "SELECT COUNT(*) FROM planning_session_messages WHERE planning_session_id = @planning_session_id;",
+                    cmd => SqliteCommandHelper.Add(cmd, "@planning_session_id", planningSessionId), token).ConfigureAwait(false);
+            }
         }
     }
 }

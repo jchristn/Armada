@@ -70,12 +70,12 @@ namespace Test.Shared.Suites.Services
                     Vessel vessel = await db.Vessels.CreateAsync(new Vessel("timeout-unverified", "https://example.invalid/repo.git")).ConfigureAwait(false);
                     await db.WorkflowProfiles.CreateAsync(new WorkflowProfile { Name = "timeout", Scope = WorkflowProfileScopeEnum.Vessel, VesselId = vessel.Id, IsDefault = true, Active = true, BuildCommand = "build-timeout" }).ConfigureAwait(false);
                     Dock dock = await db.Docks.CreateAsync(new Dock(vessel.Id) { WorktreePath = worktree, Active = true }).ConfigureAwait(false);
-                    Captain captain = await db.Captains.CreateAsync(new Captain("timeout-unverified", AgentRuntimeEnum.Mux) { State = CaptainStateEnum.Working }).ConfigureAwait(false);
+                    Captain captain = await CaptainAssignmentFixture.CreateAsync(db, new Captain("timeout-unverified", AgentRuntimeEnum.Mux) { State = CaptainStateEnum.Working }).ConfigureAwait(false);
                     Mission mission = await db.Missions.CreateAsync(new Mission("timeout") { CaptainId = captain.Id, VesselId = vessel.Id, DockId = dock.Id, Status = MissionStatusEnum.InProgress, StartedUtc = DateTime.UtcNow, ProcessId = 4343 }).ConfigureAwait(false);
-                    captain.CurrentMissionId = mission.Id;
-                    captain.CurrentDockId = dock.Id;
+                    captain.Assignment = mission;
+                    captain.Assignment ??= new Mission("fixture assignment"); captain.Assignment.DockId = dock.Id;
                     captain.ProcessId = 4343;
-                    await db.Captains.UpdateAsync(captain).ConfigureAwait(false);
+                    await CaptainAssignmentFixture.UpdateAsync(db, captain).ConfigureAwait(false);
                     int launches = 0;
                     int landings = 0;
                     captains.OnLaunchAgent = (_, _, _) => { launches++; return Task.FromResult(9001); };
@@ -129,27 +129,27 @@ namespace Test.Shared.Suites.Services
                     Dock dock = await db.Docks.CreateAsync(new Dock(vessel.Id) { WorktreePath = worktree, Active = true }).ConfigureAwait(false);
                     Directory.CreateDirectory(Path.Combine(settings.LogDirectory, "docks"));
                     await File.WriteAllTextAsync(Path.Combine(settings.LogDirectory, "docks", dock.Id + ".start"), "0123456789abcdef0123456789abcdef01234567").ConfigureAwait(false);
-                    Captain captain = await db.Captains.CreateAsync(new Captain("timeout", AgentRuntimeEnum.Mux) { State = CaptainStateEnum.Working }).ConfigureAwait(false);
+                    Captain captain = await CaptainAssignmentFixture.CreateAsync(db, new Captain("timeout", AgentRuntimeEnum.Mux) { State = CaptainStateEnum.Working }).ConfigureAwait(false);
                     Mission mission = await db.Missions.CreateAsync(new Mission("timeout") { CaptainId = captain.Id, VesselId = vessel.Id, DockId = dock.Id, Status = MissionStatusEnum.InProgress, StartedUtc = DateTime.UtcNow, ProcessId = 4242, Mode = MissionModeEnum.Research }).ConfigureAwait(false);
-                    captain.CurrentMissionId = mission.Id;
-                    captain.CurrentDockId = dock.Id;
+                    captain.Assignment = mission;
+                    captain.Assignment ??= new Mission("fixture assignment"); captain.Assignment.DockId = dock.Id;
                     captain.ProcessId = 4242;
-                    await db.Captains.UpdateAsync(captain).ConfigureAwait(false);
+                    await CaptainAssignmentFixture.UpdateAsync(db, captain).ConfigureAwait(false);
                     int launches = 0;
                     captains.OnLaunchAgent = async (holder, resumed, _) =>
                     {
                         launches++;
                         // Reproduce a concurrent stale captain release before the new PID has been persisted.
-                        holder.CurrentMissionId = null;
-                        await db.Captains.UpdateAsync(holder).ConfigureAwait(false);
+                        holder.Assignment = null;
+                        await CaptainAssignmentFixture.UpdateAsync(db, holder).ConfigureAwait(false);
                         Mission snapshot = (await db.Missions.ReadAsync(resumed.Id).ConfigureAwait(false))!;
                         AssertNull(snapshot.ProcessId, "launch is still in flight");
                         await RecoverOrphanAsync(admiral, snapshot).ConfigureAwait(false);
                         Mission during = (await db.Missions.ReadAsync(resumed.Id).ConfigureAwait(false))!;
                         AssertEqual(MissionStatusEnum.InProgress, during.Status, "orphan recovery must not complete a resume");
                         AssertNull(during.CommitHash, "no landing occurred");
-                        holder.CurrentMissionId = resumed.Id;
-                        await db.Captains.UpdateAsync(holder).ConfigureAwait(false);
+                        holder.Assignment = resumed;
+                        await CaptainAssignmentFixture.UpdateAsync(db, holder).ConfigureAwait(false);
                         return 8001;
                     };
                     await admiral.HandleProcessExitAsync(4242, 0, captain.Id, mission.Id).ConfigureAwait(false);
@@ -172,7 +172,7 @@ namespace Test.Shared.Suites.Services
                 finally { TestTemp.TryDelete(worktree); TestTemp.TryDelete(settings.LogDirectory); }
             }));
 
-            foreach (string handoff in new[] { "enqueue", "throw", "silent" })
+            foreach (string handoff in new[] { "enqueue", "throw", "silent", "conflict" })
             {
                 cases.Add(Case("passed_check_completion_" + handoff, async () =>
                 {
@@ -191,7 +191,7 @@ namespace Test.Shared.Suites.Services
                     {
                         Vessel vessel = await db.Vessels.CreateAsync(new Vessel("passed-handoff", "https://example.invalid/repo.git") { LandingMode = LandingModeEnum.MergeQueue }).ConfigureAwait(false);
                         Dock dock = await db.Docks.CreateAsync(new Dock(vessel.Id) { WorktreePath = worktree, Active = true }).ConfigureAwait(false);
-                        Captain captain = await db.Captains.CreateAsync(new Captain("passed", AgentRuntimeEnum.Mux)).ConfigureAwait(false);
+                        Captain captain = await CaptainAssignmentFixture.CreateAsync(db, new Captain("passed", AgentRuntimeEnum.Mux)).ConfigureAwait(false);
                         Mission mission = await db.Missions.CreateAsync(new Mission("passed")
                         {
                             VesselId = vessel.Id, CaptainId = captain.Id, DockId = dock.Id, Status = MissionStatusEnum.InProgress,
@@ -204,6 +204,7 @@ namespace Test.Shared.Suites.Services
                         {
                             calls++;
                             if (handoff == "throw") throw new InvalidOperationException("enqueue unavailable");
+                            if (handoff == "conflict") throw new GitMergeConflictException("conflict integrating the target", new[] { "work.txt" });
                             if (handoff == "silent") return;
                             await queue.EnqueueAsync(new MergeEntry { MissionId = m.Id, VesselId = vessel.Id, BranchName = "work", TargetBranch = "main" }).ConfigureAwait(false);
                         };
@@ -214,6 +215,9 @@ namespace Test.Shared.Suites.Services
                         AssertEqual(handoff != "enqueue" ? MissionStatusEnum.LandingFailed : MissionStatusEnum.WorkProduced, stored.Status);
                         AssertEqual(handoff != "enqueue" ? 0 : 1, (await db.MergeEntries.EnumerateAsync(new EnumerationQuery { MissionId = mission.Id })).Objects.Count);
                         if (handoff == "throw") AssertContains("enqueue unavailable", stored.FailureReason ?? "");
+                        // A stranded handoff records what failed: a real merge conflict, otherwise an environment failure.
+                        if (handoff != "enqueue")
+                            AssertEqual(handoff == "conflict" ? MissionFailureKindEnum.LandingConflict : MissionFailureKindEnum.Infra, stored.FailureKind, handoff);
                     }
                     finally { TestTemp.TryDelete(worktree); }
                 }));
@@ -275,6 +279,8 @@ namespace Test.Shared.Suites.Services
                     bool flagged = scenario == "missing" || scenario == "default" || scenario == "skipped" || scenario == "full";
                     Mission stored = (await db.Missions.ReadAsync(mission.Id).ConfigureAwait(false))!;
                     AssertEqual(flagged ? MissionStatusEnum.LandingFailed : MissionStatusEnum.WorkProduced, stored.Status, scenario);
+                    // A lost handoff is Infra: left kindless it would classify as LandingConflict and be auto-rescued.
+                    if (flagged) AssertEqual(MissionFailureKindEnum.Infra, stored.FailureKind, scenario);
                     AssertEqual(flagged ? 1 : 0, (await db.Events.EnumerateByMissionAsync(mission.Id).ConfigureAwait(false))
                         .Count(e => e.EventType == "mission.landing_handoff_missing"), "one persistent flag, no repeated notifications");
                 }));
@@ -292,7 +298,7 @@ namespace Test.Shared.Suites.Services
                 CaptainService captains = new CaptainService(logging, db, settings, git, docks);
                 MissionService missions = new MissionService(logging, db, settings, docks, captains);
                 AdmiralService admiral = new AdmiralService(logging, db, settings, captains, missions, new VoyageService(logging, db), docks);
-                Captain captain = await db.Captains.CreateAsync(new Captain("moved on")).ConfigureAwait(false);
+                Captain captain = await CaptainAssignmentFixture.CreateAsync(db, new Captain("moved on")).ConfigureAwait(false);
                 admiral.OnIsProcessTracked = pid => pid == 1234;
                 foreach (int? processId in new int?[] { null, Int32.MaxValue, 1234 })
                 {
@@ -303,6 +309,7 @@ namespace Test.Shared.Suites.Services
                     AssertNull(after.CompletedUtc, "not completed");
                     AssertNull(after.CommitHash, "no landing evidence");
                     if (processId == Int32.MaxValue) AssertContains("not verified", after.FailureReason!);
+                    if (processId == Int32.MaxValue) AssertEqual(MissionFailureKindEnum.Infra, after.FailureKind, "an unverified orphan exit records a kind");
                     Mission stale = after;
                     if (processId == Int32.MaxValue)
                     {

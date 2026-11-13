@@ -51,5 +51,17 @@ namespace Armada.Core.Database.Interfaces
         /// <param name="token">Cancellation token.</param>
         /// <returns>Rules.</returns>
         Task<List<FailureCauseRule>> EnumerateAsync(string? tenantId, CancellationToken token = default);
+
+        /// <summary>
+        /// One page of the rules in evaluation order (Priority ascending, then Name, then id), paged in the database
+        /// with a COUNT over the same scope. With a tenant, that tenant's rules plus the rules for every tenant; with
+        /// null, every rule.
+        /// </summary>
+        /// <param name="tenantId">Tenant, or null.</param>
+        /// <param name="query">Paging (PageNumber, PageSize 1 to 1000).</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>One page of rules.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when query is null.</exception>
+        Task<EnumerationResult<FailureCauseRule>> EnumeratePageAsync(string? tenantId, EnumerationQuery query, CancellationToken token = default);
     }
 }

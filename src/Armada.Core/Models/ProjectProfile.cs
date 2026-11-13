@@ -3,6 +3,7 @@ namespace Armada.Core.Models
     using System;
     using System.Collections.Generic;
     using Armada.Core.Enums;
+    using Armada.Core.Services;
 
     /// <summary>
     /// A per-project (or global/fleet default) aggregate that customizes how a project runs: which
@@ -101,11 +102,13 @@ namespace Armada.Core.Models
         /// <summary>
         /// Per-persona prompt overrides applied to this project's pipeline personas.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxConfigItems)]
         public List<PersonaOverride> PersonaOverrides { get; set; } = new List<PersonaOverride>();
 
         /// <summary>
         /// Skill identifiers or names attached to this project (a forward hook for the skills directory).
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxConfigItems)]
         public List<string> Skills { get; set; } = new List<string>();
 
         /// <summary>

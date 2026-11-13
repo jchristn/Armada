@@ -41,14 +41,10 @@ namespace Armada.Core.Models
         public int? CommitsBehind { get; set; }
 
         /// <summary>
-        /// Number of active missions on this vessel.
+        /// Number of active missions (Pending, Assigned, InProgress, Review, Testing) on this vessel. The missions
+        /// themselves are paged with GET /api/v1/workspace/vessels/{vesselId}/active-missions.
         /// </summary>
         public int ActiveMissionCount { get; set; }
-
-        /// <summary>
-        /// Active missions and their inferred file scopes.
-        /// </summary>
-        public List<WorkspaceActiveMission> ActiveMissions { get; set; } = new List<WorkspaceActiveMission>();
 
         /// <summary>
         /// Optional status error when repository inspection fails, or why the vessel has no checkout Armada can use.

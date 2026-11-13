@@ -548,7 +548,7 @@ namespace Test.Shared.Suites.Services
 
             Captain captain = new Captain("test-captain");
             captain.State = CaptainStateEnum.Working;
-            await db.Captains.CreateAsync(captain).ConfigureAwait(false);
+            await CaptainAssignmentFixture.CreateAsync(db, captain).ConfigureAwait(false);
 
             Dock dock = new Dock(vessel.Id);
             dock.CaptainId = captain.Id;
@@ -564,9 +564,9 @@ namespace Test.Shared.Suites.Services
             mission.VesselId = vessel.Id;
             await db.Missions.CreateAsync(mission).ConfigureAwait(false);
 
-            captain.CurrentMissionId = mission.Id;
-            captain.CurrentDockId = dock.Id;
-            await db.Captains.UpdateAsync(captain).ConfigureAwait(false);
+            captain.Assignment = mission;
+            captain.Assignment ??= new Mission("fixture assignment"); captain.Assignment.DockId = dock.Id;
+            await CaptainAssignmentFixture.UpdateAsync(db, captain).ConfigureAwait(false);
 
             return new LandingTestEntitiesResult(captain, mission, dock, vessel);
         }

@@ -21,7 +21,6 @@ const vessel = {
   landingMode: null,
   branchCleanupPolicy: null,
   requirePassingChecksToLand: false,
-  allowConcurrentMissions: false,
   defaultPipelineId: null,
   protectedBranchPatterns: [],
   releaseBranchPrefix: 'release/',

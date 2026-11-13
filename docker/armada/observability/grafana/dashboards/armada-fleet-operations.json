@@ -26,7 +26,7 @@
       "title": "Fleet action targets (1h)",
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "armada-prometheus"
       },
       "gridPos": {
         "h": 4,
@@ -46,7 +46,7 @@
       "title": "Fleet action failures (1h)",
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "armada-prometheus"
       },
       "gridPos": {
         "h": 4,
@@ -66,7 +66,7 @@
       "title": "Health evaluations (1h)",
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "armada-prometheus"
       },
       "gridPos": {
         "h": 4,
@@ -86,7 +86,7 @@
       "title": "Vessels imported (24h)",
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "armada-prometheus"
       },
       "gridPos": {
         "h": 4,
@@ -106,7 +106,7 @@
       "title": "Fleet action targets by outcome (per 5m)",
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "armada-prometheus"
       },
       "gridPos": {
         "h": 8,
@@ -127,7 +127,7 @@
       "title": "Fleet action target duration p50 / p95 (s)",
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "armada-prometheus"
       },
       "gridPos": {
         "h": 8,
@@ -153,7 +153,7 @@
       "title": "Health evaluations by outcome (per 5m)",
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "armada-prometheus"
       },
       "gridPos": {
         "h": 8,
@@ -174,7 +174,7 @@
       "title": "Health criterion duration p95 (s)",
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "armada-prometheus"
       },
       "gridPos": {
         "h": 8,
@@ -195,7 +195,7 @@
       "title": "Vessel import items by outcome (per 15m)",
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "armada-prometheus"
       },
       "gridPos": {
         "h": 8,
@@ -207,6 +207,26 @@
         {
           "expr": "sum by (outcome) (increase(armada_vessel_import_items_total[15m]))",
           "legendFormat": "{{outcome}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Mission slot wait p95 (s)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "armada-prometheus"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 12,
+        "x": 12,
+        "y": 20
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(armada_missions_slot_wait_seconds_bucket[15m])))",
           "refId": "A"
         }
       ]

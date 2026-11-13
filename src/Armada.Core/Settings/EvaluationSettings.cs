@@ -86,6 +86,29 @@ namespace Armada.Core.Settings
             set => _BatteryTaskTimeoutMinutes = (int)Clamp(value, 5, 1440);
         }
 
+        /// <summary>
+        /// Estimated tokens the fixture battery of one Full Evaluate may spend (prompt plus output of each attempt),
+        /// separate from production and from the Quick probes' RunTokenBudget. Once it is spent the remaining tasks are
+        /// not dispatched and the report is marked incomplete. Default 3000000, maximum 10000000000; 0 means no limit;
+        /// negative values become 0.
+        /// </summary>
+        public long FullRunTokenBudget
+        {
+            get => _FullRunTokenBudget;
+            set => _FullRunTokenBudget = Clamp(value, 0, 10000000000);
+        }
+
+        /// <summary>
+        /// Minutes one Full Evaluate (probes, battery and the evaluator's grading) may take before it is stopped, its open
+        /// battery missions cancelled (releasing their docks and captains) and its partial report marked incomplete.
+        /// 10 to 10080; default 720.
+        /// </summary>
+        public int FullRunTimeoutMinutes
+        {
+            get => _FullRunTimeoutMinutes;
+            set => _FullRunTimeoutMinutes = (int)Clamp(value, 10, 10080);
+        }
+
         #endregion
 
         #region Private-Members
@@ -97,6 +120,8 @@ namespace Armada.Core.Settings
         private int _MaxConcurrentRunsPerHost = 1;
         private int _ProbeTimeoutSeconds = 600;
         private int _BatteryTaskTimeoutMinutes = 60;
+        private long _FullRunTokenBudget = 3000000;
+        private int _FullRunTimeoutMinutes = 720;
 
         #endregion
 
