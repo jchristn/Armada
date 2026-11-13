@@ -48,7 +48,10 @@ namespace Test.Shared.Suites.Services
             cases.Add(Case("allow_runs_the_command", "An allow decision lets the bash call run; Armada sees it as Bash with the command, the scoped token and the MCP session", TestTags.Positive, skip, async () =>
             {
                 using FakePermissionPromptMcpServer server = new FakePermissionPromptMcpServer();
-                List<PiGateOutcome> outcomes = await PiPermissionGateHarness.RunAsync(new List<PiGateEvent> { PiGateEvent.Bash("git status", "toolu_allow") }, server.Url, Token, 30).ConfigureAwait(false);
+                PiGateEvent tool = PiGateEvent.Bash("git status", "toolu_allow");
+                // Real pi can include a numeric timeout. A string-only fake used to abort the MCP reply.
+                tool.Input["timeout"] = 10;
+                List<PiGateOutcome> outcomes = await PiPermissionGateHarness.RunAsync(new List<PiGateEvent> { tool }, server.Url, Token, 30).ConfigureAwait(false);
 
                 AssertEqual(1, outcomes.Count);
                 AssertTrue(outcomes[0].Allowed, "allowed calls return nothing to pi, so the tool runs");
@@ -138,7 +141,7 @@ namespace Test.Shared.Suites.Services
                 List<PiGateEvent> events = new List<PiGateEvent>();
                 foreach (string tool in new[] { "read", "edit", "write", "grep", "find", "ls", "tool_search", "codemode", "mcp__armada__status" })
                     events.Add(new PiGateEvent { ToolName = tool, ToolCallId = "c_" + tool });
-                events.Add(new PiGateEvent { ToolName = "powershell", ToolCallId = "c_ps", Input = new Dictionary<string, string> { ["command"] = "Remove-Item x" } });
+                events.Add(new PiGateEvent { ToolName = "powershell", ToolCallId = "c_ps", Input = new Dictionary<string, object> { ["command"] = "Remove-Item x" } });
                 events.Add(new PiGateEvent { ToolName = "repo_extension_shell", ToolCallId = "c_ext" });
                 List<PiGateOutcome> outcomes = await PiPermissionGateHarness.RunAsync(events, server.Url, Token, 30).ConfigureAwait(false);
 

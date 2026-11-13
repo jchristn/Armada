@@ -39,7 +39,8 @@ namespace Armada.Tui.Screens.Build
             modal.HeightRatio = 0.9;
             modal.CopyRequested += (s, e) => screen.Context.Clipboard.Copy(view.PlainText, "Tools");
             screen.Context.Modals.Show(modal);
-            screen.Call((c, t) => c.GetCaptainToolsAsync(captainId, t), r =>
+            // One bounded page of the largest size; the document says how many tools exist when there are more.
+            screen.Call((c, t) => c.EnumerateCaptainToolsAsync(captainId, 1, 1000, null, true, t), r =>
             {
                 loading = false;
                 data = r;
@@ -78,7 +79,8 @@ namespace Armada.Tui.Screens.Build
             }
 
             List<CaptainToolServerSummary> servers = data.Servers ?? new List<CaptainToolServerSummary>();
-            List<CaptainToolSummary> tools = data.Tools ?? new List<CaptainToolSummary>();
+            List<CaptainToolSummary> tools = data.Tools?.Objects ?? new List<CaptainToolSummary>();
+            long totalTools = data.Tools?.TotalRecords ?? tools.Count;
             List<CaptainToolServerSummary> mcpServers = servers.Where(s => s.SourceKind == CaptainToolSourceKindEnum.McpServer).ToList();
             List<CaptainToolServerSummary> runtimeSources = servers.Where(s => s.SourceKind != CaptainToolSourceKindEnum.McpServer).ToList();
             List<CaptainToolSummary> internalTools = tools.Where(t => t.SourceKind == CaptainToolSourceKindEnum.RuntimeBuiltIn).ToList();
@@ -107,6 +109,8 @@ namespace Armada.Tui.Screens.Build
             Tools(doc, "MCP Tools", mcpTools, mcpServers.Count > 0
                 ? doc.Loc.T("No named MCP tools were returned from the captain runtime's reachable MCP servers.")
                 : doc.Loc.T("No MCP tool inventory is available for this captain runtime."));
+            if (totalTools > tools.Count)
+                doc.Note(doc.Loc.T("Showing {{shown}} of {{total}}", LocalizationArgs.Of("shown", tools.Count, "total", totalTools)));
             return doc;
         }
 

@@ -417,6 +417,7 @@ only within the caller's tenant (tenant admins) or the caller's own records (reg
 | POST | `/api/v1/captains` | CaptainRoutes | Captain:Create | TenantAdmin | caller tenant/user (handler) | typed JSON body | - |
 | GET | `/api/v1/captains/{id}` | CaptainRoutes | Captain:Read | Authenticated | caller tenant/user (handler) | path | - |
 | GET | `/api/v1/captains/{id}/tools` | CaptainRoutes | Captain:Read | Authenticated | caller tenant/user (handler) | path | - |
+| POST | `/api/v1/captains/{id}/tools/enumerate` | CaptainRoutes | Captain:Read | Authenticated | caller tenant/user (handler) | path | - |
 | PUT | `/api/v1/captains/{id}` | CaptainRoutes | Captain:Update | TenantAdmin | caller tenant/user (handler) | typed JSON body | - |
 | PUT | `/api/v1/captains/{id}/cli-permission-policy` | CliPermissionRoutes | Captain:Update | TenantAdmin | captain's tenant (handler) | typed JSON body | - |
 | POST | `/api/v1/captains/{id}/unquarantine` | CaptainRoutes | Captain:Execute | TenantAdmin | caller tenant/user (handler) | no body / path | - |
@@ -640,6 +641,7 @@ only within the caller's tenant (tenant admins) or the caller's own records (reg
 | PUT | `/api/v1/runbook-executions/{id}` | RunbookRoutes | RunbookExecution:Update | TenantAdmin | caller tenant/user (handler) | typed JSON body | - |
 | DELETE | `/api/v1/runbook-executions/{id}` | RunbookRoutes | RunbookExecution:Delete | TenantAdmin | caller tenant/user (handler) | path + query | - |
 | GET | `/api/v1/runtimes/mux/endpoints` | RuntimeRoutes | Runtime:Read | Authenticated | server-wide | path + query | - |
+| POST | `/api/v1/runtimes/mux/endpoints/enumerate` | RuntimeRoutes | Runtime:Read | Authenticated | server-wide | body + query | - |
 | GET | `/api/v1/runtimes/mux/endpoints/{name}` | RuntimeRoutes | Runtime:Read | Authenticated | server-wide | path + query | - |
 | GET | `/api/v1/signals` | SignalRoutes | Signal:Read | Authenticated | caller tenant/user (handler) | path + query | - |
 | POST | `/api/v1/signals/enumerate` | SignalRoutes | Signal:Read | Authenticated | caller tenant/user (handler) | typed JSON body | - |

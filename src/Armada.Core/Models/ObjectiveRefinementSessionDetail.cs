@@ -1,7 +1,9 @@
 namespace Armada.Core.Models
 {
     /// <summary>
-    /// Detail response for a refinement session.
+    /// Detail response for a refinement session. The transcript is not embedded: <see cref="MessageCount"/> says how
+    /// many messages it has, and POST /api/v1/objective-refinement-sessions/{id}/messages/enumerate (MCP
+    /// list_backlog_refinement_session_messages) reads it one page at a time.
     /// </summary>
     public class ObjectiveRefinementSessionDetail
     {
@@ -10,9 +12,9 @@ namespace Armada.Core.Models
         /// </summary>
         public ObjectiveRefinementSession Session { get; set; } = new ObjectiveRefinementSession();
         /// <summary>
-        /// Gets or sets the refinement messages.
+        /// Number of messages in the session transcript.
         /// </summary>
-        public List<ObjectiveRefinementMessage> Messages { get; set; } = new List<ObjectiveRefinementMessage>();
+        public long MessageCount { get; set; } = 0;
         /// <summary>
         /// Gets or sets the captain.
         /// </summary>

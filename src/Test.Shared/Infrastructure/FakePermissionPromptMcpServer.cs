@@ -179,7 +179,7 @@ namespace Test.Shared.Infrastructure
                 FakePermissionPromptCall call = new FakePermissionPromptCall
                 {
                     ToolName = args.ToolName ?? "",
-                    Command = args.Input != null && args.Input.TryGetValue("command", out string? command) ? command : null,
+                    Command = args.Input != null && args.Input.TryGetValue("command", out JsonElement command) && command.ValueKind == JsonValueKind.String ? command.GetString() : null,
                     ToolUseId = args.ToolUseId,
                     Token = context.Request.Headers["X-Token"],
                     SessionId = context.Request.Headers["Mcp-Session-Id"],

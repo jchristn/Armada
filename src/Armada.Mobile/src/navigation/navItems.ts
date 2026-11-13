@@ -41,6 +41,8 @@ const ICONS: Record<string, IconName> = {
   cliPermissions: 'shield-checkmark-outline',
   apiExplorer: 'code-slash-outline',
   server: 'server-outline',
+  blackBox: 'file-tray-full-outline',
+  blackbox: 'file-tray-full-outline',
 };
 
 export function iconFor(key: string): IconName {

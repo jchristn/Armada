@@ -194,6 +194,23 @@ namespace Armada.Core.Database.Sqlite.Implementations
         }
 
         /// <inheritdoc />
+        public async Task<EnumerationResult<ModelEndpoint>> EnumeratePageAsync(EnumerationQuery query, ScopedEnumerationFilter filter, CancellationToken token = default)
+        {
+            if (query == null) throw new ArgumentNullException(nameof(query));
+            if (filter == null) throw new ArgumentNullException(nameof(filter));
+            ScopedEnumerationSqlQuery sql = ScopedEnumerationQueryBuilder.Build(query, filter, true);
+            using (SqliteConnection conn = new SqliteProviderConnection(_Driver.ConnectionString))
+            {
+                await conn.OpenAsync(token).ConfigureAwait(false);
+                long total = await SqliteCommandHelper.CountAsync(conn, "SELECT COUNT(*) FROM model_endpoints" + sql.Where + ";", cmd => SqliteCommandHelper.Bind(cmd, sql.Parameters), token).ConfigureAwait(false);
+                List<ModelEndpoint> rows = await SqliteCommandHelper.QueryAsync(conn,
+                    "SELECT * FROM model_endpoints" + sql.Where + sql.OrderBy + SqliteCommandHelper.Page(query.Offset, query.PageSize) + ";",
+                    cmd => SqliteCommandHelper.Bind(cmd, sql.Parameters), EndpointFromReader, token).ConfigureAwait(false);
+                return EnumerationResult<ModelEndpoint>.Create(query, rows, total);
+            }
+        }
+
+        /// <inheritdoc />
         public async Task<bool> ExistsAsync(string id, CancellationToken token = default)
         {
             if (String.IsNullOrWhiteSpace(id)) throw new ArgumentNullException(nameof(id));

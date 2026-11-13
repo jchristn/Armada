@@ -1,3 +1,9 @@
+# Usage: powershell -NoProfile -ExecutionPolicy Bypass -File scripts\windows\stop-armada-server.ps1 [-List]
+#   -List   print the PIDs of the running Admirals (one per line) and stop nothing
+param(
+    [switch]$List
+)
+
 $ErrorActionPreference = 'Stop'
 
 # Stop EVERY running Armada Admiral server, no matter where it was launched from:
@@ -28,6 +34,16 @@ function Stop-ArmadaProcess([int] $TargetProcessId) {
 }
 
 $targets = Get-ArmadaServerProcesses
+if ($List) {
+    foreach ($process in $targets) { Write-Output $process.ProcessId }
+    exit 0
+}
+
+if ($targets.Count -eq 0) {
+    Write-Host '[stop-armada-server] No Armada.Server process is running.'
+    exit 0
+}
+
 if ($targets.Count -gt 0) {
     foreach ($process in $targets) {
         $where = if ($process.ExecutablePath) { $process.ExecutablePath } else { $process.Name }

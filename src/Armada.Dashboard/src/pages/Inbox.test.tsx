@@ -1,10 +1,11 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import Inbox from './Inbox';
-import { decideCliPermissionRequest, getInbox } from '../api/client';
-import type { CliPermissionRequest, InboxItem, WebSocketMessage } from '../types/models';
+import { applyModelAlertAction, decideCliPermissionRequest, getInbox, getMissionBlackBox, getMissionBlackBoxBrief, ignoreModelAlert, retryMissionLanding } from '../api/client';
+import type { CliPermissionRequest, InboxItem, ModelAlert, WebSocketMessage } from '../types/models';
+import type { BlackBoxEntry } from '../types/blackbox';
 
-vi.mock('../api/client', () => ({ getInbox: vi.fn(), decideCliPermissionRequest: vi.fn() }));
+vi.mock('../api/client', () => ({ getInbox: vi.fn(), decideCliPermissionRequest: vi.fn(), retryMissionLanding: vi.fn(), getMissionBlackBoxBrief: vi.fn(), getMissionBlackBox: vi.fn(), applyModelAlertAction: vi.fn(), ignoreModelAlert: vi.fn(), apiErrorMessage: (_e: unknown, f: string) => f }));
 const handlers = new Set<(msg: WebSocketMessage) => void>();
 vi.mock('../context/WebSocketContext', () => ({
   useWebSocket: () => ({
@@ -22,8 +23,9 @@ vi.mock('../context/LocaleContext', () => ({
   }),
 }));
 const notificationState: { notifications: Array<Record<string, unknown>>; unreadCount: number } = { notifications: [], unreadCount: 0 };
+const pushToast = vi.fn();
 vi.mock('../context/NotificationContext', () => ({
-  useNotifications: () => ({ ...notificationState, markRead: vi.fn(), markAllRead: vi.fn() }),
+  useNotifications: () => ({ ...notificationState, markRead: vi.fn(), markAllRead: vi.fn(), pushToast }),
 }));
 
 function item(kind: string, title: string, href: string, severity: 'Critical' | 'Warning' = 'Warning'): InboxItem {
@@ -63,6 +65,21 @@ describe('Needs You approvals (F15)', () => {
 
     fireEvent.click(within(approvals).getByRole('button', { name: 'Open conversation' }));
     expect(screen.getByTestId('location').textContent).toBe('/ask/ath_1');
+  });
+});
+
+describe('Needs You background failures', () => {
+  it('offers a focusable intervention link to the existing workflow, preserving its scope', async () => {
+    vi.mocked(getInbox).mockResolvedValue([
+      item('background_job_failed', 'Background task failed: Captain usage capture (ClaudeCode)', '/activity?source=usage-overview&hostId=hbr_fixture'),
+    ]);
+    render(<MemoryRouter initialEntries={['/inbox']}><Routes><Route path="*" element={<><Inbox /><Probe /></>} /></Routes></MemoryRouter>);
+    const interventions = await screen.findByRole('region', { name: 'Needs intervention' });
+    const open = within(interventions).getByRole('button', { name: 'Open' });
+    open.focus();
+    expect(open).toHaveFocus();
+    fireEvent.click(open);
+    expect(screen.getByTestId('location')).toHaveTextContent('/activity?source=usage-overview&hostId=hbr_fixture');
   });
 });
 
@@ -155,5 +172,227 @@ describe('Recent alerts preview', () => {
     notificationState.unreadCount = 2;
     render(<MemoryRouter><Inbox /></MemoryRouter>);
     expect(await screen.findByRole('heading', { name: 'Recent alerts (2)' })).toBeInTheDocument();
+  });
+});
+
+describe('Needs You landing failures (A4)', () => {
+  it('shows the full failure reason preformatted and retries landing in one click', async () => {
+    const reason = 'Landing was blocked: the checkout at /Users/dev/Code/app has uncommitted changes.\n M src/app.ts\n?? notes.txt';
+    vi.mocked(getInbox).mockResolvedValue([
+      { ...item('landing_failed', 'Landing failed: Append line', '/missions/msn_9', 'Critical'), detail: reason, entityId: 'msn_9' },
+    ]);
+    vi.mocked(retryMissionLanding).mockResolvedValue({} as never);
+    render(
+      <MemoryRouter initialEntries={['/inbox']}>
+        <Routes>
+          <Route path="*" element={<><Inbox /><Probe /></>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    await screen.findByText('Landing failed: Append line');
+    const block = document.querySelector('pre.inbox-failure-reason') as HTMLElement;
+    expect(block).not.toBeNull();
+    expect(block.textContent).toBe(reason);
+    fireEvent.click(screen.getByRole('button', { name: 'Retry Landing' }));
+    await waitFor(() => expect(retryMissionLanding).toHaveBeenCalledWith('msn_9'));
+    // The button acts in place; it does not open the mission.
+    expect(screen.getByTestId('location')).toHaveTextContent('/inbox');
+  });
+});
+
+describe('Needs You failure rows: black box actions', () => {
+  function renderInbox() {
+    render(
+      <MemoryRouter initialEntries={['/inbox']}>
+        <Routes>
+          <Route path="*" element={<><Inbox /><Probe /></>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+  }
+
+  beforeEach(() => {
+    pushToast.mockClear();
+    vi.mocked(getInbox).mockResolvedValue([
+      { ...item('failed', 'Failed: Append line', '/missions/msn_1', 'Critical'), entityId: 'msn_1' },
+      item('review', 'Review: Docs', '/missions/msn_2'),
+    ]);
+  });
+
+  it('copies the FIX THIS brief of a failed mission', async () => {
+    const writeText = vi.fn(() => Promise.resolve());
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    vi.mocked(getMissionBlackBoxBrief).mockResolvedValue('# FIX THIS');
+    renderInbox();
+    const interventions = await screen.findByRole('region', { name: 'Needs intervention' });
+    fireEvent.click(within(interventions).getByRole('button', { name: 'Copy Markdown' }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith('# FIX THIS'));
+    expect(getMissionBlackBoxBrief).toHaveBeenCalledWith('msn_1');
+    expect(pushToast).toHaveBeenCalledWith('success', 'Black box Markdown copied. Paste it into your coding agent.');
+    // The row itself was not opened.
+    expect(screen.getByTestId('location').textContent).toBe('/inbox');
+  });
+
+  it('says so when the mission has no black box entry', async () => {
+    vi.mocked(getMissionBlackBoxBrief).mockRejectedValue(Object.assign(new Error('nf'), { status: 404, data: { code: 'BlackBoxNotFound' } }));
+    renderInbox();
+    const interventions = await screen.findByRole('region', { name: 'Needs intervention' });
+    fireEvent.click(within(interventions).getByRole('button', { name: 'Copy Markdown' }));
+    await waitFor(() => expect(pushToast).toHaveBeenCalledWith('error', 'This mission has no black box entry yet.'));
+  });
+
+  it('opens Ask Armada with the black box prompt', async () => {
+    renderInbox();
+    const interventions = await screen.findByRole('region', { name: 'Needs intervention' });
+    fireEvent.click(within(interventions).getByRole('button', { name: 'Ask Armada' }));
+    expect(screen.getByTestId('location').textContent).toBe(`/ask?prompt=${encodeURIComponent('Show me the pertinent details from the black box for mission msn_1 and give me your opinion on why it failed and what could have been done differently')}`);
+  });
+
+  it('offers no black box actions on approval rows', async () => {
+    renderInbox();
+    const approvals = await screen.findByRole('region', { name: 'Waiting for your approval' });
+    expect(within(approvals).queryByRole('button', { name: 'Copy Markdown' })).toBeNull();
+    expect(within(approvals).queryByRole('button', { name: 'Copy JSON' })).toBeNull();
+  });
+
+  it('shows Copy JSON right after Copy Markdown on failed and landing-failed rows only', async () => {
+    vi.mocked(getInbox).mockResolvedValue([
+      { ...item('failed', 'Failed: Append line', '/missions/msn_1', 'Critical'), entityId: 'msn_1' },
+      { ...item('landing_failed', 'Landing failed: Other', '/missions/msn_3', 'Critical'), entityId: 'msn_3' },
+      item('review', 'Review: Docs', '/missions/msn_2'),
+    ]);
+    renderInbox();
+    const interventions = await screen.findByRole('region', { name: 'Needs intervention' });
+    const jsonButtons = within(interventions).getAllByRole('button', { name: 'Copy JSON' });
+    expect(jsonButtons).toHaveLength(2);
+    for (const button of jsonButtons) {
+      expect(button).toHaveClass('inbox-copy-json');
+      expect(button).toHaveAttribute('title', 'Copy the entry and its versioned record as JSON.');
+      expect(button.previousElementSibling).toHaveClass('inbox-copy-fix-this');
+      expect(button.nextElementSibling).toHaveClass('inbox-ask-armada');
+    }
+    expect(within(interventions).getAllByRole('button', { name: 'Copy Markdown' })[0])
+      .toHaveAttribute('title', 'Copy the black box brief as Markdown, ready to paste into a coding agent.');
+    const approvals = screen.getByRole('region', { name: 'Waiting for your approval' });
+    expect(within(approvals).queryByRole('button', { name: 'Copy JSON' })).toBeNull();
+  });
+
+  it('copies the black box entry as JSON without opening the row', async () => {
+    const writeText = vi.fn(() => Promise.resolve());
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    const entry = { id: 'bbx_1', missionId: 'msn_1', record: { schemaVersion: 1 } } as unknown as BlackBoxEntry;
+    vi.mocked(getMissionBlackBox).mockResolvedValue(entry);
+    renderInbox();
+    const interventions = await screen.findByRole('region', { name: 'Needs intervention' });
+    fireEvent.click(within(interventions).getByRole('button', { name: 'Copy JSON' }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith(JSON.stringify(entry, null, 2)));
+    expect(getMissionBlackBox).toHaveBeenCalledWith('msn_1');
+    expect(pushToast).toHaveBeenCalledWith('success', 'Black box JSON copied.');
+    expect(screen.getByTestId('location').textContent).toBe('/inbox');
+  });
+
+  it('says so when Copy JSON finds no black box entry', async () => {
+    vi.mocked(getMissionBlackBox).mockRejectedValue(Object.assign(new Error('nf'), { status: 404, data: { code: 'BlackBoxNotFound' } }));
+    renderInbox();
+    const interventions = await screen.findByRole('region', { name: 'Needs intervention' });
+    fireEvent.click(within(interventions).getByRole('button', { name: 'Copy JSON' }));
+    await waitFor(() => expect(pushToast).toHaveBeenCalledWith('error', 'This mission has no black box entry yet.'));
+    expect(screen.getByTestId('location').textContent).toBe('/inbox');
+  });
+
+  it('reports other Copy JSON errors', async () => {
+    vi.mocked(getMissionBlackBox).mockRejectedValue(Object.assign(new Error('Server exploded'), { status: 500 }));
+    renderInbox();
+    const interventions = await screen.findByRole('region', { name: 'Needs intervention' });
+    fireEvent.click(within(interventions).getByRole('button', { name: 'Copy JSON' }));
+    await waitFor(() => expect(pushToast).toHaveBeenCalledWith('error', 'The JSON could not be copied: Server exploded'));
+  });
+});
+
+
+describe('Needs You model scorecard alerts', () => {
+  const alert: ModelAlert = {
+    id: 'mal_1', profileId: 'mdl_1', model: 'qwen3-coder:30b', revisionGroup: 'g1', persona: 'Worker', vesselId: 'vsl_1', vesselName: 'Armada',
+    rule: 'FirstPassSuccess', status: 'Open', title: 'qwen3-coder:30b as Worker on Armada: first pass 4 of 11',
+    detail: 'First-pass success 36% (4 of 11) is below 50%.', count: 4, of: 11, value: 0.36, threshold: 0.5,
+    createdUtc: '2026-10-30T00:00:00Z', lastRaisedUtc: '2026-10-30T00:00:00Z', lastEvaluatedUtc: '2026-10-30T00:00:00Z',
+    actions: [{ action: 'Reevaluate', appliedUtc: '2026-10-30T00:05:00Z', changed: true, result: 'Queued probe run mpr_1.' }],
+    suggestedActions: [
+      { action: 'MoveDown', label: 'Move captains down', description: 'Move the captains on this profile down.', available: true, recommended: true },
+      { action: 'CompactTemplate', label: 'Use the compact template', description: 'Switch to the compact template.', available: false, unavailableReason: 'No compact variant exists.', recommended: false },
+      { action: 'Ignore', label: 'Ignore for 7 days', description: 'Hide this alert.', available: true, recommended: false },
+    ],
+  };
+  const alertItem = (): InboxItem => ({
+    ...item('model_alert', alert.title, '/inbox?modelAlert=mal_1'), severity: 'Info', entityId: 'mal_1', modelAlert: alert,
+  });
+
+  function renderInbox() {
+    render(
+      <MemoryRouter initialEntries={['/inbox']}>
+        <Routes>
+          <Route path="*" element={<><Inbox /><Probe /></>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+  }
+
+  beforeEach(() => {
+    vi.mocked(applyModelAlertAction).mockReset();
+    vi.mocked(ignoreModelAlert).mockReset();
+    vi.mocked(getInbox).mockReset();
+  });
+
+  it('lists a model alert under interventions with its suggested actions; nothing is applied until a click', async () => {
+    vi.mocked(getInbox).mockResolvedValue([alertItem()]);
+    renderInbox();
+
+    const interventions = await screen.findByRole('region', { name: 'Needs intervention' });
+    expect(within(interventions).getByText(alert.title)).toBeInTheDocument();
+    expect(within(interventions).getByText('Last action: Queued probe run mpr_1.')).toBeInTheDocument();
+    const unavailable = within(interventions).getByRole('button', { name: 'Use the compact template' });
+    expect(unavailable).toBeDisabled();
+    expect(unavailable).toHaveAttribute('title', 'No compact variant exists.');
+    fireEvent.click(unavailable);
+    expect(applyModelAlertAction).not.toHaveBeenCalled();
+    expect(ignoreModelAlert).not.toHaveBeenCalled();
+  });
+
+  it('applies an available action through the client and reloads the inbox, staying on the page', async () => {
+    vi.mocked(getInbox).mockResolvedValue([alertItem()]);
+    vi.mocked(applyModelAlertAction).mockResolvedValue({ record: { action: 'MoveDown', appliedUtc: '2026-10-30T01:00:00Z', changed: true, result: 'Moved captain cpt_1 down.' }, alert });
+    renderInbox();
+
+    const button = await screen.findByRole('button', { name: 'Move captains down (Recommended)' });
+    expect(button).toBeEnabled();
+    const loadsBefore = vi.mocked(getInbox).mock.calls.length;
+    await act(async () => { fireEvent.click(button); });
+
+    expect(applyModelAlertAction).toHaveBeenCalledWith('mal_1', 'MoveDown');
+    expect(ignoreModelAlert).not.toHaveBeenCalled();
+    await waitFor(() => expect(vi.mocked(getInbox).mock.calls.length).toBeGreaterThan(loadsBefore));
+    expect(pushToast).toHaveBeenCalledWith('success', 'Moved captain cpt_1 down.');
+    expect(screen.getByTestId('location').textContent).toBe('/inbox');
+  });
+
+  it('routes Ignore through ignoreModelAlert', async () => {
+    vi.mocked(getInbox).mockResolvedValue([alertItem()]);
+    vi.mocked(ignoreModelAlert).mockResolvedValue({ record: { action: 'Ignore', appliedUtc: '2026-10-30T01:00:00Z', changed: true, result: 'Ignored for 7 days.' }, alert });
+    renderInbox();
+
+    const ignore = await screen.findByRole('button', { name: 'Ignore for 7 days' });
+    await act(async () => { fireEvent.click(ignore); });
+    expect(ignoreModelAlert).toHaveBeenCalledWith('mal_1');
+    expect(applyModelAlertAction).not.toHaveBeenCalled();
+  });
+
+  it('shows the error when an action fails', async () => {
+    vi.mocked(getInbox).mockResolvedValue([alertItem()]);
+    vi.mocked(applyModelAlertAction).mockRejectedValue(new Error('boom'));
+    renderInbox();
+
+    const move = await screen.findByRole('button', { name: 'Move captains down (Recommended)' });
+    await act(async () => { fireEvent.click(move); });
+    expect(await screen.findByRole('alert')).toHaveTextContent('The action could not be applied:');
   });
 });

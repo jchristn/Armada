@@ -169,7 +169,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
                 using (SqlCommand cmd = conn.CreateCommand())
                 {
                     cmd.CommandText = "SELECT * FROM environments" + whereClause
-                        + " ORDER BY is_default DESC, active DESC, name ASC, created_utc DESC OFFSET @offset ROWS FETCH NEXT @page_size ROWS ONLY;";
+                        + " ORDER BY is_default DESC, active DESC, name ASC, created_utc DESC, id DESC OFFSET @offset ROWS FETCH NEXT @page_size ROWS ONLY;";
                     foreach (SqlParameter parameter in parameters) cmd.Parameters.Add(CloneParameter(parameter));
                     cmd.Parameters.AddWithValue("@offset", query.Offset);
                     cmd.Parameters.AddWithValue("@page_size", pageSize);
@@ -208,7 +208,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
                 List<DeploymentEnvironment> results = new List<DeploymentEnvironment>();
                 using (SqlCommand cmd = conn.CreateCommand())
                 {
-                    cmd.CommandText = "SELECT * FROM environments" + whereClause + " ORDER BY is_default DESC, active DESC, name ASC, created_utc DESC;";
+                    cmd.CommandText = "SELECT * FROM environments" + whereClause + " ORDER BY is_default DESC, active DESC, name ASC, created_utc DESC, id DESC;";
                     foreach (SqlParameter parameter in parameters) cmd.Parameters.Add(CloneParameter(parameter));
                     using (SqlDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
                     {

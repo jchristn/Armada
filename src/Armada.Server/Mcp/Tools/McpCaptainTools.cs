@@ -94,24 +94,41 @@ namespace Armada.Server.Mcp.Tools
             {
                 register(
                     "get_captain_tools",
-                    "Describe the runtime-visible tool sources and named tools available to a specific captain.",
+                    "Describe the runtime-visible tool sources (at most 256) and tool counts of a specific captain, with one page of its named tools (Tools: pageNumber, pageSize 1 to 1000 default 10, ordered by source kind, source, and name). A snapshot from the last 60 seconds is reused for paging unless refresh is true.",
                     new
                     {
                         type = "object",
                         properties = new
                         {
-                            captainId = new { type = "string", description = "Captain ID (cpt_ prefix)" }
+                            captainId = new { type = "string", description = "Captain ID (cpt_ prefix)" },
+                            pageNumber = new { type = "integer", description = "One-based page of tools (default 1)" },
+                            pageSize = new { type = "integer", description = "Tools per page, 1 to 1000 (default 10)" },
+                            sourceKind = new { type = "string", description = "Only tools of this source kind: McpServer, RuntimeBuiltIn, or Internal" },
+                            refresh = new { type = "boolean", description = "true to probe the runtime again instead of reusing the recent snapshot" }
                         },
                         required = new[] { "captainId" }
                     },
                     async (args) =>
                     {
                         AuthContext caller = McpToolHelpers.ResolveCallerContext();
-                        CaptainIdArgs request = JsonSerializer.Deserialize<CaptainIdArgs>(args!.Value, _JsonOptions)!;
+                        CaptainToolsArgs request = JsonSerializer.Deserialize<CaptainToolsArgs>(args!.Value, _JsonOptions)!;
                         string captainId = request.CaptainId;
+                        CaptainToolsQuery query = new CaptainToolsQuery
+                        {
+                            PageNumber = request.PageNumber ?? 1,
+                            PageSize = request.PageSize ?? 10,
+                            Refresh = request.Refresh ?? false
+                        };
+                        if (!String.IsNullOrWhiteSpace(request.SourceKind))
+                        {
+                            if (!EnumNames.TryParse(request.SourceKind.Trim(), true, out CaptainToolSourceKindEnum kind))
+                                return (object)McpToolError.InvalidArgument("sourceKind must be McpServer, RuntimeBuiltIn, or Internal.");
+                            query.SourceKind = kind;
+                        }
+
                         Captain? captain = await McpCallerScope.ReadCaptainAsync(database, caller, captainId).ConfigureAwait(false);
                         if (captain == null) return (object)McpToolError.NotFound("Captain not found");
-                        return await captainToolService.DescribeAsync(captain).ConfigureAwait(false);
+                        return await captainToolService.DescribeAsync(captain, query).ConfigureAwait(false);
                     });
             }
 
@@ -140,6 +157,8 @@ namespace Armada.Server.Mcp.Tools
                         muxMaxTokens = new { type = "integer", description = "Optional Mux max tokens override" },
                         muxSystemPromptPath = new { type = "string", description = "Optional Mux system prompt file path" },
                         muxApprovalPolicy = new { type = "string", description = "Optional Mux approval policy override" },
+                        maxConcurrency = new { type = "integer", description = "Maximum simultaneous missions, 1..256 and bounded by the server ceiling. Defaults: CLI 1, ApiEndpoint/Mux 4. Lowering does not stop existing work." },
+                        active = new { type = "boolean", description = "Whether this captain may accept new work. Defaults true on create; omit on update to preserve. Disabling preserves in-flight work." },
                         autoApprove = new { type = "boolean", description = "Whether the CLI captain runs with its auto-approve or permission-bypass flag (default true). False runs it without auto-approve where the runtime supports it (Claude Code acceptEdits, Codex workspace-write sandbox, Gemini auto_edit, Cursor without --force, OpenCode without --auto, Pi without its bash and powershell tools, Mux deny)." }
                     },
                     required = new[] { "name" }
@@ -162,6 +181,10 @@ namespace Armada.Server.Mcp.Tools
                     captain.ReasoningEffort = ParseReasoningEffort(request.ReasoningEffort);
                     captain.Tier = ParseTier(request.Tier);
                     ApplyMuxOptions(captain, request);
+                    captain.MaxConcurrency = request.MaxConcurrency.HasValue
+                        ? ConcurrencyClamp.CaptainLimit(request.MaxConcurrency.Value, settings?.Concurrency.MaxCaptainConcurrency ?? 256)
+                        : CaptainConcurrencyDefaults.For(captain.Runtime, settings?.Concurrency);
+                    captain.Active = request.Active ?? true;
                     captain.RuntimeOptionsJson = CaptainRuntimeOptions.WithAutoApprove(captain.RuntimeOptionsJson, request.AutoApprove);
 
                     if (agentLifecycle != null)
@@ -201,6 +224,8 @@ namespace Armada.Server.Mcp.Tools
                         muxMaxTokens = new { type = "integer", description = "Optional Mux max tokens override" },
                         muxSystemPromptPath = new { type = "string", description = "Optional Mux system prompt file path; empty string clears it" },
                         muxApprovalPolicy = new { type = "string", description = "Optional Mux approval policy override; empty string clears it" },
+                        maxConcurrency = new { type = "integer", description = "Maximum simultaneous missions, 1..256 and bounded by the server ceiling. Defaults: CLI 1, ApiEndpoint/Mux 4. Lowering does not stop existing work." },
+                        active = new { type = "boolean", description = "Whether this captain may accept new work. Defaults true on create; omit on update to preserve. Disabling preserves in-flight work." },
                         autoApprove = new { type = "boolean", description = "Whether the CLI captain runs with its auto-approve or permission-bypass flag. Omit to keep the current value." }
                     },
                     required = new[] { "captainId" }
@@ -212,6 +237,7 @@ namespace Armada.Server.Mcp.Tools
                     string captainId = request.CaptainId;
                     Captain? captain = await McpCallerScope.ReadCaptainAsync(database, caller, captainId).ConfigureAwait(false);
                     if (captain == null) return (object)McpToolError.NotFound("Captain not found");
+                    if (request.Active.HasValue) captain.Active = request.Active.Value;
                     if (request.Name != null)
                         captain.Name = request.Name;
                     if (!String.IsNullOrEmpty(request.Runtime) && Enum.TryParse<AgentRuntimeEnum>(request.Runtime, true, out AgentRuntimeEnum rt))
@@ -249,7 +275,8 @@ namespace Armada.Server.Mcp.Tools
 
                     captain.LastUpdateUtc = DateTime.UtcNow;
                     await DuplicateEntityGuard.EnsureCaptainNameAvailableAsync(database, captain).ConfigureAwait(false);
-                    captain = await database.Captains.UpdateAsync(captain).ConfigureAwait(false);
+                    if (request.MaxConcurrency.HasValue) captain.MaxConcurrency = ConcurrencyClamp.CaptainLimit(request.MaxConcurrency.Value, settings?.Concurrency.MaxCaptainConcurrency ?? 256);
+                    captain = await database.Captains.UpdateAsync(captain, updateActive: request.Active.HasValue, updateConcurrency: request.MaxConcurrency.HasValue).ConfigureAwait(false);
                     return (object)captain;
                 });
 
@@ -276,7 +303,7 @@ namespace Armada.Server.Mcp.Tools
                     if (captain == null) return (object)McpToolError.NotFound("Captain not found: " + captainId);
                     if (onStopCaptain != null)
                         await onStopCaptain(captainId).ConfigureAwait(false);
-                    await admiral.RecallCaptainAsync(captainId).ConfigureAwait(false);
+                    await admiral.RecallCaptainAsync(captainId, new OperatorStopContext(OperatorStopContext.SourceMcpStopCaptain, caller.UserId)).ConfigureAwait(false);
                     return (object)new { Status = "stopped", CaptainId = captainId };
                 });
 
@@ -289,7 +316,7 @@ namespace Armada.Server.Mcp.Tools
                     AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     if (McpCallerScope.IsGlobal(caller))
                     {
-                        await admiral.RecallAllAsync().ConfigureAwait(false);
+                        await admiral.RecallAllAsync(new OperatorStopContext(OperatorStopContext.SourceMcpStopAll, caller.UserId)).ConfigureAwait(false);
                         return (object)new { Status = "all_stopped" };
                     }
 
@@ -300,7 +327,7 @@ namespace Armada.Server.Mcp.Tools
                         if (!McpCallerScope.CanAccess(caller, captain.TenantId, captain.UserId)) continue;
                         if (onStopCaptain != null)
                             await onStopCaptain(captain.Id).ConfigureAwait(false);
-                        await admiral.RecallCaptainAsync(captain.Id).ConfigureAwait(false);
+                        await admiral.RecallCaptainAsync(captain.Id, new OperatorStopContext(OperatorStopContext.SourceMcpStopAll, caller.UserId)).ConfigureAwait(false);
                     }
                     return (object)new { Status = "all_stopped" };
                 });
@@ -341,7 +368,7 @@ namespace Armada.Server.Mcp.Tools
 
             register(
                 "delete_captains",
-                "Permanently delete multiple captains from the database by ID. Captains that are Working or have active missions are skipped. Returns a summary of deleted and skipped entries. This cannot be undone.",
+                "Permanently delete multiple captains from the database by ID. Captains that are Working or have active missions are skipped. At most 1000 ids (InvalidArgument, Code CollectionLimitExceeded, otherwise). Returns a summary of deleted and skipped entries. This cannot be undone.",
                 new
                 {
                     type = "object",
@@ -357,6 +384,7 @@ namespace Armada.Server.Mcp.Tools
                     DeleteMultipleArgs request = JsonSerializer.Deserialize<DeleteMultipleArgs>(args!.Value, _JsonOptions)!;
                     if (request.Ids == null || request.Ids.Count == 0)
                         return (object)McpToolError.InvalidArgument("ids is required and must not be empty");
+                    CollectionLimits.RequireRequestItems(request.Ids, "Ids");
 
                     DeleteMultipleResult result = new DeleteMultipleResult();
                     foreach (string id in request.Ids)

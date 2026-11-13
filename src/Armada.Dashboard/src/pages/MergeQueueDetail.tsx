@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { getMergeEntry, deleteMergeEntry, processMergeEntry, cancelMergeEntry, listVessels, getMissionDiff, getMissionLog, getVesselLandingPreview } from '../api/client';
+import { apiErrorMessage, getMergeEntry, deleteMergeEntry, processMergeEntry, cancelMergeEntry, listVessels, getMissionDiff, getMissionLog, getVesselLandingPreview } from '../api/client';
 import { listAll } from '../api/paging';
 import type { MergeEntry, Vessel, LandingPreviewResult } from '../types/models';
 import ActionMenu from '../components/shared/ActionMenu';
@@ -14,10 +14,12 @@ import CopyButton from '../components/shared/CopyButton';
 import ErrorModal from '../components/shared/ErrorModal';
 import { useLocale } from '../context/LocaleContext';
 import { useNotifications } from '../context/NotificationContext';
+import { useDeleteProgress } from '../lib/useDeleteProgress';
 
 export default function MergeQueueDetail() {
   const { t, formatDateTime, formatRelativeTime } = useLocale();
   const { pushToast } = useNotifications();
+  const deletion = useDeleteProgress();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [entry, setEntry] = useState<MergeEntry | null>(null);
@@ -34,7 +36,7 @@ export default function MergeQueueDetail() {
   const [confirm, setConfirm] = useState<{ open: boolean; title: string; message: string; onConfirm: () => void }>({ open: false, title: '', message: '', onConfirm: () => {} });
 
   // Diff viewer
-  const [diffModal, setDiffModal] = useState<{ open: boolean; title: string; rawDiff: string; loading: boolean }>({ open: false, title: '', rawDiff: '', loading: false });
+  const [diffModal, setDiffModal] = useState<{ open: boolean; title: string; rawDiff: string; loading: boolean; error?: string }>({ open: false, title: '', rawDiff: '', loading: false });
 
   // Log viewer
   const [logModal, setLogModal] = useState<{ open: boolean; title: string; missionId: string; content: string; totalLines: number; lineCount: number }>({ open: false, title: '', missionId: '', content: '', totalLines: 0, lineCount: 200 });
@@ -113,11 +115,9 @@ export default function MergeQueueDetail() {
       message: t('Delete merge entry {{id}}? This cannot be undone.', { id: entry.id }),
       onConfirm: async () => {
         setConfirm(c => ({ ...c, open: false }));
-        try {
-          await deleteMergeEntry(entry.id);
-          pushToast('warning', t('Merge entry {{id}} deleted.', { id: entry.id }));
-          navigate('/merge-queue');
-        } catch { setError(t('Delete failed.')); }
+        if (!(await deletion.run({ kind: 'mergeEntry', action: () => deleteMergeEntry(entry.id), errorMessage: (err) => apiErrorMessage(err, t('Delete failed.')) }))) return;
+        pushToast('warning', t('Merge entry {{id}} deleted.', { id: entry.id }));
+        navigate('/merge-queue');
       },
     });
   }
@@ -129,8 +129,8 @@ export default function MergeQueueDetail() {
     try {
       const result = await getMissionDiff(entry.missionId);
       setDiffModal(d => ({ ...d, rawDiff: result?.diff || '', loading: false }));
-    } catch {
-      setDiffModal(d => ({ ...d, rawDiff: '', loading: false }));
+    } catch (e) {
+      setDiffModal(d => ({ ...d, rawDiff: '', loading: false, error: e instanceof Error ? e.message : String(e) }));
     }
   }
 
@@ -178,11 +178,10 @@ export default function MergeQueueDetail() {
   return (
     <div>
       <PageHeader
-        breadcrumb={
-          <>
-            <Link to="/merge-queue">{t('Merge Queue')}</Link> <span className="breadcrumb-sep">&gt;</span> <span className="mono">{entry.id}</span>
-          </>
-        }
+        breadcrumb={[
+          { label: t('Merge Queue'), to: '/merge-queue' },
+          { label: entry.id },
+        ]}
         title={t('Merge Entry')}
         actions={
           <>
@@ -202,10 +201,12 @@ export default function MergeQueueDetail() {
       <JsonViewer open={jsonData.open} title={jsonData.title} data={jsonData.data} onClose={() => setJsonData({ open: false, title: '', data: null })} />
       <ConfirmDialog open={confirm.open} title={confirm.title} message={confirm.message}
         onConfirm={confirm.onConfirm} onCancel={() => setConfirm(c => ({ ...c, open: false }))} />
+      {deletion.dialog}
       <DiffViewer
         open={diffModal.open}
         title={diffModal.title}
         rawDiff={diffModal.rawDiff}
+        error={diffModal.error}
         loading={diffModal.loading}
         onClose={() => setDiffModal({ open: false, title: '', rawDiff: '', loading: false })}
       />

@@ -21,10 +21,10 @@ namespace Test.Shared.Infrastructure
         public string ToolCallId { get; set; } = "call_1";
 
         /// <summary>
-        /// Tool input (string values only in these tests).
+        /// Tool input, preserving JSON value types.
         /// </summary>
         [JsonPropertyName("input")]
-        public Dictionary<string, string> Input { get; set; } = new Dictionary<string, string>();
+        public Dictionary<string, object> Input { get; set; } = new Dictionary<string, object>();
 
         /// <summary>
         /// A bash call running <paramref name="command"/>.
@@ -34,7 +34,7 @@ namespace Test.Shared.Infrastructure
         /// <returns>The event.</returns>
         public static PiGateEvent Bash(string command, string toolCallId = "call_1")
         {
-            return new PiGateEvent { ToolName = "bash", ToolCallId = toolCallId, Input = new Dictionary<string, string> { ["command"] = command } };
+            return new PiGateEvent { ToolName = "bash", ToolCallId = toolCallId, Input = new Dictionary<string, object> { ["command"] = command } };
         }
     }
 }

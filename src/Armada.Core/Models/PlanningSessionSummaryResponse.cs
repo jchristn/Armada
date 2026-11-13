@@ -29,5 +29,12 @@ namespace Armada.Core.Models
         /// Summary method used to generate the draft.
         /// </summary>
         public string Method { get; set; } = "fallback";
+
+        /// <summary>
+        /// Optional missions for a tree dispatch: each with a key, an optional parentKey, a title, a description and
+        /// owned paths. Empty means the draft is the single mission in Title and Description.
+        /// </summary>
+        [Armada.Core.Services.CollectionBound(Armada.Core.Services.CollectionLimits.MaxRequestItems)]
+        public System.Collections.Generic.List<PlanningDraftMission> Missions { get; set; } = new System.Collections.Generic.List<PlanningDraftMission>();
     }
 }

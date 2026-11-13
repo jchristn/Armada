@@ -14,6 +14,7 @@ import {
   downloadBackup,
   restoreBackup,
   getProxySessionContext,
+  isApiStatus,
   type ProxySessionContext,
   type RebuildStatus,
   type BranchInfo,
@@ -23,7 +24,10 @@ import type { Vessel } from '../types/models';
 import ImportFleetActionSettings from '../components/settings/ImportFleetActionSettings';
 import RetentionSettings from '../components/settings/RetentionSettings';
 import AskSettings from '../components/settings/AskSettings';
+import BlackBoxSettings from '../components/settings/BlackBoxSettings';
 import CliPermissionSettings from '../components/settings/CliPermissionSettings';
+import UsageSelectionSettingsPanel from '../components/usage/UsageSelectionSettingsPanel';
+import UsageCaptureSettingsPanel from '../components/usage/UsageCaptureSettingsPanel';
 import DefaultLandingModeField from '../components/settings/DefaultLandingModeField';
 import { DEFAULT_GLOBAL_LANDING_MODE } from '../lib/vesselForm';
 import {
@@ -56,14 +60,24 @@ import ConfirmDialog from '../components/shared/ConfirmDialog';
 import CopyButton, { copyToClipboard } from '../components/shared/CopyButton';
 import { useAuth } from '../context/AuthContext';
 import { useLocale } from '../context/LocaleContext';
+import { formatDurationMs, type Translate } from '../lib/fleetActionLabels';
 import ErrorModal from '../components/shared/ErrorModal';
 import RepositoryHealthSettingsSection from '../components/vessels/health/RepositoryHealthSettingsSection';
+
+/** Render the server's TimeSpan uptime ("d.hh:mm:ss.fffffff") as a compact duration; unparseable values pass through. */
+function formatUptime(t: Translate, locale: string, uptime: string | null | undefined): string {
+  if (!uptime) return '-';
+  const match = /^(?:(\d+)\.)?(\d+):(\d+):(\d+)/.exec(uptime);
+  if (!match) return uptime;
+  const totalSeconds = (Number(match[1] || 0) * 86400) + (Number(match[2]) * 3600) + (Number(match[3]) * 60) + Number(match[4]);
+  return formatDurationMs(t, locale, totalSeconds * 1000);
+}
 
 export default function Server() {
   const { isAdmin } = useAuth();
   const { connected } = useWebSocket();
   const { pushToast } = useNotifications();
-  const { t, formatDateTime } = useLocale();
+  const { t, formatDateTime, locale } = useLocale();
 
   const [health, setHealth] = useState<HealthInfo | null>(null);
   const [settings, setSettings] = useState<ServerSettings | null>(null);
@@ -72,6 +86,7 @@ export default function Server() {
   const [proxyContext, setProxyContext] = useState<ProxySessionContext | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [settingsForbidden, setSettingsForbidden] = useState(false);
   const [backupLoading, setBackupLoading] = useState(false);
   const [revealedRemoteField, setRevealedRemoteField] = useState<RemoteSecretField | null>(null);
   const [confirmDialog, setConfirmDialog] = useState<{
@@ -187,16 +202,19 @@ export default function Server() {
   const loadData = useCallback(async (replaceDraft = false) => {
     try {
       setError('');
+      let forbidden = false;
       const [h, s, proxy] = await Promise.all([
         getHealth().catch(() => null),
-        getSettings().catch(() => null),
+        // Server configuration is global-administrator only; a 403 is a permission boundary, not a failure.
+        getSettings().catch((failure: unknown) => { forbidden = isApiStatus(failure, 403); return null; }),
         getProxySessionContext().catch(() => null),
       ]);
       if (h) setHealth(h as unknown as HealthInfo);
       if (s) applyIncomingSettings(s as unknown as ServerSettings, undefined, replaceDraft);
       setProxyContext(proxy);
+      setSettingsForbidden(forbidden);
       if (!h && !s) setError(t('Failed to load server data.'));
-      else if (!s) setError(t('Failed to load server settings. Health data is available, but configuration and backup sections could not be loaded.'));
+      else if (!s && !forbidden) setError(t('Failed to load server settings. Health data is available, but configuration and backup sections could not be loaded.'));
     } catch {
       setError(t('Failed to load server data.'));
     } finally {
@@ -333,7 +351,7 @@ export default function Server() {
       setHealth(result);
       showToast('info', t('Health: {{status}} | Uptime: {{uptime}}', {
         status: translateHealthStatus(result.status),
-        uptime: result.uptime,
+        uptime: formatUptime(t, locale, result.uptime),
       }));
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : t('Unknown error');
@@ -566,6 +584,12 @@ export default function Server() {
 
       <ErrorModal error={error} onClose={() => setError('')} />
 
+      {settingsForbidden && (
+        <div className="alert alert-info" role="status" style={{ marginBottom: '1rem' }}>
+          {t('Server configuration and backups require a global administrator. Health is shown below.')}
+        </div>
+      )}
+
       {remoteProxyMode && (
         <div className="alert alert-warning" style={{ marginBottom: '1rem' }}>
           {t(
@@ -592,7 +616,7 @@ export default function Server() {
         <div className="card" title={t('How long the Admiral process has been running since its last start or restart.')}>
           <div className="card-label">{t('Uptime')}</div>
           <div className="card-value" style={{ fontSize: '1.2rem' }}>
-            {health?.uptime || '-'}
+            {formatUptime(t, locale, health?.uptime)}
           </div>
           {health?.startUtc && (
             <div className="card-detail text-muted">
@@ -632,6 +656,9 @@ export default function Server() {
           </div>
         ))}
       </div>
+
+      <UsageCaptureSettingsPanel canEdit={isAdmin} />
+      <UsageSelectionSettingsPanel canEdit={isAdmin} />
 
       {/* Server Configuration */}
       {settings && (
@@ -931,6 +958,15 @@ export default function Server() {
       {settings && (
         <RetentionSettings
           retention={settings.retention}
+          locked={remoteSettingsLocked}
+          onSaved={(updated) => applyIncomingSettings(updated as unknown as ServerSettings)}
+          notify={showToast}
+        />
+      )}
+
+      {settings && isAdmin && settings.blackBox && (
+        <BlackBoxSettings
+          blackBox={settings.blackBox}
           locked={remoteSettingsLocked}
           onSaved={(updated) => applyIncomingSettings(updated as unknown as ServerSettings)}
           notify={showToast}

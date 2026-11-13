@@ -42,7 +42,7 @@ Two more properties are not traits of intelligence but decide whether a model ca
 - **Context window.** The mission prompt, the vessel's project context and style guide, and the files the captain
   reads must fit. Local models are often served with a smaller window than the model supports (for example Ollama's
   `num_ctx`); check what the endpoint actually serves, not the model card.
-- **Contract fidelity.** Armada reads structured output: the Architect's `[ARMADA:MISSION]` blocks, the Judge's
+- **Contract fidelity.** Armada reads structured output: the Architect's `armada-plan` block, the Judge's
   `[ARMADA:VERDICT]` line and `## Affected Case` section, a Worker's commit and completion line. A model that
   paraphrases instead of following the format fails these stages no matter how good its reasoning is. Armada repairs
   only what it can decide without guessing, and records each repair as a `mission.contract_repaired` event: a missing
@@ -87,13 +87,17 @@ inside the dispatched scope. First stage of `FullPipeline`.
 
 ### Architect
 
-Reads the codebase and decomposes the goal into right-sized missions, emitted as `[ARMADA:MISSION]` blocks.
+Reads the codebase and decomposes the goal into right-sized missions, emitted as an `armada-plan` block
+(`contractVersion` 4; `[ARMADA:MISSION]` blocks are still accepted as a fallback). In v4 each mission names a
+`parent` only when it needs another mission's code, and lists its `ownedPaths`; two missions that can run in
+parallel must not own the same file, or Armada rejects the plan and asks for a repair.
 
 - **Matters most:** reasoning and decomposition, then contract fidelity, then a large usable context. It must read
   enough code to understand dependencies, so tool use matters, but mostly for reading.
 - **Failure looks like:** missions too big for the Worker model to finish (the Worker hits iteration limits or
-  stalls), missions too small to be meaningful, slices that depend on each other in the wrong order, malformed mission
-  blocks that Armada cannot parse.
+  stalls), missions too small to be meaningful, slices that depend on each other in the wrong order, deep parent chains
+  that serialize work that could run in parallel, parallel slices that own the same files, malformed plans that Armada
+  cannot parse.
 - **Good choice:** the strongest reasoning model you have. Size the missions to the Worker you actually use: a weaker
   Worker needs smaller, more explicit missions. Long-task reliability research (METR) is a useful guide to how much a
   model can finish in one go.

@@ -28,6 +28,11 @@ namespace Armada.Server.Mcp
         public double? BucketMinutes { get; set; } = null;
 
         /// <summary>
+        /// Most models broken out by name (default 10, 1 to 100); the rest are summed into OtherModels.
+        /// </summary>
+        public int? ModelLimit { get; set; } = null;
+
+        /// <summary>
         /// Optional model filter.
         /// </summary>
         public string? Model { get; set; } = null;

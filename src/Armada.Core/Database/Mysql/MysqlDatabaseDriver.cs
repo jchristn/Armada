@@ -55,6 +55,8 @@ namespace Armada.Core.Database.Mysql
             Fleets = new FleetMethods(_ConnectionString);
             Vessels = new VesselMethods(_ConnectionString);
             Captains = new CaptainMethods(_ConnectionString);
+            MissionWaitIntervals = new Armada.Core.Database.MissionWaitIntervalMethods(() => new MySqlConnector.MySqlConnection(_ConnectionString));
+            CaptainSelections = new Armada.Core.Database.CaptainSelectionMethods(() => new MySqlConnector.MySqlConnection(_ConnectionString));
             Missions = new MissionMethods(_ConnectionString);
             Voyages = new VoyageMethods(_ConnectionString);
             PlanningSessions = new PlanningSessionMethods(_ConnectionString);
@@ -75,13 +77,26 @@ namespace Armada.Core.Database.Mysql
             CliPermissionRequests = new CliPermissionRequestMethods(_ConnectionString);
             CliPermissionRules = new CliPermissionRuleMethods(_ConnectionString);
             StageOutcomes = new StageOutcomeMethods(_ConnectionString);
+            BlackBoxEntries = new BlackBoxEntryMethods(_ConnectionString);
+            BlackBoxObjects = new BlackBoxObjectMethods(_ConnectionString);
+            BlackBoxFiles = new BlackBoxFileMethods(_ConnectionString);
+            BlackBoxLinks = new BlackBoxLinkMethods(_ConnectionString);
+            BlackBoxNotes = new BlackBoxNoteMethods(_ConnectionString);
+            BlackBoxMigrations = new BlackBoxMigrationMethods(_ConnectionString);
+            BlackBoxSuccesses = new BlackBoxSuccessMethods(_ConnectionString);
+            BlackBoxRecoveryOutcomes = new BlackBoxRecoveryOutcomeMethods(_ConnectionString);
             HandoffArtifacts = new HandoffArtifactMethods(_ConnectionString);
             FailureCauseRules = new FailureCauseRuleMethods(_ConnectionString);
             ModelProbeRuns = new ModelProbeRunMethods(_ConnectionString);
+            ModelProfiles = new ModelProfileMethods(_ConnectionString);
+            ModelAlerts = new ModelAlertMethods(_ConnectionString);
             ModelProbeResults = new ModelProbeResultMethods(_ConnectionString);
             BatteryRuns = new BatteryRunMethods(_ConnectionString);
             BatteryTaskResults = new BatteryTaskResultMethods(_ConnectionString);
             PushDevices = new PushDeviceMethods(_ConnectionString);
+            Incidents = new IncidentMethods(_ConnectionString);
+            RunbookExecutions = new RunbookExecutionMethods(_ConnectionString);
+            Runbooks = new RunbookMethods(_ConnectionString);
             HarborJobs = new HarborJobMethods(_ConnectionString);
             HarborLinkSamples = new HarborLinkSampleMethods(_ConnectionString);
             HarborLinkEvents = new HarborLinkEventMethods(_ConnectionString);
@@ -92,6 +107,9 @@ namespace Armada.Core.Database.Mysql
             VesselHealthFindings = new VesselHealthFindingMethods(_ConnectionString);
             VesselDependencies = new VesselDependencyMethods(_ConnectionString);
             VesselHealthOverrides = new VesselHealthOverrideMethods(_ConnectionString);
+            UsageSnapshots = new UsageSnapshotMethods(_ConnectionString);
+            UsageMemberships = new UsageAccountMembershipMethods(_ConnectionString);
+            UsageRollups = new UsageHourlyRollupMethods(_ConnectionString);
             ObjectiveRefinementSessions = new ObjectiveRefinementSessionMethods(_ConnectionString);
             ObjectiveRefinementMessages = new ObjectiveRefinementMessageMethods(_ConnectionString);
             Docks = new DockMethods(_ConnectionString);
@@ -376,10 +394,13 @@ namespace Armada.Core.Database.Mysql
         /// <inheritdoc />
         internal override async Task ReplayMigrationsAsync(CancellationToken token = default)
         {
+            int version = await GetSchemaVersionAsync(token).ConfigureAwait(false);
             using (MySqlConnection conn = await GetConnectionAsync(token).ConfigureAwait(false))
             {
                 foreach (SchemaMigration migration in GetMigrations())
                 {
+                    // v121 is a destructive boundary: verify historical migrations on an upgrade fixture, never recreate removed columns.
+                    if (version >= 121 && migration.Version < 119) continue;
                     using (MySqlTransaction tx = await conn.BeginTransactionAsync(token).ConfigureAwait(false))
                     {
                         await ExecuteMigrationAsync(conn, tx, migration, token).ConfigureAwait(false);
@@ -1021,8 +1042,511 @@ namespace Armada.Core.Database.Mysql
                     @"ALTER TABLE fleet_action_runs ADD COLUMN inputs_json LONGTEXT NULL;",
                     @"ALTER TABLE fleet_action_runs ADD COLUMN input_values_json LONGTEXT NULL;",
                     @"ALTER TABLE fleet_action_runs ADD COLUMN findings_count INT NOT NULL DEFAULT 0;",
-                    @"ALTER TABLE fleet_action_run_targets ADD COLUMN scan_summary LONGTEXT NULL;")
+                    @"ALTER TABLE fleet_action_run_targets ADD COLUMN scan_summary LONGTEXT NULL;"),
+                new SchemaMigration(102, "Add incidents and runbook_executions: one row per incident and per runbook execution holding its current state, so their lists page and count in the database (the snapshot events stay as history)",
+                    @"CREATE TABLE IF NOT EXISTS incidents (
+                        id VARCHAR(64) NOT NULL PRIMARY KEY,
+                        tenant_id VARCHAR(64),
+                        user_id VARCHAR(64),
+                        title LONGTEXT NOT NULL,
+                        status VARCHAR(32) NOT NULL,
+                        severity VARCHAR(32) NOT NULL,
+                        vessel_id VARCHAR(64),
+                        environment_id VARCHAR(64),
+                        deployment_id VARCHAR(64),
+                        release_id VARCHAR(64),
+                        mission_id VARCHAR(64),
+                        voyage_id VARCHAR(64),
+                        failure_kind VARCHAR(64),
+                        search_text LONGTEXT,
+                        payload LONGTEXT NOT NULL,
+                        detected_utc DATETIME(6) NOT NULL,
+                        last_update_utc DATETIME(6) NOT NULL
+                    );",
+                    @"CREATE INDEX idx_incidents_tenant_user ON incidents(tenant_id, user_id);",
+                    @"CREATE INDEX idx_incidents_last_update ON incidents(last_update_utc, id);",
+                    @"CREATE TABLE IF NOT EXISTS runbook_executions (
+                        id VARCHAR(64) NOT NULL PRIMARY KEY,
+                        tenant_id VARCHAR(64),
+                        user_id VARCHAR(64),
+                        runbook_id VARCHAR(64) NOT NULL,
+                        deployment_id VARCHAR(64),
+                        incident_id VARCHAR(64),
+                        status VARCHAR(32) NOT NULL,
+                        search_text LONGTEXT,
+                        payload LONGTEXT NOT NULL,
+                        started_utc DATETIME(6) NOT NULL,
+                        last_update_utc DATETIME(6) NOT NULL
+                    );",
+                    @"CREATE INDEX idx_runbook_executions_tenant_user ON runbook_executions(tenant_id, user_id);",
+                    @"CREATE INDEX idx_runbook_executions_runbook ON runbook_executions(runbook_id);",
+                    @"CREATE INDEX idx_runbook_executions_last_update ON runbook_executions(last_update_utc, id);"),
+                new SchemaMigration(103, "Add the mission and voyage black box: blackbox_entries, blackbox_objects (object bytes in a BLOB column for the Database target), blackbox_files, blackbox_links and blackbox_notes, plus missions.last_blackbox_entry_id, missions.start_commit, voyages.last_blackbox_entry_id and vessels.blackbox_retention_days",
+                    @"CREATE TABLE IF NOT EXISTS blackbox_entries (
+                        id VARCHAR(64) NOT NULL PRIMARY KEY,
+                        tenant_id VARCHAR(64),
+                        user_id VARCHAR(64),
+                        subject_type VARCHAR(64) NOT NULL,
+                        mission_id VARCHAR(64),
+                        voyage_id VARCHAR(64),
+                        vessel_id VARCHAR(64),
+                        fleet_id VARCHAR(64),
+                        captain_id VARCHAR(64),
+                        harbor_id VARCHAR(64),
+                        dock_id VARCHAR(64),
+                        merge_entry_id VARCHAR(64),
+                        incident_id VARCHAR(64),
+                        stage_outcome_id VARCHAR(64),
+                        parent_mission_id VARCHAR(64),
+                        mission_title LONGTEXT,
+                        vessel_name LONGTEXT,
+                        attempt INT NOT NULL DEFAULT 1,
+                        is_current TINYINT(1) NOT NULL DEFAULT 0,
+                        supersedes_id VARCHAR(64),
+                        phase VARCHAR(64) NOT NULL,
+                        step VARCHAR(64) NOT NULL,
+                        failure_kind VARCHAR(64),
+                        status_before VARCHAR(64),
+                        status_after VARCHAR(64),
+                        triage VARCHAR(64) NOT NULL,
+                        fingerprint VARCHAR(64),
+                        capture_mode VARCHAR(64) NOT NULL,
+                        state VARCHAR(64) NOT NULL,
+                        resolution VARCHAR(64) NOT NULL,
+                        resolution_note LONGTEXT,
+                        resolution_link LONGTEXT,
+                        pinned TINYINT(1) NOT NULL DEFAULT 0,
+                        storage_target VARCHAR(64) NOT NULL,
+                        storage_prefix LONGTEXT,
+                        total_bytes BIGINT NOT NULL DEFAULT 0,
+                        object_count INT NOT NULL DEFAULT 0,
+                        schema_version INT NOT NULL DEFAULT 1,
+                        rules_version INT NOT NULL DEFAULT 0,
+                        armada_version LONGTEXT,
+                        armada_commit VARCHAR(64),
+                        reason_excerpt LONGTEXT,
+                        summary LONGTEXT,
+                        enrichment_attempts INT NOT NULL DEFAULT 0,
+                        last_error LONGTEXT,
+                        next_attempt_utc DATETIME(6),
+                        expires_utc DATETIME(6),
+                        created_utc DATETIME(6) NOT NULL,
+                        enriched_utc DATETIME(6),
+                        analyzed_utc DATETIME(6),
+                        resolved_utc DATETIME(6),
+                        last_update_utc DATETIME(6) NOT NULL
+                    );",
+                    @"CREATE TABLE IF NOT EXISTS blackbox_objects (
+                        id VARCHAR(64) NOT NULL PRIMARY KEY,
+                        entry_id VARCHAR(64) NOT NULL,
+                        tenant_id VARCHAR(64),
+                        name VARCHAR(255) NOT NULL,
+                        content_type VARCHAR(255) NOT NULL,
+                        content_encoding VARCHAR(64) NOT NULL,
+                        size_bytes BIGINT NOT NULL DEFAULT 0,
+                        uncompressed_bytes BIGINT NOT NULL DEFAULT 0,
+                        sha256 VARCHAR(64),
+                        storage_key LONGTEXT,
+                        missing TINYINT(1) NOT NULL DEFAULT 0,
+                        data LONGBLOB,
+                        created_utc DATETIME(6) NOT NULL
+                    );",
+                    @"CREATE TABLE IF NOT EXISTS blackbox_files (
+                        id VARCHAR(64) NOT NULL PRIMARY KEY,
+                        entry_id VARCHAR(64) NOT NULL,
+                        tenant_id VARCHAR(64),
+                        vessel_id VARCHAR(64),
+                        path LONGTEXT NOT NULL,
+                        directory VARCHAR(512) NOT NULL,
+                        role VARCHAR(64) NOT NULL,
+                        conflicting_mission_id VARCHAR(64),
+                        created_utc DATETIME(6) NOT NULL
+                    );",
+                    @"CREATE TABLE IF NOT EXISTS blackbox_links (
+                        id VARCHAR(64) NOT NULL PRIMARY KEY,
+                        entry_id VARCHAR(64) NOT NULL,
+                        tenant_id VARCHAR(64),
+                        mission_id VARCHAR(64) NOT NULL,
+                        relation VARCHAR(64) NOT NULL,
+                        commit_hash VARCHAR(64),
+                        overlap_file_count INT NOT NULL DEFAULT 0,
+                        created_utc DATETIME(6) NOT NULL
+                    );",
+                    @"CREATE TABLE IF NOT EXISTS blackbox_notes (
+                        id VARCHAR(64) NOT NULL PRIMARY KEY,
+                        entry_id VARCHAR(64) NOT NULL,
+                        tenant_id VARCHAR(64),
+                        user_id VARCHAR(64),
+                        author_kind VARCHAR(64) NOT NULL,
+                        body LONGTEXT NOT NULL,
+                        created_utc DATETIME(6) NOT NULL
+                    );",
+                    @"CREATE INDEX idx_blackbox_entries_tenant_mission_current ON blackbox_entries(tenant_id, mission_id, is_current);",
+                    @"CREATE INDEX idx_blackbox_entries_mission_current ON blackbox_entries(mission_id, is_current);",
+                    @"CREATE INDEX idx_blackbox_entries_tenant_voyage ON blackbox_entries(tenant_id, voyage_id);",
+                    @"CREATE INDEX idx_blackbox_entries_voyage ON blackbox_entries(voyage_id);",
+                    @"CREATE INDEX idx_blackbox_entries_tenant_vessel_created ON blackbox_entries(tenant_id, vessel_id, created_utc);",
+                    @"CREATE INDEX idx_blackbox_entries_tenant_fingerprint_created ON blackbox_entries(tenant_id, fingerprint, created_utc);",
+                    @"CREATE INDEX idx_blackbox_entries_expires ON blackbox_entries(expires_utc);",
+                    @"CREATE INDEX idx_blackbox_entries_tenant_resolution_triage ON blackbox_entries(tenant_id, resolution, triage);",
+                    @"CREATE INDEX idx_blackbox_entries_created ON blackbox_entries(created_utc, id);",
+                    @"CREATE INDEX idx_blackbox_entries_state ON blackbox_entries(state);",
+                    @"CREATE UNIQUE INDEX idx_blackbox_objects_entry_name ON blackbox_objects(entry_id, name);",
+                    @"CREATE INDEX idx_blackbox_files_tenant_vessel_directory ON blackbox_files(tenant_id, vessel_id, directory);",
+                    @"CREATE INDEX idx_blackbox_files_entry ON blackbox_files(entry_id);",
+                    @"CREATE INDEX idx_blackbox_links_entry ON blackbox_links(entry_id);",
+                    @"CREATE INDEX idx_blackbox_links_mission ON blackbox_links(mission_id);",
+                    @"CREATE INDEX idx_blackbox_notes_entry_created ON blackbox_notes(entry_id, created_utc);",
+                    @"ALTER TABLE missions ADD COLUMN last_blackbox_entry_id VARCHAR(64) NULL;",
+                    @"ALTER TABLE missions ADD COLUMN start_commit VARCHAR(64) NULL;",
+                    @"ALTER TABLE voyages ADD COLUMN last_blackbox_entry_id VARCHAR(64) NULL;",
+                    @"ALTER TABLE vessels ADD COLUMN blackbox_retention_days INT NULL;"),
 
+                new SchemaMigration(104, "Add blackbox_migrations: one row per black box storage migration job (copy, verify, switch, delete between storage targets) so a job is resumable after a restart and its progress can be read back",
+                    @"CREATE TABLE IF NOT EXISTS blackbox_migrations (
+                        id VARCHAR(64) NOT NULL PRIMARY KEY,
+                        state VARCHAR(64) NOT NULL,
+                        from_target VARCHAR(64),
+                        to_target VARCHAR(64) NOT NULL,
+                        delete_source TINYINT(1) NOT NULL DEFAULT 1,
+                        batch_size INT NOT NULL DEFAULT 50,
+                        total_entries BIGINT NOT NULL DEFAULT 0,
+                        migrated_entries BIGINT NOT NULL DEFAULT 0,
+                        failed_entries BIGINT NOT NULL DEFAULT 0,
+                        bytes_copied BIGINT NOT NULL DEFAULT 0,
+                        last_entry_id VARCHAR(64),
+                        last_error LONGTEXT,
+                        created_utc DATETIME(6) NOT NULL,
+                        started_utc DATETIME(6),
+                        finished_utc DATETIME(6),
+                        last_update_utc DATETIME(6) NOT NULL
+                    );",
+                    @"CREATE INDEX idx_blackbox_migrations_state_created ON blackbox_migrations(state, created_utc);"),
+
+                new SchemaMigration(105, "Add vessels.serialize_overlapping_missions: when true, a mission dispatched to the vessel that overlaps an active mission's files or a reserved hotspot directory is chained after it with DependsOnMissionId",
+                    @"ALTER TABLE vessels ADD COLUMN serialize_overlapping_missions TINYINT(1) NOT NULL DEFAULT 0;"),
+
+                new SchemaMigration(106, "Add the black box success flight recorder (blackbox_successes: minimal records of successful landings kept for blackBox.successRetentionDays) and recovery outcome tracking (blackbox_recovery_outcomes: one row per confirmed recovery run with the mission's next terminal status)",
+                    @"CREATE TABLE IF NOT EXISTS blackbox_successes (
+                        id VARCHAR(64) NOT NULL PRIMARY KEY,
+                        tenant_id VARCHAR(64),
+                        user_id VARCHAR(64),
+                        vessel_id VARCHAR(64),
+                        mission_id VARCHAR(64) NOT NULL,
+                        voyage_id VARCHAR(64),
+                        captain_id VARCHAR(64),
+                        mission_title LONGTEXT,
+                        base_commit VARCHAR(64),
+                        target_commit VARCHAR(64),
+                        target_branch VARCHAR(256),
+                        files_changed LONGTEXT,
+                        file_count INT NOT NULL DEFAULT 0,
+                        mission_created_utc DATETIME(6),
+                        started_utc DATETIME(6),
+                        landed_utc DATETIME(6) NOT NULL,
+                        queue_ms BIGINT,
+                        run_ms BIGINT,
+                        total_ms BIGINT,
+                        created_utc DATETIME(6) NOT NULL,
+                        expires_utc DATETIME(6)
+                    );",
+                    @"CREATE TABLE IF NOT EXISTS blackbox_recovery_outcomes (
+                        id VARCHAR(64) NOT NULL PRIMARY KEY,
+                        tenant_id VARCHAR(64),
+                        user_id VARCHAR(64),
+                        entry_id VARCHAR(64) NOT NULL,
+                        mission_id VARCHAR(64),
+                        voyage_id VARCHAR(64),
+                        vessel_id VARCHAR(64),
+                        rule_id VARCHAR(64),
+                        path_id VARCHAR(256) NOT NULL,
+                        runbook_id VARCHAR(64),
+                        run_succeeded TINYINT(1) NOT NULL DEFAULT 0,
+                        outcome VARCHAR(64) NOT NULL,
+                        outcome_status VARCHAR(64),
+                        created_utc DATETIME(6) NOT NULL,
+                        resolved_utc DATETIME(6)
+                    );",
+                    @"CREATE INDEX idx_blackbox_successes_tenant_vessel_landed ON blackbox_successes(tenant_id, vessel_id, landed_utc);",
+                    @"CREATE INDEX idx_blackbox_successes_mission ON blackbox_successes(mission_id);",
+                    @"CREATE INDEX idx_blackbox_successes_expires ON blackbox_successes(expires_utc);",
+                    @"CREATE INDEX idx_blackbox_recovery_outcomes_outcome_created ON blackbox_recovery_outcomes(outcome, created_utc);",
+                    @"CREATE INDEX idx_blackbox_recovery_outcomes_tenant_rule_path ON blackbox_recovery_outcomes(tenant_id, rule_id, path_id);",
+                    @"CREATE INDEX idx_blackbox_recovery_outcomes_entry ON blackbox_recovery_outcomes(entry_id);"),
+
+                new SchemaMigration(107, "Add model profiles: model_profiles (the model as served, keyed by a unique identity of runtime, provider, model and served context, with editable capabilities, rendering overrides and notes), model_profile_revisions (immutable runtime version, model digest, sampling and tool configuration), model_profile_revision_compat (administrator compatibility marks between revisions) and captains.model_profile_id",
+                    @"CREATE TABLE IF NOT EXISTS model_profiles (
+                        id VARCHAR(64) NOT NULL PRIMARY KEY,
+                        tenant_id VARCHAR(64),
+                        identity_key VARCHAR(64) NOT NULL,
+                        runtime VARCHAR(256) NOT NULL,
+                        provider VARCHAR(256),
+                        model VARCHAR(512),
+                        served_context_tokens INT,
+                        tools_available TINYINT(1),
+                        mcp_available TINYINT(1),
+                        rendering_template VARCHAR(256),
+                        rendering_repeat_contract_at_end TINYINT(1),
+                        rendering_max_files_per_mission INT,
+                        notes LONGTEXT,
+                        created_utc DATETIME(6) NOT NULL,
+                        last_update_utc DATETIME(6) NOT NULL
+                    );",
+                    @"CREATE TABLE IF NOT EXISTS model_profile_revisions (
+                        id VARCHAR(64) NOT NULL PRIMARY KEY,
+                        profile_id VARCHAR(64) NOT NULL,
+                        tenant_id VARCHAR(64),
+                        runtime_version VARCHAR(256),
+                        model_digest VARCHAR(256),
+                        sampling_temperature DOUBLE,
+                        sampling_top_p DOUBLE,
+                        tool_tools TINYINT(1),
+                        tool_mcp TINYINT(1),
+                        first_seen_utc DATETIME(6) NOT NULL
+                    );",
+                    @"CREATE TABLE IF NOT EXISTS model_profile_revision_compat (
+                        revision_id VARCHAR(64) NOT NULL,
+                        compatible_revision_id VARCHAR(64) NOT NULL,
+                        created_utc DATETIME(6) NOT NULL,
+                        PRIMARY KEY (revision_id, compatible_revision_id)
+                    );",
+                    @"CREATE UNIQUE INDEX idx_model_profiles_identity_key ON model_profiles(identity_key);",
+                    @"CREATE INDEX idx_model_profiles_tenant_created ON model_profiles(tenant_id, created_utc);",
+                    @"CREATE INDEX idx_model_profile_revisions_profile_seen ON model_profile_revisions(profile_id, first_seen_utc);",
+                    @"CREATE INDEX idx_model_profile_revision_compat_other ON model_profile_revision_compat(compatible_revision_id);",
+                    @"ALTER TABLE captains ADD COLUMN model_profile_id VARCHAR(64) NULL;"),
+
+                new SchemaMigration(108, "Add model_alerts: one row per scorecard alert condition (tenant, model profile, revision group, persona, vessel scope, rule) with a unique alert key, open/resolved status, the counts, ignore-until and the applied-action audit record",
+                    @"CREATE TABLE IF NOT EXISTS model_alerts (
+                        id VARCHAR(64) NOT NULL PRIMARY KEY,
+                        tenant_id VARCHAR(64),
+                        alert_key VARCHAR(64) NOT NULL,
+                        profile_id VARCHAR(64) NOT NULL,
+                        model VARCHAR(512),
+                        revision_group LONGTEXT NOT NULL,
+                        persona VARCHAR(256) NOT NULL,
+                        vessel_id VARCHAR(64),
+                        vessel_name VARCHAR(512),
+                        rule VARCHAR(64) NOT NULL,
+                        status VARCHAR(32) NOT NULL,
+                        title LONGTEXT NOT NULL,
+                        detail LONGTEXT,
+                        metric_count INT,
+                        metric_of INT,
+                        metric_value DOUBLE,
+                        threshold_value DOUBLE,
+                        created_utc DATETIME(6) NOT NULL,
+                        last_raised_utc DATETIME(6) NOT NULL,
+                        last_evaluated_utc DATETIME(6) NOT NULL,
+                        resolved_utc DATETIME(6),
+                        ignored_until_utc DATETIME(6),
+                        actions_json LONGTEXT,
+                        last_update_utc DATETIME(6) NOT NULL
+                    );",
+                    @"CREATE UNIQUE INDEX idx_model_alerts_alert_key ON model_alerts(alert_key);",
+                    @"CREATE INDEX idx_model_alerts_tenant_status_raised ON model_alerts(tenant_id, status, last_raised_utc);",
+                    @"CREATE INDEX idx_model_alerts_profile ON model_alerts(profile_id);"),
+
+                new SchemaMigration(109, "Add Full Evaluate results: model_probe_runs.battery_run_id and report_json (the Full report), model_profile_revisions.evaluation_run_id and evaluation_report_json (the advisory revision a Full Evaluate records)",
+                    @"ALTER TABLE model_probe_runs ADD COLUMN battery_run_id VARCHAR(64) NULL;",
+                    @"ALTER TABLE model_probe_runs ADD COLUMN report_json LONGTEXT NULL;",
+                    @"ALTER TABLE model_profile_revisions ADD COLUMN evaluation_run_id VARCHAR(64) NULL;",
+                    @"ALTER TABLE model_profile_revisions ADD COLUMN evaluation_report_json LONGTEXT NULL;"),
+                new SchemaMigration(110, "Add the Worker eligibility envelope: vessels.worker_envelope_json (the vessel default) and missions.worker_envelope_json (a tightened envelope for one mission)",
+                    @"ALTER TABLE vessels ADD COLUMN worker_envelope_json LONGTEXT NULL;",
+                    @"ALTER TABLE missions ADD COLUMN worker_envelope_json LONGTEXT NULL;"),
+
+                new SchemaMigration(111, "Add account usage capture: usage_snapshots (one sanitized capture attempt per account group), usage_snapshot_captains (member links at capture time), usage_account_memberships (effective-dated attribution), usage_hourly_rollups, usage_latest_state, captain usage-capture settings (disabled by default) and token_usage provider/account/cost attribution",
+                    @"CREATE TABLE IF NOT EXISTS usage_snapshots (
+                        id VARCHAR(64) NOT NULL PRIMARY KEY,
+                        tenant_id VARCHAR(64) NOT NULL,
+                        captain_id VARCHAR(64),
+                        harbor_id VARCHAR(64),
+                        host_id VARCHAR(64) NOT NULL,
+                        runtime VARCHAR(64) NOT NULL,
+                        provider VARCHAR(64),
+                        account_key VARCHAR(128),
+                        captured_utc DATETIME(6) NOT NULL,
+                        received_utc DATETIME(6) NOT NULL,
+                        status VARCHAR(32) NOT NULL,
+                        source VARCHAR(32) NOT NULL,
+                        windows_json LONGTEXT,
+                        raw_excerpt LONGTEXT,
+                        error_code VARCHAR(128)
+                    );",
+                    @"CREATE INDEX idx_usage_snapshots_tenant_captured ON usage_snapshots(tenant_id, captured_utc, id);",
+                    @"CREATE INDEX idx_usage_snapshots_account_captured ON usage_snapshots(tenant_id, host_id, runtime, account_key, captured_utc);",
+                    @"CREATE INDEX idx_usage_snapshots_captain_captured ON usage_snapshots(captain_id, captured_utc);",
+                    @"CREATE TABLE IF NOT EXISTS usage_snapshot_captains (
+                        id VARCHAR(64) NOT NULL PRIMARY KEY,
+                        tenant_id VARCHAR(64) NOT NULL,
+                        snapshot_id VARCHAR(64) NOT NULL,
+                        captain_id VARCHAR(64) NOT NULL,
+                        captured_utc DATETIME(6) NOT NULL
+                    );",
+                    @"CREATE INDEX idx_usage_snapshot_captains_snapshot ON usage_snapshot_captains(snapshot_id);",
+                    @"CREATE INDEX idx_usage_snapshot_captains_captain_time ON usage_snapshot_captains(tenant_id, captain_id, captured_utc);",
+                    @"CREATE TABLE IF NOT EXISTS usage_account_memberships (
+                        id VARCHAR(64) NOT NULL PRIMARY KEY,
+                        tenant_id VARCHAR(64) NOT NULL,
+                        captain_id VARCHAR(64) NOT NULL,
+                        host_id VARCHAR(64) NOT NULL,
+                        runtime VARCHAR(64) NOT NULL,
+                        provider VARCHAR(64),
+                        account_key VARCHAR(128) NOT NULL,
+                        configuration_revision VARCHAR(128),
+                        effective_from_utc DATETIME(6) NOT NULL,
+                        effective_to_utc DATETIME(6),
+                        created_utc DATETIME(6) NOT NULL,
+                        last_update_utc DATETIME(6) NOT NULL
+                    );",
+                    @"CREATE INDEX idx_usage_memberships_captain_time ON usage_account_memberships(tenant_id, captain_id, effective_from_utc);",
+                    @"CREATE INDEX idx_usage_memberships_account ON usage_account_memberships(tenant_id, host_id, runtime, account_key);",
+                    @"CREATE TABLE IF NOT EXISTS usage_hourly_rollups (
+                        id VARCHAR(64) NOT NULL PRIMARY KEY,
+                        tenant_id VARCHAR(64) NOT NULL,
+                        host_id VARCHAR(64) NOT NULL,
+                        runtime VARCHAR(32) NOT NULL,
+                        provider VARCHAR(64) NOT NULL DEFAULT '',
+                        account_key VARCHAR(128) NOT NULL,
+                        window_name VARCHAR(128) NOT NULL DEFAULT '',
+                        model VARCHAR(255) NOT NULL DEFAULT '',
+                        hour_utc DATETIME(6) NOT NULL,
+                        sample_count INT NOT NULL DEFAULT 0,
+                        last_percent DOUBLE NULL,
+                        min_percent DOUBLE NULL,
+                        max_percent DOUBLE NULL,
+                        mean_percent DOUBLE NULL,
+                        last_used BIGINT NULL,
+                        last_limit BIGINT NULL,
+                        last_reset_utc DATETIME(6) NULL,
+                        first_observed_utc DATETIME(6) NULL,
+                        last_observed_utc DATETIME(6) NULL,
+                        ok_count INT NOT NULL DEFAULT 0,
+                        unsupported_count INT NOT NULL DEFAULT 0,
+                        auth_missing_count INT NOT NULL DEFAULT 0,
+                        failed_count INT NOT NULL DEFAULT 0,
+                        estimated_count INT NOT NULL DEFAULT 0,
+                        coverage_seconds DOUBLE NULL,
+                        last_update_utc DATETIME(6) NOT NULL
+                    );",
+                    @"CREATE UNIQUE INDEX idx_usage_rollups_natural ON usage_hourly_rollups(tenant_id, host_id, runtime, provider, account_key, window_name, model, hour_utc);",
+                    @"CREATE INDEX idx_usage_rollups_tenant_hour ON usage_hourly_rollups(tenant_id, hour_utc);",
+                    @"CREATE TABLE IF NOT EXISTS usage_latest_state (
+                        id VARCHAR(64) NOT NULL PRIMARY KEY,
+                        tenant_id VARCHAR(64) NOT NULL,
+                        host_id VARCHAR(64) NOT NULL,
+                        runtime VARCHAR(64) NOT NULL,
+                        provider VARCHAR(64),
+                        account_key VARCHAR(128) NOT NULL,
+                        last_good_snapshot_id VARCHAR(64),
+                        last_good_captured_utc DATETIME(6) NULL,
+                        last_good_received_utc DATETIME(6) NULL,
+                        last_good_status VARCHAR(32),
+                        last_good_windows_json LONGTEXT,
+                        last_error_snapshot_id VARCHAR(64),
+                        last_error_captured_utc DATETIME(6) NULL,
+                        last_error_status VARCHAR(32),
+                        last_error_code VARCHAR(128),
+                        expired_utc DATETIME(6) NULL,
+                        last_update_utc DATETIME(6) NOT NULL
+                    );",
+                    @"CREATE UNIQUE INDEX idx_usage_latest_state_account ON usage_latest_state(tenant_id, host_id, runtime, account_key);",
+                    @"ALTER TABLE captains ADD COLUMN usage_capture_enabled TINYINT(1) NOT NULL DEFAULT 0;",
+                    @"ALTER TABLE captains ADD COLUMN usage_capture_interval_seconds INT NOT NULL DEFAULT 300;",
+                    @"ALTER TABLE captains ADD COLUMN usage_capture_mode VARCHAR(32) NOT NULL DEFAULT 'Auto';",
+                    @"ALTER TABLE captains ADD COLUMN usage_capture_command LONGTEXT NULL;",
+                    @"ALTER TABLE token_usage ADD COLUMN provider VARCHAR(64) NULL;",
+                    @"ALTER TABLE token_usage ADD COLUMN account_key VARCHAR(128) NULL;",
+                    @"ALTER TABLE token_usage ADD COLUMN host_id VARCHAR(64) NULL;",
+                    @"ALTER TABLE token_usage ADD COLUMN membership_id VARCHAR(64) NULL;",
+                    @"ALTER TABLE token_usage ADD COLUMN reported_cost DOUBLE NULL;",
+                    @"ALTER TABLE token_usage ADD COLUMN cost_currency VARCHAR(16) NULL;",
+                    @"CREATE INDEX idx_token_usage_tenant_source_created ON token_usage(tenant_id, source, created_utc);"),
+
+                new SchemaMigration(112, "Add captain Active eligibility (existing captains remain active)",
+                    @"ALTER TABLE captains ADD COLUMN active TINYINT(1) NOT NULL DEFAULT 1;"),
+
+                new SchemaMigration(113, "Reset usage defaults to inherited enabled capture",
+                    @"ALTER TABLE captains MODIFY COLUMN usage_capture_enabled TINYINT(1) NULL DEFAULT NULL;",
+                    @"UPDATE captains SET usage_capture_enabled = NULL;"),
+
+                new SchemaMigration(114, "Persist captain usage credential Harbor",
+                    @"ALTER TABLE captains ADD COLUMN usage_capture_harbor_id VARCHAR(64) NULL;"),
+
+                new SchemaMigration(115, "Preserve weighted usage rollup provenance",
+                    @"ALTER TABLE usage_hourly_rollups ADD COLUMN percent_sample_count INT NOT NULL DEFAULT 0;",
+                    @"ALTER TABLE usage_hourly_rollups ADD COLUMN last_status VARCHAR(32) NULL;",
+                    @"ALTER TABLE usage_hourly_rollups ADD COLUMN raw_pruned INT NOT NULL DEFAULT 0;"),
+
+                new SchemaMigration(116, "Make account usage restart durable",
+                    @"ALTER TABLE usage_latest_state ADD COLUMN capture_context_key VARCHAR(64) NULL;",
+                    @"ALTER TABLE usage_latest_state ADD COLUMN requested_interval_seconds INT NULL;",
+                    @"ALTER TABLE usage_latest_state ADD COLUMN effective_interval_seconds INT NULL;",
+                    @"CREATE TABLE IF NOT EXISTS usage_latest_state_captains (tenant_id VARCHAR(64) NOT NULL, latest_state_id VARCHAR(64) NOT NULL, captain_id VARCHAR(64) NOT NULL, PRIMARY KEY (tenant_id, latest_state_id, captain_id), FOREIGN KEY (latest_state_id) REFERENCES usage_latest_state(id) ON DELETE CASCADE);",
+                    @"INSERT INTO usage_latest_state (id, tenant_id, host_id, runtime, provider, account_key, last_good_snapshot_id, last_good_captured_utc, last_good_received_utc, last_good_status, last_good_windows_json, last_error_snapshot_id, last_error_captured_utc, last_error_status, last_error_code, last_update_utc) WITH ranked AS (SELECT s.*, ROW_NUMBER() OVER (PARTITION BY tenant_id, host_id, runtime, account_key ORDER BY captured_utc DESC, id DESC) AS group_rank, ROW_NUMBER() OVER (PARTITION BY tenant_id, host_id, runtime, account_key, CASE WHEN status IN ('Ok','Estimated') THEN 1 ELSE 0 END ORDER BY captured_utc DESC, id DESC) AS status_rank FROM usage_snapshots s WHERE account_key IS NOT NULL AND account_key <> '') SELECT CONCAT('ust_', n.id), n.tenant_id, n.host_id, n.runtime, COALESCE(n.provider,g.provider,e.provider), n.account_key, g.id, g.captured_utc, g.received_utc, g.status, g.windows_json, e.id, e.captured_utc, e.status, e.error_code, n.received_utc FROM ranked n LEFT JOIN ranked g ON g.tenant_id=n.tenant_id AND g.host_id=n.host_id AND g.runtime=n.runtime AND g.account_key=n.account_key AND g.status_rank=1 AND g.status IN ('Ok','Estimated') LEFT JOIN ranked e ON e.tenant_id=n.tenant_id AND e.host_id=n.host_id AND e.runtime=n.runtime AND e.account_key=n.account_key AND e.status_rank=1 AND e.status NOT IN ('Ok','Estimated') WHERE n.group_rank=1 AND NOT EXISTS (SELECT 1 FROM usage_latest_state x WHERE x.tenant_id=n.tenant_id AND x.host_id=n.host_id AND x.runtime=n.runtime AND x.account_key=n.account_key);",
+                    @"INSERT INTO usage_latest_state_captains (tenant_id, latest_state_id, captain_id) SELECT DISTINCT s.tenant_id, s.id, m.captain_id FROM usage_latest_state s JOIN usage_account_memberships m ON m.tenant_id = s.tenant_id AND m.host_id = s.host_id AND m.runtime = s.runtime AND m.account_key = s.account_key WHERE m.effective_to_utc IS NULL AND NOT EXISTS (SELECT 1 FROM usage_latest_state_captains l WHERE l.tenant_id = s.tenant_id AND l.latest_state_id = s.id AND l.captain_id = m.captain_id);",
+                    @"INSERT INTO usage_latest_state_captains (tenant_id, latest_state_id, captain_id) SELECT DISTINCT s.tenant_id, s.id, m.captain_id FROM usage_latest_state s JOIN usage_snapshot_captains m ON m.tenant_id = s.tenant_id AND (m.snapshot_id = s.last_good_snapshot_id OR m.snapshot_id = s.last_error_snapshot_id) WHERE NOT EXISTS (SELECT 1 FROM usage_latest_state_captains l WHERE l.tenant_id = s.tenant_id AND l.latest_state_id = s.id AND l.captain_id = m.captain_id);"),
+
+                new SchemaMigration(117, "Add vessel voyage and mission admission limits",
+                    @"ALTER TABLE vessels ADD COLUMN max_parallel_voyages INT NOT NULL DEFAULT 1;",
+                    @"ALTER TABLE vessels ADD COLUMN max_parallel_missions_per_voyage INT NOT NULL DEFAULT 4;",
+                    @"UPDATE vessels SET max_parallel_voyages = CASE WHEN allow_concurrent_missions = 1 THEN 0 ELSE 1 END, max_parallel_missions_per_voyage = CASE WHEN allow_concurrent_missions = 1 THEN 0 ELSE 1 END;") { AlreadyAppliedCheckSql = "SELECT CASE WHEN EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='vessels' AND column_name='allow_concurrent_missions') THEN 0 ELSE 1 END" },
+
+                new SchemaMigration(118, "Add durable captain mission slots and per-mission heartbeat",
+                    @"ALTER TABLE missions ADD COLUMN stall_recovery_attempts INT NOT NULL DEFAULT 0;",
+                    @"ALTER TABLE captains ADD COLUMN max_concurrency INT NOT NULL DEFAULT 1;",
+                    @"ALTER TABLE captains ADD COLUMN active_mission_count INT NOT NULL DEFAULT 0;",
+                    @"ALTER TABLE captains ADD COLUMN current_session_id VARCHAR(64) NULL;",
+                    @"ALTER TABLE missions ADD COLUMN last_heartbeat_utc DATETIME(6) NULL;",
+                    @"CREATE TABLE IF NOT EXISTS captain_mission_slots (mission_id VARCHAR(64) NOT NULL PRIMARY KEY, captain_id VARCHAR(64) NOT NULL, process_id INT NULL, dock_id VARCHAR(64) NULL, FOREIGN KEY(captain_id) REFERENCES captains(id) ON DELETE CASCADE);",
+                    @"CREATE INDEX idx_captain_mission_slots_captain ON captain_mission_slots(captain_id);",
+                    @"UPDATE captains SET max_concurrency = CASE WHEN runtime IN ('ApiEndpoint','Mux') THEN 4 ELSE 1 END, current_session_id = CASE WHEN state IN ('Planning','Refining','Analyzing') THEN current_mission_id ELSE NULL END;",
+                    @"INSERT INTO captain_mission_slots(mission_id,captain_id,process_id,dock_id) SELECT m.id,m.captain_id,m.process_id,m.dock_id FROM missions m JOIN captains c ON c.id=m.captain_id WHERE m.status IN ('Assigned','InProgress') AND NOT EXISTS (SELECT 1 FROM captain_mission_slots s WHERE s.mission_id=m.id);",
+                    @"UPDATE captains SET active_mission_count=(SELECT COUNT(*) FROM captain_mission_slots s WHERE s.captain_id=captains.id);") { AlreadyAppliedCheckSql = "SELECT CASE WHEN EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='captains' AND column_name='current_mission_id') THEN 0 ELSE 1 END" },
+                new SchemaMigration(119, "Add mission hierarchy and assignment metadata",
+                    @"ALTER TABLE missions ADD COLUMN rescue_of_mission_id VARCHAR(256) NULL;",
+                    @"ALTER TABLE missions ADD COLUMN base_branch_name VARCHAR(256) NULL;",
+                    @"ALTER TABLE missions ADD COLUMN ready_utc DATETIME(6) NULL;",
+                    @"ALTER TABLE missions ADD COLUMN assigned_utc DATETIME(6) NULL;",
+                    @"ALTER TABLE missions ADD COLUMN owned_paths_json TEXT NULL;",
+                    @"ALTER TABLE missions ADD COLUMN reads_paths_json TEXT NULL;",
+                    @"ALTER TABLE missions ADD COLUMN depth INT NOT NULL DEFAULT 0;",
+                    @"ALTER TABLE missions ADD COLUMN branch_strategy VARCHAR(256) NOT NULL DEFAULT 'New';",
+                    @"UPDATE missions SET rescue_of_mission_id=parent_mission_id,parent_mission_id=NULL WHERE is_rescue=1 AND parent_mission_id IS NOT NULL AND rescue_of_mission_id IS NULL;",
+                    @"UPDATE missions SET assigned_utc=started_utc WHERE started_utc IS NOT NULL;",
+                    @"CREATE INDEX idx_missions_voyage_parent ON missions(voyage_id(191),parent_mission_id(191));") { AlreadyAppliedCheckSql = "SELECT COUNT(*) FROM information_schema.statistics WHERE table_schema=DATABASE() AND table_name='missions' AND index_name='idx_missions_voyage_parent'" },
+                new SchemaMigration(120, "Persist mission wait intervals",
+                    @"CREATE TABLE IF NOT EXISTS mission_wait_intervals (id VARCHAR(256) NOT NULL PRIMARY KEY,tenant_id VARCHAR(256) NULL,mission_id VARCHAR(256) NOT NULL,vessel_id VARCHAR(256) NULL,voyage_id VARCHAR(256) NULL,captain_id VARCHAR(256) NULL,gate VARCHAR(256) NOT NULL,started_utc DATETIME(6) NOT NULL,ended_utc DATETIME(6) NULL,detail TEXT NULL,FOREIGN KEY(mission_id) REFERENCES missions(id) ON DELETE CASCADE);",
+                    @"CREATE INDEX idx_mission_wait_mission ON mission_wait_intervals(mission_id);",
+                    @"CREATE INDEX idx_mission_wait_vessel_started ON mission_wait_intervals(vessel_id,started_utc);",
+                    @"CREATE INDEX idx_mission_wait_ended ON mission_wait_intervals(ended_utc);") { AlreadyAppliedCheckSql = "SELECT COUNT(*) FROM information_schema.statistics WHERE table_schema=DATABASE() AND table_name='mission_wait_intervals' AND index_name='idx_mission_wait_ended'" },
+                new SchemaMigration(121, "Remove singular captain and vessel concurrency columns",
+                    @"UPDATE captains SET current_session_id=COALESCE(current_session_id,current_mission_id) WHERE state IN ('Planning','Refining','Analyzing');",
+                    @"UPDATE missions SET status='InProgress' WHERE status='Testing' AND captain_id IS NOT NULL AND (process_id IS NOT NULL OR EXISTS (SELECT 1 FROM captains c WHERE c.id=missions.captain_id AND c.current_mission_id=missions.id AND c.process_id IS NOT NULL));",
+                    @"UPDATE missions SET process_id=(SELECT c.process_id FROM captains c WHERE c.id=missions.captain_id AND c.current_mission_id=missions.id) WHERE process_id IS NULL AND status IN ('Assigned','InProgress');",
+                    @"UPDATE captain_mission_slots SET process_id=(SELECT m.process_id FROM missions m WHERE m.id=captain_mission_slots.mission_id) WHERE process_id IS NULL;",
+                    @"INSERT INTO captain_mission_slots(mission_id,captain_id,process_id,dock_id) SELECT m.id,m.captain_id,m.process_id,m.dock_id FROM missions m JOIN captains c ON c.id=m.captain_id WHERE m.status IN ('Assigned','InProgress') AND NOT EXISTS (SELECT 1 FROM captain_mission_slots s WHERE s.mission_id=m.id);",
+                    @"UPDATE captains SET active_mission_count=(SELECT COUNT(*) FROM captain_mission_slots s WHERE s.captain_id=captains.id);",
+                    @"UPDATE captains SET process_id=NULL WHERE current_session_id IS NULL;",
+                    @"ALTER TABLE vessels DROP COLUMN allow_concurrent_missions;",
+                    @"ALTER TABLE captains DROP COLUMN current_mission_id;",
+                    @"ALTER TABLE captains DROP COLUMN current_dock_id;") { AlreadyAppliedCheckSql = "SELECT CASE WHEN COUNT(*)=0 THEN 1 ELSE 0 END FROM information_schema.columns WHERE table_schema=DATABASE() AND ((table_name='captains' AND column_name IN ('current_mission_id','current_dock_id')) OR (table_name='vessels' AND column_name='allow_concurrent_missions'))" },
+                new SchemaMigration(122, "Add fleet action applicability commands and mission mode (report-only Audit and Research actions) to actions and run snapshots",
+                    @"ALTER TABLE fleet_actions ADD COLUMN applicability_command LONGTEXT NULL;",
+                    @"ALTER TABLE fleet_actions ADD COLUMN applicability_command_windows LONGTEXT NULL;",
+                    @"ALTER TABLE fleet_actions ADD COLUMN mission_mode VARCHAR(64) NOT NULL DEFAULT 'Implementation';",
+                    @"ALTER TABLE fleet_action_runs ADD COLUMN applicability_command LONGTEXT NULL;",
+                    @"ALTER TABLE fleet_action_runs ADD COLUMN applicability_command_windows LONGTEXT NULL;",
+                    @"ALTER TABLE fleet_action_runs ADD COLUMN mission_mode VARCHAR(64) NOT NULL DEFAULT 'Implementation';") { AlreadyAppliedCheckSql = "SELECT CASE WHEN COUNT(*)=6 THEN 1 ELSE 0 END FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name IN ('fleet_actions','fleet_action_runs') AND column_name IN ('applicability_command','applicability_command_windows','mission_mode')" },
+                Armada.Core.Database.UsageSelectionSchema.Migration(Armada.Core.Enums.DatabaseTypeEnum.Mysql),
+                Armada.Core.Database.UsageSelectionSchema.CaptureTimingMigration(Armada.Core.Enums.DatabaseTypeEnum.Mysql),
+                Armada.Core.Database.UsageSelectionSchema.HistoryDisplayMigration(Armada.Core.Enums.DatabaseTypeEnum.Mysql),
+                Armada.Core.Database.UsageSelectionSchema.UntrackedExecutionMigration(Armada.Core.Enums.DatabaseTypeEnum.Mysql),
+                Armada.Core.Database.UsageSelectionSchema.RecoveryMigration(Armada.Core.Enums.DatabaseTypeEnum.Mysql),
+                Armada.Core.Database.UsageSelectionSchema.AssignmentTimingMigration(Armada.Core.Enums.DatabaseTypeEnum.Mysql),
+                Armada.Core.Database.UsageSelectionSchema.OmittedCandidatesMigration(Armada.Core.Enums.DatabaseTypeEnum.Mysql),
+                Armada.Core.Database.UsageSelectionSchema.TenantTimestampMigration(Armada.Core.Enums.DatabaseTypeEnum.Mysql)
 
             };
         }
@@ -1144,8 +1668,8 @@ namespace Armada.Core.Database.Mysql
             catch { vessel.RequirePassingChecksToLand = false; }
             try { object autoApproveValue = reader["auto_approve"]; vessel.AutoApprove = autoApproveValue == null || autoApproveValue == DBNull.Value ? (bool?)null : Convert.ToInt64(autoApproveValue) == 1; }
             catch { vessel.AutoApprove = null; }
-            try { vessel.AllowConcurrentMissions = Convert.ToInt64(reader["allow_concurrent_missions"]) == 1; }
-            catch { vessel.AllowConcurrentMissions = false; }
+            vessel.MaxParallelVoyages = Convert.ToInt32(reader["max_parallel_voyages"]);
+            vessel.MaxParallelMissionsPerVoyage = Convert.ToInt32(reader["max_parallel_missions_per_voyage"]);
             try
             {
                 string? protectedPatternsJson = NullableString(reader["protected_branch_patterns_json"]);
@@ -1193,6 +1717,11 @@ namespace Armada.Core.Database.Mysql
             captain.UserId = NullableString(reader["user_id"]);
             captain.Name = reader["name"].ToString()!;
             captain.Runtime = Enum.Parse<AgentRuntimeEnum>(reader["runtime"].ToString()!);
+            captain.MaxConcurrency = Convert.ToInt32(reader["max_concurrency"]);
+            captain.ActiveMissionCount = Convert.ToInt32(reader["active_mission_count"]);
+            captain.CurrentSessionId = reader["current_session_id"] == DBNull.Value ? null : reader["current_session_id"].ToString();
+            try { captain.ActiveMissionIds = System.Text.Json.JsonSerializer.Deserialize<List<string>>(reader["active_mission_ids"].ToString() ?? "[]") ?? new List<string>(); } catch (IndexOutOfRangeException) { }
+
             try { captain.Model = NullableString(reader["model"]); } catch { }
             try { captain.ModelEndpointId = NullableString(reader["model_endpoint_id"]); } catch { }
             captain.SystemInstructions = NullableString(reader["system_instructions"]);
@@ -1204,8 +1733,6 @@ namespace Armada.Core.Database.Mysql
             }
             catch { captain.CliPermissionPolicy = null; }
             captain.State = Enum.Parse<CaptainStateEnum>(reader["state"].ToString()!);
-            captain.CurrentMissionId = NullableString(reader["current_mission_id"]);
-            captain.CurrentDockId = NullableString(reader["current_dock_id"]);
             captain.ProcessId = NullableInt(reader["process_id"]);
             captain.RecoveryAttempts = Convert.ToInt32(reader["recovery_attempts"]);
             captain.LastHeartbeatUtc = FromIso8601Nullable(reader["last_heartbeat_utc"]);
@@ -1291,6 +1818,26 @@ namespace Armada.Core.Database.Mysql
 
             foreach (string sql in migration.Statements)
             {
+                // MySQL commits DDL independently of the migration ledger. Resume a partially completed v121
+                // without reading a dropped source column or dropping the same column twice.
+                if (migration.Version == 121)
+                {
+                    string? table = null, column = null;
+                    if (sql.StartsWith("ALTER TABLE ", StringComparison.Ordinal))
+                    {
+                        string[] words = sql.TrimEnd(';').Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                        table = words[2]; column = words[5];
+                    }
+                    else if (sql.Contains("current_mission_id", StringComparison.Ordinal))
+                    { table = "captains"; column = "current_mission_id"; }
+                    if (table != null)
+                    {
+                        using MySqlCommand exists = conn.CreateCommand(); exists.Transaction = tx;
+                        exists.CommandText = "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name=@table AND column_name=@column;";
+                        exists.Parameters.AddWithValue("@table", table); exists.Parameters.AddWithValue("@column", column);
+                        if (Convert.ToInt64(await exists.ExecuteScalarAsync(token).ConfigureAwait(false)) == 0) continue;
+                    }
+                }
                 await ExecuteMigrationStatementAsync(conn, tx, sql, token).ConfigureAwait(false);
             }
         }

@@ -1,12 +1,14 @@
+import Breadcrumbs from '../components/shared/Breadcrumbs';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import {
   createWorkspaceDirectory,
   deleteWorkspaceEntry,
   getVesselReadiness,
   getWorkspaceFile,
   getWorkspaceStatus,
-  getWorkspaceTree,
+  listAllWorkspaceActiveMissions,
+  listWorkspaceDirectory,
   listVessels,
   openWorkspaceTerminal,
   renameWorkspaceEntry,
@@ -17,6 +19,7 @@ import {
 import { listAll } from '../api/paging';
 import type {
   Vessel,
+  WorkspaceActiveMission,
   WorkspaceFileResponse,
   WorkspaceSaveResult,
   WorkspaceStatusResult,
@@ -55,6 +58,7 @@ import {
   sortWorkspacePathsByDepth,
 } from '../lib/workspace';
 import { PLANNING_PATH } from '../lib/navTargets';
+import { useDeleteProgress } from '../lib/useDeleteProgress';
 
 interface PersistedWorkspaceState {
   expandedPaths: Record<string, boolean>;
@@ -93,12 +97,14 @@ export default function Workspace() {
   const { vesselId } = useParams<{ vesselId?: string }>();
   const navigate = useNavigate();
   const { t, formatDateTime } = useLocale();
+  const deletion = useDeleteProgress();
   const { pushToast } = useNotifications();
 
   const [vessels, setVessels] = useState<Vessel[]>([]);
   const [statusByVesselId, setStatusByVesselId] = useState<Record<string, WorkspaceStatusResult | undefined>>({});
 
   const [status, setStatus] = useState<WorkspaceStatusResult | null>(null);
+  const [activeMissions, setActiveMissions] = useState<WorkspaceActiveMission[]>([]);
   const [readiness, setReadiness] = useState<VesselReadinessResult | null>(null);
   const [entriesByDirectory, setEntriesByDirectory] = useState<Record<string, WorkspaceTreeEntry[]>>({});
   const [expandedPaths, setExpandedPaths] = useState<Record<string, boolean>>({ '': true });
@@ -144,11 +150,11 @@ export default function Workspace() {
     return activePath ? [normalizeWorkspacePath(activePath)] : [];
   }, [activePath, selectedPaths]);
   const overlappingMissions = useMemo(() => {
-    if (!status?.activeMissions?.length || actionablePaths.length === 0) return [];
-    return status.activeMissions.filter((mission) =>
-      mission.scopedFiles.some((path) => actionablePaths.includes(normalizeWorkspacePath(path))),
+    if (!activeMissions.length || actionablePaths.length === 0) return [];
+    return activeMissions.filter((mission) =>
+      (mission.scopedFiles ?? []).some((path) => actionablePaths.includes(normalizeWorkspacePath(path))),
     );
-  }, [actionablePaths, status?.activeMissions]);
+  }, [actionablePaths, activeMissions]);
   const showSelectionPane = selectedPaths.length > 0;
 
   useEffect(() => {
@@ -207,6 +213,7 @@ export default function Workspace() {
   useEffect(() => {
     if (!vesselId) {
       setStatus(null);
+      setActiveMissions([]);
       setReadiness(null);
       setEntriesByDirectory({});
       setTabs([]);
@@ -308,7 +315,12 @@ export default function Workspace() {
   async function rebuildWorkspaceState(pathsToRestore: string[]) {
     if (!vesselId) return;
     const nextStatus = await getWorkspaceStatus(vesselId);
-    const rootTree = await getWorkspaceTree(vesselId, undefined);
+    // The status carries only activeMissionCount; the missions (with scoped files) are paged explicitly.
+    const nextActiveMissions = (nextStatus?.activeMissionCount ?? 0) > 0
+      ? await listAllWorkspaceActiveMissions(vesselId).catch(() => [] as WorkspaceActiveMission[])
+      : [];
+    // Each directory is read in explicit pages of 1000; the first page is never treated as the whole directory.
+    const rootTree = await listWorkspaceDirectory(vesselId, undefined);
     const nextEntries: Record<string, WorkspaceTreeEntry[]> = { '': rootTree.entries };
     const nextExpanded: Record<string, boolean> = { '': true };
     const normalizedPaths = sortWorkspacePathsByDepth(pathsToRestore);
@@ -321,7 +333,7 @@ export default function Workspace() {
       if (parentPath && !nextExpanded[parentPath]) continue;
 
       try {
-        const tree = await getWorkspaceTree(vesselId, normalizedPath);
+        const tree = await listWorkspaceDirectory(vesselId, normalizedPath);
         nextEntries[normalizedPath] = tree.entries;
         nextExpanded[normalizedPath] = true;
       } catch {
@@ -330,6 +342,7 @@ export default function Workspace() {
     }
 
     setStatus(nextStatus);
+    setActiveMissions(nextActiveMissions);
     setStatusByVesselId((current) => ({ ...current, [vesselId]: nextStatus }));
     setEntriesByDirectory(nextEntries);
     setExpandedPaths(nextExpanded);
@@ -345,7 +358,7 @@ export default function Workspace() {
 
     const results = await Promise.all(uniquePaths.map(async (path) => {
       try {
-        const tree = await getWorkspaceTree(vesselId, path || undefined);
+        const tree = await listWorkspaceDirectory(vesselId, path || undefined);
         return [path, tree.entries] as const;
       } catch {
         return [path, [] as WorkspaceTreeEntry[]] as const;
@@ -365,7 +378,7 @@ export default function Workspace() {
 
     try {
       setLoadingDirectories((current) => [...current, normalizedPath]);
-      const tree = await getWorkspaceTree(vesselId, normalizedPath || undefined);
+      const tree = await listWorkspaceDirectory(vesselId, normalizedPath || undefined);
       setEntriesByDirectory((current) => ({ ...current, [normalizedPath]: tree.entries }));
       setWorkspaceError('');
       return true;
@@ -587,27 +600,32 @@ export default function Workspace() {
     const normalizedTargetPath = normalizeWorkspacePath(targetPath);
     if (!window.confirm(t('Delete {{path}}?', { path: normalizedTargetPath }))) return;
 
-    try {
-      await deleteWorkspaceEntry(vesselId, normalizedTargetPath);
-      const nextExpandedPaths = pruneWorkspacePathMap(expandedPaths, normalizedTargetPath);
-      setExpandedPaths(nextExpandedPaths);
-      setEntriesByDirectory((current) => pruneWorkspaceEntryDirectoryMap(current, normalizedTargetPath));
-      setTabs((current) => {
-        const next = current.filter((item) => !isWorkspacePathInScope(item, normalizedTargetPath));
-        if (activePath && isWorkspacePathInScope(activePath, normalizedTargetPath)) {
-          setActivePath(next[next.length - 1] || null);
-        }
-        return next;
-      });
-      setSelectedPaths((current) => current.filter((item) => !isWorkspacePathInScope(item, normalizedTargetPath)));
-      setRecentFiles((current) => current.filter((item) => !isWorkspacePathInScope(item, normalizedTargetPath)));
-      setFilesByPath((current) => pruneWorkspaceFileMap(current, normalizedTargetPath));
-      setDraftsByPath((current) => pruneWorkspaceStringMap(current, normalizedTargetPath));
-      if (metadataEntry && isWorkspacePathInScope(metadataEntry.relativePath, normalizedTargetPath)) {
-        setMetadataEntry(null);
+    const done = await deletion.run({
+      kind: 'workspaceEntry',
+      action: () => deleteWorkspaceEntry(vesselId, normalizedTargetPath),
+      errorMessage: (error) => (error instanceof Error ? error.message : t('Delete failed.')),
+    });
+    if (!done) return;
+    const nextExpandedPaths = pruneWorkspacePathMap(expandedPaths, normalizedTargetPath);
+    setExpandedPaths(nextExpandedPaths);
+    setEntriesByDirectory((current) => pruneWorkspaceEntryDirectoryMap(current, normalizedTargetPath));
+    setTabs((current) => {
+      const next = current.filter((item) => !isWorkspacePathInScope(item, normalizedTargetPath));
+      if (activePath && isWorkspacePathInScope(activePath, normalizedTargetPath)) {
+        setActivePath(next[next.length - 1] || null);
       }
-      setWorkspaceError('');
-      pushToast('warning', t('Deleted {{path}}', { path: normalizedTargetPath }));
+      return next;
+    });
+    setSelectedPaths((current) => current.filter((item) => !isWorkspacePathInScope(item, normalizedTargetPath)));
+    setRecentFiles((current) => current.filter((item) => !isWorkspacePathInScope(item, normalizedTargetPath)));
+    setFilesByPath((current) => pruneWorkspaceFileMap(current, normalizedTargetPath));
+    setDraftsByPath((current) => pruneWorkspaceStringMap(current, normalizedTargetPath));
+    if (metadataEntry && isWorkspacePathInScope(metadataEntry.relativePath, normalizedTargetPath)) {
+      setMetadataEntry(null);
+    }
+    setWorkspaceError('');
+    pushToast('warning', t('Deleted {{path}}', { path: normalizedTargetPath }));
+    try {
       await refreshWorkspace(getExpandedWorkspacePaths(nextExpandedPaths).filter((path) => path !== ''));
     } catch (error: unknown) {
       setWorkspaceError(error instanceof Error ? error.message : t('Delete failed.'));
@@ -803,11 +821,11 @@ export default function Workspace() {
 
   return (
     <div className="workspace-page">
-      <div className="breadcrumbs">
-        <Link to="/workspace" title={t('Back to the Workspace vessel picker.')}>{t('Workspace')}</Link>
-        <span className="bc-sep">&gt;</span>
-        <span>{currentVessel?.name || vesselId}</span>
-      </div>
+      {deletion.dialog}
+      <Breadcrumbs items={[
+        { label: t('Workspace'), to: '/workspace', title: t('Back to the Workspace vessel picker.') },
+        { label: currentVessel?.name || vesselId },
+      ]} />
 
       <div className="workspace-header">
         <div className="workspace-header-body">

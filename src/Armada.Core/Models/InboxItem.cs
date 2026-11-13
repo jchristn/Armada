@@ -67,6 +67,12 @@ namespace Armada.Core.Models
         public CliPermissionRequest? CliPermission { get; set; } = null;
 
         /// <summary>
+        /// For model alert items: the alert (counts, revision group, persona, vessel scope, applied actions) and its
+        /// suggested actions, or null for other kinds.
+        /// </summary>
+        public ModelAlert? ModelAlert { get; set; } = null;
+
+        /// <summary>
         /// When the item stops waiting (for CLI permission items, the request expiry), or null.
         /// </summary>
         public DateTime? ExpiresUtc { get; set; } = null;

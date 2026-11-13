@@ -8,6 +8,9 @@ namespace Armada.Core.Database.Interfaces
     /// </summary>
     public interface IMissionMethods
     {
+        /// <summary>Count execution slots in one snapshot without loading outputs or diffs.</summary>
+        Task<int> CountExecutionSlotsAsync(CancellationToken token = default);
+
         /// <summary>
         /// Create a mission.
         /// </summary>
@@ -72,6 +75,9 @@ namespace Armada.Core.Database.Interfaces
         /// </summary>
         Task UpdateHeartbeatAsync(string id, CancellationToken token = default);
 
+        /// <summary>Update heartbeat and recovery budget only while the recorded execution owner/process still match.</summary>
+        Task<bool> TryUpdateRuntimeContextAsync(string id, string captainId, int? processId, DateTime? heartbeatUtc, int recoveryAttempts, CancellationToken token = default);
+
         /// <summary>
         /// Delete a mission by identifier.
         /// </summary>
@@ -107,6 +113,9 @@ namespace Armada.Core.Database.Interfaces
         /// </summary>
         Task<List<Mission>> EnumerateByVesselAsync(string vesselId, CancellationToken token = default);
 
+        /// <summary>Read only the indexed vessel's scheduling metadata, excluding outputs, diffs and evidence.</summary>
+        Task<List<MissionAdmissionSnapshot>> EnumerateAdmissionSnapshotsAsync(string vesselId, CancellationToken token = default);
+
         /// <summary>
         /// Enumerate lightweight mission summaries by vessel identifier.
         /// </summary>
@@ -136,6 +145,13 @@ namespace Armada.Core.Database.Interfaces
         /// Enumerate lightweight mission history points in the supplied time range.
         /// </summary>
         Task<List<MissionHistoryPoint>> EnumerateHistoryPointsAsync(MissionHistoryQuery query, CancellationToken token = default);
+
+        /// <summary>
+        /// Count missions by history bucket and status in the database (one row per bucket and status that has
+        /// missions), over the query's window, vessel, and fleet filters. The bucket index counts whole buckets from
+        /// <see cref="MissionHistoryQuery.AlignedStartUtc"/>.
+        /// </summary>
+        Task<List<MissionHistoryBucketCount>> CountHistoryBucketsAsync(MissionHistoryQuery query, CancellationToken token = default);
 
         /// <summary>
         /// Check if a mission exists by identifier.
@@ -218,6 +234,13 @@ namespace Armada.Core.Database.Interfaces
         Task<List<MissionHistoryPoint>> EnumerateHistoryPointsAsync(string tenantId, MissionHistoryQuery query, CancellationToken token = default);
 
         /// <summary>
+        /// Count tenant-scoped missions by history bucket and status in the database (one row per bucket and status that has
+        /// missions), over the query's window, vessel, and fleet filters. The bucket index counts whole buckets from
+        /// <see cref="MissionHistoryQuery.AlignedStartUtc"/>.
+        /// </summary>
+        Task<List<MissionHistoryBucketCount>> CountHistoryBucketsAsync(string tenantId, MissionHistoryQuery query, CancellationToken token = default);
+
+        /// <summary>
         /// Check if a mission exists by tenant and identifier (tenant-scoped).
         /// </summary>
         Task<bool> ExistsAsync(string tenantId, string id, CancellationToken token = default);
@@ -261,5 +284,12 @@ namespace Armada.Core.Database.Interfaces
         /// Enumerate lightweight user-scoped mission history points in the supplied time range.
         /// </summary>
         Task<List<MissionHistoryPoint>> EnumerateHistoryPointsAsync(string tenantId, string userId, MissionHistoryQuery query, CancellationToken token = default);
+
+        /// <summary>
+        /// Count user-scoped missions by history bucket and status in the database (one row per bucket and status that has
+        /// missions), over the query's window, vessel, and fleet filters. The bucket index counts whole buckets from
+        /// <see cref="MissionHistoryQuery.AlignedStartUtc"/>.
+        /// </summary>
+        Task<List<MissionHistoryBucketCount>> CountHistoryBucketsAsync(string tenantId, string userId, MissionHistoryQuery query, CancellationToken token = default);
     }
 }

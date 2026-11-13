@@ -2,7 +2,7 @@ import { Alert, Pressable, StyleSheet } from 'react-native';
 import { useAuth } from '../../auth/AuthContext';
 import { useLocale } from '../../i18n/LocaleContext';
 import { urlSecurityLevel } from '../../profiles/serverUrl';
-import { MIN_TOUCH, spacing } from '../../theme/typography';
+import { MIN_TOUCH, spacing, touchSlop } from '../../theme/typography';
 import { AppText } from '../ui/AppText';
 import { Icon } from '../ui/Icon';
 
@@ -36,7 +36,8 @@ export function NotEncryptedBadge({ url, compact = false }: NotEncryptedBadgePro
       accessibilityLabel={t('Not encrypted')}
       accessibilityHint={t('Explains what an http:// connection exposes')}
       onPress={explain}
-      hitSlop={4}
+      // The inline form is drawn one caption line tall (about 24 dp); the slop brings the tappable height to MIN_TOUCH.
+      hitSlop={compact ? 4 : touchSlop(24)}
       style={[styles.base, compact ? styles.compact : null]}
     >
       <Icon name="lock-open-outline" size={compact ? 22 : 16} color={color} />
@@ -53,6 +54,6 @@ export function NotEncryptedIndicator({ compact = false }: { compact?: boolean }
 }
 
 const styles = StyleSheet.create({
-  base: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  base: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, minHeight: 24 },
   compact: { minWidth: MIN_TOUCH, minHeight: MIN_TOUCH, justifyContent: 'center' },
 });

@@ -21,5 +21,7 @@ export function buildClientMockFactory(): Record<string, unknown> {
     if (/^[A-Z]/.test(name)) continue;
     mocks[name] = jest.fn(async () => undefined);
   }
-  return { ...base, ...mocks };
+  const out = { ...base, ...mocks };
+  (jest.requireActual('./pagedBridges') as { addPagedBridges: (m: Record<string, unknown>) => void }).addPagedBridges(out);
+  return out;
 }

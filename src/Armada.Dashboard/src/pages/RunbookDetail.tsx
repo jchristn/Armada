@@ -30,6 +30,7 @@ import { useLocale } from '../context/LocaleContext';
 import { useNotifications } from '../context/NotificationContext';
 import ConfirmDialog from '../components/shared/ConfirmDialog';
 import PageHeader from '../components/shared/PageHeader';
+import { ErrorState } from '../components/shared/StateBlocks';
 import CopyButton from '../components/shared/CopyButton';
 import ErrorModal from '../components/shared/ErrorModal';
 import JsonViewer from '../components/shared/JsonViewer';
@@ -37,6 +38,7 @@ import StatusBadge from '../components/shared/StatusBadge';
 import { canEdit as canEditScoped, type ScopeViewer } from '../lib/scoping';
 import { buildRunbookDuplicatePayload } from '../lib/duplicates';
 import { cloneExecution, createDefaultParameter, createDefaultStep, RUNBOOK_CHECK_TYPES, RUNBOOK_EXECUTION_STATUSES } from '../lib/deliveryForms';
+import { useDeleteProgress } from '../lib/useDeleteProgress';
 
 interface RunbookPageState {
   prefillExecution?: Partial<RunbookExecutionStartRequest>;
@@ -50,6 +52,7 @@ export default function RunbookDetail() {
   const { isAdmin, isTenantAdmin, user } = useAuth();
   const viewer: ScopeViewer = { isAdmin, isTenantAdmin, tenantId: user?.user?.tenantId, userId: user?.user?.id };
   const { t, formatDateTime, formatRelativeTime } = useLocale();
+  const deletion = useDeleteProgress();
   const { pushToast } = useNotifications();
 
   const createMode = id === 'new';
@@ -113,6 +116,8 @@ export default function RunbookDetail() {
   const [startingExecution, setStartingExecution] = useState(false);
   const [savingExecution, setSavingExecution] = useState(false);
   const [error, setError] = useState('');
+  // A failed entity load (for example a stale link) renders an error state instead of an empty editor.
+  const [loadFailure, setLoadFailure] = useState<{ id: string | undefined; message: string } | null>(null);
   const [jsonData, setJsonData] = useState<{ open: boolean; title: string; data: unknown }>({ open: false, title: '', data: null });
   const [confirm, setConfirm] = useState<{ open: boolean; title: string; message: string; onConfirm: () => void }>({
     open: false,
@@ -183,7 +188,7 @@ export default function RunbookDetail() {
         setExecutionDraft(initialExecution ? cloneExecution(initialExecution) : null);
         setError('');
       } catch (err: unknown) {
-        if (mounted) setError(err instanceof Error ? err.message : t('Failed to load runbook.'));
+        if (mounted) setLoadFailure({ id, message: err instanceof Error ? err.message : t('Failed to load runbook.') });
       } finally {
         if (mounted) setLoading(false);
       }
@@ -273,13 +278,9 @@ export default function RunbookDetail() {
       message: t('Delete "{{title}}"? This removes the runbook definition and keeps existing executions only in the event log history.', { title: runbook.title }),
       onConfirm: async () => {
         setConfirm((current) => ({ ...current, open: false }));
-        try {
-          await deleteRunbook(runbook.id);
-          pushToast('warning', t('Runbook "{{title}}" deleted.', { title: runbook.title }));
-          navigate('/runbooks');
-        } catch (err: unknown) {
-          setError(err instanceof Error ? err.message : t('Delete failed.'));
-        }
+        if (!(await deletion.run({ kind: 'runbook', action: () => deleteRunbook(runbook.id), errorMessage: (err) => err instanceof Error ? err.message : t('Delete failed.') }))) return;
+        pushToast('warning', t('Runbook "{{title}}" deleted.', { title: runbook.title }));
+        navigate('/runbooks');
       },
     });
   }
@@ -437,14 +438,22 @@ export default function RunbookDetail() {
 
   if (loading) return <p className="text-dim">{t('Loading...')}</p>;
 
+  if (!createMode && loadFailure && loadFailure.id === id) {
+    return (
+      <div>
+        <PageHeader breadcrumb={[{ label: t('Runbooks'), to: '/runbooks' }, { label: id || '' }]} title={id || ''} />
+        <ErrorState message={loadFailure.message} />
+      </div>
+    );
+  }
+
   return (
     <div>
       <PageHeader
-        breadcrumb={
-          <>
-            <Link to="/runbooks">{t('Runbooks')}</Link> <span className="breadcrumb-sep">&gt;</span> <span>{createMode ? t('New Runbook') : title}</span>
-          </>
-        }
+        breadcrumb={[
+          { label: t('Runbooks'), to: '/runbooks' },
+          { label: createMode ? t('New Runbook') : title },
+        ]}
         title={createMode ? t('Create Runbook') : title}
         actions={
           <>
@@ -479,6 +488,7 @@ export default function RunbookDetail() {
 
       <ErrorModal error={error} onClose={() => setError('')} />
       <JsonViewer open={jsonData.open} title={jsonData.title} data={jsonData.data} onClose={() => setJsonData({ open: false, title: '', data: null })} />
+      {deletion.dialog}
       <ConfirmDialog
         open={confirm.open}
         title={confirm.title}
@@ -675,7 +685,7 @@ export default function RunbookDetail() {
                     <button
                       key={execution.id}
                       className={`card${selectedExecutionId === execution.id ? ' selected-card' : ''}`}
-                      style={{ padding: '0.85rem', textAlign: 'left', border: selectedExecutionId === execution.id ? '1px solid var(--accent-color)' : undefined }}
+                      style={{ padding: '0.85rem', textAlign: 'left', border: selectedExecutionId === execution.id ? '1px solid var(--accent)' : undefined }}
                       onClick={() => setSelectedExecutionId(execution.id)}
                       title={t('Select this execution to see and update its checklist below.')}
                     >

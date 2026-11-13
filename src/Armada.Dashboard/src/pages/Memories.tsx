@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { resolveCreateScope } from '../lib/scoping';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { enumerateMemories, deleteMemory, createMemory, listVessels } from '../api/client';
+import { apiErrorMessage, enumerateMemories, deleteMemory, createMemory, listVessels } from '../api/client';
 import { listAll } from '../api/paging';
 import type { Memory, MemoryEnumerateQuery, MemorySortField, MemoryType, ScopeEnum, Vessel } from '../types/models';
 import { useLocale } from '../context/LocaleContext';
@@ -17,6 +17,7 @@ import JsonViewer from '../components/shared/JsonViewer';
 import ScopeBadge from '../components/shared/ScopeBadge';
 import { MEMORY_TYPES } from '../lib/configuration';
 import { usePersistedPageSize } from '../lib/usePersistedPageSize';
+import { useDeleteProgress } from '../lib/useDeleteProgress';
 
 const TYPES = MEMORY_TYPES;
 
@@ -43,6 +44,7 @@ export default function Memories() {
   const { t, formatRelativeTime, formatDateTime } = useLocale();
   const navigate = useNavigate();
   const { pushToast } = useNotifications();
+  const deletion = useDeleteProgress();
   const { isAdmin, isTenantAdmin, user } = useAuth();
   const viewer = { isAdmin, isTenantAdmin, tenantId: user?.user?.tenantId, userId: user?.user?.id };
   const [draft, setDraft] = useState<Partial<Memory> | null>(null);
@@ -128,13 +130,9 @@ export default function Memories() {
   const handleDelete = async () => {
     const id = confirm.id;
     setConfirm({ open: false, id: '' });
-    try {
-      await deleteMemory(id);
-      pushToast('success', t('Memory deleted.'));
-      void load();
-    } catch {
-      pushToast('error', t('Failed to delete memory.'));
-    }
+    if (!(await deletion.run({ kind: 'memory', action: () => deleteMemory(id), errorMessage: (err) => apiErrorMessage(err, t('Failed to delete memory.')) }))) return;
+    pushToast('success', t('Memory deleted.'));
+    void load();
   };
 
   const memorySummary = (m: Memory) => m.summary || m.content;
@@ -270,6 +268,7 @@ export default function Memories() {
         onConfirm={() => void handleDelete()}
         onCancel={() => setConfirm({ open: false, id: '' })}
       />
+      {deletion.dialog}
 
       <DataTable
         tableKey="memories"

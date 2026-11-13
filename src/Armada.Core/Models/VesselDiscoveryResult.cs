@@ -1,6 +1,7 @@
 namespace Armada.Core.Models
 {
     using System.Collections.Generic;
+    using Armada.Core.Services;
 
     /// <summary>
     /// Output of the discovery engine: classified candidates, whether the candidate cap truncated the scan, and
@@ -13,6 +14,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// Candidates in discovery order. Never null.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxRequestItems, Reason = "Discovery stops at VesselDiscoveryService.MaxCandidates (at most 1000) and sets Truncated")]
         public List<VesselImportCandidate> Candidates
         {
             get => _Candidates;
@@ -27,6 +29,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// Advisory hints, for example PathNotVisibleToAdmiral. Never null.
         /// </summary>
+        [CollectionBound(16, Reason = "Fixed hint codes (CandidateLimitReached, PathNotVisibleToAdmiral)")]
         public List<VesselImportHint> Hints
         {
             get => _Hints;

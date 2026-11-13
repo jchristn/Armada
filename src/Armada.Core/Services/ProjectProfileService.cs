@@ -17,6 +17,15 @@ namespace Armada.Core.Services
     /// </summary>
     public class ProjectProfileService
     {
+        #region Public-Members
+
+        /// <summary>
+        /// Most entries ValidateAsync puts in Errors or Warnings: at most one per validation rule.
+        /// </summary>
+        public const int MaxValidationMessages = 16;
+
+        #endregion
+
         #region Private-Members
 
         private readonly DatabaseDriver _Database;
@@ -48,9 +57,14 @@ namespace Armada.Core.Services
         /// <param name="profile">The profile to validate.</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>The validation result.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="profile"/> is null.</exception>
+        /// <exception cref="CollectionLimitExceededException">Thrown when PersonaOverrides or Skills holds more than
+        /// <see cref="CollectionLimits.MaxConfigItems"/> entries. Every write path (create, update, validate) calls this
+        /// method, so an over-limit profile is never stored.</exception>
         public async Task<ProjectProfileValidationResult> ValidateAsync(ProjectProfile profile, CancellationToken token = default)
         {
             if (profile == null) throw new ArgumentNullException(nameof(profile));
+            CollectionBounds.Validate(profile);
 
             ProjectProfileValidationResult result = new ProjectProfileValidationResult();
 

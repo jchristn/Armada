@@ -2,6 +2,7 @@ namespace Armada.Core.Models
 {
     using System;
     using System.Collections.Generic;
+    using Armada.Core.Services;
 
     /// <summary>
     /// A vessel import batch with all of its items.
@@ -22,6 +23,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// Items ordered by path. Never null.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxRequestItems, Reason = "A batch holds one item per discovered candidate, at most VesselDiscoveryService.MaxCandidates (1000)")]
         public List<VesselImportItem> Items
         {
             get => _Items;
@@ -32,6 +34,7 @@ namespace Armada.Core.Models
         /// Advisory discovery hints rebuilt from the batch (candidate cap reached, paths not visible to the Admiral).
         /// Never null.
         /// </summary>
+        [CollectionBound(16, Reason = "Fixed hint codes from VesselImportService.BuildHints")]
         public List<VesselImportHint> Hints
         {
             get => _Hints;
@@ -41,6 +44,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// Fleet recommendations from the latest categorization run, in display order. Never null.
         /// </summary>
+        [CollectionBound(501, Reason = "At most FleetCategorizationService.MaxFleets (500) plus one Uncategorized bucket")]
         public List<VesselImportFleetRecommendation> FleetRecommendations
         {
             get => _FleetRecommendations;

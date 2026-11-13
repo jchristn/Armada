@@ -68,10 +68,12 @@ namespace Armada.Tui.Screens.Admin
         /// <param name="delete">Deletes one id.</param>
         /// <param name="plural">English plural noun as in the dashboard ("tenants", "users", "credentials").</param>
         /// <param name="after">Continuation.</param>
-        public static void BulkDelete(TuiContext context, List<string> ids, Func<string, Task> delete, string plural, Action after)
+        /// <param name="progressTitle">English ICU plural title of the progress notice shown while the ids are deleted
+        /// (the count is passed as <c>count</c>), for example "{count, plural, one {Deleting # user} other {Deleting # users}}".</param>
+        public static void BulkDelete(TuiContext context, List<string> ids, Func<string, Task> delete, string plural, Action after, string progressTitle)
         {
             List<string> copy = new List<string>(ids);
-            ScreenOps.Quiet(context, async () =>
+            DeleteProgress.Run(context, progressTitle, async ct =>
             {
                 int failed = 0;
                 foreach (string id in copy)
@@ -98,7 +100,7 @@ namespace Armada.Tui.Screens.Admin
 
                 if (failed > 0) ScreenOps.Toast(context, NotificationSeverityEnum.Error, "Deleted {{success}}, {{failed}} failed.", LocalizationArgs.Of("success", success, "failed", failed));
                 after?.Invoke();
-            });
+            }, "Bulk delete failed.", copy.Count);
         }
 
         #endregion

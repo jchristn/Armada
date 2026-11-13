@@ -3,6 +3,7 @@ namespace Armada.Core.Models
     using System;
     using System.Collections.Generic;
     using Armada.Core.Enums;
+    using Armada.Core.Services;
 
     /// <summary>
     /// A handoff artifact rendered for one reader within a token budget: the evidence block (findings, required actions,
@@ -44,14 +45,22 @@ namespace Armada.Core.Models
         public string? FilePath { get; set; } = null;
 
         /// <summary>
-        /// The items that did not fit the budget, in delivery order.
+        /// Every item that did not fit the budget, including any beyond <see cref="DidNotFit"/>.
         /// </summary>
+        public int DidNotFitCount { get; set; } = 0;
+
+        /// <summary>
+        /// The items that did not fit the budget, in delivery order: the first
+        /// <see cref="CollectionLimits.MaxConfigItems"/>; <see cref="DidNotFitCount"/> is the full count.
+        /// </summary>
+        [CollectionBound(CollectionLimits.MaxConfigItems, Reason = "First MaxConfigItems items; DidNotFitCount is the total")]
         public List<string> DidNotFit { get; set; } = new List<string>();
 
         /// <summary>
         /// The findings delivered in <see cref="Evidence"/>, in delivery order; findings that did not fit are listed in
         /// <see cref="DidNotFit"/> instead.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxConfigItems, Reason = "A subset of HandoffArtifact.Findings")]
         public List<HandoffFinding> Findings { get; set; } = new List<HandoffFinding>();
 
         /// <summary>

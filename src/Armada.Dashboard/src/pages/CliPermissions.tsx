@@ -6,7 +6,7 @@ import {
   getCliPermissionRequest,
   listCaptains,
   listCliPermissionRequests,
-  listCliPermissionRules,
+  enumerateCliPermissionRules,
   listVessels,
   updateCliPermissionRule,
 } from '../api/client';
@@ -30,6 +30,8 @@ import ErrorModal from '../components/shared/ErrorModal';
 import CliPermissionCard from '../components/cliPermissions/CliPermissionCard';
 import { useLiveRefresh } from '../lib/useLiveRefresh';
 import { CLI_PERMISSION_EVENT_PREFIX, mergeCliRequest, requestStatusLabel } from '../lib/cliPermissions';
+import { useDeleteProgress } from '../lib/useDeleteProgress';
+import TruncationNote from '../components/shared/TruncationNote';
 
 /** The route's maximum; the list has no total, so a full page means there may be more (said visibly below). */
 const REQUEST_LIMIT = 1000;
@@ -137,9 +139,11 @@ function RulesPanel() {
   const { t, formatRelativeTime, formatDateTime } = useLocale();
   const { isAdmin, isTenantAdmin } = useAuth();
   const { pushToast } = useNotifications();
+  const deletion = useDeleteProgress();
   const canEdit = !!isAdmin || !!isTenantAdmin;
   const [scopeFilter, setScopeFilter] = useState<CliPermissionRuleScope | ''>('');
   const [rules, setRules] = useState<CliPermissionRule[]>([]);
+  const [ruleTotal, setRuleTotal] = useState(0);
   const [vessels, setVessels] = useState<Vessel[]>([]);
   const [captains, setCaptains] = useState<Captain[]>([]);
   const [loading, setLoading] = useState(true);
@@ -153,7 +157,10 @@ function RulesPanel() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      setRules((await listCliPermissionRules({ scope: scopeFilter || null })) ?? []);
+      // One bounded page of the largest size; the note above the table says when more rules exist.
+      const page = await enumerateCliPermissionRules({ scope: scopeFilter || null });
+      setRules(page?.objects ?? []);
+      setRuleTotal(page?.totalRecords ?? (page?.objects?.length ?? 0));
       setError('');
     } catch (err: unknown) {
       setError(errorText(err, t('Failed to load CLI permission rules.')));
@@ -249,14 +256,10 @@ function RulesPanel() {
     const rule = deleteTarget;
     setDeleteTarget(null);
     if (!rule) return;
-    try {
-      await deleteCliPermissionRule(rule.id);
-      setRules((prev) => prev.filter((r) => r.id !== rule.id));
-      if (editingId === rule.id) cancelEdit();
-      pushToast('success', t('Rule deleted.'));
-    } catch (err: unknown) {
-      setError(errorText(err, t('The rule could not be deleted.')));
-    }
+    if (!(await deletion.run({ kind: 'cliPermissionRule', action: () => deleteCliPermissionRule(rule.id), errorMessage: (err) => errorText(err, t('The rule could not be deleted.')) }))) return;
+    setRules((prev) => prev.filter((r) => r.id !== rule.id));
+    if (editingId === rule.id) cancelEdit();
+    pushToast('success', t('Rule deleted.'));
   }
 
   const ruleColumns: DataTableColumn<CliPermissionRule>[] = [
@@ -314,6 +317,7 @@ function RulesPanel() {
       </div>
       <ErrorModal error={error} onClose={() => setError('')} />
 
+      <TruncationNote shown={rules.length} total={ruleTotal} />
       <DataTable
         tableKey="cli-permission-rules"
         columns={ruleColumns}
@@ -391,6 +395,7 @@ function RulesPanel() {
         onConfirm={() => void confirmDelete()}
         onCancel={() => setDeleteTarget(null)}
       />
+      {deletion.dialog}
     </section>
   );
 }

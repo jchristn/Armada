@@ -348,7 +348,7 @@ namespace Armada.Tui.Screens.Admin
             string label = String.IsNullOrEmpty(row.Name) ? row.Id : row.Name!;
             Context.Confirm("Delete Credential", Context.Loc.T("Delete credential \"{{name}}\"? This cannot be undone.", LocalizationArgs.Of("name", label)), () =>
             {
-                ScreenOps.RunVoid(Context, () => Context.Client.DeleteCredentialAsync(id), () =>
+                DeleteProgress.RunVoid(Context, "Deleting credential", ct => Context.Client.DeleteCredentialAsync(id, ct), () =>
                 {
                     ScreenOps.Toast(Context, NotificationSeverityEnum.Warning, "Credential \"{{name}}\" deleted.", LocalizationArgs.Of("name", label));
                     Load();
@@ -365,7 +365,7 @@ namespace Armada.Tui.Screens.Admin
             Context.Confirm("Delete Selected Credentials", Context.Loc.T("Delete {{count}} credential(s)?", LocalizationArgs.Of("count", ids.Count)), () =>
             {
                 Grid.ClearMarks();
-                UserAdminOps.BulkDelete(Context, ids, id => Context.Client.DeleteCredentialAsync(id), "credentials", Load);
+                UserAdminOps.BulkDelete(Context, ids, id => Context.Client.DeleteCredentialAsync(id), "credentials", Load, "{count, plural, one {Deleting # credential} other {Deleting # credentials}}");
             }, "Delete", "delete");
         }
 

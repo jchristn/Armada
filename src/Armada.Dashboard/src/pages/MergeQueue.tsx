@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
+  apiErrorMessage,
   listMergeQueue, enqueueMerge, deleteMergeEntry, processMergeEntry,
   processAllMergeQueue, cancelMergeEntry, listVessels,
   getMissionDiff, getMissionLog,
@@ -24,6 +25,7 @@ import { useLocale } from '../context/LocaleContext';
 import { useNotifications } from '../context/NotificationContext';
 import { buildEnqueueMergeRequest, emptyEnqueueMergeForm, type EnqueueMergeForm } from '../lib/mergeQueueForm';
 import { usePersistedPageSize } from '../lib/usePersistedPageSize';
+import { useDeleteProgress } from '../lib/useDeleteProgress';
 
 type SortDir = 'asc' | 'desc';
 type SortField = 'branchName' | 'targetBranch' | 'status' | 'priority' | 'createdUtc';
@@ -32,6 +34,7 @@ export default function MergeQueue() {
   const navigate = useNavigate();
   const { t } = useLocale();
   const { pushToast } = useNotifications();
+  const deletion = useDeleteProgress();
   const [entries, setEntries] = useState<MergeEntry[]>([]);
   const [vessels, setVessels] = useState<Vessel[]>([]);
   const [loading, setLoading] = useState(true);
@@ -58,7 +61,7 @@ export default function MergeQueue() {
   const [confirm, setConfirm] = useState<{ open: boolean; title: string; message: string; onConfirm: () => void }>({ open: false, title: '', message: '', onConfirm: () => {} });
 
   // Diff viewer
-  const [diffModal, setDiffModal] = useState<{ open: boolean; title: string; rawDiff: string; loading: boolean }>({ open: false, title: '', rawDiff: '', loading: false });
+  const [diffModal, setDiffModal] = useState<{ open: boolean; title: string; rawDiff: string; loading: boolean; error?: string }>({ open: false, title: '', rawDiff: '', loading: false });
 
   // Log viewer
   const [logModal, setLogModal] = useState<{ open: boolean; title: string; missionId: string; content: string; totalLines: number; lineCount: number }>({ open: false, title: '', missionId: '', content: '', totalLines: 0, lineCount: 200 });
@@ -216,11 +219,9 @@ export default function MergeQueue() {
       message: t('Delete merge entry {{id}}? This cannot be undone.', { id }),
       onConfirm: async () => {
         setConfirm(c => ({ ...c, open: false }));
-        try {
-          await deleteMergeEntry(id);
-          pushToast('warning', t('Merge entry {{id}} deleted.', { id }));
-          load();
-        } catch { setError(t('Delete failed.')); }
+        if (!(await deletion.run({ kind: 'mergeEntry', action: () => deleteMergeEntry(id), errorMessage: (err) => apiErrorMessage(err, t('Delete failed.')) }))) return;
+        pushToast('warning', t('Merge entry {{id}} deleted.', { id }));
+        load();
       },
     });
   }
@@ -235,9 +236,16 @@ export default function MergeQueue() {
         const ids = [...selected];
         setSelected([]);
         let failed = 0;
-        for (const id of ids) {
-          try { await deleteMergeEntry(id); } catch { failed++; }
-        }
+        if (!(await deletion.run({
+          kind: 'mergeEntry',
+          count: ids.length,
+          action: async () => {
+            failed = 0;
+            for (const id of ids) {
+              try { await deleteMergeEntry(id); } catch { failed++; }
+            }
+          },
+        }))) return;
         const deleted = ids.length - failed;
         if (deleted > 0) {
           pushToast(failed > 0 ? 'warning' : 'success', failed > 0
@@ -256,8 +264,8 @@ export default function MergeQueue() {
     try {
       const result = await getMissionDiff(missionId);
       setDiffModal(d => ({ ...d, rawDiff: result?.diff || '', loading: false }));
-    } catch {
-      setDiffModal(d => ({ ...d, rawDiff: '', loading: false }));
+    } catch (e) {
+      setDiffModal(d => ({ ...d, rawDiff: '', loading: false, error: e instanceof Error ? e.message : String(e) }));
     }
   }
 
@@ -425,10 +433,12 @@ export default function MergeQueue() {
       />
       <ConfirmDialog open={confirm.open} title={confirm.title} message={confirm.message}
         onConfirm={confirm.onConfirm} onCancel={() => setConfirm(c => ({ ...c, open: false }))} />
+      {deletion.dialog}
       <DiffViewer
         open={diffModal.open}
         title={diffModal.title}
         rawDiff={diffModal.rawDiff}
+        error={diffModal.error}
         loading={diffModal.loading}
         onClose={() => setDiffModal({ open: false, title: '', rawDiff: '', loading: false })}
       />

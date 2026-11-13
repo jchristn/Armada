@@ -93,6 +93,10 @@ namespace Armada.Core.Services
             if (profile == null && String.IsNullOrWhiteSpace(request.CommandOverride))
                 throw new InvalidOperationException("No active workflow profile could be resolved for this vessel.");
 
+            // One artifact is collected per ExpectedArtifacts entry, so the run's Artifacts list is bounded by the
+            // profile's list; reject an oversized profile before anything runs (docs/ENUMERATION.md).
+            CollectionLimits.RequireConfigItems(profile?.ExpectedArtifacts, "ExpectedArtifacts");
+
             string command = !String.IsNullOrWhiteSpace(request.CommandOverride)
                 ? request.CommandOverride!.Trim()
                 : _WorkflowProfiles.ResolveCommand(profile!, request.Type, request.EnvironmentName)
@@ -189,6 +193,7 @@ namespace Armada.Core.Services
             if (auth == null) throw new ArgumentNullException(nameof(auth));
             if (request == null) throw new ArgumentNullException(nameof(request));
             if (String.IsNullOrWhiteSpace(request.VesselId)) throw new ArgumentNullException(nameof(request.VesselId));
+            CollectionBounds.Validate(request);
 
             Vessel vessel = await ReadAccessibleVesselAsync(auth, request.VesselId, token).ConfigureAwait(false)
                 ?? throw new KeyNotFoundException("Vessel not found or not accessible.");
@@ -208,6 +213,7 @@ namespace Armada.Core.Services
             if (auth == null) throw new ArgumentNullException(nameof(auth));
             if (request == null) throw new ArgumentNullException(nameof(request));
             if (String.IsNullOrWhiteSpace(request.VesselId)) throw new ArgumentNullException(nameof(request.VesselId));
+            CollectionBounds.Validate(request);
 
             Vessel vessel = await ReadAccessibleVesselAsync(auth, request.VesselId, token).ConfigureAwait(false)
                 ?? throw new KeyNotFoundException("Vessel not found or not accessible.");
@@ -240,6 +246,7 @@ namespace Armada.Core.Services
             if (run == null) throw new ArgumentNullException(nameof(run));
             if (String.IsNullOrWhiteSpace(run.VesselId))
                 throw new ArgumentNullException(nameof(run.VesselId));
+            CollectionBounds.Validate(run);
 
             if (run.StartedUtc == null)
                 run.StartedUtc = DateTime.UtcNow;

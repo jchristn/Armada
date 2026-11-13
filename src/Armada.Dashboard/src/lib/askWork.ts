@@ -1,6 +1,6 @@
 import type { AskTrackedWork, AskWorkSnapshot } from '../types/models';
 import type { Translate } from './deploymentApprovalLabel';
-import { JOBS_PATH } from './navTargets';
+import { BACKGROUND_ACTIVITY_PATH } from './navTargets';
 
 /** Child statuses (missions and fleet action targets) that will not change again. */
 const TERMINAL_CHILD = new Set([
@@ -51,13 +51,23 @@ function countFor(counts: Record<string, number> | null | undefined, match: (sta
   return total;
 }
 
+/**
+ * The card's child rows when they are every row of the work. A snapshot carries counts only; the rows are read from
+ * their paged enumeration and hold the first page, so when `rowTotal` says more exist the counts are used instead.
+ */
+function completeRows(snapshot: AskWorkSnapshot): Array<{ status: string }> {
+  const rows = (snapshot.missions && snapshot.missions.length > 0) ? snapshot.missions : (snapshot.targets ?? []);
+  if (snapshot.rowTotal != null && snapshot.rowTotal > rows.length) return [];
+  return rows;
+}
+
 /** Progress for the card's bar: from the child rows when present, else the counts, else explicit counters. */
 export function workProgress(snapshot: AskWorkSnapshot | null | undefined): WorkProgress | null {
   if (!snapshot) return null;
   let total = 0;
   let done = 0;
   let failed = 0;
-  const rows = (snapshot.missions && snapshot.missions.length > 0) ? snapshot.missions : (snapshot.targets ?? []);
+  const rows = completeRows(snapshot);
   if (rows.length > 0) {
     total = rows.length;
     for (const row of rows) {
@@ -83,7 +93,7 @@ export function workProgress(snapshot: AskWorkSnapshot | null | undefined): Work
 /** Status counts for the card header, from the rows when present (stable order: first appearance). */
 export function statusCounts(snapshot: AskWorkSnapshot | null | undefined): Array<{ status: string; count: number }> {
   if (!snapshot) return [];
-  const rows = (snapshot.missions && snapshot.missions.length > 0) ? snapshot.missions : (snapshot.targets ?? []);
+  const rows = completeRows(snapshot);
   const map = new Map<string, number>();
   if (rows.length > 0) {
     for (const row of rows) map.set(row.status, (map.get(row.status) ?? 0) + 1);
@@ -103,7 +113,8 @@ export function workRoute(entityType: string | null | undefined, entityId: strin
     case 'Mission': return `/missions/${id}`;
     case 'FleetActionRun': return `/fleet-actions/runs/${id}`;
     case 'VesselImportBatch': return `/vessels/import?batch=${id}`;
-    case 'Job': return JOBS_PATH;
+    case 'Job': return BACKGROUND_ACTIVITY_PATH;
+    case 'BlackBox': return `/blackbox/${id}`;
     default: return '/activity';
   }
 }
@@ -129,6 +140,7 @@ export function entityTypeLabel(t: Translate, entityType: string | null | undefi
     case 'FleetActionRun': return t('Fleet action run');
     case 'Job': return t('Background job');
     case 'VesselImportBatch': return t('Vessel import');
+    case 'BlackBox': return t('Black box');
     default: return entityType ?? '';
   }
 }

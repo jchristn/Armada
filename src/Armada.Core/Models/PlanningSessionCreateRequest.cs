@@ -1,5 +1,7 @@
 namespace Armada.Core.Models
 {
+    using Armada.Core.Services;
+
     /// <summary>
     /// Request payload for creating a planning session.
     /// </summary>
@@ -33,6 +35,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// Optional ordered playbook selections.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxConfigItems)]
         public List<SelectedPlaybook> SelectedPlaybooks { get; set; } = new List<SelectedPlaybook>();
 
         /// <summary>

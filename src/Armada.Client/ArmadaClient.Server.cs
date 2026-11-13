@@ -25,6 +25,38 @@ namespace Armada.Client
             return GetAsync<StorageSnapshot>("/api/v1/storage", null, token);
         }
 
+        /// <summary>One page of cached storage host reports (the Admiral first, then each Harbor); the snapshot carries
+        /// only host totals.</summary>
+        /// <param name="query">Paging (page size 1 to 1000); null is the first page of 10.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The page.</returns>
+        /// <exception cref="ArmadaApiException">Authorization, transport or API failure.</exception>
+        public Task<EnumerationResult<StorageHostReport>?> ListStorageHostsAsync(EnumerationQuery? query = null, CancellationToken token = default)
+        {
+            return PostAsync<EnumerationResult<StorageHostReport>>("/api/v1/storage/hosts/enumerate", query ?? new EnumerationQuery(), null, token);
+        }
+
+        /// <summary>Every cached storage host report, read one bounded page (100 hosts) at a time.</summary>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>Every host report.</returns>
+        /// <exception cref="ArmadaApiException">Authorization, transport or API failure.</exception>
+        public async Task<List<StorageHostReport>> ListAllStorageHostsAsync(CancellationToken token = default)
+        {
+            List<StorageHostReport> hosts = new List<StorageHostReport>();
+            int page = 1;
+            while (true)
+            {
+                token.ThrowIfCancellationRequested();
+                EnumerationResult<StorageHostReport>? result = await ListStorageHostsAsync(new EnumerationQuery { PageNumber = page, PageSize = 100 }, token).ConfigureAwait(false);
+                if (result == null || result.Objects == null || result.Objects.Count == 0) break;
+                hosts.AddRange(result.Objects);
+                if (page >= result.TotalPages) break;
+                page++;
+            }
+
+            return hosts;
+        }
+
         /// <summary>Request bounded background collection. Exact counts are opt-in; concurrent requests coalesce.</summary>
         /// <exception cref="ArmadaApiException">Authorization, transport or API failure.</exception>
         public Task<StorageSnapshot?> RefreshStorageAsync(StorageRefreshRequest request, CancellationToken token = default)

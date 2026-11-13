@@ -105,6 +105,7 @@ namespace Armada.Server.Routes
                 JobQuery query = String.IsNullOrWhiteSpace(body)
                     ? new JobQuery()
                     : JsonSerializer.Deserialize<JobQuery>(body, _BodyJsonOptions) ?? new JobQuery();
+                CollectionBounds.Validate(query);
                 if (Int32.TryParse(req.Query.GetValueOrDefault("pageNumber"), out int pageNumber)) query.PageNumber = pageNumber;
                 if (Int32.TryParse(req.Query.GetValueOrDefault("pageSize"), out int pageSize)) query.PageSize = pageSize;
                 ScopeJobQuery(ctx, query);

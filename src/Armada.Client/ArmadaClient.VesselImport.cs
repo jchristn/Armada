@@ -20,13 +20,50 @@ namespace Armada.Client
         /// <summary>
         /// Dashboard <c>browseVesselImport</c>: GET /api/v1/vessels/import/browse (path sent base64url-encoded; null lists the allowed roots).
         /// </summary>
+        /// One page of the directory (TotalRecords, TotalPages, and Truncated describe the rest); use
+        /// <see cref="BrowseAllVesselImportAsync"/> to read every entry.
         /// <param name="path">Directory on the Admiral host, or null.</param>
+        /// <param name="page">Paging (page size 1 to 1000); null is the server default (first page of 10).</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>The response.</returns>
         /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
-        public Task<VesselBrowseResult?> BrowseVesselImportAsync(string? path = null, CancellationToken token = default)
+        public Task<VesselBrowseResult?> BrowseVesselImportAsync(string? path = null, EnumerationQuery? page = null, CancellationToken token = default)
         {
-            return GetAsync<VesselBrowseResult>("/api/v1/vessels/import/browse" + (String.IsNullOrEmpty(path) ? "" : "?path=" + ArmadaQueryString.Base64Url(path)), null, token);
+            List<string> parts = new List<string>();
+            if (!String.IsNullOrEmpty(path)) parts.Add("path=" + ArmadaQueryString.Base64Url(path));
+            if (page != null)
+            {
+                parts.Add("pageNumber=" + page.PageNumber);
+                parts.Add("pageSize=" + page.PageSize);
+            }
+
+            return GetAsync<VesselBrowseResult>("/api/v1/vessels/import/browse" + (parts.Count == 0 ? "" : "?" + String.Join("&", parts)), null, token);
+        }
+
+        /// <summary>
+        /// Dashboard <c>browseAllVesselImport</c>: every entry of one browse directory, read in explicit pages of 1000
+        /// (at most 100 pages). Truncated is set when the server examined fewer entries than the directory holds or
+        /// the page cap was reached.
+        /// </summary>
+        /// <param name="path">Directory on the Admiral host, or null for the allowed roots.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The first page's fields with every entry, or null.</returns>
+        /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
+        public async Task<VesselBrowseResult?> BrowseAllVesselImportAsync(string? path = null, CancellationToken token = default)
+        {
+            VesselBrowseResult? first = await BrowseVesselImportAsync(path, new EnumerationQuery { PageNumber = 1, PageSize = 1000 }, token).ConfigureAwait(false);
+            if (first == null) return null;
+            int pages = Math.Min(first.TotalPages, 100);
+            for (int pageNumber = 2; pageNumber <= pages; pageNumber++)
+            {
+                token.ThrowIfCancellationRequested();
+                VesselBrowseResult? next = await BrowseVesselImportAsync(path, new EnumerationQuery { PageNumber = pageNumber, PageSize = 1000 }, token).ConfigureAwait(false);
+                if (next == null || next.Entries.Count == 0) break;
+                first.Entries.AddRange(next.Entries);
+            }
+
+            if (first.TotalPages > pages) first.Truncated = true;
+            return first;
         }
 
         /// <summary>

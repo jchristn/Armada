@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { getFleet, listVessels, listPipelines, createFleet, updateFleet, deleteFleet, apiErrorMessage } from '../api/client';
 import { listAll } from '../api/paging';
 import type { Fleet, Vessel, Pipeline } from '../types/models';
@@ -13,10 +13,12 @@ import ErrorModal from '../components/shared/ErrorModal';
 import { useLocale } from '../context/LocaleContext';
 import { useNotifications } from '../context/NotificationContext';
 import { buildFleetDuplicatePayload } from '../lib/duplicates';
+import { useDeleteProgress } from '../lib/useDeleteProgress';
 
 export default function FleetDetail() {
   const { t, formatDateTime } = useLocale();
   const { pushToast } = useNotifications();
+  const deletion = useDeleteProgress();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [fleet, setFleet] = useState<Fleet | null>(null);
@@ -87,11 +89,9 @@ export default function FleetDetail() {
       message: t('Delete fleet "{{name}}"? This cannot be undone.', { name: fleet.name }),
       onConfirm: async () => {
         setConfirm(c => ({ ...c, open: false }));
-        try {
-          await deleteFleet(fleet.id);
-          pushToast('warning', t('Fleet "{{name}}" deleted.', { name: fleet.name }));
-          navigate('/fleets');
-        } catch { setError(t('Delete failed.')); }
+        if (!(await deletion.run({ kind: 'fleet', action: () => deleteFleet(fleet.id), errorMessage: (err) => apiErrorMessage(err, t('Delete failed.')) }))) return;
+        pushToast('warning', t('Fleet "{{name}}" deleted.', { name: fleet.name }));
+        navigate('/fleets');
       },
     });
   }
@@ -114,11 +114,10 @@ export default function FleetDetail() {
   return (
     <div>
       <PageHeader
-        breadcrumb={
-          <>
-            <Link to="/fleets" title={t('Back to the list of all fleets.')}>{t('Fleets')}</Link> <span className="breadcrumb-sep">&gt;</span> <span>{fleet.name}</span>
-          </>
-        }
+        breadcrumb={[
+          { label: t('Fleets'), to: '/fleets', title: t('Back to the list of all fleets.') },
+          { label: fleet.name },
+        ]}
         title={fleet.name}
         actions={
           <>
@@ -160,6 +159,7 @@ export default function FleetDetail() {
       <JsonViewer open={jsonData.open} title={jsonData.title} data={jsonData.data} onClose={() => setJsonData({ open: false, title: '', data: null })} />
       <ConfirmDialog open={confirm.open} title={confirm.title} message={confirm.message}
         onConfirm={confirm.onConfirm} onCancel={() => setConfirm(c => ({ ...c, open: false }))} />
+      {deletion.dialog}
 
       {/* Fleet Info */}
       <div className="detail-grid">

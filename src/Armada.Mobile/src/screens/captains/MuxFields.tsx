@@ -32,7 +32,7 @@ export function MuxFields({ runtime, form, onChange }: MuxFieldsProps) {
     try {
       const result = await listMuxEndpoints(configDirectory || undefined);
       if (!result.success) throw new Error(result.errorMessage || result.errorCode || t('Mux endpoint discovery failed.'));
-      setEndpoints(result.endpoints ?? []);
+      setEndpoints(result.objects ?? []);
       setLoadError('');
     } catch (e) {
       setEndpoints([]);

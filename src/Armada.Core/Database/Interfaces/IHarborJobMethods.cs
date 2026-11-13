@@ -46,5 +46,21 @@ namespace Armada.Core.Database.Interfaces
         /// Delete every record of a Harbor. Returns the number deleted.
         /// </summary>
         Task<int> DeleteByHarborAsync(string harborId, CancellationToken token = default);
+
+        /// <summary>
+        /// One page of a Harbor's job records, counted and cut in the data source, ordered by launch time (newest first
+        /// unless the query asks for CreatedAscending) with the row id as the tie-break. With <paramref name="openOnly"/>
+        /// only jobs that have not ended; otherwise the jobs launched before <paramref name="toUtc"/> that had not ended
+        /// before <paramref name="fromUtc"/> (the same window as <see cref="EnumerateAsync"/>).
+        /// </summary>
+        /// <param name="harborId">Harbor identifier.</param>
+        /// <param name="openOnly">Only jobs that have not ended.</param>
+        /// <param name="fromUtc">Window start (ignored with openOnly).</param>
+        /// <param name="toUtc">Window end (ignored with openOnly).</param>
+        /// <param name="query">Paging and order.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The page with exact totals.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when harborId or query is null.</exception>
+        Task<EnumerationResult<HarborJobRecord>> EnumeratePageAsync(string harborId, bool openOnly, DateTime fromUtc, DateTime toUtc, EnumerationQuery query, CancellationToken token = default);
     }
 }

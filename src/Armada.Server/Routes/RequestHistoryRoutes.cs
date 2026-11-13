@@ -110,14 +110,22 @@ namespace Armada.Server.Routes
                 if (query.BucketMinutes <= 0) query.BucketMinutes = 15;
                 ApplyScope(ctx, query);
 
-                List<RequestHistoryEntry> entries = await _database.RequestHistory.EnumerateForSummaryAsync(query).ConfigureAwait(false);
-                return RequestHistorySummaryBuilder.Build(entries, query);
+                try
+                {
+                    RequestHistorySummaryBuilder.ValidateWindow(query);
+                    List<RequestHistoryEntry> entries = await _database.RequestHistory.EnumerateForSummaryAsync(query).ConfigureAwait(false);
+                    return (object)RequestHistorySummaryBuilder.Build(entries, query);
+                }
+                catch (Exception ex) when (RouteErrorMapper.IsMapped(ex))
+                {
+                    return RouteErrorMapper.ToResponse(req, ex);
+                }
             },
             api => api
                 .WithTag("RequestHistory")
                 .WithSummary("Summarize request history")
-                .WithDescription("Returns aggregate counts and bucketed request activity for the supplied filters and time window.")
-                .WithParameter(OpenApiParameterMetadata.Query("bucketMinutes", "Bucket width in minutes", false, OpenApiSchemaMetadata.Integer()))
+                .WithDescription("Returns aggregate counts and bucketed request activity for the supplied filters and time window. At most 1000 buckets: a window and bucketMinutes that would produce more is rejected with 400 (Data.Code CollectionLimitExceeded).")
+                .WithParameter(OpenApiParameterMetadata.Query("bucketMinutes", "Bucket width in minutes (default 15, 1 to 527040)", false, OpenApiSchemaMetadata.Integer()))
                 .WithParameter(OpenApiParameterMetadata.Query("fromUtc", "UTC summary start timestamp", false))
                 .WithParameter(OpenApiParameterMetadata.Query("toUtc", "UTC summary end timestamp", false))
                 .WithParameter(OpenApiParameterMetadata.Query("method", "Optional HTTP method filter", false))
@@ -125,6 +133,7 @@ namespace Armada.Server.Routes
                 .WithParameter(OpenApiParameterMetadata.Query("statusCode", "Optional status-code filter", false, OpenApiSchemaMetadata.Integer()))
                 .WithParameter(OpenApiParameterMetadata.Query("principal", "Optional principal filter", false))
                 .WithResponse(200, OpenApiJson.For<RequestHistorySummaryResult>("Request-history summary"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
                 .WithSecurity("ApiKey"));
 
             app.Get("/api/v1/request-history/{id}", async (ApiRequest req) =>
@@ -190,6 +199,16 @@ namespace Armada.Server.Routes
                     return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Ids is required and must not be empty" };
                 }
 
+                // The request (and so the Skipped list derived from it) is bounded; nothing is deleted when it is over.
+                try
+                {
+                    CollectionLimits.RequireRequestItems(body.Ids, "Ids");
+                }
+                catch (CollectionLimitExceededException limit)
+                {
+                    return RouteErrorMapper.LimitExceeded(req, limit);
+                }
+
                 RequestHistoryQuery scopeQuery = new RequestHistoryQuery();
                 ApplyScope(ctx, scopeQuery);
 
@@ -219,7 +238,7 @@ namespace Armada.Server.Routes
             api => api
                 .WithTag("RequestHistory")
                 .WithSummary("Delete multiple request-history entries")
-                .WithDescription("Deletes multiple request-history records by identifier within the caller's scope.")
+                .WithDescription("Deletes multiple request-history records by identifier within the caller's scope. At most 1000 ids; more is rejected with 400 (Data.Code CollectionLimitExceeded) and nothing is deleted. Skipped has one entry per id that was not deleted, so it is bounded by the request.")
                 .WithRequestBody(OpenApiJson.BodyFor<DeleteMultipleRequest>("List of request-history IDs to delete"))
                 .WithResponse(200, OpenApiJson.For<DeleteMultipleResult>("Delete summary"))
                 .WithResponse(400, OpenApiResponseMetadata.BadRequest())

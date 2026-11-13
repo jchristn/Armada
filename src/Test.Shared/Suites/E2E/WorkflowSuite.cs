@@ -109,10 +109,11 @@ namespace Test.Shared.Suites.E2E
                     string voyageId = voyage.Id!;
                     AssertStartsWith("vyg_", voyageId);
                     AssertEqual("InProgress", voyage.Status.ToString());
+                    await E2eBackgroundLaunch.SettleAsync(authClient).ConfigureAwait(false);
                     AssertTrue(agents.StartedProcessIds.Count > launchedBefore, "a mission was launched on the stub runtime");
 
                     // Verify voyage details show missions
-                    VoyageDetailResponse voyageDetail = await GetAsync<VoyageDetailResponse>(authClient, "/api/v1/voyages/" + voyageId).ConfigureAwait(false);
+                    VoyageDetailView voyageDetail = await VoyageDetailView.ReadAsync(authClient, await authClient.GetAsync("/api/v1/voyages/" + voyageId).ConfigureAwait(false)).ConfigureAwait(false);
                     AssertEqual(3, voyageDetail.Missions!.Count);
                     AssertTrue(voyageDetail.Missions.Any(m => m.Status == MissionStatusEnum.InProgress), "one mission is InProgress");
 
@@ -129,7 +130,7 @@ namespace Test.Shared.Suites.E2E
                     Assert(cancelResult.Voyage != null, "Cancel response should have Voyage property");
 
                     // Verify via GET that the voyage is cancelled and its waiting missions with it
-                    VoyageDetailResponse cancelledDetail = await GetAsync<VoyageDetailResponse>(authClient, "/api/v1/voyages/" + voyageId).ConfigureAwait(false);
+                    VoyageDetailView cancelledDetail = await VoyageDetailView.ReadAsync(authClient, await authClient.GetAsync("/api/v1/voyages/" + voyageId).ConfigureAwait(false)).ConfigureAwait(false);
                     AssertEqual(VoyageStatusEnum.Cancelled, cancelledDetail.Voyage!.Status, "voyage status after cancel");
                     AssertFalse(cancelledDetail.Missions!.Any(m => m.Status == MissionStatusEnum.Pending || m.Status == MissionStatusEnum.Assigned),
                         "no mission of a cancelled voyage is still waiting for a captain");

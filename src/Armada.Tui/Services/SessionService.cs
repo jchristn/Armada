@@ -110,6 +110,7 @@ namespace Armada.Tui.Services
 
         #region Private-Members
 
+        private const int _TenantLookupPageSize = 100;
         private readonly Func<string, ArmadaClient> _ClientFactory;
         private readonly ICredentialStore _Credentials;
         private readonly PreferencesService _Prefs;
@@ -188,12 +189,24 @@ namespace Armada.Tui.Services
         /// </summary>
         /// <param name="email">Email.</param>
         /// <param name="token">Cancellation token.</param>
-        /// <returns>Tenants (possibly empty).</returns>
+        /// <returns>Every tenant (possibly empty), read one bounded page at a time.</returns>
         /// <exception cref="ArmadaApiException">Thrown when the lookup fails.</exception>
         public async Task<List<TenantListEntry>> LookupTenantsAsync(string email, CancellationToken token = default)
         {
-            TenantLookupResult? result = await Client.LookupTenantsAsync(email.Trim(), token).ConfigureAwait(false);
-            return result?.Tenants ?? new List<TenantListEntry>();
+            // The picker needs every tenant, so walk the pages explicitly until TotalPages.
+            List<TenantListEntry> tenants = new List<TenantListEntry>();
+            int pageNumber = 1;
+            while (true)
+            {
+                token.ThrowIfCancellationRequested();
+                TenantLookupResult? result = await Client.LookupTenantsAsync(email.Trim(), pageNumber, _TenantLookupPageSize, token).ConfigureAwait(false);
+                if (result == null) break;
+                tenants.AddRange(result.Tenants);
+                if (result.Tenants.Count == 0 || pageNumber >= result.TotalPages) break;
+                pageNumber++;
+            }
+
+            return tenants;
         }
 
         /// <summary>

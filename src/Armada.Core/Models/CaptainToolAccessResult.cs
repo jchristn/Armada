@@ -3,6 +3,7 @@ namespace Armada.Core.Models
     using System;
     using System.Collections.Generic;
     using Armada.Core.Enums;
+    using Armada.Core.Services;
 
     /// <summary>
     /// Describes the tool sources and named tools visible from a specific captain runtime.
@@ -82,13 +83,38 @@ namespace Armada.Core.Models
         public int ReachableServerCount { get; set; } = 0;
 
         /// <summary>
-        /// Source summaries discovered for this captain runtime.
+        /// Source summaries discovered for this captain runtime: one per configured MCP server plus the runtime's own
+        /// sources. At most <see cref="CollectionLimits.MaxConfigItems"/>; a runtime configuration with more sources is
+        /// rejected (CollectionLimitExceeded) rather than cut short.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxConfigItems)]
         public List<CaptainToolServerSummary> Servers { get; set; } = new List<CaptainToolServerSummary>();
 
         /// <summary>
-        /// Tools currently described for this captain runtime.
+        /// Total named tools of every source kind in the snapshot (before any source-kind filter).
         /// </summary>
-        public List<CaptainToolSummary> Tools { get; set; } = new List<CaptainToolSummary>();
+        public int ToolCount { get; set; } = 0;
+
+        /// <summary>
+        /// Named tools reported by MCP servers.
+        /// </summary>
+        public int McpToolCount { get; set; } = 0;
+
+        /// <summary>
+        /// Named tools built into the runtime.
+        /// </summary>
+        public int RuntimeBuiltInToolCount { get; set; } = 0;
+
+        /// <summary>
+        /// When the runtime was probed for this snapshot (UTC). Paging requests within
+        /// <see cref="CaptainToolsQuery.SnapshotReuseSeconds"/> reuse it unless they ask to refresh.
+        /// </summary>
+        public DateTime SnapshotUtc { get; set; } = DateTime.UtcNow;
+
+        /// <summary>
+        /// One page of the named tools, ordered by source kind, source, and name, filtered by the query's source kind.
+        /// Every tool of a page-able inventory is read through further pages.
+        /// </summary>
+        public EnumerationResult<CaptainToolSummary> Tools { get; set; } = new EnumerationResult<CaptainToolSummary>();
     }
 }

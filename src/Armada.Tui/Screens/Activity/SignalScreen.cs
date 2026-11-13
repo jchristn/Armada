@@ -139,8 +139,9 @@ namespace Armada.Tui.Screens.Activity
             {
                 Signal = s;
                 Banner = s == null ? Context.Loc.T("Failed to load signal.") : "";
+                if (s == null) ShowUnavailable();
                 Rebuild();
-            }, "Failed to load signal.", ex => { Banner = Context.Loc.T("Failed to load signal."); });
+            }, "Failed to load signal.", ex => { Banner = Context.Loc.T("Failed to load signal."); ShowUnavailable(); });
             ScreenOps.Quiet(Context, () => Context.Client.GetEntityAsync("signals", SignalId), raw =>
             {
                 MissionId = raw?.As<SignalMissionLink>()?.MissionId;
@@ -192,6 +193,13 @@ namespace Armada.Tui.Screens.Activity
             return c != null && !String.IsNullOrEmpty(c.Name) ? c.Name : id;
         }
 
+        private void ShowUnavailable()
+        {
+            // Replace the "Loading..." row, which would otherwise stay under the error banner.
+            Details.Clear();
+            Details.Add("Press F5 to retry.", "");
+        }
+
         private void Rebuild()
         {
             Signal? s = Signal;
@@ -223,7 +231,7 @@ namespace Armada.Tui.Screens.Activity
             string id = Signal.Id;
             Context.Confirm("Delete", Context.Loc.T("Delete {{entity}} {{name}}?", LocalizationArgs.Of("entity", Context.Loc.T("Signal").ToLowerInvariant(), "name", id)), () =>
             {
-                ScreenOps.Run(Context, () => Context.Client.DeleteSignalsBatchAsync(new List<string> { id }), r =>
+                DeleteProgress.Run(Context, "Deleting signal", ct => Context.Client.DeleteSignalsBatchAsync(new List<string> { id }, ct), r =>
                 {
                     ScreenOps.Toast(Context, NotificationSeverityEnum.Warning, "Signal {{id}} deleted.", LocalizationArgs.Of("id", id));
                     Context.Navigate("/activity?source=signals");

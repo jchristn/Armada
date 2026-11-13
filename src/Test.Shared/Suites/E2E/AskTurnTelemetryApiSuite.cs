@@ -24,6 +24,9 @@ namespace Test.Shared.Suites.E2E
         #region Private-Members
 
         private const string SuiteId = "E2E.AskTurnTelemetry";
+
+        // Tool calls of each reply, read from the paged tool call route when the reply is read.
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, List<AskMessageToolCall>> _ToolCalls = new System.Collections.Concurrent.ConcurrentDictionary<string, List<AskMessageToolCall>>(StringComparer.Ordinal);
         private const int TurnTimeoutMs = 60000;
         private readonly StubCaptainBehavior _Behavior = new StubCaptainBehavior();
 
@@ -71,8 +74,9 @@ namespace Test.Shared.Suites.E2E
                 AssertNotNull(m.StreamingMs, "streaming time");
                 AssertEqual((double)reply.DurationMs!.Value, m.TotalMs, "total time is the turn duration");
                 AssertEqual(1, m.ToolCallCount, "one tool call");
-                AssertEqual(1, reply.ToolCalls.Count, "the tool call is on the reply");
-                AssertEqual((double)(reply.ToolCalls[0].ElapsedMs ?? 0), m.ToolTimeMs, "tool time is the call's time");
+                List<AskMessageToolCall> replyCalls = _ToolCalls[reply.Id];
+                AssertEqual(1, replyCalls.Count, "the tool call is on the reply");
+                AssertEqual((double)(replyCalls[0].ElapsedMs ?? 0), m.ToolTimeMs, "tool time is the call's time");
             }));
 
             cases.Add(CaseAsync("reply_without_usage_has_timing_and_estimate", "A reply whose runtime reports no usage carries timing and an estimated token count only", TestTags.Negative, async () =>
@@ -139,7 +143,10 @@ namespace Test.Shared.Suites.E2E
             AskMessagePage page = await JsonHelper.DeserializeAsync<AskMessagePage>(await client.PostAsync("/api/v1/ask/threads/" + thread.Id + "/messages/enumerate", JsonHelper.ToJsonContent(new { })).ConfigureAwait(false)).ConfigureAwait(false);
             AskMessage? reply = page.Messages.FirstOrDefault(x => x.Id == end.Data.MessageId);
             AssertNotNull(reply, "the reply is listed");
-            return reply!;
+            EnumerationResult<AskMessageToolCall> calls = await JsonHelper.DeserializeAsync<EnumerationResult<AskMessageToolCall>>(await client.PostAsync("/api/v1/ask/threads/" + thread.Id + "/messages/" + reply!.Id + "/tool-calls/enumerate", JsonHelper.ToJsonContent(new { Order = "CreatedAscending" })).ConfigureAwait(false)).ConfigureAwait(false);
+            AssertEqual((long)reply.ToolCallCount, calls.TotalRecords, "the tool call count matches the paged tool calls");
+            _ToolCalls[reply.Id] = calls.Objects;
+            return reply;
         }
 
         private static TestCaseDescriptor CaseAsync(string caseId, string displayName, string tag, Func<Task> body)

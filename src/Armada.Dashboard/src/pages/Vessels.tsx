@@ -28,12 +28,14 @@ import ImportWizard from '../components/vessels/import/ImportWizard';
 import RunActionModal from '../components/fleetActions/RunActionModal';
 import VesselFormModal from '../components/vessels/VesselFormModal';
 import { findLandingMode, getLandingModes } from '../lib/vesselForm';
+import { useDeleteProgress } from '../lib/useDeleteProgress';
 
 
 export default function Vessels() {
   const navigate = useNavigate();
   const location = useLocation();
   const { t } = useLocale();
+  const deletion = useDeleteProgress();
   const { pushToast } = useNotifications();
   const { isTenantAdmin, user } = useAuth();
 
@@ -149,11 +151,9 @@ export default function Vessels() {
       message: t('Delete vessel "{{name}}"? This cannot be undone.', { name }),
       onConfirm: async () => {
         setConfirm(c => ({ ...c, open: false }));
-        try {
-          await deleteVessel(id);
-          pushToast('warning', t('Vessel "{{name}}" deleted.', { name }));
-          load();
-        } catch { setError(t('Delete failed.')); }
+        if (!(await deletion.run({ kind: 'vessel', action: () => deleteVessel(id) }))) return;
+        pushToast('warning', t('Vessel "{{name}}" deleted.', { name }));
+        load();
       },
     });
   }
@@ -168,9 +168,16 @@ export default function Vessels() {
         const ids = [...table.selected];
         table.setSelected([]);
         let failed = 0;
-        for (const id of ids) {
-          try { await deleteVessel(id); } catch { failed++; }
-        }
+        await deletion.run({
+          kind: 'vessel',
+          count: ids.length,
+          action: async () => {
+            failed = 0;
+            for (const id of ids) {
+              try { await deleteVessel(id); } catch { failed++; }
+            }
+          },
+        });
         const success = ids.length - failed;
         if (success > 0) {
           pushToast(failed > 0 ? 'warning' : 'success', failed > 0
@@ -374,6 +381,7 @@ export default function Vessels() {
           }}
         />
       )}
+      {deletion.dialog}
       <ConfirmDialog open={confirm.open} title={confirm.title} message={confirm.message}
         onConfirm={confirm.onConfirm} onCancel={() => setConfirm(c => ({ ...c, open: false }))} />
 

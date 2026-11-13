@@ -22,19 +22,19 @@ namespace Armada.Core.Services
         #region Public-Methods
 
         /// <inheritdoc />
-        public Task<WorkspaceTreeResult> GetTreeAsync(Vessel vessel, string? path = null, CancellationToken token = default)
+        public Task<WorkspaceTreeResult> GetTreeAsync(Vessel vessel, string? path = null, EnumerationQuery? page = null, CancellationToken token = default)
         {
             token.ThrowIfCancellationRequested();
-            WorkspaceTreeResult result = WorkspaceFileEngine.GetTree(GetWorkspaceRoot(vessel), path);
+            WorkspaceTreeResult result = WorkspaceFileEngine.GetTree(GetWorkspaceRoot(vessel), path, page ?? new EnumerationQuery());
             result.VesselId = vessel.Id;
             return Task.FromResult(result);
         }
 
         /// <inheritdoc />
-        public async Task<WorkspaceTreeResult> GetTreeAsync(VesselHost host, string? path = null, CancellationToken token = default)
+        public async Task<WorkspaceTreeResult> GetTreeAsync(VesselHost host, string? path = null, EnumerationQuery? page = null, CancellationToken token = default)
         {
             if (host == null) throw new ArgumentNullException(nameof(host));
-            WorkspaceTreeResult result = await host.Files.GetTreeAsync(path, token).ConfigureAwait(false);
+            WorkspaceTreeResult result = await host.Files.GetTreeAsync(path, page ?? new EnumerationQuery(), token).ConfigureAwait(false);
             result.VesselId = host.Vessel.Id;
             return result;
         }
@@ -146,23 +146,25 @@ namespace Armada.Core.Services
         }
 
         /// <inheritdoc />
-        public Task<WorkspaceChangesResult> GetChangesAsync(Vessel vessel, CancellationToken token = default)
+        public async Task<WorkspaceChangesResult> GetChangesAsync(Vessel vessel, EnumerationQuery? page = null, CancellationToken token = default)
         {
             token.ThrowIfCancellationRequested();
-            return GetChangesAsync(GetWorkspaceRoot(vessel), new LocalHostCommandExecutor(), token);
+            WorkspaceChangesResult changes = await GetChangesAsync(GetWorkspaceRoot(vessel), new LocalHostCommandExecutor(), token).ConfigureAwait(false);
+            return PageChanges(changes, page ?? new EnumerationQuery());
         }
 
         /// <inheritdoc />
-        public Task<WorkspaceChangesResult> GetChangesAsync(VesselHost host, CancellationToken token = default)
+        public async Task<WorkspaceChangesResult> GetChangesAsync(VesselHost host, EnumerationQuery? page = null, CancellationToken token = default)
         {
             if (host == null) throw new ArgumentNullException(nameof(host));
-            return GetChangesAsync(host.WorkingDirectory, host.Commands, token);
+            WorkspaceChangesResult changes = await GetChangesAsync(host.WorkingDirectory, host.Commands, token).ConfigureAwait(false);
+            return PageChanges(changes, page ?? new EnumerationQuery());
         }
 
         /// <inheritdoc />
         public async Task<WorkspaceStatusResult> GetStatusAsync(
             Vessel vessel,
-            IReadOnlyList<WorkspaceActiveMission>? activeMissions = null,
+            int activeMissionCount = 0,
             CancellationToken token = default)
         {
             if (vessel == null) throw new ArgumentNullException(nameof(vessel));
@@ -175,32 +177,32 @@ namespace Armada.Core.Services
             }
 
             if (String.IsNullOrWhiteSpace(normalizedRoot) || !Directory.Exists(normalizedRoot))
-                return Unavailable(vessel, activeMissions, "No working directory configured or directory does not exist.", normalizedRoot);
+                return Unavailable(vessel, activeMissionCount, "No working directory configured or directory does not exist.", normalizedRoot);
 
-            WorkspaceChangesResult changes = await GetChangesAsync(vessel, token).ConfigureAwait(false);
-            return BuildStatus(vessel, normalizedRoot, null, "Admiral", changes, activeMissions);
+            WorkspaceChangesResult changes = await GetChangesAsync(GetWorkspaceRoot(vessel), new LocalHostCommandExecutor(), token).ConfigureAwait(false);
+            return BuildStatus(vessel, normalizedRoot, null, "Admiral", changes, activeMissionCount);
         }
 
         /// <inheritdoc />
         public async Task<WorkspaceStatusResult> GetStatusAsync(
             VesselHost host,
-            IReadOnlyList<WorkspaceActiveMission>? activeMissions = null,
+            int activeMissionCount = 0,
             CancellationToken token = default)
         {
             if (host == null) throw new ArgumentNullException(nameof(host));
-            WorkspaceChangesResult changes = await GetChangesAsync(host, token).ConfigureAwait(false);
-            return BuildStatus(host.Vessel, host.WorkingDirectory, host.HarborId, host.HostLabel, changes, activeMissions);
+            WorkspaceChangesResult changes = await GetChangesAsync(host.WorkingDirectory, host.Commands, token).ConfigureAwait(false);
+            return BuildStatus(host.Vessel, host.WorkingDirectory, host.HarborId, host.HostLabel, changes, activeMissionCount);
         }
 
         /// <summary>
         /// The status of a vessel that has no checkout Armada can use.
         /// </summary>
         /// <param name="vessel">Vessel.</param>
-        /// <param name="activeMissions">Active missions.</param>
+        /// <param name="activeMissionCount">Number of active missions on the vessel.</param>
         /// <param name="error">Why there is no checkout and what to set.</param>
         /// <param name="rootPath">The configured working directory, or null.</param>
         /// <returns>The status.</returns>
-        public static WorkspaceStatusResult Unavailable(Vessel vessel, IReadOnlyList<WorkspaceActiveMission>? activeMissions, string error, string? rootPath)
+        public static WorkspaceStatusResult Unavailable(Vessel vessel, int activeMissionCount, string error, string? rootPath)
         {
             if (vessel == null) throw new ArgumentNullException(nameof(vessel));
             return new WorkspaceStatusResult
@@ -208,8 +210,7 @@ namespace Armada.Core.Services
                 VesselId = vessel.Id,
                 HasWorkingDirectory = false,
                 RootPath = rootPath,
-                ActiveMissionCount = activeMissions?.Count ?? 0,
-                ActiveMissions = activeMissions?.ToList() ?? new List<WorkspaceActiveMission>(),
+                ActiveMissionCount = activeMissionCount,
                 Error = error
             };
         }
@@ -367,7 +368,7 @@ namespace Armada.Core.Services
             string? harborId,
             string hostLabel,
             WorkspaceChangesResult changes,
-            IReadOnlyList<WorkspaceActiveMission>? activeMissions)
+            int activeMissionCount)
         {
             return new WorkspaceStatusResult
             {
@@ -378,12 +379,22 @@ namespace Armada.Core.Services
                 IsDirty = changes.IsDirty,
                 CommitsAhead = changes.CommitsAhead,
                 CommitsBehind = changes.CommitsBehind,
-                ActiveMissionCount = activeMissions?.Count ?? 0,
-                ActiveMissions = activeMissions?.ToList() ?? new List<WorkspaceActiveMission>(),
+                ActiveMissionCount = activeMissionCount,
                 Error = changes.Error,
                 HarborId = harborId,
                 Host = hostLabel
             };
+        }
+
+        private static WorkspaceChangesResult PageChanges(WorkspaceChangesResult changes, EnumerationQuery page)
+        {
+            List<WorkspaceChangeEntry> all = changes.Changes ?? new List<WorkspaceChangeEntry>();
+            changes.TotalRecords = all.Count;
+            changes.PageNumber = page.PageNumber;
+            changes.PageSize = page.PageSize;
+            changes.TotalPages = (int)Math.Ceiling((double)all.Count / page.PageSize);
+            changes.Changes = all.Skip(page.Offset).Take(page.PageSize).ToList();
+            return changes;
         }
 
         private static async Task<WorkspaceChangesResult> GetChangesAsync(string rootPath, IHostCommandExecutor commands, CancellationToken token)

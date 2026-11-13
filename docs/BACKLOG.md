@@ -164,7 +164,8 @@ Refinement tools:
 
 - `list_backlog_refinement_sessions`
 - `create_backlog_refinement_session`
-- `get_backlog_refinement_session`
+- `get_backlog_refinement_session` (session detail with `messageCount`)
+- `list_backlog_refinement_session_messages` (one page of the transcript, newest first)
 - `send_backlog_refinement_message`
 - `summarize_backlog_refinement_session`
 - `apply_backlog_refinement_summary`
@@ -173,8 +174,9 @@ Refinement tools:
 Planning handoff tools:
 
 - `create_backlog_planning_session`
-- `get_backlog_planning_session`
-- `dispatch_backlog_planning_session`
+- `get_backlog_planning_session` (session detail with `messageCount` and `linkedObjectiveCount`)
+- `list_backlog_planning_session_messages` (one page of the transcript, newest first)
+- `dispatch_backlog_planning_session` (returns the voyage and `linkedObjectiveCount`)
 
 See [MCP_API.md](./MCP_API.md) for tool details.
 

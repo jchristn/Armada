@@ -2,6 +2,7 @@ namespace Armada.Core.Models
 {
     using System.Collections.Generic;
     using Armada.Core.Enums;
+    using Armada.Core.Services;
 
     /// <summary>
     /// Start a runbook execution.
@@ -36,6 +37,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// Parameter values for substitution and execution context.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxConfigItems)]
         public Dictionary<string, string>? ParameterValues { get; set; } = null;
 
         /// <summary>

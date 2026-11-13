@@ -17,25 +17,9 @@ namespace Armada.Server.Mcp
         public bool? Summary { get; set; }
 
         /// <summary>
-        /// Include full mission objects in the response (default false). Only applies when summary is false.
+        /// Removed. Missions are never embedded; true is rejected with InvalidArgument naming the replacement (enumerate
+        /// with entityType missions and voyageId).
         /// </summary>
         public bool? IncludeMissions { get; set; }
-
-        /// <summary>
-        /// Include Description field on embedded missions (default false).
-        /// </summary>
-        public bool? IncludeDescription { get; set; }
-
-        /// <summary>
-        /// Include saved diff for each mission (default false).
-        /// </summary>
-        public bool? IncludeDiffs { get; set; }
-
-        /// <summary>
-        /// Include log excerpt for each mission (default false).
-        /// Currently reserved for future use -- logs are stored in external files
-        /// and are not available on the mission object.
-        /// </summary>
-        public bool? IncludeLogs { get; set; }
     }
 }

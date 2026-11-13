@@ -21,12 +21,14 @@ import {
   type CheckRunComparison,
 } from '../lib/checkRunComparison';
 import { formatCheckDuration, formatCoverageMetric } from '../lib/deliveryForms';
+import { useDeleteProgress } from '../lib/useDeleteProgress';
 
 export default function CheckRunDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { t, formatDateTime } = useLocale();
   const { pushToast } = useNotifications();
+  const deletion = useDeleteProgress();
 
   const [run, setRun] = useState<CheckRun | null>(null);
   const [vessel, setVessel] = useState<Vessel | null>(null);
@@ -109,13 +111,9 @@ export default function CheckRunDetail() {
       message: t('Delete check run "{{id}}"?', { id: run.id }),
       onConfirm: async () => {
         setConfirm((current) => ({ ...current, open: false }));
-        try {
-          await deleteCheckRun(run.id);
-          pushToast('warning', t('Check run deleted.'));
-          navigate('/checks');
-        } catch (err: unknown) {
-          setError(err instanceof Error ? err.message : t('Delete failed.'));
-        }
+        if (!(await deletion.run({ kind: 'checkRun', action: () => deleteCheckRun(run.id), errorMessage: (err) => (err instanceof Error ? err.message : t('Delete failed.')) }))) return;
+        pushToast('warning', t('Check run deleted.'));
+        navigate('/checks');
       },
     });
   }
@@ -126,11 +124,10 @@ export default function CheckRunDetail() {
   return (
     <div>
       <PageHeader
-        breadcrumb={
-          <>
-            <Link to="/checks">{t('Checks')}</Link> <span className="breadcrumb-sep">&gt;</span> <span>{run.label || run.id}</span>
-          </>
-        }
+        breadcrumb={[
+          { label: t('Checks'), to: '/checks' },
+          { label: run.label || run.id },
+        ]}
         title={run.label || run.type}
         actions={
           <>
@@ -174,6 +171,7 @@ export default function CheckRunDetail() {
         onConfirm={confirm.onConfirm}
         onCancel={() => setConfirm((current) => ({ ...current, open: false }))}
       />
+      {deletion.dialog}
 
       <div className="detail-grid" style={{ marginBottom: '1rem' }}>
         <div className="detail-field">
@@ -322,7 +320,7 @@ export default function CheckRunDetail() {
               <span key={index + 1}>{index + 1}</span>
             ))}
           </div>
-          <pre className="workspace-code-block" style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{run.output || t('No output captured.')}</pre>
+          <pre className="workspace-code-block" style={{ margin: 0, whiteSpace: 'pre' }}>{run.output || t('No output captured.')}</pre>
         </div>
       </div>
     </div>

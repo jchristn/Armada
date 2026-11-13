@@ -24,6 +24,14 @@ const RAW = [
 ].join('\n');
 
 describe('DiffViewer', () => {
+  it('shows an unavailable diff as an error without claiming there are no modified files', () => {
+    render(<DiffViewer open title="Diff" rawDiff={RAW} error="No mission worktree or saved diff exists" onClose={() => {}} />);
+    expect(screen.getByRole('alert')).toHaveTextContent('No mission worktree or saved diff exists');
+    expect(screen.queryByText('No modified files')).not.toBeInTheDocument();
+    expect(screen.queryByText('Copy Raw')).not.toBeInTheDocument();
+    expect(screen.queryByText('a.txt')).not.toBeInTheDocument();
+  });
+
   it('counts files and +/- from hunk ranges, including an added "++ " line', () => {
     const { container } = render(<DiffViewer open title="Diff" rawDiff={RAW} onClose={() => {}} />);
     expect(container.querySelector('.diff-stat-files')?.textContent).toContain('2');

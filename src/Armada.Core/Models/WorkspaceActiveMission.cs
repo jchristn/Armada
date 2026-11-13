@@ -1,5 +1,7 @@
 namespace Armada.Core.Models
 {
+    using Armada.Core.Services;
+
     /// <summary>
     /// One active mission relevant to a workspace.
     /// </summary>
@@ -23,6 +25,13 @@ namespace Armada.Core.Models
         /// <summary>
         /// Repository-relative scoped files inferred from the mission description.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxConfigItems, Reason = "First scoped paths parsed from the description; ScopedFileCount is the full count")]
         public List<string> ScopedFiles { get; set; } = new List<string>();
+
+        /// <summary>
+        /// Number of distinct scoped paths found in the description (ScopedFiles lists at most
+        /// <see cref="CollectionLimits.MaxConfigItems"/> of them).
+        /// </summary>
+        public int ScopedFileCount { get; set; } = 0;
     }
 }

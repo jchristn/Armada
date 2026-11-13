@@ -26,8 +26,10 @@ describe('navConfig', () => {
     ];
     const sidebarTargets = [dashboardItem, askArmadaItem, ...navSections.flatMap((s) => s.items)].map((i) => i.to);
     expect(sidebarTargets).toEqual(expect.arrayContaining(present));
-    // 13 sidebar destinations; Planning, Jobs, Storage and CLI Tool Permissions are hub tabs since v1.2.0.
+    // Planning, Jobs, Storage, CLI Tool Permissions and Black Box are hub tabs since v1.2.0.
+    // 13 sidebar destinations: Battery packs moved into the Captains hub as a tab (/captains?tab=battery).
     expect(sidebarTargets).toHaveLength(13);
+    expect(sidebarTargets).not.toContain('/battery');
   });
 
   it('lays out the v1.2.0 sections: Activity under Missions, Delivery in BUILD, no ACTIVITY or DELIVERY section', () => {
@@ -38,30 +40,32 @@ describe('navConfig', () => {
     expect(byKey.system).toEqual(['/api-explorer', '/server']);
     const operations = navSections.find((s) => s.key === 'operations')!;
     // Old Activity and Delivery child routes still highlight the section that now hosts them.
-    for (const route of ['/activity', '/jobs', '/events', '/signals', '/requests', '/history', '/planning']) {
+    for (const route of ['/activity', '/jobs', '/events', '/signals', '/requests', '/history', '/planning', '/blackbox']) {
       expect(operations.matchers).toContain(route);
     }
     expect(navSections.find((s) => s.key === 'fleet')!.matchers).toEqual(expect.arrayContaining(['/delivery', '/deployments', '/checks']));
     expect(Object.keys(DEFAULT_EXPANDED_SECTIONS).sort()).toEqual(navSections.map((s) => s.key).sort());
   });
 
-  it('mentions the new tabs in the Activity, Dispatch, and Settings tooltips', () => {
+  it('mentions the new tabs in the Activity, Dispatch, Missions, and Settings tooltips', () => {
     const items = navSections.flatMap((s) => s.items);
-    expect(items.find((i) => i.to === '/activity')!.tooltip).toContain('Jobs tab');
+    expect(items.find((i) => i.to === '/activity')!.tooltip).toContain('events');
     expect(items.find((i) => i.to === '/dispatch')!.tooltip).toContain('Planning tab');
+    expect(items.find((i) => i.to === '/missions')!.tooltip).toContain('Black Box');
     const settings = items.find((i) => i.to === '/server')!.tooltip!;
     expect(settings).toContain('Storage');
     expect(settings).toContain('CLI Tool Permissions');
   });
 
   it('keeps the folded pages searchable in the command palette, pointing at their new tabs', () => {
-    expect(commands.slice(-4)).toEqual([
+    expect(commands.slice(-5)).toEqual([
       { to: '/dispatch?tab=planning', label: 'Planning', section: 'OPERATIONS' },
-      { to: '/activity?source=jobs', label: 'Jobs', section: 'OPERATIONS' },
+      { to: '/missions?tab=blackbox', label: 'Black Box', section: 'OPERATIONS' },
       { to: '/server?tab=storage', label: 'Storage', section: 'SYSTEM' },
       { to: '/server?tab=cli-permissions', label: 'CLI Tool Permissions', section: 'SYSTEM' },
+      { to: '/evaluations', label: 'Evaluations', section: 'BUILD' },
     ]);
-    for (const old of ['/planning', '/jobs', '/storage', '/cli-permissions']) {
+    for (const old of ['/planning', '/jobs', '/storage', '/cli-permissions', '/blackbox']) {
       expect(allTargets).not.toContain(old);
     }
   });

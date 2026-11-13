@@ -16,12 +16,14 @@ import PageHeader from '../components/shared/PageHeader';
 import { useAutoRefresh } from '../lib/useAutoRefresh';
 import { buildEnvironmentDuplicatePayload } from '../lib/duplicates';
 import { ENVIRONMENT_KINDS } from '../lib/environmentForm';
+import { useDeleteProgress } from '../lib/useDeleteProgress';
 
 export default function Environments() {
   const navigate = useNavigate();
   const { isAdmin, isTenantAdmin } = useAuth();
   const { t, formatDateTime, formatRelativeTime } = useLocale();
   const { pushToast } = useNotifications();
+  const deletion = useDeleteProgress();
 
   const [environments, setEnvironments] = useState<DeploymentEnvironment[]>([]);
   const [vessels, setVessels] = useState<Vessel[]>([]);
@@ -225,13 +227,9 @@ export default function Environments() {
       message: t('Delete "{{name}}"? This removes only the environment record.', { name: environment.name }),
       onConfirm: async () => {
         setConfirm((current) => ({ ...current, open: false }));
-        try {
-          await deleteEnvironment(environment.id);
-          pushToast('warning', t('Environment "{{name}}" deleted.', { name: environment.name }));
-          await load();
-        } catch (err: unknown) {
-          setError(err instanceof Error ? err.message : t('Delete failed.'));
-        }
+        if (!(await deletion.run({ kind: 'environment', action: () => deleteEnvironment(environment.id), errorMessage: (err) => (err instanceof Error ? err.message : t('Delete failed.')) }))) return;
+        pushToast('warning', t('Environment "{{name}}" deleted.', { name: environment.name }));
+        await load();
       },
     });
   }
@@ -338,6 +336,7 @@ export default function Environments() {
         onConfirm={confirm.onConfirm}
         onCancel={() => setConfirm((current) => ({ ...current, open: false }))}
       />
+      {deletion.dialog}
 
       {showCreate && (
         <div className="modal-overlay" onClick={() => setShowCreate(false)}>

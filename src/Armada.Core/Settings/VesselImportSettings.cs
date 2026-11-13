@@ -2,6 +2,7 @@ namespace Armada.Core.Settings
 {
     using System;
     using System.Collections.Generic;
+    using Armada.Core.Services;
 
     /// <summary>
     /// Settings for bulk vessel import (discovery and import of many repositories at once). All values apply live.
@@ -13,7 +14,9 @@ namespace Armada.Core.Settings
         /// <summary>
         /// Root directories that discovery and browsing are limited to. Default empty, which limits browsing to the
         /// user profile directory and the drives or mount points under it. Never null.
+        /// At most 256 entries (CollectionLimits.MaxConfigItems); a settings update with more is rejected.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxConfigItems)]
         public List<string> AllowedRoots
         {
             get => _AllowedRoots;
@@ -34,7 +37,9 @@ namespace Armada.Core.Settings
         /// Directory names discovery never descends into (directories starting with a dot are also skipped).
         /// Default: bin, obj, node_modules, dist, .git, .vs, packages, TestResults, .armada, target, venv, .venv,
         /// __pycache__. Setting null yields an empty list.
+        /// At most 256 entries (CollectionLimits.MaxConfigItems); a settings update with more is rejected.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxConfigItems)]
         public List<string> ExcludedDirectoryNames
         {
             get => _ExcludedDirectoryNames;

@@ -3,6 +3,7 @@ namespace Armada.Server
     using System.Collections.Generic;
     using Armada.Core.Enums;
     using Armada.Core.Models;
+    using Armada.Core.Services;
 
     /// <summary>Partial persona update. Omitted routing fields preserve stored settings.</summary>
     public class PersonaUpdateRequest
@@ -15,7 +16,8 @@ namespace Armada.Server
         public string? DefaultCaptainId { get; set; }
         /// <summary>Optional ownership scope, editable by administrators.</summary>
         public ScopeEnum? Scope { get; set; }
-        /// <summary>Ordered matching classes; empty clears, null preserves.</summary>
+        /// <summary>Ordered matching classes; empty clears, null preserves. At most 256 entries.</summary>
+        [CollectionBound(CollectionLimits.MaxConfigItems)]
         public List<PersonaCaptainPriority>? CaptainPriorities { get; set; }
         /// <summary>Optional unavailable-class policy.</summary>
         public PersonaPriorityAvailabilityEnum? PriorityAvailability { get; set; }

@@ -3,6 +3,7 @@ namespace Armada.Core.Models
     using System;
     using System.Collections.Generic;
     using Armada.Core.Enums;
+    using Armada.Core.Services;
 
     /// <summary>
     /// Event-backed operational incident tied to deployments, releases, environments, and missions.
@@ -150,6 +151,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// Identifiers of the rescue missions dispatched for this incident, in dispatch order.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxLinkedIds)]
         public List<string> RescueMissionIds { get; set; } = new List<string>();
 
         /// <summary>

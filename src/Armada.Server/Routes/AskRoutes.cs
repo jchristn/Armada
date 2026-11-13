@@ -154,7 +154,7 @@ namespace Armada.Server.Routes
             api => api
                 .WithTag("Ask")
                 .WithSummary("Read an Ask Armada thread")
-                .WithDescription("Returns the thread, its tracked work (each with its latest snapshot), and its pending proposals.")
+                .WithDescription("Returns the thread with TrackedWorkCount, PendingProposalCount, PendingCliPermissionCount, and the running turn's progress (ActiveTurn, with ToolCallCount). The collections are paged: POST .../work/enumerate, .../proposals/enumerate, .../turn/tool-calls/enumerate, and POST /api/v1/cli-permissions/requests/enumerate with threadId.")
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Thread ID (ath_ prefix)"))
                 .WithResponse(200, OpenApiJson.For<AskThreadDetail>("The thread detail"))
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())
@@ -217,6 +217,14 @@ namespace Armada.Server.Routes
                 DeleteMultipleRequest request = Body<DeleteMultipleRequest>(req) ?? new DeleteMultipleRequest();
                 if (request.Ids == null || request.Ids.Count == 0)
                     return Error(req, 400, ApiResultEnum.BadRequest, "Ids is required and must not be empty");
+                try
+                {
+                    CollectionLimits.RequireRequestItems(request.Ids, "Ids");
+                }
+                catch (CollectionLimitExceededException ex)
+                {
+                    return RouteErrorMapper.LimitExceeded(req, ex);
+                }
 
                 AskThreadDeleteMultipleResult result = new AskThreadDeleteMultipleResult();
                 foreach (string id in request.Ids)
@@ -245,7 +253,7 @@ namespace Armada.Server.Routes
             api => api
                 .WithTag("Ask")
                 .WithSummary("Delete multiple Ask Armada threads")
-                .WithDescription("Deletes several of the caller's threads in one call, cancelling any running turn first. Threads owned by another user, or unknown IDs, are skipped with a reason. Returns the deleted IDs and the skipped IDs with their reasons. The work a thread started is untouched.")
+                .WithDescription("Deletes up to 1000 of the caller's threads in one call (more is 400 CollectionLimitExceeded), cancelling any running turn first. Threads owned by another user, or unknown IDs, are skipped with a reason. Returns the deleted IDs and the skipped IDs with their reasons, both bounded by the request. The work a thread started is untouched.")
                 .WithRequestBody(OpenApiJson.BodyFor<DeleteMultipleRequest>("List of thread IDs to delete"))
                 .WithResponse(200, OpenApiJson.For<AskThreadDeleteMultipleResult>("Delete result with deleted and skipped IDs"))
                 .WithResponse(400, OpenApiResponseMetadata.BadRequest())
@@ -264,7 +272,7 @@ namespace Armada.Server.Routes
             api => api
                 .WithTag("Ask")
                 .WithSummary("Enumerate thread messages")
-                .WithDescription("Returns the newest page of messages (or the page before BeforeSequence), oldest first within the page, each with ToolCalls, Proposal, and TrackedWork.")
+                .WithDescription("Returns the newest page of messages (or the page before BeforeSequence; PageSize 1 to 200, default 50), oldest first within the page, each with ToolCallCount, Proposal, and TrackedWork (a counts-only snapshot). Tool calls are paged with POST .../messages/{messageId}/tool-calls/enumerate.")
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Thread ID (ath_ prefix)"))
                 .WithRequestBody(OpenApiJson.BodyFor<AskMessageEnumerateRequest>("Paging", false))
                 .WithResponse(200, OpenApiJson.For<AskMessagePage>("A page of messages"))
@@ -373,7 +381,9 @@ namespace Armada.Server.Routes
                 AskActionRequest? request;
                 try { request = Body<AskActionRequest>(req); }
                 catch (JsonException ex) { return Error(req, 400, ApiResultEnum.BadRequest, "Invalid body: " + ex.Message); }
-                AskProposalDecision decision = await actions.SubmitQuickActionAsync(ctx, req.Parameters["id"], request).ConfigureAwait(false);
+                AskProposalDecision decision;
+                try { decision = await actions.SubmitQuickActionAsync(ctx, req.Parameters["id"], request).ConfigureAwait(false); }
+                catch (CollectionLimitExceededException ex) { return RouteErrorMapper.LimitExceeded(req, ex); }
                 if (decision.StatusCode != 200) return Error(req, decision.StatusCode, ToResult(decision.StatusCode), decision.Message ?? "Request failed");
                 return decision.Proposal;
             },
@@ -435,10 +445,166 @@ namespace Armada.Server.Routes
             api => api
                 .WithTag("Ask")
                 .WithSummary("Read a work snapshot")
-                .WithDescription("Builds the current snapshot (work card data) of one tracked item of the thread.")
+                .WithDescription("Builds the current snapshot (work card data: status and counts, with MissionCount and TargetCount) of one tracked item of the thread. Its rows are paged with POST .../work/{workId}/missions/enumerate and .../targets/enumerate.")
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Thread ID (ath_ prefix)"))
                 .WithParameter(OpenApiParameterMetadata.Path("workId", "Tracked work ID (atw_ prefix)"))
                 .WithResponse(200, OpenApiJson.For<AskWorkSnapshot>("The snapshot"))
+                .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithSecurity("ApiKey"));
+
+            app.Post("/api/v1/ask/threads/{id}/work/enumerate", async (ApiRequest req) =>
+            {
+                AuthContext ctx = await authenticate(req.Http).ConfigureAwait(false);
+                ApiErrorResponse? denied = Deny(req, ctx, authz);
+                if (denied != null) return denied;
+                EnumerationQuery query = EnumerationRequestReader.Read(req, _BodyJsonOptions);
+                try
+                {
+                    EnumerationResult<AskTrackedWork>? page = await threads.EnumerateTrackedWorkAsync(ctx, req.Parameters["id"], query).ConfigureAwait(false);
+                    if (page == null) return Error(req, 404, ApiResultEnum.NotFound, "Thread not found");
+                    return page;
+                }
+                catch (ArgumentException ex)
+                {
+                    return Error(req, 400, ApiResultEnum.BadRequest, ex.Message);
+                }
+            },
+            api => api
+                .WithTag("Ask")
+                .WithSummary("Enumerate a thread's tracked work")
+                .WithDescription("One page of the work the thread tracks, paged in the database: newest first (CreatedDescending, the default) or oldest first, id as the tie-break. Each item carries a counts-only snapshot. Status filters by state (Active, Succeeded, Failed, Cancelled). Paging comes from the JSON body (EnumerationQuery) or the querystring (pageNumber, pageSize 1 to 1000, default 10, order, status).")
+                .WithParameter(OpenApiParameterMetadata.Path("id", "Thread ID (ath_ prefix)"))
+                .WithRequestBody(OpenApiJson.BodyFor<EnumerationQuery>("Paging, order, and state filter", false))
+                .WithResponse(200, OpenApiJson.For<EnumerationResult<AskTrackedWork>>("One page of tracked work"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
+                .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithSecurity("ApiKey"));
+
+            app.Post("/api/v1/ask/threads/{id}/work/{workId}/missions/enumerate", async (ApiRequest req) =>
+            {
+                AuthContext ctx = await authenticate(req.Http).ConfigureAwait(false);
+                ApiErrorResponse? denied = Deny(req, ctx, authz);
+                if (denied != null) return denied;
+                EnumerationQuery query = EnumerationRequestReader.Read(req, _BodyJsonOptions);
+                try
+                {
+                    EnumerationResult<AskWorkMissionSnapshot>? page = await threads.EnumerateWorkMissionsAsync(ctx, req.Parameters["id"], req.Parameters["workId"], query).ConfigureAwait(false);
+                    if (page == null) return Error(req, 404, ApiResultEnum.NotFound, "Tracked work not found");
+                    return page;
+                }
+                catch (ArgumentException ex)
+                {
+                    return Error(req, 400, ApiResultEnum.BadRequest, ex.Message);
+                }
+            },
+            api => api
+                .WithTag("Ask")
+                .WithSummary("Enumerate a tracked work item's missions")
+                .WithDescription("One page of the mission rows of tracked work (a voyage's missions, or the one mission of mission work), paged in the database: newest first (CreatedDescending, the default) or creation order (CreatedAscending). A fleet action run has targets instead (400 here). Paging comes from the JSON body (EnumerationQuery) or the querystring (pageNumber, pageSize 1 to 1000, default 10, order).")
+                .WithParameter(OpenApiParameterMetadata.Path("id", "Thread ID (ath_ prefix)"))
+                .WithParameter(OpenApiParameterMetadata.Path("workId", "Tracked work ID (atw_ prefix)"))
+                .WithRequestBody(OpenApiJson.BodyFor<EnumerationQuery>("Paging and order", false))
+                .WithResponse(200, OpenApiJson.For<EnumerationResult<AskWorkMissionSnapshot>>("One page of mission rows"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
+                .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithSecurity("ApiKey"));
+
+            app.Post("/api/v1/ask/threads/{id}/work/{workId}/targets/enumerate", async (ApiRequest req) =>
+            {
+                AuthContext ctx = await authenticate(req.Http).ConfigureAwait(false);
+                ApiErrorResponse? denied = Deny(req, ctx, authz);
+                if (denied != null) return denied;
+                EnumerationQuery query = EnumerationRequestReader.Read(req, _BodyJsonOptions);
+                try
+                {
+                    EnumerationResult<AskWorkTargetSnapshot>? page = await threads.EnumerateWorkTargetsAsync(ctx, req.Parameters["id"], req.Parameters["workId"], query).ConfigureAwait(false);
+                    if (page == null) return Error(req, 404, ApiResultEnum.NotFound, "Tracked work not found");
+                    return page;
+                }
+                catch (ArgumentException ex)
+                {
+                    return Error(req, 400, ApiResultEnum.BadRequest, ex.Message);
+                }
+            },
+            api => api
+                .WithTag("Ask")
+                .WithSummary("Enumerate a tracked fleet action run's targets")
+                .WithDescription("One page of the target rows of a tracked fleet action run (one per vessel, by vessel name then id), paged in the database. Other work types are 400. Paging comes from the JSON body (EnumerationQuery) or the querystring (pageNumber, pageSize 1 to 1000, default 10).")
+                .WithParameter(OpenApiParameterMetadata.Path("id", "Thread ID (ath_ prefix)"))
+                .WithParameter(OpenApiParameterMetadata.Path("workId", "Tracked work ID (atw_ prefix)"))
+                .WithRequestBody(OpenApiJson.BodyFor<EnumerationQuery>("Paging", false))
+                .WithResponse(200, OpenApiJson.For<EnumerationResult<AskWorkTargetSnapshot>>("One page of target rows"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
+                .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithSecurity("ApiKey"));
+
+            app.Post("/api/v1/ask/threads/{id}/proposals/enumerate", async (ApiRequest req) =>
+            {
+                AuthContext ctx = await authenticate(req.Http).ConfigureAwait(false);
+                ApiErrorResponse? denied = Deny(req, ctx, authz);
+                if (denied != null) return denied;
+                EnumerationQuery query = EnumerationRequestReader.Read(req, _BodyJsonOptions);
+                try
+                {
+                    EnumerationResult<AskActionProposal>? page = await threads.EnumerateProposalsAsync(ctx, req.Parameters["id"], query).ConfigureAwait(false);
+                    if (page == null) return Error(req, 404, ApiResultEnum.NotFound, "Thread not found");
+                    return page;
+                }
+                catch (ArgumentException ex)
+                {
+                    return Error(req, 400, ApiResultEnum.BadRequest, ex.Message);
+                }
+            },
+            api => api
+                .WithTag("Ask")
+                .WithSummary("Enumerate a thread's proposals")
+                .WithDescription("One page of the thread's action proposals, paged in the database: newest first (CreatedDescending, the default) or oldest first, id as the tie-break. Status filters by proposal status (for example Pending). Paging comes from the JSON body (EnumerationQuery) or the querystring (pageNumber, pageSize 1 to 1000, default 10, order, status).")
+                .WithParameter(OpenApiParameterMetadata.Path("id", "Thread ID (ath_ prefix)"))
+                .WithRequestBody(OpenApiJson.BodyFor<EnumerationQuery>("Paging, order, and status filter", false))
+                .WithResponse(200, OpenApiJson.For<EnumerationResult<AskActionProposal>>("One page of proposals"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
+                .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithSecurity("ApiKey"));
+
+            app.Post("/api/v1/ask/threads/{id}/messages/{messageId}/tool-calls/enumerate", async (ApiRequest req) =>
+            {
+                AuthContext ctx = await authenticate(req.Http).ConfigureAwait(false);
+                ApiErrorResponse? denied = Deny(req, ctx, authz);
+                if (denied != null) return denied;
+                EnumerationQuery query = EnumerationRequestReader.Read(req, _BodyJsonOptions);
+                EnumerationResult<AskMessageToolCall>? page = await threads.EnumerateToolCallsAsync(ctx, req.Parameters["id"], req.Parameters["messageId"], query).ConfigureAwait(false);
+                if (page == null) return Error(req, 404, ApiResultEnum.NotFound, "Message not found");
+                return page;
+            },
+            api => api
+                .WithTag("Ask")
+                .WithSummary("Enumerate a message's tool calls")
+                .WithDescription("One page of the tool calls the captain made while writing one message, paged in the database: newest first (CreatedDescending, the default) or the order they were made in (CreatedAscending), id as the tie-break. Paging comes from the JSON body (EnumerationQuery) or the querystring (pageNumber, pageSize 1 to 1000, default 10, order).")
+                .WithParameter(OpenApiParameterMetadata.Path("id", "Thread ID (ath_ prefix)"))
+                .WithParameter(OpenApiParameterMetadata.Path("messageId", "Message ID (amg_ prefix)"))
+                .WithRequestBody(OpenApiJson.BodyFor<EnumerationQuery>("Paging and order", false))
+                .WithResponse(200, OpenApiJson.For<EnumerationResult<AskMessageToolCall>>("One page of tool calls"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
+                .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithSecurity("ApiKey"));
+
+            app.Post("/api/v1/ask/threads/{id}/turn/tool-calls/enumerate", async (ApiRequest req) =>
+            {
+                AuthContext ctx = await authenticate(req.Http).ConfigureAwait(false);
+                ApiErrorResponse? denied = Deny(req, ctx, authz);
+                if (denied != null) return denied;
+                EnumerationQuery query = EnumerationRequestReader.Read(req, _BodyJsonOptions);
+                EnumerationResult<AskMessageToolCall>? page = await threads.EnumerateActiveTurnToolCallsAsync(ctx, req.Parameters["id"], query).ConfigureAwait(false);
+                if (page == null) return Error(req, 404, ApiResultEnum.NotFound, "Thread not found");
+                return page;
+            },
+            api => api
+                .WithTag("Ask")
+                .WithSummary("Enumerate the running turn's tool calls")
+                .WithDescription("One page of the tool calls the thread's running turn has made so far (its in-memory live state until the turn ends and they are stored with its reply): newest first (CreatedDescending, the default) or first-seen order (CreatedAscending). An idle thread returns an empty page. Paging comes from the JSON body (EnumerationQuery) or the querystring (pageNumber, pageSize 1 to 1000, default 10, order).")
+                .WithParameter(OpenApiParameterMetadata.Path("id", "Thread ID (ath_ prefix)"))
+                .WithRequestBody(OpenApiJson.BodyFor<EnumerationQuery>("Paging and order", false))
+                .WithResponse(200, OpenApiJson.For<EnumerationResult<AskMessageToolCall>>("One page of tool calls"))
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())
                 .WithSecurity("ApiKey"));
 

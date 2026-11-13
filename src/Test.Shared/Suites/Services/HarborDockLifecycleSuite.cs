@@ -283,7 +283,7 @@ namespace Test.Shared.Suites.Services
                 using InProcessHarbor harbor = await s.ConnectMappedAsync("hbr_queue_delete").ConfigureAwait(false);
                 LandingRun run = await s.RunLandingAsync("hbr_queue_delete", LandingModeEnum.MergeQueue).ConfigureAwait(false);
                 await HarborDockGitFixture.GitAsync(git.Checkout, "push", "origin", run.Dock.BranchName!).ConfigureAwait(false);
-                await s.Docks.ReclaimAsync(run.Dock.Id).ConfigureAwait(false);
+                await s.Docks.ReclaimAsync(run.Dock.Id, forceReason: "test releases the dock").ConfigureAwait(false);
                 MergeEntry entry = (await s.MergeQueue.ListAsync().ConfigureAwait(false)).Single(e => e.MissionId == run.Mission.Id);
                 entry.Status = MergeStatusEnum.Failed;
                 await s.Db.Driver.MergeEntries.UpdateAsync(entry).ConfigureAwait(false);
@@ -301,7 +301,7 @@ namespace Test.Shared.Suites.Services
                 using Scenario s = await Scenario.CreateAsync(git).ConfigureAwait(false);
                 using InProcessHarbor harbor = await s.ConnectMappedAsync("hbr_queue_cancel").ConfigureAwait(false);
                 LandingRun run = await s.RunLandingAsync("hbr_queue_cancel", LandingModeEnum.MergeQueue).ConfigureAwait(false);
-                await s.Docks.ReclaimAsync(run.Dock.Id).ConfigureAwait(false);
+                await s.Docks.ReclaimAsync(run.Dock.Id, forceReason: "test releases the dock").ConfigureAwait(false);
                 MergeEntry entry = (await s.MergeQueue.ListAsync().ConfigureAwait(false)).Single(e => e.MissionId == run.Mission.Id);
                 await s.MergeQueue.CancelAsync(entry.Id).ConfigureAwait(false);
 

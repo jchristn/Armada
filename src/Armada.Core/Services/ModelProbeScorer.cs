@@ -38,6 +38,10 @@ namespace Armada.Core.Services
 
         private static readonly Regex _Whitespace = new Regex(@"\s+", RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
+        private static readonly Regex _DeterminismAnswer = new Regex(
+            @"^[ \t]*(?<values>[0-9]+(?:[ \t]*,[ \t]*[0-9]+){4})(?![ \t]*,[ \t]*[0-9])(?=$|[ \t.;])",
+            RegexOptions.CultureInvariant | RegexOptions.Compiled);
+
         private static readonly JsonSerializerOptions _AnswerOptions = new JsonSerializerOptions
         {
             PropertyNameCaseInsensitive = true,
@@ -387,7 +391,7 @@ namespace Armada.Core.Services
         }
 
         /// <summary>
-        /// Determinism: variance across repeats of the same short task.
+        /// Determinism: agreement of parsed answer values across repeats. Explanation wording is diagnostic only.
         /// </summary>
         /// <param name="outputs">The answers of the repeats that ran.</param>
         /// <param name="couldNotRunReason">Why fewer than two ran, or null.</param>
@@ -400,7 +404,7 @@ namespace Armada.Core.Services
 
             HashSet<string> distinct = new HashSet<string>(StringComparer.Ordinal);
             HashSet<string> answers = new HashSet<string>(StringComparer.Ordinal);
-            bool everyAnswer = true;
+            int invalidAnswers = 0;
             List<HashSet<string>> words = new List<HashSet<string>>();
             foreach (string output in outputs)
             {
@@ -408,7 +412,7 @@ namespace Armada.Core.Services
                 distinct.Add(normalized);
                 words.Add(new HashSet<string>(normalized.Split(' ', StringSplitOptions.RemoveEmptyEntries), StringComparer.Ordinal));
                 string? answer = AnswerLine(output);
-                if (answer == null) everyAnswer = false;
+                if (answer == null) invalidAnswers++;
                 else answers.Add(answer);
             }
 
@@ -417,13 +421,15 @@ namespace Armada.Core.Services
                 for (int j = i + 1; j < words.Count; j++)
                     min = Math.Min(min, Jaccard(words[i], words[j]));
 
-            bool agreement = everyAnswer && answers.Count == 1;
+            bool agreement = invalidAnswers == 0 && answers.Count == 1;
             result.Attempts = outputs.Count;
             result.Metrics.DistinctOutputs = distinct.Count;
             result.Metrics.AnswerAgreement = agreement;
             result.Metrics.MinSimilarity = Math.Round(min, 3);
             result.Outcome = agreement ? ModelProbeOutcomeEnum.Passed : ModelProbeOutcomeEnum.Failed;
-            result.Summary = (agreement ? "Same answer" : "Answers differ") + " across " + outputs.Count + " repeats; "
+            if (invalidAnswers > 0)
+                result.Reason = invalidAnswers + " of " + outputs.Count + " repeats did not contain a valid ANSWER: followed by exactly five comma-separated integers.";
+            result.Summary = (invalidAnswers > 0 ? "Malformed or missing answers" : agreement ? "Same answer" : "Answers differ") + " across " + outputs.Count + " repeats; "
                 + distinct.Count + " distinct outputs; lowest similarity " + Format(min) + ".";
             return result;
         }
@@ -500,7 +506,20 @@ namespace Armada.Core.Services
             {
                 string line = raw.Trim().Trim('`', '*');
                 if (line.StartsWith("ANSWER:", StringComparison.OrdinalIgnoreCase))
-                    return _Whitespace.Replace(line.Substring(7), "").ToLowerInvariant();
+                {
+                    Match match = _DeterminismAnswer.Match(line.Substring(7));
+                    if (!match.Success) return null;
+                    // Do not accept a fractional fifth value as an integer followed by explanatory punctuation.
+                    string tail = line.Substring(7 + match.Length);
+                    if (tail.Length > 1 && tail[0] == '.' && Char.IsDigit(tail[1])) return null;
+                    string[] values = match.Groups["values"].Value.Split(',');
+                    for (int i = 0; i < values.Length; i++)
+                    {
+                        if (!Int32.TryParse(values[i].Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out int value)) return null;
+                        values[i] = value.ToString(CultureInfo.InvariantCulture);
+                    }
+                    return String.Join(",", values);
+                }
             }
 
             return null;

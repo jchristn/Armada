@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { evaluateCaptain, evaluateModelEndpoint, getModelProbeRun, listModelProbeRuns, setAuthToken } from './client';
+import { cancelModelProbeRun, evaluateCaptain, evaluateModelEndpoint, getModelProbeRun, listModelProbeRuns, setAuthToken } from './client';
 import { onlyCallArgs } from '../test/mockCalls';
 
 function jsonResponse(status: number, body: unknown): Response {
@@ -24,6 +24,65 @@ describe('model probe client', () => {
     setAuthToken(null);
   });
 
+  it('enriches progress with an authenticated battery read and the exact profile revision', async () => {
+    setAuthToken('tok_1');
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse(200, { ...RUN, BatteryRunId: 'bat 1', Report: { ProfileId: 'mdl_1', ProfileRevisionId: 'mdv_1' } }))
+      .mockResolvedValueOnce(jsonResponse(200, { Status: 'Running', TotalTasks: 12, PendingEvaluationCount: 2 }))
+      .mockResolvedValueOnce(jsonResponse(200, { Revisions: [{ Id: 'mdv_0' }, { Id: 'mdv_1', Runtime: 'Mux' }] }));
+    vi.stubGlobal('fetch', fetchMock);
+    const result = await getModelProbeRun('mpr_1', true);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(new URL(fetchMock.mock.calls[0][0], 'http://localhost').pathname).toBe('/api/v1/model-probe-runs/mpr_1');
+    expect(new URL(fetchMock.mock.calls[1][0], 'http://localhost').pathname).toBe('/api/v1/battery/runs/bat%201');
+    expect(fetchMock.mock.calls[1][1].headers['X-Token']).toBe('tok_1');
+    expect(new URL(fetchMock.mock.calls[2][0], 'http://localhost').pathname).toBe('/api/v1/model-profiles/mdl_1');
+    expect(result.batteryProgress).toMatchObject({ totalTasks: 12, pendingEvaluationCount: 2 });
+    expect(result.profileRevision).toEqual({ id: 'mdv_1', runtime: 'Mux' });
+  });
+
+  it('keeps probe results when the auxiliary battery read fails', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse(200, { ...RUN, BatteryRunId: 'bat_1' }))
+      .mockResolvedValueOnce(jsonResponse(404, { Message: 'Battery not found' }));
+    vi.stubGlobal('fetch', fetchMock);
+    const result = await getModelProbeRun('mpr_1', true);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(result.id).toBe('mpr_1');
+    expect(result.batteryError).toBeTruthy();
+    expect(result.batteryProgress).toBeUndefined();
+  });
+
+  it('loads one requested page of battery results with authentication', async () => {
+    setAuthToken('tok_1');
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse(200, { ...RUN, BatteryRunId: 'bat 1' }))
+      .mockResolvedValueOnce(jsonResponse(200, { Objects: [{ Id: 'btr_1', MissionId: 'msn_1', Output: '<b>raw</b>', Details: { ExitCode: 0 } }], TotalPages: 3 }))
+      .mockResolvedValueOnce(jsonResponse(200, { Status: 'Completed' }));
+    vi.stubGlobal('fetch', fetchMock);
+    const result = await getModelProbeRun('mpr_1', true, true, 2);
+    const url = new URL(fetchMock.mock.calls[1][0], 'http://localhost');
+    expect(url.pathname).toBe('/api/v1/battery/runs/bat%201/results');
+    expect(url.searchParams.get('pageNumber')).toBe('2');
+    expect(url.searchParams.get('pageSize')).toBe('25');
+    expect(fetchMock.mock.calls[1][1].headers['X-Token']).toBe('tok_1');
+    expect(result.batteryResultsPage?.totalPages).toBe(3);
+    expect(result.batteryResults).toEqual([{ id: 'btr_1', missionId: 'msn_1', output: '<b>raw</b>', details: { exitCode: 0 } }]);
+  });
+
+  it('preserves probes and battery progress when paged task results fail', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse(200, { ...RUN, BatteryRunId: 'bat_1' }))
+      .mockResolvedValueOnce(jsonResponse(503, { Message: 'Results unavailable' }))
+      .mockResolvedValueOnce(jsonResponse(200, { Status: 'Completed' }));
+    vi.stubGlobal('fetch', fetchMock);
+    const result = await getModelProbeRun('mpr_1', true, true, 1);
+    expect(result.id).toBe('mpr_1');
+    expect(result.batteryProgress?.status).toBe('Completed');
+    expect(result.batteryResultsError).toContain('Results unavailable');
+    expect(result.batteryResults).toBeUndefined();
+  });
+
   it('evaluates a captain with a PascalCase Quick depth and the session token', async () => {
     setAuthToken('tok_1');
     const fetchMock = stub(201, RUN);
@@ -46,13 +105,42 @@ describe('model probe client', () => {
     expect(run.targetKind).toBe('ModelEndpoint');
   });
 
-  it('surfaces the 400 for depth Full', async () => {
-    // Attach the fetch recorder before the action and verify the rejected request was actually sent.
-    const fetchMock = stub(400, { Error: 'BadRequest', Message: 'Depth Full is not implemented until Phase 5.' });
-    await expect(evaluateCaptain('cpt_1', 'Full')).rejects.toThrow('Depth Full is not implemented until Phase 5.');
+  it('sends depth Full with only the Full options that were given', async () => {
+    const fetchMock = stub(201, { ...RUN, Depth: 'Full' });
+    const run = await evaluateCaptain('cpt_1', 'Full', { evaluatorCaptainId: 'cpt_eval', packs: ['csharp'], personas: [], runCount: 1 });
     const [url, init] = onlyCallArgs(fetchMock);
     expect(new URL(url, 'http://localhost').pathname).toBe('/api/v1/captains/cpt_1/evaluate');
+    expect(JSON.parse(init.body)).toEqual({ Depth: 'Full', EvaluatorCaptainId: 'cpt_eval', Packs: ['csharp'], RunCount: 1 });
+    expect(run.depth).toBe('Full');
+  });
+
+  it('surfaces the 403 for a Full Evaluate by a non-admin', async () => {
+    // Attach the fetch recorder before the action and verify the rejected request was actually sent.
+    const fetchMock = stub(403, { Error: 'Forbidden', Message: 'Only an admin can run a Full Evaluate.' });
+    await expect(evaluateModelEndpoint('mep_1', 'Full')).rejects.toThrow('Only an admin can run a Full Evaluate.');
+    const [url, init] = onlyCallArgs(fetchMock);
+    expect(new URL(url, 'http://localhost').pathname).toBe('/api/v1/model-endpoints/mep_1/evaluate');
     expect(JSON.parse(init.body)).toEqual({ Depth: 'Full' });
+  });
+
+  it('cancels a run and reads back the partial Full report', async () => {
+    const fetchMock = stub(200, {
+      ...RUN, Depth: 'Full', Status: 'Cancelled',
+      Report: { RunId: 'mpr_1', Complete: false, IncompleteReason: 'Cancelled by an administrator.', Narrative: { Status: 'Skipped' } },
+    });
+    const run = await cancelModelProbeRun('mpr 1');
+    const [url, init] = onlyCallArgs(fetchMock);
+    expect(new URL(url, 'http://localhost').pathname).toBe('/api/v1/model-probe-runs/mpr%201/cancel');
+    expect(init.method).toBe('POST');
+    expect(run.status).toBe('Cancelled');
+    expect(run.report?.complete).toBe(false);
+    expect(run.report?.narrative.status).toBe('Skipped');
+  });
+
+  it('surfaces a 404 when cancelling an unknown run', async () => {
+    const fetchMock = stub(404, { Error: 'NotFound', Message: 'Model probe run not found.' });
+    await expect(cancelModelProbeRun('mpr_missing')).rejects.toThrow('Model probe run not found.');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it('gets one run with camelized results and metrics, and surfaces a 404', async () => {

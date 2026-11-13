@@ -20,11 +20,13 @@ namespace Armada.Tui.Screens.Operations
     /// <summary>
     /// Fleet action run (W3.7, <c>/fleet-actions/runs/:id</c>), the dashboard's FleetActionRunDetail: the run's
     /// status, progress bar and counts, concurrency, duration, timestamps, timeout and clean-tree check for commands,
-    /// and the command or prompt snapshot; actions (Refresh, View JSON, Re-run failed targets, Cancel run); the
-    /// targets table with its status filter (vessel, status, reason, exit code, duration, voyage or output with the
-    /// Truncated tag); and the target drawer (<c>Enter</c> or <c>o</c> on a Command target) with the rendered command
-    /// and output. While the run is active the page refreshes every 5 seconds, paused while the drawer or a dialog is
-    /// open. Not thread-safe.
+    /// and the command or prompt snapshot; actions (View report <c>v</c> on Mission runs, Follow-up run <c>f</c>,
+    /// View JSON, Re-run failed targets, Cancel run); the targets table with its status filter (vessel, status, reason,
+    /// exit code, duration, voyage or output with the Truncated tag); and the target drawer (<c>Enter</c> or <c>o</c>
+    /// on a Command target) with the rendered command and output. The report joins every target's recorded captain
+    /// report (OutputText) under vessel and status headings; report-only (Audit or Research) runs say so in the
+    /// subtitle and summary and advertise the key there. While the run is active the page refreshes every 5 seconds,
+    /// paused while the drawer or a dialog is open. Not thread-safe.
     /// </summary>
     public class FleetActionRunScreen : OpsDetailScreen, IRegionOverlayHost
     {
@@ -73,6 +75,21 @@ namespace Armada.Tui.Screens.Operations
         /// Number of loads (tests).
         /// </summary>
         public int Loads { get; private set; } = 0;
+
+        /// <summary>
+        /// Targets fetched per page while building the report.
+        /// </summary>
+        public const int ReportPageSize = 100;
+
+        /// <summary>
+        /// The Markdown of the last report shown, or null (tests).
+        /// </summary>
+        public string? LastReport { get; private set; } = null;
+
+        /// <summary>
+        /// The last follow-up run flow started, or null (tests).
+        /// </summary>
+        public FleetActionRunFlow? LastFollowUp { get; private set; } = null;
 
         #endregion
 
@@ -129,6 +146,8 @@ namespace Armada.Tui.Screens.Operations
             TargetDrawer.Localizer = context.Loc;
             TargetDrawer.ApplyTheme(context.Theme.Current);
 
+            Action("report", "View report", ShowReport, "v", () => CurrentRun != null && CurrentRun.Kind == FleetActionKindEnum.Mission, true);
+            Action("followup", "Follow-up run...", StartFollowUp, "f", () => CurrentRun != null && !FleetActionLabels.IsRunActive(CurrentRun.Status) && IsTenantAdmin, true);
             Action("json", "View JSON", () => { if (CurrentRun != null) ShowJson(Tr("Fleet action run: {{name}}", LocalizationArgs.Of("name", CurrentRun.ActionName)), CurrentRun); }, "j", () => CurrentRun != null, true);
             Action("rerun", "Re-run failed targets", RerunFailed, "R", () => CurrentRun != null && !FleetActionLabels.IsRunActive(CurrentRun.Status) && CurrentRun.FailedCount > 0 && IsTenantAdmin, true);
             Action("cancel", "Cancel run", () => { if (CurrentRun != null) ConfirmCancel(this, CurrentRun, Load); }, "x", () => CurrentRun != null && FleetActionLabels.IsRunActive(CurrentRun.Status) && IsTenantAdmin, true, true);
@@ -182,7 +201,7 @@ namespace Armada.Tui.Screens.Operations
                     LoadError = null;
                     Heading = CurrentRun.ActionName;
                     Status = FleetActionLabels.RunStatusLabel(CurrentRun.Status);
-                    Body.SummaryRows = 5 + Math.Min(6, ((CurrentRun.Kind == FleetActionKindEnum.Command ? CurrentRun.CommandText : CurrentRun.PromptTemplate) ?? "").Split('\n').Length);
+                    Body.SummaryRows = 5 + (CurrentRun.Kind == FleetActionKindEnum.Mission ? 1 : 0) + Math.Min(6, ((CurrentRun.Kind == FleetActionKindEnum.Command ? CurrentRun.CommandText : CurrentRun.PromptTemplate) ?? "").Split('\n').Length);
                     Body.Grid.Columns.First(col => col.Key == "exit").DefaultVisible = CurrentRun.Kind == FleetActionKindEnum.Command;
                     Body.Grid.Columns.First(col => col.Key == "voyage").Title = CurrentRun.Kind == FleetActionKindEnum.Command ? "Output" : "Voyage";
                     Body.Summary.Invalidate();
@@ -283,7 +302,8 @@ namespace Armada.Tui.Screens.Operations
                 : (TargetDrawer.IsOpen || Context.Modals.IsModalOpen)
                     ? Tr("Auto-refresh paused while a panel is open.")
                     : Tr("Live: refreshing every {{seconds}} s.", LocalizationArgs.Of("seconds", RefreshSeconds));
-            SubtitleText = Tr(CurrentRun.Kind.ToString()) + (CurrentRun.ActionId == null ? "  [" + Tr("Ad hoc") + "]" : "") + "  " + CurrentRun.Id + "   " + state;
+            string reportOnly = FleetActionLabels.IsReportOnly(CurrentRun.Kind, CurrentRun.MissionMode) ? "  [" + Tr("Report-only") + "]" : "";
+            SubtitleText = Tr(CurrentRun.Kind.ToString()) + reportOnly + (CurrentRun.ActionId == null ? "  [" + Tr("Ad hoc") + "]" : "") + "  " + CurrentRun.Id + "   " + state;
         }
 
         private void Schedule()
@@ -385,16 +405,98 @@ namespace Armada.Tui.Screens.Operations
             }
         }
 
+        private static async Task<List<FleetActionRunTargetSummary>> ReadAllTargetsAsync(Armada.Client.ArmadaClient client, string runId, FleetActionTargetStatusEnum status, CancellationToken token)
+        {
+            // Walk the bounded pages: a run can have more targets in one status than a single page holds.
+            List<FleetActionRunTargetSummary> all = new List<FleetActionRunTargetSummary>();
+            for (int pageNumber = 1; ; pageNumber++)
+            {
+                FleetActionRunTargetEnumerateQuery query = new FleetActionRunTargetEnumerateQuery { PageNumber = pageNumber, PageSize = 500, Status = status };
+                EnumerationResult<FleetActionRunTargetSummary>? page = await client.EnumerateFleetActionRunTargetsAsync(runId, query, token).ConfigureAwait(false);
+                if (page == null || page.Objects.Count == 0) break;
+                all.AddRange(page.Objects);
+                if (pageNumber >= page.TotalPages) break;
+            }
+
+            return all;
+        }
+
+        private void StartFollowUp()
+        {
+            FleetActionRun? run = CurrentRun;
+            if (run == null) return;
+            LastFollowUp = FleetActionRunFlow.StartFollowUp(this, run);
+        }
+
+        private void ShowReport()
+        {
+            FleetActionRun? run = CurrentRun;
+            if (run == null) return;
+            Call(async (c, t) =>
+            {
+                // Page through the targets, bounded by the run's target count, then read each recorded report.
+                List<FleetActionRunTargetSummary> targets = new List<FleetActionRunTargetSummary>();
+                int total = Math.Max(0, run.TargetCount);
+                int pages = Math.Max(1, (total + ReportPageSize - 1) / ReportPageSize);
+                for (int pageNumber = 1; pageNumber <= pages; pageNumber++)
+                {
+                    FleetActionRunTargetEnumerateQuery query = new FleetActionRunTargetEnumerateQuery { PageNumber = pageNumber, PageSize = ReportPageSize };
+                    EnumerationResult<FleetActionRunTargetSummary>? page = await c.EnumerateFleetActionRunTargetsAsync(run.Id, query, t).ConfigureAwait(false);
+                    if (page == null || page.Objects.Count == 0) break;
+                    targets.AddRange(page.Objects);
+                    if (pageNumber >= page.TotalPages || targets.Count >= total) break;
+                }
+
+                Dictionary<string, string> reports = new Dictionary<string, string>(StringComparer.Ordinal);
+                foreach (FleetActionRunTargetSummary summary in targets)
+                {
+                    if (summary.OutputLength <= 0) continue;
+                    FleetActionRunTarget? target = await c.GetFleetActionRunTargetAsync(run.Id, summary.Id, t).ConfigureAwait(false);
+                    if (target != null && !String.IsNullOrWhiteSpace(target.OutputText)) reports[summary.Id] = target.OutputText!;
+                }
+
+                return new KeyValuePair<List<FleetActionRunTargetSummary>, Dictionary<string, string>>(targets, reports);
+            }, data =>
+            {
+                string markdown = BuildReport(run, data.Key, data.Value);
+                LastReport = markdown;
+                Armada.Tui.Widgets.MarkdownView view = new Armada.Tui.Widgets.MarkdownView(markdown);
+                ViewerModal modal = new ViewerModal(Tr("Report: {{name}}", LocalizationArgs.Of("name", run.ActionName)), view, Context.Loc, Context.Theme.Current);
+                modal.WidthRatio = 0.92;
+                modal.HeightRatio = 0.9;
+                modal.CopyRequested += (s, e) => Copy(markdown, "Report");
+                Context.Modals.Show(modal);
+            }, null, ex => ShowMessage(String.IsNullOrEmpty(ex.Message) ? Tr("Failed to load the report.") : ex.Message));
+        }
+
+        private string BuildReport(FleetActionRun run, List<FleetActionRunTargetSummary> targets, Dictionary<string, string> reports)
+        {
+            System.Text.StringBuilder sb = new System.Text.StringBuilder();
+            sb.Append("# ").Append(run.ActionName).Append("\n\n");
+            sb.Append(Tr(FleetActionLabels.MissionModeLabel(run.MissionMode))).Append(", ")
+                .Append(Tr("{count, plural, one {# target} other {# targets}}", LocalizationArgs.Of("count", targets.Count))).Append(", ")
+                .Append(Tr("{count, plural, one {# report} other {# reports}}", LocalizationArgs.Of("count", reports.Count))).Append("\n\n");
+            if (targets.Count == 0) sb.Append(Tr("This run has no targets")).Append("\n");
+            foreach (FleetActionRunTargetSummary target in targets)
+            {
+                sb.Append("## ").Append(target.VesselName).Append(" (").Append(Tr(FleetActionLabels.TargetStatusLabel(target.Status))).Append(")\n\n");
+                string reason = FleetActionLabels.ReasonLabel(Context.Loc, target.SkipReason, target.FailureReason);
+                if (reason.Length > 0) sb.Append("_").Append(reason).Append("_\n\n");
+                if (reports.TryGetValue(target.Id, out string? text)) sb.Append(text.Trim()).Append("\n\n");
+                else sb.Append("_").Append(Tr(FleetActionLabels.IsRunActive(run.Status) && (target.Status == FleetActionTargetStatusEnum.Pending || target.Status == FleetActionTargetStatusEnum.Running) ? "No report yet." : "No report was recorded.")).Append("_\n\n");
+            }
+
+            return sb.ToString();
+        }
+
         private void RerunFailed()
         {
             FleetActionRun? run = CurrentRun;
             if (run == null) return;
             Call(async (c, t) =>
             {
-                FleetActionRunTargetEnumerateQuery failed = new FleetActionRunTargetEnumerateQuery { PageNumber = 1, PageSize = 500, Status = FleetActionTargetStatusEnum.Failed };
-                FleetActionRunTargetEnumerateQuery timedOut = new FleetActionRunTargetEnumerateQuery { PageNumber = 1, PageSize = 500, Status = FleetActionTargetStatusEnum.TimedOut };
-                List<FleetActionRunTargetSummary> a = (await c.EnumerateFleetActionRunTargetsAsync(run.Id, failed, t).ConfigureAwait(false))?.Objects ?? new List<FleetActionRunTargetSummary>();
-                List<FleetActionRunTargetSummary> b = (await c.EnumerateFleetActionRunTargetsAsync(run.Id, timedOut, t).ConfigureAwait(false))?.Objects ?? new List<FleetActionRunTargetSummary>();
+                List<FleetActionRunTargetSummary> a = await ReadAllTargetsAsync(c, run.Id, FleetActionTargetStatusEnum.Failed, t).ConfigureAwait(false);
+                List<FleetActionRunTargetSummary> b = await ReadAllTargetsAsync(c, run.Id, FleetActionTargetStatusEnum.TimedOut, t).ConfigureAwait(false);
                 List<string> ids = a.Concat(b).Select(x => x.VesselId).Distinct().ToList();
                 string? actionId = null;
                 if (ids.Count > 0 && !String.IsNullOrEmpty(run.ActionId))
@@ -430,6 +532,19 @@ namespace Armada.Tui.Screens.Operations
                     definition.PipelineId = run.PipelineId;
                     definition.TimeoutSeconds = run.TimeoutSeconds;
                     definition.RequiresCleanWorkingTree = run.RequiresCleanWorkingTree;
+                    definition.MissionMode = run.Kind == FleetActionKindEnum.Mission ? run.MissionMode : (MissionModeEnum?)null;
+                    definition.ApplicabilityCommand = run.ApplicabilityCommand;
+                    definition.ApplicabilityCommandWindows = run.ApplicabilityCommandWindows;
+                    // The earlier run's values become the defaults, so the re-run renders the same text.
+                    definition.Inputs = run.Inputs.Select(i => new FleetActionInput
+                    {
+                        Name = i.Name,
+                        Type = i.Type,
+                        Required = i.Required,
+                        Default = run.InputValues.TryGetValue(i.Name, out string? used) ? used : i.Default,
+                        AllowedValues = i.AllowedValues.ToList(),
+                        Description = i.Description,
+                    }).ToList();
                 }
 
                 FleetActionRunFlow.Start(this, result.Key, result.Value, definition);
@@ -448,6 +563,7 @@ namespace Armada.Tui.Screens.Operations
                 + "   " + Tr("Failed") + " " + doc.Loc.FormatNumber(run.FailedCount)
                 + "   " + Tr("Skipped") + " " + doc.Loc.FormatNumber(run.SkippedCount)
                 + "   " + Tr("Cancelled") + " " + doc.Loc.FormatNumber(run.CancelledCount)
+                + (run.FindingsCount > 0 ? "   " + Tr("Findings") + " " + doc.Loc.FormatNumber(run.FindingsCount) : "")
                 + "   " + Tr("Concurrency") + " " + doc.Loc.FormatNumber(run.Concurrency)
                 + "   " + Tr("Duration") + " " + FleetActionLabels.FormatDuration(doc.Loc, FleetActionLabels.DurationBetween(run.StartedUtc, run.CompletedUtc, active, Context.Clock.UtcNow)));
             DateTime now = Context.Clock.UtcNow;
@@ -461,6 +577,10 @@ namespace Armada.Tui.Screens.Operations
             }
 
             doc.Text(timing, doc.Theme.Muted);
+            if (FleetActionLabels.IsReportOnly(run.Kind, run.MissionMode))
+                doc.Text(Tr("Report-only ({{mode}}): missions run read-only and never land. Press v to view the report.", LocalizationArgs.Of("mode", Tr(run.MissionMode.ToString()))), doc.Theme.Accent);
+            else if (run.Kind == FleetActionKindEnum.Mission)
+                doc.Text(Tr("Each captain's final message is stored on its target. Press v to view the report."), doc.Theme.Muted);
             doc.Section(run.Kind == FleetActionKindEnum.Command ? "Command (snapshot)" : "Prompt template (snapshot)");
             doc.Text((run.Kind == FleetActionKindEnum.Command ? run.CommandText : run.PromptTemplate) ?? "", doc.Theme.Code);
             return doc;

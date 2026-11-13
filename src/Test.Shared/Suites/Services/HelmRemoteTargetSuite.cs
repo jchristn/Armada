@@ -31,6 +31,18 @@ namespace Test.Shared.Suites.Services
     /// </summary>
     public sealed class HelmRemoteTargetSuite : IArmadaTestSuite
     {
+
+        /// <summary>Parses the real captain settings without executing an API call.</summary>
+        public sealed class CaptureCaptainActiveCommand : AsyncCommand<CaptainAddSettings>
+        {
+            public static bool? Value { get; set; }
+            public override Task<int> ExecuteAsync(CommandContext context, CaptainAddSettings settings, CancellationToken cancellationToken)
+            {
+                Value = settings.Active;
+                return Task.FromResult(0);
+            }
+        }
+
         #region Private-Members
 
         private const string SuiteId = "Services.HelmRemoteTarget";
@@ -48,6 +60,19 @@ namespace Test.Shared.Suites.Services
         public TestSuiteDescriptor Build()
         {
             List<TestCaseDescriptor> cases = new List<TestCaseDescriptor>();
+            cases.Add(CaseAsync("captain_active_boolean_cli_values", "Captain CLI accepts explicit true and false and preserves omitted Active", TestTags.Positive, async () =>
+            {
+                foreach (string? value in new string?[] { null, "false", "true" })
+                {
+                    CaptureCaptainActiveCommand.Value = null;
+                    CommandApp<CaptureCaptainActiveCommand> app = new CommandApp<CaptureCaptainActiveCommand>();
+                    app.Configure(config => config.PropagateExceptions());
+                    string[] args = value == null ? new[] { "captain-name" } : new[] { "captain-name", "--active=" + value };
+                    AssertEqual(0, await app.RunAsync(args));
+                    AssertEqual(value == null ? (bool?)null : Boolean.Parse(value), CaptureCaptainActiveCommand.Value);
+                }
+            }));
+
 
             cases.Add(CaseAsync("resolution_order_flag_env_profile_local", "Target resolution: flag, then ARMADA_SERVER_URL, then the active profile, then the local Admiral", TestTags.Positive, async () =>
             {

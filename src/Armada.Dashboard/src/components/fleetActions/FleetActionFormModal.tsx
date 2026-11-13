@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { createFleetAction, listPersonas, listPipelines, updateFleetAction } from '../../api/client';
 import { listAll } from '../../api/paging';
-import type { FleetAction, FleetActionKind, FleetActionUpsertRequest, Persona, Pipeline } from '../../types/models';
+import type { FleetAction, FleetActionKind, FleetActionUpsertRequest, MissionMode, Persona, Pipeline } from '../../types/models';
 import { useLocale } from '../../context/LocaleContext';
 import DialogShell from '../shared/DialogShell';
 import TemplateVariableHelp from './TemplateVariableHelp';
-import { KIND_DESCRIPTIONS, KIND_LABELS } from '../../lib/fleetActionLabels';
+import { KIND_DESCRIPTIONS, KIND_LABELS, MISSION_MODES, MISSION_MODE_LABELS } from '../../lib/fleetActionLabels';
 import { findUnknownTemplateVariables } from '../../lib/fleetActionTemplate';
 import { buildActionUpsertPayload, formFromAction, validateActionForm, type FleetActionFormState } from '../../lib/fleetActionForm';
 
@@ -49,7 +49,9 @@ export default function FleetActionFormModal({ open, mode, source, defaultTimeou
 
   const errors = validateActionForm(form);
   const bodyText = form.kind === 'Command' ? form.commandText : form.promptTemplate;
-  const unknownVars = findUnknownTemplateVariables(bodyText, form.extensions?.Inputs?.map(i => i.Name));
+  const inputNames = form.extensions?.Inputs?.map(i => i.Name);
+  const unknownVars = findUnknownTemplateVariables(bodyText, inputNames);
+  const unknownCheckVars = findUnknownTemplateVariables(`${form.applicabilityCommand}\n${form.applicabilityCommandWindows}`, inputNames);
   const show = (field: string) => (submitted && errors[field] ? t(errors[field]) : '');
 
   function insertToken(token: string) {
@@ -64,7 +66,7 @@ export default function FleetActionFormModal({ open, mode, source, defaultTimeou
 
   async function save() {
     setSubmitted(true);
-    if (Object.keys(errors).length > 0 || unknownVars.length > 0) return;
+    if (Object.keys(errors).length > 0 || unknownVars.length > 0 || unknownCheckVars.length > 0) return;
     setSaving(true);
     setServerError('');
     const payload: FleetActionUpsertRequest = buildActionUpsertPayload(form, mode);
@@ -183,6 +185,13 @@ export default function FleetActionFormModal({ open, mode, source, defaultTimeou
                 <span className="text-dim form-help">{t('Applied at dispatch. Ignored by multi-stage pipelines, which choose their own personas.')}</span>
               </label>
             </div>
+            <label className="form-field">
+              <span className="form-label" title={t('Audit and Research are report-only: nothing lands, and the report appears on the run.')}>{t('Mission mode')}</span>
+              <select title={t('Audit and Research are report-only: nothing lands, and the report appears on the run.')} value={form.missionMode} onChange={(e) => setForm({ ...form, missionMode: e.target.value as MissionMode })}>
+                {MISSION_MODES.map((m) => <option key={m} value={m}>{t(MISSION_MODE_LABELS[m])}</option>)}
+              </select>
+              <span className="text-dim form-help">{t('Audit and Research are report-only: nothing lands, and the report appears on the run.')}</span>
+            </label>
           </>
         )}
         {unknownVars.length > 0
@@ -190,6 +199,38 @@ export default function FleetActionFormModal({ open, mode, source, defaultTimeou
           : show('body') ? <span className="field-error">{show('body')}</span> : null}
 
         <TemplateVariableHelp onInsert={insertToken} />
+
+        <div className="form-grid-2">
+          <label className="form-field">
+            <span className="form-label" title={t('Optional shell check run in each vessel first. A non-zero exit skips the vessel as Not applicable. Needs tenant admin.')}>{t('Applicability check')}</span>
+            <textarea
+              title={t('Optional shell check run in each vessel first. A non-zero exit skips the vessel as Not applicable. Needs tenant admin.')}
+              className="mono"
+              rows={2}
+              spellCheck={false}
+              value={form.applicabilityCommand}
+              onChange={(e) => setForm({ ...form, applicabilityCommand: e.target.value })}
+              placeholder="test -f package.json"
+              aria-invalid={unknownCheckVars.length > 0}
+            />
+            <span className="text-dim form-help">{t('Optional. A non-zero exit skips the vessel as Not applicable. Needs tenant admin.')}</span>
+          </label>
+          <label className="form-field">
+            <span className="form-label" title={t('Optional check used instead on Windows hosts. A non-zero exit skips the vessel as Not applicable.')}>{t('Applicability check (Windows)')}</span>
+            <textarea
+              title={t('Optional check used instead on Windows hosts. A non-zero exit skips the vessel as Not applicable.')}
+              className="mono"
+              rows={2}
+              spellCheck={false}
+              value={form.applicabilityCommandWindows}
+              onChange={(e) => setForm({ ...form, applicabilityCommandWindows: e.target.value })}
+              placeholder="if (!(Test-Path package.json)) { exit 1 }"
+              aria-invalid={unknownCheckVars.length > 0}
+            />
+            <span className="text-dim form-help">{t('Optional. Used on Windows hosts instead of the check above.')}</span>
+          </label>
+        </div>
+        {unknownCheckVars.length > 0 && <span className="field-error">{t('Unknown template variable: {{names}}', { names: unknownCheckVars.join(', ') })}</span>}
 
         <div className="form-grid-3">
           {form.kind === 'Command' && (

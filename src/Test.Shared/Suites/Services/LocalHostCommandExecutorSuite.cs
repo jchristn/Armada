@@ -79,6 +79,58 @@ namespace Test.Shared.Suites.Services
                 AssertTrue(result.ExitCode != 0, "Expected a non-zero exit code.");
             }));
 
+            cases.Add(CaseAsync("nul_separated_output_returned_unchanged", "RunAsync returns NUL-terminated git output without an added line ending", TestTags.Negative, async () =>
+            {
+                string dir = await CreateRepoWithFilesAsync("hostcmd-nul").ConfigureAwait(false);
+                try
+                {
+                    LocalHostCommandExecutor executor = new LocalHostCommandExecutor();
+                    HostCommandResult result = await executor.RunAsync(new HostCommandRequest
+                    {
+                        Executable = "git",
+                        WorkingDirectory = dir,
+                        Arguments = new List<string> { "ls-files", "-z" }
+                    }).ConfigureAwait(false);
+
+                    AssertTrue(result.Success, "Expected git ls-files -z to succeed: " + result.StandardError);
+                    AssertEqual("a.txt\0b.txt\0", result.StandardOutput, "stdout is exactly what git wrote");
+                    AssertEqual(2, GitMachineOutputParser.ParsePathListZ(result.StandardOutput).Count, "two paths, no phantom empty path");
+                }
+                finally
+                {
+                    TryDeleteDir(dir);
+                }
+            }));
+
+            cases.Add(CaseAsync("line_output_not_normalized", "RunAsync keeps the command's own line ending and adds none", TestTags.Positive, async () =>
+            {
+                LocalHostCommandExecutor executor = new LocalHostCommandExecutor();
+                HostCommandResult result = await executor.RunAsync(new HostCommandRequest
+                {
+                    Executable = "git",
+                    Arguments = new List<string> { "-c", "armada.probe=hostcmd-raw", "config", "--get", "armada.probe" }
+                }).ConfigureAwait(false);
+
+                AssertTrue(result.Success, "Expected git config --get to succeed.");
+                AssertEqual("hostcmd-raw\n", result.StandardOutput, "git's LF is returned as written");
+            }));
+
+            cases.Add(CaseAsync("timeout_returns_timed_out", "RunAsync stops a command at its timeout and reports TimedOut", TestTags.Negative, async () =>
+            {
+                if (OperatingSystem.IsWindows()) return;
+                LocalHostCommandExecutor executor = new LocalHostCommandExecutor();
+                HostCommandResult result = await executor.RunAsync(new HostCommandRequest
+                {
+                    Executable = "/bin/sh",
+                    Arguments = new List<string> { "-c", "printf started; sleep 30" },
+                    TimeoutMs = 500
+                }).ConfigureAwait(false);
+
+                AssertTrue(result.TimedOut, "Expected the command to time out.");
+                AssertEqual(-1, result.ExitCode);
+                AssertEqual("started", result.StandardOutput, "output written before the timeout is kept");
+            }));
+
             cases.Add(CaseAsync("null_request_throws", "RunAsync rejects a null request", TestTags.Negative, async () =>
             {
                 LocalHostCommandExecutor executor = new LocalHostCommandExecutor();
@@ -102,7 +154,19 @@ namespace Test.Shared.Suites.Services
             return path;
         }
 
-        private static void TryDeleteDir(string path)
+        internal static async Task<string> CreateRepoWithFilesAsync(string prefix)
+        {
+            string dir = CreateTempDir(prefix);
+            File.WriteAllText(Path.Combine(dir, "a.txt"), "a");
+            File.WriteAllText(Path.Combine(dir, "b.txt"), "b");
+            LocalHostCommandExecutor executor = new LocalHostCommandExecutor();
+            await executor.RunAsync(new HostCommandRequest { Executable = "git", WorkingDirectory = dir, Arguments = new List<string> { "init", "-q" } }).ConfigureAwait(false);
+            HostCommandResult added = await executor.RunAsync(new HostCommandRequest { Executable = "git", WorkingDirectory = dir, Arguments = new List<string> { "add", "a.txt", "b.txt" } }).ConfigureAwait(false);
+            if (!added.Success) throw new InvalidOperationException("git add failed: " + added.StandardError);
+            return dir;
+        }
+
+        internal static void TryDeleteDir(string path)
         {
             try
             {

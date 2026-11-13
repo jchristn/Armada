@@ -1,7 +1,10 @@
 namespace Armada.Core.Settings
 {
+    using System;
     using System.Collections.Generic;
+    using System.Linq;
     using Armada.Core.Enums;
+    using Armada.Core.Services;
 
     /// <summary>
     /// Settings for vessel (repository) health evaluation. All values apply live.
@@ -79,11 +82,15 @@ namespace Armada.Core.Settings
         /// <summary>
         /// Criteria that feed the overall (worst-of) status. Default: every criterion except ContinuousIntegration,
         /// CommitRecency, and Overall. Setting null yields an empty list (no criteria scored, so overall is Unknown).
+        /// Duplicates and undefined values are dropped, so the list holds at most one entry per criterion.
         /// </summary>
+        [CollectionBound(11, Reason = "Distinct defined VesselHealthCriterionEnum values")]
         public List<VesselHealthCriterionEnum> ScoredCriteria
         {
             get => _ScoredCriteria;
-            set => _ScoredCriteria = value ?? new List<VesselHealthCriterionEnum>();
+            set => _ScoredCriteria = value == null
+                ? new List<VesselHealthCriterionEnum>()
+                : value.Where(criterion => Enum.IsDefined(typeof(VesselHealthCriterionEnum), criterion)).Distinct().ToList();
         }
 
         /// <summary>

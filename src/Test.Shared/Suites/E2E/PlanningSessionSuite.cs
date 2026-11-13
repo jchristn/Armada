@@ -57,19 +57,20 @@ namespace Test.Shared.Suites.E2E
                         })).ConfigureAwait(false);
 
                     AssertEqual(HttpStatusCode.Created, createResp.StatusCode);
-                    PlanningSessionDetailResponse created = await JsonHelper.DeserializeAsync<PlanningSessionDetailResponse>(createResp).ConfigureAwait(false);
+                    PlanningSessionDetail created = await JsonHelper.DeserializeAsync<PlanningSessionDetail>(createResp).ConfigureAwait(false);
                     AssertNotNull(created.Session);
                     AssertEqual("API planning session", created.Session!.Title);
                     AssertEqual(captain.Id, created.Session.CaptainId);
                     AssertEqual(vesselId, created.Session.VesselId);
                     AssertNotNull(created.Captain);
                     AssertNotNull(created.Vessel);
-                    AssertTrue(created.Messages.Count == 0);
+                    AssertEqual(0L, created.MessageCount, "a new session has an empty transcript");
+                    AssertFalse((await createResp.Content.ReadAsStringAsync().ConfigureAwait(false)).Contains("\"Messages\"", StringComparison.Ordinal), "the detail does not embed the transcript");
                     createdPlanningSessionIds.Add(created.Session.Id);
 
                     HttpResponseMessage getResp = await authClient.GetAsync("/api/v1/planning-sessions/" + created.Session.Id).ConfigureAwait(false);
                     AssertEqual(HttpStatusCode.OK, getResp.StatusCode);
-                    PlanningSessionDetailResponse fetched = await JsonHelper.DeserializeAsync<PlanningSessionDetailResponse>(getResp).ConfigureAwait(false);
+                    PlanningSessionDetail fetched = await JsonHelper.DeserializeAsync<PlanningSessionDetail>(getResp).ConfigureAwait(false);
                     AssertNotNull(fetched.Session);
                     AssertEqual(created.Session.Id, fetched.Session!.Id);
 
@@ -101,7 +102,7 @@ namespace Test.Shared.Suites.E2E
                     string vesselId = await CreateVesselAsync(authClient, fleetId, createdVesselIds).ConfigureAwait(false);
                     Captain captain = await CreateCaptainAsync(authClient, "planning-api-lifecycle", createdCaptainIds).ConfigureAwait(false);
 
-                    PlanningSessionDetailResponse created = await CreatePlanningSessionAsync(authClient, captain.Id, vesselId, "Lifecycle session").ConfigureAwait(false);
+                    PlanningSessionDetail created = await CreatePlanningSessionAsync(authClient, captain.Id, vesselId, "Lifecycle session").ConfigureAwait(false);
                     createdPlanningSessionIds.Add(created.Session!.Id);
 
                     // Force a deterministic assistant failure path so this test does not depend on any external CLI.
@@ -115,8 +116,8 @@ namespace Test.Shared.Suites.E2E
                         })).ConfigureAwait(false);
                     AssertEqual(HttpStatusCode.OK, sendResp.StatusCode);
 
-                    PlanningSessionDetailResponse withAssistant = await WaitForAssistantOutputAsync(authClient, created.Session.Id).ConfigureAwait(false);
-                    PlanningSessionMessage? assistant = withAssistant.Messages
+                    List<PlanningSessionMessage> withAssistant = await WaitForAssistantOutputAsync(authClient, created.Session.Id).ConfigureAwait(false);
+                    PlanningSessionMessage? assistant = withAssistant
                         .Where(message => String.Equals(message.Role, "Assistant", StringComparison.OrdinalIgnoreCase))
                         .OrderByDescending(message => message.Sequence)
                         .FirstOrDefault(message => !String.IsNullOrWhiteSpace(message.Content));
@@ -157,13 +158,13 @@ namespace Test.Shared.Suites.E2E
                         "/api/v1/planning-sessions/" + created.Session.Id + "/stop",
                         JsonHelper.ToJsonContent(new { })).ConfigureAwait(false);
                     AssertEqual(HttpStatusCode.OK, stopResp.StatusCode);
-                    PlanningSessionDetailResponse stopping = await JsonHelper.DeserializeAsync<PlanningSessionDetailResponse>(stopResp).ConfigureAwait(false);
+                    PlanningSessionDetail stopping = await JsonHelper.DeserializeAsync<PlanningSessionDetail>(stopResp).ConfigureAwait(false);
                     AssertNotNull(stopping.Session);
                     AssertTrue(
                         stopping.Session!.Status.ToString() == "Stopping" || stopping.Session.Status.ToString() == "Stopped",
                         "Stop should return a stopping or stopped session state");
 
-                    PlanningSessionDetailResponse stopped = await WaitForSessionStatusAsync(authClient, created.Session.Id, "Stopped").ConfigureAwait(false);
+                    PlanningSessionDetail stopped = await WaitForSessionStatusAsync(authClient, created.Session.Id, "Stopped").ConfigureAwait(false);
                     AssertEqual("Stopped", stopped.Session!.Status.ToString());
 
                     HttpResponseMessage deleteResp = await authClient.DeleteAsync("/api/v1/planning-sessions/" + created.Session.Id).ConfigureAwait(false);
@@ -195,7 +196,7 @@ namespace Test.Shared.Suites.E2E
 
         #region Private-Methods
 
-        private static async Task<PlanningSessionDetailResponse> CreatePlanningSessionAsync(HttpClient authClient, string captainId, string vesselId, string title)
+        private static async Task<PlanningSessionDetail> CreatePlanningSessionAsync(HttpClient authClient, string captainId, string vesselId, string title)
         {
             HttpResponseMessage createResp = await authClient.PostAsync(
                 "/api/v1/planning-sessions",
@@ -206,22 +207,23 @@ namespace Test.Shared.Suites.E2E
                     VesselId = vesselId
                 })).ConfigureAwait(false);
             createResp.EnsureSuccessStatusCode();
-            return await JsonHelper.DeserializeAsync<PlanningSessionDetailResponse>(createResp).ConfigureAwait(false);
+            return await JsonHelper.DeserializeAsync<PlanningSessionDetail>(createResp).ConfigureAwait(false);
         }
 
-        private static async Task<PlanningSessionDetailResponse> WaitForAssistantOutputAsync(HttpClient authClient, string sessionId, int timeoutMs = 15000)
+        private static async Task<List<PlanningSessionMessage>> WaitForAssistantOutputAsync(HttpClient authClient, string sessionId, int timeoutMs = 15000)
         {
             MonotonicDeadline deadline = MonotonicDeadline.After(TimeSpan.FromMilliseconds(timeoutMs));
             while (!deadline.Passed)
             {
-                HttpResponseMessage resp = await authClient.GetAsync("/api/v1/planning-sessions/" + sessionId).ConfigureAwait(false);
+                HttpResponseMessage resp = await authClient.PostAsync("/api/v1/planning-sessions/" + sessionId + "/messages/enumerate",
+                    JsonHelper.ToJsonContent(new { PageSize = 1000, Order = "CreatedAscending" })).ConfigureAwait(false);
                 resp.EnsureSuccessStatusCode();
-                PlanningSessionDetailResponse detail = await JsonHelper.DeserializeAsync<PlanningSessionDetailResponse>(resp).ConfigureAwait(false);
-                if (detail.Messages.Any(message =>
+                EnumerationResult<PlanningSessionMessage> page = await JsonHelper.DeserializeAsync<EnumerationResult<PlanningSessionMessage>>(resp).ConfigureAwait(false);
+                if (page.Objects.Any(message =>
                     String.Equals(message.Role, "Assistant", StringComparison.OrdinalIgnoreCase) &&
                     !String.IsNullOrWhiteSpace(message.Content)))
                 {
-                    return detail;
+                    return page.Objects;
                 }
 
                 await Task.Delay(25).ConfigureAwait(false);
@@ -230,14 +232,14 @@ namespace Test.Shared.Suites.E2E
             throw new Exception("Timed out waiting for assistant planning output for session " + sessionId);
         }
 
-        private static async Task<PlanningSessionDetailResponse> WaitForSessionStatusAsync(HttpClient authClient, string sessionId, string expectedStatus, int timeoutMs = 15000)
+        private static async Task<PlanningSessionDetail> WaitForSessionStatusAsync(HttpClient authClient, string sessionId, string expectedStatus, int timeoutMs = 15000)
         {
             MonotonicDeadline deadline = MonotonicDeadline.After(TimeSpan.FromMilliseconds(timeoutMs));
             while (!deadline.Passed)
             {
                 HttpResponseMessage resp = await authClient.GetAsync("/api/v1/planning-sessions/" + sessionId).ConfigureAwait(false);
                 resp.EnsureSuccessStatusCode();
-                PlanningSessionDetailResponse detail = await JsonHelper.DeserializeAsync<PlanningSessionDetailResponse>(resp).ConfigureAwait(false);
+                PlanningSessionDetail detail = await JsonHelper.DeserializeAsync<PlanningSessionDetail>(resp).ConfigureAwait(false);
                 if (String.Equals(detail.Session?.Status.ToString(), expectedStatus, StringComparison.OrdinalIgnoreCase))
                 {
                     return detail;
@@ -394,16 +396,5 @@ namespace Test.Shared.Suites.E2E
 
         #endregion
 
-        #region Private-Types
-
-        private sealed class PlanningSessionDetailResponse
-        {
-            public PlanningSession? Session { get; set; }
-            public List<PlanningSessionMessage> Messages { get; set; } = new List<PlanningSessionMessage>();
-            public Captain? Captain { get; set; }
-            public Vessel? Vessel { get; set; }
-        }
-
-        #endregion
     }
 }

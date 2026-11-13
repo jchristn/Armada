@@ -1,6 +1,7 @@
 namespace Armada.Core
 {
     using System.Diagnostics.Metrics;
+    using Armada.Core.Services;
 
     /// <summary>
     /// Armada's telemetry instruments. Emitting a measurement rides the .NET base class library
@@ -19,6 +20,23 @@ namespace Armada.Core
         public const string MeterName = "Armada";
 
         private static readonly Meter _Meter = new Meter(MeterName);
+
+        // Wait histograms share one bucket layout from 1 second to 2 hours.
+        private static readonly InstrumentAdvice<double> _WaitBuckets = new InstrumentAdvice<double>
+        {
+            HistogramBucketBoundaries = new double[] { 1, 5, 15, 30, 60, 120, 300, 600, 1800, 3600, 7200 }
+        };
+
+        /// <summary>Bounded admission waits that timed out; gate is vessel or capacity.</summary>
+        public static readonly Counter<long> AdmissionLockTimeouts =
+            _Meter.CreateCounter<long>("armada.admission.lock_timeouts");
+
+        /// <summary>New or changed capacity overruns, tagged only by gate and observed cause.</summary>
+        public static readonly Counter<long> ConcurrencyLimitViolations =
+            _Meter.CreateCounter<long>("armada.concurrency.limit_violations");
+
+        /// <summary>Pending missions observed ready before/after three consecutive dispatch opportunities.</summary>
+        public static readonly Counter<long> AdmissionStuck = _Meter.CreateCounter<long>("armada.admission.stuck");
 
         /// <summary>Missions that reached Failed.</summary>
         public static readonly Counter<long> MissionsFailed =
@@ -85,5 +103,57 @@ namespace Armada.Core
         /// </summary>
         public static readonly Counter<long> VesselImportItems =
             _Meter.CreateCounter<long>("armada.vessel_import.items", null, "Vessel import items processed");
+
+        /// <summary>
+        /// Time from a mission's first capacity-ready observation to its assignment, exported as
+        /// armada_missions_slot_wait_seconds. Tags: gate_last (the last capacity gate before assignment, or None) and persona.
+        /// </summary>
+        public static readonly Histogram<double> SlotWaitSeconds =
+            _Meter.CreateHistogram<double>("armada.missions.slot_wait_seconds", "s", "Mission slot wait", null, _WaitBuckets);
+
+        /// <summary>Time a mission spent Pending before assignment, exported as armada_missions_queue_seconds. Tag: persona.</summary>
+        public static readonly Histogram<double> QueueSeconds =
+            _Meter.CreateHistogram<double>("armada.missions.queue_seconds", "s", "Mission queue time", null, _WaitBuckets);
+
+        /// <summary>One observation per closed wait interval, exported as armada_missions_gate_wait_seconds. Tag: gate.</summary>
+        public static readonly Histogram<double> GateWaitSeconds =
+            _Meter.CreateHistogram<double>("armada.missions.gate_wait_seconds", "s", "Mission wait per gate", null, _WaitBuckets);
+
+        /// <summary>Time spent acquiring an admission lock, exported as armada_admission_lock_wait_seconds. Tag: lock (vessel or capacity).</summary>
+        public static readonly Histogram<double> AdmissionLockWaitSeconds =
+            _Meter.CreateHistogram<double>("armada.admission.lock_wait_seconds", "s", "Admission lock wait", null,
+                new InstrumentAdvice<double> { HistogramBucketBoundaries = new double[] { 0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1, 5, 15, 30 } });
+
+        /// <summary>Missions that waited longer than Concurrency.StarvationWarningMinutes, once per wait. Tag: gate.</summary>
+        public static readonly Counter<long> MissionsStarving =
+            _Meter.CreateCounter<long>("armada.missions.starving", null, "Missions waiting past the starvation threshold");
+
+        /// <summary>Pending missions by their current wait gate.</summary>
+        public static readonly ObservableGauge<int> MissionsWaiting =
+            _Meter.CreateObservableGauge<int>("armada.missions.waiting", () => ConcurrencyGaugeState.Waiting(), null, "Pending missions by wait gate");
+
+        /// <summary>Assigned or running missions by runtime.</summary>
+        public static readonly ObservableGauge<int> MissionsActive =
+            _Meter.CreateObservableGauge<int>("armada.missions.active", () => ConcurrencyGaugeState.ByRuntime(s => s.ActiveByRuntime), null, "Active missions by runtime");
+
+        /// <summary>Occupied captain mission slots by runtime.</summary>
+        public static readonly ObservableGauge<int> CaptainSlotsInUse =
+            _Meter.CreateObservableGauge<int>("armada.captains.slots_in_use", () => ConcurrencyGaugeState.ByRuntime(s => s.SlotsInUseByRuntime), null, "Captain slots in use by runtime");
+
+        /// <summary>Configured captain mission slots by runtime.</summary>
+        public static readonly ObservableGauge<int> CaptainSlotsTotal =
+            _Meter.CreateObservableGauge<int>("armada.captains.slots_total", () => ConcurrencyGaugeState.ByRuntime(s => s.SlotsTotalByRuntime), null, "Captain slots by runtime");
+
+        /// <summary>Voyage slots held, summed across vessels with a voyage limit.</summary>
+        public static readonly ObservableGauge<int> VesselVoyageSlotsInUse =
+            _Meter.CreateObservableGauge<int>("armada.vessels.voyage_slots_in_use", () => ConcurrencyGaugeState.Value(s => s.VoyageSlotsInUse), null, "Vessel voyage slots in use");
+
+        /// <summary>Voyage slot limits, summed across vessels with a limit; unlimited vessels are counted separately.</summary>
+        public static readonly ObservableGauge<int> VesselVoyageSlotsTotal =
+            _Meter.CreateObservableGauge<int>("armada.vessels.voyage_slots_total", () => ConcurrencyGaugeState.Value(s => s.VoyageSlotsTotal), null, "Vessel voyage slots");
+
+        /// <summary>Vessels with no voyage limit.</summary>
+        public static readonly ObservableGauge<int> VesselsUnlimited =
+            _Meter.CreateObservableGauge<int>("armada.vessels.unlimited", () => ConcurrencyGaugeState.Value(s => s.UnlimitedVessels), null, "Vessels without a voyage limit");
     }
 }

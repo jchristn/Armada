@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
-import { deleteVesselHealthOverride, getVesselHealth, setVesselHealthOverride } from '../../../api/client';
+import { deleteVesselHealthOverride, getVesselHealth, listVesselDependencies, setVesselHealthOverride } from '../../../api/client';
 import { useLocale } from '../../../context/LocaleContext';
 import { useNotifications } from '../../../context/NotificationContext';
 import type {
+  VesselDependency,
   VesselHealthCriterion,
   VesselHealthDetail,
   VesselHealthOverride,
@@ -56,6 +57,9 @@ interface VesselHealthDetailModalProps {
   /** Opens branch management for this vessel. */
   onOpenBranches?: (vesselId: string, vesselName: string) => void;
 }
+
+/** Dependency rows per page read from the server. */
+export const DEPENDENCY_PAGE_SIZE = 100;
 
 const SECTIONS: Array<{ key: HealthDetailSection; label: string }> = [
   { key: 'summary', label: msg('Summary') },
@@ -117,6 +121,27 @@ export default function VesselHealthDetailModal({
     note: '',
   });
   const [formError, setFormError] = useState('');
+  // Dependency rows are paged by the server; the detail carries only dependencyCount.
+  const [deps, setDeps] = useState<VesselDependency[]>([]);
+  const [depsTotal, setDepsTotal] = useState(0);
+  const [depsPage, setDepsPage] = useState(0);
+  const [depsPages, setDepsPages] = useState(0);
+  const [depsLoading, setDepsLoading] = useState(false);
+
+  const loadDependencies = useCallback(async (pageNumber: number) => {
+    setDepsLoading(true);
+    try {
+      const page = await listVesselDependencies(vesselId, { pageNumber, pageSize: DEPENDENCY_PAGE_SIZE });
+      setDeps(prev => (pageNumber <= 1 ? page.objects ?? [] : [...prev, ...(page.objects ?? [])]));
+      setDepsTotal(page.totalRecords ?? 0);
+      setDepsPage(page.pageNumber ?? pageNumber);
+      setDepsPages(page.totalPages ?? 0);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setDepsLoading(false);
+    }
+  }, [vesselId]);
 
   useFocusTrap(containerRef, true, onClose, confirmRemove === null);
 
@@ -128,15 +153,17 @@ export default function VesselHealthDetailModal({
       setDetail({
         health: result.health,
         findings: result.findings ?? [],
-        dependencies: result.dependencies ?? [],
+        dependencyCount: result.dependencyCount ?? 0,
         overrides: result.overrides ?? [],
       });
+      if ((result.dependencyCount ?? 0) > 0) void loadDependencies(1);
+      else { setDeps([]); setDepsTotal(0); setDepsPage(0); setDepsPages(0); }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoading(false);
     }
-  }, [vesselId]);
+  }, [vesselId, loadDependencies]);
 
   useEffect(() => {
     void load();
@@ -179,7 +206,7 @@ export default function VesselHealthDetailModal({
     setFormError('');
     try {
       const updated = await setVesselHealthOverride(vesselId, form.criterion, form.status, form.note.trim() || null);
-      setDetail({ health: updated.health, findings: updated.findings ?? [], dependencies: updated.dependencies ?? [], overrides: updated.overrides ?? [] });
+      setDetail({ health: updated.health, findings: updated.findings ?? [], dependencyCount: updated.dependencyCount ?? 0, overrides: updated.overrides ?? [] });
       pushToast('success', t('Override saved for {{criterion}}.', { criterion: criterionLabel(t, form.criterion) }));
       setForm((f) => ({ ...f, note: '' }));
       onChanged?.();
@@ -194,7 +221,7 @@ export default function VesselHealthDetailModal({
     setConfirmRemove(null);
     try {
       const updated = await deleteVesselHealthOverride(vesselId, o.criterion);
-      setDetail({ health: updated.health, findings: updated.findings ?? [], dependencies: updated.dependencies ?? [], overrides: updated.overrides ?? [] });
+      setDetail({ health: updated.health, findings: updated.findings ?? [], dependencyCount: updated.dependencyCount ?? 0, overrides: updated.overrides ?? [] });
       pushToast('success', t('Override removed for {{criterion}}.', { criterion: criterionLabel(t, o.criterion) }));
       onChanged?.();
     } catch (err) {
@@ -284,7 +311,7 @@ export default function VesselHealthDetailModal({
               title={sectionHelp(t, s.key)}
             >
               {t(s.label)}
-              {s.key === 'dependencies' && detail && detail.dependencies.length > 0 && <span className="vh-count">{formatCount(locale, detail.dependencies.length)}</span>}
+              {s.key === 'dependencies' && detail && detail.dependencyCount > 0 && <span className="vh-count">{formatCount(locale, detail.dependencyCount)}</span>}
               {s.key === 'overrides' && detail && detail.overrides.length > 0 && <span className="vh-count">{formatCount(locale, detail.overrides.length)}</span>}
             </button>
           ))}
@@ -408,13 +435,14 @@ export default function VesselHealthDetailModal({
           )}
 
           {detail && section === 'dependencies' && (
-            detail.dependencies.length === 0 ? (
+            detail.dependencyCount === 0 && deps.length === 0 ? (
               <p className="text-dim">{t('No outdated or vulnerable dependencies were found.')}</p>
             ) : (
+              <>
               <DataTable
                 tableKey="vessel-health-dependencies"
                 className="vh-deps-table"
-                rows={detail.dependencies}
+                rows={deps}
                 rowKey={(dep) => dep.id ?? `${dep.projectPath}-${dep.packageName}-${dep.currentVersion}`}
                 columns={[
                   { key: 'ecosystem', label: t('Ecosystem'), headerTitle: t('Package manager the package comes from: NuGet (.NET) or npm.'), cellClassName: 'vh-nowrap', render: (dep) => dep.ecosystem },
@@ -452,6 +480,13 @@ export default function VesselHealthDetailModal({
                   },
                 ]}
               />
+              {depsPage < depsPages && (
+                <div className="vh-deps-more" style={{ marginTop: '0.5rem' }}>
+                  <span className="text-dim" style={{ marginRight: '0.5rem' }}>{formatCount(locale, deps.length)} / {formatCount(locale, depsTotal)}</span>
+                  <button type="button" className="btn btn-sm" disabled={depsLoading} onClick={() => void loadDependencies(depsPage + 1)}>{t('Load more')}</button>
+                </div>
+              )}
+              </>
             )
           )}
 

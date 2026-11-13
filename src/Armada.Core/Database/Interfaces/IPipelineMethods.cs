@@ -51,6 +51,20 @@ namespace Armada.Core.Database.Interfaces
         Task<EnumerationResult<Pipeline>> EnumerateAsync(EnumerationQuery query, CancellationToken token = default);
 
         /// <summary>
+        /// Enumerate the pipelines (with their stages) one caller may see, paged in the data source with the visibility applied before
+        /// counting: rows in <paramref name="tenantId"/>, and when <paramref name="viewerUserId"/> is set only the
+        /// tenant-wide rows plus that user's own (the ScopedVisibility.CanView rule for a regular user). Ordered by
+        /// creation time in the query order with the id as the tie-break.
+        /// </summary>
+        /// <param name="tenantId">Visible tenant.</param>
+        /// <param name="viewerUserId">Regular user's id, or null for a tenant admin's view of the whole tenant.</param>
+        /// <param name="query">Paging and created-range filters.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>One page of visible pipelines (with their stages).</returns>
+        /// <exception cref="System.ArgumentNullException">Thrown when <paramref name="tenantId"/> is null or empty.</exception>
+        Task<EnumerationResult<Pipeline>> EnumerateVisibleAsync(string tenantId, string? viewerUserId, EnumerationQuery query, CancellationToken token = default);
+
+        /// <summary>
         /// Check if a pipeline exists by identifier.
         /// </summary>
         Task<bool> ExistsAsync(string id, CancellationToken token = default);

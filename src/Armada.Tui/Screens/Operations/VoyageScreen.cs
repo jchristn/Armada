@@ -3,12 +3,15 @@ namespace Armada.Tui.Screens.Operations
     using System;
     using System.Collections.Generic;
     using System.Linq;
+    using System.Threading;
+    using System.Threading.Tasks;
     using Armada.Client;
     using Armada.Client.Models;
     using Armada.Core.Enums;
     using Armada.Core.Models;
     using Armada.Tui.Routing;
     using Armada.Tui.Screens.Build;
+    using Armada.Tui.Screens.Kit;
     using Armada.Tui.Services;
     using Armada.Tui.Widgets;
     using TUIKit;
@@ -17,8 +20,10 @@ namespace Armada.Tui.Screens.Operations
     /// Voyage detail (W3.9, <c>/voyages/:id</c>), the dashboard's VoyageDetail page: actions (Run Check, Draft Release,
     /// Cancel Voyage while open or in progress, Retry Failed with a count, View JSON, Delete once finished), the
     /// status, details, configuration, captain assignments with fallback tier, timestamps, progress, and playbook
-    /// snapshots or selections, and the missions table (Diff, Log, Detail). Reloads on <c>voyage.changed</c> and
-    /// <c>mission.changed</c>. Not thread-safe.
+    /// snapshots or selections, the missions table (Diff, Log, Detail), the Failure tab, and the Cascade tab (the
+    /// black box cascade graph as a tree: which failure took the others down, each mission with its status, failure
+    /// kind, the edge that links it and its entry; Enter opens the entry, <c>m</c> the mission). Reloads on
+    /// <c>voyage.changed</c> and <c>mission.changed</c>. Not thread-safe.
     /// </summary>
     public class VoyageScreen : OpsDetailScreen
     {
@@ -35,9 +40,24 @@ namespace Armada.Tui.Screens.Operations
         public Voyage? Voyage { get; private set; } = null;
 
         /// <summary>
-        /// Missions of the voyage.
+        /// Mission counts of the voyage, or null before the first load.
+        /// </summary>
+        public VoyageProgress? Progress { get; private set; } = null;
+
+        /// <summary>
+        /// Missions on the page the table shows (the table pages the voyage's missions from the server).
         /// </summary>
         public List<Mission> Missions { get; private set; } = new List<Mission>();
+
+        /// <summary>
+        /// Playbook snapshots of the voyage's first mission (read from that mission's detail), or empty.
+        /// </summary>
+        public List<MissionPlaybookSnapshot> Snapshots { get; private set; } = new List<MissionPlaybookSnapshot>();
+
+        /// <summary>
+        /// Missions per page in the table.
+        /// </summary>
+        public const int MissionPageSize = 25;
 
         /// <summary>
         /// Overview panel.
@@ -53,6 +73,40 @@ namespace Armada.Tui.Screens.Operations
         /// Mission actions.
         /// </summary>
         public MissionOps Ops { get; }
+
+        /// <summary>
+        /// Failure panel: the voyage's black box entry (user brief, recovery paths) with its own keys.
+        /// </summary>
+        public BlackBoxFailurePanel Failure { get; }
+
+        /// <summary>
+        /// Cascade panel: the voyage's black box cascade graph in tree order.
+        /// </summary>
+        public ArmadaGrid<BlackBoxCascadeRow> Cascade { get; }
+
+        /// <summary>
+        /// The loaded cascade graph, or null.
+        /// </summary>
+        public BlackBoxCascadeGraph? CascadeGraph { get; private set; } = null;
+
+        /// <summary>
+        /// Tree panel: the voyage's logical missions with their pipeline stages, children indented under their parent.
+        /// </summary>
+        public ArmadaGrid<MissionTreeRow> Tree { get; }
+
+        /// <summary>
+        /// The loaded mission tree, or null.
+        /// </summary>
+        public VoyageTree? MissionTree { get; private set; } = null;
+
+        #endregion
+
+        #region Private-Members
+
+        private bool _CascadeLoaded = false;
+        private int _CascadeGeneration = 0;
+        private bool _TreeLoaded = false;
+        private int _TreeGeneration = 0;
 
         #endregion
 
@@ -73,8 +127,8 @@ namespace Armada.Tui.Screens.Operations
 
             MissionGrid = new ArmadaGrid<Mission>(m => m.Id);
             MissionGrid.MultiSelect = false;
-            MissionGrid.ShowPagingBar = false;
-            MissionGrid.PageSize = 10000;
+            MissionGrid.PageSize = MissionPageSize;
+            MissionGrid.Loader = LoadMissionsAsync;
             MissionGrid.EmptyText = "No missions in this voyage.";
             MissionGrid.ModalHost = context.Modals;
             MissionGrid.AddColumn(new GridColumn<Mission>("title", "Mission", m => m.Title + "  " + m.Id) { Weight = 4 });
@@ -97,10 +151,55 @@ namespace Armada.Tui.Screens.Operations
             Action("mission-log", "Log", () => { Mission m = MissionGrid.Current!; Ops.ViewLog(m.Id, Tr("Log: {{title}}", LocalizationArgs.Of("title", m.Title))); }, "l", OnMission);
             Action("mission-detail", "Detail", () => Context.Navigate("/missions/" + Uri.EscapeDataString(MissionGrid.Current!.Id)), "o", OnMission);
             Action("copy-id", "Copy ID", () => Copy(VoyageId, "Voyage ID"), "y");
+            Failure = new BlackBoxFailurePanel(this, BlackBoxPanelSourceEnum.Voyage, () => VoyageId);
+            Failure.Changed = Load;
+            MissionScreen.AddFailureActions(this, Failure);
+
+            Cascade = new ArmadaGrid<BlackBoxCascadeRow>(r => r.Node.MissionId);
+            Cascade.MultiSelect = false;
+            Cascade.ShowPagingBar = false;
+            Cascade.PageSize = 10000;
+            Cascade.ModalHost = context.Modals;
+            Cascade.EmptyText = "Open this tab to read the cascade.";
+            Cascade.AddColumn(new GridColumn<BlackBoxCascadeRow>("mission", "Mission", r => new string(' ', r.Depth * 2) + (r.Depth > 0 ? "> " : "") + (r.Node.IsRoot ? "* " : "") + (String.IsNullOrEmpty(r.Node.Title) ? r.Node.MissionId : r.Node.Title + "  " + r.Node.MissionId)) { Weight = 5 });
+            GridColumn<BlackBoxCascadeRow> cascadeStatus = new GridColumn<BlackBoxCascadeRow>("status", "Status", r => StatusBadge.Label(r.Node.Status)) { Width = 16 };
+            cascadeStatus.Style = (r, t) => StatusBadge.Style(r.Node.Status, t);
+            Cascade.AddColumn(cascadeStatus);
+            Cascade.AddColumn(new GridColumn<BlackBoxCascadeRow>("kind", "Failure", r => r.Node.FailureKind ?? "-") { Width = 18 });
+            Cascade.AddColumn(new GridColumn<BlackBoxCascadeRow>("edge", "Linked by", r => CascadeLinks(r)) { Weight = 3 });
+            Cascade.AddColumn(new GridColumn<BlackBoxCascadeRow>("entry", "Entry", r => r.Node.EntryId ?? "-") { Weight = 2 });
+            Cascade.Activated += (s, r) => OpenCascadeRow(r);
+            PanelAction("cascade", "cascade-mission", "Open cascade mission", () => Context.Navigate("/missions/" + Uri.EscapeDataString(Cascade.Current!.Node.MissionId)), "m", () => Cascade.Current != null);
+            PanelHint("cascade", "Enter", "Open entry");
+
+            Tree = new ArmadaGrid<MissionTreeRow>(r => r.Mission.Id);
+            Tree.MultiSelect = false;
+            Tree.ShowPagingBar = false;
+            Tree.PageSize = 10000;
+            Tree.ModalHost = context.Modals;
+            Tree.EmptyText = "Open this tab to read the mission tree.";
+            Tree.AddColumn(new GridColumn<MissionTreeRow>("mission", "Mission", r => new string(' ', r.Depth * 2) + (r.Depth > 0 ? "> " : "") + MissionTreeText.BaseTitle(r.Mission.Title)) { Weight = 5 });
+            GridColumn<MissionTreeRow> treeStatus = new GridColumn<MissionTreeRow>("status", "Status", r => StatusBadge.Label(r.Mission.Status)) { Width = 16 };
+            treeStatus.Style = (r, t) => StatusBadge.Style(r.Mission.Status, t);
+            Tree.AddColumn(treeStatus);
+            Tree.AddColumn(new GridColumn<MissionTreeRow>("pipeline", "Pipeline", r => MissionTreeText.Pipeline(r)) { Weight = 4 });
+            Tree.AddColumn(new GridColumn<MissionTreeRow>("branch", "Branch", r => Tr(MissionTreeText.Branch(r.Mission))) { Width = 18 });
+            Tree.Activated += (s, r) => Context.Navigate("/missions/" + Uri.EscapeDataString(r.Mission.Id));
+            PanelHint("tree", "Enter", "Open mission");
 
             Overview.Builder = BuildOverview;
             AddPanel("overview", "Overview", Overview);
             AddPanel("missions", "Missions", MissionGrid);
+            AddPanel("tree", "Tree", Tree);
+            AddPanel("failure", "Failure", Failure);
+            AddPanel("cascade", "Cascade", Cascade);
+            Tabs.SelectedChanged += (s, e) =>
+            {
+                if (ReferenceEquals(CurrentPanel, Failure)) Failure.Ensure();
+                if (ReferenceEquals(CurrentPanel, Cascade) && !_CascadeLoaded) LoadCascade();
+                if (ReferenceEquals(CurrentPanel, Tree) && !_TreeLoaded) LoadTree();
+            };
+            SubscribeCoalesced("blackbox.", () => { if (Failure.Loaded) Failure.Reload(); });
 
             SubscribeCoalesced("voyage.changed", Load);
             SubscribeCoalesced("mission.changed", Load);
@@ -116,7 +215,15 @@ namespace Armada.Tui.Screens.Operations
         /// </summary>
         public int CompletedCount
         {
-            get { return Missions.Count(m => m.Status == MissionStatusEnum.Complete); }
+            get { return CountOf(MissionStatusEnum.Complete); }
+        }
+
+        /// <summary>
+        /// Missions in the voyage.
+        /// </summary>
+        public int TotalCount
+        {
+            get { return Progress?.TotalMissions ?? 0; }
         }
 
         /// <summary>
@@ -124,7 +231,7 @@ namespace Armada.Tui.Screens.Operations
         /// </summary>
         public int FailedCount
         {
-            get { return Missions.Count(m => m.Status == MissionStatusEnum.Failed); }
+            get { return CountOf(MissionStatusEnum.Failed); }
         }
 
         /// <inheritdoc />
@@ -140,17 +247,70 @@ namespace Armada.Tui.Screens.Operations
                 }
 
                 Voyage = d.Voyage;
-                Missions = d.Missions ?? new List<Mission>();
-                MissionGrid.SetLocalRows(Missions);
+                Progress = d;
+                MissionGrid.Reload();
+                if (!String.IsNullOrEmpty(Voyage.LastBlackBoxEntryId) && (Failure.Entry == null || Failure.Entry.Id != Voyage.LastBlackBoxEntryId)) Failure.Reload();
                 Loaded = true;
                 LoadError = null;
                 Heading = String.IsNullOrEmpty(Voyage.Title) ? Voyage.Id : Voyage.Title;
                 Status = Voyage.Status.ToString();
                 SubtitleText = Tr("Voyages") + " / " + Heading;
                 Overview.Invalidate();
+                if (_CascadeLoaded) LoadCascade();
+                if (_TreeLoaded) LoadTree();
             }, null, ex =>
             {
                 if (initial) LoadError = Tr("Failed to load voyage: {{message}}", LocalizationArgs.Of("message", ex.Message));
+            });
+        }
+
+        /// <summary>
+        /// Load (or reload) the mission tree into the Tree tab.
+        /// </summary>
+        public void LoadTree()
+        {
+            _TreeLoaded = true;
+            int generation = ++_TreeGeneration;
+            if (MissionTree == null) Tree.SetLoading();
+            Call((c, t) => c.GetVoyageTreeAsync(VoyageId, t), tree =>
+            {
+                if (generation != _TreeGeneration) return;
+                MissionTree = tree;
+                List<MissionTreeRow> rows = tree == null ? new List<MissionTreeRow>() : MissionTreeText.Rows(tree.Roots);
+                Tree.EmptyText = "No missions in this voyage.";
+                Tree.SetLocalRows(rows);
+                if (tree != null && tree.Truncated) Toast(NotificationSeverityEnum.Info, Tr("The tree shows the oldest {{count}} missions.", LocalizationArgs.Of("count", 1000)));
+            }, null, ex =>
+            {
+                if (generation != _TreeGeneration) return;
+                MissionTree = null;
+                Tree.SetError(Tr("The mission tree could not be loaded: {{message}}", LocalizationArgs.Of("message", ex.Message)));
+            });
+        }
+
+        /// <summary>
+        /// Load (or reload) the cascade graph into the Cascade tab.
+        /// </summary>
+        public void LoadCascade()
+        {
+            _CascadeLoaded = true;
+            int generation = ++_CascadeGeneration;
+            Cascade.SetLoading();
+            Call((c, t) => c.GetVoyageBlackBoxCascadeAsync(VoyageId, t), g =>
+            {
+                if (generation != _CascadeGeneration) return;
+                CascadeGraph = g;
+                List<BlackBoxCascadeRow> rows = g == null ? new List<BlackBoxCascadeRow>() : BlackBoxInsightText.CascadeRows(g);
+                Cascade.EmptyText = "No missions in the cascade.";
+                Cascade.SetLocalRows(rows);
+                if (g != null && g.Truncated) Toast(NotificationSeverityEnum.Info, Tr("The cascade shows the first {{count}} missions.", LocalizationArgs.Of("count", g.Nodes.Count)));
+            }, null, ex =>
+            {
+                if (generation != _CascadeGeneration) return;
+                CascadeGraph = null;
+                Cascade.SetError(ex is ArmadaApiException api && api.StatusCode == 404
+                    ? Tr("No cascade: the voyage has no black box failures.")
+                    : Tr("The cascade could not be loaded: {{message}}", LocalizationArgs.Of("message", ex.Message)));
             });
         }
 
@@ -158,9 +318,60 @@ namespace Armada.Tui.Screens.Operations
 
         #region Private-Methods
 
+        private int CountOf(MissionStatusEnum status)
+        {
+            if (Progress == null) return 0;
+            return Progress.MissionCountsByStatus.TryGetValue(status.ToString(), out int n) ? n : 0;
+        }
+
+        private async Task<GridPage<Mission>> LoadMissionsAsync(GridQuery query, CancellationToken token)
+        {
+            ArmadaPageQuery page = new ArmadaPageQuery(query.PageNumber, query.PageSize).With("voyageId", VoyageId).With("order", EnumerationOrderEnum.CreatedAscending.ToString());
+            EnumerationResult<Mission>? result = await Context.Client.ListMissionsAsync(page, token).ConfigureAwait(false);
+            List<Mission> rows = result?.Objects ?? new List<Mission>();
+            long total = result?.TotalRecords ?? rows.Count;
+            List<MissionPlaybookSnapshot> snapshots = new List<MissionPlaybookSnapshot>();
+            if (query.PageNumber == 1 && rows.Count > 0)
+            {
+                // List reads carry no playbook snapshots; the first mission's detail does (every mission of a voyage
+                // gets the voyage's playbook selections).
+                try
+                {
+                    Mission? first = await Context.Client.GetMissionAsync(rows[0].Id, token).ConfigureAwait(false);
+                    snapshots = first?.PlaybookSnapshots ?? new List<MissionPlaybookSnapshot>();
+                }
+                catch (ArmadaApiException)
+                {
+                    // The table still shows when the snapshot read fails.
+                }
+            }
+
+            Context.Dispatcher.Post(() =>
+            {
+                Missions = rows;
+                if (query.PageNumber == 1) Snapshots = snapshots;
+                Overview.Invalidate();
+            });
+            return new GridPage<Mission>(rows, total);
+        }
+
         private static bool IsActive(VoyageStatusEnum status)
         {
             return status == VoyageStatusEnum.Open || status == VoyageStatusEnum.InProgress;
+        }
+
+        private string CascadeLinks(BlackBoxCascadeRow row)
+        {
+            BlackBoxCascadeGraph? g = CascadeGraph;
+            if (g == null) return "-";
+            List<string> links = g.Edges.Where(e => e.ToMissionId == row.Node.MissionId).Select(e => e.Kind + " " + e.FromMissionId).ToList();
+            return links.Count == 0 ? (row.Node.IsRoot ? Tr("root cause") : "-") : String.Join(", ", links);
+        }
+
+        private void OpenCascadeRow(BlackBoxCascadeRow row)
+        {
+            if (!String.IsNullOrEmpty(row.Node.EntryId)) Context.Navigate("/blackbox/" + Uri.EscapeDataString(row.Node.EntryId!));
+            else Context.Navigate("/missions/" + Uri.EscapeDataString(row.Node.MissionId));
         }
 
         private bool OnMission()
@@ -179,7 +390,7 @@ namespace Armada.Tui.Screens.Operations
             Dictionary<string, string> q = new Dictionary<string, string>(StringComparer.Ordinal);
             q["tab"] = "checks";
             q["prefill"] = "1";
-            q["vesselId"] = Missions.FirstOrDefault()?.VesselId ?? "";
+            q["vesselId"] = Progress?.VesselId ?? Missions.FirstOrDefault()?.VesselId ?? "";
             q["voyageId"] = Voyage.Id;
             string? branch = Missions.FirstOrDefault()?.BranchName;
             if (!String.IsNullOrEmpty(branch)) q["branchName"] = branch!;
@@ -192,10 +403,10 @@ namespace Armada.Tui.Screens.Operations
             if (Voyage == null) return;
             Dictionary<string, string> q = new Dictionary<string, string>(StringComparer.Ordinal);
             q["prefill"] = "1";
-            string? vessel = Missions.FirstOrDefault()?.VesselId;
+            string? vessel = Progress?.VesselId ?? Missions.FirstOrDefault()?.VesselId;
             if (!String.IsNullOrEmpty(vessel)) q["vesselId"] = vessel!;
+            // The release links the voyage; its missions follow from it, so the URL never lists every mission id.
             q["voyageIds"] = Voyage.Id;
-            q["missionIds"] = String.Join(",", Missions.Select(m => m.Id));
             q["title"] = String.IsNullOrEmpty(Voyage.Title) ? "Voyage Release" : Voyage.Title + " Release";
             Context.Navigate("/releases/new" + RouteMatch.BuildQuery(q));
         }
@@ -220,22 +431,34 @@ namespace Armada.Tui.Screens.Operations
             string name = Name();
             Confirm("Delete Voyage", Tr("Permanently delete this voyage and all its missions? This cannot be undone."), () =>
             {
-                Run((c, t) => c.PurgeVoyageAsync(VoyageId, t), () =>
+                DeleteProgress.RunVoid(Context, "Purging voyage", t => Context.Client.PurgeVoyageAsync(VoyageId, t), () =>
                 {
                     Toast(NotificationSeverityEnum.Warning, Tr("Voyage \"{{title}}\" deleted.", LocalizationArgs.Of("title", name)));
                     Context.Navigate("/missions?tab=voyages");
-                }, null, ex => ShowMessage(Tr("Delete failed: {{message}}", LocalizationArgs.Of("message", ex.Message))));
+                }, "Delete failed.");
             }, "Delete");
         }
 
         private void RetryFailed()
         {
-            List<Mission> failed = Missions.Where(m => m.Status == MissionStatusEnum.Failed).ToList();
-            if (failed.Count == 0) return;
-            Confirm("Retry Failed Missions", Tr("Retry {{count}} failed mission(s)? New missions will be created with the same parameters.", LocalizationArgs.Of("count", failed.Count)), () =>
+            int failedCount = FailedCount;
+            if (failedCount == 0) return;
+            Confirm("Retry Failed Missions", Tr("Retry {{count}} failed mission(s)? New missions will be created with the same parameters.", LocalizationArgs.Of("count", failedCount)), () =>
             {
                 Run(async (c, t) =>
                 {
+                    // Read every failed mission explicitly, one bounded page at a time, before creating the retries
+                    // (the new missions are Pending, so they never join the Failed pages being read).
+                    List<Mission> failed = new List<Mission>();
+                    for (int pageNumber = 1; ; pageNumber++)
+                    {
+                        ArmadaPageQuery fq = new ArmadaPageQuery(pageNumber, 100).With("voyageId", VoyageId).With("status", MissionStatusEnum.Failed.ToString());
+                        EnumerationResult<Mission>? page = await c.ListMissionsAsync(fq, t).ConfigureAwait(false);
+                        if (page == null || page.Objects.Count == 0) break;
+                        failed.AddRange(page.Objects);
+                        if (pageNumber >= page.TotalPages) break;
+                    }
+
                     foreach (Mission m in failed)
                     {
                         Mission retry = new Mission(m.Title, m.Description);
@@ -246,7 +469,7 @@ namespace Armada.Tui.Screens.Operations
                     }
                 }, () =>
                 {
-                    Toast(NotificationSeverityEnum.Success, Tr("Retried {{count}} failed mission(s).", LocalizationArgs.Of("count", failed.Count)));
+                    Toast(NotificationSeverityEnum.Success, Tr("Retried {{count}} failed mission(s).", LocalizationArgs.Of("count", failedCount)));
                     Load();
                 }, null, ex => ShowMessage(Tr("Retry failed: {{message}}", LocalizationArgs.Of("message", ex.Message))));
             }, "Retry");
@@ -289,17 +512,17 @@ namespace Armada.Tui.Screens.Operations
             doc.Time("Created", v.CreatedUtc, now);
             if (v.CompletedUtc.HasValue) doc.Time("Completed", v.CompletedUtc, now);
 
-            if (Missions.Count > 0)
+            if (TotalCount > 0)
             {
                 doc.Section("Progress");
-                int pct = (int)Math.Round(CompletedCount * 100.0 / Missions.Count);
+                int pct = (int)Math.Round(CompletedCount * 100.0 / TotalCount);
                 int barWidth = 40;
                 int filled = pct * barWidth / 100;
                 doc.Add(StyledText.From("[" + new string('#', filled), doc.Theme.Accent).Append(StyledText.From(new string('-', barWidth - filled) + "] " + pct + "%", doc.Theme.Muted)));
-                doc.Text(Tr("{{completed}}/{{total}} complete, {{failed}} failed", LocalizationArgs.Of("completed", CompletedCount, "total", Missions.Count, "failed", FailedCount)), doc.Theme.Muted);
+                doc.Text(Tr("{{completed}}/{{total}} complete, {{failed}} failed", LocalizationArgs.Of("completed", CompletedCount, "total", TotalCount, "failed", FailedCount)), doc.Theme.Muted);
             }
 
-            List<MissionPlaybookSnapshot> snapshots = Missions.FirstOrDefault()?.PlaybookSnapshots ?? new List<MissionPlaybookSnapshot>();
+            List<MissionPlaybookSnapshot> snapshots = Snapshots;
             List<SelectedPlaybook> selections = v.SelectedPlaybooks ?? new List<SelectedPlaybook>();
             if (snapshots.Count > 0 || selections.Count > 0)
             {
@@ -325,8 +548,8 @@ namespace Armada.Tui.Screens.Operations
                 }
             }
 
-            doc.Section("Missions", " (" + Missions.Count + ")");
-            doc.Note(Missions.Count == 0 ? "No missions in this voyage." : "] " + Tr("Missions") + ": d " + Tr("Diff") + "  l " + Tr("Log") + "  Enter " + Tr("Detail"));
+            doc.Section("Missions", " (" + TotalCount + ")");
+            doc.Note(TotalCount == 0 ? "No missions in this voyage." : "] " + Tr("Missions") + ": d " + Tr("Diff") + "  l " + Tr("Log") + "  Enter " + Tr("Detail"));
             return doc;
         }
 

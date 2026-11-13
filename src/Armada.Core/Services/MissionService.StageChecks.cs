@@ -102,7 +102,7 @@ namespace Armada.Core.Services
 
                 // A stage that committed nothing has nothing new to verify (a frontier stage that only reviewed). Local
                 // models are still checked either way, because they often leave edits uncommitted.
-                string? startCommit = TryReadDockStartCommit(dock.Id);
+                string? startCommit = TryReadDockStartCommit(dock, mission);
                 if (!checkedRuntime)
                 {
                     string? head = await ReadDockHeadAsync(dock, token).ConfigureAwait(false);
@@ -165,8 +165,7 @@ namespace Armada.Core.Services
                                 return result;
                             }
 
-                            string output = ((commandResult.StandardOutput ?? "") + "\n" + (commandResult.StandardError ?? "")).Trim();
-                            if (output.Length > 3000) output = "...\n" + output.Substring(output.Length - 3000);
+                            string output = StageCheckOutputSummarizer.Summarize((commandResult.StandardOutput ?? "") + "\n" + (commandResult.StandardError ?? ""));
                             _Logging.Warn(_Header + "stage check for mission " + mission.Id + " failed: " + command + " exited " + commandResult.ExitCode);
                             result.Status = StageCheckStatusEnum.Failed;
                             result.FailedCommand = command;
@@ -243,7 +242,7 @@ namespace Armada.Core.Services
                 // The rescue is for a captain that never commits. A captain that committed its work this attempt has said
                 // what belongs on the branch; what it left behind is typically build output (regenerated XML docs, lock
                 // files), and committing that breaks the mission's file scope and sends the work back to rework.
-                string? startCommit = TryReadDockStartCommit(dock.Id);
+                string? startCommit = TryReadDockStartCommit(dock, mission);
                 string? headCommit = await git.GetHeadCommitHashAsync(dock.WorktreePath!, token).ConfigureAwait(false);
                 if (!String.IsNullOrEmpty(startCommit) && !String.IsNullOrEmpty(headCommit)
                     && !String.Equals(startCommit, headCommit, StringComparison.OrdinalIgnoreCase))

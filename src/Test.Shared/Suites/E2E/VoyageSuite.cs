@@ -129,7 +129,7 @@ namespace Test.Shared.Suites.E2E
 
                 HttpResponseMessage getResp = await authClient.GetAsync("/api/v1/voyages/" + voyageId);
                 AssertEqual(HttpStatusCode.OK, getResp.StatusCode);
-                VoyageDetailResponse detail = await JsonHelper.DeserializeAsync<VoyageDetailResponse>(getResp);
+                VoyageDetailView detail = await VoyageDetailView.ReadAsync(authClient, getResp);
                 AssertEqual(1, detail.Missions!.Count);
             }));
 
@@ -148,7 +148,7 @@ namespace Test.Shared.Suites.E2E
                 string voyageId = voyage.Id;
 
                 HttpResponseMessage getResp = await authClient.GetAsync("/api/v1/voyages/" + voyageId);
-                VoyageDetailResponse detail = await JsonHelper.DeserializeAsync<VoyageDetailResponse>(getResp);
+                VoyageDetailView detail = await VoyageDetailView.ReadAsync(authClient, getResp);
                 AssertEqual(5, detail.Missions!.Count);
             }));
 
@@ -167,7 +167,7 @@ namespace Test.Shared.Suites.E2E
                 string voyageId = voyage.Id;
 
                 HttpResponseMessage getResp = await authClient.GetAsync("/api/v1/voyages/" + voyageId);
-                VoyageDetailResponse detail = await JsonHelper.DeserializeAsync<VoyageDetailResponse>(getResp);
+                VoyageDetailView detail = await VoyageDetailView.ReadAsync(authClient, getResp);
 
                 List<string> titles = detail.Missions!.Select(m => m.Title).ToList();
 
@@ -189,7 +189,7 @@ namespace Test.Shared.Suites.E2E
                 string voyageId = voyage.Id;
 
                 HttpResponseMessage getResp = await authClient.GetAsync("/api/v1/voyages/" + voyageId);
-                VoyageDetailResponse detail = await JsonHelper.DeserializeAsync<VoyageDetailResponse>(getResp);
+                VoyageDetailView detail = await VoyageDetailView.ReadAsync(authClient, getResp);
 
                 foreach (Mission m in detail.Missions!)
                 {
@@ -212,7 +212,7 @@ namespace Test.Shared.Suites.E2E
                 string voyageId = voyage.Id;
 
                 HttpResponseMessage getResp = await authClient.GetAsync("/api/v1/voyages/" + voyageId);
-                VoyageDetailResponse detail = await JsonHelper.DeserializeAsync<VoyageDetailResponse>(getResp);
+                VoyageDetailView detail = await VoyageDetailView.ReadAsync(authClient, getResp);
 
                 foreach (Mission m in detail.Missions!)
                 {
@@ -235,7 +235,7 @@ namespace Test.Shared.Suites.E2E
                 string voyageId = voyage.Id;
 
                 HttpResponseMessage getResp = await authClient.GetAsync("/api/v1/voyages/" + voyageId);
-                VoyageDetailResponse detail = await JsonHelper.DeserializeAsync<VoyageDetailResponse>(getResp);
+                VoyageDetailView detail = await VoyageDetailView.ReadAsync(authClient, getResp);
 
                 foreach (Mission m in detail.Missions!)
                 {
@@ -344,7 +344,7 @@ namespace Test.Shared.Suites.E2E
                 HttpResponseMessage response = await authClient.GetAsync("/api/v1/voyages/" + voyageId);
                 AssertEqual(HttpStatusCode.OK, response.StatusCode);
 
-                VoyageDetailResponse detail = await JsonHelper.DeserializeAsync<VoyageDetailResponse>(response);
+                VoyageDetailView detail = await VoyageDetailView.ReadAsync(authClient, response);
 
                 AssertTrue(detail.Voyage != null);
                 AssertTrue(detail.Missions != null);
@@ -368,7 +368,7 @@ namespace Test.Shared.Suites.E2E
                 string voyageId = created.Id;
 
                 HttpResponseMessage response = await authClient.GetAsync("/api/v1/voyages/" + voyageId);
-                VoyageDetailResponse detail = await JsonHelper.DeserializeAsync<VoyageDetailResponse>(response);
+                VoyageDetailView detail = await VoyageDetailView.ReadAsync(authClient, response);
                 Voyage voyage = detail.Voyage!;
 
                 AssertEqual(voyageId, voyage.Id);
@@ -434,7 +434,7 @@ namespace Test.Shared.Suites.E2E
                 string voyageId = created.Id;
 
                 HttpResponseMessage response = await authClient.GetAsync("/api/v1/voyages/" + voyageId);
-                VoyageDetailResponse detail = await JsonHelper.DeserializeAsync<VoyageDetailResponse>(response);
+                VoyageDetailView detail = await VoyageDetailView.ReadAsync(authClient, response);
                 Mission firstMission = detail.Missions![0];
 
                 AssertTrue(firstMission.Id != null);
@@ -485,7 +485,7 @@ namespace Test.Shared.Suites.E2E
                 await authClient.DeleteAsync("/api/v1/voyages/" + voyageId);
 
                 HttpResponseMessage getResp = await authClient.GetAsync("/api/v1/voyages/" + voyageId);
-                VoyageDetailResponse detail = await JsonHelper.DeserializeAsync<VoyageDetailResponse>(getResp);
+                VoyageDetailView detail = await VoyageDetailView.ReadAsync(authClient, getResp);
                 AssertEqual("Cancelled", detail.Voyage!.Status.ToString());
             }));
 
@@ -506,7 +506,7 @@ namespace Test.Shared.Suites.E2E
                 await authClient.DeleteAsync("/api/v1/voyages/" + voyageId);
 
                 HttpResponseMessage getResp = await authClient.GetAsync("/api/v1/voyages/" + voyageId);
-                VoyageDetailResponse detail = await JsonHelper.DeserializeAsync<VoyageDetailResponse>(getResp);
+                VoyageDetailView detail = await VoyageDetailView.ReadAsync(authClient, getResp);
                 AssertTrue(detail.Voyage!.CompletedUtc != null);
             }));
 
@@ -527,7 +527,7 @@ namespace Test.Shared.Suites.E2E
                 await authClient.DeleteAsync("/api/v1/voyages/" + voyageId);
 
                 HttpResponseMessage getResp = await authClient.GetAsync("/api/v1/voyages/" + voyageId);
-                VoyageDetailResponse detail = await JsonHelper.DeserializeAsync<VoyageDetailResponse>(getResp);
+                VoyageDetailView detail = await VoyageDetailView.ReadAsync(authClient, getResp);
 
                 foreach (Mission m in detail.Missions!)
                 {
@@ -565,7 +565,7 @@ namespace Test.Shared.Suites.E2E
                 HttpResponseMessage getResp = await authClient.GetAsync("/api/v1/voyages/" + voyageId);
                 AssertEqual(HttpStatusCode.OK, getResp.StatusCode);
 
-                VoyageDetailResponse detail = await JsonHelper.DeserializeAsync<VoyageDetailResponse>(getResp);
+                VoyageDetailView detail = await VoyageDetailView.ReadAsync(authClient, getResp);
                 AssertTrue(detail.Voyage != null);
             }));
 
@@ -666,7 +666,7 @@ namespace Test.Shared.Suites.E2E
                 await authClient.DeleteAsync("/api/v1/voyages/" + voyageId);
 
                 HttpResponseMessage getBeforeResp = await authClient.GetAsync("/api/v1/voyages/" + voyageId);
-                VoyageDetailResponse detailBefore = await JsonHelper.DeserializeAsync<VoyageDetailResponse>(getBeforeResp);
+                VoyageDetailView detailBefore = await VoyageDetailView.ReadAsync(authClient, getBeforeResp);
                 List<string> missionIds = detailBefore.Missions!.Select(m => m.Id).ToList();
 
                 AssertTrue(missionIds.Count > 0);
@@ -1530,7 +1530,7 @@ namespace Test.Shared.Suites.E2E
                 await authClient.DeleteAsync("/api/v1/voyages/" + voyageId);
 
                 HttpResponseMessage response = await authClient.GetAsync("/api/v1/voyages/" + voyageId);
-                VoyageDetailResponse detail = await JsonHelper.DeserializeAsync<VoyageDetailResponse>(response);
+                VoyageDetailView detail = await VoyageDetailView.ReadAsync(authClient, response);
 
                 foreach (Mission m in detail.Missions!)
                 {

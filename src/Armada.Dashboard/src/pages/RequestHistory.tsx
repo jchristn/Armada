@@ -17,6 +17,8 @@ import type {
   RequestHistorySummaryBucket,
   RequestHistorySummaryResult,
 } from '../types/models';
+import { useDeleteProgress } from '../lib/useDeleteProgress';
+import { deleteMatchingRequestHistoryTitle } from '../lib/deleteProgress';
 import DataTable, { type DataTableColumn } from '../components/shared/DataTable';
 import ActionMenu from '../components/shared/ActionMenu';
 import ConfirmDialog from '../components/shared/ConfirmDialog';
@@ -238,6 +240,7 @@ export default function RequestHistory() {
   const navigate = useNavigate();
   const { id } = useParams();
   const { t, formatDateTime, formatRelativeTime } = useLocale();
+  const deletion = useDeleteProgress();
   const { pushToast } = useNotifications();
   const { isAdmin, isTenantAdmin } = useAuth();
 
@@ -346,50 +349,59 @@ export default function RequestHistory() {
     }
   }, [navigate, t]);
 
+  const runDelete = deletion.run;
+
   const handleDeleteSingle = useCallback(async () => {
     if (!deleteTarget) return;
-    try {
-      await deleteRequestHistoryEntry(deleteTarget.id);
-      pushToast('warning', t('Request entry deleted.'));
-      setDeleteTarget(null);
-      if (detailRecord?.entry.id === deleteTarget.id) {
-        setDetailRecord(null);
-        navigate('/requests');
-      }
-      await loadEntries();
-      await loadSummary();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t('Failed to delete request history entry.'));
+    const target = deleteTarget;
+    setDeleteTarget(null);
+    const done = await runDelete({
+      kind: 'requestHistoryEntry',
+      action: () => deleteRequestHistoryEntry(target.id),
+      errorMessage: (err) => (err instanceof Error ? err.message : t('Failed to delete request history entry.')),
+    });
+    if (!done) return;
+    pushToast('warning', t('Request entry deleted.'));
+    if (detailRecord?.entry.id === target.id) {
+      setDetailRecord(null);
+      navigate('/requests');
     }
-  }, [deleteTarget, detailRecord?.entry.id, loadEntries, loadSummary, navigate, pushToast, t]);
+    await loadEntries();
+    await loadSummary();
+  }, [deleteTarget, detailRecord?.entry.id, loadEntries, loadSummary, navigate, pushToast, runDelete, t]);
 
   const handleDeleteSelected = useCallback(async () => {
-    try {
-      await deleteRequestHistoryEntries(selectedIds);
-      pushToast('warning', t('Deleted {{count}} request entries.', { count: selectedIds.length }));
-      setDeleteSelectedOpen(false);
-      await loadEntries();
-      await loadSummary();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t('Failed to delete selected request entries.'));
-    }
-  }, [loadEntries, loadSummary, pushToast, selectedIds, t]);
+    const ids = [...selectedIds];
+    setDeleteSelectedOpen(false);
+    const done = await runDelete({
+      kind: 'requestHistoryEntry',
+      count: ids.length,
+      action: () => deleteRequestHistoryEntries(ids),
+      errorMessage: (err) => (err instanceof Error ? err.message : t('Failed to delete selected request entries.')),
+    });
+    if (!done) return;
+    pushToast('warning', t('Deleted {{count}} request entries.', { count: ids.length }));
+    await loadEntries();
+    await loadSummary();
+  }, [loadEntries, loadSummary, pushToast, runDelete, selectedIds, t]);
 
   const handleDeleteFiltered = useCallback(async () => {
-    try {
-      const deleteQuery: RequestHistoryQuery = { ...query };
-      delete deleteQuery.pageNumber;
-      delete deleteQuery.pageSize;
-      await deleteRequestHistoryByFilter(deleteQuery);
-      pushToast('warning', t('Deleted the current filtered request set.'));
-      setDeleteFilteredOpen(false);
-      setPageNumber(1);
-      await loadEntries();
-      await loadSummary();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t('Failed to delete filtered request entries.'));
-    }
-  }, [loadEntries, loadSummary, pushToast, query, t]);
+    const deleteQuery: RequestHistoryQuery = { ...query };
+    delete deleteQuery.pageNumber;
+    delete deleteQuery.pageSize;
+    setDeleteFilteredOpen(false);
+    const done = await runDelete({
+      kind: 'requestHistoryEntry',
+      title: deleteMatchingRequestHistoryTitle(t),
+      action: () => deleteRequestHistoryByFilter(deleteQuery),
+      errorMessage: (err) => (err instanceof Error ? err.message : t('Failed to delete filtered request entries.')),
+    });
+    if (!done) return;
+    pushToast('warning', t('Deleted the current filtered request set.'));
+    setPageNumber(1);
+    await loadEntries();
+    await loadSummary();
+  }, [loadEntries, loadSummary, pushToast, query, runDelete, t]);
 
   const detailHeaders = useMemo(() => requestDetailMaps(detailRecord), [detailRecord]);
 
@@ -712,6 +724,7 @@ export default function RequestHistory() {
         </div>
       )}
 
+      {deletion.dialog}
       <ConfirmDialog
         open={!!deleteTarget}
         title={t('Delete Request Entry')}

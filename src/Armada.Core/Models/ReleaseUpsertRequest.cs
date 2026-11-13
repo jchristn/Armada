@@ -2,6 +2,7 @@ namespace Armada.Core.Models
 {
     using System.Collections.Generic;
     using Armada.Core.Enums;
+    using Armada.Core.Services;
 
     /// <summary>
     /// Request payload for creating or updating a release.
@@ -51,21 +52,25 @@ namespace Armada.Core.Models
         /// <summary>
         /// Linked voyage identifiers.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxLinkedIds)]
         public List<string> VoyageIds { get; set; } = new List<string>();
 
         /// <summary>
         /// Linked mission identifiers.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxLinkedIds)]
         public List<string> MissionIds { get; set; } = new List<string>();
 
         /// <summary>
         /// Linked check-run identifiers.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxLinkedIds)]
         public List<string> CheckRunIds { get; set; } = new List<string>();
 
         /// <summary>
         /// Optional linked objective identifiers to associate with the release.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxLinkedIds)]
         public List<string> ObjectiveIds { get; set; } = new List<string>();
     }
 }

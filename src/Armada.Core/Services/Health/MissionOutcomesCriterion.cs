@@ -61,8 +61,10 @@ namespace Armada.Core.Services.Health
             int window = context.Settings.MissionWindowDays;
             DateTime cutoff = context.NowUtc.AddDays(-window);
             List<MissionSummary> missions = await _Database.Missions.EnumerateSummariesByVesselAsync(context.TenantId, context.Vessel.Id, token).ConfigureAwait(false);
+            // An operator's stop is not a failure of the vessel's work (older stops were recorded as Failed).
             int failures = missions.Count(m =>
                 (m.Status == MissionStatusEnum.Failed || m.Status == MissionStatusEnum.LandingFailed)
+                && m.FailureKind != MissionFailureKindEnum.OperatorAction
                 && (m.CompletedUtc ?? m.LastUpdateUtc) >= cutoff);
             context.Health.RecentMissionFailureCount = failures;
             return Grade(failures, window, context.Settings.Thresholds.MissionFailureWarn, context.Settings.Thresholds.MissionFailureFail);

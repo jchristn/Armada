@@ -138,7 +138,7 @@ describe('deployment detail', () => {
 
   it('syncs GitHub Actions with the deployment context', async () => {
     api.getDeployment.mockResolvedValue(dep({ status: 'Succeeded', workflowProfileId: 'wfp_1' }));
-    api.syncGitHubActions.mockResolvedValue({ providerName: 'GitHub', vesselId: 'vsl_1', deploymentId: 'dpl_1', createdCount: 2, updatedCount: 1, checkRuns: [] });
+    api.syncGitHubActions.mockResolvedValue({ providerName: 'GitHub', vesselId: 'vsl_1', deploymentId: 'dpl_1', createdCount: 2, updatedCount: 1, pageNumber: 1, pageSize: 20, sourceTotalCount: 3, sourceTotalPages: 1, fetchedCount: 3, filteredOutCount: 0, checkRunIds: ['chk_1', 'chk_2', 'chk_3'] });
     await renderW4Routes(ROUTES, '/deployments/dpl_1');
     await waitFor(() => expect(screen.getByTestId('deployment-sync-github')).toBeTruthy());
     await act(async () => { await fireEvent.press(screen.getByTestId('deployment-sync-github')); });

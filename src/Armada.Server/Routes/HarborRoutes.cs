@@ -62,12 +62,12 @@ namespace Armada.Server.Routes
                 AuthContext? ctx = await AuthorizeAsync(req, authenticate, authz).ConfigureAwait(false);
                 if (ctx == null) return BuildAuthError(req);
                 EnumerationQuery query = EnumerationRequestReader.Read(req, _BodyJsonOptions);
-                return EnumerationResult<Harbor>.Page(query, await _Harbors.EnumerateAsync(ctx).ConfigureAwait(false));
+                return await _Harbors.EnumeratePageAsync(ctx, query).ConfigureAwait(false);
             },
             api => api
                 .WithTag("Harbors")
                 .WithSummary("Enumerate Harbors")
-                .WithDescription("One page of the registered Harbors visible to the caller, newest first. Paging and filters come from the JSON body (EnumerationQuery) or the querystring (pageNumber, pageSize 1 to 1000, default 10).")
+                .WithDescription("One page of the registered Harbors visible to the caller, counted and cut in the database, newest first (Order CreatedAscending for oldest first; ties break by id). Paging and filters (CreatedAfter, CreatedBefore) come from the JSON body (EnumerationQuery) or the querystring (pageNumber, pageSize 1 to 1000, default 10).")
                 .WithRequestBody(OpenApiJson.BodyFor<EnumerationQuery>("Paging and filters", false))
                 .WithResponse(200, OpenApiJson.For<EnumerationResult<Harbor>>("One page"))
                 .WithSecurity("ApiKey"));
@@ -85,6 +85,10 @@ namespace Armada.Server.Routes
                     req.Http.Response.StatusCode = 201;
                     return created;
                 }
+                catch (CollectionLimitExceededException ex)
+                {
+                    return RouteErrorMapper.LimitExceeded(req, ex);
+                }
                 catch (Exception ex) when (ex is ArgumentException || ex is InvalidOperationException)
                 {
                     req.Http.Response.StatusCode = 400;
@@ -94,7 +98,7 @@ namespace Armada.Server.Routes
             api => api
                 .WithTag("Harbors")
                 .WithSummary("Register a Harbor")
-                .WithDescription("Pre-registers a Harbor. A Harbor also self-registers on first handshake.")
+                .WithDescription("Pre-registers a Harbor. A Harbor also self-registers on first handshake. Capabilities may hold at most 256 entries (400 with Data.Code CollectionLimitExceeded otherwise).")
                 .WithRequestBody(OpenApiJson.BodyFor<Harbor>("Harbor create request", true))
                 .WithResponse(201, OpenApiJson.For<Harbor>("Created Harbor"))
                 .WithResponse(400, OpenApiResponseMetadata.BadRequest())
@@ -362,6 +366,14 @@ namespace Armada.Server.Routes
                 HarborProbeRequest probe = new HarborProbeRequest();
                 if (!string.IsNullOrWhiteSpace(req.Http.Request.DataAsString))
                     probe = JsonSerializer.Deserialize<HarborProbeRequest>(req.Http.Request.DataAsString, _BodyJsonOptions) ?? new HarborProbeRequest();
+                try
+                {
+                    CollectionBounds.Validate(probe);
+                }
+                catch (CollectionLimitExceededException ex)
+                {
+                    return RouteErrorMapper.LimitExceeded(req, ex);
+                }
 
                 if (!_Connections.IsConnected(harbor.Id))
                 {

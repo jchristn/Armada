@@ -3,6 +3,7 @@ namespace Armada.Server.Mcp
     using System.Collections.Generic;
     using Armada.Core.Enums;
     using Armada.Core.Models;
+    using Armada.Core.Services;
 
     /// <summary>
     /// MCP tool arguments for workflow-profile get, create, update, delete, and validate. Every field is optional so
@@ -63,6 +64,7 @@ namespace Armada.Server.Mcp
         /// <summary>
         /// Language or framework hints.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxConfigItems)]
         public List<string>? LanguageHints { get; set; }
 
         /// <summary>
@@ -143,16 +145,19 @@ namespace Armada.Server.Mcp
         /// <summary>
         /// Required secret or configuration input references.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxConfigItems)]
         public List<WorkflowInputReference>? RequiredInputs { get; set; }
 
         /// <summary>
         /// Expected build or release artifacts.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxConfigItems)]
         public List<string>? ExpectedArtifacts { get; set; }
 
         /// <summary>
         /// Environment-specific delivery commands.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxConfigItems)]
         public List<WorkflowEnvironmentProfile>? Environments { get; set; }
     }
 }

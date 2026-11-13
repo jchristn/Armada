@@ -288,6 +288,18 @@ namespace Armada.Core.Database.Postgresql.Implementations
         /// <inheritdoc />
         public async Task<EnumerationResult<Pipeline>> EnumerateAsync(EnumerationQuery query, CancellationToken token = default)
         {
+            return await EnumerateInternalAsync(null, null, query, token).ConfigureAwait(false);
+        }
+
+        /// <inheritdoc />
+        public async Task<EnumerationResult<Pipeline>> EnumerateVisibleAsync(string tenantId, string? viewerUserId, EnumerationQuery query, CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(tenantId)) throw new ArgumentNullException(nameof(tenantId));
+            return await EnumerateInternalAsync(tenantId, viewerUserId, query, token).ConfigureAwait(false);
+        }
+
+        private async Task<EnumerationResult<Pipeline>> EnumerateInternalAsync(string? tenantId, string? viewerUserId, EnumerationQuery query, CancellationToken token)
+        {
             if (query == null) query = new EnumerationQuery();
 
             using (NpgsqlConnection conn = new NpgsqlConnection(_Settings.GetConnectionString()))
@@ -296,6 +308,19 @@ namespace Armada.Core.Database.Postgresql.Implementations
 
                 List<string> conditions = new List<string>();
                 List<NpgsqlParameter> parameters = new List<NpgsqlParameter>();
+
+                if (!String.IsNullOrEmpty(tenantId))
+                {
+                    conditions.Add("tenant_id = @tenant_id");
+                    parameters.Add(new NpgsqlParameter("@tenant_id", tenantId));
+                }
+                if (!String.IsNullOrEmpty(viewerUserId))
+                {
+                    // A regular user sees tenant-wide rows plus their own (ScopedVisibility.CanView), counted in the data source.
+                    conditions.Add("(scope = @tenant_wide_scope OR user_id = @viewer_user_id)");
+                    parameters.Add(new NpgsqlParameter("@tenant_wide_scope", ScopeEnum.TenantWide.ToString()));
+                    parameters.Add(new NpgsqlParameter("@viewer_user_id", viewerUserId));
+                }
 
                 if (query.CreatedAfter.HasValue)
                 {
@@ -327,7 +352,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
                 {
                     cmd.Connection = conn;
                     cmd.CommandText = "SELECT * FROM pipelines" + whereClause +
-                        " ORDER BY created_utc " + orderDirection +
+                        " ORDER BY created_utc " + orderDirection + ", id " + orderDirection +
                         " LIMIT " + query.PageSize + " OFFSET " + query.Offset + ";";
                     foreach (NpgsqlParameter p in parameters) cmd.Parameters.Add(new NpgsqlParameter(p.ParameterName, p.Value));
                     using (NpgsqlDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))

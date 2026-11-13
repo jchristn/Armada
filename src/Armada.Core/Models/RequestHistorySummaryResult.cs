@@ -3,6 +3,8 @@ using System.Collections.Generic;
 
 namespace Armada.Core.Models
 {
+    using Armada.Core.Services;
+
     /// <summary>
     /// Aggregate request-history summary for cards and charts.
     /// </summary>
@@ -53,6 +55,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// Summary buckets in chronological order.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxSummaryBuckets)]
         public List<RequestHistorySummaryBucket> Buckets { get; set; } = new List<RequestHistorySummaryBucket>();
 
         #endregion

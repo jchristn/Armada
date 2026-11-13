@@ -1,9 +1,12 @@
 import type {
   FleetAction,
+  FleetActionInput,
   FleetActionKind,
   FleetActionRun,
   FleetActionRunRequest,
+  FleetActionTargetStatus,
   FleetActionUpsertRequest,
+  MissionMode,
 } from '../types/models';
 import { findUnknownTemplateVariables } from './fleetActionTemplate';
 
@@ -29,6 +32,11 @@ export interface FleetActionFormState {
   timeoutSeconds: string;
   defaultConcurrency: string;
   requiresCleanWorkingTree: boolean;
+  /** Mission kind only; Audit and Research are report-only. */
+  missionMode: MissionMode;
+  /** Optional shell check; a non-zero exit skips the vessel as NotApplicable. */
+  applicabilityCommand: string;
+  applicabilityCommandWindows: string;
 }
 
 /** Initial form: blank (create), a copy of `source` named with `copySuffix` (create from source), or `source` (edit). */
@@ -37,6 +45,7 @@ export function formFromAction(source: FleetAction | null | undefined, mode: 'cr
     return {
       name: '', description: '', kind: 'Command', commandText: '', promptTemplate: '', pipelineId: '', persona: '',
       timeoutSeconds: String(defaultTimeout), defaultConcurrency: '4', requiresCleanWorkingTree: true,
+      missionMode: 'Implementation', applicabilityCommand: '', applicabilityCommandWindows: '',
     };
   }
   return {
@@ -55,6 +64,9 @@ export function formFromAction(source: FleetAction | null | undefined, mode: 'cr
     timeoutSeconds: String(source.timeoutSeconds || defaultTimeout),
     defaultConcurrency: String(source.defaultConcurrency || 4),
     requiresCleanWorkingTree: source.requiresCleanWorkingTree,
+    missionMode: source.kind === 'Mission' ? (source.missionMode ?? 'Implementation') : 'Implementation',
+    applicabilityCommand: source.applicabilityCommand ?? '',
+    applicabilityCommandWindows: source.applicabilityCommandWindows ?? '',
   };
 }
 
@@ -73,9 +85,15 @@ export function validateActionForm(form: FleetActionFormState): Record<string, s
   return errors;
 }
 
-/** The create / update body for a valid form. On update an empty string clears an optional field; on create it is omitted (null). */
+/**
+ * The create / update body for a valid form. On update an empty string clears an optional field; on create it is
+ * omitted (null). The applicability commands and mission mode are left out of a create body when unset, and a
+ * Command action is saved with the Implementation mode on update (the server rejects any other for Command).
+ */
 export function buildActionUpsertPayload(form: FleetActionFormState, mode: 'create' | 'edit'): FleetActionUpsertRequest {
   const clearValue = mode === 'edit' ? '' : null;
+  const optionalCommand = (value: string | undefined) => (value && value.trim() ? value : (mode === 'edit' ? '' : undefined));
+  const missionMode = form.kind === 'Mission' ? (form.missionMode ?? 'Implementation') : (mode === 'edit' ? 'Implementation' : undefined);
   return {
     ...form.extensions,
     Name: form.name.trim(),
@@ -88,6 +106,9 @@ export function buildActionUpsertPayload(form: FleetActionFormState, mode: 'crea
     TimeoutSeconds: form.kind === 'Command' ? Number(form.timeoutSeconds) : null,
     DefaultConcurrency: Number(form.defaultConcurrency),
     RequiresCleanWorkingTree: form.kind === 'Command' ? form.requiresCleanWorkingTree : false,
+    ...(optionalCommand(form.applicabilityCommand) !== undefined ? { ApplicabilityCommand: optionalCommand(form.applicabilityCommand) } : {}),
+    ...(optionalCommand(form.applicabilityCommandWindows) !== undefined ? { ApplicabilityCommandWindows: optionalCommand(form.applicabilityCommandWindows) } : {}),
+    ...(missionMode !== undefined ? { MissionMode: missionMode } : {}),
   };
 }
 
@@ -111,16 +132,22 @@ function parseIntStrict(value: string): number | null {
   return parseInt(value, 10);
 }
 
-/** Validate the run flow inputs; returns field -> English message (callers translate). */
+/**
+ * Validate the run flow inputs; returns field -> English message (callers translate). With `followUp` the targets
+ * come from an earlier run, so the vessel count is not checked and at least one source status is required.
+ */
 export function validateRunInputs(args: {
   vesselCount: number;
   mode: RunMode;
   action: FleetAction | null;
   concurrency: string;
   adHoc: AdHocRunForm;
+  followUp?: { statuses: FleetActionTargetStatus[] } | null;
 }): Record<string, string> {
   const errors: Record<string, string> = {};
-  if (args.vesselCount < 1) errors.vessels = 'Select at least one vessel.';
+  if (args.followUp) {
+    if (args.followUp.statuses.length === 0) errors.vessels = 'Choose at least one target status.';
+  } else if (args.vesselCount < 1) errors.vessels = 'Select at least one vessel.';
   else if (args.vesselCount > MAX_RUN_VESSELS) errors.vessels = 'A run can target at most 500 vessels.';
 
   const c = parseIntStrict(args.concurrency);
@@ -149,10 +176,13 @@ export function emptyAdHoc(kind: FleetActionKind): AdHocRunForm {
   return { name: '', kind, commandText: '', promptTemplate: '', pipelineId: '', timeoutSeconds: '300', requiresCleanWorkingTree: kind === 'Command' };
 }
 
+/** Definition keys the ad hoc form does not edit but carries through a re-run. */
+const EXTENSION_KEYS = ['CommandWindows', 'OutputParser', 'ScanSourceActionKey', 'RequiredTools', 'RequiresNetwork', 'Inputs', 'ApplicabilityCommand', 'ApplicabilityCommandWindows', 'MissionMode'];
+
 /** An ad hoc form prefilled from a definition (re-running an ad hoc run). */
 export function adHocFromDefinition(definition: FleetActionUpsertRequest): AdHocRunForm {
   return {
-    ...(Object.keys(definition).some(key => ['CommandWindows', 'OutputParser', 'ScanSourceActionKey', 'RequiredTools', 'RequiresNetwork', 'Inputs'].includes(key)) ? { extensions: definition } : {}),
+    ...(Object.keys(definition).some(key => EXTENSION_KEYS.includes(key)) ? { extensions: definition } : {}),
     name: definition.Name ?? '',
     kind: definition.Kind ?? 'Command',
     commandText: definition.CommandText ?? '',
@@ -191,6 +221,8 @@ export function definitionFromRun(run: FleetActionRun): FleetActionUpsertRequest
   return {
     CommandWindows: run.commandWindows, OutputParser: run.outputParser, ScanSourceActionKey: run.scanSourceActionKey,
     RequiredTools: run.requiredTools, RequiresNetwork: run.requiresNetwork,
+    ApplicabilityCommand: run.applicabilityCommand, ApplicabilityCommandWindows: run.applicabilityCommandWindows,
+    MissionMode: run.kind === 'Mission' ? run.missionMode : undefined,
     Inputs: run.inputs?.map(i => ({ Name: i.name, Type: i.type, Required: i.required, Default: run.inputValues?.[i.name] ?? i.default, AllowedValues: i.allowedValues, Description: i.description })),
     Name: run.actionName,
     Kind: run.kind,
@@ -207,4 +239,45 @@ export function runProgress(run: Pick<FleetActionRun, 'targetCount' | 'succeeded
   const total = Math.max(0, run.targetCount);
   const done = run.succeededCount + run.failedCount + run.skippedCount + run.cancelledCount + (run.findingsCount ?? 0);
   return { total, done, percent: total > 0 ? Math.round((done / total) * 100) : 0 };
+}
+
+/** Same pattern the server applies to `package` inputs: no shell metacharacters, up to 200 characters. */
+export const PACKAGE_INPUT_PATTERN = /^[A-Za-z0-9@][A-Za-z0-9@/._+:-]{0,199}$/;
+
+/**
+ * Validate typed run-time input values; returns input name -> English message (callers translate). Required inputs
+ * must be set and `package` values must match PACKAGE_INPUT_PATTERN.
+ */
+export function validateInputValues(inputs: Pick<FleetActionInput, 'name' | 'type' | 'required'>[], values: Record<string, string>): Record<string, string> {
+  const errors: Record<string, string> = {};
+  for (const input of inputs) {
+    const value = (values[input.name] ?? '').trim();
+    if (!value) {
+      if (input.required) errors[input.name] = 'This input is required.';
+      continue;
+    }
+    if (input.type === 'package' && !PACKAGE_INPUT_PATTERN.test(value)) errors[input.name] = 'Use a package name such as Newtonsoft.Json or @scope/name.';
+  }
+  return errors;
+}
+
+/** Target statuses a follow-up run can draw from, in display order. */
+export const FOLLOW_UP_STATUSES: FleetActionTargetStatus[] = ['Findings', 'Failed', 'Succeeded', 'Skipped', 'TimedOut', 'Cancelled'];
+
+/** Statuses checked by default for a follow-up run (the server default too). */
+export const DEFAULT_FOLLOW_UP_STATUSES: FleetActionTargetStatus[] = ['Findings', 'Failed'];
+
+/** Turn a run request into a follow-up of `runId`: no explicit vessels, targets drawn from that run by status. */
+export function asFollowUpRequest(request: FleetActionRunRequest, runId: string, statuses: FleetActionTargetStatus[]): FleetActionRunRequest {
+  return { ...request, VesselIds: [], FromRunId: runId, FromTargetStatuses: FOLLOW_UP_STATUSES.filter(s => statuses.includes(s)) };
+}
+
+/**
+ * Split actions for a follow-up of a run into suggested ones (whose scanSourceActionKey names the run's action by
+ * built-in key or id, such as Fix failing tests after Run tests) and all others, each keeping its order.
+ */
+export function orderFollowUpActions(actions: FleetAction[], source: { actionId: string | null; builtInKey?: string | null }): { suggested: FleetAction[]; others: FleetAction[] } {
+  const keys = [source.builtInKey, source.actionId].filter((k): k is string => Boolean(k));
+  const isSuggested = (a: FleetAction) => Boolean(a.scanSourceActionKey && keys.includes(a.scanSourceActionKey));
+  return { suggested: actions.filter(isSuggested), others: actions.filter(a => !isSuggested(a)) };
 }

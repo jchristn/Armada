@@ -214,7 +214,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
         public async Task<List<Job>> EnumerateAsync(CancellationToken token = default)
         {
             return await EnumerateInternalAsync(
-                "SELECT * FROM jobs ORDER BY created_utc DESC;",
+                "SELECT * FROM jobs ORDER BY created_utc DESC, id DESC;",
                 null,
                 token).ConfigureAwait(false);
         }
@@ -224,7 +224,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
         {
             if (String.IsNullOrWhiteSpace(tenantId)) throw new ArgumentNullException(nameof(tenantId));
             return await EnumerateInternalAsync(
-                "SELECT * FROM jobs WHERE tenant_id = @tenant_id ORDER BY created_utc DESC;",
+                "SELECT * FROM jobs WHERE tenant_id = @tenant_id ORDER BY created_utc DESC, id DESC;",
                 cmd => cmd.Parameters.AddWithValue("@tenant_id", tenantId),
                 token).ConfigureAwait(false);
         }
@@ -235,7 +235,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
             if (String.IsNullOrWhiteSpace(tenantId)) throw new ArgumentNullException(nameof(tenantId));
             if (String.IsNullOrWhiteSpace(userId)) throw new ArgumentNullException(nameof(userId));
             return await EnumerateInternalAsync(
-                "SELECT * FROM jobs WHERE tenant_id = @tenant_id AND user_id = @user_id ORDER BY created_utc DESC;",
+                "SELECT * FROM jobs WHERE tenant_id = @tenant_id AND user_id = @user_id ORDER BY created_utc DESC, id DESC;",
                 cmd =>
                 {
                     cmd.Parameters.AddWithValue("@tenant_id", tenantId);
@@ -262,7 +262,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
                 }
             }
 
-            List<Job> page = await EnumerateInternalAsync("SELECT * FROM jobs" + where + " ORDER BY created_utc DESC OFFSET @offset ROWS FETCH NEXT @page_size ROWS ONLY;", cmd =>
+            List<Job> page = await EnumerateInternalAsync("SELECT * FROM jobs" + where + " ORDER BY created_utc DESC, id DESC OFFSET @offset ROWS FETCH NEXT @page_size ROWS ONLY;", cmd =>
             {
                 foreach (KeyValuePair<string, object> parameter in parameters) cmd.Parameters.AddWithValue(parameter.Key, parameter.Value);
                 cmd.Parameters.AddWithValue("@page_size", query.PageSize);

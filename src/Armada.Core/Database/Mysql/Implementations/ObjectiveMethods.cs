@@ -239,6 +239,44 @@ namespace Armada.Core.Database.Mysql.Implementations
             }
         }
 
+        /// <inheritdoc />
+        public async Task<EnumerationResult<Objective>> EnumeratePageAsync(string? tenantId, string? userId, ObjectiveQuery query, CancellationToken token = default)
+        {
+            if (query == null) throw new ArgumentNullException(nameof(query));
+            ObjectiveSqlFilter filter = ObjectiveSqlFilter.Build(tenantId, userId, query, false);
+            EnumerationQuery page = new EnumerationQuery();
+            page.PageNumber = query.PageNumber;
+            page.PageSize = query.PageSize;
+            using (MySqlConnection conn = new MySqlConnection(_ConnectionString))
+            {
+                await conn.OpenAsync(token).ConfigureAwait(false);
+                return await MysqlBoundedPage.ReadAsync(conn, filter.FromWhere, "last_update_utc DESC, id DESC",
+                    cmd => BindFilter(cmd, filter), ObjectiveFromReader, page, token).ConfigureAwait(false);
+            }
+        }
+
+        /// <inheritdoc />
+        public async Task<int?> ReadMaxRankAsync(string? tenantId, string? userId, CancellationToken token = default)
+        {
+            ObjectiveSqlFilter filter = ObjectiveSqlFilter.Build(tenantId, userId, new ObjectiveQuery(), false);
+            using (MySqlConnection conn = new MySqlConnection(_ConnectionString))
+            {
+                await conn.OpenAsync(token).ConfigureAwait(false);
+                object? result = await MysqlCommandHelper.ScalarAsync(conn, null, "SELECT MAX(`rank`) " + filter.FromWhere + ";", cmd => BindFilter(cmd, filter), token).ConfigureAwait(false);
+                if (result == null || result == DBNull.Value) return null;
+                return Convert.ToInt32(result);
+            }
+        }
+
+        private static void BindFilter(MySqlCommand cmd, ObjectiveSqlFilter filter)
+        {
+            foreach (SqlFilterParameter parameter in filter.Parameters)
+            {
+                if (parameter.IsDate) cmd.Parameters.AddWithValue(parameter.Name, MysqlDatabaseDriver.ToIso8601(((DateTime)parameter.Value).ToUniversalTime()));
+                else MysqlCommandHelper.Add(cmd, parameter.Name, parameter.Value);
+            }
+        }
+
         private async Task<Objective?> ReadInternalAsync(string sql, Action<MySqlCommand> parameterize, CancellationToken token)
         {
             using (MySqlConnection conn = new MySqlConnection(_ConnectionString))

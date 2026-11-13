@@ -3,6 +3,7 @@ namespace Armada.Core.Models
     using System;
     using System.Collections.Generic;
     using Armada.Core.Enums;
+    using Armada.Core.Services;
 
     /// <summary>
     /// Incident create or update payload.
@@ -72,6 +73,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// Optional backlog/objective identifiers that should remain linked to this incident.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxLinkedIds)]
         public List<string>? ObjectiveIds { get; set; } = null;
 
         /// <summary>
@@ -122,6 +124,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// Optional set of rescue-mission identifiers linked to this incident.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxLinkedIds)]
         public List<string>? RescueMissionIds { get; set; } = null;
     }
 }

@@ -2,6 +2,7 @@ namespace Armada.Core.Models
 {
     using System;
     using System.Collections.Generic;
+    using Armada.Core.Services;
 
     /// <summary>
     /// Reusable HTTP verification definition for post-deploy and rollout-window checks.
@@ -60,6 +61,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// Optional request headers.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxConfigItems)]
         public Dictionary<string, string> Headers { get; set; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
         /// <summary>

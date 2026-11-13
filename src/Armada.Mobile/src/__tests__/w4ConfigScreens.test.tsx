@@ -311,6 +311,21 @@ describe('endpoints, harbors, memories', () => {
     expect(api.disableHarbor).toHaveBeenCalledWith('hbr_1');
   });
 
+  it('harbors: says when the list holds one bounded page of a larger set', async () => {
+    const harbor: Harbor = { id: 'hbr_1', tenantId: 'ten_1', userId: null, name: 'Laptop', capabilities: [], connectionStatus: 'Connected', maxConcurrentJobs: 4, enabled: true, protocolVersion: '1', osPlatform: 'macOS', architecture: 'arm64', lastSeenUtc: null, lastConnectedUtc: null, ...STAMP };
+    const bridge = api.enumerateHarbors.getMockImplementation();
+    api.enumerateHarbors.mockResolvedValue({ success: true, pageNumber: 1, pageSize: 1000, totalPages: 2, totalRecords: 1500, totalMs: 0, objects: [harbor] });
+    try {
+      await renderW4Routes(ROUTES, '/configuration?tab=harbors');
+      await waitFor(() => expect(screen.getByTestId('harbor-row-hbr_1')).toBeTruthy());
+      expect(screen.getByTestId('truncation-note')).toHaveTextContent('Showing 1 of 1500');
+      // One bounded page is read; the rest is never fetched behind the user's back.
+      expect(api.enumerateHarbors.mock.calls.every((call) => call.length === 0 || call[0] === undefined)).toBe(true);
+    } finally {
+      if (bridge) api.enumerateHarbors.mockImplementation(bridge);
+    }
+  });
+
   it('harbors are read-only for regular users', async () => {
     api.listHarbors.mockResolvedValue([]);
     await renderW4Routes(ROUTES, '/configuration?tab=harbors', 'user');

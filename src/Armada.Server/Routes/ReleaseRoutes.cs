@@ -97,6 +97,7 @@ namespace Armada.Server.Routes
 
                 try
                 {
+                    CollectionBounds.Validate(request);
                     await ValidateObjectivesAsync(ctx, request.ObjectiveIds).ConfigureAwait(false);
                     Release release = await _Releases.CreateAsync(ctx, request).ConfigureAwait(false);
                     await LinkObjectivesAsync(ctx, request.ObjectiveIds, release.Id).ConfigureAwait(false);
@@ -153,7 +154,7 @@ namespace Armada.Server.Routes
                 try
                 {
                     EnumerationQuery query = EnumerationRequestReader.Read(req, _BodyJsonOptions);
-                    return EnumerationResult<GitHubPullRequestDetail>.Page(query, await _GitHub.GetReleasePullRequestsAsync(ctx, release).ConfigureAwait(false));
+                    return await _GitHub.EnumerateReleasePullRequestsAsync(ctx, release, query).ConfigureAwait(false);
                 }
                 catch (Exception ex) when (RouteErrorMapper.IsMapped(ex))
                 {
@@ -163,7 +164,7 @@ namespace Armada.Server.Routes
             api => api
                 .WithTag("Releases")
                 .WithSummary("Enumerate a release's GitHub pull requests")
-                .WithDescription("One page of the GitHub pull requests linked to a release's missions. Paging and filters come from the JSON body (EnumerationQuery) or the querystring (pageNumber, pageSize 1 to 1000, default 10).")
+                .WithDescription("One page of the GitHub pull requests linked to a release's missions, ordered by pull request number (newest first) then repository. Only the requested page is read from GitHub; TotalRecords counts the distinct pull requests across the release's linked missions (at most 1000). Paging comes from the JSON body (EnumerationQuery) or the querystring (pageNumber, pageSize 1 to 1000, default 10).")
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Release ID (rel_ prefix)"))
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())
                 .WithRequestBody(OpenApiJson.BodyFor<EnumerationQuery>("Paging and filters", false))
@@ -180,6 +181,7 @@ namespace Armada.Server.Routes
 
                 try
                 {
+                    CollectionBounds.Validate(request);
                     await ValidateObjectivesAsync(ctx, request.ObjectiveIds).ConfigureAwait(false);
                     Release release = await _Releases.UpdateAsync(ctx, req.Parameters["id"], request).ConfigureAwait(false);
                     await LinkObjectivesAsync(ctx, request.ObjectiveIds, release.Id).ConfigureAwait(false);

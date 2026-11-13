@@ -16,17 +16,24 @@ import {
 function captain(over: Partial<Captain> = {}): Captain {
   return {
     id: 'cpt_1', tenantId: null, name: 'Ada', runtime: 'ClaudeCode', supportsPlanningSessions: true, planningSessionSupportReason: null,
-    systemInstructions: null, model: null, allowedPersonas: null, preferredPersona: null, state: 'Idle', currentMissionId: null,
-    currentDockId: null, processId: null, recoveryAttempts: 0, lastHeartbeatUtc: null, createdUtc: '2026-01-01T00:00:00Z', lastUpdateUtc: '2026-01-01T00:00:00Z',
+    systemInstructions: null, model: null, allowedPersonas: null, preferredPersona: null, state: 'Idle', processId: null, recoveryAttempts: 0, lastHeartbeatUtc: null, createdUtc: '2026-01-01T00:00:00Z', lastUpdateUtc: '2026-01-01T00:00:00Z',
     ...over,
   };
 }
 
 describe('captainForm', () => {
+  it('defaults Active for older captains and preserves explicit false in both payloads', () => {
+    expect(emptyCaptainForm().active).toBe(true);
+    expect(captainFormFromCaptain(captain()).active).toBe(true);
+    const form = captainFormFromCaptain(captain({ active: false }));
+    expect(form.active).toBe(false);
+    expect(buildCaptainPayload(form).active).toBe(false);
+    expect(buildCaptainCreatePayload(form).active).toBe(false);
+  });
   it('builds the create payload like the Captains page did', () => {
     const form = { ...emptyCaptainForm(), name: 'Ada', runtime: 'Codex', model: '  gpt-5 ', autoApprove: false, cliPermissionPolicy: 'Refuse' as const };
     expect(buildCaptainCreatePayload(form)).toEqual({
-      name: 'Ada', runtime: 'Codex', model: 'gpt-5', modelEndpointId: null, reasoningEffort: null, tier: null,
+      active: true, name: 'Ada', runtime: 'Codex', model: 'gpt-5', modelEndpointId: null, reasoningEffort: null, tier: null,
       runtimeOptionsJson: '{"autoApprove":false}', cliPermissionPolicy: 'Refuse',
     });
     expect(buildCaptainPayload(form)).not.toHaveProperty('cliPermissionPolicy');
@@ -85,6 +92,16 @@ describe('captainForm', () => {
     expect(captainFormError({ ...emptyCaptainForm(), runtime: 'ApiEndpoint' })).toBe('inferenceEndpointRequired');
     const detail = captainFormFromCaptain(captain({ runtime: 'ApiEndpoint' }), { withPersonas: true });
     expect(captainFormError(detail)).toBeNull();
+  });
+
+  it('round trips capacity and leaves blank creation to the server runtime default', () => {
+    expect(buildCaptainCreatePayload({ ...emptyCaptainForm(), name: 'new', runtime: 'Mux' })).not.toHaveProperty('maxConcurrency');
+    const form = captainFormFromCaptain(captain({ maxConcurrency: 3 }));
+    expect(form.maxConcurrency).toBe('3');
+    expect(buildCaptainPayload(form).maxConcurrency).toBe(3);
+    expect(buildCaptainPayload({ ...form, maxConcurrency: '0' }).maxConcurrency).toBe(1);
+    expect(buildCaptainPayload({ ...form, maxConcurrency: '300' }).maxConcurrency).toBe(256);
+    expect(buildCaptainPayload({ ...form, maxConcurrency: '2.9' }).maxConcurrency).toBe(2);
   });
 
   it('detects CLI policy changes and lifecycle actions', () => {

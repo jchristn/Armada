@@ -370,6 +370,24 @@ namespace Armada.Core.Services.Interfaces
         Task<bool?> IsAncestorAsync(string repoPath, string ancestorRef, string descendantRef, CancellationToken token = default);
 
         /// <summary>
+        /// Find commits reachable from a revision whose message carries a trailer with exactly the given key and value
+        /// (for example <c>Armada-Mission-Id: msn_...</c>), newest first. The search is a bounded
+        /// <c>git log &lt;revision&gt; --fixed-strings --grep</c> narrowed by <c>--since</c>, and each candidate's parsed
+        /// trailers must match the value exactly, so a message that only mentions the value in prose does not count.
+        /// </summary>
+        /// <param name="repoPath">Repository path (working tree or bare repository).</param>
+        /// <param name="revision">Revision to search from (for example refs/remotes/origin/main).</param>
+        /// <param name="trailerKey">Trailer key, without the colon.</param>
+        /// <param name="trailerValue">Exact trailer value.</param>
+        /// <param name="sinceUtc">Only commits committed at or after this time, or null for no bound.</param>
+        /// <param name="maxCount">Maximum number of commits to return (at least 1).</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The matching commit hashes; empty when none match, the revision does not resolve, or git fails.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when repoPath, revision, trailerKey, or trailerValue is null or empty.</exception>
+        Task<IReadOnlyList<string>> FindCommitsByTrailerAsync(string repoPath, string revision, string trailerKey, string trailerValue, DateTime? sinceUtc, int maxCount, CancellationToken token = default)
+            => Task.FromResult<IReadOnlyList<string>>(new List<string>());
+
+        /// <summary>
         /// Summarize the working tree (git status --porcelain): modified tracked files and untracked files.
         /// </summary>
         /// <param name="repoPath">Working tree path.</param>
@@ -475,5 +493,38 @@ namespace Armada.Core.Services.Interfaces
         /// <exception cref="ArgumentOutOfRangeException">Thrown when skip is negative or limit is below 1.</exception>
         /// <exception cref="InvalidOperationException">Thrown when git fails (for example the tip commit no longer exists).</exception>
         Task<GitCommitLogPage> GetCommitLogAsync(string repoPath, string tipSha, long? untilUnixSeconds, int skip, int limit, CancellationToken token = default);
+
+        /// <summary>
+        /// The best common ancestor of two revisions (git merge-base a b).
+        /// </summary>
+        /// <param name="repoPath">Repository path (working tree or bare repository).</param>
+        /// <param name="a">First revision (branch, commit or ref).</param>
+        /// <param name="b">Second revision.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The full SHA of the merge base, or null when either revision does not resolve, they share no history,
+        /// or git fails.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when repoPath, a, or b is null or empty.</exception>
+        /// <exception cref="ArgumentException">Thrown when a or b starts with '-'.</exception>
+        Task<string?> GetMergeBaseAsync(string repoPath, string a, string b, CancellationToken token = default)
+            => Task.FromResult<string?>(null);
+
+        /// <summary>
+        /// Read the commits reachable from <paramref name="toRef"/> but not from <paramref name="fromRef"/>
+        /// (git log fromRef..toRef --date-order), newest first, at most <paramref name="limit"/>: each with its author,
+        /// dates, subject, trailers (parsed from the message, for example Armada-Mission-Id) and changed paths (merges
+        /// diffed against their first parent; capped at <see cref="GitCommitRange.MaxPathsPerCommit"/> per commit).
+        /// TotalCount is the full size of the range. On a Harbor-hosted repository the same commands run on the Harbor.
+        /// </summary>
+        /// <param name="repoPath">Repository path (working tree or bare repository).</param>
+        /// <param name="fromRef">Lower bound, excluded (for example the mission's start commit).</param>
+        /// <param name="toRef">Upper bound, included (for example the target tip).</param>
+        /// <param name="limit">Most commits to return, 1 to <see cref="GitCommitRange.MaxLimit"/>.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The range, or null when either revision does not resolve or git fails.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when repoPath, fromRef, or toRef is null or empty.</exception>
+        /// <exception cref="ArgumentException">Thrown when fromRef or toRef starts with '-'.</exception>
+        /// <exception cref="ArgumentOutOfRangeException">Thrown when limit is outside 1 to <see cref="GitCommitRange.MaxLimit"/>.</exception>
+        Task<GitCommitRange?> GetCommitRangeAsync(string repoPath, string fromRef, string toRef, int limit, CancellationToken token = default)
+            => Task.FromResult<GitCommitRange?>(null);
     }
 }

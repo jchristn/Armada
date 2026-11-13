@@ -176,6 +176,18 @@ namespace Armada.Tui.Screens.Configuration
         }
 
         /// <inheritdoc />
+        protected override string DeletingTitle
+        {
+            get { return "Deleting project profile"; }
+        }
+
+        /// <inheritdoc />
+        protected override string DeletingManyTitle
+        {
+            get { return "{count, plural, one {Deleting # project profile} other {Deleting # project profiles}}"; }
+        }
+
+        /// <inheritdoc />
         protected override Task DeleteAsync(ProjectProfile row, CancellationToken token)
         {
             return Context.Client.DeleteProjectProfileAsync(row.Id, token);

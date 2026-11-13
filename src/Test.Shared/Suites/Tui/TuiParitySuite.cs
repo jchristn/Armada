@@ -29,7 +29,7 @@ namespace Test.Shared.Suites.Tui
         {
             List<TestCaseDescriptor> cases = new List<TestCaseDescriptor>();
 
-            cases.Add(TuiCase.Sync(Suite, "routes_have_entries", "Every App.tsx route has a manifest entry and resolves in the router", () =>
+            cases.Add(TuiCase.Sync(Suite, "routes_have_entries", "Every App.tsx route is mapped, or explicitly documented as not applicable to the TUI", () =>
             {
                 ParityManifest manifest = Load();
                 List<string> routes = DashboardSource.Routes();
@@ -37,6 +37,12 @@ namespace Test.Shared.Suites.Tui
                 Missing(manifest, "route", routes);
                 foreach (string route in routes)
                 {
+                    ParityEntry? entry = manifest.Entries.FirstOrDefault(e => e.Kind == "route" && e.Key == route);
+                    if (entry?.Status == "not-applicable")
+                    {
+                        AssertFalse(String.IsNullOrWhiteSpace(entry.Notes), "not-applicable route explains why: " + route);
+                        continue;
+                    }
                     string sample = String.Join("/", route.Split('/').Select(s => s.StartsWith(":") ? "x_1" : s));
                     RouteMatch m = Router.Resolve(sample.Length == 0 ? "/" : sample);
                     AssertFalse(ReferenceEquals(RouteTable.NotFound, m.Route), "router resolves " + route);
@@ -51,6 +57,12 @@ namespace Test.Shared.Suites.Tui
                 Missing(manifest, "tab", tabs);
                 foreach (string tab in tabs)
                 {
+                    ParityEntry? entry = manifest.Entries.FirstOrDefault(e => e.Kind == "tab" && e.Key == tab);
+                    if (entry?.Status == "not-applicable")
+                    {
+                        AssertFalse(String.IsNullOrWhiteSpace(entry.Notes), "not-applicable tab explains why: " + tab);
+                        continue;
+                    }
                     string page = tab.Split(':')[0];
                     string key = tab.Split(':')[1];
                     RouteMatch m = Router.Resolve(DashboardSource.HubPages[page] + key);
@@ -67,7 +79,7 @@ namespace Test.Shared.Suites.Tui
             {
                 ParityManifest manifest = Load();
                 List<string> exports = DashboardSource.ApiExports();
-                AssertEqual(359, exports.Count, "server-calling exports");
+                AssertEqual(462, exports.Count, "server-calling exports");
                 Missing(manifest, "api", exports);
                 HashSet<string> methods = new HashSet<string>(typeof(ArmadaClient).GetMethods(BindingFlags.Public | BindingFlags.Instance).Select(m => m.Name), StringComparer.Ordinal);
                 List<string> missing = exports.Where(e => !methods.Contains(Char.ToUpperInvariant(e[0]) + e.Substring(1) + "Async")).ToList();

@@ -1,0 +1,12 @@
+# Only dist/, media/, package.json, README.md, CHANGELOG.md and LICENSE.md ship in the VSIX.
+src/**
+test/**
+out/**
+node_modules/**
+**/*.map
+**/*.ts
+tsconfig*.json
+esbuild.mjs
+.vscode-test/**
+.gitignore
+*.vsix

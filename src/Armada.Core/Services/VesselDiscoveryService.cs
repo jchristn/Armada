@@ -24,22 +24,24 @@ namespace Armada.Core.Services
         #region Public-Members
 
         /// <summary>
-        /// Maximum candidates one discovery returns; discovery stops and reports truncation at this count.
-        /// Default 5000, minimum 1, maximum 100000.
+        /// Maximum candidates one discovery returns; discovery stops and reports truncation at this count (Truncated
+        /// and a CandidateLimitReached hint). Default 1000, minimum 1, maximum 1000 (CollectionLimits.MaxRequestItems,
+        /// so a batch's items, and every import request built from them, stay within the request limit).
         /// </summary>
         public int MaxCandidates
         {
             get => _MaxCandidates;
-            set => _MaxCandidates = Math.Clamp(value, 1, 100000);
+            set => _MaxCandidates = Math.Clamp(value, 1, CollectionLimits.MaxRequestItems);
         }
 
         /// <summary>
-        /// Maximum directories and roots in one request. Default 1000, minimum 1, maximum 10000.
+        /// Maximum directories and roots in one request. Default 1000, minimum 1, maximum 1000
+        /// (CollectionLimits.MaxRequestItems). More is rejected with CollectionLimitExceededException (field Paths).
         /// </summary>
         public int MaxRequestPaths
         {
             get => _MaxRequestPaths;
-            set => _MaxRequestPaths = Math.Clamp(value, 1, 10000);
+            set => _MaxRequestPaths = Math.Clamp(value, 1, CollectionLimits.MaxRequestItems);
         }
 
         /// <summary>
@@ -62,7 +64,9 @@ namespace Armada.Core.Services
         }
 
         /// <summary>
-        /// Maximum entries one browse returns. Default 5000, minimum 1, maximum 100000.
+        /// Most directory entries one browse examines before it stops and sets Truncated. Browse results are paged
+        /// (page size 1 to 1000), so this bounds the server's work, not the response. Default 5000, minimum 1, maximum
+        /// 100000.
         /// </summary>
         public int MaxBrowseEntries
         {
@@ -77,7 +81,7 @@ namespace Armada.Core.Services
         private readonly DatabaseDriver _Database;
         private readonly ArmadaSettings _Settings;
         private readonly IHostCommandExecutor _Executor;
-        private int _MaxCandidates = 5000;
+        private int _MaxCandidates = CollectionLimits.MaxRequestItems;
         private int _MaxRequestPaths = 1000;
         private int _GitConcurrency = 8;
         private int _GitTimeoutMs = 15000;
@@ -213,18 +217,20 @@ namespace Armada.Core.Services
         }
 
         /// <inheritdoc />
-        public Task<VesselBrowseResult> BrowseAsync(string? path, CancellationToken token = default)
+        public Task<VesselBrowseResult> BrowseAsync(string? path, EnumerationQuery? page = null, CancellationToken token = default)
         {
+            if (page == null) page = new EnumerationQuery();
             List<string> allowedRoots = GetAllowedRoots();
             HashSet<string> excluded = new HashSet<string>(_Settings.Import.ExcludedDirectoryNames, StringComparer.OrdinalIgnoreCase);
             VesselBrowseResult result = new VesselBrowseResult();
 
             if (String.IsNullOrWhiteSpace(path))
             {
-                foreach (string root in allowedRoots)
+                List<string> existing = allowedRoots.Where(Directory.Exists).ToList();
+                ApplyPage(result, existing.Count, page);
+                foreach (string root in existing.Skip(page.Offset).Take(page.PageSize))
                 {
                     token.ThrowIfCancellationRequested();
-                    if (!Directory.Exists(root)) continue;
                     result.Entries.Add(BuildEntry(root, root, excluded));
                 }
 
@@ -246,17 +252,34 @@ namespace Armada.Core.Services
             {
                 token.ThrowIfCancellationRequested();
                 if (!IsTraversable(child, excluded)) continue;
+                if (visible.Count >= _MaxBrowseEntries)
+                {
+                    result.Truncated = true;
+                    break;
+                }
+
                 visible.Add(child);
-                if (visible.Count >= _MaxBrowseEntries) break;
             }
 
-            foreach (DirectoryInfo child in visible.OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase))
+            // The file system has no paging: names are collected and sorted, and only the requested page is inspected
+            // for git state (the per-entry cost).
+            List<DirectoryInfo> ordered = visible.OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase).ThenBy(c => c.Name, StringComparer.Ordinal).ToList();
+            ApplyPage(result, ordered.Count, page);
+            foreach (DirectoryInfo child in ordered.Skip(page.Offset).Take(page.PageSize))
             {
                 token.ThrowIfCancellationRequested();
                 result.Entries.Add(BuildEntry(child.FullName, child.Name, excluded));
             }
 
             return Task.FromResult(result);
+        }
+
+        private static void ApplyPage(VesselBrowseResult result, int total, EnumerationQuery page)
+        {
+            result.PageNumber = page.PageNumber;
+            result.PageSize = page.PageSize;
+            result.TotalRecords = total;
+            result.TotalPages = (int)Math.Ceiling((double)total / page.PageSize);
         }
 
         /// <inheritdoc />
@@ -299,8 +322,7 @@ namespace Armada.Core.Services
 
             List<string> rawPaths = request.Directories.Concat(request.Roots).Where(p => !String.IsNullOrWhiteSpace(p)).ToList();
             if (rawPaths.Count == 0) throw new ArgumentException("At least one directory or root is required.", nameof(request));
-            if (rawPaths.Count > _MaxRequestPaths)
-                throw new ArgumentException("Too many paths: " + rawPaths.Count + " (maximum " + _MaxRequestPaths + ").", nameof(request));
+            CollectionLimits.RequireCount(rawPaths.Count, "Paths", _MaxRequestPaths);
 
             List<string> inputs = VesselImportPaths.NormalizeDistinct(rawPaths);
             List<string> allowedRoots = GetAllowedRoots();

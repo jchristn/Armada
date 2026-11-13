@@ -10,6 +10,7 @@ namespace Armada.Tui.Screens.Delivery
     using Armada.Core.Models;
     using Armada.Tui.Routing;
     using Armada.Tui.Screens.Entities;
+    using Armada.Tui.Screens.Kit;
     using Armada.Tui.Services;
     using Armada.Tui.Widgets;
 
@@ -318,7 +319,7 @@ namespace Armada.Tui.Screens.Delivery
             if (e == null) return;
             Context.Confirm("Delete Environment", EntityUi.T(Context, "Delete \"{{name}}\"? This removes only the environment record.", "name", e.Name), () =>
             {
-                EntityUi.Run(Context, ct => Context.Client.DeleteEnvironmentAsync(e.Id, ct), () =>
+                DeleteProgress.RunVoid(Context, "Deleting environment", ct => Context.Client.DeleteEnvironmentAsync(e.Id, ct), () =>
                 {
                     EntityUi.Toast(Context, NotificationSeverityEnum.Warning, EntityUi.T(Context, "Environment \"{{name}}\" deleted.", "name", e.Name));
                     Context.Navigate("/delivery?tab=environments");

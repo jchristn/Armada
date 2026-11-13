@@ -187,6 +187,18 @@ namespace Armada.Tui.Screens.Configuration
         }
 
         /// <inheritdoc />
+        protected override string DeletingTitle
+        {
+            get { return "Deleting pipeline"; }
+        }
+
+        /// <inheritdoc />
+        protected override string DeletingManyTitle
+        {
+            get { return "{count, plural, one {Deleting # pipeline} other {Deleting # pipelines}}"; }
+        }
+
+        /// <inheritdoc />
         protected override Task DeleteAsync(Pipeline row, CancellationToken token)
         {
             return Context.Client.DeletePipelineAsync(row.Name, token);

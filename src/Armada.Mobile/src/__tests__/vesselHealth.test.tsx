@@ -27,7 +27,7 @@ function detail(over: Partial<VesselHealthDetail> = {}): VesselHealthDetail {
   return {
     health: row(),
     findings: [{ vesselId: 'vsl_1', criterion: 'TestInfrastructure', status: 'Warn', detailCode: null }],
-    dependencies: [{ vesselId: 'vsl_1', ecosystem: 'npm', packageName: 'left-pad', currentVersion: '1.0.0', latestVersion: '2.0.0', drift: 'Major', isVulnerable: false }],
+    dependencyCount: 2,
     overrides: [],
     ...over,
   };
@@ -65,6 +65,13 @@ describe('vessel health tab', () => {
     api.listVessels.mockResolvedValue(page([{ id: 'vsl_1', name: 'demo-api', defaultBranch: 'main' } as never]));
     api.listJobs.mockResolvedValue(page([]));
     api.getVesselHealth.mockResolvedValue(detail());
+    // Two dependency rows over two pages: the sheet must load the second page explicitly.
+    api.listVesselDependencies.mockImplementation(async (_id: string, p?: { pageNumber?: number }) => ({
+      pageNumber: p?.pageNumber ?? 1, pageSize: 100, totalPages: 2, totalRecords: 2,
+      objects: [(p?.pageNumber ?? 1) === 1
+        ? { vesselId: 'vsl_1', ecosystem: 'npm', packageName: 'left-pad', currentVersion: '1.0.0', latestVersion: '2.0.0', drift: 'Major', isVulnerable: false }
+        : { vesselId: 'vsl_1', ecosystem: 'npm', packageName: 'right-pad', currentVersion: '1.0.0', latestVersion: '1.1.0', drift: 'Minor', isVulnerable: false }],
+    }) as never);
   });
   afterEach(() => jest.restoreAllMocks());
 
@@ -109,7 +116,12 @@ describe('vessel health tab', () => {
     await act(async () => { await fireEvent.press(screen.getByTestId('health-open-demo-api')); });
     await waitFor(() => expect(api.getVesselHealth).toHaveBeenCalledWith('vsl_1'));
     await act(async () => { await fireEvent.press(screen.getByTestId('hub-tab-dependencies')); });
-    expect(screen.getByText('left-pad')).toBeTruthy();
+    await waitFor(() => expect(screen.getByText('left-pad')).toBeTruthy());
+    expect(api.listVesselDependencies).toHaveBeenCalledWith('vsl_1', { pageNumber: 1, pageSize: 100 });
+    expect(screen.queryByText('right-pad')).toBeNull();
+    await act(async () => { await fireEvent.press(screen.getByTestId('health-dependencies-more')); });
+    await waitFor(() => expect(screen.getByText('right-pad')).toBeTruthy());
+    expect(screen.queryByTestId('health-dependencies-more')).toBeNull();
     await act(async () => { await fireEvent.press(screen.getByTestId('hub-tab-overrides')); });
     await act(async () => { await fireEvent.changeText(screen.getByTestId('health-override-note'), ' known '); });
     await act(async () => { await fireEvent.press(screen.getByTestId('health-override-save')); });

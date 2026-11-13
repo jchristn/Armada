@@ -1,9 +1,9 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import Planning from './Planning';
-import { getPlanningSession, listCaptains, listFleets, listPipelines, listPlanningSessions, listVessels, sendPlanningSessionMessage } from '../api/client';
+import { getPlanningSession, listCaptains, listFleets, listPipelines, listPlanningSessionMessages, listPlanningSessions, listVessels, sendPlanningSessionMessage } from '../api/client';
 import { translateTemplate } from '../i18n/runtime';
-import type { PlanningSession, PlanningSessionDetail, PlanningSessionMessage, WebSocketMessage } from '../types/models';
+import type { PlanningSession, PlanningSessionMessage, PlanningSessionView, WebSocketMessage } from '../types/models';
 
 vi.mock('../api/client', () => ({
   createPlanningSession: vi.fn(),
@@ -15,6 +15,7 @@ vi.mock('../api/client', () => ({
   listFleets: vi.fn(),
   listPipelines: vi.fn(),
   listPlanningSessions: vi.fn(),
+  listPlanningSessionMessages: vi.fn().mockResolvedValue({ success: true, pageNumber: 1, pageSize: 100, totalPages: 0, totalRecords: 0, objects: [], totalMs: 0 }),
   listVessels: vi.fn(),
   sendPlanningSessionMessage: vi.fn(),
   stopPlanningSession: vi.fn(),
@@ -64,8 +65,8 @@ function message(id: string, role: string, sequence: number, content: string, la
   };
 }
 
-function detail(s: PlanningSession, messages: PlanningSessionMessage[]): PlanningSessionDetail {
-  return { session: s, messages, captain: null, vessel: null };
+function detail(s: PlanningSession, messages: PlanningSessionMessage[]): PlanningSessionView {
+  return { session: s, messages, messageCount: messages.length, captain: null, vessel: null };
 }
 
 function emit(msg: WebSocketMessage) {
@@ -75,7 +76,7 @@ function emit(msg: WebSocketMessage) {
 describe('Planning send ordering (F16)', () => {
   beforeEach(() => {
     handlers.clear();
-    vi.mocked(listPlanningSessions).mockResolvedValue([session('Active', '2026-10-05T00:00:00Z')] as never);
+    vi.mocked(listPlanningSessions).mockResolvedValue(page([session('Active', '2026-10-05T00:00:00Z')]) as never);
     vi.mocked(listCaptains).mockResolvedValue(page([]) as never);
     vi.mocked(listFleets).mockResolvedValue(page([]) as never);
     vi.mocked(listVessels).mockResolvedValue(page([]) as never);
@@ -84,7 +85,7 @@ describe('Planning send ordering (F16)', () => {
   });
 
   it('keeps a fast reply that arrived over the WebSocket before the send response', async () => {
-    let resolveSend: (value: PlanningSessionDetail) => void = () => {};
+    let resolveSend: (value: PlanningSessionView) => void = () => {};
     vi.mocked(sendPlanningSessionMessage).mockImplementation(() => new Promise((resolve) => { resolveSend = resolve; }));
 
     render(
@@ -113,5 +114,56 @@ describe('Planning send ordering (F16)', () => {
     expect((await screen.findAllByText('Fast reply')).length).toBeGreaterThan(0);
     expect(screen.queryByRole('button', { name: 'Stop' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Send' })).toBeInTheDocument();
+  });
+
+  it('loads the transcript one page at a time: the newest page first, older pages on request, with the total', async () => {
+    const all = Array.from({ length: 150 }, (_, i) => message(`psm_${i + 1}`, i % 2 === 0 ? 'User' : 'Assistant', i + 1, `line ${i + 1}`, '2026-10-05T00:00:01Z'));
+    vi.mocked(getPlanningSession).mockResolvedValue({ session: session('Active', '2026-10-05T00:00:00Z'), messageCount: 150, captain: null, vessel: null });
+    vi.mocked(listPlanningSessionMessages).mockImplementation(async (_id, query) => {
+      const newestFirst = [...all].reverse();
+      const size = query?.pageSize ?? 10;
+      const number = query?.pageNumber ?? 1;
+      return { success: true, pageNumber: number, pageSize: size, totalPages: Math.ceil(150 / size), totalRecords: 150, totalMs: 1, objects: newestFirst.slice((number - 1) * size, number * size) };
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/dispatch?tab=planning&session=psn_1']}>
+        <Routes>
+          <Route path="/dispatch" element={<Planning />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect((await screen.findAllByText('line 150')).length).toBeGreaterThan(0);
+    expect(screen.queryByText('line 50')).not.toBeInTheDocument();
+    const older = screen.getByRole('button', { name: 'Load earlier messages (100 of 150)' });
+    expect(vi.mocked(listPlanningSessionMessages)).toHaveBeenCalledWith('psn_1', expect.objectContaining({ pageNumber: 1, pageSize: 100, order: 'CreatedDescending' }));
+    await act(async () => { fireEvent.click(older); });
+    expect(vi.mocked(listPlanningSessionMessages)).toHaveBeenCalledWith('psn_1', expect.objectContaining({ pageNumber: 2, pageSize: 100 }));
+    expect((await screen.findAllByText('line 1')).length).toBeGreaterThan(0);
+    expect(screen.queryByRole('button', { name: /Load earlier messages/ })).not.toBeInTheDocument();
+  });
+
+  it('counts every planning session, not just the first page, and loads the next page on request', async () => {
+    const sessions = Array.from({ length: 100 }, (_, i) => ({ ...session('Stopped', '2026-10-05T00:00:00Z'), id: `psn_${i}`, title: `Plan ${i}` }));
+    vi.mocked(listPlanningSessions).mockImplementation(async (query) => ({
+      success: true, pageNumber: query?.pageNumber ?? 1, pageSize: 100, totalPages: 2, totalRecords: 101, totalMs: 1,
+      objects: (query?.pageNumber ?? 1) === 1 ? sessions : [{ ...session('Stopped', '2026-10-05T00:00:00Z'), id: 'psn_last', title: 'Plan last' }],
+    }));
+
+    render(
+      <MemoryRouter initialEntries={['/dispatch?tab=planning']}>
+        <Routes>
+          <Route path="/dispatch" element={<Planning />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText('101 total')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Recent Sessions/ }));
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Load more (100 of 101)' })); });
+    expect(vi.mocked(listPlanningSessions)).toHaveBeenCalledWith(expect.objectContaining({ pageNumber: 2, pageSize: 100 }));
+    expect(await screen.findByText('Plan last')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Load more/ })).not.toBeInTheDocument();
   });
 });

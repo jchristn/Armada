@@ -1,12 +1,11 @@
 services:
   armada-server:
-    # Published release image. To run a locally built image instead, build it with this tag first
-    # (scripts/common/build-*.sh) or change the tag.
-    image: jchristn77/armada-server:v1.2.0
+    # v1.3.0 development images; keep the server and dashboard tags aligned.
+    # Build/publish both with ./build-all.sh v1.3.0 from the repository root.
+    image: jchristn77/armada-server:v1.3.0
     ports:
       - "7890:7890"
       - "7891:7891"
-      - "9464:9464"
     environment:
       # The Admiral listens on 0.0.0.0 in the container and refuses to start while the default admin
       # password is in use. Set this before the first start (for example in a .env file next to this file).
@@ -16,6 +15,9 @@ services:
       - ./armada.json:/app/data/settings.json
       - ./db:/app/data/db
       - ./logs:/app/data/logs
+      # Managed battery packs (ARMADA_BATTERY_DIR in the image). A named volume starts with the image's ownership
+      # (UID 1654) and keeps edited and custom packs across upgrades; bundled packs are seeded on every start.
+      - battery-packs:/app/data/battery-packs
       # To use a host checkout as a vessel, mount it and trust its container path in a gitconfig named by
       # GIT_CONFIG_GLOBAL (it is owned by your host user, not the container's UID 1654, and git refuses it
       # otherwise). See docs/DOCKER.md, "Vessels from repositories mounted into the container".
@@ -28,12 +30,12 @@ services:
       retries: 2
       start_period: 30s
     depends_on:
-      # The Admiral pushes its logs to Loki (telemetry.lokiEndpoint in armada.json).
+      # Wait for the bundled log store; the collector forwards the Admiral's OTLP logs.
       loki:
         condition: service_healthy
 
   armada-dashboard:
-    image: jchristn77/armada-dashboard:v1.2.0
+    image: jchristn77/armada-dashboard:v1.3.0
     ports:
       - "3000:8080"
     environment:
@@ -48,18 +50,44 @@ services:
       armada-server:
         condition: service_healthy
 
-  # --- Observability stack (Prometheus / Loki / Grafana) ---
-  # Prometheus scrapes the Admiral's in-process /metrics endpoint (port 9464); Loki receives logs
-  # pushed by the Admiral's telemetry host; Grafana visualizes both via provisioned datasources.
+  # --- Observability stack (Collector / Prometheus / Tempo / Loki / Grafana) ---
+  # The Admiral exports OTLP to the collector. Prometheus scrapes its private metrics endpoint;
+  # Tempo retains traces and Loki retains logs. Grafana provisions all three datasources.
   # The Prometheus and Loki images ship without curl (busybox only), so their healthchecks use the
   # busybox wget against the same 127.0.0.1 endpoint; Grafana's image includes curl.
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.119.0
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes:
+      - ./observability/otel-collector.yaml:/etc/otelcol/config.yaml:ro
+    depends_on:
+      tempo:
+        condition: service_healthy
+      loki:
+        condition: service_healthy
+
+  tempo:
+    image: grafana/tempo:2.6.1
+    command: ["-config.file=/etc/tempo.yaml"]
+    ports:
+      - "127.0.0.1:3200:3200"
+    volumes:
+      - ./observability/tempo.yaml:/etc/tempo.yaml:ro
+      - tempo-data:/var/tempo
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3200/ready"]
+      interval: 5s
+      timeout: 3s
+      retries: 2
+      start_period: 30s
 
   prometheus:
     image: prom/prometheus:v3.1.0
     ports:
-      - "9090:9090"
+      - "127.0.0.1:9090:9090"
     volumes:
-      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus-data:/prometheus
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
@@ -76,9 +104,9 @@ services:
   loki:
     image: grafana/loki:3.3.2
     ports:
-      - "3100:3100"
+      - "127.0.0.1:3100:3100"
     volumes:
-      - ./observability/loki-config.yaml:/etc/loki/local-config.yaml
+      - ./observability/loki-config.yaml:/etc/loki/local-config.yaml:ro
       - loki-data:/loki
     command:
       - "-config.file=/etc/loki/local-config.yaml"
@@ -94,14 +122,14 @@ services:
   grafana:
     image: grafana/grafana:11.4.0
     ports:
-      - "3001:3000"
+      - "127.0.0.1:3001:3000"
     environment:
       - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_SECURITY_ADMIN_PASSWORD=${ARMADA_GRAFANA_ADMIN_PASSWORD:?Set ARMADA_GRAFANA_ADMIN_PASSWORD}
       - GF_USERS_ALLOW_SIGN_UP=false
     volumes:
-      - ./observability/grafana/provisioning:/etc/grafana/provisioning
-      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
       - grafana-data:/var/lib/grafana
     healthcheck:
       test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1:3000/api/health"]
@@ -112,10 +140,14 @@ services:
     depends_on:
       prometheus:
         condition: service_healthy
+      tempo:
+        condition: service_healthy
       loki:
         condition: service_healthy
 
 volumes:
+  battery-packs:
   prometheus-data:
   loki-data:
   grafana-data:
+  tempo-data:

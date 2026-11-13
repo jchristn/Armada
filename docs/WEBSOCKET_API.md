@@ -1,5 +1,9 @@
 # Armada WebSocket API Reference
 
+## v1.3.0: captain capacity
+
+Captain create/update accepts `MaxConcurrency` (JSON `maxConcurrency`), clamped to 1..`Concurrency.MaxCaptainConcurrency` (hard ceiling 256). Creation defaults to 1 for CLI runtimes and 4 for ApiEndpoint/Mux, or configured server defaults. Routing prefers the eligible captain with the fewest active missions; see [SCHEDULING.md](SCHEDULING.md#capacity). Updates that omit it preserve the current value. Lowering it does not stop running work. REST, MCP and WebSocket return server-owned `ActiveMissionCount`, `ActiveMissionIds` and `CurrentSessionId`; client writes cannot replace these ownership fields. Planning/refinement/analysis are exclusive, and a quarantined captain accepts no new missions while existing work continues. The singular `CurrentMissionId` and `CurrentDockId` fields were removed in migration 121; use active mission IDs to find each mission’s dock and process. See [testing](CONCURRENCY_TESTING.md).
+
 **Version:** 1.0.0
 **Default URL:** `ws://localhost:7890/ws`
 **Protocol:** WebSocket (RFC 6455) via Watson7
@@ -36,6 +40,9 @@ If the selected deployment disconnects or the tunnel drops, the proxy closes the
   - [status.snapshot](#statussnapshot)
   - [mission.changed](#missionchanged)
   - [mission.activity](#missionactivity)
+  - [captain-selection.changed](#captain-selectionchanged)
+  - [mission.waiting_gate_changed](#missionwaiting_gate_changed)
+  - [mission.starving and concurrency.limit_exceeded](#missionstarving-and-concurrencylimit_exceeded)
   - [mission.status_changed](#missionstatus_changed)
   - [voyage.changed](#voyagechanged)
   - [captain.changed](#captainchanged)
@@ -56,6 +63,15 @@ If the selected deployment disconnects or the tunnel drops, the proxy closes the
   - [Ask Armada thread events](#ask-armada-thread-events)
   - [CLI permission events](#cli-permission-events)
   - [Planning session events](#planning-session-events)
+  - [Black box events](#black-box-events)
+    - [blackbox.captured](#blackboxcaptured)
+    - [blackbox.capture_failed](#blackboxcapture_failed)
+    - [blackbox.analyzed](#blackboxanalyzed)
+    - [blackbox.resolved](#blackboxresolved)
+    - [blackbox.deleted](#blackboxdeleted)
+    - [blackbox.storage_fallback](#blackboxstorage_fallback)
+    - [blackbox.gc_completed](#blackboxgc_completed)
+    - [blackbox.recovery_run](#blackboxrecovery_run)
   - [Generic Events](#generic-events)
 - [Command Actions](#command-actions)
   - [Status & Control](#status--control)
@@ -70,6 +86,10 @@ If the selected deployment disconnects or the tunnel drops, the proxy closes the
   - [Dock Actions](#dock-actions)
   - [Merge Queue Actions](#merge-queue-actions)
   - [Backup and Restore Actions](#backup-and-restore-actions)
+  - [Black Box Actions](#black-box-actions)
+    - [blackbox.get](#blackboxget)
+    - [blackbox.brief](#blackboxbrief)
+    - [blackbox.list](#blackboxlist)
   - [Enumerate](#enumerate)
 - [Pagination](#pagination)
 - [Mission Status Transitions](#mission-status-transitions)
@@ -111,6 +131,7 @@ entitled to:
 | Event family | Delivered to |
 |---|---|
 | Entity changes (`mission.changed`, `voyage.changed`, `captain.changed`, `check-run.changed`, `objective.changed`, `deployment.*`, `incident.changed`, `runbook-execution.changed`, `approval-needed`, planning and objective-refinement session events, generic events) | Sockets of the entity's tenant. Global admins may opt in to every tenant with `{ "Route": "subscribe", "AllTenants": true }`. Events whose tenant cannot be resolved go to global admins only. |
+| Black box events (`blackbox.*`) | Sockets of the entry's tenant, plus global admins opted in to all tenants (not narrowed to the entry's owner). `blackbox.gc_completed` has no tenant and goes to global admins only. |
 | Ask Armada events (`ask.*`) | Only the sockets of the thread owner (same tenant and user). The all-tenants opt-in does not apply. |
 | CLI permission events (`cli_permission.*`) | The request's approvers and owner: global admins of the request's tenant or opted in to all tenants, the tenant's tenant admins, and the owner of the Ask thread or mission. Each copy carries that recipient's own `canDecide` and `canRemember`. |
 
@@ -188,7 +209,7 @@ Messages sent from the client to the server must include a `Route` field to sele
 ### Server-to-Client
 
 Every server message includes a `type` field. Pushed events use the envelope `type`, `message`, `data`, `timestamp`
-(UTC), where `message` is present only on events that carry one (generic, planning, and refinement events);
+(UTC), where `message` is present only on events that carry one (generic, planning, refinement, and black box events);
 command replies use `type` (`command.result` or `command.error`), `action`, and `data` (results) or `error` and `code`
 (errors):
 
@@ -229,7 +250,7 @@ A global administrator may add `"AllTenants": true` to receive entity events of 
 
 **Server responds with:** a [`status.snapshot`](#statussnapshot) message.
 
-The client receives all broadcast events it is entitled to ([`mission.changed`](#missionchanged), [`voyage.changed`](#voyagechanged), [`captain.changed`](#captainchanged), [`objective.changed`](#objectivechanged), [`objective-refinement-session.changed`](#objective-refinement-sessionchanged), [`objective-refinement-session.message.created`](#objective-refinement-sessionmessagecreated), [`objective-refinement-session.message.updated`](#objective-refinement-sessionmessageupdated), [`objective-refinement-session.summary.created`](#objective-refinement-sessionsummarycreated), [`objective-refinement-session.applied`](#objective-refinement-sessionapplied), [`objective-refinement-session.deleted`](#objective-refinement-sessiondeleted), [`check-run.changed`](#check-runchanged), [`deployment.changed`](#deploymentchanged), [`deployment.progress`](#deploymentprogress), [`environment.health`](#environmenthealth), [`incident.changed`](#incidentchanged), [`runbook-execution.changed`](#runbook-executionchanged), [`approval-needed`](#approval-needed), [planning session events](#planning-session-events), and [generic events](#generic-events)) as they occur. [Ask Armada thread events](#ask-armada-thread-events) go only to the thread owner's sockets.
+The client receives all broadcast events it is entitled to ([`mission.changed`](#missionchanged), [`voyage.changed`](#voyagechanged), [`captain.changed`](#captainchanged), [`objective.changed`](#objectivechanged), [`objective-refinement-session.changed`](#objective-refinement-sessionchanged), [`objective-refinement-session.message.created`](#objective-refinement-sessionmessagecreated), [`objective-refinement-session.message.updated`](#objective-refinement-sessionmessageupdated), [`objective-refinement-session.summary.created`](#objective-refinement-sessionsummarycreated), [`objective-refinement-session.applied`](#objective-refinement-sessionapplied), [`objective-refinement-session.deleted`](#objective-refinement-sessiondeleted), [`check-run.changed`](#check-runchanged), [`deployment.changed`](#deploymentchanged), [`deployment.progress`](#deploymentprogress), [`environment.health`](#environmenthealth), [`incident.changed`](#incidentchanged), [`runbook-execution.changed`](#runbook-executionchanged), [`approval-needed`](#approval-needed), [planning session events](#planning-session-events), [black box events](#black-box-events), and [generic events](#generic-events)) as they occur. [Ask Armada thread events](#ask-armada-thread-events) go only to the thread owner's sockets.
 
 ---
 
@@ -279,6 +300,8 @@ aggregate that `GET /api/v1/status` returns for the socket's identity: a global 
     "workingCaptains": 2,
     "stalledCaptains": 1,
     "activeVoyages": 2,
+    "inProgressVoyages": 1,
+    "openVoyages": 1,
     "memoryPressureDeferrals": 0,
     "missionsByStatus": {
       "Pending": 3,
@@ -286,15 +309,6 @@ aggregate that `GET /api/v1/status` returns for the socket's identity: a global 
       "Complete": 10,
       "Failed": 1
     },
-    "voyages": [
-      {
-        "voyage": { "...": "Voyage object" },
-        "totalMissions": 5,
-        "completedMissions": 3,
-        "failedMissions": 0,
-        "inProgressMissions": 2
-      }
-    ],
     "recentSignals": [],
     "remoteTunnel": {
       "enabled": false,
@@ -383,6 +397,82 @@ a second per mission (the newest wins). Not recorded as an event.
 | `data.activity.timestampUtc` | string | When it was observed |
 
 ---
+
+
+### captain-selection.changed
+
+Broadcast to the mission's tenant, the same recipients as `mission.changed`, after a captain-selection change commits:
+an admitted dispatch or repair attempt, a new materially different waiting decision, or an administrator recovery
+authorization. Repeated waiting evaluations with unchanged evidence do not broadcast. The event is an invalidation
+signal only. It never carries candidates, usage percentages or account identity; clients re-fetch
+`GET /api/v1/missions/{id}/captain-selection` (or the MCP `get_captain_selection` tool), which applies the caller's
+authorization. Not recorded as an event.
+
+```json
+{
+  "type": "captain-selection.changed",
+  "data": {
+    "missionId": "msn_abc123def456ghi789jk",
+    "voyageId": "vyg_abc123def456ghi789jk",
+    "decisionId": "csd_abc123def456ghi789jk",
+    "outcome": "Admitted"
+  },
+  "timestamp": "2026-03-07T12:35:00.100Z"
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `data.missionId` | string | Mission ID |
+| `data.voyageId` | string \| null | Parent voyage ID |
+| `data.decisionId` | string \| null | Recorded decision ID, or null for `RecoveryAuthorized` |
+| `data.outcome` | string | `Admitted`, `Waiting` or `RecoveryAuthorized` |
+
+### mission.waiting_gate_changed
+
+Broadcast to the mission's tenant when a Pending mission starts waiting on a different scheduling gate (for example
+from `Parent` to `CaptainSlot`). It is sent once per gate change, never per scheduler tick, so a mission that keeps
+waiting on the same gate sends nothing more. Not recorded as an event; the full history is
+`GET /api/v1/missions/{id}/waits`.
+
+```json
+{
+  "type": "mission.waiting_gate_changed",
+  "data": {
+    "tenantId": "ten_default",
+    "missionId": "msn_abc123def456ghi789jk",
+    "voyageId": "vyg_abc123def456ghi789jk",
+    "vesselId": "vsl_abc123def456ghi789jk",
+    "gate": "CaptainSlot",
+    "previousGate": "Parent",
+    "detail": "CaptainSlotsFull",
+    "sinceUtc": "2026-03-07T12:35:00.100Z"
+  },
+  "timestamp": "2026-03-07T12:35:00.100Z"
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `data.missionId` | string | Mission ID |
+| `data.voyageId` | string \| null | Voyage ID |
+| `data.vesselId` | string \| null | Vessel ID |
+| `data.gate` | string | Gate the mission now waits on (`MissionWaitGateEnum`) |
+| `data.previousGate` | string \| null | Gate it waited on before, or null when the wait just began |
+| `data.detail` | string \| null | Selection reason code or blocker reason recorded with the wait |
+| `data.sinceUtc` | string | When the wait on `gate` began |
+
+### mission.starving and concurrency.limit_exceeded
+
+Both are recorded as events (`GET /api/v1/events`) and pushed live with the recorded `ArmadaEvent` as `data`.
+
+- `mission.starving`: a Pending mission has waited longer than `Concurrency.StarvationWarningMinutes`. Sent once per
+  waiting episode. `data.payload` is a JSON string with `MissionId`, `Gate` and `WaitedMinutes`. Delivered to the
+  mission's tenant.
+- `concurrency.limit_exceeded`: the invariant monitor observed more work than a captain, vessel, runtime, endpoint or
+  global limit allows. `data.payload` is a JSON string with `Gate`, `Count`, `Limit` and `Cause` (`limit_lowered`,
+  `unknown` or `unexpected`). Captain and vessel overruns go to the owning tenant; runtime, endpoint and global
+  overruns have no tenant and reach only global admins.
 
 ### mission.status_changed
 
@@ -889,9 +979,9 @@ Sent only to the sockets of the thread's owner. Every payload carries `threadId`
 | `ask.chunk` | `{ threadId, turnId, delta }` | Streamed reply text of a running turn |
 | `ask.thinking` | `{ threadId, turnId, delta }` | Streamed reasoning (when `ShowThinking`) |
 | `ask.tool` | `{ threadId, turnId, phase, id, name, arguments, ok, elapsedMs, result, permissionDenied }` | A tool call started (`phase: "started"`) or completed (`"completed"`). `permissionDenied` is `true` when the CLI refused the call because the turn's CLI tool permission policy did not grant it (Claude Code reports this in its result event, so a second `completed` event for an already completed call can arrive at the end of the turn); null otherwise |
-| `ask.message` | `{ threadId, message }` | Any persisted message (user, reply, proposal card, action result, work update, summary, error, CLI permission card) with `toolCalls`, `proposal`, `trackedWork`, and `cliPermissionRequest` embedded, and a captain reply's turn telemetry in `metrics` (see `AskMessage` in REST_API.md); also re-sent for a confirm card when its proposal is decided and for a CLI permission card when its request is decided, expires, or is cancelled |
+| `ask.message` | `{ threadId, message }` | Any persisted message (user, reply, proposal card, action result, work update, summary, error, CLI permission card) with `toolCallCount` (read the calls with `POST /api/v1/ask/threads/{id}/messages/{messageId}/tool-calls/enumerate`), and `proposal`, `trackedWork`, and `cliPermissionRequest` embedded, and a captain reply's turn telemetry in `metrics` (see `AskMessage` in REST_API.md); also re-sent for a confirm card when its proposal is decided and for a CLI permission card when its request is decided, expires, or is cancelled |
 | `ask.proposal` | `{ threadId, proposal }` | A proposal was created or changed status (`expiresUtc` set while pending) |
-| `ask.work` | `{ threadId, trackedWorkId, snapshot, trackedWork }` | The snapshot of tracked work changed (see `AskWorkSnapshot` in REST_API.md) |
+| `ask.work` | `{ threadId, trackedWorkId, snapshot, trackedWork }` | The snapshot of tracked work changed: counts with `missionCount` and `targetCount`, no rows (see `AskWorkSnapshot` in REST_API.md; rows are paged with `.../work/{workId}/missions/enumerate` and `.../targets/enumerate`) |
 | `ask.thread` | `{ threadId, thread }` | Title, counters (`messageCount`, `unreadCount`), `activeWorkCount`, or `activeTurnId` changed |
 
 The direct captain chat endpoint (`POST /api/v1/captains/{id}/chat` with a `TurnId`) also streams `ask.chunk`,
@@ -954,6 +1044,187 @@ Broadcast to the planning session's tenant. Field names are camelCase.
 
 `planning-session.created` and `planning-session.stopped` (and the refinement-session `created` and `stopped`
 events) are generic events (see below).
+
+---
+
+### Black box events
+
+Sent when the [black box](REST_API.md#black-box) captures, analyzes, resolves or deletes an entry, falls back to the
+database store, finishes a garbage collection pass, or runs a recovery path. Each is also recorded as an event
+(`EntityType` `blackbox`, `EntityId` the entry id, `Payload` the same values) readable through REST and MCP events.
+The envelope carries a `message` (not stable; do not parse it). Delivery follows the entry's tenant: every socket of
+that tenant (and global admins opted in to all tenants) receives the event, even though REST and MCP reads of a regular
+user's entries are narrowed to their owner. `blackbox.gc_completed` has no tenant and reaches global admins only.
+Field names are camelCase; enum values are strings.
+
+| Type | Payload | When |
+|---|---|---|
+| [`blackbox.captured`](#blackboxcaptured) | `{ entryId, missionId, voyageId, vesselId, phase, step, kind, attempt, captureMode }` | An entry was captured (inline at the failure site, by the sweeper, or by a backfill) |
+| [`blackbox.capture_failed`](#blackboxcapture_failed) | `{ missionId, voyageId, step, error }` | A capture threw; the failure itself is unaffected |
+| [`blackbox.analyzed`](#blackboxanalyzed) | `{ entryId, missionId, voyageId, state, triage, rulesVersion }` | Enrichment and analysis finished (also after a re-analysis) |
+| [`blackbox.resolved`](#blackboxresolved) | `{ entryId, missionId, voyageId, resolution }` | The resolution was set or reopened |
+| [`blackbox.deleted`](#blackboxdeleted) | `{ entryId, missionId, voyageId, reason }` | An entry was deleted (`reason` `Manual`, `Purge`, `Expired`, `Evicted`, `Cascade`, `Retry` or `TenantDeleted`) |
+| [`blackbox.storage_fallback`](#blackboxstorage_fallback) | `{ entryId, from, to, error }` | The configured store failed and the entry was written to the database instead |
+| [`blackbox.gc_completed`](#blackboxgc_completed) | The `BlackBoxGcReport` (`dryRun`, `startedUtc`, `finishedUtc`, `durationMs`, `expired`, `evicted`, `cascaded`, `retriedDeletes`, `orphansRemoved`, `objectsMissing`, `bytesFreed`, `failures`, `candidateEntryIds`, `errors`) | A garbage collection pass finished |
+| [`blackbox.recovery_run`](#blackboxrecovery_run) | `{ entryId, pathId, recommendationId, dryRun, succeeded, stepsRun, stepsFailed, userId }` | Every recovery dry run and run, and every recommendation dry run and apply |
+
+#### blackbox.captured
+
+```json
+{
+  "type": "blackbox.captured",
+  "message": "Black box captured for msn_mvu1fjp0_9Wd6Uuyp262: External/OperatorTransition",
+  "data": {
+    "entryId": "bbx_mvu1ieiz_WMTEXGqlAJ5",
+    "missionId": "msn_mvu1fjp0_9Wd6Uuyp262",
+    "voyageId": "vyg_mvu1fjoz_xO6urNkcaHp",
+    "vesselId": "vsl_mvu1ffz5_4Vb0gY5fhKv",
+    "phase": "External",
+    "step": "OperatorTransition",
+    "kind": null,
+    "attempt": 2,
+    "captureMode": "Inline"
+  },
+  "timestamp": "2026-10-29T21:13:06.061924Z"
+}
+```
+
+This entry was captured inline when an operator moved the mission to `Cancelled` (`PUT /api/v1/missions/{id}/status`).
+
+#### blackbox.capture_failed
+
+```json
+{
+  "type": "blackbox.capture_failed",
+  "message": "Black box capture failed for msn_mvu1fjp0_9Wd6Uuyp262: The database is locked.",
+  "data": {
+    "missionId": "msn_mvu1fjp0_9Wd6Uuyp262",
+    "voyageId": "vyg_mvu1fjoz_xO6urNkcaHp",
+    "step": "ProcessCrash",
+    "error": "The database is locked."
+  },
+  "timestamp": "2026-10-29T21:13:06.061924Z"
+}
+```
+
+`error` is redacted. The sweeper captures a missed failure later (`captureMode` `Sweeper`).
+
+#### blackbox.analyzed
+
+```json
+{
+  "type": "blackbox.analyzed",
+  "message": "Black box analyzed: bbx_mvu1ieiz_WMTEXGqlAJ5",
+  "data": {
+    "entryId": "bbx_mvu1ieiz_WMTEXGqlAJ5",
+    "missionId": "msn_mvu1fjp0_9Wd6Uuyp262",
+    "voyageId": "vyg_mvu1fjoz_xO6urNkcaHp",
+    "state": "Analyzed",
+    "triage": "External",
+    "rulesVersion": 1
+  },
+  "timestamp": "2026-10-29T21:13:06.070652Z"
+}
+```
+
+After `POST /api/v1/blackbox/{id}/reanalyze` the message reads `Black box re-analyzed: ...`.
+
+#### blackbox.resolved
+
+```json
+{
+  "type": "blackbox.resolved",
+  "message": "Black box entry bbx_mvu1ftcv_zcdofOBmjhY set to Resolved",
+  "data": {
+    "entryId": "bbx_mvu1ftcv_zcdofOBmjhY",
+    "missionId": "msn_mvu1fjp0_9Wd6Uuyp262",
+    "voyageId": "vyg_mvu1fjoz_xO6urNkcaHp",
+    "resolution": "Resolved"
+  },
+  "timestamp": "2026-10-29T21:11:39.835678Z"
+}
+```
+
+#### blackbox.deleted
+
+```json
+{
+  "type": "blackbox.deleted",
+  "message": "Black box entry deleted (Manual): bbx_mvu1ftep_b5OtDr4leub",
+  "data": {
+    "entryId": "bbx_mvu1ftep_b5OtDr4leub",
+    "missionId": "msn_mvu1fjpe_wAvcJzyllyF",
+    "voyageId": "vyg_mvu1fjoz_xO6urNkcaHp",
+    "reason": "Manual"
+  },
+  "timestamp": "2026-10-29T21:15:02.118204Z"
+}
+```
+
+#### blackbox.storage_fallback
+
+```json
+{
+  "type": "blackbox.storage_fallback",
+  "message": "Black box storage fell back to the database for bbx_mvu1ieiz_WMTEXGqlAJ5",
+  "data": {
+    "entryId": "bbx_mvu1ieiz_WMTEXGqlAJ5",
+    "from": "S3",
+    "to": "Database",
+    "error": "The remote name could not be resolved: 's3.devbox.internal'"
+  },
+  "timestamp": "2026-10-29T21:13:06.064310Z"
+}
+```
+
+#### blackbox.gc_completed
+
+```json
+{
+  "type": "blackbox.gc_completed",
+  "message": "Black box garbage collection: 2 expired, 0 evicted, 0 cascaded, 0 orphans removed, 0 objects missing, 0 failures",
+  "data": {
+    "dryRun": false,
+    "startedUtc": "2026-10-29T22:10:34.416490Z",
+    "finishedUtc": "2026-10-29T22:10:34.431002Z",
+    "durationMs": 14,
+    "expired": 2,
+    "evicted": 0,
+    "cascaded": 0,
+    "retriedDeletes": 0,
+    "orphansRemoved": 0,
+    "objectsMissing": 0,
+    "bytesFreed": 18734,
+    "failures": 0,
+    "candidateEntryIds": [],
+    "errors": []
+  },
+  "timestamp": "2026-10-29T22:10:34.431500Z"
+}
+```
+
+#### blackbox.recovery_run
+
+```json
+{
+  "type": "blackbox.recovery_run",
+  "message": "Recovery path bbx-exec-006.restart ran on black box entry bbx_mvu1ftcv_zcdofOBmjhY",
+  "data": {
+    "entryId": "bbx_mvu1ftcv_zcdofOBmjhY",
+    "pathId": "bbx-exec-006.restart",
+    "recommendationId": null,
+    "dryRun": false,
+    "succeeded": true,
+    "stepsRun": 1,
+    "stepsFailed": 0,
+    "userId": "default"
+  },
+  "timestamp": "2026-10-29T21:11:39.804858Z"
+}
+```
+
+A dry run reads `Recovery path ... dry run on black box entry ...`, a failed run `... failed on ...`, and a
+recommendation `Recommendation <id> ...` (with `recommendationId` set).
 
 ---
 
@@ -1038,7 +1309,8 @@ Commands are sent via the `command` route. Each command returns a `command.resul
 | | `update_vessel_context` | Update vessel project context and style guide | `id`, `data` |
 | | `delete_vessel` | Delete vessel | `id` |
 | **Voyage** | `list_voyages` | List/enumerate voyages | optional `query` |
-| | `get_voyage` | Get voyage by ID | `id` |
+| | `list_voyage_progress` | One page of voyages with mission counts (active by default) | optional `query`, `status` |
+| | `get_voyage` | Get voyage by ID (with mission counts) | `id` |
 | | `create_voyage` | Create voyage | `data` |
 | | `cancel_voyage` | Cancel voyage | `id` |
 | | `purge_voyage` | Permanently delete voyage and all missions | `id` |
@@ -1083,6 +1355,9 @@ Commands are sent via the `command` route. Each command returns a `command.resul
 | **Enumerate** | `enumerate` | Paginated enumeration of any entity type | `entityType`, optional `query` |
 | **Backup** | `backup` | Create a backup ZIP | optional `outputPath` |
 | | `restore` | Restore from a backup ZIP | `filePath` |
+| **Black Box** | `blackbox.get` | Get a black box entry (with its record by default) | `id` (`msn_`, `vyg_` or `bbx_`) or `data.entryId` / `data.missionId` / `data.voyageId`; optional `data.includeRecord` |
+| | `blackbox.brief` | Get the Markdown FIX THIS brief of an entry | as `blackbox.get`; optional `data.redactHosts` |
+| | `blackbox.list` | One page of black box entries, newest first | optional `data` (BlackBoxEnumerateRequest filters), `query` |
 
 Any other `action` is rejected with `command.error` code `UnknownAction` (`Unknown action: <action>`).
 
@@ -1115,8 +1390,9 @@ Get the current Armada status.
     "workingCaptains": 2,
     "stalledCaptains": 1,
     "activeVoyages": 2,
+    "inProgressVoyages": 1,
+    "openVoyages": 1,
     "missionsByStatus": { "Pending": 3, "InProgress": 2 },
-    "voyages": [],
     "recentSignals": [],
     "timestampUtc": "2026-03-07T12:34:56.789Z"
   }
@@ -1264,7 +1540,8 @@ List or enumerate fleets with optional pagination and filtering.
 
 #### get_fleet
 
-Get a fleet by ID together with its vessels.
+Get a fleet by ID and the number of vessels it holds (`vesselCount`). The vessels are not embedded; page them with
+`list_vessels` and `query.fleetId`.
 
 **Request:**
 
@@ -1289,9 +1566,7 @@ Get a fleet by ID together with its vessels.
   "action": "get_fleet",
   "data": {
     "fleet": { "id": "flt_abc123", "name": "my-fleet", "...": "..." },
-    "vessels": [
-      { "id": "vsl_abc123", "name": "my-repo", "fleetId": "flt_abc123", "...": "..." }
-    ]
+    "vesselCount": 1
   }
 }
 ```
@@ -1496,7 +1771,7 @@ Create a new vessel.
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `action` | string | Yes | `"create_vessel"` |
-| `data` | object | Yes | Vessel creation data ([Vessel](#vessel) fields). `RepoUrl` is required (`command.error` `InvalidArgument` otherwise) |
+| `data` | object | Yes | Vessel creation data ([Vessel](#vessel) fields). `RepoUrl` is required (`command.error` `InvalidArgument` otherwise). Each configuration list (`ProtectedBranchPatterns`, `ProtectedPathPatterns`, `PrivateIdentifierDenylist`, `AutoLandPathAllowGlobs`, `AutoLandPathDenyGlobs`) holds at most 256 entries; more is `command.error` `InvalidArgument` (the same limit applies to `update_vessel`) |
 
 ---
 
@@ -1621,9 +1896,31 @@ List or enumerate voyages with optional pagination and filtering.
 
 ---
 
+#### list_voyage_progress
+
+One page of voyages with mission counts ([VoyageProgress](#voyageprogress)), the same view as REST
+`POST /api/v1/voyages/progress/enumerate`: with no status, the active voyages (InProgress first, then Open, newest first
+within each); `status` (or `query.status`) selects one voyage status. Scoped to the connection's identity; needs an
+authenticated connection.
+
+**Request:**
+
+```json
+{
+  "Route": "command",
+  "action": "list_voyage_progress",
+  "query": { "pageNumber": 1, "pageSize": 10 }
+}
+```
+
+**Response:** `data` is an [EnumerationResult](#enumerationresult) of [VoyageProgress](#voyageprogress).
+
+---
+
 #### get_voyage
 
-Get a voyage by ID. Returns the voyage object along with its missions.
+Get a voyage by ID. Returns the voyage with counts of its missions ([VoyageProgress](#voyageprogress)); the missions are
+not embedded: page them with `list_missions` and `query.voyageId`.
 
 **Request:**
 
@@ -1648,9 +1945,13 @@ Get a voyage by ID. Returns the voyage object along with its missions.
   "action": "get_voyage",
   "data": {
     "voyage": { "id": "vyg_abc123", "title": "Feature batch", "...": "..." },
-    "missions": [
-      { "id": "msn_abc123", "title": "Task 1", "status": "Complete", "...": "..." }
-    ]
+    "totalMissions": 3,
+    "completedMissions": 1,
+    "failedMissions": 0,
+    "inProgressMissions": 1,
+    "missionCountsByStatus": { "Complete": 1, "InProgress": 1, "Pending": 1 },
+    "vesselId": "vsl_abc123",
+    "vesselCount": 1
   }
 }
 ```
@@ -1707,8 +2008,8 @@ Create a new voyage. When `data` includes both a `VesselId` and a non-empty `Mis
 
 Cancel a voyage. Its `Pending`, `Assigned`, and `Blocked` missions are also cancelled the same way `cancel_mission`
 cancels one (a running agent is stopped first; an assigned captain with no other active mission returns to `Idle`);
-`InProgress` missions keep running. A mission whose agent did not confirm it stopped is left unchanged and listed in
-the reply's `NotCancelled`.
+`InProgress` missions keep running. A mission whose agent did not confirm it stopped is left unchanged and counted in
+the reply's `notCancelledMissions`.
 
 **Request:**
 
@@ -1725,7 +2026,7 @@ the reply's `NotCancelled`.
 | `action` | string | Yes | `"cancel_voyage"` |
 | `id` | string | Yes | Voyage ID (prefix `vyg_`) |
 
-**Response:** `data` is `{ "voyage": { ... }, "cancelledMissions": 2 }`.
+**Response:** `data` is `{ "voyage": { ... }, "cancelledMissions": 2, "notCancelledMissions": 0, "firstNotCancelledReason": null }`.
 
 ---
 
@@ -2696,6 +2997,197 @@ Restore Armada from a previously created backup ZIP file.
 
 ---
 
+### Black Box Actions
+
+Read-only mirrors of the black box read routes and tools ([REST_API.md](REST_API.md#black-box),
+[MCP_API.md](MCP_API.md#black-box)). Global administrators only, like every command; tenant admins and regular users
+read black box entries over REST or MCP, which scope them. Replies are camelCase. Errors: `NotFound` for a missing
+entry (or a mission or voyage without one), `InvalidArgument` for a missing target, a bad filter or body, `Conflict` while the
+entry is being deleted, and `Unavailable` when the black box is not running or its store is unreachable.
+
+#### blackbox.get
+
+Get one entry. Name it with `id` (a `msn_` id means that mission's current entry, a `vyg_` id that voyage's current
+entry, anything else an entry id) or with `data.entryId`, `data.missionId` or `data.voyageId`.
+
+**Request:**
+
+```json
+{
+  "Route": "command",
+  "action": "blackbox.get",
+  "id": "msn_mvu1fjp0_9Wd6Uuyp262",
+  "data": { "includeRecord": false }
+}
+```
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `action` | string | Yes | `"blackbox.get"` |
+| `id` | string | One of `id` or `data.*Id` | `msn_`, `vyg_` or `bbx_` id |
+| `data.entryId`, `data.missionId`, `data.voyageId` | string | One of `id` or `data.*Id` | The entry, or a mission's or voyage's current entry (used instead of `id` when present) |
+| `data.includeRecord` | boolean | No | Include the record (default `true`) |
+
+**Response:** `command.result` whose `data` is the `BlackBoxEntry` (trimmed):
+
+```json
+{
+  "type": "command.result",
+  "action": "blackbox.get",
+  "data": {
+    "id": "bbx_mvu1ftcv_zcdofOBmjhY",
+    "tenantId": "default",
+    "userId": "default",
+    "subjectType": "Mission",
+    "missionId": "msn_mvu1fjp0_9Wd6Uuyp262",
+    "voyageId": "vyg_mvu1fjoz_xO6urNkcaHp",
+    "vesselId": "vsl_mvu1ffz5_4Vb0gY5fhKv",
+    "missionTitle": "Retry landings deferred on a dirty checkout",
+    "attempt": 1,
+    "isCurrent": true,
+    "phase": "Execution",
+    "step": "ProcessCrash",
+    "failureKind": "Crash",
+    "statusAfter": "Failed",
+    "triage": "Transient",
+    "fingerprint": "9eab364095ddc8148f79ed0e7a81303bb19a5f115eba491962241d1a1403cead",
+    "captureMode": "Backfill",
+    "state": "Analyzed",
+    "resolution": "Resolved",
+    "pinned": false,
+    "storageTarget": "Disk",
+    "totalBytes": 9979,
+    "objectCount": 5,
+    "createdUtc": "2026-10-29T21:11:05.310433Z",
+    "record": null
+  }
+}
+```
+
+```json
+{
+  "type": "command.error",
+  "action": "blackbox.get",
+  "error": "Black box entry bbx_doesnotexist_0000000000 not found.",
+  "code": "NotFound"
+}
+```
+
+#### blackbox.brief
+
+Get the Markdown FIX THIS brief of one entry, rendered live. The entry is named as for `blackbox.get`.
+
+**Request:**
+
+```json
+{
+  "Route": "command",
+  "action": "blackbox.brief",
+  "id": "bbx_mvu1ftcv_zcdofOBmjhY",
+  "data": { "redactHosts": false }
+}
+```
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `action` | string | Yes | `"blackbox.brief"` |
+| `id` or `data.entryId` / `data.missionId` / `data.voyageId` | string | Yes | The entry |
+| `data.redactHosts` | boolean | No | Strip absolute paths, host names and user names (default `false`) |
+
+**Response:**
+
+```json
+{
+  "type": "command.result",
+  "action": "blackbox.brief",
+  "data": {
+    "entryId": "bbx_mvu1ftcv_zcdofOBmjhY",
+    "contentType": "text/markdown",
+    "brief": "# FIX THIS: Retry landings deferred on a dirty checkout (mission msn_mvu1fjp0_9Wd6Uuyp262)\n\nYou are asked to FIX THIS. This brief is a self-contained black box entry from Armada, a multi-agent orchestration system. ...\n\n## Summary\n\n..."
+  }
+}
+```
+
+```json
+{
+  "type": "command.error",
+  "action": "blackbox.brief",
+  "error": "Give a missionId, voyageId or entryId.",
+  "code": "InvalidArgument"
+}
+```
+
+#### blackbox.list
+
+One page of entries, newest first. The filters are a `BlackBoxEnumerateRequest` in `data` (`vesselId`, `voyageId`,
+`missionId`, `captainId`, `fleetId`, `harborId`, `subjectType`, `phase`, `step`, `kind`, `triage`, `resolution`,
+`state`, `captureMode`, `fingerprint`, `pinned`, `isCurrent`, `path`, `createdAfter`, `createdBefore`); paging comes
+from `query` (`pageNumber`, `pageSize` 1 to 1000, `order`). When `query` is present it replaces the paging and order in
+`data`.
+
+**Request:**
+
+```json
+{
+  "Route": "command",
+  "action": "blackbox.list",
+  "data": { "vesselId": "vsl_mvu1ffz5_4Vb0gY5fhKv", "isCurrent": true },
+  "query": { "pageNumber": 1, "pageSize": 5 }
+}
+```
+
+**Response:** `command.result` whose `data` is an enumeration result of `BlackBoxEntrySummary` (trimmed to one row):
+
+```json
+{
+  "type": "command.result",
+  "action": "blackbox.list",
+  "data": {
+    "success": true,
+    "pageNumber": 1,
+    "pageSize": 5,
+    "totalPages": 1,
+    "totalRecords": 3,
+    "objects": [
+      {
+        "id": "bbx_mvu1ftew_95PyT7WmtrV",
+        "subjectType": "Voyage",
+        "missionId": null,
+        "voyageId": "vyg_mvu1fjoz_xO6urNkcaHp",
+        "vesselId": "vsl_mvu1ffz5_4Vb0gY5fhKv",
+        "captainId": null,
+        "missionTitle": "Harden landing retries",
+        "vesselName": "demo-api",
+        "attempt": 1,
+        "isCurrent": true,
+        "phase": "Voyage",
+        "step": "SettlementFailed",
+        "failureKind": "Crash",
+        "statusBefore": null,
+        "statusAfter": "Failed",
+        "triage": "Transient",
+        "fingerprint": "bcb7be821991076ba7d7551c9c5714b099bddaa13843c800b1bd4ee271e37329",
+        "captureMode": "Backfill",
+        "state": "Analyzed",
+        "resolution": "Open",
+        "pinned": false,
+        "reasonExcerpt": "Mission msn_mvu1fjp0_9Wd6Uuyp262 failed: Captain process exited with code 134 after 4m12s while running dotnet test ...",
+        "totalBytes": 9199,
+        "objectCount": 5,
+        "createdUtc": "2026-10-29T21:11:05.382585Z",
+        "expiresUtc": "2027-04-27T21:11:05.382585Z"
+      }
+    ],
+    "totalMs": 0
+  }
+}
+```
+
+The `enumerate` command does not take `blackbox`; use `blackbox.list`.
+
+---
+
+
 ### Enumerate
 
 #### enumerate
@@ -2842,7 +3334,7 @@ transition out of `Complete`, `Failed`, or `Cancelled`, is rejected.
 | `PullRequestOpen` | `Complete`, `LandingFailed`, `Cancelled` |
 | `Testing` | `Review`, `InProgress`, `Complete`, `Failed` |
 | `Review` | `Complete`, `InProgress`, `Failed` |
-| `LandingFailed` | `WorkProduced`, `Failed`, `Cancelled` |
+| `LandingFailed` | `WorkProduced`, `Complete`, `Failed`, `Cancelled` |
 
 An invalid transition returns `command.error` with `code` `Conflict`; an unknown status name returns `InvalidArgument`.
 
@@ -2951,10 +3443,11 @@ recognize.
 | `idleCaptains` | int | Captains in Idle state |
 | `workingCaptains` | int | Captains in Working state |
 | `stalledCaptains` | int | Captains in Stalled state |
-| `activeVoyages` | int | Number of active (non-complete) voyages |
+| `activeVoyages` | int | Number of active (Open or InProgress) voyages; page them with `list_voyage_progress` |
+| `inProgressVoyages` | int | Number of InProgress voyages |
+| `openVoyages` | int | Number of Open voyages |
 | `memoryPressureDeferrals` | int | Cumulative dispatch attempts deferred because the host was under memory pressure |
 | `missionsByStatus` | object | Map of status string to count (e.g., `{"Pending": 3, "InProgress": 2}`) |
-| `voyages` | array | List of [VoyageProgress](#voyageprogress) objects |
 | `recentSignals` | array | List of recent [Signal](#signal) objects |
 | `remoteTunnel` | [RemoteTunnelStatus](#remotetunnelstatus) | Current outbound remote tunnel status |
 | `timestampUtc` | string | ISO 8601 UTC timestamp of the snapshot |
@@ -2986,7 +3479,9 @@ recognize.
 | `completedMissions` | int | Missions with status Complete |
 | `failedMissions` | int | Missions with status Failed |
 | `inProgressMissions` | int | Missions currently in progress |
-| `vesselIds` | string[] | Distinct vessel IDs referenced by the voyage's missions |
+| `missionCountsByStatus` | object | Count per mission status (only statuses with missions) |
+| `vesselId` | string | Vessel of the earliest mission, or null |
+| `vesselCount` | int | Distinct vessels the missions target |
 
 #### Voyage
 
@@ -3047,7 +3542,7 @@ recognize.
 | `persona` | string \| null | Persona for this mission (for example `Worker`, `Architect`, `Judge`) |
 | `failureReason` | string \| null | Human-readable failure detail (not stable; do not parse) |
 | `requiresReview` | bool | Whether the mission stops at a review gate |
-| `failureKind` | string \| null | Structured failure classification (`MissionFailureKindEnum`: `Compile`, `TestFail`, `Timeout`, `LandingConflict`, `Crash`, `NoOp`, `Boundary`, `ScopeViolation`, `JudgeRejected`, `Infra`, `Unknown`, `ReviewDenied`, `DependencyFailed`, `MaxRuntimeExceeded`, `StallRecoveryExhausted`, `OperatorAction`, `InvalidOutput`). Branch on this, not on `failureReason` |
+| `failureKind` | string \| null | Structured failure classification (`MissionFailureKindEnum`: `Compile`, `TestFail`, `Timeout`, `LandingConflict`, `Crash`, `NoOp`, `Boundary`, `ScopeViolation`, `JudgeRejected`, `Infra`, `Unknown`, `ReviewDenied`, `DependencyFailed`, `MaxRuntimeExceeded`, `StallRecoveryExhausted`, `OperatorAction`, `InvalidOutput`, `Blocked`). Branch on this, not on `failureReason` |
 | `createdUtc` | string | ISO 8601 creation timestamp |
 | `startedUtc` | string \| null | ISO 8601 start timestamp |
 | `completedUtc` | string \| null | ISO 8601 completion timestamp |
@@ -3510,3 +4005,30 @@ async def main():
 
 asyncio.run(main())
 ```
+
+### usage.snapshot
+
+A committed account observation emits `usage.snapshot` with `tenantId`,
+`snapshotId`, `hostId`, `runtime`, `provider`, `captainIds`, `capturedUtc` and
+`status`. The hub routes it only to authorized subscribers in the owning tenant.
+Account credentials, raw excerpts and full provider responses are excluded.
+Clients should invalidate and refetch usage queries, coalesce bursts, and refetch
+after reconnect; events are notifications rather than an append-only data feed.
+Historical observations remain available from the paged REST queries.
+
+
+Usage snapshot events are invalidations, not quota deltas. A representative payload
+inside the existing event envelope is:
+
+```json
+{"tenantId":"ten_example","snapshotId":"usg_example","hostId":"hbr_example","runtime":"ClaudeCode","provider":"anthropic","captainIds":["cpt_example"],"capturedUtc":"2026-11-01T13:00:00Z","status":"Ok"}
+```
+
+No AccountKey, windows, RawExcerpt, credential material or provider body is sent.
+An event can represent Failed, AuthMissing or Unsupported; refetch the sanitized
+REST view to distinguish these from a fresh successful observation. Repeated or
+out-of-order notifications do not create duplicate chart points. On reconnect,
+refetch current filters because the event channel does not replay every missed
+observation. Tenant filtering happens on the server before delivery, including
+for administrator and captain-session connections. No usage WebSocket command is
+added; capture uses the authorized REST/MCP operation.

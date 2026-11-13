@@ -103,7 +103,7 @@ Before dispatching work, understand what exists:
 ```
 status()                                                    -> overview of captains, missions, voyages
 enumerate({ entityType: "fleets" })                         -> find available fleets
-get_fleet({ fleetId })                                      -> see vessels in a fleet
+get_fleet({ fleetId })                                      -> fleet + vesselCount (page vessels with enumerate fleetId)
 enumerate({ entityType: "vessels", fleetId: "flt_..." })    -> find vessels in a fleet
 enumerate({ entityType: "captains" })                       -> confirm captains are registered
 ```
@@ -130,7 +130,7 @@ Good: "Add JWT validation middleware in src/middleware/auth.ts. Import jsonwebto
 **Rule 2 -- Monolithic files require sequential missions.** Some codebases have large files that many features touch (e.g., a single-page app with one `index.html` and one `app.js`). You CANNOT parallelize work on these files. Instead:
 - Put all changes to the shared file in a **single mission**, OR
 - Split across **separate sequential voyages** (dispatch voyage 2 only after voyage 1 completes), OR
-- Use one mission per voyage and rely on the vessel's `allowConcurrentMissions: false` (the default) to serialize execution
+- Use one mission per voyage and rely on the vessel's `maxParallelVoyages: 1` and `maxParallelMissionsPerVoyage: 1` to serialize execution
 
 **Rule 3 -- Never dispatch overlapping voyages.** If Voyage A has a mission that touches `dashboard.js`, do NOT dispatch Voyage B with another mission that also touches `dashboard.js` while Voyage A is still running. The second voyage's missions will branch from stale code and fail to land even if execution is serialized.
 
@@ -179,14 +179,34 @@ create_mission({
 })
 ```
 
+#### Dispatching a Mission Tree
+
+When one mission needs code that another mission produces, dispatch both in one call and link them with `key` and `parentKey` instead of splitting them across voyages. A child starts only after its parent finishes, on the parent's result: the first child continues the parent's branch and later children fork from it (`branchStrategy` `ContinueParent` or `ForkFromParent` overrides this). Missions without a `parentKey` are siblings and can run in parallel. A `parentKey` must name an earlier mission in the same call; an unknown or later key is rejected and nothing is created. Use `parentKey` only for a real dependency, and keep trees shallow (the default depth limit is 4).
+
+Give every mission `ownedPaths`, the files or directories (trailing `/`) it may change. Missions that can run at the same time must not own the same file; shared files such as lockfiles, project files and barrel exports belong to one mission, usually the parent. Captains see their owned paths and their running siblings' paths in their instructions.
+
+```
+dispatch({
+  title: "Add caching",
+  vesselId: "vsl_abc123",
+  missions: [
+    { key: "svc", title: "Add CacheService", description: "...", ownedPaths: ["src/Services/CacheService.cs", "src/Armada.csproj"] },
+    { key: "mw", parentKey: "svc", title: "Add caching middleware", description: "...", ownedPaths: ["src/Middleware/CacheMiddleware.cs"] },
+    { key: "docs", title: "Document cache settings", description: "...", ownedPaths: ["docs/CACHING.md"] }
+  ]
+})
+```
+
+Before adding more work, check capacity. `vessel_concurrency({ vesselId })` returns the voyage slots in use against `MaxParallelVoyages`, the voyages holding them, the missions waiting and on which gate, and recent slot wait times. `voyage_tree({ voyageId })` shows the voyage as logical missions with their stages and children. Each running mission takes one captain slot: a CLI captain has one, so N parallel missions need N captains, while an endpoint or Mux captain has several. Splitting a request into more parallel missions than the vessel's `MaxParallelMissionsPerVoyage` or the free captain slots allow only makes the extra missions wait. `mission_status({ missionId, includeWaits: true })` shows why and how long a mission waited. See [SCHEDULING.md](SCHEDULING.md#capacity).
+
 ### 4. Monitor
 
 ```
 voyage_status({ voyageId: "vyg_..." })
-voyage_status({ voyageId: "vyg_...", summary: false, includeMissions: true })
+enumerate({ entityType: "missions", voyageId: "vyg_...", pageSize: 25 })
 ```
 
-By default this returns the voyage with mission counts by status; pass `summary: false, includeMissions: true` for the full mission objects. Mission statuses:
+`voyage_status` returns the voyage with mission counts by status (it never embeds missions); page the missions themselves with `enumerate` (`entityType: "missions"`, `voyageId`). Mission statuses:
 
 | Status | Meaning |
 |--------|---------|
@@ -270,7 +290,7 @@ Boolean include flags (all default to `false`): `includeDescription` (missions, 
 
 | Tool | Parameters | Description |
 |------|-----------|-------------|
-| `get_fleet` | `fleetId` (required) | Get fleet with its vessels |
+| `get_fleet` | `fleetId` (required) | Get fleet and its vessel count; page its vessels with `enumerate` (`vessels`, `fleetId`) |
 | `create_fleet` | `name` (required), `description` | Create a new fleet |
 | `update_fleet` | `fleetId` (required), `name`, `description` | Update fleet |
 | `delete_fleet` | `fleetId` (required) | Delete fleet |
@@ -280,17 +300,19 @@ Boolean include flags (all default to `false`): `includeDescription` (missions, 
 | Tool | Parameters | Description |
 |------|-----------|-------------|
 | `get_vessel` | `vesselId` (required) | Get vessel details |
-| `add_vessel` | `name` (required), `repoUrl` (required), `fleetId` (required), `defaultBranch` (default: "main"), `workingDirectory`, `projectContext`, `styleGuide`, `allowConcurrentMissions` (default false), `autoApprove`, `enableModelContext`, `defaultPipelineId`, `gitHubTokenOverride` | Register a new git repo |
+| `add_vessel` | `name` (required), `repoUrl` (required), `fleetId` (required), `defaultBranch` (default: "main"), `workingDirectory`, `projectContext`, `styleGuide`, `maxParallelVoyages` (default 1), `maxParallelMissionsPerVoyage` (default 4), `autoApprove`, `enableModelContext`, `defaultPipelineId`, `gitHubTokenOverride` | Register a new git repo |
 | `update_vessel` | `vesselId` (required), plus any `add_vessel` field, `clearAutoApprove`, `modelContext`, and the auto-land (`autoLand*`) and Definition-of-Done (`definitionOfDone*`) settings | Update vessel |
 | `update_vessel_context` | `vesselId` (required), `projectContext`, `styleGuide`, `modelContext` | Update only the vessel's context fields |
+| `vessel_concurrency` | `vesselId` (required) | Voyage slots in use, the voyages holding them, waiting missions by gate, and slot wait p50/p95/max over 24 hours and 7 days |
 | `delete_vessel` | `vesselId` (required) | Delete vessel |
 
 ### Voyages
 
 | Tool | Parameters | Description |
 |------|-----------|-------------|
-| `dispatch` | `title` (required), `vesselId`, `missions` (array of {title, description}), `description`, `pipeline` (name) or `pipelineId`, `objectiveId`, `selectedPlaybooks`, `captainAssignments` | Dispatch a voyage with missions -- the primary way to create work. `vesselId` and `missions` are needed to create work; without either, an empty voyage is created. |
-| `voyage_status` | `voyageId` (required), `summary` (default true), `includeMissions` (default false), `includeDescription` (default false), `includeDiffs` (default false), `includeLogs` (default false) | Get voyage status. Default summary mode returns voyage metadata and mission counts by status. Set `includeMissions: true` for full mission details. |
+| `dispatch` | `title` (required), `vesselId`, `missions` (array of {title, description, key, parentKey, branchStrategy, ownedPaths}), `description`, `pipeline` (name) or `pipelineId`, `objectiveId`, `selectedPlaybooks`, `captainAssignments` | Dispatch a voyage with missions -- the primary way to create work. `vesselId` and `missions` are needed to create work; without either, an empty voyage is created. |
+| `voyage_status` | `voyageId` (required), `summary` (default true) | Get voyage status: the voyage with mission counts by status. Missions are not embedded; page them with `enumerate` (`entityType: "missions"`, `voyageId`). |
+| `voyage_tree` | `voyageId` (required) | The voyage's missions as logical missions with their pipeline stages and children (at most 1000 missions) |
 | `cancel_voyage` | `voyageId` (required) | Cancel voyage and all pending missions |
 | `purge_voyage` | `voyageId` (required) | Permanently delete voyage and all missions (cannot be undone) |
 
@@ -298,7 +320,7 @@ Boolean include flags (all default to `false`): `includeDescription` (missions, 
 
 | Tool | Parameters | Description |
 |------|-----------|-------------|
-| `mission_status` | `missionId` (required) | Get mission details |
+| `mission_status` | `missionId` (required), `includeWaits` | Get mission details; `includeWaits` adds its 100 most recent wait intervals |
 | `create_mission` | `title` (required), `description` (required), `vesselId` (required), `voyageId`, `persona`, `mode` (Implementation/Audit/Research), `tier` (Economy/Standard/Premium), `selectedPlaybooks` | Create and dispatch a standalone mission |
 | `update_mission` | `missionId` (required), `title`, `description`, `vesselId`, `voyageId`, `priority`, `branchName`, `prUrl`, `parentMissionId`, `persona`, `mode` | Update mission metadata |
 | `cancel_mission` | `missionId` (required) | Cancel a mission (stops its agent first; refused with `Conflict` when the stop is not confirmed) |
@@ -319,7 +341,7 @@ Valid status transitions for `transition_mission_status`:
 | WorkProduced | Complete, LandingFailed, Cancelled |
 | Testing | Review, InProgress, Complete, Failed |
 | Review | Complete, InProgress, Failed |
-| LandingFailed | WorkProduced, Failed, Cancelled |
+| LandingFailed | WorkProduced, Complete, Failed, Cancelled |
 
 Complete, Failed, and Cancelled are terminal.
 
@@ -381,7 +403,7 @@ Use `enumerate` for all collection queries. Use a small `pageSize` (10-25) to co
 **How to handle monolithic/shared files?** When multiple changes must go into the same file (e.g., a single `index.html` or `app.js`), you have three options:
 1. **Combine into one mission** -- put all the changes in a single mission description. This is the safest approach.
 2. **Chain voyages** -- dispatch voyage 1, wait for it to complete, then dispatch voyage 2. Each voyage builds on the prior one's landed code.
-3. **Single-mission voyages with serialization** -- create one mission per voyage and rely on the vessel's `allowConcurrentMissions: false` (the default). But be aware that if two voyages are active simultaneously, their branches may still conflict.
+3. **Single-mission voyages with serialization** -- create one mission per voyage and rely on the vessel's `maxParallelVoyages: 1` and `maxParallelMissionsPerVoyage: 1`. But be aware that if two voyages are active simultaneously, their branches may still conflict.
 
 **NEVER** dispatch two voyages that modify the same files concurrently. This is the most common cause of `LandingFailed` status.
 
@@ -391,7 +413,7 @@ Use `enumerate` for all collection queries. Use a small `pageSize` (10-25) to co
 
 **When to use the merge queue?** When multiple missions complete and you want their branches tested and merged in order (or set the vessel's landing mode to MergeQueue so Armada enqueues them for you). Enqueue completed mission branches; the Admiral tests and lands them on its next pass, or call `process_merge_queue` to run one now. This prevents broken merges from landing. After merges land, use `purge_merge_queue` to bulk-delete old terminal entries (Landed/Failed/Cancelled) and keep the queue clean. You can filter by `vesselId` or `status`. For selective cleanup, use `purge_merge_entries` with an array of entry IDs.
 
-**How to handle a stalled captain?** Check `enumerate({ entityType: "captains", status: "Stalled" })` -- stalled captains have stopped sending heartbeats. Read the log with `get_captain_log` to diagnose. Stop it with `stop_captain` and the mission will be marked Failed for redispatch.
+**How to handle a stalled captain?** Check `enumerate({ entityType: "captains", status: "Stalled" })` -- stalled captains have stopped sending heartbeats. Read the log with `get_captain_log` to diagnose. Stop it with `stop_captain`: the mission is marked Cancelled (failure kind OperatorAction) with the stop recorded in its failure reason, and uncommitted work in its dock is kept as a WIP commit on the mission branch. Restart it with `restart_mission` to redispatch.
 
 ## Emergency Controls
 

@@ -313,6 +313,10 @@ namespace Armada.Harbor
             _RunCts = new CancellationTokenSource();
             UpdateConnectButton();
             AppendInfo(automatic ? "Auto-connecting on startup" : "Connect requested", HarborLogCategoryEnum.Link, HarborLogOutcomeEnum.None);
+            // The link loop prepares its job runner before it reports Connecting; show Connecting from the click so the
+            // header never reads Disconnected beside a Disconnect button.
+            SetLinkState(HarborLinkStateEnum.Connecting);
+            SetDetail("Reaching the Admiral at " + _Settings.ServerLinkUrl + "...");
             _ = RunLoopAsync(_RunCts.Token);
             RaiseStateChanged();
         }
@@ -323,6 +327,8 @@ namespace Armada.Harbor
             _RunCts = null;
             UpdateConnectButton();
             SetLinkState(HarborLinkStateEnum.Idle);
+            // The link loop stops without reporting, so clear what it last said ("Ready", a retry countdown).
+            SetDetail("Not connected. Connect to start taking work from the Admiral.");
             RaiseStateChanged();
         }
 

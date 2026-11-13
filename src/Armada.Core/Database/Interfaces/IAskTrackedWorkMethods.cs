@@ -62,5 +62,27 @@ namespace Armada.Core.Database.Interfaces
         /// <param name="token">Cancellation token.</param>
         /// <returns>Matching Active rows.</returns>
         Task<List<AskTrackedWork>> EnumerateActiveByEntityAsync(AskTrackedEntityTypeEnum entityType, string entityId, CancellationToken token = default);
+
+        /// <summary>
+        /// Read one page of a thread's tracked work. CreatedDescending (the default) is newest first; the id breaks
+        /// ties. The page is cut in the database and TotalRecords counts every row of the thread.
+        /// </summary>
+        /// <param name="tenantId">Tenant identifier.</param>
+        /// <param name="threadId">Thread identifier.</param>
+        /// <param name="state">Only rows in this state, or null for every state.</param>
+        /// <param name="query">Page number, page size (1 to 1000), and order.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>One page of tracked work rows.</returns>
+        Task<EnumerationResult<AskTrackedWork>> EnumeratePageByThreadAsync(string tenantId, string threadId, AskTrackedWorkStateEnum? state, EnumerationQuery query, CancellationToken token = default);
+
+        /// <summary>
+        /// Count a thread's tracked work rows.
+        /// </summary>
+        /// <param name="tenantId">Tenant identifier.</param>
+        /// <param name="threadId">Thread identifier.</param>
+        /// <param name="state">Only rows in this state, or null for every state.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The number of rows.</returns>
+        Task<long> CountByThreadAsync(string tenantId, string threadId, AskTrackedWorkStateEnum? state, CancellationToken token = default);
     }
 }

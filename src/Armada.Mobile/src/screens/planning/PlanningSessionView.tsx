@@ -12,6 +12,7 @@ import {
 } from '@dashboard/api/client';
 import { randomThinkingMessage } from '@dashboard/lib/askThinkingMessages';
 import { mergeSessionDetail } from '@dashboard/lib/liveMerge';
+import { withStoppedSession } from '@dashboard/lib/sessionViews';
 import { getLatestAssistantMessage, resolveDispatchSeedUpdate, type DispatchSeedState } from '@dashboard/lib/planningSessions';
 import { ActionRow, InfoRow, SwitchField, useActionRunner } from '../../build/fields';
 import { errorMessage } from '../../build/useLiveResource';
@@ -27,6 +28,7 @@ import { planningDispatchHref } from './planningDispatch';
 import type { PlanningCatalog } from './usePlanningCatalog';
 import { usePlanningSession } from './usePlanningSession';
 import { useReducedMotion } from '../../lib/accessibility';
+import { dispatchWarningsOf, firstWarningMessage, warningCount } from '../blackbox/insightModel';
 
 export interface PlanningSessionViewProps {
   sessionId: string;
@@ -156,13 +158,13 @@ export function PlanningSessionView({ sessionId, catalog, embedded, initialCompo
   const stopTurn = async () => {
     if (!current) return;
     const result = await run('stopTurn', () => stopPlanningTurn(current.id));
-    if (result) setDetail(result);
+    if (result) setDetail((prev) => withStoppedSession(prev, result));
   };
 
   const endSession = async () => {
     if (!current) return;
     const result = await run('end', () => stopPlanningSession(current.id), t('Planning session is ending.'));
-    if (result) setDetail(result);
+    if (result) setDetail((prev) => withStoppedSession(prev, result));
   };
 
   const deleteSession = async () => {
@@ -193,13 +195,17 @@ export function PlanningSessionView({ sessionId, catalog, embedded, initialCompo
       title: dispatchTitle.trim() || undefined,
       description: dispatchDescription.trim(),
     }), t('Dispatch created from planning session.'));
-    if (voyage) router.push(`/voyages/${voyage.id}` as Href);
+    if (voyage) {
+      const dispatchWarnings = dispatchWarningsOf(voyage);
+      if (warningCount(dispatchWarnings) > 0) pushToast('warning', t('Dispatched with {{count}} warning(s): {{message}}', { count: warningCount(dispatchWarnings), message: firstWarningMessage(dispatchWarnings) }));
+      router.push(`/voyages/${voyage.id}` as Href);
+    }
   };
 
   // Committing planning output to dispatch releases the reserved captain and dock (best-effort, like the dashboard).
   const openInDispatch = async (prompt: string, voyageTitle: string | null) => {
     if (!current || !prompt.trim()) return;
-    try { setDetail(await stopPlanningSession(current.id)); } catch { /* the user can still end the session by hand */ }
+    try { const stopped = await stopPlanningSession(current.id); setDetail((prev) => withStoppedSession(prev, stopped)); } catch { /* the user can still end the session by hand */ }
     router.push(planningDispatchHref(current, catalog.pipelines, prompt.trim(), voyageTitle) as Href);
   };
 
@@ -232,7 +238,7 @@ export function PlanningSessionView({ sessionId, catalog, embedded, initialCompo
                 <InfoRow label={t('Pipeline')} value={catalog.pipelineName(current.pipelineId)} />
                 <InfoRow label={t('Playbooks')} value={current.selectedPlaybooks?.length ?? 0} />
                 <InfoRow label={t('Updated')} value={`${formatRelativeTime(current.lastUpdateUtc)} (${formatDateTime(current.lastUpdateUtc)})`} />
-                <InfoRow label={t('Messages')} value={messages.length} />
+                <InfoRow label={t('Messages')} value={detail.messageCount ?? messages.length} />
                 <InfoRow label={t('ID')} value={current.id} mono />
               </View>
               <SwitchField label={t('Stream responses')} value={streaming} onChange={setStreaming} disabled={busyTurn} testID="planning-stream" />
@@ -256,6 +262,14 @@ export function PlanningSessionView({ sessionId, catalog, embedded, initialCompo
           {runtime === 'Codex' ? <Banner tone="info" title={t('Codex responses cannot be streamed and will arrive upon completion.')} /> : null}
 
           <View style={styles.transcript}>
+            {(detail.messageCount ?? 0) > messages.length ? (
+              <Button
+                label={t('Load earlier messages ({{shown}} of {{total}})', { shown: messages.length, total: detail.messageCount })}
+                variant="secondary"
+                onPress={() => void session.loadOlder()}
+                testID="planning-load-older"
+              />
+            ) : null}
             {messages.length === 0 ? <AppText muted>{t('No transcript yet. Send the first planning message below.')}</AppText> : null}
             {messages.map((message) => (
               <PlanningMessageView

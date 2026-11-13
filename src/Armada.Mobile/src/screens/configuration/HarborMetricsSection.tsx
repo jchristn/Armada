@@ -64,7 +64,7 @@ export function tokenSeries(t: Translate, metrics: HarborMetrics): { series: Cha
   const keyOf = (runtime: string, model: string) => `${runtime} / ${model}`;
   const top = metrics.tokens.series.slice(0, MAX_TOKEN_SERIES);
   const hasOther = metrics.tokens.series.length > MAX_TOKEN_SERIES;
-  const series: ChartSeries[] = top.map((s, i) => ({ key: keyOf(s.runtime, s.model), label: keyOf(s.runtime, s.model), color: TOKEN_COLORS[i % TOKEN_COLORS.length] }));
+  const series: ChartSeries[] = top.map((s, i) => ({ key: keyOf(s.runtime, s.model), label: s.isOther ? t('Other') : keyOf(s.runtime, s.model), color: TOKEN_COLORS[i % TOKEN_COLORS.length] }));
   if (hasOther) series.push({ key: '__other', label: t('Other'), color: 'textMuted' });
   const buckets = metrics.tokens.buckets.map((b) => {
     const values = top.map((s) => b.series.find((x) => x.runtime === s.runtime && x.model === s.model)?.totalTokens ?? 0);
@@ -249,11 +249,13 @@ function LaunchSpeedRow({ row }: { row: HarborLaunchSpeed }) {
   const firstOutput = `${t('First output')}: ${ms(row.firstOutputMedianMs)} / ${ms(row.firstOutputP95Ms)}`;
   const runtime = `${t('Runtime')}: ${ms(row.durationMedianMs)} / ${ms(row.durationP95Ms)}`;
   // The spoken label carries every visible line, then what the "a / b" pairs mean.
-  const label = `${row.runtime}, ${jobs}. ${firstOutput}. ${runtime}. ${t('Median / p95')}.`;
+  // The server aggregates runtimes past its limit into one Other entry (runtimeCount says how many).
+  const name = row.isOther ? `${t('Other')} (${row.runtimeCount ?? 0})` : row.runtime;
+  const label = `${name}, ${jobs}. ${firstOutput}. ${runtime}. ${t('Median / p95')}.`;
   return (
     <View style={[styles.speedRow, { borderColor: colors.border }]} accessible accessibilityLabel={label} testID={`harbor-speed-${row.runtime}`}>
       <View style={styles.speedHead}>
-        <AppText variant="label" style={styles.flex}>{row.runtime}</AppText>
+        <AppText variant="label" style={styles.flex}>{name}</AppText>
         <AppText variant="caption" muted>{jobs}</AppText>
       </View>
       <AppText variant="caption">{firstOutput}</AppText>
@@ -370,6 +372,9 @@ export function HarborMetricsSection({ harborId }: { harborId: string }) {
                   return span > 0 ? <View key={`${s.startUtc}-${s.state}`} style={{ flex: span, backgroundColor: colors[SEGMENT_COLORS[s.state]] }} /> : null;
                 })}
               </View>
+              {metrics.link.segmentsCoalesced ? (
+                <AppText variant="caption" muted testID="harbor-link-coalesced">{t('Too many link changes to draw one by one; each time slice shows its main state.')}</AppText>
+              ) : null}
               <View style={styles.legend}>
                 {(['Connected', 'Reconnecting', 'Down', 'Unknown'] as HarborLinkSegmentState[]).filter((s) => (durations?.[s] ?? 0) > 0 || s !== 'Unknown').map((s) => (
                   <View key={s} style={styles.legendItem}>
@@ -405,7 +410,7 @@ export function HarborMetricsSection({ harborId }: { harborId: string }) {
               <AppText variant="caption" muted>{t('Median / p95 per runtime, for jobs that ended in this range')}</AppText>
               {metrics.launchSpeed.length === 0 ? (
                 <AppText muted>{t('No jobs ended in this time range')}</AppText>
-              ) : metrics.launchSpeed.map((row) => <LaunchSpeedRow key={row.runtime} row={row} />)}
+              ) : metrics.launchSpeed.map((row) => <LaunchSpeedRow key={row.isOther ? '__other' : row.runtime} row={row} />)}
             </View>
           </FieldCard>
 

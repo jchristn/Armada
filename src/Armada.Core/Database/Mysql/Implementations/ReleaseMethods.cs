@@ -165,7 +165,7 @@ namespace Armada.Core.Database.Mysql.Implementations
                 using (MySqlCommand cmd = conn.CreateCommand())
                 {
                     cmd.CommandText = "SELECT * FROM releases" + whereClause
-                        + " ORDER BY COALESCE(published_utc, last_update_utc) DESC, created_utc DESC LIMIT " + pageSize + " OFFSET " + offset + ";";
+                        + " ORDER BY COALESCE(published_utc, last_update_utc) DESC, created_utc DESC, id DESC LIMIT " + pageSize + " OFFSET " + offset + ";";
                     foreach (MySqlParameter parameter in parameters) cmd.Parameters.Add(CloneParameter(parameter));
                     using (MySqlDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
                     {
@@ -202,7 +202,7 @@ namespace Armada.Core.Database.Mysql.Implementations
                 List<Release> results = new List<Release>();
                 using (MySqlCommand cmd = conn.CreateCommand())
                 {
-                    cmd.CommandText = "SELECT * FROM releases" + whereClause + " ORDER BY COALESCE(published_utc, last_update_utc) DESC, created_utc DESC;";
+                    cmd.CommandText = "SELECT * FROM releases" + whereClause + " ORDER BY COALESCE(published_utc, last_update_utc) DESC, created_utc DESC, id DESC;";
                     foreach (MySqlParameter parameter in parameters) cmd.Parameters.Add(CloneParameter(parameter));
                     using (MySqlDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
                     {

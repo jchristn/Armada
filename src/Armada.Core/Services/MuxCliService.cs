@@ -150,6 +150,60 @@ namespace Armada.Core.Services
         }
 
         /// <summary>
+        /// One page of the configured Mux endpoints, ordered by name (case-insensitive, then ordinal). mux reads its whole
+        /// configuration file and cannot page, so the page is cut here from its answer; TotalRecords counts every saved
+        /// endpoint. Each endpoint's header lists are checked against their declared bounds.
+        /// </summary>
+        /// <param name="configDirectory">Mux config directory override, or null for the default.</param>
+        /// <param name="query">Paging (PageNumber, PageSize 1 to 1000, default 10).</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The page; Success is false with ErrorCode and ErrorMessage when mux failed.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="query"/> is null.</exception>
+        /// <exception cref="CollectionLimitExceededException">Thrown when an endpoint reports more headers than allowed.</exception>
+        public async Task<MuxEndpointPage> EnumerateEndpointsAsync(string? configDirectory, EnumerationQuery query, CancellationToken token = default)
+        {
+            if (query == null) throw new ArgumentNullException(nameof(query));
+            MuxEndpointListResult list = await ListEndpointsAsync(configDirectory, token).ConfigureAwait(false);
+            return ToPage(list, query);
+        }
+
+        /// <summary>
+        /// Cut one page from a mux endpoint list, ordered by name.
+        /// </summary>
+        /// <param name="list">The list mux returned.</param>
+        /// <param name="query">Paging.</param>
+        /// <returns>The page.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when an argument is null.</exception>
+        /// <exception cref="CollectionLimitExceededException">Thrown when an endpoint reports more headers than allowed.</exception>
+        public static MuxEndpointPage ToPage(MuxEndpointListResult list, EnumerationQuery query)
+        {
+            if (list == null) throw new ArgumentNullException(nameof(list));
+            if (query == null) throw new ArgumentNullException(nameof(query));
+            List<MuxEndpointInfo> ordered = (list.Endpoints ?? new List<MuxEndpointInfo>())
+                .Where(e => e != null)
+                .OrderBy(e => e.Name ?? String.Empty, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(e => e.Name ?? String.Empty, StringComparer.Ordinal)
+                .ToList();
+            for (int i = 0; i < ordered.Count; i++) CollectionBounds.Validate(ordered[i], "Objects[" + i + "]");
+
+            EnumerationResult<MuxEndpointInfo> page = CollectionLimits.Page(query, ordered);
+            return new MuxEndpointPage
+            {
+                Success = list.Success,
+                PageNumber = page.PageNumber,
+                PageSize = page.PageSize,
+                TotalPages = page.TotalPages,
+                TotalRecords = page.TotalRecords,
+                Objects = page.Objects,
+                ContractVersion = list.ContractVersion,
+                HarborId = list.HarborId,
+                ConfigDirectory = list.ConfigDirectory ?? String.Empty,
+                ErrorCode = list.ErrorCode ?? String.Empty,
+                ErrorMessage = list.ErrorMessage ?? String.Empty
+            };
+        }
+
+        /// <summary>
         /// Inspect a single configured Mux endpoint.
         /// </summary>
         public async Task<MuxEndpointShowResult> ShowEndpointAsync(string endpointName, string? configDirectory, CancellationToken token = default)
@@ -166,6 +220,7 @@ namespace Armada.Core.Services
             MuxEndpointShowResult? result = DeserializeJson<MuxEndpointShowResult>(execution.Stdout, execution.Stderr);
             if (result != null)
             {
+                if (result.Endpoint != null) CollectionBounds.Validate(result.Endpoint, "Endpoint");
                 return result;
             }
 

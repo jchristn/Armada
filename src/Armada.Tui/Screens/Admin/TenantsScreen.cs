@@ -281,7 +281,7 @@ namespace Armada.Tui.Screens.Admin
             string name = row.Name;
             Context.Confirm("Delete Tenant", Context.Loc.T("Delete tenant \"{{name}}\"? This is destructive and cannot be undone.", LocalizationArgs.Of("name", name)), () =>
             {
-                ScreenOps.RunVoid(Context, () => Context.Client.DeleteTenantAsync(id), () =>
+                DeleteProgress.RunVoid(Context, "Deleting tenant", ct => Context.Client.DeleteTenantAsync(id, ct), () =>
                 {
                     ScreenOps.Toast(Context, NotificationSeverityEnum.Warning, "Tenant \"{{name}}\" deleted.", LocalizationArgs.Of("name", name));
                     Load();
@@ -298,7 +298,7 @@ namespace Armada.Tui.Screens.Admin
             Context.Confirm("Delete Selected Tenants", Context.Loc.T("Delete {{count}} tenant(s)? This cannot be undone.", LocalizationArgs.Of("count", ids.Count)), () =>
             {
                 Grid.ClearMarks();
-                UserAdminOps.BulkDelete(Context, ids, id => Context.Client.DeleteTenantAsync(id), "tenants", Load);
+                UserAdminOps.BulkDelete(Context, ids, id => Context.Client.DeleteTenantAsync(id), "tenants", Load, "{count, plural, one {Deleting # tenant} other {Deleting # tenants}}");
             }, "Delete", "delete");
         }
 

@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { getStorage, refreshStorage } from '../api/client';
+import { getStorage, listAllStorageHosts, refreshStorage } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { useLocale } from '../context/LocaleContext';
 import PageHeader from '../components/shared/PageHeader';
 import CopyButton from '../components/shared/CopyButton';
 import StorageTable from '../components/storage/StorageTable';
-import type { StorageSnapshot } from '../types/storage';
+import type { StorageHostReport, StorageSnapshot } from '../types/storage';
 import { formatStorageBytes } from '../lib/storageFormatting';
 import './Storage.css';
 
@@ -14,18 +14,26 @@ export default function Storage() {
   const { isAdmin } = useAuth();
   const { t, locale, formatDateTime } = useLocale();
   const [snapshot, setSnapshot] = useState<StorageSnapshot | null>(null);
+  // Host reports are not in the snapshot; they are read in explicit bounded pages (100 hosts per page).
+  const [hostReports, setHostReports] = useState<StorageHostReport[]>([]);
   const [error, setError] = useState(false);
   const [requesting, setRequesting] = useState(false);
   const [tab, setTab] = useState('locations');
   const [trendScope, setTrendScope] = useState<'categories' | 'hosts' | 'tables'>('categories');
   const load = useCallback(async () => {
-    try { setSnapshot(await getStorage()); setError(false); } catch { setError(true); }
+    try {
+      const [result, hosts] = await Promise.all([getStorage(), listAllStorageHosts()]);
+      setSnapshot(result); setHostReports(hosts); setError(false);
+    } catch { setError(true); }
   }, []);
   useEffect(() => {
     if (!isAdmin) return;
     let active = true;
     const poll = async () => {
-      try { const result = await getStorage(); if (active) { setSnapshot(result); setError(false); } }
+      try {
+        const [result, hosts] = await Promise.all([getStorage(), listAllStorageHosts()]);
+        if (active) { setSnapshot(result); setHostReports(hosts); setError(false); }
+      }
       catch { if (active) setError(true); }
     };
     void poll();
@@ -34,7 +42,10 @@ export default function Storage() {
   }, [isAdmin]);
   const collect = async (exact: boolean) => {
     setRequesting(true);
-    try { setSnapshot(await refreshStorage(exact)); setError(false); } catch { setError(true); }
+    try {
+      const result = await refreshStorage(exact);
+      setSnapshot(result); setHostReports(await listAllStorageHosts()); setError(false);
+    } catch { setError(true); }
     finally { setRequesting(false); }
   };
   const number = (n: number | null | undefined) => n == null ? t('storage.unavailable') : new Intl.NumberFormat(locale).format(n);
@@ -44,11 +55,12 @@ export default function Storage() {
   const category = (value: string) => t(`storage.category.${value}`);
   const path = (value: string) => <span className="storage-path"><code title={value}>{value}</code><CopyButton text={value} /></span>;
   if (!isAdmin) return <p role="alert">{t('storage.denied')}</p>;
-  const hosts = snapshot?.hosts ?? [];
+  const hosts = hostReports;
   const locations = hosts.flatMap(host => host.locations.map(l => ({ ...l, host: host.name, hostId: host.hostId, measured: host.measuredUtc, stale: host.stale })));
-  const sum = locations.reduce((n, l) => n + (l.bytes ?? 0), 0);
+  const sum = snapshot?.observedFileBytes ?? locations.reduce((n, l) => n + (l.bytes ?? 0), 0);
   const logs = locations.filter(l => l.category.startsWith('Logs/')).reduce((n, l) => n + (l.bytes ?? 0), 0);
-  const fresh = hosts.filter(h => !h.stale && h.status === 'Complete').length;
+  const fresh = snapshot?.freshHostCount ?? hosts.filter(h => !h.stale && h.status === 'Complete').length;
+  const hostCount = snapshot?.hostCount ?? hosts.length;
   const files = locations.flatMap(l => l.largestFiles.map(f => ({ ...f, host: l.host, category: l.category })));
   const db = snapshot?.database;
   const history = snapshot?.history ?? [];
@@ -71,7 +83,7 @@ export default function Storage() {
       <p className="text-dim">{t('storage.measured', { time: date(snapshot.measuredUtc), seconds: snapshot.intervalSeconds })}</p>
       {!snapshot.measuredUtc && <p role="status">{t('storage.pending')}</p>}
       <div className="storage-kpis">
-        {[['filesKpi', bytes(sum)], ['databaseKpi', bytes(db?.allocatedBytes)], ['logsKpi', bytes(logs)], ['coverageKpi', `${number(fresh)} / ${number(hosts.length)}`]].map(([key, value]) =>
+        {[['filesKpi', bytes(sum)], ['databaseKpi', bytes(db?.allocatedBytes)], ['logsKpi', bytes(logs)], ['coverageKpi', `${number(fresh)} / ${number(hostCount)}`]].map(([key, value]) =>
           <div className="stat-card" key={key}><div className="stat-label">{t(`storage.${key}`)}</div><div className="stat-value">{value}</div></div>)}
       </div>
       <p className="text-dim">{t('storage.accounting')}</p>

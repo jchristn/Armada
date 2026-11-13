@@ -81,6 +81,44 @@ namespace Test.Shared.Suites.Database
                 AssertNull(await db.ModelProbeRuns.ReadAsync("mpr_missing").ConfigureAwait(false), "missing id");
             }));
 
+            cases.Add(CaseAsync("run_full_report_roundtrip", "A Full run's battery run id and report (migration 109) round-trip on create and update; a Quick run keeps them null", TestTags.Positive, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                DatabaseDriver db = testDb.Driver;
+
+                ModelProbeRun quick = await db.ModelProbeRuns.CreateAsync(new ModelProbeRun()).ConfigureAwait(false);
+                ModelProbeRun quickRead = (await db.ModelProbeRuns.ReadAsync(quick.Id).ConfigureAwait(false))!;
+                AssertNull(quickRead.BatteryRunId, "no battery run");
+                AssertNull(quickRead.Report, "no report");
+
+                ModelProbeRun run = new ModelProbeRun { Depth = ModelProbeDepthEnum.Full, Status = ModelProbeRunStatusEnum.Cancelled, BatteryRunId = "bat_full" };
+                run.Report = new ModelEvaluationReport { RunId = run.Id, Complete = false, IncompleteReason = "Cancelled by an administrator.", EvaluatorCaptainId = "cpt_eval" };
+                run.Report.Warnings.Add("same family");
+                run.Report.PersonaOutcomes.Add(new ModelEvaluationPersonaOutcome { Persona = "Worker", Totals = new ModelEvaluationCount { Key = "persona:Worker", Passed = 2, Failed = 1 } });
+                run.Report.Narrative = new ModelEvaluationNarrative { Status = ModelEvaluationNarrativeStatusEnum.Rejected, Reason = "wrong count", RejectedOutput = "{}" };
+                await db.ModelProbeRuns.CreateAsync(run).ConfigureAwait(false);
+
+                ModelProbeRun read = (await db.ModelProbeRuns.ReadAsync(run.Id).ConfigureAwait(false))!;
+                AssertEqual(ModelProbeRunStatusEnum.Cancelled, read.Status, "cancelled status");
+                AssertEqual("bat_full", read.BatteryRunId, "battery run id");
+                AssertNotNull(read.Report, "report");
+                AssertFalse(read.Report!.Complete, "incomplete");
+                AssertEqual("Cancelled by an administrator.", read.Report.IncompleteReason, "reason");
+                AssertEqual("cpt_eval", read.Report.EvaluatorCaptainId, "evaluator");
+                AssertEqual("same family", read.Report.Warnings.Single(), "warning");
+                AssertEqual(3, read.Report.PersonaOutcomes.Single().Totals.Graded, "counts");
+                AssertEqual(ModelEvaluationNarrativeStatusEnum.Rejected, read.Report.Narrative.Status, "narrative status");
+
+                read.Report.Complete = true;
+                read.Report.IncompleteReason = null;
+                read.BatteryRunId = "bat_other";
+                await db.ModelProbeRuns.UpdateAsync(read).ConfigureAwait(false);
+                ModelProbeRun updated = (await db.ModelProbeRuns.ReadAsync(run.Id).ConfigureAwait(false))!;
+                AssertTrue(updated.Report!.Complete, "report updated");
+                AssertNull(updated.Report.IncompleteReason, "reason cleared");
+                AssertEqual("bat_other", updated.BatteryRunId, "battery run id updated");
+            }));
+
             cases.Add(CaseAsync("run_roundtrip_minimal", "A minimally populated run keeps defaults and nulls", TestTags.Positive, async () =>
             {
                 using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);

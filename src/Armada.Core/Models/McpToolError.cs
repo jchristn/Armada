@@ -159,6 +159,8 @@ namespace Armada.Core.Models
             if (duplicate != null) return new McpToolError(McpToolErrorCodeEnum.Conflict, duplicate.Message, code ?? DuplicateEntityException.ErrorCode);
             if (ex is VesselCheckoutUnavailableException checkout)
                 return new McpToolError(McpToolErrorCodeEnum.Unavailable, checkout.Message, code ?? (VesselCheckoutUnavailableException.ErrorCode + "." + checkout.Code));
+            if (ex is CollectionLimitExceededException limit)
+                return new McpToolError(McpToolErrorCodeEnum.InvalidArgument, limit.Message, code ?? CollectionLimitExceededException.ErrorCode);
             McpToolErrorCodeEnum category = McpToolErrorCodeEnum.Failed;
             if (ex is KeyNotFoundException) category = McpToolErrorCodeEnum.NotFound;
             else if (ex is ArgumentException) category = McpToolErrorCodeEnum.InvalidArgument;

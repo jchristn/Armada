@@ -2,10 +2,12 @@ namespace Test.Shared.Suites.Database
 {
     using System;
     using System.Collections.Generic;
+    using System.Linq;
     using System.Threading;
     using System.Threading.Tasks;
     using Armada.Core.Database;
     using Armada.Core.Database.Sqlite;
+    using Armada.Core.Enums;
     using Armada.Core.Models;
     using Test.Shared.Infrastructure;
     using Touchstone.Core;
@@ -52,6 +54,42 @@ namespace Test.Shared.Suites.Database
                     AssertEqual("/tmp/worktree", result.WorktreePath);
                     AssertEqual("armada/test", result.BranchName);
                     AssertTrue(result.Active);
+                }
+            }));
+
+            cases.Add(CaseAsync("dock_enumerate_pages_ties_by_id", "Dock_Enumerate_EqualTimestampsPageWithoutGapsOrDuplicatesInBothOrders", TestTags.Positive, async () =>
+            {
+                TestDatabaseSetup setup = await SetupWithVesselAsync();
+                using (setup.Database)
+                {
+                    DatabaseDriver db = setup.Database.Driver;
+                    DateTime same = new DateTime(2026, 1, 2, 3, 4, 5, DateTimeKind.Utc);
+                    List<string> ids = new List<string>();
+                    for (int i = 0; i < 5; i++)
+                    {
+                        Dock dock = new Dock(setup.Vessel.Id) { BranchName = "armada/tie/" + i, CreatedUtc = same, LastUpdateUtc = same };
+                        ids.Add((await db.Docks.CreateAsync(dock)).Id);
+                    }
+
+                    Dictionary<EnumerationOrderEnum, List<string>> byOrder = new Dictionary<EnumerationOrderEnum, List<string>>();
+                    foreach (EnumerationOrderEnum order in new[] { EnumerationOrderEnum.CreatedAscending, EnumerationOrderEnum.CreatedDescending })
+                    {
+                        List<string> seen = new List<string>();
+                        for (int page = 1; page <= 3; page++)
+                        {
+                            EnumerationResult<Dock> result = await db.Docks.EnumerateAsync(new EnumerationQuery { VesselId = setup.Vessel.Id, Order = order, PageNumber = page, PageSize = 2 });
+                            AssertEqual(5L, result.TotalRecords, order + " total");
+                            seen.AddRange(result.Objects.Select(d => d.Id));
+                        }
+
+                        AssertEqual(5, seen.Distinct().Count(), order + ": no duplicates across pages: " + String.Join(",", seen));
+                        AssertTrue(ids.All(seen.Contains), order + ": no gaps across pages");
+                        byOrder[order] = seen;
+                    }
+
+                    // The id tie-break follows the provider's collation; descending must be the exact reverse of ascending.
+                    List<string> reversed = byOrder[EnumerationOrderEnum.CreatedAscending].AsEnumerable().Reverse().ToList();
+                    AssertEqual(String.Join(",", reversed), String.Join(",", byOrder[EnumerationOrderEnum.CreatedDescending]), "descending is the reverse of ascending (deterministic id tie-break)");
                 }
             }));
 

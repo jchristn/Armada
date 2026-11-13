@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { apiErrorCode, browseVesselImport } from '../../../api/client';
+import { apiErrorCode, browseAllVesselImport } from '../../../api/client';
 import type { VesselBrowseEntry } from '../../../types/models';
 import { useLocale } from '../../../context/LocaleContext';
 import CodeStatusBadge from '../../shared/CodeStatusBadge';
@@ -17,6 +17,7 @@ interface NodeState {
   error: string;
   entries: VesselBrowseEntry[] | null;
   expanded: boolean;
+  truncated?: boolean;
 }
 
 /**
@@ -26,6 +27,7 @@ interface NodeState {
 export default function BrowseTree({ selected, onToggle, allowWorktrees }: BrowseTreeProps) {
   const { t } = useLocale();
   const [roots, setRoots] = useState<VesselBrowseEntry[] | null>(null);
+  const [rootsTruncated, setRootsTruncated] = useState(false);
   const [rootError, setRootError] = useState('');
   const [rootLoading, setRootLoading] = useState(false);
   const [nodes, setNodes] = useState<Record<string, NodeState>>({});
@@ -39,8 +41,10 @@ export default function BrowseTree({ selected, onToggle, allowWorktrees }: Brows
     setRootLoading(true);
     setRootError('');
     try {
-      const result = await browseVesselImport(null);
+      // Every page of the listing is read explicitly; the server pages it (1000 per page).
+      const result = await browseAllVesselImport(null);
       setRoots(result.entries || []);
+      setRootsTruncated(Boolean(result.truncated));
     } catch (err: unknown) {
       setRootError(describeError(err));
     } finally {
@@ -66,8 +70,8 @@ export default function BrowseTree({ selected, onToggle, allowWorktrees }: Brows
   async function loadNode(entry: VesselBrowseEntry) {
     setNodes((n) => ({ ...n, [entry.path]: { loading: true, error: '', entries: null, expanded: true } }));
     try {
-      const result = await browseVesselImport(entry.path);
-      setNodes((n) => ({ ...n, [entry.path]: { loading: false, error: '', entries: result.entries || [], expanded: true } }));
+      const result = await browseAllVesselImport(entry.path);
+      setNodes((n) => ({ ...n, [entry.path]: { loading: false, error: '', entries: result.entries || [], expanded: true, truncated: Boolean(result.truncated) } }));
     } catch (err: unknown) {
       setNodes((n) => ({ ...n, [entry.path]: { loading: false, error: describeError(err), entries: null, expanded: true } }));
     }
@@ -115,6 +119,7 @@ export default function BrowseTree({ selected, onToggle, allowWorktrees }: Brows
                 </li>
               )}
               {node.entries && renderEntries(node.entries, depth + 1)}
+              {node.truncated && <li className="text-dim browse-tree-empty browse-tree-truncated" style={{ paddingLeft: `${(depth + 1) * 1.1 + 1.6}rem` }}>{t('This folder has more subdirectories than can be listed. Open a narrower folder to see the rest.')}</li>}
             </ul>
           )}
         </li>
@@ -132,6 +137,7 @@ export default function BrowseTree({ selected, onToggle, allowWorktrees }: Brows
       )}
       {roots && roots.length === 0 && <p className="text-dim">{t('No browsable folders. An administrator can configure allowed roots under Settings > Import.')}</p>}
       {roots && roots.length > 0 && <ul className="browse-tree-root">{renderEntries(roots, 0)}</ul>}
+      {rootsTruncated && <p className="text-dim browse-tree-truncated">{t('This folder has more subdirectories than can be listed. Open a narrower folder to see the rest.')}</p>}
     </div>
   );
 }

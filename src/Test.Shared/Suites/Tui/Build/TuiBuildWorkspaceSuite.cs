@@ -158,13 +158,14 @@ namespace Test.Shared.Suites.Tui.Build
         {
             StubHttpHandler stub = BuildStubs.Server();
             string w = "/api/v1/workspace/vessels/vsl_demo";
-            stub.Json("GET", w + "/status", "{\"VesselId\":\"vsl_demo\",\"HasWorkingDirectory\":true,\"RootPath\":\"/work/DemoRepo\",\"BranchName\":\"main\",\"IsDirty\":true,\"CommitsAhead\":2,\"CommitsBehind\":0,\"ActiveMissionCount\":1,\"ActiveMissions\":[{\"MissionId\":\"msn_1\",\"Title\":\"Fix parser\",\"Status\":\"InProgress\",\"ScopedFiles\":[\"src/Program.cs\"]}]}");
+            stub.Json("GET", w + "/status", "{\"VesselId\":\"vsl_demo\",\"HasWorkingDirectory\":true,\"RootPath\":\"/work/DemoRepo\",\"BranchName\":\"main\",\"IsDirty\":true,\"CommitsAhead\":2,\"CommitsBehind\":0,\"ActiveMissionCount\":1}");
+            stub.Json("POST", w + "/active-missions/enumerate", "{\"PageNumber\":1,\"PageSize\":1000,\"TotalPages\":1,\"TotalRecords\":1,\"Objects\":[{\"MissionId\":\"msn_1\",\"Title\":\"Fix parser\",\"Status\":\"InProgress\",\"ScopedFiles\":[\"src/Program.cs\"],\"ScopedFileCount\":1}]}");
             stub.Json("GET", "/api/v1/workspace/vessels/vsl_api/status", "{\"VesselId\":\"vsl_api\",\"HasWorkingDirectory\":false}");
-            stub.Json("GET", w + "/tree", "{\"VesselId\":\"vsl_demo\",\"RootPath\":\"/work/DemoRepo\",\"CurrentPath\":\"\",\"Entries\":[" +
+            stub.Json("GET", w + "/tree?pageNumber=1&pageSize=1000", "{\"VesselId\":\"vsl_demo\",\"RootPath\":\"/work/DemoRepo\",\"CurrentPath\":\"\",\"Entries\":[" +
                 "{\"Name\":\"src\",\"RelativePath\":\"src\",\"IsDirectory\":true,\"IsEditable\":false,\"LastWriteUtc\":\"2026-10-01T10:00:00Z\"}," +
                 "{\"Name\":\"README.md\",\"RelativePath\":\"README.md\",\"IsDirectory\":false,\"IsEditable\":true,\"SizeBytes\":20,\"LastWriteUtc\":\"2026-10-01T10:00:00Z\"}," +
                 "{\"Name\":\"logo.png\",\"RelativePath\":\"logo.png\",\"IsDirectory\":false,\"IsEditable\":false,\"SizeBytes\":2000,\"LastWriteUtc\":\"2026-10-01T10:00:00Z\"}]}");
-            stub.Json("GET", w + "/tree?path=src", "{\"VesselId\":\"vsl_demo\",\"RootPath\":\"/work/DemoRepo\",\"CurrentPath\":\"src\",\"Entries\":[" +
+            stub.Json("GET", w + "/tree?path=src&pageNumber=1&pageSize=1000", "{\"VesselId\":\"vsl_demo\",\"RootPath\":\"/work/DemoRepo\",\"CurrentPath\":\"src\",\"Entries\":[" +
                 "{\"Name\":\"Program.cs\",\"RelativePath\":\"src/Program.cs\",\"IsDirectory\":false,\"IsEditable\":true,\"SizeBytes\":40,\"LastWriteUtc\":\"2026-10-01T10:00:00Z\"}]}");
             stub.Json("GET", w + "/file?path=src/Program.cs", "{\"VesselId\":\"vsl_demo\",\"Path\":\"src/Program.cs\",\"Name\":\"Program.cs\",\"Content\":\"Console.WriteLine(1);\",\"ContentHash\":\"hash1\",\"IsEditable\":true,\"Language\":\"csharp\",\"SizeBytes\":21}");
             stub.Json("GET", w + "/file?path=logo.png", "{\"VesselId\":\"vsl_demo\",\"Path\":\"logo.png\",\"Name\":\"logo.png\",\"Content\":\"\",\"ContentHash\":\"h\",\"IsEditable\":false,\"IsBinary\":true,\"Language\":\"plaintext\"}");

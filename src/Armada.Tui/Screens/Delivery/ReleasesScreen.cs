@@ -184,6 +184,18 @@ namespace Armada.Tui.Screens.Delivery
         }
 
         /// <inheritdoc />
+        protected override string DeletingTitle
+        {
+            get { return "Deleting release"; }
+        }
+
+        /// <inheritdoc />
+        protected override string DeletingManyTitle
+        {
+            get { return "{count, plural, one {Deleting # release} other {Deleting # releases}}"; }
+        }
+
+        /// <inheritdoc />
         protected override Task DeleteAsync(Release row, CancellationToken token)
         {
             return Context.Client.DeleteReleaseAsync(row.Id, token);

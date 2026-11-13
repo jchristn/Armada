@@ -28,6 +28,13 @@ namespace Armada.Core.Services
         private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, SemaphoreSlim> _RepoLocks =
             new System.Collections.Concurrent.ConcurrentDictionary<string, SemaphoreSlim>(StringComparer.OrdinalIgnoreCase);
 
+        // One fetch at a time per repository, and the Stopwatch timestamp at which the last successful one started. A
+        // caller whose request predates that start skips its own fetch: the refs it would get are no newer.
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, SemaphoreSlim> _FetchLocks =
+            new System.Collections.Concurrent.ConcurrentDictionary<string, SemaphoreSlim>(StringComparer.OrdinalIgnoreCase);
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, long> _FetchStarted =
+            new System.Collections.Concurrent.ConcurrentDictionary<string, long>(StringComparer.OrdinalIgnoreCase);
+
         private string _Header = "[GitService] ";
         private LoggingModule _Logging;
         private IHostCommandExecutor? _Commands = null;
@@ -97,8 +104,11 @@ namespace Armada.Core.Services
         /// <inheritdoc />
         public async Task FastForwardVerifiedCommitAsync(string targetWorkDir, string sourceRepoPath, string commitHash, string targetBranch, CancellationToken token = default)
         {
-            if (!(await GetWorkingTreeStatusAsync(targetWorkDir, token).ConfigureAwait(false)).IsClean)
-                throw new GitDirtyCheckoutException(targetWorkDir, "Checkout has changes; verified work is preserved.");
+            // Untracked files also block the fast-forward, so the porcelain listing includes them. Keep the leading
+            // status columns (" M path"): only trailing whitespace is trimmed so ModifiedPaths parses exactly.
+            string porcelain = (await RunGitAsync(targetWorkDir, token, "status", "--porcelain", "--untracked-files=all").ConfigureAwait(false)).TrimEnd();
+            if (!String.IsNullOrWhiteSpace(porcelain))
+                throw new GitDirtyCheckoutException(targetWorkDir, porcelain);
             string? original = await GetCurrentBranchAsync(targetWorkDir, token).ConfigureAwait(false);
             if (String.IsNullOrEmpty(original)) throw new InvalidOperationException("Cannot land into a detached target checkout.");
             await RunGitAsync(targetWorkDir, token, "fetch", sourceRepoPath, commitHash).ConfigureAwait(false);
@@ -246,51 +256,35 @@ namespace Armada.Core.Services
         }
 
         /// <summary>
-        /// Fetch latest changes from remote.
+        /// Fetch latest changes from remote. Fetches of one repository run one at a time, and a caller that was waiting
+        /// while a fetch started after its request skips its own, since that fetch already brought the refs up to date.
         /// </summary>
+        /// <param name="repoPath">Repository path.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <exception cref="ArgumentNullException">Thrown when repoPath is null or empty.</exception>
         public async Task FetchAsync(string repoPath, CancellationToken token = default)
         {
             if (String.IsNullOrEmpty(repoPath)) throw new ArgumentNullException(nameof(repoPath));
 
-            // Ensure the fetch refspec is configured (bare repos cloned before the fix may lack it)
+            long requested = System.Diagnostics.Stopwatch.GetTimestamp();
+            string key = Path.GetFullPath(repoPath);
+            SemaphoreSlim fetchLock = _FetchLocks.GetOrAdd(key, _ => new SemaphoreSlim(1, 1));
+            await fetchLock.WaitAsync(token).ConfigureAwait(false);
             try
             {
-                string currentRefspec = await RunGitAsync(repoPath, "config", "--get", "remote.origin.fetch").ConfigureAwait(false);
-                if (String.IsNullOrWhiteSpace(currentRefspec) || !String.Equals(currentRefspec.Trim(), _SafeFetchRefspec, StringComparison.Ordinal))
+                if (_FetchStarted.TryGetValue(key, out long started) && started > requested)
                 {
-                    await EnsureSafeFetchRefspecAsync(repoPath).ConfigureAwait(false);
+                    _Logging.Debug(_Header + "fetch skipped, a fetch that started after this request just finished: " + repoPath);
+                    return;
                 }
-            }
-            catch
-            {
-                // Config key missing entirely — set it
-                await EnsureSafeFetchRefspecAsync(repoPath).ConfigureAwait(false);
-            }
 
-            // Prune stale worktree registrations before fetching to avoid
-            // "refusing to fetch into branch checked out at ..." errors
-            // from worktrees that no longer exist on disk.
-            try
-            {
-                await RunGitAsync(repoPath, "worktree", "prune").ConfigureAwait(false);
+                long start = System.Diagnostics.Stopwatch.GetTimestamp();
+                await FetchCoreAsync(repoPath).ConfigureAwait(false);
+                _FetchStarted[key] = start;
             }
-            catch
+            finally
             {
-                // Best effort — don't let prune failure block fetch
-            }
-
-            _Logging.Debug(_Header + "fetching: " + repoPath);
-            try
-            {
-                await RunGitAsync(repoPath, "fetch", "--all", "--prune").ConfigureAwait(false);
-            }
-            catch (GitCommandException ex)
-            {
-                // Some remote's configured refspec could not be applied (for example a refspec that targets a
-                // branch checked out in a worktree). Fetch origin with an explicit remote-tracking refspec,
-                // which never writes to refs/heads and so cannot be refused for a checked-out branch.
-                _Logging.Warn(_Header + "full fetch failed (exit " + ex.ExitCode + "), fetching origin into remote-tracking refs: " + ex.StandardError.Trim());
-                await RunGitAsync(repoPath, "fetch", "--prune", "origin", _SafeFetchRefspec).ConfigureAwait(false);
+                fetchLock.Release();
             }
         }
 
@@ -396,6 +390,7 @@ namespace Armada.Core.Services
         /// </summary>
         /// <exception cref="ArgumentNullException">Thrown when targetWorkDir, sourceRepoPath, or branchName is null or empty.</exception>
         /// <exception cref="GitDirtyCheckoutException">Thrown when the checkout has uncommitted changes to tracked files.</exception>
+        /// <exception cref="GitMergeConflictException">Thrown when git reports conflicted files merging the branch.</exception>
         /// <exception cref="InvalidOperationException">Thrown when git cannot check out the target or merge the branch.</exception>
         public async Task MergeBranchLocalAsync(string targetWorkDir, string sourceRepoPath, string branchName, string? targetBranch = null, string? commitMessage = null, CancellationToken token = default)
         {
@@ -484,9 +479,10 @@ namespace Armada.Core.Services
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 string failure = "Merge conflict or merge failure: " + ex.Message;
+                IReadOnlyList<string> conflicts = Array.Empty<string>();
                 try
                 {
-                    IReadOnlyList<string> conflicts = await GetConflictedFilesAsync(targetWorkDir, CancellationToken.None).ConfigureAwait(false);
+                    conflicts = await GetConflictedFilesAsync(targetWorkDir, CancellationToken.None).ConfigureAwait(false);
                     if (conflicts.Count > 0) failure += " Conflicted files: " + String.Join(", ", conflicts) + ".";
                     if (await ChangelogLandingConflict.TryResolveAsync(_Commands ?? new LocalHostCommandExecutor(), targetWorkDir, IsWindowsHost(targetWorkDir), token).ConfigureAwait(false)) return;
                 }
@@ -499,6 +495,8 @@ namespace Armada.Core.Services
                     try { await RestoreAfterFailedMergeAsync(targetWorkDir, sourceRepoPath, targetBranch, CancellationToken.None).ConfigureAwait(false); }
                     catch (Exception secondary) { failure += " Merge cleanup failed: " + secondary.Message; }
                 }
+                // Only a merge git reports as conflicted is a landing conflict; any other merge failure is not.
+                if (conflicts.Count > 0) throw new GitMergeConflictException(failure, conflicts, ex as GitCommandException);
                 if (ex is GitCommandException gitFailure)
                     throw new GitCommandException(gitFailure.Executable, gitFailure.Arguments, gitFailure.ExitCode, gitFailure.StandardOutput, failure);
                 throw new InvalidOperationException(failure, ex);
@@ -1237,6 +1235,62 @@ namespace Armada.Core.Services
         }
 
         /// <inheritdoc />
+        public async Task<IReadOnlyList<string>> FindCommitsByTrailerAsync(string repoPath, string revision, string trailerKey, string trailerValue, DateTime? sinceUtc, int maxCount, CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(repoPath)) throw new ArgumentNullException(nameof(repoPath));
+            if (String.IsNullOrEmpty(revision)) throw new ArgumentNullException(nameof(revision));
+            if (String.IsNullOrEmpty(trailerKey)) throw new ArgumentNullException(nameof(trailerKey));
+            if (String.IsNullOrEmpty(trailerValue)) throw new ArgumentNullException(nameof(trailerValue));
+
+            List<string> found = new List<string>();
+            int limit = Math.Max(1, maxCount);
+            if (!await RefResolvesAsync(repoPath, revision, token).ConfigureAwait(false)) return found;
+
+            // The grep narrows the walk to messages that mention the value; the parsed trailers then decide, so a message
+            // that only quotes the value in prose is not a match. The candidate window is wider than the result limit for
+            // that reason.
+            List<string> args = new List<string>
+            {
+                "log",
+                revision,
+                "--fixed-strings",
+                "--grep=" + trailerValue,
+                "--max-count=" + (limit * 4).ToString(CultureInfo.InvariantCulture),
+                "--format=%H%x09%(trailers:key=" + trailerKey + ",valueonly,separator=%x09)"
+            };
+            if (sinceUtc.HasValue)
+                args.Add("--since=" + sinceUtc.Value.ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture));
+
+            GitProcessResult result;
+            try
+            {
+                result = await ExecuteProcessAsync(repoPath, "git", token, args.ToArray()).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (!(ex is OperationCanceledException && token.IsCancellationRequested))
+            {
+                _Logging.Debug(_Header + "trailer search failed in " + repoPath + ": " + ex.Message);
+                return found;
+            }
+
+            if (!result.Succeeded || String.IsNullOrEmpty(result.StandardOutput)) return found;
+            foreach (string rawLine in result.StandardOutput.Replace("\r", String.Empty).Split('\n'))
+            {
+                string[] fields = rawLine.Split('\t');
+                if (fields.Length < 2 || String.IsNullOrWhiteSpace(fields[0])) continue;
+                bool matches = false;
+                for (int i = 1; i < fields.Length; i++)
+                {
+                    if (String.Equals(fields[i].Trim(), trailerValue, StringComparison.Ordinal)) matches = true;
+                }
+
+                if (matches) found.Add(fields[0].Trim());
+                if (found.Count >= limit) break;
+            }
+
+            return found;
+        }
+
+        /// <inheritdoc />
         public async Task<bool> CommitAllAsync(string worktreePath, string message, CancellationToken token = default)
         {
             if (String.IsNullOrEmpty(worktreePath)) throw new ArgumentNullException(nameof(worktreePath));
@@ -1497,7 +1551,7 @@ namespace Armada.Core.Services
             if (String.IsNullOrEmpty(tipSha)) throw new ArgumentNullException(nameof(tipSha));
             if (!GitRevisionNames.IsFullCommitId(tipSha)) throw new ArgumentException("tipSha must be a full commit id", nameof(tipSha));
             if (skip < 0) throw new ArgumentOutOfRangeException(nameof(skip));
-            if (limit < 1) throw new ArgumentOutOfRangeException(nameof(limit));
+            if (limit < 1 || limit > Constants.VesselHistoryMaxPageSize) throw new ArgumentOutOfRangeException(nameof(limit), "limit must be between 1 and " + Constants.VesselHistoryMaxPageSize + ".");
 
             List<string> args = new List<string>
             {
@@ -1521,9 +1575,140 @@ namespace Armada.Core.Services
             return page;
         }
 
+        /// <inheritdoc />
+        public async Task<string?> GetMergeBaseAsync(string repoPath, string a, string b, CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(repoPath)) throw new ArgumentNullException(nameof(repoPath));
+            if (String.IsNullOrEmpty(a)) throw new ArgumentNullException(nameof(a));
+            if (String.IsNullOrEmpty(b)) throw new ArgumentNullException(nameof(b));
+            RequireRevision(a, nameof(a));
+            RequireRevision(b, nameof(b));
+
+            try
+            {
+                if (!await RefResolvesAsync(repoPath, a, token).ConfigureAwait(false)) return null;
+                if (!await RefResolvesAsync(repoPath, b, token).ConfigureAwait(false)) return null;
+                GitProcessResult result = await ExecuteProcessAsync(repoPath, "git", _NoMatch, token, "merge-base", a, b).ConfigureAwait(false);
+                if (!result.Succeeded) return null;
+                string sha = result.StandardOutput.Trim();
+                return GitRevisionNames.IsFullCommitId(sha) ? sha : null;
+            }
+            catch (Exception ex) when (!(ex is OperationCanceledException && token.IsCancellationRequested))
+            {
+                _Logging.Debug(_Header + "merge-base failed in " + repoPath + ": " + ex.Message);
+                return null;
+            }
+        }
+
+        /// <inheritdoc />
+        public async Task<GitCommitRange?> GetCommitRangeAsync(string repoPath, string fromRef, string toRef, int limit, CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(repoPath)) throw new ArgumentNullException(nameof(repoPath));
+            if (String.IsNullOrEmpty(fromRef)) throw new ArgumentNullException(nameof(fromRef));
+            if (String.IsNullOrEmpty(toRef)) throw new ArgumentNullException(nameof(toRef));
+            RequireRevision(fromRef, nameof(fromRef));
+            RequireRevision(toRef, nameof(toRef));
+            if (limit < 1 || limit > GitCommitRange.MaxLimit) throw new ArgumentOutOfRangeException(nameof(limit), "limit must be between 1 and " + GitCommitRange.MaxLimit + ".");
+
+            try
+            {
+                string? from = await ResolveCommitShaAsync(repoPath, fromRef, token).ConfigureAwait(false);
+                if (from == null) return null;
+                string? to = await ResolveCommitShaAsync(repoPath, toRef, token).ConfigureAwait(false);
+                if (to == null) return null;
+
+                GitProcessResult count = await ExecuteProcessAsync(repoPath, "git", token, "rev-list", "--count", from + ".." + to).ConfigureAwait(false);
+                if (!count.Succeeded || !Int32.TryParse(count.StandardOutput.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int total)) return null;
+
+                GitCommitRange range = new GitCommitRange { FromSha = from, ToSha = to, TotalCount = total };
+                if (total == 0) return range;
+
+                GitProcessResult log = await ExecuteProcessAsync(repoPath, "git", token,
+                    "log", "--no-show-signature", "--date-order", "-z", "--no-color", "--no-ext-diff", "--no-textconv",
+                    "--format=" + GitMachineOutputParser.CommitLogFormat,
+                    "--raw", "--numstat", "-M", "--diff-merges=first-parent",
+                    "--max-count=" + limit.ToString(CultureInfo.InvariantCulture),
+                    from + ".." + to, "--").ConfigureAwait(false);
+                if (!log.Succeeded) return null;
+
+                foreach (VesselCommit commit in GitMachineOutputParser.ParseCommitLogZ(log.StandardOutput, GitCommitRange.MaxPathsPerCommit))
+                {
+                    GitCommitInfo info = new GitCommitInfo
+                    {
+                        Sha = commit.Sha,
+                        AuthorName = commit.AuthorName,
+                        AuthorEmail = commit.AuthorEmail,
+                        AuthoredUtc = commit.AuthoredUtc,
+                        CommittedUtc = commit.CommittedUtc,
+                        Subject = commit.Subject,
+                        IsMerge = commit.IsMerge,
+                        Trailers = GitTrailerParser.Parse(commit.Body),
+                        ChangedPathTotal = Math.Max(commit.FilesChanged, commit.Files.Count)
+                    };
+                    foreach (GitChangedFile file in commit.Files)
+                    {
+                        if (!String.IsNullOrEmpty(file.Path) && info.ChangedPaths.Count < GitCommitRange.MaxPathsPerCommit) info.ChangedPaths.Add(file.Path);
+                    }
+                    range.Commits.Add(info);
+                }
+
+                range.Truncated = range.TotalCount > range.Commits.Count;
+                return range;
+            }
+            catch (Exception ex) when (!(ex is OperationCanceledException && token.IsCancellationRequested))
+            {
+                _Logging.Debug(_Header + "commit range " + fromRef + ".." + toRef + " failed in " + repoPath + ": " + ex.Message);
+                return null;
+            }
+        }
+
         #endregion
 
         #region Private-Methods
+
+        private async Task FetchCoreAsync(string repoPath)
+        {
+            // Ensure the fetch refspec is configured (bare repos cloned before the fix may lack it)
+            try
+            {
+                string currentRefspec = await RunGitAsync(repoPath, "config", "--get", "remote.origin.fetch").ConfigureAwait(false);
+                if (String.IsNullOrWhiteSpace(currentRefspec) || !String.Equals(currentRefspec.Trim(), _SafeFetchRefspec, StringComparison.Ordinal))
+                {
+                    await EnsureSafeFetchRefspecAsync(repoPath).ConfigureAwait(false);
+                }
+            }
+            catch
+            {
+                // Config key missing entirely — set it
+                await EnsureSafeFetchRefspecAsync(repoPath).ConfigureAwait(false);
+            }
+
+            // Prune stale worktree registrations before fetching to avoid
+            // "refusing to fetch into branch checked out at ..." errors
+            // from worktrees that no longer exist on disk.
+            try
+            {
+                await RunGitAsync(repoPath, "worktree", "prune").ConfigureAwait(false);
+            }
+            catch
+            {
+                // Best effort — don't let prune failure block fetch
+            }
+
+            _Logging.Debug(_Header + "fetching: " + repoPath);
+            try
+            {
+                await RunGitAsync(repoPath, "fetch", "--all", "--prune").ConfigureAwait(false);
+            }
+            catch (GitCommandException ex)
+            {
+                // Some remote's configured refspec could not be applied (for example a refspec that targets a
+                // branch checked out in a worktree). Fetch origin with an explicit remote-tracking refspec,
+                // which never writes to refs/heads and so cannot be refused for a checked-out branch.
+                _Logging.Warn(_Header + "full fetch failed (exit " + ex.ExitCode + "), fetching origin into remote-tracking refs: " + ex.StandardError.Trim());
+                await RunGitAsync(repoPath, "fetch", "--prune", "origin", _SafeFetchRefspec).ConfigureAwait(false);
+            }
+        }
 
         private static List<long> ParseUnixSecondsLines(string output)
         {
@@ -1539,6 +1724,19 @@ namespace Armada.Core.Services
         {
             GitProcessResult result = await ExecuteProcessAsync(worktreePath, "git", _NoMatch, token, "rev-parse", "-q", "--verify", "MERGE_HEAD").ConfigureAwait(false);
             return result.Succeeded;
+        }
+
+        private static void RequireRevision(string revision, string name)
+        {
+            if (revision.StartsWith("-", StringComparison.Ordinal)) throw new ArgumentException(name + " must not start with '-'.", name);
+        }
+
+        private async Task<string?> ResolveCommitShaAsync(string repoPath, string gitRef, CancellationToken token)
+        {
+            GitProcessResult result = await ExecuteProcessAsync(repoPath, "git", _NoMatch, token, "rev-parse", "--verify", "--quiet", gitRef + "^{commit}").ConfigureAwait(false);
+            if (!result.Succeeded) return null;
+            string sha = result.StandardOutput.Trim();
+            return GitRevisionNames.IsFullCommitId(sha) ? sha : null;
         }
 
         private async Task<bool> RefResolvesAsync(string repoPath, string gitRef, CancellationToken token)

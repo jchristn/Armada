@@ -20,6 +20,7 @@ import { useNotifications } from '../context/NotificationContext';
 import { useAuth } from '../context/AuthContext';
 import { canEdit as canEditScoped, type ScopeViewer } from '../lib/scoping';
 import { buildPersonaDuplicatePayload } from '../lib/duplicates';
+import { useDeleteProgress } from '../lib/useDeleteProgress';
 
 const PERSONA_DESCRIPTION_TIP = 'Optional note on what this persona is for. Shown in lists and pickers; it is not sent to the captain.';
 const PERSONA_TEMPLATE_TIP = 'The prompt template whose text tells the captain how to act in this role. Required. Manage templates on the Prompts tab.';
@@ -29,6 +30,7 @@ const PROMPT_CONTENT_TIP = 'The instruction text sent to the captain for this ro
 
 export default function PersonaDetail() {
   const { t, formatDateTime } = useLocale();
+  const deletion = useDeleteProgress();
   const { pushToast } = useNotifications();
   const { isAdmin, isTenantAdmin, user } = useAuth();
   const viewer: ScopeViewer = { isAdmin, isTenantAdmin, tenantId: user?.user?.tenantId, userId: user?.user?.id };
@@ -187,11 +189,9 @@ export default function PersonaDetail() {
       message: t('Delete persona "{{name}}"? This cannot be undone.', { name: persona.name }),
       onConfirm: async () => {
         setConfirm(c => ({ ...c, open: false }));
-        try {
-          await deletePersona(persona.name);
-          pushToast('warning', t('Persona "{{name}}" deleted.', { name: persona.name }));
-          navigate('/personas');
-        } catch { setError(t('Delete failed.')); }
+        if (!(await deletion.run({ kind: 'persona', action: () => deletePersona(persona.name) }))) return;
+        pushToast('warning', t('Persona "{{name}}" deleted.', { name: persona.name }));
+        navigate('/personas');
       },
     });
   }
@@ -214,11 +214,10 @@ export default function PersonaDetail() {
   return (
     <div>
       <PageHeader
-        breadcrumb={
-          <>
-            <Link to="/personas">{t('Personas')}</Link> <span className="breadcrumb-sep">&gt;</span> <span>{persona.name}</span>
-          </>
-        }
+        breadcrumb={[
+          { label: t('Personas'), to: '/personas' },
+          { label: persona.name },
+        ]}
         title={persona.name}
         actions={
           <>
@@ -268,6 +267,7 @@ export default function PersonaDetail() {
       </DialogShell>
 
       <JsonViewer open={jsonData.open} title={jsonData.title} data={jsonData.data} onClose={() => setJsonData({ open: false, title: '', data: null })} />
+      {deletion.dialog}
       <ConfirmDialog open={confirm.open} title={confirm.title} message={confirm.message}
         onConfirm={confirm.onConfirm} onCancel={() => setConfirm(c => ({ ...c, open: false }))} />
 

@@ -14,7 +14,7 @@ import {
 function status(partial: Partial<DashboardStatusData>): DashboardStatusData {
   return {
     totalCaptains: 2, idleCaptains: 1, workingCaptains: 1, stalledCaptains: 0, activeVoyages: 0,
-    missionsByStatus: {}, voyages: [], recentSignals: [], ...partial,
+    missionsByStatus: {}, recentSignals: [], ...partial,
   };
 }
 

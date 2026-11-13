@@ -181,6 +181,18 @@ namespace Armada.Tui.Screens.Delivery
         }
 
         /// <inheritdoc />
+        protected override string DeletingTitle
+        {
+            get { return "Deleting incident"; }
+        }
+
+        /// <inheritdoc />
+        protected override string DeletingManyTitle
+        {
+            get { return "{count, plural, one {Deleting # incident} other {Deleting # incidents}}"; }
+        }
+
+        /// <inheritdoc />
         protected override Task DeleteAsync(Incident row, CancellationToken token)
         {
             return Context.Client.DeleteIncidentAsync(row.Id, token);

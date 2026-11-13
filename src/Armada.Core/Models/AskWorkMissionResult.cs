@@ -2,6 +2,7 @@ namespace Armada.Core.Models
 {
     using System;
     using System.Collections.Generic;
+    using System.Text.Json.Serialization;
 
     /// <summary>
     /// The outcome of one mission of finished tracked work (see <see cref="AskWorkResult"/>).
@@ -96,6 +97,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// The mission's most recent check runs, newest first.
         /// </summary>
+        [JsonIgnore]
         public List<AskWorkCheckResult> Checks
         {
             get => _Checks;

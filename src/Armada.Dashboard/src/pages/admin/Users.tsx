@@ -14,6 +14,7 @@ import { useLocale } from '../../context/LocaleContext';
 import { useNotifications } from '../../context/NotificationContext';
 import { useProxySessionContext } from '../../lib/useProxySessionContext';
 import { usePersistedPageSize } from '../../lib/usePersistedPageSize';
+import { useDeleteProgress } from '../../lib/useDeleteProgress';
 
 type SortField = 'email' | 'firstName' | 'isAdmin' | 'active' | 'createdUtc';
 type SortDir = 'asc' | 'desc';
@@ -21,6 +22,7 @@ type SortDir = 'asc' | 'desc';
 export default function Users() {
   const { user, isAdmin, isTenantAdmin } = useAuth();
   const { t, formatRelativeTime, formatDateTime } = useLocale();
+  const deletion = useDeleteProgress();
   const { pushToast } = useNotifications();
   const proxyContext = useProxySessionContext();
   const [items, setItems] = useState<UserMaster[]>([]);
@@ -206,11 +208,9 @@ export default function Users() {
       resourceName: email,
       onConfirm: async () => {
         setConfirm(c => ({ ...c, open: false }));
-        try {
-          await deleteUser(id);
-          pushToast('warning', t('User "{{email}}" deleted.', { email }));
-          load();
-        } catch { setError(t('Delete failed.')); }
+        if (!(await deletion.run({ kind: 'user', action: () => deleteUser(id) }))) return;
+        pushToast('warning', t('User "{{email}}" deleted.', { email }));
+        load();
       },
     });
   }
@@ -224,7 +224,14 @@ export default function Users() {
         setConfirm(c => ({ ...c, open: false }));
         const ids = [...selected]; setSelected([]);
         let failed = 0;
-        for (const id of ids) { try { await deleteUser(id); } catch { failed++; } }
+        await deletion.run({
+          kind: 'user',
+          count: ids.length,
+          action: async () => {
+            failed = 0;
+            for (const id of ids) { try { await deleteUser(id); } catch { failed++; } }
+          },
+        });
         const success = ids.length - failed;
         if (success > 0) {
           pushToast(failed > 0 ? 'warning' : 'success', failed > 0
@@ -392,6 +399,7 @@ export default function Users() {
       )}
 
       <JsonViewer open={jsonData.open} title={jsonData.title} data={jsonData.data} onClose={() => setJsonData({ open: false, title: '', data: null })} />
+      {deletion.dialog}
       <ConfirmDialog open={confirm.open} title={confirm.title} message={confirm.message} resourceName={confirm.resourceName} danger requireDeleteConfirm onConfirm={confirm.onConfirm} onCancel={() => setConfirm(c => ({ ...c, open: false }))} />
 
       <DataTable

@@ -2,6 +2,7 @@ namespace Armada.Core.Models
 {
     using System;
     using System.Collections.Generic;
+    using Armada.Core.Services;
 
     /// <summary>
     /// One page of commit history read from git (git log --date-order from a fixed tip commit).
@@ -13,6 +14,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// Commits, newest commit date first. Never null.
         /// </summary>
+        [CollectionBound(Constants.VesselHistoryMaxPageSize, Reason = "GitService.GetCommitLogAsync rejects a larger limit")]
         public List<VesselCommit> Commits { get; set; } = new List<VesselCommit>();
 
         /// <summary>

@@ -134,19 +134,17 @@ namespace Armada.Server.Routes
                         ? await _database.Fleets.ReadAsync(ctx.TenantId!, id).ConfigureAwait(false)
                         : await _database.Fleets.ReadAsync(ctx.TenantId!, ctx.UserId!, id).ConfigureAwait(false);
                 if (fleet == null) { req.Http.Response.StatusCode = 404; return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Fleet not found" }; }
-                List<Vessel> vessels = ctx.IsAdmin
-                    ? await _database.Vessels.EnumerateByFleetAsync(id).ConfigureAwait(false)
-                    : await _database.Vessels.EnumerateByFleetAsync(ctx.TenantId!, id).ConfigureAwait(false);
-                if (!ctx.IsAdmin && !ctx.IsTenantAdmin)
-                    vessels = vessels.Where(v => String.Equals(v.UserId, ctx.UserId, StringComparison.Ordinal)).ToList();
-                return (object)new { Fleet = fleet, Vessels = vessels };
+                // Vessels are not embedded: count them in the caller's scope; read them with vessels enumerate + fleetId.
+                EnumerationQuery countQuery = new EnumerationQuery { FleetId = id, PageSize = 1 };
+                EnumerationResult<Vessel> vesselPage = await Armada.Core.Models.EnumerationScope.EnumerateScopedAsync(ctx, countQuery, q => _database.Vessels.EnumerateAsync(q), (t, q) => _database.Vessels.EnumerateAsync(t, q), (t, u, q) => _database.Vessels.EnumerateAsync(t, u, q)).ConfigureAwait(false);
+                return (object)new FleetDetailResponse { Fleet = fleet, VesselCount = vesselPage.TotalRecords };
             },
             api => api
                 .WithTag("Fleets")
                 .WithSummary("Get a fleet")
-                .WithDescription("Returns a single fleet by ID.")
+                .WithDescription("Returns a single fleet by ID with the number of vessels it holds in the caller's scope (VesselCount). The vessels are not embedded: page them with POST /api/v1/vessels/enumerate (or GET /api/v1/vessels) and fleetId.")
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Fleet ID (flt_ prefix)"))
-                .WithResponse(200, OpenApiJson.For<Fleet>("Fleet details"))
+                .WithResponse(200, OpenApiJson.For<FleetDetailResponse>("Fleet and vessel count"))
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())
                 .WithSecurity("ApiKey"));
 
@@ -231,6 +229,7 @@ namespace Armada.Server.Routes
                 DeleteMultipleRequest? body = JsonSerializer.Deserialize<DeleteMultipleRequest>(req.Http.Request.DataAsString, _jsonOptions);
                 if (body == null || body.Ids == null || body.Ids.Count == 0)
                     { req.Http.Response.StatusCode = 400; return (object)new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Ids is required and must not be empty" }; }
+                CollectionLimits.RequireRequestItems(body.Ids, "Ids");
 
                 DeleteMultipleResult result = new DeleteMultipleResult();
                 foreach (string id in body.Ids)
@@ -268,7 +267,7 @@ namespace Armada.Server.Routes
             api => api
                 .WithTag("Fleets")
                 .WithSummary("Batch delete multiple fleets")
-                .WithDescription("Permanently deletes multiple fleets from the database by ID. Returns a summary of deleted and skipped entries. This cannot be undone.")
+                .WithDescription("Permanently deletes multiple fleets from the database by ID (at most 1000 Ids; more is 400 CollectionLimitExceeded). Returns a summary of deleted and skipped entries. This cannot be undone.")
                 .WithRequestBody(OpenApiJson.BodyFor<DeleteMultipleRequest>("List of fleet IDs to delete"))
                 .WithResponse(200, OpenApiJson.For<DeleteMultipleResult>("Delete result summary"))
                 .WithResponse(400, OpenApiResponseMetadata.BadRequest())

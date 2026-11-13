@@ -4,7 +4,7 @@ import { Slot, Stack } from 'expo-router';
 import { renderRouter } from 'expo-router/testing-library';
 import { Text } from 'react-native';
 import * as client from '@dashboard/api/client';
-import type { Captain, PlanningSession, PlanningSessionDetail, PlanningSessionMessage, Vessel } from '@dashboard/types/models';
+import type { Captain, PlanningSession, PlanningSessionView, PlanningSessionMessage, Vessel } from '@dashboard/types/models';
 import PlanningIndexRoute from '../app/(app)/(work)/planning/index';
 import PlanningSessionRoute from '../app/(app)/(work)/planning/[id]';
 import DispatchRoute from '../app/(app)/(work)/dispatch';
@@ -12,6 +12,7 @@ import { dispatchPrefillFromParams } from '../screens/operations/w24/dispatchLin
 import { planningDispatchHref } from '../screens/planning/planningDispatch';
 import { prefillFromParams } from '../screens/planning/PlanningScreen';
 import { BuildProviders, buildSockets, page } from '../test/buildFixtures';
+import { serveTranscriptsFromDetails } from '../test/transcripts';
 
 jest.mock('@dashboard/api/client', () => require('../test/buildClientMock').buildClientMockFactory());
 
@@ -34,8 +35,8 @@ const CAPTAIN = { id: 'cpt_1', name: 'Ada', runtime: 'ClaudeCode', state: 'Idle'
 const BUSY_CAPTAIN = { id: 'cpt_2', name: 'Bob', runtime: 'ClaudeCode', state: 'Working', supportsPlanningSessions: true } as Captain;
 const VESSEL = { id: 'vsl_1', name: 'demo-api', fleetId: null } as unknown as Vessel;
 
-function detail(over: Partial<PlanningSessionDetail> = {}): PlanningSessionDetail {
-  return { session: session(), messages: [], captain: CAPTAIN, vessel: VESSEL, ...over };
+function detail(over: Partial<PlanningSessionView> = {}): PlanningSessionView {
+  return { session: session(), messages: [], messageCount: 0, captain: CAPTAIN, vessel: VESSEL, ...over };
 }
 
 const ROUTES = {
@@ -60,13 +61,14 @@ async function emit(type: string, data: unknown) {
 }
 
 beforeEach(async () => {
+  serveTranscriptsFromDetails(api as unknown as Record<string, jest.Mock>);
   await AsyncStorage.clear();
   api.listCaptains.mockResolvedValue(page([CAPTAIN, BUSY_CAPTAIN]));
   api.listFleets.mockResolvedValue(page([]));
   api.listVessels.mockResolvedValue(page([VESSEL]));
   api.listPipelines.mockResolvedValue(page([{ id: 'ppl_1', name: 'Reviewed', stages: [] } as never]));
   api.listPlaybooks.mockResolvedValue(page([]));
-  api.listPlanningSessions.mockResolvedValue([session()]);
+  api.listPlanningSessions.mockResolvedValue(page([session()]));
   api.getVesselReadiness.mockResolvedValue(null as never);
 });
 
@@ -99,7 +101,7 @@ describe('Planning list', () => {
     await renderAt('/planning');
     await waitFor(() => expect(screen.getByText('Plan login fix')).toBeTruthy());
     expect(screen.getByText(/Ada \u00b7 demo-api/)).toBeTruthy();
-    api.listPlanningSessions.mockResolvedValue([session(), session({ id: 'pls_2', title: 'Second plan', lastUpdateUtc: '2026-10-07T13:00:00Z' })]);
+    api.listPlanningSessions.mockResolvedValue(page([session(), session({ id: 'pls_2', title: 'Second plan', lastUpdateUtc: '2026-10-07T13:00:00Z' })]));
     await emit('planning-session.message.updated', { sessionId: 'pls_1' });
     expect(api.listPlanningSessions).toHaveBeenCalledTimes(1);
     await emit('planning-session.changed', { session: session({ id: 'pls_2' }) });
@@ -135,7 +137,7 @@ describe('Planning list', () => {
   });
 
   it('deletes every session only after the typed confirmation', async () => {
-    api.listPlanningSessions.mockResolvedValue([session(), session({ id: 'pls_2', title: 'Second plan' })]);
+    api.listPlanningSessions.mockResolvedValue(page([session(), session({ id: 'pls_2', title: 'Second plan' })]));
     api.deletePlanningSession.mockImplementation(async (id: string) => { if (id === 'pls_2') throw new Error('running'); });
     await renderAt('/planning');
     await waitFor(() => expect(screen.getByText('Second plan')).toBeTruthy());

@@ -1,6 +1,7 @@
 namespace Armada.Core.Models
 {
     using System.Collections.Generic;
+    using Armada.Core.Services;
 
     /// <summary>
     /// A seeded defect or violation a reviewer should find.
@@ -22,6 +23,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// Case-insensitive phrases; a finding that contains any of them matches this item.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxConfigItems)]
         public List<string> Keywords
         {
             get => _Keywords;

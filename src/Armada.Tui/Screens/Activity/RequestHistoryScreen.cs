@@ -453,7 +453,7 @@ namespace Armada.Tui.Screens.Activity
             string id = row.Id;
             Context.Confirm("Delete Request Entry", Context.Loc.T("Delete the stored request-history entry for {{route}}?", LocalizationArgs.Of("route", row.Route)), () =>
             {
-                ScreenOps.RunVoid(Context, () => Context.Client.DeleteRequestHistoryEntryAsync(id), () =>
+                DeleteProgress.RunVoid(Context, "Deleting request history entry", ct => Context.Client.DeleteRequestHistoryEntryAsync(id, ct), () =>
                 {
                     ScreenOps.Toast(Context, NotificationSeverityEnum.Warning, "Request entry deleted.");
                     if (DetailDrawer.IsOpen && Detail.Record != null && Detail.Record.Entry.Id == id) DetailDrawer.Close();
@@ -469,12 +469,12 @@ namespace Armada.Tui.Screens.Activity
             if (ids.Count == 0) return;
             Context.Confirm("Delete Selected Requests", Context.Loc.T("Delete {{count}} selected request-history entries?", LocalizationArgs.Of("count", ids.Count)), () =>
             {
-                ScreenOps.Run(Context, () => Context.Client.DeleteRequestHistoryEntriesAsync(ids), r =>
+                DeleteProgress.Run(Context, "{count, plural, one {Deleting # request history entry} other {Deleting # request history entries}}", ct => Context.Client.DeleteRequestHistoryEntriesAsync(ids, ct), r =>
                 {
                     ScreenOps.Toast(Context, NotificationSeverityEnum.Warning, "Deleted {{count}} request entries.", LocalizationArgs.Of("count", ids.Count));
                     Grid.ClearMarks();
                     Refresh();
-                }, "Failed to delete selected request entries.");
+                }, "Failed to delete selected request entries.", ids.Count);
             }, "Delete Selected");
         }
 
@@ -663,7 +663,7 @@ namespace Armada.Tui.Screens.Activity
             RequestHistoryQuery q = BuildQuery(1, Grid.PageSize);
             Context.Confirm("Delete Filtered Requests", Context.Loc.T("Delete all request-history entries matching the current filters?"), () =>
             {
-                ScreenOps.Run(Context, () => Context.Client.DeleteRequestHistoryByFilterAsync(q), r =>
+                DeleteProgress.Run(Context, "Deleting matching request history entries", ct => Context.Client.DeleteRequestHistoryByFilterAsync(q, ct), r =>
                 {
                     ScreenOps.Toast(Context, NotificationSeverityEnum.Warning, "Deleted the current filtered request set.");
                     Grid.ClearMarks();

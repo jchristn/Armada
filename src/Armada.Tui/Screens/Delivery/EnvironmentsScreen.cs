@@ -199,6 +199,18 @@ namespace Armada.Tui.Screens.Delivery
         }
 
         /// <inheritdoc />
+        protected override string DeletingTitle
+        {
+            get { return "Deleting environment"; }
+        }
+
+        /// <inheritdoc />
+        protected override string DeletingManyTitle
+        {
+            get { return "{count, plural, one {Deleting # environment} other {Deleting # environments}}"; }
+        }
+
+        /// <inheritdoc />
         protected override Task DeleteAsync(DeploymentEnvironment row, CancellationToken token)
         {
             return Context.Client.DeleteEnvironmentAsync(row.Id, token);

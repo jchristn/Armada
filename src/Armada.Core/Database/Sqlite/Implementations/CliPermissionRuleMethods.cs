@@ -130,6 +130,43 @@ namespace Armada.Core.Database.Sqlite.Implementations
         }
 
         /// <inheritdoc />
+        public async Task<EnumerationResult<CliPermissionRule>> EnumeratePageAsync(CliPermissionRuleQuery query, int pageNumber, int pageSize, CancellationToken token = default)
+        {
+            if (query == null) throw new ArgumentNullException(nameof(query));
+            pageNumber = Math.Max(1, pageNumber);
+            pageSize = Math.Clamp(pageSize, 1, 1000);
+            StringBuilder where = new StringBuilder(" WHERE 1 = 1");
+            if (query.TenantId != null) where.Append(" AND (tenant_id = @tenant_id OR tenant_id IS NULL)");
+            if (query.Scope.HasValue) where.Append(" AND scope = @scope");
+            if (query.VesselId != null) where.Append(" AND vessel_id = @vessel_id");
+            if (query.CaptainId != null) where.Append(" AND captain_id = @captain_id");
+            Action<SqliteCommand> bind = cmd =>
+            {
+                if (query.TenantId != null) SqliteCommandHelper.Add(cmd, "@tenant_id", query.TenantId);
+                if (query.Scope.HasValue) SqliteCommandHelper.Add(cmd, "@scope", query.Scope.Value.ToString());
+                if (query.VesselId != null) SqliteCommandHelper.Add(cmd, "@vessel_id", query.VesselId);
+                if (query.CaptainId != null) SqliteCommandHelper.Add(cmd, "@captain_id", query.CaptainId);
+            };
+
+            using (SqliteConnection conn = new SqliteProviderConnection(_ConnectionString))
+            {
+                await conn.OpenAsync(token).ConfigureAwait(false);
+                long total = await SqliteCommandHelper.CountAsync(conn, "SELECT COUNT(*) FROM cli_permission_rules" + where + ";", bind, token).ConfigureAwait(false);
+                List<CliPermissionRule> rows = await SqliteCommandHelper.QueryAsync(conn,
+                    "SELECT * FROM cli_permission_rules" + where + " ORDER BY created_utc DESC, id DESC" + SqliteCommandHelper.Page((pageNumber - 1) * pageSize, pageSize) + ";",
+                    bind, FromReader, token).ConfigureAwait(false);
+
+                EnumerationResult<CliPermissionRule> result = new EnumerationResult<CliPermissionRule>();
+                result.PageNumber = pageNumber;
+                result.PageSize = pageSize;
+                result.TotalRecords = total;
+                result.TotalPages = (int)Math.Ceiling((double)total / pageSize);
+                result.Objects = rows;
+                return result;
+            }
+        }
+
+        /// <inheritdoc />
         public async Task<List<CliPermissionRule>> EnumerateApplicableAsync(string? tenantId, string? captainId, string? vesselId, CancellationToken token = default)
         {
             return await SqliteCommandHelper.QueryAsync(_ConnectionString,

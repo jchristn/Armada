@@ -37,8 +37,8 @@ namespace Test.Shared.Suites.Models
                 AssertEqual(0, status.ActiveVoyages);
                 AssertNotNull(status.MissionsByStatus);
                 AssertEqual(0, status.MissionsByStatus.Count);
-                AssertNotNull(status.Voyages);
-                AssertEqual(0, status.Voyages.Count);
+                AssertEqual(0, status.InProgressVoyages);
+                AssertEqual(0, status.OpenVoyages);
                 AssertNotNull(status.RecentSignals);
                 AssertEqual(0, status.RecentSignals.Count);
                 AssertTrue(status.TimestampUtc <= DateTime.UtcNow);
@@ -54,12 +54,18 @@ namespace Test.Shared.Suites.Models
                 AssertEqual(0, status.MissionsByStatus.Count);
             }));
 
-            cases.Add(Case("voyages_null_setter_resets_to_empty", "ArmadaStatus Voyages null setter resets to empty", TestTags.Negative, () =>
+            cases.Add(Case("status_has_no_voyage_list", "ArmadaStatus carries voyage counts, never a voyage list", TestTags.Positive, () =>
             {
-                ArmadaStatus status = new ArmadaStatus();
-                status.Voyages = null!;
-                AssertNotNull(status.Voyages);
-                AssertEqual(0, status.Voyages.Count);
+                AssertNull(typeof(ArmadaStatus).GetProperty("Voyages"), "the active voyages are paged by POST /api/v1/voyages/progress/enumerate");
+                string json = System.Text.Json.JsonSerializer.Serialize(new ArmadaStatus { ActiveVoyages = 3, InProgressVoyages = 2, OpenVoyages = 1 });
+                AssertFalse(json.Contains("\"Voyages\"", StringComparison.Ordinal), "no Voyages array is serialized: " + json);
+                AssertTrue(json.Contains("\"InProgressVoyages\":2", StringComparison.Ordinal), "per-status counts are serialized");
+            }));
+
+            cases.Add(Case("status_bounds_are_declared", "ArmadaStatus declares the bounds of its server-produced lists", TestTags.Positive, () =>
+            {
+                AssertEqual(ArmadaStatus.RecentSignalCount, Armada.Core.Services.CollectionBounds.BoundOf(typeof(ArmadaStatus).GetProperty("RecentSignals")!)!.Limit);
+                AssertTrue(Enum.GetValues(typeof(MissionStatusEnum)).Length <= VoyageProgress.MaxStatusEntries, "MissionStatusEnum fits the declared status-dictionary bound");
             }));
 
             cases.Add(Case("recentsignals_null_setter_resets_to_empty", "ArmadaStatus RecentSignals null setter resets to empty", TestTags.Negative, () =>
@@ -90,23 +96,22 @@ namespace Test.Shared.Suites.Models
                 AssertEqual(10, status.MissionsByStatus["Complete"]);
             }));
 
-            cases.Add(Case("voyages_populate_and_read", "ArmadaStatus Voyages populate and read", TestTags.Positive, () =>
+            cases.Add(Case("voyage_progress_counts_only", "VoyageProgress carries counts and no vessel id list", TestTags.Positive, () =>
             {
-                ArmadaStatus status = new ArmadaStatus();
                 VoyageProgress vp = new VoyageProgress();
                 vp.TotalMissions = 10;
                 vp.CompletedMissions = 7;
                 vp.FailedMissions = 1;
                 vp.InProgressMissions = 2;
+                vp.VesselId = "vsl_a";
+                vp.VesselCount = 2;
+                vp.MissionCountsByStatus["Complete"] = 7;
                 vp.Voyage = new Voyage("Test Voyage");
 
-                status.Voyages.Add(vp);
-
-                AssertEqual(1, status.Voyages.Count);
-                AssertEqual(10, status.Voyages[0].TotalMissions);
-                AssertEqual(7, status.Voyages[0].CompletedMissions);
-                AssertEqual(1, status.Voyages[0].FailedMissions);
-                AssertEqual(2, status.Voyages[0].InProgressMissions);
+                AssertNull(typeof(VoyageProgress).GetProperty("VesselIds"), "the distinct vessel list is replaced by VesselId and VesselCount");
+                AssertEqual(10, vp.TotalMissions);
+                AssertEqual(7, vp.MissionCountsByStatus["Complete"]);
+                AssertEqual(2, vp.VesselCount);
             }));
 
             cases.Add(Case("serialization_round_trip", "ArmadaStatus serialization round trip", TestTags.Positive, () =>

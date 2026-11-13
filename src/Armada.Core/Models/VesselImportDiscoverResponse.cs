@@ -2,6 +2,7 @@ namespace Armada.Core.Models
 {
     using System;
     using System.Collections.Generic;
+    using Armada.Core.Services;
 
     /// <summary>
     /// Response to a discover request: the persisted batch (status Discovered) and its candidate items, or, for a
@@ -38,6 +39,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// Persisted candidate items in discovery order. Never null.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxRequestItems, Reason = "Discovery stops at VesselDiscoveryService.MaxCandidates (at most 1000)")]
         public List<VesselImportItem> Candidates
         {
             get => _Candidates;
@@ -52,6 +54,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// Advisory hints. Never null.
         /// </summary>
+        [CollectionBound(16, Reason = "Fixed hint codes")]
         public List<VesselImportHint> Hints
         {
             get => _Hints;

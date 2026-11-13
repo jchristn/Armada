@@ -90,7 +90,7 @@ namespace Armada.Helm.Commands
                 }
                 catch (Exception ex)
                 {
-                    AnsiConsole.MarkupLine($"[red]Failed[/] to delete database: {Markup.Escape(ex.Message)}");
+                    HelmConsole.Error.MarkupLine($"[red]Failed[/] to delete database: {Markup.Escape(ex.Message)}");
                     errors++;
                 }
             }
@@ -105,7 +105,7 @@ namespace Armada.Helm.Commands
                 }
                 catch (Exception ex)
                 {
-                    AnsiConsole.MarkupLine($"[red]Failed[/] to delete logs: {Markup.Escape(ex.Message)}");
+                    HelmConsole.Error.MarkupLine($"[red]Failed[/] to delete logs: {Markup.Escape(ex.Message)}");
                     errors++;
                 }
             }
@@ -121,7 +121,7 @@ namespace Armada.Helm.Commands
                 }
                 catch (Exception ex)
                 {
-                    AnsiConsole.MarkupLine($"[red]Failed[/] to delete docks: {Markup.Escape(ex.Message)}");
+                    HelmConsole.Error.MarkupLine($"[red]Failed[/] to delete docks: {Markup.Escape(ex.Message)}");
                     errors++;
                 }
             }
@@ -137,7 +137,7 @@ namespace Armada.Helm.Commands
                 }
                 catch (Exception ex)
                 {
-                    AnsiConsole.MarkupLine($"[red]Failed[/] to delete bare repos: {Markup.Escape(ex.Message)}");
+                    HelmConsole.Error.MarkupLine($"[red]Failed[/] to delete bare repos: {Markup.Escape(ex.Message)}");
                     errors++;
                 }
             }

@@ -94,10 +94,12 @@ namespace Armada.Server
         /// <returns>Validation result with command previews and available check types.</returns>
         /// <exception cref="ArgumentNullException">Thrown when caller or profile is null.</exception>
         /// <exception cref="ArgumentException">Thrown when fleetId or vesselId names a fleet or vessel outside the caller's tenant.</exception>
+        /// <exception cref="CollectionLimitExceededException">Thrown when a list on the profile holds more than <see cref="CollectionLimits.MaxConfigItems"/> entries.</exception>
         public async Task<WorkflowProfileValidationResult> ValidateAsync(AuthContext caller, WorkflowProfile profile, CancellationToken token = default)
         {
             if (caller == null) throw new ArgumentNullException(nameof(caller));
             if (profile == null) throw new ArgumentNullException(nameof(profile));
+            CollectionBounds.Validate(profile);
             if (!caller.IsAdmin) profile.TenantId = caller.TenantId;
             await RequireVisibleReferencesAsync(caller, profile, token).ConfigureAwait(false);
             return await _Service.ValidateAsync(profile, token).ConfigureAwait(false);
@@ -113,6 +115,7 @@ namespace Armada.Server
         /// <returns>The created profile.</returns>
         /// <exception cref="ArgumentNullException">Thrown when caller or profile is null.</exception>
         /// <exception cref="ArgumentException">Thrown when the definition fails validation or references a fleet or vessel outside the caller's tenant.</exception>
+        /// <exception cref="CollectionLimitExceededException">Thrown when a list on the profile holds more than <see cref="CollectionLimits.MaxConfigItems"/> entries.</exception>
         public async Task<WorkflowProfile> CreateAsync(AuthContext caller, WorkflowProfile profile, CancellationToken token = default)
         {
             if (caller == null) throw new ArgumentNullException(nameof(caller));
@@ -142,6 +145,7 @@ namespace Armada.Server
         /// <exception cref="KeyNotFoundException">Thrown when the profile is missing or not visible to the caller.</exception>
         /// <exception cref="UnauthorizedAccessException">Thrown when the caller may not edit the profile.</exception>
         /// <exception cref="ArgumentException">Thrown when the updated definition fails validation or references a fleet or vessel outside the caller's tenant.</exception>
+        /// <exception cref="CollectionLimitExceededException">Thrown when a list on the updated profile holds more than <see cref="CollectionLimits.MaxConfigItems"/> entries.</exception>
         public async Task<WorkflowProfile> UpdateAsync(AuthContext caller, string? id, Action<WorkflowProfile, bool> apply, CancellationToken token = default)
         {
             if (caller == null) throw new ArgumentNullException(nameof(caller));
@@ -234,10 +238,12 @@ namespace Armada.Server
         /// <returns>Deleted count and skipped entries.</returns>
         /// <exception cref="ArgumentNullException">Thrown when caller is null.</exception>
         /// <exception cref="ArgumentException">Thrown when ids is null or empty.</exception>
+        /// <exception cref="CollectionLimitExceededException">Thrown when ids holds more than <see cref="CollectionLimits.MaxRequestItems"/> entries.</exception>
         public async Task<DeleteMultipleResult> DeleteMultipleAsync(AuthContext caller, List<string>? ids, CancellationToken token = default)
         {
             if (caller == null) throw new ArgumentNullException(nameof(caller));
             if (ids == null || ids.Count == 0) throw new ArgumentException("Ids is required and must not be empty", nameof(ids));
+            CollectionLimits.RequireRequestItems(ids, "Ids");
 
             DeleteMultipleResult result = new DeleteMultipleResult();
             foreach (string id in ids)
@@ -350,6 +356,7 @@ namespace Armada.Server
 
         private async Task RequireValidAsync(WorkflowProfile profile, CancellationToken token)
         {
+            CollectionBounds.Validate(profile);
             WorkflowProfileValidationResult validation = await _Service.ValidateAsync(profile, token).ConfigureAwait(false);
             if (!validation.IsValid) throw new ArgumentException(String.Join(" ", validation.Errors));
         }

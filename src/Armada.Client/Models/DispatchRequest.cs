@@ -35,6 +35,21 @@ namespace Armada.Client.Models
         /// </summary>
         public bool IsEvaluation { get; set; } = false;
 
+        /// <summary>
+        /// Optional key naming this mission within a voyage create request, so a later mission can name it as ParentKey.
+        /// </summary>
+        public string? Key { get; set; } = null;
+
+        /// <summary>
+        /// Optional Key of an earlier mission in the same voyage create request; this mission becomes its child.
+        /// </summary>
+        public string? ParentKey { get; set; } = null;
+
+        /// <summary>
+        /// Optional branch relationship to the parent: New, ContinueParent or ForkFromParent.
+        /// </summary>
+        public Armada.Core.Enums.MissionBranchStrategyEnum? BranchStrategy { get; set; } = null;
+
         #endregion
 
         #region Constructors-and-Factories

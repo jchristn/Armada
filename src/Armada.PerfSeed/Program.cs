@@ -4,6 +4,7 @@ namespace Armada.PerfSeed
     using System.Collections.Generic;
     using System.Diagnostics;
     using System.IO;
+    using System.Text.Json;
     using System.Threading.Tasks;
     using Armada.Core;
     using Armada.Core.Database;
@@ -15,7 +16,7 @@ namespace Armada.PerfSeed
     /// <summary>
     /// Seeds a throwaway Armada data directory for the performance baseline: settings.json bound to 127.0.0.1 on the
     /// given ports (no background schedulers, no data expiry), and armada.db with fleets, vessels and their health rows,
-    /// captains, voyages, missions, jobs, Ask threads with tracked work, and a bearer credential for the default tenant's
+    /// captains, voyages, missions, jobs, Ask threads with tracked work, captain-selection history, and a bearer credential for the default tenant's
     /// admin user. Rows go through the database driver, so the schema and constraints match a real install.
     ///
     /// No mission is Pending, Assigned, or InProgress, so the Admiral started on this data never dispatches or launches
@@ -38,7 +39,7 @@ namespace Armada.PerfSeed
             catch (ArgumentException ex)
             {
                 Console.Error.WriteLine("ERROR: " + ex.Message);
-                Console.Error.WriteLine("Usage: Armada.PerfSeed --data-dir <dir> [--admiral-port 25060] [--mcp-port 25061] [--token t] [--vessels 500] [--missions 10000] [--voyages 1000] [--captains 50] [--fleets 10] [--jobs 2000] [--ask-threads 300] [--seed 42]");
+                Console.Error.WriteLine("Usage: Armada.PerfSeed --data-dir <dir> [--admiral-port 25060] [--mcp-port 25061] [--token t] [--vessels 500] [--missions 10000] [--voyages 1000] [--captains 50] [--fleets 10] [--jobs 2000] [--ask-threads 300] [--selection-decisions 2000] [--seed 42]");
                 return 2;
             }
 
@@ -132,6 +133,7 @@ namespace Armada.PerfSeed
                 }
                 Report("voyages", voyages.Count, total);
 
+                List<Mission> finished = new List<Mission>();
                 for (int i = 0; i < options.Missions; i++)
                 {
                     int voyageIndex = i % voyages.Count;
@@ -150,7 +152,8 @@ namespace Armada.PerfSeed
                     if (mission.Status == MissionStatusEnum.PullRequestOpen) mission.PrUrl = "https://example.invalid/perf/pull/" + i;
                     if (mission.Status == MissionStatusEnum.Failed || mission.Status == MissionStatusEnum.LandingFailed) mission.FailureReason = "Seeded failure";
                     mission.BranchName = "armada/perf/" + i.ToString("D5");
-                    await db.Missions.CreateAsync(mission).ConfigureAwait(false);
+                    Mission created = await db.Missions.CreateAsync(mission).ConfigureAwait(false);
+                    if (created.Status == MissionStatusEnum.Complete && finished.Count < 200) finished.Add(created);
                     if ((i + 1) % 2500 == 0 && i + 1 < options.Missions) Report("missions", i + 1, total);
                 }
                 Report("missions", options.Missions, total);
@@ -197,6 +200,13 @@ namespace Armada.PerfSeed
                     }
                 }
                 Report("ask threads (+3 tracked work each)", options.AskThreads, total);
+
+                if (options.SelectionDecisions > 0 && finished.Count > 0 && captains.Count > 0)
+                {
+                    PerfSeedIds ids = await SelectionSeeder.SeedAsync(db, tenant, user, finished, captains, options.SelectionDecisions, random).ConfigureAwait(false);
+                    await File.WriteAllTextAsync(Path.Combine(options.DataDirectory, "perf-ids.json"), JsonSerializer.Serialize(ids)).ConfigureAwait(false);
+                    Report("captain selection decisions", options.SelectionDecisions, total);
+                }
             }
 
             Console.WriteLine("[perf-seed] done in " + total.Elapsed.TotalSeconds.ToString("F1") + " s: " + dbPath);

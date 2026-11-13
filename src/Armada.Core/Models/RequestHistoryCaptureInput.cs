@@ -3,6 +3,8 @@ using System.Collections.Generic;
 
 namespace Armada.Core.Models
 {
+    using Armada.Core.Services;
+
     /// <summary>
     /// Primitive request and response fields used to build a request-history record.
     /// </summary>
@@ -73,11 +75,13 @@ namespace Armada.Core.Models
         /// <summary>
         /// Request headers captured during execution.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxConfigItems, Reason = "Captured headers past the limit are counted in an X-Armada-Omitted-Headers entry")]
         public Dictionary<string, string?> RequestHeaders { get; set; } = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
 
         /// <summary>
         /// Response headers captured during execution.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxConfigItems, Reason = "Captured headers past the limit are counted in an X-Armada-Omitted-Headers entry")]
         public Dictionary<string, string?> ResponseHeaders { get; set; } = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
 
         /// <summary>

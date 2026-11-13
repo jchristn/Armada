@@ -172,7 +172,7 @@ action. On each health cycle the recovery coordinator:
    `FailureKind` (Compile, TestFail, Timeout, LandingConflict, Crash for mechanical
    failures; NoOp, Boundary, ScopeViolation, JudgeRejected, Infra, ReviewDenied,
    DependencyFailed, MaxRuntimeExceeded, StallRecoveryExhausted, OperatorAction,
-   InvalidOutput, and Unknown otherwise).
+   InvalidOutput, Blocked, and Unknown otherwise).
 2. **Opens an incident** for the mechanical (recoverable) kinds, linked to the mission,
    vessel, and voyage, recording the classified `FailureKind`. Non-recoverable kinds are
    left to the existing escalation/inbox path -- they need a human, not a retry.

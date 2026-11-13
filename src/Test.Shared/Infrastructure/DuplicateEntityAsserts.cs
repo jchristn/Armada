@@ -74,7 +74,7 @@ namespace Test.Shared.Infrastructure
             if (String.IsNullOrEmpty(text)) return;
             foreach (string marker in _ProviderMarkers)
             {
-                if (text.Contains(marker, StringComparison.Ordinal))
+                if (marker == "23505" ? System.Text.RegularExpressions.Regex.IsMatch(text, @"(?<![0-9])23505(?![0-9])") : text.Contains(marker, StringComparison.Ordinal))
                     throw new AssertionException(label + ": contains provider text <" + marker + ">: " + text);
             }
         }

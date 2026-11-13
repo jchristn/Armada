@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { useLocale } from '../context/LocaleContext';
 import { useTheme } from '../context/ThemeContext';
 import { lookupTenants, authenticate, ApiError } from '../api/client';
+import { lookupAllTenants } from '../lib/tenantLookup';
 import type { TenantListEntry } from '../types/models';
 import LanguageSelector from './shared/LanguageSelector';
 
@@ -38,14 +39,14 @@ export default function LoginFlow() {
     setError('');
     setBusy(true);
     try {
-      const result = await lookupTenants(email);
-      if (result.tenants.length === 0) {
+      const found = await lookupAllTenants(email, lookupTenants);
+      if (found.length === 0) {
         setError(t('No tenants found for this email.'));
-      } else if (result.tenants.length === 1) {
-        setSelectedTenant(result.tenants[0]);
+      } else if (found.length === 1) {
+        setSelectedTenant(found[0]);
         setStep('password');
       } else {
-        setTenants(result.tenants);
+        setTenants(found);
         setStep('tenant');
       }
     } catch {

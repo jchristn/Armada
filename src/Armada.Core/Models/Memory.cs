@@ -3,6 +3,7 @@ namespace Armada.Core.Models
     using System;
     using System.Collections.Generic;
     using Armada.Core.Enums;
+    using Armada.Core.Services;
 
     /// <summary>
     /// A durable agent memory distilled from work. Memories are the persistent counterpart to a captain's
@@ -134,6 +135,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// Free-form tags for retrieval and consolidation. Persisted in a child table.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxConfigItems)]
         public List<string> Tags
         {
             get => _Tags;

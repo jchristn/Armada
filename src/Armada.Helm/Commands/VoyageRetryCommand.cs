@@ -9,6 +9,7 @@ namespace Armada.Helm.Commands
     using Armada.Core.Models;
     using Armada.Core.Services;
     using Armada.Helm.Rendering;
+    using Armada.Helm.Infrastructure;
 
     /// <summary>
     /// Retry all failed missions in a voyage.
@@ -23,7 +24,7 @@ namespace Armada.Helm.Commands
             Voyage? voyage = null;
             if (settings.Id.StartsWith("vyg_"))
             {
-                VoyageDetailResponse? detail = await GetAsync<VoyageDetailResponse>($"/api/v1/voyages/{settings.Id}").ConfigureAwait(false);
+                VoyageProgress? detail = await GetAsync<VoyageProgress>($"/api/v1/voyages/{settings.Id}").ConfigureAwait(false);
                 if (detail?.Voyage != null)
                     voyage = detail.Voyage;
             }
@@ -38,21 +39,27 @@ namespace Armada.Helm.Commands
 
             if (voyage == null)
             {
-                AnsiConsole.MarkupLine($"[red]Voyage not found:[/] {Markup.Escape(settings.Id)}");
+                HelmConsole.Error.MarkupLine($"[red]Voyage not found:[/] {Markup.Escape(settings.Id)}");
                 return 1;
             }
 
-            // Find failed missions
-            EnumerationResult<Mission>? missionResult = await GetAsync<EnumerationResult<Mission>>($"/api/v1/missions?voyageId={voyage.Id}").ConfigureAwait(false);
-            List<Mission>? missions = missionResult?.Objects;
-            if (missions == null)
+            // Find every failed or cancelled mission, reading bounded pages explicitly (before any retry is created).
+            List<Mission> failed = new List<Mission>();
+            foreach (MissionStatusEnum status in new[] { MissionStatusEnum.Failed, MissionStatusEnum.Cancelled })
             {
-                AnsiConsole.MarkupLine("[red]Failed to fetch missions.[/]");
-                return 1;
-            }
+                for (int pageNumber = 1; ; pageNumber++)
+                {
+                    EnumerationResult<Mission>? page = await GetAsync<EnumerationResult<Mission>>($"/api/v1/missions?voyageId={voyage.Id}&status={status}&pageNumber={pageNumber}&pageSize=100&order=CreatedAscending").ConfigureAwait(false);
+                    if (page == null)
+                    {
+                        HelmConsole.Error.MarkupLine("[red]Failed to fetch missions.[/]");
+                        return 1;
+                    }
 
-            List<Mission> failed = missions.FindAll(m =>
-                m.Status == MissionStatusEnum.Failed || m.Status == MissionStatusEnum.Cancelled);
+                    failed.AddRange(page.Objects);
+                    if (page.Objects.Count == 0 || pageNumber >= page.TotalPages) break;
+                }
+            }
 
             if (failed.Count == 0)
             {

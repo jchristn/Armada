@@ -12,9 +12,9 @@
 #
 # Usage:
 #   run-db-parity-tests.sh [--providers sqlite,postgresql,mysql,sqlserver]
-#                          [--framework net10.0] [--no-build]
+#                          [--framework net10.0] [--no-build] [--suites Database]
 #
-# Requirements: docker, dotnet. Exits non-zero if any provider has a
+# Requirements: dotnet, and docker for any provider but sqlite. Exits non-zero if any provider has a
 # failing test.
 # =====================================================================
 set -uo pipefail
@@ -25,16 +25,31 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 PROVIDERS="sqlite,postgresql,mysql,sqlserver"
 FRAMEWORK="net10.0"
 DO_BUILD=1
+SUITES="Database"
+
+# need_value <flag> <value...>: a flag that takes a value must have one.
+need_value() { if [ "$#" -lt 2 ] || [ -z "$2" ]; then echo "Missing value after $1" >&2; exit 2; fi; }
 
 while [ $# -gt 0 ]; do
   case "$1" in
-    --providers) PROVIDERS="$2"; shift 2 ;;
-    --framework) FRAMEWORK="$2"; shift 2 ;;
+    --providers) need_value "$@"; PROVIDERS="$2"; shift 2 ;;
+    --framework) need_value "$@"; FRAMEWORK="$2"; shift 2 ;;
     --no-build) DO_BUILD=0; shift ;;
+    --suites) need_value "$@"; SUITES="$2"; shift 2 ;;
     -h|--help) grep '^#' "$0" | grep -v '^#!' | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "Unknown argument: $1" >&2; exit 2 ;;
   esac
 done
+
+command -v dotnet >/dev/null 2>&1 || { echo "dotnet was not found on PATH. Install the .NET SDK: https://dotnet.microsoft.com/download" >&2; exit 1; }
+# Native-library checks (ICU, Avalonia, clipboard); they do nothing where there is no ldconfig (macOS).
+# shellcheck source=scripts/common/native-libs.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/native-libs.sh"
+native_check_icu
+if [ "$(echo "$PROVIDERS" | tr '[:upper:]' '[:lower:]' | tr -d ' ')" != "sqlite" ]; then
+  command -v docker >/dev/null 2>&1 || { echo "docker was not found on PATH; it runs the server providers. Install Docker or pass --providers sqlite." >&2; exit 1; }
+  docker info >/dev/null 2>&1 || { echo "The Docker engine is not reachable. Start Docker or pass --providers sqlite." >&2; exit 1; }
+fi
 
 MYSQL_IMAGE="${ARMADA_MYSQL_IMAGE:-mysql:8.4}"
 POSTGRES_IMAGE="${ARMADA_POSTGRES_IMAGE:-postgres:17-alpine}"
@@ -61,7 +76,7 @@ run_suite() {
   local label="$1"; shift
   local out="${RESULT_DIR}/${label}.txt"
   ( cd "$REPO_ROOT" && dotnet run --project "$TEST_PROJECT" --framework "$FRAMEWORK" -p:TargetFramework="$FRAMEWORK" -p:TargetFrameworks="$FRAMEWORK" -c Debug ${DOTNET_NO_BUILD} -- \
-      --suites Database "$@" ) > "$out" 2>&1
+      --suites "$SUITES" "$@" ) > "$out" 2>&1
   local code=$?
   local total
   total="$(grep -E '^Total:' "$out" | tail -1)"
@@ -96,8 +111,7 @@ start_container() {
 # container is no longer running (for example it exited on a bad configuration).
 wait_ready() {
   local name="$1"; shift
-  local i
-  for i in $(seq 1 90); do
+  for _ in $(seq 1 90); do
     if docker exec "$name" "$@" >/dev/null 2>&1; then return 0; fi
     if [ "$(docker inspect -f '{{.State.Running}}' "$name" 2>/dev/null)" != "true" ]; then
       echo "  ${name}: container stopped before it became ready; last log lines:"

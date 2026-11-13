@@ -2,6 +2,41 @@
 
 This document explains how Armada decides which mission to assign to which captain and in what order.
 
+## Vessel admission limits
+
+`MaxParallelVoyages` limits admitted voyage groups on a vessel (new vessel default 1). `MaxParallelMissionsPerVoyage` limits Assigned/InProgress missions within each group (default 4). Zero removes that cap; negative inputs become 1 and values above 1000 become 1000. Each independent standalone mission counts as a group; its dependent pipeline stages share the group.
+
+A voyage retains admission through verification, review and landing and between its stages, until terminal or all its missions settle. Failed landings and blocked work alone do not retain admission. Post-agent states do not consume a running mission slot. Lowering limits prevents new admissions and leaves existing work running. Global, runtime, endpoint, eligibility, broad-scope and branch-safety gates still apply. Vessels upgraded from v1.2 get 1/1 or 0/0 from the removed `AllowConcurrentMissions` flag (false or true), so they schedule as before; see [UPGRADING.md](UPGRADING.md).
+
+Vessel admission checks serialize per vessel, followed by a shared capacity lock protecting cross-vessel global/runtime/endpoint/captain checks and claims. Locks are always acquired in that order, both waits use `Concurrency.AdmissionLockTimeoutSeconds`, and timed-out requests retry on the next cycle. Idle vessel-lock entries are removed. The check/claim boundary releases both locks before worktree provisioning or agent launch. Admission reads only scheduling metadata, not historical outputs or diffs. Each captain admits up to `MaxConcurrency` missions, bounded by the configured server ceiling. Defaults are 1 for CLI runtimes and 4 for ApiEndpoint/Mux. Each mission holds its own dock and process; cancellation, completion or recovery affects that mission. Planning/refinement/analysis remain exclusive. A mission in verification, review or landing no longer holds a captain slot; its recovery record is kept so a restart can still finish the check. See [end-to-end testing](CONCURRENCY_TESTING.md).
+
+## Capacity
+
+A mission runs only when every limit between it and a captain has room. The number of missions that can run at once is the smallest of:
+
+| Limit | Where it is set | Default | Counts |
+|---|---|---|---|
+| Voyage slots | Vessel `MaxParallelVoyages` | 1 | Voyages (or standalone missions) admitted on the vessel |
+| Missions per voyage | Vessel `MaxParallelMissionsPerVoyage` | 4 | Assigned and InProgress missions of one voyage |
+| Captain slots | Captain `MaxConcurrency` (capped by `Concurrency.MaxCaptainConcurrency`, 256) | 1 for CLI runtimes, 4 for ApiEndpoint and Mux | Running missions on that captain |
+| Endpoint cap | Model endpoint inference options `MaxConcurrentMissions` | unset (unlimited) | Running missions on every captain that uses the endpoint |
+| Runtime cap | `Agents` runtime `MaxConcurrent` | 0 (unlimited) | Running missions of that runtime |
+| Global cap | `MaxConcurrentMissions` | 0 (unlimited) | Running missions in the deployment |
+
+Zero means unlimited for every limit except captain slots, which are at least 1. The endpoint, runtime and global caps count missions, not captains, so one endpoint captain with four slots uses four units of an endpoint cap.
+
+**Worked example.** A vessel at the defaults (1 voyage, 4 missions per voyage) runs one voyage with up to four missions at a time. Four Claude Code workers need four Claude Code captains, because a CLI captain runs one harness process and so one mission. One ApiEndpoint or Mux captain at `MaxConcurrency` 4 covers the same four missions. With two Claude Code captains the voyage runs two missions at a time and the others wait with `CaptainConcurrencyLimit`.
+
+**Pipelines.** Each running stage holds a captain slot while its agent runs. Stages after the agent (verification, review, landing) hold the voyage slot but no captain slot and no per-voyage mission slot.
+
+**Hierarchy.** A child mission starts after its parent's last stage finishes (`ParentNotFinished` until then). Siblings at the same level run in parallel within the per-voyage limit. See [PIPELINES.md](PIPELINES.md#mission-hierarchy).
+
+**Gate order.** Admission checks a Pending mission in this order and reports the first gate that holds it: launch backoff and voyage state, parent, dependency, integration barrier, broad scope, vessel voyage slot, per-voyage mission slot, branch in use, global cap, captain selection (eligible captains with a free slot, then the runtime and endpoint caps), and placement. Structural gates come first, so a mission waiting on its parent never reports a capacity reason. Among captains with free slots, the requested captain wins, then routing preferences, then the captain with the fewest active missions, so work spreads across captains.
+
+**Reading the advice.** Every capacity blocker carries advice built from the numbers that held the mission: the holding voyage and what it waits for, and the smallest change that admits this mission (for example "Raise Max parallel voyages on Armada from 1 to 2"). For CLI captains the advice is to add a captain, never to raise `MaxConcurrency`. Callers who cannot change the setting see the text without the action.
+
+**Live view.** `GET /api/v1/vessels/{id}/concurrency` (MCP `vessel_concurrency`) returns the slots in use, the holding voyages, waiting missions and slot wait over 24 hours and 7 days; `GET /api/v1/voyages/{id}/tree` (MCP `voyage_tree`) returns the voyage's logical missions. The dashboard, TUI and Mobile show both on the vessel and voyage pages.
+
 ## Ordered captain priorities
 
 Personas can define `captainPriorities`, an ordered list of runtime/model/endpoint/minimum-tier matchers. Every supplied field in an entry must match. `priorityAvailability` chooses `FallThrough` or `WaitForFirstPriority`; `priorityExhaustion` chooses `Wait` or `UseEligibleCaptain`. The first-priority wait policy never uses lower entries or general fallback. Empty lists retain legacy default-captain behavior.
@@ -44,13 +79,13 @@ Ordering only decides which mission is *tried* first. A mission that cannot be a
 
 ## Captain Assignment
 
-Armada tries to assign a mission as soon as it is created. When a captain finishes a mission, the Admiral immediately offers the freed captain the highest-priority pending mission, and every heartbeat cycle it walks the full pending queue (in priority, then creation order) and tries each mission against the idle captains.
+Armada tries to assign a mission as soon as it is created. When a mission frees a captain slot, the Admiral immediately offers it to the highest-priority pending mission, and every heartbeat cycle it walks the full pending queue (in priority, then creation order) and tries each mission against the captains with a free slot.
 
-Assignment uses an atomic **TryClaim** operation on the captain to prevent race conditions when two assignments find the same idle captain at once. Only one assignment can claim a given captain; if the claim fails, the mission is reverted to `Pending` and retried on a later cycle.
+Assignment claims a captain slot atomically, together with the mission's move to Assigned, so two assignments can never take the same last slot. If the claim fails, the mission stays `Pending` and is retried on a later cycle. Admission takes the vessel's lock and then a shared capacity lock, always in that order, and releases both before the dock is provisioned and the agent launched.
 
 ### What Happens When All Captains Are Busy
 
-Missions stay in the `Pending` state until a captain finishes its current work and becomes idle. No missions are lost or dropped -- they simply wait in the queue. Two optional settings can also hold new launches back: `MaxConcurrentMissions` (default 0, unlimited) caps how many captains may be working at once, and `MinAvailableMemoryBytesForLaunch` (default 0, disabled) defers launches while the host is short on memory.
+Missions stay `Pending` until a captain slot frees. No missions are lost or dropped; they wait in the queue. Two optional settings can also hold new launches back: `MaxConcurrentMissions` (default 0, unlimited) caps how many missions run at once across the deployment, and `MinAvailableMemoryBytesForLaunch` (default 0, disabled) defers launches while the host is short on memory. How long missions wait, and on which gate, is recorded per mission (`GET /api/v1/missions/{id}/waits`) and in the `armada.concurrency` metrics; see [TELEMETRY.md](TELEMETRY.md).
 
 ### Why a Mission Is Waiting
 
@@ -66,10 +101,31 @@ Every `Pending` mission carries a server-computed **assignment blocker** (`Assig
 | `WaitingForVoyageWorkers` | The architect sequenced this mission after the voyage's other implementation missions, which are still running. |
 | `VesselBroadScopeMissionActive` | A broad-scope mission is running on the vessel and holds it exclusively. |
 | `BroadScopeWaitingForVessel` | This mission is broad scope and waits until the vessel has no active missions. |
-| `VesselConcurrencyLimit` | The vessel runs one mission at a time (`AllowConcurrentMissions` is off) and another mission is active. |
+| `VesselVoyageLimit` | All vessel voyage slots are occupied. An admitted voyage retains its slot through review and landing; each standalone mission counts as a voyage. |
+| `VoyageMissionLimit` | The voyage has reached its running mission limit. Assigned and InProgress consume slots; post-agent states do not. |
+| `GlobalMissionLimit` | The deployment-wide running mission cap has been reached. |
+| `VesselConcurrencyLimit` | Legacy stored reason from older releases. |
 | `NoCaptains` | No captains exist. |
-| `NoIdleCaptain` | Every captain is busy (working, planning, refining, quarantined, stalled, or stopping). |
+| `NoIdleCaptain` | Every captain is in a state that takes no new work (planning, refining, analyzing, quarantined, stalled, or stopping). |
 | `NoEligibleCaptain` | Idle captains exist, but none may take this mission's persona or required tier. |
+| `CaptainConcurrencyLimit` | Eligible captains exist, but every one of them is running `MaxConcurrency` missions. |
+| `RuntimeMissionLimit` | The runtime's `MaxConcurrent` cap is reached by running missions. |
+| `EndpointMissionLimit` | The model endpoint's `MaxConcurrentMissions` cap is reached by running missions. |
+| `EndpointUnavailable` | An eligible model endpoint is disabled, unhealthy or temporarily circuit-broken. |
+| `ParentNotFinished` | The mission's parent has not finished its last stage. This is not a capacity wait. |
+| `BranchInUse` | Another active mission is working on the branch this mission continues. |
+| `LaunchFailing` | The captain could not be started on the host the mission was placed on; the next attempt is shown as "Automatic retry". |
+| `PlacementWaiting` | A captain is free, but no host can take the mission's dock yet (for example Require Harbor is on and no Harbor is connected). |
+
+## Deadlocks and starvation
+
+- **Mission and captain slots cannot deadlock.** A slot is claimed together with the move to Assigned; Pending missions hold nothing, and a running mission waits on nothing else in Armada.
+- **Voyage slots are held, but not in a cycle.** An admitted voyage keeps its slot while its next stage waits for a captain. That wait is only on captain or global capacity, which running missions release, and those missions never wait on the voyage's slot.
+- **Starvation is possible and visible.** A voyage waiting for human review keeps its slot. The blocker names the holding voyage and what it waits for, a `mission.starving` event and the `armada.missions.starving` gauge fire after `Concurrency.StarvationWarningMinutes` (60), and LandingFailed or Blocked missions do not keep a voyage's slot, so a stuck landing does not hold the vessel.
+- **Fairness considers eligible missions only.** A Pending integration mission or a child waiting for its parent never blocks a sibling that could run, even at one mission per voyage.
+- **Broad scope** waits for the vessel to have no running missions; a voyage that holds a slot without running anything does not block it.
+- **Lowering a limit** stops new admissions until running work falls under it; nothing is stopped. The invariant monitor reports the temporary overrun with `cause=limit_lowered`.
+- **Lock timeouts.** An admission that cannot take a lock within `Concurrency.AdmissionLockTimeoutSeconds` (30) returns and retries on the next cycle, counted in `armada.admission.lock_timeouts`. A mission eligible with every gate open for more than two ticks is counted in `armada.admission.stuck`.
 
 ## Heartbeat Cycle
 
@@ -162,3 +218,5 @@ When the captains free up, assignment proceeds as follows:
 3. When a captain finishes, the next pickup is "Add rate limiting" (priority 100, created before "Add integration tests").
 4. Then "Add integration tests" (priority 100, created last of the three).
 5. Finally "Fix typos in docs" (priority 200 -- lowest priority, assigned last).
+
+Equivalent captains are selected by occupied slots, then earliest idle/update time and stable ID, after persona/tier preferences. Explicit captain selection and persona priority ordering take precedence. Priority-class ties retain stable ID order after occupied slots.

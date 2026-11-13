@@ -8,6 +8,7 @@ namespace Armada.Harbor
     using Armada.Core.Enums;
     using Armada.Core.Hosting;
     using Avalonia;
+    using Avalonia.Automation;
     using Avalonia.Controls;
     using Avalonia.Layout;
     using Avalonia.Media;
@@ -116,11 +117,13 @@ namespace Armada.Harbor
             AddField(form, "Planning abandonment timeout (minutes)", _PlanningAbandonMinutes, "0 turns abandonment cleanup off.", "Minutes after which a planning session whose captain process is no longer running is reclaimed, even when the inactivity timeout is off. 0 turns this cleanup off.");
             AddField(form, "Planning session retention (days)", _PlanningRetentionDays, "0 keeps stopped and failed sessions.", "Days to keep stopped and failed planning sessions before they are deleted. 0 keeps them forever.");
             AddField(form, "Landing mode", _LandingMode, "Default for completed missions; vessels and voyages can override it.", "What happens to a completed mission's branch by default: LocalMerge merges it into the vessel's working directory, MergeAndPush also pushes, PullRequest opens a pull request, MergeQueue tests it in the merge queue first, and None leaves the branch for you. A vessel or voyage can override this.");
-            AddField(form, "Admiral port", _AdmiralPort, "Takes effect after a restart; Harbor's link URL must follow it.", "TCP port the Admiral's REST API and dashboard listen on. Changes take effect after the Admiral restarts; update Harbor's Admiral address to match.");
+            AddField(form, "Admiral port", _AdmiralPort, "Takes effect after a restart; Harbor's Admiral address must follow it.", "TCP port the Admiral's REST API and dashboard listen on. Changes take effect after the Admiral restarts; update Harbor's Admiral address to match.");
             AddField(form, "MCP port", _McpPort, "Takes effect after a restart.", "TCP port the Admiral's MCP server listens on, used by captains and MCP clients. Changes take effect after the Admiral restarts; update MCP client configurations to match.");
             StackPanel buttons = HarborUi.ButtonRow();
             Button apply = HarborUi.Button("Apply", () => _ = ApplyLiveAsync(), "Send these values to the Admiral. Most take effect at once; the ports take effect after the Admiral restarts.");
             apply.Classes.Add("accent");
+            // Nothing to apply until the Admiral's current values are loaded; the inputs and Apply enable together.
+            _LiveInputs.Add(apply);
             buttons.Children.Add(apply);
             buttons.Children.Add(HarborUi.Button("Reload", () => _ = LoadLiveAsync(), "Read the values from the Admiral again"));
             buttons.Children.Add(RestartButton());
@@ -148,6 +151,7 @@ namespace Armada.Harbor
 
             Grid.SetRow(labelBlock, row);
             form.Children.Add(labelBlock);
+            AutomationProperties.SetName(input, label);
 
             // Help sits to the right of the input (the inputs are narrow), one row per setting.
             Grid cell = new Grid { ColumnDefinitions = new ColumnDefinitions("170,*"), ColumnSpacing = 14 };
@@ -356,7 +360,7 @@ namespace Armada.Harbor
                         }
                         catch (ArmadaApiException ex)
                         {
-                            _Privilege = AdminPrivilegeCheck.FromError(ex.StatusCode, ex.Message);
+                            _Privilege = AdminPrivilegeCheck.FromError(ex.StatusCode, HarborUi.ApiErrorDetail(ex));
                         }
                     }
                 }
@@ -464,7 +468,7 @@ namespace Armada.Harbor
                     : "Not authorized. Set an admin access key (an Armada credential) in Settings > General.";
             }
 
-            if (ex.StatusCode == 0) return "Could not reach the Admiral at " + _Session.RestBaseUrl + ": " + ex.Message;
+            if (ex.StatusCode == 0) return "Could not reach the Admiral at " + _Session.RestBaseUrl + ": " + HarborUi.ApiErrorDetail(ex);
             return "The Admiral answered " + ex.StatusCode + ": " + ex.Message;
         }
 

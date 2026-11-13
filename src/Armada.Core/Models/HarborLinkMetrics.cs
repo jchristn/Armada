@@ -2,6 +2,8 @@ namespace Armada.Core.Models
 {
     using System;
     using System.Collections.Generic;
+    using Armada.Core.Metrics;
+    using Armada.Core.Services;
 
     /// <summary>
     /// Health of a Harbor's link over a metrics window: a timeline of connected, reconnecting, and down stretches, and the heartbeat round-trip times the Harbor reported.
@@ -13,11 +15,25 @@ namespace Armada.Core.Models
         /// <summary>
         /// Contiguous stretches covering the window up to now, oldest first.
         /// </summary>
+        [CollectionBound(HarborMetricsRanges.MaxLinkSegments, Reason = "Above the limit the timeline is coalesced to bucket resolution (SegmentsCoalesced)")]
         public List<HarborLinkSegment> Segments { get; set; } = new List<HarborLinkSegment>();
+
+        /// <summary>
+        /// True when the window had more than <see cref="HarborMetricsRanges.MaxLinkSegments"/> link-state stretches, so
+        /// <see cref="Segments"/> shows each bucket's dominant state instead (adjacent equal buckets merged).
+        /// ConnectedPercent is still computed from every stretch.
+        /// </summary>
+        public bool SegmentsCoalesced { get; set; } = false;
+
+        /// <summary>
+        /// Link-state stretches in the window before any coalescing.
+        /// </summary>
+        public int RawSegmentCount { get; set; } = 0;
 
         /// <summary>
         /// Round-trip times per bucket, oldest first.
         /// </summary>
+        [CollectionBound(HarborMetricsRanges.MaxBucketCount, Reason = "One per window bucket; the fixed ranges produce at most 60")]
         public List<HarborRoundTripBucket> RoundTrip { get; set; } = new List<HarborRoundTripBucket>();
 
         /// <summary>

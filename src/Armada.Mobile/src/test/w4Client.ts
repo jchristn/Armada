@@ -16,5 +16,6 @@ export function autoMockClient(): Record<string, unknown> {
   out.configureClient = jest.fn();
   out.setAuthToken = jest.fn();
   out.setOnUnauthorized = jest.fn();
+  (jest.requireActual('./pagedBridges') as { addPagedBridges: (m: Record<string, unknown>) => void }).addPagedBridges(out);
   return out;
 }

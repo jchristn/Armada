@@ -17,7 +17,7 @@ namespace Armada.Helm.Commands
         /// Optional fleet filter.
         /// </summary>
         [Description("Filter by fleet name or ID")]
-        [CommandOption("--fleet|-f")]
+        [CommandOption("--fleet|-f <FLEET>")]
         public string? Fleet { get; set; }
     }
 }

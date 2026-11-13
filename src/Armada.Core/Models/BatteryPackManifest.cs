@@ -1,6 +1,7 @@
 namespace Armada.Core.Models
 {
     using System.Collections.Generic;
+    using Armada.Core.Services;
 
     /// <summary>
     /// A battery pack manifest (battery-pack.json): the fixture, the tasks, the persona each task tests, how each
@@ -49,6 +50,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// Tools the Harbor needs for the pack's command-graded tasks.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxConfigItems)]
         public List<BatteryToolchainRequirement> Toolchain
         {
             get => _Toolchain;
@@ -63,6 +65,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// Tasks, in run order.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxConfigItems)]
         public List<BatteryTaskDefinition> Tasks
         {
             get => _Tasks;

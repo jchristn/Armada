@@ -101,12 +101,11 @@ namespace Armada.Server.Mcp.Tools
 
             register(
                 "run_fleet_action",
-                "Start a fleet action run over vessels. Pass actionId to run a saved action, or the inline definition fields (name, kind, commandText or promptTemplate) for an ad hoc run. Every vessel must be in the caller's tenant or the whole request is rejected. Returns the run id; poll fleet_action_run_status.",
+                "Start a fleet action run over vessels. Pass actionId to run a saved action, or the inline definition fields (name, kind, commandText or promptTemplate) for an ad hoc run. Pass vesselIds, or fromRunId to follow up on an earlier run (for example run a fix action only on the vessels where a scan found something). Every vessel must be in the caller's tenant or the whole request is rejected. Returns the run id; poll fleet_action_run_status.",
                 new
                 {
                     type = "object",
                     properties = RunProperties(),
-                    required = new[] { "vesselIds" }
                 },
                 async (args) =>
                 {
@@ -121,7 +120,9 @@ namespace Armada.Server.Mcp.Tools
                         {
                             VesselIds = request.VesselIds ?? new List<string>(),
                             Concurrency = request.Concurrency,
-                            InputValues = request.InputValues ?? new()
+                            InputValues = request.InputValues ?? new(),
+                            FromRunId = request.FromRunId,
+                            FromTargetStatuses = ParseTargetStatuses(request.FromTargetStatuses)
                         };
 
                         if (String.IsNullOrWhiteSpace(request.ActionId))
@@ -147,7 +148,7 @@ namespace Armada.Server.Mcp.Tools
 
             register(
                 "fleet_action_run_status",
-                "Get a fleet action run with per-target summaries (status, skip/failure reason codes, exit code, voyage id, output length hints). Output text is not included.",
+                "Get a fleet action run with its target counts (succeeded, failed, skipped, cancelled). Targets are not embedded: page them with enumerate (entityType fleet_action_run_target, runId, pageNumber, pageSize, optional status) for per-target status, reason codes, exit code, voyage id and output length hints.",
                 new
                 {
                     type = "object",
@@ -219,6 +220,10 @@ namespace Armada.Server.Mcp.Tools
             {
                 return new McpToolError(McpToolErrorCodeEnum.NotFound, e.Message) { StatusCode = 404 };
             }
+            catch (CollectionLimitExceededException e)
+            {
+                return McpToolError.FromException(e);
+            }
             catch (FleetActionTemplateException e)
             {
                 return new McpToolError(McpToolErrorCodeEnum.InvalidArgument, e.Message, FleetActionTemplateErrorDetail.UnknownTemplateVariableCode) { StatusCode = 400 };
@@ -233,6 +238,20 @@ namespace Armada.Server.Mcp.Tools
             }
         }
 
+        private static List<FleetActionTargetStatusEnum>? ParseTargetStatuses(List<string>? values)
+        {
+            if (values == null) return null;
+            List<FleetActionTargetStatusEnum> statuses = new List<FleetActionTargetStatusEnum>();
+            foreach (string value in values)
+            {
+                if (!Enum.TryParse(value, true, out FleetActionTargetStatusEnum status))
+                    throw new ArgumentException("Unknown target status: " + value + ".");
+                statuses.Add(status);
+            }
+
+            return statuses;
+        }
+
         private static FleetActionUpsertRequest ToUpsertRequest(FleetActionUpsertArgs args)
         {
             FleetActionKindEnum? kind = null;
@@ -241,6 +260,14 @@ namespace Armada.Server.Mcp.Tools
                 if (!Enum.TryParse(args.Kind, true, out FleetActionKindEnum parsed))
                     throw new ArgumentException("Unknown kind: " + args.Kind + ". Use Command or Mission.");
                 kind = parsed;
+            }
+
+            MissionModeEnum? missionMode = null;
+            if (!String.IsNullOrWhiteSpace(args.MissionMode))
+            {
+                if (!Enum.TryParse(args.MissionMode, true, out MissionModeEnum parsedMode))
+                    throw new ArgumentException("Unknown missionMode: " + args.MissionMode + ". Use Implementation, Audit, or Research.");
+                missionMode = parsedMode;
             }
 
             return new FleetActionUpsertRequest
@@ -252,6 +279,9 @@ namespace Armada.Server.Mcp.Tools
                 CommandWindows = args.CommandWindows,
                 OutputParser = args.OutputParser,
                 ScanSourceActionKey = args.ScanSourceActionKey,
+                ApplicabilityCommand = args.ApplicabilityCommand,
+                ApplicabilityCommandWindows = args.ApplicabilityCommandWindows,
+                MissionMode = missionMode,
                 RequiredTools = args.RequiredTools,
                 RequiresNetwork = args.RequiresNetwork,
                 Inputs = args.Inputs,
@@ -277,10 +307,13 @@ namespace Armada.Server.Mcp.Tools
                     commandWindows = new { type = "string", description = "Optional Windows shell command" },
                 outputParser = new { type = "string", description = "Registered output parser ID" },
                 scanSourceActionKey = new { type = "string", description = "Source scan action key or ID for scan.summary" },
+                applicabilityCommand = new { type = "string", description = "Optional shell check run in each working directory first; a non-zero exit skips the vessel (NotApplicable). Requires tenant admin." },
+                applicabilityCommandWindows = new { type = "string", description = "Optional Windows (PowerShell) applicability check" },
+                missionMode = new { type = "string", @enum = new[] { "Implementation", "Audit", "Research" }, description = "Mission kind: Audit and Research are report-only (read-only, Worker-only, nothing lands; the report is the target output)" },
                 requiredTools = new { type = "array", items = new { type = "string" } },
                 requiresNetwork = new { type = "boolean" },
                 inputs = new { type = "array", items = new { type = "object", properties = new {
-                    name = new { type = "string" }, type = new { type = "string", @enum = new[] { "string", "semver", "enum" } },
+                    name = new { type = "string" }, type = new { type = "string", @enum = new[] { "string", "semver", "enum", "package" } },
                     required = new { type = "boolean" }, @default = new { type = "string" },
                     allowedValues = new { type = "array", items = new { type = "string" } }, description = new { type = "string" }
                 }, required = new[] { "name", "type" } } },
@@ -302,10 +335,13 @@ namespace Armada.Server.Mcp.Tools
                 commandWindows = new { type = "string", description = "Optional Windows shell command" },
                 outputParser = new { type = "string", description = "Registered output parser ID" },
                 scanSourceActionKey = new { type = "string", description = "Source scan action key or ID for scan.summary" },
+                applicabilityCommand = new { type = "string", description = "Optional shell check run in each working directory first; a non-zero exit skips the vessel (NotApplicable). Requires tenant admin." },
+                applicabilityCommandWindows = new { type = "string", description = "Optional Windows (PowerShell) applicability check" },
+                missionMode = new { type = "string", @enum = new[] { "Implementation", "Audit", "Research" }, description = "Mission kind: Audit and Research are report-only (read-only, Worker-only, nothing lands; the report is the target output)" },
                 requiredTools = new { type = "array", items = new { type = "string" } },
                 requiresNetwork = new { type = "boolean" },
                 inputs = new { type = "array", items = new { type = "object", properties = new {
-                    name = new { type = "string" }, type = new { type = "string", @enum = new[] { "string", "semver", "enum" } },
+                    name = new { type = "string" }, type = new { type = "string", @enum = new[] { "string", "semver", "enum", "package" } },
                     required = new { type = "boolean" }, @default = new { type = "string" },
                     allowedValues = new { type = "array", items = new { type = "string" } }, description = new { type = "string" }
                 }, required = new[] { "name", "type" } } },
@@ -327,7 +363,9 @@ namespace Armada.Server.Mcp.Tools
                     approveAll = new { type = "boolean" }, timeoutSeconds = new { type = "integer", minimum = 10, maximum = 3600 }, timeoutDecision = new { type = "string", @enum = new[] { "Deny", "Approve" } }
                 } },
                 actionId = new { type = "string", description = "Saved fleet action ID (fac_ prefix). Omit for an ad hoc run." },
-                vesselIds = new { type = "array", items = new { type = "string" }, description = "Target vessel IDs (vsl_ prefix), 1-500" },
+                vesselIds = new { type = "array", items = new { type = "string" }, description = "Target vessel IDs (vsl_ prefix), 1-500. Omit when fromRunId is set." },
+                fromRunId = new { type = "string", description = "Follow-up run: target the vessels of this earlier run (far_ prefix) whose status is in fromTargetStatuses, for example a fix action after a scan" },
+                fromTargetStatuses = new { type = "array", items = new { type = "string", @enum = new[] { "Findings", "Failed", "Succeeded", "Skipped", "TimedOut", "Cancelled" } }, description = "Statuses selected from fromRunId (default Findings and Failed)" },
                 inputValues = new { type = "object", additionalProperties = new { type = "string" }, description = "Runtime values keyed by declared input name" },
                 concurrency = new { type = "integer", description = "Concurrency for this run (1-32); defaults to the action's default" },
                 name = new { type = "string", description = "Ad hoc: display name" },
@@ -335,10 +373,13 @@ namespace Armada.Server.Mcp.Tools
                 commandWindows = new { type = "string", description = "Optional Windows shell command" },
                 outputParser = new { type = "string", description = "Registered output parser ID" },
                 scanSourceActionKey = new { type = "string", description = "Source scan action key or ID for scan.summary" },
+                applicabilityCommand = new { type = "string", description = "Optional shell check run in each working directory first; a non-zero exit skips the vessel (NotApplicable). Requires tenant admin." },
+                applicabilityCommandWindows = new { type = "string", description = "Optional Windows (PowerShell) applicability check" },
+                missionMode = new { type = "string", @enum = new[] { "Implementation", "Audit", "Research" }, description = "Mission kind: Audit and Research are report-only (read-only, Worker-only, nothing lands; the report is the target output)" },
                 requiredTools = new { type = "array", items = new { type = "string" } },
                 requiresNetwork = new { type = "boolean" },
                 inputs = new { type = "array", items = new { type = "object", properties = new {
-                    name = new { type = "string" }, type = new { type = "string", @enum = new[] { "string", "semver", "enum" } },
+                    name = new { type = "string" }, type = new { type = "string", @enum = new[] { "string", "semver", "enum", "package" } },
                     required = new { type = "boolean" }, @default = new { type = "string" },
                     allowedValues = new { type = "array", items = new { type = "string" } }, description = new { type = "string" }
                 }, required = new[] { "name", "type" } } },

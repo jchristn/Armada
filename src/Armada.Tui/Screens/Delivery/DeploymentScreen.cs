@@ -13,6 +13,7 @@ namespace Armada.Tui.Screens.Delivery
     using Armada.Tui.Approvals;
     using Armada.Tui.Routing;
     using Armada.Tui.Screens.Entities;
+    using Armada.Tui.Screens.Kit;
     using Armada.Tui.Services;
     using Armada.Tui.Widgets;
 
@@ -349,7 +350,7 @@ namespace Armada.Tui.Screens.Delivery
             if (d == null) return;
             Context.Confirm("Delete Deployment", EntityUi.T(Context, "Delete \"{{title}}\"? This removes only the deployment record.", "title", d.Title), () =>
             {
-                EntityUi.Run(Context, ct => Context.Client.DeleteDeploymentAsync(d.Id, ct), () =>
+                DeleteProgress.RunVoid(Context, "Deleting deployment", ct => Context.Client.DeleteDeploymentAsync(d.Id, ct), () =>
                 {
                     EntityUi.Toast(Context, NotificationSeverityEnum.Warning, EntityUi.T(Context, "Deployment \"{{title}}\" deleted.", "title", d.Title));
                     Context.Navigate("/delivery?tab=deployments");

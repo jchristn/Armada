@@ -37,6 +37,7 @@ import StatusBadge from '../components/shared/StatusBadge';
 import { useAutoRefresh } from '../lib/useAutoRefresh';
 import { buildRunbookDuplicatePayload } from '../lib/duplicates';
 import { RUNBOOK_CHECK_TYPES } from '../lib/deliveryForms';
+import { useDeleteProgress } from '../lib/useDeleteProgress';
 
 interface RunbookPageState {
   prefillExecution?: Partial<RunbookExecutionStartRequest>;
@@ -48,6 +49,7 @@ export default function Runbooks() {
   const { isAdmin, isTenantAdmin, user } = useAuth();
   const viewer: ScopeViewer = { isAdmin, isTenantAdmin, tenantId: user?.user?.tenantId, userId: user?.user?.id };
   const { t, formatDateTime, formatRelativeTime } = useLocale();
+  const deletion = useDeleteProgress();
   const { pushToast } = useNotifications();
 
   const [runbooks, setRunbooks] = useState<Runbook[]>([]);
@@ -210,13 +212,9 @@ export default function Runbooks() {
       message: t('Delete "{{title}}"? This removes the runbook definition but does not touch deployments, incidents, or completed check runs.', { title: runbook.title }),
       onConfirm: async () => {
         setConfirm((current) => ({ ...current, open: false }));
-        try {
-          await deleteRunbook(runbook.id);
-          pushToast('warning', t('Runbook "{{title}}" deleted.', { title: runbook.title }));
-          await load();
-        } catch (err: unknown) {
-          setError(err instanceof Error ? err.message : t('Delete failed.'));
-        }
+        if (!(await deletion.run({ kind: 'runbook', action: () => deleteRunbook(runbook.id), errorMessage: (err) => err instanceof Error ? err.message : t('Delete failed.') }))) return;
+        pushToast('warning', t('Runbook "{{title}}" deleted.', { title: runbook.title }));
+        await load();
       },
     });
   }
@@ -356,6 +354,7 @@ export default function Runbooks() {
         }}
         editLabel={t('Open Details')}
       />
+      {deletion.dialog}
       <ConfirmDialog
         open={confirm.open}
         title={confirm.title}

@@ -13,7 +13,7 @@ namespace Armada.Core.Services
 
     /// <summary>
     /// Builds the operator's inbox: a single consolidated list of items across the fleet that require a
-    /// human's attention or action, ordered most-urgent first. Two kinds of item qualify:
+    /// human's attention or action, read one page at a time (see <see cref="EnumerateAsync"/>). Two kinds of item qualify:
     ///
     /// - Awaiting your decision (human-in-the-loop): a mission in Review, a deployment pending approval, or an
     ///   Ask Armada action proposal pending approval in one of your conversations.
@@ -91,89 +91,146 @@ namespace Armada.Core.Services
         #region Public-Methods
 
         /// <summary>
-        /// Build the inbox: actionable items ordered most-urgent first.
+        /// Kinds in the order the inbox lists them: decisions and critical failures first, then the other items. Within a
+        /// kind, items are newest first.
+        /// </summary>
+        public static readonly IReadOnlyList<string> KindOrder = new List<string>
+        {
+            InboxItemKinds.Review,
+            InboxItemKinds.LandingFailed,
+            InboxItemKinds.MergeFailed,
+            InboxItemKinds.DeploymentFailed,
+            InboxItemKinds.DeploymentApproval,
+            InboxItemKinds.AskProposal,
+            InboxItemKinds.CliPermission,
+            InboxItemKinds.Failed,
+            InboxItemKinds.StalledCaptain,
+            InboxItemKinds.SelectionBlocked,
+            InboxItemKinds.BackgroundJobFailed,
+            InboxItemKinds.ModelAlert
+        };
+
+        /// <summary>
+        /// Read one page of the inbox. Each kind is read from its own source one page at a time (missions, merge entries,
+        /// and deployments are paged and counted in the database under the caller's scope), and the kinds follow
+        /// <see cref="KindOrder"/>, newest first within a kind. TotalRecords is the exact count across kinds.
         /// </summary>
         /// <param name="auth">Caller authentication context, used to scope inbox items to the caller.</param>
+        /// <param name="query">Paging query (page number and size).</param>
         /// <param name="token">Cancellation token.</param>
-        /// <returns>The list of inbox items.</returns>
-        public async Task<List<InboxItem>> GetInboxAsync(AuthContext auth, CancellationToken token = default)
+        /// <returns>One page of inbox items.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when an argument is null.</exception>
+        public async Task<EnumerationResult<InboxItem>> EnumerateAsync(AuthContext auth, EnumerationQuery query, CancellationToken token = default)
         {
             if (auth == null) throw new ArgumentNullException(nameof(auth));
-            List<InboxItem> items = new List<InboxItem>();
+            if (query == null) throw new ArgumentNullException(nameof(query));
+            return await SectionedPaging.PageAsync(query, BuildSections(auth, null), token).ConfigureAwait(false);
+        }
 
-            try
+        /// <summary>
+        /// Count the caller's inbox items of the given kinds without reading them (each source is counted with a
+        /// one-row page).
+        /// </summary>
+        /// <param name="auth">Caller authentication context.</param>
+        /// <param name="kinds">Kinds to count (InboxItemKinds values).</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The count.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when an argument is null.</exception>
+        public async Task<long> CountAsync(AuthContext auth, IEnumerable<string> kinds, CancellationToken token = default)
+        {
+            if (auth == null) throw new ArgumentNullException(nameof(auth));
+            if (kinds == null) throw new ArgumentNullException(nameof(kinds));
+            EnumerationQuery probe = new EnumerationQuery { PageNumber = 1, PageSize = CollectionLimits.MinPageSize };
+            EnumerationResult<InboxItem> page = await SectionedPaging.PageAsync(probe, BuildSections(auth, new HashSet<string>(kinds, StringComparer.Ordinal)), token).ConfigureAwait(false);
+            return page.TotalRecords;
+        }
+
+        #endregion
+
+        #region Private-Methods
+
+        private List<PagedSection<InboxItem>> BuildSections(AuthContext auth, HashSet<string>? kinds)
+        {
+            List<PagedSection<InboxItem>> sections = new List<PagedSection<InboxItem>>();
+            foreach (string kind in KindOrder)
             {
-                List<Mission> reviews = await MissionsByStatusAsync(auth, MissionStatusEnum.Review, token).ConfigureAwait(false);
-                foreach (Mission mission in reviews)
+                if (kinds != null && !kinds.Contains(kind)) continue;
+                switch (kind)
                 {
-                    Voyage? approvalVoyage = String.IsNullOrEmpty(mission.VoyageId) ? null : await _Database.Voyages.ReadAsync(mission.VoyageId, token).ConfigureAwait(false);
-                    RunApprovalOptions? approvalOptions = approvalVoyage?.ApprovalOptions;
-                    bool overdue = mission.ReviewDeadlineUtc.HasValue && mission.ReviewDeadlineUtc.Value < DateTime.UtcNow;
-                    items.Add(new InboxItem
-                    {
-                        Kind = InboxItemKinds.Review,
-                        ExpiresUtc = approvalOptions == null ? null : mission.ReviewDeadlineUtc,
-                        TimeoutDecision = approvalOptions?.TimeoutDecision,
-                        Severity = overdue ? InboxSeverityEnum.Critical : InboxSeverityEnum.Warning,
-                        Title = "Review: " + mission.Title,
-                        EntityName = mission.Title,
-                        Detail = overdue ? "Review is overdue -- awaiting your approval." : "Awaiting your review.",
-                        EntityType = "mission",
-                        EntityId = mission.Id,
-                        Href = "/missions/" + mission.Id
-                    });
+                    case InboxItemKinds.Review:
+                        sections.Add(MissionSection(auth, kind, MissionStatusEnum.Review, ReviewItemAsync));
+                        break;
+                    case InboxItemKinds.LandingFailed:
+                        sections.Add(MissionSection(auth, kind, MissionStatusEnum.LandingFailed, (m, t) => Task.FromResult(LandingFailedItem(m))));
+                        break;
+                    case InboxItemKinds.Failed:
+                        // An operator's own stop needs no attention (older stops were recorded as Failed); left out in
+                        // the data source so the section's count stays exact.
+                        sections.Add(MissionSection(auth, kind, MissionStatusEnum.Failed, (m, t) => Task.FromResult(FailedItem(m)), MissionFailureKindEnum.OperatorAction));
+                        break;
+                    case InboxItemKinds.MergeFailed:
+                        sections.Add(MergeFailedSection(auth));
+                        break;
+                    case InboxItemKinds.DeploymentFailed:
+                        sections.Add(DeploymentSection(auth, kind, DeploymentStatusEnum.Failed));
+                        sections.Add(DeploymentSection(auth, kind, DeploymentStatusEnum.VerificationFailed));
+                        break;
+                    case InboxItemKinds.DeploymentApproval:
+                        sections.Add(DeploymentSection(auth, kind, DeploymentStatusEnum.PendingApproval));
+                        break;
+                    case InboxItemKinds.AskProposal:
+                        sections.Add(MemorySection(kind, async t => (await PendingAskProposalsAsync(auth, t).ConfigureAwait(false)).Select(AskProposalItem).ToList()));
+                        break;
+                    case InboxItemKinds.CliPermission:
+                        sections.Add(MemorySection(kind, async t => (await PendingCliPermissionsAsync(auth, t).ConfigureAwait(false)).Select(r => CliPermissionItem(auth, r)).ToList()));
+                        break;
+                    case InboxItemKinds.BackgroundJobFailed:
+                        sections.Add(BackgroundJobSection(auth));
+                        break;
+                    case InboxItemKinds.ModelAlert:
+                        sections.Add(ModelAlertSection(auth));
+                        break;
+                    case InboxItemKinds.SelectionBlocked:
+                        sections.Add(SelectionBlockedSection(auth));
+                        break;
+                    case InboxItemKinds.StalledCaptain:
+                        // Captains are a registered set (not operational rows that accumulate), so the stalled ones are read
+                        // together and paged here.
+                        sections.Add(MemorySection(kind, async t => (await CaptainsByStateAsync(auth, CaptainStateEnum.Stalled, t).ConfigureAwait(false))
+                            .OrderByDescending(c => c.LastUpdateUtc).ThenBy(c => c.Id, StringComparer.Ordinal).Select(StalledCaptainItem).ToList()));
+                        break;
                 }
+            }
 
-                List<Mission> landingFailed = await MissionsByStatusAsync(auth, MissionStatusEnum.LandingFailed, token).ConfigureAwait(false);
-                foreach (Mission mission in landingFailed)
-                {
-                    items.Add(new InboxItem
-                    {
-                        Kind = InboxItemKinds.LandingFailed,
-                        Severity = InboxSeverityEnum.Critical,
-                        Title = "Landing failed: " + mission.Title,
-                        EntityName = mission.Title,
-                        Detail = String.IsNullOrWhiteSpace(mission.FailureReason) ? "The work could not be landed." : mission.FailureReason!,
-                        EntityType = "mission",
-                        EntityId = mission.Id,
-                        Href = "/missions/" + mission.Id
-                    });
-                }
+            return sections;
+        }
 
-                List<Mission> failed = await MissionsByStatusAsync(auth, MissionStatusEnum.Failed, token).ConfigureAwait(false);
-                foreach (Mission mission in failed)
-                {
-                    items.Add(new InboxItem
-                    {
-                        Kind = InboxItemKinds.Failed,
-                        Severity = InboxSeverityEnum.Warning,
-                        Title = "Failed: " + mission.Title,
-                        EntityName = mission.Title,
-                        Detail = String.IsNullOrWhiteSpace(mission.FailureReason) ? "The mission failed." : mission.FailureReason!,
-                        EntityType = "mission",
-                        EntityId = mission.Id,
-                        Href = "/missions/" + mission.Id
-                    });
-                }
+        private PagedSection<InboxItem> MissionSection(AuthContext auth, string kind, MissionStatusEnum status, Func<Mission, CancellationToken, Task<InboxItem>> map, MissionFailureKindEnum? excludeFailureKind = null)
+        {
+            return Guarded(kind, async (pageNumber, pageSize, token) =>
+            {
+                EnumerationQuery query = new EnumerationQuery { PageNumber = pageNumber, PageSize = pageSize, Status = status.ToString(), ExcludeFailureKind = excludeFailureKind };
+                EnumerationResult<Mission> page = await EnumerationScope.EnumerateScopedAsync(auth, query,
+                    q => _Database.Missions.EnumerateAsync(q, token),
+                    (t, q) => _Database.Missions.EnumerateAsync(t, q, token),
+                    (t, u, q) => _Database.Missions.EnumerateAsync(t, u, q, token)).ConfigureAwait(false);
+                List<InboxItem> items = new List<InboxItem>();
+                foreach (Mission mission in page.Objects) items.Add(await map(mission, token).ConfigureAwait(false));
+                return EnumerationResult<InboxItem>.Create(query, items, page.TotalRecords);
+            });
+        }
 
-                List<Captain> stalled = await CaptainsByStateAsync(auth, CaptainStateEnum.Stalled, token).ConfigureAwait(false);
-                foreach (Captain captain in stalled)
-                {
-                    items.Add(new InboxItem
-                    {
-                        Kind = InboxItemKinds.StalledCaptain,
-                        Severity = InboxSeverityEnum.Warning,
-                        Title = "Stalled captain: " + captain.Name,
-                        EntityName = captain.Name,
-                        Detail = "This captain is stalled and may need recovery or a dock reclaim.",
-                        EntityType = "captain",
-                        EntityId = captain.Id,
-                        Href = "/captains/" + captain.Id
-                    });
-                }
-
-                List<MergeEntry> mergeFailed = await MergeEntriesByStatusAsync(auth, MergeStatusEnum.Failed, token).ConfigureAwait(false);
-                foreach (MergeEntry entry in mergeFailed)
+        private PagedSection<InboxItem> MergeFailedSection(AuthContext auth)
+        {
+            return Guarded(InboxItemKinds.MergeFailed, async (pageNumber, pageSize, token) =>
+            {
+                EnumerationQuery query = new EnumerationQuery { PageNumber = pageNumber, PageSize = pageSize, Status = MergeStatusEnum.Failed.ToString() };
+                EnumerationResult<MergeEntry> page = await EnumerationScope.EnumerateScopedAsync(auth, query,
+                    q => _Database.MergeEntries.EnumerateAsync(q, token),
+                    (t, q) => _Database.MergeEntries.EnumerateAsync(t, q, token),
+                    (t, u, q) => _Database.MergeEntries.EnumerateAsync(t, u, q, token)).ConfigureAwait(false);
+                List<InboxItem> items = new List<InboxItem>();
+                foreach (MergeEntry entry in page.Objects)
                 {
                     string? missionTitle = await MergeEntryMissionTitleAsync(entry, token).ConfigureAwait(false);
                     items.Add(new InboxItem
@@ -189,105 +246,297 @@ namespace Armada.Core.Services
                     });
                 }
 
-                List<Deployment> deployments = ScopeList(auth,
-                    await _Database.Deployments.EnumerateAllAsync(new DeploymentQuery(), token).ConfigureAwait(false),
-                    d => d.TenantId, d => d.UserId);
-
-                foreach (Deployment deployment in deployments.Where(d => d.Status == DeploymentStatusEnum.PendingApproval))
-                {
-                    items.Add(new InboxItem
-                    {
-                        Kind = InboxItemKinds.DeploymentApproval,
-                        Severity = InboxSeverityEnum.Warning,
-                        Title = DeploymentApprovalLabel.Format(deployment.EnvironmentName, deployment.Title, deployment.Id),
-                        EntityName = String.IsNullOrWhiteSpace(deployment.EnvironmentName) ? deployment.Id : deployment.EnvironmentName!,
-                        EnvironmentName = String.IsNullOrWhiteSpace(deployment.EnvironmentName) ? null : deployment.EnvironmentName,
-                        DeploymentTitle = String.IsNullOrWhiteSpace(deployment.Title) ? null : deployment.Title,
-                        Detail = "A deployment is waiting for your approval before it runs.",
-                        EntityType = "deployment",
-                        EntityId = deployment.Id,
-                        Href = "/deployments/" + deployment.Id
-                    });
-                }
-
-                foreach (Deployment deployment in deployments.Where(d => d.Status == DeploymentStatusEnum.Failed || d.Status == DeploymentStatusEnum.VerificationFailed))
-                {
-                    items.Add(new InboxItem
-                    {
-                        Kind = InboxItemKinds.DeploymentFailed,
-                        Severity = InboxSeverityEnum.Critical,
-                        Title = "Deployment failed: " + (String.IsNullOrWhiteSpace(deployment.EnvironmentName) ? deployment.Id : deployment.EnvironmentName!),
-                        EntityName = String.IsNullOrWhiteSpace(deployment.EnvironmentName) ? deployment.Id : deployment.EnvironmentName!,
-                        EnvironmentName = String.IsNullOrWhiteSpace(deployment.EnvironmentName) ? null : deployment.EnvironmentName,
-                        DeploymentTitle = String.IsNullOrWhiteSpace(deployment.Title) ? null : deployment.Title,
-                        Detail = deployment.Status == DeploymentStatusEnum.VerificationFailed
-                            ? "Deployment verification failed and needs attention."
-                            : "A deployment failed and needs attention.",
-                        EntityType = "deployment",
-                        EntityId = deployment.Id,
-                        Href = "/deployments/" + deployment.Id
-                    });
-                }
-
-                foreach (AskActionProposal proposal in await PendingAskProposalsAsync(auth, token).ConfigureAwait(false))
-                {
-                    string summary = String.IsNullOrWhiteSpace(proposal.SummaryText) ? proposal.ToolName : proposal.SummaryText;
-                    items.Add(new InboxItem
-                    {
-                        Kind = InboxItemKinds.AskProposal,
-                        Severity = InboxSeverityEnum.Warning,
-                        Title = "Ask approval: " + summary,
-                        EntityName = summary,
-                        Detail = "Armada proposed an action in an Ask conversation and is waiting for you to approve or reject it.",
-                        EntityType = "ask_proposal",
-                        EntityId = proposal.Id,
-                        Href = "/ask/" + proposal.ThreadId
-                    });
-                }
-
-                foreach (CliPermissionRequest request in await PendingCliPermissionsAsync(auth, token).ConfigureAwait(false))
-                {
-                    string where = !String.IsNullOrEmpty(request.MissionTitle) ? "mission " + request.MissionTitle
-                        : (!String.IsNullOrEmpty(request.ThreadId) ? "an Ask conversation" : "a captain session");
-                    bool ownThread = !String.IsNullOrEmpty(request.ThreadId) && String.Equals(request.UserId, auth.UserId, StringComparison.Ordinal);
-                    items.Add(new InboxItem
-                    {
-                        Kind = InboxItemKinds.CliPermission,
-                        Severity = InboxSeverityEnum.Warning,
-                        Title = "CLI permission: " + request.ToolName + " " + Clip(request.SummaryText, 120),
-                        EntityName = request.ToolName,
-                        Detail = (String.IsNullOrEmpty(request.CaptainName) ? "A captain" : "Captain " + request.CaptainName)
-                            + (String.IsNullOrEmpty(request.VesselName) ? "" : " on " + request.VesselName)
-                            + " (" + where + ") is waiting for permission to run " + request.ToolName + "."
-                            + (request.CanDecide ? "" : " An admin must decide it."),
-                        EntityType = "cli_permission_request",
-                        EntityId = request.Id,
-                        Href = ownThread ? "/ask/" + request.ThreadId : "/server?tab=cli-permissions&request=" + request.Id,
-                        CliPermission = request,
-                        ExpiresUtc = request.ExpiresUtc
-                    });
-                }
-            }
-            catch (Exception ex)
-            {
-                _Logging.Warn(_Header + "error building inbox: " + ex.ToString());
-            }
-
-            return items
-                .OrderByDescending(item => (int)item.Severity)
-                .ThenBy(item => item.Title, StringComparer.OrdinalIgnoreCase)
-                .ToList();
+                return EnumerationResult<InboxItem>.Create(query, items, page.TotalRecords);
+            });
         }
 
-        #endregion
-
-        #region Private-Methods
-
-        private async Task<List<Mission>> MissionsByStatusAsync(AuthContext auth, MissionStatusEnum status, CancellationToken token)
+        private PagedSection<InboxItem> DeploymentSection(AuthContext auth, string kind, DeploymentStatusEnum status)
         {
-            if (auth.IsAdmin) return await _Database.Missions.EnumerateByStatusAsync(status, token).ConfigureAwait(false);
-            List<Mission> list = await _Database.Missions.EnumerateByStatusAsync(auth.TenantId!, status, token).ConfigureAwait(false);
-            return auth.IsTenantAdmin ? list : list.Where(m => String.Equals(m.UserId, auth.UserId, StringComparison.Ordinal)).ToList();
+            return Guarded(kind + ":" + status, async (pageNumber, pageSize, token) =>
+            {
+                DeploymentQuery query = new DeploymentQuery { Status = status, PageNumber = pageNumber, PageSize = pageSize };
+                if (!auth.IsAdmin)
+                {
+                    query.TenantId = auth.TenantId;
+                    if (!auth.IsTenantAdmin) query.UserId = auth.UserId;
+                }
+
+                EnumerationResult<Deployment> page = await _Database.Deployments.EnumerateAsync(query, token).ConfigureAwait(false);
+                List<InboxItem> items = page.Objects.Select(d => status == DeploymentStatusEnum.PendingApproval ? DeploymentApprovalItem(d) : DeploymentFailedItem(d)).ToList();
+                return EnumerationResult<InboxItem>.Create(new EnumerationQuery { PageNumber = pageNumber, PageSize = pageSize }, items, page.TotalRecords);
+            });
+        }
+
+        private PagedSection<InboxItem> BackgroundJobSection(AuthContext auth)
+        {
+            return Guarded(InboxItemKinds.BackgroundJobFailed, async (pageNumber, pageSize, token) =>
+            {
+                JobQuery query = new JobQuery { PageNumber = pageNumber, PageSize = pageSize, NeedsAttentionOnly = true };
+                if (!auth.IsAdmin)
+                {
+                    query.TenantId = auth.TenantId;
+                    if (!auth.IsTenantAdmin) query.UserId = auth.UserId;
+                    if (String.IsNullOrEmpty(query.TenantId) || (!auth.IsTenantAdmin && String.IsNullOrEmpty(query.UserId)))
+                        return EnumerationResult<InboxItem>.Create(new EnumerationQuery { PageNumber = pageNumber, PageSize = pageSize }, new List<InboxItem>(), 0);
+                }
+                EnumerationResult<Job> page = await _Database.Jobs.EnumeratePageAsync(query, token).ConfigureAwait(false);
+                List<InboxItem> items = page.Objects.Select(job => new InboxItem
+                {
+                    Kind = InboxItemKinds.BackgroundJobFailed, Severity = InboxSeverityEnum.Warning,
+                    Title = "Background task failed: " + JobActivity.DisplayName(job),
+                    EntityName = job.Name, EntityType = "job", EntityId = job.Id,
+                    Detail = (job.ErrorReason ?? "The task could not finish.") + " Open the related view to investigate and retry. A new attempt replaces this item.",
+                    Href = JobActivity.Href(job)
+                }).ToList();
+                return EnumerationResult<InboxItem>.Create(new EnumerationQuery { PageNumber = pageNumber, PageSize = pageSize }, items, page.TotalRecords);
+            });
+        }
+
+        /// <summary>Minutes an operator-actionable selection wait lasts before it becomes a Needs You item.</summary>
+        public const int SelectionBlockedMinutes = 15;
+
+        private PagedSection<InboxItem> SelectionBlockedSection(AuthContext auth)
+        {
+            return Guarded(InboxItemKinds.SelectionBlocked, async (pageNumber, pageSize, token) =>
+            {
+                EnumerationQuery paging = new EnumerationQuery { PageNumber = pageNumber, PageSize = pageSize };
+                string? tenant = auth.IsAdmin ? null : auth.TenantId;
+                string? user = auth.IsAdmin || auth.IsTenantAdmin ? null : auth.UserId;
+                if (!auth.IsAdmin && (String.IsNullOrEmpty(tenant) || (!auth.IsTenantAdmin && String.IsNullOrEmpty(user))))
+                    return EnumerationResult<InboxItem>.Create(paging, new List<InboxItem>(), 0);
+                EnumerationResult<CaptainSelectionWaitingItem> page = await _Database.CaptainSelections.EnumerateActionableWaitsAsync(tenant, user,
+                    UsageSelectionReasonCodes.OperatorActionable, DateTime.UtcNow.AddMinutes(-SelectionBlockedMinutes), pageNumber, pageSize, token).ConfigureAwait(false);
+                List<InboxItem> items = page.Objects.Select(SelectionBlockedItem).ToList();
+                return EnumerationResult<InboxItem>.Create(paging, items, page.TotalRecords);
+            });
+        }
+
+        private static InboxItem SelectionBlockedItem(CaptainSelectionWaitingItem wait)
+        {
+            return new InboxItem
+            {
+                Kind = InboxItemKinds.SelectionBlocked,
+                Severity = InboxSeverityEnum.Warning,
+                Title = "Captain selection is waiting: " + wait.MissionTitle,
+                EntityName = wait.MissionTitle,
+                EntityType = "mission",
+                EntityId = wait.MissionId,
+                Detail = UsageSelectionText.ForReason(wait.ReasonCode) + " Open the mission's Captain selection section for the evidence and the permitted next step.",
+                Href = "/missions/" + Uri.EscapeDataString(wait.MissionId)
+            };
+        }
+
+        private PagedSection<InboxItem> ModelAlertSection(AuthContext auth)
+        {
+            // Model alerts are advisory and only an admin can apply their suggested actions, so only admins see them.
+            return Guarded(InboxItemKinds.ModelAlert, async (pageNumber, pageSize, token) =>
+            {
+                EnumerationQuery paging = new EnumerationQuery { PageNumber = pageNumber, PageSize = pageSize };
+                if (!auth.IsAdmin && !(auth.IsTenantAdmin && !String.IsNullOrEmpty(auth.TenantId)))
+                    return EnumerationResult<InboxItem>.Create(paging, new List<InboxItem>(), 0);
+                DateTime now = DateTime.UtcNow;
+                ModelAlertQuery query = new ModelAlertQuery
+                {
+                    TenantId = auth.IsAdmin ? null : auth.TenantId,
+                    Status = ModelAlertStatusEnum.Open,
+                    NotIgnoredAtUtc = now,
+                    PageNumber = pageNumber,
+                    PageSize = pageSize
+                };
+                EnumerationResult<ModelAlert> page = await _Database.ModelAlerts.EnumerateAsync(query, token).ConfigureAwait(false);
+                ModelAlertActionPlanner planner = new ModelAlertActionPlanner(_Database);
+                int ignoreDays = _Settings?.ModelAlerts.DefaultIgnoreDays ?? 7;
+                List<InboxItem> items = new List<InboxItem>();
+                foreach (ModelAlert alert in page.Objects)
+                {
+                    alert.SuggestedActions = (await planner.PlanAsync(alert, auth, ignoreDays, token).ConfigureAwait(false)).Actions;
+                    items.Add(ModelAlertItem(alert));
+                }
+                return EnumerationResult<InboxItem>.Create(paging, items, page.TotalRecords);
+            });
+        }
+
+        private static InboxItem ModelAlertItem(ModelAlert alert)
+        {
+            return new InboxItem
+            {
+                Kind = InboxItemKinds.ModelAlert,
+                Severity = InboxSeverityEnum.Info,
+                Title = alert.Title,
+                EntityName = String.IsNullOrWhiteSpace(alert.Model) ? alert.ProfileId : alert.Model,
+                Detail = alert.Detail,
+                EntityType = "model_alert",
+                EntityId = alert.Id,
+                Href = "/inbox?modelAlert=" + alert.Id,
+                ModelAlert = alert
+            };
+        }
+
+        private PagedSection<InboxItem> MemorySection(string kind, Func<CancellationToken, Task<List<InboxItem>>> load)
+        {
+            List<InboxItem>? loaded = null;
+            return Guarded(kind, async (pageNumber, pageSize, token) =>
+            {
+                loaded ??= await load(token).ConfigureAwait(false);
+                return EnumerationResult<InboxItem>.Page(new EnumerationQuery { PageNumber = pageNumber, PageSize = pageSize }, loaded);
+            });
+        }
+
+        private PagedSection<InboxItem> Guarded(string name, PageFetchDelegate<InboxItem> fetch)
+        {
+            // One failing source leaves its kind out of the inbox (with a warning) instead of failing the whole read.
+            return new PagedSection<InboxItem>(name, async (pageNumber, pageSize, token) =>
+            {
+                try
+                {
+                    return await fetch(pageNumber, pageSize, token).ConfigureAwait(false);
+                }
+                catch (Exception ex) when (!(ex is OperationCanceledException))
+                {
+                    _Logging.Warn(_Header + "error reading inbox source " + name + ": " + ex.ToString());
+                    return EnumerationResult<InboxItem>.Create(new EnumerationQuery { PageNumber = pageNumber, PageSize = pageSize }, new List<InboxItem>(), 0);
+                }
+            });
+        }
+
+        private async Task<InboxItem> ReviewItemAsync(Mission mission, CancellationToken token)
+        {
+            Voyage? approvalVoyage = String.IsNullOrEmpty(mission.VoyageId) ? null : await _Database.Voyages.ReadAsync(mission.VoyageId, token).ConfigureAwait(false);
+            RunApprovalOptions? approvalOptions = approvalVoyage?.ApprovalOptions;
+            bool overdue = mission.ReviewDeadlineUtc.HasValue && mission.ReviewDeadlineUtc.Value < DateTime.UtcNow;
+            return new InboxItem
+            {
+                Kind = InboxItemKinds.Review,
+                ExpiresUtc = approvalOptions == null ? null : mission.ReviewDeadlineUtc,
+                TimeoutDecision = approvalOptions?.TimeoutDecision,
+                Severity = overdue ? InboxSeverityEnum.Critical : InboxSeverityEnum.Warning,
+                Title = "Review: " + mission.Title,
+                EntityName = mission.Title,
+                Detail = overdue ? "Review is overdue -- awaiting your approval." : "Awaiting your review.",
+                EntityType = "mission",
+                EntityId = mission.Id,
+                Href = "/missions/" + mission.Id
+            };
+        }
+
+        private static InboxItem LandingFailedItem(Mission mission)
+        {
+            return new InboxItem
+            {
+                Kind = InboxItemKinds.LandingFailed,
+                Severity = InboxSeverityEnum.Critical,
+                Title = "Landing failed: " + mission.Title,
+                EntityName = mission.Title,
+                Detail = String.IsNullOrWhiteSpace(mission.FailureReason) ? "The work could not be landed." : mission.FailureReason!,
+                EntityType = "mission",
+                EntityId = mission.Id,
+                Href = "/missions/" + mission.Id
+            };
+        }
+
+        private static InboxItem FailedItem(Mission mission)
+        {
+            return new InboxItem
+            {
+                Kind = InboxItemKinds.Failed,
+                Severity = InboxSeverityEnum.Warning,
+                Title = "Failed: " + mission.Title,
+                EntityName = mission.Title,
+                Detail = String.IsNullOrWhiteSpace(mission.FailureReason) ? "The mission failed." : mission.FailureReason!,
+                EntityType = "mission",
+                EntityId = mission.Id,
+                Href = "/missions/" + mission.Id
+            };
+        }
+
+        private static InboxItem StalledCaptainItem(Captain captain)
+        {
+            return new InboxItem
+            {
+                Kind = InboxItemKinds.StalledCaptain,
+                Severity = InboxSeverityEnum.Warning,
+                Title = "Stalled captain: " + captain.Name,
+                EntityName = captain.Name,
+                Detail = "This captain is stalled and may need recovery or a dock reclaim.",
+                EntityType = "captain",
+                EntityId = captain.Id,
+                Href = "/captains/" + captain.Id
+            };
+        }
+
+        private static InboxItem DeploymentApprovalItem(Deployment deployment)
+        {
+            return new InboxItem
+            {
+                Kind = InboxItemKinds.DeploymentApproval,
+                Severity = InboxSeverityEnum.Warning,
+                Title = DeploymentApprovalLabel.Format(deployment.EnvironmentName, deployment.Title, deployment.Id),
+                EntityName = String.IsNullOrWhiteSpace(deployment.EnvironmentName) ? deployment.Id : deployment.EnvironmentName!,
+                EnvironmentName = String.IsNullOrWhiteSpace(deployment.EnvironmentName) ? null : deployment.EnvironmentName,
+                DeploymentTitle = String.IsNullOrWhiteSpace(deployment.Title) ? null : deployment.Title,
+                Detail = "A deployment is waiting for your approval before it runs.",
+                EntityType = "deployment",
+                EntityId = deployment.Id,
+                Href = "/deployments/" + deployment.Id
+            };
+        }
+
+        private static InboxItem DeploymentFailedItem(Deployment deployment)
+        {
+            return new InboxItem
+            {
+                Kind = InboxItemKinds.DeploymentFailed,
+                Severity = InboxSeverityEnum.Critical,
+                Title = "Deployment failed: " + (String.IsNullOrWhiteSpace(deployment.EnvironmentName) ? deployment.Id : deployment.EnvironmentName!),
+                EntityName = String.IsNullOrWhiteSpace(deployment.EnvironmentName) ? deployment.Id : deployment.EnvironmentName!,
+                EnvironmentName = String.IsNullOrWhiteSpace(deployment.EnvironmentName) ? null : deployment.EnvironmentName,
+                DeploymentTitle = String.IsNullOrWhiteSpace(deployment.Title) ? null : deployment.Title,
+                Detail = deployment.Status == DeploymentStatusEnum.VerificationFailed
+                    ? "Deployment verification failed and needs attention."
+                    : "A deployment failed and needs attention.",
+                EntityType = "deployment",
+                EntityId = deployment.Id,
+                Href = "/deployments/" + deployment.Id
+            };
+        }
+
+        private static InboxItem AskProposalItem(AskActionProposal proposal)
+        {
+            string summary = String.IsNullOrWhiteSpace(proposal.SummaryText) ? proposal.ToolName : proposal.SummaryText;
+            return new InboxItem
+            {
+                Kind = InboxItemKinds.AskProposal,
+                Severity = InboxSeverityEnum.Warning,
+                Title = "Ask approval: " + summary,
+                EntityName = summary,
+                Detail = "Armada proposed an action in an Ask conversation and is waiting for you to approve or reject it.",
+                EntityType = "ask_proposal",
+                EntityId = proposal.Id,
+                Href = "/ask/" + proposal.ThreadId
+            };
+        }
+
+        private static InboxItem CliPermissionItem(AuthContext auth, CliPermissionRequest request)
+        {
+            string where = !String.IsNullOrEmpty(request.MissionTitle) ? "mission " + request.MissionTitle
+                : (!String.IsNullOrEmpty(request.ThreadId) ? "an Ask conversation" : "a captain session");
+            bool ownThread = !String.IsNullOrEmpty(request.ThreadId) && String.Equals(request.UserId, auth.UserId, StringComparison.Ordinal);
+            return new InboxItem
+            {
+                Kind = InboxItemKinds.CliPermission,
+                Severity = InboxSeverityEnum.Warning,
+                Title = "CLI permission: " + request.ToolName + " " + Clip(request.SummaryText, 120),
+                EntityName = request.ToolName,
+                Detail = (String.IsNullOrEmpty(request.CaptainName) ? "A captain" : "Captain " + request.CaptainName)
+                    + (String.IsNullOrEmpty(request.VesselName) ? "" : " on " + request.VesselName)
+                    + " (" + where + ") is waiting for permission to run " + request.ToolName + "."
+                    + (request.CanDecide ? "" : " An admin must decide it."),
+                EntityType = "cli_permission_request",
+                EntityId = request.Id,
+                Href = ownThread ? "/ask/" + request.ThreadId : "/server?tab=cli-permissions&request=" + request.Id,
+                CliPermission = request,
+                ExpiresUtc = request.ExpiresUtc
+            };
         }
 
         private async Task<List<Captain>> CaptainsByStateAsync(AuthContext auth, CaptainStateEnum state, CancellationToken token)
@@ -295,13 +544,6 @@ namespace Armada.Core.Services
             if (auth.IsAdmin) return await _Database.Captains.EnumerateByStateAsync(state, token).ConfigureAwait(false);
             List<Captain> list = await _Database.Captains.EnumerateByStateAsync(auth.TenantId!, state, token).ConfigureAwait(false);
             return auth.IsTenantAdmin ? list : list.Where(c => String.Equals(c.UserId, auth.UserId, StringComparison.Ordinal)).ToList();
-        }
-
-        private async Task<List<MergeEntry>> MergeEntriesByStatusAsync(AuthContext auth, MergeStatusEnum status, CancellationToken token)
-        {
-            if (auth.IsAdmin) return await _Database.MergeEntries.EnumerateByStatusAsync(status, token).ConfigureAwait(false);
-            List<MergeEntry> list = await _Database.MergeEntries.EnumerateByStatusAsync(auth.TenantId!, status, token).ConfigureAwait(false);
-            return auth.IsTenantAdmin ? list : list.Where(e => String.Equals(e.UserId, auth.UserId, StringComparison.Ordinal)).ToList();
         }
 
         /// <summary>
@@ -392,18 +634,6 @@ namespace Armada.Core.Services
         private static int Clamp(int minutes)
         {
             return minutes < 0 ? 0 : (minutes > 1440 ? 1440 : minutes);
-        }
-
-        /// <summary>
-        /// Apply three-tier scoping to an in-memory list: a global admin sees all, a tenant admin sees the
-        /// tenant, and a regular user sees only their own rows.
-        /// </summary>
-        private static List<T> ScopeList<T>(AuthContext auth, List<T> list, Func<T, string?> tenantOf, Func<T, string?> userOf)
-        {
-            if (auth.IsAdmin) return list;
-            List<T> scoped = list.Where(x => String.Equals(tenantOf(x), auth.TenantId, StringComparison.Ordinal)).ToList();
-            if (auth.IsTenantAdmin) return scoped;
-            return scoped.Where(x => String.Equals(userOf(x), auth.UserId, StringComparison.Ordinal)).ToList();
         }
 
         #endregion

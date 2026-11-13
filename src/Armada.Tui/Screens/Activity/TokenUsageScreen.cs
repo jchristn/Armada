@@ -5,6 +5,7 @@ namespace Armada.Tui.Screens.Activity
     using System.Globalization;
     using System.Linq;
     using Armada.Core.Models;
+    using Armada.Core.Services;
     using Armada.Tui.Input;
     using Armada.Tui.Routing;
     using Armada.Tui.Screens.Kit;
@@ -116,6 +117,7 @@ namespace Armada.Tui.Screens.Activity
 
         #region Private-Members
 
+        private const int _ModelLimit = 20;
         private readonly TextBlock _Note = new TextBlock("", t => t.Muted);
         private readonly TextBlock _HarborNote = new TextBlock("", t => t.Accent);
 
@@ -297,6 +299,7 @@ namespace Armada.Tui.Screens.Activity
             q.FromUtc = end.AddHours(-r.Hours);
             q.ToUtc = end;
             q.BucketMinutes = r.StepMinutes;
+            q.ModelLimit = _ModelLimit;
             q.HarborId = HarborId.Length > 0 ? HarborId : null;
             return q;
         }
@@ -338,6 +341,9 @@ namespace Armada.Tui.Screens.Activity
             List<string> models = data.ByModel.Select(m => m.Model).ToList();
             List<string> header = new List<string> { "bucketStartUtc", "bucketEndUtc", "inputTokens", "outputTokens", "cachedTokens", "totalTokens" };
             header.AddRange(models);
+            // Models beyond the model limit are summed by the server; keep them as one explicit column.
+            bool hasOther = data.OtherModels != null;
+            if (hasOther) header.Add(TokenUsageSummaryBuilder.OtherModelName);
             List<IEnumerable<string?>> rows = new List<IEnumerable<string?>>();
             foreach (TokenUsageBucket b in data.Buckets)
             {
@@ -353,6 +359,7 @@ namespace Armada.Tui.Screens.Activity
                     row.Add((m != null ? m.TotalTokens : 0).ToString(CultureInfo.InvariantCulture));
                 }
 
+                if (hasOther) row.Add((b.OtherModels != null ? b.OtherModels.TotalTokens : 0).ToString(CultureInfo.InvariantCulture));
                 rows.Add(row);
             }
 
@@ -394,7 +401,9 @@ namespace Armada.Tui.Screens.Activity
                 ? Context.Loc.T("{{estimated}} of {{total}} records estimated", LocalizationArgs.Of("estimated", data.EstimatedCount, "total", data.RecordCount))
                 : "";
             ModelChart.ByType = byType;
-            ModelChart.Models = data?.ByModel ?? new List<TokenUsageModelBreakdown>();
+            List<TokenUsageModelBreakdown> modelRows = new List<TokenUsageModelBreakdown>(data?.ByModel ?? new List<TokenUsageModelBreakdown>());
+            if (data?.OtherModels != null) modelRows.Add(data.OtherModels);
+            ModelChart.Models = modelRows;
             if (Loading)
             {
                 TimeChart.EmptyText = "Loading token usage...";
@@ -426,6 +435,9 @@ namespace Armada.Tui.Screens.Activity
                         return m != null ? (double)m.TotalTokens : 0;
                     })));
                 }
+
+                if (data?.OtherModels != null)
+                    series.Add(new ChartSeries(TokenUsageSummaryBuilder.OtherModelName, buckets.Select(b => b.OtherModels != null ? (double)b.OtherModels.TotalTokens : 0)));
             }
 
             TimeChart.SetData(labels, series);

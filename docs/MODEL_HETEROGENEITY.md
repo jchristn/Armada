@@ -221,7 +221,7 @@ Armada and not only the model. The tasks below are the template each code pack i
 | Write tests for an untested method, including negative paths | Test Engineer | Tests plus mutation check |
 | Review a diff with three seeded defects (negative control) | Judge | Findings matched against the seeded set; false positives count |
 | Review a correct diff (positive control) | Judge | A PASS with no invented blocking findings |
-| Turn a feature request into an `armada-plan` | Architect | Schema check, then the evaluator grades it |
+| Turn a feature request into an `armada-plan` (contract v4: `parent` links, `ownedPaths`) | Architect | Schema check with the dispatch parser (a v4 plan whose parallel missions own the same paths fails), then the evaluator grades it |
 | Lint a diff with seeded style violations | Linter | Matched against the seeded set |
 | Summarize a voyage | Recorder | Evaluator grades it |
 
@@ -476,12 +476,13 @@ When a threshold is crossed:
 
 ## The model profile
 
-A first sketch. Field names are up for discussion. The profile is advisory: it informs rendering, the eligibility
+A first sketch. Field names are up for discussion. Profile ids use the `mdl_` prefix and revision ids `mdv_` (`mpr_` is
+taken by model probe runs). The profile is advisory: it informs rendering, the eligibility
 envelope and the administrator; it does not set `Captain.Tier` or change routing automatically.
 
 ```json
 {
-  "id": "mpr_...",
+  "id": "mdl_...",
   "identity": {
     "runtime": "Mux",
     "provider": "Ollama",
@@ -490,7 +491,7 @@ envelope and the administrator; it does not set `Captain.Tier` or change routing
   },
   "revisions": [
     {
-      "id": "mpv_...",
+      "id": "mdv_...",
       "runtimeVersion": "1.4.1",
       "modelDigest": "sha256:...",
       "sampling": { "temperature": 0.1 },
@@ -510,7 +511,7 @@ envelope and the administrator; it does not set `Captain.Tier` or change routing
   },
   "measured": [
     {
-      "revisionId": "mpv_...",
+      "revisionId": "mdv_...",
       "source": "battery",
       "batteryVersion": 1,
       "promptVersion": "...",
@@ -560,11 +561,24 @@ Measure first, then change handoffs and contracts, then prompts, then add profil
    cover real work beside `README.md.backup` and `.orig`, scratch-only leftovers, and tracked-file preservation.
 3. Change `VerifyStageWorkAsync` to return a result that distinguishes passed, failed, skipped (with the reason) and
    could not run, and record it on the mission. Addresses E1.
+   Status: done through `CheckStageWorkAsync` returning `StageCheckResult` (the legacy `VerifyStageWorkAsync`
+   remains a failure-message wrapper). `AdmiralService.RecordStageCheckAsync` records the result in a
+   mission-linked `mission.stage_check` event. `Services.HandoffResilience` covers passed, failed, skipped
+   with reasons (`stage_check_result_says_why_a_frontier_stage_was_skipped`) and could-not-run event
+   round trips (`stage_check_event_round_trips_the_result`); `Services.StageCheckResumeSafety`
+   `timeout_check_never_completes_without_landing` asserts a recorded CouldNotRun timeout.
 4. Record attempt-level provenance: runtime version, model digest, sampling, context, tool configuration, prompt
    version, and the escalation record. Record the observed failure and suspected cause on every failed, reworked or
    escalated stage.
+   Status: done in `StageOutcomeService.RecordAttemptAsync`, storing attempt-level `StageOutcome` provenance,
+   observed failure, suspected cause and escalation links. `Services.StageOutcomes`
+   `record_attempt_provenance_and_classification` and `provenance_recorded_and_cached_per_captain_and_harbor`
+   cover persistence and runtime/model probes; unavailable provenance is recorded as null.
 5. Start the failure classification (observed failure, suspected cause, amendable rules) so data accumulates while
    the rest is built.
+   Status: done through `FailureCauseClassifier`, persisted amendable rules and `classify_stage_outcome` /
+   `reclassify_stage_outcomes`. `Services.StageOutcomes` `manual_classification_survives_reclassify` and
+   `reclassify_applies_new_rule_to_past_outcomes`, plus `E2E.StageOutcomes` `mcp_tools`, cover this.
 6. Rerun the Timestamps baseline from HYBRID_DEVELOPMENT_RESULTS.md on the current build, with the same models
    (gpt-oss:20b, gpt-oss:120b, qwen3-coder:30b, qwen3.8:27b), 2 to 3 runs each, and publish it next to the old
    results. The four models share one GB10, so the runs go one at a time.
@@ -573,15 +587,41 @@ Measure first, then change handoffs and contracts, then prompts, then add profil
 
 1. Quick probes (served context, output contract, ASCII and format rules, tool calling, speed, determinism) as a
    first, probe-only **Evaluate**. They need nothing else to exist and catch context mismatches at once.
+   Status: implemented (migration 94, `model_probe_runs` and `model_probe_results`). `ModelProbeService` runs the six
+   probes of `ModelProbeCatalog` (probe set `quick-1`) through the captain's own runtime, on its Harbor as a `ModelProbe`
+   job when it routes there, and `ModelProbeScorer` scores them; a probe that cannot apply or launch is CouldNotRun with
+   the reason, never Failed. Runs (`ModelProbeRun`, `ModelProbeResult`) carry provenance, are tagged as evaluations,
+   write no stage outcome and change no routing; the `Evaluation` settings group sets token budgets and concurrency
+   (`EvaluationConcurrencyGate`). Exposed through `evaluate_captain`, `get_model_probe_run` and `list_model_probe_runs`
+   and the matching REST routes. Tests: `Services.ModelProbe`, `Database.ModelProbePersistence`, `E2E.ModelProbes`,
+   `Client.Contract.ModelProbes`.
 2. The pack format and the C# pack with the tasks in [The fixture battery](#the-fixture-battery), running through
    real dispatch, Harbor execution, stage checks and completion parsing, with positive and negative review controls.
    The other language packs follow.
+   Status: implemented (migration 95, `battery_runs` and `battery_task_results`). Packs are data under
+   `battery/<pack>/battery-pack.json` (schema in `battery/README.md`), loaded and validated by `BatteryPackLoader`,
+   `BatteryPackValidator` and `BatteryPackCatalog`. `BatteryRunService` resets the fixture (`BatteryFixtureService`),
+   dispatches each task through real dispatch under the built-in ModelEvaluation pipeline with landing mode None and
+   grades it in the worktree on the host that ran it (`BatteryTaskGrader`, `BatterySeededSetGrader`,
+   `BatteryByteComparison`); a missing toolchain is CouldNotRun and rubric tasks are PendingEvaluation. Packs: C#
+   (commit d70486ad2), JavaScript, Python, Go and Rust (4cae06b53), Java, PHP and Ruby (02637ba42), all with the same ten
+   template tasks. Exposed through `run_battery`, `get_battery_run`, `list_battery_packs` and `list_battery_results`.
+   Tests: `Services.Battery`, `Battery.CSharpPack`, `Services.BatteryPacks`, `Database.BatteryPersistence`,
+   `E2E.Battery`.
 3. Record a baseline for each model in use.
 
 ### Phase 3: handoffs and contract repair
 
 1. Durable, versioned handoff artifacts with budgeted delivery suited to the reader (3.1), replacing the
    3000-character output and 4000-character diff excerpts.
+   Status: done (migration 97, `handoff_artifacts`; commit 8a78b728b). Every stage attempt stores a `HandoffArtifact`
+   (schema version 1: findings, acceptance criteria, stage-check result, commit references, full output and diff or a
+   pointer) built by `HandoffArtifactBuilder` and recorded by `HandoffArtifactService`. At launch `HandoffRenderer`
+   delivers it within the reader's token budget (`HandoffBudgetTokens`; findings first, then checks and diff, then a
+   pointer chosen by `HandoffReaderResolver` and an explicit did-not-fit list) instead of the fixed excerpts. Exposed
+   through `GET /api/v1/missions/{id}/handoff-artifacts`, `GET /api/v1/handoff-artifacts/{id}`, `get_handoff_artifact`
+   and `list_handoff_artifacts`. Tests: `Services.HandoffArtifacts`, `Database.HandoffArtifacts`,
+   `E2E.HandoffArtifacts`, `Client.Contract.HandoffArtifacts`.
 2. Rework prompts built from the artifact, one demand per line. Addresses C2 and C5.
    Status: done. `ReworkPromptBuilder` replaces the one-paragraph rework instruction. When the rework is scheduled, the
    description gets a rework section: a findings placeholder, the demands as a numbered list with one demand per line
@@ -622,14 +662,94 @@ Measure first, then change handoffs and contracts, then prompts, then add profil
 ### Phase 5: advisory profiles, scorecard and Evaluate
 
 1. Profile entity with a stable identity and immutable revisions; captains reference it.
+   Status: implemented (migration 107). `ModelProfile` (`mdl_`) keyed by tenant, runtime, provider, model and served
+   context; immutable `ModelProfileRevision`s (`mdv_`) with the Decision 6 pooling rules (a served context change is a
+   new profile); compatibility marks stored beside the revisions; `Captain.ModelProfileId` set best effort from stage
+   outcomes and Quick probe runs; REST `/api/v1/model-profiles` and MCP `get_model_profile` / `list_model_profiles`.
+   The scorecard and Full Evaluate are not part of it; the `measured` block is filled from Full Evaluate (item 4).
 2. Scorecard with counts, uncertainty, repair frequency and cost per accepted result, using the attribution rules.
+   Status: implemented (no migration; computed on request from stage outcomes, token usage and timing).
+   `ModelScorecardService` and REST `GET /api/v1/model-profiles/{id}/scorecard`, MCP `get_model_scorecard`: one
+   (profile, persona), optionally one vessel, over the last 30 days or 50 missions, whichever is smaller. Rates carry
+   their count, denominator and a 95% Wilson interval; revisions are separate groups unless marked compatible; every
+   attribution rule reports how many items it removed. Judge finding categories, tool failure kinds and recovered stalls
+   are not recorded today and are returned as unavailable. There is no dashboard model profile view yet, so there is no
+   scorecard panel, and no fleet-wide listing.
 3. Inbox alerts and suggested actions. No automatic changes.
+   Status: implemented (migration 108, `model_alerts`). `ModelAlertService` evaluates the scorecard of every (profile,
+   persona) with production attempts in the last 30 days (and each vessel with `ModelAlerts.IncludeVessels`) every 60
+   minutes (`ModelAlerts.IntervalMinutes`; `Enabled` turns the pass off) and on demand. Defaults (Decision 13), with
+   per-persona overrides in `ModelAlerts.Thresholds`: first pass below 50% over at least 8 missions; 3 escalations away
+   in a row (a new scorecard metric, `escalations.inARow`); protocol repairs above 30% over at least 8 attempts; tokens
+   per accepted result above 2x the median of the other profiles in the persona, at least 5 accepted results on each
+   side. A rule whose metric is unavailable is inactive and reported as such. One alert per (profile, revision group,
+   persona, vessel or all, rule), kept while the condition holds, resolved when it clears and reopened when it returns;
+   it shows in the inbox (kind `model_alert`) for admins, with counts and the Wilson interval in the title, and is pushed
+   only with `ModelAlerts.PushEnabled` (off by default). Suggested actions apply only on request, through the persona
+   update and Evaluate, and are recorded on the alert: move down in the persona's priorities, remove from the persona,
+   re-evaluate (Quick), ignore for N days (default 7). The compact template is listed as unavailable: Armada has no
+   prompt variant per profile and persona. REST `/api/v1/model-alerts`, MCP `list_model_alerts`, `get_model_alert`,
+   `evaluate_model_alerts`, `get_model_alert_thresholds`, `update_model_alert_thresholds`, `apply_model_alert_action`,
+   `ignore_model_alert`. The persona-scoped quarantine stays in Phase 6.
 4. Full Evaluate: the fixture battery on top of the Quick probes from Phase 2, with the evaluator grading only the
    subjective parts and writing the strengths and weaknesses summary from the counts.
+   Status: implemented (migration 109). `evaluate_captain` and `POST /api/v1/captains/{id}/evaluate` (and the model
+   endpoint route) accept depth `Full` with `evaluatorCaptainId`, `packs` (default: packs matching the primary languages
+   of the tenant's repositories, else the first installed pack with a note), `personas` (default: all the captain is
+   allowed) and `runCount`; Quick stays the default. `ModelProbeService` runs the probes, then a battery run through
+   `BatteryRunService` under the same per-inference-host evaluation slot, then one evaluator exchange through the probe
+   executor. `EvaluatorSelector` picks the highest-tier idle captain of another `ModelFamily` (same family only as a
+   fallback, with a warning; none skips the narrative with the reason). The report (`ModelProbeRun.Report`) holds probe
+   counts and per-persona counts per task; `EvaluationNarrativeValidator` rejects a reply that does not parse, names an
+   unknown count, misquotes one or cites any "N of M" that is not a count, keeping the mechanical report. Subjective grades
+   of PendingEvaluation attempts are listed beside the counts and never change them. A complete report becomes an advisory
+   `ModelProfileRevision` (`EvaluationRunId`, `EvaluationReport`) marked compatible with the observed revision; nothing
+   reads it for routing. Battery missions are `IsEvaluation`; settings `evaluation.fullRunTokenBudget` (3,000,000) and
+   `evaluation.fullRunTimeoutMinutes` (720). Cancel (`POST /api/v1/model-probe-runs/{id}/cancel`, MCP
+   `cancel_model_probe_run`) and the timeout cancel the open battery mission and leave a partial report marked
+   incomplete. Gaps: the `ModelEvaluation` pipeline still runs one mission per battery task (no separate Evaluate
+   pipeline stage); the evaluator runs as a single probe-executor exchange, not a mission; a model endpoint's battery
+   needs a saved captain that drives it; battery token use is estimated from prompt and output length.
+   Follow-up (gaps closed, no migration): an incomplete report (cancel, timeout, or a battery that could not run) is
+   also recorded as an advisory revision, marked `EvaluationIncomplete` (derived from the stored report); it never
+   changes an earlier revision, never fills `measured`, and observations never pool into it (`ResolveAsync` skips it
+   when picking the current revision). The profile's `measured` block (`ModelProfile.Measured`, built on each
+   single-profile read, REST `GET /api/v1/model-profiles/{id}` and MCP `get_model_profile`) holds the counts of the
+   latest complete Full report only: run, revision and battery run ids, report time, packs, one count per probe kind and,
+   per persona, one count per pack (passed, failed, could not run, pending evaluation, attempted); no derived scores.
+   The dashboard captain Full Evaluate control opens a dialog (depth, Full by default; evaluator captain from the idle
+   captains with a same-family note; packs from the installed battery packs; personas; run count) and keeps the report
+   view; a model endpoint still starts Full with the defaults. The TUI captain page has an Evaluate action (`v`) with the
+   same options and a viewer that polls the run, shows its probes and report, and cancels it (`c`).
 
 ### Phase 6: sizing and routing
 
 1. Worker eligibility envelope (3.3), enforced by dispatch; escalation selects a stronger compatible captain.
+   Status: implemented (migration 110, `vessels.worker_envelope_json` and `missions.worker_envelope_json`). `WorkerEnvelope`
+   has `maxFiles`, `maxSteps`, `minServedContextTokens` and `requiredTools` (`tools`, `mcp`); every field is optional and an
+   envelope with none set is no envelope. `Vessel.WorkerEnvelope` is the default (null by default, so routing is unchanged
+   until a vessel sets one), exposed through REST vessel create/update, MCP `add_vessel` / `update_vessel` / `get_vessel`
+   and the dashboard vessel settings. A mission may carry a tighter `Mission.WorkerEnvelope`: REST dispatch rejects a
+   looser one with 400 and the reason, the Architect's per-mission `workerEnvelope` in the plan is clamped to the default
+   (event `mission.worker_envelope_clamped`), and dispatch always applies the tightest of both. Enforcement is in
+   `MissionService` assignment for the Worker stage only: a captain with no model profile, a profile without served
+   context when a minimum is set, or a profile that does not record a required capability is not eligible, on every
+   routing path (requested, persona default, priorities, tier). File and step limits guide the Architect and Judge and
+   never exclude a captain (profiles record no such capacity). When no idle captain routing would use meets the envelope,
+   dispatch escalates to the lowest-tier idle captain that meets it, may run the Worker persona, meets the mission's tier
+   floor and is stronger than the busy preferred captains; strict and escalated-rework pins are not escalated. With no
+   compatible captain at all the mission stays Pending and the assignment blocker says why. Each decision (assigned,
+   escalated, waiting, no eligible captain, with every excluded captain and reason) is an event `mission.worker_envelope`
+   recorded when it changes, so it shows in the mission timeline and black box. The rework escalation selector applies
+   the envelope too. The Architect and Judge get the generated description through the `{WorkerEnvelope}` prompt
+   placeholder in the built-in templates (Current, Lean, Compact). Follow-up (gaps closed): mission update (REST
+   `PUT /api/v1/missions/{id}`, MCP and WebSocket `update_mission`) sets or clears the envelope with the dispatch
+   validation (400 / InvalidArgument when invalid or looser than the vessel default) and only while the mission is
+   Pending or Assigned and not started (409 / Conflict otherwise; an unchanged value is accepted on any status); MCP
+   `create_mission` and `armada mission create` (`--max-files`, `--max-steps`, `--min-context-tokens`, `--require-tool`)
+   accept an envelope; and a customized Architect or Judge template without `{WorkerEnvelope}` gets the rendered section
+   appended (one warning per template; the stored template is not rewritten). MCP `dispatch` missions[] items have their
+   own schema and take no envelope. Tests: `Services.WorkerEnvelope`.
 2. Routing changes based on profiles only after held-out production tasks support them.
 3. Optional persona-scoped quarantine, off by default.
 
@@ -676,3 +796,6 @@ Still open: the exact field names, alert defaults after real data, and the per-v
 | 2026-10-26 | Questions answered; plan adopted | The 14 open questions settled (see [Decisions](#decisions)): profile per model, not per Harbor; Quick probes moved to Phase 2; per-language battery packs defined as data; amendable failure classification; envelope as vessel default with escalation; separate evaluation budget. Phase 1 started under v1.1.0. |
 | 2026-10-26 | Phase 2 step 1: Quick probes as a probe-only Evaluate | Six probes (served context, output contract, ASCII and format rules, tool calling, speed, determinism) run as ModelProbe Harbor jobs through the captain's own runtime; vendor CLIs are probed and inapplicable probes are recorded as could-not-run with the reason. Runs persist as ModelProbeRun with ModelProbeResult rows (probe set quick-1, Phase 1 provenance), are tagged as evaluations and write no stage outcome. Separate Evaluation settings: run and daily token budgets (overall and per inference host) and concurrency limits (overall, and one run per host by default). evaluate_captain (Quick only; Full is rejected until Phase 5), get_model_probe_run and list_model_probe_runs over REST, MCP and the clients; a minimal dashboard Evaluate button. Nothing changes routing or captain settings. |
 | 2026-10-27 | Phase 2 step 2: fixture battery pack format and the C# pack | Packs are data (battery/<pack>/battery-pack.json, schema in battery/README.md): fixture, tasks, persona per task, grader (command, byteComparison, mutation, seededSet, rubric) and toolchain. The C# pack implements the ten template tasks. The runner resets the fixture (a forward commit) before each task, dispatches it on a fixture vessel created on request under the built-in ModelEvaluation pipeline (no landing), and grades it in its worktree; a missing toolchain is could-not-run, rubric tasks are pending evaluation with the raw output. Runs (BatteryRun, BatteryTaskResult) record seed, sampling settings, run count (default 3), battery version and configuration revision, share Evaluate's concurrency gate, and tag their stage outcomes IsEvaluation. list_battery_packs, run_battery and get_battery_run over REST, MCP and the .NET client. |
+| 2026-10-30 | Phase 5 step 1: model profiles | ModelProfile (mdl_; mpr_ is taken by model probe runs) keyed by tenant, runtime, provider, model and served context, with editable capabilities, rendering overrides and notes; immutable ModelProfileRevision (mdv_) with runtime version, model digest, sampling, tool configuration and first seen. A new runtime major version, digest or sampling starts a revision; minor and patch releases pool; a served context change is a new profile. Compatibility marks are kept beside the revisions so revisions are never edited. Captain.ModelProfileId is set best effort from stage outcomes and Quick probe runs. REST /api/v1/model-profiles, MCP get_model_profile and list_model_profiles; migration 107. No routing change. |
+| 2026-10-30 | Phase 5 step 2: scorecard | A read-only scorecard per (profile, persona), optionally per vessel, computed on request from stage outcomes, token usage and timing (no migration, no stored aggregate). Window: last 30 days or 50 missions, whichever is smaller, both per request. Rates are count of denominator with a 95% Wilson score interval. An attempt belongs to the newest revision it pools into that existed when it was recorded; revisions are separate groups unless marked compatible. Attribution: evaluation and battery missions, NotTheModel causes, and (unless a person classified the cause) Infra, OperatorAction, cancelled, interrupted and runtime-environment failures are excluded; an attempt in another persona is charged to that stage; a Judge verdict counts only when the reviewed work (the reviewed mission's last completed attempt before the review) is this profile's; Unknown and Mixed are their own buckets; each rule reports its count. Accepted result: the mission's final attempt is this profile's, completed, did not fail its checks and drew no Judge rejection; its cost sums every attempt on the mission and on earlier rework rounds. Finding categories, tool failure kinds and recovered stalls are returned as unavailable. REST GET /api/v1/model-profiles/{id}/scorecard, MCP get_model_scorecard. No alerts, suggested actions or routing change. |
+| 2026-10-30 | Phase 5 step 3: alerts | Decision 13's defaults as built-in thresholds with per-persona overrides in settings, each with a minimum count; a rule whose scorecard metric is unavailable is inactive and reported, never invented. The cost rule compares tokens per accepted result with the median of the other profiles in the persona (2x, at least 5 accepted results on each side), because a median that includes the profile itself can never be exceeded twofold with two profiles. Escalations in a row is a new scorecard metric (the newest attempts escalated, stopping at the first that was not). One stored alert per (profile, revision group, persona, vessel or all, rule) (migration 108), resolved and reopened in place; a periodic pass (60 minutes) and on demand, read only. Suggested actions apply only when an operator asks, through the existing persona update and Evaluate, and are recorded on the alert; move down and remove act only on priority entries that name a model and select only this profile's captains. The compact template is unavailable until a prompt variant per profile and persona exists. Push is off by default. No automatic mode. |

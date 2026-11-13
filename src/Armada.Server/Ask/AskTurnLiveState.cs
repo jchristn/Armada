@@ -128,6 +128,7 @@ namespace Armada.Server.Ask
             }
 
             progress.ToolCalls = ToolCalls();
+            progress.ToolCallCount = progress.ToolCalls.Count;
             return progress;
         }
 

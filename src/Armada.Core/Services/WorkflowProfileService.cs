@@ -13,6 +13,22 @@ namespace Armada.Core.Services
     /// </summary>
     public class WorkflowProfileService
     {
+        /// <summary>
+        /// Most entries ValidateAsync puts in Errors or Warnings: at most one per validation rule.
+        /// </summary>
+        public const int MaxValidationMessages = 16;
+
+        /// <summary>
+        /// Most entries in AvailableCheckTypes: the 15 profile-level command types plus the 6 environment command types.
+        /// </summary>
+        public const int MaxAvailableCheckTypes = 21;
+
+        /// <summary>
+        /// Most command previews BuildCommandPreviews returns: 15 profile-level commands plus 6 per environment, with
+        /// Environments limited to <see cref="CollectionLimits.MaxConfigItems"/> on every write path.
+        /// </summary>
+        public const int MaxCommandPreviews = 15 + 6 * CollectionLimits.MaxConfigItems;
+
         private readonly string _Header = "[WorkflowProfileService] ";
         private readonly DatabaseDriver _Database;
         private readonly LoggingModule _Logging;

@@ -50,7 +50,7 @@ namespace Test.Shared.Suites.Services
                 using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
                 {
                     InboxService inbox = new InboxService(testDb.Driver, CreateLogging());
-                    List<InboxItem> items = await inbox.GetInboxAsync(AuthContext.Authenticated("ten_inbox", "usr_inbox", true, false, "Test"));
+                    List<InboxItem> items = await InboxTestPages.AllAsync(inbox, AuthContext.Authenticated("ten_inbox", "usr_inbox", true, false, "Test"));
                     AssertEqual(0, items.Count);
                 }
             }));
@@ -66,7 +66,7 @@ namespace Test.Shared.Suites.Services
                     await db.Captains.CreateAsync(new Captain("stuck-1") { State = CaptainStateEnum.Stalled });
 
                     InboxService inbox = new InboxService(db, CreateLogging());
-                    List<InboxItem> items = await inbox.GetInboxAsync(AuthContext.Authenticated("ten_inbox", "usr_inbox", true, false, "Test"));
+                    List<InboxItem> items = await InboxTestPages.AllAsync(inbox, AuthContext.Authenticated("ten_inbox", "usr_inbox", true, false, "Test"));
 
                     AssertEqual(4, items.Count);
                     AssertTrue(items.Any(i => i.Kind == "review"), "Should include the review");
@@ -84,7 +84,7 @@ namespace Test.Shared.Suites.Services
                     Mission mission = new Mission("Inference endpoint authentication failed") { Status = MissionStatusEnum.Failed, FailureReason = reason };
                     await testDb.Driver.Missions.CreateAsync(mission);
                     InboxService inbox = new InboxService(testDb.Driver, CreateLogging());
-                    List<InboxItem> items = await inbox.GetInboxAsync(AuthContext.Authenticated("ten_inbox", "usr_inbox", true, false, "Test"));
+                    List<InboxItem> items = await InboxTestPages.AllAsync(inbox, AuthContext.Authenticated("ten_inbox", "usr_inbox", true, false, "Test"));
                     InboxItem item = items.Single(i => i.EntityId == mission.Id);
                     AssertEqual(reason, item.Detail);
                     AssertContains("Remediation:", item.Detail);
@@ -101,7 +101,7 @@ namespace Test.Shared.Suites.Services
                     await db.Missions.CreateAsync(new Mission("Could not land") { Status = MissionStatusEnum.LandingFailed });
 
                     InboxService inbox = new InboxService(db, CreateLogging());
-                    List<InboxItem> items = await inbox.GetInboxAsync(AuthContext.Authenticated("ten_inbox", "usr_inbox", true, false, "Test"));
+                    List<InboxItem> items = await InboxTestPages.AllAsync(inbox, AuthContext.Authenticated("ten_inbox", "usr_inbox", true, false, "Test"));
 
                     AssertTrue(items.Count >= 2, "Expected at least two items");
                     AssertEqual(InboxSeverityEnum.Critical, items[0].Severity);
@@ -119,7 +119,7 @@ namespace Test.Shared.Suites.Services
                     await db.Missions.CreateAsync(overdue);
 
                     InboxService inbox = new InboxService(db, CreateLogging());
-                    List<InboxItem> items = await inbox.GetInboxAsync(AuthContext.Authenticated("ten_inbox", "usr_inbox", true, false, "Test"));
+                    List<InboxItem> items = await InboxTestPages.AllAsync(inbox, AuthContext.Authenticated("ten_inbox", "usr_inbox", true, false, "Test"));
 
                     AssertEqual(1, items.Count);
                     AssertEqual(InboxSeverityEnum.Critical, items[0].Severity);
@@ -145,7 +145,7 @@ namespace Test.Shared.Suites.Services
                     await db.AskActionProposals.CreateAsync(NewProposal(theirs, "dispatch", "Someone else's dispatch"));
 
                     InboxService inbox = new InboxService(db, CreateLogging()) { AskProposalExpiryMinutes = 60 };
-                    List<InboxItem> items = await inbox.GetInboxAsync(AuthContext.Authenticated(tenantId, "usr_ask_me", false, true, "Test"));
+                    List<InboxItem> items = await InboxTestPages.AllAsync(inbox, AuthContext.Authenticated(tenantId, "usr_ask_me", false, true, "Test"));
 
                     List<InboxItem> asks = items.Where(i => i.Kind == InboxItemKinds.AskProposal).ToList();
                     AssertEqual(1, asks.Count, "only the caller's pending, unexpired proposal");
@@ -155,7 +155,7 @@ namespace Test.Shared.Suites.Services
                     AssertEqual(InboxSeverityEnum.Warning, asks[0].Severity);
                     AssertTrue(asks[0].Title.Contains("Dispatch voyage Fix login to vessel gateway", StringComparison.Ordinal), "title carries the proposal summary");
 
-                    List<InboxItem> noUser = await inbox.GetInboxAsync(AuthContext.Authenticated(tenantId, null!, true, true, "Test"));
+                    List<InboxItem> noUser = await InboxTestPages.AllAsync(inbox, AuthContext.Authenticated(tenantId, null!, true, true, "Test"));
                     AssertFalse(noUser.Any(i => i.Kind == InboxItemKinds.AskProposal), "an identity without a user has no Ask conversations");
                 }
             }));

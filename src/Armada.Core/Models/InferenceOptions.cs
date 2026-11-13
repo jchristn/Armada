@@ -3,6 +3,7 @@ namespace Armada.Core.Models
     using System;
     using System.Collections.Generic;
     using System.Linq;
+    using Armada.Core.Services;
 
     /// <summary>Inference defaults and execution restrictions shared by local and Harbor API captains.</summary>
     public class InferenceOptions
@@ -14,6 +15,7 @@ namespace Armada.Core.Models
         /// <summary>Permit discovery of tools from the session's scoped MCP server.</summary>
         public bool McpToolsEnabled { get; set; } = true;
         /// <summary>Exact allowed tool names. Null allows all otherwise permitted tools; an empty list allows none.</summary>
+        [CollectionBound(CollectionLimits.MaxConfigItems)]
         public List<string>? AllowedTools { get; set; } = null;
         /// <summary>Maximum model turns in an API captain run, from 1 through 1000.</summary>
         public int MaxIterations { get; set; } = 100;

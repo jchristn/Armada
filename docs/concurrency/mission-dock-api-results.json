@@ -1,0 +1,26 @@
+[
+  {
+    "mission": "own",
+    "artifact": "diff",
+    "status": 200,
+    "noSiblingContent": true
+  },
+  {
+    "mission": "own",
+    "artifact": "instructions",
+    "status": 200,
+    "noSiblingContent": true
+  },
+  {
+    "mission": "missing",
+    "artifact": "diff",
+    "status": 404,
+    "noSiblingContent": true
+  },
+  {
+    "mission": "missing",
+    "artifact": "instructions",
+    "status": 404,
+    "noSiblingContent": true
+  }
+]

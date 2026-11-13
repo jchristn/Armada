@@ -1,6 +1,7 @@
 namespace Armada.Core.Services
 {
     using SyslogLogging;
+    using Armada.Core.BlackBox;
     using Armada.Core.Database;
     using Armada.Core.Enums;
     using Armada.Core.Models;
@@ -25,6 +26,17 @@ namespace Armada.Core.Services
         /// When null, only docks on the Admiral's host are checked.
         /// </summary>
         public DockHostResolver? DockHosts { get; set; } = null;
+
+        /// <summary>
+        /// Dock service used to recreate a missing dock worktree from the mission branch before retrying. When null, a
+        /// missing worktree fails the retry as before.
+        /// </summary>
+        public IDockService? Docks { get; set; } = null;
+
+        /// <summary>
+        /// Black box capture for failed landing retries, or null.
+        /// </summary>
+        public IBlackBoxCapture? BlackBox { get; set; } = null;
 
         #endregion
 
@@ -79,6 +91,7 @@ namespace Armada.Core.Services
 
             DateTime retryVersion = mission.LastUpdateUtc;
             MissionStatusEnum retryStatus = mission.Status;
+            MissionStatusEnum retryStatusBefore = mission.Status;
             async Task<bool> SaveRetryAsync()
             {
                 mission.LastUpdateUtc = DateTime.UtcNow;
@@ -125,8 +138,14 @@ namespace Armada.Core.Services
             string? owningRepository = DockHostResolver.IsHarborDock(dock) ? dock!.RepositoryPath : vessel.LocalPath;
             if (String.IsNullOrEmpty(owningRepository))
             {
+                mission.FailureKind = MissionFailureKindEnum.Infra;
                 mission.FailureReason = "Landing retry cannot resolve the repository on the dock's owning host.";
                 if (!await SaveRetryAsync().ConfigureAwait(false)) return false;
+                await BlackBox.RecordMissionFailureAsync(mission, retryStatusBefore, BlackBoxStepEnum.RetryLanding, context =>
+                {
+                    context.Vessel = vessel;
+                    context.Dock = dock;
+                }, token).ConfigureAwait(false);
                 return false;
             }
 
@@ -170,13 +189,30 @@ namespace Armada.Core.Services
                     mission.Status = MissionStatusEnum.LandingFailed;
                     mission.FailureKind = MissionFailureKindEnum.Infra;
                     mission.FailureReason = "Source branch '" + missionBranch + "' is missing in " + repoPath + ". Recover the preserved commit or branch before retrying landing.";
-                    await SaveRetryAsync().ConfigureAwait(false);
+                    if (await SaveRetryAsync().ConfigureAwait(false))
+                    {
+                        await BlackBox.RecordMissionFailureAsync(mission, retryStatusBefore, BlackBoxStepEnum.RetryLanding, context =>
+                        {
+                            context.Vessel = vessel;
+                            context.Dock = dock;
+                            context.GitFacts = new BlackBoxGitFacts { GitOperation = "rev-parse --verify " + missionBranch, CheckoutPath = repoPath };
+                        }, token).ConfigureAwait(false);
+                    }
                     return false;
                 }
 
                 _Logging.Debug(_Header + "retrying landing for mission " + missionId + " branch " + missionBranch);
 
-                if (dock != null && !String.IsNullOrEmpty(dock.WorktreePath)
+                DockRestoreResult? restored = null;
+                if (dock != null && !String.IsNullOrEmpty(dock.WorktreePath) && Docks != null
+                    && !await DockWorktreeExistsAsync(dock, token).ConfigureAwait(false))
+                {
+                    restored = await Docks.RestoreWorktreeAsync(dock.Id, "retry landing of mission " + mission.Id, true, token).ConfigureAwait(false);
+                    if (!restored.Restored)
+                        _Logging.Warn(_Header + "could not recreate the worktree of dock " + dock.Id + " for mission " + missionId + ": " + restored.Reason);
+                }
+
+                if (dock != null && !String.IsNullOrEmpty(dock.WorktreePath) && restored?.Restored != true
                     && !await DockWorktreeExistsAsync(dock, token).ConfigureAwait(false))
                 {
                     string where = DockHostResolver.IsHarborDock(dock) ? " on Harbor " + dock.HarborId : "";
@@ -185,9 +221,16 @@ namespace Armada.Core.Services
                     mission.FailureKind = MissionFailureKindEnum.Infra;
                     mission.FailureReason = "Dock missing: the worktree " + dock.WorktreePath + where + " for dock " + dock.Id
                         + " no longer exists, so landing cannot be retried from it. Branch '" + missionBranch
-                        + "' is still in the repository; merge it manually or restart the mission.";
+                        + "' is still in the repository; merge it manually or restart the mission."
+                        + (restored != null && !String.IsNullOrEmpty(restored.Reason) ? " Recreating the worktree failed: " + restored.Reason + "." : "");
                     mission.LastUpdateUtc = DateTime.UtcNow;
                     if (!await SaveRetryAsync().ConfigureAwait(false)) return false;
+                    await BlackBox.RecordMissionFailureAsync(mission, retryStatusBefore, BlackBoxStepEnum.DockMissing, context =>
+                    {
+                        context.Vessel = vessel;
+                        context.Dock = dock;
+                        context.GitFacts = new BlackBoxGitFacts { WorktreeExisted = false, CheckoutPath = dock.WorktreePath };
+                    }, token).ConfigureAwait(false);
                     return false;
                 }
 
@@ -221,9 +264,15 @@ namespace Armada.Core.Services
                 {
                     _Logging.Warn(_Header + "no landing handler configured -- cannot retry landing for mission " + missionId);
                     mission.Status = MissionStatusEnum.LandingFailed;
-                    mission.FailureKind = MissionFailureKindEnum.LandingConflict;
+                    mission.FailureKind = MissionFailureKindEnum.Infra;
                     mission.LastUpdateUtc = DateTime.UtcNow;
                     if (!await SaveRetryAsync().ConfigureAwait(false)) return false;
+                    await BlackBox.RecordMissionFailureAsync(mission, retryStatusBefore, BlackBoxStepEnum.RetryLanding, context =>
+                    {
+                        context.Vessel = vessel;
+                        context.Dock = dock;
+                        context.Reason = "No landing handler is configured on this Admiral, so the landing could not be retried.";
+                    }, token).ConfigureAwait(false);
                     return false;
                 }
             }
@@ -231,15 +280,19 @@ namespace Armada.Core.Services
             {
                 _Logging.Warn(_Header + "landing retry failed for mission " + missionId + ": " + ex.ToString());
 
-                // Capture any merge-conflict file list so the operator sees exactly what to fix.
+                // Capture any merge-conflict file list so the operator sees exactly what to fix. A merge git reported as
+                // conflicted carries its files (read before the merge was aborted); otherwise the list is read from the
+                // worktree where the merge ran, never from the owning repository, which is not where landing merges.
                 string failureReason = "Landing retry failed: " + ex.Message;
-                try
+                MissionFailureKindEnum failureKind = LandingFailureClassifier.Classify(ex);
+                IReadOnlyList<string> conflicts = ConflictedFilesFrom(ex);
+                if (conflicts.Count == 0)
+                    conflicts = await ReadMergeWorktreeConflictsAsync(git, dock, vessel).ConfigureAwait(false);
+                if (conflicts.Count > 0)
                 {
-                    IReadOnlyList<string> conflicts = await git.GetConflictedFilesAsync(repoPath, token).ConfigureAwait(false);
-                    if (conflicts.Count > 0)
-                        failureReason = "Landing retry failed with merge conflicts in: " + String.Join(", ", conflicts);
+                    failureReason = "Landing retry failed with merge conflicts in: " + String.Join(", ", conflicts);
+                    failureKind = MissionFailureKindEnum.LandingConflict;
                 }
-                catch { }
 
                 // Ensure mission goes back to LandingFailed with the captured reason
                 try
@@ -248,9 +301,19 @@ namespace Armada.Core.Services
                     {
                         mission.Status = MissionStatusEnum.LandingFailed;
                         mission.FailureReason = failureReason;
-                        mission.FailureKind = MissionFailureKindEnum.LandingConflict;
+                        mission.FailureKind = failureKind;
                         mission.LastUpdateUtc = DateTime.UtcNow;
                         if (!await SaveRetryAsync().ConfigureAwait(false)) return false;
+                        IReadOnlyList<string> recordedConflicts = conflicts;
+                        await BlackBox.RecordMissionFailureAsync(mission, retryStatusBefore, BlackBoxSiteFacts.LandingStepOf(ex, BlackBoxStepEnum.RetryLanding), context =>
+                        {
+                            context.Vessel = vessel;
+                            context.Dock = dock != null && dock.Active ? dock : null;
+                            BlackBoxSiteFacts.ApplyException(context, ex);
+                            context.GitFacts ??= new BlackBoxGitFacts();
+                            foreach (string file in recordedConflicts)
+                                if (!context.GitFacts.ConflictedFiles.Contains(file)) context.GitFacts.ConflictedFiles.Add(file);
+                        }, token).ConfigureAwait(false);
                     }
                 }
                 catch { }
@@ -262,6 +325,40 @@ namespace Armada.Core.Services
         #endregion
 
         #region Private-Methods
+
+        private static IReadOnlyList<string> ConflictedFilesFrom(Exception exception)
+        {
+            for (Exception? current = exception; current != null; current = current.InnerException)
+            {
+                if (current is GitMergeConflictException conflict && conflict.ConflictedFiles.Count > 0) return conflict.ConflictedFiles;
+            }
+            return new List<string>();
+        }
+
+        private async Task<IReadOnlyList<string>> ReadMergeWorktreeConflictsAsync(IGitService git, Dock? dock, Vessel vessel)
+        {
+            // Landing merges in the dock worktree (target integration) and, for a local merge, in the target checkout.
+            List<string> candidates = new List<string>();
+            bool harborDock = DockHostResolver.IsHarborDock(dock);
+            if (!String.IsNullOrEmpty(dock?.WorktreePath)) candidates.Add(dock!.WorktreePath!);
+            string? targetCheckout = harborDock ? dock!.CheckoutPath : vessel.WorkingDirectory;
+            if (!String.IsNullOrEmpty(targetCheckout) && !candidates.Contains(targetCheckout)) candidates.Add(targetCheckout);
+
+            foreach (string candidate in candidates)
+            {
+                try
+                {
+                    // Not cancellable: the failure is being recorded even when the retry was cancelled.
+                    IReadOnlyList<string> conflicts = await git.GetConflictedFilesAsync(candidate, CancellationToken.None).ConfigureAwait(false);
+                    if (conflicts.Count > 0) return conflicts;
+                }
+                catch (Exception ex)
+                {
+                    _Logging.Debug(_Header + "unable to list conflicted files in " + candidate + ": " + ex.Message);
+                }
+            }
+            return new List<string>();
+        }
 
         private async Task<bool> DockWorktreeExistsAsync(Dock dock, CancellationToken token)
         {

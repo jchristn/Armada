@@ -40,7 +40,7 @@ namespace Armada.Server.Mcp.Tools
                     {
                         category = new { type = "string", description = "Optional category filter (for example 'persona' or 'mission')" },
                         pageNumber = new { type = "integer", description = "1-based page number (default 1)" },
-                        pageSize = new { type = "integer", description = "Results per page (default 25, max 100)" }
+                        pageSize = new { type = "integer", description = "Results per page (default 10, min 1, max 1000; out-of-range values are normalized)" }
                     }
                 },
                 async (args) =>
@@ -49,26 +49,27 @@ namespace Armada.Server.Mcp.Tools
                         ? JsonSerializer.Deserialize<PromptTemplateArgs>(args.Value, _JsonOptions) ?? new PromptTemplateArgs()
                         : new PromptTemplateArgs();
 
-                    int pageNumber = request.PageNumber.HasValue ? request.PageNumber.Value : 1;
-                    if (pageNumber < 1) pageNumber = 1;
-                    int pageSize = request.PageSize.HasValue ? request.PageSize.Value : 25;
-                    if (pageSize < 1) pageSize = 1;
-                    if (pageSize > 100) pageSize = 100;
-
                     AuthContext caller = McpToolHelpers.ResolveCallerContext();
-                    List<PromptTemplate> templates = await templateService.ListAsync(request.Category).ConfigureAwait(false);
-                    List<PromptTemplate> ordered = templates
-                        .Where(template => IsVisible(caller, template))
-                        .OrderBy(template => template.Category, StringComparer.OrdinalIgnoreCase)
-                        .ThenBy(template => template.Name, StringComparer.OrdinalIgnoreCase)
-                        .ToList();
+                    // Paged in the data source with the caller's visibility applied before counting (templates stored
+                    // without a tenant are shared defaults and visible to everyone, as get_prompt_template treats them).
+                    PromptTemplateQuery query = new PromptTemplateQuery
+                    {
+                        TenantId = caller.IsAdmin ? null : (caller.TenantId ?? Constants.DefaultTenantId),
+                        ViewerUserId = caller.IsAdmin || caller.IsTenantAdmin ? null : caller.UserId,
+                        IncludeUntenanted = true,
+                        Category = String.IsNullOrWhiteSpace(request.Category) ? null : request.Category,
+                        OrderByCategoryAndName = true
+                    };
+                    if (request.PageNumber.HasValue) query.PageNumber = request.PageNumber.Value;
+                    if (request.PageSize.HasValue) query.PageSize = request.PageSize.Value;
 
-                    long totalRecords = ordered.Count;
-                    int totalPages = pageSize > 0 ? (int)Math.Ceiling((double)totalRecords / pageSize) : 0;
+                    EnumerationResult<PromptTemplate> page = await database.PromptTemplates.EnumerateVisibleAsync(query).ConfigureAwait(false);
+                    int pageNumber = page.PageNumber;
+                    int pageSize = page.PageSize;
+                    long totalRecords = page.TotalRecords;
+                    int totalPages = page.TotalPages;
 
-                    List<object> objects = ordered
-                        .Skip((pageNumber - 1) * pageSize)
-                        .Take(pageSize)
+                    List<object> objects = page.Objects
                         .Select(template => (object)new
                         {
                             name = template.Name,

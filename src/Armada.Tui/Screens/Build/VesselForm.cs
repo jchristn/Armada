@@ -86,7 +86,11 @@ namespace Armada.Tui.Screens.Build
             autoApprove.SetValue(editing?.AutoApprove == true ? "on" : editing?.AutoApprove == false ? "off" : "inherit");
             SelectField<string> pipeline = screen.NewSelect("Default Pipeline", BuildText.PipelineOptions(pipelines, loc));
             pipeline.SetValue(editing?.DefaultPipelineId ?? "");
-            OpsCheckField concurrent = new OpsCheckField("Allow Concurrent Missions", editing?.AllowConcurrentMissions ?? false);
+            InputField parallelVoyages = Input((editing?.MaxParallelVoyages ?? 1).ToString(CultureInfo.InvariantCulture), "1");
+            parallelVoyages.Validator = v => RangeOrBlank(v, 0, 1000);
+            InputField parallelMissions = Input((editing?.MaxParallelMissionsPerVoyage ?? 4).ToString(CultureInfo.InvariantCulture), "4");
+            parallelMissions.Validator = v => RangeOrBlank(v, 0, 1000);
+            OpsCheckField serialize = new OpsCheckField("Serialize Overlapping Missions", editing?.SerializeOverlappingMissions ?? true);
             OpsCheckField modelContextOn = new OpsCheckField("Enable Model Context", editing?.EnableModelContext ?? true);
 
             InputField releasePrefix = Input(editing != null && !String.IsNullOrEmpty(editing.ReleaseBranchPrefix) ? editing.ReleaseBranchPrefix : "release/", null);
@@ -114,6 +118,17 @@ namespace Armada.Tui.Screens.Build
             InputField dodTimeout = Input(editing != null && editing.DefinitionOfDoneTimeoutSeconds > 0 ? editing.DefinitionOfDoneTimeoutSeconds.ToString(CultureInfo.InvariantCulture) : "", "1800");
             dodTimeout.Validator = v => String.IsNullOrWhiteSpace(v) || (Int32.TryParse(v.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int n) && n >= 30 && n <= 7200) ? null : "Enter 30 to 7200 seconds.";
 
+            WorkerEnvelope? storedEnvelope = editing?.WorkerEnvelope;
+            InputField envMaxFiles = Input(OptionalCount(storedEnvelope?.MaxFiles), "no limit");
+            envMaxFiles.Validator = v => RangeOrBlank(v, 1, 1000);
+            InputField envMaxSteps = Input(OptionalCount(storedEnvelope?.MaxSteps), "no limit");
+            envMaxSteps.Validator = v => RangeOrBlank(v, 1, 1000);
+            InputField envMinContext = Input(OptionalCount(storedEnvelope?.MinServedContextTokens), "no minimum");
+            envMinContext.Validator = v => RangeOrBlank(v, 1, 100000000);
+            List<string> storedTools = storedEnvelope?.RequiredTools ?? new List<string>();
+            OpsCheckField envTools = new OpsCheckField("Require tool calls", storedTools.Contains("tools"));
+            OpsCheckField envMcp = new OpsCheckField("Require MCP tools", storedTools.Contains("mcp"));
+
             OpsTextArea projectContext = Area(screen, editing?.ProjectContext ?? "", "");
             OpsTextArea styleGuide = Area(screen, editing?.StyleGuide ?? "", "");
             OpsTextArea modelContext = Area(screen, editing?.ModelContext ?? "", "Agent-accumulated context...");
@@ -135,7 +150,9 @@ namespace Armada.Tui.Screens.Build
             dialog.AddField("Branch Cleanup", cleanup, "When and how mission branches are deleted after successful landing.");
             dialog.AddField("Agent Auto-Approve", autoApprove, "Whether CLI captains run missions on this vessel with their auto-approve (permission bypass) flags. Overrides the captain setting when set.");
             dialog.AddField("Default Pipeline", pipeline);
-            dialog.AddField("", concurrent);
+            dialog.AddField("Parallel Voyages", parallelVoyages, "Admitted voyages, including review and landing. Each standalone mission counts as a voyage. 0 = unlimited.");
+            dialog.AddField("Parallel Missions Per Voyage", parallelMissions, "Running agents within each voyage. 0 = unlimited.");
+            dialog.AddField("", serialize, "Black box prevention: a mission that overlaps an active one is dispatched to start after it lands.");
             dialog.AddField("", modelContextOn);
             dialog.Form.AddSection("Branch Policy");
             dialog.AddField("Release Branch Prefix", releasePrefix);
@@ -159,6 +176,12 @@ namespace Armada.Tui.Screens.Build
             dialog.AddField("Build Command", dodBuild);
             dialog.AddField("Test Command", dodTest);
             dialog.AddField("Per-phase Timeout (seconds)", dodTimeout);
+            dialog.Form.AddSection("Worker Eligibility Envelope");
+            dialog.AddField("Max Files", envMaxFiles, "Optional; leave every envelope field blank for no envelope. When set, only captains whose model profile meets it run Worker missions here. The Architect may tighten it per mission but never loosen it.");
+            dialog.AddField("Max Steps", envMaxSteps);
+            dialog.AddField("Min Served Context (tokens)", envMinContext);
+            dialog.AddField("", envTools);
+            dialog.AddField("", envMcp);
             dialog.Form.AddSection("Context");
             dialog.AddField("Project Context", projectContext, null, 5);
             dialog.AddField("Style Guide", styleGuide, null, 5);
@@ -180,7 +203,9 @@ namespace Armada.Tui.Screens.Build
                 body.BranchCleanupPolicy = Enum.TryParse<BranchCleanupPolicyEnum>(cleanup.Value ?? "", out BranchCleanupPolicyEnum bc) ? bc : (BranchCleanupPolicyEnum?)null;
                 body.AutoApprove = autoApprove.Value == "on" ? true : autoApprove.Value == "off" ? false : (bool?)null;
                 body.DefaultPipelineId = String.IsNullOrEmpty(pipeline.Value) ? null : pipeline.Value;
-                body.AllowConcurrentMissions = concurrent.Checked;
+                body.MaxParallelVoyages = ParseOptional(parallelVoyages.Value) ?? 1;
+                body.MaxParallelMissionsPerVoyage = ParseOptional(parallelMissions.Value) ?? 4;
+                body.SerializeOverlappingMissions = serialize.Checked;
                 body.EnableModelContext = modelContextOn.Checked;
                 body.ReleaseBranchPrefix = String.IsNullOrWhiteSpace(releasePrefix.Value) ? "release/" : releasePrefix.Value.Trim();
                 body.HotfixBranchPrefix = String.IsNullOrWhiteSpace(hotfixPrefix.Value) ? "hotfix/" : hotfixPrefix.Value.Trim();
@@ -200,6 +225,7 @@ namespace Armada.Tui.Screens.Build
                 body.DefinitionOfDoneBuildCommand = dodBuild.Value.Trim();
                 body.DefinitionOfDoneTestCommand = dodTest.Value.Trim();
                 body.DefinitionOfDoneTimeoutSeconds = Int32.TryParse(dodTimeout.Value.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int timeout) ? Math.Max(30, timeout) : 1800;
+                body.WorkerEnvelope = BuildEnvelope(envMaxFiles.Value, envMaxSteps.Value, envMinContext.Value, envTools.Checked, envMcp.Checked);
                 body.ProjectContext = Blank(projectContext.Text);
                 body.StyleGuide = Blank(styleGuide.Text);
                 body.ModelContext = Blank(modelContext.Text);
@@ -255,7 +281,9 @@ namespace Armada.Tui.Screens.Build
             copy.HotfixBranchPrefix = vessel.HotfixBranchPrefix;
             copy.RequirePullRequestForProtectedBranches = vessel.RequirePullRequestForProtectedBranches;
             copy.RequireMergeQueueForReleaseBranches = vessel.RequireMergeQueueForReleaseBranches;
-            copy.AllowConcurrentMissions = vessel.AllowConcurrentMissions;
+            copy.MaxParallelVoyages = vessel.MaxParallelVoyages;
+            copy.MaxParallelMissionsPerVoyage = vessel.MaxParallelMissionsPerVoyage;
+            copy.SerializeOverlappingMissions = vessel.SerializeOverlappingMissions;
             copy.DefaultPipelineId = vessel.DefaultPipelineId;
             return copy;
         }
@@ -295,6 +323,40 @@ namespace Armada.Tui.Screens.Build
         private static string? Blank(string? value)
         {
             return String.IsNullOrEmpty(value) ? null : value;
+        }
+
+        private static string OptionalCount(int? value)
+        {
+            return value.HasValue ? value.Value.ToString(CultureInfo.InvariantCulture) : "";
+        }
+
+        private static string? RangeOrBlank(string value, int min, int max)
+        {
+            if (String.IsNullOrWhiteSpace(value)) return null;
+            return Int32.TryParse(value.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int n) && n >= min && n <= max
+                ? null
+                : "Enter " + min.ToString(CultureInfo.InvariantCulture) + " to " + max.ToString(CultureInfo.InvariantCulture) + ", or leave blank.";
+        }
+
+        private static int? ParseOptional(string value)
+        {
+            return Int32.TryParse((value ?? "").Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int n) ? n : (int?)null;
+        }
+
+        private static WorkerEnvelope? BuildEnvelope(string maxFiles, string maxSteps, string minContext, bool requireTools, bool requireMcp)
+        {
+            List<string> tools = new List<string>();
+            if (requireTools) tools.Add("tools");
+            if (requireMcp) tools.Add("mcp");
+            WorkerEnvelope envelope = new WorkerEnvelope
+            {
+                MaxFiles = ParseOptional(maxFiles),
+                MaxSteps = ParseOptional(maxSteps),
+                MinServedContextTokens = ParseOptional(minContext),
+                RequiredTools = tools
+            };
+            if (!envelope.MaxFiles.HasValue && !envelope.MaxSteps.HasValue && !envelope.MinServedContextTokens.HasValue && tools.Count == 0) return null;
+            return envelope;
         }
 
         #endregion

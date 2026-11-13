@@ -10,6 +10,7 @@ namespace Armada.Tui.Screens.Build
     using Armada.Client.Models;
     using Armada.Core.Models;
     using Armada.Tui.Routing;
+    using Armada.Tui.Screens.Kit;
     using Armada.Tui.Screens.Operations;
     using Armada.Tui.Services;
     using Armada.Tui.Text;
@@ -137,6 +138,7 @@ namespace Armada.Tui.Screens.Build
 
             RowActions.Add(new OpsAction<Vessel>("dispatch", "Dispatch", v => Context.Navigate(DispatchRoute(v)), "d"));
             RowActions.Add(new OpsAction<Vessel>("branches", "Manage Branches", v => ManageBranches(v), "b"));
+            RowActions.Add(new OpsAction<Vessel>("cleanup", "Cleanup", v => Cleanup(v), "c"));
             RowActions.Add(new OpsAction<Vessel>("objectives", "Manage Objectives", v => Context.Navigate(ObjectivesRoute(v)), "O"));
             RowActions.Add(new OpsAction<Vessel>("fleet", "Manage Fleet", v => Context.Navigate("/fleets/" + Uri.EscapeDataString(v.FleetId!)), "f", v => !String.IsNullOrEmpty(v.FleetId)));
             RowActions.Add(new OpsAction<Vessel>("workspace", "Open Workspace", v => Context.Navigate("/workspace/" + Uri.EscapeDataString(v.Id)), "w"));
@@ -197,6 +199,24 @@ namespace Armada.Tui.Screens.Build
         }
 
         /// <summary>
+        /// Open the vessel Cleanup dialog (read-only until cleanup is confirmed); the list reloads when it closes.
+        /// </summary>
+        /// <param name="vessel">Vessel.</param>
+        /// <returns>The dialog.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="vessel"/> is null.</exception>
+        public VesselCleanupDialog Cleanup(Vessel vessel)
+        {
+            if (vessel == null) throw new ArgumentNullException(nameof(vessel));
+            VesselCleanupDialog dialog = new VesselCleanupDialog(this, vessel.Id, vessel.Name);
+            Context.Modals.Show(dialog, r =>
+            {
+                _StatusReadUtc.TryRemove(vessel.Id, out DateTime _);
+                Refresh();
+            });
+            return dialog;
+        }
+
+        /// <summary>
         /// Open the Manage Branches dialog; the list reloads when it closes, as on the dashboard.
         /// </summary>
         /// <param name="vessel">Vessel.</param>
@@ -242,10 +262,10 @@ namespace Armada.Tui.Screens.Build
             q.With("userId", UserScope?.Value);
             Task<EnumerationResult<Vessel>?> vessels = Context.Client.ListVesselsAsync(q, token);
             Task<EnumerationResult<Fleet>?> fleets = Context.Client.ListFleetsAsync(new ArmadaPageQuery(1, 9999), token);
-            Task<EnumerationResult<Pipeline>?> pipelines = Context.Client.ListPipelinesAsync(new ArmadaPageQuery(1, 9999), token);
+            Task<List<Pipeline>> pipelines = ArmadaPaging.ReadAllAsync<Pipeline>((p, ct) => Context.Client.ListPipelinesAsync(new ArmadaPageQuery(p, 1000), ct), ArmadaPaging.DefaultMaxPages, token);
             await Task.WhenAll(vessels, fleets, pipelines).ConfigureAwait(false);
             _LoadedFleets = fleets.Result?.Objects ?? new List<Fleet>();
-            _LoadedPipelines = pipelines.Result?.Objects ?? new List<Pipeline>();
+            _LoadedPipelines = pipelines.Result;
             List<Vessel> rows = vessels.Result?.Objects ?? new List<Vessel>();
             return new GridPage<Vessel>(rows, rows.Count);
         }
@@ -402,11 +422,11 @@ namespace Armada.Tui.Screens.Build
         {
             Confirm("Delete Vessel", Tr("Delete vessel \"{{name}}\"? This cannot be undone.", LocalizationArgs.Of("name", vessel.Name)), () =>
             {
-                Run((c, t) => c.DeleteVesselAsync(vessel.Id, t), () =>
+                DeleteProgress.RunVoid(Context, "Deleting vessel", t => Context.Client.DeleteVesselAsync(vessel.Id, t), () =>
                 {
                     Toast(NotificationSeverityEnum.Warning, Tr("Vessel \"{{name}}\" deleted.", LocalizationArgs.Of("name", vessel.Name)));
                     Refresh();
-                }, null, ex => ShowMessage(Tr("Delete failed.")));
+                }, "Delete failed.");
             }, "Delete");
         }
 
@@ -417,12 +437,12 @@ namespace Armada.Tui.Screens.Build
             Confirm("Delete Selected Vessels", Tr("Delete {{count}} selected vessel(s)? This cannot be undone.", LocalizationArgs.Of("count", ids.Count)), () =>
             {
                 Grid.ClearMarks();
-                Call(async (c, t) =>
+                DeleteProgress.Run(Context, "{count, plural, one {Deleting # vessel} other {Deleting # vessels}}", async t =>
                 {
                     int failed = 0;
                     foreach (string id in ids)
                     {
-                        try { await c.DeleteVesselAsync(id, t).ConfigureAwait(false); }
+                        try { await Context.Client.DeleteVesselAsync(id, t).ConfigureAwait(false); }
                         catch (ArmadaApiException) { failed++; }
                     }
 
@@ -439,7 +459,7 @@ namespace Armada.Tui.Screens.Build
 
                     if (failed > 0) ShowMessage(Tr("Deleted {{success}} vessels, {{failed}} failed.", LocalizationArgs.Of("success", success, "failed", failed)));
                     Refresh();
-                }, "Delete failed.");
+                }, "Delete failed.", ids.Count);
             }, "Delete");
         }
 

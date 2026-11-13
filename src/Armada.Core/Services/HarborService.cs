@@ -56,18 +56,39 @@ namespace Armada.Core.Services
         #region Public-Methods
 
         /// <summary>
-        /// Enumerate Harbors visible to the caller (all for an admin, otherwise the caller's tenant), newest
-        /// first.
+        /// Every Harbor visible to the caller (all for an admin, otherwise the caller's tenant), newest first. For
+        /// in-process routing decisions that must consider every Harbor; REST and MCP read Harbors one page at a time
+        /// through <see cref="EnumeratePageAsync"/>.
         /// </summary>
         /// <param name="auth">Authentication context.</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>List of Harbors.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when auth is null.</exception>
         public async Task<List<Harbor>> EnumerateAsync(AuthContext auth, CancellationToken token = default)
         {
             if (auth == null) throw new ArgumentNullException(nameof(auth));
             if (auth.IsAdmin || String.IsNullOrEmpty(auth.TenantId))
                 return await _Database.Harbors.EnumerateAsync(token).ConfigureAwait(false);
             return await _Database.Harbors.EnumerateAsync(auth.TenantId, token).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// One page of the Harbors visible to the caller (all for an admin or a caller without a tenant, otherwise the
+        /// caller's tenant), newest first by default, counted and cut in the database.
+        /// </summary>
+        /// <param name="auth">Authentication context.</param>
+        /// <param name="query">Paging (PageSize 1 to 1000, default 10), Order, CreatedAfter, and CreatedBefore.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The page with exact totals for the caller.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when auth or query is null.</exception>
+        public async Task<EnumerationResult<Harbor>> EnumeratePageAsync(AuthContext auth, EnumerationQuery query, CancellationToken token = default)
+        {
+            if (auth == null) throw new ArgumentNullException(nameof(auth));
+            if (query == null) throw new ArgumentNullException(nameof(query));
+            ScopedEnumerationFilter filter = auth.IsAdmin || String.IsNullOrEmpty(auth.TenantId)
+                ? new ScopedEnumerationFilter()
+                : ScopedEnumerationFilter.ForTenant(auth.TenantId);
+            return await _Database.Harbors.EnumeratePageAsync(query, filter, token).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -95,11 +116,14 @@ namespace Armada.Core.Services
         /// <param name="harbor">Harbor to create.</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>The created Harbor.</returns>
+        /// <exception cref="ArgumentException">Thrown when the name is missing.</exception>
+        /// <exception cref="CollectionLimitExceededException">Thrown when Capabilities holds more than <see cref="CollectionLimits.MaxConfigItems"/> entries.</exception>
         public async Task<Harbor> CreateAsync(AuthContext auth, Harbor harbor, CancellationToken token = default)
         {
             if (auth == null) throw new ArgumentNullException(nameof(auth));
             if (harbor == null) throw new ArgumentNullException(nameof(harbor));
             if (String.IsNullOrWhiteSpace(harbor.Name)) throw new ArgumentException("Harbor name is required.");
+            CollectionBounds.Validate(harbor);
 
             harbor.TenantId = auth.TenantId;
             harbor.UserId = auth.UserId;
@@ -203,6 +227,7 @@ namespace Armada.Core.Services
         /// <param name="token">Cancellation token.</param>
         /// <returns>The registered Harbor.</returns>
         /// <exception cref="UnauthorizedAccessException">Thrown when the id is already registered to another tenant or user.</exception>
+        /// <exception cref="CollectionLimitExceededException">Thrown when the handshake advertises more than <see cref="CollectionLimits.MaxConfigItems"/> capabilities.</exception>
         public async Task<Harbor> UpsertFromHandshakeAsync(
             string harborId,
             string? tenantId,
@@ -217,6 +242,7 @@ namespace Armada.Core.Services
         {
             if (String.IsNullOrWhiteSpace(harborId)) throw new ArgumentNullException(nameof(harborId));
             if (String.IsNullOrWhiteSpace(name)) throw new ArgumentException("Harbor name is required.");
+            CollectionLimits.RequireConfigItems(capabilities, "Capabilities");
 
             DateTime now = DateTime.UtcNow;
             Harbor? existing = await _Database.Harbors.ReadAsync(harborId, token).ConfigureAwait(false);

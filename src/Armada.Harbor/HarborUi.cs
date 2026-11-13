@@ -1,6 +1,8 @@
 namespace Armada.Harbor
 {
     using System;
+    using System.Net.Http;
+    using Armada.Client;
     using Avalonia;
     using Avalonia.Automation;
     using Avalonia.Controls;
@@ -318,6 +320,21 @@ namespace Armada.Harbor
             button.VerticalContentAlignment = VerticalAlignment.Center;
             AutomationProperties.SetName(button, "Refresh");
             return button;
+        }
+
+        /// <summary>
+        /// The useful part of an API error for a sentence that already names the Admiral. The client words a network
+        /// failure as "Could not reach the Armada server at URL: reason"; this returns only the reason, so callers can
+        /// say "Could not reach the Admiral at URL: reason" without repeating it.
+        /// </summary>
+        /// <param name="ex">Error.</param>
+        /// <returns>Detail text.</returns>
+        /// <exception cref="ArgumentNullException">ex is null.</exception>
+        public static string ApiErrorDetail(ArmadaApiException ex)
+        {
+            if (ex == null) throw new ArgumentNullException(nameof(ex));
+            if (ex.StatusCode == 0 && ex.InnerException is HttpRequestException inner && !String.IsNullOrWhiteSpace(inner.Message)) return inner.Message;
+            return ex.Message;
         }
 
         /// <summary>

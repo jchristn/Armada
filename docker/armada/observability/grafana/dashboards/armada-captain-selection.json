@@ -1,0 +1,330 @@
+{
+  "title": "Armada Captain Selection",
+  "uid": "armada-captain-selection",
+  "tags": [
+    "armada",
+    "usage",
+    "selection"
+  ],
+  "schemaVersion": 39,
+  "version": 1,
+  "timezone": "browser",
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "refresh": "30s",
+  "links": [
+    {
+      "title": "Selection traces",
+      "type": "link",
+      "url": "/explore?left=%7B%22datasource%22%3A%22armada-tempo%22%2C%22queries%22%3A%5B%7B%22refId%22%3A%22A%22%2C%22queryType%22%3A%22traceql%22%2C%22query%22%3A%22%7Bname%3D~%5C%22selection.*%5C%22%7D%22%7D%5D%7D"
+    },
+    {
+      "title": "Armada Usage",
+      "type": "link",
+      "url": "/d/armada-usage"
+    }
+  ],
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Decisions by mode and outcome",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "armada-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
+      "targets": [
+        {
+          "expr": "sum by (mode,outcome) (rate(armada_selection_decisions_total[5m]))",
+          "refId": "A",
+          "legendFormat": "{{mode}} {{outcome}}"
+        }
+      ],
+      "description": "Recorded selection decisions per second. Waiting counts only materially new waiting states, not every dispatch cycle.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Waits by reason",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "armada-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
+      "targets": [
+        {
+          "expr": "sum by (reason) (increase(armada_selection_waits_total[15m]))",
+          "refId": "A",
+          "legendFormat": "{{reason}}"
+        }
+      ],
+      "description": "New waiting states per 15 minutes by semantic reason. Reasons outside the fixed code set appear as Other.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "stacking": {
+              "mode": "normal"
+            }
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Observe divergence",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "armada-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 8
+      },
+      "targets": [
+        {
+          "expr": "sum(increase(armada_selection_observe_divergence_total[1h])) / clamp_min(sum(increase(armada_selection_decisions_total{mode=\"Observe\",outcome=\"Admitted\"}[1h])), 1)",
+          "refId": "A",
+          "legendFormat": "share of Observe admissions"
+        },
+        {
+          "expr": "sum by (strategy) (increase(armada_selection_observe_divergence_total[1h]))",
+          "refId": "B",
+          "legendFormat": "{{strategy}} diverged"
+        }
+      ],
+      "description": "Share of Observe admissions where the configured strategy would have chosen a different captain than actual routing. Use it to judge what Enforce would change before switching.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Stage latency (p95)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "armada-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 8
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le,stage) (rate(armada_selection_stage_duration_seconds_bucket{stage=~\"evidence|evaluation|transaction\"}[5m])))",
+          "refId": "A",
+          "legendFormat": "{{stage}}"
+        }
+      ],
+      "description": "Evidence reads, policy evaluation and the admission transaction. Evidence and evaluation include read-only previews.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Admission transaction outcomes",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "armada-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 16
+      },
+      "targets": [
+        {
+          "expr": "sum by (outcome) (rate(armada_selection_stage_duration_seconds_count{stage=\"transaction\"}[5m]))",
+          "refId": "A",
+          "legendFormat": "{{outcome}}"
+        }
+      ],
+      "description": "Admitted, Conflict (slot, revision or evidence changed before commit), Replayed (already committed) and Error.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Reservations by state",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "armada-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 16
+      },
+      "targets": [
+        {
+          "expr": "sum by (state) (armada_selection_reservations)",
+          "refId": "A",
+          "legendFormat": "{{state}}"
+        }
+      ],
+      "description": "Reservation rows by lifecycle state, refreshed each health tick by the reconciler. Uncertain means post-execution evidence never proved settlement; investigate captures for those accounts.",
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      }
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Reconciliation outcomes",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "armada-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 24
+      },
+      "targets": [
+        {
+          "expr": "sum by (outcome) (increase(armada_selection_reconciliation_total[1h]))",
+          "refId": "A",
+          "legendFormat": "{{outcome}}"
+        },
+        {
+          "expr": "sum(increase(armada_selection_stage_duration_seconds_count{stage=\"reconcile\",outcome=\"Error\"}[1h]))",
+          "refId": "B",
+          "legendFormat": "pass errors"
+        }
+      ],
+      "description": "Rows settled, moved to unsettled or uncertain, released or left unchanged per hour, plus reconciler passes that failed.",
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      }
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Provider cooldowns",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "armada-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 24
+      },
+      "targets": [
+        {
+          "expr": "sum by (outcome) (increase(armada_selection_cooldowns_total[1h]))",
+          "refId": "A",
+          "legendFormat": "{{outcome}}"
+        }
+      ],
+      "description": "Classified provider usage-limit exits: Recorded set an account cooldown; Ignored or Unattributed could not be tied to an owned execution.",
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      }
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Ledger persistence failures",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "armada-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 32
+      },
+      "targets": [
+        {
+          "expr": "sum by (stage) (increase(armada_selection_persistence_failures_total[15m]))",
+          "refId": "A",
+          "legendFormat": "{{stage}}"
+        }
+      ],
+      "description": "Evidence reads, history writes or admission transactions that could not be confirmed. The mission waits and no process starts.",
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      }
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "History retention",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "armada-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 32
+      },
+      "targets": [
+        {
+          "expr": "sum(increase(armada_selection_retention_deleted_total[6h]))",
+          "refId": "A",
+          "legendFormat": "decisions removed"
+        },
+        {
+          "expr": "sum(increase(armada_selection_stage_duration_seconds_count{stage=\"retention\",outcome=\"Error\"}[6h]))",
+          "refId": "B",
+          "legendFormat": "pass errors"
+        }
+      ],
+      "description": "Decisions removed by UsageSelection.DecisionRetentionDays. Decisions with live reservations or running missions are kept.",
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      }
+    }
+  ]
+}

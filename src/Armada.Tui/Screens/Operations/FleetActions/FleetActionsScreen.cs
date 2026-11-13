@@ -9,6 +9,7 @@ namespace Armada.Tui.Screens.Operations
     using Armada.Core.Enums;
     using Armada.Core.Models;
     using Armada.Tui.Routing;
+    using Armada.Tui.Screens.Kit;
     using Armada.Tui.Services;
     using Armada.Tui.Text;
     using Armada.Tui.Widgets;
@@ -16,7 +17,7 @@ namespace Armada.Tui.Screens.Operations
 
     /// <summary>
     /// Fleet Actions: Actions tab (W3.7, <c>/fleet-actions</c>), the dashboard's FleetActionsTable: saved actions with
-    /// name (hidden marker, id, description), kind, source (built-in or custom), timeout, concurrency, created
+    /// name (hidden and report-only markers, id, description), kind, source (built-in or custom), timeout, concurrency, created
     /// (sortable on the server), and updated; Run action... (vessel picker, run dialog, run), + Action, and the row
     /// menu (Run, Edit, Duplicate, View JSON, Delete; deleting a built-in hides it). Writes are tenant-admin only;
     /// others open View JSON. <c>?run=new</c> starts the run flow. Not thread-safe.
@@ -61,7 +62,7 @@ namespace Armada.Tui.Screens.Operations
         {
             Grid.MultiSelect = false;
             Grid.EmptyText = "No fleet actions yet";
-            Column("name", "Name", a => a.Name + (a.Active ? "" : "  [" + Tr("Hidden") + "]") + (String.IsNullOrEmpty(a.Description) ? "" : "  - " + a.Description), 4);
+            Column("name", "Name", a => a.Name + (a.Active ? "" : "  [" + Tr("Hidden") + "]") + (FleetActionLabels.IsReportOnly(a.Kind, a.MissionMode) ? "  [" + Tr("Report-only") + "]" : "") + (String.IsNullOrEmpty(a.Description) ? "" : "  - " + a.Description), 4);
             Column("id", "ID", a => a.Id, 0, 24).DefaultVisible = false;
             Column("kind", "Kind", a => (a.Kind == FleetActionKindEnum.Command ? "! " : "i ") + Tr(a.Kind.ToString()), 0, 11, null, (a, t) => a.Kind == FleetActionKindEnum.Command ? t.Warning : t.Info);
             Column("source", "Source", a => a.IsBuiltIn ? "# " + Tr("Built-in") : Tr("Custom"), 0, 11);
@@ -151,7 +152,7 @@ namespace Armada.Tui.Screens.Operations
             int y = 0;
             foreach (string text in new[]
             {
-                "Armada seeds five built-in actions into each tenant the first time actions are listed: Fast-forward default branch, Prune merged branches, Build, Update outdated dependencies, and Add a test project.",
+                "Armada seeds its built-in actions into each tenant the first time actions are listed: repository upkeep, scans (Run tests, Lint, Vulnerability audit, Outdated dependencies report) with linked fix actions for a follow-up run, and report-only reviews.",
                 "Deleted built-ins are hidden for good and never re-seeded. Create your own action to get started.",
             })
             {
@@ -194,13 +195,13 @@ namespace Armada.Tui.Screens.Operations
                 : Tr("Delete \"{{name}}\"? Past runs keep their snapshot of the definition. This cannot be undone.", LocalizationArgs.Of("name", a.Name));
             Confirm(title, message, () =>
             {
-                Run((c, t) => c.DeleteFleetActionAsync(a.Id, t), () =>
+                DeleteProgress.RunVoid(Context, "Deleting fleet action", t => Context.Client.DeleteFleetActionAsync(a.Id, t), () =>
                 {
                     Toast(NotificationSeverityEnum.Warning, a.IsBuiltIn
                         ? Tr("Built-in action \"{{name}}\" hidden.", LocalizationArgs.Of("name", a.Name))
                         : Tr("Fleet action \"{{name}}\" deleted.", LocalizationArgs.Of("name", a.Name)));
                     Refresh();
-                }, null, ex => ShowMessage(String.IsNullOrEmpty(ex.Message) ? Tr("Delete failed.") : ex.Message));
+                }, "Delete failed.");
             }, a.IsBuiltIn ? "Hide" : "Delete");
         }
 

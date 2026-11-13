@@ -49,6 +49,7 @@ namespace Armada.Server.Mcp.Tools
                         missions = new
                         {
                             type = "array",
+                            description = "Missions to dispatch, at most 1000",
                             items = new
                             {
                                 type = "object",
@@ -58,7 +59,11 @@ namespace Armada.Server.Mcp.Tools
                                     description = new { type = "string" },
                                     requestedCaptainId = new { type = "string", description = "Optional captain (cpt_ prefix) to run this mission (the first stage in a pipeline); overrides persona captain priorities" },
                                     tier = new { type = "string", description = "Optional minimum captain tier for this mission: Economy, Standard, or Premium" },
-                                    persona = new { type = "string", description = "Optional persona for a single-stage mission when no pipeline is given (defaults to Worker)" }
+                                    persona = new { type = "string", description = "Optional persona for a single-stage mission when no pipeline is given (defaults to Worker)" },
+                                    key = new { type = "string", description = "Optional key naming this mission so a later mission can name it as parentKey" },
+                                    parentKey = new { type = "string", description = "Optional key of an earlier mission in this dispatch: this mission becomes its child and starts once the parent finishes, on its result. Use it only when this mission needs the parent's code; unrelated missions run in parallel. An unknown or later key creates nothing" },
+                                    branchStrategy = new { type = "string", description = "Optional branch relationship to the parent: New, ContinueParent (default for the first child) or ForkFromParent (default for later children)" },
+                                    ownedPaths = new { type = "array", items = new { type = "string" }, description = "Optional files or directories (trailing / for a directory) this mission may change; missions that can run at the same time should not share them" }
                                 }
                             }
                         },
@@ -70,7 +75,7 @@ namespace Armada.Server.Mcp.Tools
                         selectedPlaybooks = new
                         {
                             type = "array",
-                            description = "Ordered playbooks to apply during dispatch",
+                            description = "Ordered playbooks to apply during dispatch, at most 256",
                             items = new
                             {
                                 type = "object",
@@ -121,6 +126,8 @@ namespace Armada.Server.Mcp.Tools
                     string vesselId = request.VesselId;
                     List<MissionDescription> missions = request.Missions;
                     List<SelectedPlaybook> selectedPlaybooks = request.SelectedPlaybooks ?? new List<SelectedPlaybook>();
+                    CollectionLimits.RequireRequestItems(missions, "Missions");
+                    CollectionLimits.RequireConfigItems(selectedPlaybooks, "SelectedPlaybooks");
 
                     // Shared validation: objective existence, pipeline-by-name resolution, and bare-voyage
                     // detection live in one place so MCP accepts and rejects the same inputs as REST.
@@ -180,18 +187,14 @@ namespace Armada.Server.Mcp.Tools
 
             register(
                 "voyage_status",
-                "Get status of a specific voyage. Returns summary with mission counts by default; opt-in to full mission details.",
+                "Get status of a specific voyage: the voyage with its mission counts (TotalMissions, MissionCountsByStatus) and LastBlackBoxEntryId (its current black box entry, read it with get_blackbox). Missions are never embedded; read them one page at a time with enumerate (entityType missions, voyageId).",
                 new
                 {
                     type = "object",
                     properties = new
                     {
                         voyageId = new { type = "string", description = "Voyage ID (vyg_ prefix)" },
-                        summary = new { type = "boolean", description = "Return summary only with mission counts by status (default true). Set false to include mission objects." },
-                        includeMissions = new { type = "boolean", description = "Include full mission objects (default false). Only used when summary=false." },
-                        includeDescription = new { type = "boolean", description = "Include Description on embedded missions (default false)" },
-                        includeDiffs = new { type = "boolean", description = "Include saved diff for each mission (default false)" },
-                        includeLogs = new { type = "boolean", description = "Include log excerpt for each mission (default false). Currently reserved for future use." }
+                        summary = new { type = "boolean", description = "Return a trimmed voyage (id, title, description, status, timestamps, approval options, evaluation flag, LastBlackBoxEntryId) with the counts (default true). Set false for the full voyage object with the counts." }
                     },
                     required = new[] { "voyageId" }
                 },
@@ -199,47 +202,69 @@ namespace Armada.Server.Mcp.Tools
                 {
                     AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     VoyageStatusArgs request = JsonSerializer.Deserialize<VoyageStatusArgs>(args!.Value, _JsonOptions)!;
+                    if (request.IncludeMissions == true)
+                        return (object)McpToolError.InvalidArgument("includeMissions was removed: voyage_status never embeds missions. Read them one page at a time with enumerate (entityType missions, voyageId " + request.VoyageId + ").");
                     string voyageId = request.VoyageId;
                     Voyage? voyage = await McpCallerScope.ReadVoyageAsync(database, caller, voyageId).ConfigureAwait(false);
                     if (voyage == null) return (object)McpToolError.NotFound("Voyage not found");
 
-                    List<MissionSummary> missionSummaries = await database.Missions.EnumerateSummariesByVoyageAsync(voyageId).ConfigureAwait(false);
-
-                    // Default: summary mode (returns voyage metadata + mission counts by status, no mission objects)
-                    bool isSummary = request.Summary != false;
-                    if (isSummary)
+                    VoyageProgress progress = await VoyageProgressReader.ReadAsync(database, voyage).ConfigureAwait(false);
+                    if (request.Summary != false)
                     {
-                        Dictionary<string, int> counts = missionSummaries.GroupBy(m => m.Status.ToString())
-                            .ToDictionary(g => g.Key, g => g.Count());
                         return (object)new
                         {
-                            Voyage = new { voyage.Id, voyage.Title, voyage.Description, voyage.Status, voyage.CreatedUtc, voyage.LastUpdateUtc, voyage.ApprovalOptions, voyage.IsEvaluation },
-                            TotalMissions = missionSummaries.Count,
-                            MissionCountsByStatus = counts
+                            Voyage = new { voyage.Id, voyage.Title, voyage.Description, voyage.Status, voyage.CreatedUtc, voyage.LastUpdateUtc, voyage.ApprovalOptions, voyage.IsEvaluation, voyage.LastBlackBoxEntryId },
+                            TotalMissions = progress.TotalMissions,
+                            MissionCountsByStatus = progress.MissionCountsByStatus
                         };
                     }
 
-                    // Non-summary: optionally include mission objects
-                    if (request.IncludeMissions != true)
+                    return (object)new { Voyage = voyage, TotalMissions = progress.TotalMissions, MissionCountsByStatus = progress.MissionCountsByStatus };
+                });
+
+            register(
+                "list_voyage_progress",
+                "Page through voyages with their mission counts (the voyages the status tool counts in ActiveVoyages). With no status the view is the active voyages: InProgress first, then Open, newest first within each. A status selects one voyage status. Returns PageNumber, PageSize, TotalPages, TotalRecords, and Objects (VoyageProgress).",
+                new
+                {
+                    type = "object",
+                    properties = new
                     {
-                        return (object)new { Voyage = voyage, TotalMissions = missionSummaries.Count };
+                        pageNumber = new { type = "integer", description = "Page number (1-based, default 1)" },
+                        pageSize = new { type = "integer", description = "Page size (1 to 1000, default 10; out-of-range values are normalized)" },
+                        status = new { type = "string", description = "Optional voyage status: Open, InProgress, Complete, Failed, or Cancelled" },
+                        order = new { type = "string", description = "CreatedDescending (default) or CreatedAscending" }
+                    }
+                },
+                async (args) =>
+                {
+                    AuthContext caller = McpToolHelpers.ResolveCallerContext();
+                    VoyageProgressListArgs request = args == null
+                        ? new VoyageProgressListArgs()
+                        : JsonSerializer.Deserialize<VoyageProgressListArgs>(args.Value, _JsonOptions) ?? new VoyageProgressListArgs();
+                    EnumerationQuery query = new EnumerationQuery { Status = request.Status };
+                    if (request.PageNumber.HasValue) query.PageNumber = request.PageNumber.Value;
+                    if (request.PageSize.HasValue) query.PageSize = request.PageSize.Value;
+                    if (!String.IsNullOrWhiteSpace(request.Order))
+                    {
+                        if (!Enum.TryParse<EnumerationOrderEnum>(request.Order.Trim(), true, out EnumerationOrderEnum order))
+                            return (object)McpToolError.InvalidArgument("Unknown order: " + request.Order);
+                        query.Order = order;
                     }
 
-                    // Full mission objects with optional field inclusion
-                    List<Mission> missions = await database.Missions.EnumerateByVoyageAsync(voyageId).ConfigureAwait(false);
-                    foreach (Mission m in missions)
+                    try
                     {
-                        m.DiffSnapshot = request.IncludeDiffs == true ? m.DiffSnapshot : null;
-                        if (request.IncludeDescription != true) m.Description = null;
-                        // includeLogs is reserved for future use -- logs are stored in external files
-                        // and are not available on the mission object. This flag currently has no effect.
+                        return (object)await VoyageProgressReader.EnumerateAsync(database, caller, query).ConfigureAwait(false);
                     }
-                    return (object)new { Voyage = voyage, Missions = missions };
+                    catch (ArgumentException ex) when (!(ex is CollectionLimitExceededException))
+                    {
+                        return (object)McpToolError.InvalidArgument(ex.Message);
+                    }
                 });
 
             register(
                 "cancel_voyage",
-                "Cancel an entire voyage and all its pending missions",
+                "Cancel an entire voyage and its Pending, Assigned, and Blocked missions. Returns the voyage with CancelledMissions and NotCancelledMissions counts; read which missions remain with enumerate (entityType missions, voyageId).",
                 new
                 {
                     type = "object",
@@ -257,31 +282,9 @@ namespace Armada.Server.Mcp.Tools
                     Voyage? voyage = await McpCallerScope.ReadVoyageAsync(database, caller, voyageId).ConfigureAwait(false);
                     if (voyage == null) return (object)McpToolError.NotFound("Voyage not found");
 
-                    // Cancel only pending/assigned missions (in-progress work is left running)
-                    List<Mission> missions = await database.Missions.EnumerateByVoyageAsync(voyageId).ConfigureAwait(false);
-                    int cancelledCount = 0;
-                    List<object> notCancelled = new List<object>();
-                    foreach (Mission m in missions)
-                    {
-                        if (m.Status == MissionStatusEnum.Pending || m.Status == MissionStatusEnum.Assigned || m.Status == MissionStatusEnum.Blocked)
-                        {
-                            try
-                            {
-                                await admiral.CancelMissionAsync(m).ConfigureAwait(false);
-                                cancelledCount++;
-                            }
-                            catch (InvalidOperationException ex)
-                            {
-                                notCancelled.Add(new { MissionId = m.Id, Reason = ex.Message });
-                            }
-                        }
-                    }
-
-                    voyage.Status = VoyageStatusEnum.Cancelled;
-                    voyage.CompletedUtc = DateTime.UtcNow;
-                    voyage.LastUpdateUtc = DateTime.UtcNow;
-                    voyage = await database.Voyages.UpdateAsync(voyage).ConfigureAwait(false);
-                    return (object)new { Voyage = voyage, CancelledMissions = cancelledCount, NotCancelled = notCancelled };
+                    // Cancel only pending/assigned/blocked missions (in-progress work is left running)
+                    VoyageCancelResult cancel = await VoyageCancellation.CancelAsync(database, admiral, voyage, McpCallerScope.IsGlobal(caller) ? null : caller.TenantId).ConfigureAwait(false);
+                    return (object)cancel;
                 });
 
             register(
@@ -333,7 +336,7 @@ namespace Armada.Server.Mcp.Tools
                     type = "object",
                     properties = new
                     {
-                        ids = new { type = "array", items = new { type = "string" }, description = "List of voyage IDs to delete (vyg_ prefix)" }
+                        ids = new { type = "array", items = new { type = "string" }, description = "List of voyage IDs to delete (vyg_ prefix), at most 1000" }
                     },
                     required = new[] { "ids" }
                 },
@@ -343,6 +346,7 @@ namespace Armada.Server.Mcp.Tools
                     DeleteMultipleArgs request = JsonSerializer.Deserialize<DeleteMultipleArgs>(args!.Value, _JsonOptions)!;
                     if (request.Ids == null || request.Ids.Count == 0)
                         return (object)McpToolError.InvalidArgument("ids is required and must not be empty");
+                    CollectionLimits.RequireRequestItems(request.Ids, "Ids");
 
                     DeleteMultipleResult result = new DeleteMultipleResult();
                     foreach (string id in request.Ids)

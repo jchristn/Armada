@@ -16,7 +16,7 @@ namespace Armada.Server
     /// admin sees every tenant). Captain sessions are refused. Errors are typed exceptions the route and tool layers map
     /// to 400/403/404.
     /// </summary>
-    public class BatteryAccessService
+    public partial class BatteryAccessService
     {
         #region Private-Members
 
@@ -53,7 +53,7 @@ namespace Armada.Server
         /// <param name="caller">Caller.</param>
         /// <param name="pageNumber">Page number (1-based; default 1).</param>
         /// <param name="pageSize">Page size (1 to 1000; default 100).</param>
-        /// <returns>One page of packs, ordered by identifier.</returns>
+        /// <returns>One page of packs, ordered by pack directory name. Only the page's manifests are read.</returns>
         /// <exception cref="ArgumentNullException">Thrown when caller is null.</exception>
         /// <exception cref="UnauthorizedAccessException">Thrown for anonymous callers and captain sessions.</exception>
         public EnumerationResult<BatteryPackInfo> ListPacks(AuthContext caller, int? pageNumber, int? pageSize)
@@ -61,13 +61,18 @@ namespace Armada.Server
             RequirePerson(caller);
             int size = Math.Clamp(pageSize ?? 100, 1, 1000);
             int number = Math.Max(1, pageNumber ?? 1);
-            List<BatteryPackInfo> all = _Service.ListPacks().Select(p => p.ToInfo()).ToList();
+            EnumerationResult<BatteryPack> page = _Service.ListPacks(number, size);
             EnumerationResult<BatteryPackInfo> result = new EnumerationResult<BatteryPackInfo>();
-            result.PageNumber = number;
-            result.PageSize = size;
-            result.TotalRecords = all.Count;
-            result.TotalPages = (int)Math.Ceiling((double)all.Count / size);
-            result.Objects = all.Skip((number - 1) * size).Take(size).ToList();
+            result.PageNumber = page.PageNumber;
+            result.PageSize = page.PageSize;
+            result.TotalRecords = page.TotalRecords;
+            result.TotalPages = page.TotalPages;
+            result.Objects = page.Objects.Select(p =>
+            {
+                BatteryPackInfo info = p.ToInfo();
+                info.Id = System.IO.Path.GetFileName(p.Directory);
+                return info;
+            }).ToList();
             return result;
         }
 
@@ -106,7 +111,8 @@ namespace Armada.Server
         }
 
         /// <summary>
-        /// One run with its per-task results.
+        /// One run with its outcome counts. The per-task results are not embedded; page them with
+        /// <see cref="EnumerateResultsAsync"/>.
         /// </summary>
         /// <param name="caller">Caller.</param>
         /// <param name="runId">Run identifier.</param>
@@ -119,9 +125,28 @@ namespace Armada.Server
         {
             RequirePerson(caller);
             if (String.IsNullOrWhiteSpace(runId)) throw new KeyNotFoundException("Battery run not found.");
-            BatteryRun? run = await _Service.ReadAsync(runId.Trim(), token).ConfigureAwait(false);
+            BatteryRun? run = await _Service.ReadRunAsync(runId.Trim(), token).ConfigureAwait(false);
             if (run == null || !CanSeeTenant(caller, run.TenantId)) throw new KeyNotFoundException("Battery run not found.");
             return run;
+        }
+
+        /// <summary>
+        /// One page of a visible run's per-task results (grader evidence and the captain's raw output), paged in the
+        /// database. query.Status filters by outcome.
+        /// </summary>
+        /// <param name="caller">Caller.</param>
+        /// <param name="runId">Run identifier.</param>
+        /// <param name="query">Paging query; null uses the defaults.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>One page of results.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when caller is null.</exception>
+        /// <exception cref="ArgumentException">Thrown for an unknown outcome filter.</exception>
+        /// <exception cref="KeyNotFoundException">Thrown when the run does not exist or is in another tenant.</exception>
+        /// <exception cref="UnauthorizedAccessException">Thrown for anonymous callers and captain sessions.</exception>
+        public async Task<EnumerationResult<BatteryTaskResult>> EnumerateResultsAsync(AuthContext caller, string? runId, EnumerationQuery? query, CancellationToken token = default)
+        {
+            BatteryRun run = await GetRunAsync(caller, runId, token).ConfigureAwait(false);
+            return await _Service.EnumerateResultsAsync(run.Id, query ?? new EnumerationQuery(), token).ConfigureAwait(false);
         }
 
         #endregion

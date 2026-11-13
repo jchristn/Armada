@@ -3,6 +3,7 @@ namespace Armada.Core.Models
     using System;
     using System.Collections.Generic;
     using Armada.Core.Enums;
+    using Armada.Core.Services;
 
     /// <summary>
     /// A registered Harbor: a detached host-side runner that connects to the Admiral over an authenticated
@@ -51,8 +52,10 @@ namespace Armada.Core.Models
         }
 
         /// <summary>
-        /// Capabilities advertised at handshake (available runtimes and host tools).
+        /// Capabilities advertised at handshake (available runtimes and host tools). At most
+        /// <see cref="CollectionLimits.MaxConfigItems"/>; a create or handshake with more is rejected.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxConfigItems)]
         public List<HarborCapability> Capabilities
         {
             get => _Capabilities;

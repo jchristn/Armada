@@ -11,10 +11,11 @@ import Captains from './Captains';
 import Signals from './Signals';
 import Events from './Events';
 import {
-  listCaptains, listDocks, listEvents, listFleets, listModelEndpoints, listPersonas, listPipelines,
+  listCaptains, listDocks, listEvents, listFleets, listModelEndpoints, enumerateModelEndpoints, listPersonas, listPipelines,
   listPromptTemplates, listSignals, listVessels, listVoyages,
 } from '../api/client';
 import { translateTemplate } from '../i18n/runtime';
+import { asPage } from '../test/asPage';
 
 vi.mock('../api/client', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../api/client')>();
@@ -23,6 +24,7 @@ vi.mock('../api/client', async (importOriginal) => {
     listFleets: vi.fn(), listVessels: vi.fn(), listPipelines: vi.fn(), listDocks: vi.fn(), listCaptains: vi.fn(),
     listPersonas: vi.fn(), listPromptTemplates: vi.fn(), listVoyages: vi.fn(), listSignals: vi.fn(), listEvents: vi.fn(),
     listModelEndpoints: vi.fn(),
+    enumerateModelEndpoints: vi.fn(),
   };
 });
 
@@ -50,7 +52,7 @@ beforeEach(() => {
   vi.mocked(listVessels).mockResolvedValue(page([]));
   vi.mocked(listPipelines).mockResolvedValue(page([{ id: 'ppl_1', name: 'Reviewed', description: LONG, stages: [], scope: 'Tenant', isBuiltIn: false, active: true, createdUtc: CREATED }]));
   vi.mocked(listDocks).mockResolvedValue(page([{ id: 'dck_1', vesselId: null, captainId: null, branchName: 'armada/feature-x', worktreePath: '/tmp/w', active: true, createdUtc: CREATED }]));
-  vi.mocked(listCaptains).mockResolvedValue(page([{ id: 'cpt_1', name: 'alpha', runtime: 'ClaudeCode', state: 'Idle', currentMissionId: null, lastHeartbeatUtc: CREATED, createdUtc: CREATED }]));
+  vi.mocked(listCaptains).mockResolvedValue(page([{ id: 'cpt_1', name: 'alpha', runtime: 'ClaudeCode', state: 'Idle', lastHeartbeatUtc: CREATED, createdUtc: CREATED }]));
   vi.mocked(listPersonas).mockResolvedValue(page([{ id: 'prs_1', name: 'Worker', description: LONG, promptTemplateName: 'persona.worker', scope: 'Tenant', isBuiltIn: true, active: true, createdUtc: CREATED }]));
   vi.mocked(listPromptTemplates).mockResolvedValue(page([]));
   vi.mocked(listVoyages).mockResolvedValue(page([
@@ -60,6 +62,7 @@ beforeEach(() => {
   vi.mocked(listSignals).mockResolvedValue(page([{ id: 'sig_1', type: 'Nudge', fromCaptainId: null, toCaptainId: null, read: false, payload: 'hello', createdUtc: CREATED }]));
   vi.mocked(listEvents).mockResolvedValue(page([{ id: 'evt_1', eventType: 'mission.created', entityType: 'mission', entityId: 'msn_1', captainId: null, missionId: 'msn_1', vesselId: null, voyageId: 'vyg_1', message: 'Mission created', createdUtc: CREATED }]));
   vi.mocked(listModelEndpoints).mockResolvedValue(page([]));
+  vi.mocked(enumerateModelEndpoints).mockImplementation((async () => asPage(await listModelEndpoints())) as never);
 });
 
 interface Case {

@@ -1,6 +1,8 @@
 import { StyleSheet, View } from 'react-native';
+import { assignmentAdviceTarget } from '@dashboard/lib/assignmentAdvice';
 import { assignmentBlockerTitle, type MissionLandingState } from '@dashboard/lib/missionActions';
-import type { GitHubPullRequestDetail, LandingPreviewResult, MissionAssignmentBlocker } from '@dashboard/types/models';
+import type { LandingPreviewResult, MissionAssignmentBlocker } from '@dashboard/types/models';
+import { shownOfTotal, type PullRequestEvidence } from '@dashboard/lib/pullRequestEvidence';
 import { AppText, Button, KeyValueRow, ListRow, Section, StatusBadge } from '../../../components/ui';
 import { useLocale } from '../../../i18n/LocaleContext';
 import { spacing } from '../../../theme/typography';
@@ -21,6 +23,13 @@ export function AssignmentBlockerCard({ blocker, onOpen }: { blocker: MissionAss
         <AppText selectable>{blocker.summary}</AppText>
         {blocker.untilUtc ? <AppText muted>{t('Expected to clear at {{time}}', { time: formatDateTime(blocker.untilUtc) })}</AppText> : null}
       </View>
+      {(blocker.advice ?? []).map((advice, index) => {
+        const target = assignmentAdviceTarget(advice, false);
+        return <View key={index} style={[pad, styles.gap]}>
+          <AppText selectable>{advice.text}</AppText>
+          {target ? <Button label={t(target.label)} onPress={() => onOpen(target.path)} /> : null}
+        </View>;
+      })}
       {blocker.dependsOnMissionId ? (
         <ListRow title={t('Depends on')} subtitle={blocker.dependsOnMissionId} onPress={() => onOpen(`/missions/${blocker.dependsOnMissionId}`)} />
       ) : null}
@@ -89,13 +98,17 @@ export function LandingPreviewCard({ preview, loading, landing, branchName }: {
 }
 
 /** GitHub pull-request evidence for a mission with a PR URL. */
-export function PullRequestCard({ prUrl, detail, loading, onRefresh }: {
+export function PullRequestCard({ prUrl, evidence, loading, onRefresh }: {
   prUrl: string;
-  detail: GitHubPullRequestDetail | null;
+  /** The detail with the newest page of reviews and checks (the lists are paged; the counts are totals). */
+  evidence: PullRequestEvidence | null;
   loading: boolean;
   onRefresh: () => void;
 }) {
   const { t } = useLocale();
+  const detail = evidence?.detail ?? null;
+  const reviews = evidence?.reviews ?? [];
+  const checks = evidence?.checks ?? [];
   return (
     <Section title={t('GitHub Pull Request')}>
       <View style={[pad, styles.buttons]}>
@@ -111,12 +124,12 @@ export function PullRequestCard({ prUrl, detail, loading, onRefresh }: {
           <KeyValueRow label={t('Review Status')} value={detail.reviewStatus} />
           <KeyValueRow label={t('State')} value={detail.state} />
           <KeyValueRow label={t('Mergeability')} value={detail.mergeableState || '-'} />
-          <View style={pad}><AppText variant="label">{t('Reviews')}</AppText></View>
-          {detail.reviews.length === 0 ? <View style={pad}><AppText muted>{t('No reviews')}</AppText></View> : detail.reviews.map((review, index) => (
+          <View style={pad}><AppText variant="label">{`${t('Reviews')}${shownOfTotal(reviews.length, detail.reviewCount)}`}</AppText></View>
+          {reviews.length === 0 ? <View style={pad}><AppText muted>{t('No reviews')}</AppText></View> : reviews.map((review, index) => (
             <ListRow key={`review-${index}`} title={review.reviewerLogin || t('Unknown')} subtitle={review.state} />
           ))}
-          <View style={pad}><AppText variant="label">{t('Checks')}</AppText></View>
-          {detail.checks.length === 0 ? <View style={pad}><AppText muted>{t('No provider checks')}</AppText></View> : detail.checks.map((check, index) => (
+          <View style={pad}><AppText variant="label">{`${t('Checks')}${shownOfTotal(checks.length, detail.checkCount)}`}</AppText></View>
+          {checks.length === 0 ? <View style={pad}><AppText muted>{t('No provider checks')}</AppText></View> : checks.map((check, index) => (
             <ListRow key={`check-${index}`} title={check.name} subtitle={`${check.status}${check.conclusion ? ` / ${check.conclusion}` : ''}`} />
           ))}
         </>

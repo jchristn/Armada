@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { listDocks, deleteDock, listCaptains, listVessels } from '../api/client';
+import { apiErrorMessage, listDocks, deleteDock, listCaptains, listVessels } from '../api/client';
 import { listAll } from '../api/paging';
 import type { Dock, Captain, Vessel } from '../types/models';
 import DataTable, { type DataTableColumn } from '../components/shared/DataTable';
@@ -17,11 +17,13 @@ import { useLocale } from '../context/LocaleContext';
 import { useNotifications } from '../context/NotificationContext';
 import { useResourceTable } from '../lib/useResourceTable';
 import { usePersistedPageSize } from '../lib/usePersistedPageSize';
+import { useDeleteProgress } from '../lib/useDeleteProgress';
 
 export default function Docks() {
   const navigate = useNavigate();
   const { t, formatRelativeTime, formatDateTime } = useLocale();
   const { pushToast } = useNotifications();
+  const deletion = useDeleteProgress();
   const [docks, setDocks] = useState<Dock[]>([]);
   const [captains, setCaptains] = useState<Captain[]>([]);
   const [vessels, setVessels] = useState<Vessel[]>([]);
@@ -102,11 +104,9 @@ export default function Docks() {
       message: t('Delete dock {{id}}? This will clean up the git worktree and cannot be undone.', { id }),
       onConfirm: async () => {
         setConfirm(c => ({ ...c, open: false }));
-        try {
-          await deleteDock(id);
-          pushToast('warning', t('Dock {{id}} deleted.', { id }));
-          load();
-        } catch { setError(t('Delete failed.')); }
+        if (!(await deletion.run({ kind: 'dock', action: () => deleteDock(id), errorMessage: (err) => apiErrorMessage(err, t('Delete failed.')) }))) return;
+        pushToast('warning', t('Dock {{id}} deleted.', { id }));
+        load();
       },
     });
   }
@@ -121,9 +121,16 @@ export default function Docks() {
         const ids = [...table.selected];
         table.setSelected([]);
         let failed = 0;
-        for (const id of ids) {
-          try { await deleteDock(id); } catch { failed++; }
-        }
+        if (!(await deletion.run({
+          kind: 'dock',
+          count: ids.length,
+          action: async () => {
+            failed = 0;
+            for (const id of ids) {
+              try { await deleteDock(id); } catch { failed++; }
+            }
+          },
+        }))) return;
         const deleted = ids.length - failed;
         if (deleted > 0) {
           pushToast(failed > 0 ? 'warning' : 'success', failed > 0
@@ -219,6 +226,7 @@ export default function Docks() {
       />
       <ConfirmDialog open={confirm.open} title={confirm.title} message={confirm.message}
         onConfirm={confirm.onConfirm} onCancel={() => setConfirm(c => ({ ...c, open: false }))} />
+      {deletion.dialog}
 
       <DataTable
         tableKey="docks"

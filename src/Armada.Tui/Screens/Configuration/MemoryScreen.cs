@@ -182,6 +182,18 @@ namespace Armada.Tui.Screens.Configuration
         }
 
         /// <inheritdoc />
+        protected override string DeletingTitle
+        {
+            get { return "Deleting memory"; }
+        }
+
+        /// <inheritdoc />
+        protected override string DeletingManyTitle
+        {
+            get { return "{count, plural, one {Deleting # memory} other {Deleting # memories}}"; }
+        }
+
+        /// <inheritdoc />
         protected override Task DeleteAsync(Memory row, CancellationToken token)
         {
             return Context.Client.DeleteMemoryAsync(row.Id, token);

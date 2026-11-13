@@ -192,7 +192,7 @@ namespace Armada.Tui.Screens.Activity
             string id = row.Id;
             Context.Confirm("Delete Event", Context.Loc.T("Delete event {{id}}?", LocalizationArgs.Of("id", id)), () =>
             {
-                ScreenOps.Run(Context, () => Context.Client.DeleteEventsBatchAsync(new List<string> { id }), r =>
+                DeleteProgress.Run(Context, "Deleting event", ct => Context.Client.DeleteEventsBatchAsync(new List<string> { id }, ct), r =>
                 {
                     ScreenOps.Toast(Context, NotificationSeverityEnum.Warning, "Event {{id}} deleted.", LocalizationArgs.Of("id", id));
                     Refresh();
@@ -207,12 +207,12 @@ namespace Armada.Tui.Screens.Activity
             if (ids.Count == 0) return;
             Context.Confirm("Delete Selected Events", Context.Loc.T("Delete {{count}} selected event(s)?", LocalizationArgs.Of("count", ids.Count)), () =>
             {
-                ScreenOps.Run(Context, () => Context.Client.DeleteEventsBatchAsync(ids), r =>
+                DeleteProgress.Run(Context, "{count, plural, one {Deleting # event} other {Deleting # events}}", ct => Context.Client.DeleteEventsBatchAsync(ids, ct), r =>
                 {
                     ScreenOps.Toast(Context, NotificationSeverityEnum.Warning, "Deleted {{count}} event(s).", LocalizationArgs.Of("count", ids.Count));
                     Grid.ClearMarks();
                     Refresh();
-                }, "Bulk delete failed.");
+                }, "Bulk delete failed.", ids.Count);
             }, "Delete");
         }
 

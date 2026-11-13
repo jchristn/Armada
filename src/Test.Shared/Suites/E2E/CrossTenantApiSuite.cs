@@ -620,7 +620,7 @@ namespace Test.Shared.Suites.E2E
                 HttpResponseMessage response = await _ClientA!.GetAsync("/api/v1/voyages/" + _VoyageAId).ConfigureAwait(false);
                 AssertEqual(HttpStatusCode.OK, response.StatusCode);
 
-                VoyageDetailResponse detail = await JsonHelper.DeserializeAsync<VoyageDetailResponse>(response).ConfigureAwait(false);
+                VoyageProgress detail = await JsonHelper.DeserializeAsync<VoyageProgress>(response).ConfigureAwait(false);
                 AssertEqual(_VoyageAId, detail.Voyage!.Id);
             }));
 

@@ -308,6 +308,25 @@ namespace Test.Shared.Suites.Services
                 AssertNotNull(offered, "the local /ws upgrade should be observed");
                 AssertContains("armada-token.YWRtaXJhbA", offered!, "the Admiral's own token entry is relayed");
                 AssertFalse(offered!.Contains(Constants.ProxySessionProtocolPrefix, StringComparison.OrdinalIgnoreCase), "a proxy session entry must never reach the local /ws upgrade: " + offered);
+
+                await Task.WhenAll(Enumerable.Range(0, 8)
+                    .Select(_ => Task.Run(async () => await service.DisposeAsync().ConfigureAwait(false))))
+                    .ConfigureAwait(false);
+            }));
+
+            cases.Add(CaseAsync("web_socket_shutdown_has_one_owner", "WebSocket ShutdownHasOneOwner", TestTags.Reliability, async () =>
+            {
+                // Exercise the same session reached by service shutdown and receive-loop cleanup.
+                Type sessionType = typeof(RemoteDashboardRelayService).GetNestedType("RelayWebSocketSession", BindingFlags.NonPublic)!;
+                using ClientWebSocket socket = new ClientWebSocket();
+                using IDisposable session = (IDisposable)Activator.CreateInstance(sessionType, "shutdown-race", socket)!;
+                MethodInfo beginClose = sessionType.GetMethod("TryBeginClose")!;
+                AssertNotNull(beginClose, "session must arbitrate concurrent close ownership");
+                Task<bool>[] contenders = Enumerable.Range(0, 32)
+                    .Select(_ => Task.Run(() => (bool)beginClose.Invoke(session, null)!)).ToArray();
+                bool[] owners = await Task.WhenAll(contenders).ConfigureAwait(false);
+                AssertEqual(1, owners.Count(owner => owner), "exactly one shutdown path may close/dispose the stream");
+                AssertFalse((bool)beginClose.Invoke(session, null)!, "late receive-loop cleanup must not close again");
             }));
 
             return new TestSuiteDescriptor(

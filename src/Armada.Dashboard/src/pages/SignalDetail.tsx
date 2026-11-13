@@ -1,3 +1,4 @@
+import Breadcrumbs from '../components/shared/Breadcrumbs';
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
@@ -6,6 +7,7 @@ import {
   deleteSignalsBatch,
   listCaptains,
 } from '../api/client';
+import { useDeleteProgress } from '../lib/useDeleteProgress';
 import { listAll } from '../api/paging';
 import type { Signal, Captain } from '../types/models';
 import ConfirmDialog from '../components/shared/ConfirmDialog';
@@ -23,6 +25,7 @@ interface SignalWithMission extends Signal {
 
 export default function SignalDetail() {
   const { t, formatDateTime, formatRelativeTime } = useLocale();
+  const deletion = useDeleteProgress();
   const { pushToast } = useNotifications();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -61,15 +64,10 @@ export default function SignalDetail() {
     setConfirmAction({
       message: t('Delete {{entity}} {{name}}?', { entity: t('Signal').toLowerCase(), name: id ?? '' }),
       action: async () => {
-        try {
-          await deleteSignalsBatch([id!]);
-          setConfirmAction(null);
-          pushToast('warning', t('Signal {{id}} deleted.', { id: id ?? '' }));
-          navigate('/signals');
-        } catch {
-          setError(t('Delete failed.'));
-          setConfirmAction(null);
-        }
+        setConfirmAction(null);
+        if (!(await deletion.run({ kind: 'signal', action: () => deleteSignalsBatch([id!]) }))) return;
+        pushToast('warning', t('Signal {{id}} deleted.', { id: id ?? '' }));
+        navigate('/signals');
       }
     });
   }
@@ -90,11 +88,10 @@ export default function SignalDetail() {
   return (
     <div>
       {/* Breadcrumb */}
-      <div className="breadcrumb" style={{ marginBottom: 16, fontSize: 13 }}>
-        <Link to="/signals">{t('Signals')}</Link>
-        <span className="text-muted"> / </span>
-        <span className="mono">{signal.id}</span>
-      </div>
+      <Breadcrumbs items={[
+        { label: t('Signals'), to: '/signals' },
+        { label: signal.id },
+      ]} />
 
       <ErrorModal error={error} onClose={() => setError('')} />
 
@@ -158,7 +155,7 @@ export default function SignalDetail() {
       <div className="card">
         <h3 title={t('Message content of the signal. JSON payloads are shown formatted.')}>{t('Payload')}</h3>
         <pre style={{
-          background: '#f5f5fa',
+          background: 'var(--bg-hover)',
           padding: 16,
           borderRadius: 'var(--radius)',
           overflow: 'auto',
@@ -176,6 +173,7 @@ export default function SignalDetail() {
       <JsonViewer open={jsonView !== null} title={jsonView?.title ?? ''} data={jsonView?.data ?? null} onClose={() => setJsonView(null)} />
 
       {/* Confirm Dialog */}
+      {deletion.dialog}
       <ConfirmDialog open={confirmAction !== null} message={confirmAction?.message ?? ''} onConfirm={() => confirmAction?.action()} onCancel={() => setConfirmAction(null)} />
     </div>
   );

@@ -1152,7 +1152,7 @@ namespace Armada.Helm.Commands
 
                 **Monitor progress:**
                 1. `status` for overview
-                2. `voyage_status` for voyage summary (returns mission counts by status; set summary=false and includeMissions=true for full mission objects) or `mission_status` for individual mission details
+                2. `voyage_status` for voyage summary (returns the voyage with mission counts by status; page its missions with enumerate, entityType missions and voyageId) or `mission_status` for individual mission details
                 3. `get_mission_log` / `get_captain_log` to see what an agent is doing
                 4. `get_mission_diff` to review code changes
 

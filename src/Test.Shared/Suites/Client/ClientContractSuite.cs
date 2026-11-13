@@ -49,6 +49,11 @@ namespace Test.Shared.Suites.Client
                 AssertTrue(snapshot!.IntervalSeconds >= 30);
                 StorageSnapshot? requested = await c.RefreshStorageAsync(new StorageRefreshRequest()).ConfigureAwait(false);
                 AssertNotNull(requested);
+                EnumerationResult<StorageHostReport>? hosts = await c.ListStorageHostsAsync(new EnumerationQuery { PageSize = 1 }).ConfigureAwait(false);
+                AssertNotNull(hosts, "host page");
+                AssertTrue(hosts!.Objects.Count <= 1, "page of one");
+                List<StorageHostReport> allHosts = await c.ListAllStorageHostsAsync().ConfigureAwait(false);
+                AssertEqual((int)hosts.TotalRecords, allHosts.Count, "every host across pages");
             }));
 
             cases.Add(Case("auth_flows", "Whoami, tenant lookup, authenticate, and session token", async c =>
@@ -86,9 +91,11 @@ namespace Test.Shared.Suites.Client
                 AssertEqual(created.Id, rawDetail.Fleet?.Id, "generic entity lookup id");
                 AssertEqual(created.Name, rawDetail.Fleet?.Name, "generic entity lookup name");
                 FleetDetail? detail = await c.GetFleetAsync(created.Id);
+                AssertEqual(created.Id, (await c.GetFleetDetailAsync(created.Id))?.Fleet?.Id, "fleet detail");
                 Fleet? fetched = detail?.Fleet;
                 AssertEqual(created.Name, fetched?.Name, "get");
-                AssertNotNull(detail?.Vessels, "vessels included");
+                AssertEqual(0L, detail?.VesselCount, "vessel count (vessels are not embedded)");
+                AssertFalse(rawGet.Json.Contains("\"vessels\"", StringComparison.OrdinalIgnoreCase), "no embedded vessel list");
                 fetched!.Description = "updated";
                 Fleet? updated = await c.UpdateFleetAsync(created.Id, fetched);
                 AssertEqual("updated", updated?.Description, "update");
@@ -161,6 +168,12 @@ namespace Test.Shared.Suites.Client
                 AssertTrue(((await c.ListPromptTemplatesAsync())?.Objects.Count ?? 0) > 0, "prompt templates");
                 AssertNotNull(await c.ListHarborsAsync(), "harbors");
                 AssertNotNull(await c.ListModelEndpointsAsync(), "model endpoints");
+                EnumerationResult<Harbor>? harborPage = await c.EnumerateHarborsAsync(new EnumerationQuery { PageSize = 1 });
+                AssertNotNull(harborPage, "harbor page");
+                AssertTrue(harborPage!.Objects.Count <= 1, "harbor page bounded");
+                EnumerationResult<ModelEndpoint>? endpointPage = await c.EnumerateModelEndpointsAsync(new EnumerationQuery { PageSize = 1 });
+                AssertNotNull(endpointPage, "endpoint page");
+                AssertTrue(endpointPage!.Objects.Count <= 1, "endpoint page bounded");
                 AssertNotNull(await c.ListMemoriesAsync(), "memories");
             }));
 
@@ -205,6 +218,8 @@ namespace Test.Shared.Suites.Client
                 AssertNotNull(await c.EnumerateFleetActionsAsync(), "fleet actions");
                 AssertNotNull(await c.EnumerateFleetActionRunsAsync(), "fleet action runs");
                 AssertNotNull(await c.BrowseVesselImportAsync(), "import browse roots");
+                VesselBrowseResult? allRoots = await c.BrowseAllVesselImportAsync();
+                AssertEqual((int)allRoots!.TotalRecords, allRoots.Entries.Count, "every allowed root across pages");
                 AssertNotNull(await c.EnumerateVesselImportBatchesAsync(), "import batches");
                 AssertNotNull(await c.GetFleetCategorizationDefaultPromptAsync(), "categorization prompt");
             }));

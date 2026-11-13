@@ -35,6 +35,12 @@ namespace Armada.Server.Mcp
         public string? OutputParser { get; set; }
         /// <summary>Source scan action key or ID.</summary>
         public string? ScanSourceActionKey { get; set; }
+        /// <summary>Optional applicability check command (POSIX); empty string clears it.</summary>
+        public string? ApplicabilityCommand { get; set; }
+        /// <summary>Optional Windows applicability check command; empty string clears it.</summary>
+        public string? ApplicabilityCommandWindows { get; set; }
+        /// <summary>Mission mode for Mission actions: Implementation, Audit, or Research.</summary>
+        public string? MissionMode { get; set; }
         /// <summary>Executables required on the target host PATH.</summary>
         public System.Collections.Generic.List<string>? RequiredTools { get; set; }
         /// <summary>Whether this action requires network access.</summary>

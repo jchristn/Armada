@@ -32,6 +32,9 @@ namespace Armada.Core.Models
         /// <summary>A voyage finished (completed or failed).</summary>
         public const string VoyageFinished = "voyage_finished";
 
+        /// <summary>A model scorecard alert was raised or reopened.</summary>
+        public const string ModelAlert = InboxItemKinds.ModelAlert;
+
         /// <summary>A test push sent from POST /api/v1/push/devices/{id}/test.</summary>
         public const string Test = "test";
 

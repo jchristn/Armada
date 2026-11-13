@@ -75,6 +75,10 @@ The `armada` server should appear connected with a non-zero tool count (`pi mcp 
 
 pi will call `status` and report active captains, missions, and voyages. If it does not recognize the tool, verify the Admiral is running and that the `armada` server is present in `~/.pi/agent/mcp.json`.
 
+## Dispatching a Mission Tree
+
+When one mission needs another's code, dispatch both in one `dispatch` call: give the first a `key` and the dependent one a matching `parentKey`. The child starts after its parent finishes and builds on its branch; missions without a `parentKey` run in parallel. Give each mission `ownedPaths` (the files or directories it may change), and never let two missions that can run at the same time own the same file. Before adding more work, call `vessel_concurrency` to see the vessel's free voyage slots and waiting missions, and `voyage_tree` to see a voyage's missions as a tree. A CLI captain runs one mission at a time, so N parallel missions need N captains. See [`INSTRUCTIONS_FOR_PI.md`](INSTRUCTIONS_FOR_PI.md#dispatching-a-mission-tree) and [SCHEDULING.md](SCHEDULING.md#capacity).
+
 ## Quick Start
 
 > "Show me all fleets and vessels."
@@ -95,9 +99,9 @@ To orchestrate Armada from within a specific project rather than as a standalone
 This project is managed by Armada. When asked to perform large tasks:
 1. Use `enumerate({ entityType: "vessels" })` to find this repository's vessel ID
 2. Decompose work into missions that touch **non-overlapping files** -- never assign the same file to two missions
-3. For monolithic/shared files, combine all changes into a single mission or chain sequential voyages
-4. Use `dispatch` to create a voyage with missions (include explicit file paths in descriptions)
-5. Monitor with `voyage_status` until complete
+3. For monolithic/shared files, combine all changes into a single mission, make the dependent mission a child (`key` and `parentKey` in one dispatch), or chain sequential voyages
+4. Use `dispatch` to create a voyage with missions (include explicit file paths in descriptions and `ownedPaths`)
+5. Check `vessel_concurrency` before adding more work; monitor with `voyage_status` and `voyage_tree` until complete
 6. Do NOT dispatch a second voyage that touches the same files while a prior voyage is still running
 7. Review results and redispatch failures if needed
 

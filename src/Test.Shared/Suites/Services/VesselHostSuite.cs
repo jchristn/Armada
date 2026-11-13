@@ -397,6 +397,50 @@ namespace Test.Shared.Suites.Services
                 AssertContains("+changed on the harbor", diff.Diff ?? String.Empty);
             }));
 
+            cases.Add(CaseAsync("workspace_tree_and_changes_on_harbor_are_paged", "A Harbor answers a directory listing one page at a time (folders first, then files, by name) with totals for the whole directory, changes are paged with an exact total, and a full listing from an older Harbor is cut to the page on the Admiral", TestTags.Positive, async () =>
+            {
+                using HarborDockGitFixture git = await HarborDockGitFixture.CreateAsync().ConfigureAwait(false);
+                using Scenario s = await Scenario.CreateAsync(git).ConfigureAwait(false);
+                using InProcessHarbor harbor = await s.ConnectMappedAsync("hbr_vh_page").ConfigureAwait(false);
+                Vessel vessel = await s.CreateVesselAsync("app", null, null).ConfigureAwait(false);
+                VesselHost host = await s.Resolver.ResolveAsync(vessel, null).ConfigureAwait(false);
+                WorkspaceService workspace = new WorkspaceService();
+                for (int i = 0; i < 23; i++) await File.WriteAllTextAsync(Path.Combine(git.Checkout, "page" + i.ToString("D2") + ".txt"), "x\n").ConfigureAwait(false);
+                Directory.CreateDirectory(Path.Combine(git.Checkout, "zz-folder"));
+
+                List<WorkspaceTreeEntry> all = await WorkspaceTreeReader.ReadAllEntriesAsync(host.Files, null).ConfigureAwait(false);
+                AssertTrue(all.Count >= 25, "every entry across pages: " + all.Count);
+                AssertTrue(all[0].IsDirectory, "folders come first");
+                List<string> seen = new List<string>();
+                WorkspaceTreeResult first = await workspace.GetTreeAsync(host, null, new EnumerationQuery { PageNumber = 1, PageSize = 10 }).ConfigureAwait(false);
+                AssertEqual(10, first.Entries.Count, "one page of ten from the Harbor");
+                AssertEqual((long)all.Count, first.TotalRecords, "total covers the whole directory");
+                AssertEqual((int)Math.Ceiling(all.Count / 10.0), first.TotalPages, "pages of ten");
+                for (int page = 1; page <= first.TotalPages; page++)
+                {
+                    WorkspaceTreeResult result = await workspace.GetTreeAsync(host, null, new EnumerationQuery { PageNumber = page, PageSize = 10 }).ConfigureAwait(false);
+                    seen.AddRange(result.Entries.Select(e => e.RelativePath));
+                }
+
+                AssertEqual(String.Join(",", all.Select(e => e.RelativePath)), String.Join(",", seen), "pages in order without gaps or duplicates");
+                WorkspaceTreeResult past = await workspace.GetTreeAsync(host, null, new EnumerationQuery { PageNumber = 50, PageSize = 10 }).ConfigureAwait(false);
+                AssertEqual(0, past.Entries.Count, "past the end is empty");
+                AssertEqual((long)all.Count, past.TotalRecords, "with the total");
+
+                WorkspaceChangesResult changes = await workspace.GetChangesAsync(host, new EnumerationQuery { PageNumber = 2, PageSize = 5 }).ConfigureAwait(false);
+                AssertNull(changes.Error, changes.Error);
+                AssertTrue(changes.IsDirty, "dirty");
+                AssertTrue(changes.TotalRecords >= 23, "every untracked file is counted: " + changes.TotalRecords);
+                AssertEqual(5, changes.Changes.Count, "one page of five changes");
+                AssertEqual(2, changes.PageNumber, "page two");
+
+                WorkspaceTreeResult legacy = new WorkspaceTreeResult { Entries = all.ToList() };
+                WorkspaceTreeResult cut = WorkspaceFileEngine.PageTree(legacy, new EnumerationQuery { PageNumber = 3, PageSize = 4 });
+                AssertEqual(4, cut.Entries.Count, "an older Harbor's full listing is cut to the page");
+                AssertEqual(all[8].RelativePath, cut.Entries[0].RelativePath, "at the right offset");
+                AssertEqual((long)all.Count, cut.TotalRecords, "with the total");
+            }));
+
             cases.Add(CaseAsync("workspace_on_harbor_refuses_paths_outside_checkout", "Path traversal, .git, and symbolic links out of the checkout are refused on the Harbor", TestTags.Negative, async () =>
             {
                 using HarborDockGitFixture git = await HarborDockGitFixture.CreateAsync().ConfigureAwait(false);

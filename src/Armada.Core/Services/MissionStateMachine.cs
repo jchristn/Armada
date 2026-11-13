@@ -70,7 +70,10 @@ namespace Armada.Core.Services
                         || target == MissionStatusEnum.Failed;
 
                 case MissionStatusEnum.LandingFailed:
+                    // Complete: the work reached the target branch after all (it was landed by another path, or a
+                    // later retry published it), proven by commit ancestry or the mission trailer on the remote.
                     return target == MissionStatusEnum.WorkProduced
+                        || target == MissionStatusEnum.Complete
                         || target == MissionStatusEnum.Failed
                         || target == MissionStatusEnum.Cancelled;
 

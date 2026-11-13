@@ -10,7 +10,7 @@ import {
   setAskThreadCliPermissionPolicy,
 } from '../api/client';
 import { translateTemplate } from '../i18n/runtime';
-import type { AskMessage, AskThread, AskThreadDetail, CliPermissionRequest, EnumerationResult, WebSocketMessage } from '../types/models';
+import type { AskMessage, AskThread, AskThreadView, CliPermissionRequest, EnumerationResult, WebSocketMessage } from '../types/models';
 
 vi.mock('../api/client', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../api/client')>();
@@ -48,6 +48,19 @@ const localeValue = {
   formatDate: (v: string | null | undefined) => v ?? '',
   formatRelativeTime: (v: string | null | undefined) => (v ? 'recently' : ''),
 };
+vi.mock('../lib/askPaging', async (importOriginal) => {
+  // The page reads the thread's collections through lib/askPaging (covered by askPaging.test.ts); these tests feed
+  // the composed view straight from the mocked getAskThread.
+  const actual = await importOriginal<typeof import('../lib/askPaging')>();
+  const client = await import('../api/client');
+  return {
+    ...actual,
+    loadAskThreadView: (id: string) => client.getAskThread(id),
+    withToolCalls: async (_id: string, m: unknown) => m,
+    withWorkRows: async (_threadId: string, _workId: string, snapshot: unknown) => snapshot,
+    loadToolCalls: async () => [],
+  };
+});
 vi.mock('../context/LocaleContext', () => ({ useLocale: () => localeValue }));
 
 const handlers = new Set<(msg: WebSocketMessage) => void>();
@@ -91,7 +104,7 @@ function messages(request: CliPermissionRequest = pending, extra: AskMessage[] =
   ];
 }
 
-function detail(th: AskThread = thread): AskThreadDetail {
+function detail(th: AskThread = thread): AskThreadView {
   return { thread: th, trackedWork: [], pendingProposals: [], pendingCliPermissions: [] };
 }
 

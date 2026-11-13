@@ -124,6 +124,15 @@ When a mission's agent exits successfully, Armada sets the mission to `WorkProdu
 | `MergeQueue` | Enqueue the mission branch into Armada's merge queue (target: the vessel's default branch) for serialized testing and landing. The mission stays `WorkProduced` while the entry is `Queued` or `Testing`, and its voyage stays `InProgress` (not `Complete`) until the entry settles: `Landed` moves the mission to `Complete`, a failure moves it to `LandingFailed`. |
 | `None` | No automated landing. The mission stays at `WorkProduced` for manual handling: merge its branch yourself (the dashboard and TUI mission pages offer **Merge in Manage Branches** instead of Land). Once the mission's commit is contained in the vessel's target branch (`git merge-base --is-ancestor`, checked right after a Manage Branches merge and on every health check), Armada moves the mission to `Complete`. |
 
+### Reconciling stale LandingFailed missions
+
+A landing can fail for a reason that later clears (a dirty developer checkout, an unpushed local commit), while the same work still reaches the default branch by another path, for example a rescue mission or a manual push. On every health check Armada examines a bounded page of `LandingFailed` missions (25 per check, oldest first, continuing with the next page on the next check) and moves a mission to `Complete` only when it has proof that its work is on `origin/<default branch>`:
+
+- the mission's `CommitHash` is an ancestor of `origin/<default branch>` (`git merge-base --is-ancestor`), or
+- a commit on `origin/<default branch>`, committed since the mission was created, carries the trailer `Armada-Mission-Id: <mission id>` (an exact trailer match; a message that only mentions the id does not count).
+
+Content that landed as a different commit without the trailer is not matched. Git runs where the vessel's repository lives: Armada's repository or the working directory on the Admiral host, otherwise the vessel's checkout on a connected Harbor. The repository is fetched at most once per vessel per check; a vessel whose repository cannot be reached or fetched is skipped, so no mission is completed without proof. A reconciled mission has its landing failure reason cleared, and Armada records a `mission.landing_reconciled` event whose payload names the evidence commit, how it was found (`CommitAncestry` or `MissionTrailer`), the ref, and the previous failure reason. `LandingFailed` to `Complete` is also a legal manual transition.
+
 ### Where to set it
 
 | Scope | Dashboard | TUI | CLI | REST |

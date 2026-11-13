@@ -46,6 +46,11 @@ namespace Test.Shared.Infrastructure
         public Dictionary<string, List<AskActionProposal>> Pending { get; } = new Dictionary<string, List<AskActionProposal>>(StringComparer.Ordinal);
 
         /// <summary>
+        /// Tool calls per message id, served by the message tool call enumeration.
+        /// </summary>
+        public Dictionary<string, List<AskMessageToolCall>> ToolCalls { get; } = new Dictionary<string, List<AskMessageToolCall>>(StringComparer.Ordinal);
+
+        /// <summary>
         /// Captains.
         /// </summary>
         public List<Captain> Captains { get; } = new List<Captain>();
@@ -96,6 +101,47 @@ namespace Test.Shared.Infrastructure
         #region Public-Methods
 
         /// <summary>
+        /// Serve a snapshot's mission and target rows from the paged work row routes (the snapshot itself is serialized
+        /// with counts only). Call again with a newer snapshot to change what the routes return.
+        /// </summary>
+        /// <param name="threadId">Thread ID.</param>
+        /// <param name="workId">Tracked work ID.</param>
+        /// <param name="snapshot">Snapshot whose rows to serve.</param>
+        /// <returns>The snapshot.</returns>
+        public AskWorkSnapshot ServeWorkRows(string threadId, string workId, AskWorkSnapshot snapshot)
+        {
+            string key = threadId + "/" + workId;
+            _MissionRows[key] = snapshot.Missions.ToList();
+            _TargetRows[key] = snapshot.Targets.ToList();
+            Stub.On("POST", "/api/v1/ask/threads/" + threadId + "/work/" + workId + "/missions/enumerate", body => Ok(Page(_MissionRows.TryGetValue(key, out List<AskWorkMissionSnapshot>? m) ? m : new List<AskWorkMissionSnapshot>())));
+            Stub.On("POST", "/api/v1/ask/threads/" + threadId + "/work/" + workId + "/targets/enumerate", body => Ok(Page(_TargetRows.TryGetValue(key, out List<AskWorkTargetSnapshot>? t) ? t : new List<AskWorkTargetSnapshot>())));
+            return snapshot;
+        }
+
+        /// <summary>
+        /// Add tool calls to a message: sets its ToolCallCount and serves the calls from the paged tool call route.
+        /// </summary>
+        /// <param name="message">Message (ThreadId and Id set).</param>
+        /// <param name="calls">Tool calls.</param>
+        /// <returns>The message.</returns>
+        public AskMessage SetToolCalls(AskMessage message, params AskMessageToolCall[] calls)
+        {
+            List<AskMessageToolCall> list = ToolCalls.TryGetValue(message.Id, out List<AskMessageToolCall>? existing) ? existing : new List<AskMessageToolCall>();
+            list.AddRange(calls);
+            foreach (AskMessageToolCall call in list)
+            {
+                call.MessageId = message.Id;
+                call.ThreadId = message.ThreadId;
+            }
+
+            ToolCalls[message.Id] = list;
+            message.ToolCallCount = list.Count;
+            string messageId = message.Id;
+            Stub.On("POST", "/api/v1/ask/threads/" + message.ThreadId + "/messages/" + messageId + "/tool-calls/enumerate", body => Ok(Page(ToolCalls.TryGetValue(messageId, out List<AskMessageToolCall>? c) ? c : new List<AskMessageToolCall>())));
+            return message;
+        }
+
+        /// <summary>
         /// Add a thread with messages and register its routes.
         /// </summary>
         /// <param name="thread">Thread.</param>
@@ -110,10 +156,12 @@ namespace Test.Shared.Infrastructure
             {
                 AskThreadDetail detail = new AskThreadDetail();
                 detail.Thread = Threads.First(t => t.Id == id);
-                detail.TrackedWork = Work.TryGetValue(id, out List<AskTrackedWork>? w) ? w : new List<AskTrackedWork>();
-                detail.PendingProposals = Pending.TryGetValue(id, out List<AskActionProposal>? p) ? p : new List<AskActionProposal>();
+                detail.TrackedWorkCount = Work.TryGetValue(id, out List<AskTrackedWork>? w) ? w.Count : 0;
+                detail.PendingProposalCount = Pending.TryGetValue(id, out List<AskActionProposal>? p) ? p.Count : 0;
                 return Ok(ArmadaJson.Serialize(detail));
             });
+            Stub.On("POST", "/api/v1/ask/threads/" + id + "/work/enumerate", body => Ok(Page(Work.TryGetValue(id, out List<AskTrackedWork>? w) ? w : new List<AskTrackedWork>())));
+            Stub.On("POST", "/api/v1/ask/threads/" + id + "/proposals/enumerate", body => Ok(Page(Pending.TryGetValue(id, out List<AskActionProposal>? p) ? p : new List<AskActionProposal>())));
             Stub.On("POST", "/api/v1/ask/threads/" + id + "/messages/enumerate", body =>
             {
                 bool older = JsonHelper.Deserialize<AskMessageEnumerateQuery>(body).BeforeSequence.HasValue;
@@ -267,8 +315,11 @@ namespace Test.Shared.Infrastructure
                 if (ms == "Failed") m.FailureReason = "Tests failed";
                 if (i == 1) m.PrUrl = "https://example.com/pr/1";
                 s.Missions.Add(m);
+                s.Counts[ms] = s.Counts.TryGetValue(ms, out int c) ? c + 1 : 1;
             }
 
+            s.MissionCount = s.Missions.Count;
+            s.TotalCount = s.Missions.Count;
             return s;
         }
 
@@ -300,6 +351,9 @@ namespace Test.Shared.Infrastructure
         #endregion
 
         #region Private-Methods
+
+        private readonly Dictionary<string, List<AskWorkMissionSnapshot>> _MissionRows = new Dictionary<string, List<AskWorkMissionSnapshot>>(StringComparer.Ordinal);
+        private readonly Dictionary<string, List<AskWorkTargetSnapshot>> _TargetRows = new Dictionary<string, List<AskWorkTargetSnapshot>>(StringComparer.Ordinal);
 
         private static System.Net.Http.HttpResponseMessage Ok(string json)
         {

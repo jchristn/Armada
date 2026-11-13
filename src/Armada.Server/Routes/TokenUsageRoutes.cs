@@ -54,16 +54,25 @@ namespace Armada.Server.Routes
                 if (query.BucketMinutes <= 0) query.BucketMinutes = 15;
                 ApplyScope(ctx, query);
 
-                List<TokenUsageRecord> records = await _database.TokenUsage.EnumerateForSummaryAsync(query).ConfigureAwait(false);
-                return TokenUsageSummaryBuilder.Build(records, query);
+                try
+                {
+                    TokenUsageSummaryBuilder.ValidateWindow(query);
+                    List<TokenUsageRecord> records = await _database.TokenUsage.EnumerateForSummaryAsync(query).ConfigureAwait(false);
+                    return (object)TokenUsageSummaryBuilder.Build(records, query);
+                }
+                catch (Exception ex) when (RouteErrorMapper.IsMapped(ex))
+                {
+                    return RouteErrorMapper.ToResponse(req, ex);
+                }
             },
             api => api
                 .WithTag("TokenUsage")
                 .WithSummary("Summarize token usage")
-                .WithDescription("Returns token usage aggregated into time buckets (with a per-model breakdown), a whole-window per-model aggregate ordered most-used first, and grand totals -- the data behind the dashboard token-usage charts.")
+                .WithDescription("Returns token usage aggregated into time buckets (with a per-model breakdown), a whole-window per-model aggregate ordered most-used first, and grand totals: the data behind the dashboard token-usage charts. At most 1000 buckets: a window and bucketMinutes that would produce more is rejected with 400 (Data.Code CollectionLimitExceeded). ByModel and each bucket's Models list the modelLimit most-used models; the rest are summed into OtherModels (OtherModelCount says how many), so totals always add up.")
                 .WithParameter(OpenApiParameterMetadata.Query("fromUtc", "UTC summary start timestamp (default now-24h)", false))
                 .WithParameter(OpenApiParameterMetadata.Query("toUtc", "UTC summary end timestamp (default now)", false))
-                .WithParameter(OpenApiParameterMetadata.Query("bucketMinutes", "Bucket width in minutes; fractional allowed, e.g. 0.5 for 30-second buckets (default 15)", false))
+                .WithParameter(OpenApiParameterMetadata.Query("bucketMinutes", "Bucket width in minutes; fractional allowed, e.g. 0.5 for 30-second buckets (default 15, at most 527040)", false))
+                .WithParameter(OpenApiParameterMetadata.Query("modelLimit", "Most models broken out by name (default 10, 1 to 100); the rest are summed into OtherModels", false, OpenApiSchemaMetadata.Integer()))
                 .WithParameter(OpenApiParameterMetadata.Query("model", "Optional model filter", false))
                 .WithParameter(OpenApiParameterMetadata.Query("runtime", "Optional runtime filter", false))
                 .WithParameter(OpenApiParameterMetadata.Query("source", "Optional source filter (mission, chat, planning, synthetic)", false))
@@ -74,6 +83,7 @@ namespace Armada.Server.Routes
                 .WithParameter(OpenApiParameterMetadata.Query("tenantId", "Optional tenant filter (admin only)", false))
                 .WithParameter(OpenApiParameterMetadata.Query("userId", "Optional user filter (admin or tenant admin)", false))
                 .WithResponse(200, OpenApiJson.For<TokenUsageSummaryResult>("Token-usage summary"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
                 .WithSecurity("ApiKey"));
 
             app.Post("/api/v1/token-usage/enumerate", async (ApiRequest req) =>
@@ -239,6 +249,8 @@ namespace Armada.Server.Routes
                 query.PageSize = Math.Clamp(pageSize, 1, 500);
             if (double.TryParse(req.Query.GetValueOrDefault("bucketMinutes"), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double bucketMinutes) && bucketMinutes > 0)
                 query.BucketMinutes = bucketMinutes;
+            if (int.TryParse(req.Query.GetValueOrDefault("modelLimit"), out int modelLimit))
+                query.ModelLimit = modelLimit;
 
             query.Model = NormalizeEmpty(req.Query.GetValueOrDefault("model")) ?? query.Model;
             query.Runtime = NormalizeEmpty(req.Query.GetValueOrDefault("runtime")) ?? query.Runtime;

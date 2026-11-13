@@ -15,6 +15,7 @@ import { useAutoRefresh } from '../lib/useAutoRefresh';
 import { usePersistedPageSize } from '../lib/usePersistedPageSize';
 import { canDeleteHistoryEntry } from '../lib/history';
 import { buildHistoryCsv, buildHistoryJson, buildHistoryMarkdown, buildHistoryTimelineQuery } from '../lib/historyExport';
+import { useDeleteProgress } from '../lib/useDeleteProgress';
 
 interface SavedHistoryView {
   id: string;
@@ -79,6 +80,7 @@ const EXPORT_MAX_PAGES = 10;
 export default function History() {
   const { t, formatDateTime, formatRelativeTime } = useLocale();
   const { pushToast } = useNotifications();
+  const deletion = useDeleteProgress();
   const navigate = useNavigate();
   const [confirmDelete, setConfirmDelete] = useState<HistoricalTimelineEntry | null>(null);
   const location = useLocation();
@@ -271,13 +273,9 @@ export default function History() {
 
   async function handleDeleteEntry(entry: HistoricalTimelineEntry) {
     setConfirmDelete(null);
-    try {
-      await deleteRequestHistoryEntry(entry.sourceId);
-      pushToast('warning', t('History entry deleted.'));
-      await load();
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : t('Failed to delete history entry.'));
-    }
+    if (!(await deletion.run({ kind: 'requestHistoryEntry', action: () => deleteRequestHistoryEntry(entry.sourceId), errorMessage: (err) => (err instanceof Error ? err.message : t('Failed to delete history entry.')) }))) return;
+    pushToast('warning', t('History entry deleted.'));
+    await load();
   }
 
   function saveCurrentView() {
@@ -572,6 +570,7 @@ export default function History() {
         onConfirm={() => confirmDelete && void handleDeleteEntry(confirmDelete)}
         onCancel={() => setConfirmDelete(null)}
       />
+      {deletion.dialog}
     </div>
   );
 }

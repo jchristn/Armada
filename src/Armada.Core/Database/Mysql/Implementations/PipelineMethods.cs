@@ -310,6 +310,18 @@ namespace Armada.Core.Database.Mysql.Implementations
         /// <returns>Paginated enumeration result.</returns>
         public async Task<EnumerationResult<Pipeline>> EnumerateAsync(EnumerationQuery query, CancellationToken token = default)
         {
+            return await EnumerateInternalAsync(null, null, query, token).ConfigureAwait(false);
+        }
+
+        /// <inheritdoc />
+        public async Task<EnumerationResult<Pipeline>> EnumerateVisibleAsync(string tenantId, string? viewerUserId, EnumerationQuery query, CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(tenantId)) throw new ArgumentNullException(nameof(tenantId));
+            return await EnumerateInternalAsync(tenantId, viewerUserId, query, token).ConfigureAwait(false);
+        }
+
+        private async Task<EnumerationResult<Pipeline>> EnumerateInternalAsync(string? tenantId, string? viewerUserId, EnumerationQuery query, CancellationToken token)
+        {
             if (query == null) query = new EnumerationQuery();
 
             using (MySqlConnection conn = new MySqlConnection(_ConnectionString))
@@ -318,6 +330,19 @@ namespace Armada.Core.Database.Mysql.Implementations
 
                 List<string> conditions = new List<string>();
                 List<MySqlParameter> parameters = new List<MySqlParameter>();
+
+                if (!String.IsNullOrEmpty(tenantId))
+                {
+                    conditions.Add("tenant_id = @tenant_id");
+                    parameters.Add(new MySqlParameter("@tenant_id", tenantId));
+                }
+                if (!String.IsNullOrEmpty(viewerUserId))
+                {
+                    // A regular user sees tenant-wide rows plus their own (ScopedVisibility.CanView), counted in the data source.
+                    conditions.Add("(scope = @tenant_wide_scope OR user_id = @viewer_user_id)");
+                    parameters.Add(new MySqlParameter("@tenant_wide_scope", ScopeEnum.TenantWide.ToString()));
+                    parameters.Add(new MySqlParameter("@viewer_user_id", viewerUserId));
+                }
 
                 if (query.CreatedAfter.HasValue)
                 {
@@ -347,7 +372,7 @@ namespace Armada.Core.Database.Mysql.Implementations
                 using (MySqlCommand cmd = conn.CreateCommand())
                 {
                     cmd.CommandText = "SELECT * FROM pipelines" + whereClause +
-                        " ORDER BY created_utc " + orderDirection +
+                        " ORDER BY created_utc " + orderDirection + ", id " + orderDirection +
                         " LIMIT " + query.PageSize + " OFFSET " + query.Offset + ";";
                     foreach (MySqlParameter p in parameters) cmd.Parameters.Add(new MySqlParameter(p.ParameterName, p.Value));
                     using (MySqlDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))

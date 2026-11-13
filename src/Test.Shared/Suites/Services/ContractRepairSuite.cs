@@ -328,7 +328,125 @@ namespace Test.Shared.Suites.Services
 
                     Mission after = (await testDb.Driver.Missions.ReadAsync(s.Mission.Id).ConfigureAwait(false))!;
                     AssertEqual(0, after.NoOpRedispatchAttempts, "a blocked verifier is not re-dispatched as a no-op");
+                    AssertTrue(after.FailureKind != MissionFailureKindEnum.Blocked, "a verifier's BLOCKED keeps its rework meaning: " + after.Status + " " + after.FailureReason);
+                    AssertEqual(0, (await testDb.Driver.Events.EnumerateByMissionAsync(s.Mission.Id, 100).ConfigureAwait(false)).Count(e => e.EventType == CaptainBlockedContract.EventType));
                     AssertEqual(0, (await RepairsAsync(testDb, s.Mission.Id).ConfigureAwait(false)).Count);
+                }).ConfigureAwait(false);
+            }));
+
+            // A captain that reports BLOCKED is a reported blocker, not an unfinished completion (FIX_LANDING_FAILURES C2).
+
+            cases.Add(Case("blocked_contract_parses_marker_message_and_reason", "The blocked outcome is read from the marker, its result alias, or a BLOCKED message, outside fences, with a bounded reason", TestTags.Positive, () =>
+            {
+                AssertTrue(CaptainBlockedContract.IsReported("Checked.\n" + VerifierContract.BlockedMarker + "\nMission 1 has not landed."));
+                AssertTrue(CaptainBlockedContract.IsReported("Checked.\n" + CaptainBlockedContract.ResultAlias + "\nMission 1 has not landed."));
+                AssertTrue(CaptainBlockedContract.IsReported("[ARMADA:MESSAGE] BLOCKED: mission 5 depends on missions 1-4"));
+                AssertFalse(CaptainBlockedContract.IsReported(null));
+                AssertFalse(CaptainBlockedContract.IsReported("[ARMADA:MESSAGE] not BLOCKED: just a note"));
+                AssertFalse(CaptainBlockedContract.IsReported("Quoting the prompt:\n```\n" + VerifierContract.BlockedMarker + "\n```"), "a fenced marker is not a report");
+
+                AssertEqual("mission 5 depends on missions 1-4", CaptainBlockedContract.ExtractReason("[ARMADA:MESSAGE] BLOCKED:   mission 5 depends on missions 1-4  "));
+                AssertEqual("Mission 1 has not landed on main.", CaptainBlockedContract.ExtractReason("Checked.\n" + VerifierContract.BlockedMarker + "\n\nMission 1 has not landed\non main."));
+                AssertEqual("The brief contradicts itself.", CaptainBlockedContract.ExtractReason("Intro.\n\nThe brief contradicts itself.\n" + VerifierContract.BlockedMarker));
+                AssertNull(CaptainBlockedContract.ExtractReason(VerifierContract.BlockedMarker));
+                string longReason = CaptainBlockedContract.ExtractReason("[ARMADA:MESSAGE] BLOCKED: " + new string('x', 5000))!;
+                AssertEqual(CaptainBlockedContract.MaxReasonLength, longReason.Length, "the reason is bounded");
+                AssertTrue(CaptainBlockedContract.HasCompletionOrVerdict("[ARMADA:MESSAGE] BLOCKED: waiting\n[ARMADA:RESULT] COMPLETE"));
+            }));
+
+            foreach (string blockedOutput in new[]
+            {
+                "Inspected the branches; the prerequisites have not landed.\n" + VerifierContract.BlockedMarker + "\nMission 5 depends on missions 1-4, which are not on main yet.",
+                "Inspected the branches.\n[ARMADA:MESSAGE] BLOCKED: mission 5 depends on missions 1-4, which are not on main yet."
+            })
+            {
+                bool markerForm = blockedOutput.Contains(VerifierContract.BlockedMarker, StringComparison.Ordinal);
+                cases.Add(CaseAsync(markerForm ? "worker_blocked_marker_fails_without_redispatch" : "worker_blocked_message_fails_without_redispatch",
+                    "A Worker that reports BLOCKED " + (markerForm ? "with the marker line" : "with a BLOCKED message only") + " and leaves no work fails as Blocked with its reason and is not re-dispatched", TestTags.Positive, async () =>
+                {
+                    await WithRepoAsync(async repo =>
+                    {
+                        using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                        Harness h = new Harness(testDb);
+                        h.Missions.OnGetMissionOutput = _ => blockedOutput;
+                        Scenario s = await Scenario.CreateAsync(testDb, h, repo, "Worker").ConfigureAwait(false);
+
+                        await h.Missions.HandleCompletionAsync(s.Captain, s.Mission.Id).ConfigureAwait(false);
+
+                        Mission after = (await testDb.Driver.Missions.ReadAsync(s.Mission.Id).ConfigureAwait(false))!;
+                        AssertEqual(0, after.NoOpRedispatchAttempts, "a reported blocker is not re-dispatched");
+                        AssertEqual(MissionStatusEnum.Failed, after.Status);
+                        AssertEqual(MissionFailureKindEnum.Blocked, after.FailureKind);
+                        AssertStartsWith(CaptainBlockedContract.FailureReasonPrefix, after.FailureReason ?? "");
+                        AssertContains("depends on missions 1-4", after.FailureReason ?? "");
+                        AssertFalse((after.FailureReason ?? "").Contains("stopping mid-task", StringComparison.Ordinal), "not described as a model stopping mid-task");
+
+                        List<ArmadaEvent> events = await testDb.Driver.Events.EnumerateByMissionAsync(s.Mission.Id, 100).ConfigureAwait(false);
+                        ArmadaEvent blocked = events.Single(e => e.EventType == CaptainBlockedContract.EventType);
+                        MissionBlockedByCaptainPayload payload = JsonSerializer.Deserialize<MissionBlockedByCaptainPayload>(blocked.Payload!)!;
+                        AssertEqual(s.Mission.Id, payload.MissionId);
+                        AssertEqual(s.Captain.Id, payload.CaptainId);
+                        AssertContains("depends on missions 1-4", payload.Reason ?? "");
+                    }).ConfigureAwait(false);
+                }));
+            }
+
+            cases.Add(CaseAsync("worker_blocked_with_work_is_not_blocked", "A Worker that reports BLOCKED but committed work is handled as produced work, not as a blocker", TestTags.Negative, async () =>
+            {
+                await WithRepoAsync(async repo =>
+                {
+                    using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                    Harness h = new Harness(testDb);
+                    h.Missions.OnGetMissionOutput = _ => "Did part of it.\n[ARMADA:MESSAGE] BLOCKED: the second half needs mission 1";
+                    Scenario s = await Scenario.CreateAsync(testDb, h, repo, "Worker").ConfigureAwait(false);
+                    await File.WriteAllTextAsync(Path.Combine(repo, "work.txt"), "work\n").ConfigureAwait(false);
+                    await GitAsync(repo, "add", "-A").ConfigureAwait(false);
+                    await GitAsync(repo, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "partial").ConfigureAwait(false);
+
+                    await h.Missions.HandleCompletionAsync(s.Captain, s.Mission.Id).ConfigureAwait(false);
+
+                    Mission after = (await testDb.Driver.Missions.ReadAsync(s.Mission.Id).ConfigureAwait(false))!;
+                    AssertTrue(after.FailureKind != MissionFailureKindEnum.Blocked, "work on the branch is not a reported blocker: " + after.Status);
+                    AssertEqual(0, (await testDb.Driver.Events.EnumerateByMissionAsync(s.Mission.Id, 100).ConfigureAwait(false)).Count(e => e.EventType == CaptainBlockedContract.EventType));
+                }).ConfigureAwait(false);
+            }));
+
+            cases.Add(CaseAsync("unfinished_wording_only_without_result_or_blocking_line", "Exhausted unfinished runs say the model stopped mid-task only when the output had no result line and no blocking message", TestTags.Negative, async () =>
+            {
+                foreach (bool hasResultLine in new[] { false, true })
+                {
+                    await WithRepoAsync(async repo =>
+                    {
+                        using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                        Harness h = new Harness(testDb);
+                        h.Settings.MaxNoOpRedispatchAttempts = 0;
+                        h.Missions.OnGetMissionOutput = _ => hasResultLine ? "Nothing needed.\n[ARMADA:RESULT]COMPLETE" : "I'll start by reading the key files.";
+                        Scenario s = await Scenario.CreateAsync(testDb, h, repo, "Worker").ConfigureAwait(false);
+
+                        await h.Missions.HandleCompletionAsync(s.Captain, s.Mission.Id).ConfigureAwait(false);
+
+                        Mission after = (await testDb.Driver.Missions.ReadAsync(s.Mission.Id).ConfigureAwait(false))!;
+                        AssertEqual(MissionStatusEnum.Failed, after.Status);
+                        AssertEqual(MissionFailureKindEnum.NoOp, after.FailureKind);
+                        AssertEqual(!hasResultLine, (after.FailureReason ?? "").Contains("stopping mid-task", StringComparison.Ordinal), after.FailureReason ?? "");
+                    }).ConfigureAwait(false);
+                }
+            }));
+
+            cases.Add(CaseAsync("empty_worker_output_keeps_unfinished_redispatch", "A Worker with no output and no work is still re-dispatched as unfinished", TestTags.Negative, async () =>
+            {
+                await WithRepoAsync(async repo =>
+                {
+                    using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                    Harness h = new Harness(testDb);
+                    h.Missions.OnGetMissionOutput = _ => String.Empty;
+                    Scenario s = await Scenario.CreateAsync(testDb, h, repo, "Worker").ConfigureAwait(false);
+
+                    await h.Missions.HandleCompletionAsync(s.Captain, s.Mission.Id).ConfigureAwait(false);
+
+                    Mission after = (await testDb.Driver.Missions.ReadAsync(s.Mission.Id).ConfigureAwait(false))!;
+                    AssertEqual(1, after.NoOpRedispatchAttempts, "unfinished: " + after.Status);
+                    AssertTrue(after.FailureKind != MissionFailureKindEnum.Blocked, "not a blocker");
                 }).ConfigureAwait(false);
             }));
 
@@ -540,7 +658,7 @@ namespace Test.Shared.Suites.Services
 
                 Captain captain = new Captain("Mux", AgentRuntimeEnum.Mux);
                 captain.State = CaptainStateEnum.Working;
-                captain = await testDb.Driver.Captains.CreateAsync(captain).ConfigureAwait(false);
+                captain = await CaptainAssignmentFixture.CreateAsync(testDb.Driver, captain).ConfigureAwait(false);
                 Voyage voyage = await testDb.Driver.Voyages.CreateAsync(new Voyage("repair") { Status = VoyageStatusEnum.InProgress }).ConfigureAwait(false);
 
                 Mission mission = new Mission("[" + persona + "] Task", "Do the task");
@@ -564,9 +682,9 @@ namespace Test.Shared.Suites.Services
 
                 mission.DockId = dock.Id;
                 await testDb.Driver.Missions.UpdateAsync(mission).ConfigureAwait(false);
-                captain.CurrentMissionId = mission.Id;
-                captain.CurrentDockId = dock.Id;
-                await testDb.Driver.Captains.UpdateAsync(captain).ConfigureAwait(false);
+                captain.Assignment = mission;
+                captain.Assignment ??= new Mission("fixture assignment"); captain.Assignment.DockId = dock.Id;
+                await CaptainAssignmentFixture.UpdateAsync(testDb.Driver, captain).ConfigureAwait(false);
 
                 // The dock started from the repository's current head, as a real dock does.
                 string start = (await GitAsync(repo, "rev-parse", "HEAD").ConfigureAwait(false)).Trim();

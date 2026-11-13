@@ -1,12 +1,19 @@
-import { render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import MissionDetail from './MissionDetail';
-import { getHarbor, getMission, getMissionLandingPreview, listCaptains, listCheckRuns, listDeployments, listVessels } from '../api/client';
+import { getHarbor, getMissionDiff, getMission, getMissionBlackBox, getMissionLandingPreview, listCaptains, listCheckRuns, listDeployments, listVessels, purgeMission, retryMissionLanding } from '../api/client';
 import { translateTemplate } from '../i18n/runtime';
 import type { Captain, Harbor, LandingPreviewResult, Mission } from '../types/models';
+import { blackBoxEntryFixture } from '../test/fixtures/blackbox';
 
 vi.mock('../api/client', () => ({
   getMission: vi.fn(),
+  getCaptainSelection: vi.fn((id: string) => Promise.resolve({ missionId: id, currentMode: 'Observe', currentStrategy: 'FirstAvailable', historyAvailable: false })),
+  getMissionBlackBox: vi.fn(() => Promise.reject(Object.assign(new Error('not found'), { status: 404, data: { code: 'BlackBoxNotFound' } }))),
+  getVoyageBlackBox: vi.fn(() => Promise.reject(Object.assign(new Error('not found'), { status: 404, data: { code: 'BlackBoxNotFound' } }))),
+  getBlackBox: vi.fn(),
+  getBlackBoxBrief: vi.fn(() => Promise.resolve('# FIX THIS')),
+  listMissionBlackBoxEntries: vi.fn(() => Promise.resolve({ objects: [] })),
   updateMission: vi.fn(),
   deleteMission: vi.fn(),
   purgeMission: vi.fn(),
@@ -41,6 +48,7 @@ vi.mock('../context/NotificationContext', () => ({ useNotifications: () => ({ pu
 vi.mock('../context/AuthContext', () => ({ useAuth: () => ({ isAdmin: true, isTenantAdmin: true }) }));
 vi.mock('../context/WebSocketContext', () => ({
   useWebSocket: () => ({ connected: true, reconnectCount: 0, send: vi.fn(), subscribe: () => () => {} }),
+  useCaptainSelectionRevision: () => 0,
 }));
 
 const emptyPage = { success: true, pageNumber: 1, pageSize: 1000, totalPages: 1, totalRecords: 0, totalMs: 1, objects: [] };
@@ -75,6 +83,16 @@ function renderPage() {
 }
 
 describe('MissionDetail waiting and landing', () => {
+  it('keeps a failed diff read distinct from an empty successful diff', async () => {
+    vi.mocked(getMission).mockResolvedValue(mission({ status: 'Complete' }));
+    vi.mocked(getMissionLandingPreview).mockResolvedValue(preview({ missionStatus: 'Complete' }));
+    vi.mocked(getMissionDiff).mockRejectedValue(new Error('No diff available: no mission worktree or saved diff exists'));
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Diff' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('No diff available: no mission worktree or saved diff exists');
+    expect(screen.queryByText('No modified files')).not.toBeInTheDocument();
+  });
+
   beforeEach(() => {
     vi.mocked(listVessels).mockResolvedValue(emptyPage as never);
     vi.mocked(listCaptains).mockResolvedValue(emptyPage as never);
@@ -88,7 +106,8 @@ describe('MissionDetail waiting and landing', () => {
     vi.mocked(getMissionLandingPreview).mockResolvedValue(preview({ missionStatus: 'Failed' }));
     renderPage();
     expect(await screen.findByText('Failure Reason')).toBeInTheDocument();
-    expect(screen.getByText(/The inference response hit the output-token limit/)).toHaveTextContent('4096');
+    // The reason is shown by the black box panel once it knows the mission has no entry.
+    expect(await screen.findByText(/The inference response hit the output-token limit/)).toHaveTextContent('4096');
     expect(screen.getByText(/The inference response hit the output-token limit/)).toHaveTextContent('Remediation: Increase Max Output Tokens');
   });
 
@@ -227,5 +246,70 @@ describe('MissionDetail Harbor and captain runtime', () => {
 
     expect(await screen.findByText('Admiral host')).toBeInTheDocument();
     expect(screen.queryByTestId('mission-harbor')).not.toBeInTheDocument();
+  });
+  it('shows an infra landing failure in full with Retry Landing next to it (A4)', async () => {
+    const reason = 'Landing was blocked: the checkout at /Users/dev/Code/app has uncommitted changes.\n M src/app.ts\n?? notes.txt';
+    vi.mocked(getMission).mockResolvedValue(mission({ status: 'LandingFailed', failureKind: 'Infra', failureReason: reason }));
+    vi.mocked(getMissionLandingPreview).mockResolvedValue(preview({ missionStatus: 'LandingFailed' }));
+    vi.mocked(retryMissionLanding).mockResolvedValue({} as never);
+    renderPage();
+    await screen.findByText('Failure Reason');
+    // The black box panel shows the recorded reason once it knows the mission has no entry.
+    await waitFor(() => expect(document.querySelector('pre.mission-failure-reason')).not.toBeNull());
+    const block = document.querySelector('pre.mission-failure-reason') as HTMLElement;
+    expect(block).not.toBeNull();
+    expect(block.textContent).toBe(reason);
+    expect(block).toHaveAttribute('data-failure-kind', 'Infra');
+    const field = block.closest('.detail-field') as HTMLElement;
+    fireEvent.click(within(field).getByRole('button', { name: 'Retry Landing' }));
+    await waitFor(() => expect(retryMissionLanding).toHaveBeenCalledWith('msn_1'));
+  });
+
+  it('does not repeat Retry Landing beside the reason for other landing failures', async () => {
+    vi.mocked(getMission).mockResolvedValue(mission({ status: 'LandingFailed', failureKind: 'LandingConflict', failureReason: 'Merge conflict in src/app.ts' }));
+    vi.mocked(getMissionLandingPreview).mockResolvedValue(preview({ missionStatus: 'LandingFailed' }));
+    renderPage();
+    await screen.findByText('Failure Reason');
+    await waitFor(() => expect(document.querySelector('pre.mission-failure-reason')).not.toBeNull());
+    const field = (document.querySelector('pre.mission-failure-reason') as HTMLElement).closest('.detail-field') as HTMLElement;
+    expect(within(field).queryByRole('button', { name: 'Retry Landing' })).not.toBeInTheDocument();
+  });
+
+  it('shows the delete progress modal while a purge runs', async () => {
+    let finish!: () => void;
+    vi.mocked(purgeMission).mockReturnValue(new Promise<void>((resolve) => { finish = resolve; }));
+    vi.mocked(getMission).mockResolvedValue(mission({ status: 'Failed', failureReason: 'x' }));
+    vi.mocked(getMissionLandingPreview).mockResolvedValue(preview({ missionStatus: 'Failed' }));
+    renderPage();
+    await screen.findByText('Failure Reason');
+    fireEvent.click(screen.getAllByRole('button', { name: 'Actions' })[0]);
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Purge' }));
+    const confirm = screen.getByText('Purge Mission').closest('.modal-box') as HTMLElement;
+    fireEvent.click(within(confirm).getByRole('button', { name: 'Yes' }));
+    const progress = await screen.findByRole('alertdialog', { name: 'Purging mission' });
+    expect(progress).toHaveTextContent('This may take some time while related records are cleaned up.');
+    expect(progress).toHaveAttribute('aria-busy', 'true');
+    await act(async () => { finish(); });
+    await waitFor(() => expect(screen.queryByRole('alertdialog', { name: 'Purging mission' })).not.toBeInTheDocument());
+    expect(purgeMission).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('MissionDetail black box', () => {
+  beforeEach(() => {
+    vi.mocked(listVessels).mockResolvedValue(emptyPage as never);
+    vi.mocked(listCaptains).mockResolvedValue(emptyPage as never);
+    vi.mocked(listCheckRuns).mockResolvedValue(emptyPage as never);
+    vi.mocked(listDeployments).mockResolvedValue(emptyPage as never);
+  });
+
+  it('shows the black box panel for a failed mission with an entry, keeping Retry Landing', async () => {
+    vi.mocked(getMissionBlackBox).mockResolvedValueOnce(blackBoxEntryFixture());
+    vi.mocked(getMission).mockResolvedValue(mission({ status: 'LandingFailed', failureKind: 'Infra', failureReason: 'Merge conflict in src/logging.ts', lastBlackBoxEntryId: 'bbx_2' } as Partial<Mission>));
+    vi.mocked(getMissionLandingPreview).mockResolvedValue(preview({ missionStatus: 'LandingFailed' }));
+    renderPage();
+    expect(await screen.findByText('Another mission changed the same files before this one landed.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Copy Markdown' })).toBeInTheDocument();
+    expect(getMissionBlackBox).toHaveBeenCalledWith('msn_1');
   });
 });

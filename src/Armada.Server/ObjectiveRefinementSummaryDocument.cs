@@ -40,6 +40,13 @@ namespace Armada.Server
         [JsonPropertyName("suggestedPipelineId")]
         public string? SuggestedPipelineId { get; set; } = null;
 
+        /// <summary>
+        /// Optional suggested slices: <c>{title, parent}</c> with parent an earlier 1-based index or null.
+        /// </summary>
+        [JsonPropertyName("suggestedSlices")]
+        [Armada.Core.Services.CollectionBound(Armada.Core.Services.CollectionLimits.MaxConfigItems)]
+        public List<Armada.Core.Models.ObjectiveSuggestedSlice?>? SuggestedSlices { get; set; } = null;
+
         #endregion
     }
 }

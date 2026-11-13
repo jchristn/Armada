@@ -37,6 +37,32 @@ namespace Test.Shared.Suites.Client
         {
             List<TestCaseDescriptor> cases = new List<TestCaseDescriptor>();
 
+            cases.Add(Case("pack_management", "Create, inspect, edit, validate and delete an on-disk pack through the client", async (c, fx) =>
+            {
+                string? original = fx.Settings.Evaluation.BatteryDirectory;
+                string directory = Path.Combine(fx.TempDir, "client-battery");
+                Directory.CreateDirectory(directory);
+                fx.Settings.Evaluation.BatteryDirectory = directory;
+                try
+                {
+                    BatteryPackDetail pack = (await c.CreateBatteryPackAsync(new BatteryPackEditRequest { PackId = "client-demo", ManifestJson = "{}" }))!;
+                    AssertFalse(pack.Info.Valid);
+                    pack = (await c.GetBatteryPackAsync("client-demo"))!;
+                    AssertEqual("{}", pack.ManifestJson);
+                    pack = (await c.WriteBatteryPackFileAsync("client-demo", "fixture/demo.txt", "hello"))!;
+                    AssertTrue(pack.Files.Any(f => f.Path == "fixture/demo.txt"));
+                    BatteryPackTextFile text = (await c.ReadBatteryPackFileAsync("client-demo", "fixture/demo.txt"))!;
+                    AssertEqual("hello", text.Content);
+                    pack = (await c.UpdateBatteryPackManifestAsync("client-demo", "{ \"id\": \"client-demo\" }"))!;
+                    AssertFalse(pack.Info.Valid);
+                    AssertFalse((await c.ValidateBatteryPackAsync("client-demo"))!.Valid);
+                    await c.DeleteBatteryPackFileAsync("client-demo", "fixture/demo.txt");
+                    await c.DeleteBatteryPackAsync("client-demo");
+                    await ClientContract.ExpectErrorAsync(() => c.GetBatteryPackAsync("client-demo"), "deleted pack", 404, 404);
+                }
+                finally { fx.Settings.Evaluation.BatteryDirectory = original; }
+            }));
+
             cases.Add(Case("battery", "List packs, run the C# pack, get the run; unknown packs and runs fail", async (c, fx) =>
             {
                 Captain captain;
@@ -72,8 +98,17 @@ namespace Test.Shared.Suites.Client
                 }
 
                 AssertEqual(BatteryRunStatusEnum.Completed, run.Status, run.FailureReason);
-                AssertEqual(10, run.Results.Count, "results");
+                AssertEqual(0, run.Results.Count, "the run read does not embed results");
+                EnumerationResult<BatteryTaskResult> first = (await c.EnumerateBatteryRunResultsAsync(run.Id, new EnumerationQuery { PageNumber = 1, PageSize = 4, Order = EnumerationOrderEnum.CreatedAscending }))!;
+                AssertEqual(10L, first.TotalRecords, "results total");
+                AssertEqual(3, first.TotalPages, "results pages");
+                AssertEqual(4, first.Objects.Count, "first page");
+                EnumerationResult<BatteryTaskResult> last = (await c.EnumerateBatteryRunResultsAsync(run.Id, new EnumerationQuery { PageNumber = 3, PageSize = 4, Order = EnumerationOrderEnum.CreatedAscending }))!;
+                AssertEqual(2, last.Objects.Count, "final partial page");
+                EnumerationResult<BatteryTaskResult> viaGet = (await c.ListBatteryRunResultsAsync(run.Id, 1, 1000, null))!;
+                AssertEqual(10, viaGet.Objects.Count, "GET twin");
                 await ClientContract.ExpectErrorAsync(() => c.GetBatteryRunAsync("bat_missing"), "unknown run", 404, 404);
+                await ClientContract.ExpectErrorAsync(() => c.EnumerateBatteryRunResultsAsync("bat_missing"), "unknown run results", 404, 404);
             }));
 
             return new TestSuiteDescriptor(suiteId: Suite, displayName: "Armada.Client contract: fixture battery", cases: cases);

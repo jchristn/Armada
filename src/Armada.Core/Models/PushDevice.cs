@@ -4,6 +4,7 @@ namespace Armada.Core.Models
     using System.Collections.Generic;
     using System.Linq;
     using Armada.Core.Enums;
+    using Armada.Core.Services;
 
     /// <summary>
     /// A mobile app installation registered to receive push notifications for one user. Devices are keyed by their
@@ -65,10 +66,11 @@ namespace Armada.Core.Models
         /// <summary>
         /// Categories this device receives. An empty list mutes the device. Never null.
         /// </summary>
+        [CollectionBound(32, Reason = "Distinct defined PushCategoryEnum values (the setter drops duplicates and undefined values); headroom for new categories")]
         public List<PushCategoryEnum> Categories
         {
             get => _Categories;
-            set => _Categories = value == null ? new List<PushCategoryEnum>() : value.Distinct().ToList();
+            set => _Categories = value == null ? new List<PushCategoryEnum>() : value.Where(category => Enum.IsDefined(typeof(PushCategoryEnum), category)).Distinct().ToList();
         }
 
         /// <summary>

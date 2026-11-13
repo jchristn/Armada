@@ -24,6 +24,7 @@ import { useLocale } from '../context/LocaleContext';
 import { useNotifications } from '../context/NotificationContext';
 import { buildPersonaDuplicatePayload } from '../lib/duplicates';
 import { useResourceTable } from '../lib/useResourceTable';
+import { useDeleteProgress } from '../lib/useDeleteProgress';
 
 const PERSONA_NAME_TIP = 'Unique persona name that missions, pipelines and captains refer to, for example Reviewer or Test Engineer. Required, and it cannot be changed after creation.';
 const PERSONA_DESCRIPTION_TIP = 'Optional note on what this persona is for. Shown in lists and pickers; it is not sent to the captain.';
@@ -34,6 +35,7 @@ export default function Personas() {
   const { isAdmin, isTenantAdmin, user } = useAuth();
   const viewer: ScopeViewer = { isAdmin, isTenantAdmin, tenantId: user?.user?.tenantId, userId: user?.user?.id };
   const { t, formatRelativeTime, formatDateTime } = useLocale();
+  const deletion = useDeleteProgress();
   const { pushToast } = useNotifications();
   const [personas, setPersonas] = useState<Persona[]>([]);
   const [loading, setLoading] = useState(true);
@@ -120,11 +122,9 @@ export default function Personas() {
       message: t('Delete persona "{{name}}"? This cannot be undone.', { name }),
       onConfirm: async () => {
         setConfirm(c => ({ ...c, open: false }));
-        try {
-          await deletePersona(name);
-          pushToast('warning', t('Persona "{{name}}" deleted.', { name }));
-          load();
-        } catch { setError(t('Delete failed.')); }
+        if (!(await deletion.run({ kind: 'persona', action: () => deletePersona(name) }))) return;
+        pushToast('warning', t('Persona "{{name}}" deleted.', { name }));
+        load();
       },
     });
   }
@@ -245,6 +245,7 @@ export default function Personas() {
       />
 
       {/* Confirm Dialog */}
+      {deletion.dialog}
       <ConfirmDialog open={confirm.open} title={confirm.title} message={confirm.message}
         onConfirm={confirm.onConfirm} onCancel={() => setConfirm(c => ({ ...c, open: false }))} />
 

@@ -2,6 +2,7 @@ namespace Armada.Core.Models
 {
     using System.Text.Json.Serialization;
     using Armada.Core.Enums;
+    using Armada.Core.Services;
 
     /// <summary>
     /// Aggregate status summary across all active work.
@@ -31,9 +32,25 @@ namespace Armada.Core.Models
         public int StalledCaptains { get; set; } = 0;
 
         /// <summary>
-        /// Total number of active voyages.
+        /// Total number of active (Open or InProgress) voyages. The voyages themselves, with progress, are read one page
+        /// at a time from POST /api/v1/voyages/progress/enumerate (MCP list_voyage_progress).
         /// </summary>
         public int ActiveVoyages { get; set; } = 0;
+
+        /// <summary>
+        /// Number of InProgress voyages.
+        /// </summary>
+        public int InProgressVoyages { get; set; } = 0;
+
+        /// <summary>
+        /// Number of Open voyages (created, no mission assigned yet).
+        /// </summary>
+        public int OpenVoyages { get; set; } = 0;
+
+        /// <summary>
+        /// Number of signals in <see cref="RecentSignals"/> at most.
+        /// </summary>
+        public const int RecentSignalCount = 10;
 
         /// <summary>
         /// Cumulative number of dispatch attempts deferred because the host was under memory pressure
@@ -44,6 +61,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// Missions grouped by status.
         /// </summary>
+        [CollectionBound(VoyageProgress.MaxStatusEntries, Reason = "At most one entry per MissionStatusEnum value")]
         public Dictionary<string, int> MissionsByStatus
         {
             get => _MissionsByStatus;
@@ -51,17 +69,9 @@ namespace Armada.Core.Models
         }
 
         /// <summary>
-        /// Active voyages with progress information.
+        /// Recent signals: the newest <see cref="RecentSignalCount"/>.
         /// </summary>
-        public List<VoyageProgress> Voyages
-        {
-            get => _Voyages;
-            set => _Voyages = value ?? new List<VoyageProgress>();
-        }
-
-        /// <summary>
-        /// Recent signals.
-        /// </summary>
+        [CollectionBound(RecentSignalCount, Reason = "The status snapshot reads the newest RecentSignalCount signals")]
         public List<Signal> RecentSignals
         {
             get => _RecentSignals;
@@ -87,7 +97,6 @@ namespace Armada.Core.Models
         #region Private-Members
 
         private Dictionary<string, int> _MissionsByStatus = new Dictionary<string, int>();
-        private List<VoyageProgress> _Voyages = new List<VoyageProgress>();
         private List<Signal> _RecentSignals = new List<Signal>();
         private RemoteTunnelStatus _RemoteTunnel = new RemoteTunnelStatus();
 

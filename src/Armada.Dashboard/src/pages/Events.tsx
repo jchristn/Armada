@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { listEvents, deleteEventsBatch, listCaptains, listVessels } from '../api/client';
+import { apiErrorMessage, listEvents, deleteEventsBatch, listCaptains, listVessels } from '../api/client';
 import { listAll } from '../api/paging';
 import type { ArmadaEvent, Captain, Vessel } from '../types/models';
 import DataTable, { type DataTableColumn } from '../components/shared/DataTable';
@@ -17,6 +17,7 @@ import { useLocale } from '../context/LocaleContext';
 import { useNotifications } from '../context/NotificationContext';
 import { entityRoute } from '../lib/routing';
 import { usePersistedPageSize } from '../lib/usePersistedPageSize';
+import { useDeleteProgress } from '../lib/useDeleteProgress';
 
 type SortDir = 'asc' | 'desc';
 type SortField = 'eventType' | 'entityType' | 'createdUtc';
@@ -25,6 +26,7 @@ export default function Events() {
   const navigate = useNavigate();
   const { t, formatRelativeTime, formatDateTime } = useLocale();
   const { pushToast } = useNotifications();
+  const deletion = useDeleteProgress();
   const [events, setEvents] = useState<ArmadaEvent[]>([]);
   const [viewRecord, setViewRecord] = useState<Record<string, unknown> | null>(null);
   const [captains, setCaptains] = useState<Captain[]>([]);
@@ -140,11 +142,9 @@ export default function Events() {
       message: t('Delete event {{id}}?', { id }),
       onConfirm: async () => {
         setConfirm(c => ({ ...c, open: false }));
-        try {
-          await deleteEventsBatch([id]);
-          pushToast('warning', t('Event {{id}} deleted.', { id }));
-          load();
-        } catch { setError(t('Delete failed.')); }
+        if (!(await deletion.run({ kind: 'event', action: () => deleteEventsBatch([id]), errorMessage: (err) => apiErrorMessage(err, t('Delete failed.')) }))) return;
+        pushToast('warning', t('Event {{id}} deleted.', { id }));
+        load();
       },
     });
   }
@@ -156,12 +156,10 @@ export default function Events() {
       message: t('Delete {{count}} selected event(s)?', { count: selected.length }),
       onConfirm: async () => {
         setConfirm(c => ({ ...c, open: false }));
-        try {
-          await deleteEventsBatch(selected);
-          pushToast('warning', t('Deleted {{count}} event(s).', { count: selected.length }));
-          setSelected([]);
-          load();
-        } catch { setError(t('Bulk delete failed.')); }
+        if (!(await deletion.run({ kind: 'event', count: selected.length, action: () => deleteEventsBatch(selected), errorMessage: (err) => apiErrorMessage(err, t('Bulk delete failed.')) }))) return;
+        pushToast('warning', t('Deleted {{count}} event(s).', { count: selected.length }));
+        setSelected([]);
+        load();
       },
     });
   }
@@ -277,6 +275,7 @@ export default function Events() {
       />
       <ConfirmDialog open={confirm.open} title={confirm.title} message={confirm.message}
         onConfirm={confirm.onConfirm} onCancel={() => setConfirm(c => ({ ...c, open: false }))} />
+      {deletion.dialog}
 
       <DataTable
         tableKey="events"

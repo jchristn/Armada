@@ -3,7 +3,8 @@ import { useLocale } from '../../context/LocaleContext';
 import { CAPTAIN_TIERS } from '../../lib/captainForm';
 import { personaPriorityTargets, priorityTarget, priorityTargetPatch } from '../../lib/personaPriorities';
 import type { PersonaRoutingForm } from '../../lib/personaPriorities';
-import { listModelEndpoints } from '../../api/client';
+import { enumerateModelEndpoints } from '../../api/client';
+import { listAll } from '../../api/paging';
 import type { ModelEndpoint, PersonaCaptainPriority } from '../../types/models';
 
 const RUNTIME_TIP = 'Match only captains with this runtime, for example Codex. Any matches every runtime.';
@@ -21,7 +22,7 @@ export default function PersonaPriorityEditor({ value, onChange }: Props) {
   const [endpointError, setEndpointError] = useState(false);
   useEffect(() => {
     let active = true;
-    Promise.resolve().then(() => listModelEndpoints()).then(items => { if (active) setEndpoints(items ?? []); }).catch(() => { if (active) setEndpointError(true); });
+    Promise.resolve().then(() => listAll(enumerateModelEndpoints)).then(page => { if (active) setEndpoints(page?.objects ?? []); }).catch(() => { if (active) setEndpointError(true); });
     return () => { active = false; };
   }, []);
   const targets = personaPriorityTargets(endpoints);

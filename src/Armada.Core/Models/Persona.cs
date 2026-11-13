@@ -4,6 +4,7 @@ namespace Armada.Core.Models
     using System.Collections.Generic;
     using Armada.Core.Enums;
     using System.Text.Json.Serialization;
+    using Armada.Core.Services;
 
     /// <summary>
     /// A named agent persona that defines a captain's role during a mission.
@@ -97,7 +98,9 @@ namespace Armada.Core.Models
         /// <summary>
         /// Ordered captain classes for assignment. Empty preserves legacy default-captain routing.
         /// A nonempty list supersedes DefaultCaptainId unless dispatch explicitly overrides the captain.
+        /// At most <see cref="CollectionLimits.MaxConfigItems"/> entries; a write with more is rejected.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxConfigItems)]
         public List<PersonaCaptainPriority> CaptainPriorities
         {
             get => _CaptainPriorities;

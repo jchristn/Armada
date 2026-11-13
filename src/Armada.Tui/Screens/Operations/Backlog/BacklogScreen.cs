@@ -9,6 +9,7 @@ namespace Armada.Tui.Screens.Operations
     using Armada.Core.Enums;
     using Armada.Core.Models;
     using Armada.Tui.Routing;
+    using Armada.Tui.Screens.Kit;
     using Armada.Tui.Services;
     using Armada.Tui.Text;
     using Armada.Tui.Widgets;
@@ -471,11 +472,11 @@ namespace Armada.Tui.Screens.Operations
         {
             Confirm("Delete Backlog Item", Tr("Delete \"{{title}}\"? This removes the backlog item and its objective snapshot history, but leaves linked missions, releases, deployments, and incidents intact.", LocalizationArgs.Of("title", objective.Title)), () =>
             {
-                Run((c, t) => c.DeleteBacklogItemAsync(objective.Id, t), () =>
+                DeleteProgress.RunVoid(Context, "Deleting backlog item", t => Context.Client.DeleteBacklogItemAsync(objective.Id, t), () =>
                 {
                     Toast(NotificationSeverityEnum.Warning, Tr("Backlog item \"{{title}}\" deleted.", LocalizationArgs.Of("title", objective.Title)));
                     Refresh();
-                }, null, ex => ShowMessage(String.IsNullOrEmpty(ex.Message) ? Tr("Delete failed.") : ex.Message));
+                }, "Delete failed.");
             }, "Delete");
         }
 

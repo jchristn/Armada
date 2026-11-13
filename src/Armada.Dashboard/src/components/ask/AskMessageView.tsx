@@ -52,7 +52,7 @@ export default function AskMessageView({ message, proposal, captainName, proposa
 
   // The captain's reply is reserved (empty) when a turn starts so later cards sort after it; the live
   // streaming bubble shows the text until the turn completes and fills it in.
-  if (kind === 'Text' && role === 'Assistant' && !text.trim() && !(message.toolCalls && message.toolCalls.length > 0)) {
+  if (kind === 'Text' && role === 'Assistant' && !text.trim() && !(message.toolCalls && message.toolCalls.length > 0) && !message.toolCallCount) {
     return null;
   }
 
@@ -104,12 +104,13 @@ export default function AskMessageView({ message, proposal, captainName, proposa
           <div className="ask-milestone-head">
             <span className="ask-msg-label">{t('Progress update')}</span>
             {when}
-            {copy}
             {onShowWork && (
               <button type="button" className="ask-link-btn ask-milestone-link" onClick={onShowWork} title={t('Scroll to the live card for this work, which shows its current status.')}>
                 {t('Show live card')}
               </button>
             )}
+            {/* Last in the header so keyboard order matches its pinned top-right position (see App.css). */}
+            {copy}
           </div>
           <Markdown>{text}</Markdown>
           {workCard}

@@ -271,10 +271,13 @@ namespace Test.Shared.Suites.Services
                 AssertEqual("claude-code-mcp-probe", result.AvailabilitySource, "availability source");
                 AssertEqual(2, result.ConfiguredServerCount, "configured servers");
                 AssertEqual(1, result.ReachableServerCount, "reachable servers");
-                AssertEqual(1, result.Tools.Count, "tools");
-                AssertEqual("fixture_echo", result.Tools[0].Name, "tool name");
-                AssertEqual("fixture", result.Tools[0].RegistrationSource, "tool source");
-                AssertEqual(CaptainToolSourceKindEnum.McpServer, result.Tools[0].SourceKind, "tool source kind");
+                AssertEqual(1L, result.Tools.TotalRecords, "tools");
+                AssertEqual(1, result.Tools.Objects.Count, "tools on the page");
+                AssertEqual(1, result.ToolCount, "tool count");
+                AssertEqual(1, result.McpToolCount, "MCP tool count");
+                AssertEqual("fixture_echo", result.Tools.Objects[0].Name, "tool name");
+                AssertEqual("fixture", result.Tools.Objects[0].RegistrationSource, "tool source");
+                AssertEqual(CaptainToolSourceKindEnum.McpServer, result.Tools.Objects[0].SourceKind, "tool source kind");
 
                 CaptainToolServerSummary? fixtureServer = result.Servers.FirstOrDefault(s => s.Name == "fixture");
                 CaptainToolServerSummary? offlineServer = result.Servers.FirstOrDefault(s => s.Name == "offline");

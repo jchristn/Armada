@@ -15,42 +15,45 @@ The `Client.RouteSurface` and `Docs.Deprecation` test suites keep this file hone
 - no first-party client (the dashboard and mobile `api/client.ts`, `Armada.Client` and the TUI, the `armada` CLI,
   `Armada.Core`'s `ArmadaApiClient`) may call a listed or removed route, or list jobs without paging.
 
+## v1.3.0 concurrency removal exception
+
+The owner-approved [concurrency plan](CONCURRENCY_IMPROVEMENTS.md) removes `Captain.CurrentMissionId`, `Captain.CurrentDockId`, `Vessel.AllowConcurrentMissions` and Helm `--allow-concurrent` in v1.3.0, with no aliases. This is the explicit exception to the usual major-release removal policy in [compatibility](docs/COMPATIBILITY.md#v130-concurrency-exception). Use `ActiveMissionIds` and each mission’s dock/process, plus the two numeric vessel limits. Old vessel inputs and the old CLI flag fail with migration guidance. First-party Dashboard, Mobile, TUI, Helm and SDK models use the new fields. These are field/option removals, not retired routes in the route registry below.
+
 ## Active deprecations
 
-Nothing is deprecated right now. The whole-list APIs that were deprecated here were retired; see [Removed](#removed).
+The whole-list APIs that were deprecated here were retired; see [Removed](#removed). Two v1.3.0 concurrency items remain readable for stored data and older plans.
 
 | ID | Surface | Item | Replacement | Deprecated in | Removed in | First-party clients |
 |---|---|---|---|---|---|---|
+| D-025 | Model | `VesselConcurrencyLimit` | `VesselVoyageLimit` and `VoyageMissionLimit` (the reason is kept only so stored events and waits still read) | 1.3.0 | 2.0 | Migrated (no client produces it) |
+| D-026 | Contract | `dependsOn` | `parent` in `armada-plan` contract version 4 (`dependsOn` is read as `parent` with a warning) | 1.3.0 | 2.0 | Migrated (built-in Architect prompts emit `parent`) |
 
 ## Bounded, not retired
 
-Armada exposes no API that returns a whole stored collection in one response. Every collection is read through a
-paged route or tool (`pageNumber`, `pageSize` 1 to 1000 or a lower route cap, `TotalRecords`), and every list route that
-had no `POST .../enumerate` form gained one. The guard suite `E2E.CollectionSurface` fails when a new REST route or MCP
-tool returns an unpaged list without an entry in its allowlist. The allowlisted items below return a list that is not a
-stored collection:
+Armada exposes no API that returns, embeds, or echoes an unbounded collection ([docs/ENUMERATION.md](docs/ENUMERATION.md)).
+Every stored collection is read through a paged route or tool (`pageNumber`, `pageSize` 1 to 1000 or a lower documented
+cap, exact `TotalRecords`), paged in the data source, and every paged `GET` list has a `POST .../enumerate` form. Growing
+children of one entity (voyage missions, fleet vessels, status voyages, planning and refinement transcripts, Ask
+tracked work, proposals and tool calls, vessel dependencies, cleanup resources, storage hosts, battery results, fleet
+action run targets, workspace directory entries and changes) are no longer embedded in the parent read: the parent
+carries a count and the children have their own paged enumeration. Lists that are not stored rows are limited by
+`CollectionLimits` and rejected with `CollectionLimitExceeded` when over the limit, never truncated silently.
+
+Two guard suites keep this true: `E2E.CollectionSurface` (no bare-list routes, paged `GET` lists have `POST` twins, list
+tools page, retired routes answer 410) and `E2E.ResponseShape` (every collection property of a response model declares
+`[CollectionBound]`, and every array in a live REST or MCP response is a page or a declared bounded property within its
+limit). The lists below are bounded by construction rather than by paging:
 
 | Surface | Item | Bound |
 |---|---|---|
-| REST, MCP | `GET /api/v1/ask/quick-actions`, `list_ask_quick_actions` | A fixed catalog defined in code (a handful of entries) |
-| REST | `GET /api/v1/runtimes/mux/endpoints` | The endpoints in one Mux configuration file, read from the `mux` CLI |
+| REST, MCP | `GET /api/v1/ask/quick-actions`, `list_ask_quick_actions` | A fixed catalog defined in code (at most 10 entries) |
+| REST | `GET /api/v1/doctor` | One entry per diagnostic check (at most 11) |
 | REST, MCP, WebSocket | Captain and mission log reads (`.../log`, `get_captain_log`, `get_mission_log`) | `lines` 1 to 5000 per read; page with `offset` |
 | REST | `GET /api/v1/workspace/vessels/{vesselId}/search` | `maxResults` 1 to 1000 (default 200) |
-
-### Lists inside a single read (not retired)
-
-These are the children of one entity returned with its single-resource read, not collections of every row of a type.
-They stay, because the reads are single-resource lookups; each large one has a paged alternative.
-
-| Surface | Item | Paged alternative |
-|---|---|---|
-| REST, MCP, WebSocket | Missions in `GET /api/v1/voyages/{id}`, `voyage_status` with `includeMissions`, `get_voyage` | `POST /api/v1/missions/enumerate` with `voyageId`, `enumerate` missions with `voyageId` |
-| REST, MCP, WebSocket | `Voyages` in `GET /api/v1/status`, `status` (one progress row per active voyage) | `POST /api/v1/voyages/enumerate` with `status` |
-| REST, MCP | Targets in `GET /api/v1/fleet-action-runs/{id}`, `fleet_action_run_status` | `POST /api/v1/fleet-action-runs/{id}/targets/enumerate`, `enumerate` fleet_action_run_target |
-| REST, MCP | Tracked work and pending proposals in `GET /api/v1/ask/threads/{id}`, `get_ask_thread` | Messages: `POST /api/v1/ask/threads/{id}/messages/enumerate`, `list_ask_messages` |
-| REST, MCP | Transcripts in planning and refinement session reads (`GET /api/v1/planning-sessions/{id}`, `GET /api/v1/objective-refinement-sessions/{id}`, `get_backlog_planning_session`, `get_backlog_refinement_session`) | None (one conversation) |
-| REST, MCP | Items in `GET /api/v1/vessels/import/batches/{id}`; candidates of `POST /api/v1/vessels/import/discover`, `discover_vessels` | None (one import batch or one directory scan) |
-| REST, MCP | `GET /api/v1/captains/{id}/tools`, `get_captain_tools`; directory and change lists of the workspace routes | None (one captain's tool inventory; one directory or working tree) |
+| REST, MCP | Model probe results (`.../evaluate`, `get_model_probe_run`) | Exactly six probes (`ModelProbeCatalog.ProbeCount`) |
+| REST | `GET /api/v1/missions/{id}/landing-preview`, `GET /api/v1/vessels/{id}/landing-preview` | At most 12 issues (`LandingPreviewResult.MaxIssues`) |
+| REST, MCP | `Servers` in `GET /api/v1/captains/{id}/tools`, `get_captain_tools` | At most 256 tool sources; the tools themselves are one page |
+| REST, MCP | Model endpoint `HealthHistory` | Server-owned, at most 500 records |
 
 ## Removed
 
@@ -79,6 +82,12 @@ REST route is answered with HTTP 410 Gone and a message naming the replacement, 
 | D-016 | REST | `GET /api/v1/signals/recent` | `POST /api/v1/signals/enumerate` | Unreleased |
 | D-017 | MCP | `list_cli_permission_requests` | `enumerate with entityType cli_permission_requests` | Unreleased |
 | D-018 | Behavior | WebSocket `list_cli_permission_requests` returned up to 100 rows as a bare list | It returns one page (`query.pageNumber`, `query.pageSize`) as an enumeration result | Unreleased |
+| D-019 | Behavior | `Voyages` (one progress row per Open or InProgress voyage) in `GET /api/v1/status`, MCP `status`, WebSocket `status` | The snapshot keeps `ActiveVoyages` and adds `InProgressVoyages` and `OpenVoyages`; the voyages are paged with `POST /api/v1/voyages/progress/enumerate`, MCP `list_voyage_progress`, WebSocket `list_voyage_progress` | Unreleased |
+| D-020 | Behavior | `Missions` embedded in `GET /api/v1/voyages/{id}` and WebSocket `get_voyage` | Both return `VoyageProgress` (the voyage with `TotalMissions`, `MissionCountsByStatus`, `VesselId`, `VesselCount`); missions are paged with `GET /api/v1/missions?voyageId=` or `POST /api/v1/missions/enumerate` | Unreleased |
+| D-021 | Behavior | MCP `voyage_status` with `includeMissions` (and `includeDescription`, `includeDiffs`, `includeLogs`) | `includeMissions: true` is rejected with InvalidArgument; use `enumerate` with entityType missions and `voyageId` | Unreleased |
+| D-022 | Behavior | `NotCancelled` (one entry per mission that could not be cancelled) in `DELETE /api/v1/voyages/{id}`, MCP `cancel_voyage`, WebSocket `cancel_voyage` | `VoyageCancelResult`: `CancelledMissions`, `NotCancelledMissions`, `FirstNotCancelledReason`; the remaining missions are read with the missions enumeration (`voyageId`, `status`) | Unreleased |
+| D-023 | Behavior | `Reviews`, `Comments`, `Checks` in `GET /api/v1/missions/{id}/github/pull-request` (one unpaged GitHub page each) | `ReviewCount`, `CommentCount`, `CheckCount` with `POST /api/v1/missions/{id}/github/pull-request/reviews/enumerate`, `.../comments/enumerate`, `.../checks/enumerate` (GitHub-paged, page size 1 to 100) | Unreleased |
+| D-024 | Behavior | `VoyageProgress.VesselIds` (every distinct vessel of a voyage) | `VesselId` (the vessel of the earliest mission) and `VesselCount` | Unreleased |
 
 Paged `POST .../enumerate` forms added alongside existing paged `GET` lists (the `GET` forms stay, because they already
 page): `/api/v1/tenants/enumerate`, `/api/v1/users/enumerate`, `/api/v1/credentials/enumerate`,

@@ -46,7 +46,7 @@ namespace Test.Shared.Suites.Services
                     await db.Captains.CreateAsync(new Captain("stuck-1") { State = CaptainStateEnum.Stalled });
 
                     InboxService inbox = new InboxService(db, CreateLogging());
-                    List<InboxItem> items = await inbox.GetInboxAsync(AuthContext.Authenticated("ten_inbox", "usr_inbox", true, false, "Test"));
+                    List<InboxItem> items = await InboxTestPages.AllAsync(inbox, AuthContext.Authenticated("ten_inbox", "usr_inbox", true, false, "Test"));
 
                     InboxItem review = items.Single(i => i.Kind == InboxItemKinds.Review);
                     AssertEqual("Review: nested title", review.EntityName, "a title that itself starts with the prefix is kept whole");
@@ -64,7 +64,7 @@ namespace Test.Shared.Suites.Services
                         await db.Missions.CreateAsync(new Mission("Failed " + i) { Status = MissionStatusEnum.Failed });
 
                     InboxService inbox = new InboxService(db, CreateLogging());
-                    List<InboxItem> items = await inbox.GetInboxAsync(AuthContext.Authenticated("ten_inbox", "usr_inbox", true, false, "Test"));
+                    List<InboxItem> items = await InboxTestPages.AllAsync(inbox, AuthContext.Authenticated("ten_inbox", "usr_inbox", true, false, "Test"));
                     AssertEqual(181, items.Count(i => i.Kind == InboxItemKinds.Failed), "all failed missions are listed");
                 }
             }));
@@ -78,7 +78,7 @@ namespace Test.Shared.Suites.Services
                     Deployment noEnvironment = await db.Deployments.CreateAsync(new Deployment { Title = "Ad hoc deploy", Status = DeploymentStatusEnum.PendingApproval });
 
                     InboxService inbox = new InboxService(db, CreateLogging());
-                    List<InboxItem> items = await inbox.GetInboxAsync(AuthContext.Authenticated("ten_inbox", "usr_inbox", true, false, "Test"));
+                    List<InboxItem> items = await InboxTestPages.AllAsync(inbox, AuthContext.Authenticated("ten_inbox", "usr_inbox", true, false, "Test"));
 
                     InboxItem first = items.Single(i => i.Kind == InboxItemKinds.DeploymentApproval && i.EntityId == both.Id);
                     AssertEqual("Deploy to production: Release 2.3 hotfix", first.Title, "environment first, then title");

@@ -185,6 +185,8 @@ namespace Armada.Core.Services
             ReleaseUpsertRequest request,
             CancellationToken token)
         {
+            // Link lists are bounded (docs/ENUMERATION.md): reject before reading anything.
+            CollectionBounds.Validate(request);
             List<string> voyageIds = DistinctNormalized(request.VoyageIds);
             List<string> explicitMissionIds = DistinctNormalized(request.MissionIds);
             List<string> checkRunIds = DistinctNormalized(request.CheckRunIds);
@@ -218,6 +220,13 @@ namespace Armada.Core.Services
                         missions.Add(mission);
                 }
             }
+
+            // Linked voyages expand to every one of their missions; a release may link at most MaxLinkedIds missions
+            // in all, so a larger expansion is rejected rather than cut short.
+            if (missions.Count > CollectionLimits.MaxLinkedIds)
+                throw new CollectionLimitExceededException("MissionIds", CollectionLimits.MaxLinkedIds, missions.Count,
+                    "The linked voyages and missions add up to " + missions.Count + " missions; a release may link at most "
+                    + CollectionLimits.MaxLinkedIds + ". Link fewer voyages or split the release.");
 
             List<CheckRun> checkRuns = new List<CheckRun>();
             foreach (string checkRunId in checkRunIds)
@@ -266,6 +275,10 @@ namespace Armada.Core.Services
                 throw new KeyNotFoundException("Workflow profile not found or not accessible.");
 
             List<ReleaseArtifact> artifacts = BuildArtifacts(checkRuns);
+            if (artifacts.Count > CollectionLimits.MaxLinkedIds)
+                throw new CollectionLimitExceededException("Artifacts", CollectionLimits.MaxLinkedIds, artifacts.Count,
+                    "The linked check runs carry " + artifacts.Count + " artifacts; a release may list at most "
+                    + CollectionLimits.MaxLinkedIds + ". Link fewer check runs.");
             string version = await ResolveVersionAsync(auth, vessel, checkRuns, request, existing, token).ConfigureAwait(false);
             string tagName = Normalize(request.TagName)
                 ?? Normalize(existing?.TagName)

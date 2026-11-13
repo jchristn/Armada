@@ -88,8 +88,13 @@ namespace Armada.Core.Services
             };
             if (Manifest == null) return info;
 
-            info.Toolchain = Manifest.Toolchain.Where(t => t != null && !String.IsNullOrWhiteSpace(t.Name)).Select(t => t.Name!).ToList();
-            foreach (BatteryTaskDefinition task in Manifest.Tasks)
+            // A manifest over the limits is invalid (its Errors say so); the info still lists at most MaxConfigItems of
+            // each and carries the true counts, so nothing is dropped silently.
+            List<string> toolchain = Manifest.Toolchain.Where(t => t != null && !String.IsNullOrWhiteSpace(t.Name)).Select(t => t.Name!).ToList();
+            info.ToolchainCount = toolchain.Count;
+            info.Toolchain = toolchain.Take(CollectionLimits.MaxConfigItems).ToList();
+            info.TaskCount = Manifest.Tasks.Count(t => t != null);
+            foreach (BatteryTaskDefinition task in Manifest.Tasks.Where(t => t != null).Take(CollectionLimits.MaxConfigItems))
             {
                 if (task == null) continue;
                 info.Tasks.Add(new BatteryTaskInfo
@@ -114,9 +119,9 @@ namespace Armada.Core.Services
         public List<string> ToolchainFor(BatteryTaskDefinition task)
         {
             if (task == null) throw new ArgumentNullException(nameof(task));
-            if (task.Toolchain != null) return task.Toolchain.Where(n => !String.IsNullOrWhiteSpace(n)).ToList();
+            if (task.Toolchain != null) return task.Toolchain.Where(n => !String.IsNullOrWhiteSpace(n)).Take(CollectionLimits.MaxConfigItems).ToList();
             if (Manifest == null) return new List<string>();
-            return Manifest.Toolchain.Where(t => t != null && !String.IsNullOrWhiteSpace(t.Name)).Select(t => t.Name!).ToList();
+            return Manifest.Toolchain.Where(t => t != null && !String.IsNullOrWhiteSpace(t.Name)).Select(t => t.Name!).Take(CollectionLimits.MaxConfigItems).ToList();
         }
 
         /// <summary>

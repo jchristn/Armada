@@ -6,6 +6,7 @@ namespace Armada.Harbor
     using System.Threading.Tasks;
     using Armada.Core.Hosting;
     using Avalonia;
+    using Avalonia.Automation;
     using Avalonia.Controls;
     using Avalonia.Layout;
     using Avalonia.Media;
@@ -63,6 +64,8 @@ namespace Armada.Harbor
 
             Grid keyRow = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
             keyRow.Children.Add(_AccessKey);
+            AutomationProperties.SetName(_AccessKey, "Access key");
+            AutomationProperties.SetName(_ShowSecrets, "Show access key and secret");
             Grid.SetColumn(_ShowSecrets, 1);
             _ShowSecrets.Margin = new Thickness(8, 0, 0, 0);
             keyRow.Children.Add(_ShowSecrets);
@@ -164,6 +167,7 @@ namespace Armada.Harbor
 
             Grid.SetRow(labelBlock, row);
             form.Children.Add(labelBlock);
+            if (String.IsNullOrEmpty(AutomationProperties.GetName(input))) AutomationProperties.SetName(input, label);
 
             StackPanel cell = new StackPanel { Spacing = 2 };
             cell.Children.Add(input);

@@ -168,6 +168,47 @@ namespace Armada.Core.Database.Sqlite.Implementations
                 }, FromReader, token).ConfigureAwait(false);
         }
 
+        /// <inheritdoc />
+        public async Task<EnumerationResult<AskActionProposal>> EnumeratePageByThreadAsync(string tenantId, string threadId, AskProposalStatusEnum? status, EnumerationQuery query, CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(tenantId)) throw new ArgumentNullException(nameof(tenantId));
+            if (String.IsNullOrEmpty(threadId)) throw new ArgumentNullException(nameof(threadId));
+            if (query == null) throw new ArgumentNullException(nameof(query));
+            string direction = query.Order == EnumerationOrderEnum.CreatedAscending ? "ASC" : "DESC";
+            using (SqliteConnection conn = new SqliteProviderConnection(_ConnectionString))
+            {
+                await conn.OpenAsync(token).ConfigureAwait(false);
+                return await SqliteBoundedPage.ReadAsync(conn,
+                    "FROM ask_action_proposals WHERE tenant_id = @tenant_id AND thread_id = @thread_id" + (status.HasValue ? " AND status = @status" : String.Empty),
+                    "created_utc " + direction + ", id " + direction,
+                    cmd =>
+                    {
+                        SqliteCommandHelper.Add(cmd, "@tenant_id", tenantId);
+                        SqliteCommandHelper.Add(cmd, "@thread_id", threadId);
+                        if (status.HasValue) SqliteCommandHelper.Add(cmd, "@status", status.Value.ToString());
+                    }, FromReader, query, token).ConfigureAwait(false);
+            }
+        }
+
+        /// <inheritdoc />
+        public async Task<long> CountByThreadAsync(string tenantId, string threadId, AskProposalStatusEnum? status, CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(tenantId)) throw new ArgumentNullException(nameof(tenantId));
+            if (String.IsNullOrEmpty(threadId)) throw new ArgumentNullException(nameof(threadId));
+            using (SqliteConnection conn = new SqliteProviderConnection(_ConnectionString))
+            {
+                await conn.OpenAsync(token).ConfigureAwait(false);
+                return await SqliteCommandHelper.CountAsync(conn,
+                    "SELECT COUNT(*) FROM ask_action_proposals WHERE tenant_id = @tenant_id AND thread_id = @thread_id" + (status.HasValue ? " AND status = @status" : String.Empty) + ";",
+                    cmd =>
+                    {
+                        SqliteCommandHelper.Add(cmd, "@tenant_id", tenantId);
+                        SqliteCommandHelper.Add(cmd, "@thread_id", threadId);
+                        if (status.HasValue) SqliteCommandHelper.Add(cmd, "@status", status.Value.ToString());
+                    }, token).ConfigureAwait(false);
+            }
+        }
+
         #endregion
 
         #region Private-Methods

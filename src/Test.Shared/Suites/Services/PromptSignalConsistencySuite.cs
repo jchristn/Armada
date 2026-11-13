@@ -68,6 +68,8 @@ namespace Test.Shared.Suites.Services
                     AssertNotContains("`[ARMADA:RESULT] NEEDS_REVISION`", embeddedSignals, "embedded runtime signals");
                     AssertNotContains("`[ARMADA:VERDICT] COMPLETE`", embeddedSignals, "embedded runtime signals");
 
+                    AssertContains("`" + VerifierContract.BlockedMarker + "` -- any persona", embeddedSignals, "embedded runtime signals should document the blocked outcome for every persona");
+                    AssertContains("`" + VerifierContract.BlockedMarker + "` -- any persona", fallbackSignals, "fallback runtime signals should document the blocked outcome for every persona");
                     AssertContains("`[ARMADA:RESULT] COMPLETE`", fallbackSignals, "fallback runtime signals should include RESULT COMPLETE");
                     AssertContains("`[ARMADA:VERDICT] PASS`", fallbackSignals, "fallback runtime signals should include VERDICT PASS");
                     AssertContains("`[ARMADA:VERDICT] FAIL`", fallbackSignals, "fallback runtime signals should include VERDICT FAIL");
@@ -113,7 +115,7 @@ namespace Test.Shared.Suites.Services
                         null).ConfigureAwait(false);
 
                     AssertContains("armada-plan", embeddedPrompt, "architect embedded template should use the typed plan contract");
-                    AssertContains("contractVersion:3", embeddedPrompt, "architect embedded template should require evidence-bearing plans");
+                    AssertContains("contractVersion:4", embeddedPrompt, "architect embedded template should require evidence-bearing plans");
                     AssertContains("Do not emit [ARMADA:RESULT] or [ARMADA:VERDICT] lines.", embeddedPrompt, "architect embedded template should forbid result and verdict lines");
                     AssertContains("[ARMADA:MISSION]", templateParams["CaptainInstructions"], "architect captain instructions should use mission markers");
                     AssertContains("Do not emit [ARMADA:RESULT] or [ARMADA:VERDICT] lines.", templateParams["CaptainInstructions"], "architect captain instructions should forbid result and verdict lines");
@@ -172,7 +174,7 @@ namespace Test.Shared.Suites.Services
                             else if (PersonaCatalog.Matches(persona, PersonaCatalog.Architect))
                             {
                                 AssertContains("armada-plan", prompt, label + " plan contract");
-                                AssertContains("contractVersion:3", prompt, label + " plan contract version");
+                                AssertContains("contractVersion:4", prompt, label + " plan contract version");
                             }
                             else
                             {

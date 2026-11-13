@@ -2,11 +2,14 @@ namespace Armada.Core.Models
 {
     using System;
     using System.Collections.Generic;
+    using System.Text.Json.Serialization;
     using Armada.Core.Enums;
+    using Armada.Core.Services;
 
     /// <summary>
-    /// The live data of a work card, one flat object: the tracked entity's status, counts, and per-mission (or per-target)
-    /// rows. Built by the Ask work tracker; its hash (computed without CapturedUtc) detects changes.
+    /// The live data of a work card, one flat object: the tracked entity's status and counts. The per-mission and
+    /// per-target rows are paged separately (MissionCount and TargetCount say how many there are). Built by the Ask work
+    /// tracker; its hash (computed without CapturedUtc, over the rows too) detects changes.
     /// </summary>
     public class AskWorkSnapshot
     {
@@ -98,8 +101,22 @@ namespace Armada.Core.Models
         }
 
         /// <summary>
-        /// Counts keyed by status string.
+        /// Number of mission rows (a voyage's missions, or the one mission of mission work). Read them with POST
+        /// /api/v1/ask/threads/{id}/work/{workId}/missions/enumerate (MCP list_ask_work_missions).
         /// </summary>
+        public int MissionCount { get; set; } = 0;
+
+        /// <summary>
+        /// Number of target rows of a fleet action run. Read them with POST
+        /// /api/v1/ask/threads/{id}/work/{workId}/targets/enumerate (MCP list_ask_work_targets).
+        /// </summary>
+        public int TargetCount { get; set; } = 0;
+
+        /// <summary>
+        /// Counts keyed by status string. The keys are the names of one status enum (mission, fleet action target, job,
+        /// or vessel import outcome), so the dictionary holds at most that enum's member count.
+        /// </summary>
+        [CollectionBound(64, Reason = "Keyed by the member names of one status enum; every such enum has fewer than 64 members.")]
         public Dictionary<string, int> Counts
         {
             get => _Counts;
@@ -107,8 +124,10 @@ namespace Armada.Core.Models
         }
 
         /// <summary>
-        /// Per-mission rows (voyages, missions, and the voyages of fleet action Mission targets).
+        /// Per-mission rows (voyages, missions, and up to 50 missions of the voyages of fleet action Mission targets).
+        /// Server-side state used to derive the counts and the change hash; never serialized. Clients page the rows.
         /// </summary>
+        [JsonIgnore]
         public List<AskWorkMissionSnapshot> Missions
         {
             get => _Missions;
@@ -116,13 +135,21 @@ namespace Armada.Core.Models
         }
 
         /// <summary>
-        /// Per-target rows (fleet action runs).
+        /// Per-target rows (fleet action runs). Server-side state used to derive the counts and the change hash; never
+        /// serialized. Clients page the rows.
         /// </summary>
+        [JsonIgnore]
         public List<AskWorkTargetSnapshot> Targets
         {
             get => _Targets;
             set => _Targets = value ?? new List<AskWorkTargetSnapshot>();
         }
+
+        /// <summary>
+        /// The black box card of BlackBox work (an entry's summary, conflicting missions, recovery paths and follow-ups);
+        /// null for every other kind of work.
+        /// </summary>
+        public AskBlackBoxCard? BlackBox { get; set; } = null;
 
         /// <summary>
         /// Failure reason or error text, or null.

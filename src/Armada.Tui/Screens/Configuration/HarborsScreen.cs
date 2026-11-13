@@ -338,6 +338,18 @@ namespace Armada.Tui.Screens.Configuration
         }
 
         /// <inheritdoc />
+        protected override string DeletingTitle
+        {
+            get { return "Deleting harbor"; }
+        }
+
+        /// <inheritdoc />
+        protected override string DeletingManyTitle
+        {
+            get { return "{count, plural, one {Deleting # harbor} other {Deleting # harbors}}"; }
+        }
+
+        /// <inheritdoc />
         protected override Task DeleteAsync(Harbor row, CancellationToken token)
         {
             return Context.Client.DeleteHarborAsync(row.Id, token);

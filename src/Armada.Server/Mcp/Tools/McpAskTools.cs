@@ -6,7 +6,9 @@ namespace Armada.Server.Mcp.Tools
     using System.Text.Json;
     using System.Text.Json.Serialization;
     using System.Threading.Tasks;
+    using Armada.Core.Enums;
     using Armada.Core.Models;
+    using Armada.Core.Services;
     using Armada.Core.Services.Ask;
     using Armada.Server.Ask;
 
@@ -89,7 +91,7 @@ namespace Armada.Server.Mcp.Tools
 
             register(
                 "get_ask_thread",
-                "Get one Ask Armada conversation with its recent messages, pending and decided action proposals, and tracked work.",
+                "Get one Ask Armada conversation with counts of its tracked work, pending proposals, and pending CLI permission requests, and the running turn's progress (with its tool call count). Read the collections with list_ask_work, list_ask_proposals, and list_ask_tool_calls.",
                 new { type = "object", properties = new { threadId }, required = new[] { "threadId" } },
                 async (args) =>
                 {
@@ -191,7 +193,7 @@ namespace Armada.Server.Mcp.Tools
 
             register(
                 "delete_ask_threads",
-                "Permanently delete several Ask Armada conversations by ID (cancelling running turns). Returns which were deleted and which were not found. This cannot be undone.",
+                "Permanently delete up to 1000 Ask Armada conversations by ID (cancelling running turns); more is InvalidArgument CollectionLimitExceeded. Returns which were deleted and which were not found (both bounded by the request). This cannot be undone.",
                 new
                 {
                     type = "object",
@@ -202,6 +204,7 @@ namespace Armada.Server.Mcp.Tools
                 {
                     AskToolArgs a = Parse(args);
                     if (a.ThreadIds == null || a.ThreadIds.Count == 0) return (object)McpToolError.InvalidArgument("threadIds is required.");
+                    CollectionLimits.RequireRequestItems(a.ThreadIds, "threadIds");
                     List<string> deleted = new List<string>();
                     List<string> notFound = new List<string>();
                     foreach (string id in a.ThreadIds.Where(i => !String.IsNullOrWhiteSpace(i)).Distinct(StringComparer.Ordinal))
@@ -215,7 +218,7 @@ namespace Armada.Server.Mcp.Tools
 
             register(
                 "list_ask_messages",
-                "Read an Ask Armada conversation's messages, newest page first. Pass beforeSequence (the lowest sequence you have) to read older messages.",
+                "Read an Ask Armada conversation's messages, newest page first (1 to 200 per page). Pass beforeSequence (the lowest sequence you have) to read older messages. Each message carries toolCallCount; read its tool calls with list_ask_tool_calls.",
                 new
                 {
                     type = "object",
@@ -223,7 +226,7 @@ namespace Armada.Server.Mcp.Tools
                     {
                         threadId,
                         beforeSequence = new { type = "integer", description = "Return messages before this sequence number" },
-                        pageSize = new { type = "integer", description = "Messages per page (default 50)" }
+                        pageSize = new { type = "integer", description = "Messages per page, 1 to 200 (default 50)" }
                     },
                     required = new[] { "threadId" }
                 },
@@ -373,7 +376,7 @@ namespace Armada.Server.Mcp.Tools
 
             register(
                 "get_ask_work",
-                "Get the current state of work an Ask Armada conversation is tracking (a voyage, mission, or fleet action run it started).",
+                "Get the current state of work an Ask Armada conversation is tracking (a voyage, mission, or fleet action run it started): status and counts, with missionCount and targetCount. Read the rows with list_ask_work_missions and list_ask_work_targets.",
                 new
                 {
                     type = "object",
@@ -387,6 +390,127 @@ namespace Armada.Server.Mcp.Tools
                     AskWorkSnapshot? snapshot = await threads.GetWorkSnapshotAsync(McpToolHelpers.ResolveCallerContext(), a.ThreadId, a.WorkId).ConfigureAwait(false);
                     return snapshot == null ? (object)McpToolError.NotFound("Tracked work not found") : snapshot;
                 });
+            register(
+                "list_ask_work",
+                "Read one page of the work an Ask Armada conversation tracks (paged in the database), newest first by default, each item with a counts-only snapshot. status filters by state: Active, Succeeded, Failed, or Cancelled.",
+                new
+                {
+                    type = "object",
+                    properties = new
+                    {
+                        threadId,
+                        status = new { type = "string", description = "Optional state filter: Active, Succeeded, Failed, Cancelled" },
+                        pageNumber = new { type = "integer", description = "1-based page number (default 1)" },
+                        pageSize = new { type = "integer", description = "Items per page, 1 to 1000 (default 10)" },
+                        order = new { type = "string", description = "CreatedDescending (newest first, default) or CreatedAscending" }
+                    },
+                    required = new[] { "threadId" }
+                },
+                async (args) =>
+                {
+                    AskToolArgs a = Parse(args);
+                    if (String.IsNullOrWhiteSpace(a.ThreadId)) return (object)McpToolError.InvalidArgument("threadId is required.");
+                    EnumerationQuery query = ToQuery(a);
+                    query.Status = a.Status;
+                    EnumerationResult<AskTrackedWork>? page = await threads.EnumerateTrackedWorkAsync(McpToolHelpers.ResolveCallerContext(), a.ThreadId, query).ConfigureAwait(false);
+                    return page == null ? (object)McpToolError.NotFound("Ask conversation not found") : page;
+                });
+            register(
+                "list_ask_work_missions",
+                "Read one page of the mission rows of tracked work (a voyage's missions, or the mission itself), paged in the database. Newest first by default; pass order CreatedAscending for creation order. Fleet action runs have targets instead (list_ask_work_targets).",
+                new
+                {
+                    type = "object",
+                    properties = new
+                    {
+                        threadId,
+                        workId = new { type = "string", description = "Tracked work ID (atw_ prefix)" },
+                        pageNumber = new { type = "integer", description = "1-based page number (default 1)" },
+                        pageSize = new { type = "integer", description = "Rows per page, 1 to 1000 (default 10)" },
+                        order = new { type = "string", description = "CreatedDescending (newest first, default) or CreatedAscending" }
+                    },
+                    required = new[] { "threadId", "workId" }
+                },
+                async (args) =>
+                {
+                    AskToolArgs a = Parse(args);
+                    if (String.IsNullOrWhiteSpace(a.ThreadId) || String.IsNullOrWhiteSpace(a.WorkId)) return (object)McpToolError.InvalidArgument("threadId and workId are required.");
+                    EnumerationResult<AskWorkMissionSnapshot>? page = await threads.EnumerateWorkMissionsAsync(McpToolHelpers.ResolveCallerContext(), a.ThreadId, a.WorkId, ToQuery(a)).ConfigureAwait(false);
+                    return page == null ? (object)McpToolError.NotFound("Tracked work not found") : page;
+                });
+            register(
+                "list_ask_work_targets",
+                "Read one page of the target rows of a tracked fleet action run (one per vessel, by vessel name), paged in the database.",
+                new
+                {
+                    type = "object",
+                    properties = new
+                    {
+                        threadId,
+                        workId = new { type = "string", description = "Tracked work ID (atw_ prefix)" },
+                        pageNumber = new { type = "integer", description = "1-based page number (default 1)" },
+                        pageSize = new { type = "integer", description = "Rows per page, 1 to 1000 (default 10)" }
+                    },
+                    required = new[] { "threadId", "workId" }
+                },
+                async (args) =>
+                {
+                    AskToolArgs a = Parse(args);
+                    if (String.IsNullOrWhiteSpace(a.ThreadId) || String.IsNullOrWhiteSpace(a.WorkId)) return (object)McpToolError.InvalidArgument("threadId and workId are required.");
+                    EnumerationResult<AskWorkTargetSnapshot>? page = await threads.EnumerateWorkTargetsAsync(McpToolHelpers.ResolveCallerContext(), a.ThreadId, a.WorkId, ToQuery(a)).ConfigureAwait(false);
+                    return page == null ? (object)McpToolError.NotFound("Tracked work not found") : page;
+                });
+            register(
+                "list_ask_proposals",
+                "Read one page of an Ask Armada conversation's action proposals (paged in the database), newest first by default. status filters by proposal status, for example Pending.",
+                new
+                {
+                    type = "object",
+                    properties = new
+                    {
+                        threadId,
+                        status = new { type = "string", description = "Optional status filter, for example Pending" },
+                        pageNumber = new { type = "integer", description = "1-based page number (default 1)" },
+                        pageSize = new { type = "integer", description = "Proposals per page, 1 to 1000 (default 10)" },
+                        order = new { type = "string", description = "CreatedDescending (newest first, default) or CreatedAscending" }
+                    },
+                    required = new[] { "threadId" }
+                },
+                async (args) =>
+                {
+                    AskToolArgs a = Parse(args);
+                    if (String.IsNullOrWhiteSpace(a.ThreadId)) return (object)McpToolError.InvalidArgument("threadId is required.");
+                    EnumerationQuery query = ToQuery(a);
+                    query.Status = a.Status;
+                    EnumerationResult<AskActionProposal>? page = await threads.EnumerateProposalsAsync(McpToolHelpers.ResolveCallerContext(), a.ThreadId, query).ConfigureAwait(false);
+                    return page == null ? (object)McpToolError.NotFound("Ask conversation not found") : page;
+                });
+            register(
+                "list_ask_tool_calls",
+                "Read one page of tool calls in an Ask Armada conversation: the calls of one message (messageId, paged in the database), or without messageId the calls the running turn has made so far. Newest first by default; pass order CreatedAscending for the order they were made in.",
+                new
+                {
+                    type = "object",
+                    properties = new
+                    {
+                        threadId,
+                        messageId = new { type = "string", description = "Message ID (amg_ prefix); omit for the running turn" },
+                        pageNumber = new { type = "integer", description = "1-based page number (default 1)" },
+                        pageSize = new { type = "integer", description = "Calls per page, 1 to 1000 (default 10)" },
+                        order = new { type = "string", description = "CreatedDescending (newest first, default) or CreatedAscending" }
+                    },
+                    required = new[] { "threadId" }
+                },
+                async (args) =>
+                {
+                    AskToolArgs a = Parse(args);
+                    if (String.IsNullOrWhiteSpace(a.ThreadId)) return (object)McpToolError.InvalidArgument("threadId is required.");
+                    AuthContext caller = McpToolHelpers.ResolveCallerContext();
+                    EnumerationResult<AskMessageToolCall>? page = String.IsNullOrWhiteSpace(a.MessageId)
+                        ? await threads.EnumerateActiveTurnToolCallsAsync(caller, a.ThreadId, ToQuery(a)).ConfigureAwait(false)
+                        : await threads.EnumerateToolCallsAsync(caller, a.ThreadId, a.MessageId!, ToQuery(a)).ConfigureAwait(false);
+                    return page == null ? (object)McpToolError.NotFound(String.IsNullOrWhiteSpace(a.MessageId) ? "Ask conversation not found" : "Message not found") : page;
+                });
         }
 
         
@@ -397,6 +521,15 @@ namespace Armada.Server.Mcp.Tools
             if (ex.Message.Contains("not found", StringComparison.OrdinalIgnoreCase))
                 return McpToolError.NotFound(ex.Message.Split(" (Parameter", StringSplitOptions.None)[0]);
             return McpToolError.FromException(ex);
+        }
+
+        private static EnumerationQuery ToQuery(AskToolArgs a)
+        {
+            EnumerationQuery query = new EnumerationQuery();
+            if (a.PageNumber.HasValue) query.PageNumber = a.PageNumber.Value;
+            if (a.PageSize.HasValue) query.PageSize = a.PageSize.Value;
+            if (!String.IsNullOrWhiteSpace(a.Order) && Enum.TryParse<EnumerationOrderEnum>(a.Order, true, out EnumerationOrderEnum order)) query.Order = order;
+            return query;
         }
 
         private static AskToolArgs Parse(JsonElement? args)

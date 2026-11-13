@@ -95,7 +95,7 @@ namespace Armada.Core.Services
 
             // Only captains that can handle the work (effective tier >= required) are candidates.
             List<Captain> candidates = eligibleIdleCaptains
-                .Where(c => CanHandle(c, required))
+                .Where(c => c.Active && CanHandle(c, required))
                 .ToList();
             if (candidates.Count == 0) return null;
 

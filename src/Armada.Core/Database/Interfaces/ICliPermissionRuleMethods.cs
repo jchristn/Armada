@@ -61,5 +61,17 @@ namespace Armada.Core.Database.Interfaces
         /// <param name="token">Cancellation token.</param>
         /// <returns>Applicable rules.</returns>
         Task<List<CliPermissionRule>> EnumerateApplicableAsync(string? tenantId, string? captainId, string? vesselId, CancellationToken token = default);
+
+        /// <summary>
+        /// One page of the rules matching the query (the same filters as <see cref="EnumerateAsync"/>), counted and cut in
+        /// the data source, newest first with the id as the tie-break.
+        /// </summary>
+        /// <param name="query">Filters.</param>
+        /// <param name="pageNumber">One-based page number; values below 1 read page 1.</param>
+        /// <param name="pageSize">Page size, clamped to 1 through 1000.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The page with exact totals.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when query is null.</exception>
+        Task<EnumerationResult<CliPermissionRule>> EnumeratePageAsync(CliPermissionRuleQuery query, int pageNumber, int pageSize, CancellationToken token = default);
     }
 }

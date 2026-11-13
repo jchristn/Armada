@@ -89,7 +89,9 @@ describe('Missions list', () => {
 
     await fireEvent.press(screen.getByTestId('missions-filters'));
     await fireEvent.press(screen.getByTestId('missions-filter-status'));
-    await fireEvent.press(screen.getByTestId('missions-filter-status-option-Failed'));
+    // Search the virtualized options so Failed is rendered beyond the initial list window.
+    await fireEvent.changeText(screen.getByTestId('missions-filter-status-search'), 'Failed');
+    await fireEvent.press(await screen.findByTestId('missions-filter-status-option-Failed'));
     expect(await screen.findByTestId('mission-row-msn_f')).toBeTruthy();
     expect(api.listMissionSummaries).toHaveBeenLastCalledWith({ pageNumber: 1, pageSize: 25, filters: { status: 'Failed' } });
   });
@@ -206,7 +208,8 @@ describe('Missions list', () => {
     await renderScreen(<MissionRoute />);
     expect(await screen.findByTestId('mission-detail-title')).toHaveTextContent('Mission msn_1');
     expect(screen.queryByTestId('split-view')).toBeNull();
-    expect(api.listMissionSummaries).not.toHaveBeenCalled();
+    // Only the Children section's parent-filtered query runs; the mission list itself is not loaded.
+    for (const call of api.listMissionSummaries.mock.calls) expect(call[0]?.filters?.parentMissionId).toBe('msn_1');
   });
 
   it('switches hub tabs through the route query', async () => {
@@ -218,6 +221,21 @@ describe('Missions list', () => {
 });
 
 describe('Mission detail', () => {
+  it('shows waiting remedies and opens an existing native review screen', async () => {
+    api.getMission.mockResolvedValue(mission({ status: 'Pending', assignmentBlocker: {
+      reason: 'CaptainConcurrencyLimit', summary: 'The captain has no free slots.', untilUtc: null, dependsOnMissionId: null,
+      blockingMissionIds: [], captains: [], computedUtc: '', advice: [
+        { text: 'Review this captain capacity.', action: 'EditCaptain', targetId: 'cpt_1' },
+        { text: 'Ask an admin to review the server ceiling.', action: null },
+      ],
+    } }));
+    await renderScreen(<MissionDetail id="msn_1" />);
+    expect(await screen.findByText('Review this captain capacity.')).toBeTruthy();
+    expect(await screen.findByText('Ask an admin to review the server ceiling.')).toBeTruthy();
+    await fireEvent.press(screen.getByText('Review captain'));
+    expect(mockRouter.push).toHaveBeenCalledWith('/captains/cpt_1');
+  });
+
   it('shows the mission, lands it, and follows live updates', async () => {
     api.getMission.mockResolvedValue(mission({ status: 'WorkProduced' }));
     api.getMissionLandingPreview.mockResolvedValue({ isReadyToLand: true, issues: [], targetBranch: 'main', branchCategory: 'Feature' } as never);

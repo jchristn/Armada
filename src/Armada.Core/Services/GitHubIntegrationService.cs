@@ -24,6 +24,12 @@ namespace Armada.Core.Services
     {
         private const string GitHubProviderName = Objective.GitHubSourceProvider;
         private const string GitHubActionsProviderName = "GitHubActions";
+        private const int MaxReviewStatusPages = 10;
+
+        /// <summary>
+        /// Largest page GitHub returns (per_page). Pull-request sub-enumerations normalize a larger page size to this.
+        /// </summary>
+        public const int GitHubMaxPageSize = 100;
 
         private readonly DatabaseDriver _Database;
         private readonly ObjectiveService _Objectives;
@@ -140,11 +146,18 @@ namespace Armada.Core.Services
                     throw new InvalidOperationException("The selected deployment does not belong to the supplied vessel.");
             }
 
-            List<GitHubWorkflowRunDto> runs = await ReadWorkflowRunsAsync(repository, request, token).ConfigureAwait(false);
+            GitHubWorkflowRunPage page = await ReadWorkflowRunsAsync(repository, request, token).ConfigureAwait(false);
+            List<GitHubWorkflowRunDto> runs = page.Runs;
             GitHubActionsSyncResult result = new GitHubActionsSyncResult
             {
                 VesselId = repository.Vessel.Id,
-                DeploymentId = deployment?.Id
+                DeploymentId = deployment?.Id,
+                PageNumber = page.PageNumber,
+                PageSize = page.PageSize,
+                SourceTotalCount = page.TotalCount,
+                SourceTotalPages = page.TotalCount <= 0 ? 0 : (int)Math.Ceiling(page.TotalCount / (double)page.PageSize),
+                FetchedCount = page.FetchedCount,
+                FilteredOutCount = page.FetchedCount - runs.Count
             };
             List<string> linkedCheckRunIds = new List<string>();
 
@@ -153,7 +166,7 @@ namespace Armada.Core.Services
                 CheckRun? existing = await ReadExistingImportedRunAsync(auth, repository.Vessel.Id, Convert.ToString(workflowRun.Id, CultureInfo.InvariantCulture), token).ConfigureAwait(false);
                 CheckRunImportRequest importRequest = BuildImportRequest(request, deployment, repository.Vessel, workflowRun);
                 CheckRun imported = await _CheckRuns.ImportOrUpdateAsync(auth, importRequest, token).ConfigureAwait(false);
-                result.CheckRuns.Add(imported);
+                result.CheckRunIds.Add(imported.Id);
                 linkedCheckRunIds.Add(imported.Id);
                 if (existing == null)
                     result.CreatedCount++;
@@ -190,43 +203,162 @@ namespace Armada.Core.Services
         }
 
         /// <summary>
-        /// Retrieve normalized GitHub pull-request evidence for the missions linked to a release.
+        /// Read one page of the reviews on a mission's pull request, paged by GitHub (page size at most
+        /// <see cref="GitHubMaxPageSize"/>; a larger requested size is normalized to it). CreatedAscending is GitHub's
+        /// order (oldest first); CreatedDescending (the default) reverses it.
         /// </summary>
-        public async Task<List<GitHubPullRequestDetail>> GetReleasePullRequestsAsync(
+        /// <param name="auth">Caller.</param>
+        /// <param name="mission">Mission already read under the caller's scope.</param>
+        /// <param name="query">Paging query.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>One page of reviews with the exact total.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when an argument is null.</exception>
+        /// <exception cref="InvalidOperationException">Thrown when the mission has no vessel or pull request URL, or GitHub fails.</exception>
+        /// <exception cref="KeyNotFoundException">Thrown when the mission's vessel is not accessible.</exception>
+        public async Task<EnumerationResult<GitHubPullRequestReview>> EnumerateMissionPullRequestReviewsAsync(
+            AuthContext auth,
+            Mission mission,
+            EnumerationQuery query,
+            CancellationToken token = default)
+        {
+            GitHubSourcePage source = await ResolveMissionSourceAsync(auth, mission, query, token).ConfigureAwait(false);
+            string url = source.PullRequestApiUrl + "/reviews";
+            long total = await CountViaLinkAsync<GitHubPullRequestReviewDto>(url, source.Token, token).ConfigureAwait(false);
+            return await ReadSourcePageAsync(source.Query, total, async (pageNumber, pageSize, ct) =>
+            {
+                GitHubPage<List<GitHubPullRequestReviewDto>> page = await GetPageAsync<List<GitHubPullRequestReviewDto>>(PagedUrl(url, pageNumber, pageSize), source.Token, ct).ConfigureAwait(false);
+                return EnumerationResult<GitHubPullRequestReview>.Create(new EnumerationQuery { PageNumber = pageNumber, PageSize = pageSize }, page.Value.Select(MapReview).ToList(), total);
+            }, token).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Read one page of the issue comments on a mission's pull request, paged by GitHub (page size at most
+        /// <see cref="GitHubMaxPageSize"/>). CreatedAscending is GitHub's order (oldest first); CreatedDescending (the
+        /// default) reverses it.
+        /// </summary>
+        /// <param name="auth">Caller.</param>
+        /// <param name="mission">Mission already read under the caller's scope.</param>
+        /// <param name="query">Paging query.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>One page of comments with the exact total.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when an argument is null.</exception>
+        /// <exception cref="InvalidOperationException">Thrown when the mission has no vessel or pull request URL, or GitHub fails.</exception>
+        /// <exception cref="KeyNotFoundException">Thrown when the mission's vessel is not accessible.</exception>
+        public async Task<EnumerationResult<GitHubPullRequestComment>> EnumerateMissionPullRequestCommentsAsync(
+            AuthContext auth,
+            Mission mission,
+            EnumerationQuery query,
+            CancellationToken token = default)
+        {
+            GitHubSourcePage source = await ResolveMissionSourceAsync(auth, mission, query, token).ConfigureAwait(false);
+            string url = source.IssueApiUrl + "/comments";
+            long total = await CountViaLinkAsync<GitHubIssueCommentDto>(url, source.Token, token).ConfigureAwait(false);
+            return await ReadSourcePageAsync(source.Query, total, async (pageNumber, pageSize, ct) =>
+            {
+                GitHubPage<List<GitHubIssueCommentDto>> page = await GetPageAsync<List<GitHubIssueCommentDto>>(PagedUrl(url, pageNumber, pageSize), source.Token, ct).ConfigureAwait(false);
+                return EnumerationResult<GitHubPullRequestComment>.Create(new EnumerationQuery { PageNumber = pageNumber, PageSize = pageSize }, page.Value.Select(MapComment).ToList(), total);
+            }, token).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Read one page of the provider checks on a mission's pull request head commit, paged by GitHub (page size at
+        /// most <see cref="GitHubMaxPageSize"/>). CreatedAscending is GitHub's order; CreatedDescending (the default)
+        /// reverses it. An empty page when the pull request has no head commit.
+        /// </summary>
+        /// <param name="auth">Caller.</param>
+        /// <param name="mission">Mission already read under the caller's scope.</param>
+        /// <param name="query">Paging query.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>One page of checks with the exact total.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when an argument is null.</exception>
+        /// <exception cref="InvalidOperationException">Thrown when the mission has no vessel or pull request URL, or GitHub fails.</exception>
+        /// <exception cref="KeyNotFoundException">Thrown when the mission's vessel is not accessible.</exception>
+        public async Task<EnumerationResult<GitHubPullRequestCheck>> EnumerateMissionPullRequestChecksAsync(
+            AuthContext auth,
+            Mission mission,
+            EnumerationQuery query,
+            CancellationToken token = default)
+        {
+            GitHubSourcePage source = await ResolveMissionSourceAsync(auth, mission, query, token).ConfigureAwait(false);
+            GitHubPullRequestDto pullRequest = await GetAsync<GitHubPullRequestDto>(source.PullRequestApiUrl, source.Token, token).ConfigureAwait(false);
+            if (String.IsNullOrWhiteSpace(pullRequest.Head?.Sha))
+                return EnumerationResult<GitHubPullRequestCheck>.Create(source.Query, new List<GitHubPullRequestCheck>(), 0);
+
+            string url = source.RepositoryApiUrl + "/commits/" + Uri.EscapeDataString(pullRequest.Head!.Sha!) + "/check-runs";
+            GitHubCheckRunsEnvelopeDto probe = await GetAsync<GitHubCheckRunsEnvelopeDto>(PagedUrl(url, 1, 1), source.Token, token).ConfigureAwait(false);
+            long total = probe.TotalCount;
+            return await ReadSourcePageAsync(source.Query, total, async (pageNumber, pageSize, ct) =>
+            {
+                GitHubCheckRunsEnvelopeDto page = await GetAsync<GitHubCheckRunsEnvelopeDto>(PagedUrl(url, pageNumber, pageSize), source.Token, ct).ConfigureAwait(false);
+                return EnumerationResult<GitHubPullRequestCheck>.Create(new EnumerationQuery { PageNumber = pageNumber, PageSize = pageSize }, (page.CheckRuns ?? new List<GitHubCheckRunDto>()).Select(MapCheck).ToList(), total);
+            }, token).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// One page of the GitHub pull requests linked to a release's missions. The distinct pull requests are resolved
+        /// from the release's mission links (at most <see cref="CollectionLimits.MaxLinkedIds"/>), ordered by pull
+        /// request number (newest first) then repository, and only the requested page is read from GitHub, so the
+        /// totals are exact and GitHub is asked for one page of details at a time.
+        /// </summary>
+        /// <param name="auth">Caller.</param>
+        /// <param name="release">Release (already read within the caller's scope).</param>
+        /// <param name="query">Paging (PageNumber, PageSize 1 to 1000).</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>One page of pull request details.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when an argument is null.</exception>
+        /// <exception cref="InvalidOperationException">Thrown when the release has no vessel.</exception>
+        /// <exception cref="KeyNotFoundException">Thrown when the release vessel is not accessible.</exception>
+        public async Task<EnumerationResult<GitHubPullRequestDetail>> EnumerateReleasePullRequestsAsync(
             AuthContext auth,
             Release release,
+            EnumerationQuery query,
             CancellationToken token = default)
         {
             if (auth == null) throw new ArgumentNullException(nameof(auth));
             if (release == null) throw new ArgumentNullException(nameof(release));
+            if (query == null) throw new ArgumentNullException(nameof(query));
             if (String.IsNullOrWhiteSpace(release.VesselId))
                 throw new InvalidOperationException("Release is not linked to a vessel.");
 
             Vessel vessel = await ReadAccessibleVesselAsync(auth, release.VesselId, token).ConfigureAwait(false)
                 ?? throw new KeyNotFoundException("Release vessel not found or not accessible.");
             string tokenValue = ResolveToken(vessel);
-            List<GitHubPullRequestDetail> results = new List<GitHubPullRequestDetail>();
-            HashSet<string> seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-            foreach (string missionId in release.MissionIds)
+            // The distinct pull requests come from the release's links (bounded by MaxLinkedIds), not from GitHub.
+            List<GitHubPullRequestReference> references = new List<GitHubPullRequestReference>();
+            Dictionary<string, string> missionIdByKey = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (string missionId in release.MissionIds.Take(CollectionLimits.MaxLinkedIds))
             {
                 Mission? mission = await ReadAccessibleMissionAsync(auth, missionId, token).ConfigureAwait(false);
                 if (mission == null || String.IsNullOrWhiteSpace(mission.PrUrl))
                     continue;
 
                 GitHubPullRequestReference reference = ParsePullRequestReference(mission.PrUrl);
-                string key = reference.Repository + "#" + reference.Number.ToString(CultureInfo.InvariantCulture);
-                if (!seen.Add(key))
+                string key = ReleasePullRequestKey(reference);
+                if (missionIdByKey.ContainsKey(key))
                     continue;
-
-                GitHubPullRequestDetail detail = await ReadPullRequestDetailAsync(reference, tokenValue, mission.Id, token).ConfigureAwait(false);
-                results.Add(detail);
+                missionIdByKey[key] = mission.Id;
+                references.Add(reference);
             }
 
-            return results
-                .OrderByDescending(item => item.UpdatedUtc ?? DateTime.MinValue)
-                .ThenByDescending(item => item.Number)
+            List<GitHubPullRequestReference> ordered = references
+                .OrderByDescending(item => item.Number)
+                .ThenBy(item => item.Owner + "/" + item.Repository, StringComparer.OrdinalIgnoreCase)
                 .ToList();
+
+            List<GitHubPullRequestDetail> details = new List<GitHubPullRequestDetail>();
+            foreach (GitHubPullRequestReference reference in ordered.Skip(query.Offset).Take(query.PageSize))
+            {
+                token.ThrowIfCancellationRequested();
+                details.Add(await ReadPullRequestDetailAsync(reference, tokenValue, missionIdByKey[ReleasePullRequestKey(reference)], token).ConfigureAwait(false));
+            }
+
+            return EnumerationResult<GitHubPullRequestDetail>.Create(query, details, ordered.Count);
+        }
+
+        private static string ReleasePullRequestKey(GitHubPullRequestReference reference)
+        {
+            return reference.Owner + "/" + reference.Repository + "#" + reference.Number.ToString(CultureInfo.InvariantCulture);
         }
 
         private async Task<GitHubImportedObjectiveData> ReadImportedObjectiveDataAsync(
@@ -300,15 +432,19 @@ namespace Armada.Core.Services
             };
         }
 
-        private async Task<List<GitHubWorkflowRunDto>> ReadWorkflowRunsAsync(
+        private async Task<GitHubWorkflowRunPage> ReadWorkflowRunsAsync(
             GitHubRepositoryContext repository,
             GitHubActionsSyncRequest request,
             CancellationToken token)
         {
+            // One bounded GitHub page (per_page at most 100); the caller reads further pages with PageNumber, and the
+            // result reports GitHub's total_count so nothing is cut short silently.
             int runCount = Math.Clamp(request.RunCount, 1, 100);
+            int pageNumber = request.PageNumber < 1 ? 1 : request.PageNumber;
             List<string> queryParts = new List<string>
             {
-                "per_page=" + runCount.ToString(CultureInfo.InvariantCulture)
+                "per_page=" + runCount.ToString(CultureInfo.InvariantCulture),
+                "page=" + pageNumber.ToString(CultureInfo.InvariantCulture)
             };
             if (!String.IsNullOrWhiteSpace(request.BranchName))
                 queryParts.Add("branch=" + Uri.EscapeDataString(request.BranchName.Trim()));
@@ -320,7 +456,8 @@ namespace Armada.Core.Services
             string url = repository.ApiBaseUrl + "/repos/" + Uri.EscapeDataString(repository.Owner) + "/" + Uri.EscapeDataString(repository.Repository) + "/actions/runs?" + String.Join("&", queryParts);
             GitHubWorkflowRunsEnvelopeDto response = await GetAsync<GitHubWorkflowRunsEnvelopeDto>(url, repository.Token, token).ConfigureAwait(false);
 
-            IEnumerable<GitHubWorkflowRunDto> filtered = response.WorkflowRuns ?? new List<GitHubWorkflowRunDto>();
+            List<GitHubWorkflowRunDto> fetched = (response.WorkflowRuns ?? new List<GitHubWorkflowRunDto>()).Take(runCount).ToList();
+            IEnumerable<GitHubWorkflowRunDto> filtered = fetched;
             if (!String.IsNullOrWhiteSpace(request.WorkflowName))
             {
                 string workflowName = request.WorkflowName.Trim();
@@ -333,7 +470,14 @@ namespace Armada.Core.Services
                 filtered = filtered.Where(run => String.Equals(run.HeadSha, commitHash, StringComparison.OrdinalIgnoreCase));
             }
 
-            return filtered.ToList();
+            return new GitHubWorkflowRunPage
+            {
+                Runs = filtered.ToList(),
+                PageNumber = pageNumber,
+                PageSize = runCount,
+                TotalCount = response.TotalCount,
+                FetchedCount = fetched.Count
+            };
         }
 
         private CheckRunImportRequest BuildImportRequest(
@@ -399,36 +543,64 @@ namespace Armada.Core.Services
             CancellationToken token)
         {
             string repoSegment = Uri.EscapeDataString(reference.Owner) + "/" + Uri.EscapeDataString(reference.Repository);
+            string repositoryApiUrl = reference.ApiBaseUrl + "/repos/" + repoSegment;
+            string number = reference.Number.ToString(CultureInfo.InvariantCulture);
             GitHubPullRequestDto pullRequest = await GetAsync<GitHubPullRequestDto>(
-                reference.ApiBaseUrl + "/repos/" + repoSegment + "/pulls/" + reference.Number.ToString(CultureInfo.InvariantCulture),
+                repositoryApiUrl + "/pulls/" + number,
                 tokenValue,
                 token).ConfigureAwait(false);
 
-            List<GitHubPullRequestReviewDto> reviews = await GetAsync<List<GitHubPullRequestReviewDto>>(
-                reference.ApiBaseUrl + "/repos/" + repoSegment + "/pulls/" + reference.Number.ToString(CultureInfo.InvariantCulture) + "/reviews",
-                tokenValue,
-                token).ConfigureAwait(false);
-            List<GitHubIssueCommentDto> comments = await GetAsync<List<GitHubIssueCommentDto>>(
-                reference.ApiBaseUrl + "/repos/" + repoSegment + "/issues/" + reference.Number.ToString(CultureInfo.InvariantCulture) + "/comments",
-                tokenValue,
-                token).ConfigureAwait(false);
+            // Reviews are read in bounded pages of 100 to compute the review status, up to MaxReviewStatusPages pages;
+            // beyond that the status reflects the first pages and ReviewStatusComplete says so.
+            string reviewsUrl = repositoryApiUrl + "/pulls/" + number + "/reviews";
+            List<GitHubPullRequestReview> reviews = new List<GitHubPullRequestReview>();
+            bool reviewsComplete = true;
+            for (int pageNumber = 1; ; pageNumber++)
+            {
+                GitHubPage<List<GitHubPullRequestReviewDto>> page = await GetPageAsync<List<GitHubPullRequestReviewDto>>(PagedUrl(reviewsUrl, pageNumber, GitHubMaxPageSize), tokenValue, token).ConfigureAwait(false);
+                reviews.AddRange(page.Value.Select(MapReview));
+                if (page.Value.Count < GitHubMaxPageSize) break;
+                if (pageNumber >= MaxReviewStatusPages)
+                {
+                    reviewsComplete = false;
+                    break;
+                }
+            }
 
-            List<GitHubCheckRunDto> checkRuns = new List<GitHubCheckRunDto>();
+            long reviewCount = reviewsComplete
+                ? reviews.Count
+                : await CountViaLinkAsync<GitHubPullRequestReviewDto>(reviewsUrl, tokenValue, token).ConfigureAwait(false);
+            long commentCount = await CountViaLinkAsync<GitHubIssueCommentDto>(repositoryApiUrl + "/issues/" + number + "/comments", tokenValue, token).ConfigureAwait(false);
+
+            long checkCount = 0;
             if (!String.IsNullOrWhiteSpace(pullRequest.Head?.Sha))
             {
                 try
                 {
                     GitHubCheckRunsEnvelopeDto checksEnvelope = await GetAsync<GitHubCheckRunsEnvelopeDto>(
-                        reference.ApiBaseUrl + "/repos/" + repoSegment + "/commits/" + Uri.EscapeDataString(pullRequest.Head.Sha) + "/check-runs",
+                        PagedUrl(repositoryApiUrl + "/commits/" + Uri.EscapeDataString(pullRequest.Head.Sha) + "/check-runs", 1, 1),
                         tokenValue,
                         token).ConfigureAwait(false);
-                    checkRuns = checksEnvelope.CheckRuns ?? new List<GitHubCheckRunDto>();
+                    checkCount = checksEnvelope.TotalCount;
                 }
                 catch (InvalidOperationException)
                 {
-                    checkRuns = new List<GitHubCheckRunDto>();
+                    checkCount = 0;
                 }
             }
+
+            List<string> requestedReviewers = (pullRequest.RequestedReviewers ?? new List<GitHubUserDto>())
+                .Select(reviewer => Normalize(reviewer.Login))
+                .Where(login => !String.IsNullOrWhiteSpace(login))
+                .Cast<string>()
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            List<string> labels = (pullRequest.Labels ?? new List<GitHubLabelDto>())
+                .Select(label => Normalize(label.Name))
+                .Where(name => !String.IsNullOrWhiteSpace(name))
+                .Cast<string>()
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
 
             GitHubPullRequestDetail detail = new GitHubPullRequestDetail
             {
@@ -447,57 +619,126 @@ namespace Armada.Core.Services
                 HeadSha = Normalize(pullRequest.Head?.Sha),
                 AuthorLogin = Normalize(pullRequest.User?.Login),
                 MergedByLogin = Normalize(pullRequest.MergedBy?.Login),
-                RequestedReviewers = pullRequest.RequestedReviewers
-                    .Select(reviewer => Normalize(reviewer.Login))
-                    .Where(login => !String.IsNullOrWhiteSpace(login))
-                    .Cast<string>()
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .ToList(),
-                Labels = pullRequest.Labels
-                    .Select(label => Normalize(label.Name))
-                    .Where(name => !String.IsNullOrWhiteSpace(name))
-                    .Cast<string>()
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .ToList(),
+                RequestedReviewers = requestedReviewers.Take(GitHubPullRequestDetail.MaxListed).ToList(),
+                RequestedReviewerCount = requestedReviewers.Count,
+                Labels = labels.Take(GitHubPullRequestDetail.MaxListed).ToList(),
+                LabelCount = labels.Count,
                 ChangedFiles = pullRequest.ChangedFiles ?? 0,
                 Additions = pullRequest.Additions ?? 0,
                 Deletions = pullRequest.Deletions ?? 0,
                 CommitCount = pullRequest.Commits ?? 0,
-                Reviews = reviews
-                    .Select(review => new GitHubPullRequestReview
-                    {
-                        ReviewerLogin = Normalize(review.User?.Login),
-                        State = Normalize(review.State) ?? String.Empty,
-                        Body = Normalize(review.Body),
-                        SubmittedUtc = ToUtcDateTime(review.SubmittedAt)
-                    })
-                    .OrderByDescending(review => review.SubmittedUtc ?? DateTime.MinValue)
-                    .ToList(),
-                Comments = comments
-                    .Select(comment => new GitHubPullRequestComment
-                    {
-                        AuthorLogin = Normalize(comment.User?.Login),
-                        Body = Normalize(comment.Body),
-                        Url = Normalize(comment.HtmlUrl),
-                        CreatedUtc = ToUtcDateTime(comment.CreatedAt)
-                    })
-                    .OrderByDescending(comment => comment.CreatedUtc ?? DateTime.MinValue)
-                    .ToList(),
-                Checks = checkRuns
-                    .Select(check => new GitHubPullRequestCheck
-                    {
-                        Name = Normalize(check.Name) ?? String.Empty,
-                        Status = Normalize(check.Status) ?? String.Empty,
-                        Conclusion = Normalize(check.Conclusion),
-                        DetailsUrl = Normalize(check.DetailsUrl)
-                    })
-                    .ToList(),
+                ReviewCount = (int)Math.Min(int.MaxValue, reviewCount),
+                CommentCount = (int)Math.Min(int.MaxValue, commentCount),
+                CheckCount = (int)Math.Min(int.MaxValue, checkCount),
+                ReviewStatusComplete = reviewsComplete,
                 CreatedUtc = ToUtcDateTime(pullRequest.CreatedAt),
                 UpdatedUtc = ToUtcDateTime(pullRequest.UpdatedAt),
                 MergedUtc = ToUtcDateTime(pullRequest.MergedAt)
             };
-            detail.ReviewStatus = ComputeReviewStatus(detail.Reviews, detail.RequestedReviewers);
+            detail.ReviewStatus = ComputeReviewStatus(reviews, requestedReviewers.Count);
             return detail;
+        }
+
+        private async Task<GitHubSourcePage> ResolveMissionSourceAsync(AuthContext auth, Mission mission, EnumerationQuery query, CancellationToken token)
+        {
+            if (auth == null) throw new ArgumentNullException(nameof(auth));
+            if (mission == null) throw new ArgumentNullException(nameof(mission));
+            if (query == null) throw new ArgumentNullException(nameof(query));
+            if (String.IsNullOrWhiteSpace(mission.VesselId))
+                throw new InvalidOperationException("Mission is not linked to a vessel.");
+            if (String.IsNullOrWhiteSpace(mission.PrUrl))
+                throw new InvalidOperationException("Mission does not have a GitHub pull request URL.");
+
+            Vessel vessel = await ReadAccessibleVesselAsync(auth, mission.VesselId, token).ConfigureAwait(false)
+                ?? throw new KeyNotFoundException("Mission vessel not found or not accessible.");
+            GitHubPullRequestReference reference = ParsePullRequestReference(mission.PrUrl);
+            string repositoryApiUrl = reference.ApiBaseUrl + "/repos/" + Uri.EscapeDataString(reference.Owner) + "/" + Uri.EscapeDataString(reference.Repository);
+            string number = reference.Number.ToString(CultureInfo.InvariantCulture);
+            return new GitHubSourcePage
+            {
+                Token = ResolveToken(vessel),
+                RepositoryApiUrl = repositoryApiUrl,
+                PullRequestApiUrl = repositoryApiUrl + "/pulls/" + number,
+                IssueApiUrl = repositoryApiUrl + "/issues/" + number,
+                Query = new EnumerationQuery
+                {
+                    PageNumber = query.PageNumber,
+                    PageSize = Math.Min(query.PageSize, GitHubMaxPageSize),
+                    Order = query.Order
+                }
+            };
+        }
+
+        private static async Task<EnumerationResult<T>> ReadSourcePageAsync<T>(EnumerationQuery query, long total, PageFetchDelegate<T> fetch, CancellationToken token)
+        {
+            // GitHub pages oldest first. CreatedAscending reads that order directly; CreatedDescending reads the mirrored
+            // window and reverses it, so either order pages without gaps or overlaps.
+            long offset = query.Offset;
+            long count = Math.Max(0, Math.Min(query.PageSize, total - offset));
+            List<T> items;
+            if (count <= 0)
+            {
+                items = new List<T>();
+            }
+            else if (query.Order == EnumerationOrderEnum.CreatedAscending)
+            {
+                items = await SectionedPaging.ReadWindowAsync(fetch, offset, (int)count, query.PageSize, token).ConfigureAwait(false);
+            }
+            else
+            {
+                long start = Math.Max(0, total - offset - count);
+                items = await SectionedPaging.ReadWindowAsync(fetch, start, (int)count, query.PageSize, token).ConfigureAwait(false);
+                items.Reverse();
+            }
+
+            return EnumerationResult<T>.Create(query, items, total);
+        }
+
+        private async Task<long> CountViaLinkAsync<T>(string url, string tokenValue, CancellationToken token)
+        {
+            // With per_page=1 GitHub's Link rel="last" names the last page, which is the item count.
+            GitHubPage<List<T>> page = await GetPageAsync<List<T>>(PagedUrl(url, 1, 1), tokenValue, token).ConfigureAwait(false);
+            if (page.LastPage.HasValue) return page.LastPage.Value;
+            return page.Value.Count;
+        }
+
+        private static string PagedUrl(string url, int pageNumber, int pageSize)
+        {
+            string separator = url.Contains('?') ? "&" : "?";
+            return url + separator + "per_page=" + pageSize.ToString(CultureInfo.InvariantCulture) + "&page=" + pageNumber.ToString(CultureInfo.InvariantCulture);
+        }
+
+        private GitHubPullRequestReview MapReview(GitHubPullRequestReviewDto review)
+        {
+            return new GitHubPullRequestReview
+            {
+                ReviewerLogin = Normalize(review.User?.Login),
+                State = Normalize(review.State) ?? String.Empty,
+                Body = Normalize(review.Body),
+                SubmittedUtc = ToUtcDateTime(review.SubmittedAt)
+            };
+        }
+
+        private GitHubPullRequestComment MapComment(GitHubIssueCommentDto comment)
+        {
+            return new GitHubPullRequestComment
+            {
+                AuthorLogin = Normalize(comment.User?.Login),
+                Body = Normalize(comment.Body),
+                Url = Normalize(comment.HtmlUrl),
+                CreatedUtc = ToUtcDateTime(comment.CreatedAt)
+            };
+        }
+
+        private GitHubPullRequestCheck MapCheck(GitHubCheckRunDto check)
+        {
+            return new GitHubPullRequestCheck
+            {
+                Name = Normalize(check.Name) ?? String.Empty,
+                Status = Normalize(check.Status) ?? String.Empty,
+                Conclusion = Normalize(check.Conclusion),
+                DetailsUrl = Normalize(check.DetailsUrl)
+            };
         }
 
         private async Task<GitHubRepositoryContext> ResolveRepositoryContextAsync(
@@ -672,6 +913,36 @@ namespace Armada.Core.Services
             if (value == null)
                 throw new InvalidOperationException("GitHub returned an empty response for " + url + ".");
             return value;
+        }
+
+        private async Task<GitHubPage<T>> GetPageAsync<T>(string url, string tokenValue, CancellationToken token)
+        {
+            using HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Get, url);
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", tokenValue);
+            using HttpResponseMessage response = await _Client.SendAsync(request, token).ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode)
+                throw await BuildHttpErrorAsync(response).ConfigureAwait(false);
+
+            T? value = await response.Content.ReadFromJsonAsync<T>(_JsonOptions, token).ConfigureAwait(false);
+            if (value == null)
+                throw new InvalidOperationException("GitHub returned an empty response for " + url + ".");
+
+            GitHubPage<T> page = new GitHubPage<T> { Value = value };
+            if (response.Headers.TryGetValues("Link", out IEnumerable<string>? links))
+                page.LastPage = ParseLastPage(String.Join(",", links));
+            return page;
+        }
+
+        private static int? ParseLastPage(string linkHeader)
+        {
+            foreach (string part in linkHeader.Split(','))
+            {
+                if (part.IndexOf("rel=\"last\"", StringComparison.OrdinalIgnoreCase) < 0) continue;
+                System.Text.RegularExpressions.Match match = System.Text.RegularExpressions.Regex.Match(part, "[?&]page=(\\d+)");
+                if (match.Success && Int32.TryParse(match.Groups[1].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out int last)) return last;
+            }
+
+            return null;
         }
 
         private async Task<Exception> BuildHttpErrorAsync(HttpResponseMessage response)
@@ -928,17 +1199,32 @@ namespace Armada.Core.Services
             return label + " is currently " + status + ".";
         }
 
-        private static string ComputeReviewStatus(List<GitHubPullRequestReview> reviews, List<string> requestedReviewers)
+        private static string ComputeReviewStatus(List<GitHubPullRequestReview> reviews, int requestedReviewerCount)
         {
             if (reviews.Any(review => String.Equals(review.State, "CHANGES_REQUESTED", StringComparison.OrdinalIgnoreCase)))
                 return "ChangesRequested";
             if (reviews.Any(review => String.Equals(review.State, "APPROVED", StringComparison.OrdinalIgnoreCase)))
                 return "Approved";
-            if (requestedReviewers.Count > 0)
+            if (requestedReviewerCount > 0)
                 return "PendingReview";
             if (reviews.Any(review => String.Equals(review.State, "COMMENTED", StringComparison.OrdinalIgnoreCase)))
                 return "Commented";
             return "NoReview";
+        }
+
+        private sealed class GitHubSourcePage
+        {
+            public string Token { get; set; } = String.Empty;
+            public string RepositoryApiUrl { get; set; } = String.Empty;
+            public string PullRequestApiUrl { get; set; } = String.Empty;
+            public string IssueApiUrl { get; set; } = String.Empty;
+            public EnumerationQuery Query { get; set; } = new EnumerationQuery();
+        }
+
+        private sealed class GitHubPage<T>
+        {
+            public T Value { get; set; } = default!;
+            public int? LastPage { get; set; } = null;
         }
 
         private sealed class GitHubRepositoryContext
@@ -1099,8 +1385,24 @@ namespace Armada.Core.Services
             public string? Login { get; set; } = null;
         }
 
+        private sealed class GitHubWorkflowRunPage
+        {
+            public List<GitHubWorkflowRunDto> Runs { get; set; } = new List<GitHubWorkflowRunDto>();
+
+            public int PageNumber { get; set; } = 1;
+
+            public int PageSize { get; set; } = 20;
+
+            public long TotalCount { get; set; } = 0;
+
+            public int FetchedCount { get; set; } = 0;
+        }
+
         private sealed class GitHubWorkflowRunsEnvelopeDto
         {
+            [JsonPropertyName("total_count")]
+            public long TotalCount { get; set; } = 0;
+
             [JsonPropertyName("workflow_runs")]
             public List<GitHubWorkflowRunDto> WorkflowRuns { get; set; } = new List<GitHubWorkflowRunDto>();
         }
@@ -1176,6 +1478,9 @@ namespace Armada.Core.Services
 
         private sealed class GitHubCheckRunsEnvelopeDto
         {
+            [JsonPropertyName("total_count")]
+            public long TotalCount { get; set; } = 0;
+
             [JsonPropertyName("check_runs")]
             public List<GitHubCheckRunDto> CheckRuns { get; set; } = new List<GitHubCheckRunDto>();
         }

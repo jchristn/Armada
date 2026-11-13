@@ -20,6 +20,7 @@ import { useAutoRefresh } from '../lib/useAutoRefresh';
 import PageHeader from '../components/shared/PageHeader';
 import StatusBadge from '../components/shared/StatusBadge';
 import { buildWorkflowProfileDuplicatePayload } from '../lib/duplicates';
+import { useDeleteProgress } from '../lib/useDeleteProgress';
 
 
 
@@ -47,6 +48,7 @@ export default function WorkflowProfiles() {
   const viewer: ScopeViewer = { isAdmin, isTenantAdmin, tenantId: user?.user?.tenantId, userId: user?.user?.id };
   const canEditProfile = (p: WorkflowProfile) => canEditScoped(viewer, { scope: p.ownershipScope, tenantId: p.tenantId, userId: p.userId });
   const { t, formatDateTime, formatRelativeTime } = useLocale();
+  const deletion = useDeleteProgress();
   const { pushToast } = useNotifications();
   const [profiles, setProfiles] = useState<WorkflowProfile[]>([]);
   const [fleets, setFleets] = useState<Fleet[]>([]);
@@ -242,13 +244,9 @@ export default function WorkflowProfiles() {
       message: t('Delete "{{name}}"? Existing check runs remain, but this profile will no longer be available.', { name: profile.name }),
       onConfirm: async () => {
         setConfirm((current) => ({ ...current, open: false }));
-        try {
-          await deleteWorkflowProfile(profile.id);
-          pushToast('warning', t('Workflow profile "{{name}}" deleted.', { name: profile.name }));
-          await load();
-        } catch (err: unknown) {
-          setError(err instanceof Error ? err.message : t('Delete failed.'));
-        }
+        if (!(await deletion.run({ kind: 'workflowProfile', action: () => deleteWorkflowProfile(profile.id), errorMessage: (err) => err instanceof Error ? err.message : t('Delete failed.') }))) return;
+        pushToast('warning', t('Workflow profile "{{name}}" deleted.', { name: profile.name }));
+        await load();
       },
     });
   }
@@ -345,6 +343,7 @@ export default function WorkflowProfiles() {
 
       <ErrorModal error={error} onClose={() => setError('')} />
       <JsonViewer open={jsonData.open} title={jsonData.title} data={jsonData.data} onClose={() => setJsonData({ open: false, title: '', data: null })} />
+      {deletion.dialog}
       <ConfirmDialog
         open={confirm.open}
         title={confirm.title}

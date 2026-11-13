@@ -37,10 +37,11 @@ describe('workspace', () => {
   beforeEach(async () => {
     await AsyncStorage.clear();
     api.listVessels.mockResolvedValue(page([VESSEL]));
-    api.getWorkspaceStatus.mockResolvedValue({ vesselId: 'vsl_1', hasWorkingDirectory: true, branchName: 'main', isDirty: false, commitsAhead: 0, commitsBehind: 0, activeMissionCount: 1, activeMissions: [{ missionId: 'msn_1', title: 'Fix docs', status: 'InProgress', scopedFiles: ['README.md'] }] });
+    api.getWorkspaceStatus.mockResolvedValue({ vesselId: 'vsl_1', hasWorkingDirectory: true, branchName: 'main', isDirty: false, commitsAhead: 0, commitsBehind: 0, activeMissionCount: 1 });
+    api.listAllWorkspaceActiveMissions.mockResolvedValue([{ missionId: 'msn_1', title: 'Fix docs', status: 'InProgress', scopedFiles: ['README.md'], scopedFileCount: 1 }]);
     api.getVesselReadiness.mockResolvedValue(null as never);
-    api.getWorkspaceTree.mockImplementation(async (_id: string, path?: string) => ({
-      vesselId: 'vsl_1', rootPath: '/code/api', currentPath: path ?? '', parentPath: null,
+    api.listWorkspaceDirectory.mockImplementation(async (_id: string, path?: string) => ({
+      vesselId: 'vsl_1', rootPath: '/code/api', currentPath: path ?? '', parentPath: null, pageNumber: 1, pageSize: 1000, totalPages: 1, totalRecords: path === 'src' ? 1 : 2,
       entries: path === 'src' ? [entry('src/app.ts')] : [entry('src', true), entry('README.md')],
     }));
   });
@@ -62,7 +63,7 @@ describe('workspace', () => {
     await waitFor(() => expect(screen.getByTestId('workspace-open-src')).toBeTruthy());
     await act(async () => { await fireEvent.press(screen.getByTestId('workspace-open-src')); });
     await waitFor(() => expect(screen.getByTestId('workspace-open-app.ts')).toBeTruthy());
-    expect(api.getWorkspaceTree).toHaveBeenCalledWith('vsl_1', 'src');
+    expect(api.listWorkspaceDirectory).toHaveBeenCalledWith('vsl_1', 'src');
     await act(async () => { await fireEvent.press(screen.getByTestId('workspace-up')); });
 
     await act(async () => { await fireEvent.press(screen.getByTestId('workspace-open-README.md')); });
@@ -121,7 +122,7 @@ describe('workspace', () => {
     expect(api.searchWorkspace).toHaveBeenCalledWith('vsl_1', 'demo');
     expect(screen.getByText('README.md:1')).toBeTruthy();
 
-    api.getWorkspaceChanges.mockResolvedValue({ branchName: 'main', isDirty: true, commitsAhead: 0, commitsBehind: 0, changes: [{ path: 'README.md', status: 'Modified' }] });
+    api.listAllWorkspaceChanges.mockResolvedValue({ branchName: 'main', isDirty: true, commitsAhead: 0, commitsBehind: 0, pageNumber: 1, pageSize: 1000, totalPages: 1, totalRecords: 1, changes: [{ path: 'README.md', status: 'Modified' }] });
     api.getWorkspaceDiff.mockResolvedValue({ path: 'README.md', diff: 'diff --git a/README.md b/README.md\n@@ -1 +1 @@\n-# Demo\n+# Demo 2\n', error: null });
     await act(async () => { await fireEvent.press(screen.getByTestId('hub-tab-changes')); });
     await waitFor(() => expect(screen.getByTestId('workspace-change-README.md')).toBeTruthy());

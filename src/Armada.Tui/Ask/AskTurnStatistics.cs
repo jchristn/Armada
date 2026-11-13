@@ -21,12 +21,13 @@ namespace Armada.Tui.Ask
         /// The rows of a message; empty when it has nothing to show (user messages, cards, replies without timing).
         /// </summary>
         /// <param name="message">Message.</param>
+        /// <param name="calls">The message's tool calls (read from their paged enumeration), or null when none are loaded.</param>
         /// <returns>Rows, in display order.</returns>
-        public static List<AskTurnStatistic> Rows(AskMessage message)
+        public static List<AskTurnStatistic> Rows(AskMessage message, IReadOnlyList<AskMessageToolCall>? calls = null)
         {
             List<AskTurnStatistic> rows = new List<AskTurnStatistic>();
             if (message == null) return rows;
-            List<AskMessageToolCall> completed = (message.ToolCalls ?? new List<AskMessageToolCall>()).Where(IsCompleted).ToList();
+            List<AskMessageToolCall> completed = (calls ?? new List<AskMessageToolCall>()).Where(IsCompleted).ToList();
 
             CaptainChatMetrics? m = message.Metrics;
             if (m == null)

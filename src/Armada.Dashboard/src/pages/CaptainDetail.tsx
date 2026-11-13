@@ -1,6 +1,7 @@
-import { useEffect, useState, useCallback } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useEffect, useState, useCallback, useRef } from 'react';
+import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import {
+  apiErrorMessage,
   createCaptain,
   getCaptain,
   getCaptainTools,
@@ -13,8 +14,9 @@ import {
   updateCaptain,
   deleteCaptain,
   setCaptainCliPermissionPolicy,
-  listModelEndpoints,
+  enumerateModelEndpoints,
 } from '../api/client';
+import { listAll } from '../api/paging';
 import type { CliPermissionPolicy, ModelEndpoint } from '../types/models';
 import type { Captain, Mission, MissionSummary, LogResult, FormattedLogEntry, CaptainToolAccessResult } from '../types/models';
 import ActionMenu from '../components/shared/ActionMenu';
@@ -37,6 +39,9 @@ import { supportsAutoApproveSwitch } from '../lib/captainApproval';
 import { CAPTAIN_AUTO_APPROVE_TOOLTIP, CAPTAIN_CLI_POLICY_TOOLTIP, CAPTAIN_INFERENCE_ENDPOINT_TOOLTIP, CAPTAIN_NAME_TOOLTIP, CAPTAIN_REASONING_EFFORT_TOOLTIP, CAPTAIN_RUNTIME_TOOLTIP, CAPTAIN_SYSTEM_INSTRUCTIONS_TOOLTIP, CAPTAIN_TIER_TOOLTIP, buildCaptainPayload, captainDetailActions, captainFormError, captainFormErrorMessage, captainFormFromCaptain, captainModelPlaceholder, captainModelTooltip, cliPolicyChanged } from '../lib/captainForm';
 import { buildCaptainDuplicatePayload } from '../lib/duplicates';
 import ModelProbeEvaluate from '../components/ModelProbeEvaluate';
+import CaptainUsageCard from '../components/usage/CaptainUsageCard';
+import { evaluationsListPath } from '../lib/evaluationLinks';
+import { useDeleteProgress } from '../lib/useDeleteProgress';
 
 const ALLOWED_PERSONAS_TOOLTIP = 'Personas this captain may take on, as a JSON array of persona names, for example ["Worker", "Judge"]. Blank lets it fill any persona.';
 const PREFERRED_PERSONA_TOOLTIP = 'A persona name, for example Worker. When several captains could take a mission, dispatch prefers this captain for work of this persona. Blank means no preference.';
@@ -52,6 +57,8 @@ type CaptainDetailFormState = {
   tier: string;
   allowedPersonas: string;
   preferredPersona: string;
+  active?: boolean;
+  maxConcurrency?: string;
   autoApprove: boolean;
   /** CLI tool permission policy; null inherits. Saved through its own endpoint. */
   cliPermissionPolicy: CliPermissionPolicy | null;
@@ -60,9 +67,11 @@ type CaptainDetailFormState = {
 export default function CaptainDetail() {
   const { t, formatDateTime, formatRelativeTime } = useLocale();
   const { pushToast } = useNotifications();
+  const deletion = useDeleteProgress();
   const { isAdmin, isTenantAdmin } = useAuth();
   const canManageCliPolicy = !!isAdmin || !!isTenantAdmin;
   const { id } = useParams<{ id: string }>();
+  const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const [captain, setCaptain] = useState<Captain | null>(null);
   const [currentMission, setCurrentMission] = useState<Mission | null>(null);
@@ -103,9 +112,9 @@ export default function CaptainDetail() {
       const cap = await getCaptain(id);
       setCaptain(cap);
       // Load current mission if set
-      if (cap.currentMissionId) {
+      if (cap.activeMissionIds?.length === 1) {
         try {
-          const m = await getMission(cap.currentMissionId);
+          const m = await getMission(cap.activeMissionIds[0]);
           setCurrentMission(m);
         } catch { setCurrentMission(null); }
       } else {
@@ -126,15 +135,35 @@ export default function CaptainDetail() {
 
   useEffect(() => { load(); }, [load]);
 
+  // View Usage (Captains row menu) links to ?section=usage: bring the usage section into view and give it focus
+  // once the captain has loaded, so keyboard users land on it.
+  const usageSectionRef = useRef<HTMLElement | null>(null);
+  const usageRequested = searchParams.get('section') === 'usage';
+  const usageCaptainId = captain?.id;
+  useEffect(() => {
+    if (!usageRequested || !usageCaptainId || usageCaptainId !== id) return;
+    const section = usageSectionRef.current;
+    if (!section) return;
+    if (typeof section.scrollIntoView === 'function') section.scrollIntoView({ block: 'start' });
+    section.focus({ preventScroll: true });
+  }, [usageRequested, usageCaptainId, id]);
+
   function openEdit() {
     if (!captain) return;
     // withEndpoint keeps an API-endpoint captain's inference endpoint (the form edits it below).
     setForm(captainFormFromCaptain(captain, { withEndpoint: true, withPersonas: true, defaultRuntime: 'ClaudeCode' }) as CaptainDetailFormState);
     setShowForm(true);
-    listModelEndpoints()
-      .then(result => setInferenceEndpoints((result ?? []).filter(e => e.kind === 'Inference')))
+    // A picker needs every endpoint: read the pages explicitly (bounded by listAll's safety stop).
+    listAll(enumerateModelEndpoints)
+      .then(result => setInferenceEndpoints((result?.objects ?? []).filter(e => e.kind === 'Inference')))
       .catch(() => setInferenceEndpoints([]));
   }
+
+  useEffect(() => {
+    if (!isAdmin || !captain || captain.id !== id || searchParams.get('edit') !== '1') return;
+    openEdit();
+    setSearchParams(current => { const next = new URLSearchParams(current); next.delete('edit'); return next; }, { replace: true });
+  }, [captain, id, isAdmin, searchParams, setSearchParams]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -227,11 +256,9 @@ export default function CaptainDetail() {
       message: t('Remove captain "{{name}}"? This cannot be undone.', { name: captain.name }),
       onConfirm: async () => {
         setConfirm(c => ({ ...c, open: false }));
-        try {
-          await deleteCaptain(captain.id);
-          pushToast('warning', t('Captain "{{name}}" removed.', { name: captain.name }));
-          navigate('/captains');
-        } catch { setError(t('Remove failed.')); }
+        if (!(await deletion.run({ kind: 'captain', action: () => deleteCaptain(captain.id), errorMessage: (err) => apiErrorMessage(err, t('Remove failed.')) }))) return;
+        pushToast('warning', t('Captain "{{name}}" removed.', { name: captain.name }));
+        navigate('/captains');
       },
     });
   }
@@ -258,7 +285,8 @@ export default function CaptainDetail() {
     });
 
     try {
-      const result = await getCaptainTools(captain.id);
+      // Probe once (refresh) for the summary and sources; the viewer then reads each tool section a page at a time.
+      const result = await getCaptainTools(captain.id, { refresh: true, pageSize: 1 });
       setToolViewer({
         open: true,
         loading: false,
@@ -300,11 +328,10 @@ export default function CaptainDetail() {
   return (
     <div>
       <PageHeader
-        breadcrumb={
-          <>
-            <Link to="/captains">{t('Captains')}</Link> <span className="breadcrumb-sep">&gt;</span> <span>{captain.name}</span>
-          </>
-        }
+        breadcrumb={[
+          { label: t('Captains'), to: '/captains' },
+          { label: captain.name },
+        ]}
         title={captain.name}
         actions={
           <>
@@ -318,7 +345,7 @@ export default function CaptainDetail() {
       {/* Edit Modal */}
       {showForm && (
         <div className="modal-overlay" onClick={() => setShowForm(false)}>
-          <form className="modal" onClick={e => e.stopPropagation()} onSubmit={handleSubmit}>
+          <form className={`modal modal-captain${isMuxRuntime(form.runtime) ? ' modal-mux' : ''}`} onClick={e => e.stopPropagation()} onSubmit={handleSubmit}>
             <h3>{t('Edit Captain')}</h3>
             <label title={t(CAPTAIN_NAME_TOOLTIP)}>{t('Name')}<input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} title={t(CAPTAIN_NAME_TOOLTIP)} required /></label>
             <label title={t(CAPTAIN_RUNTIME_TOOLTIP)}>{t('Runtime')}
@@ -371,10 +398,21 @@ export default function CaptainDetail() {
                 {t('Missions requiring a tier route to captains at or above it. Leave on Auto to classify from the model name.')}
               </span>
             </label>
+            <label>
+              {t('Maximum concurrent missions')}
+              <input aria-label={t('Maximum concurrent missions')} type="number" min="1" max="256" step="1" value={form.maxConcurrency ?? ''}
+                placeholder={form.runtime === 'ApiEndpoint' || form.runtime === 'Mux' ? '4' : '1'}
+                onChange={event => setForm({ ...form, maxConcurrency: event.target.value })}
+                title={t('Most missions this captain can run at once. Blank uses the server default on create. Lowering the limit leaves running missions alone. Planning sessions remain exclusive.')} />
+            </label>
+            <label className="checkbox-row captain-active-field">
+              <input type="checkbox" checked={form.active ?? true} onChange={e => setForm({ ...form, active: e.target.checked })} />
+              <span>{t('Active')}</span>
+            </label>
             {supportsAutoApproveSwitch(form.runtime) && (
-              <label className="captain-auto-approve-field" title={t(CAPTAIN_AUTO_APPROVE_TOOLTIP)}>
+              <label className="checkbox-row captain-auto-approve-field" title={t(CAPTAIN_AUTO_APPROVE_TOOLTIP)}>
                 <input type="checkbox" checked={form.autoApprove} onChange={e => setForm({ ...form, autoApprove: e.target.checked })} title={t(CAPTAIN_AUTO_APPROVE_TOOLTIP)} />
-                {' '}{t('Auto-approve agent tool use (runs the CLI with its permission-bypass flag)')}
+                <span>{t('Auto-approve agent tool use (runs the CLI with its permission-bypass flag)')}</span>
               </label>
             )}
             <div className="captain-cli-policy-field">
@@ -418,6 +456,7 @@ export default function CaptainDetail() {
       <CaptainToolViewer
         open={toolViewer.open}
         captainName={captain.name}
+        captainId={toolViewer.data ? captain.id : undefined}
         loading={toolViewer.loading}
         error={toolViewer.error}
         data={toolViewer.data}
@@ -425,6 +464,7 @@ export default function CaptainDetail() {
       />
       <ConfirmDialog open={confirm.open} title={confirm.title} message={confirm.message}
         onConfirm={confirm.onConfirm} onCancel={() => setConfirm(c => ({ ...c, open: false }))} />
+      {deletion.dialog}
 
       {/* Captain Info */}
       <div className="detail-grid">
@@ -498,6 +538,8 @@ export default function CaptainDetail() {
         <div className="detail-field">
           <span className="detail-label" title={t('Idle is free for work, Working is on a mission, Planning, Refining and Analyzing are reserved, Stalled has gone silent, Quarantined is skipped by dispatch for a while.')}>{t('State')}</span>
           <StatusBadge status={captain.state} />
+          <span>{t('Active')}: {t(captain.active === false ? 'No' : 'Yes')}</span>
+          <span>{t('Running missions')}: {captain.activeMissionCount ?? 0} / {captain.maxConcurrency ?? 1}</span>
         </div>
         {captain.state === 'Quarantined' && (
           <div className="detail-field">
@@ -512,25 +554,24 @@ export default function CaptainDetail() {
           </div>
         )}
         <div className="detail-field">
-          <span className="detail-label" title={t('The mission this captain is running now. A dash means it has no mission.')}>{t('Current Mission')}</span>
-          {captain.currentMissionId ? (
-            <span className="id-display">
-              <Link className="mono" to={`/missions/${captain.currentMissionId}`}>{captain.currentMissionId}</Link>
-              <CopyButton text={captain.currentMissionId!} />
+          <span className="detail-label" title={t('Missions currently holding this captain’s capacity. Open a mission to see its dock, process and progress.')}>{t('Active Missions')}</span>
+          {captain.activeMissionIds?.length ? (
+            <span style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+              {(captain.activeMissionIds ?? []).map(missionId => (
+                <span key={missionId} className="id-display">
+                  <Link className="mono" to={`/missions/${encodeURIComponent(missionId)}`}>{missionId}</Link>
+                  <CopyButton text={missionId} />
+                </span>
+              ))}
             </span>
           ) : <span>-</span>}
         </div>
-        <div className="detail-field">
-          <span className="detail-label" title={t('The dock (git worktree) the captain works in for its current mission. A dash means none.')}>{t('Current Dock')}</span>
-          {captain.currentDockId ? (
-            <span className="id-display">
-              <Link className="mono" to={`/docks/${captain.currentDockId}`}>{captain.currentDockId}</Link>
-              <CopyButton text={captain.currentDockId!} />
-            </span>
-          ) : <span>-</span>}
-        </div>
+        {captain.currentSessionId && (
         <div className="detail-field"><span className="detail-label" title={t('Operating system process ID of the running agent, on the Admiral host or Harbor. A dash means no process is running.')}>{t('Process ID')}</span><span>{captain.processId || '-'}</span></div>
+        )}
+        {captain.currentSessionId && (
         <div className="detail-field"><span className="detail-label" title={t('How many times Armada has automatically tried to recover the agent on its current mission, for example after a crash.')}>{t('Recovery Attempts')}</span><span>{captain.recoveryAttempts ?? 0}</span></div>
+        )}
         <div className="detail-field">
           <span className="detail-label" title={t('When the captain last produced agent output. If it stops advancing while the captain is Working, the captain may be stalled.')}>{t('Last Heartbeat')}</span>
           <span title={formatDateTime(captain.lastHeartbeatUtc)}>
@@ -554,16 +595,26 @@ export default function CaptainDetail() {
         </div>
       </div>
 
-      {/* Evaluation (Quick mechanical probes) */}
+      {/* Account usage (limits, capture now, capture settings) */}
       <div style={{ marginTop: '1rem' }}>
-        <h3 title={t('Probe this captain through its own runtime: served context, output contract, ASCII and format, tool calling, speed and determinism.')}>{t('Evaluation')}</h3>
-        <ModelProbeEvaluate target="captain" targetId={captain.id} onError={setError} />
+        <CaptainUsageCard ref={usageSectionRef} captain={captain} canManage={canManageCliPolicy} onCaptainSaved={setCaptain} />
       </div>
+
+      {/* Evaluation (Quick mechanical probes) */}
+      <section className="detail-section captain-evaluation-section">
+        <div className="detail-section-header">
+          <h3 title={t('Probe this captain through its own runtime: served context, output contract, ASCII and format, tool calling, speed and determinism.')}>{t('Evaluation')}</h3>
+          <Link className="btn btn-sm" to={evaluationsListPath(captain.id)} title={t('Open the Evaluations page filtered to this captain: every past Quick and Full evaluation with its results.')}>
+            {t('Past evaluations')}
+          </Link>
+        </div>
+        <ModelProbeEvaluate target="captain" targetId={captain.id} evaluationRunId={searchParams.get('evaluationRun')} onError={setError} />
+      </section>
 
       {/* Current Mission Details */}
       {currentMission && (
         <div style={{ marginTop: '1rem' }}>
-          <h3>{t('Current Mission')}</h3>
+          <h3>{t('Active Missions')}</h3>
           <div className="card" style={{ padding: '1rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
               <strong>{currentMission.title}</strong>
@@ -647,10 +698,6 @@ export default function CaptainDetail() {
             recordCount={null}
             onRowClick={(m) => navigate(`/missions/${m.id}`)}
             columns={[
-              { key: 'actions', label: t('Actions'), fixed: true, interactive: true, render: m => <ActionMenu id={`captain-mission-${m.id}`} items={[
-                { label: 'Open', onClick: () => navigate(`/missions/${m.id}`) },
-                { label: 'Duplicate', onClick: () => navigate(`/missions?duplicate=${encodeURIComponent(m.id)}`) },
-              ]} /> },
               {
                 key: 'id', label: t('ID'), required: true, headerTitle: t('Unique mission ID (msn_ prefix). Use the copy button to copy it.'), cellClassName: 'mono text-dim table-id-cell',
                 render: (m) => (
@@ -674,6 +721,10 @@ export default function CaptainDetail() {
                 cellTitle: (m) => formatDateTime(m.completedUtc || m.createdUtc),
                 render: (m) => formatRelativeTime(m.completedUtc || m.createdUtc),
               },
+              { key: 'actions', label: t('Actions'), fixed: true, interactive: true, className: 'text-right', render: m => <ActionMenu id={`captain-mission-${m.id}`} items={[
+                { label: 'Open', onClick: () => navigate(`/missions/${m.id}`) },
+                { label: 'Duplicate', onClick: () => navigate(`/missions?duplicate=${encodeURIComponent(m.id)}`) },
+              ]} /> },
             ]}
           />
         ) : (

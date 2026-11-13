@@ -2,6 +2,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
 {
     using System;
     using System.Collections.Generic;
+    using System.Text;
     using System.Threading;
     using System.Threading.Tasks;
     using Microsoft.Data.Sqlite;
@@ -266,6 +267,38 @@ namespace Armada.Core.Database.Sqlite.Implementations
                     cmd.Parameters.AddWithValue("@userId", userId);
                 },
                 token).ConfigureAwait(false);
+        }
+
+        /// <inheritdoc />
+        public async Task<EnumerationResult<PlanningSession>> EnumeratePageAsync(string? tenantId, string? userId, EnumerationQuery query, CancellationToken token = default)
+        {
+            if (query == null) throw new ArgumentNullException(nameof(query));
+            string direction = query.Order == EnumerationOrderEnum.CreatedAscending ? "ASC" : "DESC";
+            StringBuilder where = new StringBuilder("FROM planning_sessions WHERE 1 = 1");
+            if (!String.IsNullOrEmpty(tenantId)) where.Append(" AND tenant_id = @tenant_id");
+            if (!String.IsNullOrEmpty(userId)) where.Append(" AND user_id = @user_id");
+            if (!String.IsNullOrEmpty(query.Status)) where.Append(" AND status = @status");
+            if (!String.IsNullOrEmpty(query.CaptainId)) where.Append(" AND captain_id = @captain_id");
+            if (!String.IsNullOrEmpty(query.VesselId)) where.Append(" AND vessel_id = @vessel_id");
+            if (!String.IsNullOrEmpty(query.FleetId)) where.Append(" AND fleet_id = @fleet_id");
+            if (query.CreatedAfter.HasValue) where.Append(" AND created_utc > @created_after");
+            if (query.CreatedBefore.HasValue) where.Append(" AND created_utc < @created_before");
+            using (SqliteConnection conn = new SqliteProviderConnection(_Driver.ConnectionString))
+            {
+                await conn.OpenAsync(token).ConfigureAwait(false);
+                return await SqliteBoundedPage.ReadAsync(conn, where.ToString(), "last_update_utc " + direction + ", id " + direction,
+                    cmd =>
+                    {
+                        if (!String.IsNullOrEmpty(tenantId)) SqliteCommandHelper.Add(cmd, "@tenant_id", tenantId);
+                        if (!String.IsNullOrEmpty(userId)) SqliteCommandHelper.Add(cmd, "@user_id", userId);
+                        if (!String.IsNullOrEmpty(query.Status)) SqliteCommandHelper.Add(cmd, "@status", query.Status);
+                        if (!String.IsNullOrEmpty(query.CaptainId)) SqliteCommandHelper.Add(cmd, "@captain_id", query.CaptainId);
+                        if (!String.IsNullOrEmpty(query.VesselId)) SqliteCommandHelper.Add(cmd, "@vessel_id", query.VesselId);
+                        if (!String.IsNullOrEmpty(query.FleetId)) SqliteCommandHelper.Add(cmd, "@fleet_id", query.FleetId);
+                        if (query.CreatedAfter.HasValue) SqliteCommandHelper.AddDate(cmd, "@created_after", query.CreatedAfter.Value);
+                        if (query.CreatedBefore.HasValue) SqliteCommandHelper.AddDate(cmd, "@created_before", query.CreatedBefore.Value);
+                    }, SqliteDatabaseDriver.PlanningSessionFromReader, query, token).ConfigureAwait(false);
+            }
         }
 
         private async Task<List<PlanningSession>> EnumerateInternalAsync(string sql, Action<SqliteCommand>? parameterizer, CancellationToken token)

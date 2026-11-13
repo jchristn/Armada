@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { createHarbor, deleteHarbor, disableHarbor, enableHarbor, getHarbor, listHarbors, updateHarbor } from '@dashboard/api/client';
+import { createHarbor, deleteHarbor, disableHarbor, enableHarbor, enumerateHarbors, getHarbor, updateHarbor } from '@dashboard/api/client';
 import type { Harbor } from '@dashboard/types/models';
 import { useAuth } from '../../auth/AuthContext';
 import { ActionBar, DetailHeader, DetailPending, Field, FieldCard, JsonSheet } from '../../components/resource/DetailParts';
@@ -7,6 +7,7 @@ import { bool, FormSheet, str, type FormValues } from '../../components/resource
 import { ResourceList, StatRow } from '../../components/resource/ResourceList';
 import { ResourceRow, useConfirm } from '../../components/resource/ResourceRow';
 import { resourceStyles } from '../../components/resource/styles';
+import { TruncationNote } from '../../components/resource/TruncationNote';
 import { Button } from '../../components/ui/Button';
 import { StatusBadge, type StatusTone } from '../../components/ui/StatusBadge';
 import type { Translate } from '../../i18n/LocaleContext';
@@ -91,7 +92,13 @@ export function HarborsTab() {
   const canManage = isAdmin || isTenantAdmin;
   const { confirm, dialog } = useConfirm('harbor-confirm');
   const selection = useLocalSelection();
-  const { data, loading, refreshing, error, reload, refresh } = useLoad(async () => (await listHarbors()) ?? [], [], { fallbackError: t('Failed to load harbors.') });
+  // One bounded page of the largest size; the note in the header says when more Harbors exist.
+  const [total, setTotal] = useState(0);
+  const { data, loading, refreshing, error, reload, refresh } = useLoad(async () => {
+    const page = await enumerateHarbors();
+    setTotal(page?.totalRecords ?? 0);
+    return page?.objects ?? [];
+  }, [], { fallbackError: t('Failed to load harbors.') });
   useReloadOnFocus(reload);
   const harbors = useMemo(() => data ?? [], [data]);
   const [search, setSearch] = useState('');
@@ -154,11 +161,12 @@ export function HarborsTab() {
       header={(
         <>
           <StatRow stats={[
-            { label: t('Total Harbors'), value: harbors.length },
+            { label: t('Total Harbors'), value: Math.max(total, harbors.length) },
             { label: t('Connected'), value: harbors.filter((h) => h.connectionStatus === 'Connected').length },
             { label: t('Disconnected'), value: harbors.filter((h) => h.connectionStatus === 'Disconnected').length },
             { label: t('Enabled'), value: harbors.filter((h) => h.enabled).length },
           ]} />
+          <TruncationNote shown={harbors.length} total={total} />
           {canManage ? <Button label={t('Harbor')} icon="add" onPress={() => setEditing('new')} style={resourceStyles.create} testID="harbors-create" /> : null}
         </>
       )}

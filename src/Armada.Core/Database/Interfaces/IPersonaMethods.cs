@@ -59,5 +59,17 @@ namespace Armada.Core.Database.Interfaces
         /// Check if a persona exists by name.
         /// </summary>
         Task<bool> ExistsByNameAsync(string name, CancellationToken token = default);
+
+        /// <summary>
+        /// One page of personas visible through <paramref name="filter"/>, counted and cut in the data source (COUNT plus
+        /// LIMIT/OFFSET over the same filter), ordered by creation time in the query's direction with the id as the
+        /// tie-break. CreatedAfter and CreatedBefore apply.
+        /// </summary>
+        /// <param name="query">Paging, order, and created-time filters.</param>
+        /// <param name="filter">Caller visibility.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The page with exact totals.</returns>
+        /// <exception cref="System.ArgumentNullException">Thrown when query or filter is null.</exception>
+        Task<EnumerationResult<Persona>> EnumeratePageAsync(EnumerationQuery query, ScopedEnumerationFilter filter, CancellationToken token = default);
     }
 }

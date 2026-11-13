@@ -1,5 +1,7 @@
 namespace Armada.Core.Services
 {
+    using System.Runtime.CompilerServices;
+    using System.Text.Json;
     using SyslogLogging;
     using Armada.Core.Database;
     using Armada.Core.Enums;
@@ -26,6 +28,14 @@ namespace Armada.Core.Services
 
         private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, SemaphoreSlim> _RepoProvisionLocks =
             new System.Collections.Concurrent.ConcurrentDictionary<string, SemaphoreSlim>(StringComparer.OrdinalIgnoreCase);
+
+        // Repository preparation (clone check, default branch, fetch, prune) reused for this long after it last ran.
+        private static readonly TimeSpan _PreparationReuse = TimeSpan.FromSeconds(5);
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, DateTime> _RecentPreparations =
+            new System.Collections.Concurrent.ConcurrentDictionary<string, DateTime>(StringComparer.OrdinalIgnoreCase);
+
+        private readonly System.Collections.Concurrent.ConcurrentDictionary<string, DockProvisionFailure> _ProvisionFailures =
+            new System.Collections.Concurrent.ConcurrentDictionary<string, DockProvisionFailure>(StringComparer.Ordinal);
 
         private string _Header = "[DockService] ";
         private LoggingModule _Logging;
@@ -57,7 +67,11 @@ namespace Armada.Core.Services
         #region Public-Methods
 
         /// <inheritdoc />
-        public async Task<Dock?> ProvisionAsync(Vessel vessel, Captain captain, string branchName, string? missionId = null, CancellationToken token = default)
+        public Task<Dock?> ProvisionAsync(Vessel vessel, Captain captain, string branchName, string? missionId = null, CancellationToken token = default)
+            => ProvisionAsync(vessel, captain, branchName, missionId, null, token);
+
+        /// <inheritdoc />
+        public async Task<Dock?> ProvisionAsync(Vessel vessel, Captain captain, string branchName, string? missionId, string? baseBranch, CancellationToken token = default)
         {
             if (vessel == null) throw new ArgumentNullException(nameof(vessel));
             if (captain == null) throw new ArgumentNullException(nameof(captain));
@@ -73,66 +87,82 @@ namespace Armada.Core.Services
             string normalizedRepoPath = Path.GetFullPath(repoPath);
             SemaphoreSlim repoLock = _RepoProvisionLocks.GetOrAdd(normalizedRepoPath, _ => new SemaphoreSlim(1, 1));
             bool repoLockAcquired = false;
+            BlackBoxStepEnum step = BlackBoxStepEnum.DockProvision;
+            if (!String.IsNullOrEmpty(missionId)) _ProvisionFailures.TryRemove(missionId, out DockProvisionFailure? _);
 
+            System.Diagnostics.Stopwatch phase = System.Diagnostics.Stopwatch.StartNew();
+            ProvisionTimings timings = new ProvisionTimings();
             try
             {
                 await repoLock.WaitAsync(token).ConfigureAwait(false);
                 repoLockAcquired = true;
+                timings.LockWaitMs = phase.ElapsedMilliseconds; phase.Restart();
 
-                // Ensure bare clone exists. If the directory exists but isn't a valid repo
-                // (e.g. leftover from a failed clone/seed), remove it and re-clone.
-                if (Directory.Exists(repoPath) && !await _Git.IsRepositoryAsync(repoPath, token).ConfigureAwait(false))
+                // A burst of missions on one repository needs the clone checked, fetched and pruned once, not once per
+                // mission: this work runs under the repository lock and was about half of each provisioning.
+                string preparationKey = normalizedRepoPath + "\n" + vessel.DefaultBranch + "\n" + vessel.RepoUrl;
+                if (!RecentlyPrepared(preparationKey))
                 {
-                    if (!ManagedPaths.IsStrictlyUnder(repoPath, _Settings.ReposDirectory))
-                        throw new InvalidOperationException("Vessel " + vessel.Name + " LocalPath " + repoPath + " exists but is not a git repository, and it is outside the managed repos directory, so Armada will not remove it.");
-                    _Logging.Warn(_Header + "removing corrupt/incomplete repo directory: " + repoPath);
-                    await ForceRemoveDirectoryAsync(repoPath, token).ConfigureAwait(false);
-                }
+                    // Ensure bare clone exists. If the directory exists but isn't a valid repo
+                    // (e.g. leftover from a failed clone/seed), remove it and re-clone.
+                    if (Directory.Exists(repoPath) && !await _Git.IsRepositoryAsync(repoPath, token).ConfigureAwait(false))
+                    {
+                        if (!ManagedPaths.IsStrictlyUnder(repoPath, _Settings.ReposDirectory))
+                            throw new InvalidOperationException("Vessel " + vessel.Name + " LocalPath " + repoPath + " exists but is not a git repository, and it is outside the managed repos directory, so Armada will not remove it.");
+                        _Logging.Warn(_Header + "removing corrupt/incomplete repo directory: " + repoPath);
+                        await ForceRemoveDirectoryAsync(repoPath, token).ConfigureAwait(false);
+                    }
 
-                if (!await _Git.IsRepositoryAsync(repoPath, token).ConfigureAwait(false))
-                {
-                    if (String.IsNullOrEmpty(vessel.RepoUrl))
-                        throw new InvalidOperationException("Vessel " + vessel.Name + " has no remote URL configured");
-                    await _Git.CloneBareAsync(vessel.RepoUrl, repoPath, token).ConfigureAwait(false);
-                    vessel.LocalPath = repoPath;
-                    await _Database.Vessels.UpdateAsync(vessel, token).ConfigureAwait(false);
-                }
+                    if (!await _Git.IsRepositoryAsync(repoPath, token).ConfigureAwait(false))
+                    {
+                        if (String.IsNullOrEmpty(vessel.RepoUrl))
+                            throw new InvalidOperationException("Vessel " + vessel.Name + " has no remote URL configured");
+                        await _Git.CloneBareAsync(vessel.RepoUrl, repoPath, token).ConfigureAwait(false);
+                        vessel.LocalPath = repoPath;
+                        await _Database.Vessels.UpdateAsync(vessel, token).ConfigureAwait(false);
+                    }
 
-                // Ensure the configured default branch exists locally. Missing configured branches
-                // in non-empty repos should be created from the remote/default history rather than
-                // being treated as an empty repository.
-                bool hasDefaultBranch = await _Git.EnsureLocalBranchAsync(repoPath, vessel.DefaultBranch, token).ConfigureAwait(false);
-                if (!hasDefaultBranch)
-                {
-                    _Logging.Info(_Header + "bare repo for " + vessel.Name + " has no usable branch history for " + vessel.DefaultBranch + " -- seeding initial commit");
-                    await SeedEmptyRepoAsync(vessel, repoPath, token).ConfigureAwait(false);
-                }
-                else if (String.IsNullOrEmpty(vessel.LocalPath))
-                {
-                    _Logging.Info(_Header + "bare repo exists but vessel LocalPath is empty for " + vessel.Name + ", updating to " + repoPath);
-                    vessel.LocalPath = repoPath;
-                    await _Database.Vessels.UpdateAsync(vessel, token).ConfigureAwait(false);
-                }
+                    // Ensure the configured default branch exists locally. Missing configured branches
+                    // in non-empty repos should be created from the remote/default history rather than
+                    // being treated as an empty repository.
+                    bool hasDefaultBranch = await _Git.EnsureLocalBranchAsync(repoPath, vessel.DefaultBranch, token).ConfigureAwait(false);
+                    if (!hasDefaultBranch)
+                    {
+                        _Logging.Info(_Header + "bare repo for " + vessel.Name + " has no usable branch history for " + vessel.DefaultBranch + " -- seeding initial commit");
+                        await SeedEmptyRepoAsync(vessel, repoPath, token).ConfigureAwait(false);
+                    }
+                    else if (String.IsNullOrEmpty(vessel.LocalPath))
+                    {
+                        _Logging.Info(_Header + "bare repo exists but vessel LocalPath is empty for " + vessel.Name + ", updating to " + repoPath);
+                        vessel.LocalPath = repoPath;
+                        await _Database.Vessels.UpdateAsync(vessel, token).ConfigureAwait(false);
+                    }
 
-                // Fetch latest from remote to ensure worktrees branch from current main
-                if (!String.IsNullOrEmpty(vessel.RepoUrl))
-                {
+                    timings.RepositoryCheckMs = phase.ElapsedMilliseconds; phase.Restart();
+                    // Fetch latest from remote to ensure worktrees branch from current main
+                    if (!String.IsNullOrEmpty(vessel.RepoUrl))
+                    {
+                        try
+                        {
+                            await _Git.FetchAsync(repoPath, token).ConfigureAwait(false);
+                        }
+                        catch (Exception fetchEx)
+                        {
+                            _Logging.Warn(_Header + "fetch failed for " + vessel.Name + ", continuing with local state: " + fetchEx.Message);
+                        }
+                    }
+
+                    timings.FetchMs = phase.ElapsedMilliseconds; phase.Restart();
+                    // Prune stale worktree registrations (handles "missing but registered" entries)
                     try
                     {
-                        await _Git.FetchAsync(repoPath, token).ConfigureAwait(false);
+                        await _Git.PruneWorktreesAsync(repoPath, token).ConfigureAwait(false);
                     }
-                    catch (Exception fetchEx)
-                    {
-                        _Logging.Warn(_Header + "fetch failed for " + vessel.Name + ", continuing with local state: " + fetchEx.Message);
-                    }
+                    catch { }
+                    timings.PruneMs = phase.ElapsedMilliseconds; phase.Restart();
+                    _RecentPreparations[preparationKey] = DateTime.UtcNow;
                 }
-
-                // Prune stale worktree registrations (handles "missing but registered" entries)
-                try
-                {
-                    await _Git.PruneWorktreesAsync(repoPath, token).ConfigureAwait(false);
-                }
-                catch { }
+                else timings.PreparationReused = true;
 
                 // Clean up stale worktree directories under this vessel's dock directory.
                 // Only removes directories that are NOT associated with any active dock record.
@@ -223,8 +253,12 @@ namespace Armada.Core.Services
 
                 // Create worktree. If the branch already exists, GitService will attach to it
                 // instead of recreating it so downstream pipeline stages and retries preserve work.
-                await _Git.CreateWorktreeAsync(repoPath, worktreePath, branchName, vessel.DefaultBranch, token).ConfigureAwait(false);
+                step = BlackBoxStepEnum.WorktreeCreate;
+                timings.CleanupMs = phase.ElapsedMilliseconds; phase.Restart();
+                await _Git.CreateWorktreeAsync(repoPath, worktreePath, branchName, String.IsNullOrWhiteSpace(baseBranch) ? vessel.DefaultBranch : baseBranch!, token).ConfigureAwait(false);
+                timings.WorktreeMs = phase.ElapsedMilliseconds; phase.Restart();
 
+                step = BlackBoxStepEnum.StartCommitRecord;
                 string? headCommit = await _Git.GetHeadCommitHashAsync(worktreePath, token).ConfigureAwait(false);
                 if (String.IsNullOrEmpty(headCommit))
                 {
@@ -238,6 +272,8 @@ namespace Armada.Core.Services
                 dock.CaptainId = captain.Id;
                 dock.WorktreePath = worktreePath;
                 dock.BranchName = branchName;
+                // The start commit is durable on the dock (scope checks and the black box read it after a restart).
+                DockStartCommit.Write(dock, headCommit, vessel.DefaultBranch);
                 dock = await _Database.Docks.CreateAsync(dock, token).ConfigureAwait(false);
 
                 try
@@ -250,12 +286,26 @@ namespace Armada.Core.Services
                 }
 
                 ArmadaMetrics.DocksProvisioned.Add(1);
+                timings.RecordMs = phase.ElapsedMilliseconds;
                 _Logging.Info(_Header + "provisioned dock " + dock.Id + " at " + worktreePath);
+                _Logging.Debug(_Header + "dock " + dock.Id + " provisioning ms: " + timings);
                 return dock;
             }
             catch (Exception ex)
             {
                 _Logging.Warn(_Header + "provisioning failed for vessel " + vessel.Id + " captain " + captain.Id + " repo " + (vessel.RepoUrl ?? "unknown") + ": " + ex.ToString());
+                _RecentPreparations.TryRemove(normalizedRepoPath + "\n" + vessel.DefaultBranch + "\n" + vessel.RepoUrl, out _);
+                if (!String.IsNullOrEmpty(missionId))
+                {
+                    _ProvisionFailures[missionId] = new DockProvisionFailure
+                    {
+                        MissionId = missionId,
+                        Step = step,
+                        Exception = ex,
+                        WorktreePath = worktreePath,
+                        WorktreeExisted = Directory.Exists(worktreePath)
+                    };
+                }
 
                 // Clean up partial state -- remove worktree directory if it was partially created
                 if (Directory.Exists(worktreePath))
@@ -273,7 +323,11 @@ namespace Armada.Core.Services
         }
 
         /// <inheritdoc />
-        public async Task<Dock> ProvisionOnHarborAsync(Vessel vessel, Captain captain, string branchName, string missionId, string harborId, CancellationToken token = default)
+        public Task<Dock> ProvisionOnHarborAsync(Vessel vessel, Captain captain, string branchName, string missionId, string harborId, CancellationToken token = default)
+            => ProvisionOnHarborAsync(vessel, captain, branchName, missionId, harborId, null, token);
+
+        /// <inheritdoc />
+        public async Task<Dock> ProvisionOnHarborAsync(Vessel vessel, Captain captain, string branchName, string missionId, string harborId, string? baseBranch, CancellationToken token = default)
         {
             if (vessel == null) throw new ArgumentNullException(nameof(vessel));
             if (captain == null) throw new ArgumentNullException(nameof(captain));
@@ -291,7 +345,7 @@ namespace Armada.Core.Services
             Armada.Core.Harbor.HarborDockResult? result;
             try
             {
-                result = await client.ProvisionAsync(harborId, vessel, branchName, missionId + "_" + dock.Id, token).ConfigureAwait(false);
+                result = await client.ProvisionAsync(harborId, vessel, branchName, missionId + "_" + dock.Id, token, baseBranch).ConfigureAwait(false);
             }
             catch (InvalidOperationException ex)
             {
@@ -313,6 +367,7 @@ namespace Armada.Core.Services
             dock.RepositoryPath = result.RepositoryPath;
             dock.CheckoutPath = result.CheckoutPath;
             dock.BranchName = branchName;
+            if (!String.IsNullOrEmpty(result.HeadCommit)) DockStartCommit.Write(dock, result.HeadCommit, vessel.DefaultBranch);
             dock = await _Database.Docks.CreateAsync(dock, token).ConfigureAwait(false);
 
             if (!String.IsNullOrEmpty(result.HeadCommit))
@@ -334,14 +389,14 @@ namespace Armada.Core.Services
         }
 
         /// <inheritdoc />
-        public async Task ReclaimAsync(string dockId, string? tenantId = null, CancellationToken token = default)
+        public async Task<bool> ReclaimAsync(string dockId, string? tenantId = null, CancellationToken token = default, string? forceReason = null, [CallerMemberName] string caller = "")
         {
             if (String.IsNullOrEmpty(dockId)) throw new ArgumentNullException(nameof(dockId));
 
             Dock? dock = !String.IsNullOrEmpty(tenantId)
                 ? await _Database.Docks.ReadAsync(tenantId, dockId, token).ConfigureAwait(false)
                 : await _Database.Docks.ReadAsync(dockId, token).ConfigureAwait(false);
-            if (dock == null) return;
+            if (dock == null) return true;
 
             // Idempotency guard: if the dock is already inactive, it was already reclaimed.
             // This prevents duplicate worktree removal when both MissionService (background finalizer)
@@ -349,7 +404,20 @@ namespace Armada.Core.Services
             if (!dock.Active)
             {
                 _Logging.Debug(_Header + "dock " + dockId + " already reclaimed (Active=false) -- skipping");
-                return;
+                return true;
+            }
+
+            // One lease check for every reclaim path: work that has not landed (or is waiting on review, a pull request,
+            // a landing retry or the merge queue) keeps its worktree unless the caller says explicitly why it may go.
+            DockLeaseState lease = await ReadLeaseAsync(dock, token).ConfigureAwait(false);
+            string reclaimCaller = String.IsNullOrWhiteSpace(caller) ? "unknown" : caller;
+            if (lease.IsHeld && String.IsNullOrWhiteSpace(forceReason))
+            {
+                _Logging.Warn(_Header + "refusing to reclaim dock " + dock.Id + " for " + reclaimCaller + ": " + lease.Describe()
+                    + "; its worktree " + dock.WorktreePath + " is kept");
+                await EmitReclaimEventAsync("dock.reclaim_refused", "Kept dock " + dock.Id + " (" + lease.Describe() + "); reclaim requested by " + reclaimCaller,
+                    dock, lease, reclaimCaller, null, true, token).ConfigureAwait(false);
+                return false;
             }
 
             if (await HasOtherActivePathOwnerAsync(dock, token).ConfigureAwait(false))
@@ -397,6 +465,154 @@ namespace Armada.Core.Services
             dock.LastUpdateUtc = DateTime.UtcNow;
             await _Database.Docks.UpdateAsync(dock, token).ConfigureAwait(false);
             ArmadaMetrics.DocksReclaimed.Add(1);
+
+            MissionSummary? primary = lease.PrimaryMission;
+            _Logging.Info(_Header + "dock " + dock.Id + " reclaimed by " + reclaimCaller
+                + (primary != null ? " (mission " + primary.Id + " " + primary.Status + ")" : "")
+                + (String.IsNullOrWhiteSpace(forceReason) ? "" : "; forced: " + forceReason));
+            await EmitReclaimEventAsync("dock.reclaimed", "Reclaimed dock " + dock.Id + " for " + reclaimCaller
+                + (primary != null ? " (mission " + primary.Id + " " + primary.Status + ")" : ""),
+                dock, lease, reclaimCaller, forceReason, false, token).ConfigureAwait(false);
+            return true;
+        }
+
+        /// <inheritdoc />
+        public DockProvisionFailure? TakeProvisionFailure(string missionId)
+        {
+            if (String.IsNullOrEmpty(missionId)) return null;
+            return _ProvisionFailures.TryRemove(missionId, out DockProvisionFailure? failure) ? failure : null;
+        }
+
+        /// <inheritdoc />
+        public async Task<bool?> WorktreeExistsAsync(Dock dock, CancellationToken token = default)
+        {
+            if (dock == null) throw new ArgumentNullException(nameof(dock));
+            if (String.IsNullOrEmpty(dock.WorktreePath)) return false;
+            if (!DockHostResolver.IsHarborDock(dock)) return Directory.Exists(dock.WorktreePath);
+            if (Hosts == null) return null;
+            try
+            {
+                return await Hosts.ForDock(dock).Files.DirectoryExistsAsync(dock.WorktreePath, token).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                // An unreachable Harbor is not proof the dock is gone.
+                _Logging.Warn(_Header + "unable to check dock " + dock.Id + " on Harbor " + dock.HarborId + ": " + ex.Message);
+                return null;
+            }
+        }
+
+        /// <inheritdoc />
+        public async Task<DockRestoreResult> RestoreWorktreeAsync(string dockId, string trigger, bool reactivate = false, CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(dockId)) throw new ArgumentNullException(nameof(dockId));
+
+            Dock? dock = await _Database.Docks.ReadAsync(dockId, token).ConfigureAwait(false);
+            if (dock == null) return DockRestoreResult.Failed(dockId, "dock " + dockId + " is not recorded");
+            if (!dock.Active && !reactivate) return DockRestoreResult.Failed(dockId, "dock " + dockId + " was reclaimed");
+            if (String.IsNullOrEmpty(dock.WorktreePath) || String.IsNullOrEmpty(dock.BranchName))
+                return DockRestoreResult.Failed(dockId, "dock " + dockId + " has no recorded worktree path or branch");
+
+            DockRestoreResult result = new DockRestoreResult
+            {
+                DockId = dock.Id,
+                HarborId = dock.HarborId,
+                WorktreePath = dock.WorktreePath,
+                BranchName = dock.BranchName,
+                Trigger = trigger
+            };
+
+            bool harborDock = DockHostResolver.IsHarborDock(dock);
+            IGitService git;
+            string? repository;
+            string baseBranch = "main";
+            Vessel? vessel = await _Database.Vessels.ReadAsync(dock.VesselId, token).ConfigureAwait(false);
+            if (vessel != null && !String.IsNullOrEmpty(vessel.DefaultBranch)) baseBranch = vessel.DefaultBranch;
+            if (harborDock)
+            {
+                if (Hosts == null)
+                {
+                    result.Reason = "dock " + dock.Id + " is on Harbor " + dock.HarborId + ", but Harbor delegation is not available";
+                    return result;
+                }
+                git = Hosts.ForDock(dock).Git;
+                repository = dock.RepositoryPath;
+            }
+            else
+            {
+                git = _Git;
+                repository = !String.IsNullOrEmpty(dock.RepositoryPath) ? dock.RepositoryPath : vessel?.LocalPath;
+            }
+
+            result.RepositoryPath = repository;
+            if (String.IsNullOrEmpty(repository))
+            {
+                result.Reason = "the repository for dock " + dock.Id + " is unknown";
+                return result;
+            }
+
+            try
+            {
+                bool? exists = await WorktreeExistsAsync(dock, token).ConfigureAwait(false);
+                if (exists == true)
+                {
+                    result.Restored = true;
+                    result.HeadCommit = await git.GetHeadCommitHashAsync(dock.WorktreePath, token).ConfigureAwait(false);
+                    return result;
+                }
+
+                // Never let worktree creation invent a fresh branch from the base: the branch is the work.
+                if (!await git.BranchExistsAsync(repository, dock.BranchName, token).ConfigureAwait(false))
+                {
+                    result.Reason = "branch '" + dock.BranchName + "' is not in " + repository;
+                    return result;
+                }
+
+                // The vanished directory is usually still registered as a worktree; clear that before adding it again.
+                try { await git.PruneWorktreesAsync(repository, token).ConfigureAwait(false); }
+                catch (Exception pruneEx) when (pruneEx is not OperationCanceledException)
+                {
+                    _Logging.Debug(_Header + "could not prune worktrees in " + repository + " before restoring dock " + dock.Id + ": " + pruneEx.Message);
+                }
+
+                await git.CreateWorktreeAsync(repository, dock.WorktreePath, dock.BranchName, baseBranch, token).ConfigureAwait(false);
+                result.HeadCommit = await git.GetHeadCommitHashAsync(dock.WorktreePath, token).ConfigureAwait(false);
+                result.Restored = true;
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _Logging.Warn(_Header + "could not restore dock " + dock.Id + " at " + dock.WorktreePath + ": " + ex.Message);
+                result.Reason = ex.Message;
+                return result;
+            }
+
+            if (!dock.Active)
+            {
+                dock.Active = true;
+                dock.LastUpdateUtc = DateTime.UtcNow;
+                await _Database.Docks.UpdateAsync(dock, token).ConfigureAwait(false);
+            }
+
+            DockLeaseState lease = await ReadLeaseAsync(dock, token).ConfigureAwait(false);
+            _Logging.Warn(_Header + "restored missing worktree of dock " + dock.Id + " at " + dock.WorktreePath + " from branch " + dock.BranchName + " (" + trigger + ")");
+            try
+            {
+                ArmadaEvent evt = new ArmadaEvent("dock.repaired", "Recreated the missing worktree of dock " + dock.Id + " from branch " + dock.BranchName + " (" + trigger + ")");
+                evt.EntityType = "dock";
+                evt.EntityId = dock.Id;
+                evt.TenantId = dock.TenantId;
+                evt.UserId = dock.UserId;
+                evt.VesselId = dock.VesselId;
+                evt.MissionId = lease.PrimaryMission?.Id;
+                evt.Payload = JsonSerializer.Serialize(result);
+                await _Database.Events.CreateAsync(evt, token).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _Logging.Warn(_Header + "could not record dock.repaired for " + dock.Id + ": " + ex.Message);
+            }
+
+            return result;
         }
 
         /// <inheritdoc />
@@ -427,23 +643,17 @@ namespace Armada.Core.Services
                 : await _Database.Docks.ReadAsync(dockId, token).ConfigureAwait(false);
             if (dock == null) throw new KeyNotFoundException("Dock not found: " + dockId);
 
-            // Free any captain still holding this dock so it stops counting as "in use".
+            List<Mission> missions = await _Database.Missions.EnumerateByVesselAsync(dock.VesselId, token).ConfigureAwait(false);
+            if (missions.Any(m => m.DockId == dock.Id && (m.Status == MissionStatusEnum.Assigned || m.Status == MissionStatusEnum.InProgress || m.Status == MissionStatusEnum.Verifying)))
+                throw new InvalidOperationException("Dock is owned by an active mission. Stop or cancel that mission before unsticking its dock.");
             if (!String.IsNullOrEmpty(dock.CaptainId))
             {
                 Captain? captain = await _Database.Captains.ReadAsync(dock.CaptainId, token).ConfigureAwait(false);
-                if (captain != null && captain.CurrentDockId == dock.Id)
-                {
-                    _Logging.Warn(_Header + "unstick: releasing captain " + captain.Id + " holding dock " + dockId);
-                    captain.State = CaptainStateEnum.Idle;
-                    captain.CurrentMissionId = null;
-                    captain.CurrentDockId = null;
-                    captain.ProcessId = null;
-                    captain.LastUpdateUtc = DateTime.UtcNow;
-                    await _Database.Captains.UpdateAsync(captain, token).ConfigureAwait(false);
-                }
+                if (captain?.CurrentSessionId != null && (await CaptainContextResolver.ReadDockAsync(_Database, captain, token).ConfigureAwait(false))?.Id == dock.Id)
+                    throw new InvalidOperationException("Dock is owned by an active planning session. Stop that session before unsticking its dock.");
             }
 
-            await ReclaimAsync(dockId, tenantId, token).ConfigureAwait(false);
+            await ReclaimAsync(dockId, tenantId, token, "operator unstick").ConfigureAwait(false);
             _Logging.Info(_Header + "unstuck dock " + dockId);
         }
 
@@ -498,6 +708,75 @@ namespace Armada.Core.Services
         #endregion
 
         #region Private-Methods
+
+        private static bool RecentlyPrepared(string key)
+            => _RecentPreparations.TryGetValue(key, out DateTime prepared) && DateTime.UtcNow - prepared < _PreparationReuse;
+
+        private async Task<DockLeaseState> ReadLeaseAsync(Dock dock, CancellationToken token)
+        {
+            DockLeaseState lease = new DockLeaseState();
+            if (String.IsNullOrEmpty(dock.VesselId)) return lease;
+
+            List<MissionSummary> summaries = await _Database.Missions.EnumerateSummariesByVesselAsync(dock.VesselId, token).ConfigureAwait(false);
+            foreach (MissionSummary summary in summaries)
+            {
+                if (String.Equals(summary.DockId, dock.Id, StringComparison.Ordinal)) lease.Missions.Add(summary);
+            }
+            lease.Missions.Sort((a, b) => b.LastUpdateUtc.CompareTo(a.LastUpdateUtc));
+            lease.HoldingMission = lease.Missions.FirstOrDefault(m => DockLeaseState.IsLeaseStatus(m.Status));
+            if (lease.HoldingMission != null || lease.Missions.Count == 0) return lease;
+
+            HashSet<string> missionIds = new HashSet<string>(lease.Missions.Select(m => m.Id), StringComparer.Ordinal);
+            foreach (MergeStatusEnum status in new[] { MergeStatusEnum.Queued, MergeStatusEnum.Testing })
+            {
+                List<MergeEntry> entries = await _Database.MergeEntries.EnumerateByStatusAsync(status, token).ConfigureAwait(false);
+                MergeEntry? holding = entries.FirstOrDefault(e => !String.IsNullOrEmpty(e.MissionId) && missionIds.Contains(e.MissionId));
+                if (holding != null)
+                {
+                    lease.HoldingEntry = holding;
+                    break;
+                }
+            }
+            return lease;
+        }
+
+        private async Task EmitReclaimEventAsync(string eventType, string message, Dock dock, DockLeaseState lease, string caller, string? forceReason, bool refused, CancellationToken token)
+        {
+            MissionSummary? primary = lease.PrimaryMission;
+            DockReclaimRecord record = new DockReclaimRecord
+            {
+                DockId = dock.Id,
+                VesselId = dock.VesselId,
+                HarborId = dock.HarborId,
+                WorktreePath = dock.WorktreePath,
+                BranchName = dock.BranchName,
+                MissionId = primary?.Id,
+                MissionStatus = primary?.Status.ToString(),
+                Caller = caller,
+                ForceReason = String.IsNullOrWhiteSpace(forceReason) ? null : forceReason,
+                LeaseHolder = lease.IsHeld ? lease.Describe() : null,
+                Refused = refused
+            };
+
+            try
+            {
+                ArmadaEvent evt = new ArmadaEvent(eventType, message);
+                evt.EntityType = "dock";
+                evt.EntityId = dock.Id;
+                evt.TenantId = dock.TenantId;
+                evt.UserId = dock.UserId;
+                evt.VesselId = dock.VesselId;
+                evt.CaptainId = dock.CaptainId;
+                evt.MissionId = primary?.Id;
+                evt.VoyageId = primary?.VoyageId;
+                evt.Payload = JsonSerializer.Serialize(record);
+                await _Database.Events.CreateAsync(evt, token).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _Logging.Warn(_Header + "could not record " + eventType + " for dock " + dock.Id + ": " + ex.Message);
+            }
+        }
 
         /// <summary>
         /// Whether a legacy path has been reassigned to a different active dock.

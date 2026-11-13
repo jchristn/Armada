@@ -550,6 +550,10 @@ namespace Armada.Server
 
         private async Task CloseRelaySocketAsync(string proxySocketId, RelayWebSocketSession relaySession, WebSocketCloseStatus status, string reason)
         {
+            // Cancellation wakes the receive loop, whose finally also closes this session.
+            // Only one caller may close/dispose the socket and its underlying stream.
+            if (!relaySession.TryBeginClose()) return;
+
             relaySession.Cancel();
 
             try
@@ -682,6 +686,9 @@ namespace Armada.Server
             public Task? ReceiveTask { get; set; }
 
             private int _Disposed = 0;
+            private int _Closing = 0;
+
+            public bool TryBeginClose() => Interlocked.Exchange(ref _Closing, 1) == 0;
 
             public void Cancel()
             {

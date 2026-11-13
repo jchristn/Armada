@@ -89,6 +89,37 @@ namespace Armada.Core.Database.Mysql.Implementations
         }
 
         /// <inheritdoc />
+        public async Task<EnumerationResult<VesselDependency>> EnumerateByVesselAsync(string tenantId, string vesselId, EnumerationQuery query, CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(tenantId)) throw new ArgumentNullException(nameof(tenantId));
+            if (String.IsNullOrEmpty(vesselId)) throw new ArgumentNullException(nameof(vesselId));
+            if (query == null) query = new EnumerationQuery();
+
+            Action<MySqlCommand> bind = cmd =>
+            {
+                MysqlCommandHelper.Add(cmd, "@tenant_id", tenantId);
+                MysqlCommandHelper.Add(cmd, "@vessel_id", vesselId);
+            };
+
+            using (MySqlConnection conn = new MySqlConnection(_ConnectionString))
+            {
+                await conn.OpenAsync(token).ConfigureAwait(false);
+                long total = await MysqlCommandHelper.CountAsync(conn, "SELECT COUNT(*) FROM vessel_dependencies WHERE tenant_id = @tenant_id AND vessel_id = @vessel_id;", bind, token).ConfigureAwait(false);
+                List<VesselDependency> rows = await MysqlCommandHelper.QueryAsync(conn,
+                    "SELECT * FROM vessel_dependencies WHERE tenant_id = @tenant_id AND vessel_id = @vessel_id ORDER BY ecosystem ASC, package_name ASC, project_path ASC, id ASC" + MysqlCommandHelper.Page(query.Offset, query.PageSize) + ";",
+                    bind, FromReader, token).ConfigureAwait(false);
+
+                EnumerationResult<VesselDependency> result = new EnumerationResult<VesselDependency>();
+                result.PageNumber = query.PageNumber;
+                result.PageSize = query.PageSize;
+                result.TotalRecords = total;
+                result.TotalPages = (int)Math.Ceiling((double)total / query.PageSize);
+                result.Objects = rows;
+                return result;
+            }
+        }
+
+        /// <inheritdoc />
         public async Task DeleteByVesselAsync(string tenantId, string vesselId, CancellationToken token = default)
         {
             if (String.IsNullOrEmpty(tenantId)) throw new ArgumentNullException(nameof(tenantId));

@@ -44,6 +44,7 @@ namespace Test.Shared.Suites.Services
             AddLegal(cases, MissionStatusEnum.Review, MissionStatusEnum.Complete);
             AddLegal(cases, MissionStatusEnum.Review, MissionStatusEnum.InProgress);
             AddLegal(cases, MissionStatusEnum.LandingFailed, MissionStatusEnum.WorkProduced);
+            AddLegal(cases, MissionStatusEnum.LandingFailed, MissionStatusEnum.Complete);
 
             // ----- Illegal transitions (negative) -----
             AddIllegal(cases, MissionStatusEnum.Pending, MissionStatusEnum.InProgress);   // must go via Assigned

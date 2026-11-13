@@ -215,6 +215,27 @@ namespace Test.Shared.Suites.Services
                 AssertFalse(GitProcessEnvironment.IsGitTool("dotnet"), "dotnet");
             }));
 
+            cases.Add(Case("split_nul_drops_trailing_newline_field", "A newline after the last NUL terminator does not produce a field", TestTags.Negative, () =>
+            {
+                List<string> lf = GitMachineOutputParser.SplitNul("a\0b\0\n");
+                AssertEqual(2, lf.Count, "LF after the last terminator");
+                AssertEqual("a", lf[0]);
+                AssertEqual("b", lf[1]);
+                List<string> crlf = GitMachineOutputParser.SplitNul("a\0b\0\r\n");
+                AssertEqual(2, crlf.Count, "CRLF after the last terminator");
+                List<string> exact = GitMachineOutputParser.SplitNul("a\0b\0");
+                AssertEqual(2, exact.Count, "exact terminators");
+            }));
+
+            cases.Add(Case("path_list_z_skips_line_ending_only_fields", "ParsePathListZ yields no empty or newline-only paths", TestTags.Negative, () =>
+            {
+                List<string> paths = GitMachineOutputParser.ParsePathListZ("src/A.cs\0\n\0src/B.cs\0\r\n");
+                AssertEqual(2, paths.Count, "only the two real paths survive");
+                AssertEqual("src/A.cs", paths[0]);
+                AssertEqual("src/B.cs", paths[1]);
+                AssertEqual(0, GitMachineOutputParser.ParsePathListZ("\n").Count, "a lone newline is not a path");
+            }));
+
             return new TestSuiteDescriptor(
                 suiteId: "Services.GitStructuredOutput",
                 displayName: "Git Structured Output",

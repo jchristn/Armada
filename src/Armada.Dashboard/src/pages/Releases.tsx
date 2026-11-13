@@ -17,11 +17,13 @@ import PageHeader from '../components/shared/PageHeader';
 import StatusBadge from '../components/shared/StatusBadge';
 import { useAutoRefresh } from '../lib/useAutoRefresh';
 import { RELEASE_STATUSES, splitList } from '../lib/deliveryForms';
+import { useDeleteProgress } from '../lib/useDeleteProgress';
 
 export default function Releases() {
   const navigate = useNavigate();
   const { isAdmin, isTenantAdmin } = useAuth();
   const { t, formatDateTime, formatRelativeTime } = useLocale();
+  const deletion = useDeleteProgress();
   const { pushToast } = useNotifications();
 
   const [releases, setReleases] = useState<Release[]>([]);
@@ -196,13 +198,9 @@ export default function Releases() {
       message: t('Delete "{{title}}"? This removes the release record but does not delete linked work or artifacts on disk.', { title: release.title }),
       onConfirm: async () => {
         setConfirm((current) => ({ ...current, open: false }));
-        try {
-          await deleteRelease(release.id);
-          pushToast('warning', t('Release "{{title}}" deleted.', { title: release.title }));
-          await load();
-        } catch (err: unknown) {
-          setError(err instanceof Error ? err.message : t('Delete failed.'));
-        }
+        if (!(await deletion.run({ kind: 'release', action: () => deleteRelease(release.id), errorMessage: (err) => err instanceof Error ? err.message : t('Delete failed.') }))) return;
+        pushToast('warning', t('Release "{{title}}" deleted.', { title: release.title }));
+        await load();
       },
     });
   }
@@ -293,6 +291,7 @@ export default function Releases() {
 
       <ErrorModal error={error} onClose={() => setError('')} />
       <JsonViewer open={jsonData.open} title={jsonData.title} data={jsonData.data} onClose={() => setJsonData({ open: false, title: '', data: null })} />
+      {deletion.dialog}
       <ConfirmDialog
         open={confirm.open}
         title={confirm.title}

@@ -425,7 +425,7 @@ namespace Armada.Tui.Screens.Activity
             string sourceId = row.SourceId;
             Context.Confirm("Delete History Entry", Context.Loc.T("Delete this request-history entry? This cannot be undone."), () =>
             {
-                ScreenOps.RunVoid(Context, () => Context.Client.DeleteRequestHistoryEntryAsync(sourceId), () =>
+                DeleteProgress.RunVoid(Context, "Deleting request history entry", ct => Context.Client.DeleteRequestHistoryEntryAsync(sourceId, ct), () =>
                 {
                     ScreenOps.Toast(Context, NotificationSeverityEnum.Warning, "History entry deleted.");
                     Load();

@@ -5,7 +5,6 @@ import {
   cancelAskTurn,
   createAskThread,
   enumerateAskMessages,
-  getAskThread,
   getAskWorkSnapshot,
   rejectAskProposal,
   runAskQuickAction,
@@ -13,8 +12,10 @@ import {
 } from '@dashboard/api/client';
 import type { AskActionProposal, AskMessage, AskQuickAction, AskThread, AskTrackedWork, CliPermissionRequest, WebSocketMessage } from '@dashboard/types/models';
 import { parseAskEvent } from '@dashboard/lib/askEvents';
+import { loadAskThreadView, loadToolCalls, withToolCalls, withWorkRows } from '@dashboard/lib/askPaging';
 import { conversationReducer, initialConversation, isLocalMessage, type ConversationState } from '@dashboard/lib/askConversation';
 import { isWorkActive } from '@dashboard/lib/askWork';
+import { quickActionForm } from '@dashboard/lib/askQuickActions';
 import { isPendingRequest, parseCliPermissionEvent } from '@dashboard/lib/cliPermissions';
 import { randomThinkingMessage } from '@dashboard/lib/askThinkingMessages';
 import { useLocale } from '../i18n/LocaleContext';
@@ -88,10 +89,16 @@ export function useAskConversation({ threadId, onCreated, schedule = (fn, ms) =>
   const announce = useCallback((text: string) => { announceForScreenReader(text); }, []);
 
   const fetchSnapshots = useCallback((id: string, work: AskTrackedWork[]) => {
-    const missing = work.filter((w) => !convRef.current.snapshots[w.id] && !w.snapshot);
-    missing.sort((a, b) => Number(isWorkActive(b)) - Number(isWorkActive(a)));
-    for (const item of missing.slice(0, SNAPSHOT_FETCH_LIMIT)) {
-      getAskWorkSnapshot(id, item.id)
+    // Snapshots carry counts only: each card reads the first page of its rows (with the total) from the row routes.
+    const pending = work.filter((w) => {
+      const known = convRef.current.snapshots[w.id] ?? w.snapshot;
+      return !known || (known.missions == null && known.targets == null);
+    });
+    pending.sort((a, b) => Number(isWorkActive(b)) - Number(isWorkActive(a)));
+    for (const item of pending.slice(0, SNAPSHOT_FETCH_LIMIT)) {
+      const known = convRef.current.snapshots[item.id] ?? item.snapshot;
+      (known ? Promise.resolve(known) : getAskWorkSnapshot(id, item.id))
+        .then((snapshot) => (snapshot ? withWorkRows(id, item.id, snapshot) : snapshot))
         .then((snapshot) => { if (snapshot && convRef.current.threadId === id) dispatch({ type: 'snapshot', trackedWorkId: item.id, snapshot }); })
         .catch(() => { /* the card shows its loading state until an ask.work event arrives */ });
     }
@@ -101,7 +108,10 @@ export function useAskConversation({ threadId, onCreated, schedule = (fn, ms) =>
     if (!silent) setLoading(true);
     setError(null);
     try {
-      const [detail, page] = await Promise.all([getAskThread(id), enumerateAskMessages(id, { pageSize: MESSAGE_PAGE_SIZE })]);
+      const [detail, page] = await Promise.all([
+        loadAskThreadView(id),
+        enumerateAskMessages(id, { pageSize: MESSAGE_PAGE_SIZE }).then(async (p) => (p ? { ...p, messages: await withToolCalls(id, p.messages ?? []) } : p)),
+      ]);
       if (convRef.current.threadId !== id) return;
       dispatch({ type: 'loaded', threadId: id, detail, messages: page?.messages ?? [], hasMore: !!page?.hasMore });
       if (detail?.thread) upsertThread(detail.thread);
@@ -119,13 +129,13 @@ export function useAskConversation({ threadId, onCreated, schedule = (fn, ms) =>
   const refreshLatest = useCallback(async (id: string) => {
     try {
       const page = await enumerateAskMessages(id, { pageSize: MESSAGE_PAGE_SIZE });
-      dispatch({ type: 'latest', threadId: id, messages: page?.messages ?? [] });
+      dispatch({ type: 'latest', threadId: id, messages: await withToolCalls(id, page?.messages ?? []) });
     } catch { /* the socket will deliver the messages; this is only reconciliation */ }
   }, []);
 
   const refreshDetail = useCallback(async (id: string) => {
     try {
-      const detail = await getAskThread(id);
+      const detail = await loadAskThreadView(id);
       dispatch({ type: 'detail', threadId: id, detail });
       fetchSnapshots(id, detail?.trackedWork ?? []);
     } catch { /* reconciliation only */ }
@@ -173,6 +183,27 @@ export function useAskConversation({ threadId, onCreated, schedule = (fn, ms) =>
     if (event.threadId !== openId) return;
 
     const before = convRef.current;
+    if (event.type === 'ask.work' && event.snapshot) {
+      // The event's snapshot carries counts only; keep the card's rows until they are read again below.
+      const prior = before.snapshots[event.trackedWorkId];
+      if (prior && event.snapshot.missions == null && event.snapshot.targets == null) {
+        event.snapshot = { ...event.snapshot, missions: prior.missions, targets: prior.targets, rowTotal: prior.rowTotal };
+      }
+      const workId = event.trackedWorkId;
+      const threadIdForRows = event.threadId;
+      void withWorkRows(threadIdForRows, workId, event.snapshot).then((snapshot) => {
+        if (convRef.current.threadId === threadIdForRows) dispatch({ type: 'snapshot', trackedWorkId: workId, snapshot });
+      });
+    }
+    if (event.type === 'ask.message' && (event.message.toolCallCount ?? 0) > 0 && !event.message.toolCalls) {
+      const known = before.messages.find((m) => m.id === event.message.id);
+      if (known?.toolCalls) event.message = { ...event.message, toolCalls: known.toolCalls };
+      const message = event.message;
+      const threadIdForCalls = event.threadId;
+      void loadToolCalls(threadIdForCalls, message.id).then((toolCalls) => {
+        if (convRef.current.threadId === threadIdForCalls) dispatch({ type: 'event', event: { type: 'ask.message', threadId: threadIdForCalls, message: { ...message, toolCalls } } });
+      }).catch(() => { /* the reply shows without its tool chips until the next reconciliation */ });
+    }
     dispatch({ type: 'event', event });
     const tr = tRef.current;
 
@@ -256,9 +287,13 @@ export function useAskConversation({ threadId, onCreated, schedule = (fn, ms) =>
       const proposal = await runAskQuickAction(id, action.toolName, args);
       if (proposal?.id) dispatch({ type: 'proposal', proposal });
       await Promise.all([refreshLatest(id), refreshDetail(id)]);
-      if (proposal && String(proposal.status).toLowerCase() === 'failed') {
+      const failed = !!proposal && String(proposal.status).toLowerCase() === 'failed';
+      if (failed) {
         pushToast('error', tRef.current('{{command}} failed: {{reason}}', { command: action.command || action.name, reason: proposal.errorText || tRef.current('unknown error') }));
       }
+      // /blackbox: the card is shown; the question (optional) goes to the captain as a message.
+      const question = typeof args.question === 'string' ? args.question.trim() : '';
+      if (!failed && question && quickActionForm(action) === 'blackbox' && !convRef.current.turnActive) void send(question);
       return true;
     } catch (err: unknown) {
       reportError(errorText(err, tRef.current('The quick action failed.')));
@@ -266,7 +301,7 @@ export function useAskConversation({ threadId, onCreated, schedule = (fn, ms) =>
     } finally {
       setActionBusy(false);
     }
-  }, [ensureThread, refreshLatest, refreshDetail, pushToast, reportError]);
+  }, [ensureThread, refreshLatest, refreshDetail, pushToast, reportError, send]);
 
   const decide = useCallback(async (proposal: AskActionProposal, approve: boolean) => {
     const id = convRef.current.threadId;
@@ -300,7 +335,7 @@ export function useAskConversation({ threadId, onCreated, schedule = (fn, ms) =>
     setLoadingOlder(true);
     try {
       const page = await enumerateAskMessages(id, { beforeSequence: oldest.sequence, pageSize: MESSAGE_PAGE_SIZE });
-      dispatch({ type: 'older', threadId: id, messages: page?.messages ?? [], hasMore: !!page?.hasMore });
+      dispatch({ type: 'older', threadId: id, messages: await withToolCalls(id, page?.messages ?? []), hasMore: !!page?.hasMore });
     } catch (err: unknown) {
       reportError(errorText(err, tRef.current('Failed to load earlier messages.')));
     } finally {

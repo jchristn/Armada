@@ -62,9 +62,10 @@ namespace Armada.Server.Routes
                 EnumerationQuery query = new EnumerationQuery();
                 query.ApplyQuerystringOverrides(key => req.Query.GetValueOrDefault(key));
                 Stopwatch sw = Stopwatch.StartNew();
-                EnumerationResult<PromptTemplate> result = await _database.PromptTemplates.EnumerateAsync(query).ConfigureAwait(false);
+                EnumerationResult<PromptTemplate> result = ctx.IsAdmin
+                    ? await _database.PromptTemplates.EnumerateAsync(query).ConfigureAwait(false)
+                    : await _database.PromptTemplates.EnumerateVisibleAsync(VisibleQuery(ctx, query)).ConfigureAwait(false);
                 result.TotalMs = Math.Round(sw.Elapsed.TotalMilliseconds, 2);
-                if (!ctx.IsAdmin) result.Objects = result.Objects.Where(p => ScopedVisibility.CanView(ctx, p.Scope, p.TenantId, p.UserId)).ToList();
                 return result;
             },
             api => api
@@ -86,9 +87,10 @@ namespace Armada.Server.Routes
                 EnumerationQuery query = JsonSerializer.Deserialize<EnumerationQuery>(req.Http.Request.DataAsString, _jsonOptions) ?? new EnumerationQuery();
                 query.ApplyQuerystringOverrides(key => req.Query.GetValueOrDefault(key));
                 Stopwatch sw = Stopwatch.StartNew();
-                EnumerationResult<PromptTemplate> result = await _database.PromptTemplates.EnumerateAsync(query).ConfigureAwait(false);
+                EnumerationResult<PromptTemplate> result = ctx.IsAdmin
+                    ? await _database.PromptTemplates.EnumerateAsync(query).ConfigureAwait(false)
+                    : await _database.PromptTemplates.EnumerateVisibleAsync(VisibleQuery(ctx, query)).ConfigureAwait(false);
                 result.TotalMs = Math.Round(sw.Elapsed.TotalMilliseconds, 2);
-                if (!ctx.IsAdmin) result.Objects = result.Objects.Where(p => ScopedVisibility.CanView(ctx, p.Scope, p.TenantId, p.UserId)).ToList();
                 return result;
             },
             api => api
@@ -96,6 +98,7 @@ namespace Armada.Server.Routes
                 .WithSummary("Enumerate prompt templates")
                 .WithDescription("Paginated enumeration of prompt templates with optional filtering and sorting.")
                 .WithRequestBody(OpenApiJson.BodyFor<EnumerationQuery>("Enumeration query", false))
+                .WithResponse(200, OpenApiJson.For<EnumerationResult<PromptTemplate>>("Paginated prompt templates visible to the caller"))
                 .WithSecurity("ApiKey"));
 
             // Create prompt template
@@ -240,6 +243,16 @@ namespace Armada.Server.Routes
                 .WithResponse(200, OpenApiJson.For<PromptTemplate>("Reset prompt template"))
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())
                 .WithSecurity("ApiKey"));
+        }
+
+        private static PromptTemplateQuery VisibleQuery(AuthContext ctx, EnumerationQuery query)
+        {
+            // A tenant admin sees the whole tenant; a regular user the tenant-wide templates plus their own. Applied in
+            // the data source before counting, so TotalRecords is exact for the caller.
+            PromptTemplateQuery visible = PromptTemplateQuery.From(query);
+            visible.TenantId = ctx.TenantId ?? Armada.Core.Constants.DefaultTenantId;
+            visible.ViewerUserId = ctx.IsTenantAdmin ? null : ctx.UserId;
+            return visible;
         }
     }
 }

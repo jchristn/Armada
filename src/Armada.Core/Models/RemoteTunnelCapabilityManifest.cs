@@ -1,5 +1,7 @@
 namespace Armada.Core.Models
 {
+    using Armada.Core.Services;
+
     /// <summary>
     /// Capability manifest advertised by an Armada instance to the remote proxy.
     /// </summary>
@@ -20,6 +22,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// Supported feature identifiers.
         /// </summary>
+        [CollectionBound(16, Reason = "Fixed feature names built by RemoteTunnelManager.BuildCapabilityManifest (six today)")]
         public List<string> Features
         {
             get => _Features;

@@ -37,15 +37,36 @@ namespace Armada.Tui.Screens.Operations
         {
             FleetActionTargetStatusEnum.Pending, FleetActionTargetStatusEnum.Skipped, FleetActionTargetStatusEnum.Running,
             FleetActionTargetStatusEnum.Succeeded, FleetActionTargetStatusEnum.Failed, FleetActionTargetStatusEnum.Cancelled,
-            FleetActionTargetStatusEnum.TimedOut,
+            FleetActionTargetStatusEnum.TimedOut, FleetActionTargetStatusEnum.Findings,
         };
+
+        /// <summary>
+        /// Mission modes in picker order.
+        /// </summary>
+        public static readonly MissionModeEnum[] MissionModes = new MissionModeEnum[]
+        {
+            MissionModeEnum.Implementation, MissionModeEnum.Audit, MissionModeEnum.Research,
+        };
+
+        /// <summary>
+        /// Target statuses a follow-up run selects by default (the server default: Findings and Failed).
+        /// </summary>
+        public static readonly FleetActionTargetStatusEnum[] DefaultFollowUpStatuses = new FleetActionTargetStatusEnum[]
+        {
+            FleetActionTargetStatusEnum.Findings, FleetActionTargetStatusEnum.Failed,
+        };
+
+        /// <summary>
+        /// Runtime input types the server accepts.
+        /// </summary>
+        public static readonly string[] InputTypes = new string[] { "string", "semver", "enum", "package" };
 
         /// <summary>
         /// Template variable names (as written in templates).
         /// </summary>
         public static readonly string[] TemplateVariableNames = new string[]
         {
-            "vessel.name", "vessel.id", "vessel.defaultBranch", "vessel.workingDirectory", "vessel.buildCommand", "vessel.ecosystems", "vessel.testCommand", "vessel.lintCommand", "vessel.auditCommand", "health.summary",
+            "vessel.name", "vessel.id", "vessel.defaultBranch", "vessel.workingDirectory", "vessel.buildCommand", "vessel.ecosystems", "vessel.testCommand", "vessel.lintCommand", "vessel.auditCommand", "vessel.outdatedCommand", "vessel.licensesCommand", "scan.summary", "health.summary",
         };
 
         /// <summary>
@@ -57,11 +78,14 @@ namespace Armada.Tui.Screens.Operations
             "The vessel ID (vsl_ prefix)",
             "The vessel default branch",
             "The vessel working directory, or empty",
-            "The definition-of-done build command, or empty (vessels without one are skipped)",
+            "The resolved build command (definition-of-done build command, repo script, then ecosystem default); vessels without one are skipped",
             "Detected ecosystems, comma-separated, or empty; rendered on the server",
             "The resolved test command (vessel override, repo script, then ecosystem default); rendered on the server",
             "The resolved lint command (vessel override, repo script, then ecosystem default); rendered on the server",
             "The resolved audit command (vessel override, repo script, ecosystem default, then osv-scanner); rendered on the server",
+            "The resolved outdated-dependency report command (ecosystem default); rendered on the server",
+            "The resolved license report command (ecosystem default); rendered on the server",
+            "The vessel's latest result from the linked scan action (fix actions); rendered on the server",
             "Failing, warning, and unknown health findings; rendered on the server",
         };
 
@@ -75,7 +99,10 @@ namespace Armada.Tui.Screens.Operations
         #region Private-Members
 
         private static readonly Regex _Variable = new Regex(@"\{\{\s*([^{}]*?)\s*\}\}", RegexOptions.Compiled);
-        private static readonly string[] _Known = new string[] { "vessel.name", "vessel.id", "vessel.defaultbranch", "vessel.workingdirectory", "vessel.buildcommand", "vessel.ecosystems", "vessel.testcommand", "vessel.lintcommand", "vessel.auditcommand", "health.summary" };
+        private static readonly string[] _Known = new string[] { "vessel.name", "vessel.id", "vessel.defaultbranch", "vessel.workingdirectory", "vessel.buildcommand", "vessel.ecosystems", "vessel.testcommand", "vessel.lintcommand", "vessel.auditcommand", "vessel.outdatedcommand", "vessel.licensescommand", "scan.summary", "health.summary" };
+        // The server's package identifier rule (FleetActionInputValidator): no shell metacharacters.
+        private static readonly Regex _Package = new Regex(@"^[A-Za-z0-9@][A-Za-z0-9@/._+:-]{0,199}\z", RegexOptions.CultureInvariant);
+        private static readonly Regex _Semver = new Regex(@"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?\z", RegexOptions.CultureInvariant);
 
         #endregion
 
@@ -134,6 +161,7 @@ namespace Armada.Tui.Screens.Operations
                 case FleetActionTargetStatusEnum.Cancelled: return "cancelled";
                 case FleetActionTargetStatusEnum.Running: return "running";
                 case FleetActionTargetStatusEnum.Skipped: return "info";
+                case FleetActionTargetStatusEnum.Findings: return "warning";
                 default: return "pending";
             }
         }
@@ -148,6 +176,70 @@ namespace Armada.Tui.Screens.Operations
             return kind == FleetActionKindEnum.Command
                 ? "Runs a shell command in each vessel working directory and captures the exit code and output."
                 : "Dispatches one voyage per vessel with the rendered prompt as the mission description.";
+        }
+
+        /// <summary>
+        /// English label of a mission mode.
+        /// </summary>
+        /// <param name="mode">Mode.</param>
+        /// <returns>Label.</returns>
+        public static string MissionModeLabel(MissionModeEnum mode)
+        {
+            switch (mode)
+            {
+                case MissionModeEnum.Audit: return "Audit (report-only)";
+                case MissionModeEnum.Research: return "Research (report-only)";
+                default: return "Implementation";
+            }
+        }
+
+        /// <summary>
+        /// English description of a mission mode.
+        /// </summary>
+        /// <param name="mode">Mode.</param>
+        /// <returns>Description.</returns>
+        public static string MissionModeDescription(MissionModeEnum mode)
+        {
+            return mode == MissionModeEnum.Implementation
+                ? "The captain changes the repository and the result lands (or holds for review)."
+                : "Report-only: each mission runs read-only on a Worker-only pipeline that never lands, and the captain's final report is stored on the run target.";
+        }
+
+        /// <summary>
+        /// True for a report-only definition: a Mission whose mode is Audit or Research.
+        /// </summary>
+        /// <param name="kind">Kind.</param>
+        /// <param name="mode">Mission mode.</param>
+        /// <returns>True when report-only.</returns>
+        public static bool IsReportOnly(FleetActionKindEnum kind, MissionModeEnum mode)
+        {
+            return kind == FleetActionKindEnum.Mission && mode != MissionModeEnum.Implementation;
+        }
+
+        /// <summary>
+        /// English validation message for a runtime input value (the server's rules), or null when valid. A blank
+        /// value is valid unless the input is required.
+        /// </summary>
+        /// <param name="input">Input definition.</param>
+        /// <param name="value">Value.</param>
+        /// <returns>Message or null.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="input"/> is null.</exception>
+        public static string? InputError(FleetActionInput input, string? value)
+        {
+            if (input == null) throw new ArgumentNullException(nameof(input));
+            string v = value ?? "";
+            if (v.Length == 0) return input.Required ? "This input is required." : null;
+            switch (input.Type)
+            {
+                case "semver":
+                    return _Semver.IsMatch(v) ? null : "Enter a semantic version, for example 1.2.3.";
+                case "package":
+                    return _Package.IsMatch(v) ? null : "Enter a package identifier: letters, digits, and @ / . _ + : - only (for example Newtonsoft.Json or @scope/name).";
+                case "enum":
+                    return input.AllowedValues.Contains(v, StringComparer.Ordinal) ? null : "Choose one of the allowed values.";
+                default:
+                    return null;
+            }
         }
 
         /// <summary>
@@ -172,7 +264,9 @@ namespace Armada.Tui.Screens.Operations
             if (!String.IsNullOrEmpty(skipReason))
             {
                 string? label = SkipReason(skipReason!);
-                return label != null ? loc.T(label) : skipReason!;
+                if (label == null) return skipReason!;
+                string tool = skipReason!.StartsWith(FleetActionReasonCodes.ToolMissing, StringComparison.Ordinal) ? skipReason.Substring(FleetActionReasonCodes.ToolMissing.Length) : "";
+                return tool.Length > 0 ? loc.T(label) + ": " + tool : loc.T(label);
             }
 
             if (!String.IsNullOrEmpty(failureReason))
@@ -188,15 +282,19 @@ namespace Armada.Tui.Screens.Operations
         /// Template variable names in a text that the server would reject (case-insensitive, de-duplicated).
         /// </summary>
         /// <param name="text">Text.</param>
+        /// <param name="inputNames">Declared runtime input names (<c>{{input.name}}</c> is known for these), or null.</param>
         /// <returns>Unknown names.</returns>
-        public static List<string> FindUnknownVariables(string? text)
+        public static List<string> FindUnknownVariables(string? text, IEnumerable<string>? inputNames = null)
         {
+            List<string> inputs = (inputNames ?? Enumerable.Empty<string>()).Select(n => (n ?? "").ToLowerInvariant()).ToList();
             List<string> unknown = new List<string>();
             if (String.IsNullOrEmpty(text)) return unknown;
             foreach (Match m in _Variable.Matches(text!))
             {
                 string name = m.Groups[1].Value.Trim();
-                if (!_Known.Contains(name.ToLowerInvariant()) && !unknown.Contains(name)) unknown.Add(name);
+                string lower = name.ToLowerInvariant();
+                bool input = lower.StartsWith("input.", StringComparison.Ordinal) && inputs.Contains(lower.Substring(6));
+                if (!_Known.Contains(lower) && !input && !unknown.Contains(name)) unknown.Add(name);
             }
 
             return unknown;
@@ -209,12 +307,11 @@ namespace Armada.Tui.Screens.Operations
         /// <param name="vessel">Vessel.</param>
         /// <param name="healthPlaceholder">Text standing in for the health summary (translated).</param>
         /// <param name="usesHealthSummary">True when the template uses the health summary.</param>
-        /// <param name="missingBuildCommand">True when it uses the build command and the vessel has none.</param>
-        /// <returns>Rendered text.</returns>
-        public static string RenderPreview(string text, Vessel vessel, string healthPlaceholder, out bool usesHealthSummary, out bool missingBuildCommand)
+        /// <returns>Rendered text. Variables the server resolves (ecosystem commands without a vessel override, the
+        /// scan summary, and inputs) stay as written.</returns>
+        public static string RenderPreview(string text, Vessel vessel, string healthPlaceholder, out bool usesHealthSummary)
         {
             bool health = false;
-            bool missing = false;
             string rendered = _Variable.Replace(text ?? "", m =>
             {
                 switch (m.Groups[1].Value.Trim().ToLowerInvariant())
@@ -224,9 +321,7 @@ namespace Armada.Tui.Screens.Operations
                     case "vessel.defaultbranch": return String.IsNullOrEmpty(vessel.DefaultBranch) ? "main" : vessel.DefaultBranch;
                     case "vessel.workingdirectory": return vessel.WorkingDirectory ?? "";
                     case "vessel.buildcommand":
-                        string cmd = vessel.DefinitionOfDoneBuildCommand ?? "";
-                        if (cmd.Length == 0) missing = true;
-                        return cmd;
+                        return FirstSet(vessel.DefinitionOfDoneBuildCommand) ?? m.Value;
                     case "vessel.testcommand":
                         return FirstSet(vessel.TestCommand, vessel.DefinitionOfDoneTestCommand) ?? m.Value;
                     case "vessel.lintcommand":
@@ -241,7 +336,6 @@ namespace Armada.Tui.Screens.Operations
                 }
             });
             usesHealthSummary = health;
-            missingBuildCommand = missing;
             return rendered;
         }
 
@@ -348,8 +442,14 @@ namespace Armada.Tui.Screens.Operations
 
         private static string? SkipReason(string code)
         {
+            if (code.StartsWith(FleetActionReasonCodes.ToolMissing, StringComparison.Ordinal)) return "Required tool is missing";
             switch (code)
             {
+                case FleetActionReasonCodes.NotApplicable: return "Action does not apply (applicability check did not pass)";
+                case FleetActionReasonCodes.NoMatchingEcosystem: return "No matching ecosystem";
+                case FleetActionReasonCodes.NotConfigured: return "Not configured";
+                case FleetActionReasonCodes.NoForgeCredentials: return "No forge credentials";
+                case FleetActionReasonCodes.NetworkUnavailable: return "Network unavailable";
                 case FleetActionReasonCodes.DirtyTree: return "Working tree has uncommitted changes";
                 case FleetActionReasonCodes.NoWorkingDirectory: return "Vessel has no working directory";
                 case FleetActionReasonCodes.NoBuildCommand: return "Vessel has no build command";

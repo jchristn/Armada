@@ -10,6 +10,7 @@ namespace Armada.Helm.Commands
     using Armada.Core.Models;
     using Armada.Core.Services;
     using Armada.Helm.Rendering;
+    using Armada.Helm.Infrastructure;
 
     /// <summary>
     /// Retry a failed mission (creates a new mission with the same details).
@@ -37,7 +38,7 @@ namespace Armada.Helm.Commands
 
             if (mission == null)
             {
-                AnsiConsole.MarkupLine($"[red]Mission not found:[/] {Markup.Escape(settings.Id)}");
+                HelmConsole.Error.MarkupLine($"[red]Mission not found:[/] {Markup.Escape(settings.Id)}");
                 return 1;
             }
 

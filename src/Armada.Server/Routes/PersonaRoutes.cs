@@ -60,15 +60,14 @@ namespace Armada.Server.Routes
                 EnumerationQuery query = new EnumerationQuery();
                 query.ApplyQuerystringOverrides(key => req.Query.GetValueOrDefault(key));
                 Stopwatch sw = Stopwatch.StartNew();
-                EnumerationResult<Persona> result = await _database.Personas.EnumerateAsync(query).ConfigureAwait(false);
+                EnumerationResult<Persona> result = await _database.Personas.EnumeratePageAsync(query, ScopedEnumerationFilter.ForScopedEntity(ctx)).ConfigureAwait(false);
                 result.TotalMs = Math.Round(sw.Elapsed.TotalMilliseconds, 2);
-                if (!ctx.IsAdmin) result.Objects = result.Objects.Where(p => ScopedVisibility.CanView(ctx, p.Scope, p.TenantId, p.UserId)).ToList();
                 return result;
             },
             api => api
                 .WithTag("Personas")
-                .WithSummary("List all personas")
-                .WithDescription("Returns all personas with optional querystring filtering.")
+                .WithSummary("List personas")
+                .WithDescription("One page of the personas visible to the caller (admins see all; tenant admins their tenant; others their tenant's tenant-wide personas plus their own), counted and cut in the database, newest first with the id as the tie-break. Querystring: pageNumber, pageSize (1 to 1000, default 10), order, createdAfter, createdBefore.")
                 .WithResponse(200, OpenApiJson.For<EnumerationResult<Persona>>("Paginated persona list"))
                 .WithSecurity("ApiKey"));
 
@@ -84,16 +83,16 @@ namespace Armada.Server.Routes
                 EnumerationQuery query = JsonSerializer.Deserialize<EnumerationQuery>(req.Http.Request.DataAsString, _jsonOptions) ?? new EnumerationQuery();
                 query.ApplyQuerystringOverrides(key => req.Query.GetValueOrDefault(key));
                 Stopwatch sw = Stopwatch.StartNew();
-                EnumerationResult<Persona> result = await _database.Personas.EnumerateAsync(query).ConfigureAwait(false);
+                EnumerationResult<Persona> result = await _database.Personas.EnumeratePageAsync(query, ScopedEnumerationFilter.ForScopedEntity(ctx)).ConfigureAwait(false);
                 result.TotalMs = Math.Round(sw.Elapsed.TotalMilliseconds, 2);
-                if (!ctx.IsAdmin) result.Objects = result.Objects.Where(p => ScopedVisibility.CanView(ctx, p.Scope, p.TenantId, p.UserId)).ToList();
                 return result;
             },
             api => api
                 .WithTag("Personas")
                 .WithSummary("Enumerate personas")
-                .WithDescription("Paginated enumeration of personas with optional filtering and sorting.")
+                .WithDescription("One page of the personas visible to the caller, counted and cut in the database (the POST twin of GET /api/v1/personas; the query comes from the JSON body with querystring values applied on top).")
                 .WithRequestBody(OpenApiJson.BodyFor<EnumerationQuery>("Enumeration query", false))
+                .WithResponse(200, OpenApiJson.For<EnumerationResult<Persona>>("One page"))
                 .WithSecurity("ApiKey"));
 
             // Get persona by name

@@ -51,7 +51,7 @@ namespace Armada.Core.Enums
         BroadScopeWaitingForVessel,
 
         /// <summary>
-        /// The vessel runs one mission at a time (AllowConcurrentMissions is off) and another mission is active.
+        /// Historical pre-v1.3 boolean vessel limit. New decisions use numeric voyage and mission limits.
         /// </summary>
         VesselConcurrencyLimit,
 
@@ -87,6 +87,26 @@ namespace Armada.Core.Enums
         /// build on one earlier slice). It waits so both do not check out one branch at once; the slices then stack on
         /// the branch in order.
         /// </summary>
-        BranchInUse
+        BranchInUse,
+
+        /// <summary>The vessel has no free voyage admission slot.</summary>
+        VesselVoyageLimit,
+
+        /// <summary>The voyage has no free running mission slot.</summary>
+        VoyageMissionLimit,
+
+        /// <summary>The deployment has no free running mission slot.</summary>
+        GlobalMissionLimit,
+
+        /// <summary>Eligible captains have no free mission slots.</summary>
+        CaptainConcurrencyLimit,
+        /// <summary>All eligible runtime capacity is occupied.</summary>
+        RuntimeMissionLimit,
+        /// <summary>All eligible inference endpoint capacity is occupied.</summary>
+        EndpointMissionLimit,
+        /// <summary>An eligible endpoint is disabled, unhealthy or temporarily circuit-broken.</summary>
+        EndpointUnavailable,
+        /// <summary>The mission's hierarchy parent (its terminal pipeline stage) has not finished.</summary>
+        ParentNotFinished
     }
 }

@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { ActivityIndicator } from 'react-native';
 import { BottomSheet } from '../../components/ui/BottomSheet';
 import {
-  createCaptain, createModelEndpoint, duplicateModelEndpoint, deleteModelEndpoint, getModelEndpoint, healthCheckModelEndpoints, listModelEndpoints, updateModelEndpoint, validateModelEndpoint,
+  createCaptain, createModelEndpoint, duplicateModelEndpoint, deleteModelEndpoint, getModelEndpoint, healthCheckModelEndpoints, enumerateModelEndpoints, updateModelEndpoint, validateModelEndpoint,
 } from '@dashboard/api/client';
 import type { ModelEndpoint, ModelEndpointProbeResult } from '@dashboard/types/models';
 import { formatHealthSpan, MODEL_ENDPOINT_KINDS } from '@dashboard/lib/configuration';
@@ -13,6 +13,7 @@ import { FormSheet } from '../../components/resource/FormSheet';
 import { ResourceList, StatRow } from '../../components/resource/ResourceList';
 import { ResourceRow, useConfirm } from '../../components/resource/ResourceRow';
 import { resourceStyles } from '../../components/resource/styles';
+import { TruncationNote } from '../../components/resource/TruncationNote';
 import { AppText } from '../../components/ui/AppText';
 import { Button } from '../../components/ui/Button';
 import { StatusBadge } from '../../components/ui/StatusBadge';
@@ -164,7 +165,13 @@ export function EndpointsTab() {
   const canManage = isAdmin || isTenantAdmin;
   const { confirm, dialog } = useConfirm('endpoint-confirm');
   const selection = useLocalSelection();
-  const { data, loading, refreshing, error, reload, refresh } = useLoad(async () => (await listModelEndpoints()) ?? [], [], { fallbackError: t('Failed to load endpoints.') });
+  // One bounded page of the largest size; the note in the header says when more endpoints exist.
+  const [total, setTotal] = useState(0);
+  const { data, loading, refreshing, error, reload, refresh } = useLoad(async () => {
+    const page = await enumerateModelEndpoints();
+    setTotal(page?.totalRecords ?? 0);
+    return page?.objects ?? [];
+  }, [], { fallbackError: t('Failed to load endpoints.') });
   useReloadOnFocus(reload);
   const endpoints = useMemo(() => data ?? [], [data]);
   const [search, setSearch] = useState('');
@@ -234,11 +241,12 @@ export function EndpointsTab() {
       header={(
         <>
           <StatRow stats={[
-            { label: t('Total Endpoints'), value: endpoints.length },
+            { label: t('Total Endpoints'), value: Math.max(total, endpoints.length) },
             { label: t('Healthy'), value: endpoints.filter((e) => e.healthStatus === 'Healthy').length, tone: 'success' },
             { label: t('Unhealthy'), value: endpoints.filter((e) => e.healthStatus === 'Unhealthy').length, tone: 'danger' },
             { label: t('Enabled'), value: endpoints.filter((e) => e.enabled).length },
           ]} />
+          <TruncationNote shown={endpoints.length} total={total} />
           {canManage ? <Button label={sweeping ? t('Sweeping...') : t('Run Health Sweep')} variant="secondary" busy={sweeping} onPress={() => void sweep()} style={resourceStyles.create} testID="endpoints-sweep" /> : null}
           {canManage ? <Button label={t('Endpoint')} icon="add" onPress={() => { setDuplicateSource(null); setEditing('new'); }} style={resourceStyles.create} testID="endpoints-create" /> : null}
         </>

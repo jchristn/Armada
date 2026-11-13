@@ -4,6 +4,7 @@ namespace Armada.Core.Services.Ask
     using System.Collections.Generic;
     using System.Linq;
     using System.Text.Json;
+    using System.Text.RegularExpressions;
     using Armada.Core.Enums;
 
     /// <summary>
@@ -11,7 +12,9 @@ namespace Armada.Core.Services.Ask
     /// thread) or affected (and should be refreshed). dispatch links a Voyage; create_mission and restart_mission a
     /// Mission; run_fleet_action a FleetActionRun; evaluate_vessel_health a Job;
     /// import_vessels and discover_vessels a VesselImportBatch plus its Job when one runs in the background; cancel_voyage,
-    /// cancel_mission, and cancel_fleet_action_run refresh the existing tracked item. A result carrying an Error links
+    /// cancel_mission, and cancel_fleet_action_run refresh the existing tracked item. get_blackbox (a read) links the
+    /// BlackBox card of the entry it returned; the black box write tools (run_blackbox_recovery,
+    /// apply_blackbox_recommendation, resolve_blackbox, annotate_blackbox) refresh it. A result carrying an Error links
     /// nothing.
     /// </summary>
     public static class AskWorkLinker
@@ -19,6 +22,12 @@ namespace Armada.Core.Services.Ask
         #region Private-Members
 
         private static readonly JsonSerializerOptions _Options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+        private static readonly Regex _MissionIdPattern = new Regex(@"(?<![A-Za-z0-9_])" + Constants.MissionIdPrefix + @"[A-Za-z0-9][A-Za-z0-9_]{3,63}(?![A-Za-z0-9_])", RegexOptions.CultureInvariant);
+
+        /// <summary>
+        /// Most mission ids one message links to black box cards.
+        /// </summary>
+        public const int MaxMentionedMissions = 5;
 
         #endregion
 
@@ -33,8 +42,38 @@ namespace Armada.Core.Services.Ask
             return new List<string>
             {
                 "dispatch", "create_mission", "restart_mission", "run_fleet_action",
-                "evaluate_vessel_health", "import_vessels", "discover_vessels", "cancel_voyage", "cancel_mission", "cancel_fleet_action_run"
+                "evaluate_vessel_health", "import_vessels", "discover_vessels", "cancel_voyage", "cancel_mission", "cancel_fleet_action_run",
+                "get_blackbox", "run_blackbox_recovery", "apply_blackbox_recommendation", "resolve_blackbox", "annotate_blackbox"
             };
+        }
+
+        /// <summary>
+        /// Read-only tools whose results link a card (they run without a proposal, so the gate links them itself).
+        /// </summary>
+        /// <returns>Tool names.</returns>
+        public static IReadOnlyList<string> LinkedReadTools()
+        {
+            return new List<string> { "get_blackbox" };
+        }
+
+        /// <summary>
+        /// The distinct mission ids (msn_ prefix) a message mentions, in order of first mention, at most
+        /// <see cref="MaxMentionedMissions"/>. Used to link the black box cards of mentioned missions.
+        /// </summary>
+        /// <param name="text">Message text, or null.</param>
+        /// <returns>Mission ids.</returns>
+        public static List<string> MentionedMissionIds(string? text)
+        {
+            List<string> ids = new List<string>();
+            if (String.IsNullOrEmpty(text)) return ids;
+            foreach (Match match in _MissionIdPattern.Matches(text))
+            {
+                if (ids.Contains(match.Value, StringComparer.Ordinal)) continue;
+                ids.Add(match.Value);
+                if (ids.Count >= MaxMentionedMissions) break;
+            }
+
+            return ids;
         }
 
         /// <summary>
@@ -93,6 +132,17 @@ namespace Armada.Core.Services.Ask
 
                 case "cancel_fleet_action_run":
                     Add(links, AskTrackedEntityTypeEnum.FleetActionRun, FirstWithPrefix(Constants.FleetActionRunIdPrefix, args.RunId, args.Id), true);
+                    break;
+
+                case "get_blackbox":
+                    Add(links, AskTrackedEntityTypeEnum.BlackBox, FirstWithPrefix(Constants.BlackBoxEntryIdPrefix, result.EntryId, args.EntryId), false);
+                    break;
+
+                case "run_blackbox_recovery":
+                case "apply_blackbox_recommendation":
+                case "resolve_blackbox":
+                case "annotate_blackbox":
+                    Add(links, AskTrackedEntityTypeEnum.BlackBox, FirstWithPrefix(Constants.BlackBoxEntryIdPrefix, result.EntryId, args.EntryId, result.Id), true);
                     break;
             }
 

@@ -1,0 +1,353 @@
+namespace Test.Shared.Suites.E2E
+{
+    using System;
+    using System.Collections.Generic;
+    using System.IO;
+    using System.Net;
+    using System.Net.Http;
+    using System.Reflection;
+    using System.Linq;
+    using System.Threading;
+    using System.Threading.Tasks;
+    using Armada.Core;
+    using Armada.Core.Database;
+    using Armada.Core.Enums;
+    using Armada.Core.Models;
+    using Armada.Core.Services;
+    using Armada.Core.Settings;
+    using Armada.Server;
+    using Test.Shared.Infrastructure;
+    using Touchstone.Core;
+    using static Test.Shared.Infrastructure.Asserts;
+
+    /// <summary>Real authenticated HTTP contracts for live policy and durable scoped selection explanations.</summary>
+    public sealed class CaptainSelectionApiSuite : IArmadaTestSuite
+    {
+        private const string _SuiteId = "E2E.CaptainSelectionApi";
+
+        /// <inheritdoc />
+        public TestSuiteDescriptor Build()
+        {
+            return new TestSuiteDescriptor(_SuiteId, "Captain selection API", new List<TestCaseDescriptor>
+            {
+                new TestCaseDescriptor(_SuiteId, "history_survives_raw_pruning_and_restart", "Retained selection evidence survives raw capture retention and a server restart", async token =>
+                {
+                    string directory = TestTemp.NewDirectory("selection-restart");
+                    DatabaseSettings settings = new DatabaseSettings { Type = DatabaseTypeEnum.Sqlite, Filename = Path.Combine(directory, "armada.db") };
+                    E2ETenantUser owner;
+                    string decisionId, candidateId, snapshotId, missionId;
+                    using (InProcessArmadaServer server = await InProcessArmadaServer.StartAsync(directory, settings).ConfigureAwait(false))
+                    {
+                        owner = await E2ETenantUser.CreateAsync(server.Client, "retained-owner", false).ConfigureAwait(false);
+                        ArmadaServer runtime = (ArmadaServer)typeof(InProcessArmadaServer).GetField("_Server", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(server)!;
+                        DatabaseDriver database = (DatabaseDriver)typeof(ArmadaServer).GetField("_Database", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(runtime)!;
+                        Mission mission = await database.Missions.CreateAsync(new Mission("retained selection") { TenantId = owner.TenantId, UserId = owner.UserId }, token).ConfigureAwait(false);
+                        missionId = mission.Id;
+                        UsageSnapshot raw = new UsageSnapshot { TenantId = owner.TenantId, HostId = "host", AccountKey = "private-retention-account", CapturedUtc = DateTime.UtcNow.AddDays(-120),
+                            Runtime = AgentRuntimeEnum.ClaudeCode, Source = UsageCaptureSourceEnum.Pty, Status = UsageSnapshotStatusEnum.Ok, WindowsJson = "[{\"name\":\"weekly\",\"usedPercent\":44}]" };
+                        await database.UsageSnapshots.CreateAsync(raw, new List<string>(), token).ConfigureAwait(false); snapshotId = raw.Id;
+                        CaptainSelectionRecordSet records = new CaptainSelectionRecordSet { Policy = CaptainSelectionPolicyRevision.FromSettings(owner.TenantId, new UsageSelectionSettings()) };
+                        records.Decision.TenantId = owner.TenantId; records.Decision.UserId = owner.UserId; records.Decision.MissionId = mission.Id;
+                        records.Decision.ExecutionAttemptId = records.Decision.Id; records.Decision.PolicyRevisionId = records.Policy.Id;
+                        records.Decision.Mode = UsageSelectionModeEnum.Observe; records.Decision.Outcome = "Waiting"; records.Decision.Trigger = "Waiting";
+                        records.Decision.EvaluatedUtc = DateTime.UtcNow; records.Decision.AlgorithmVersion = UsageSelectionPolicy.AlgorithmVersion; records.Decision.PrimaryReasonCode = "UsageStale";
+                        records.Decision.CandidateCount = 1; decisionId = records.Decision.Id;
+                        CaptainSelectionCandidateRecord candidate = new CaptainSelectionCandidateRecord { TenantId = owner.TenantId, UserId = owner.UserId, DecisionId = decisionId,
+                            CaptainId = "cpt_retained", CaptainName = "Retained captain", ConfiguredModel = "configured-model", Rank = 1,
+                            Band = UsageSelectionBandEnum.Unknown, PrimaryReasonCode = "UsageStale", AvailablePercent = 56, EvidenceCapturedUtc = raw.CapturedUtc };
+                        candidateId = candidate.Id; records.Candidates.Add(candidate);
+                        records.Windows.Add(new CaptainSelectionWindowRecord { TenantId = owner.TenantId, UserId = owner.UserId, DecisionId = decisionId, CandidateId = candidateId,
+                            SnapshotId = raw.Id, CapturedUtc = raw.CapturedUtc, WindowKey = "weekly", WindowName = "Weekly allowance", UsedPercent = 44, Applicable = true });
+                        await database.CaptainSelections.CreateDecisionAsync(records, token).ConfigureAwait(false);
+                        AssertEqual(1, await database.UsageSnapshots.DeleteOlderThanAsync(DateTime.UtcNow.AddDays(-90), token).ConfigureAwait(false));
+                        AssertNull(await database.UsageSnapshots.ReadAsync(snapshotId, owner.TenantId, token).ConfigureAwait(false));
+                    }
+                    using (InProcessArmadaServer restarted = await InProcessArmadaServer.StartAsync(directory, settings).ConfigureAwait(false))
+                    {
+                        using HttpClient caller = owner.CreateClient(restarted.BaseUrl);
+                        using HttpResponseMessage reply = await caller.GetAsync("/api/v1/captain-selection-decisions/" + decisionId, token).ConfigureAwait(false);
+                        reply.EnsureSuccessStatusCode();
+                        CaptainSelectionDecisionDetail detail = await JsonHelper.DeserializeAsync<CaptainSelectionDecisionDetail>(reply).ConfigureAwait(false);
+                        AssertEqual(missionId, detail.Decision.MissionId); AssertEqual("Retained captain", detail.Candidates.Objects.Single().CaptainName);
+                        AssertEqual(56d, detail.Candidates.Objects.Single().AvailablePercent); AssertFalse(detail.Candidates.Objects.Single().CaptainAvailable);
+                        ArmadaServer runtime = (ArmadaServer)typeof(InProcessArmadaServer).GetField("_Server", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(restarted)!;
+                        DatabaseDriver database = (DatabaseDriver)typeof(ArmadaServer).GetField("_Database", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(runtime)!;
+                        CaptainSelectionWindowRecord window = (await database.CaptainSelections.ReadWindowsAsync(owner.TenantId, decisionId, candidateId, owner.UserId, owner.UserId, token).ConfigureAwait(false)).Single();
+                        AssertEqual(snapshotId, window.SnapshotId); AssertEqual(44d, window.UsedPercent); AssertNull(window.Unit);
+                        AssertNull(await database.UsageSnapshots.ReadAsync(snapshotId, owner.TenantId, token).ConfigureAwait(false));
+                    }
+                }),
+                new TestCaseDescriptor(_SuiteId, "live_strategy_settings_revision_and_authorization", "Live configurable strategy survives reload and rejects stale and unauthorized updates", async token =>
+                {
+                    string directory = TestTemp.NewDirectory("selection-settings-api");
+                    using InProcessArmadaServer server = await InProcessArmadaServer.StartAsync(directory,
+                        new DatabaseSettings { Type = DatabaseTypeEnum.Sqlite, Filename = Path.Combine(directory, "armada.db") }).ConfigureAwait(false);
+                    UsageSelectionConfiguration initial = new UsageSelectionConfiguration();
+                    using (HttpResponseMessage response = await server.Client.GetAsync("/api/v1/settings", token).ConfigureAwait(false))
+                    {
+                        response.EnsureSuccessStatusCode();
+                        Armada.Client.Models.SettingsData settings = await JsonHelper.DeserializeAsync<Armada.Client.Models.SettingsData>(response).ConfigureAwait(false);
+                        initial.Revision = settings.UsageSelectionRevision;
+                        AssertEqual(CaptainSelectionStrategyEnum.FirstAvailable, settings.UsageSelection!.Strategy);
+                    }
+                    UsageSelectionSettings policy = new UsageSelectionSettings { Strategy = CaptainSelectionStrategyEnum.MostUsedAllowance };
+                    using (HttpResponseMessage response = await server.Client.PutAsync("/api/v1/settings", JsonHelper.ToJsonContent(new { UsageSelection = policy, ExpectedUsageSelectionRevision = initial.Revision }), token).ConfigureAwait(false))
+                        AssertStatusCode(HttpStatusCode.OK, response);
+                    using HttpClient mcp = new HttpClient { BaseAddress = new Uri("http://127.0.0.1:" + server.Settings.McpPort) };
+                    mcp.DefaultRequestHeaders.Add("X-Api-Key", server.Settings.ApiKey);
+                    string configuration = await McpTestCalls.CallToolAsync(mcp, "get_usage_selection_settings", new { }).ConfigureAwait(false);
+                    AssertContains("MostUsedAllowance", configuration);
+                    AssertContains("MostRemainingAllowance", configuration);
+                    string conflict = await McpTestCalls.CallToolAsync(mcp, "update_usage_selection_settings", new { settings = policy, expectedRevision = initial.Revision }).ConfigureAwait(false);
+                    AssertContains("RevisionConflict", conflict);
+                    AssertEqual(CaptainSelectionStrategyEnum.MostUsedAllowance, server.Settings.EffectiveUsageSelection.Strategy);
+                    AssertEqual(CaptainSelectionStrategyEnum.MostUsedAllowance, (await ArmadaSettings.LoadAsync(server.Settings.EffectiveSettingsFilePath).ConfigureAwait(false)).UsageSelection.Strategy);
+                    using (HttpResponseMessage response = await server.Client.PutAsync("/api/v1/settings", JsonHelper.ToJsonContent(new { UsageSelection = policy, ExpectedUsageSelectionRevision = initial.Revision }), token).ConfigureAwait(false))
+                        AssertStatusCode(HttpStatusCode.Conflict, response);
+                    policy.Mode = UsageSelectionModeEnum.Enforce;
+                    using (HttpResponseMessage response = await server.Client.PutAsync("/api/v1/settings", JsonHelper.ToJsonContent(new { UsageSelection = policy }), token).ConfigureAwait(false))
+                        AssertStatusCode(HttpStatusCode.OK, response);
+                    AssertEqual(UsageSelectionModeEnum.Enforce, server.Settings.EffectiveUsageSelection.Mode);
+                    E2ETenantUser tenant = await E2ETenantUser.CreateAsync(server.Client, "selection-settings").ConfigureAwait(false);
+                    using HttpClient caller = tenant.CreateClient(server.BaseUrl);
+                    using (HttpResponseMessage response = await caller.PutAsync("/api/v1/settings", JsonHelper.ToJsonContent(new { UsageSelection = new UsageSelectionSettings() }), token).ConfigureAwait(false))
+                        AssertStatusCode(HttpStatusCode.Forbidden, response);
+                }),
+                new TestCaseDescriptor(_SuiteId, "recovery_permissions_require_scoped_admin_and_audited_revision", "Recovery permissions are scoped, audited and revision-checked through REST, SDK and MCP", async token =>
+                {
+                    string directory = TestTemp.NewDirectory("selection-recovery-api");
+                    using InProcessArmadaServer server = await InProcessArmadaServer.StartAsync(directory,
+                        new DatabaseSettings { Type = DatabaseTypeEnum.Sqlite, Filename = Path.Combine(directory, "armada.db") }).ConfigureAwait(false);
+                    ArmadaServer runtime = (ArmadaServer)typeof(InProcessArmadaServer).GetField("_Server", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(server)!;
+                    DatabaseDriver database = (DatabaseDriver)typeof(ArmadaServer).GetField("_Database", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(runtime)!;
+                    E2ETenantUser admin = await E2ETenantUser.CreateAsync(server.Client, "recovery-admin").ConfigureAwait(false);
+                    E2ETenantUser viewer = await E2ETenantUser.CreateAsync(server.Client, "recovery-viewer", false, admin.TenantId).ConfigureAwait(false);
+                    E2ETenantUser foreign = await E2ETenantUser.CreateAsync(server.Client, "recovery-foreign").ConfigureAwait(false);
+                    Mission mission = await database.Missions.CreateAsync(new Mission("recoverable") { TenantId = admin.TenantId, UserId = viewer.UserId }, token).ConfigureAwait(false);
+                    string path = "/api/v1/missions/" + mission.Id + "/captain-selection/recovery";
+                    UsageSelectionRecoveryRequest request = new UsageSelectionRecoveryRequest { ExpectedRevision = 0, AllowFallback = true, ReserveException = true, Reason = "Operator approved controlled recovery" };
+                    using HttpClient owner = viewer.CreateClient(server.BaseUrl);
+                    using HttpClient other = foreign.CreateClient(server.BaseUrl);
+                    using HttpClient authorized = admin.CreateClient(server.BaseUrl);
+                    using (HttpResponseMessage denied = await owner.PostAsync(path, JsonHelper.ToJsonContent(request), token).ConfigureAwait(false)) AssertStatusCode(HttpStatusCode.Forbidden, denied);
+                    using (HttpResponseMessage denied = await other.PostAsync(path, JsonHelper.ToJsonContent(request), token).ConfigureAwait(false)) AssertStatusCode(HttpStatusCode.NotFound, denied);
+                    using Armada.Client.ArmadaClient sdk = new Armada.Client.ArmadaClient(new Armada.Client.ArmadaClientOptions(server.BaseUrl) { BearerToken = admin.BearerToken });
+                    UsageSelectionRecovery recovery = (await sdk.AuthorizeCaptainSelectionRecoveryAsync(mission.Id, request, token).ConfigureAwait(false))!;
+                    AssertEqual(1, recovery.Revision); AssertEqual(admin.UserId, recovery.ActorUserId); AssertEqual(request.Reason, recovery.Reason);
+                    using (HttpResponseMessage stale = await authorized.PostAsync(path, JsonHelper.ToJsonContent(request), token).ConfigureAwait(false)) AssertStatusCode(HttpStatusCode.Conflict, stale);
+                    CaptainSelectionSummary summary = (await sdk.GetCaptainSelectionAsync(mission.Id, token).ConfigureAwait(false))!;
+                    AssertTrue(summary.CanManageRecovery); AssertTrue(summary.Recovery!.ReserveException);
+                    using HttpClient mcp = new HttpClient { BaseAddress = new Uri("http://127.0.0.1:" + server.Settings.McpPort) };
+                    mcp.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", admin.BearerToken);
+                    string revoked = await McpTestCalls.CallToolAsync(mcp, "authorize_captain_selection_recovery", new { missionId = mission.Id,
+                        recovery = new { expectedRevision = 1, reason = "Revoke after validation", allowFallback = false, reserveException = false } }).ConfigureAwait(false);
+                    AssertContains("Revoke after validation", revoked);
+                    UsageSelectionRecovery latest = (await database.CaptainSelections.ReadRecoveryAsync(admin.TenantId, mission.Id, token).ConfigureAwait(false))!;
+                    AssertEqual(2, latest.Revision); AssertFalse(latest.AllowFallback); AssertFalse(latest.ReserveException);
+                    using (Armada.Core.Client.ArmadaApiClient native = new Armada.Core.Client.ArmadaApiClient(authorized, server.BaseUrl))
+                    {
+                        UsageSelectionRecovery nativeAuthorization = (await native.AuthorizeCaptainSelectionRecoveryAsync(mission.Id,
+                            new UsageSelectionRecoveryRequest { ExpectedRevision = 2, AllowFallback = true, Reason = "Native client authorized qualified fallback" }, token).ConfigureAwait(false))!;
+                        AssertEqual(3, nativeAuthorization.Revision); AssertTrue(nativeAuthorization.AllowFallback);
+                    }
+                    mission.Status = MissionStatusEnum.InProgress; await database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
+                    request.ExpectedRevision = 3;
+                    using (HttpResponseMessage running = await authorized.PostAsync(path, JsonHelper.ToJsonContent(request), token).ConfigureAwait(false)) AssertStatusCode(HttpStatusCode.Conflict, running);
+                    AssertEqual(3, (await database.CaptainSelections.ReadRecoveryAsync(admin.TenantId, mission.Id, token).ConfigureAwait(false))!.Revision);
+                }),
+                new TestCaseDescriptor(_SuiteId, "malformed_inputs_filters_and_partial_settings", "Malformed bodies and unknown filters return 400; a partial selection group keeps the omitted members", async token =>
+                {
+                    string directory = TestTemp.NewDirectory("selection-inputs-api");
+                    using InProcessArmadaServer server = await InProcessArmadaServer.StartAsync(directory,
+                        new DatabaseSettings { Type = DatabaseTypeEnum.Sqlite, Filename = Path.Combine(directory, "armada.db") }).ConfigureAwait(false);
+                    ArmadaServer runtime = (ArmadaServer)typeof(InProcessArmadaServer).GetField("_Server", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(server)!;
+                    DatabaseDriver database = (DatabaseDriver)typeof(ArmadaServer).GetField("_Database", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(runtime)!;
+                    Mission mission = await database.Missions.CreateAsync(new Mission("selection inputs") { TenantId = Constants.DefaultTenantId, UserId = Constants.DefaultUserId }, token).ConfigureAwait(false);
+                    CaptainSelectionRecordSet records = new CaptainSelectionRecordSet { Policy = CaptainSelectionPolicyRevision.FromSettings(Constants.DefaultTenantId, new UsageSelectionSettings()) };
+                    records.Decision.TenantId = Constants.DefaultTenantId; records.Decision.UserId = Constants.DefaultUserId; records.Decision.MissionId = mission.Id;
+                    records.Decision.ExecutionAttemptId = records.Decision.Id; records.Decision.PolicyRevisionId = records.Policy.Id;
+                    records.Decision.Mode = UsageSelectionModeEnum.Observe; records.Decision.Outcome = "Waiting"; records.Decision.Trigger = "Waiting";
+                    records.Decision.EvaluatedUtc = DateTime.UtcNow; records.Decision.AlgorithmVersion = UsageSelectionPolicy.AlgorithmVersion; records.Decision.PrimaryReasonCode = "UsageMissing";
+                    await database.CaptainSelections.CreateDecisionAsync(records, token).ConfigureAwait(false);
+                    string path = "/api/v1/missions/" + mission.Id + "/captain-selection";
+
+                    async Task Post(string route, string body, HttpStatusCode expected)
+                    {
+                        using StringContent content = new StringContent(body, System.Text.Encoding.UTF8, "application/json");
+                        using HttpResponseMessage response = await server.Client.PostAsync(route, content, token).ConfigureAwait(false);
+                        AssertEqual(expected, response.StatusCode, route + " " + body);
+                        if (expected == HttpStatusCode.BadRequest) AssertContains("application/json", response.Content.Headers.ContentType?.ToString() ?? "", route + " answers JSON");
+                    }
+                    await Post(path + "/recovery", "", HttpStatusCode.BadRequest).ConfigureAwait(false);
+                    await Post(path + "/recovery", "{\"expectedRevision\":", HttpStatusCode.BadRequest).ConfigureAwait(false);
+                    await Post(path + "/recovery", "{\"expectedRevision\":\"zero\",\"allowFallback\":true,\"reason\":\"x\"}", HttpStatusCode.BadRequest).ConfigureAwait(false);
+                    await Post(path + "/history/enumerate", "{\"PageSize\":", HttpStatusCode.BadRequest).ConfigureAwait(false);
+                    await Post("/api/v1/captain-selection-decisions/" + records.Decision.Id + "/candidates/enumerate?tenantId=" + Constants.DefaultTenantId, "{", HttpStatusCode.BadRequest).ConfigureAwait(false);
+
+                    using (HttpResponseMessage response = await server.Client.GetAsync(path + "/history?outcome=waiting", token).ConfigureAwait(false))
+                    {
+                        response.EnsureSuccessStatusCode();
+                        AssertEqual(1L, (await JsonHelper.DeserializeAsync<EnumerationResult<CaptainSelectionDecisionView>>(response).ConfigureAwait(false)).TotalRecords, "filters accept any letter case");
+                    }
+                    using (HttpResponseMessage response = await server.Client.GetAsync(path + "/history?trigger=redispatch", token).ConfigureAwait(false))
+                        AssertStatusCode(HttpStatusCode.OK, response);
+                    foreach (string query in new[] { "?outcome=Bogus", "?trigger=Nope", "?pageSize=0", "?pageSize=1001", "?pageNumber=0" })
+                        using (HttpResponseMessage response = await server.Client.GetAsync(path + "/history" + query, token).ConfigureAwait(false))
+                            AssertEqual(HttpStatusCode.BadRequest, response.StatusCode, "history" + query);
+
+                    // UT-014: a mission no captain can take yet is still the documented Mission body, with a warning header.
+                    using (HttpResponseMessage response = await server.Client.PostAsync("/api/v1/missions", JsonHelper.ToJsonContent(new { Title = "waits for a captain" }), token).ConfigureAwait(false))
+                    {
+                        AssertStatusCode(HttpStatusCode.Created, response);
+                        string body = await response.Content.ReadAsStringAsync(token).ConfigureAwait(false);
+                        Mission created = JsonHelper.Deserialize<Mission>(body);
+                        AssertFalse(String.IsNullOrEmpty(created.Id), "Id at the top level: " + body);
+                        AssertFalse(body.Contains("\"Warning\"", StringComparison.Ordinal), "no wrapper");
+                        AssertEqual(MissionStatusEnum.Pending, created.Status);
+                        AssertTrue(response.Headers.TryGetValues("X-Armada-Warning", out IEnumerable<string>? warning) && warning!.Single().Contains("not assigned to a captain yet", StringComparison.Ordinal), "warning header");
+                    }
+                    // UT-011: a wrongly typed value names the field and the accepted values.
+                    using (HttpResponseMessage response = await server.Client.PutAsync("/api/v1/settings", JsonHelper.ToJsonContent(new { UsageSelection = new { Mode = "Bogus" } }), token).ConfigureAwait(false))
+                    {
+                        AssertStatusCode(HttpStatusCode.BadRequest, response);
+                        string body = await response.Content.ReadAsStringAsync(token).ConfigureAwait(false);
+                        AssertContains("UsageSelection.Mode must be one of Disabled, Observe or Enforce.", body);
+                        AssertContains("InvalidJsonValue", body); AssertFalse(body.Contains("Armada.Core.Enums", StringComparison.Ordinal), "no type names");
+                    }
+                    using (HttpResponseMessage response = await server.Client.PutAsync("/api/v1/settings", JsonHelper.ToJsonContent(new { ExpectedUsageSelectionRevision = "x" }), token).ConfigureAwait(false))
+                    {
+                        string body = await response.Content.ReadAsStringAsync(token).ConfigureAwait(false);
+                        AssertContains("ExpectedUsageSelectionRevision must be a number.", body); AssertFalse(body.Contains("System.Nullable", StringComparison.Ordinal), "no type names");
+                    }
+
+                    // UT-006: the same PascalCase bodies and error envelope as every other route.
+                    using (HttpResponseMessage response = await server.Client.GetAsync(path, token).ConfigureAwait(false))
+                    {
+                        string body = await response.Content.ReadAsStringAsync(token).ConfigureAwait(false);
+                        AssertContains("\"HistoryAvailable\":", body, "summary is PascalCase"); AssertFalse(body.Contains("\"historyAvailable\"", StringComparison.Ordinal), "no camelCase summary");
+                    }
+                    using (HttpResponseMessage response = await server.Client.GetAsync(path + "/history", token).ConfigureAwait(false))
+                        AssertContains("\"Objects\":", await response.Content.ReadAsStringAsync(token).ConfigureAwait(false), "history page is PascalCase");
+                    using (HttpResponseMessage response = await server.Client.GetAsync("/api/v1/captain-selection-decisions/csd_nope?tenantId=" + Constants.DefaultTenantId, token).ConfigureAwait(false))
+                    {
+                        AssertStatusCode(HttpStatusCode.NotFound, response);
+                        AssertContains("\"Error\":\"NotFound\"", await response.Content.ReadAsStringAsync(token).ConfigureAwait(false), "standard error envelope");
+                    }
+                    using (HttpResponseMessage response = await server.Client.PostAsync(path + "/recovery", JsonHelper.ToJsonContent(new { ExpectedRevision = 99, AllowFallback = true, ReserveException = false, Reason = "stale revision" }), token).ConfigureAwait(false))
+                    {
+                        AssertStatusCode(HttpStatusCode.Conflict, response);
+                        string body = await response.Content.ReadAsStringAsync(token).ConfigureAwait(false);
+                        AssertContains("\"Error\":\"Conflict\"", body, "conflict envelope"); AssertContains("RecoveryRevisionConflict", body, "conflict code in Data");
+                    }
+
+                    using (HttpResponseMessage response = await server.Client.PutAsync("/api/v1/settings", JsonHelper.ToJsonContent(new { UsageSelection = new UsageSelectionSettings { Strategy = CaptainSelectionStrategyEnum.MostRemainingAllowance, SettlementLagSeconds = 0 } }), token).ConfigureAwait(false))
+                        AssertStatusCode(HttpStatusCode.OK, response);
+                    using (HttpResponseMessage response = await server.Client.PutAsync("/api/v1/settings", JsonHelper.ToJsonContent(new { UsageSelection = new { Mode = "Disabled" } }), token).ConfigureAwait(false))
+                        AssertStatusCode(HttpStatusCode.OK, response);
+                    AssertEqual(UsageSelectionModeEnum.Disabled, server.Settings.EffectiveUsageSelection.Mode, "the sent member changes");
+                    AssertEqual(CaptainSelectionStrategyEnum.MostRemainingAllowance, server.Settings.EffectiveUsageSelection.Strategy, "an omitted member keeps its value");
+                    AssertEqual(0, server.Settings.EffectiveUsageSelection.SettlementLagSeconds, "omitted numbers keep their values");
+                    using (HttpResponseMessage response = await server.Client.PutAsync("/api/v1/settings", JsonHelper.ToJsonContent(new { UsageSelection = new { ReservePercent = 500 } }), token).ConfigureAwait(false))
+                        AssertStatusCode(HttpStatusCode.BadRequest, response);
+                    AssertEqual(CaptainSelectionStrategyEnum.MostRemainingAllowance, server.Settings.EffectiveUsageSelection.Strategy, "a rejected update changes nothing");
+                }),
+                new TestCaseDescriptor(_SuiteId, "history_scope_redaction_and_preview_has_no_writes", "History scopes counts and redacts account keys; preview never writes or claims", async token =>
+                {
+                    string directory = TestTemp.NewDirectory("selection-history-api");
+                    using InProcessArmadaServer server = await InProcessArmadaServer.StartAsync(directory,
+                        new DatabaseSettings { Type = DatabaseTypeEnum.Sqlite, Filename = Path.Combine(directory, "armada.db") }).ConfigureAwait(false);
+                    ArmadaServer runtime = (ArmadaServer)typeof(InProcessArmadaServer).GetField("_Server", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(server)!;
+                    DatabaseDriver database = (DatabaseDriver)typeof(ArmadaServer).GetField("_Database", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(runtime)!;
+                    E2ETenantUser owner = await E2ETenantUser.CreateAsync(server.Client, "selection-owner", false).ConfigureAwait(false);
+                    E2ETenantUser peer = await E2ETenantUser.CreateAsync(server.Client, "selection-peer", false, owner.TenantId).ConfigureAwait(false);
+                    E2ETenantUser foreign = await E2ETenantUser.CreateAsync(server.Client, "selection-foreign").ConfigureAwait(false);
+                    using HttpClient caller = owner.CreateClient(server.BaseUrl);
+                    using HttpClient peerClient = peer.CreateClient(server.BaseUrl);
+                    using HttpClient foreignClient = foreign.CreateClient(server.BaseUrl);
+                    Mission mission = await database.Missions.CreateAsync(new Mission("selection history") { TenantId = owner.TenantId, UserId = owner.UserId }, token).ConfigureAwait(false);
+                    CaptainSelectionRecordSet records = new CaptainSelectionRecordSet { Policy = CaptainSelectionPolicyRevision.FromSettings(owner.TenantId, new UsageSelectionSettings { Strategy = CaptainSelectionStrategyEnum.MostRemainingAllowance }) };
+                    records.Decision.TenantId = owner.TenantId; records.Decision.UserId = owner.UserId; records.Decision.MissionId = mission.Id;
+                    records.Decision.ExecutionAttemptId = records.Decision.Id; records.Decision.PolicyRevisionId = records.Policy.Id;
+                    records.Decision.Mode = UsageSelectionModeEnum.Observe; records.Decision.Outcome = "Waiting"; records.Decision.Trigger = "Waiting";
+                    records.Decision.EvaluatedUtc = DateTime.UtcNow; records.Decision.AlgorithmVersion = UsageSelectionPolicy.AlgorithmVersion; records.Decision.PrimaryReasonCode = "UsageUnknown";
+                    records.Decision.CandidateCount = 2;
+                    records.Candidates.Add(new CaptainSelectionCandidateRecord { TenantId = owner.TenantId, UserId = owner.UserId, DecisionId = records.Decision.Id, CaptainId = "visible", CaptainName = "Historical captain", AccountKey = "private-account-key", Rank = 2 });
+                    records.Candidates.Add(new CaptainSelectionCandidateRecord { TenantId = owner.TenantId, UserId = peer.UserId, DecisionId = records.Decision.Id, CaptainId = "hidden", CaptainName = "Hidden peer", Rank = 1 });
+                    await database.CaptainSelections.CreateDecisionAsync(records, token).ConfigureAwait(false);
+                    string path = "/api/v1/missions/" + mission.Id + "/captain-selection";
+                    using Armada.Client.ArmadaClient sdk = new Armada.Client.ArmadaClient(new Armada.Client.ArmadaClientOptions(server.BaseUrl) { BearerToken = owner.BearerToken });
+                    AssertTrue((await sdk.GetCaptainSelectionAsync(mission.Id, token).ConfigureAwait(false))!.HistoryAvailable);
+                    AssertEqual(1L, (await sdk.GetCaptainSelectionHistoryAsync(mission.Id, token: token).ConfigureAwait(false))!.TotalRecords);
+                    AssertEqual(1L, (await sdk.GetCaptainSelectionCandidatesAsync(records.Decision.Id, token: token).ConfigureAwait(false))!.TotalRecords);
+
+                    using (HttpResponseMessage response = await caller.GetAsync(path, token).ConfigureAwait(false))
+                    {
+                        response.EnsureSuccessStatusCode();
+                        CaptainSelectionSummary summary = await JsonHelper.DeserializeAsync<CaptainSelectionSummary>(response).ConfigureAwait(false);
+                        AssertTrue(summary.HistoryAvailable); AssertNull(summary.CurrentAttempt);
+                        AssertEqual(CaptainSelectionStrategyEnum.MostRemainingAllowance, summary.LatestDecision!.Strategy);
+                    }
+                    AssertNotNull(await sdk.GetCaptainSelectionDecisionAsync(records.Decision.Id, token: token).ConfigureAwait(false));
+                    AssertEqual("VesselMissing", (await sdk.PreviewCaptainSelectionAsync(mission.Id, token: token).ConfigureAwait(false))!.ReasonCode);
+                    using (Armada.Core.Client.ArmadaApiClient native = new Armada.Core.Client.ArmadaApiClient(caller, server.BaseUrl))
+                    {
+                        AssertTrue((await native.GetCaptainSelectionAsync(mission.Id, token).ConfigureAwait(false))!.HistoryAvailable);
+                        AssertEqual(1L, (await native.GetCaptainSelectionHistoryAsync(mission.Id, token: token).ConfigureAwait(false))!.TotalRecords);
+                        AssertEqual(1L, (await native.GetCaptainSelectionCandidatesAsync(records.Decision.Id, token: token).ConfigureAwait(false))!.TotalRecords);
+                        AssertNotNull(await native.GetCaptainSelectionDecisionAsync(records.Decision.Id, token: token).ConfigureAwait(false));
+                        AssertEqual("VesselMissing", (await native.PreviewCaptainSelectionAsync(mission.Id, token: token).ConfigureAwait(false))!.ReasonCode);
+                    }
+                    string detailPath = "/api/v1/captain-selection-decisions/" + records.Decision.Id;
+                    using (HttpResponseMessage response = await caller.GetAsync(detailPath, token).ConfigureAwait(false))
+                    {
+                        response.EnsureSuccessStatusCode();
+                        string body = await response.Content.ReadAsStringAsync(token).ConfigureAwait(false);
+                        AssertFalse(body.Contains("private-account-key", StringComparison.Ordinal)); AssertFalse(body.Contains("Hidden peer", StringComparison.Ordinal));
+                        CaptainSelectionDecisionDetail detail = JsonHelper.Deserialize<CaptainSelectionDecisionDetail>(body);
+                        AssertEqual(1L, detail.Candidates.TotalRecords); AssertEqual(1, detail.Candidates.Objects[0].Rank);
+                        AssertFalse(detail.Candidates.Objects[0].CaptainAvailable);
+                    }
+                    using (HttpClient ownerMcp = owner.CreateClient("http://127.0.0.1:" + server.Settings.McpPort))
+                    {
+                        string history = await McpTestCalls.CallToolAsync(ownerMcp, "enumerate", new { entityType = "captain_selection_decision", missionId = mission.Id, status = "Waiting" }).ConfigureAwait(false);
+                        AssertContains(records.Decision.Id, history);
+                        string comparison = await McpTestCalls.CallToolAsync(ownerMcp, "enumerate", new { entityType = "captain_selection_candidate", decisionId = records.Decision.Id }).ConfigureAwait(false);
+                        AssertContains("Historical captain", comparison); AssertFalse(comparison.Contains("Hidden peer", StringComparison.Ordinal));
+                        AssertFalse(comparison.Contains("private-account-key", StringComparison.Ordinal));
+                        string invalid = await McpTestCalls.CallToolAsync(ownerMcp, "enumerate", new { entityType = "captain_selection_decision", missionId = mission.Id, createdAfter = "invalid-date" }).ConfigureAwait(false);
+                        AssertContains("ISO 8601", invalid);
+                    }
+                    foreach (HttpClient denied in new[] { peerClient, foreignClient })
+                    {
+                        using HttpResponseMessage response = await denied.GetAsync(path, token).ConfigureAwait(false);
+                        AssertStatusCode(HttpStatusCode.NotFound, response);
+                        using HttpResponseMessage detail = await denied.GetAsync(detailPath + "?tenantId=" + owner.TenantId, token).ConfigureAwait(false);
+                        AssertStatusCode(HttpStatusCode.NotFound, detail);
+                    }
+                    using (HttpClient foreignMcp = foreign.CreateClient("http://127.0.0.1:" + server.Settings.McpPort))
+                    {
+                        string denied = await McpTestCalls.CallToolAsync(foreignMcp, "get_captain_selection_decision", new { decisionId = records.Decision.Id }).ConfigureAwait(false);
+                        AssertContains("not found", denied.ToLowerInvariant()); AssertFalse(denied.Contains("Historical captain", StringComparison.Ordinal));
+                    }
+                    using (HttpResponseMessage enumeration = await caller.PostAsync(path + "/history/enumerate", JsonHelper.ToJsonContent(new { Outcome = "Waiting", PageSize = 1 }), token).ConfigureAwait(false))
+                    {
+                        enumeration.EnsureSuccessStatusCode();
+                        AssertEqual(1L, (await JsonHelper.DeserializeAsync<EnumerationResult<CaptainSelectionDecisionView>>(enumeration).ConfigureAwait(false)).TotalRecords);
+                    }
+                    using (HttpResponseMessage comparison = await caller.PostAsync(detailPath + "/candidates/enumerate", JsonHelper.ToJsonContent(new { PageSize = 1 }), token).ConfigureAwait(false))
+                    {
+                        comparison.EnsureSuccessStatusCode();
+                        AssertEqual(1L, (await JsonHelper.DeserializeAsync<EnumerationResult<CaptainSelectionCandidateView>>(comparison).ConfigureAwait(false)).TotalRecords);
+                    }
+                    using (HttpResponseMessage response = await caller.PostAsync(path + "/preview", JsonHelper.ToJsonContent(new { }), token).ConfigureAwait(false))
+                    {
+                        response.EnsureSuccessStatusCode();
+                        AssertEqual("VesselMissing", (await JsonHelper.DeserializeAsync<CaptainSelectionPreview>(response).ConfigureAwait(false)).ReasonCode);
+                    }
+                    AssertEqual(1L, (await database.CaptainSelections.EnumerateByMissionAsync(owner.TenantId, mission.Id, owner.UserId, token: token).ConfigureAwait(false)).TotalRecords);
+                    AssertEqual(MissionStatusEnum.Pending, (await database.Missions.ReadAsync(mission.Id, token).ConfigureAwait(false))!.Status);
+                })
+            });
+        }
+    }
+}

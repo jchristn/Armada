@@ -59,8 +59,8 @@ namespace Test.Shared.Suites.E2E
 
                 AssertNotNull(status);
                 Assert(status.MissionsByStatus != null, "Missing MissionsByStatus");
-                Assert(status.Voyages != null, "Missing Voyages");
                 Assert(status.RecentSignals != null, "Missing RecentSignals");
+                AssertEqual(status.InProgressVoyages + status.OpenVoyages, status.ActiveVoyages, "ActiveVoyages is InProgress plus Open");
                 Assert(status.TimestampUtc != default, "Missing TimestampUtc");
             }));
 
@@ -79,13 +79,21 @@ namespace Test.Shared.Suites.E2E
                 AssertTrue(status.ActiveVoyages >= 0);
             }));
 
-            cases.Add(CaseAsync("get_status_no_data_empty_voyages", "GetStatus_NoData_EmptyVoyages", TestTags.Positive, async () =>
+            cases.Add(CaseAsync("get_status_embeds_no_voyage_list", "GetStatus_EmbedsNoVoyageList", TestTags.Positive, async () =>
             {
                 E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this);
                 HttpClient authClient = fx.AuthClient;
 
-                ArmadaStatus status = await GetStatusAsync(authClient);
-                AssertTrue(status.Voyages.Count >= 0);
+                string fleetId = await CreateFleetAsync(authClient);
+                string vesselId = await CreateVesselAsync(authClient, fleetId);
+                await CreateVoyageAsync(authClient, vesselId, "Status Shape Voyage");
+
+                HttpResponseMessage response = await authClient.GetAsync("/api/v1/status");
+                string json = await response.Content.ReadAsStringAsync();
+                AssertEqual(HttpStatusCode.OK, response.StatusCode);
+                AssertFalse(json.Contains("\"Voyages\"", StringComparison.Ordinal), "status no longer embeds the active voyages: " + json);
+                AssertTrue(json.Contains("\"ActiveVoyages\"", StringComparison.Ordinal), "status keeps the active voyage count");
+                AssertTrue(json.Contains("\"InProgressVoyages\"", StringComparison.Ordinal) && json.Contains("\"OpenVoyages\"", StringComparison.Ordinal), "status carries the per-status voyage counts");
             }));
 
             cases.Add(CaseAsync("get_status_no_data_empty_recent_signals", "GetStatus_NoData_EmptyRecentSignals", TestTags.Positive, async () =>
@@ -160,7 +168,13 @@ namespace Test.Shared.Suites.E2E
                 await CreateVoyageAsync(authClient, vesselId, "Voyage Array Check");
 
                 ArmadaStatus status = await GetStatusAsync(authClient);
-                AssertTrue(status.Voyages.Count >= 1);
+                AssertTrue(status.ActiveVoyages >= 1);
+
+                // The voyages themselves come from the paged progress enumeration, with the same total.
+                HttpResponseMessage page = await authClient.PostAsync("/api/v1/voyages/progress/enumerate", new StringContent("{\"PageSize\":1000}", System.Text.Encoding.UTF8, "application/json"));
+                EnumerationResult<VoyageProgress> progress = await JsonHelper.DeserializeAsync<EnumerationResult<VoyageProgress>>(page);
+                AssertEqual((long)status.ActiveVoyages, progress.TotalRecords, "progress enumeration total matches the status count");
+                AssertTrue(progress.Objects.Exists(p => p.Voyage != null && p.Voyage.Title == "Voyage Array Check"), "the new voyage is listed");
             }));
 
             cases.Add(CaseAsync("get_status_after_creating_signals_shows_recent_signals", "GetStatus_AfterCreatingSignals_ShowsRecentSignals", TestTags.Positive, async () =>
@@ -419,7 +433,7 @@ namespace Test.Shared.Suites.E2E
         /// <summary>
         /// Creates a voyage against the given vessel with the specified number of missions.
         /// </summary>
-        private static async Task<VoyageDetailResponse> CreateVoyageAsync(HttpClient client, string vesselId, string title, int missionCount = 2)
+        private static async Task<Voyage> CreateVoyageAsync(HttpClient client, string vesselId, string title, int missionCount = 2)
         {
             object[] missions = Enumerable.Range(1, missionCount)
                 .Select(i => (object)new { Title = "Voyage Mission " + i, Description = "Desc " + i })
@@ -434,7 +448,7 @@ namespace Test.Shared.Suites.E2E
             });
             HttpResponseMessage resp = await client.PostAsync("/api/v1/voyages", content);
             resp.EnsureSuccessStatusCode();
-            return await JsonHelper.DeserializeAsync<VoyageDetailResponse>(resp);
+            return await JsonHelper.DeserializeAsync<Voyage>(resp);
         }
 
         /// <summary>

@@ -165,7 +165,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
                 using (SqlCommand cmd = conn.CreateCommand())
                 {
                     cmd.CommandText = "SELECT * FROM project_profiles" + whereClause
-                        + " ORDER BY is_default DESC, last_update_utc DESC, name ASC OFFSET @offset ROWS FETCH NEXT @page_size ROWS ONLY;";
+                        + " ORDER BY is_default DESC, last_update_utc DESC, name ASC, id ASC OFFSET @offset ROWS FETCH NEXT @page_size ROWS ONLY;";
                     foreach (SqlParameter parameter in parameters) cmd.Parameters.Add(CloneParameter(parameter));
                     cmd.Parameters.AddWithValue("@offset", query.Offset);
                     cmd.Parameters.AddWithValue("@page_size", pageSize);
@@ -201,7 +201,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
                     List<SqlParameter> parameters = new List<SqlParameter>();
                     ApplyQueryFilters(query, conditions, parameters);
                     string whereClause = conditions.Count > 0 ? " WHERE " + String.Join(" AND ", conditions) : String.Empty;
-                    cmd.CommandText = "SELECT * FROM project_profiles" + whereClause + " ORDER BY is_default DESC, last_update_utc DESC, name ASC;";
+                    cmd.CommandText = "SELECT * FROM project_profiles" + whereClause + " ORDER BY is_default DESC, last_update_utc DESC, name ASC, id ASC;";
                     foreach (SqlParameter parameter in parameters) cmd.Parameters.Add(parameter);
 
                     List<ProjectProfile> results = new List<ProjectProfile>();
@@ -229,6 +229,13 @@ namespace Armada.Core.Database.SqlServer.Implementations
             {
                 conditions.Add("user_id = @user_id");
                 parameters.Add(new SqlParameter("@user_id", query.UserId));
+            }
+            if (!String.IsNullOrWhiteSpace(query.ViewerUserId))
+            {
+                // A regular user sees tenant-wide rows plus their own (ScopedVisibility.CanView), counted in the data source.
+                conditions.Add("(ownership_scope = @tenant_wide_scope OR user_id = @viewer_user_id)");
+                parameters.Add(new SqlParameter("@tenant_wide_scope", Armada.Core.Enums.ScopeEnum.TenantWide.ToString()));
+                parameters.Add(new SqlParameter("@viewer_user_id", query.ViewerUserId));
             }
             if (query.Scope.HasValue)
             {

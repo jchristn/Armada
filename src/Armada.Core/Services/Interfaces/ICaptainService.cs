@@ -27,6 +27,21 @@ namespace Armada.Core.Services.Interfaces
         Task RecallAsync(string captainId, string? tenantId = null, CancellationToken token = default);
 
         /// <summary>
+        /// Stop a specific captain gracefully on an operator's request. A mission the captain was running
+        /// (InProgress or Assigned) is cancelled with FailureKind OperatorAction and a FailureReason naming who stopped
+        /// it, how and when; a mission.stopped_by_operator event is emitted; and uncommitted work in its dock is
+        /// committed to the mission branch as a WIP commit and pushed (best effort) before the dock is reclaimed.
+        /// </summary>
+        /// <param name="captainId">Captain identifier.</param>
+        /// <param name="tenantId">Optional tenant ID for tenant-scoped reads. Null for system/admin context.</param>
+        /// <param name="stop">Who stopped the captain and through which surface; null records a generic recall.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <exception cref="ArgumentNullException">Thrown when captainId is null or empty.</exception>
+        /// <exception cref="KeyNotFoundException">Thrown when the captain does not exist.</exception>
+        /// <exception cref="InvalidOperationException">Thrown when the agent process did not confirm it stopped.</exception>
+        Task RecallAsync(string captainId, string? tenantId, OperatorStopContext? stop, CancellationToken token = default);
+
+        /// <summary>
         /// Attempt auto-recovery of a failed captain.
         /// </summary>
         /// <param name="captain">Captain to recover.</param>

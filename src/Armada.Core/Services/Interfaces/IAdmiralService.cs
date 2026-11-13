@@ -1,5 +1,6 @@
 namespace Armada.Core.Services.Interfaces
 {
+    using Armada.Core.BlackBox;
     using Armada.Core.Enums;
     using Armada.Core.Models;
 
@@ -8,6 +9,11 @@ namespace Armada.Core.Services.Interfaces
     /// </summary>
     public interface IAdmiralService
     {
+        /// <summary>
+        /// Black box capture for the failures the Admiral writes (and operator cancellations through it), or null.
+        /// </summary>
+        IBlackBoxCapture? BlackBox => null;
+
         /// <summary>
         /// Delegate invoked when a captain needs an agent process started.
         /// The handler receives (captain, mission, dock) and should return the process ID.
@@ -174,6 +180,21 @@ namespace Armada.Core.Services.Interfaces
         Task<Mission> CancelMissionAsync(Mission mission, CancellationToken token = default);
 
         /// <summary>
+        /// Cancel a mission like <see cref="CancelMissionAsync(Mission, CancellationToken)"/>, recording the cancellation
+        /// the caller's way: the black box step, failure kind and reason, and capture context in
+        /// <paramref name="options"/>, so the cancel records one entry (for example VesselDeleted) instead of an
+        /// OperatorTransition the caller then supersedes.
+        /// </summary>
+        /// <param name="mission">Mission to cancel, already read with the caller's scope.</param>
+        /// <param name="options">How to record the cancellation, or null for the default.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The updated mission.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when mission is null.</exception>
+        /// <exception cref="InvalidOperationException">Thrown when the agent process could not be stopped or its exit was not
+        /// confirmed.</exception>
+        Task<Mission> CancelMissionAsync(Mission mission, MissionCancelOptions? options, CancellationToken token = default);
+
+        /// <summary>
         /// Stop a specific captain gracefully.
         /// </summary>
         /// <param name="captainId">Captain identifier.</param>
@@ -181,10 +202,31 @@ namespace Armada.Core.Services.Interfaces
         Task RecallCaptainAsync(string captainId, CancellationToken token = default);
 
         /// <summary>
+        /// Stop a specific captain on an operator's request, recording who stopped it and through which surface on the
+        /// mission it was running.
+        /// </summary>
+        /// <param name="captainId">Captain identifier.</param>
+        /// <param name="stop">Who stopped the captain and how; null records a generic recall.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>A task.</returns>
+        Task RecallCaptainAsync(string captainId, OperatorStopContext? stop, CancellationToken token = default)
+            => RecallCaptainAsync(captainId, token);
+
+        /// <summary>
         /// Emergency stop all captains.
         /// </summary>
         /// <param name="token">Cancellation token.</param>
         Task RecallAllAsync(CancellationToken token = default);
+
+        /// <summary>
+        /// Emergency stop all captains on an operator's request, recording who stopped them and through which surface
+        /// on each mission they were running.
+        /// </summary>
+        /// <param name="stop">Who stopped the captains and how; null records a generic recall.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>A task.</returns>
+        Task RecallAllAsync(OperatorStopContext? stop, CancellationToken token = default)
+            => RecallAllAsync(token);
 
         /// <summary>
         /// Stop Admiral-local agent processes without altering mission or dock state.
@@ -206,6 +248,13 @@ namespace Armada.Core.Services.Interfaces
         /// </summary>
         /// <param name="token">Cancellation token.</param>
         Task CleanupStaleCaptainsAsync(CancellationToken token = default);
+
+        /// <summary>
+        /// Close mission wait intervals a previous Admiral process left open, ending them at this restart.
+        /// </summary>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The number of intervals closed.</returns>
+        Task<int> CloseInterruptedWaitsAsync(CancellationToken token = default) => Task.FromResult(0);
 
         /// <summary>
         /// Handle an agent process exit detected via the OnProcessExited event.
@@ -247,10 +296,12 @@ namespace Armada.Core.Services.Interfaces
         /// <param name="pipelineId">Optional explicit pipeline id.</param>
         /// <param name="pipelineName">Optional pipeline name to resolve (used when no id is supplied).</param>
         /// <param name="vesselId">Target vessel id.</param>
-        /// <param name="missionCount">Number of missions in the request.</param>
+        /// <param name="missionCount">Number of missions in the request. At most CollectionLimits.MaxRequestItems.</param>
         /// <param name="allowBareVoyage">Whether a missing vessel / zero missions should be treated as a bare voyage rather than an error.</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>The typed validation result.</returns>
+        /// <exception cref="Armada.Core.Services.CollectionLimitExceededException">Thrown when the request carries more than
+        /// CollectionLimits.MaxRequestItems missions.</exception>
         Task<DispatchValidationResult> ValidateDispatchAsync(
             string? objectiveId,
             string? pipelineId,

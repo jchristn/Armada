@@ -475,8 +475,9 @@ namespace Test.Shared.Suites.Services
             {
                 using FleetActionTestHarness h = await FleetActionTestHarness.CreateAsync().ConfigureAwait(false);
                 FleetActionSeedService seeder = new FleetActionSeedService(h.Db.Driver, h.Logging);
+                int builtIns = FleetActionSeedService.BuildDefaults(OperatingSystem.IsWindows()).Count;
                 int first = await seeder.SeedTenantAsync(Constants.DefaultTenantId).ConfigureAwait(false);
-                AssertEqual(5, first, "five built-ins created");
+                AssertEqual(builtIns, first, "every built-in created");
                 AssertEqual(0, await seeder.SeedTenantAsync(Constants.DefaultTenantId).ConfigureAwait(false), "second seed creates nothing");
 
                 FleetAction? prune = await h.Db.Driver.FleetActions.ReadByBuiltInKeyAsync(Constants.DefaultTenantId, FleetActionSeedService.PruneMergedBranchesKey).ConfigureAwait(false);
@@ -488,14 +489,15 @@ namespace Test.Shared.Suites.Services
                 AssertFalse(after!.Active, "soft-deleted");
 
                 EnumerationResult<FleetAction> visible = await h.Service.EnumerateActionsAsync(h.Admin, new FleetActionEnumerateRequest { PageSize = 100 }).ConfigureAwait(false);
-                AssertEqual(4, visible.Objects.Count(a => a.IsBuiltIn), "four active built-ins listed");
+                AssertEqual(builtIns - 1, visible.Objects.Count(a => a.IsBuiltIn), "active built-ins listed");
                 EnumerationResult<FleetAction> all = await h.Service.EnumerateActionsAsync(h.Admin, new FleetActionEnumerateRequest { PageSize = 100, IncludeInactive = true }).ConfigureAwait(false);
-                AssertEqual(5, all.Objects.Count(a => a.IsBuiltIn), "five with inactive");
+                AssertEqual(builtIns, all.Objects.Count(a => a.IsBuiltIn), "all with inactive");
 
                 foreach (FleetAction builtIn in FleetActionSeedService.BuildDefaults(false).Concat(FleetActionSeedService.BuildDefaults(true)))
                 {
-                    FleetActionTemplateRenderer.Validate(builtIn.CommandText);
-                    FleetActionTemplateRenderer.Validate(builtIn.PromptTemplate);
+                    List<string> inputNames = builtIn.Inputs.Select(i => i.Name).ToList();
+                    FleetActionTemplateRenderer.Validate(builtIn.CommandText, inputNames);
+                    FleetActionTemplateRenderer.Validate(builtIn.PromptTemplate, inputNames);
                 }
             }));
 

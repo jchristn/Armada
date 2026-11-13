@@ -19,6 +19,7 @@ import DataTable, { type DataTableColumn } from '../components/shared/DataTable'
 import { useAutoRefresh } from '../lib/useAutoRefresh';
 import PageHeader from '../components/shared/PageHeader';
 import StatusBadge from '../components/shared/StatusBadge';
+import { useDeleteProgress } from '../lib/useDeleteProgress';
 
 const SKILL_NAME_TIP = 'Unique skill name, for example Conventional Commits. Project profiles list skills by this name, so renaming one can break those references. Required.';
 const SKILL_CATEGORY_TIP = 'Optional group for browsing the skill directory, for example engineering or testing. It does not change how the skill is used.';
@@ -31,6 +32,7 @@ export default function Skills() {
   const { isAdmin, isTenantAdmin, user } = useAuth();
   const viewer: ScopeViewer = { isAdmin, isTenantAdmin, tenantId: user?.user?.tenantId, userId: user?.user?.id };
   const { t, formatRelativeTime, formatDateTime } = useLocale();
+  const deletion = useDeleteProgress();
   const { pushToast } = useNotifications();
   const [skills, setSkills] = useState<Skill[]>([]);
   const [loading, setLoading] = useState(true);
@@ -149,13 +151,9 @@ export default function Skills() {
       message: t('Delete "{{name}}"? Project profiles referencing it will simply skip it.', { name: skill.name }),
       onConfirm: async () => {
         setConfirm((current) => ({ ...current, open: false }));
-        try {
-          await deleteSkill(skill.id);
-          pushToast('warning', t('Skill "{{name}}" deleted.', { name: skill.name }));
-          await load();
-        } catch (err: unknown) {
-          setError(err instanceof Error ? err.message : t('Delete failed.'));
-        }
+        if (!(await deletion.run({ kind: 'skill', action: () => deleteSkill(skill.id), errorMessage: (err) => err instanceof Error ? err.message : t('Delete failed.') }))) return;
+        pushToast('warning', t('Skill "{{name}}" deleted.', { name: skill.name }));
+        await load();
       },
     });
   }
@@ -235,6 +233,7 @@ export default function Skills() {
 
       <ErrorModal error={error} onClose={() => setError('')} />
       <JsonViewer open={jsonData.open} title={jsonData.title} data={jsonData.data} onClose={() => setJsonData({ open: false, title: '', data: null })} />
+      {deletion.dialog}
       <ConfirmDialog
         open={confirm.open}
         title={confirm.title}

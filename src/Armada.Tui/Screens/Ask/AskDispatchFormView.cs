@@ -303,9 +303,7 @@ namespace Armada.Tui.Screens.Ask
                     List<Pipeline> pipelines;
                     try
                     {
-                        ArmadaPageQuery pq = new ArmadaPageQuery();
-                        pq.PageSize = 500;
-                        pipelines = (await client.ListPipelinesAsync(pq).ConfigureAwait(false))?.Objects ?? new List<Pipeline>();
+                        pipelines = await ArmadaPaging.ReadAllAsync<Pipeline>((p, ct) => client.ListPipelinesAsync(new ArmadaPageQuery(p, 1000), ct)).ConfigureAwait(false);
                     }
                     catch (ArmadaApiException)
                     {

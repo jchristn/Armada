@@ -7,7 +7,8 @@ namespace Armada.Core.Database
     /// <summary>
     /// Recognizes a database error that is worth one retry because the same statement may succeed a moment later, by
     /// the provider's error code or its own transient flag and never by message text: SQLite <c>SqliteErrorCode</c> 5
-    /// (SQLITE_BUSY, "database is locked" after the busy timeout) or 6 (SQLITE_LOCKED); any provider exception whose
+    /// (SQLITE_BUSY, "database is locked" after the busy timeout) or 6 (SQLITE_LOCKED); a deadlock or lock timeout by its
+    /// provider code (SQL Server 1205 and 1222, MySQL 1213 and 1205, PostgreSQL 40P01 and 40001); any provider exception whose
     /// <see cref="DbException.IsTransient"/> is true (PostgreSQL, MySQL, and SQL Server set it for deadlocks, lock
     /// timeouts, and dropped connections); and a <see cref="TimeoutException"/>.
     /// </summary>
@@ -24,6 +25,16 @@ namespace Armada.Core.Database
         /// SQLite primary result code SQLITE_LOCKED.
         /// </summary>
         public const int SqliteLocked = 6;
+
+        /// <summary>
+        /// SQL Server error number for a transaction chosen as a deadlock victim.
+        /// </summary>
+        public const int SqlServerDeadlockVictim = 1205;
+
+        /// <summary>
+        /// SQL Server error number for an exceeded lock request timeout.
+        /// </summary>
+        public const int SqlServerLockTimeout = 1222;
 
         #endregion
 
@@ -43,6 +54,19 @@ namespace Armada.Core.Database
                 if (current is SqliteException sqlite)
                 {
                     if (sqlite.SqliteErrorCode == SqliteBusy || sqlite.SqliteErrorCode == SqliteLocked) return true;
+                }
+                else if (current is Microsoft.Data.SqlClient.SqlException sqlServer)
+                {
+                    // Deadlock victim (1205) and lock request timeout (1222) are retryable whatever IsTransient reports.
+                    if (sqlServer.Number == SqlServerDeadlockVictim || sqlServer.Number == SqlServerLockTimeout || sqlServer.IsTransient) return true;
+                }
+                else if (current is MySqlConnector.MySqlException mysql)
+                {
+                    if (mysql.ErrorCode == MySqlConnector.MySqlErrorCode.LockDeadlock || mysql.ErrorCode == MySqlConnector.MySqlErrorCode.LockWaitTimeout || mysql.IsTransient) return true;
+                }
+                else if (current is Npgsql.PostgresException postgres)
+                {
+                    if (postgres.SqlState == Npgsql.PostgresErrorCodes.DeadlockDetected || postgres.SqlState == Npgsql.PostgresErrorCodes.SerializationFailure || postgres.IsTransient) return true;
                 }
                 else if (current is DbException db)
                 {

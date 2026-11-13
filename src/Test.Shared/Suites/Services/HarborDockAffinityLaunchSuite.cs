@@ -502,6 +502,7 @@ namespace Test.Shared.Suites.Services
                 Admiral.OnIsProcessTracked = Handler.IsProcessTracked;
                 Admiral.OnIsRemoteProcessTracked = Manager.IsProcessTracked;
                 Admiral.OnIsProcessAwaitingReconnect = Manager.IsProcessAwaitingReconnect;
+                Admiral.HarborLinks = Manager;
             }
 
             public async Task<RecoveryRecords> CreateStalledMissionAsync(string harborId)
@@ -510,10 +511,10 @@ namespace Test.Shared.Suites.Services
                 Vessel vessel = await _Db.Driver.Vessels.CreateAsync(new Vessel("affinity-vessel-" + suffix, "https://github.com/test/repo.git")).ConfigureAwait(false);
                 Captain captain = new Captain("affinity-captain-" + suffix, AgentRuntimeEnum.ClaudeCode);
                 captain.State = CaptainStateEnum.Working;
-                captain.CurrentMissionId = "msn_affinity_" + suffix;
-                captain.CurrentDockId = "dck_affinity_" + suffix;
+                captain.Assignment = new Mission { Id = "msn_affinity_" + suffix };
+                captain.Assignment ??= new Mission("fixture assignment"); captain.Assignment.DockId = "dck_affinity_" + suffix;
                 captain.ProcessId = 4242;
-                captain = await _Db.Driver.Captains.CreateAsync(captain).ConfigureAwait(false);
+                captain = await CaptainAssignmentFixture.CreateAsync(_Db.Driver, captain).ConfigureAwait(false);
 
                 Dock dock = new Dock(vessel.Id);
                 dock.Id = "dck_affinity_" + suffix;
@@ -539,8 +540,12 @@ namespace Test.Shared.Suites.Services
             public async Task AgeHeartbeatAsync(string captainId)
             {
                 Captain? captain = await _Db.Driver.Captains.ReadAsync(captainId).ConfigureAwait(false);
-                captain!.LastHeartbeatUtc = DateTime.UtcNow.AddMinutes(-(Settings.StallThresholdMinutes + 5));
-                await _Db.Driver.Captains.UpdateAsync(captain).ConfigureAwait(false);
+                DateTime heartbeat = DateTime.UtcNow.AddMinutes(-(Settings.StallThresholdMinutes + 5));
+                foreach (string missionId in captain!.ActiveMissionIds)
+                {
+                    Mission held = (await _Db.Driver.Missions.ReadAsync(missionId).ConfigureAwait(false))!;
+                    AssertTrue(await _Db.Driver.Missions.TryUpdateRuntimeContextAsync(held.Id, captain.Id, held.ProcessId, heartbeat, held.StallRecoveryAttempts));
+                }
             }
 
             public Task LinkAsync(string harborId, string? userId, List<HarborLaunchRequest> launches)
@@ -616,7 +621,7 @@ namespace Test.Shared.Suites.Services
             {
                 Captain captain = new Captain("dock-probe-captain-" + Guid.NewGuid().ToString("N").Substring(0, 8), AgentRuntimeEnum.ClaudeCode);
                 captain.State = CaptainStateEnum.Idle;
-                return await _Db.Driver.Captains.CreateAsync(captain).ConfigureAwait(false);
+                return await CaptainAssignmentFixture.CreateAsync(_Db.Driver, captain).ConfigureAwait(false);
             }
 
             public async Task<Mission> CreatePendingMissionAsync(Vessel vessel, string userId)

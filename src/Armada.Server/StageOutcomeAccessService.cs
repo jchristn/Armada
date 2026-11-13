@@ -215,8 +215,8 @@ namespace Armada.Server
         public async Task<EnumerationResult<FailureCauseRule>> ListRulesAsync(AuthContext caller, EnumerationQuery? page, CancellationToken token = default)
         {
             RequirePerson(caller);
-            List<FailureCauseRule> rules = await _Database.FailureCauseRules.EnumerateAsync(caller.IsAdmin ? null : caller.TenantId, token).ConfigureAwait(false);
-            return EnumerationResult<FailureCauseRule>.Page(page ?? new EnumerationQuery(), rules);
+            // Paged in the database (COUNT over the same tenant scope), never loaded whole and sliced.
+            return await _Database.FailureCauseRules.EnumeratePageAsync(caller.IsAdmin ? null : caller.TenantId, page ?? new EnumerationQuery(), token).ConfigureAwait(false);
         }
 
         /// <summary>

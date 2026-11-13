@@ -23,6 +23,8 @@ namespace Test.Shared.Infrastructure
         // Call tracking
         public List<string> CloneCalls { get; } = new List<string>();
         public List<string> WorktreeCalls { get; } = new List<string>();
+        /// <summary>Base branch of every created worktree, in call order.</summary>
+        public List<string> WorktreeBases { get; } = new List<string>();
         public List<string> DeleteBranchCalls { get; } = new List<string>();
         public List<string> RemoveWorktreeCalls { get; } = new List<string>();
         public List<string> MergeBranchCalls { get; } = new List<string>();
@@ -85,6 +87,7 @@ namespace Test.Shared.Infrastructure
             if (ShouldThrowOnWorktree) throw new InvalidOperationException("Simulated worktree failure");
             ExistingBranches.Add(branchName);
             WorktreeCalls.Add(worktreePath);
+            WorktreeBases.Add(baseBranch);
             OperationCalls.Add("create-worktree:" + worktreePath);
             return Task.CompletedTask;
         }
@@ -96,7 +99,14 @@ namespace Test.Shared.Infrastructure
             return Task.CompletedTask;
         }
         public Func<Task>? OnFetch { get; set; }
-        public Task FetchAsync(string repoPath, CancellationToken token = default) => OnFetch?.Invoke() ?? Task.CompletedTask;
+        public List<string> FetchCalls { get; } = new List<string>();
+        public bool ShouldThrowOnFetch { get; set; } = false;
+        public Task FetchAsync(string repoPath, CancellationToken token = default)
+        {
+            lock (FetchCalls) FetchCalls.Add(repoPath);
+            if (ShouldThrowOnFetch) throw new InvalidOperationException("Stub fetch failure");
+            return OnFetch?.Invoke() ?? Task.CompletedTask;
+        }
 
         public Task PushBranchAsync(string worktreePath, string remoteName = "origin", CancellationToken token = default)
         {
@@ -211,17 +221,44 @@ namespace Test.Shared.Infrastructure
             return Task.CompletedTask;
         }
 
+        /// <summary>
+        /// Runs inside FetchRemotesAsync (the first git step of landing's target synchronization), so a test can act
+        /// while a landing is in progress.
+        /// </summary>
+        public Func<Task>? OnFetchRemotes { get; set; }
+
         public Task FetchRemotesAsync(string repoPath, CancellationToken token = default)
         {
             OperationCalls.Add("fetch-remotes:" + repoPath);
-            return Task.CompletedTask;
+            lock (FetchCalls) FetchCalls.Add(repoPath);
+            if (ShouldThrowOnFetch) throw new InvalidOperationException("Stub fetch failure");
+            return OnFetchRemotes?.Invoke() ?? Task.CompletedTask;
         }
 
         public Task<GitDivergenceCounts?> GetDivergenceAsync(string repoPath, string baseRef, string headRef, CancellationToken token = default)
             => Task.FromResult<GitDivergenceCounts?>(new GitDivergenceCounts(0, 0));
 
+        /// <summary>
+        /// When set, answers IsAncestorAsync per (ancestorRef, descendantRef) instead of <see cref="IsAncestorResult"/>.
+        /// </summary>
+        public Func<string, string, bool?>? IsAncestorHandler { get; set; }
+
         public Task<bool?> IsAncestorAsync(string repoPath, string ancestorRef, string descendantRef, CancellationToken token = default)
-            => Task.FromResult<bool?>(IsAncestorResult);
+            => Task.FromResult<bool?>(IsAncestorHandler != null ? IsAncestorHandler(ancestorRef, descendantRef) : IsAncestorResult);
+
+        public List<string> TrailerSearchCalls { get; } = new List<string>();
+
+        /// <summary>
+        /// When set, answers FindCommitsByTrailerAsync per trailer value; otherwise no commit matches.
+        /// </summary>
+        public Func<string, IReadOnlyList<string>>? TrailerCommitsHandler { get; set; }
+
+        public Task<IReadOnlyList<string>> FindCommitsByTrailerAsync(string repoPath, string revision, string trailerKey, string trailerValue, DateTime? sinceUtc, int maxCount, CancellationToken token = default)
+        {
+            lock (TrailerSearchCalls) TrailerSearchCalls.Add(revision + "|" + trailerKey + ": " + trailerValue);
+            IReadOnlyList<string> result = TrailerCommitsHandler != null ? TrailerCommitsHandler(trailerValue) : new List<string>();
+            return Task.FromResult(result);
+        }
 
         public Task<bool> CommitAllAsync(string worktreePath, string message, CancellationToken token = default)
         {
@@ -255,5 +292,37 @@ namespace Test.Shared.Infrastructure
 
         public Task<GitCommitLogPage> GetCommitLogAsync(string repoPath, string tipSha, long? untilUnixSeconds, int skip, int limit, CancellationToken token = default)
             => Task.FromResult(new GitCommitLogPage());
+
+        /// <summary>
+        /// Answer for GetMergeBaseAsync (null by default: no common ancestor).
+        /// </summary>
+        public string? MergeBaseResult { get; set; }
+
+        /// <summary>
+        /// Forensic reads (merge-base and commit-range calls), kept apart from OperationCalls.
+        /// </summary>
+        public List<string> ForensicCalls { get; } = new List<string>();
+
+        public Task<string?> GetMergeBaseAsync(string repoPath, string a, string b, CancellationToken token = default)
+        {
+            lock (ForensicCalls) ForensicCalls.Add("merge-base:" + a + "|" + b);
+            return Task.FromResult(MergeBaseResult);
+        }
+
+        /// <summary>
+        /// When set, answers GetCommitRangeAsync per (fromRef, toRef); otherwise <see cref="CommitRangeResult"/>.
+        /// </summary>
+        public Func<string, string, GitCommitRange?>? CommitRangeHandler { get; set; }
+
+        /// <summary>
+        /// Answer for GetCommitRangeAsync (null by default: a revision does not resolve).
+        /// </summary>
+        public GitCommitRange? CommitRangeResult { get; set; }
+
+        public Task<GitCommitRange?> GetCommitRangeAsync(string repoPath, string fromRef, string toRef, int limit, CancellationToken token = default)
+        {
+            lock (ForensicCalls) ForensicCalls.Add("commit-range:" + fromRef + ".." + toRef);
+            return Task.FromResult(CommitRangeHandler != null ? CommitRangeHandler(fromRef, toRef) : CommitRangeResult);
+        }
     }
 }

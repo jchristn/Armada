@@ -3,6 +3,7 @@ namespace Armada.Core.Models
     using System;
     using System.Collections.Generic;
     using System.Text.Json.Serialization;
+    using Armada.Core.Services;
 
     /// <summary>
     /// An ordered sequence of persona stages that a dispatch goes through.
@@ -62,6 +63,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// Ordered list of pipeline stages.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxConfigItems)]
         public List<PipelineStage> Stages
         {
             get => _Stages;

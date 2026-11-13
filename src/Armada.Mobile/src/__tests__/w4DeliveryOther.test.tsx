@@ -83,7 +83,7 @@ beforeEach(async () => {
   for (const fn of [api.listEnvironments, api.listReleases, api.listWorkflowProfiles, api.listRunbookExecutions, api.listDeployments, api.listVoyages, api.listObjectives, api.listCheckRuns, api.listIncidents, api.listRunbooks]) {
     fn.mockResolvedValue(page([]) as never);
   }
-  api.getReleaseGitHubPullRequests.mockResolvedValue([]);
+  api.getReleaseGitHubPullRequests.mockResolvedValue({ objects: [], pageNumber: 1, pageSize: 25, totalPages: 0, totalRecords: 0 } as never);
 });
 
 function queryOf(href: string): Record<string, string> {
@@ -157,7 +157,7 @@ describe('releases', () => {
   it('refreshes derived fields and shows linked pull requests', async () => {
     api.getRelease.mockResolvedValue(release());
     api.refreshRelease.mockResolvedValue(release({ title: 'Release 2.3 (refreshed)' }));
-    api.getReleaseGitHubPullRequests.mockResolvedValue([{ repository: 'org/repo', number: 7, title: 'Fix', url: 'https://x', state: 'open', reviewStatus: 'Approved', checks: [], reviews: [], requestedReviewers: [], updatedUtc: null } as never]);
+    api.getReleaseGitHubPullRequests.mockResolvedValue({ objects: [{ repository: 'org/repo', number: 7, title: 'Fix', url: 'https://x', state: 'open', reviewStatus: 'Approved', checks: [], reviews: [], requestedReviewers: [], updatedUtc: null } as never], pageNumber: 1, pageSize: 25, totalPages: 1, totalRecords: 1 } as never);
     await renderW4Routes(ROUTES, '/releases/rel_1');
     await waitFor(() => expect(screen.getByTestId('release-title')).toHaveTextContent('Release 2.3'));
     await waitFor(() => expect(screen.getByText('Fix')).toBeTruthy());

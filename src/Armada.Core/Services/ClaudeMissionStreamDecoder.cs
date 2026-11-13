@@ -6,7 +6,8 @@ namespace Armada.Core.Services
     /// <summary>
     /// Decodes Claude Code's <c>--output-format stream-json</c> for a mission: assistant messages report activity (each
     /// text, thinking, and tool_use block), and the terminal result event stands for the reply text that <c>--print</c>
-    /// prints in text mode. System and user (tool result) events, and the CLI's rate_limit_event, stand for nothing.
+    /// prints in text mode. System and user (tool result) events stand for nothing; the CLI's rate_limit_event stands for no
+    /// text either and is reported only as a typed <see cref="MissionStreamDecodeResult.UsageObservations"/> entry.
     /// </summary>
     public class ClaudeMissionStreamDecoder : MissionStreamDecoder
     {
@@ -18,7 +19,14 @@ namespace Armada.Core.Services
             if (!ClaudeStreamLine.TryParse(line, out ClaudeStreamLine? evt) || evt == null)
             {
                 // A rate limit report is protocol, not output: without this it would reach the mission's output as JSON.
-                if (ClaudeRateLimitEvent.TryParse(line, out ClaudeRateLimitEvent? _)) return MissionStreamDecodeResult.Empty();
+                // It is harvested as a typed passive usage observation instead, stamped with the time it was read.
+                if (ClaudeRateLimitEvent.TryParse(line, out ClaudeRateLimitEvent? rateLimit))
+                {
+                    MissionStreamDecodeResult limits = MissionStreamDecodeResult.Empty();
+                    limits.UsageObservations.Add(ClaudeRateLimitUsage.ToResult(rateLimit, nowUtc));
+                    return limits;
+                }
+
                 return MissionStreamDecodeResult.Plain();
             }
 

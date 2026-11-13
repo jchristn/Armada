@@ -326,7 +326,7 @@ namespace Armada.Tui.Screens.Activity
             string id = row.Id;
             Context.Confirm("Delete", Context.Loc.T("Delete signal {{id}}?", LocalizationArgs.Of("id", id)), () =>
             {
-                ScreenOps.Run(Context, () => Context.Client.DeleteSignalsBatchAsync(new List<string> { id }), r =>
+                DeleteProgress.Run(Context, "Deleting signal", ct => Context.Client.DeleteSignalsBatchAsync(new List<string> { id }, ct), r =>
                 {
                     ScreenOps.Toast(Context, NotificationSeverityEnum.Warning, "Signal {{id}} deleted.", LocalizationArgs.Of("id", id));
                     Refresh();
@@ -341,12 +341,12 @@ namespace Armada.Tui.Screens.Activity
             if (ids.Count == 0) return;
             Context.Confirm("Delete", Context.Loc.T("Delete {{count}} selected signal(s)?", LocalizationArgs.Of("count", ids.Count)), () =>
             {
-                ScreenOps.Run(Context, () => Context.Client.DeleteSignalsBatchAsync(ids), r =>
+                DeleteProgress.Run(Context, "{count, plural, one {Deleting # signal} other {Deleting # signals}}", ct => Context.Client.DeleteSignalsBatchAsync(ids, ct), r =>
                 {
                     ScreenOps.Toast(Context, NotificationSeverityEnum.Warning, "Deleted {{count}} signal(s).", LocalizationArgs.Of("count", ids.Count));
                     Grid.ClearMarks();
                     Refresh();
-                }, "Bulk delete failed.");
+                }, "Bulk delete failed.", ids.Count);
             }, "Delete");
         }
 

@@ -1,6 +1,7 @@
 namespace Armada.Core.Models
 {
     using Armada.Core.Enums;
+    using Armada.Core.Services;
 
     /// <summary>
     /// Repeated reports of the same friction, collapsed into one row. One captain reporting a problem
@@ -70,6 +71,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// Up to five mission identifiers that reported it, newest first, for evidence links.
         /// </summary>
+        [CollectionBound(PapercutService.MaxSampleMissions, Reason = "PapercutService.Group keeps at most MaxSampleMissions ids per group")]
         public List<string> SampleMissionIds
         {
             get => _SampleMissionIds;

@@ -6,6 +6,16 @@
     outline: 2px solid var(--accent);
     outline-offset: 2px;
 }
+/* Form fields' own `outline: none` (App.css) outranks the rule above, because :where() adds no
+   specificity, so the captain edit and settings forms showed only a border-color change on keyboard
+   focus while every other control on the same page showed the ring. Keyboard focus gets the ring back;
+   mouse focus keeps the border-color change only. */
+.form-group input:focus-visible,
+.form-group textarea:focus-visible,
+.form-group select:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+}
 .sidebar :where(a, button):focus-visible {
     outline-color: var(--sidebar-accent);
     outline-offset: -2px;
@@ -22,7 +32,6 @@
 
 /* Links inside running text must not rely on color alone. */
 .breadcrumb a,
-.breadcrumbs a,
 p a:not(.btn),
 li > a:not(.btn):not([class]),
 .text-block a:not(.btn) {
@@ -59,6 +68,7 @@ li > a:not(.btn):not([class]),
 [data-theme="dark"] .readiness-pill.ready { color: #4ade80; }
 [data-theme="dark"] .readiness-pill.warning { color: #fbbf24; }
 [data-theme="dark"] .readiness-pill.error { color: #fca5a5; }
+[data-theme="dark"] .readiness-pill.proposed { color: #93c5fd; border-color: #93c5fd; }
 
 /* Solid status fills that carry white text (sidebar attention badges). */
 :root { --danger: #dc2626; --warning: #b45309; }

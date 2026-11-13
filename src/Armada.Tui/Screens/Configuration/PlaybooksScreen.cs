@@ -181,6 +181,18 @@ namespace Armada.Tui.Screens.Configuration
         }
 
         /// <inheritdoc />
+        protected override string DeletingTitle
+        {
+            get { return "Deleting playbook"; }
+        }
+
+        /// <inheritdoc />
+        protected override string DeletingManyTitle
+        {
+            get { return "{count, plural, one {Deleting # playbook} other {Deleting # playbooks}}"; }
+        }
+
+        /// <inheritdoc />
         protected override Task DeleteAsync(Playbook row, CancellationToken token)
         {
             return Context.Client.DeletePlaybookAsync(row.Id, token);

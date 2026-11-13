@@ -205,55 +205,84 @@ namespace Armada.Core.Metrics
                 list.Add(job);
             }
 
-            List<HarborLaunchSpeed> result = new List<HarborLaunchSpeed>();
-            foreach (KeyValuePair<string, List<HarborJobRecord>> pair in byRuntime)
+            // Bounded: the busiest runtimes are listed one by one and the rest are aggregated into one explicit Other entry.
+            List<KeyValuePair<string, List<HarborJobRecord>>> groups = byRuntime
+                .OrderByDescending(g => g.Value.Count)
+                .ThenBy(g => g.Key, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            List<KeyValuePair<string, List<HarborJobRecord>>> listed = groups;
+            List<KeyValuePair<string, List<HarborJobRecord>>> aggregated = new List<KeyValuePair<string, List<HarborJobRecord>>>();
+            if (groups.Count > HarborMetricsRanges.MaxLaunchSpeedRuntimes)
             {
-                List<long> firstOutput = new List<long>();
-                List<long> durations = new List<long>();
-                List<List<long>> perBucket = new List<List<long>>();
-                for (int i = 0; i < layout.BucketCount; i++) perBucket.Add(new List<long>());
-
-                foreach (HarborJobRecord job in pair.Value)
-                {
-                    if (job.TimeToFirstOutputMs.HasValue && job.TimeToFirstOutputMs.Value >= 0)
-                    {
-                        firstOutput.Add(job.TimeToFirstOutputMs.Value);
-                        perBucket[layout.IndexOf(job.EndedUtc!.Value)].Add(job.TimeToFirstOutputMs.Value);
-                    }
-
-                    if (job.DurationMs.HasValue && job.DurationMs.Value >= 0) durations.Add(job.DurationMs.Value);
-                }
-
-                HarborLaunchSpeed speed = new HarborLaunchSpeed
-                {
-                    Runtime = pair.Key,
-                    JobCount = pair.Value.Count,
-                    FirstOutputCount = firstOutput.Count,
-                    FirstOutputMedianMs = TimeBucketMath.Median(firstOutput),
-                    FirstOutputP95Ms = TimeBucketMath.Percentile(firstOutput, 95),
-                    DurationCount = durations.Count,
-                    DurationMedianMs = TimeBucketMath.Median(durations),
-                    DurationP95Ms = TimeBucketMath.Percentile(durations, 95)
-                };
-                foreach (List<long> bucket in perBucket) speed.FirstOutputMedianMsByBucket.Add(TimeBucketMath.Median(bucket));
-                result.Add(speed);
+                listed = groups.Take(HarborMetricsRanges.MaxLaunchSpeedRuntimes - 1).ToList();
+                aggregated = groups.Skip(HarborMetricsRanges.MaxLaunchSpeedRuntimes - 1).ToList();
             }
 
-            return result
+            List<HarborLaunchSpeed> result = new List<HarborLaunchSpeed>();
+            foreach (KeyValuePair<string, List<HarborJobRecord>> pair in listed)
+                result.Add(BuildSpeed(layout, pair.Key, pair.Value));
+
+            result = result
                 .OrderByDescending(s => s.JobCount)
                 .ThenBy(s => s.Runtime, StringComparer.OrdinalIgnoreCase)
                 .ToList();
+
+            if (aggregated.Count > 0)
+            {
+                HarborLaunchSpeed other = BuildSpeed(layout, "Other", aggregated.SelectMany(g => g.Value).ToList());
+                other.IsOther = true;
+                other.RuntimeCount = aggregated.Count;
+                result.Add(other);
+            }
+
+            return result;
+        }
+
+        private static HarborLaunchSpeed BuildSpeed(TimeBucketLayout layout, string runtime, List<HarborJobRecord> jobs)
+        {
+            List<long> firstOutput = new List<long>();
+            List<long> durations = new List<long>();
+            List<List<long>> perBucket = new List<List<long>>();
+            for (int i = 0; i < layout.BucketCount; i++) perBucket.Add(new List<long>());
+
+            foreach (HarborJobRecord job in jobs)
+            {
+                if (job.TimeToFirstOutputMs.HasValue && job.TimeToFirstOutputMs.Value >= 0)
+                {
+                    firstOutput.Add(job.TimeToFirstOutputMs.Value);
+                    perBucket[layout.IndexOf(job.EndedUtc!.Value)].Add(job.TimeToFirstOutputMs.Value);
+                }
+
+                if (job.DurationMs.HasValue && job.DurationMs.Value >= 0) durations.Add(job.DurationMs.Value);
+            }
+
+            HarborLaunchSpeed speed = new HarborLaunchSpeed
+            {
+                Runtime = runtime,
+                JobCount = jobs.Count,
+                FirstOutputCount = firstOutput.Count,
+                FirstOutputMedianMs = TimeBucketMath.Median(firstOutput),
+                FirstOutputP95Ms = TimeBucketMath.Percentile(firstOutput, 95),
+                DurationCount = durations.Count,
+                DurationMedianMs = TimeBucketMath.Median(durations),
+                DurationP95Ms = TimeBucketMath.Percentile(durations, 95)
+            };
+            foreach (List<long> bucket in perBucket) speed.FirstOutputMedianMsByBucket.Add(TimeBucketMath.Median(bucket));
+            return speed;
         }
 
         private static HarborLinkMetrics BuildLink(TimeBucketLayout layout, HarborMetricsInput input)
         {
             HarborLinkMetrics result = new HarborLinkMetrics();
             DateTime end = input.NowUtc < layout.ToUtc ? input.NowUtc : layout.ToUtc;
-            result.Segments = BuildTimeline(layout.FromUtc, end, input.EventBeforeWindow, input.Events, input.ReconnectGrace);
+            List<HarborLinkSegment> timeline = BuildTimeline(layout.FromUtc, end, input.EventBeforeWindow, input.Events, input.ReconnectGrace);
+            result.RawSegmentCount = timeline.Count;
+            result.Segments = timeline.Count > HarborMetricsRanges.MaxLinkSegments ? CoalesceToBuckets(layout, end, timeline) : timeline;
+            result.SegmentsCoalesced = timeline.Count > HarborMetricsRanges.MaxLinkSegments;
 
             double known = 0;
             double connected = 0;
-            foreach (HarborLinkSegment segment in result.Segments)
+            foreach (HarborLinkSegment segment in timeline)
             {
                 if (segment.State == HarborLinkSegmentStateEnum.Unknown) continue;
                 double length = (segment.EndUtc - segment.StartUtc).TotalMilliseconds;
@@ -344,9 +373,71 @@ namespace Armada.Core.Metrics
                 Accumulate(overall, key, runtime, model, record);
             }
 
-            for (int i = 0; i < layout.BucketCount; i++) result.Buckets[i].Series = Order(perBucket[i].Values);
-            result.Series = Order(overall.Values);
+            // Bounded: the window's top series are listed one by one; every other series, overall and in each bucket, is
+            // aggregated into one explicit IsOther entry, so no tokens are dropped.
+            List<HarborTokenSeries> ordered = Order(overall.Values);
+            HashSet<string> keep = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            int listedCount = ordered.Count > HarborMetricsRanges.MaxTokenSeries ? HarborMetricsRanges.MaxTokenSeries - 1 : ordered.Count;
+            for (int i = 0; i < listedCount; i++) keep.Add(ordered[i].Runtime + "\n" + ordered[i].Model);
+
+            for (int i = 0; i < layout.BucketCount; i++) result.Buckets[i].Series = Bound(perBucket[i], keep);
+            result.Series = Bound(overall, keep);
             return result;
+        }
+
+        private static List<HarborTokenSeries> Bound(Dictionary<string, HarborTokenSeries> series, HashSet<string> keep)
+        {
+            List<HarborTokenSeries> listed = new List<HarborTokenSeries>();
+            HarborTokenSeries other = new HarborTokenSeries { Runtime = "other", Model = "other", IsOther = true, SeriesCount = 0 };
+            foreach (KeyValuePair<string, HarborTokenSeries> pair in series)
+            {
+                if (keep.Contains(pair.Key))
+                {
+                    listed.Add(pair.Value);
+                    continue;
+                }
+
+                other.SeriesCount++;
+                other.InputTokens += pair.Value.InputTokens;
+                other.OutputTokens += pair.Value.OutputTokens;
+                other.CachedTokens += pair.Value.CachedTokens;
+                other.TotalTokens += pair.Value.TotalTokens;
+            }
+
+            List<HarborTokenSeries> result = Order(listed);
+            if (other.SeriesCount > 0) result.Add(other);
+            return result;
+        }
+
+        private static List<HarborLinkSegment> CoalesceToBuckets(TimeBucketLayout layout, DateTime endUtc, List<HarborLinkSegment> timeline)
+        {
+            List<HarborLinkSegment> coalesced = new List<HarborLinkSegment>();
+            int cursor = 0;
+            for (int i = 0; i < layout.BucketCount; i++)
+            {
+                DateTime start = layout.StartOf(i);
+                DateTime stop = layout.EndOf(i) < endUtc ? layout.EndOf(i) : endUtc;
+                if (stop <= start) break;
+
+                // The state that held longest in the bucket; ties go to the worse state (Down, then Reconnecting).
+                Dictionary<HarborLinkSegmentStateEnum, double> durations = new Dictionary<HarborLinkSegmentStateEnum, double>();
+                while (cursor < timeline.Count && timeline[cursor].EndUtc <= start) cursor++;
+                for (int j = cursor; j < timeline.Count && timeline[j].StartUtc < stop; j++)
+                {
+                    DateTime overlapStart = timeline[j].StartUtc > start ? timeline[j].StartUtc : start;
+                    DateTime overlapEnd = timeline[j].EndUtc < stop ? timeline[j].EndUtc : stop;
+                    if (overlapEnd <= overlapStart) continue;
+                    durations.TryGetValue(timeline[j].State, out double sum);
+                    durations[timeline[j].State] = sum + (overlapEnd - overlapStart).TotalMilliseconds;
+                }
+
+                HarborLinkSegmentStateEnum dominant = durations.Count == 0
+                    ? HarborLinkSegmentStateEnum.Unknown
+                    : durations.OrderByDescending(d => d.Value).ThenByDescending(d => (int)d.Key).First().Key;
+                Append(coalesced, dominant, start, stop);
+            }
+
+            return coalesced;
         }
 
         private static void Accumulate(Dictionary<string, HarborTokenSeries> map, string key, string runtime, string model, TokenUsageRecord record)

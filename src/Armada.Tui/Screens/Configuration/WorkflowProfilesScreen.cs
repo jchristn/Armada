@@ -196,6 +196,18 @@ namespace Armada.Tui.Screens.Configuration
         }
 
         /// <inheritdoc />
+        protected override string DeletingTitle
+        {
+            get { return "Deleting workflow profile"; }
+        }
+
+        /// <inheritdoc />
+        protected override string DeletingManyTitle
+        {
+            get { return "{count, plural, one {Deleting # workflow profile} other {Deleting # workflow profiles}}"; }
+        }
+
+        /// <inheritdoc />
         protected override Task DeleteAsync(WorkflowProfile row, CancellationToken token)
         {
             return Context.Client.DeleteWorkflowProfileAsync(row.Id, token);

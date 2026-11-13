@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
-import { apiErrorCode, browseVesselImport } from '@dashboard/api/client';
+import { apiErrorCode, browseAllVesselImport } from '@dashboard/api/client';
 import type { VesselBrowseEntry } from '@dashboard/types/models';
 import { importErrorLabel } from '@dashboard/lib/vesselImportLabels';
 import { errorMessage } from '../../../build/useLiveResource';
@@ -14,6 +14,7 @@ interface NodeState {
   error: string;
   entries: VesselBrowseEntry[] | null;
   expanded: boolean;
+  truncated?: boolean;
 }
 
 export interface BrowseTreeProps {
@@ -31,6 +32,7 @@ export function BrowseTree({ selected, onToggle, allowWorktrees }: BrowseTreePro
   const { t } = useLocale();
   const { colors } = useTheme();
   const [roots, setRoots] = useState<VesselBrowseEntry[] | null>(null);
+  const [rootsTruncated, setRootsTruncated] = useState(false);
   const [rootError, setRootError] = useState('');
   const [rootLoading, setRootLoading] = useState(false);
   const [nodes, setNodes] = useState<Record<string, NodeState>>({});
@@ -41,8 +43,10 @@ export function BrowseTree({ selected, onToggle, allowWorktrees }: BrowseTreePro
     setRootLoading(true);
     setRootError('');
     try {
-      const result = await browseVesselImport(null);
+      // Every page of the listing is read explicitly (the server pages it, 1000 per page).
+      const result = await browseAllVesselImport(null);
       setRoots(result?.entries ?? []);
+      setRootsTruncated(Boolean(result?.truncated));
     } catch (e) {
       setRootError(describe(e));
     } finally {
@@ -55,8 +59,8 @@ export function BrowseTree({ selected, onToggle, allowWorktrees }: BrowseTreePro
   async function loadNode(entry: VesselBrowseEntry) {
     setNodes((n) => ({ ...n, [entry.path]: { loading: true, error: '', entries: null, expanded: true } }));
     try {
-      const result = await browseVesselImport(entry.path);
-      setNodes((n) => ({ ...n, [entry.path]: { loading: false, error: '', entries: result?.entries ?? [], expanded: true } }));
+      const result = await browseAllVesselImport(entry.path);
+      setNodes((n) => ({ ...n, [entry.path]: { loading: false, error: '', entries: result?.entries ?? [], expanded: true, truncated: Boolean(result?.truncated) } }));
     } catch (e) {
       setNodes((n) => ({ ...n, [entry.path]: { loading: false, error: describe(e), entries: null, expanded: true } }));
     }
@@ -118,6 +122,7 @@ export function BrowseTree({ selected, onToggle, allowWorktrees }: BrowseTreePro
                 </View>
               ) : null}
               {node.entries ? renderEntries(node.entries, depth + 1) : null}
+              {node.truncated ? <AppText variant="caption" muted style={{ paddingLeft: (depth + 1) * 16 + 40 }}>{t('This folder has more subdirectories than can be listed. Open a narrower folder to see the rest.')}</AppText> : null}
             </View>
           ) : null}
         </View>
@@ -136,6 +141,7 @@ export function BrowseTree({ selected, onToggle, allowWorktrees }: BrowseTreePro
       ) : null}
       {roots && roots.length === 0 ? <AppText muted>{t('No browsable folders. An administrator can configure allowed roots under Settings > Import.')}</AppText> : null}
       {roots && roots.length > 0 ? renderEntries(roots, 0) : null}
+      {rootsTruncated ? <AppText variant="caption" muted>{t('This folder has more subdirectories than can be listed. Open a narrower folder to see the rest.')}</AppText> : null}
     </View>
   );
 }

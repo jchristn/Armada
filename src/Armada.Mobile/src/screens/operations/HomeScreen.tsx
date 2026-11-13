@@ -4,6 +4,7 @@ import { Pressable, RefreshControl, StyleSheet, View } from 'react-native';
 import {
   deleteMission,
   enumerateFleetActionRuns,
+  enumerateVoyageProgress,
   getHealth,
   getStatus,
   getVesselHealthSummary,
@@ -15,6 +16,7 @@ import {
   canRestartFromHome,
   dashboardAlerts,
   filterRecentMissions,
+  HOME_VOYAGE_PAGE_SIZE,
   RECENT_MISSION_STATUSES,
   serverHealthIndicator,
   totalMissionCount,
@@ -69,16 +71,19 @@ interface HomeData {
   activeRuns: { pending: number; running: number } | null;
   health: Record<string, unknown> | null;
   vesselHealth: VesselHealthSummary | null;
+  /** One page of the active voyages with progress, and the total across every page. */
+  voyages: { rows: VoyageProgress[]; total: number } | null;
 }
 
 async function loadHome(): Promise<HomeData> {
-  const [status, missions, pending, running, health, vesselHealth] = await Promise.all([
+  const [status, missions, pending, running, health, vesselHealth, voyages] = await Promise.all([
     getStatus().catch(() => null),
     listMissionSummaries({ pageSize: 10 }).catch(() => null),
     enumerateFleetActionRuns({ status: 'Pending', pageSize: 1 }).catch(() => null),
     enumerateFleetActionRuns({ status: 'Running', pageSize: 1 }).catch(() => null),
     getHealth().catch(() => null),
     getVesselHealthSummary().catch(() => null),
+    enumerateVoyageProgress({ pageSize: HOME_VOYAGE_PAGE_SIZE }).catch(() => null),
   ]);
   if (!status && !missions) throw new Error('Failed to load dashboard data.');
   return {
@@ -87,6 +92,7 @@ async function loadHome(): Promise<HomeData> {
     activeRuns: pending && running ? { pending: pending.totalRecords, running: running.totalRecords } : null,
     health,
     vesselHealth,
+    voyages: voyages ? { rows: (voyages.objects ?? []) as unknown as VoyageProgress[], total: voyages.totalRecords } : null,
   };
 }
 
@@ -277,13 +283,13 @@ export function HomeScreen() {
 
       <MissionHistoryChart vessels={lookups.vessels} fleets={lookups.fleets} refreshToken={refreshToken} />
 
-      {status?.voyages && status.voyages.length > 0 ? (
-        <Section title={t('Voyage Progress')}>
-          {status.voyages.map((vp) => (
+      {data?.voyages && data.voyages.rows.length > 0 ? (
+        <Section title={data.voyages.total > data.voyages.rows.length ? `${t('Voyage Progress')} (${data.voyages.rows.length}/${data.voyages.total})` : t('Voyage Progress')}>
+          {data.voyages.rows.map((vp) => (
             <VoyageProgressRow
               key={vp.voyage?.id}
               vp={vp}
-              vesselNames={(vp.vesselIds ?? []).map((id) => lookups.vesselName(id)).join(', ') || '-'}
+              vesselNames={vp.vesselId ? `${lookups.vesselName(vp.vesselId)}${(vp.vesselCount ?? 1) > 1 ? ` +${(vp.vesselCount ?? 1) - 1}` : ''}` : '-'}
               onPress={() => go(`/voyages/${vp.voyage?.id}`)}
               onLongPress={() => setJson({ title: `${t('Voyage')}: ${vp.voyage?.title || vp.voyage?.id}`, data: vp.voyage })}
             />

@@ -246,6 +246,18 @@ namespace Armada.Tui.Screens.Configuration
         }
 
         /// <inheritdoc />
+        protected override string DeletingTitle
+        {
+            get { return "Deleting model endpoint"; }
+        }
+
+        /// <inheritdoc />
+        protected override string DeletingManyTitle
+        {
+            get { return "{count, plural, one {Deleting # model endpoint} other {Deleting # model endpoints}}"; }
+        }
+
+        /// <inheritdoc />
         protected override Task DeleteAsync(ModelEndpoint row, CancellationToken token)
         {
             return Context.Client.DeleteModelEndpointAsync(row.Id, token);

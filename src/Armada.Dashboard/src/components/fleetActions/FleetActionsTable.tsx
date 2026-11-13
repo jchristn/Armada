@@ -7,6 +7,7 @@ import { useAuth } from '../../context/AuthContext';
 import DataTable, { type DataTableColumn } from '../shared/DataTable';
 import ActionMenu from '../shared/ActionMenu';
 import ConfirmDialog from '../shared/ConfirmDialog';
+import { useDeleteProgress } from '../../lib/useDeleteProgress';
 import JsonViewer from '../shared/JsonViewer';
 import CopyButton from '../shared/CopyButton';
 import CodeStatusBadge from '../shared/CodeStatusBadge';
@@ -14,7 +15,7 @@ import { EmptyState, ErrorState, LoadingState } from '../shared/StateBlocks';
 import FleetActionFormModal from './FleetActionFormModal';
 import VesselPickerModal from './VesselPickerModal';
 import RunActionModal from './RunActionModal';
-import { KIND_DESCRIPTIONS, KIND_LABELS } from '../../lib/fleetActionLabels';
+import { KIND_DESCRIPTIONS, KIND_LABELS, isReportOnly } from '../../lib/fleetActionLabels';
 import { usePersistedPageSize } from '../../lib/usePersistedPageSize';
 
 interface FleetActionsTableProps {
@@ -28,6 +29,7 @@ export default function FleetActionsTable({ startRunOnMount, onRunFlowStarted }:
   const { t, formatDateTime, formatRelativeTime } = useLocale();
   const { pushToast } = useNotifications();
   const { isTenantAdmin } = useAuth();
+  const deletion = useDeleteProgress();
 
   const [rows, setRows] = useState<FleetAction[]>([]);
   const [pageNumber, setPageNumber] = useState(1);
@@ -85,15 +87,16 @@ export default function FleetActionsTable({ startRunOnMount, onRunFlowStarted }:
 
   async function handleDelete(a: FleetAction) {
     setConfirmDelete(null);
-    try {
-      await deleteFleetAction(a.id);
-      pushToast('warning', a.isBuiltIn
-        ? t('Built-in action "{{name}}" hidden.', { name: a.name })
-        : t('Fleet action "{{name}}" deleted.', { name: a.name }));
-      void load();
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : t('Delete failed.'));
-    }
+    const done = await deletion.run({
+      kind: 'fleetAction',
+      action: () => deleteFleetAction(a.id),
+      errorMessage: (err) => (err instanceof Error && err.message ? err.message : t('Delete failed.')),
+    });
+    if (!done) return;
+    pushToast('warning', a.isBuiltIn
+      ? t('Built-in action "{{name}}" hidden.', { name: a.name })
+      : t('Fleet action "{{name}}" deleted.', { name: a.name }));
+    void load();
   }
 
   const toggleOrder = () => {
@@ -129,12 +132,19 @@ export default function FleetActionsTable({ startRunOnMount, onRunFlowStarted }:
     {
       key: 'kind', label: t('Kind'), headerTitle: t('Command runs a shell command in each vessel working directory. Mission dispatches a captain voyage per vessel.'), cellClassName: 'cell-nowrap',
       render: (a) => (
-        <CodeStatusBadge
-          label={t(KIND_LABELS[a.kind])}
-          tone={a.kind === 'Command' ? 'warning' : 'info'}
-          icon={a.kind === 'Command' ? 'alert' : 'info'}
-          title={t(KIND_DESCRIPTIONS[a.kind])}
-        />
+        <>
+          <CodeStatusBadge
+            label={t(KIND_LABELS[a.kind])}
+            tone={a.kind === 'Command' ? 'warning' : 'info'}
+            icon={a.kind === 'Command' ? 'alert' : 'info'}
+            title={t(KIND_DESCRIPTIONS[a.kind])}
+          />
+          {isReportOnly(a) && (
+            <span style={{ marginLeft: '0.35rem' }}>
+              <CodeStatusBadge label={t('Report-only')} tone="skipped" icon="info" title={t('Audit or Research mission: captains change nothing, and each vessel report is kept on the run.')} />
+            </span>
+          )}
+        </>
       ),
     },
     {
@@ -183,7 +193,7 @@ export default function FleetActionsTable({ startRunOnMount, onRunFlowStarted }:
           title={t('No fleet actions yet')}
           actions={isTenantAdmin ? <button type="button" className="btn btn-primary btn-sm" onClick={openCreate} title={t('Create a reusable command or mission prompt to run across many vessels.')}>+ {t('Action')}</button> : undefined}
         >
-          <p>{t('Armada seeds five built-in actions into each tenant the first time actions are listed: Fast-forward default branch, Prune merged branches, Build, Update outdated dependencies, and Add a test project.')}</p>
+          <p>{t('Armada seeds built-in actions into each tenant the first time actions are listed, such as Build, Run tests, Vulnerability audit, and their paired fixes.')}</p>
           <p>{t('Deleted built-ins are hidden for good and never re-seeded. Create your own action to get started.')}</p>
         </EmptyState>
       );
@@ -258,6 +268,7 @@ export default function FleetActionsTable({ startRunOnMount, onRunFlowStarted }:
         onConfirm={() => { if (confirmDelete) void handleDelete(confirmDelete); }}
         onCancel={() => setConfirmDelete(null)}
       />
+      {deletion.dialog}
 
       <VesselPickerModal
         open={runFlow.stage === 'pick'}

@@ -2,6 +2,7 @@ namespace Armada.Core.Models
 {
     using System;
     using System.Collections.Generic;
+    using Armada.Core.Services;
 
     /// <summary>
     /// Aggregate token-usage summary that feeds both dashboard charts: <see cref="Buckets"/> drives the
@@ -62,13 +63,40 @@ namespace Armada.Core.Models
         public long TotalTokens { get; set; } = 0;
 
         /// <summary>
-        /// Time buckets in chronological order (gap-filled across the requested window).
+        /// Most models broken out by name (the query's ModelLimit after normalization).
         /// </summary>
+        public int ModelLimit { get; set; } = TokenUsageQuery.DefaultModelLimit;
+
+        /// <summary>
+        /// Number of distinct models in the window. When it is above <see cref="ModelLimit"/>, the least-used
+        /// models are summed into <see cref="OtherModels"/>.
+        /// </summary>
+        public int ModelCount { get; set; } = 0;
+
+        /// <summary>
+        /// Number of distinct models summed into <see cref="OtherModels"/> (zero when every model is in <see cref="ByModel"/>).
+        /// </summary>
+        public int OtherModelCount { get; set; } = 0;
+
+        /// <summary>
+        /// Whole-window aggregate of the models beyond <see cref="ModelLimit"/>, with Model set to
+        /// <see cref="TokenUsageSummaryBuilder.OtherModelName"/>; null when every model is in <see cref="ByModel"/>.
+        /// ByModel plus OtherModels always sums to the grand totals.
+        /// </summary>
+        public TokenUsageModelBreakdown? OtherModels { get; set; } = null;
+
+        /// <summary>
+        /// Time buckets in chronological order (gap-filled across the requested window). A window and bucket size
+        /// that would produce more than <see cref="CollectionLimits.MaxSummaryBuckets"/> buckets is rejected.
+        /// </summary>
+        [CollectionBound(CollectionLimits.MaxSummaryBuckets)]
         public List<TokenUsageBucket> Buckets { get; set; } = new List<TokenUsageBucket>();
 
         /// <summary>
-        /// Per-model aggregate over the whole window, ordered by total tokens descending (most-used first).
+        /// Per-model aggregate over the whole window for the <see cref="ModelLimit"/> most-used models, ordered by
+        /// total tokens descending, then model name. The rest are summed into <see cref="OtherModels"/>.
         /// </summary>
+        [CollectionBound(TokenUsageQuery.MaxModelLimit, Reason = "Top ModelLimit models; the rest are summed into OtherModels")]
         public List<TokenUsageModelBreakdown> ByModel { get; set; } = new List<TokenUsageModelBreakdown>();
 
         #endregion

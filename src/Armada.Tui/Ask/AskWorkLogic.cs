@@ -179,6 +179,7 @@ namespace Armada.Tui.Ask
                 case AskTrackedEntityTypeEnum.FleetActionRun: return "/fleet-actions/runs/" + id;
                 case AskTrackedEntityTypeEnum.VesselImportBatch: return "/vessels/import?batch=" + id;
                 case AskTrackedEntityTypeEnum.Job: return TabLinks.JobsPath;
+                case AskTrackedEntityTypeEnum.BlackBox: return "/blackbox/" + id;
                 default: return "/activity";
             }
         }
@@ -197,6 +198,7 @@ namespace Armada.Tui.Ask
                 case AskTrackedEntityTypeEnum.FleetActionRun: return "Fleet action run";
                 case AskTrackedEntityTypeEnum.Job: return "Background job";
                 case AskTrackedEntityTypeEnum.VesselImportBatch: return "Vessel import";
+                case AskTrackedEntityTypeEnum.BlackBox: return "Black box";
                 default: return entityType.ToString();
             }
         }

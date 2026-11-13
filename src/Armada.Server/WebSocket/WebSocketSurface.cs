@@ -70,7 +70,7 @@ namespace Armada.Server.WebSocket
             "status", "stop_captain", "stop_all", "stop_server",
             "list_fleets", "get_fleet", "create_fleet", "update_fleet", "delete_fleet",
             "list_vessels", "get_vessel", "create_vessel", "update_vessel", "update_vessel_context", "delete_vessel",
-            "list_voyages", "get_voyage", "create_voyage", "cancel_voyage", "purge_voyage",
+            "list_voyages", "list_voyage_progress", "get_voyage", "create_voyage", "cancel_voyage", "purge_voyage",
             "list_missions", "list_missions_summary", "get_mission", "create_mission", "update_mission", "transition_mission_status",
             "cancel_mission", "purge_mission", "restart_mission", "get_mission_diff", "get_mission_log",
             "list_captains", "get_captain", "create_captain", "update_captain", "delete_captain", "get_captain_log",
@@ -83,7 +83,8 @@ namespace Armada.Server.WebSocket
             "get_persona", "create_persona", "update_persona", "delete_persona",
             "get_prompt_template", "update_prompt_template",
             "get_pipeline", "create_pipeline", "update_pipeline", "delete_pipeline",
-            "list_cli_permission_requests", "decide_cli_permission_request"
+            "list_cli_permission_requests", "decide_cli_permission_request",
+            "blackbox.get", "blackbox.brief", "blackbox.list"
         };
 
         /// <summary>
@@ -135,8 +136,13 @@ namespace Armada.Server.WebSocket
             events.Add(new WebSocketEventDescriptor("status.snapshot", "connection", false, "ArmadaStatus", new[] { "allTenants" }, false));
 
             // Entity change events with dedicated payloads
+            events.Add(new WebSocketEventDescriptor("usage.snapshot", "tenant", false, null, new[] { "tenantId", "snapshotId", "hostId", "runtime", "provider", "captainIds", "capturedUtc", "status" }, false));
             events.Add(new WebSocketEventDescriptor("mission.changed", "tenant", false, null, new[] { "id", "title", "status", "voyageId", "activity" }, false));
             events.Add(new WebSocketEventDescriptor("mission.activity", "tenant", false, null, new[] { "id", "voyageId", "activity" }, false));
+            events.Add(new WebSocketEventDescriptor("mission.waiting_gate_changed", "tenant", false, "MissionWaitGateChange", null, false));
+            events.Add(new WebSocketEventDescriptor("mission.starving", "tenant", false, "ArmadaEvent", null, false));
+            events.Add(new WebSocketEventDescriptor("concurrency.limit_exceeded", "tenant", false, "ArmadaEvent", null, false));
+            events.Add(new WebSocketEventDescriptor("captain-selection.changed", "tenant", false, null, new[] { "missionId", "voyageId", "decisionId", "outcome" }, false));
             events.Add(new WebSocketEventDescriptor("voyage.changed", "tenant", false, null, new[] { "id", "title", "status" }, false));
             events.Add(new WebSocketEventDescriptor("captain.changed", "tenant", false, null, new[] { "id", "name", "state" }, false));
             events.Add(new WebSocketEventDescriptor("check-run.changed", "tenant", false, "CheckRun", null, false));
@@ -200,6 +206,16 @@ namespace Armada.Server.WebSocket
 
             foreach (string type in generic)
                 events.Add(new WebSocketEventDescriptor(type, "tenant", true, null, GenericEventFields, true));
+
+            // Mission and voyage black box (typed payloads in Armada.Core.Models; docs/BLACKBOX.md, "Events").
+            events.Add(new WebSocketEventDescriptor("blackbox.captured", "tenant", true, "BlackBoxCapturedPayload", new[] { "entryId", "missionId", "voyageId", "vesselId", "phase", "step", "kind", "attempt", "captureMode" }, false));
+            events.Add(new WebSocketEventDescriptor("blackbox.capture_failed", "tenant", true, "BlackBoxCaptureFailedPayload", new[] { "missionId", "voyageId", "step", "error" }, false));
+            events.Add(new WebSocketEventDescriptor("blackbox.analyzed", "tenant", true, "BlackBoxAnalyzedPayload", new[] { "entryId", "missionId", "voyageId", "state", "triage", "rulesVersion" }, false));
+            events.Add(new WebSocketEventDescriptor("blackbox.resolved", "tenant", true, "BlackBoxResolvedPayload", new[] { "entryId", "missionId", "voyageId", "resolution" }, false));
+            events.Add(new WebSocketEventDescriptor("blackbox.deleted", "tenant", true, "BlackBoxDeletedPayload", new[] { "entryId", "missionId", "voyageId", "reason" }, false));
+            events.Add(new WebSocketEventDescriptor("blackbox.storage_fallback", "tenant", true, "BlackBoxStorageFallbackPayload", new[] { "entryId", "from", "to", "error" }, false));
+            events.Add(new WebSocketEventDescriptor("blackbox.gc_completed", "tenant", true, "BlackBoxGcReport", new[] { "dryRun", "startedUtc", "finishedUtc", "durationMs", "expired", "evicted", "cascaded", "retriedDeletes", "orphansRemoved", "objectsMissing", "bytesFreed", "failures", "candidateEntryIds", "errors" }, false));
+            events.Add(new WebSocketEventDescriptor("blackbox.recovery_run", "tenant", true, "BlackBoxRecoveryRunPayload", new[] { "entryId", "pathId", "recommendationId", "dryRun", "succeeded", "stepsRun", "stepsFailed", "userId" }, false));
 
             // mission.status_changed is generic plus the new and previous status as fields.
             events.Add(new WebSocketEventDescriptor("mission.status_changed", "tenant", true, null, GenericEventFields.Concat(new[] { "status", "previousStatus" }), true));

@@ -55,6 +55,37 @@ namespace Test.Shared.Suites.Services
                 AssertEqual("http://127.0.0.1:7891/mcp", client.McpBaseUrl);
             }));
 
+            cases.Add(CaseAsync("git_output_bytes_match_local_executor", "A Harbor returns NUL-terminated git output over the wire exactly as the local executor does", TestTags.Negative, async () =>
+            {
+                string dir = await LocalHostCommandExecutorSuite.CreateRepoWithFilesAsync("harbor-nul").ConfigureAwait(false);
+                try
+                {
+                    List<string> arguments = new List<string> { "ls-files", "-z" };
+                    HostCommandResult local = await new LocalHostCommandExecutor().RunAsync(new HostCommandRequest
+                    {
+                        Executable = "git",
+                        WorkingDirectory = dir,
+                        Arguments = arguments
+                    }).ConfigureAwait(false);
+
+                    FakeTransport transport = new FakeTransport { HoldUntilGitResult = true };
+                    transport.Enqueue(HarborProtocol.Serialize(new HarborHandshakeAck { Accepted = true }));
+                    transport.Enqueue(HarborProtocol.Serialize(new HarborGitRequest { RequestId = "rz", Executable = "git", WorkingDirectory = dir, Arguments = arguments }));
+                    HarborLinkClient client = new HarborLinkClient("hbr_lcz", "Rig", new List<HarborCapability> { new HarborCapability { Name = "git" } }, 4, new LocalHostCommandExecutor(), CreateLogging(), 0);
+
+                    await client.RunSessionAsync(transport, CancellationToken.None).ConfigureAwait(false);
+
+                    HarborGitResult? result = FindGitResult(transport.Sent);
+                    AssertNotNull(result, "Expected a git result to be sent.");
+                    AssertEqual("a.txt\0b.txt\0", local.StandardOutput, "local executor output");
+                    AssertEqual(local.StandardOutput, result!.StandardOutput, "the Harbor's wire result carries the same text");
+                }
+                finally
+                {
+                    LocalHostCommandExecutorSuite.TryDeleteDir(dir);
+                }
+            }));
+
             cases.Add(CaseAsync("launch_request_is_refused", "Client refuses a launch request with an error", TestTags.Negative, async () =>
             {
                 FakeTransport transport = new FakeTransport();
@@ -334,8 +365,12 @@ namespace Test.Shared.Suites.Services
         private sealed class FakeTransport : IHarborTransport
         {
             private readonly Queue<string> _Inbound = new Queue<string>();
+            private readonly TaskCompletionSource<bool> _GitResultSent = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
 
             public List<string> Sent { get; } = new List<string>();
+
+            /// <summary>When true, the inbound stream stays open until a git result is sent (or 30 seconds pass).</summary>
+            public bool HoldUntilGitResult { get; set; } = false;
 
             public void Enqueue(string message) => _Inbound.Enqueue(message);
 
@@ -343,14 +378,19 @@ namespace Test.Shared.Suites.Services
 
             public Task SendAsync(string text, CancellationToken token)
             {
-                Sent.Add(text);
+                lock (Sent)
+                {
+                    Sent.Add(text);
+                }
+                if (HarborProtocol.Deserialize(text) is HarborGitResult) _GitResultSent.TrySetResult(true);
                 return Task.CompletedTask;
             }
 
-            public Task<string?> ReceiveAsync(CancellationToken token)
+            public async Task<string?> ReceiveAsync(CancellationToken token)
             {
-                if (_Inbound.Count == 0) return Task.FromResult<string?>(null);
-                return Task.FromResult<string?>(_Inbound.Dequeue());
+                if (_Inbound.Count > 0) return _Inbound.Dequeue();
+                if (HoldUntilGitResult) await Task.WhenAny(_GitResultSent.Task, Task.Delay(30000, token)).ConfigureAwait(false);
+                return null;
             }
 
             public Task CloseAsync(CancellationToken token) => Task.CompletedTask;

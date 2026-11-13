@@ -1,5 +1,6 @@
 namespace Armada.Core.Services.Interfaces
 {
+    using System.Runtime.CompilerServices;
     using Armada.Core.Models;
 
     /// <summary>
@@ -21,6 +22,20 @@ namespace Armada.Core.Services.Interfaces
         Task<Dock?> ProvisionAsync(Vessel vessel, Captain captain, string branchName, string? missionId = null, CancellationToken token = default);
 
         /// <summary>
+        /// Provision a local dock whose new branch starts at <paramref name="baseBranch"/> instead of the vessel's default
+        /// branch (a hierarchy child that forks from its parent's head). Implementations without fork support ignore it.
+        /// </summary>
+        /// <param name="vessel">Vessel.</param>
+        /// <param name="captain">Captain.</param>
+        /// <param name="branchName">Branch to create or attach.</param>
+        /// <param name="missionId">Mission identifier, or null.</param>
+        /// <param name="baseBranch">Start point for a new branch, or null for the vessel default.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The dock, or null when provisioning failed.</returns>
+        Task<Dock?> ProvisionAsync(Vessel vessel, Captain captain, string branchName, string? missionId, string? baseBranch, CancellationToken token = default)
+            => ProvisionAsync(vessel, captain, branchName, missionId, token);
+
+        /// <summary>
         /// Have a Harbor create a mission dock on its own host: a git worktree of the vessel's checkout there (or of the
         /// Harbor's own clone) under the Harbor's docks directory. The dock records the Harbor and the repository on that
         /// host, so every later operation on it runs on that Harbor.
@@ -37,12 +52,65 @@ namespace Armada.Core.Services.Interfaces
         Task<Dock> ProvisionOnHarborAsync(Vessel vessel, Captain captain, string branchName, string missionId, string harborId, CancellationToken token = default);
 
         /// <summary>
-        /// Reclaim a dock by removing the worktree.
+        /// Provision a Harbor-hosted dock whose new branch starts at <paramref name="baseBranch"/> (which must exist on that
+        /// host) instead of the vessel's default branch. Implementations without fork support ignore it.
+        /// </summary>
+        /// <param name="vessel">Vessel.</param>
+        /// <param name="captain">Captain.</param>
+        /// <param name="branchName">Branch to create or attach.</param>
+        /// <param name="missionId">Mission identifier.</param>
+        /// <param name="harborId">Harbor identifier.</param>
+        /// <param name="baseBranch">Start point for a new branch, or null for the vessel default.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The dock.</returns>
+        Task<Dock> ProvisionOnHarborAsync(Vessel vessel, Captain captain, string branchName, string missionId, string harborId, string? baseBranch, CancellationToken token = default)
+            => ProvisionOnHarborAsync(vessel, captain, branchName, missionId, harborId, token);
+
+        /// <summary>
+        /// Reclaim a dock by removing the worktree. A dock is leased while a mission that references it is WorkProduced,
+        /// Testing, Review, Verifying, PullRequestOpen or LandingFailed, or while a merge queue entry for such a mission is
+        /// Queued or Testing; a leased dock is kept (the call is a no-op, logged and recorded as a dock.reclaim_refused
+        /// event) unless <paramref name="forceReason"/> says why it may go. Every reclaim is recorded as a dock.reclaimed
+        /// event naming the caller and the mission's status.
         /// </summary>
         /// <param name="dockId">Dock identifier.</param>
         /// <param name="tenantId">Optional tenant ID for tenant-scoped reads. Null for system/admin context.</param>
         /// <param name="token">Cancellation token.</param>
-        Task ReclaimAsync(string dockId, string? tenantId = null, CancellationToken token = default);
+        /// <param name="forceReason">Why a leased dock may be removed anyway (for example a pipeline handoff that moves the
+        /// branch to the next stage), or null to respect the lease.</param>
+        /// <param name="caller">Code path asking for the reclaim; defaults to the calling member.</param>
+        /// <returns>False when the reclaim was refused because the dock is leased; true otherwise.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when dockId is null or empty.</exception>
+        Task<bool> ReclaimAsync(string dockId, string? tenantId = null, CancellationToken token = default, string? forceReason = null, [CallerMemberName] string caller = "");
+
+        /// <summary>
+        /// Whether a dock's worktree directory exists on the dock's host (the Admiral's disk, or its Harbor's).
+        /// </summary>
+        /// <param name="dock">Dock.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>True or false, or null when it cannot be told (for example the dock's Harbor does not answer).</returns>
+        Task<bool?> WorktreeExistsAsync(Dock dock, CancellationToken token = default) => Task.FromResult<bool?>(null);
+
+        /// <summary>
+        /// Take (and forget) why the last provisioning for a mission failed, or null when none is recorded. ProvisionAsync
+        /// returns null on failure; this says which step failed and with what exception.
+        /// </summary>
+        /// <param name="missionId">Mission identifier.</param>
+        /// <returns>The failure, or null.</returns>
+        DockProvisionFailure? TakeProvisionFailure(string missionId) => null;
+
+        /// <summary>
+        /// Recreate a dock's missing worktree from its branch, on the dock's own host, at the dock's recorded path. Never
+        /// creates a branch: when the branch is missing from the dock's repository the restore fails. A restored dock is
+        /// recorded as a dock.repaired event.
+        /// </summary>
+        /// <param name="dockId">Dock identifier.</param>
+        /// <param name="trigger">What asked for the repair, for the event.</param>
+        /// <param name="reactivate">Whether a dock already marked reclaimed may be restored (and marked active again).</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The outcome.</returns>
+        Task<DockRestoreResult> RestoreWorktreeAsync(string dockId, string trigger, bool reactivate = false, CancellationToken token = default)
+            => Task.FromResult(DockRestoreResult.Failed(dockId, "This dock service cannot restore worktrees."));
 
         /// <summary>
         /// Repair a dock's worktree.

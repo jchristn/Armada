@@ -281,7 +281,7 @@ namespace Armada.Tui.Screens.Admin
             Context.Modals.Show(dialog, result =>
             {
                 if (!(result is bool ok) || !ok) return;
-                ScreenOps.RunVoid(Context, () => Context.Client.DeleteCliPermissionRuleAsync(id), () =>
+                DeleteProgress.RunVoid(Context, "Deleting CLI permission rule", ct => Context.Client.DeleteCliPermissionRuleAsync(id, ct), () =>
                 {
                     ScreenOps.Toast(Context, NotificationSeverityEnum.Success, "Rule deleted.");
                     Load();

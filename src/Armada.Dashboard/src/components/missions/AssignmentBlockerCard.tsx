@@ -1,6 +1,8 @@
 import { Link } from 'react-router-dom';
 import { useLocale } from '../../context/LocaleContext';
 import type { MissionAssignmentBlocker } from '../../types/models';
+import { assignmentAdviceTarget } from '../../lib/assignmentAdvice';
+import { selectionReasonKey } from '../../lib/usageSelection';
 import { assignmentBlockerTitle } from '../../lib/missionActions';
 
 interface AssignmentBlockerCardProps {
@@ -24,7 +26,23 @@ export default function AssignmentBlockerCard({ blocker }: AssignmentBlockerCard
         </div>
         <span className={`readiness-pill ${blocker.reason === 'AwaitingDispatch' ? 'ready' : 'warning'}`} title={blocker.reason === 'AwaitingDispatch' ? t('Nothing is blocking this mission; it will be assigned on the next dispatch pass.') : t('Something is holding this mission back. The reason and details are shown in this card.')}>{t('Pending')}</span>
       </div>
-      <p style={{ margin: '0.5rem 0' }}>{blocker.summary}</p>
+      <p style={{ margin: '0.5rem 0' }}>{blocker.selectionReasonCode ? t(selectionReasonKey(blocker.selectionReasonCode)) : blocker.summary}</p>
+      {blocker.selectionReasonCode && <Link className="btn btn-sm" to="/activity?source=usage-overview">{t('Captain Usage')}</Link>}
+      {blocker.selectionNextReconsiderUtc && <p className="text-dim">{t('usageSelection.reconsiderAt', { time: formatDateTime(blocker.selectionNextReconsiderUtc) })}</p>}
+      {(blocker.advice?.length ?? 0) > 0 && (
+        <section className="assignment-blocker-next-steps" aria-label={t('Next steps')}>
+          <h4>{t('Next steps')}</h4>
+          <ul>
+            {blocker.advice!.map((advice, index) => {
+              const target = assignmentAdviceTarget(advice);
+              return <li key={`${advice.setting ?? advice.targetId ?? 'step'}-${index}`}>
+                <span>{advice.text}</span>
+                {target && <Link className="btn btn-sm" to={target.path}>{t(target.label)}</Link>}
+              </li>;
+            })}
+          </ul>
+        </section>
+      )}
       {blocker.untilUtc && (
         <p className="text-dim" style={{ margin: '0.25rem 0' }}>{t('Expected to clear at {{time}}', { time: formatDateTime(blocker.untilUtc) })}</p>
       )}
@@ -42,6 +60,7 @@ export default function AssignmentBlockerCard({ blocker }: AssignmentBlockerCard
               <Link to={`/missions/${missionId}`} className="mono" title={t('A mission that must settle before this one can be assigned. Click to open it.')}>{missionId}</Link>
             </span>
           ))}
+          {(blocker.blockingMissionCount ?? 0) > blocker.blockingMissionIds.length && <span className="text-dim">{` (+${(blocker.blockingMissionCount ?? 0) - blocker.blockingMissionIds.length})`}</span>}
         </p>
       )}
       {blocker.captains.length > 0 && (
@@ -60,6 +79,7 @@ export default function AssignmentBlockerCard({ blocker }: AssignmentBlockerCard
               )}
             </li>
           ))}
+          {(blocker.captainCount ?? 0) > blocker.captains.length && <li className="text-dim">{`+${(blocker.captainCount ?? 0) - blocker.captains.length}`}</li>}
         </ul>
       )}
     </div>

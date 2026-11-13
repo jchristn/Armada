@@ -66,7 +66,6 @@ namespace Armada.Server.Routes
                 Stopwatch sw = Stopwatch.StartNew();
                 EnumerationResult<ProjectProfile> result = await _database.ProjectProfiles.EnumerateAsync(query).ConfigureAwait(false);
                 result.TotalMs = Math.Round(sw.Elapsed.TotalMilliseconds, 2);
-                if (!ctx.IsAdmin) result.Objects = result.Objects.Where(p => ScopedVisibility.CanView(ctx, p.OwnershipScope, p.TenantId, p.UserId)).ToList();
                 return result;
             },
             api => api
@@ -96,7 +95,6 @@ namespace Armada.Server.Routes
                 Stopwatch sw = Stopwatch.StartNew();
                 EnumerationResult<ProjectProfile> result = await _database.ProjectProfiles.EnumerateAsync(query).ConfigureAwait(false);
                 result.TotalMs = Math.Round(sw.Elapsed.TotalMilliseconds, 2);
-                if (!ctx.IsAdmin) result.Objects = result.Objects.Where(p => ScopedVisibility.CanView(ctx, p.OwnershipScope, p.TenantId, p.UserId)).ToList();
                 return result;
             },
             api => api
@@ -369,7 +367,7 @@ namespace Armada.Server.Routes
             if (int.TryParse(req.Query.GetValueOrDefault("pageNumber"), out int pageNumber))
                 query.PageNumber = Math.Max(1, pageNumber);
             if (int.TryParse(req.Query.GetValueOrDefault("pageSize"), out int pageSize))
-                query.PageSize = Math.Clamp(pageSize, 1, 500);
+                query.PageSize = pageSize;
             if (Enum.TryParse(req.Query.GetValueOrDefault("scope"), true, out ProjectProfileScopeEnum scope))
                 query.Scope = scope;
             if (DateTime.TryParse(req.Query.GetValueOrDefault("fromUtc"), out DateTime fromUtc))
@@ -390,6 +388,9 @@ namespace Armada.Server.Routes
             if (ctx.IsAdmin) return;
             query.TenantId = ctx.TenantId;
             query.UserId = null;
+            // A regular user sees tenant-wide rows plus their own; the data source applies it before counting, so
+            // TotalRecords and every page are exact for the caller.
+            query.ViewerUserId = ctx.IsTenantAdmin ? null : ctx.UserId;
         }
 
         private static ProjectProfileQuery BuildScopedReadQuery(AuthContext ctx)

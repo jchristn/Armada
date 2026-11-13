@@ -79,9 +79,37 @@ namespace Armada.Core.Models
         public double BucketMinutes { get; set; } = 15;
 
         /// <summary>
+        /// Most models a summary breaks out by name, in <see cref="TokenUsageSummaryResult.ByModel"/> and in each
+        /// bucket's Models. The remaining models are summed into an explicit OtherModels aggregate, never dropped.
+        /// Default <see cref="DefaultModelLimit"/>, minimum 1, maximum <see cref="MaxModelLimit"/>; values outside the
+        /// range are normalized to the nearest bound.
+        /// </summary>
+        public int ModelLimit
+        {
+            get => _ModelLimit;
+            set => _ModelLimit = value < 1 ? 1 : (value > MaxModelLimit ? MaxModelLimit : value);
+        }
+
+        /// <summary>
+        /// Default for <see cref="ModelLimit"/>.
+        /// </summary>
+        public const int DefaultModelLimit = 10;
+
+        /// <summary>
+        /// Largest <see cref="ModelLimit"/>.
+        /// </summary>
+        public const int MaxModelLimit = 100;
+
+        /// <summary>
         /// Calculated zero-based offset.
         /// </summary>
         public int Offset => PageNumber <= 1 ? 0 : (PageNumber - 1) * PageSize;
+
+        #endregion
+
+        #region Private-Members
+
+        private int _ModelLimit = DefaultModelLimit;
 
         #endregion
     }

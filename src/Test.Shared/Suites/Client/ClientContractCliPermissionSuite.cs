@@ -57,6 +57,9 @@ namespace Test.Shared.Suites.Client
                 AssertEqual(rule.Pattern, created.Pattern, "created pattern");
                 AssertEqual(rule.Pattern, (await c.GetCliPermissionRuleAsync(created.Id))?.Pattern, "get");
                 List<CliPermissionRule> global = (await c.ListCliPermissionRulesAsync(new CliPermissionRuleQuery { Scope = CliPermissionRuleScopeEnum.Global }))!;
+                EnumerationResult<CliPermissionRule>? rulePage = await c.EnumerateCliPermissionRulesAsync(new CliPermissionRuleQuery { Scope = CliPermissionRuleScopeEnum.Global }, 1, 1);
+                AssertEqual((long)global.Count, rulePage!.TotalRecords, "page total matches every rule");
+                AssertTrue(rulePage.Objects.Count <= 1, "rule page bounded");
                 AssertTrue(global.Any(r => r.Id == created.Id), "listed");
                 created.Description = "updated";
                 created.Action = CliPermissionRuleActionEnum.Deny;

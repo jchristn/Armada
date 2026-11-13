@@ -2,6 +2,7 @@ namespace Armada.Core.Models
 {
     using System;
     using Armada.Core.Enums;
+    using Armada.Core.Services;
 
     /// <summary>
     /// Query for objective enumeration.
@@ -129,18 +130,35 @@ namespace Armada.Core.Models
         public DateTime? ToUtc { get; set; } = null;
 
         /// <summary>
-        /// Page number.
+        /// Page number (1-based). Default 1; a smaller value is normalized to 1.
         /// </summary>
-        public int PageNumber { get; set; } = 1;
+        public int PageNumber
+        {
+            get => _PageNumber;
+            set => _PageNumber = value < 1 ? 1 : value;
+        }
 
         /// <summary>
-        /// Page size.
+        /// Page size. Default 50, minimum 1, maximum 1000 (CollectionLimits.MaxPageSize); a value outside the range is
+        /// normalized to the nearest bound.
         /// </summary>
-        public int PageSize { get; set; } = 50;
+        public int PageSize
+        {
+            get => _PageSize;
+            set
+            {
+                if (value < CollectionLimits.MinPageSize) _PageSize = CollectionLimits.MinPageSize;
+                else if (value > CollectionLimits.MaxPageSize) _PageSize = CollectionLimits.MaxPageSize;
+                else _PageSize = value;
+            }
+        }
 
         /// <summary>
         /// Zero-based offset.
         /// </summary>
-        public int Offset => PageNumber <= 1 ? 0 : (PageNumber - 1) * PageSize;
+        public int Offset => (PageNumber - 1) * PageSize;
+
+        private int _PageNumber = 1;
+        private int _PageSize = 50;
     }
 }

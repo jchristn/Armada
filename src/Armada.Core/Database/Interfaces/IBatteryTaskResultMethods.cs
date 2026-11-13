@@ -27,6 +27,17 @@ namespace Armada.Core.Database.Interfaces
         Task<List<BatteryTaskResult>> ReadByRunAsync(string runId, CancellationToken token = default);
 
         /// <summary>
+        /// One page of a run's results, filtered by outcome (query.Status) when set, ordered by creation (query.Order)
+        /// with the id as the tie-break. Paged in the database; TotalRecords counts the same filter.
+        /// </summary>
+        /// <param name="runId">Run identifier.</param>
+        /// <param name="query">Paging query (PageNumber, PageSize 1 to 1000, Order, Status as the outcome filter).</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>One page of results.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when runId or query is null.</exception>
+        Task<EnumerationResult<BatteryTaskResult>> EnumerateByRunAsync(string runId, EnumerationQuery query, CancellationToken token = default);
+
+        /// <summary>
         /// Delete every result of a run.
         /// </summary>
         /// <param name="runId">Run identifier.</param>

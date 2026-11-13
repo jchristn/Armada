@@ -8,7 +8,7 @@ import {
   getCliPermissionRule,
   listCaptains,
   listCliPermissionRequests,
-  listCliPermissionRules,
+  enumerateCliPermissionRules,
   updateCliPermissionRule,
 } from '@dashboard/api/client';
 import type { Captain, CliPermissionRequest, CliPermissionRequestStatus, CliPermissionRule, CliPermissionRuleAction, CliPermissionRuleScope } from '@dashboard/types/models';
@@ -21,6 +21,7 @@ import { FormSheet, str, type FormField, type FormValues } from '../../component
 import { ResourceList } from '../../components/resource/ResourceList';
 import { ResourceRow, useConfirm } from '../../components/resource/ResourceRow';
 import { resourceStyles } from '../../components/resource/styles';
+import { TruncationNote } from '../../components/resource/TruncationNote';
 import { AppText } from '../../components/ui/AppText';
 import { BottomSheet } from '../../components/ui/BottomSheet';
 import { Button } from '../../components/ui/Button';
@@ -132,8 +133,14 @@ function RulesPanel() {
   const vesselNames = useMemo(() => new Map(vessels.map((v) => [v.id, v.name])), [vessels]);
   const captainNames = useMemo(() => new Map(captains.map((c) => [c.id, c.name])), [captains]);
 
+  // One bounded page of the largest size; the note in the header says when more rules exist.
+  const [ruleTotal, setRuleTotal] = useState(0);
   const { data, loading, refreshing, error, reload, refresh, setData } = useLoad(
-    async () => (await listCliPermissionRules({ scope: scopeFilter || null })) ?? [],
+    async () => {
+      const page = await enumerateCliPermissionRules({ scope: scopeFilter || null });
+      setRuleTotal(page?.totalRecords ?? 0);
+      return page?.objects ?? [];
+    },
     [scopeFilter],
     { fallbackError: t('Failed to load CLI permission rules.') },
   );
@@ -201,6 +208,7 @@ function RulesPanel() {
             <AppText muted style={resourceStyles.pad}>
               {t('Rules use Claude Code permission rule syntax, for example Bash(git status:*), Bash(npm run *), WebFetch(domain:example.com), Edit(src/**), or mcp__server__tool. Deny rules win over allow rules; every part of a compound shell command must be allowed.')}
             </AppText>
+            <TruncationNote shown={rules.length} total={ruleTotal} />
             {canEdit ? <Button label={t('New rule')} icon="add" onPress={() => setCreating(true)} style={resourceStyles.create} testID="cli-rules-create" /> : null}
           </>
         )}

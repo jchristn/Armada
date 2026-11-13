@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { createPlaybook, deletePlaybook, getPlaybook, updatePlaybook } from '../api/client';
 import type { Playbook } from '../types/models';
 import { useAuth } from '../context/AuthContext';
@@ -10,9 +10,11 @@ import CopyButton from '../components/shared/CopyButton';
 import ErrorModal from '../components/shared/ErrorModal';
 import JsonViewer from '../components/shared/JsonViewer';
 import PageHeader from '../components/shared/PageHeader';
+import { ErrorState } from '../components/shared/StateBlocks';
 import StatusBadge from '../components/shared/StatusBadge';
 import { buildPlaybookDuplicatePayload } from '../lib/duplicates';
 import { canEdit as canEditScoped, type ScopeViewer } from '../lib/scoping';
+import { useDeleteProgress } from '../lib/useDeleteProgress';
 
 const PLAYBOOK_FILE_TIP = 'File name for the playbook, which must end in .md, for example CSHARP_BACKEND_ARCHITECTURE.md. Captains see this name when the playbook is attached as a file. Required.';
 const PLAYBOOK_DESCRIPTION_TIP = 'Optional one-line summary shown when people pick playbooks during dispatch. It is not sent to the captain.';
@@ -25,6 +27,7 @@ export default function PlaybookDetail() {
   const { isAdmin, isTenantAdmin, user } = useAuth();
   const viewer: ScopeViewer = { isAdmin, isTenantAdmin, tenantId: user?.user?.tenantId, userId: user?.user?.id };
   const { t, formatDateTime } = useLocale();
+  const deletion = useDeleteProgress();
   const { pushToast } = useNotifications();
 
   const createMode = id === 'new';
@@ -38,6 +41,8 @@ export default function PlaybookDetail() {
   const [loading, setLoading] = useState(!createMode);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  // A failed entity load (for example a stale link) renders an error state instead of an empty editor.
+  const [loadFailure, setLoadFailure] = useState<{ id: string | undefined; message: string } | null>(null);
   const [jsonData, setJsonData] = useState<{ open: boolean; title: string; data: unknown }>({ open: false, title: '', data: null });
   const [confirm, setConfirm] = useState<{ open: boolean; title: string; message: string; onConfirm: () => void }>({
     open: false,
@@ -65,7 +70,7 @@ export default function PlaybookDetail() {
         setError('');
       } catch (err: unknown) {
         if (!mounted) return;
-        setError(err instanceof Error ? err.message : t('Failed to load playbook.'));
+        setLoadFailure({ id, message: err instanceof Error ? err.message : t('Failed to load playbook.') });
       } finally {
         if (mounted) setLoading(false);
       }
@@ -128,13 +133,9 @@ export default function PlaybookDetail() {
       message: t('Delete "{{name}}"? Existing mission snapshots remain immutable, but future dispatches will no longer be able to select it.', { name: playbook.fileName }),
       onConfirm: async () => {
         setConfirm((current) => ({ ...current, open: false }));
-        try {
-          await deletePlaybook(playbook.id);
-          pushToast('warning', t('Playbook "{{name}}" deleted.', { name: playbook.fileName }));
-          navigate('/playbooks');
-        } catch (err: unknown) {
-          setError(err instanceof Error ? err.message : t('Delete failed.'));
-        }
+        if (!(await deletion.run({ kind: 'playbook', action: () => deletePlaybook(playbook.id), errorMessage: (err) => err instanceof Error ? err.message : t('Delete failed.') }))) return;
+        pushToast('warning', t('Playbook "{{name}}" deleted.', { name: playbook.fileName }));
+        navigate('/playbooks');
       },
     });
   }
@@ -155,14 +156,22 @@ export default function PlaybookDetail() {
 
   if (loading) return <p className="text-dim">{t('Loading...')}</p>;
 
+  if (!createMode && loadFailure && loadFailure.id === id) {
+    return (
+      <div>
+        <PageHeader breadcrumb={[{ label: t('Playbooks'), to: '/playbooks' }, { label: id || '' }]} title={id || ''} />
+        <ErrorState message={loadFailure.message} />
+      </div>
+    );
+  }
+
   return (
     <div>
       <PageHeader
-        breadcrumb={
-          <>
-            <Link to="/playbooks">{t('Playbooks')}</Link> <span className="breadcrumb-sep">&gt;</span> <span>{createMode ? t('New Playbook') : fileName}</span>
-          </>
-        }
+        breadcrumb={[
+          { label: t('Playbooks'), to: '/playbooks' },
+          { label: createMode ? t('New Playbook') : fileName },
+        ]}
         title={createMode ? t('Create Playbook') : fileName}
         actions={
           <>
@@ -188,6 +197,7 @@ export default function PlaybookDetail() {
 
       <ErrorModal error={error} onClose={() => setError('')} />
       <JsonViewer open={jsonData.open} title={jsonData.title} data={jsonData.data} onClose={() => setJsonData({ open: false, title: '', data: null })} />
+      {deletion.dialog}
       <ConfirmDialog
         open={confirm.open}
         title={confirm.title}

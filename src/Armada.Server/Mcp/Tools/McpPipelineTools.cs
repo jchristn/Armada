@@ -66,6 +66,7 @@ namespace Armada.Server.Mcp.Tools
                     PipelineArgs request = JsonSerializer.Deserialize<PipelineArgs>(args!.Value, _JsonOptions)!;
                     if (String.IsNullOrEmpty(request.Name)) return (object)McpToolError.InvalidArgument("name is required");
                     if (request.Stages == null || request.Stages.Count == 0) return (object)McpToolError.InvalidArgument("stages is required and must not be empty");
+                    CollectionBounds.Validate(request);
 
                     AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     Pipeline pipeline = new Pipeline(request.Name);
@@ -87,6 +88,7 @@ namespace Armada.Server.Mcp.Tools
                         stages.Add(stage);
                     }
                     pipeline.Stages = stages;
+                    CollectionBounds.Validate(pipeline);
 
                     await DuplicateEntityGuard.EnsurePipelineNameAvailableAsync(database, pipeline).ConfigureAwait(false);
                     pipeline = await database.Pipelines.CreateAsync(pipeline).ConfigureAwait(false);
@@ -164,6 +166,7 @@ namespace Armada.Server.Mcp.Tools
 
                     if (request.Stages != null)
                     {
+                        CollectionBounds.Validate(request);
                         List<PipelineStage> stages = new List<PipelineStage>();
                         for (int i = 0; i < request.Stages.Count; i++)
                         {
@@ -180,6 +183,7 @@ namespace Armada.Server.Mcp.Tools
                     }
 
                     pipeline.LastUpdateUtc = DateTime.UtcNow;
+                    CollectionBounds.Validate(pipeline);
                     pipeline = await database.Pipelines.UpdateAsync(pipeline).ConfigureAwait(false);
                     return (object)pipeline;
                 });

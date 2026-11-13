@@ -4,6 +4,7 @@ namespace Armada.Helm.Commands
     using Spectre.Console;
     using Spectre.Console.Cli;
     using Armada.Core.Models;
+    using Armada.Helm.Infrastructure;
 
     /// <summary>
     /// Delete a playbook.
@@ -17,7 +18,7 @@ namespace Armada.Helm.Commands
             Playbook? playbook = await ResolvePlaybookAsync(settings.Id).ConfigureAwait(false);
             if (playbook == null)
             {
-                AnsiConsole.MarkupLine($"[red]Playbook not found:[/] {Markup.Escape(settings.Id)}");
+                HelmConsole.Error.MarkupLine($"[red]Playbook not found:[/] {Markup.Escape(settings.Id)}");
                 return 1;
             }
 
@@ -33,8 +34,8 @@ namespace Armada.Helm.Commands
                 return await GetAsync<Playbook>("/api/v1/playbooks/" + idOrFileName).ConfigureAwait(false);
             }
 
-            EnumerationResult<Playbook>? result = await GetAsync<EnumerationResult<Playbook>>("/api/v1/playbooks").ConfigureAwait(false);
-            return result?.Objects?.FirstOrDefault(p =>
+            List<Playbook> playbooks = await PlaybookPages.ReadAllAsync(path => GetAsync<EnumerationResult<Playbook>>(path)).ConfigureAwait(false);
+            return playbooks.FirstOrDefault(p =>
                 String.Equals(p.FileName, idOrFileName, StringComparison.OrdinalIgnoreCase) ||
                 String.Equals(p.Id, idOrFileName, StringComparison.OrdinalIgnoreCase));
         }

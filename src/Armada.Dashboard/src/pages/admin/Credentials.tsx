@@ -14,6 +14,7 @@ import { useLocale } from '../../context/LocaleContext';
 import { useNotifications } from '../../context/NotificationContext';
 import { useProxySessionContext } from '../../lib/useProxySessionContext';
 import { usePersistedPageSize } from '../../lib/usePersistedPageSize';
+import { useDeleteProgress } from '../../lib/useDeleteProgress';
 
 type SortField = 'name' | 'userId' | 'active' | 'createdUtc';
 type SortDir = 'asc' | 'desc';
@@ -21,6 +22,7 @@ type SortDir = 'asc' | 'desc';
 export default function Credentials() {
   const { user, isAdmin, isTenantAdmin } = useAuth();
   const { t, formatRelativeTime, formatDateTime } = useLocale();
+  const deletion = useDeleteProgress();
   const { pushToast } = useNotifications();
   const proxyContext = useProxySessionContext();
   const [items, setItems] = useState<Credential[]>([]);
@@ -172,11 +174,9 @@ export default function Credentials() {
       resourceName: name || id,
       onConfirm: async () => {
         setConfirm(c => ({ ...c, open: false }));
-        try {
-          await deleteCredential(id);
-          pushToast('warning', t('Credential "{{name}}" deleted.', { name: name || id }));
-          load();
-        } catch { setError(t('Delete failed.')); }
+        if (!(await deletion.run({ kind: 'credential', action: () => deleteCredential(id) }))) return;
+        pushToast('warning', t('Credential "{{name}}" deleted.', { name: name || id }));
+        load();
       },
     });
   }
@@ -190,7 +190,14 @@ export default function Credentials() {
         setConfirm(c => ({ ...c, open: false }));
         const ids = [...selected]; setSelected([]);
         let failed = 0;
-        for (const id of ids) { try { await deleteCredential(id); } catch { failed++; } }
+        await deletion.run({
+          kind: 'credential',
+          count: ids.length,
+          action: async () => {
+            failed = 0;
+            for (const id of ids) { try { await deleteCredential(id); } catch { failed++; } }
+          },
+        });
         const success = ids.length - failed;
         if (success > 0) {
           pushToast(failed > 0 ? 'warning' : 'success', failed > 0
@@ -348,6 +355,7 @@ export default function Credentials() {
       )}
 
       <JsonViewer open={jsonData.open} title={jsonData.title} data={jsonData.data} onClose={() => setJsonData({ open: false, title: '', data: null })} />
+      {deletion.dialog}
       <ConfirmDialog open={confirm.open} title={confirm.title} message={confirm.message} resourceName={confirm.resourceName} danger requireDeleteConfirm onConfirm={confirm.onConfirm} onCancel={() => setConfirm(c => ({ ...c, open: false }))} />
 
       <DataTable

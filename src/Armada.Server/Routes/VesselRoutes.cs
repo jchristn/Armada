@@ -21,6 +21,11 @@ namespace Armada.Server.Routes
     /// </summary>
     public class VesselRoutes
     {
+        /// <summary>
+        /// Black box capture for the missions a vessel deletion cancels (step VesselDeleted), or null.
+        /// </summary>
+        public Armada.Core.BlackBox.IBlackBoxCapture? BlackBox { get; set; } = null;
+
         private readonly DatabaseDriver _database;
         private readonly VesselReadinessService _readiness;
         private readonly LandingPreviewService _landingPreview;
@@ -35,6 +40,11 @@ namespace Armada.Server.Routes
         private readonly VesselHostResolver? _Hosts;
         private readonly IAdmiralService? _Admiral;
         private readonly VesselGitStatusCache _GitStatusCache = new VesselGitStatusCache();
+
+        /// <summary>
+        /// Black box lifecycle hooks (retention cascades and expiry recomputes after deletes and updates), or null.
+        /// </summary>
+        public Armada.Core.BlackBox.IBlackBoxLifecycleHooks? BlackBoxHooks { get; set; } = null;
 
         /// <summary>
         /// Instantiate.
@@ -192,12 +202,31 @@ namespace Armada.Server.Routes
                     req.Http.Response.StatusCode = ctx.IsAuthenticated ? 403 : 401;
                     return new ApiErrorResponse { Error = ctx.IsAuthenticated ? ApiResultEnum.Forbidden : ApiResultEnum.NotAuthorized, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
                 }
+                using (JsonDocument legacyCheck = JsonDocument.Parse(req.Http.Request.DataAsString))
+                    if (RemovedConcurrencyFields.Contains(legacyCheck.RootElement))
+                    { req.Http.Response.StatusCode = 400; return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = RemovedConcurrencyFields.Message }; }
                 Vessel vessel = JsonSerializer.Deserialize<Vessel>(req.Http.Request.DataAsString, _jsonOptions)
                     ?? throw new InvalidOperationException("Request body could not be deserialized as Vessel.");
+                using (JsonDocument body = JsonDocument.Parse(req.Http.Request.DataAsString))
+                {
+                    if (!body.RootElement.EnumerateObject().Any(p => String.Equals(p.Name, "maxParallelVoyages", StringComparison.OrdinalIgnoreCase)))
+                        vessel.MaxParallelVoyages = _settings?.Concurrency.DefaultVesselMaxParallelVoyages ?? Constants.DefaultVesselMaxParallelVoyages;
+                    if (!body.RootElement.EnumerateObject().Any(p => String.Equals(p.Name, "maxParallelMissionsPerVoyage", StringComparison.OrdinalIgnoreCase)))
+                        vessel.MaxParallelMissionsPerVoyage = _settings?.Concurrency.DefaultVesselMaxParallelMissionsPerVoyage ?? Constants.DefaultVesselMaxParallelMissionsPerVoyage;
+                }
                 if (String.IsNullOrEmpty(vessel.RepoUrl))
                 {
                     req.Http.Response.StatusCode = 400;
                     return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "repoUrl is required when creating a vessel" };
+                }
+                try
+                {
+                    vessel.WorkerEnvelope = WorkerEnvelopeRules.Normalize(vessel.WorkerEnvelope);
+                }
+                catch (ArgumentException ex)
+                {
+                    req.Http.Response.StatusCode = 400;
+                    return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = ex.Message };
                 }
                 vessel.TenantId = ctx.TenantId;
                 vessel.UserId = ctx.UserId;
@@ -256,11 +285,24 @@ namespace Armada.Server.Routes
                         ? await _database.Vessels.ReadAsync(ctx.TenantId!, id).ConfigureAwait(false)
                         : await _database.Vessels.ReadAsync(ctx.TenantId!, ctx.UserId!, id).ConfigureAwait(false);
                 if (existing == null) { req.Http.Response.StatusCode = 404; return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Vessel not found" }; }
+                using (JsonDocument legacyCheck = JsonDocument.Parse(req.Http.Request.DataAsString))
+                    if (RemovedConcurrencyFields.Contains(legacyCheck.RootElement))
+                    { req.Http.Response.StatusCode = 400; return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = RemovedConcurrencyFields.Message }; }
                 Vessel updated = JsonSerializer.Deserialize<Vessel>(req.Http.Request.DataAsString, _jsonOptions)
                     ?? throw new InvalidOperationException("Request body could not be deserialized as Vessel.");
                 updated = EntityUpdateMerger.MergeVessel(existing, updated);
+                try
+                {
+                    updated.WorkerEnvelope = WorkerEnvelopeRules.Normalize(updated.WorkerEnvelope);
+                }
+                catch (ArgumentException ex)
+                {
+                    req.Http.Response.StatusCode = 400;
+                    return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = ex.Message };
+                }
                 await DuplicateEntityGuard.EnsureVesselNameAvailableAsync(_database, updated).ConfigureAwait(false);
                 updated = await _database.Vessels.UpdateAsync(updated).ConfigureAwait(false);
+                if (BlackBoxHooks != null && existing.BlackBoxRetentionDays != updated.BlackBoxRetentionDays) await BlackBoxHooks.OnVesselUpdatedAsync(updated.Id).ConfigureAwait(false);
                 return (object)updated;
             },
             api => api
@@ -270,6 +312,7 @@ namespace Armada.Server.Routes
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Vessel ID (vsl_ prefix)"))
                 .WithRequestBody(OpenApiJson.BodyFor<Vessel>("Updated vessel data", true))
                 .WithResponse(200, OpenApiJson.For<Vessel>("Updated vessel"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())
                 .WithResponse(409, OpenApiJson.For<ApiErrorResponse>("A vessel with that name already exists (Data: DuplicateEntityErrorDetail)"))
                 .WithSecurity("ApiKey"));
@@ -289,6 +332,9 @@ namespace Armada.Server.Routes
                         ? await _database.Vessels.ReadAsync(ctx.TenantId!, id).ConfigureAwait(false)
                         : await _database.Vessels.ReadAsync(ctx.TenantId!, ctx.UserId!, id).ConfigureAwait(false);
                 if (existing == null) { req.Http.Response.StatusCode = 404; return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Vessel not found" }; }
+                using (JsonDocument legacyCheck = JsonDocument.Parse(req.Http.Request.DataAsString))
+                    if (RemovedConcurrencyFields.Contains(legacyCheck.RootElement))
+                    { req.Http.Response.StatusCode = 400; return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = RemovedConcurrencyFields.Message }; }
                 Vessel patch = JsonSerializer.Deserialize<Vessel>(req.Http.Request.DataAsString, _jsonOptions)
                     ?? throw new InvalidOperationException("Request body could not be deserialized as Vessel.");
                 if (patch.ProjectContext != null)
@@ -355,9 +401,21 @@ namespace Armada.Server.Routes
                         : await _database.Vessels.ReadAsync(ctx.TenantId!, ctx.UserId!, id).ConfigureAwait(false);
                 if (vessel == null) { req.Http.Response.StatusCode = 404; return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Vessel not found" }; }
                 if (_git == null) { req.Http.Response.StatusCode = 503; return new ApiStatusErrorResponse(ApiStatusErrorCodeEnum.ServiceUnavailable, "Git service is not available"); }
-                EnumerationQuery query = EnumerationRequestReader.Read(req, _jsonOptions);
+                EnumerationQuery query;
+                try
+                {
+                    query = EnumerationRequestReader.Read(req, _jsonOptions);
+                }
+                catch (JsonException ex)
+                {
+                    req.Http.Response.StatusCode = 400;
+                    return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Request body is not valid: " + ex.Message };
+                }
+
                 string defaultBranch = vessel.DefaultBranch ?? "main";
                 VesselRepositoryTarget repo = await ResolveRepositoryAsync(vessel, ctx.UserId).ConfigureAwait(false);
+                // git for-each-ref has no offset, so the ref list (one line per branch, no per-branch work) is read whole and
+                // the page is cut from it with an exact total; the per-branch divergence below runs only for the page.
                 List<BranchInfo> all = new List<BranchInfo>();
                 string? error = repo.Found ? null : repo.Error;
                 if (repo.Found)
@@ -382,7 +440,7 @@ namespace Armada.Server.Routes
             api => api
                 .WithTag("Vessels")
                 .WithSummary("Enumerate vessel branches")
-                .WithDescription("One page of a vessel's branches (in git order, the default branch first), with its default branch and a git error when they could not be read. Paging and filters come from the JSON body (EnumerationQuery) or the querystring (pageNumber, pageSize 1 to 1000, default 10).")
+                .WithDescription("One page of a vessel's branches (in git order, the default branch first), with its default branch and a git error when they could not be read. Paging and filters come from the JSON body (EnumerationQuery) or the querystring (pageNumber, pageSize 1 to 1000, default 10). The ref list is read with one git command and cut to the page; ahead/behind is measured only for the branches on the page. A malformed body is 400.")
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Vessel ID (vsl_ prefix)"))
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())
                 .WithRequestBody(OpenApiJson.BodyFor<EnumerationQuery>("Paging and filters", false))
@@ -839,6 +897,7 @@ namespace Armada.Server.Routes
                     await _database.Vessels.DeleteAsync(ctx.TenantId!, id).ConfigureAwait(false);
                 else
                     await _database.Vessels.DeleteAsync(ctx.TenantId!, ctx.UserId!, id).ConfigureAwait(false);
+                if (BlackBoxHooks != null) await BlackBoxHooks.OnVesselDeletedAsync(id).ConfigureAwait(false);
                 req.Http.Response.StatusCode = 204;
                 return null;
             },
@@ -862,6 +921,7 @@ namespace Armada.Server.Routes
                 DeleteMultipleRequest? body = JsonSerializer.Deserialize<DeleteMultipleRequest>(req.Http.Request.DataAsString, _jsonOptions);
                 if (body == null || body.Ids == null || body.Ids.Count == 0)
                     { req.Http.Response.StatusCode = 400; return (object)new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Ids is required and must not be empty" }; }
+                CollectionLimits.RequireRequestItems(body.Ids, "Ids");
 
                 DeleteMultipleResult result = new DeleteMultipleResult();
                 foreach (string id in body.Ids)
@@ -890,6 +950,7 @@ namespace Armada.Server.Routes
                         await _database.Vessels.DeleteAsync(ctx.TenantId!, id).ConfigureAwait(false);
                     else
                         await _database.Vessels.DeleteAsync(ctx.TenantId!, ctx.UserId!, id).ConfigureAwait(false);
+                    if (BlackBoxHooks != null) await BlackBoxHooks.OnVesselDeletedAsync(id).ConfigureAwait(false);
                     result.Deleted++;
                 }
 
@@ -902,7 +963,7 @@ namespace Armada.Server.Routes
             api => api
                 .WithTag("Vessels")
                 .WithSummary("Batch delete multiple vessels")
-                .WithDescription("Permanently deletes multiple vessels from the database by ID. Returns a summary of deleted and skipped entries. This cannot be undone.")
+                .WithDescription("Permanently deletes multiple vessels from the database by ID (at most 1000 Ids; more is 400 CollectionLimitExceeded). Returns a summary of deleted and skipped entries. This cannot be undone.")
                 .WithRequestBody(OpenApiJson.BodyFor<DeleteMultipleRequest>("List of vessel IDs to delete"))
                 .WithResponse(200, OpenApiJson.For<DeleteMultipleResult>("Delete result summary"))
                 .WithResponse(400, OpenApiResponseMetadata.BadRequest())
@@ -931,17 +992,24 @@ namespace Armada.Server.Routes
                     || mission.Status == Armada.Core.Enums.MissionStatusEnum.Review
                     || mission.Status == Armada.Core.Enums.MissionStatusEnum.Testing)
                 {
+                    Armada.Core.Enums.MissionStatusEnum statusBefore = mission.Status;
                     if (_Admiral != null)
                     {
-                        // Stop the agent before the mission row goes away; a failed stop blocks the delete.
-                        try { await _Admiral.CancelMissionAsync(mission).ConfigureAwait(false); }
+                        // Stop the agent before the mission row goes away; a failed stop blocks the delete. The cancel
+                        // records the single VesselDeleted entry.
+                        try { await _Admiral.CancelMissionAsync(mission, BlackBoxOperatorCapture.VesselDeletedCancel(statusBefore, vessel, mission.VesselId, "REST")).ConfigureAwait(false); }
                         catch (InvalidOperationException ex) { errors.Add("Mission " + mission.Id + ": " + ex.Message); continue; }
                     }
-                    mission.Status = Armada.Core.Enums.MissionStatusEnum.Cancelled;
-                    mission.FailureReason = "Vessel deleted";
-                    mission.CompletedUtc = DateTime.UtcNow;
-                    mission.LastUpdateUtc = DateTime.UtcNow;
-                    await _database.Missions.UpdateAsync(mission).ConfigureAwait(false);
+                    else
+                    {
+                        mission.Status = Armada.Core.Enums.MissionStatusEnum.Cancelled;
+                        mission.FailureKind = Armada.Core.Enums.MissionFailureKindEnum.OperatorAction;
+                        mission.FailureReason = "Vessel deleted";
+                        mission.CompletedUtc = DateTime.UtcNow;
+                        mission.LastUpdateUtc = DateTime.UtcNow;
+                        await _database.Missions.UpdateAsync(mission).ConfigureAwait(false);
+                        await BlackBoxOperatorCapture.RecordVesselDeletedAsync(BlackBox, mission, statusBefore, vessel, "REST").ConfigureAwait(false);
+                    }
                 }
                 try { await _database.Missions.DeleteAsync(mission.Id).ConfigureAwait(false); }
                 catch (Exception ex) { errors.Add("Mission " + mission.Id + ": " + ex.Message); }

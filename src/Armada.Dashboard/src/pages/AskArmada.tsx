@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState, type CSSProperties } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
-import type { AskNavigationState } from '../lib/askNavigation';
+import { readAskPrefill, type AskNavigationState } from '../lib/askNavigation';
 import {
   ApiError,
   approveAskProposal,
@@ -11,7 +11,6 @@ import {
   enumerateAskMessages,
   enumerateAskThreads,
   getAskQuickActions,
-  getAskThread,
   getAskWorkSnapshot,
   getCaptainTools,
   listCaptains,
@@ -44,7 +43,7 @@ import { useAuth } from '../context/AuthContext';
 import { useNotifications } from '../context/NotificationContext';
 import ErrorModal from '../components/shared/ErrorModal';
 import ConfirmDialog from '../components/shared/ConfirmDialog';
-import AskDeleteProgressDialog from '../components/ask/AskDeleteProgressDialog';
+import { useDeleteProgress } from '../lib/useDeleteProgress';
 import { ErrorState, LoadingState } from '../components/shared/StateBlocks';
 import ImportWizard from '../components/vessels/import/ImportWizard';
 import AskThreadList from '../components/ask/AskThreadList';
@@ -55,9 +54,11 @@ import AskComposer, { type AskComposerHandle } from '../components/ask/AskCompos
 import { randomThinkingMessage } from '../lib/askThinkingMessages';
 import { randomGreeting } from '../lib/askGreetings';
 import { parseAskEvent } from '../lib/askEvents';
+import { loadAskThreadView, loadToolCalls, withToolCalls, withWorkRows } from '../lib/askPaging';
 import { conversationReducer, initialConversation, isLocalMessage } from '../lib/askConversation';
 import { applyActivityEvent, applyThreadUpdate, sortThreads, type ThreadActivityMap, type ThreadListFilter } from '../lib/askThreads';
-import { DEFAULT_QUICK_ACTIONS, mergeQuickActions } from '../lib/askQuickActions';
+import { DEFAULT_QUICK_ACTIONS, mergeQuickActions, quickActionForm } from '../lib/askQuickActions';
+import { AskBlackBoxActionsContext, type AskBlackBoxActionsValue } from '../components/ask/AskBlackBoxActions';
 import { runLocalCommand, type AskCommandOutcome, type AskLocalCommand } from '../lib/askCommands';
 import { isWorkActive, workRoute } from '../lib/askWork';
 import { useFocusTrap } from '../lib/useFocusTrap';
@@ -178,10 +179,9 @@ export default function AskArmada() {
   // Dialogs and announcements.
   const [error, setError] = useState('');
   const [deleteTarget, setDeleteTarget] = useState<AskThread | null>(null);
-  // Single delete in flight (or just failed): the progress modal stays up until the server answers. The ref blocks a
-  // second submission before React re-renders.
-  const [deleteProgress, setDeleteProgress] = useState<{ thread: AskThread; error: string } | null>(null);
-  const deletingRef = useRef(false);
+  // Delete in flight (or just failed): the progress modal stays up until the server answers and blocks a second
+  // submission before React re-renders.
+  const deletion = useDeleteProgress();
   // Bulk delete: the rows ticked in the list, and the confirmation dialog they open.
   const [selectedThreadIds, setSelectedThreadIds] = useState<string[]>([]);
   const [deleteManyOpen, setDeleteManyOpen] = useState(false);
@@ -279,10 +279,16 @@ export default function AskArmada() {
   }, []);
 
   const fetchSnapshots = useCallback((id: string, work: AskTrackedWork[]) => {
-    const missing = work.filter((w) => !convRef.current.snapshots[w.id] && !w.snapshot);
-    missing.sort((a, b) => Number(isWorkActive(b)) - Number(isWorkActive(a)));
-    for (const item of missing.slice(0, SNAPSHOT_FETCH_LIMIT)) {
-      getAskWorkSnapshot(id, item.id)
+    // Snapshots carry counts only: each card reads the first page of its rows (with the total) from the row routes.
+    const pending = work.filter((w) => {
+      const known = convRef.current.snapshots[w.id] ?? w.snapshot;
+      return !known || (known.missions == null && known.targets == null);
+    });
+    pending.sort((a, b) => Number(isWorkActive(b)) - Number(isWorkActive(a)));
+    for (const item of pending.slice(0, SNAPSHOT_FETCH_LIMIT)) {
+      const known = convRef.current.snapshots[item.id] ?? item.snapshot;
+      (known ? Promise.resolve(known) : getAskWorkSnapshot(id, item.id))
+        .then((snapshot) => (snapshot ? withWorkRows(id, item.id, snapshot) : snapshot))
         .then((snapshot) => { if (snapshot && convRef.current.threadId === id) dispatch({ type: 'snapshot', trackedWorkId: item.id, snapshot }); })
         .catch(() => { /* the card shows its loading state until an ask.work event arrives */ });
     }
@@ -293,8 +299,8 @@ export default function AskArmada() {
     setConvError(null);
     try {
       const [detail, page] = await Promise.all([
-        getAskThread(id),
-        enumerateAskMessages(id, { pageSize: MESSAGE_PAGE_SIZE }),
+        loadAskThreadView(id),
+        enumerateAskMessages(id, { pageSize: MESSAGE_PAGE_SIZE }).then(async (p) => (p ? { ...p, messages: await withToolCalls(id, p.messages ?? []) } : p)),
       ]);
       if (openThreadId() !== id) return;
       if (restoringThreadIdRef.current === id) restoringThreadIdRef.current = null;
@@ -323,29 +329,32 @@ export default function AskArmada() {
   const refreshLatest = useCallback(async (id: string) => {
     try {
       const page = await enumerateAskMessages(id, { pageSize: MESSAGE_PAGE_SIZE });
-      dispatch({ type: 'latest', threadId: id, messages: page?.messages ?? [] });
+      dispatch({ type: 'latest', threadId: id, messages: await withToolCalls(id, page?.messages ?? []) });
     } catch { /* the socket will deliver the messages; this is only reconciliation */ }
   }, []);
 
   const refreshDetail = useCallback(async (id: string) => {
     try {
-      const detail = await getAskThread(id);
+      const detail = await loadAskThreadView(id);
       dispatch({ type: 'detail', threadId: id, detail });
       fetchSnapshots(id, detail?.trackedWork ?? []);
     } catch { /* reconciliation only */ }
   }, [fetchSnapshots]);
 
-  // Another page (Workspace's Ask Armada) can open a new conversation with a draft in the message box. The draft is
-  // cleared once used, so reloading or going back does not put it there again.
+  // Another page (Workspace's Ask Armada, the black box panel) can open a new conversation with a draft in the message
+  // box, through router state or the ?prompt= query parameter (links from outside the dashboard, such as the VS Code
+  // extension). The draft is cleared once used, so reloading or going back does not put it there again.
   // The bare /ask route (the nav link) reopens the conversation last open. An explicit new conversation carries
   // NEW_CONVERSATION_STATE; any other bare /ask entry is stamped with it once handled, so Back never bounces.
   const location = useLocation();
   useEffect(() => {
     if (routeThreadId) return;
     const state = location.state as AskRouteState | null;
-    const here = location.pathname + location.search;
-    if (state?.draft) {
-      composerRef.current?.reset({ text: state.draft, focus: true });
+    const prefill = readAskPrefill(location.search);
+    const here = location.pathname + (prefill ? prefill.rest : location.search);
+    const draft = state?.draft || prefill?.text;
+    if (draft) {
+      composerRef.current?.reset({ text: draft, focus: true });
       navigate(here, { replace: true, state: NEW_CONVERSATION_STATE });
       return;
     }
@@ -431,6 +440,27 @@ export default function AskArmada() {
       if (event.threadId !== openId) return;
 
       const before = convRef.current;
+      if (event.type === 'ask.work' && event.snapshot) {
+        // The event's snapshot carries counts only; keep the card's rows until they are read again below.
+        const prior = before.snapshots[event.trackedWorkId];
+        if (prior && event.snapshot.missions == null && event.snapshot.targets == null) {
+          event.snapshot = { ...event.snapshot, missions: prior.missions, targets: prior.targets, rowTotal: prior.rowTotal };
+        }
+        const workId = event.trackedWorkId;
+        const threadId = event.threadId;
+        void withWorkRows(threadId, workId, event.snapshot).then((snapshot) => {
+          if (convRef.current.threadId === threadId) dispatch({ type: 'snapshot', trackedWorkId: workId, snapshot });
+        });
+      }
+      if (event.type === 'ask.message' && (event.message.toolCallCount ?? 0) > 0 && !event.message.toolCalls) {
+        const known = before.messages.find((m) => m.id === event.message.id);
+        if (known?.toolCalls) event.message = { ...event.message, toolCalls: known.toolCalls };
+        const message = event.message;
+        const threadId = event.threadId;
+        void loadToolCalls(threadId, message.id).then((toolCalls) => {
+          if (convRef.current.threadId === threadId) dispatch({ type: 'event', event: { type: 'ask.message', threadId, message: { ...message, toolCalls } } });
+        }).catch(() => { /* the reply shows without its tool chips until the next reconciliation */ });
+      }
       dispatch({ type: 'event', event });
 
       if (event.type === 'ask.turn' && event.state !== 'started') {
@@ -518,13 +548,34 @@ export default function AskArmada() {
       if (proposal?.id) dispatch({ type: 'proposal', proposal });
       await Promise.all([refreshLatest(id), refreshDetail(id)]);
       messageListRef.current?.scrollToBottom();
-      if (proposal && String(proposal.status).toLowerCase() === 'failed') {
+      const failed = !!proposal && String(proposal.status).toLowerCase() === 'failed';
+      if (failed) {
         pushToast('error', t('{{command}} failed: {{reason}}', { command: action.command || action.name, reason: proposal.errorText || t('unknown error') }));
       }
+      // /blackbox: the card is shown; the question (optional) goes to the captain as a message.
+      const question = typeof args.question === 'string' ? args.question.trim() : '';
+      if (!failed && question && quickActionForm(action) === 'blackbox' && !convRef.current.turnActive) void send(question);
       return true;
     } catch (err: unknown) {
       setError(errorText(err, t('The quick action failed.')));
       return false;
+    } finally {
+      setActionBusy(false);
+    }
+  }
+
+  /** Black box card buttons: Fix it, Apply and Propose create Pending proposals; the other follow-ups ask the captain. */
+  async function proposeBlackBoxAction(toolName: string, args: Record<string, unknown>) {
+    const id = convRef.current.threadId;
+    if (!id) return;
+    setActionBusy(true);
+    try {
+      const proposal = await runAskQuickAction(id, toolName, args, { propose: true });
+      if (proposal?.id) dispatch({ type: 'proposal', proposal });
+      await refreshLatest(id);
+      messageListRef.current?.scrollToBottom();
+    } catch (err: unknown) {
+      setError(errorText(err, t('The action could not be proposed.')));
     } finally {
       setActionBusy(false);
     }
@@ -658,7 +709,7 @@ export default function AskArmada() {
   }
 
   function requestDelete(target: AskThread) {
-    if (deletingRef.current) return;
+    if (deletion.isBusy()) return;
     setDeleteTarget(target);
   }
 
@@ -669,46 +720,45 @@ export default function AskArmada() {
   }
 
   async function runDelete(target: AskThread) {
-    if (deletingRef.current) return;
-    deletingRef.current = true;
-    setDeleteProgress({ thread: target, error: '' });
-    try {
-      await deleteAskThread(target.id);
-      setThreads((prev) => prev.filter((th) => th.id !== target.id));
-      setDeleteProgress(null);
-      pushToast('success', t('Conversation deleted.'));
-      forgetLastThread([target.id]);
-      saveDraft(target.id, '');
-      if (target.id === convRef.current.threadId) navigate('/ask', { state: NEW_CONVERSATION_STATE });
-    } catch (err: unknown) {
-      setDeleteProgress({ thread: target, error: errorText(err, t('The conversation could not be deleted.')) });
-    } finally {
-      deletingRef.current = false;
-    }
+    const done = await deletion.run({
+      kind: 'conversation',
+      message: t('This conversation is being deleted. This may take a few moments.'),
+      action: () => deleteAskThread(target.id),
+      errorMessage: (err) => errorText(err, t('The conversation could not be deleted.')),
+    });
+    if (!done) return;
+    setThreads((prev) => prev.filter((th) => th.id !== target.id));
+    pushToast('success', t('Conversation deleted.'));
+    forgetLastThread([target.id]);
+    saveDraft(target.id, '');
+    if (target.id === convRef.current.threadId) navigate('/ask', { state: NEW_CONVERSATION_STATE });
   }
 
   async function confirmDeleteMany() {
     const ids = selectedThreadIds.slice();
     setDeleteManyOpen(false);
     if (ids.length === 0) return;
-    try {
-      const result = await deleteAskThreads(ids);
-      const skipped = result?.skipped ?? [];
-      const deleted = result?.deletedIds && result.deletedIds.length > 0
-        ? result.deletedIds
-        : ids.filter((id) => !skipped.some((entry) => entry.id === id));
-      setThreads((prev) => prev.filter((th) => !deleted.includes(th.id)));
-      setSelectedThreadIds([]);
-      if (skipped.length > 0) pushToast('warning', t('{{count}} conversations were not deleted.', { count: skipped.length }));
-      else pushToast('success', t('Conversations deleted.'));
-      forgetLastThread(deleted);
-      for (const id of deleted) saveDraft(id, '');
-      if (convRef.current.threadId && deleted.includes(convRef.current.threadId)) navigate('/ask', { state: NEW_CONVERSATION_STATE });
-      void loadThreads(1);
-    } catch (err: unknown) {
-      setSelectedThreadIds([]);
-      setError(errorText(err, t('The conversations could not be deleted.')));
-    }
+    const box: { result: Awaited<ReturnType<typeof deleteAskThreads>> | null } = { result: null };
+    const done = await deletion.run({
+      kind: 'conversation',
+      count: ids.length,
+      action: async () => { box.result = await deleteAskThreads(ids); },
+      errorMessage: (err) => errorText(err, t('The conversations could not be deleted.')),
+    });
+    setSelectedThreadIds([]);
+    if (!done) return;
+    const result = box.result;
+    const skipped = result?.skipped ?? [];
+    const deleted = result?.deletedIds && result.deletedIds.length > 0
+      ? result.deletedIds
+      : ids.filter((id) => !skipped.some((entry) => entry.id === id));
+    setThreads((prev) => prev.filter((th) => !deleted.includes(th.id)));
+    if (skipped.length > 0) pushToast('warning', t('{{count}} conversations were not deleted.', { count: skipped.length }));
+    else pushToast('success', t('Conversations deleted.'));
+    forgetLastThread(deleted);
+    for (const id of deleted) saveDraft(id, '');
+    if (convRef.current.threadId && deleted.includes(convRef.current.threadId)) navigate('/ask', { state: NEW_CONVERSATION_STATE });
+    void loadThreads(1);
   }
 
   function toggleSelected(target: AskThread, selected: boolean) {
@@ -741,7 +791,7 @@ export default function AskArmada() {
     setLoadingOlder(true);
     try {
       const page = await enumerateAskMessages(id, { beforeSequence: oldest.sequence, pageSize: MESSAGE_PAGE_SIZE });
-      dispatch({ type: 'older', threadId: id, messages: page?.messages ?? [], hasMore: !!page?.hasMore });
+      dispatch({ type: 'older', threadId: id, messages: await withToolCalls(id, page?.messages ?? []), hasMore: !!page?.hasMore });
     } catch (err: unknown) {
       setError(errorText(err, t('Failed to load earlier messages.')));
     } finally {
@@ -753,6 +803,12 @@ export default function AskArmada() {
 
   // Whether the captain proposes actions as approval cards, runs Armada tools ungated, or is not connected (lib/askCaptain).
   const { mcpMissing, ungated, noCaptain } = askCaptainAccess(activeCaptainId, tools);
+  const blackBoxActions: AskBlackBoxActionsValue = {
+    propose: proposeBlackBoxAction,
+    ask: (prompt: string) => { if (!convRef.current.turnActive) void send(prompt); },
+    canAsk: !noCaptain && !conv.turnActive,
+    busy: actionBusy,
+  };
 
   const emptyState = thread ? (
     <p className="text-dim">{t('Send the first message to begin.')}</p>
@@ -889,6 +945,7 @@ export default function AskArmada() {
         ) : convLoading && conv.messages.length === 0 ? (
           <div className="ask-transcript ask-transcript-loading"><LoadingState label={t('Loading conversation...')} /></div>
         ) : (
+          <AskBlackBoxActionsContext.Provider value={blackBoxActions}>
           <AskMessageList
             ref={messageListRef}
             messages={conv.messages}
@@ -913,6 +970,7 @@ export default function AskArmada() {
             onCliDecided={cliDecided}
             cliResolution={thread?.cliPermission ?? null}
           />
+          </AskBlackBoxActionsContext.Provider>
         )}
 
         <AskComposer
@@ -958,12 +1016,7 @@ export default function AskArmada() {
         onConfirm={() => void confirmDeleteMany()}
         onCancel={() => setDeleteManyOpen(false)}
       />
-      <AskDeleteProgressDialog
-        open={!!deleteProgress}
-        error={deleteProgress?.error ?? ''}
-        onRetry={() => { if (deleteProgress) void runDelete(deleteProgress.thread); }}
-        onDismiss={() => { if (!deletingRef.current) setDeleteProgress(null); }}
-      />
+      {deletion.dialog}
       <ImportWizard open={importOpen} onClose={() => setImportOpen(false)} tenantId={user?.user?.tenantId ?? null} />
     </div>
   );

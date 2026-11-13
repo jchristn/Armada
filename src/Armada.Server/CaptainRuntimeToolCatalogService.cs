@@ -337,9 +337,9 @@ namespace Armada.Server
         /// </summary>
         private async Task<RuntimeHostContext> ResolveHostContextAsync(Captain captain, DatabaseDriver database, CancellationToken token)
         {
-            if (_HarborConnections != null && !String.IsNullOrWhiteSpace(captain.CurrentDockId))
+            if (_HarborConnections != null)
             {
-                Dock? dock = await database.Docks.ReadAsync(captain.CurrentDockId).ConfigureAwait(false);
+                Dock? dock = await CaptainContextResolver.ReadDockAsync(database, captain).ConfigureAwait(false);
                 if (dock != null
                     && !String.IsNullOrWhiteSpace(dock.HarborId)
                     && _HarborConnections.IsConnected(dock.HarborId!))
@@ -819,18 +819,17 @@ namespace Armada.Server
 
         private async Task<string?> ResolveContextDirectoryAsync(Captain captain, DatabaseDriver database)
         {
-            if (!String.IsNullOrWhiteSpace(captain.CurrentDockId))
             {
-                Dock? dock = await database.Docks.ReadAsync(captain.CurrentDockId).ConfigureAwait(false);
+                Dock? dock = await CaptainContextResolver.ReadDockAsync(database, captain).ConfigureAwait(false);
                 if (dock != null && !String.IsNullOrWhiteSpace(dock.WorktreePath) && Directory.Exists(dock.WorktreePath))
                 {
                     return dock.WorktreePath;
                 }
             }
 
-            if (!String.IsNullOrWhiteSpace(captain.CurrentMissionId))
+            if (!String.IsNullOrWhiteSpace(captain.Assignment?.Id))
             {
-                Mission? mission = await database.Missions.ReadAsync(captain.CurrentMissionId).ConfigureAwait(false);
+                Mission? mission = await database.Missions.ReadAsync(captain.Assignment!.Id!).ConfigureAwait(false);
                 if (mission != null && !String.IsNullOrWhiteSpace(mission.VesselId))
                 {
                     Vessel? vessel = await database.Vessels.ReadAsync(mission.VesselId).ConfigureAwait(false);

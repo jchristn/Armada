@@ -7,6 +7,7 @@ namespace Armada.Tui.Screens.Operations
     using Armada.Core.Enums;
     using Armada.Core.Models;
     using Armada.Tui.Approvals;
+    using Armada.Tui.Screens.Kit;
     using Armada.Tui.Services;
     using Armada.Tui.Widgets;
 
@@ -223,11 +224,11 @@ namespace Armada.Tui.Screens.Operations
                 : _Screen.Tr("Purge mission \"{{title}}\"? This will permanently remove it and clean up all associated resources. This cannot be undone.", LocalizationArgs.Of("title", title));
             _Screen.Confirm("Purge Mission", message, () =>
             {
-                _Screen.Run((c, t) => c.PurgeMissionAsync(id, t), () =>
+                DeleteProgress.RunVoid(_Screen.Context, "Purging mission", t => _Screen.Context.Client.PurgeMissionAsync(id, t), () =>
                 {
                     _Screen.Toast(NotificationSeverityEnum.Warning, _Screen.Tr("Mission \"{{title}}\" purged.", LocalizationArgs.Of("title", title)));
                     after?.Invoke();
-                }, null, ex => _Screen.ShowMessage(detail ? _Screen.Tr("Purge failed: {{message}}", LocalizationArgs.Of("message", ex.Message)) : _Screen.Tr("Purge failed.")));
+                }, "Purge failed.");
             }, "Purge");
         }
 

@@ -8,6 +8,7 @@ namespace Armada.Helm.Commands
     using Armada.Core.Models;
     using Armada.Core.Services;
     using Armada.Helm.Rendering;
+    using Armada.Helm.Infrastructure;
 
     /// <summary>
     /// Show voyage details. Accepts ID or title.
@@ -15,6 +16,11 @@ namespace Armada.Helm.Commands
     [Description("Show voyage details")]
     public class VoyageShowCommand : BaseCommand<VoyageShowSettings>
     {
+        /// <summary>
+        /// Missions listed per voyage (the table title gives the total when there are more).
+        /// </summary>
+        public const int MissionPageSize = 100;
+
         /// <inheritdoc />
         public override async Task<int> ExecuteAsync(CommandContext context, VoyageShowSettings settings, CancellationToken cancellationToken)
         {
@@ -22,8 +28,8 @@ namespace Armada.Helm.Commands
 
             if (settings.Id.StartsWith("vyg_"))
             {
-                // Server returns { Voyage: {...}, Missions: [...] } wrapper
-                VoyageDetailResponse? detail = await GetAsync<VoyageDetailResponse>($"/api/v1/voyages/{settings.Id}").ConfigureAwait(false);
+                // Server returns the voyage with mission counts (VoyageProgress); missions are paged separately.
+                VoyageProgress? detail = await GetAsync<VoyageProgress>($"/api/v1/voyages/{settings.Id}").ConfigureAwait(false);
                 if (detail?.Voyage != null)
                     voyage = detail.Voyage;
             }
@@ -38,7 +44,7 @@ namespace Armada.Helm.Commands
 
             if (voyage == null)
             {
-                AnsiConsole.MarkupLine($"[red]Voyage not found:[/] {Markup.Escape(settings.Id)}");
+                HelmConsole.Error.MarkupLine($"[red]Voyage not found:[/] {Markup.Escape(settings.Id)}");
                 AnsiConsole.MarkupLine("List voyages with [green]armada voyage list[/].");
                 return 1;
             }
@@ -65,13 +71,14 @@ namespace Armada.Helm.Commands
 
             AnsiConsole.Write(panel);
 
-            // Fetch missions for this voyage
-            EnumerationResult<Mission>? missionResult = await GetAsync<EnumerationResult<Mission>>($"/api/v1/missions?voyageId={voyage.Id}").ConfigureAwait(false);
+            // Fetch one page of this voyage's missions (oldest first); the title says when there are more.
+            EnumerationResult<Mission>? missionResult = await GetAsync<EnumerationResult<Mission>>($"/api/v1/missions?voyageId={voyage.Id}&pageSize={MissionPageSize}&order=CreatedAscending").ConfigureAwait(false);
             List<Mission>? missions = missionResult?.Objects;
 
             if (missions != null && missions.Count > 0)
             {
-                Table table = TableRenderer.CreateTable("Missions", null);
+                string missionTitle = missionResult!.TotalRecords > missions.Count ? $"Missions ({missions.Count} of {missionResult.TotalRecords})" : "Missions";
+                Table table = TableRenderer.CreateTable(missionTitle, null);
                 table.AddColumn("[bold]Id[/]");
                 table.AddColumn("[bold]Title[/]");
                 table.AddColumn("[bold]Status[/]");
@@ -90,8 +97,9 @@ namespace Armada.Helm.Commands
 
                 AnsiConsole.Write(table);
 
-                // Suggest retry if there are failed missions
-                int failedCount = missions.Count(m => m.Status == MissionStatusEnum.Failed);
+                // Suggest retry if there are failed missions (counted over the whole voyage, not just this page)
+                EnumerationResult<Mission>? failedResult = await GetAsync<EnumerationResult<Mission>>($"/api/v1/missions?voyageId={voyage.Id}&status=Failed&pageSize=1").ConfigureAwait(false);
+                long failedCount = failedResult?.TotalRecords ?? missions.Count(m => m.Status == MissionStatusEnum.Failed);
                 if (failedCount > 0)
                 {
                     AnsiConsole.MarkupLine($"  [red]{failedCount} failed mission(s).[/] Retry with [green]armada voyage retry {Markup.Escape(voyage.Id)}[/].");

@@ -1,6 +1,7 @@
 namespace Armada.Core.Models
 {
     using System.Collections.Generic;
+    using Armada.Core.Services;
 
     /// <summary>
     /// Request body for a captain chat turn: the new user message plus the prior conversation so the
@@ -18,6 +19,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// Prior conversation turns (oldest first), excluding the new message. Optional.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxRequestItems)]
         public List<CaptainChatMessage> History { get; set; } = new List<CaptainChatMessage>();
 
         /// <summary>

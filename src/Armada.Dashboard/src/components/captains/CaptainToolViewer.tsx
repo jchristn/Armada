@@ -1,6 +1,8 @@
+import { useEffect, useState } from 'react';
 import { useLocale } from '../../context/LocaleContext';
-import DataTable, { type DataTableColumn } from '../shared/DataTable';
-import type { CaptainToolAccessResult, CaptainToolServerSummary, CaptainToolSummary } from '../../types/models';
+import { getCaptainTools } from '../../api/client';
+import DataTable, { type DataTableColumn, type DataTablePagination } from '../shared/DataTable';
+import type { CaptainToolAccessResult, CaptainToolServerSummary, CaptainToolSummary, CaptainToolsQuery, EnumerationResult } from '../../types/models';
 
 interface CaptainToolViewerProps {
   open: boolean;
@@ -9,17 +11,66 @@ interface CaptainToolViewerProps {
   error: string;
   data: CaptainToolAccessResult | null;
   onClose: () => void;
+  /** When set, each tool section reads its own pages from the server (the probe snapshot is reused, so paging does not probe again). */
+  captainId?: string;
 }
 
-export default function CaptainToolViewer({ open, captainName, loading, error, data, onClose }: CaptainToolViewerProps) {
+type ToolKind = NonNullable<CaptainToolsQuery['sourceKind']>;
+
+const DEFAULT_TOOL_PAGE_SIZE = 25;
+
+/** One section's page of tools: fetched page by page when a captain id is given, otherwise cut from the loaded page. */
+function useToolSection(captainId: string | undefined, data: CaptainToolAccessResult | null, kind: ToolKind) {
+  const [pageNumber, setPageNumber] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_TOOL_PAGE_SIZE);
+  const [page, setPage] = useState<EnumerationResult<CaptainToolSummary> | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    setPageNumber(1);
+    setPage(null);
+    setFailed(false);
+  }, [data, captainId]);
+
+  useEffect(() => {
+    if (!captainId || !data) return undefined;
+    let active = true;
+    getCaptainTools(captainId, { sourceKind: kind, pageNumber, pageSize })
+      .then((result) => { if (active) { setPage(result?.tools ?? null); setFailed(false); } })
+      .catch(() => { if (active) setFailed(true); });
+    return () => { active = false; };
+  }, [captainId, data, kind, pageNumber, pageSize]);
+
+  if (!captainId) {
+    const loaded = (data?.tools?.objects ?? []).filter((tool) => tool.sourceKind === kind);
+    return { rows: loaded, pagination: undefined as DataTablePagination | undefined, failed: false };
+  }
+
+  const rows = page?.objects ?? [];
+  const pagination: DataTablePagination | undefined = page
+    ? {
+      pageNumber: page.pageNumber,
+      pageSize: page.pageSize,
+      totalPages: page.totalPages,
+      totalRecords: page.totalRecords,
+      onPageChange: (next: number) => setPageNumber(next),
+      onPageSizeChange: (size: number) => { setPageSize(size); setPageNumber(1); },
+    }
+    : undefined;
+  return { rows, pagination, failed };
+}
+
+export default function CaptainToolViewer({ open, captainName, loading, error, data, onClose, captainId }: CaptainToolViewerProps) {
   const { t } = useLocale();
+  const internalSection = useToolSection(open ? captainId : undefined, open ? data : null, 'RuntimeBuiltIn');
+  const mcpSection = useToolSection(open ? captainId : undefined, open ? data : null, 'McpServer');
 
   if (!open) return null;
 
   const configuredMcpServers = data?.servers.filter((server) => server.sourceKind === 'McpServer') ?? [];
   const runtimeSources = data?.servers.filter((server) => server.sourceKind !== 'McpServer') ?? [];
-  const runtimeInternalTools = data?.tools.filter((tool) => tool.sourceKind === 'RuntimeBuiltIn') ?? [];
-  const mcpTools = data?.tools.filter((tool) => tool.sourceKind === 'McpServer') ?? [];
+  const runtimeInternalTools = internalSection.rows;
+  const mcpTools = mcpSection.rows;
   const runtimeReportedToolCount = runtimeSources.reduce((total, source) => total + Math.max(0, source.toolCount), 0);
 
   function formatEndpoint(server: CaptainToolServerSummary) {
@@ -83,7 +134,7 @@ export default function CaptainToolViewer({ open, captainName, loading, error, d
     );
   }
 
-  function renderToolTable(tableKey: string, title: string, tools: CaptainToolSummary[], emptyMessage: string) {
+  function renderToolTable(tableKey: string, title: string, tools: CaptainToolSummary[], emptyMessage: string, pagination?: DataTablePagination, failed = false) {
     const columns: DataTableColumn<CaptainToolSummary>[] = [
       { key: 'tool', label: t('Tool'), required: true, headerTitle: t('Tool name as the agent sees and calls it.'), cellClassName: 'mono captain-tool-viewer-tool-name', render: (tool) => tool.name },
       {
@@ -95,9 +146,10 @@ export default function CaptainToolViewer({ open, captainName, loading, error, d
     return (
       <section className="captain-tool-viewer-section">
         <h4>{title}</h4>
-        {tools.length === 0 ? (
+        {failed && <p className="text-dim">{t('Failed to load captain tools.')}</p>}
+        {!failed && tools.length === 0 && (!pagination || pagination.totalRecords === 0) ? (
           <p className="text-dim">{emptyMessage}</p>
-        ) : (
+        ) : !failed && (
           <DataTable
             tableKey={tableKey}
             columns={columns}
@@ -105,6 +157,7 @@ export default function CaptainToolViewer({ open, captainName, loading, error, d
             rowKey={(tool) => `${tool.registrationSource || 'internal'}:${tool.name}`}
             wrapClassName="captain-tool-viewer-table"
             ariaLabel={title}
+            pagination={pagination}
           />
         )}
       </section>
@@ -177,6 +230,8 @@ export default function CaptainToolViewer({ open, captainName, loading, error, d
               runtimeReportedToolCount > 0
                 ? t('This runtime reports {{count}} internal tool(s), but it does not expose individual tool names for every internal source.', { count: runtimeReportedToolCount })
                 : t('No named runtime-internal tools are currently exposed for this captain runtime.'),
+              internalSection.pagination,
+              internalSection.failed,
             )}
 
             {renderToolTable(
@@ -186,6 +241,8 @@ export default function CaptainToolViewer({ open, captainName, loading, error, d
               configuredMcpServers.length > 0
                 ? t('No named MCP tools were returned from the captain runtime\'s reachable MCP servers.')
                 : t('No MCP tool inventory is available for this captain runtime.'),
+              mcpSection.pagination,
+              mcpSection.failed,
             )}
           </>
         )}

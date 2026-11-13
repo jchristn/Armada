@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 """Measure Armada REST endpoint latency for the performance baseline.
 
-Usage: perf-measure.py <base-url> <bearer-token> <runs> <warmup> <output.tsv>
+Usage: perf-measure.py <base-url> <bearer-token> <runs> <warmup> <output.tsv> [perf-ids.json]
+
+Endpoints whose path names a {placeholder} read it from the optional perf-ids.json written by Armada.PerfSeed;
+they are skipped when the file or the identifier is missing.
 
 Each endpoint gets <warmup> unmeasured requests, then <runs> measured requests over one persistent HTTP connection
 (the dashboard's browser also reuses connections). Prints a Markdown table and writes name, method, path, p50, p95,
@@ -34,6 +37,14 @@ ENDPOINTS = [
     ("jobs active (header poll)", "GET", "/api/v1/jobs?status=Queued,Running&pageSize=50", None),
     ("ask threads first page", "POST", "/api/v1/ask/threads/enumerate", {"PageNumber": 1, "PageSize": 25}),
     ("fleet action runs count", "POST", "/api/v1/fleet-action-runs/enumerate", {"PageNumber": 1, "PageSize": 1, "Status": "Running"}),
+    ("latest account usage", "GET", "/api/v1/usage/latest?pageSize=25", None),
+    ("selection summary", "GET", "/api/v1/missions/{selectionMissionId}/captain-selection", None),
+    ("selection history first page", "GET", "/api/v1/missions/{selectionMissionId}/captain-selection/history?pageSize=25", None),
+    ("selection history deep page (8)", "GET", "/api/v1/missions/{selectionMissionId}/captain-selection/history?pageSize=25&pageNumber=8", None),
+    ("selection history filtered", "POST", "/api/v1/missions/{selectionMissionId}/captain-selection/history/enumerate", {"PageNumber": 1, "PageSize": 25, "Outcome": "Waiting"}),
+    ("selection decision detail", "GET", "/api/v1/captain-selection-decisions/{selectionDecisionId}", None),
+    ("selection candidates page", "GET", "/api/v1/captain-selection-decisions/{selectionDecisionId}/candidates?pageSize=25", None),
+    ("selection preview (read-only)", "POST", "/api/v1/missions/{selectionMissionId}/captain-selection/preview", {}),
 ]
 
 
@@ -48,16 +59,28 @@ def percentile(values, pct):
 
 
 def main():
-    if len(sys.argv) != 6:
+    if len(sys.argv) not in (6, 7):
         print(__doc__, file=sys.stderr)
         return 2
     base, token, runs, warmup, output = sys.argv[1], sys.argv[2], int(sys.argv[3]), int(sys.argv[4]), sys.argv[5]
+    ids = {}
+    if len(sys.argv) == 7:
+        try:
+            with open(sys.argv[6]) as fh:
+                ids = {k: v for k, v in json.load(fh).items() if v}
+        except (OSError, ValueError):
+            ids = {}
     url = urlparse(base)
     conn = http.client.HTTPConnection(url.hostname, url.port, timeout=120)
     headers = {"Authorization": "Bearer " + token, "Content-Type": "application/json", "Connection": "keep-alive"}
     rows = []
     failed = False
     for name, method, path, body in ENDPOINTS:
+        try:
+            path = path.format(**ids)
+        except KeyError:
+            print("skipped %s: no seeded identifier" % name, file=sys.stderr)
+            continue
         payload = json.dumps(body) if body is not None else None
         timings = []
         size = 0

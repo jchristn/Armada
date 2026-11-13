@@ -16,6 +16,11 @@ namespace Armada.Tui.Screens.Operations
         public ArmadaStatus? Status { get; set; } = null;
 
         /// <summary>
+        /// First page of active voyage progress (InProgress, then Open), or null when the call failed.
+        /// </summary>
+        public EnumerationResult<VoyageProgress>? ActiveVoyages { get; set; } = null;
+
+        /// <summary>
         /// Recent missions.
         /// </summary>
         public List<MissionSummary>? Missions { get; set; } = null;

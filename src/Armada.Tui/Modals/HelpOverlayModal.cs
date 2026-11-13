@@ -50,7 +50,8 @@ namespace Armada.Tui.Modals
             List<ArmadaCommand> screen = commands.All().Where(c => c.Scope != null && c.Visible && c.Gestures.Count > 0).ToList();
             if (screen.Count > 0)
             {
-                Heading(T(screenTitle));
+                // A hub title is "Hub: Tab"; each part is a catalog phrase, so translate them separately.
+                Heading(String.Join(": ", screenTitle.Split(new string[] { ": " }, StringSplitOptions.None).Select(part => T(part))));
                 foreach (ArmadaCommand c in screen) Row(String.Join(", ", c.Gestures.Select(g => g.ToLabel())), T(c.Title));
             }
 
@@ -80,7 +81,8 @@ namespace Armada.Tui.Modals
             Heading(T("Panes"));
             Row("Tab / Shift+Tab, F6", T("Next pane"));
             Row("[ ] / Alt+1..9", T("Previous/next tab"));
-            FooterHint = " Esc " + T("Close") + " ";
+            // The list is longer than most terminals, so the scroll keys are named beside Esc.
+            FooterHint = " Up/Down PgUp/PgDn " + T("Scroll") + "  Esc " + T("Close") + " ";
             MinContentWidth = 50;
             MaxContentWidth = 90;
         }

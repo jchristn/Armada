@@ -21,6 +21,7 @@ import { socketFactory, type FakeSocket } from '../test/fakeSocket';
 import { ThemeProvider } from '../theme/ThemeContext';
 
 jest.mock('@dashboard/api/client', () => require('../test/askFixtures').askClientMockFactory());
+jest.mock('@dashboard/lib/askPaging', () => require('../test/askFixtures').askPagingMockFactory());
 
 const api = client as jest.Mocked<typeof client>;
 const NOW = '2026-10-07T12:00:00Z';
@@ -93,7 +94,7 @@ beforeEach(async () => {
   api.getCaptainTools.mockResolvedValue({ captainId: 'cpt_1', runtime: 'ClaudeCode', armadaToolCount: 0, askApprovalGated: true } as never);
   api.getAskQuickActions.mockResolvedValue([]);
   api.enumerateAskThreads.mockResolvedValue({ objects: [], totalPages: 1 } as never);
-  api.getAskThread.mockResolvedValue({ thread: thread(), trackedWork: [], pendingProposals: [] });
+  (api.getAskThread as unknown as jest.Mock).mockResolvedValue({ thread: thread(), trackedWork: [], pendingProposals: [] });
   api.enumerateAskMessages.mockResolvedValue({ messages: [], hasMore: false });
   api.markAskThreadRead.mockResolvedValue(undefined);
 });
@@ -132,7 +133,7 @@ describe('Ask Armada', () => {
   it('pressing Return in the message box sends, like Send, and keeps the keyboard up', async () => {
     api.createAskThread.mockResolvedValue(thread({ id: 'thr_new', title: 'New conversation' }));
     api.sendAskMessage.mockResolvedValue({ messageId: 'msg_10', turnId: 'turn_1' });
-    api.getAskThread.mockResolvedValue({ thread: thread({ id: 'thr_new', activeTurnId: 'turn_1' }), trackedWork: [] });
+    (api.getAskThread as unknown as jest.Mock).mockResolvedValue({ thread: thread({ id: 'thr_new', activeTurnId: 'turn_1' }), trackedWork: [] });
     api.enumerateAskMessages.mockResolvedValue({ messages: [message({ id: 'msg_10', threadId: 'thr_new', contentText: 'What is running?' })], hasMore: false });
     await renderAsk();
     await waitFor(() => expect(api.listCaptains).toHaveBeenCalled());
@@ -262,7 +263,7 @@ describe('Ask Armada', () => {
   });
 
   it('the captain cannot change during a turn: the bar is disabled and an open dropdown closes', async () => {
-    api.getAskThread.mockResolvedValue({ thread: thread(), trackedWork: [] });
+    (api.getAskThread as unknown as jest.Mock).mockResolvedValue({ thread: thread(), trackedWork: [] });
     await renderAsk('/ask/thr_1');
     await waitFor(() => expect(screen.getByTestId('ask-captain-bar-name')).toHaveTextContent(/Ada/));
     await act(async () => { fireEvent.press(screen.getByTestId('ask-captain-bar')); });
@@ -275,7 +276,7 @@ describe('Ask Armada', () => {
   it('sending creates the conversation, shows the message at once, and streams the reply', async () => {
     api.createAskThread.mockResolvedValue(thread({ id: 'thr_new', title: 'New conversation' }));
     api.sendAskMessage.mockResolvedValue({ messageId: 'msg_10', turnId: 'turn_1' });
-    api.getAskThread.mockResolvedValue({ thread: thread({ id: 'thr_new', activeTurnId: 'turn_1' }), trackedWork: [] });
+    (api.getAskThread as unknown as jest.Mock).mockResolvedValue({ thread: thread({ id: 'thr_new', activeTurnId: 'turn_1' }), trackedWork: [] });
     api.enumerateAskMessages.mockResolvedValue({ messages: [message({ id: 'msg_10', threadId: 'thr_new', contentText: 'What is running?' })], hasMore: false });
     await renderAsk();
     await waitFor(() => expect(api.listCaptains).toHaveBeenCalled());
@@ -309,7 +310,7 @@ describe('Ask Armada', () => {
   });
 
   it('a reply that finishes before the send returns ends the turn: no Stop, no waiting line, the reply shown', async () => {
-    api.getAskThread.mockResolvedValue({ thread: thread(), trackedWork: [] });
+    (api.getAskThread as unknown as jest.Mock).mockResolvedValue({ thread: thread(), trackedWork: [] });
     let resolveSend: (value: { messageId: string; turnId: string }) => void = () => undefined;
     api.sendAskMessage.mockReturnValue(new Promise((resolve) => { resolveSend = resolve; }));
     await renderAsk('/ask/thr_1');
@@ -452,7 +453,7 @@ describe('Ask Armada', () => {
   });
 
   it('a pending proposal shows a confirm card with the exact arguments; Approve runs it', async () => {
-    api.getAskThread.mockResolvedValue({ thread: thread(), trackedWork: [], pendingProposals: [proposal()] });
+    (api.getAskThread as unknown as jest.Mock).mockResolvedValue({ thread: thread(), trackedWork: [], pendingProposals: [proposal()] });
     api.enumerateAskMessages.mockResolvedValue({ messages: [message({ id: 'msg_2', sequence: 2, role: 'Assistant', kind: 'ActionProposal', proposalId: 'prp_1', contentText: '' })], hasMore: false });
     api.approveAskProposal.mockResolvedValue(proposal({ status: 'Executed', executedUtc: NOW, resultText: '{"ok":true}' }));
     await renderAsk('/ask/thr_1');
@@ -468,7 +469,7 @@ describe('Ask Armada', () => {
   });
 
   it('a proposal decided elsewhere updates the card from the socket; Reject calls reject', async () => {
-    api.getAskThread.mockResolvedValue({ thread: thread(), trackedWork: [], pendingProposals: [proposal({ id: 'prp_2' })] });
+    (api.getAskThread as unknown as jest.Mock).mockResolvedValue({ thread: thread(), trackedWork: [], pendingProposals: [proposal({ id: 'prp_2' })] });
     api.enumerateAskMessages.mockResolvedValue({ messages: [message({ id: 'msg_2', sequence: 2, role: 'Assistant', kind: 'ActionProposal', proposalId: 'prp_2' })], hasMore: false });
     api.rejectAskProposal.mockResolvedValue(proposal({ id: 'prp_2', status: 'Rejected' }));
     await renderAsk('/ask/thr_1');
@@ -480,7 +481,7 @@ describe('Ask Armada', () => {
 
   it('a CLI permission request in the conversation can be allowed once', async () => {
     const request: CliPermissionRequest = { id: 'cpr_1', threadId: 'thr_1', messageId: 'msg_3', toolName: 'Bash', summaryText: 'git status', status: 'Pending', canDecide: true, canRemember: true, captainId: 'cpt_1', captainName: 'Ada', expiresUtc: '2099-01-01T00:00:00Z' };
-    api.getAskThread.mockResolvedValue({ thread: thread(), trackedWork: [], pendingCliPermissions: [request] });
+    (api.getAskThread as unknown as jest.Mock).mockResolvedValue({ thread: thread(), trackedWork: [], pendingCliPermissions: [request] });
     api.enumerateAskMessages.mockResolvedValue({ messages: [message({ id: 'msg_3', sequence: 3, role: 'Assistant', kind: 'CliPermission' })], hasMore: false });
     api.decideCliPermissionRequest.mockResolvedValue({ ...request, status: 'Allowed', decisionSource: 'Approver' });
     await renderAsk('/ask/thr_1');
@@ -500,7 +501,7 @@ describe('Ask Armada', () => {
 
   it('a CLI permission request can be denied with a message for the captain', async () => {
     const request: CliPermissionRequest = { id: 'cpr_2', threadId: 'thr_1', messageId: 'msg_3', toolName: 'Bash', summaryText: 'rm -rf build', status: 'Pending', canDecide: true };
-    api.getAskThread.mockResolvedValue({ thread: thread(), trackedWork: [], pendingCliPermissions: [request] });
+    (api.getAskThread as unknown as jest.Mock).mockResolvedValue({ thread: thread(), trackedWork: [], pendingCliPermissions: [request] });
     api.enumerateAskMessages.mockResolvedValue({ messages: [message({ id: 'msg_3', sequence: 3, role: 'Assistant', kind: 'CliPermission' })], hasMore: false });
     api.decideCliPermissionRequest.mockResolvedValue({ ...request, status: 'Denied', decisionMessage: 'Use make clean' });
     await renderAsk('/ask/thr_1');
@@ -517,7 +518,7 @@ describe('Ask Armada', () => {
     api.runAskQuickAction.mockResolvedValue(proposal({ id: 'prp_q', threadId: 'thr_q', toolName: 'status', source: 'QuickAction', status: 'Executed', summaryText: 'Status' }));
     await renderAsk();
     await waitFor(() => expect(api.getAskQuickActions).toHaveBeenCalled());
-    api.getAskThread.mockResolvedValue({ thread: thread({ id: 'thr_q' }), trackedWork: [] });
+    (api.getAskThread as unknown as jest.Mock).mockResolvedValue({ thread: thread({ id: 'thr_q' }), trackedWork: [] });
     api.enumerateAskMessages.mockResolvedValue({
       messages: [message({ id: 'msg_r', threadId: 'thr_q', role: 'System', kind: 'ActionResult', proposalId: 'prp_q', contentText: 'No **active** work.' })],
       hasMore: false,
@@ -561,7 +562,7 @@ describe('Ask Armada', () => {
     await emit('ask.thread', { threadId: 'thr_2', thread: thread({ id: 'thr_2', title: 'Deploy plan', unreadCount: 4 }) });
     expect(screen.getByText('4')).toBeTruthy();
 
-    api.getAskThread.mockResolvedValue({ thread: thread({ id: 'thr_2', title: 'Deploy plan' }), trackedWork: [] });
+    (api.getAskThread as unknown as jest.Mock).mockResolvedValue({ thread: thread({ id: 'thr_2', title: 'Deploy plan' }), trackedWork: [] });
     api.enumerateAskMessages.mockResolvedValue({ messages: [message({ id: 'm', threadId: 'thr_2', contentText: 'ship it' })], hasMore: false });
     await act(async () => { await fireEvent.press(screen.getByTestId('ask-thread-row-thr_2')); });
     await waitFor(() => expect(screen.getByText('ship it')).toBeTruthy());
@@ -575,6 +576,17 @@ describe('Ask Armada', () => {
     await renderAsk();
     await waitFor(() => expect(screen.getByText('from last time')).toBeTruthy());
     expect(api.getAskThread).toHaveBeenCalledWith('thr_1');
+  });
+
+  it('a prefilled /ask (?prompt=) starts a new conversation with the prompt in the composer, not the last one', async () => {
+    await AsyncStorage.setItem(ASK_PREF_KEYS.lastThread, '"thr_1"');
+    const prompt = 'Show me the pertinent details from the black box for mission msn_1 and give me your opinion on why it failed and what could have been done differently.';
+    await renderAsk(`/ask?prompt=${encodeURIComponent(prompt)}`);
+    await waitFor(() => expect(screen.getByTestId('ask-input').props.value).toBe(prompt));
+    expect(screen.getByTestId('ask-empty')).toBeTruthy();
+    expect(api.getAskThread).not.toHaveBeenCalledWith('thr_1');
+    // Nothing is sent until the user does.
+    expect(api.sendAskMessage).not.toHaveBeenCalled();
   });
 
   it('deleting the open conversation asks first and returns to a new conversation', async () => {
@@ -600,7 +612,7 @@ describe('Ask Armada', () => {
   });
 
   it('live work cards follow ask.work events and link to the work', async () => {
-    api.getAskThread.mockResolvedValue({ thread: thread(), trackedWork: [{ id: 'trk_1', threadId: 'thr_1', entityType: 'Voyage', entityId: 'vyg_1', title: 'Login fix', status: 'InProgress', state: 'Active' }] });
+    (api.getAskThread as unknown as jest.Mock).mockResolvedValue({ thread: thread(), trackedWork: [{ id: 'trk_1', threadId: 'thr_1', entityType: 'Voyage', entityId: 'vyg_1', title: 'Login fix', status: 'InProgress', state: 'Active' }] });
     api.getAskWorkSnapshot.mockResolvedValue(null as never);
     api.enumerateAskMessages.mockResolvedValue({ messages: [message({ id: 'msg_r', role: 'System', kind: 'ActionResult', trackedWorkId: 'trk_1', contentText: 'Dispatched.' })], hasMore: false });
     await renderAsk('/ask/thr_1');
@@ -623,7 +635,7 @@ describe('Ask Armada', () => {
       '  - UnitTest check "Test.Automated" passed (exit code 0, 2m 40s): 412 passed, 0 failed of 412 tests.',
       '  - Captain\'s final message: "All 412 tests passed."',
     ].join('\n');
-    api.getAskThread.mockResolvedValue({ thread: thread(), trackedWork: [{ id: 'trk_1', threadId: 'thr_1', entityType: 'Voyage', entityId: 'vyg_1', title: 'Run tests', status: 'Complete', state: 'Finished' }] });
+    (api.getAskThread as unknown as jest.Mock).mockResolvedValue({ thread: thread(), trackedWork: [{ id: 'trk_1', threadId: 'thr_1', entityType: 'Voyage', entityId: 'vyg_1', title: 'Run tests', status: 'Complete', state: 'Finished' }] });
     api.getAskWorkSnapshot.mockResolvedValue(null as never);
     api.enumerateAskMessages.mockResolvedValue({
       messages: [
@@ -670,7 +682,7 @@ describe('Ask Armada', () => {
   });
 
   it('a failed turn is shown inline', async () => {
-    api.getAskThread.mockResolvedValue({ thread: thread({ activeTurnId: 'turn_9' }), trackedWork: [] });
+    (api.getAskThread as unknown as jest.Mock).mockResolvedValue({ thread: thread({ activeTurnId: 'turn_9' }), trackedWork: [] });
     await renderAsk('/ask/thr_1');
     await waitFor(() => expect(screen.getByTestId('ask-waiting')).toBeTruthy());
     // The waiting line rotates; its spoken label does not, so TalkBack's live region speaks it once.
@@ -881,7 +893,7 @@ describe('Ask Armada slash commands', () => {
   const type = async (text: string) => { await fireEvent.changeText(input(), text); };
 
   async function openThread() {
-    api.getAskThread.mockImplementation(async (id: string) => ({ thread: thread({ id, title: id === 'thr_2' ? 'Deploy plan' : 'Fleet status' }), trackedWork: [] }));
+    (api.getAskThread as unknown as jest.Mock).mockImplementation(async (id: string) => ({ thread: thread({ id, title: id === 'thr_2' ? 'Deploy plan' : 'Fleet status' }), trackedWork: [] }));
     api.enumerateAskThreads.mockResolvedValue({ objects: [thread(), thread({ id: 'thr_2', title: 'Deploy plan' })], totalPages: 1 } as never);
     api.enumerateAskMessages.mockResolvedValue({ messages: [message({ contentText: 'open one' })], hasMore: false });
     await renderAsk('/ask/thr_1');

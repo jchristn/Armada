@@ -1,5 +1,6 @@
 namespace Test.Shared.Suites.Services
 {
+    using System.Linq;
     using System;
     using System.Collections.Generic;
     using System.Diagnostics;
@@ -146,8 +147,8 @@ namespace Test.Shared.Suites.Services
                 await testDb.Driver.Missions.UpdateAsync(repaired).ConfigureAwait(false);
                 Captain? holder = await testDb.Driver.Captains.ReadAsync(judgeCaptain.Id).ConfigureAwait(false);
                 holder!.State = CaptainStateEnum.Working;
-                holder.CurrentMissionId = judge.Id;
-                await testDb.Driver.Captains.UpdateAsync(holder).ConfigureAwait(false);
+                holder.Assignment = judge;
+                await CaptainAssignmentFixture.UpdateAsync(testDb.Driver, holder).ConfigureAwait(false);
 
                 await h.Missions.HandleCompletionAsync(holder, judge.Id).ConfigureAwait(false);
                 Mission? failed = await testDb.Driver.Missions.ReadAsync(judge.Id).ConfigureAwait(false);
@@ -158,7 +159,7 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(0, landingCalls);
 
                 Captain? released = await testDb.Driver.Captains.ReadAsync(judgeCaptain.Id).ConfigureAwait(false);
-                AssertTrue(released!.CurrentMissionId != judge.Id, "the captain is released after the terminal failure");
+                AssertTrue(released!.ActiveMissionIds.SingleOrDefault() != judge.Id, "the captain is released after the terminal failure");
             }));
 
             cases.Add(CaseAsync("restart_later_stage_keeps_branch", "Restarting a failed later stage keeps the earlier stage's branch, reopens the voyage, and restores the cancelled stages after it", TestTags.Positive, async () =>
@@ -193,7 +194,156 @@ namespace Test.Shared.Suites.Services
                 AssertTrue(refused, "a Complete mission cannot be restarted");
             }));
 
-            cases.Add(CaseAsync("restarted_judge_retains_findings", "A restarted rejected Judge receives prior findings as historical evidence alongside its current requirements", TestTags.Positive, async () =>
+            cases.Add(CaseAsync("restart_blocked_verifier_sends_work_back_to_worker", "Restarting a Test Engineer that failed on a blocking product defect after the rework budget sends the work back to a Worker with the operator's guidance instead of re-verifying the unchanged code", TestTags.Positive, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                Harness h = new Harness(testDb, new DirCreatingGitService());
+                Vessel vessel = await CreateVesselAsync(testDb).ConfigureAwait(false);
+                Voyage voyage = await testDb.Driver.Voyages.CreateAsync(new Voyage("pipeline") { Status = VoyageStatusEnum.Failed }).ConfigureAwait(false);
+                const string branch = "armada/flow/phase4";
+                string blockedOutput = "## Affected Case\nFile: src/Armada.Helm/Commands/McpStdioCommand.cs:90\nstdio capture_captain_usage {} returns result.isError instead of -32602.\n" + VerifierContract.BlockedMarker;
+
+                // The recorded failure shape: the escalated rework round's verifier blocked with the budget exhausted.
+                Mission worker = await testDb.Driver.Missions.CreateAsync(new Mission("[Worker] Phase 4", "Implement the usage surfaces.") { VesselId = vessel.Id, VoyageId = voyage.Id, Persona = "Worker", Status = MissionStatusEnum.WorkProduced, BranchName = branch }).ConfigureAwait(false);
+                Mission firstTester = await testDb.Driver.Missions.CreateAsync(new Mission("[Test Engineer] Phase 4", "Verify.") { VesselId = vessel.Id, VoyageId = voyage.Id, Persona = "Test Engineer", Status = MissionStatusEnum.WorkProduced, BranchName = branch, DependsOnMissionId = worker.Id, AgentOutput = blockedOutput }).ConfigureAwait(false);
+                Mission escalated = await testDb.Driver.Missions.CreateAsync(new Mission("[Worker] Rework 3 (escalated): Phase 4", "Implement the usage surfaces.") { VesselId = vessel.Id, VoyageId = voyage.Id, Persona = "Worker", Status = MissionStatusEnum.WorkProduced, BranchName = branch, DependsOnMissionId = firstTester.Id, ReworkRound = 3, ReworkEscalated = true }).ConfigureAwait(false);
+                Mission tester = await testDb.Driver.Missions.CreateAsync(new Mission("[Test Engineer] Rework 3: Phase 4", "Verify.") { VesselId = vessel.Id, VoyageId = voyage.Id, Persona = "Test Engineer", Status = MissionStatusEnum.Failed, BranchName = branch, DependsOnMissionId = escalated.Id, AgentOutput = blockedOutput, FailureKind = MissionFailureKindEnum.JudgeRejected, FailureReason = "Test Engineer reported a blocking defect (see its Affected Case).\nAutomatic Judge rework limit reached after 1 rework round(s), including an escalated attempt." }).ConfigureAwait(false);
+                Mission judge = await testDb.Driver.Missions.CreateAsync(new Mission("[Judge] Phase 4", "Review.") { VesselId = vessel.Id, VoyageId = voyage.Id, Persona = "Judge", Status = MissionStatusEnum.Cancelled, BranchName = branch, DependsOnMissionId = tester.Id, FailureKind = MissionFailureKindEnum.DependencyFailed, FailureReason = "dependency failed" }).ConfigureAwait(false);
+
+                Mission routed = await h.Missions.RestartAsync(tester, description: "Install the required-argument guard on the stdio server too.").ConfigureAwait(false);
+
+                AssertEqual("Worker", routed.Persona, "the restart answers with the Worker that will correct the product code, not the verifier: " + routed.Title);
+                AssertNotEqual(tester.Id, routed.Id, "a new rework Worker, not the blocked verifier");
+                AssertEqual(tester.Id, routed.DependsOnMissionId, "the rework hangs off the blocked verifier, whose handoff carries the affected case");
+                AssertEqual(MissionStatusEnum.Pending, routed.Status, "no idle captain in this harness: the rework waits for the dispatcher");
+                AssertEqual(2, routed.ReworkRound, "an operator-approved round past the automatic budget");
+                AssertFalse(routed.ReworkEscalated, "an operator restart uses normal routing, not another automatic escalation");
+                AssertContains("Implement the usage surfaces.", routed.Description, "the original task travels with the rework");
+                AssertContains("Install the required-argument guard on the stdio server too.", routed.Description, "the operator's restart description is guidance for the Worker");
+
+                Mission? blocked = await testDb.Driver.Missions.ReadAsync(tester.Id).ConfigureAwait(false);
+                AssertEqual(MissionStatusEnum.WorkProduced, blocked!.Status, "the blocked verifier keeps its finding as produced work, as with automatic rework");
+                AssertNull(blocked.FailureKind, "the verifier is no longer a failed mission the voyage settles on");
+                AssertEqual(blockedOutput, blocked.AgentOutput, "the verifier's affected case is preserved for the rework");
+
+                List<Mission> all = await testDb.Driver.Missions.EnumerateByVoyageAsync(voyage.Id).ConfigureAwait(false);
+                Mission? nextTester = all.Find(m => m.DependsOnMissionId == routed.Id && m.Persona == "Test Engineer");
+                AssertNotNull(nextTester, "a fresh Test Engineer verifies the rework");
+                AssertEqual(MissionStatusEnum.Pending, nextTester!.Status);
+                Mission? restoredJudge = await testDb.Driver.Missions.ReadAsync(judge.Id).ConfigureAwait(false);
+                AssertEqual(nextTester.Id, restoredJudge!.DependsOnMissionId, "the Judge now waits for the fresh Test Engineer");
+                AssertEqual(MissionStatusEnum.Pending, restoredJudge.Status, "the Judge cancelled by the failure is restored");
+                AssertEqual(VoyageStatusEnum.InProgress, (await testDb.Driver.Voyages.ReadAsync(voyage.Id).ConfigureAwait(false))!.Status, "the voyage is reopened");
+                AssertEqual(0, all.Count(m => m.Persona == "Test Engineer" && m.Status == MissionStatusEnum.Failed), "no failed verifier remains to fail the voyage again");
+
+                bool refused = false;
+                try { await h.Missions.RestartAsync(blocked).ConfigureAwait(false); }
+                catch (InvalidOperationException) { refused = true; }
+                AssertTrue(refused, "the routed verifier cannot be restarted a second time into a duplicate chain");
+            }));
+
+            cases.Add(CaseAsync("restart_unblocked_failed_verifier_restarts_itself", "A Test Engineer that failed for another reason (a crash, no BLOCKED outcome) still restarts itself on the kept branch", TestTags.Negative, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                Harness h = new Harness(testDb, new DirCreatingGitService());
+                Vessel vessel = await CreateVesselAsync(testDb).ConfigureAwait(false);
+                Voyage voyage = await testDb.Driver.Voyages.CreateAsync(new Voyage("pipeline") { Status = VoyageStatusEnum.Failed }).ConfigureAwait(false);
+                Mission worker = await testDb.Driver.Missions.CreateAsync(new Mission("[Worker] Build", "Build it") { VesselId = vessel.Id, VoyageId = voyage.Id, Persona = "Worker", Status = MissionStatusEnum.WorkProduced, BranchName = "armada/flow/crash" }).ConfigureAwait(false);
+                Mission crashed = await testDb.Driver.Missions.CreateAsync(new Mission("[Test Engineer] Build", "Verify.") { VesselId = vessel.Id, VoyageId = voyage.Id, Persona = "Test Engineer", Status = MissionStatusEnum.Failed, DependsOnMissionId = worker.Id, FailureKind = MissionFailureKindEnum.Crash, FailureReason = "crashed", AgentOutput = "partial output" }).ConfigureAwait(false);
+                Mission blockedButCrashed = await testDb.Driver.Missions.CreateAsync(new Mission("[Test Engineer] Other", "Verify.") { VesselId = vessel.Id, VoyageId = voyage.Id, Persona = "Test Engineer", Status = MissionStatusEnum.Failed, DependsOnMissionId = worker.Id, FailureKind = MissionFailureKindEnum.Crash, FailureReason = "crashed", AgentOutput = VerifierContract.BlockedMarker }).ConfigureAwait(false);
+
+                Mission restarted = await h.Missions.RestartAsync(crashed).ConfigureAwait(false);
+                AssertEqual(crashed.Id, restarted.Id, "the verifier itself restarts");
+                AssertEqual(MissionStatusEnum.Pending, restarted.Status);
+                AssertEqual("armada/flow/crash", restarted.BranchName, "on the Worker's branch");
+                Mission again = await h.Missions.RestartAsync(blockedButCrashed).ConfigureAwait(false);
+                AssertEqual(blockedButCrashed.Id, again.Id, "only a JudgeRejected blocking defect is routed to the Worker");
+                List<Mission> all = await testDb.Driver.Missions.EnumerateByVoyageAsync(voyage.Id).ConfigureAwait(false);
+                AssertEqual(0, all.Count(m => IntegrationBarrier.IsRework(m)), "no rework chain was written");
+            }));
+
+            cases.Add(CaseAsync("restart_blocked_verifier_without_worker_refuses_and_changes_nothing", "Restarting a blocked verifier whose Worker cannot be found is refused with a reason, and leaves the verifier, its voyage and the mission set exactly as they were", TestTags.Negative, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                Harness h = new Harness(testDb, new DirCreatingGitService());
+                Vessel vessel = await CreateVesselAsync(testDb).ConfigureAwait(false);
+                Voyage voyage = await testDb.Driver.Voyages.CreateAsync(new Voyage("pipeline") { Status = VoyageStatusEnum.Failed }).ConfigureAwait(false);
+                string blockedOutput = "## Affected Case\nFile: src/a.cs:1\nwrong\n" + VerifierContract.BlockedMarker;
+
+                // The verifier's dependency is an Architect, not a Worker: no Worker can take the rework.
+                Mission architect = await testDb.Driver.Missions.CreateAsync(new Mission("[Architect] Plan", "Plan.") { VesselId = vessel.Id, VoyageId = voyage.Id, Persona = "Architect", Status = MissionStatusEnum.Complete }).ConfigureAwait(false);
+                Mission tester = await testDb.Driver.Missions.CreateAsync(new Mission("[Test Engineer] Orphan", "Verify.") { VesselId = vessel.Id, VoyageId = voyage.Id, Persona = "Test Engineer", Status = MissionStatusEnum.Failed, DependsOnMissionId = architect.Id, AgentOutput = blockedOutput, FailureKind = MissionFailureKindEnum.JudgeRejected, FailureReason = "blocked" }).ConfigureAwait(false);
+                int before = (await testDb.Driver.Missions.EnumerateByVoyageAsync(voyage.Id).ConfigureAwait(false)).Count;
+
+                string? refusal = null;
+                try { await h.Missions.RestartAsync(tester, description: "guidance").ConfigureAwait(false); }
+                catch (InvalidOperationException e) { refusal = e.Message; }
+                AssertNotNull(refusal, "a blocked verifier with no Worker to send the work to is refused, not silently re-verified");
+                AssertContains("cannot be sent back to its Worker", refusal!, "the refusal names why");
+                AssertContains("re-verify the unchanged product code", refusal!, "the refusal explains why the stage is not restarted alone");
+
+                Mission? after = await testDb.Driver.Missions.ReadAsync(tester.Id).ConfigureAwait(false);
+                AssertEqual(MissionStatusEnum.Failed, after!.Status, "the refused verifier stays Failed");
+                AssertEqual(MissionFailureKindEnum.JudgeRejected, after.FailureKind, "its failure kind is kept");
+                AssertEqual("blocked", after.FailureReason, "its failure reason is kept");
+                AssertEqual(blockedOutput, after.AgentOutput, "its affected case is kept");
+                AssertEqual("Verify.", after.Description, "the restart description did not overwrite the verifier brief");
+                AssertEqual(VoyageStatusEnum.Failed, (await testDb.Driver.Voyages.ReadAsync(voyage.Id).ConfigureAwait(false))!.Status, "the voyage is not reopened by a refused restart");
+                AssertEqual(before, (await testDb.Driver.Missions.EnumerateByVoyageAsync(voyage.Id).ConfigureAwait(false)).Count, "no rework chain was written");
+            }));
+
+            cases.Add(CaseAsync("restart_blocked_verifier_outside_a_voyage_restarts_itself", "A blocked verifier with no voyage cannot hang a rework chain anywhere, so a restart still restarts the verifier itself", TestTags.Negative, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                Harness h = new Harness(testDb, new DirCreatingGitService());
+                Vessel vessel = await CreateVesselAsync(testDb).ConfigureAwait(false);
+                Mission standalone = await testDb.Driver.Missions.CreateAsync(new Mission("[Test Engineer] Standalone", "Verify.") { VesselId = vessel.Id, Persona = "Test Engineer", Status = MissionStatusEnum.Failed, AgentOutput = VerifierContract.BlockedMarker, FailureKind = MissionFailureKindEnum.JudgeRejected, FailureReason = "blocked" }).ConfigureAwait(false);
+                Mission restarted = await h.Missions.RestartAsync(standalone).ConfigureAwait(false);
+                AssertEqual(standalone.Id, restarted.Id, "the verifier itself restarts");
+                AssertEqual(MissionStatusEnum.Pending, restarted.Status);
+            }));
+
+            cases.Add(CaseAsync("restart_blocked_linter_and_usability_route_to_worker_repeatedly", "Linter and Usability Engineer blocks route to the Worker too; blank guidance adds no section; a second operator restart opens another round past the automatic budget", TestTags.Positive, async () =>
+            {
+                foreach (string persona in new[] { "Linter", "Usability Engineer" })
+                {
+                    using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                    Harness h = new Harness(testDb, new DirCreatingGitService());
+                    Vessel vessel = await CreateVesselAsync(testDb).ConfigureAwait(false);
+                    Voyage voyage = await testDb.Driver.Voyages.CreateAsync(new Voyage("pipeline") { Status = VoyageStatusEnum.Failed }).ConfigureAwait(false);
+                    string blockedOutput = "## Affected Case\nScenario: " + persona + " finding\n" + VerifierContract.BlockedMarker;
+                    Mission worker = await testDb.Driver.Missions.CreateAsync(new Mission("[Worker] Slice", "Do the slice.") { VesselId = vessel.Id, VoyageId = voyage.Id, Persona = "Worker", Status = MissionStatusEnum.WorkProduced, BranchName = "armada/flow/slice" }).ConfigureAwait(false);
+                    Mission verifier = await testDb.Driver.Missions.CreateAsync(new Mission("[" + persona + "] Slice", "Verify.") { VesselId = vessel.Id, VoyageId = voyage.Id, Persona = persona, Status = MissionStatusEnum.Failed, BranchName = "armada/flow/slice", DependsOnMissionId = worker.Id, AgentOutput = blockedOutput, FailureKind = MissionFailureKindEnum.JudgeRejected, FailureReason = "blocked" }).ConfigureAwait(false);
+
+                    Mission first = await h.Missions.RestartAsync(verifier, description: "   ").ConfigureAwait(false);
+                    AssertEqual("Worker", first.Persona, persona + ": routed to a Worker");
+                    AssertEqual(1, first.ReworkRound, persona + ": first rework round");
+                    AssertFalse(first.Description != null && first.Description.Contains("Operator restart guidance", StringComparison.Ordinal), persona + ": whitespace guidance adds no guidance section");
+
+                    List<Mission> all = await testDb.Driver.Missions.EnumerateByVoyageAsync(voyage.Id).ConfigureAwait(false);
+                    Mission? next = all.Find(m => m.DependsOnMissionId == first.Id && m.Persona == persona);
+                    AssertNotNull(next, persona + ": a fresh verifier of the same persona follows the rework");
+
+                    // The fresh verifier blocks again with the automatic budget already spent; the operator restarts again.
+                    next!.Status = MissionStatusEnum.Failed;
+                    next.AgentOutput = blockedOutput;
+                    next.FailureKind = MissionFailureKindEnum.JudgeRejected;
+                    next.FailureReason = "blocked again";
+                    first.Status = MissionStatusEnum.WorkProduced;
+                    await testDb.Driver.Missions.UpdateAsync(first).ConfigureAwait(false);
+                    next = await testDb.Driver.Missions.UpdateAsync(next).ConfigureAwait(false);
+                    Mission second = await h.Missions.RestartAsync(next, description: "Second pass.").ConfigureAwait(false);
+                    AssertEqual("Worker", second.Persona, persona + ": second restart also goes to a Worker");
+                    AssertEqual(2, second.ReworkRound, persona + ": operator restarts are not capped by the automatic budget");
+                    AssertEqual(next.Id, second.DependsOnMissionId, persona + ": second rework hangs off the second blocked verifier");
+                    AssertFalse(second.ReworkEscalated, persona + ": an operator restart is not turned into an automatic stagnation escalation");
+                    AssertContains("Second pass.", second.Description, persona + ": second restart's guidance reaches the Worker");
+                    all = await testDb.Driver.Missions.EnumerateByVoyageAsync(voyage.Id).ConfigureAwait(false);
+                    AssertEqual(0, all.Count(m => m.Status == MissionStatusEnum.Failed), persona + ": no failed stage remains");
+                }
+            }));
+
+            cases.Add(CaseAsync("restarted_judge_retains_findings","A restarted rejected Judge receives prior findings as historical evidence alongside its current requirements", TestTags.Positive, async () =>
             {
                 using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
                 Harness h = new Harness(testDb, new DirCreatingGitService());
@@ -606,7 +756,7 @@ namespace Test.Shared.Suites.Services
                 // Restart dispatches at once when a captain is idle; keep the only captain busy so the restarted Judge waits
                 // (this harness's git has no slice commits, so launching it would fail it again and re-cancel integration).
                 integrator.State = CaptainStateEnum.Working;
-                await testDb.Driver.Captains.UpdateAsync(integrator).ConfigureAwait(false);
+                await CaptainAssignmentFixture.UpdateAsync(testDb.Driver, integrator).ConfigureAwait(false);
                 await h.Missions.RestartAsync((await testDb.Driver.Missions.ReadAsync(rejected.Id).ConfigureAwait(false))!).ConfigureAwait(false);
                 Mission? restored = await testDb.Driver.Missions.ReadAsync(integration.Id).ConfigureAwait(false);
                 AssertEqual(MissionStatusEnum.Pending, restored!.Status, "restarting the failed mission brings integration back");
@@ -859,7 +1009,7 @@ namespace Test.Shared.Suites.Services
                 Mission r2 = await testDb.Driver.Missions.CreateAsync(new Mission("[Worker] Rework 2: Do it", "x") { VesselId = vessel.Id, VoyageId = voyage.Id, Persona = "Worker", CaptainId = workerCaptain.Id, Status = MissionStatusEnum.WorkProduced, DependsOnMissionId = r1.Id, BranchName = "b" }).ConfigureAwait(false);
                 Captain reviewer = await CreateCaptainAsync(testDb, "Judge only", AgentRuntimeEnum.Codex, CaptainStateEnum.Working).ConfigureAwait(false);
                 reviewer.AllowedPersonas = "[\"Judge\"]";
-                await testDb.Driver.Captains.UpdateAsync(reviewer).ConfigureAwait(false);
+                await CaptainAssignmentFixture.UpdateAsync(testDb.Driver, reviewer).ConfigureAwait(false);
                 Mission judge = await CreateRunningMissionAsync(testDb, h, vessel, voyage, reviewer, "Judge", false).ConfigureAwait(false);
                 judge.DependsOnMissionId = r2.Id;
                 await testDb.Driver.Missions.UpdateAsync(judge).ConfigureAwait(false);
@@ -878,17 +1028,17 @@ namespace Test.Shared.Suites.Services
                 Captain quarantined = await CreateCaptainAsync(testDb, "Quarantined", AgentRuntimeEnum.Codex, CaptainStateEnum.Quarantined).ConfigureAwait(false);
                 Captain disallowed = await CreateCaptainAsync(testDb, "Judge only", AgentRuntimeEnum.ClaudeCode).ConfigureAwait(false);
                 disallowed.AllowedPersonas = "[\"Judge\"]";
-                await testDb.Driver.Captains.UpdateAsync(disallowed).ConfigureAwait(false);
+                await CaptainAssignmentFixture.UpdateAsync(testDb.Driver, disallowed).ConfigureAwait(false);
                 Captain foreign = await CreateCaptainAsync(testDb, "Foreign owner", AgentRuntimeEnum.Codex).ConfigureAwait(false);
                 TenantMetadata foreignTenant = await testDb.Driver.Tenants.CreateAsync(new TenantMetadata("Escalation ownership fence")).ConfigureAwait(false);
                 UserMaster foreignUser = await testDb.Driver.Users.CreateAsync(new UserMaster(foreignTenant.Id, "escalation-other@example.com", "password")).ConfigureAwait(false);
                 foreign.UserId = foreignUser.Id;
-                await testDb.Driver.Captains.UpdateAsync(foreign).ConfigureAwait(false);
+                await CaptainAssignmentFixture.UpdateAsync(testDb.Driver, foreign).ConfigureAwait(false);
                 Mission mission = new Mission("Recover", "Finish") { CaptainId = failed.Id };
                 AssertNull(await CaptainEscalationSelector.SelectAsync(testDb.Driver, mission, failed.Id, new List<Mission>()).ConfigureAwait(false), "No unauthorized fallback is selected");
                 Captain alternative = await CreateCaptainAsync(testDb, "Alternative", AgentRuntimeEnum.Codex).ConfigureAwait(false);
                 alternative.Tier = CaptainTierEnum.Standard;
-                await testDb.Driver.Captains.UpdateAsync(alternative).ConfigureAwait(false);
+                await CaptainAssignmentFixture.UpdateAsync(testDb.Driver, alternative).ConfigureAwait(false);
                 mission.Tier = CaptainTierEnum.Premium;
                 AssertNull(await CaptainEscalationSelector.SelectAsync(testDb.Driver, mission, failed.Id, new List<Mission>()).ConfigureAwait(false), "The mission tier floor applies");
                 mission.Tier = null;
@@ -933,7 +1083,7 @@ namespace Test.Shared.Suites.Services
         {
             Captain captain = new Captain(name, runtime);
             captain.State = state;
-            return await testDb.Driver.Captains.CreateAsync(captain).ConfigureAwait(false);
+            return await CaptainAssignmentFixture.CreateAsync(testDb.Driver, captain).ConfigureAwait(false);
         }
 
         private static async Task<Vessel> CreateVesselAsync(TestDatabase testDb)
@@ -967,9 +1117,9 @@ namespace Test.Shared.Suites.Services
 
             mission.DockId = dock.Id;
             await testDb.Driver.Missions.UpdateAsync(mission).ConfigureAwait(false);
-            captain.CurrentMissionId = mission.Id;
-            captain.CurrentDockId = dock.Id;
-            await testDb.Driver.Captains.UpdateAsync(captain).ConfigureAwait(false);
+            captain.Assignment = mission;
+            captain.Assignment ??= new Mission("fixture assignment"); captain.Assignment.DockId = dock.Id;
+            await CaptainAssignmentFixture.UpdateAsync(testDb.Driver, captain).ConfigureAwait(false);
             return mission;
         }
 

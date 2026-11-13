@@ -81,6 +81,7 @@ namespace Armada.Core.Services
         {
             if (auth == null) throw new ArgumentNullException(nameof(auth));
             if (request == null) throw new ArgumentNullException(nameof(request));
+            CollectionBounds.Validate(request);
 
             Vessel vessel = await ResolveAccessibleVesselAsync(auth, request.VesselId, token).ConfigureAwait(false);
             DeploymentEnvironment environment = new DeploymentEnvironment
@@ -107,6 +108,7 @@ namespace Armada.Core.Services
                 LastUpdateUtc = DateTime.UtcNow
             };
 
+            CollectionBounds.Validate(environment);
             environment = await _Database.Environments.CreateAsync(environment, token).ConfigureAwait(false);
             if (environment.IsDefault)
                 await ClearOtherDefaultsAsync(auth, environment.VesselId!, environment.Id, token).ConfigureAwait(false);
@@ -127,6 +129,7 @@ namespace Armada.Core.Services
             if (auth == null) throw new ArgumentNullException(nameof(auth));
             if (String.IsNullOrWhiteSpace(id)) throw new ArgumentNullException(nameof(id));
             if (request == null) throw new ArgumentNullException(nameof(request));
+            CollectionBounds.Validate(request);
 
             DeploymentEnvironment environment = await ReadAsync(auth, id, token).ConfigureAwait(false)
                 ?? throw new KeyNotFoundException("Environment not found.");
@@ -159,6 +162,7 @@ namespace Armada.Core.Services
             environment.Active = request.Active ?? environment.Active;
             environment.LastUpdateUtc = DateTime.UtcNow;
 
+            CollectionBounds.Validate(environment);
             environment = await _Database.Environments.UpdateAsync(environment, token).ConfigureAwait(false);
             if (environment.IsDefault)
                 await ClearOtherDefaultsAsync(auth, environment.VesselId!, environment.Id, token).ConfigureAwait(false);

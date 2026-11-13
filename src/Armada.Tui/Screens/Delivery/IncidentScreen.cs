@@ -13,6 +13,7 @@ namespace Armada.Tui.Screens.Delivery
     using Armada.Core.Models;
     using Armada.Tui.Routing;
     using Armada.Tui.Screens.Entities;
+    using Armada.Tui.Screens.Kit;
     using Armada.Tui.Services;
     using Armada.Tui.Widgets;
 
@@ -312,7 +313,7 @@ namespace Armada.Tui.Screens.Delivery
             if (i == null) return;
             Context.Confirm("Delete Incident", EntityUi.T(Context, "Delete \"{{title}}\"? This removes only the incident record.", "title", i.Title), () =>
             {
-                EntityUi.Run(Context, ct => Context.Client.DeleteIncidentAsync(i.Id, ct), () =>
+                DeleteProgress.RunVoid(Context, "Deleting incident", ct => Context.Client.DeleteIncidentAsync(i.Id, ct), () =>
                 {
                     EntityUi.Toast(Context, NotificationSeverityEnum.Warning, EntityUi.T(Context, "Incident \"{{title}}\" deleted.", "title", i.Title));
                     Context.Navigate("/delivery?tab=incidents");

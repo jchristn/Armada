@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
+import { dispatchWarningsFrom } from '../lib/dispatchPreview';
+import DispatchPreview from '../components/blackbox/DispatchWarnings';
 import { createPipeline, getPipeline, updatePipeline, deletePipeline, listPersonas, listVessels, createVoyage, apiErrorMessage } from '../api/client';
 import { listAll } from '../api/paging';
 import type { Pipeline, PipelineStage, Vessel } from '../types/models';
@@ -15,6 +17,7 @@ import ErrorModal from '../components/shared/ErrorModal';
 import { useLocale } from '../context/LocaleContext';
 import { useNotifications } from '../context/NotificationContext';
 import { buildPipelineDuplicatePayload } from '../lib/duplicates';
+import { useDeleteProgress } from '../lib/useDeleteProgress';
 
 interface StageForm {
   personaName: string;
@@ -39,8 +42,8 @@ function PipelineFlow({ stages, label }: { stages: PipelineStage[]; label: (key:
             <div className="text-dim" style={{ fontSize: '0.7rem' }}>{label('Stage')} {i + 1}</div>
             <strong>{stage.personaName || label('(unset)')}</strong>
             <div style={{ marginTop: '0.3rem', display: 'flex', gap: '0.3rem', flexWrap: 'wrap' }}>
-              {stage.isOptional && <span className="badge badge-info" title={label('Marked optional. This is reserved and has no effect today: the stage still runs.')}>{label('Optional')}</span>}
-              {stage.requiresReview && <span className="badge badge-warning" title={label('Review gate: the pipeline pauses after this stage until a person approves its work.')}>{label('Review')}</span>}
+              {stage.isOptional && <span className="tag info" title={label('Marked optional. This is reserved and has no effect today: the stage still runs.')}>{label('Optional')}</span>}
+              {stage.requiresReview && <span className="tag warning" title={label('Review gate: the pipeline pauses after this stage until a person approves its work.')}>{label('Review')}</span>}
             </div>
           </div>
           {i < ordered.length - 1 && <span style={{ padding: '0 0.4rem', color: 'var(--text-dim)' }}>{'→'}</span>}
@@ -61,6 +64,7 @@ const RUN_DESCRIPTION_TIP = 'What you want done, in plain words. It becomes the 
 
 export default function PipelineDetail() {
   const { t, formatDateTime } = useLocale();
+  const deletion = useDeleteProgress();
   const { pushToast } = useNotifications();
   const { isAdmin, isTenantAdmin, user } = useAuth();
   const viewer: ScopeViewer = { isAdmin, isTenantAdmin, tenantId: user?.user?.tenantId, userId: user?.user?.id };
@@ -186,11 +190,9 @@ export default function PipelineDetail() {
       message: t('Delete pipeline "{{name}}"? This cannot be undone.', { name: pipeline.name }),
       onConfirm: async () => {
         setConfirm(c => ({ ...c, open: false }));
-        try {
-          await deletePipeline(pipeline.name);
-          pushToast('warning', t('Pipeline "{{name}}" deleted.', { name: pipeline.name }));
-          navigate('/pipelines');
-        } catch { setError(t('Delete failed.')); }
+        if (!(await deletion.run({ kind: 'pipeline', action: () => deletePipeline(pipeline.name) }))) return;
+        pushToast('warning', t('Pipeline "{{name}}" deleted.', { name: pipeline.name }));
+        navigate('/pipelines');
       },
     });
   }
@@ -227,7 +229,7 @@ export default function PipelineDetail() {
       });
       setShowRun(false);
       pushToast('success', t('Voyage launched.'));
-      navigate(`/voyages/${voyage.id}`);
+      navigate(`/voyages/${voyage.id}`, { state: { dispatchWarnings: dispatchWarningsFrom(voyage) } });
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : t('Run failed.'));
     } finally {
@@ -242,11 +244,10 @@ export default function PipelineDetail() {
   return (
     <div>
       <PageHeader
-        breadcrumb={
-          <>
-            <Link to="/pipelines">{t('Pipelines')}</Link> <span className="breadcrumb-sep">&gt;</span> <span>{pipeline.name}</span>
-          </>
-        }
+        breadcrumb={[
+          { label: t('Pipelines'), to: '/pipelines' },
+          { label: pipeline.name },
+        ]}
         title={pipeline.name}
         actions={
           <>
@@ -343,6 +344,7 @@ export default function PipelineDetail() {
             </label>
             <label title={t(RUN_TITLE_TIP)}>{t('Title')}<input type="text" title={t(RUN_TITLE_TIP)} value={runTitle} onChange={e => setRunTitle(e.target.value)} required /></label>
             <label title={t(RUN_DESCRIPTION_TIP)}>{t('Objective / Description')}<textarea rows={4} title={t(RUN_DESCRIPTION_TIP)} value={runDescription} onChange={e => setRunDescription(e.target.value)} /></label>
+            <DispatchPreview compact vesselId={runVesselId} title={runTitle} description={runDescription} enabled={!running} />
             <div className="modal-actions">
               <button type="submit" className="btn btn-primary" disabled={running || !runVesselId} title={t('Create the voyage now. Its first stage mission is queued for a captain right away; this starts real agent work.')}>{running ? t('Launching...') : t('Launch Voyage')}</button>
               <button type="button" className="btn" onClick={() => setShowRun(false)}>{t('Cancel')}</button>
@@ -352,6 +354,7 @@ export default function PipelineDetail() {
       )}
 
       <JsonViewer open={jsonData.open} title={jsonData.title} data={jsonData.data} onClose={() => setJsonData({ open: false, title: '', data: null })} />
+      {deletion.dialog}
       <ConfirmDialog open={confirm.open} title={confirm.title} message={confirm.message}
         onConfirm={confirm.onConfirm} onCancel={() => setConfirm(c => ({ ...c, open: false }))} />
 
@@ -366,8 +369,8 @@ export default function PipelineDetail() {
         </div>
         <div className="detail-field"><span className="detail-label">{t('Name')}</span><span>{pipeline.name}</span></div>
         <div className="detail-field"><span className="detail-label">{t('Description')}</span><span>{pipeline.description || '-'}</span></div>
-        <div className="detail-field"><span className="detail-label" title={t('Built-in pipelines ship with Armada and cannot be deleted.')}>{t('Built-in')}</span><span>{pipeline.isBuiltIn ? <span className="badge badge-info" title={t('Built-in: ships with Armada and cannot be deleted.')}>{t('Yes')}</span> : <span className="badge" title={t('Custom: created by a user and can be deleted.')}>{t('No')}</span>}</span></div>
-        <div className="detail-field"><span className="detail-label" title={t('Marks the pipeline as in use or retired. It is a label only: dispatch does not skip inactive pipelines.')}>{t('Active')}</span><span>{pipeline.active !== false ? <span className="badge badge-success" title={t('Active (a label only; it does not change dispatch).')}>{t('Yes')}</span> : <span className="badge badge-dim" title={t('Inactive (a label only; dispatch can still use it).')}>{t('No')}</span>}</span></div>
+        <div className="detail-field"><span className="detail-label" title={t('Built-in pipelines ship with Armada and cannot be deleted.')}>{t('Built-in')}</span><span>{pipeline.isBuiltIn ? <span className="tag info" title={t('Built-in: ships with Armada and cannot be deleted.')}>{t('Yes')}</span> : <span className="tag" title={t('Custom: created by a user and can be deleted.')}>{t('No')}</span>}</span></div>
+        <div className="detail-field"><span className="detail-label" title={t('Marks the pipeline as in use or retired. It is a label only: dispatch does not skip inactive pipelines.')}>{t('Active')}</span><span>{pipeline.active !== false ? <span className="tag passed" title={t('Active (a label only; it does not change dispatch).')}>{t('Yes')}</span> : <span className="tag" title={t('Inactive (a label only; dispatch can still use it).')}>{t('No')}</span>}</span></div>
         <div className="detail-field"><span className="detail-label">{t('Created')}</span><span title={pipeline.createdUtc}>{formatDateTime(pipeline.createdUtc)}</span></div>
         <div className="detail-field"><span className="detail-label">{t('Last Updated')}</span><span>{formatDateTime(pipeline.lastUpdateUtc)}</span></div>
       </div>
@@ -400,11 +403,11 @@ export default function PipelineDetail() {
               { key: 'persona', label: t('Persona Name'), required: true, headerTitle: t('The persona (role) this stage\'s mission is given, which decides its instructions and which captains can take it.'), cellClassName: 'cell-ident', render: (stage) => <strong>{stage.personaName}</strong> },
               {
                 key: 'optional', label: t('Optional'), headerTitle: t('Reserved: saved but has no effect today. Every stage runs whether or not it is marked optional.'), cellClassName: 'cell-nowrap',
-                render: (stage) => stage.isOptional ? <span className="badge badge-info" title={t('Marked optional. This is reserved and has no effect today: the stage still runs.')}>{t('Yes')}</span> : <span className="badge" title={t('Not marked optional.')}>{t('No')}</span>,
+                render: (stage) => stage.isOptional ? <span className="tag info" title={t('Marked optional. This is reserved and has no effect today: the stage still runs.')}>{t('Yes')}</span> : <span className="tag" title={t('Not marked optional.')}>{t('No')}</span>,
               },
               {
                 key: 'review', label: t('Review'), headerTitle: t('Required means the pipeline pauses after this stage until a person approves its work in Review.'), cellClassName: 'cell-nowrap',
-                render: (stage) => stage.requiresReview ? <span className="badge badge-warning" title={t('Review gate: the pipeline pauses after this stage until a person approves its work.')}>{t('Required')}</span> : <span className="text-dim">{t('None')}</span>,
+                render: (stage) => stage.requiresReview ? <span className="tag warning" title={t('Review gate: the pipeline pauses after this stage until a person approves its work.')}>{t('Required')}</span> : <span className="text-dim">{t('None')}</span>,
               },
               {
                 key: 'onDeny', label: t('On Deny'), headerTitle: t('What a denied review does: Retry stage reworks the same mission; Fail pipeline fails it and cancels the stages after it.'), cellClassName: 'cell-nowrap',

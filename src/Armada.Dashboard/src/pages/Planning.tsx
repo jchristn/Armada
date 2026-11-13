@@ -11,6 +11,7 @@ import {
   listCaptains,
   listFleets,
   listPipelines,
+  listPlanningSessionMessages,
   listPlanningSessions,
   listVessels,
   sendPlanningSessionMessage,
@@ -25,8 +26,8 @@ import type {
   Fleet,
   Pipeline,
   PlanningSession,
-  PlanningSessionDetail,
   PlanningSessionMessage,
+  PlanningSessionView,
   SelectedPlaybook,
   Vessel,
   VesselReadinessResult,
@@ -45,6 +46,11 @@ import { applyToolEvent, type ToolEvent } from '../components/shared/ChatToolChi
 import { randomThinkingMessage } from '../lib/askThinkingMessages';
 import { canCaptainStartPlanning } from '../lib/captains';
 import { mergeSessionDetail, newerOf } from '../lib/liveMerge';
+import { loadNewestTranscript, loadOlderTranscript, mergeTranscript } from '../lib/pagedTranscript';
+import { withStoppedSession } from '../lib/sessionViews';
+
+/** Planning sessions read per page of the Recent Sessions list. */
+const SESSION_PAGE_SIZE = 100;
 import {
   type DispatchSeedState,
   getLatestAssistantMessage,
@@ -55,6 +61,7 @@ import {
   upsertSession,
 } from './planning/planningUtils';
 import { sortByName } from '../lib/sortByName';
+import { useDeleteProgress } from '../lib/useDeleteProgress';
 
 interface PlanningSummaryEventPayload {
   sessionId?: string;
@@ -87,15 +94,19 @@ export default function Planning() {
   const navigate = useNavigate();
   const location = useLocation();
   const { t, formatDateTime, formatRelativeTime } = useLocale();
+  const deletion = useDeleteProgress();
   const { pushToast } = useNotifications();
   const { subscribe } = useWebSocket();
 
   const [sessions, setSessions] = useState<PlanningSession[]>([]);
+  const [sessionsTotal, setSessionsTotal] = useState(0);
+  const [loadingMoreSessions, setLoadingMoreSessions] = useState(false);
+  const [loadingOlderMessages, setLoadingOlderMessages] = useState(false);
   const [captains, setCaptains] = useState<Captain[]>([]);
   const [fleets, setFleets] = useState<Fleet[]>([]);
   const [vessels, setVessels] = useState<Vessel[]>([]);
   const [pipelines, setPipelines] = useState<Pipeline[]>([]);
-  const [detail, setDetail] = useState<PlanningSessionDetail | null>(null);
+  const [detail, setDetail] = useState<PlanningSessionView | null>(null);
   const [readiness, setReadiness] = useState<VesselReadinessResult | null>(null);
   const [loadingCatalog, setLoadingCatalog] = useState(true);
   const [loadingDetail, setLoadingDetail] = useState(false);
@@ -141,14 +152,15 @@ export default function Planning() {
       setLoadingCatalog(true);
       setError('');
       const [sessionItems, captainResult, fleetResult, vesselResult, pipelineResult] = await Promise.all([
-        listPlanningSessions().catch(() => []),
+        listPlanningSessions({ pageNumber: 1, pageSize: SESSION_PAGE_SIZE }).catch(() => null),
         listAll(listCaptains).catch(() => null),
         listAll(listFleets).catch(() => null),
         listAll(listVessels).catch(() => null),
         listAll(listPipelines).catch(() => null),
       ]);
 
-      setSessions(sessionItems);
+      setSessions(sessionItems?.objects ?? []);
+      setSessionsTotal(sessionItems?.totalRecords ?? 0);
       setCaptains(captainResult?.objects || []);
       setFleets(fleetResult?.objects || []);
       setVessels(sortByName(vesselResult?.objects));
@@ -164,8 +176,11 @@ export default function Planning() {
     try {
       setLoadingDetail(true);
       setError('');
-      const result = await getPlanningSession(sessionId);
-      setDetail(result);
+      const [result, transcript] = await Promise.all([
+        getPlanningSession(sessionId),
+        loadNewestTranscript((query) => listPlanningSessionMessages(sessionId, query)),
+      ]);
+      setDetail({ ...result, messages: transcript.messages, messageCount: Math.max(result.messageCount ?? 0, transcript.total) });
       setSessions((current) => upsertSession(current, result.session));
     } catch (err: unknown) {
       setDetail(null);
@@ -237,9 +252,11 @@ export default function Planning() {
 
         setDetail((current) => {
           if (!current || current.session.id !== payload.sessionId) return current;
+          const known = current.messages.some((message) => message.id === payload.message!.id);
           return {
             ...current,
             messages: upsertMessage(current.messages, payload.message!),
+            messageCount: known ? current.messageCount : (current.messageCount ?? 0) + 1,
           };
         });
         return;
@@ -289,6 +306,7 @@ export default function Planning() {
         if (!payload?.sessionId) return;
 
         setSessions((current) => removeSession(current, payload.sessionId!));
+        setSessionsTotal((total) => Math.max(0, total - 1));
         if (payload.sessionId === id) {
           setDetail(null);
           setSelectedMessageId('');
@@ -462,6 +480,49 @@ export default function Planning() {
     return () => window.clearInterval(timer);
   }, [currentSession?.status]);
 
+  async function refreshTranscript(sessionId: string) {
+    try {
+      const transcript = await loadNewestTranscript((query) => listPlanningSessionMessages(sessionId, query));
+      setDetail((current) => (current && current.session.id === sessionId
+        ? { ...current, messages: mergeTranscript(current.messages, transcript.messages), messageCount: Math.max(transcript.total, current.messageCount ?? 0) }
+        : current));
+    } catch { /* the socket delivers new messages; this is only reconciliation */ }
+  }
+
+  async function handleLoadOlderMessages() {
+    if (!detail || loadingOlderMessages) return;
+    const sessionId = detail.session.id;
+    try {
+      setLoadingOlderMessages(true);
+      const transcript = await loadOlderTranscript((query) => listPlanningSessionMessages(sessionId, query), detail.messages);
+      setDetail((current) => (current && current.session.id === sessionId
+        ? { ...current, messages: mergeTranscript(current.messages, transcript.messages), messageCount: Math.max(transcript.total, current.messageCount ?? 0) }
+        : current));
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : t('Failed to load earlier messages.'));
+    } finally {
+      setLoadingOlderMessages(false);
+    }
+  }
+
+  async function handleLoadMoreSessions() {
+    if (loadingMoreSessions) return;
+    try {
+      setLoadingMoreSessions(true);
+      const page = await listPlanningSessions({ pageNumber: Math.floor(sessions.length / SESSION_PAGE_SIZE) + 1, pageSize: SESSION_PAGE_SIZE });
+      setSessions((current) => {
+        let next = current;
+        for (const session of page?.objects ?? []) if (!next.some((item) => item.id === session.id)) next = [...next, session];
+        return next;
+      });
+      setSessionsTotal(page?.totalRecords ?? sessionsTotal);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : t('Failed to load planning data.'));
+    } finally {
+      setLoadingMoreSessions(false);
+    }
+  }
+
   async function handleCreateSession() {
     if (!captainId || !vesselId) return;
 
@@ -507,6 +568,7 @@ export default function Planning() {
       setComposer('');
       // A fast captain can finish the turn (over the WebSocket) before this response arrives; keep the newer state.
       setDetail((current) => mergeSessionDetail(current, result));
+      void refreshTranscript(result.session.id);
       setSessions((current) => {
         const existing = current.find((item) => item.id === result.session.id);
         return upsertSession(current, existing ? newerOf(existing, result.session) : result.session);
@@ -524,7 +586,8 @@ export default function Planning() {
     try {
       setError('');
       const result = await stopPlanningTurn(currentSession.id);
-      setDetail(result);
+      setDetail((current) => withStoppedSession(current, result));
+      void refreshTranscript(result.session.id);
       setSessions((current) => upsertSession(current, result.session));
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : t('Failed to stop the current turn.'));
@@ -640,7 +703,8 @@ export default function Planning() {
       setError('');
       const result = await stopPlanningSession(targetSessionId);
       if (currentSession?.id === targetSessionId) {
-        setDetail(result);
+        setDetail((current) => withStoppedSession(current, result));
+        void refreshTranscript(targetSessionId);
       }
       setSessions((current) => upsertSession(current, result.session));
       pushToast('warning', t('Planning session is ending.'));
@@ -655,11 +719,18 @@ export default function Planning() {
   async function handleDeleteSession() {
     if (!currentSession) return;
 
+    const target = currentSession;
     try {
       setDeleting(true);
       setError('');
-      await deletePlanningSession(currentSession.id);
-      setSessions((current) => removeSession(current, currentSession.id));
+      const done = await deletion.run({
+        kind: 'planningSession',
+        action: () => deletePlanningSession(target.id),
+        errorMessage: (err) => (err instanceof Error ? err.message : t('Failed to delete planning session.')),
+      });
+      if (!done) return;
+      setSessions((current) => removeSession(current, target.id));
+      setSessionsTotal((total) => Math.max(0, total - 1));
       setDetail(null);
       setSelectedMessageId('');
       setDispatchTitle('');
@@ -667,48 +738,71 @@ export default function Planning() {
       dispatchSeedRef.current = null;
       navigate(PLANNING_PATH);
       pushToast('warning', t('Planning session deleted.'));
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : t('Failed to delete planning session.'));
     } finally {
       setDeleting(false);
     }
   }
 
   async function handleDeleteSessionById(session: PlanningSession) {
-    try {
-      setError('');
-      await deletePlanningSession(session.id);
-      setSessions((current) => removeSession(current, session.id));
-      if (currentSession?.id === session.id) {
-        setDetail(null);
-        setSelectedMessageId('');
-        navigate(PLANNING_PATH);
-      }
-      pushToast('warning', t('Planning session deleted.'));
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : t('Failed to delete planning session.'));
+    setError('');
+    const done = await deletion.run({
+      kind: 'planningSession',
+      action: () => deletePlanningSession(session.id),
+      errorMessage: (err) => (err instanceof Error ? err.message : t('Failed to delete planning session.')),
+    });
+    if (!done) return;
+    setSessions((current) => removeSession(current, session.id));
+    setSessionsTotal((total) => Math.max(0, total - 1));
+    if (currentSession?.id === session.id) {
+      setDetail(null);
+      setSelectedMessageId('');
+      navigate(PLANNING_PATH);
     }
+    pushToast('warning', t('Planning session deleted.'));
   }
 
   async function handleDeleteAllSessions() {
-    const targets = sessions.slice();
-    if (targets.length === 0) return;
+    if (sessionsTotal === 0 && sessions.length === 0) return;
 
     try {
       setDeletingAll(true);
       setError('');
 
-      // Delete each session independently so one failure (e.g. a session that cannot be deleted while
-      // running) does not abort the rest; count failures and report them.
+      // Delete every session, reading bounded pages until none is left; each session is deleted independently so one
+      // failure (e.g. a session that cannot be deleted while running) does not abort the rest. A session that could
+      // not be deleted stays on the page, so the loop moves past it once each one was tried.
       let failures = 0;
-      for (const session of targets) {
-        try {
-          await deletePlanningSession(session.id);
-          setSessions((current) => removeSession(current, session.id));
-        } catch {
-          failures += 1;
-        }
-      }
+      await deletion.run({
+        kind: 'planningSession',
+        count: sessionsTotal || sessions.length,
+        action: async () => {
+          failures = 0;
+          const attempted = new Set<string>();
+          let pageNumber = 1;
+          for (;;) {
+            const page = await listPlanningSessions({ pageNumber, pageSize: SESSION_PAGE_SIZE });
+            const objects = page?.objects ?? [];
+            if (objects.length === 0) break;
+            let progressed = false;
+            for (const session of objects) {
+              if (attempted.has(session.id)) continue;
+              attempted.add(session.id);
+              progressed = true;
+              try {
+                await deletePlanningSession(session.id);
+                setSessions((current) => removeSession(current, session.id));
+                setSessionsTotal((total) => Math.max(0, total - 1));
+              } catch {
+                failures += 1;
+              }
+            }
+            if (!progressed) {
+              if (pageNumber >= (page?.totalPages ?? 0)) break;
+              pageNumber += 1;
+            }
+          }
+        },
+      });
 
       // Delete-all removes the open session too; reset the workspace back to the empty state.
       setDetail(null);
@@ -804,6 +898,9 @@ export default function Planning() {
         <PlanningSessionListCard
           t={t}
           sessions={sessions}
+          totalCount={Math.max(sessionsTotal, sessions.length)}
+          onLoadMore={handleLoadMoreSessions}
+          loadingMore={loadingMoreSessions}
           activeSessionId={id}
           endingSessionId={endingSessionId}
           formatRelativeTime={formatRelativeTime}
@@ -848,6 +945,9 @@ export default function Planning() {
               failureReason={detail.session.failureReason}
               updatedUtc={detail.session.lastUpdateUtc}
               messages={currentMessages}
+              messageTotal={detail.messageCount ?? currentMessages.length}
+              onLoadOlder={handleLoadOlderMessages}
+              loadingOlder={loadingOlderMessages}
               messageTools={messageTools}
               messageThinking={messageThinking}
               thinkingMessage={thinking}
@@ -891,6 +991,7 @@ export default function Planning() {
         )}
       </div>
 
+      {deletion.dialog}
       <ConfirmDialog
         open={confirmEndOpen}
         title={t('End Planning Session')}
@@ -924,7 +1025,7 @@ export default function Planning() {
       <ConfirmDialog
         open={confirmDeleteAllOpen}
         title={t('Delete All Planning Sessions')}
-        message={t('Delete all {{count}} planning session(s) and their transcripts? This cannot be undone.', { count: sessions.length })}
+        message={t('Delete all {{count}} planning session(s) and their transcripts? This cannot be undone.', { count: Math.max(sessionsTotal, sessions.length) })}
         confirmLabel={t('Delete All')}
         cancelLabel={t('Cancel')}
         danger

@@ -160,16 +160,21 @@ namespace Armada.Core.Services.Push
         }
 
         /// <summary>
-        /// List devices: the caller's own by default. A tenant admin may name a user of the tenant; a global admin may
-        /// name any user (and optionally a tenant).
+        /// Enumerate one page of devices: the caller's own by default. A tenant admin may name a user of the tenant; a
+        /// global admin may name any user (and optionally a tenant). The scope is applied in the database query, so the
+        /// page and its totals cover only devices the caller may manage.
         /// </summary>
         /// <param name="caller">Caller.</param>
         /// <param name="userId">User filter, or null for the caller.</param>
         /// <param name="tenantId">Tenant filter (global admins only), or null.</param>
+        /// <param name="page">Paging (PageNumber, PageSize 1 to 1000).</param>
         /// <param name="token">Cancellation token.</param>
-        /// <returns>Devices (masked), oldest first.</returns>
-        public async Task<List<PushDevice>> ListAsync(AuthContext caller, string? userId, string? tenantId, CancellationToken token = default)
+        /// <returns>One page of devices (masked), oldest first.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="page"/> is null.</exception>
+        /// <exception cref="UnauthorizedAccessException">Thrown when the caller may not list the requested devices.</exception>
+        public async Task<EnumerationResult<PushDevice>> EnumerateAsync(AuthContext caller, string? userId, string? tenantId, EnumerationQuery page, CancellationToken token = default)
         {
+            if (page == null) throw new ArgumentNullException(nameof(page));
             if (!PushDeviceAccess.CanRegister(caller)) throw new UnauthorizedAccessException("Push devices are listed by signed-in users.");
             PushDeviceQuery query = new PushDeviceQuery();
             bool ownOnly = String.IsNullOrEmpty(userId) || String.Equals(userId, caller.UserId, StringComparison.Ordinal);
@@ -195,8 +200,10 @@ namespace Armada.Core.Services.Push
                 throw new UnauthorizedAccessException("Only admins may list other users' devices.");
             }
 
-            List<PushDevice> devices = await _Database.PushDevices.EnumerateAsync(query, token).ConfigureAwait(false);
-            return devices.Where(d => PushDeviceAccess.CanManage(caller, d)).Select(d => d.ToMasked()).ToList();
+            // The query above already limits the rows to devices the caller may manage (own, tenant, or global admin).
+            EnumerationResult<PushDevice> result = await _Database.PushDevices.EnumeratePageAsync(query, page, token).ConfigureAwait(false);
+            result.Objects = result.Objects.Select(d => d.ToMasked()).ToList();
+            return result;
         }
 
         /// <summary>

@@ -27,6 +27,11 @@ namespace Armada.Core.Services
                 FailureCauseEnum.NotTheModel,
                 m => m.FailureKinds.AddRange(new[] { MissionFailureKindEnum.Infra, MissionFailureKindEnum.OperatorAction, MissionFailureKindEnum.DependencyFailed, MissionFailureKindEnum.LandingConflict, MissionFailureKindEnum.ReviewDenied })));
 
+            rules.Add(Rule(15, "Captain reported blocked",
+                "The captain reported BLOCKED (an external prerequisite or a contradictory brief) and left no work: excluded from the model's results.",
+                FailureCauseEnum.NotTheModel,
+                m => m.FailureKinds.Add(MissionFailureKindEnum.Blocked)));
+
             rules.Add(Rule(20, "Runtime or account unavailable",
                 "The runtime could not serve the model (usage limit, authentication, model not available).",
                 FailureCauseEnum.NotTheModel,

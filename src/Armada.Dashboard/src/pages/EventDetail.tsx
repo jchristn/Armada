@@ -1,6 +1,8 @@
+import Breadcrumbs from '../components/shared/Breadcrumbs';
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
+  apiErrorMessage,
   getEvent,
   deleteEventsBatch,
   listCaptains,
@@ -16,10 +18,12 @@ import { useLocale } from '../context/LocaleContext';
 import { useNotifications } from '../context/NotificationContext';
 import { entityRoute } from '../lib/routing';
 import { formatEventPayload } from '../lib/eventPayload';
+import { useDeleteProgress } from '../lib/useDeleteProgress';
 
 export default function EventDetail() {
   const { t, formatDateTime, formatRelativeTime } = useLocale();
   const { pushToast } = useNotifications();
+  const deletion = useDeleteProgress();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
 
@@ -53,15 +57,10 @@ export default function EventDetail() {
     setConfirmAction({
       message: t('Delete {{entity}} {{name}}?', { entity: t('Event').toLowerCase(), name: id ?? '' }),
       action: async () => {
-        try {
-          await deleteEventsBatch([id!]);
-          setConfirmAction(null);
-          pushToast('warning', t('Event {{id}} deleted.', { id: id ?? '' }));
-          navigate('/events');
-        } catch {
-          setError(t('Delete failed.'));
-          setConfirmAction(null);
-        }
+        setConfirmAction(null);
+        if (!(await deletion.run({ kind: 'event', action: () => deleteEventsBatch([id!]), errorMessage: (err) => apiErrorMessage(err, t('Delete failed.')) }))) return;
+        pushToast('warning', t('Event {{id}} deleted.', { id: id ?? '' }));
+        navigate('/events');
       }
     });
   }
@@ -85,11 +84,10 @@ export default function EventDetail() {
   return (
     <div>
       {/* Breadcrumb */}
-      <div style={{ marginBottom: 16, fontSize: 13 }}>
-        <Link to="/events">{t('Events')}</Link>
-        <span className="text-muted"> / </span>
-        <span className="mono">{event.id}</span>
-      </div>
+      <Breadcrumbs items={[
+        { label: t('Events'), to: '/events' },
+        { label: event.id },
+      ]} />
 
       <ErrorModal error={error} onClose={() => setError('')} />
 
@@ -113,7 +111,7 @@ export default function EventDetail() {
           </div>
           <div>
             <div className="text-muted" style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', marginBottom: 4 }} title={t('What happened, as a dotted name such as mission.completed or mission.failed.')}>{t('Event Type')}</div>
-            <span className="status" title={t('Event type name. The Event Type filter on the Events list matches on it.')}>{event.eventType}</span>
+            <span className="tag" title={t('Event type name. The Event Type filter on the Events list matches on it.')}>{event.eventType}</span>
           </div>
           <div>
             <div className="text-muted" style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', marginBottom: 4 }} title={t('Plain-language description of the event.')}>{t('Message')}</div>
@@ -173,7 +171,8 @@ export default function EventDetail() {
         <div className="card">
           <h3 title={t('Extra structured data recorded with the event, shown as formatted JSON.')}>{t('Payload')}</h3>
           <pre style={{
-            background: '#f5f5fa',
+            background: 'var(--bg-hover)',
+            color: 'var(--text)',
             padding: 16,
             borderRadius: 'var(--radius)',
             overflow: 'auto',
@@ -193,6 +192,7 @@ export default function EventDetail() {
 
       {/* Confirm Dialog */}
       <ConfirmDialog open={confirmAction !== null} message={confirmAction?.message ?? ''} onConfirm={() => confirmAction?.action()} onCancel={() => setConfirmAction(null)} />
+      {deletion.dialog}
     </div>
   );
 }

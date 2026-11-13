@@ -8,6 +8,7 @@ namespace Armada.Helm.Commands
     using Armada.Core.Models;
     using Armada.Core.Services;
     using Armada.Helm.Rendering;
+    using Armada.Helm.Infrastructure;
 
     /// <summary>
     /// Create a new voyage with missions.
@@ -76,8 +77,7 @@ namespace Armada.Helm.Commands
             List<SelectedPlaybook> results = new List<SelectedPlaybook>();
             if (selections == null || selections.Length == 0) return results;
 
-            EnumerationResult<Playbook>? playbookResult = await GetAsync<EnumerationResult<Playbook>>("/api/v1/playbooks").ConfigureAwait(false);
-            List<Playbook> playbooks = playbookResult?.Objects ?? new List<Playbook>();
+            List<Playbook> playbooks = await PlaybookPages.ReadAllAsync(path => GetAsync<EnumerationResult<Playbook>>(path)).ConfigureAwait(false);
 
             foreach (string rawSelection in selections)
             {
@@ -102,7 +102,7 @@ namespace Armada.Helm.Commands
 
                 if (playbook == null)
                 {
-                    AnsiConsole.MarkupLine($"[red]Playbook not found:[/] {Markup.Escape(token)}");
+                    HelmConsole.Error.MarkupLine($"[red]Playbook not found:[/] {Markup.Escape(token)}");
                     return new List<SelectedPlaybook>();
                 }
 

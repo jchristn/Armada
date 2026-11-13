@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Image, StyleSheet, View } from 'react-native';
 import { ApiError, NetworkError, TimeoutError, authenticate, lookupTenants } from '@dashboard/api/client';
+import { lookupAllTenants } from '@dashboard/lib/tenantLookup';
 import type { TenantListEntry } from '@dashboard/types/models';
 import { useAuth } from '../auth/AuthContext';
 import { biometricName, useBiometricSupport } from '../auth/biometrics';
@@ -83,15 +84,15 @@ export function SignInScreen() {
     setError('');
     setBusy(true);
     try {
-      const result = await lookupTenants(email.trim());
-      if (result.tenants.length === 0) {
+      const found = await lookupAllTenants(email.trim(), lookupTenants);
+      if (found.length === 0) {
         setError(t('No tenants found for this email.'));
-      } else if (result.tenants.length === 1) {
-        setTenant(result.tenants[0]);
+      } else if (found.length === 1) {
+        setTenant(found[0]);
         setStep('password');
       } else {
-        setTenants(result.tenants);
-        setTenant(result.tenants.find((x) => x.id === activeProfile?.lastTenantId) ?? null);
+        setTenants(found);
+        setTenant(found.find((x) => x.id === activeProfile?.lastTenantId) ?? null);
         setStep('tenant');
       }
     } catch (err) {

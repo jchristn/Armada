@@ -5,6 +5,7 @@ namespace Armada.Tui.Screens.Build
     using Armada.Client;
     using Armada.Core.Models;
     using Armada.Tui.Routing;
+    using Armada.Tui.Screens.Kit;
     using Armada.Tui.Screens.Operations;
     using Armada.Tui.Services;
     using Armada.Tui.Widgets;
@@ -151,11 +152,11 @@ namespace Armada.Tui.Screens.Build
         {
             Confirm("Delete Dock", Tr("Delete dock {{name}}? This will clean up the git worktree and cannot be undone.", LocalizationArgs.Of("name", DockId)), () =>
             {
-                Run((c, t) => c.DeleteDockAsync(DockId, t), () =>
+                DeleteProgress.RunVoid(Context, "Deleting dock", t => Context.Client.DeleteDockAsync(DockId, t), () =>
                 {
                     Toast(NotificationSeverityEnum.Warning, Tr("Dock {{id}} deleted.", LocalizationArgs.Of("id", DockId)));
                     Context.Navigate("/captains?tab=docks");
-                }, null, ex => ShowMessage(Tr("Delete failed.")));
+                }, "Delete failed.");
             }, "Delete");
         }
 

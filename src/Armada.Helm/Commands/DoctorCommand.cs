@@ -93,7 +93,7 @@ namespace Armada.Helm.Commands
                 }
                 catch (Exception ex)
                 {
-                    AnsiConsole.MarkupLine($"[red]FAIL[/]  Settings file is invalid: {Markup.Escape(ex.Message)}");
+                    HelmConsole.Error.MarkupLine($"[red]FAIL[/]  Settings file is invalid: {Markup.Escape(ex.Message)}");
                     AnsiConsole.MarkupLine($"        Fix: Delete {Markup.Escape(ArmadaSettings.DefaultSettingsPath)} and run any command to regenerate.");
                     return 1;
                 }
@@ -114,7 +114,7 @@ namespace Armada.Helm.Commands
             }
             else
             {
-                AnsiConsole.MarkupLine("[red]FAIL[/]  git is not available on PATH");
+                HelmConsole.Error.MarkupLine("[red]FAIL[/]  git is not available on PATH");
                 AnsiConsole.MarkupLine("        Fix: Install git from https://git-scm.com/");
                 return 1;
             }
@@ -133,7 +133,7 @@ namespace Armada.Helm.Commands
             }
             else
             {
-                AnsiConsole.MarkupLine("[red]FAIL[/]  No agent runtimes found on PATH");
+                HelmConsole.Error.MarkupLine("[red]FAIL[/]  No agent runtimes found on PATH");
                 AnsiConsole.MarkupLine($"        Fix: {RuntimeDetectionService.GetInstallHint(AgentRuntimeEnum.ClaudeCode)}");
                 return 1;
             }
@@ -176,7 +176,7 @@ namespace Armada.Helm.Commands
             bool healthy = await GetApiClient().HealthCheckAsync().ConfigureAwait(false);
             if (!healthy)
             {
-                AnsiConsole.MarkupLine("[red]FAIL[/]  Admiral at " + Markup.Escape(target.BaseUrl) + " is not reachable");
+                HelmConsole.Error.MarkupLine("[red]FAIL[/]  Admiral at " + Markup.Escape(target.BaseUrl) + " is not reachable");
                 AnsiConsole.MarkupLine("        Fix: check the URL, rest.hostname on the server, the firewall, and the proxy. See docs/REMOTE_SERVER.md.");
                 return 1;
             }
@@ -193,7 +193,7 @@ namespace Armada.Helm.Commands
             }
             catch (AdmiralTargetException ex)
             {
-                AnsiConsole.MarkupLine("[red]FAIL[/]  " + Markup.Escape(ex.Message));
+                HelmConsole.Error.MarkupLine("[red]FAIL[/]  " + Markup.Escape(ex.Message));
                 return 1;
             }
         }
@@ -209,7 +209,7 @@ namespace Armada.Helm.Commands
                 List<Captain> stalled = captains.FindAll(c => c.State == CaptainStateEnum.Stalled);
                 if (stalled.Count > 0)
                 {
-                    AnsiConsole.MarkupLine($"[red]FAIL[/]  {stalled.Count} stalled captain(s)");
+                    HelmConsole.Error.MarkupLine($"[red]FAIL[/]  {stalled.Count} stalled captain(s)");
                     foreach (Captain c in stalled)
                     {
                         AnsiConsole.MarkupLine($"        - {Markup.Escape(c.Name)} ({Markup.Escape(c.Id)})");

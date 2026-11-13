@@ -251,7 +251,7 @@ namespace Armada.Server.Mcp.Tools
                     type = "object",
                     properties = new
                     {
-                        entryIds = new { type = "array", items = new { type = "string" }, description = "List of merge entry IDs to purge (mrg_ prefix)" }
+                        entryIds = new { type = "array", items = new { type = "string" }, description = "List of merge entry IDs to purge (mrg_ prefix), at most 1000" }
                     },
                     required = new[] { "entryIds" }
                 },

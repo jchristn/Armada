@@ -325,6 +325,7 @@ namespace Armada.Core.Services.Ask
                 case AskTrackedEntityTypeEnum.Mission: return "Mission";
                 case AskTrackedEntityTypeEnum.FleetActionRun: return "Fleet action run";
                 case AskTrackedEntityTypeEnum.Job: return "Job";
+                case AskTrackedEntityTypeEnum.BlackBox: return "Black box";
                 default: return "Import batch";
             }
         }

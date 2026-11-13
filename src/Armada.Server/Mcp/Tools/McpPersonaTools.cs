@@ -24,7 +24,7 @@ namespace Armada.Server.Mcp.Tools
         private static readonly object _PrioritySchema = new
         {
             type = "array",
-            description = "Ordered captain classes; at least one field per entry. Empty clears the hierarchy.",
+            description = "Ordered captain classes (at most 256); at least one field per entry. Empty clears the hierarchy.",
             items = new
             {
                 type = "object",

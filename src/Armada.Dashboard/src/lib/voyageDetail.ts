@@ -1,4 +1,4 @@
-import type { CaptainAssignmentOverride, Mission, Voyage } from '../types/models';
+import type { CaptainAssignmentOverride, Mission, Voyage, VoyageProgress } from '../types/models';
 
 /** Pure logic of the voyage detail page, shared by the dashboard (pages/VoyageDetail.tsx) and the mobile app. */
 
@@ -8,6 +8,19 @@ export interface VoyageProgressSummary {
   failed: number;
   /** Rounded percentage of completed missions (0 when there are none). */
   percent: number;
+}
+
+/** Missions per page on the voyage detail's missions table (the server pages them; the voyage carries the counts). */
+export const VOYAGE_MISSION_PAGE_SIZE = 50;
+
+/** Progress from the voyage detail's server counts (GET /api/v1/voyages/{id}), so it covers every mission, not one page. */
+export function voyageProgressFromDetail(detail: Pick<VoyageProgress, 'totalMissions' | 'missionCountsByStatus'> | null | undefined): VoyageProgressSummary {
+  const total = detail?.totalMissions ?? 0;
+  const counts = detail?.missionCountsByStatus ?? {};
+  const completed = counts['Complete'] ?? 0;
+  const failed = counts['Failed'] ?? 0;
+  const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
+  return { total, completed, failed, percent };
 }
 
 export function voyageProgress(missions: readonly Pick<Mission, 'status'>[]): VoyageProgressSummary {
@@ -49,16 +62,17 @@ export function retryMissionPayload(m: Pick<Mission, 'title' | 'description' | '
   } as Partial<Mission>;
 }
 
-/** getVoyage may answer `{ voyage, missions }` or the bare voyage; null missions means "load them separately". */
+/** getVoyage answers the voyage with its mission counts (VoyageProgress); a bare voyage has no counts. */
 export interface VoyageResponseParts {
   voyage: Voyage;
-  missions: Mission[] | null;
+  detail: VoyageProgress | null;
 }
 
 export function splitVoyageResponse(raw: unknown): VoyageResponseParts {
-  const value = raw as { voyage?: Voyage; missions?: Mission[] } | Voyage;
+  const value = raw as VoyageProgress | Voyage;
   if (value && typeof value === 'object' && 'voyage' in value && value.voyage) {
-    return { voyage: value.voyage, missions: value.missions || [] };
+    const detail = value as VoyageProgress;
+    return { voyage: detail.voyage, detail: { ...detail, missionCountsByStatus: detail.missionCountsByStatus ?? {} } };
   }
-  return { voyage: value as Voyage, missions: null };
+  return { voyage: value as Voyage, detail: null };
 }

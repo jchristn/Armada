@@ -17,6 +17,7 @@ import { useLocale } from '../context/LocaleContext';
 import { useNotifications } from '../context/NotificationContext';
 import { buildFleetDuplicatePayload } from '../lib/duplicates';
 import { useResourceTable } from '../lib/useResourceTable';
+import { useDeleteProgress } from '../lib/useDeleteProgress';
 
 interface FleetWithCount extends Fleet {
   _vesselCount: number;
@@ -27,6 +28,7 @@ export default function Fleets() {
   const navigate = useNavigate();
   const { t, formatRelativeTime, formatDateTime } = useLocale();
   const { pushToast } = useNotifications();
+  const deletion = useDeleteProgress();
   const [fleets, setFleets] = useState<FleetWithCount[]>([]);
   const [vessels, setVessels] = useState<Vessel[]>([]);
   const [loading, setLoading] = useState(true);
@@ -128,11 +130,9 @@ export default function Fleets() {
       message: t('Delete fleet "{{name}}"? This cannot be undone.', { name }),
       onConfirm: async () => {
         setConfirm(c => ({ ...c, open: false }));
-        try {
-          await deleteFleet(id);
-          pushToast('warning', t('Fleet "{{name}}" deleted.', { name }));
-          load();
-        } catch { setError(t('Delete failed.')); }
+        if (!(await deletion.run({ kind: 'fleet', action: () => deleteFleet(id), errorMessage: (err) => apiErrorMessage(err, t('Delete failed.')) }))) return;
+        pushToast('warning', t('Fleet "{{name}}" deleted.', { name }));
+        load();
       },
     });
   }
@@ -147,9 +147,16 @@ export default function Fleets() {
         const ids = [...table.selected];
         table.setSelected([]);
         let failed = 0;
-        for (const id of ids) {
-          try { await deleteFleet(id); } catch { failed++; }
-        }
+        if (!(await deletion.run({
+          kind: 'fleet',
+          count: ids.length,
+          action: async () => {
+            failed = 0;
+            for (const id of ids) {
+              try { await deleteFleet(id); } catch { failed++; }
+            }
+          },
+        }))) return;
         const deleted = ids.length - failed;
         if (deleted > 0) {
           pushToast(failed > 0 ? 'warning' : 'success', failed > 0
@@ -267,6 +274,7 @@ export default function Fleets() {
       {/* Confirm Dialog */}
       <ConfirmDialog open={confirm.open} title={confirm.title} message={confirm.message}
         onConfirm={confirm.onConfirm} onCancel={() => setConfirm(c => ({ ...c, open: false }))} />
+      {deletion.dialog}
 
       <DataTable
         tableKey="fleets"

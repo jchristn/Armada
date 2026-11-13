@@ -35,6 +35,7 @@ import DataTable, { type DataTableColumn } from '../components/shared/DataTable'
 import StatusBadge from '../components/shared/StatusBadge';
 import { useAutoRefresh } from '../lib/useAutoRefresh';
 import { INCIDENT_SEVERITIES, INCIDENT_STATUSES } from '../lib/deliveryForms';
+import { useDeleteProgress } from '../lib/useDeleteProgress';
 
 
 interface IncidentPageState {
@@ -47,6 +48,7 @@ export default function Incidents() {
   const { isAdmin, isTenantAdmin } = useAuth();
   const { t, formatDateTime, formatRelativeTime } = useLocale();
   const { pushToast } = useNotifications();
+  const deletion = useDeleteProgress();
 
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [vessels, setVessels] = useState<Vessel[]>([]);
@@ -220,13 +222,9 @@ export default function Incidents() {
       message: t('Delete "{{title}}"? This removes the incident snapshot chain but does not affect deployments, checks, or releases.', { title: incident.title }),
       onConfirm: async () => {
         setConfirm((current) => ({ ...current, open: false }));
-        try {
-          await deleteIncident(incident.id);
-          pushToast('warning', t('Incident "{{title}}" deleted.', { title: incident.title }));
-          await load();
-        } catch (err: unknown) {
-          setError(err instanceof Error ? err.message : t('Delete failed.'));
-        }
+        if (!(await deletion.run({ kind: 'incident', action: () => deleteIncident(incident.id), errorMessage: (err) => (err instanceof Error ? err.message : t('Delete failed.')) }))) return;
+        pushToast('warning', t('Incident "{{title}}" deleted.', { title: incident.title }));
+        await load();
       },
     });
   }
@@ -324,6 +322,7 @@ export default function Incidents() {
         onConfirm={confirm.onConfirm}
         onCancel={() => setConfirm((current) => ({ ...current, open: false }))}
       />
+      {deletion.dialog}
 
       {showCreate && (
         <div className="modal-overlay" onClick={() => setShowCreate(false)}>

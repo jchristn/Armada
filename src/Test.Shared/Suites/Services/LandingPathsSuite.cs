@@ -53,7 +53,7 @@ namespace Test.Shared.Suites.Services
                     Mission? mission = await testDb.Driver.Missions.ReadAsync(entities.Mission.Id).ConfigureAwait(false);
                     AssertEqual(MissionStatusEnum.LandingFailed, mission!.Status);
                     AssertContains("Error merging locally: Simulated merge failure", mission.FailureReason ?? "");
-                    AssertEqual(MissionFailureKindEnum.LandingConflict, mission.FailureKind, "failure kind is recorded where the failure happens");
+                    AssertEqual(MissionFailureKindEnum.Infra, mission.FailureKind, "only a merge conflict git reports is a LandingConflict");
                     AssertFalse(git.OperationCalls.Contains("delete-local-branch:" + entities.Dock.BranchName), "branch kept for retry");
                 }
             }));
@@ -71,7 +71,7 @@ namespace Test.Shared.Suites.Services
                     Mission? mission = await testDb.Driver.Missions.ReadAsync(entities.Mission.Id).ConfigureAwait(false);
                     AssertEqual(MissionStatusEnum.LandingFailed, mission!.Status);
                     AssertContains("Error publishing verified commit: Simulated push failure", mission.FailureReason ?? "");
-                    AssertEqual(MissionFailureKindEnum.LandingConflict, mission.FailureKind, "failure kind is recorded where the failure happens");
+                    AssertEqual(MissionFailureKindEnum.Infra, mission.FailureKind, "only a merge conflict git reports is a LandingConflict");
                     AssertEqual(0, git.MergeBranchCalls.Count, "No checkout merge before publication");
                     AssertFalse(git.OperationCalls.Contains("delete-local-branch:" + entities.Dock.BranchName), "branch kept for retry");
                 }
@@ -354,7 +354,7 @@ namespace Test.Shared.Suites.Services
                     Mission? mission = await testDb.Driver.Missions.ReadAsync(entities.Mission.Id).ConfigureAwait(false);
                     AssertEqual(MissionStatusEnum.LandingFailed, mission!.Status);
                     AssertContains("Error pushing/creating PR", mission.FailureReason ?? "");
-                    AssertEqual(MissionFailureKindEnum.LandingConflict, mission.FailureKind, "failure kind is recorded where the failure happens");
+                    AssertEqual(MissionFailureKindEnum.Infra, mission.FailureKind, "only a merge conflict git reports is a LandingConflict");
                     AssertNull(mission.PrUrl, "no PR URL recorded");
                 }
             }));
@@ -485,6 +485,41 @@ namespace Test.Shared.Suites.Services
                 }));
             }
 
+            cases.Add(CaseAsync("merge_and_push_lands_with_dirty_checkout", "MergeAndPush lands from the dock while the developer checkout is dirty; the checkout sync is skipped with a warning event", TestTags.Positive, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync();
+                RealLandingFixture f = await RealLandingFixture.CreateAsync(testDb.Driver, LandingModeEnum.MergeAndPush);
+                string readme = Path.Combine(f.Repos.Work, "README.md");
+                string edited = File.ReadAllText(readme) + "operator edit in progress" + Environment.NewLine;
+                File.WriteAllText(readme, edited);
+
+                await f.Handler.HandleMissionCompleteAsync(f.Mission, f.Dock);
+
+                Mission landed = (await testDb.Driver.Missions.ReadAsync(f.Mission.Id))!;
+                AssertEqual(MissionStatusEnum.Complete, landed.Status, landed.FailureReason);
+                AssertEqual(f.WorkCommit, f.Repos.OriginHead("main"), "the verified commit is published");
+                AssertEqual(edited, File.ReadAllText(readme), "the operator's edit is untouched");
+                List<ArmadaEvent> events = await testDb.Driver.Events.EnumerateByMissionAsync(f.Mission.Id);
+                AssertTrue(events.Exists(e => e.EventType == "mission.checkout_sync_skipped"), "the skipped checkout sync is recorded");
+            }));
+
+            cases.Add(CaseAsync("merge_and_push_lands_with_unpushed_checkout_commit", "MergeAndPush lands when the developer checkout has a local commit the candidate does not include; the checkout keeps it", TestTags.Positive, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync();
+                RealLandingFixture f = await RealLandingFixture.CreateAsync(testDb.Driver, LandingModeEnum.MergeAndPush);
+                string local = await HarborDockGitFixture.CommitFileAsync(f.Repos.Work, "local-only.txt", "not pushed", "Operator commit not yet pushed");
+
+                await f.Handler.HandleMissionCompleteAsync(f.Mission, f.Dock);
+
+                Mission landed = (await testDb.Driver.Missions.ReadAsync(f.Mission.Id))!;
+                AssertEqual(MissionStatusEnum.Complete, landed.Status, landed.FailureReason);
+                AssertEqual(f.WorkCommit, f.Repos.OriginHead("main"), "the verified commit is published");
+                AssertFalse(f.Repos.OriginHasFile("main", "local-only.txt"), "the operator's unpushed commit is not published");
+                AssertEqual(local, await HarborDockGitFixture.ResolveAsync(f.Repos.Work, "refs/heads/main"), "the checkout keeps its own commit");
+                List<ArmadaEvent> events = await testDb.Driver.Events.EnumerateByMissionAsync(f.Mission.Id);
+                AssertTrue(events.Exists(e => e.EventType == "mission.checkout_sync_skipped"), "the skipped checkout sync is recorded");
+            }));
+
             return new TestSuiteDescriptor(suiteId: SuiteId, displayName: "Landing Paths", cases: cases);
         }
 
@@ -536,6 +571,8 @@ namespace Test.Shared.Suites.Services
             Dock dock = new Dock(vessel.Id);
             dock.CaptainId = captain.Id;
             dock.WorktreePath = Path.Combine(Path.GetTempPath(), "armada_test_wt_" + suffix);
+            // The dock's worktree exists, as it does after a captain finishes; landing recreates a missing one.
+            Directory.CreateDirectory(dock.WorktreePath);
             dock.BranchName = "armada/landing/" + suffix;
             dock.Active = true;
             dock = await db.Docks.CreateAsync(dock).ConfigureAwait(false);

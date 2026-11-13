@@ -43,7 +43,7 @@ export default function MuxRuntimeFields({ runtime, form, onChange, t, compact =
         throw new Error(result.errorMessage || result.errorCode || t('Mux endpoint discovery failed.'));
       }
 
-      setEndpoints(result.endpoints ?? []);
+      setEndpoints(result.objects ?? []);
       setHarborId(result.harborId ?? null);
       setLoadError('');
     } catch (error) {

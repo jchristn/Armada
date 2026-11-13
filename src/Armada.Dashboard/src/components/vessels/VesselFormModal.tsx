@@ -49,6 +49,7 @@ export default function VesselFormModal({ vessel, fleets, pipelines, onClose, on
     branchCleanup: t('What happens to a mission branch after it lands. Local Only deletes it from the bare clone; Local and Remote also deletes it on the remote; None keeps it. Default is the global setting (Local Only).'),
     autoApprove: t('Whether CLI captains run here with their auto-approve (permission bypass) flags. Use captain setting keeps each captain as configured; On or Off overrides every captain on this vessel.'),
     pipeline: t('Persona pipeline used when a dispatch to this vessel does not name one, e.g. Architect then Worker then Judge. None falls back to the fleet default, then a single Worker stage.'),
+    serialize: t('When a new mission overlaps an active mission on this vessel (shared files or a reserved hotspot directory), dispatch chains it after that mission so it starts once that one lands. Off (the default) dispatches it right away with an overlap warning. A dependency you set yourself is never replaced.'),
     concurrent: t('Let several missions be active on this vessel at once, each in its own worktree. Off (the default) runs one mission at a time, which avoids merge conflicts between missions.'),
     modelContext: t('Ask captains to record what they learn about this repo (build quirks, test patterns, architecture) into Model Context, which is fed to future missions. On by default.'),
     secretScan: t('Before landing, scan each mission diff for secrets such as API keys, and block changes to Protected Path Patterns or text from the Private Identifier Denylist. Off by default.'),
@@ -71,6 +72,7 @@ export default function VesselFormModal({ vessel, fleets, pipelines, onClose, on
     testOverride: t('Command fleet actions run for the Test intent on this vessel. Overrides the repo script and the detected ecosystem default. Blank uses detection.'),
     lintOverride: t('Command fleet actions run for the Lint intent on this vessel. Overrides the repo script and the detected ecosystem default. Blank uses detection.'),
     auditOverride: t('Command fleet actions run for the Audit intent on this vessel. Overrides the repo script and the detected ecosystem default. Blank uses detection.'),
+    workerEnvelope: t('Optional Worker eligibility envelope. Leave every field blank for no envelope. When set, only captains whose model profile meets it run Worker missions on this vessel. The Architect may tighten it per mission but never loosen it.'),
     timeout: t('Time limit in seconds for each of the build and test commands, from 30 to 7200. Blank uses 1800 (30 minutes). Going over counts as a timeout failure.'),
     projectContext: t('What this project is: purpose, architecture, key files and dependencies. Added to every captain prompt for this vessel, so keep it accurate and concise.'),
     styleGuide: t('Coding rules captains must follow here: naming, patterns, language restrictions, preferred libraries. Added to every captain prompt for this vessel.'),
@@ -185,9 +187,17 @@ export default function VesselFormModal({ vessel, fleets, pipelines, onClose, on
         </div>
 
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem 2rem', marginBottom: '0.5rem' }}>
-          <label style={checkboxLabelStyle} title={tip.concurrent}>
-            <input title={tip.concurrent} type="checkbox" checked={form.allowConcurrentMissions} onChange={e => setForm({ ...form, allowConcurrentMissions: e.target.checked })} style={checkboxStyle} />
-            <span style={{ verticalAlign: 'middle' }}>{t('Allow Concurrent Missions')}</span>
+          <label style={columnLabelStyle}>
+            {t('Parallel voyages')}
+            <input aria-label={t('Parallel voyages')} title={t('Maximum admitted voyages on this vessel. Each standalone mission counts as one voyage. 0 means unlimited.')} type="number" min="0" max="1000" step="1" value={form.maxParallelVoyages} onChange={e => setForm({ ...form, maxParallelVoyages: e.target.value })} />
+          </label>
+          <label style={columnLabelStyle}>
+            {t('Parallel missions per voyage')}
+            <input aria-label={t('Parallel missions per voyage')} title={t('Maximum agents running within each voyage. Review and landing do not consume a mission slot. 0 means unlimited.')} type="number" min="0" max="1000" step="1" value={form.maxParallelMissionsPerVoyage} onChange={e => setForm({ ...form, maxParallelMissionsPerVoyage: e.target.value })} />
+          </label>
+          <label style={checkboxLabelStyle} title={tip.serialize}>
+            <input title={tip.serialize} type="checkbox" checked={form.serializeOverlappingMissions} onChange={e => setForm({ ...form, serializeOverlappingMissions: e.target.checked })} style={checkboxStyle} aria-label={t('Serialize Overlapping Missions')} />
+            <span style={{ verticalAlign: 'middle' }}>{t('Serialize Overlapping Missions')}</span>
           </label>
           <label style={checkboxLabelStyle} title={tip.modelContext}>
             <input title={tip.modelContext} type="checkbox" checked={form.enableModelContext} onChange={e => setForm({ ...form, enableModelContext: e.target.checked })} style={checkboxStyle} />
@@ -298,6 +308,36 @@ export default function VesselFormModal({ vessel, fleets, pipelines, onClose, on
             <input title={tip.auditOverride} value={form.auditCommand} onChange={e => setForm({ ...form, auditCommand: e.target.value })} placeholder={t('e.g. osv-scanner scan source -r .')} />
           </label>
         </div>
+
+        {/* Worker eligibility envelope (vessel default; missions may only tighten it) */}
+        <fieldset title={tip.workerEnvelope} style={{ border: 'none', padding: 0, margin: '0 0 0.5rem 0' }}>
+          <legend title={tip.workerEnvelope} style={{ fontWeight: 600, padding: 0, marginBottom: '0.25rem' }}>{t('Worker eligibility envelope')}</legend>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0 1.5rem' }}>
+            <label style={columnLabelStyle} title={tip.workerEnvelope}>
+              {t('Max files')}
+              <input title={tip.workerEnvelope} type="number" min={1} max={1000} value={form.envelopeMaxFiles} onChange={e => setForm({ ...form, envelopeMaxFiles: e.target.value })} />
+            </label>
+            <label style={columnLabelStyle} title={tip.workerEnvelope}>
+              {t('Max steps')}
+              <input title={tip.workerEnvelope} type="number" min={1} max={1000} value={form.envelopeMaxSteps} onChange={e => setForm({ ...form, envelopeMaxSteps: e.target.value })} />
+            </label>
+            <label style={columnLabelStyle} title={tip.workerEnvelope}>
+              {t('Min served context (tokens)')}
+              <input title={tip.workerEnvelope} type="number" min={1} max={100000000} value={form.envelopeMinServedContextTokens} onChange={e => setForm({ ...form, envelopeMinServedContextTokens: e.target.value })} />
+            </label>
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem 2rem' }}>
+            <span style={{ verticalAlign: 'middle' }}>{t('Required tools')}</span>
+            <label style={checkboxLabelStyle} title={tip.workerEnvelope}>
+              <input title={tip.workerEnvelope} type="checkbox" checked={form.envelopeRequireTools} onChange={e => setForm({ ...form, envelopeRequireTools: e.target.checked })} style={checkboxStyle} />
+              <span style={{ verticalAlign: 'middle' }}>{t('Tool calls')}</span>
+            </label>
+            <label style={checkboxLabelStyle} title={tip.workerEnvelope}>
+              <input title={tip.workerEnvelope} type="checkbox" checked={form.envelopeRequireMcp} onChange={e => setForm({ ...form, envelopeRequireMcp: e.target.checked })} style={checkboxStyle} />
+              <span style={{ verticalAlign: 'middle' }}>{t('MCP tools')}</span>
+            </label>
+          </div>
+        </fieldset>
 
         {/* Context */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '0 1.5rem' }}>

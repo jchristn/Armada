@@ -4,6 +4,7 @@ namespace Armada.Core.Models
     using System.Collections.Generic;
     using System.Linq;
     using Armada.Core.Enums;
+    using Armada.Core.Services;
 
     /// <summary>
     /// Defines how a project builds, tests, releases, and deploys.
@@ -93,6 +94,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// Optional language/runtime hints.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxConfigItems)]
         public List<string> LanguageHints { get; set; } = new List<string>();
 
         /// <summary>
@@ -178,6 +180,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// Required secret or configuration references.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxConfigItems)]
         public List<string> RequiredSecrets { get; set; } = new List<string>();
 
         /// <summary>
@@ -185,6 +188,7 @@ namespace Armada.Core.Models
         /// These are persisted through the legacy RequiredSecrets backing list to avoid
         /// a dedicated schema migration for readiness/preflight support.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxConfigItems)]
         public List<WorkflowInputReference> RequiredInputs
         {
             get => WorkflowInputReference.ParseMany(RequiredSecrets);
@@ -194,11 +198,13 @@ namespace Armada.Core.Models
         /// <summary>
         /// Expected build or release artifacts.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxConfigItems)]
         public List<string> ExpectedArtifacts { get; set; } = new List<string>();
 
         /// <summary>
         /// Environment-specific delivery commands.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxConfigItems)]
         public List<WorkflowEnvironmentProfile> Environments { get; set; } = new List<WorkflowEnvironmentProfile>();
 
         /// <summary>

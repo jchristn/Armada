@@ -299,6 +299,11 @@ function renderMenu() {
     if (state.menu?.anchorRect) {
       positionMenu(state.menu.anchorRect);
     }
+    if (state.menu?.focusMenu) {
+      state.menu.focusMenu = false;
+      const firstItem = elements.instanceMenu.querySelector('.instance-menu-item:not([disabled])');
+      if (firstItem) firstItem.focus();
+    }
   });
 }
 
@@ -336,10 +341,10 @@ function renderInstances() {
           </div>
           ${deploymentMeta}
         </td>
-        <td class="instance-ip">${escapeHtml(formatIpAddress(instance.remoteAddress))}</td>
-        <td class="instance-version">${escapeHtml(instance.armadaVersion || '-')}</td>
-        <td class="instance-last-seen">${escapeHtml(formatTimestamp(instance.lastSeenUtc))}</td>
-        <td>
+        <td class="instance-ip" data-label="IP address">${escapeHtml(formatIpAddress(instance.remoteAddress))}</td>
+        <td class="instance-version" data-label="Version">${escapeHtml(instance.armadaVersion || '-')}</td>
+        <td class="instance-last-seen" data-label="Last seen">${escapeHtml(formatTimestamp(instance.lastSeenUtc))}</td>
+        <td data-label="State">
           <span class="state-pill ${escapeHtml(stateClass)}">${escapeHtml(formatState(instance.state))}</span>
         </td>
         <td class="instance-actions-cell">
@@ -350,8 +355,8 @@ function renderInstances() {
             data-instance-id="${escapeHtml(instance.instanceId)}"
             aria-haspopup="menu"
             aria-expanded="${expanded}"
-            aria-label="Open actions"
-            title="Open actions"
+            aria-label="Actions for ${escapeHtml(instance.instanceId)}"
+            title="Actions"
             ${state.busy ? 'disabled' : ''}
           >
             <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -514,16 +519,16 @@ elements.loginForm.addEventListener('submit', async (event) => {
   const password = elements.passwordInput.value;
   if (!password) return;
 
-  setStatus(elements.loginStatus, 'Unlocking proxy...', null);
+  setStatus(elements.loginStatus, 'Signing in...', null);
   elements.loginButton.disabled = true;
 
   try {
     await loginToProxy(password);
     elements.passwordInput.value = '';
     await refreshPortalAfterLogin();
-    setStatus(elements.portalStatus, 'Proxy unlocked. Choose a deployment to connect.', 'success');
+    setStatus(elements.portalStatus, 'Signed in. Choose a deployment to connect.', 'success');
   } catch (error) {
-    setStatus(elements.loginStatus, error instanceof Error ? error.message : 'Proxy login failed.', 'error');
+    setStatus(elements.loginStatus, error instanceof Error ? error.message : 'Sign-in failed.', 'error');
   } finally {
     elements.loginButton.disabled = false;
   }
@@ -560,6 +565,8 @@ elements.instanceList.addEventListener('click', (event) => {
     state.menu = {
       instanceId,
       anchorRect: nextAnchorRect,
+      // event.detail is 0 for keyboard activation; move focus into the menu then.
+      focusMenu: event.detail === 0,
     };
   }
 
@@ -606,7 +613,11 @@ document.addEventListener('click', (event) => {
 
 document.addEventListener('keydown', (event) => {
   if (event.key === 'Escape' && state.menu) {
+    const instanceId = state.menu.instanceId;
     closeMenu();
+    const trigger = Array.from(elements.instanceList.querySelectorAll('[data-menu-trigger]'))
+      .find((button) => button.getAttribute('data-instance-id') === instanceId);
+    if (trigger) trigger.focus();
   }
 });
 

@@ -120,6 +120,37 @@ namespace Armada.Core.Database.Sqlite.Implementations
             }, FromReader, token).ConfigureAwait(false);
         }
 
+        /// <inheritdoc />
+        public async Task<EnumerationResult<FailureCauseRule>> EnumeratePageAsync(string? tenantId, EnumerationQuery query, CancellationToken token = default)
+        {
+            if (query == null) throw new ArgumentNullException(nameof(query));
+            int pageSize = query.PageSize < 1 ? 1 : (query.PageSize > 1000 ? 1000 : query.PageSize);
+            int pageNumber = query.PageNumber < 1 ? 1 : query.PageNumber;
+            int offset = (pageNumber - 1) * pageSize;
+            string where = tenantId != null ? " WHERE (tenant_id = @tenant_id OR tenant_id IS NULL)" : String.Empty;
+            Action<SqliteCommand> bind = cmd =>
+            {
+                if (tenantId != null) SqliteCommandHelper.Add(cmd, "@tenant_id", tenantId);
+            };
+
+            using (SqliteConnection conn = new SqliteProviderConnection(_ConnectionString))
+            {
+                await conn.OpenAsync(token).ConfigureAwait(false);
+                long total = await SqliteCommandHelper.CountAsync(conn, "SELECT COUNT(*) FROM failure_cause_rules" + where + ";", bind, token).ConfigureAwait(false);
+                List<FailureCauseRule> rows = await SqliteCommandHelper.QueryAsync(conn,
+                    "SELECT * FROM failure_cause_rules" + where + " ORDER BY priority ASC, name ASC, id ASC" + SqliteCommandHelper.Page(offset, pageSize) + ";",
+                    bind, FromReader, token).ConfigureAwait(false);
+
+                EnumerationResult<FailureCauseRule> result = new EnumerationResult<FailureCauseRule>();
+                result.PageNumber = pageNumber;
+                result.PageSize = pageSize;
+                result.TotalRecords = total;
+                result.TotalPages = (int)Math.Ceiling((double)total / pageSize);
+                result.Objects = rows;
+                return result;
+            }
+        }
+
         #endregion
 
         #region Private-Methods

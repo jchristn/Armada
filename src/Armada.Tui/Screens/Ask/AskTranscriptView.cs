@@ -848,7 +848,7 @@ namespace Armada.Tui.Screens.Ask
                 return true;
             }
 
-            if (block.Kind == AskBlockKindEnum.Stream || (block.Message != null && block.Message.ToolCalls != null && block.Message.ToolCalls.Count > 0))
+            if (block.Kind == AskBlockKindEnum.Stream || (block.Message != null && (block.Message.ToolCallCount > 0 || _Ask.Conversation.ToolCallsFor(block.Message).Count > 0)))
             {
                 ViewState.Toggle(ViewState.ExpandedTools, block.Key);
                 return true;
@@ -863,12 +863,12 @@ namespace Armada.Tui.Screens.Ask
             return true;
         }
 
-        private static bool HasStatistics(AskBlock? block)
+        private bool HasStatistics(AskBlock? block)
         {
             AskMessage? message = block?.Message;
             if (message == null || block!.Kind != AskBlockKindEnum.Message) return false;
             if (message.Role != AskMessageRoleEnum.Assistant || message.Kind != AskMessageKindEnum.Text) return false;
-            return AskTurnStatistics.Rows(message).Count > 0;
+            return AskTurnStatistics.Rows(message, _Ask.Conversation.ToolCallsFor(message)).Count > 0;
         }
 
         private void OpenWork(string workId)

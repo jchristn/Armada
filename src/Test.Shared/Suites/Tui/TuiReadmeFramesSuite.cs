@@ -99,8 +99,8 @@ namespace Test.Shared.Suites.Tui
             StubHttpHandler stub = fx.Stub;
             stub.Json("GET", "/api/v1/status", "{\"TotalCaptains\":3,\"IdleCaptains\":1,\"WorkingCaptains\":1,\"StalledCaptains\":1,\"ActiveVoyages\":1," +
                 "\"MissionsByStatus\":{\"Failed\":1,\"Complete\":5,\"InProgress\":1}," +
-                "\"Voyages\":[{\"Voyage\":{\"Id\":\"vyg_1\",\"Title\":\"Release train\",\"Status\":\"InProgress\"},\"TotalMissions\":3,\"CompletedMissions\":2,\"FailedMissions\":0,\"VesselIds\":[\"vsl_a\"]}]," +
                 "\"RecentSignals\":[{\"Id\":\"sig_1\",\"Type\":\"Progress\",\"Payload\":\"Tests passing on DemoRepo\",\"CreatedUtc\":\"2026-10-04T10:00:00Z\"}]}");
+            stub.Json("POST", "/api/v1/voyages/progress/enumerate", "{\"Success\":true,\"PageNumber\":1,\"PageSize\":8,\"TotalPages\":1,\"TotalRecords\":1,\"Objects\":[{\"Voyage\":{\"Id\":\"vyg_1\",\"Title\":\"Release train\",\"Status\":\"InProgress\"},\"TotalMissions\":3,\"CompletedMissions\":2,\"FailedMissions\":0,\"VesselId\":\"vsl_a\",\"VesselCount\":1}]}");
             stub.Json("GET", "/api/v1/missions/summaries", "{\"Success\":true,\"Objects\":[" +
                 "{\"Id\":\"msn_f\",\"Title\":\"Fix column widths\",\"Status\":\"InProgress\",\"Priority\":100,\"VesselId\":\"vsl_a\",\"CaptainId\":\"cpt_1\",\"CreatedUtc\":\"2026-10-04T10:00:00Z\",\"LastUpdateUtc\":\"2026-10-04T10:05:00Z\"}," +
                 "{\"Id\":\"msn_x\",\"Title\":\"Broken\",\"Status\":\"Failed\",\"Priority\":100,\"VesselId\":\"vsl_a\",\"CreatedUtc\":\"2026-10-04T09:00:00Z\",\"LastUpdateUtc\":\"2026-10-04T09:30:00Z\"}," +

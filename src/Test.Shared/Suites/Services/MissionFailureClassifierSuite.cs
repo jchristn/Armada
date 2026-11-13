@@ -60,7 +60,8 @@ namespace Test.Shared.Suites.Services
                     MissionFailureKindEnum.MaxRuntimeExceeded,
                     MissionFailureKindEnum.StallRecoveryExhausted,
                     MissionFailureKindEnum.OperatorAction,
-                    MissionFailureKindEnum.InvalidOutput
+                    MissionFailureKindEnum.InvalidOutput,
+                    MissionFailureKindEnum.Blocked
                 };
                 foreach (MissionFailureKindEnum kind in humanKinds)
                 {

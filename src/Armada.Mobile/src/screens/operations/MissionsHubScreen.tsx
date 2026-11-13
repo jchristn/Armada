@@ -4,6 +4,8 @@ import { StyleSheet, View } from 'react-native';
 import { HubTabBar, useHubTab, type HubTab } from '../../components/app/HubTabs';
 import { useSplitSelection } from '../../components/app/useSplitSelection';
 import { EmptyState, IconButton, SplitView } from '../../components/ui';
+import { BlackBoxEntryScreen } from '../blackbox/BlackBoxEntryScreen';
+import { BlackBoxList } from '../blackbox/BlackBoxList';
 import { useLocale } from '../../i18n/LocaleContext';
 import { MergeEntryDetail } from './MergeEntryDetail';
 import { MergeQueueList } from './MergeQueueList';
@@ -12,20 +14,23 @@ import { MissionsList } from './MissionsList';
 import { VoyageDetail } from './VoyageDetail';
 import { VoyagesList } from './VoyagesList';
 
-export type MissionsHubTab = 'missions' | 'voyages' | 'merge-queue';
+export type MissionsHubTab = 'missions' | 'voyages' | 'merge-queue' | 'blackbox';
 export const MISSIONS_HUB_TABS: HubTab<MissionsHubTab>[] = [
   { key: 'missions', label: 'Missions' },
   { key: 'voyages', label: 'Voyages' },
   { key: 'merge-queue', label: 'Merge Queue' },
+  { key: 'blackbox', label: 'Black Box' },
 ];
 const TAB_KEYS = MISSIONS_HUB_TABS.map((tab) => tab.key);
 
 const missionRoute = (id: string) => `/missions/${id}`;
 const voyageRoute = (id: string) => `/voyages/${id}`;
 const mergeRoute = (id: string) => `/merge-queue/${id}`;
+const blackBoxRoute = (id: string) => `/blackbox/${id}`;
 
 /**
- * The Missions hub (the dashboard's MissionsHub): Missions, Voyages, and the Merge Queue as tabs bound to ?tab=.
+ * The Missions hub (the dashboard's MissionsHub): Missions, Voyages, the Merge Queue, and the Black Box as tabs bound
+ * to ?tab= (/blackbox redirects to ?tab=blackbox).
  * Narrow panes push each item's own route; wide ones show the selected item beside the list (split view). On the Voyages
  * tab the header's "+" opens Create Voyage (the Missions list has its own "+ Mission").
  */
@@ -36,6 +41,7 @@ export function MissionsHubScreen({ initialMissionTab = 'overview' }: { initialM
   const missions = useSplitSelection(missionRoute);
   const voyages = useSplitSelection(voyageRoute);
   const merges = useSplitSelection(mergeRoute);
+  const blackBox = useSplitSelection(blackBoxRoute);
   const isTablet = missions.isTablet;
   const [missionTab, setMissionTab] = useState<MissionDetailTab>(initialMissionTab);
 
@@ -69,6 +75,10 @@ export function MissionsHubScreen({ initialMissionTab = 'overview' }: { initialM
     master = <VoyagesList onSelect={voyages.select} selectedId={voyages.selectedId} />;
     detail = voyages.selectedId ? <VoyageDetail key={voyages.selectedId} id={voyages.selectedId} embedded /> : isTablet ? <EmptyState icon="boat-outline" title={t('Select a voyage')} /> : null;
     clear = voyages.clear;
+  } else if (tab === 'blackbox') {
+    master = <BlackBoxList onSelect={blackBox.select} selectedId={blackBox.selectedId} />;
+    detail = blackBox.selectedId ? <BlackBoxEntryScreen key={blackBox.selectedId} id={blackBox.selectedId} embedded /> : isTablet ? <EmptyState icon="file-tray-full-outline" title={t('Select a black box entry')} /> : null;
+    clear = blackBox.clear;
   } else {
     master = <MergeQueueList onSelect={merges.select} selectedId={merges.selectedId} />;
     detail = merges.selectedId ? <MergeEntryDetail key={merges.selectedId} id={merges.selectedId} embedded /> : isTablet ? <EmptyState icon="git-merge-outline" title={t('Select a merge queue entry')} /> : null;

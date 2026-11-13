@@ -2,6 +2,7 @@ namespace Armada.Core.Models
 {
     using System;
     using System.Collections.Generic;
+    using Armada.Core.Services;
 
     /// <summary>
     /// One fleet in an apply request: the (possibly edited) name, description, and vessels of a recommendation.
@@ -28,6 +29,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// Vessels (vsl_ prefix) to assign to the fleet. Never null.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxRequestItems)]
         public List<string> VesselIds
         {
             get => _VesselIds;

@@ -1,6 +1,7 @@
 namespace Armada.Core.Models
 {
     using System.Collections.Generic;
+    using Armada.Core.Services;
 
     /// <summary>
     /// Request to evaluate vessel health. When <see cref="VesselIds"/> is non-empty only those vessels are evaluated
@@ -14,6 +15,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// Vessel identifiers to evaluate, or null/empty for all. Every identifier must belong to the caller's tenant.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxRequestItems)]
         public List<string>? VesselIds { get; set; } = null;
 
         /// <summary>

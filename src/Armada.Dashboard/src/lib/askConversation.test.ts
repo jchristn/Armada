@@ -2,7 +2,7 @@ import { parseAskEvent, parseTurnState, type AskEvent } from './askEvents';
 import { CLOSED_TURN_LIMIT, conversationReducer, initialConversation, isLocalMessage, mergeMessages, mergeStreamText, mergeStreamTools, proposalForMessage, workCardHosts, type ConversationState } from './askConversation';
 import { applyActivityEvent, applyThreadUpdate, isThreadWorking, sortThreads } from './askThreads';
 import { isWorkActive, statusCounts, workProgress, workRoute } from './askWork';
-import type { AskMessage, AskThread, AskThreadDetail, AskWorkSnapshot } from '../types/models';
+import type { AskMessage, AskThread, AskThreadView, AskWorkSnapshot } from '../types/models';
 
 const thread = (id: string, extra: Partial<AskThread> = {}): AskThread => ({
   id, title: id, captainId: 'cpt_1', autoApprove: false, pinned: false, archived: false, lastMessageUtc: '2026-10-04T10:00:00Z', unreadCount: 0, ...extra,
@@ -12,7 +12,7 @@ const msg = (id: string, sequence: number, extra: Partial<AskMessage> = {}): Ask
   id, threadId: 'ath_1', sequence, role: 'Assistant', kind: 'Text', contentText: id, ...extra,
 });
 
-function loaded(messages: AskMessage[] = [], detail: Partial<AskThreadDetail> = {}): ConversationState {
+function loaded(messages: AskMessage[] = [], detail: Partial<AskThreadView> = {}): ConversationState {
   return conversationReducer(initialConversation('ath_1'), {
     type: 'loaded', threadId: 'ath_1', detail: { thread: thread('ath_1'), trackedWork: [], pendingProposals: [], ...detail }, messages, hasMore: false,
   });

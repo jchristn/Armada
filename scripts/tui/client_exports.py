@@ -13,7 +13,7 @@ CLIENT_TS = os.path.join(ROOT, "src", "Armada.Dashboard", "src", "api", "client.
 # Exports of client.ts that do not call the server.
 NON_SERVER_EXPORTS = {
     "ApiError", "apiErrorCode", "apiErrorMessage", "isApiStatus", "setAuthToken", "setOnUnauthorized", "camelizeKeys", "encodeBrowsePath",
-    "configureClient", "getClientBaseUrl",
+    "configureClient", "getClientBaseUrl", "BULK_DELETE_CHUNK", "CLEANUP_KEY_CHUNK", "MAX_WORKSPACE_PAGES", "deleteInChunks",
 }
 
 

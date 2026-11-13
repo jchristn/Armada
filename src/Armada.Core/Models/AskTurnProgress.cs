@@ -2,6 +2,7 @@ namespace Armada.Core.Models
 {
     using System;
     using System.Collections.Generic;
+    using System.Text.Json.Serialization;
 
     /// <summary>
     /// What a captain turn that is still running in an Ask Armada thread has produced so far: the streamed reply text,
@@ -45,8 +46,16 @@ namespace Armada.Core.Models
         }
 
         /// <summary>
-        /// Tool calls seen so far, in first-seen order. A call still running has a null Ok and no result.
+        /// Number of tool calls seen so far. The calls are read one page at a time with POST
+        /// /api/v1/ask/threads/{id}/turn/tool-calls/enumerate (MCP list_ask_tool_calls without messageId).
         /// </summary>
+        public int ToolCallCount { get; set; } = 0;
+
+        /// <summary>
+        /// Tool calls seen so far, in first-seen order (server-side live state, never serialized; read it through the
+        /// paged enumeration). A call still running has a null Ok and no result.
+        /// </summary>
+        [JsonIgnore]
         public List<AskMessageToolCall> ToolCalls
         {
             get => _ToolCalls;

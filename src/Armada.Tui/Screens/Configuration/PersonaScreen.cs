@@ -10,6 +10,7 @@ namespace Armada.Tui.Screens.Configuration
     using Armada.Core.Models;
     using Armada.Tui.Routing;
     using Armada.Tui.Screens.Entities;
+    using Armada.Tui.Screens.Kit;
     using Armada.Tui.Services;
     using Armada.Tui.Widgets;
 
@@ -275,7 +276,7 @@ namespace Armada.Tui.Screens.Configuration
 
             Context.Confirm("Delete Persona", EntityUi.T(Context, "Delete persona \"{{name}}\"? This cannot be undone.", "name", p.Name), () =>
             {
-                EntityUi.Run(Context, ct => Context.Client.DeletePersonaAsync(p.Name, ct), () =>
+                DeleteProgress.RunVoid(Context, "Deleting persona", ct => Context.Client.DeletePersonaAsync(p.Name, ct), () =>
                 {
                     EntityUi.Toast(Context, NotificationSeverityEnum.Warning, EntityUi.T(Context, "Persona \"{{name}}\" deleted.", "name", p.Name));
                     Context.Navigate("/configuration?tab=personas");

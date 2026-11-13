@@ -75,8 +75,45 @@ namespace Armada.Core.Database.SqlServer.Implementations
         {
             if (String.IsNullOrEmpty(runId)) throw new ArgumentNullException(nameof(runId));
             return await SqlServerCommandHelper.QueryAsync(_ConnectionString,
-                "SELECT * FROM battery_task_results WHERE run_id = @run_id ORDER BY created_utc ASC, id ASC;",
+                "SELECT * FROM battery_task_results WHERE run_id = @run_id ORDER BY created_utc ASC, id COLLATE Latin1_General_BIN2 ASC;",
                 cmd => SqlServerCommandHelper.Add(cmd, "@run_id", runId), FromReader, token).ConfigureAwait(false);
+        }
+
+        /// <inheritdoc />
+        public async Task<EnumerationResult<BatteryTaskResult>> EnumerateByRunAsync(string runId, EnumerationQuery query, CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(runId)) throw new ArgumentNullException(nameof(runId));
+            if (query == null) throw new ArgumentNullException(nameof(query));
+            int pageSize = query.PageSize < 1 ? 1 : (query.PageSize > 1000 ? 1000 : query.PageSize);
+            int pageNumber = query.PageNumber < 1 ? 1 : query.PageNumber;
+            int offset = (pageNumber - 1) * pageSize;
+
+            string where = " WHERE run_id = @run_id" + (String.IsNullOrWhiteSpace(query.Status) ? String.Empty : " AND outcome = @outcome");
+            Action<SqlCommand> bind = cmd =>
+            {
+                SqlServerCommandHelper.Add(cmd, "@run_id", runId);
+                if (!String.IsNullOrWhiteSpace(query.Status)) SqlServerCommandHelper.Add(cmd, "@outcome", query.Status);
+            };
+            string direction = query.Order == EnumerationOrderEnum.CreatedAscending ? "ASC" : "DESC";
+
+            using (SqlConnection conn = new SqlConnection(_ConnectionString))
+            {
+                await conn.OpenAsync(token).ConfigureAwait(false);
+                long total = await SqlServerCommandHelper.CountAsync(conn, "SELECT COUNT(*) FROM battery_task_results" + where + ";", bind, token).ConfigureAwait(false);
+                List<BatteryTaskResult> rows = await SqlServerCommandHelper.QueryAsync(conn,
+                    // Ordinal id tie-break: the default collation is case-insensitive, so ids that share a timestamp would sort
+                    // differently from the other providers.
+                    "SELECT * FROM battery_task_results" + where + " ORDER BY created_utc " + direction + ", id COLLATE Latin1_General_BIN2 " + direction + SqlServerCommandHelper.Page(offset, pageSize) + ";",
+                    bind, FromReader, token).ConfigureAwait(false);
+
+                EnumerationResult<BatteryTaskResult> result = new EnumerationResult<BatteryTaskResult>();
+                result.PageNumber = pageNumber;
+                result.PageSize = pageSize;
+                result.TotalRecords = total;
+                result.TotalPages = (int)Math.Ceiling((double)total / pageSize);
+                result.Objects = rows;
+                return result;
+            }
         }
 
         /// <inheritdoc />

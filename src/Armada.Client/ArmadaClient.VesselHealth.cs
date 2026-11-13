@@ -53,6 +53,20 @@ namespace Armada.Client
         }
 
         /// <summary>
+        /// Dashboard <c>listVesselDependencies</c>: POST `/api/v1/vessels/${encodeURIComponent(vesselId)}/health/dependencies/enumerate`.
+        /// One page of the vessel's outdated or vulnerable dependency rows (the health detail carries only DependencyCount).
+        /// </summary>
+        /// <param name="vesselId">vesselId.</param>
+        /// <param name="query">Paging (page size 1 to 1000); null is the first page of 10.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The page.</returns>
+        /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
+        public Task<EnumerationResult<VesselDependency>?> ListVesselDependenciesAsync(string vesselId, EnumerationQuery? query = null, CancellationToken token = default)
+        {
+            return PostAsync<EnumerationResult<VesselDependency>>($"/api/v1/vessels/{E(vesselId)}/health/dependencies/enumerate", query ?? new EnumerationQuery(), null, token);
+        }
+
+        /// <summary>
         /// Dashboard <c>evaluateVesselHealth</c>: POST '/api/v1/vessel-health/evaluate'. A 409 (an evaluation is already
         /// running) is returned like a success with <c>AlreadyRunning</c> set, as on the dashboard.
         /// </summary>
@@ -96,15 +110,56 @@ namespace Armada.Client
         }
 
         /// <summary>
-        /// Dashboard <c>listMuxEndpoints</c>: GET /api/v1/runtimes/mux/endpoints.
+        /// GET /api/v1/runtimes/mux/endpoints: one page of the saved Mux endpoints, ordered by name.
+        /// </summary>
+        /// <param name="configDirectory">Mux config directory, or null.</param>
+        /// <param name="pageNumber">One-based page number.</param>
+        /// <param name="pageSize">Page size, 1 to 1000 (the server normalizes other values).</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The page.</returns>
+        /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
+        public Task<MuxEndpointPage?> EnumerateMuxEndpointsAsync(string? configDirectory = null, int pageNumber = 1, int pageSize = 10, CancellationToken token = default)
+        {
+            string query = "?pageNumber=" + pageNumber + "&pageSize=" + pageSize + (String.IsNullOrEmpty(configDirectory) ? "" : "&configDirectory=" + E(configDirectory));
+            return GetAsync<MuxEndpointPage>("/api/v1/runtimes/mux/endpoints" + query, null, token);
+        }
+
+        /// <summary>
+        /// Dashboard <c>listMuxEndpoints</c>: every saved Mux endpoint for a picker, read explicitly page by page (1000 per
+        /// page) from GET /api/v1/runtimes/mux/endpoints until TotalPages is reached. The returned page holds every endpoint
+        /// and the server's TotalRecords; Success is false (with the server's error) when any page fails.
         /// </summary>
         /// <param name="configDirectory">Mux config directory, or null.</param>
         /// <param name="token">Cancellation token.</param>
-        /// <returns>The response.</returns>
+        /// <returns>Every endpoint, or the failing page.</returns>
         /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
-        public Task<MuxEndpointListResult?> ListMuxEndpointsAsync(string? configDirectory = null, CancellationToken token = default)
+        public async Task<MuxEndpointPage?> ListMuxEndpointsAsync(string? configDirectory = null, CancellationToken token = default)
         {
-            return GetAsync<MuxEndpointListResult>("/api/v1/runtimes/mux/endpoints" + (String.IsNullOrEmpty(configDirectory) ? "" : "?configDirectory=" + E(configDirectory)), null, token);
+            MuxEndpointPage? first = await EnumerateMuxEndpointsAsync(configDirectory, 1, 1000, token).ConfigureAwait(false);
+            if (first == null || !first.Success) return first;
+            for (int page = 2; page <= first.TotalPages; page++)
+            {
+                MuxEndpointPage? next = await EnumerateMuxEndpointsAsync(configDirectory, page, 1000, token).ConfigureAwait(false);
+                if (next == null || !next.Success) return next;
+                first.Objects.AddRange(next.Objects);
+            }
+
+            first.PageSize = first.Objects.Count < 1 ? first.PageSize : first.Objects.Count;
+            first.TotalPages = first.Objects.Count < 1 ? 0 : 1;
+            return first;
+        }
+
+        /// <summary>
+        /// Dashboard <c>listAllMuxEndpoints</c>: every saved Mux endpoint for a picker, read page by page (see
+        /// <see cref="ListMuxEndpointsAsync"/>).
+        /// </summary>
+        /// <param name="configDirectory">Mux config directory, or null.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>Every endpoint, or the failing page.</returns>
+        /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
+        public Task<MuxEndpointPage?> ListAllMuxEndpointsAsync(string? configDirectory = null, CancellationToken token = default)
+        {
+            return ListMuxEndpointsAsync(configDirectory, token);
         }
 
         /// <summary>

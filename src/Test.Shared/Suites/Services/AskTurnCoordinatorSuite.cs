@@ -37,6 +37,30 @@ namespace Test.Shared.Suites.Services
         public TestSuiteDescriptor Build()
         {
             List<TestCaseDescriptor> cases = new List<TestCaseDescriptor>();
+            cases.Add(CaseAsync("inactive_captain_preserves_turn_and_rejects_new_work", "Disabling preserves an in-flight Ask turn, rejects new turns and summaries, and reactivation works", async () =>
+            {
+                using AskTestHarness h = await AskTestHarness.CreateAsync().ConfigureAwait(false);
+                AuthContext owner = AskTestHarness.User("usr_active");
+                Captain captain = await NewCaptainAsync(h, "usr_active");
+                AskThread thread = await h.Threads.CreateThreadAsync(owner, new AskThreadCreateRequest { CaptainId = captain.Id });
+                h.Runner.Gate = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                AssertEqual(202, (await h.Turns.SendMessageAsync(owner, thread.Id, new AskMessageSendRequest { Content = "Known request" })).StatusCode);
+                AssertTrue(await AskTestHarness.WaitUntilAsync(() => Task.FromResult(h.Runner.Calls.Count == 1), 10000));
+                captain.Active = false;
+                await h.Db.Driver.Captains.UpdateAsync(captain, updateActive: true);
+                h.Runner.Gate.SetResult(true);
+                await WaitForTurnEndAsync(h, thread.Id);
+                AssertEqual(2, (await h.Threads.EnumerateMessagesAsync(owner, thread.Id, null))!.Messages.Count);
+                AssertEqual(409, (await h.Turns.SendMessageAsync(owner, thread.Id, new AskMessageSendRequest { Content = "Refused" })).StatusCode);
+                AssertEqual(409, (await h.Turns.SummarizeAsync(owner, thread.Id)).StatusCode);
+                AssertEqual(1, h.Runner.Calls.Count);
+                captain.Active = true;
+                await h.Db.Driver.Captains.UpdateAsync(captain, updateActive: true);
+                AssertEqual(202, (await h.Turns.SendMessageAsync(owner, thread.Id, new AskMessageSendRequest { Content = "Resumed" })).StatusCode);
+                await WaitForTurnEndAsync(h, thread.Id);
+                AssertEqual(2, h.Runner.Calls.Count);
+            }));
+
 
             cases.Add(CaseAsync("turn_persists_reply_and_tool_calls", "A turn runs in the background and persists the reply and its tool calls", async () =>
             {
@@ -58,8 +82,10 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(AskMessageRoleEnum.Assistant, reply.Role);
                 AssertEqual("There are 2 voyages.", reply.ContentText);
                 AssertEqual(captain.Id, reply.CaptainId);
-                AssertEqual(1, reply.ToolCalls.Count, "tool call persisted");
-                AssertEqual("mcp__armada__enumerate", reply.ToolCalls[0].ToolName);
+                AssertEqual(1, reply.ToolCallCount, "the message carries its tool call count");
+                List<AskMessageToolCall> replyCalls = await h.ToolCallsAsync(owner, reply).ConfigureAwait(false);
+                AssertEqual(1, replyCalls.Count, "tool call persisted");
+                AssertEqual("mcp__armada__enumerate", replyCalls[0].ToolName);
 
                 CaptainChatTurnOptions options = h.Runner.Calls.Single();
                 AssertContains("User: How many voyages?", options.Prompt);
@@ -271,10 +297,15 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(during.Thread.ActiveTurnId, live.TurnId, "progress matches the thread's ActiveTurnId");
                 AskMessage reserved = (await h.Threads.EnumerateMessagesAsync(owner, thread.Id, null).ConfigureAwait(false))!.Messages.Single(m => m.Role == AskMessageRoleEnum.Assistant);
                 AssertEqual(reserved.Id, live.MessageId, "progress names the reserved reply");
-                AssertEqual(0, reserved.ToolCalls.Count, "nothing is persisted on the reply until the turn ends");
+                AssertEqual(0, reserved.ToolCallCount, "nothing is persisted on the reply until the turn ends");
                 AssertEqual("partial so far", live.Text, "streamed text so far");
                 AssertEqual("Checking status.", live.ThinkingText, "streamed thinking so far");
                 AssertEqual(2, live.ToolCalls.Count, "both tool calls, merged by call id");
+                AssertEqual(2, live.ToolCallCount, "the progress carries the tool call count");
+                EnumerationResult<AskMessageToolCall> livePage = (await h.Threads.EnumerateActiveTurnToolCallsAsync(owner, thread.Id, new EnumerationQuery { PageSize = 1, Order = EnumerationOrderEnum.CreatedAscending }).ConfigureAwait(false))!;
+                AssertEqual(2L, livePage.TotalRecords, "the running turn's tool calls are paged");
+                AssertEqual(1, livePage.Objects.Count, "one per page");
+                AssertEqual("call_1", livePage.Objects[0].CallId, "first-seen order");
                 AskMessageToolCall done = live.ToolCalls[0];
                 AssertEqual("call_1", done.CallId);
                 AssertEqual("mcp__armada__status", done.ToolName);
@@ -290,7 +321,9 @@ namespace Test.Shared.Suites.Services
                 // The REST and MCP surfaces serialize the detail: the progress survives a JSON round trip.
                 AskThreadDetail roundTrip = JsonSerializer.Deserialize<AskThreadDetail>(JsonSerializer.Serialize(during))!;
                 AssertEqual("partial so far", roundTrip.ActiveTurn!.Text, "text after a round trip");
-                AssertEqual("{\"Health\":\"ok\"}", roundTrip.ActiveTurn.ToolCalls[0].ResultText, "tool result after a round trip");
+                AssertEqual(2, roundTrip.ActiveTurn.ToolCallCount, "tool call count after a round trip");
+                AssertEqual(0, roundTrip.ActiveTurn.ToolCalls.Count, "the tool calls themselves are not serialized with the detail");
+                AssertFalse(JsonSerializer.Serialize(during).Contains("\"ToolCalls\"", StringComparison.Ordinal), "no ToolCalls array in the serialized detail");
                 AssertNull(JsonSerializer.Deserialize<AskThreadDetail>("{}")!.ActiveTurn, "minimal detail has no active turn");
                 AskTurnProgress minimal = JsonSerializer.Deserialize<AskThreadDetail>("{\"ActiveTurn\":{\"Text\":null,\"ToolCalls\":null}}")!.ActiveTurn!;
                 AssertEqual(String.Empty, minimal.Text, "null text defaults to empty");
@@ -304,8 +337,9 @@ namespace Test.Shared.Suites.Services
                 AssertNull((await h.Threads.GetThreadDetailAsync(owner, thread.Id).ConfigureAwait(false))!.ActiveTurn, "no progress once the turn ended");
                 AskMessage reply = (await h.Threads.EnumerateMessagesAsync(owner, thread.Id, null).ConfigureAwait(false))!.Messages.Single(m => m.Id == reserved.Id);
                 AssertEqual("All quiet.", reply.ContentText);
-                AssertEqual(1, reply.ToolCalls.Count, "the runner's tool calls are stored once, not again from the live record");
-                AssertEqual("{\"Health\":\"ok\"}", reply.ToolCalls[0].ResultText, "persisted tool result");
+                List<AskMessageToolCall> stored = await h.ToolCallsAsync(owner, reply).ConfigureAwait(false);
+                AssertEqual(1, stored.Count, "the runner's tool calls are stored once, not again from the live record");
+                AssertEqual("{\"Health\":\"ok\"}", stored[0].ResultText, "persisted tool result");
             }));
 
             cases.Add(CaseAsync("stopped_turn_keeps_tool_calls", "A turn stopped mid-way keeps the tool calls it already made on its stopped message", async () =>
@@ -326,9 +360,10 @@ namespace Test.Shared.Suites.Services
                 AskMessage last = (await h.Threads.EnumerateMessagesAsync(owner, thread.Id, null).ConfigureAwait(false))!.Messages.Last();
                 AssertEqual(AskMessageKindEnum.Error, last.Kind, "stopped message");
                 AssertContains("Stopped before", last.ContentText);
-                AssertEqual(1, last.ToolCalls.Count, "the tool call made before the stop is kept");
-                AssertEqual("mcp__armada__status", last.ToolCalls[0].ToolName);
-                AssertEqual("{\"verbose\":true}", last.ToolCalls[0].ArgumentsText, "its arguments are kept");
+                List<AskMessageToolCall> kept = await h.ToolCallsAsync(owner, last).ConfigureAwait(false);
+                AssertEqual(1, kept.Count, "the tool call made before the stop is kept");
+                AssertEqual("mcp__armada__status", kept[0].ToolName);
+                AssertEqual("{\"verbose\":true}", kept[0].ArgumentsText, "its arguments are kept");
             }));
 
             cases.Add(CaseAsync("crashed_turn_keeps_tool_calls", "A turn whose runtime throws keeps the tool calls it already made on its error message", async () =>
@@ -348,8 +383,9 @@ namespace Test.Shared.Suites.Services
                 AskMessage last = (await h.Threads.EnumerateMessagesAsync(owner, thread.Id, null).ConfigureAwait(false))!.Messages.Last();
                 AssertEqual(AskMessageKindEnum.Error, last.Kind, "error message");
                 AssertContains("runtime crashed", last.ContentText);
-                AssertEqual(1, last.ToolCalls.Count, "the tool call made before the crash is kept");
-                AssertEqual("call_1", last.ToolCalls[0].CallId);
+                List<AskMessageToolCall> kept = await h.ToolCallsAsync(owner, last).ConfigureAwait(false);
+                AssertEqual(1, kept.Count, "the tool call made before the crash is kept");
+                AssertEqual("call_1", kept[0].CallId);
                 AssertEqual("failed", AskTurnEventPayload.From(h.EventsFor("usr_crash", "ask.turn").Last().Payload).State, "failed ask.turn");
             }));
 

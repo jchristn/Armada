@@ -2,6 +2,7 @@ namespace Armada.Core.Models
 {
     using System;
     using System.Collections.Generic;
+    using Armada.Core.Services;
 
     /// <summary>
     /// Result of applying fleet recommendations: the fleets used and every vessel assignment.
@@ -22,6 +23,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// Fleets that received vessels, created or reused, in request order. Never null.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxRequestItems, Reason = "One per requested fleet with vessels")]
         public List<Fleet> Fleets
         {
             get => _Fleets;
@@ -31,6 +33,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// Identifiers of the fleets this apply created (the rest were reused by name). Never null.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxRequestItems, Reason = "Subset of the requested fleets")]
         public List<string> CreatedFleetIds
         {
             get => _CreatedFleetIds;
@@ -40,6 +43,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// Vessel assignments. Never null.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxRequestItems, Reason = "One per distinct batch vessel (a batch holds at most 1000)")]
         public List<FleetRecommendationAssignment> Assignments
         {
             get => _Assignments;

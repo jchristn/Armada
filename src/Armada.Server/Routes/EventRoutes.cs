@@ -9,6 +9,7 @@ namespace Armada.Server.Routes
     using Armada.Core;
     using Armada.Core.Database;
     using Armada.Core.Models;
+    using Armada.Core.Services;
     using Armada.Core.Services.Interfaces;
 
     /// <summary>
@@ -175,6 +176,8 @@ namespace Armada.Server.Routes
                 DeleteMultipleRequest? body = JsonSerializer.Deserialize<DeleteMultipleRequest>(req.Http.Request.DataAsString, _jsonOptions);
                 if (body == null || body.Ids == null || body.Ids.Count == 0)
                     { req.Http.Response.StatusCode = 400; return (object)new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Ids is required and must not be empty" }; }
+                try { body.RequireWithinLimit(); }
+                catch (CollectionLimitExceededException limit) { return RouteErrorMapper.LimitExceeded(req, limit); }
 
                 DeleteMultipleResult result = new DeleteMultipleResult();
                 foreach (string id in body.Ids)
@@ -217,7 +220,7 @@ namespace Armada.Server.Routes
             api => api
                 .WithTag("Events")
                 .WithSummary("Batch delete multiple events")
-                .WithDescription("Permanently deletes multiple events by ID. Returns a summary of deleted and skipped entries.")
+                .WithDescription("Permanently deletes multiple events by ID (at most 1000 ids; more is a 400 with Data.Code CollectionLimitExceeded). Returns a summary of deleted and skipped entries.")
                 .WithRequestBody(OpenApiJson.BodyFor<DeleteMultipleRequest>("List of event IDs to delete"))
                 .WithResponse(200, OpenApiJson.For<DeleteMultipleResult>("Delete result summary"))
                 .WithResponse(400, OpenApiResponseMetadata.BadRequest())

@@ -29,6 +29,11 @@ namespace Armada.Core.Database.Mysql.Implementations
         /// <inheritdoc />
         public Task<PlanningSessionMessage> UpdateAsync(PlanningSessionMessage message, CancellationToken token = default) => throw NotSupported();
 
+        /// <inheritdoc />
+        public Task<EnumerationResult<PlanningSessionMessage>> EnumeratePageBySessionAsync(string planningSessionId, EnumerationQuery query, CancellationToken token = default) => throw NotSupported();
+        /// <inheritdoc />
+        public Task<long> CountBySessionAsync(string planningSessionId, CancellationToken token = default) => throw NotSupported();
+
         private static NotSupportedException NotSupported()
         {
             return new NotSupportedException("Planning sessions are currently implemented for SQLite-backed Armada deployments.");

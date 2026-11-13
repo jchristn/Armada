@@ -2,6 +2,7 @@ namespace Armada.Core.Models
 {
     using System;
     using System.Collections.Generic;
+    using Armada.Core.Services;
 
     /// <summary>
     /// A battery pack as listed by list_battery_packs, with its validation errors when it is malformed.
@@ -52,6 +53,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// Validation errors.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxConfigItems, Reason = "Validator errors, capped at MaxConfigItems with a final summary entry")]
         public List<string> Errors
         {
             get => _Errors;
@@ -61,6 +63,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// Toolchain names.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxConfigItems, Reason = "The pack toolchain; ToolchainCount is the manifest total")]
         public List<string> Toolchain
         {
             get => _Toolchain;
@@ -70,11 +73,24 @@ namespace Armada.Core.Models
         /// <summary>
         /// Tasks.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxConfigItems, Reason = "The pack tasks; TaskCount is the manifest total")]
         public List<BatteryTaskInfo> Tasks
         {
             get => _Tasks;
             set => _Tasks = value ?? new List<BatteryTaskInfo>();
         }
+
+        /// <summary>
+        /// Tasks in the manifest. <see cref="Tasks"/> lists at most <see cref="CollectionLimits.MaxConfigItems"/>; a
+        /// manifest with more is invalid and says so in <see cref="Errors"/>.
+        /// </summary>
+        public int TaskCount { get; set; } = 0;
+
+        /// <summary>
+        /// Toolchain entries in the manifest. <see cref="Toolchain"/> lists at most
+        /// <see cref="CollectionLimits.MaxConfigItems"/>.
+        /// </summary>
+        public int ToolchainCount { get; set; } = 0;
 
         /// <summary>
         /// SHA-256 of the manifest bytes (part of a run's configuration revision).

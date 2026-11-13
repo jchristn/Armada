@@ -2,6 +2,7 @@ namespace Armada.Core.Models
 {
     using System.Collections.Generic;
     using Armada.Core.Enums;
+    using Armada.Core.Services;
 
     /// <summary>
     /// Body of POST /api/v1/battery/runs (run_battery).
@@ -13,6 +14,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// Packs to run (identifiers).
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxConfigItems)]
         public List<string> Packs
         {
             get => _Packs;

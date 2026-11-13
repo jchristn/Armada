@@ -9,6 +9,22 @@ namespace Armada.Core.Database
     /// </summary>
     public abstract class DatabaseDriver : IDisposable
     {
+        /// <summary>Immutable tenant-scoped captain selection history and usage reservations.</summary>
+        public ICaptainSelectionMethods CaptainSelections
+        {
+            get => _CaptainSelections;
+            protected set => _CaptainSelections = DuplicateEntityTranslationProxy.Wrap(value);
+        }
+        private ICaptainSelectionMethods _CaptainSelections = null!;
+
+        /// <summary>Mission scheduling wait interval persistence.</summary>
+        public IMissionWaitIntervalMethods MissionWaitIntervals
+        {
+            get => _MissionWaitIntervals;
+            protected set => _MissionWaitIntervals = DuplicateEntityTranslationProxy.Wrap(value);
+        }
+        private IMissionWaitIntervalMethods _MissionWaitIntervals = null!;
+
         #region Public-Members
 
         /// <summary>Read-only storage and record statistics.</summary>
@@ -430,6 +446,78 @@ namespace Armada.Core.Database
         }
 
         /// <summary>
+        /// Black box entries (blackbox_entries).
+        /// </summary>
+        public IBlackBoxEntryMethods BlackBoxEntries
+        {
+            get => _BlackBoxEntries;
+            protected set => _BlackBoxEntries = DuplicateEntityTranslationProxy.Wrap(value);
+        }
+
+        /// <summary>
+        /// Black box objects (blackbox_objects).
+        /// </summary>
+        public IBlackBoxObjectMethods BlackBoxObjects
+        {
+            get => _BlackBoxObjects;
+            protected set => _BlackBoxObjects = DuplicateEntityTranslationProxy.Wrap(value);
+        }
+
+        /// <summary>
+        /// Black box file rows (blackbox_files).
+        /// </summary>
+        public IBlackBoxFileMethods BlackBoxFiles
+        {
+            get => _BlackBoxFiles;
+            protected set => _BlackBoxFiles = DuplicateEntityTranslationProxy.Wrap(value);
+        }
+
+        /// <summary>
+        /// Black box link rows (blackbox_links).
+        /// </summary>
+        public IBlackBoxLinkMethods BlackBoxLinks
+        {
+            get => _BlackBoxLinks;
+            protected set => _BlackBoxLinks = DuplicateEntityTranslationProxy.Wrap(value);
+        }
+
+        /// <summary>
+        /// Black box notes (blackbox_notes).
+        /// </summary>
+        public IBlackBoxNoteMethods BlackBoxNotes
+        {
+            get => _BlackBoxNotes;
+            protected set => _BlackBoxNotes = DuplicateEntityTranslationProxy.Wrap(value);
+        }
+
+        /// <summary>
+        /// Black box storage migration jobs (blackbox_migrations).
+        /// </summary>
+        public IBlackBoxMigrationMethods BlackBoxMigrations
+        {
+            get => _BlackBoxMigrations;
+            protected set => _BlackBoxMigrations = DuplicateEntityTranslationProxy.Wrap(value);
+        }
+
+        /// <summary>
+        /// Black box success flight recorder rows (blackbox_successes).
+        /// </summary>
+        public IBlackBoxSuccessMethods BlackBoxSuccesses
+        {
+            get => _BlackBoxSuccesses;
+            protected set => _BlackBoxSuccesses = DuplicateEntityTranslationProxy.Wrap(value);
+        }
+
+        /// <summary>
+        /// Black box recovery outcome rows (blackbox_recovery_outcomes).
+        /// </summary>
+        public IBlackBoxRecoveryOutcomeMethods BlackBoxRecoveryOutcomes
+        {
+            get => _BlackBoxRecoveryOutcomes;
+            protected set => _BlackBoxRecoveryOutcomes = DuplicateEntityTranslationProxy.Wrap(value);
+        }
+
+        /// <summary>
         /// Handoff artifact methods (one row per stage attempt that handed work on).
         /// </summary>
         public IHandoffArtifactMethods HandoffArtifacts
@@ -445,6 +533,24 @@ namespace Armada.Core.Database
         {
             get => _FailureCauseRules;
             protected set => _FailureCauseRules = DuplicateEntityTranslationProxy.Wrap(value);
+        }
+
+        /// <summary>
+        /// Model alert methods (one row per scorecard alert condition, with its applied-action audit record).
+        /// </summary>
+        public IModelAlertMethods ModelAlerts
+        {
+            get => _ModelAlerts;
+            protected set => _ModelAlerts = DuplicateEntityTranslationProxy.Wrap(value);
+        }
+
+        /// <summary>
+        /// Model profile methods (the model as served, its immutable revisions, and the captain reference).
+        /// </summary>
+        public IModelProfileMethods ModelProfiles
+        {
+            get => _ModelProfiles;
+            protected set => _ModelProfiles = DuplicateEntityTranslationProxy.Wrap(value);
         }
 
         /// <summary>
@@ -490,6 +596,34 @@ namespace Armada.Core.Database
         {
             get => _PushDevices;
             protected set => _PushDevices = DuplicateEntityTranslationProxy.Wrap(value);
+        }
+
+        /// <summary>
+        /// Incident methods (current state of each incident; incident.snapshot events keep the history).
+        /// </summary>
+        public IIncidentMethods Incidents
+        {
+            get => _Incidents;
+            protected set => _Incidents = DuplicateEntityTranslationProxy.Wrap(value);
+        }
+
+        /// <summary>
+        /// Runbook execution methods (current state of each execution; runbook-execution.snapshot events keep the
+        /// history).
+        /// </summary>
+        public IRunbookExecutionMethods RunbookExecutions
+        {
+            get => _RunbookExecutions;
+            protected set => _RunbookExecutions = DuplicateEntityTranslationProxy.Wrap(value);
+        }
+
+        /// <summary>
+        /// Runbook reads (runbooks are playbook rows, paged in the playbooks table).
+        /// </summary>
+        public IRunbookMethods Runbooks
+        {
+            get => _Runbooks;
+            protected set => _Runbooks = DuplicateEntityTranslationProxy.Wrap(value);
         }
 
         /// <summary>
@@ -582,6 +716,33 @@ namespace Armada.Core.Database
             protected set => _VesselHealthOverrides = DuplicateEntityTranslationProxy.Wrap(value);
         }
 
+        /// <summary>
+        /// Usage snapshot operations (snapshots, member links, per-account latest state).
+        /// </summary>
+        public IUsageSnapshotMethods UsageSnapshots
+        {
+            get => _UsageSnapshots;
+            protected set => _UsageSnapshots = DuplicateEntityTranslationProxy.Wrap(value);
+        }
+
+        /// <summary>
+        /// Usage account membership operations (effective-dated attribution periods).
+        /// </summary>
+        public IUsageAccountMembershipMethods UsageMemberships
+        {
+            get => _UsageMemberships;
+            protected set => _UsageMemberships = DuplicateEntityTranslationProxy.Wrap(value);
+        }
+
+        /// <summary>
+        /// Usage hourly rollup operations.
+        /// </summary>
+        public IUsageHourlyRollupMethods UsageRollups
+        {
+            get => _UsageRollups;
+            protected set => _UsageRollups = DuplicateEntityTranslationProxy.Wrap(value);
+        }
+
         #endregion
 
         #region Private-Members
@@ -633,12 +794,25 @@ namespace Armada.Core.Database
         private ICliPermissionRuleMethods _CliPermissionRules = null!;
         private IStageOutcomeMethods _StageOutcomes = null!;
         private IHandoffArtifactMethods _HandoffArtifacts = null!;
+        private IBlackBoxEntryMethods _BlackBoxEntries = null!;
+        private IBlackBoxObjectMethods _BlackBoxObjects = null!;
+        private IBlackBoxFileMethods _BlackBoxFiles = null!;
+        private IBlackBoxLinkMethods _BlackBoxLinks = null!;
+        private IBlackBoxNoteMethods _BlackBoxNotes = null!;
+        private IBlackBoxMigrationMethods _BlackBoxMigrations = null!;
+        private IBlackBoxSuccessMethods _BlackBoxSuccesses = null!;
+        private IBlackBoxRecoveryOutcomeMethods _BlackBoxRecoveryOutcomes = null!;
         private IFailureCauseRuleMethods _FailureCauseRules = null!;
         private IModelProbeRunMethods _ModelProbeRuns = null!;
+        private IModelProfileMethods _ModelProfiles = null!;
+        private IModelAlertMethods _ModelAlerts = null!;
         private IModelProbeResultMethods _ModelProbeResults = null!;
         private IBatteryRunMethods _BatteryRuns = null!;
         private IBatteryTaskResultMethods _BatteryTaskResults = null!;
         private IPushDeviceMethods _PushDevices = null!;
+        private IIncidentMethods _Incidents = null!;
+        private IRunbookExecutionMethods _RunbookExecutions = null!;
+        private IRunbookMethods _Runbooks = null!;
         private IHarborJobMethods _HarborJobs = null!;
         private IHarborLinkSampleMethods _HarborLinkSamples = null!;
         private IHarborLinkEventMethods _HarborLinkEvents = null!;
@@ -649,6 +823,9 @@ namespace Armada.Core.Database
         private IVesselHealthFindingMethods _VesselHealthFindings = null!;
         private IVesselDependencyMethods _VesselDependencies = null!;
         private IVesselHealthOverrideMethods _VesselHealthOverrides = null!;
+        private IUsageSnapshotMethods _UsageSnapshots = null!;
+        private IUsageAccountMembershipMethods _UsageMemberships = null!;
+        private IUsageHourlyRollupMethods _UsageRollups = null!;
 
         #endregion
 

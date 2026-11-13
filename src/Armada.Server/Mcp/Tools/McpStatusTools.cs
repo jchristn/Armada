@@ -30,7 +30,7 @@ namespace Armada.Server.Mcp.Tools
         {
             register(
                 "status",
-                "Get aggregate status of active work in Armada: captain counts by state, mission counts by status, active voyages with progress, and recent signals. A global administrator sees every tenant; any other caller sees only its own tenant.",
+                "Get aggregate status of active work in Armada: captain counts by state, mission counts by status, active voyage counts (ActiveVoyages, InProgressVoyages, OpenVoyages), and the 10 most recent signals. Page through the active voyages with progress with list_voyage_progress. A global administrator sees every tenant; any other caller sees only its own tenant.",
                 new { type = "object", properties = new { } },
                 async (args) =>
                 {

@@ -7,6 +7,7 @@ namespace Test.Shared.Suites.Tui.Build
     using Armada.Client.Models;
     using Armada.Core.Enums;
     using Armada.Core.Models;
+    using Armada.Tui.Modals;
     using Armada.Tui.Screens;
     using Armada.Tui.Screens.Build;
     using Armada.Tui.Screens.Operations;
@@ -255,6 +256,56 @@ namespace Test.Shared.Suites.Tui.Build
                     AssertTrue(host.PumpUntil(() => stub.CountFor("POST", "/api/v1/vessels/vsl_api/build-context") == 1), "build context");
                     AssertEqual("cpt_1", stub.LastBody<BuildVesselContextRequest>("POST", "/api/v1/vessels/vsl_api/build-context").CaptainId, "captain in body");
                     AssertTrue(host.PumpUntil(() => host.Tui.Context.Notifications.ActiveToasts().Any(t => t.Text.Contains("Model Context updated for \"ApiRepo\"."))), "toast");
+                }
+            }));
+
+            cases.Add(TuiCase.Sync(Suite, "cleanup", "Cleanup lists safe, in use, and unknown resources at 95% of the terminal; only safe ones are selected and removed after confirmation", () =>
+            {
+                StubHttpHandler stub = Stub();
+                string inventory = "{\"VesselId\":\"vsl_demo\",\"VesselName\":\"DemoRepo\",\"ResourceCount\":3,\"SafeCount\":2,\"InUseCount\":1,\"UnknownCount\":0,\"SafeMeasuredBytes\":2048,\"SafeUnmeasuredCount\":0}";
+                stub.Json("GET", "/api/v1/vessels/vsl_demo/cleanup", inventory);
+                stub.On("POST", "/api/v1/vessels/vsl_demo/cleanup/resources/enumerate", body =>
+                {
+                    EnumerationQuery query = JsonSerializer.Deserialize<EnumerationQuery>(body)!;
+                    string objects = query.Status == "Safe"
+                        ? "{\"Key\":\"dock:dck_1\",\"ResourceType\":\"Dock\",\"Disposition\":\"Safe\",\"Reason\":\"Mission complete and landed.\",\"Identity\":\"dck_1\",\"Path\":\"/docks/dck_1\",\"SizeBytes\":1024}," +
+                          "{\"Key\":\"branch:armada/old\",\"ResourceType\":\"Branch\",\"Disposition\":\"Safe\",\"Reason\":\"Merged into main.\",\"Identity\":\"armada/old\",\"SizeBytes\":1024}"
+                        : query.Status == "InUse"
+                            ? "{\"Key\":\"dock:dck_2\",\"ResourceType\":\"Dock\",\"Disposition\":\"InUse\",\"Reason\":\"Mission is running.\",\"Identity\":\"dck_2\",\"MissionId\":\"msn_2\",\"MissionStatus\":\"InProgress\"}"
+                            : "";
+                    int count = objects.Length == 0 ? 0 : objects.Count(ch => ch == '{');
+                    return StubHttpHandler.Response(System.Net.HttpStatusCode.OK, "{\"Success\":true,\"PageNumber\":1,\"PageSize\":50,\"TotalPages\":1,\"TotalRecords\":" + count + ",\"Objects\":[" + objects + "]}");
+                });
+                stub.Json("POST", "/api/v1/vessels/vsl_demo/cleanup", "{\"Results\":[{\"Key\":\"dock:dck_1\",\"ResourceType\":\"Dock\",\"Identity\":\"dck_1\",\"Status\":\"Deleted\",\"Message\":\"Removed.\"},{\"Key\":\"branch:armada/old\",\"ResourceType\":\"Branch\",\"Identity\":\"armada/old\",\"Status\":\"Deleted\",\"Message\":\"Removed.\"}]," +
+                    "\"Deleted\":2,\"Skipped\":0,\"Failed\":0,\"Inventory\":{\"VesselId\":\"vsl_demo\",\"ResourceCount\":0}}");
+                using (TuiTestHost host = TuiCase.SignedIn(180, 50, "/vessels", stub))
+                {
+                    AssertTrue(host.WaitForText("DemoRepo"), "rows");
+                    host.Press("home");
+                    host.Press("down");
+                    host.Press("c");
+                    AssertTrue(host.PumpUntil(() => host.App.Modals.Top is VesselCleanupDialog), "dialog opens");
+                    VesselCleanupDialog dialog = (VesselCleanupDialog)host.App.Modals.Top!;
+                    AssertTrue(host.WaitForText("dck_1"), "safe rows\n" + host.Screen());
+                    TuiCase.Contains(host.Screen(), "Cleanup: DemoRepo", "title");
+                    TuiCase.Contains(host.Screen(), "Still in use (1)", "in use count");
+                    AssertTrue(dialog.FrameBounds.Width >= 168, "95% of the terminal width: " + dialog.FrameBounds.Width);
+                    AssertTrue(dialog.FrameBounds.Height >= 46, "95% of the terminal height: " + dialog.FrameBounds.Height);
+                    host.Press("g");
+                    AssertTrue(host.WaitForText("Mission is running."), "in use group");
+                    AssertFalse(dialog.Grid.MultiSelect, "in use rows cannot be selected");
+                    host.Press("g").Press("g");
+                    AssertEqual(VesselCleanupDispositionEnum.Safe, dialog.Group, "back to safe");
+                    host.Press("a");
+                    AssertTrue(host.PumpUntil(() => dialog.Selected.Count == 2), "select all safe");
+                    host.Press("c");
+                    AssertTrue(host.PumpUntil(() => host.App.Modals.Top is ConfirmDialog), "confirm");
+                    host.Press("y");
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("POST", "/api/v1/vessels/vsl_demo/cleanup") == 1), "cleanup call");
+                    VesselCleanupRequest request = stub.LastBody<VesselCleanupRequest>("POST", "/api/v1/vessels/vsl_demo/cleanup");
+                    AssertEqual(2, request.Keys.Count, "both safe keys sent");
+                    AssertFalse(request.Keys.Contains("dock:dck_2"), "in use key never sent");
+                    AssertTrue(host.WaitForText("2 removed, 0 skipped, 0 failed."), "results\n" + host.Screen());
                 }
             }));
 

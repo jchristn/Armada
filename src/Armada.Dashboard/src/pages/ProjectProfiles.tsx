@@ -20,6 +20,7 @@ import DataTable, { type DataTableColumn } from '../components/shared/DataTable'
 import PageHeader from '../components/shared/PageHeader';
 import StatusBadge from '../components/shared/StatusBadge';
 import { useAutoRefresh } from '../lib/useAutoRefresh';
+import { useDeleteProgress } from '../lib/useDeleteProgress';
 
 
 const NAME_TIP = 'Name for this project profile, for example web-app or payments-service. Required.';
@@ -39,6 +40,7 @@ export default function ProjectProfiles() {
   const viewer: ScopeViewer = { isAdmin, isTenantAdmin, tenantId: user?.user?.tenantId, userId: user?.user?.id };
   const canEditProfile = (p: ProjectProfile) => canEditScoped(viewer, { scope: p.ownershipScope, tenantId: p.tenantId, userId: p.userId });
   const { t, formatDateTime, formatRelativeTime } = useLocale();
+  const deletion = useDeleteProgress();
   const { pushToast } = useNotifications();
   const [profiles, setProfiles] = useState<ProjectProfile[]>([]);
   const [fleets, setFleets] = useState<Fleet[]>([]);
@@ -200,13 +202,9 @@ export default function ProjectProfiles() {
       message: t('Delete "{{name}}"? Projects using it will fall back to their fleet or global profile.', { name: profile.name }),
       onConfirm: async () => {
         setConfirm((current) => ({ ...current, open: false }));
-        try {
-          await deleteProjectProfile(profile.id);
-          pushToast('warning', t('Project profile "{{name}}" deleted.', { name: profile.name }));
-          await load();
-        } catch (err: unknown) {
-          setError(err instanceof Error ? err.message : t('Delete failed.'));
-        }
+        if (!(await deletion.run({ kind: 'projectProfile', action: () => deleteProjectProfile(profile.id), errorMessage: (err) => err instanceof Error ? err.message : t('Delete failed.') }))) return;
+        pushToast('warning', t('Project profile "{{name}}" deleted.', { name: profile.name }));
+        await load();
       },
     });
   }
@@ -293,6 +291,7 @@ export default function ProjectProfiles() {
 
       <ErrorModal error={error} onClose={() => setError('')} />
       <JsonViewer open={jsonData.open} title={jsonData.title} data={jsonData.data} onClose={() => setJsonData({ open: false, title: '', data: null })} />
+      {deletion.dialog}
       <ConfirmDialog
         open={confirm.open}
         title={confirm.title}

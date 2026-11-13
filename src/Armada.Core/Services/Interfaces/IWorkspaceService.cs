@@ -10,9 +10,9 @@ namespace Armada.Core.Services.Interfaces
     public interface IWorkspaceService
     {
         /// <summary>
-        /// List one workspace directory.
+        /// List one page of one workspace directory (page null is the first page of 10).
         /// </summary>
-        Task<WorkspaceTreeResult> GetTreeAsync(Vessel vessel, string? path = null, CancellationToken token = default);
+        Task<WorkspaceTreeResult> GetTreeAsync(Vessel vessel, string? path = null, EnumerationQuery? page = null, CancellationToken token = default);
 
         /// <summary>
         /// Read one workspace file.
@@ -45,16 +45,17 @@ namespace Armada.Core.Services.Interfaces
         Task<WorkspaceSearchResult> SearchAsync(Vessel vessel, string query, int maxResults = 200, CancellationToken token = default);
 
         /// <summary>
-        /// Inspect the current working tree changes for a workspace.
+        /// Inspect the current working tree changes for a workspace; Changes is one page (page null is the first page
+        /// of 10) and TotalRecords counts every changed file.
         /// </summary>
-        Task<WorkspaceChangesResult> GetChangesAsync(Vessel vessel, CancellationToken token = default);
+        Task<WorkspaceChangesResult> GetChangesAsync(Vessel vessel, EnumerationQuery? page = null, CancellationToken token = default);
 
         /// <summary>
         /// Get high-level workspace status for one vessel.
         /// </summary>
         Task<WorkspaceStatusResult> GetStatusAsync(
             Vessel vessel,
-            IReadOnlyList<WorkspaceActiveMission>? activeMissions = null,
+            int activeMissionCount = 0,
             CancellationToken token = default);
 
         /// <summary>
@@ -69,9 +70,10 @@ namespace Armada.Core.Services.Interfaces
         Task<WorkspaceDiffResult> GetDiffAsync(Vessel vessel, string? path = null, CancellationToken token = default);
 
         /// <summary>
-        /// List one workspace directory in a checkout on its host.
+        /// List one page of one workspace directory in a checkout on its host; the page is cut on that host (page null
+        /// is the first page of 10).
         /// </summary>
-        Task<WorkspaceTreeResult> GetTreeAsync(VesselHost host, string? path = null, CancellationToken token = default);
+        Task<WorkspaceTreeResult> GetTreeAsync(VesselHost host, string? path = null, EnumerationQuery? page = null, CancellationToken token = default);
 
         /// <summary>
         /// Read one workspace file in a checkout on its host.
@@ -104,16 +106,17 @@ namespace Armada.Core.Services.Interfaces
         Task<WorkspaceSearchResult> SearchAsync(VesselHost host, string query, int maxResults = 200, CancellationToken token = default);
 
         /// <summary>
-        /// Get git changes of a checkout on its host.
+        /// Get git changes of a checkout on its host; Changes is one page (page null is the first page of 10) and
+        /// TotalRecords counts every changed file.
         /// </summary>
-        Task<WorkspaceChangesResult> GetChangesAsync(VesselHost host, CancellationToken token = default);
+        Task<WorkspaceChangesResult> GetChangesAsync(VesselHost host, EnumerationQuery? page = null, CancellationToken token = default);
 
         /// <summary>
         /// Get high-level workspace status of a checkout on its host.
         /// </summary>
         Task<WorkspaceStatusResult> GetStatusAsync(
             VesselHost host,
-            IReadOnlyList<WorkspaceActiveMission>? activeMissions = null,
+            int activeMissionCount = 0,
             CancellationToken token = default);
 
         /// <summary>

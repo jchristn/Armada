@@ -438,9 +438,9 @@ namespace Armada.Tui.Screens.Build
             Call(async (c, t) =>
             {
                 Task<EnumerationResult<Fleet>?> fleets = c.ListFleetsAsync(new ArmadaPageQuery(1, 9999), t);
-                Task<EnumerationResult<Pipeline>?> pipelines = c.ListPipelinesAsync(new ArmadaPageQuery(1, 9999), t);
+                Task<List<Pipeline>> pipelines = ArmadaPaging.ReadAllAsync<Pipeline>((p, ct) => c.ListPipelinesAsync(new ArmadaPageQuery(p, 1000), ct), ArmadaPaging.DefaultMaxPages, t);
                 await Task.WhenAll(fleets, pipelines).ConfigureAwait(false);
-                return new KeyValuePair<List<Fleet>, List<Pipeline>>(fleets.Result?.Objects ?? new List<Fleet>(), pipelines.Result?.Objects ?? new List<Pipeline>());
+                return new KeyValuePair<List<Fleet>, List<Pipeline>>(fleets.Result?.Objects ?? new List<Fleet>(), pipelines.Result);
             }, r =>
             {
                 _Fleets = r.Key;
@@ -1018,7 +1018,7 @@ namespace Armada.Tui.Screens.Build
         private void LoadRoots()
         {
             Browse.EmptyText = "Loading allowed roots...";
-            Call((c, t) => c.BrowseVesselImportAsync(null, t), r =>
+            Call((c, t) => c.BrowseAllVesselImportAsync(null, t), r =>
             {
                 Browse.Roots = r?.Entries ?? new List<VesselBrowseEntry>();
                 if (Browse.Roots.Count == 0) Browse.EmptyText = "No browsable folders. An administrator can configure allowed roots under Settings > Import.";
@@ -1033,7 +1033,7 @@ namespace Armada.Tui.Screens.Build
         {
             Browse.Loading.Add(path);
             Browse.Errors.Remove(path);
-            Call((c, t) => c.BrowseVesselImportAsync(path, t), r =>
+            Call((c, t) => c.BrowseAllVesselImportAsync(path, t), r =>
             {
                 Browse.Loading.Remove(path);
                 Browse.Children[path] = r?.Entries ?? new List<VesselBrowseEntry>();

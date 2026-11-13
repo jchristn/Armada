@@ -202,6 +202,18 @@ namespace Armada.Tui.Screens.Delivery
         }
 
         /// <inheritdoc />
+        protected override string DeletingTitle
+        {
+            get { return "Deleting deployment"; }
+        }
+
+        /// <inheritdoc />
+        protected override string DeletingManyTitle
+        {
+            get { return "{count, plural, one {Deleting # deployment} other {Deleting # deployments}}"; }
+        }
+
+        /// <inheritdoc />
         protected override Task DeleteAsync(Deployment row, CancellationToken token)
         {
             return Context.Client.DeleteDeploymentAsync(row.Id, token);

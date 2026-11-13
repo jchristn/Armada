@@ -298,8 +298,11 @@ namespace Test.Shared.Suites.Client
                 string muxDir = TestTemp.NewDirectory("mux-config");
                 try
                 {
-                    MuxEndpointListResult? mux = await c.ListMuxEndpointsAsync(muxDir);
+                    MuxEndpointPage? mux = await c.ListMuxEndpointsAsync(muxDir);
                     AssertNotNull(mux, "mux list reply");
+                    MuxEndpointPage? muxPage = await c.EnumerateMuxEndpointsAsync(muxDir, 1, 5);
+                    AssertNotNull(await c.ListAllMuxEndpointsAsync(muxDir), "mux picker list");
+                    AssertNotNull(muxPage, "mux page reply");
                 }
                 catch (ArmadaApiException ex)
                 {

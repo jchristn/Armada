@@ -24,7 +24,7 @@ namespace Armada.Helm.Commands
         /// Optional fleet description.
         /// </summary>
         [Description("Description of the fleet")]
-        [CommandOption("--description|-d")]
+        [CommandOption("--description|-d <TEXT>")]
         public string? Description { get; set; }
     }
 }

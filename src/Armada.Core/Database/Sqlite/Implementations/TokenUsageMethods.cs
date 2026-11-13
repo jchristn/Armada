@@ -55,10 +55,12 @@ namespace Armada.Core.Database.Sqlite.Implementations
                 {
                     cmd.CommandText = @"INSERT INTO token_usage (
                             id, tenant_id, user_id, model, runtime, source, source_id, vessel_id, captain_id, harbor_id,
-                            input_tokens, output_tokens, cached_tokens, total_tokens, estimated, created_utc
+                            input_tokens, output_tokens, cached_tokens, total_tokens, estimated, created_utc,
+                            provider, account_key, host_id, membership_id, reported_cost, cost_currency
                         ) VALUES (
                             @id, @tenant_id, @user_id, @model, @runtime, @source, @source_id, @vessel_id, @captain_id, @harbor_id,
-                            @input_tokens, @output_tokens, @cached_tokens, @total_tokens, @estimated, @created_utc
+                            @input_tokens, @output_tokens, @cached_tokens, @total_tokens, @estimated, @created_utc,
+                            @provider, @account_key, @host_id, @membership_id, @reported_cost, @cost_currency
                         );";
                     BindRecord(cmd, record);
                     await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
@@ -216,11 +218,17 @@ namespace Armada.Core.Database.Sqlite.Implementations
             cmd.Parameters.AddWithValue("@total_tokens", record.TotalTokens);
             cmd.Parameters.AddWithValue("@estimated", record.Estimated ? 1 : 0);
             cmd.Parameters.AddWithValue("@created_utc", SqliteDatabaseDriver.ToIso8601(record.CreatedUtc));
+            cmd.Parameters.AddWithValue("@provider", (object?)record.Provider ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@account_key", (object?)record.AccountKey ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@host_id", (object?)record.HostId ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@membership_id", (object?)record.MembershipId ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@reported_cost", record.ReportedCost.HasValue ? (object)record.ReportedCost.Value : DBNull.Value);
+            cmd.Parameters.AddWithValue("@cost_currency", (object?)record.CostCurrency ?? DBNull.Value);
         }
 
         private static TokenUsageRecord RecordFromReader(SqliteDataReader reader)
         {
-            return new TokenUsageRecord
+            TokenUsageRecord record = new TokenUsageRecord
             {
                 Id = reader["id"].ToString()!,
                 TenantId = NullableString(reader["tenant_id"]),
@@ -239,6 +247,20 @@ namespace Armada.Core.Database.Sqlite.Implementations
                 Estimated = Convert.ToInt32(reader["estimated"]) == 1,
                 CreatedUtc = SqliteDatabaseDriver.FromIso8601(reader["created_utc"].ToString()!)
             };
+
+            try { record.Provider = NullableString(reader["provider"]); } catch { }
+            try { record.AccountKey = NullableString(reader["account_key"]); } catch { }
+            try { record.HostId = NullableString(reader["host_id"]); } catch { }
+            try { record.MembershipId = NullableString(reader["membership_id"]); } catch { }
+            try
+            {
+                object cost = reader["reported_cost"];
+                if (cost != DBNull.Value && Convert.ToDouble(cost) >= 0) record.ReportedCost = Convert.ToDouble(cost);
+            }
+            catch { }
+            try { record.CostCurrency = NullableString(reader["cost_currency"]); } catch { }
+
+            return record;
         }
 
         private static string? NullableString(object value)

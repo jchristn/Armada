@@ -1,4 +1,5 @@
 import { listFleets, listPipelines, listVessels } from '@dashboard/api/client';
+import { listAll } from '@dashboard/api/paging';
 import type { Fleet, Pipeline, Vessel } from '@dashboard/types/models';
 
 /** Everything the fleet screens show: fleets, every vessel (for counts and the fleet's vessel list), pipelines. */
@@ -8,9 +9,12 @@ export interface FleetData {
   pipelines: Pipeline[];
 }
 
-/** Load fleets, vessels, and pipelines in full, as the dashboard's Fleets and Fleet Detail pages do. */
+/**
+ * Load fleets, vessels, and pipelines in full, as the dashboard's Fleets and Fleet Detail pages do. The server caps a
+ * page at 1000 rows, so each list is walked one bounded page at a time rather than trusting a single large page.
+ */
 export async function loadFleetData(): Promise<FleetData> {
-  const [f, v, p] = await Promise.all([listFleets({ pageSize: 9999 }), listVessels({ pageSize: 9999 }), listPipelines({ pageSize: 9999 })]);
+  const [f, v, p] = await Promise.all([listAll(listFleets), listAll(listVessels), listAll(listPipelines)]);
   return { fleets: f?.objects ?? [], vessels: v?.objects ?? [], pipelines: p?.objects ?? [] };
 }
 

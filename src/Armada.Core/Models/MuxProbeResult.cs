@@ -56,11 +56,6 @@ namespace Armada.Core.Models
         public string EndpointSelectionSource { get; set; } = String.Empty;
 
         /// <summary>
-        /// CLI override categories applied to the resolved runtime.
-        /// </summary>
-        public List<string> CliOverridesApplied { get; set; } = new List<string>();
-
-        /// <summary>
         /// Whether endpoints.json exists in the active config directory.
         /// </summary>
         public bool EndpointsFilePresent { get; set; } = false;

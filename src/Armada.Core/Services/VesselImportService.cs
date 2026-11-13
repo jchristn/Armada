@@ -157,6 +157,7 @@ namespace Armada.Core.Services
             if (String.IsNullOrEmpty(tenantId)) throw new ArgumentNullException(nameof(tenantId));
             if (request == null) throw new ArgumentNullException(nameof(request));
             if (String.IsNullOrWhiteSpace(request.BatchId)) throw new ArgumentException("batchId is required.", nameof(request));
+            CollectionBounds.Validate(request);
             List<string> requested = request.Paths.Where(p => !String.IsNullOrWhiteSpace(p)).Select(p => p.Trim()).ToList();
             if (requested.Count == 0) throw new ArgumentException("paths is required and must not be empty.", nameof(request));
 
@@ -360,9 +361,9 @@ namespace Armada.Core.Services
         }
 
         /// <inheritdoc />
-        public Task<VesselBrowseResult> BrowseAsync(string? path, CancellationToken token = default)
+        public Task<VesselBrowseResult> BrowseAsync(string? path, EnumerationQuery? page = null, CancellationToken token = default)
         {
-            return _Discovery.BrowseAsync(path, token);
+            return _Discovery.BrowseAsync(path, page, token);
         }
 
         #endregion

@@ -104,6 +104,12 @@ namespace Test.Shared.Infrastructure
         }
 
         /// <inheritdoc />
+        public Task<EnumerationResult<ObjectiveRefinementSession>> EnumeratePageByObjectiveAsync(string objectiveId, string? tenantId, string? userId, EnumerationQuery query, CancellationToken token = default)
+        {
+            return _Inner.EnumeratePageByObjectiveAsync(objectiveId, tenantId, userId, query, token);
+        }
+
+        /// <inheritdoc />
         public Task<List<ObjectiveRefinementSession>> EnumerateByObjectiveAsync(string objectiveId, CancellationToken token = default)
         {
             return _Inner.EnumerateByObjectiveAsync(objectiveId, token);

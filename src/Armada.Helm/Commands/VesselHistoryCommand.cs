@@ -10,6 +10,7 @@ namespace Armada.Helm.Commands
     using Armada.Core.Models;
     using Armada.Core.Services;
     using Armada.Helm.Rendering;
+    using Armada.Helm.Infrastructure;
 
     /// <summary>
     /// Show a vessel's commit history (grouped by local day) or its commit activity heatmap.
@@ -47,7 +48,7 @@ namespace Armada.Helm.Commands
             Vessel? match = EntityResolver.ResolveVessel(vessels, identifier);
             if (match != null) return match;
 
-            AnsiConsole.MarkupLine($"[red]Vessel not found:[/] {Markup.Escape(identifier)}");
+            HelmConsole.Error.MarkupLine($"[red]Vessel not found:[/] {Markup.Escape(identifier)}");
             if (vessels.Count > 0)
             {
                 AnsiConsole.MarkupLine("[dim]Available vessels:[/]");
@@ -78,13 +79,13 @@ namespace Armada.Helm.Commands
 
             if (activity == null)
             {
-                AnsiConsole.MarkupLine("[red]No response from the Admiral.[/]");
+                HelmConsole.Error.MarkupLine("[red]No response from the Admiral.[/]");
                 return 1;
             }
 
             if (activity.Error != null)
             {
-                AnsiConsole.MarkupLine($"[red]Error:[/] {Markup.Escape(activity.Error)}");
+                HelmConsole.Error.MarkupLine($"[red]Error:[/] {Markup.Escape(activity.Error)}");
                 return 1;
             }
 
@@ -127,7 +128,7 @@ namespace Armada.Helm.Commands
                 VesselCommitPage? page = await GetAsync<VesselCommitPage>(path).ConfigureAwait(false);
                 if (page == null)
                 {
-                    if (!json) AnsiConsole.MarkupLine("[red]No response from the Admiral.[/]");
+                    if (!json) HelmConsole.Error.MarkupLine("[red]No response from the Admiral.[/]");
                     return 1;
                 }
 
@@ -135,7 +136,7 @@ namespace Armada.Helm.Commands
                 if (page.Error != null)
                 {
                     if (json) break;
-                    AnsiConsole.MarkupLine($"[red]Error:[/] {Markup.Escape(page.Error)}");
+                    HelmConsole.Error.MarkupLine($"[red]Error:[/] {Markup.Escape(page.Error)}");
                     return 1;
                 }
 

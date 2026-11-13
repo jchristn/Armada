@@ -15,6 +15,7 @@ import { useLocale } from '../../context/LocaleContext';
 import { useNotifications } from '../../context/NotificationContext';
 import { useProxySessionContext } from '../../lib/useProxySessionContext';
 import { usePersistedPageSize } from '../../lib/usePersistedPageSize';
+import { useDeleteProgress } from '../../lib/useDeleteProgress';
 
 type SortField = 'name' | 'active' | 'createdUtc';
 type SortDir = 'asc' | 'desc';
@@ -31,6 +32,7 @@ interface GeneratedAdminSignIn {
 export default function Tenants() {
   const { user, isAdmin } = useAuth();
   const { t, formatRelativeTime, formatDateTime } = useLocale();
+  const deletion = useDeleteProgress();
   const { pushToast } = useNotifications();
   const proxyContext = useProxySessionContext();
   const [items, setItems] = useState<TenantMetadata[]>([]);
@@ -151,11 +153,9 @@ export default function Tenants() {
       resourceName: name,
       onConfirm: async () => {
         setConfirm(c => ({ ...c, open: false }));
-        try {
-          await deleteTenant(id);
-          pushToast('warning', t('Tenant "{{name}}" deleted.', { name }));
-          load();
-        } catch { setError(t('Delete failed.')); }
+        if (!(await deletion.run({ kind: 'tenant', action: () => deleteTenant(id) }))) return;
+        pushToast('warning', t('Tenant "{{name}}" deleted.', { name }));
+        load();
       },
     });
   }
@@ -169,7 +169,14 @@ export default function Tenants() {
         setConfirm(c => ({ ...c, open: false }));
         const ids = [...selected]; setSelected([]);
         let failed = 0;
-        for (const id of ids) { try { await deleteTenant(id); } catch { failed++; } }
+        await deletion.run({
+          kind: 'tenant',
+          count: ids.length,
+          action: async () => {
+            failed = 0;
+            for (const id of ids) { try { await deleteTenant(id); } catch { failed++; } }
+          },
+        });
         const success = ids.length - failed;
         if (success > 0) {
           pushToast(failed > 0 ? 'warning' : 'success', failed > 0
@@ -284,6 +291,7 @@ export default function Tenants() {
         onClose={() => setGenerated(null)}
       />
       <JsonViewer open={jsonData.open} title={jsonData.title} data={jsonData.data} onClose={() => setJsonData({ open: false, title: '', data: null })} />
+      {deletion.dialog}
       <ConfirmDialog open={confirm.open} title={confirm.title} message={confirm.message} resourceName={confirm.resourceName} danger requireDeleteConfirm onConfirm={confirm.onConfirm} onCancel={() => setConfirm(c => ({ ...c, open: false }))} />
 
       <DataTable

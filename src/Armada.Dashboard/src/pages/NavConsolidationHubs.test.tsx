@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router-dom';
 import DispatchHub from './DispatchHub';
 import Activity from './Activity';
 import ServerHub from './ServerHub';
+import MissionsHub from './MissionsHub';
 import { translateTemplate } from '../i18n/runtime';
 
 const localeValue = { t: (text: string, params?: Record<string, string | number | null | undefined>) => translateTemplate('en', text, null, params) };
@@ -19,7 +20,10 @@ vi.mock('./RequestHistory', () => ({ default: () => <div>requests panel</div> })
 vi.mock('./Events', () => ({ default: () => <div>events panel</div> }));
 vi.mock('./Signals', () => ({ default: () => <div>signals panel</div> }));
 vi.mock('./TokenUsage', () => ({ default: () => <div>tokens panel</div> }));
-vi.mock('./Jobs', () => ({ default: () => <div>jobs panel</div> }));
+vi.mock('./Missions', () => ({ default: () => <div>missions panel</div> }));
+vi.mock('./Voyages', () => ({ default: () => <div>voyages panel</div> }));
+vi.mock('./MergeQueue', () => ({ default: () => <div>merge queue panel</div> }));
+vi.mock('./BlackBox', () => ({ default: () => <div>black box panel</div> }));
 vi.mock('./Server', () => ({ default: () => <div>server panel</div> }));
 vi.mock('./Storage', () => ({ default: () => <div>storage panel</div> }));
 vi.mock('./CliPermissions', () => ({ default: () => <div>cli permissions panel</div> }));
@@ -48,10 +52,18 @@ describe('v1.2.0 hub tabs', () => {
     expect(screen.getByRole('tab', { name: 'Planning' })).toHaveAttribute('aria-selected', 'true');
   });
 
-  it('Activity hosts Jobs, deep-linked by ?source=jobs', async () => {
+  it('Missions hosts Voyages, the Merge Queue, and the Black Box, deep-linked by ?tab=blackbox', async () => {
+    renderAt('/missions?tab=blackbox&bbtab=fingerprints', <MissionsHub />);
+    expect(tabNames('Mission sections')).toEqual(['Missions', 'Voyages', 'Merge Queue', 'Black Box']);
+    expect(await screen.findByText('black box panel')).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Black Box' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tab', { name: 'Black Box' })).toHaveAttribute('title', 'Failure records for missions and voyages: where, how and why each failed, and how to recover');
+  });
+
+  it('Activity redirects a legacy Jobs link to Events', async () => {
     renderAt('/activity?source=jobs', <Activity />);
-    expect(tabNames('Activity sources')).toContain('Jobs');
-    expect(await screen.findByText('jobs panel')).toBeInTheDocument();
+    expect(tabNames('Activity sources')).not.toContain('Jobs');
+    expect(await screen.findByText('events panel')).toBeInTheDocument();
   });
 
   it('Settings hosts Storage and CLI Tool Permissions as tabs', async () => {

@@ -50,12 +50,14 @@ import UserScopeFilter from '../components/shared/UserScopeFilter';
 import { useAutoRefresh } from '../lib/useAutoRefresh';
 import { buildObjectiveDuplicatePayload } from '../lib/duplicates';
 import { sortByName } from '../lib/sortByName';
+import { useDeleteProgress } from '../lib/useDeleteProgress';
 
 export default function Objectives() {
   const navigate = useNavigate();
   const location = useLocation();
   const { isAdmin, isTenantAdmin } = useAuth();
   const { t, formatDateTime, formatRelativeTime } = useLocale();
+  const deletion = useDeleteProgress();
   const { pushToast } = useNotifications();
 
   const [objectives, setObjectives] = useState<Objective[]>([]);
@@ -218,13 +220,9 @@ export default function Objectives() {
       message: t('Delete "{{title}}"? This removes the backlog item and its objective snapshot history, but leaves linked missions, releases, deployments, and incidents intact.', { title: objective.title }),
       onConfirm: async () => {
         setConfirm((current) => ({ ...current, open: false }));
-        try {
-          await deleteBacklogItem(objective.id);
-          pushToast('warning', t('Backlog item "{{title}}" deleted.', { title: objective.title }));
-          await load();
-        } catch (err: unknown) {
-          setError(err instanceof Error ? err.message : t('Delete failed.'));
-        }
+        if (!(await deletion.run({ kind: 'backlogItem', action: () => deleteBacklogItem(objective.id), errorMessage: (err) => err instanceof Error ? err.message : t('Delete failed.') }))) return;
+        pushToast('warning', t('Backlog item "{{title}}" deleted.', { title: objective.title }));
+        await load();
       },
     });
   }
@@ -438,6 +436,7 @@ export default function Objectives() {
         }}
         editLabel={t('Open Details')}
       />
+      {deletion.dialog}
       <ConfirmDialog
         open={confirm.open}
         title={confirm.title}

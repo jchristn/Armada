@@ -169,6 +169,18 @@ namespace Armada.Tui.Screens.Configuration
         }
 
         /// <inheritdoc />
+        protected override string DeletingTitle
+        {
+            get { return "Deleting skill"; }
+        }
+
+        /// <inheritdoc />
+        protected override string DeletingManyTitle
+        {
+            get { return "{count, plural, one {Deleting # skill} other {Deleting # skills}}"; }
+        }
+
+        /// <inheritdoc />
         protected override Task DeleteAsync(Skill row, CancellationToken token)
         {
             return Context.Client.DeleteSkillAsync(row.Id, token);

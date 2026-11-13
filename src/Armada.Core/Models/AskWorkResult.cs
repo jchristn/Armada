@@ -2,6 +2,7 @@ namespace Armada.Core.Models
 {
     using System;
     using System.Collections.Generic;
+    using System.Text.Json.Serialization;
 
     /// <summary>
     /// The outcome of finished tracked work, built from typed data Armada already stores (mission status and failure
@@ -29,6 +30,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// Per-mission results, in the order of the work snapshot.
         /// </summary>
+        [JsonIgnore]
         public List<AskWorkMissionResult> Missions
         {
             get => _Missions;

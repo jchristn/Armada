@@ -45,3 +45,19 @@ armada_resolve_framework() {
     . "$(dirname "${BASH_SOURCE[0]}")/resolve-insecure.sh"
     armada_resolve_insecure "$@"
 }
+
+# Call after armada_resolve_framework with the same arguments, in scripts that take nothing else: exits 2 on any
+# argument that is neither the leading framework selection nor an "ignore TLS certificate" flag.
+armada_reject_unexpected_args() {
+    local arg
+    shift "${ARMADA_FRAMEWORK_ARGS_CONSUMED:-0}"
+    for arg in "$@"; do
+        case "$arg" in
+            -k|--insecure|--no-strict-ssl|--ignore-cert-errors) ;;
+            *)
+                echo "ERROR: Unexpected argument: $arg (run with -h for usage)" >&2
+                exit 2
+                ;;
+        esac
+    done
+}

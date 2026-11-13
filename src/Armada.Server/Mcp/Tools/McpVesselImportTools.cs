@@ -76,7 +76,7 @@ namespace Armada.Server.Mcp.Tools
                     {
                         return (object)McpToolError.FromException(ex, VesselImportCodes.HarborNotSupported);
                     }
-                    catch (ArgumentException ex)
+                    catch (ArgumentException ex) when (!(ex is CollectionLimitExceededException))
                     {
                         return (object)McpToolError.FromException(ex, VesselImportRequestException.CodeFor(ex));
                     }
@@ -163,7 +163,7 @@ namespace Armada.Server.Mcp.Tools
                     {
                         return (object)McpToolError.FromException(ex, VesselImportCodes.BatchBusy);
                     }
-                    catch (ArgumentException ex)
+                    catch (ArgumentException ex) when (!(ex is CollectionLimitExceededException))
                     {
                         return (object)McpToolError.FromException(ex, VesselImportRequestException.CodeFor(ex));
                     }
@@ -221,7 +221,7 @@ namespace Armada.Server.Mcp.Tools
                     {
                         return (object)McpToolError.FromException(ex, VesselImportCodes.BatchBusy);
                     }
-                    catch (ArgumentException ex)
+                    catch (ArgumentException ex) when (!(ex is CollectionLimitExceededException))
                     {
                         return (object)McpToolError.FromException(ex, VesselImportRequestException.CodeFor(ex));
                     }
@@ -295,7 +295,7 @@ namespace Armada.Server.Mcp.Tools
                     {
                         return (object)McpToolError.FromException(ex, VesselImportCodes.BatchBusy);
                     }
-                    catch (ArgumentException ex)
+                    catch (ArgumentException ex) when (!(ex is CollectionLimitExceededException))
                     {
                         return (object)McpToolError.FromException(ex, VesselImportRequestException.CodeFor(ex));
                     }

@@ -249,7 +249,7 @@ namespace Armada.Core.Hosting
             string legacy = Path.Combine(Context.HomeDirectory, "Library", "LaunchAgents", LegacyMacLabel + ".plist");
             if (File.Exists(legacy))
             {
-                Print("warning: " + legacy + " (from scripts/macos/install-launchd-agent.sh) also starts an Admiral. Remove it with scripts/macos/remove-launchd-agent.sh.");
+                Print("warning: " + legacy + " (from scripts/macos/install-startup.sh, formerly install-launchd-agent.sh) also starts an Admiral. Remove it with scripts/macos/remove-startup.sh.");
             }
 
             if (!WriteDefinition(path, plist, out bool changed)) return RegistrationExitCode.Failed;

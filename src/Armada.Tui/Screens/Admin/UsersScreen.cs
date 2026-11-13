@@ -407,7 +407,7 @@ namespace Armada.Tui.Screens.Admin
             string mail = row.Email;
             Context.Confirm("Delete User", Context.Loc.T("Delete user \"{{email}}\"? This cannot be undone.", LocalizationArgs.Of("email", mail)), () =>
             {
-                ScreenOps.RunVoid(Context, () => Context.Client.DeleteUserAsync(id), () =>
+                DeleteProgress.RunVoid(Context, "Deleting user", ct => Context.Client.DeleteUserAsync(id, ct), () =>
                 {
                     ScreenOps.Toast(Context, NotificationSeverityEnum.Warning, "User \"{{email}}\" deleted.", LocalizationArgs.Of("email", mail));
                     Load();
@@ -424,7 +424,7 @@ namespace Armada.Tui.Screens.Admin
             Context.Confirm("Delete Selected Users", Context.Loc.T("Delete {{count}} user(s)?", LocalizationArgs.Of("count", ids.Count)), () =>
             {
                 Grid.ClearMarks();
-                UserAdminOps.BulkDelete(Context, ids, id => Context.Client.DeleteUserAsync(id), "users", Load);
+                UserAdminOps.BulkDelete(Context, ids, id => Context.Client.DeleteUserAsync(id), "users", Load, "{count, plural, one {Deleting # user} other {Deleting # users}}");
             }, "Delete", "delete");
         }
 

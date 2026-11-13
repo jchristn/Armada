@@ -23,6 +23,13 @@ export interface Toast {
   severity: Severity;
   message: string;
   onClick?: () => void;
+  /** Optional in-app link shown in the toast, for example "View results" of a started evaluation. */
+  link?: ToastLink;
+}
+
+export interface ToastLink {
+  label: string;
+  to: string;
 }
 
 interface NotificationState {
@@ -33,7 +40,7 @@ interface NotificationState {
   markAllRead: () => void;
   clearHistory: () => void;
   dismissToast: (id: number) => void;
-  pushToast: (severity: Severity, message: string) => void;
+  pushToast: (severity: Severity, message: string, link?: ToastLink) => void;
 }
 
 const NotificationContext = createContext<NotificationState | null>(null);
@@ -121,9 +128,9 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     setToasts(prev => prev.filter(t => t.id !== id));
   }, []);
 
-  const pushToast = useCallback((severity: Severity, message: string) => {
+  const pushToast = useCallback((severity: Severity, message: string, link?: ToastLink) => {
     const toastId = ++toastCounterRef.current;
-    const toast: Toast = { id: toastId, severity, message };
+    const toast: Toast = link ? { id: toastId, severity, message, link } : { id: toastId, severity, message };
     setToasts(prev => [...prev, toast]);
     setTimeout(() => {
       setToasts(prev => prev.filter(t => t.id !== toastId));
@@ -150,4 +157,9 @@ export function useNotifications(): NotificationState {
   const ctx = useContext(NotificationContext);
   if (!ctx) throw new Error('useNotifications must be used within NotificationProvider');
   return ctx;
+}
+
+/** The notification state, or null outside a NotificationProvider (components that also render in isolation). */
+export function useOptionalNotifications(): NotificationState | null {
+  return useContext(NotificationContext);
 }

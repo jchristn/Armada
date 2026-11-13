@@ -1,6 +1,7 @@
 namespace Armada.Core.Models
 {
     using System.Collections.Generic;
+    using Armada.Core.Services;
 
     /// <summary>
     /// Request payload for creating or updating a deployment.
@@ -45,6 +46,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// Optional backlog/objective identifiers that should remain linked to this deployment.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxLinkedIds)]
         public List<string>? ObjectiveIds { get; set; } = null;
 
         /// <summary>

@@ -61,9 +61,13 @@ namespace Armada.Core.Services
                 else grade.Details.Missed.Add(item.Id ?? String.Empty);
             }
 
+            // Agent output: keep the first MaxConfigItems false positives and count every one, so the stored evidence is
+            // bounded and the count (which decides the grade) is exact.
             foreach (string finding in findings)
             {
-                if (!seeded.Any(item => Mentions(finding, item))) grade.Details.FalsePositives.Add(Trim(finding));
+                if (seeded.Any(item => Mentions(finding, item))) continue;
+                grade.Details.FalsePositiveCount++;
+                if (grade.Details.FalsePositives.Count < CollectionLimits.MaxConfigItems) grade.Details.FalsePositives.Add(Trim(finding));
             }
 
             grade.Details.FindingCount = findings.Count;
@@ -72,7 +76,7 @@ namespace Armada.Core.Services
 
             int required = grader.MinMatched ?? seeded.Count;
             int matched = grade.Details.Matched.Count;
-            int falsePositives = grade.Details.FalsePositives.Count;
+            int falsePositives = grade.Details.FalsePositiveCount;
             bool verdictOk = grader.ExpectedVerdicts.Count == 0 || (verdict != null && grader.ExpectedVerdicts.Contains(verdict, StringComparer.Ordinal));
 
             List<string> reasons = new List<string>();

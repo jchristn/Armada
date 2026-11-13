@@ -71,7 +71,8 @@ namespace Test.Shared.Suites.Services
                     AssertEqual(0, status.IdleCaptains);
                     AssertEqual(0, status.WorkingCaptains);
                     AssertEqual(0, status.ActiveVoyages);
-                    AssertEqual(0, status.Voyages.Count);
+                    AssertEqual(0, status.InProgressVoyages);
+                    AssertEqual(0, status.OpenVoyages);
                 }
             }));
 
@@ -90,9 +91,9 @@ namespace Test.Shared.Suites.Services
                     Captain c3 = new Captain("working-2");
                     c3.State = CaptainStateEnum.Working;
 
-                    await db.Captains.CreateAsync(c1);
-                    await db.Captains.CreateAsync(c2);
-                    await db.Captains.CreateAsync(c3);
+                    await CaptainAssignmentFixture.CreateAsync(db, c1);
+                    await CaptainAssignmentFixture.CreateAsync(db, c2);
+                    await CaptainAssignmentFixture.CreateAsync(db, c3);
 
                     ArmadaStatus status = await service.GetStatusAsync();
 
@@ -153,10 +154,12 @@ namespace Test.Shared.Suites.Services
                     ArmadaStatus status = await service.GetStatusAsync();
 
                     AssertEqual(1, status.ActiveVoyages);
-                    AssertEqual(1, status.Voyages.Count);
-                    AssertEqual(2, status.Voyages[0].TotalMissions);
-                    AssertEqual(1, status.Voyages[0].CompletedMissions);
-                    AssertEqual(1, status.Voyages[0].InProgressMissions);
+                    AssertEqual(1, status.InProgressVoyages);
+                    EnumerationResult<VoyageProgress> page = await VoyageProgressReader.EnumerateAsync(db, AuthContext.Authenticated(null!, null!, true, false, "Test"), new EnumerationQuery());
+                    AssertEqual(1L, page.TotalRecords);
+                    AssertEqual(2, page.Objects[0].TotalMissions);
+                    AssertEqual(1, page.Objects[0].CompletedMissions);
+                    AssertEqual(1, page.Objects[0].InProgressMissions);
                 }
             }));
 
@@ -282,7 +285,7 @@ namespace Test.Shared.Suites.Services
                     }
                     AssertEqual(2, (await db.Missions.EnumerateByVoyageAsync(staged.Id).ConfigureAwait(false)).Count, "pipeline path created both stages");
 
-                    Captain captain = await db.Captains.CreateAsync(new Captain("eval-captain")).ConfigureAwait(false);
+                    Captain captain = await CaptainAssignmentFixture.CreateAsync(db, new Captain("eval-captain")).ConfigureAwait(false);
                     Mission first = (await db.Missions.EnumerateByVoyageAsync(standard.Id).ConfigureAwait(false))[0];
                     StageOutcome? outcome = await new StageOutcomeService(db, CreateLogging()).RecordAttemptAsync(new StageAttemptCapture { Claimed = true, MissionId = first.Id, Captain = captain, ExitCode = 0 }).ConfigureAwait(false);
                     AssertNotNull(outcome, "outcome recorded");
@@ -309,7 +312,7 @@ namespace Test.Shared.Suites.Services
                     Mission mission = (await db.Missions.EnumerateByVoyageAsync(voyage.Id).ConfigureAwait(false)).Single();
                     AssertFalse(mission.IsEvaluation, "mission not flagged");
 
-                    Captain captain = await db.Captains.CreateAsync(new Captain("prod-captain")).ConfigureAwait(false);
+                    Captain captain = await CaptainAssignmentFixture.CreateAsync(db, new Captain("prod-captain")).ConfigureAwait(false);
                     StageOutcome? outcome = await new StageOutcomeService(db, CreateLogging()).RecordAttemptAsync(new StageAttemptCapture { Claimed = true, MissionId = mission.Id, Captain = captain, ExitCode = 0 }).ConfigureAwait(false);
                     AssertFalse(outcome!.IsEvaluation, "production stage outcome not tagged");
 
@@ -350,19 +353,19 @@ namespace Test.Shared.Suites.Services
 
                     Captain captain = new Captain("recall-target");
                     captain.State = CaptainStateEnum.Working;
-                    await db.Captains.CreateAsync(captain);
+                    await CaptainAssignmentFixture.CreateAsync(db, captain);
 
                     await service.RecallCaptainAsync(captain.Id);
 
                     Captain? result = await db.Captains.ReadAsync(captain.Id);
                     AssertEqual(CaptainStateEnum.Idle, result!.State);
-                    AssertNull(result.CurrentMissionId);
-                    AssertNull(result.CurrentDockId);
+                    AssertNull(result.ActiveMissionIds.SingleOrDefault());
+                    AssertNull(result.Assignment?.DockId);
                     AssertNull(result.ProcessId);
                 }
             }));
 
-            cases.Add(CaseAsync("recall_captain_async_fails_active_mission", "RecallCaptainAsync FailsActiveMission", TestTags.Positive, async () =>
+            cases.Add(CaseAsync("recall_captain_async_cancels_active_mission", "RecallCaptainAsync cancels the active mission as an operator stop with a reason", TestTags.Positive, async () =>
             {
                 using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
                 {
@@ -376,14 +379,86 @@ namespace Test.Shared.Suites.Services
 
                     Captain captain = new Captain("recall-active");
                     captain.State = CaptainStateEnum.Working;
-                    captain.CurrentMissionId = mission.Id;
-                    await db.Captains.CreateAsync(captain);
+                    captain.Assignment = mission;
+                    await CaptainAssignmentFixture.CreateAsync(db, captain);
 
                     await service.RecallCaptainAsync(captain.Id);
 
                     Mission? result = await db.Missions.ReadAsync(mission.Id);
-                    AssertEqual(MissionStatusEnum.Failed, result!.Status);
+                    AssertEqual(MissionStatusEnum.Cancelled, result!.Status, "an operator stop is a cancel, not a failure");
+                    AssertEqual(MissionFailureKindEnum.OperatorAction, result.FailureKind, "classified as an operator action");
+                    AssertContains("Stopped by operator via recall at ", result.FailureReason ?? "", "the reason names the stop");
                     AssertNotNull(result.CompletedUtc);
+                }
+            }));
+
+            cases.Add(CaseAsync("recall_captain_with_context_records_source_user_and_event", "RecallCaptainAsync records who stopped the mission, how, and emits mission.stopped_by_operator", TestTags.Positive, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    DatabaseDriver db = testDb.Driver;
+                    StubGitService git = new StubGitService();
+                    AdmiralService service = CreateAdmiralService(CreateLogging(), db, CreateSettings(), git);
+
+                    Vessel vessel = await db.Vessels.CreateAsync(new Vessel("stop-ctx-vessel", "https://github.com/test/repo.git"));
+                    Voyage voyage = await db.Voyages.CreateAsync(new Voyage("stop-ctx-voyage"));
+                    Mission mission = new Mission("Stopped Mission");
+                    mission.Status = MissionStatusEnum.Assigned;
+                    mission.VesselId = vessel.Id;
+                    mission.VoyageId = voyage.Id;
+                    await db.Missions.CreateAsync(mission);
+
+                    Captain captain = new Captain("recall-context");
+                    captain.State = CaptainStateEnum.Working;
+                    captain.Assignment = mission;
+                    await CaptainAssignmentFixture.CreateAsync(db, captain);
+
+                    OperatorStopContext stop = new OperatorStopContext(OperatorStopContext.SourceMcpStopCaptain, "usr_operator");
+                    stop.RequestedUtc = new DateTime(2026, 10, 28, 2, 37, 59, DateTimeKind.Utc);
+                    await service.RecallCaptainAsync(captain.Id, stop);
+
+                    Mission? result = await db.Missions.ReadAsync(mission.Id);
+                    AssertEqual(MissionStatusEnum.Cancelled, result!.Status);
+                    AssertEqual("Stopped by operator (usr_operator) via stop_captain (MCP) at 2026-10-28T02:37:59Z.", result.FailureReason);
+
+                    List<ArmadaEvent> events = await db.Events.EnumerateByMissionAsync(mission.Id);
+                    ArmadaEvent? stopped = events.Find(e => e.EventType == "mission.stopped_by_operator");
+                    AssertNotNull(stopped, "a mission.stopped_by_operator event is emitted");
+                    AssertEqual(captain.Id, stopped!.CaptainId);
+                    AssertEqual(vessel.Id, stopped.VesselId);
+                    AssertEqual(voyage.Id, stopped.VoyageId);
+                    AssertContains("(usr_operator)", stopped.Message);
+                    OperatorStopEventPayload? payload = System.Text.Json.JsonSerializer.Deserialize<OperatorStopEventPayload>(stopped.Payload ?? "{}");
+                    AssertEqual(OperatorStopContext.SourceMcpStopCaptain, payload!.Source);
+                    AssertEqual("Assigned", payload.PreviousStatus);
+                    AssertEqual("usr_operator", payload.UserId);
+                }
+            }));
+
+            cases.Add(CaseAsync("recall_all_with_context_records_stop_all", "RecallAllAsync records stop_all on every interrupted mission", TestTags.Positive, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    DatabaseDriver db = testDb.Driver;
+                    StubGitService git = new StubGitService();
+                    AdmiralService service = CreateAdmiralService(CreateLogging(), db, CreateSettings(), git);
+
+                    List<string> missionIds = new List<string>();
+                    for (int i = 0; i < 2; i++)
+                    {
+                        Mission mission = await db.Missions.CreateAsync(new Mission("stop-all " + i) { Status = MissionStatusEnum.InProgress });
+                        missionIds.Add(mission.Id);
+                        await CaptainAssignmentFixture.CreateAsync(db, new Captain("stop-all-" + i) { State = CaptainStateEnum.Working, Assignment = new Mission { Id = mission.Id }});
+                    }
+
+                    await service.RecallAllAsync(new OperatorStopContext(OperatorStopContext.SourceRestStopAll, "usr_admin"));
+
+                    foreach (string id in missionIds)
+                    {
+                        Mission? result = await db.Missions.ReadAsync(id);
+                        AssertEqual(MissionStatusEnum.Cancelled, result!.Status);
+                        AssertContains("(usr_admin) via stop_all (REST)", result.FailureReason ?? "");
+                    }
                 }
             }));
 
@@ -402,9 +477,9 @@ namespace Test.Shared.Suites.Services
                     Captain c3 = new Captain("idle-1");
                     c3.State = CaptainStateEnum.Idle;
 
-                    await db.Captains.CreateAsync(c1);
-                    await db.Captains.CreateAsync(c2);
-                    await db.Captains.CreateAsync(c3);
+                    await CaptainAssignmentFixture.CreateAsync(db, c1);
+                    await CaptainAssignmentFixture.CreateAsync(db, c2);
+                    await CaptainAssignmentFixture.CreateAsync(db, c3);
 
                     await service.RecallAllAsync();
 
@@ -441,9 +516,9 @@ namespace Test.Shared.Suites.Services
 
                     Captain captain = new Captain("model-judge");
                     captain.State = CaptainStateEnum.Working;
-                    captain.CurrentMissionId = mission.Id;
+                    captain.Assignment = mission;
                     captain.ProcessId = 4242;
-                    await db.Captains.CreateAsync(captain);
+                    await CaptainAssignmentFixture.CreateAsync(db, captain);
 
                     // The runtime reported a structured provider error: the model does not exist for these credentials.
                     RuntimeProviderError providerError = new RuntimeProviderError { HttpStatusCode = 404, ErrorType = "not_found_error", Message = "model: claude-nonexistent" };
@@ -460,7 +535,7 @@ namespace Test.Shared.Suites.Services
                     AssertEqual(MissionFailureKindEnum.Crash, updatedMission.FailureKind, "A runtime exit failure is recorded as a crash");
                     AssertContains("claude-nonexistent", updatedMission.FailureReason ?? String.Empty, "Mission should preserve the provider's error message");
                     AssertEqual(CaptainStateEnum.Stalled, updatedCaptain!.State, "Captain should be stalled when the runtime is unavailable");
-                    AssertNull(updatedCaptain.CurrentMissionId, "Captain mission assignment should be cleared");
+                    AssertNull(updatedCaptain.ActiveMissionIds.SingleOrDefault(), "Captain mission assignment should be cleared");
                     AssertEqual(VoyageStatusEnum.Cancelled, updatedVoyage!.Status, "Voyage should be halted after the failed mission");
                 }
             }));
@@ -505,10 +580,10 @@ namespace Test.Shared.Suites.Services
 
                     Captain captain = new Captain("mux", AgentRuntimeEnum.Mux);
                     captain.State = CaptainStateEnum.Working;
-                    captain.CurrentMissionId = mission.Id;
-                    captain.CurrentDockId = dock.Id;
+                    captain.Assignment = mission;
+                    captain.Assignment ??= new Mission("fixture assignment"); captain.Assignment.DockId = dock.Id;
                     captain.ProcessId = 4242;
-                    await db.Captains.CreateAsync(captain);
+                    await CaptainAssignmentFixture.CreateAsync(db, captain);
 
                     RuntimeProviderError endpoint500 = new RuntimeProviderError { HttpStatusCode = 500, ErrorType = "llm_error", Message = "error parsing tool call", Reason = "the model endpoint rejected the request" };
                     await service.HandleProcessExitAsync(4242, RuntimeFailureClassifier.Decide(1, endpoint500), captain.Id, mission.Id).ConfigureAwait(false);
@@ -580,10 +655,10 @@ namespace Test.Shared.Suites.Services
 
                     Captain captain = new Captain("mux", AgentRuntimeEnum.Mux);
                     captain.State = CaptainStateEnum.Working;
-                    captain.CurrentMissionId = mission.Id;
-                    captain.CurrentDockId = dock.Id;
+                    captain.Assignment = mission;
+                    captain.Assignment ??= new Mission("fixture assignment"); captain.Assignment.DockId = dock.Id;
                     captain.ProcessId = 4242;
-                    await db.Captains.CreateAsync(captain);
+                    await CaptainAssignmentFixture.CreateAsync(db, captain);
 
                     RuntimeProviderError endpoint500 = new RuntimeProviderError { HttpStatusCode = 500, ErrorType = "llm_error", Message = "error parsing tool call", Reason = "the model endpoint rejected the request" };
                     await service.HandleProcessExitAsync(4242, RuntimeFailureClassifier.Decide(1, endpoint500), captain.Id, mission.Id).ConfigureAwait(false);
@@ -635,10 +710,10 @@ namespace Test.Shared.Suites.Services
                         dock = await db.Docks.CreateAsync(dock).ConfigureAwait(false);
                         Mission m = await db.Missions.CreateAsync(new Mission("Worker on a local model", "Do it.") { VoyageId = voyage.Id, VesselId = vessel.Id, Persona = "Worker", Status = MissionStatusEnum.InProgress, ProcessId = 4242, DockId = dock.Id }).ConfigureAwait(false);
                         captain.State = CaptainStateEnum.Working;
-                        captain.CurrentMissionId = m.Id;
-                        captain.CurrentDockId = dock.Id;
+                        captain.Assignment = m;
+                        captain.Assignment ??= new Mission("fixture assignment"); captain.Assignment.DockId = dock.Id;
                         captain.ProcessId = 4242;
-                        await db.Captains.CreateAsync(captain).ConfigureAwait(false);
+                        await CaptainAssignmentFixture.CreateAsync(db, captain).ConfigureAwait(false);
                         return m;
                     }
 
@@ -695,14 +770,14 @@ namespace Test.Shared.Suites.Services
 
                     Vessel vessel = await db.Vessels.CreateAsync(new Vessel("esc-vessel", "https://github.com/test/repo.git")).ConfigureAwait(false);
                     Voyage voyage = await db.Voyages.CreateAsync(new Voyage("esc") { Status = VoyageStatusEnum.InProgress }).ConfigureAwait(false);
-                    Captain claude = await db.Captains.CreateAsync(new Captain("claude", AgentRuntimeEnum.ClaudeCode) { State = CaptainStateEnum.Idle }).ConfigureAwait(false);
+                    Captain claude = await CaptainAssignmentFixture.CreateAsync(db, new Captain("claude", AgentRuntimeEnum.ClaudeCode) { State = CaptainStateEnum.Idle }).ConfigureAwait(false);
                     await db.Missions.CreateAsync(new Mission("Plan [Architect]", "plan") { VoyageId = voyage.Id, VesselId = vessel.Id, Persona = "Architect", Status = MissionStatusEnum.WorkProduced, CaptainId = claude.Id }).ConfigureAwait(false);
 
                     Dock dock = new Dock(vessel.Id) { WorktreePath = Path.Combine(Path.GetTempPath(), "armada_esc_dock_" + Guid.NewGuid().ToString("N")), Active = true };
                     Directory.CreateDirectory(dock.WorktreePath);
                     dock = await db.Docks.CreateAsync(dock).ConfigureAwait(false);
                     Mission worker = await db.Missions.CreateAsync(new Mission("Build it [Worker]", "Do it.") { VoyageId = voyage.Id, VesselId = vessel.Id, Persona = "Worker", Status = MissionStatusEnum.InProgress, ProcessId = 4242, DockId = dock.Id, BranchName = "armada/mux/w" }).ConfigureAwait(false);
-                    Captain mux = await db.Captains.CreateAsync(new Captain("mux", AgentRuntimeEnum.Mux) { State = CaptainStateEnum.Working, CurrentMissionId = worker.Id, CurrentDockId = dock.Id, ProcessId = 4242, RecoveryAttempts = 1 }).ConfigureAwait(false);
+                    Captain mux = await CaptainAssignmentFixture.CreateAsync(db, new Captain("mux", AgentRuntimeEnum.Mux) { State = CaptainStateEnum.Working, ProcessId = 4242, RecoveryAttempts = 1 , Assignment = new Mission { Id = worker.Id, DockId = dock.Id }}).ConfigureAwait(false);
 
                     RuntimeProviderError endpoint500 = new RuntimeProviderError { HttpStatusCode = 500, ErrorType = "llm_error", Reason = "the model endpoint rejected the request" };
                     await service.HandleProcessExitAsync(4242, RuntimeFailureClassifier.Decide(1, endpoint500), mux.Id, worker.Id).ConfigureAwait(false);
@@ -729,8 +804,8 @@ namespace Test.Shared.Suites.Services
                     AdmiralService service = CreateAdmiralService(CreateLogging(), db, settings, git);
 
                     Vessel vessel = await db.Vessels.CreateAsync(new Vessel("strict-esc-vessel", "https://github.com/test/repo.git")).ConfigureAwait(false);
-                    Captain claude = await db.Captains.CreateAsync(new Captain("claude", AgentRuntimeEnum.ClaudeCode) { State = CaptainStateEnum.Idle }).ConfigureAwait(false);
-                    Captain mux = await db.Captains.CreateAsync(new Captain("mux", AgentRuntimeEnum.Mux) { State = CaptainStateEnum.Working, ProcessId = 4343, RecoveryAttempts = 1 }).ConfigureAwait(false);
+                    Captain claude = await CaptainAssignmentFixture.CreateAsync(db, new Captain("claude", AgentRuntimeEnum.ClaudeCode) { State = CaptainStateEnum.Idle }).ConfigureAwait(false);
+                    Captain mux = await CaptainAssignmentFixture.CreateAsync(db, new Captain("mux", AgentRuntimeEnum.Mux) { State = CaptainStateEnum.Working, ProcessId = 4343, RecoveryAttempts = 1 }).ConfigureAwait(false);
                     Voyage voyage = await db.Voyages.CreateAsync(new Voyage("strict-esc") { Status = VoyageStatusEnum.InProgress,
                         CaptainOverridesJson = System.Text.Json.JsonSerializer.Serialize(new List<CaptainAssignmentOverride> { new CaptainAssignmentOverride { Persona = "Worker", CaptainId = mux.Id, StrictCaptain = true } }) }).ConfigureAwait(false);
                     await db.Missions.CreateAsync(new Mission("Plan [Architect]", "plan") { VoyageId = voyage.Id, VesselId = vessel.Id, Persona = "Architect", Status = MissionStatusEnum.WorkProduced, CaptainId = claude.Id }).ConfigureAwait(false);
@@ -739,9 +814,9 @@ namespace Test.Shared.Suites.Services
                     Directory.CreateDirectory(dock.WorktreePath);
                     dock = await db.Docks.CreateAsync(dock).ConfigureAwait(false);
                     Mission worker = await db.Missions.CreateAsync(new Mission("Build it [Worker]", "Do it.") { VoyageId = voyage.Id, VesselId = vessel.Id, Persona = "Worker", Status = MissionStatusEnum.InProgress, ProcessId = 4343, DockId = dock.Id, BranchName = "armada/mux/strict", RequestedCaptainId = mux.Id, CaptainId = mux.Id }).ConfigureAwait(false);
-                    mux.CurrentMissionId = worker.Id;
-                    mux.CurrentDockId = dock.Id;
-                    await db.Captains.UpdateAsync(mux).ConfigureAwait(false);
+                    mux.Assignment = worker;
+                    mux.Assignment ??= new Mission("fixture assignment"); mux.Assignment.DockId = dock.Id;
+                    await CaptainAssignmentFixture.UpdateAsync(db, mux).ConfigureAwait(false);
 
                     RuntimeProviderError endpoint502 = new RuntimeProviderError { HttpStatusCode = 502, ErrorType = "llm_error", Reason = "the model endpoint rejected the request" };
                     await service.HandleProcessExitAsync(4343, RuntimeFailureClassifier.Decide(1, endpoint502), mux.Id, worker.Id).ConfigureAwait(false);
@@ -785,8 +860,8 @@ namespace Test.Shared.Suites.Services
 
                     Captain captain = new Captain("fast-exit-captain");
                     captain.State = CaptainStateEnum.Working;
-                    captain.CurrentMissionId = mission.Id;
-                    await db.Captains.CreateAsync(captain);
+                    captain.Assignment = mission;
+                    await CaptainAssignmentFixture.CreateAsync(db, captain);
 
                     string missionLogDir = Path.Combine(settings.LogDirectory, "missions");
                     Directory.CreateDirectory(missionLogDir);
@@ -835,8 +910,8 @@ namespace Test.Shared.Suites.Services
                     await db.Missions.CreateAsync(mission);
                     Captain captain = new Captain("jump-captain");
                     captain.State = CaptainStateEnum.Working;
-                    captain.CurrentMissionId = mission.Id;
-                    await db.Captains.CreateAsync(captain);
+                    captain.Assignment = mission;
+                    await CaptainAssignmentFixture.CreateAsync(db, captain);
 
                     Task exitTask = service.HandleProcessExitAsync(2000000002, 1, captain.Id, mission.Id);
 
@@ -905,9 +980,9 @@ namespace Test.Shared.Suites.Services
 
                     Captain captain = new Captain("interrupted-judge");
                     captain.State = CaptainStateEnum.Working;
-                    captain.CurrentMissionId = mission.Id;
+                    captain.Assignment = mission;
                     captain.ProcessId = 5150;
-                    await db.Captains.CreateAsync(captain);
+                    await CaptainAssignmentFixture.CreateAsync(db, captain);
 
                     // Exit code -1 == interruption (stop/restart cancellation), not a genuine failure.
                     await service.HandleProcessExitAsync(5150, -1, captain.Id, mission.Id).ConfigureAwait(false);
@@ -948,9 +1023,9 @@ namespace Test.Shared.Suites.Services
 
                     Captain captain = new Captain("exhausted-judge");
                     captain.State = CaptainStateEnum.Working;
-                    captain.CurrentMissionId = mission.Id;
+                    captain.Assignment = mission;
                     captain.ProcessId = 5151;
-                    await db.Captains.CreateAsync(captain);
+                    await CaptainAssignmentFixture.CreateAsync(db, captain);
 
                     await service.HandleProcessExitAsync(5151, -1, captain.Id, mission.Id).ConfigureAwait(false);
 
@@ -987,7 +1062,7 @@ namespace Test.Shared.Suites.Services
                     Captain captain = new Captain("no-pid");
                     captain.State = CaptainStateEnum.Working;
                     captain.ProcessId = null;
-                    await db.Captains.CreateAsync(captain);
+                    await CaptainAssignmentFixture.CreateAsync(db, captain);
 
                     await service.HealthCheckAsync();
 
@@ -1021,12 +1096,12 @@ namespace Test.Shared.Suites.Services
                             TenantId = tenant.Id, UserId = user.Id, VoyageId = voyage.Id, VesselId = vessel.Id, DockId = dock.Id,
                             Status = MissionStatusEnum.InProgress, ProcessId = 98765432, StartedUtc = DateTime.UtcNow.AddMinutes(-2)
                         });
-                        Captain captain = await db.Captains.CreateAsync(new Captain("recovery owner")
+                        Captain captain = await CaptainAssignmentFixture.CreateAsync(db, new Captain("recovery owner")
                         {
                             TenantId = tenant.Id, UserId = user.Id, State = CaptainStateEnum.Working,
-                            ProcessId = mission.ProcessId, CurrentMissionId = mission.Id, CurrentDockId = dock.Id,
+                            ProcessId = mission.ProcessId,
                             LastHeartbeatUtc = DateTime.UtcNow.AddMinutes(-10)
-                        });
+                        , Assignment = new Mission { Id = mission.Id, DockId = dock.Id }});
                         await service.HealthCheckAsync().ConfigureAwait(false);
                         await service.HealthCheckAsync().ConfigureAwait(false);
                         Mission updated = (await db.Missions.ReadAsync(mission.Id).ConfigureAwait(false))!;
@@ -1077,12 +1152,12 @@ namespace Test.Shared.Suites.Services
                             TenantId = tenant.Id, UserId = user.Id, VoyageId = voyage.Id, VesselId = vessel.Id, DockId = dock.Id,
                             Status = MissionStatusEnum.InProgress, ProcessId = 98765432, StartedUtc = DateTime.UtcNow.AddMinutes(-2)
                         });
-                        Captain captain = await db.Captains.CreateAsync(new Captain("recovery owner")
+                        Captain captain = await CaptainAssignmentFixture.CreateAsync(db, new Captain("recovery owner")
                         {
                             TenantId = tenant.Id, UserId = user.Id, State = CaptainStateEnum.Working,
-                            ProcessId = mission.ProcessId, CurrentMissionId = mission.Id, CurrentDockId = dock.Id,
+                            ProcessId = mission.ProcessId,
                             LastHeartbeatUtc = DateTime.UtcNow.AddMinutes(-10)
-                        });
+                        , Assignment = new Mission { Id = mission.Id, DockId = dock.Id }});
                         await service.HealthCheckAsync().ConfigureAwait(false);
                         AssertEqual(0, replacementLaunches, "Do not overlap an unconfirmed original with a recovery process.");
                         Mission updated = (await db.Missions.ReadAsync(mission.Id).ConfigureAwait(false))!;
@@ -1111,12 +1186,12 @@ namespace Test.Shared.Suites.Services
                         TenantId = tenant.Id, UserId = user.Id, VoyageId = voyage.Id,
                         Status = MissionStatusEnum.InProgress, ProcessId = 98765432, StartedUtc = DateTime.UtcNow.AddMinutes(-2)
                     });
-                    Captain captain = await db.Captains.CreateAsync(new Captain("stalled owner")
+                    Captain captain = await CaptainAssignmentFixture.CreateAsync(db, new Captain("stalled owner")
                     {
                         TenantId = tenant.Id, UserId = user.Id, State = CaptainStateEnum.Working,
-                        ProcessId = mission.ProcessId, CurrentMissionId = mission.Id,
+                        ProcessId = mission.ProcessId,
                         LastHeartbeatUtc = DateTime.UtcNow.AddMinutes(-10)
-                    });
+                    , Assignment = new Mission { Id = mission.Id }});
                     await service.HealthCheckAsync().ConfigureAwait(false);
                     Mission updated = (await db.Missions.ReadAsync(mission.Id).ConfigureAwait(false))!;
                     AssertEqual(MissionStatusEnum.Failed, updated.Status);
@@ -1152,8 +1227,8 @@ namespace Test.Shared.Suites.Services
                     Captain captain = new Captain("dead-process");
                     captain.State = CaptainStateEnum.Working;
                     captain.ProcessId = 99999999;
-                    captain.CurrentMissionId = mission.Id;
-                    await db.Captains.CreateAsync(captain);
+                    captain.Assignment = mission;
+                    await CaptainAssignmentFixture.CreateAsync(db, captain);
 
                     await service.HealthCheckAsync();
 
@@ -1162,7 +1237,7 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
-            cases.Add(CaseAsync("health_check_async_assigned_orphan_without_started_process_reverts_to_pending", "HealthCheckAsync AssignedOrphanWithoutStartedProcess RevertsToPending", TestTags.Positive, async () =>
+            cases.Add(CaseAsync("health_check_async_assigned_sibling_reconciles_ownership", "HealthCheckAsync reconciles an Assigned mission even when its captain has sibling work", TestTags.Positive, async () =>
             {
                 using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
                 {
@@ -1176,11 +1251,11 @@ namespace Test.Shared.Suites.Services
 
                     Captain originalCaptain = new Captain("original");
                     originalCaptain.State = CaptainStateEnum.Idle;
-                    await db.Captains.CreateAsync(originalCaptain);
+                    await CaptainAssignmentFixture.CreateAsync(db, originalCaptain);
 
                     Captain movedCaptain = new Captain("moved");
                     movedCaptain.State = CaptainStateEnum.Working;
-                    await db.Captains.CreateAsync(movedCaptain);
+                    await CaptainAssignmentFixture.CreateAsync(db, movedCaptain);
 
                     Mission mission = new Mission("Assigned orphan");
                     mission.VesselId = vessel.Id;
@@ -1191,15 +1266,16 @@ namespace Test.Shared.Suites.Services
                     await SetMissionLastUpdateUtcAsync(testDb, mission.Id, DateTime.UtcNow.AddMinutes(-2));
 
                     originalCaptain.State = CaptainStateEnum.Working;
-                    originalCaptain.CurrentMissionId = "different-mission";
-                    await db.Captains.UpdateAsync(originalCaptain);
+                    originalCaptain.Assignment = new Mission { Id = "different-mission" };
+                    await CaptainAssignmentFixture.UpdateAsync(db, originalCaptain);
 
                     await service.HealthCheckAsync();
 
                     Mission? updatedMission = await db.Missions.ReadAsync(mission.Id);
                     AssertNotNull(updatedMission, "Mission should still exist");
-                    AssertEqual(MissionStatusEnum.Pending, updatedMission!.Status, "Assigned orphan that never started should return to Pending");
-                    AssertNull(updatedMission.CaptainId, "Pending orphan should be unassigned");
+                    AssertEqual(MissionStatusEnum.Assigned, updatedMission!.Status, "A sibling does not invalidate this assignment");
+                    AssertEqual(originalCaptain.Id, updatedMission.CaptainId);
+                    AssertTrue((await db.Captains.ReadAsync(originalCaptain.Id))!.ActiveMissionIds.Contains(mission.Id));
                     AssertNull(updatedMission.DockId, "Pending orphan should clear dock");
                 }
             }));
@@ -1218,7 +1294,7 @@ namespace Test.Shared.Suites.Services
 
                     Captain captain = new Captain("fresh-original");
                     captain.State = CaptainStateEnum.Idle;
-                    await db.Captains.CreateAsync(captain);
+                    await CaptainAssignmentFixture.CreateAsync(db, captain);
 
                     Mission mission = new Mission("Fresh assigned orphan candidate");
                     mission.VesselId = vessel.Id;
@@ -1229,8 +1305,8 @@ namespace Test.Shared.Suites.Services
                     mission = await db.Missions.CreateAsync(mission);
 
                     captain.State = CaptainStateEnum.Working;
-                    captain.CurrentMissionId = "different-mission";
-                    await db.Captains.UpdateAsync(captain);
+                    captain.Assignment = new Mission { Id = "different-mission" };
+                    await CaptainAssignmentFixture.UpdateAsync(db, captain);
 
                     await service.HealthCheckAsync();
 
@@ -1241,7 +1317,7 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
-            cases.Add(CaseAsync("health_check_async_fresh_work_produced_mission_skips_captain_release", "HealthCheckAsync FreshWorkProducedMission SkipsCaptainRelease", TestTags.Positive, async () =>
+            cases.Add(CaseAsync("health_check_async_fresh_work_produced_mission_skips_captain_release", "HealthCheckAsync fresh WorkProduced mission retains provenance while freeing execution capacity", TestTags.Positive, async () =>
             {
                 using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
                 {
@@ -1256,15 +1332,16 @@ namespace Test.Shared.Suites.Services
 
                     Captain captain = new Captain("fresh-work-produced");
                     captain.State = CaptainStateEnum.Working;
-                    captain.CurrentMissionId = mission.Id;
-                    await db.Captains.CreateAsync(captain);
+                    captain.Assignment = mission;
+                    await CaptainAssignmentFixture.CreateAsync(db, captain);
 
                     await service.HealthCheckAsync();
 
                     Captain? updatedCaptain = await db.Captains.ReadAsync(captain.Id);
                     AssertNotNull(updatedCaptain, "Captain should still exist");
-                    AssertEqual(CaptainStateEnum.Working, updatedCaptain!.State, "Freshly WorkProduced mission should not release the captain during handoff grace");
-                    AssertEqual(mission.Id, updatedCaptain.CurrentMissionId, "Freshly WorkProduced mission should keep the current mission assignment during handoff grace");
+                    AssertEqual(CaptainStateEnum.Idle, updatedCaptain!.State, "Post-work processing holds no execution slot");
+                    AssertEqual(0, updatedCaptain.ActiveMissionIds.Count);
+                    AssertEqual(captain.Id, (await db.Missions.ReadAsync(mission.Id))!.CaptainId, "mission provenance survives capacity release");
                 }
             }));
 
@@ -1283,15 +1360,15 @@ namespace Test.Shared.Suites.Services
 
                     Captain captain = new Captain("stale-work-produced");
                     captain.State = CaptainStateEnum.Working;
-                    captain.CurrentMissionId = mission.Id;
-                    await db.Captains.CreateAsync(captain);
+                    captain.Assignment = mission;
+                    await CaptainAssignmentFixture.CreateAsync(db, captain);
 
                     await service.HealthCheckAsync();
 
                     Captain? updatedCaptain = await db.Captains.ReadAsync(captain.Id);
                     AssertNotNull(updatedCaptain, "Captain should still exist");
                     AssertEqual(CaptainStateEnum.Idle, updatedCaptain!.State, "Stale WorkProduced mission should release the captain");
-                    AssertNull(updatedCaptain.CurrentMissionId, "Stale WorkProduced mission should clear the current mission assignment when released");
+                    AssertNull(updatedCaptain.ActiveMissionIds.SingleOrDefault(), "Stale WorkProduced mission should clear the current mission assignment when released");
                 }
             }));
 
@@ -1595,9 +1672,9 @@ namespace Test.Shared.Suites.Services
 
                     Captain captain = new Captain("throttled-captain");
                     captain.State = CaptainStateEnum.Working;
-                    captain.CurrentMissionId = mission.Id;
+                    captain.Assignment = mission;
                     captain.ProcessId = 4343;
-                    await db.Captains.CreateAsync(captain);
+                    await CaptainAssignmentFixture.CreateAsync(db, captain);
 
                     DateTime before = DateTime.UtcNow;
                     RuntimeProviderError providerError = new RuntimeProviderError { HttpStatusCode = 429, ErrorType = "rate_limit_error", RetryAfterSeconds = 300 };
@@ -1627,9 +1704,9 @@ namespace Test.Shared.Suites.Services
 
                     Captain captain = new Captain("build-captain");
                     captain.State = CaptainStateEnum.Working;
-                    captain.CurrentMissionId = mission.Id;
+                    captain.Assignment = mission;
                     captain.ProcessId = 4444;
-                    await db.Captains.CreateAsync(captain);
+                    await CaptainAssignmentFixture.CreateAsync(db, captain);
 
                     // Before the fix these lines quarantined (429, billing, capacity) or stalled (forbidden, invalid model,
                     // hit your limit) the captain because the classifier searched the log for those words.
@@ -1680,9 +1757,9 @@ namespace Test.Shared.Suites.Services
 
                     Captain captain = new Captain("exit-race-captain");
                     captain.State = CaptainStateEnum.Working;
-                    captain.CurrentMissionId = mission.Id;
+                    captain.Assignment = mission;
                     captain.ProcessId = processId;
-                    await db.Captains.CreateAsync(captain);
+                    await CaptainAssignmentFixture.CreateAsync(db, captain);
                     mission.CaptainId = captain.Id;
                     await db.Missions.UpdateAsync(mission);
 
@@ -1763,9 +1840,9 @@ namespace Test.Shared.Suites.Services
                     Captain captain = new Captain("long-check-captain");
                     captain.Runtime = AgentRuntimeEnum.ApiEndpoint;
                     captain.State = CaptainStateEnum.Working;
-                    captain.CurrentMissionId = mission.Id;
+                    captain.Assignment = mission;
                     captain.ProcessId = processId;
-                    await db.Captains.CreateAsync(captain);
+                    await CaptainAssignmentFixture.CreateAsync(db, captain);
                     mission.CaptainId = captain.Id;
                     await db.Missions.UpdateAsync(mission);
 
@@ -1805,9 +1882,9 @@ namespace Test.Shared.Suites.Services
 
                     Captain captain = new Captain("tracked-captain");
                     captain.State = CaptainStateEnum.Working;
-                    captain.CurrentMissionId = mission.Id;
+                    captain.Assignment = mission;
                     captain.ProcessId = processId;
-                    await db.Captains.CreateAsync(captain);
+                    await CaptainAssignmentFixture.CreateAsync(db, captain);
                     mission.CaptainId = captain.Id;
                     await db.Missions.UpdateAsync(mission);
 
@@ -1846,9 +1923,9 @@ namespace Test.Shared.Suites.Services
 
                     Captain captain = new Captain("two-attempt-captain");
                     captain.State = CaptainStateEnum.Working;
-                    captain.CurrentMissionId = mission.Id;
+                    captain.Assignment = mission;
                     captain.ProcessId = firstProcessId;
-                    await db.Captains.CreateAsync(captain);
+                    await CaptainAssignmentFixture.CreateAsync(db, captain);
 
                     await service.HandleProcessExitAsync(firstProcessId, 0, captain.Id, mission.Id).ConfigureAwait(false);
                     Mission? afterFirst = await db.Missions.ReadAsync(mission.Id).ConfigureAwait(false);
@@ -1863,9 +1940,9 @@ namespace Test.Shared.Suites.Services
                     await db.Missions.UpdateAsync(afterFirst).ConfigureAwait(false);
                     Captain? rerun = await db.Captains.ReadAsync(captain.Id).ConfigureAwait(false);
                     rerun!.State = CaptainStateEnum.Working;
-                    rerun.CurrentMissionId = mission.Id;
+                    rerun.Assignment = mission;
                     rerun.ProcessId = secondProcessId;
-                    await db.Captains.UpdateAsync(rerun).ConfigureAwait(false);
+                    await CaptainAssignmentFixture.UpdateAsync(db, rerun).ConfigureAwait(false);
 
                     await service.HandleProcessExitAsync(secondProcessId, 0, captain.Id, mission.Id).ConfigureAwait(false);
 
@@ -1887,8 +1964,11 @@ namespace Test.Shared.Suites.Services
                     List<int> stopped = new List<int>();
                     captains.OnStopAgent = captain => { stopped.Add(captain.ProcessId!.Value); return Task.CompletedTask; };
                     AdmiralService service = new AdmiralService(logging, db, settings, captains, new MissionService(logging, db, settings, docks, captains), new VoyageService(logging, db), docks);
-                    await db.Captains.CreateAsync(new Captain("Harbor") { State = CaptainStateEnum.Working, ProcessId = 2000000007 }).ConfigureAwait(false);
-                    await db.Captains.CreateAsync(new Captain("Local") { State = CaptainStateEnum.Working, ProcessId = 2000000008 }).ConfigureAwait(false);
+                    foreach (var execution in new[] { ("Harbor", 2000000007), ("Local", 2000000008) })
+                    {
+                        Mission held = await db.Missions.CreateAsync(new Mission(execution.Item1) { Status=MissionStatusEnum.InProgress, ProcessId=execution.Item2 });
+                        await CaptainAssignmentFixture.CreateAsync(db, new Captain(execution.Item1) { State=CaptainStateEnum.Working, ProcessId=execution.Item2, Assignment=held });
+                    }
                     service.OnIsRemoteProcessTracked = pid => pid == 2000000007;
                     await service.StopAllAgentProcessesAsync().ConfigureAwait(false);
                     AssertEqual(1, stopped.Count);
@@ -1917,10 +1997,10 @@ namespace Test.Shared.Suites.Services
                         Directory.CreateDirectory(path);
                         File.WriteAllText(Path.Combine(path, "uncommitted.txt"), "keep my work");
                         Dock dock = await db.Docks.CreateAsync(new Dock(vessel.Id) { WorktreePath = path, BranchName = "armada/same" }).ConfigureAwait(false);
-                        Captain captain = await db.Captains.CreateAsync(new Captain("restart") { State = CaptainStateEnum.Working, ProcessId = 2000000007, CurrentDockId = dock.Id }).ConfigureAwait(false);
+                        Captain captain = await CaptainAssignmentFixture.CreateAsync(db, new Captain("restart") { State = CaptainStateEnum.Working, ProcessId = 2000000007}).ConfigureAwait(false);
                         Mission mission = await db.Missions.CreateAsync(new Mission("restart") { Status = MissionStatusEnum.InProgress, CaptainId = captain.Id, ProcessId = captain.ProcessId, VesselId = vessel.Id, DockId = dock.Id, StartedUtc = DateTime.UtcNow.AddMinutes(-2), BranchName = dock.BranchName }).ConfigureAwait(false);
-                        captain.CurrentMissionId = mission.Id;
-                        await db.Captains.UpdateAsync(captain).ConfigureAwait(false);
+                        captain.Assignment = mission;
+                        await CaptainAssignmentFixture.UpdateAsync(db, captain).ConfigureAwait(false);
                         service.OnIsProcessTracked = pid => captured || pid == 2000000011;
                         await service.CleanupStaleCaptainsAsync().ConfigureAwait(false);
                         await service.CleanupStaleCaptainsAsync().ConfigureAwait(false);
@@ -1934,7 +2014,7 @@ namespace Test.Shared.Suites.Services
                         if (captured)
                         {
                             captain.LastHeartbeatUtc = DateTime.UtcNow.AddHours(-2);
-                            await db.Captains.UpdateAsync(captain).ConfigureAwait(false);
+                            await CaptainAssignmentFixture.UpdateAsync(db, captain).ConfigureAwait(false);
                             service.OnIsProcessAwaitingReconnect = _ => true;
                             await service.HealthCheckAsync().ConfigureAwait(false);
                             AssertEqual(0, launches, "startup must not stall-recover an old heartbeat before the Harbor reports");

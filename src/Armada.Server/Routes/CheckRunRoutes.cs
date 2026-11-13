@@ -182,7 +182,7 @@ namespace Armada.Server.Routes
             api => api
                 .WithTag("CheckRuns")
                 .WithSummary("Sync GitHub Actions runs")
-                .WithDescription("Pulls recent GitHub Actions workflow runs into Armada check history and optionally links them to a deployment.")
+                .WithDescription("Pulls one GitHub page of workflow runs (RunCount per page, 1..100; PageNumber selects the page, newest first) into Armada check history and optionally links them to a deployment. Returns counts, GitHub's total_count and page count, and the imported check-run ids; read the runs through the check-run enumeration.")
                 .WithRequestBody(OpenApiJson.BodyFor<GitHubActionsSyncRequest>("GitHub Actions sync request", true))
                 .WithResponse(200, OpenApiJson.For<GitHubActionsSyncResult>("GitHub Actions sync result"))
                 .WithSecurity("ApiKey"));

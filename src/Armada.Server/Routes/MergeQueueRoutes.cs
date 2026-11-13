@@ -308,7 +308,7 @@ namespace Armada.Server.Routes
             api => api
                 .WithTag("MergeQueue")
                 .WithSummary("Batch purge merge queue entries")
-                .WithDescription("Permanently deletes multiple terminal merge queue entries from the database by ID. Returns a summary of purged and skipped entries. This cannot be undone.")
+                .WithDescription("Permanently deletes multiple terminal merge queue entries from the database by ID (at most 1000 ids; more is a 400 CollectionLimitExceeded). Returns a summary of purged and skipped entries. This cannot be undone.")
                 .WithRequestBody(OpenApiJson.BodyFor<PurgeMergeEntriesRequest>("List of merge entry IDs to purge"))
                 .WithResponse(200, OpenApiJson.For<MergeQueuePurgeResult>("Purge result summary"))
                 .WithResponse(400, OpenApiResponseMetadata.BadRequest())

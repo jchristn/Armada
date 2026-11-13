@@ -3,6 +3,7 @@ namespace Armada.Core.Models
     using System;
     using System.Collections.Generic;
     using Armada.Core.Enums;
+    using Armada.Core.Services;
 
     /// <summary>
     /// Body of PUT /api/v1/push/devices/{id}. Omitted (null) fields are left unchanged.
@@ -19,6 +20,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// New enabled categories (an empty list mutes the device), or null to keep them.
         /// </summary>
+        [CollectionBound(8, Reason = "At most one entry per PushCategoryEnum value")]
         public List<PushCategoryEnum>? Categories { get; set; } = null;
 
         #endregion

@@ -2,6 +2,7 @@ namespace Armada.Core.Models
 {
     using System.Text.Json;
     using Armada.Core.Enums;
+    using Armada.Core.Services;
 
     /// <summary>
     /// A persistent planning conversation between a user and a captain.
@@ -76,6 +77,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// Ordered playbook selections attached to this planning session.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxConfigItems)]
         public List<SelectedPlaybook> SelectedPlaybooks { get; set; } = new List<SelectedPlaybook>();
 
         /// <summary>

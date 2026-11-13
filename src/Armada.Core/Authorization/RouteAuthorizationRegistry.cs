@@ -50,6 +50,12 @@ namespace Armada.Core.Authorization
             Add("POST", "/api/v1/ask/threads/{id}/proposals/{pid}/approve", "AskThread", ResourceOperationEnum.Execute, PermissionLevel.Authenticated);
             Add("POST", "/api/v1/ask/threads/{id}/proposals/{pid}/reject", "AskThread", ResourceOperationEnum.Execute, PermissionLevel.Authenticated);
             Add("GET", "/api/v1/ask/threads/{id}/work/{workId}", "AskThread", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("POST", "/api/v1/ask/threads/{id}/work/enumerate", "AskThread", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("POST", "/api/v1/ask/threads/{id}/work/{workId}/missions/enumerate", "AskThread", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("POST", "/api/v1/ask/threads/{id}/work/{workId}/targets/enumerate", "AskThread", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("POST", "/api/v1/ask/threads/{id}/proposals/enumerate", "AskThread", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("POST", "/api/v1/ask/threads/{id}/messages/{messageId}/tool-calls/enumerate", "AskThread", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("POST", "/api/v1/ask/threads/{id}/turn/tool-calls/enumerate", "AskThread", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("GET", "/api/v1/ask/quick-actions", "AskThread", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("PUT", "/api/v1/ask/threads/{id}/cli-permission-policy", "AskThread", ResourceOperationEnum.Update, PermissionLevel.Authenticated);
 
@@ -62,6 +68,21 @@ namespace Armada.Core.Authorization
             Add("GET", "/api/v1/cli-permissions/rules/{id}", "CliPermission", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("PUT", "/api/v1/cli-permissions/rules/{id}", "CliPermission", ResourceOperationEnum.Update, PermissionLevel.TenantAdmin);
             Add("DELETE", "/api/v1/cli-permissions/rules/{id}", "CliPermission", ResourceOperationEnum.Delete, PermissionLevel.TenantAdmin);
+
+            // Captain selection: shared service enforces tenant/owner and mission-token scope.
+            Add("GET", "/api/v1/missions/{id}/waits", "Mission", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("POST", "/api/v1/missions/{id}/waits/enumerate", "Mission", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("GET", "/api/v1/voyages/{id}/tree", "Voyage", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("GET", "/api/v1/vessels/{id}/concurrency", "Vessel", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("GET", "/api/v1/metrics/concurrency", "Mission", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("POST", "/api/v1/missions/{id}/captain-selection/recovery", "Mission", ResourceOperationEnum.Update, PermissionLevel.TenantAdmin);
+            Add("GET", "/api/v1/missions/{id}/captain-selection", "Mission", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("POST", "/api/v1/missions/{id}/captain-selection/history/enumerate", "Mission", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("POST", "/api/v1/captain-selection-decisions/{id}/candidates/enumerate", "Mission", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("GET", "/api/v1/missions/{id}/captain-selection/history", "Mission", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("POST", "/api/v1/missions/{id}/captain-selection/preview", "Mission", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("GET", "/api/v1/captain-selection-decisions/{id}", "Mission", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("GET", "/api/v1/captain-selection-decisions/{id}/candidates", "Mission", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
 
             // StageOutcomeRoutes (tenant scoping, global-rule and built-in-rule writes are checked by StageOutcomeAccessService)
             Add("GET", "/api/v1/stage-outcomes", "StageOutcome", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
@@ -84,10 +105,35 @@ namespace Armada.Core.Authorization
             Add("GET", "/api/v1/model-probe-runs", "ModelProbeRun", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("POST", "/api/v1/model-probe-runs/enumerate", "ModelProbeRun", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("GET", "/api/v1/model-probe-runs/{id}", "ModelProbeRun", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("POST", "/api/v1/model-probe-runs/{id}/cancel", "ModelProbeRun", ResourceOperationEnum.Execute, PermissionLevel.TenantAdmin);
+            Add("GET", "/api/v1/model-profiles", "ModelProfile", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("POST", "/api/v1/model-profiles/enumerate", "ModelProfile", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("GET", "/api/v1/model-profiles/{id}", "ModelProfile", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("GET", "/api/v1/model-profiles/{id}/scorecard", "ModelProfile", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("GET", "/api/v1/model-alerts", "ModelAlert", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("POST", "/api/v1/model-alerts/enumerate", "ModelAlert", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("POST", "/api/v1/model-alerts/evaluate", "ModelAlert", ResourceOperationEnum.Update, PermissionLevel.Authenticated);
+            Add("GET", "/api/v1/model-alerts/thresholds", "ModelAlert", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("PUT", "/api/v1/model-alerts/thresholds", "ModelAlert", ResourceOperationEnum.Update, PermissionLevel.Authenticated);
+            Add("GET", "/api/v1/model-alerts/{id}", "ModelAlert", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("POST", "/api/v1/model-alerts/{id}/apply", "ModelAlert", ResourceOperationEnum.Update, PermissionLevel.Authenticated);
+            Add("POST", "/api/v1/model-alerts/{id}/ignore", "ModelAlert", ResourceOperationEnum.Update, PermissionLevel.Authenticated);
+            Add("PUT", "/api/v1/model-profiles/{id}", "ModelProfile", ResourceOperationEnum.Update, PermissionLevel.TenantAdmin);
+            Add("PUT", "/api/v1/model-profiles/{id}/revisions/{revisionId}/compatible-with", "ModelProfile", ResourceOperationEnum.Update, PermissionLevel.TenantAdmin);
+            Add("GET", "/api/v1/battery/packs/{packId}", "BatteryPack", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("GET", "/api/v1/battery/packs/{packId}/files", "BatteryPack", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("POST", "/api/v1/battery/packs", "BatteryPack", ResourceOperationEnum.Create, PermissionLevel.AdminOnly);
+            Add("PUT", "/api/v1/battery/packs/{packId}/manifest", "BatteryPack", ResourceOperationEnum.Update, PermissionLevel.AdminOnly);
+            Add("PUT", "/api/v1/battery/packs/{packId}/files", "BatteryPack", ResourceOperationEnum.Update, PermissionLevel.AdminOnly);
+            Add("DELETE", "/api/v1/battery/packs/{packId}/files", "BatteryPack", ResourceOperationEnum.Delete, PermissionLevel.AdminOnly);
+            Add("DELETE", "/api/v1/battery/packs/{packId}", "BatteryPack", ResourceOperationEnum.Delete, PermissionLevel.AdminOnly);
+            Add("POST", "/api/v1/battery/packs/{packId}/validate", "BatteryPack", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("GET", "/api/v1/battery/packs", "BatteryPack", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("POST", "/api/v1/battery/packs/enumerate", "BatteryPack", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("POST", "/api/v1/battery/runs", "BatteryRun", ResourceOperationEnum.Execute, PermissionLevel.TenantAdmin);
             Add("GET", "/api/v1/battery/runs/{id}", "BatteryRun", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("GET", "/api/v1/battery/runs/{id}/results", "BatteryRun", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("POST", "/api/v1/battery/runs/{id}/results/enumerate", "BatteryRun", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
 
             // PushRoutes (owner / tenant admin / global admin scoping is checked per device by PushDeviceAccess)
             Add("POST", "/api/v1/push/devices", "PushDevice", ResourceOperationEnum.Create, PermissionLevel.Authenticated);
@@ -104,6 +150,8 @@ namespace Armada.Core.Authorization
 
             Add("GET", "/api/v1/storage", "Storage", ResourceOperationEnum.Admin, PermissionLevel.AdminOnly);
             Add("POST", "/api/v1/storage/refresh", "Storage", ResourceOperationEnum.Admin, PermissionLevel.AdminOnly);
+            Add("GET", "/api/v1/storage/hosts", "Storage", ResourceOperationEnum.Admin, PermissionLevel.AdminOnly);
+            Add("POST", "/api/v1/storage/hosts/enumerate", "Storage", ResourceOperationEnum.Admin, PermissionLevel.AdminOnly);
 
             // BackupRoutes
             Add("GET", "/api/v1/backup", "Backup", ResourceOperationEnum.Admin, PermissionLevel.AdminOnly);
@@ -115,6 +163,7 @@ namespace Armada.Core.Authorization
             Add("POST", "/api/v1/captains", "Captain", ResourceOperationEnum.Create, PermissionLevel.TenantAdmin);
             Add("GET", "/api/v1/captains/{id}", "Captain", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("GET", "/api/v1/captains/{id}/tools", "Captain", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("POST", "/api/v1/captains/{id}/tools/enumerate", "Captain", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("PUT", "/api/v1/captains/{id}", "Captain", ResourceOperationEnum.Update, PermissionLevel.TenantAdmin);
             Add("PUT", "/api/v1/captains/{id}/cli-permission-policy", "Captain", ResourceOperationEnum.Update, PermissionLevel.TenantAdmin);
             Add("POST", "/api/v1/captains/{id}/unquarantine", "Captain", ResourceOperationEnum.Execute, PermissionLevel.TenantAdmin);
@@ -257,7 +306,54 @@ namespace Armada.Core.Authorization
             Add("POST", "/api/v1/missions", "Mission", ResourceOperationEnum.Create, PermissionLevel.TenantAdmin);
             Add("GET", "/api/v1/missions/{id}", "Mission", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("GET", "/api/v1/missions/{id}/github/pull-request", "Mission", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("POST", "/api/v1/missions/{id}/github/pull-request/reviews/enumerate", "Mission", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("POST", "/api/v1/missions/{id}/github/pull-request/comments/enumerate", "Mission", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("POST", "/api/v1/missions/{id}/github/pull-request/checks/enumerate", "Mission", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("GET", "/api/v1/missions/{id}/landing-preview", "Mission", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+
+            // BlackBoxRoutes (entry visibility is checked per request by IBlackBoxService: an invisible entry is 404;
+            // recovery and recommendation steps are authorized as the underlying tool)
+            Add("GET", "/api/v1/missions/{id}/blackbox", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("GET", "/api/v1/missions/{id}/blackbox/brief", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("GET", "/api/v1/missions/{id}/blackbox/entries", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("POST", "/api/v1/missions/{id}/blackbox/entries/enumerate", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("GET", "/api/v1/voyages/{id}/blackbox", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("GET", "/api/v1/voyages/{id}/blackbox/brief", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("GET", "/api/v1/blackbox", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("POST", "/api/v1/blackbox/enumerate", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("POST", "/api/v1/blackbox/search", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("POST", "/api/v1/blackbox/bundle", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("POST", "/api/v1/blackbox/hotspots/enumerate", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("POST", "/api/v1/blackbox/fingerprints/enumerate", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("POST", "/api/v1/blackbox/resilience-gaps/enumerate", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("GET", "/api/v1/blackbox/fingerprints/{fingerprint}/trend", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("POST", "/api/v1/blackbox/{id}/export-fixture", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.AdminOnly);
+            Add("GET", "/api/v1/blackbox/retention", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.TenantAdmin);
+            Add("GET", "/api/v1/blackbox/storage", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.AdminOnly);
+            Add("POST", "/api/v1/blackbox/storage/migrate", "BlackBox", ResourceOperationEnum.Execute, PermissionLevel.AdminOnly);
+            Add("GET", "/api/v1/blackbox/storage/migrations/{id}", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.AdminOnly);
+            Add("POST", "/api/v1/blackbox/purge", "BlackBox", ResourceOperationEnum.Delete, PermissionLevel.AdminOnly);
+            Add("POST", "/api/v1/blackbox/gc", "BlackBox", ResourceOperationEnum.Execute, PermissionLevel.AdminOnly);
+            Add("POST", "/api/v1/blackbox/backfill", "BlackBox", ResourceOperationEnum.Execute, PermissionLevel.AdminOnly);
+            Add("POST", "/api/v1/blackbox/delete", "BlackBox", ResourceOperationEnum.Delete, PermissionLevel.TenantAdmin);
+            Add("GET", "/api/v1/blackbox/{id}", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("DELETE", "/api/v1/blackbox/{id}", "BlackBox", ResourceOperationEnum.Delete, PermissionLevel.TenantAdmin);
+            Add("GET", "/api/v1/blackbox/{id}/brief", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("GET", "/api/v1/blackbox/{id}/sections/{section}", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("GET", "/api/v1/blackbox/{id}/objects", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("POST", "/api/v1/blackbox/{id}/objects/enumerate", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("GET", "/api/v1/blackbox/{id}/objects/{name}", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("GET", "/api/v1/blackbox/{id}/download", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("GET", "/api/v1/blackbox/{id}/notes", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("POST", "/api/v1/blackbox/{id}/notes/enumerate", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("POST", "/api/v1/blackbox/{id}/notes", "BlackBox", ResourceOperationEnum.Create, PermissionLevel.Authenticated);
+            Add("POST", "/api/v1/blackbox/{id}/resolve", "BlackBox", ResourceOperationEnum.Update, PermissionLevel.Authenticated);
+            Add("POST", "/api/v1/blackbox/{id}/pin", "BlackBox", ResourceOperationEnum.Update, PermissionLevel.Authenticated);
+            Add("POST", "/api/v1/blackbox/{id}/unpin", "BlackBox", ResourceOperationEnum.Update, PermissionLevel.Authenticated);
+            Add("POST", "/api/v1/blackbox/{id}/recovery/{pathId}", "BlackBox", ResourceOperationEnum.Execute, PermissionLevel.Authenticated);
+            Add("POST", "/api/v1/blackbox/{id}/recommendations/{recommendationId}/apply", "BlackBox", ResourceOperationEnum.Execute, PermissionLevel.Authenticated);
+            Add("POST", "/api/v1/blackbox/{id}/reanalyze", "BlackBox", ResourceOperationEnum.Execute, PermissionLevel.TenantAdmin);
+
             Add("GET", "/api/v1/missions/{id}/evaluate-autoland", "Mission", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("PUT", "/api/v1/missions/{id}", "Mission", ResourceOperationEnum.Update, PermissionLevel.TenantAdmin);
             Add("PUT", "/api/v1/missions/{id}/status", "Mission", ResourceOperationEnum.Update, PermissionLevel.TenantAdmin);
@@ -288,6 +384,7 @@ namespace Armada.Core.Authorization
             Add("POST", "/api/v1/backlog/{id}/refinement-sessions/enumerate", "ObjectiveRefinementSession", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("POST", "/api/v1/backlog/{id}/refinement-sessions", "ObjectiveRefinementSession", ResourceOperationEnum.Create, PermissionLevel.TenantAdmin);
             Add("GET", "/api/v1/objective-refinement-sessions/{id}", "ObjectiveRefinementSession", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("POST", "/api/v1/objective-refinement-sessions/{id}/messages/enumerate", "ObjectiveRefinementSession", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("POST", "/api/v1/objective-refinement-sessions/{id}/messages", "ObjectiveRefinementSession", ResourceOperationEnum.Execute, PermissionLevel.TenantAdmin);
             Add("POST", "/api/v1/objective-refinement-sessions/{id}/summarize", "ObjectiveRefinementSession", ResourceOperationEnum.Execute, PermissionLevel.TenantAdmin);
             Add("POST", "/api/v1/objective-refinement-sessions/{id}/apply", "ObjectiveRefinementSession", ResourceOperationEnum.Execute, PermissionLevel.TenantAdmin);
@@ -331,6 +428,7 @@ namespace Armada.Core.Authorization
             Add("POST", "/api/v1/planning-sessions/enumerate", "PlanningSession", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("POST", "/api/v1/planning-sessions", "PlanningSession", ResourceOperationEnum.Create, PermissionLevel.TenantAdmin);
             Add("GET", "/api/v1/planning-sessions/{id}", "PlanningSession", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("POST", "/api/v1/planning-sessions/{id}/messages/enumerate", "PlanningSession", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("POST", "/api/v1/planning-sessions/{id}/messages", "PlanningSession", ResourceOperationEnum.Execute, PermissionLevel.TenantAdmin);
             Add("POST", "/api/v1/planning-sessions/{id}/dispatch", "PlanningSession", ResourceOperationEnum.Execute, PermissionLevel.TenantAdmin);
             Add("POST", "/api/v1/planning-sessions/{id}/summarize", "PlanningSession", ResourceOperationEnum.Execute, PermissionLevel.TenantAdmin);
@@ -400,6 +498,7 @@ namespace Armada.Core.Authorization
 
             // RuntimeRoutes
             Add("GET", "/api/v1/runtimes/mux/endpoints", "Runtime", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("POST", "/api/v1/runtimes/mux/endpoints/enumerate", "Runtime", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("GET", "/api/v1/runtimes/mux/endpoints/{name}", "Runtime", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
 
             // SignalRoutes
@@ -455,17 +554,43 @@ namespace Armada.Core.Authorization
             Add("POST", "/api/v1/activity/synthetic", "TokenUsage", ResourceOperationEnum.Create, PermissionLevel.AdminOnly);
 
             // TokenUsageRoutes
+            Add("POST", "/api/v1/usage/snapshots/enumerate", "Usage", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("POST", "/api/v1/usage/latest/enumerate", "Usage", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("POST", "/api/v1/usage/missions/enumerate", "Usage", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("GET", "/api/v1/usage/snapshots", "Usage", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("GET", "/api/v1/usage/latest", "Usage", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("GET", "/api/v1/usage/series", "Usage", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("GET", "/api/v1/usage/missions", "Usage", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("POST", "/api/v1/captains/{id}/usage/capture", "Usage", ResourceOperationEnum.Create, PermissionLevel.TenantAdmin);
             Add("GET", "/api/v1/token-usage/summary", "TokenUsage", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("POST", "/api/v1/token-usage/synthetic", "TokenUsage", ResourceOperationEnum.Create, PermissionLevel.AdminOnly);
             Add("GET", "/api/v1/token-usage", "TokenUsage", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("POST", "/api/v1/token-usage/enumerate", "TokenUsage", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("POST", "/api/v1/token-usage/delete/by-filter", "TokenUsage", ResourceOperationEnum.Delete, PermissionLevel.Authenticated);
 
+            // BlackBoxInsightRoutes (read-only; BlackBoxInsightService scopes to the caller)
+            Add("POST", "/api/v1/vessels/{id}/overlap-preview", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("GET", "/api/v1/vessels/{id}/reservations", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("POST", "/api/v1/vessels/{id}/reservations/enumerate", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("POST", "/api/v1/missions/lint-brief", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("GET", "/api/v1/vessels/{id}/blackbox-doctor", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("POST", "/api/v1/vessels/{id}/blackbox-doctor/enumerate", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("GET", "/api/v1/blackbox/recovery-stats", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("POST", "/api/v1/blackbox/recovery-stats/enumerate", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("GET", "/api/v1/blackbox/{id}/diff/{otherId}", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("GET", "/api/v1/blackbox/{id}/nearby-successes", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("POST", "/api/v1/blackbox/{id}/nearby-successes/enumerate", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("GET", "/api/v1/blackbox/{id}/timeline", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("POST", "/api/v1/blackbox/{id}/timeline/enumerate", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("GET", "/api/v1/voyages/{id}/blackbox/cascade", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+
             // VesselHealthRoutes
             Add("POST", "/api/v1/vessel-health/enumerate", "VesselHealth", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("GET", "/api/v1/vessel-health/summary", "VesselHealth", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("POST", "/api/v1/vessel-health/evaluate", "VesselHealth", ResourceOperationEnum.Execute, PermissionLevel.TenantAdmin);
             Add("GET", "/api/v1/vessels/{id}/health", "VesselHealth", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("GET", "/api/v1/vessels/{id}/health/dependencies", "VesselHealth", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("POST", "/api/v1/vessels/{id}/health/dependencies/enumerate", "VesselHealth", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("PUT", "/api/v1/vessels/{id}/health/overrides/{criterion}", "VesselHealth", ResourceOperationEnum.Update, PermissionLevel.TenantAdmin);
             Add("DELETE", "/api/v1/vessels/{id}/health/overrides/{criterion}", "VesselHealth", ResourceOperationEnum.Delete, PermissionLevel.TenantAdmin);
 
@@ -495,6 +620,8 @@ namespace Armada.Core.Authorization
             Add("GET", "/api/v1/vessels/{id}/readiness", "Vessel", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("GET", "/api/v1/vessels/{id}/landing-preview", "Vessel", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("GET", "/api/v1/vessels/{id}/cleanup", "Vessel", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("GET", "/api/v1/vessels/{id}/cleanup/resources", "Vessel", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("POST", "/api/v1/vessels/{id}/cleanup/resources/enumerate", "Vessel", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("POST", "/api/v1/vessels/{id}/cleanup", "Vessel", ResourceOperationEnum.Delete, PermissionLevel.TenantAdmin);
             Add("POST", "/api/v1/vessels/{id}/build-context", "Vessel", ResourceOperationEnum.Execute, PermissionLevel.TenantAdmin);
             Add("DELETE", "/api/v1/vessels/{id}", "Vessel", ResourceOperationEnum.Delete, PermissionLevel.TenantAdmin);
@@ -503,6 +630,7 @@ namespace Armada.Core.Authorization
             // VoyageRoutes
             Add("GET", "/api/v1/voyages", "Voyage", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("POST", "/api/v1/voyages/enumerate", "Voyage", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("POST", "/api/v1/voyages/progress/enumerate", "Voyage", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("POST", "/api/v1/voyages", "Voyage", ResourceOperationEnum.Create, PermissionLevel.TenantAdmin);
             Add("GET", "/api/v1/voyages/{id}", "Voyage", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("DELETE", "/api/v1/voyages/{id}", "Voyage", ResourceOperationEnum.Delete, PermissionLevel.TenantAdmin);
@@ -534,6 +662,8 @@ namespace Armada.Core.Authorization
             Add("GET", "/api/v1/workspace/vessels/{vesselId}/search", "Workspace", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("GET", "/api/v1/workspace/vessels/{vesselId}/changes", "Workspace", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("GET", "/api/v1/workspace/vessels/{vesselId}/status", "Workspace", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("GET", "/api/v1/workspace/vessels/{vesselId}/active-missions", "Workspace", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("POST", "/api/v1/workspace/vessels/{vesselId}/active-missions/enumerate", "Workspace", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
         }
 
         #endregion

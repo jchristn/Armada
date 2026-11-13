@@ -146,7 +146,7 @@ namespace Test.Shared.Suites.Tui
             stub.Json("GET", "/api/v1/users", "{\"Success\":true,\"Objects\":[],\"TotalRecords\":0}");
             stub.Json("GET", "/api/v1/captains", "{\"Success\":true,\"Objects\":[{\"Id\":\"cpt_1\",\"Name\":\"claude-1\",\"Runtime\":\"ClaudeCode\",\"State\":\"Idle\"}],\"TotalRecords\":1}");
             stub.Json("GET", "/api/v1/pipelines", "{\"Success\":true,\"Objects\":[{\"Id\":\"ppl_1\",\"Name\":\"Reviewed\"}],\"TotalRecords\":1}");
-            stub.Json("POST", "/api/v1/backlog/reorder", "[" + Objective("obj_a", "Fix login", 2, "Draft", "Inbox", "") + "," + Objective("obj_b", "Plan billing", 1, "Scoped", "ReadyForPlanning", "") + "]");
+            stub.Json("POST", "/api/v1/backlog/reorder", "{\"Updated\":2,\"Items\":[{\"ObjectiveId\":\"obj_b\",\"Rank\":1},{\"ObjectiveId\":\"obj_a\",\"Rank\":2}]}");
             stub.On("DELETE", "/api/v1/backlog/obj_a", b => StubHttpHandler.Response(HttpStatusCode.NoContent, ""));
             stub.Json("POST", "/api/v1/backlog", Objective("obj_new", "Fix login (Copy)", 4, "Draft", "Inbox", ""));
             stub.Json("POST", "/api/v1/objectives/import/github", Objective("obj_imp", "Imported issue", 5, "Draft", "Inbox", ""));

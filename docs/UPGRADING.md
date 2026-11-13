@@ -20,7 +20,7 @@ then replace the binaries the way you installed them. The new Admiral migrates t
 | Install type | How to upgrade |
 |--------------|----------------|
 | Source checkout with the `armada` global tool | `git pull`, then `scripts/linux/update.sh`, `scripts/macos/update.sh`, or `scripts\windows\update.bat`. The script stops repo-backed MCP stdio hosts and the server, reinstalls the `Armada.Helm` tool, redeploys the dashboard, and starts the server again. |
-| Startup scripts ([RUN_ON_STARTUP.md](RUN_ON_STARTUP.md)) | `git pull`, then `update-systemd-user.sh`, `update-launchd-agent.sh`, or `update-windows-task.bat`. These republish `~/.armada/bin` and restart the registered server. |
+| Startup scripts ([RUN_ON_STARTUP.md](RUN_ON_STARTUP.md)) | `git pull`, then `scripts/<os>/update-startup.sh` or `scripts\windows\update-startup.bat`. These republish `~/.armada/bin` and restart the registered server. |
 | Docker ([DOCKER.md](DOCKER.md)) | `git pull`, then `docker/update.sh` (or `docker\update.bat`), optionally with the compose file, for example `docker/update.sh armada/compose.split.yaml`. The compose files name release tags (`jchristn77/armada-server:v1.0.0` and so on), so the script pulls the tags the pulled checkout names, recreates the stack, and keeps `db/`, `logs/`, and the named volumes. |
 | Packages (`.msi`, Inno, `.pkg`, Deb/Rpm) | Install the new package over the old one. The package re-registers the service (see "Service and startup registration" in [OPERATIONS.md](OPERATIONS.md)). |
 
@@ -186,7 +186,7 @@ Long-running installs accumulate conversations, job records, and import history.
 | `jobRetentionDays` | 30 | 0 to 3650 | Delete finished background jobs (Succeeded, Failed, Cancelled) older than this. The newest finished job of each kind and name per tenant is kept, because schedules such as vessel health measure from it. Harbor metrics (Harbor job records, link samples, and link events) follow the same retention. |
 | `importBatchRetentionDays` | 90 | 0 to 3650 | Delete finished vessel import batches (Completed, CompletedWithFailures, Failed) with their items and fleet recommendations. Imported vessels are not affected; batches still categorizing are kept. |
 
-Other data has its own controls. Fleet action runs (and their captured output) follow `fleetActions.runRetentionDays` (default 30). Request history follows `requestHistoryRetentionDays` (default 30). Completed voyages and missions, old signals, and old events follow `dataRetentionDays` (default 30), which currently applies to SQLite only. Vessel health findings need no retention: each evaluation replaces the previous findings for a vessel instead of adding history.
+Other data has its own controls. Fleet action runs (and their captured output) follow `fleetActions.runRetentionDays` (default 30). Request history follows `requestHistoryRetentionDays` (default 30). Completed voyages and missions, old signals, and old events follow `dataRetentionDays` (default 30), which currently applies to SQLite only. Vessel health findings need no retention: each evaluation replaces the previous findings for a vessel instead of adding history. Black box entries are not touched by any of these; they follow `blackBox.retention` and their own garbage collector (see [Black box retention and storage](OPERATIONS.md#black-box-retention-and-storage)).
 
 ## Testing an upgrade
 
@@ -484,13 +484,208 @@ v1.0.0 is the first stable release: security hardening, a frozen and documented 
 
 **New settings worth reviewing:** `TransientOutageGraceMinutes` (default 10) and `BlockDependentsOfFailedStages` (default false; when true, the stages waiting on a failed stage show Blocked until it is restarted instead of being cancelled). Personas gain ordered captain priorities; an empty list keeps the 1.0 default-captain behavior. See [PIPELINES.md](PIPELINES.md) and [CAPTAIN_ROUTING.md](CAPTAIN_ROUTING.md).
 
+### v1.2.0 to v1.3.0
+
+v1.3.0 adds concurrency limits and the mission hierarchy, usage-based captain selection, and fleet action modes. Schema migrations 117 through 130 run automatically at startup on SQLite, PostgreSQL, MySQL and SQL Server through the normal [upgrade procedure](#how-an-upgrade-runs). Fresh installs and populated v1.2 upgrades run the same ordered migrations.
+
+**Before you upgrade.** Back up the database (and, for captain selection, the protected settings and usage identity). Downgrading in place is not supported: migration 121 removes columns v1.2.0 reads. To return to v1.2.0, restore the pre-upgrade backup; do not point a v1.2.0 binary at an upgraded database.
+
+#### Breaking changes
+
+These are an owner-approved [compatibility exception](COMPATIBILITY.md#v130-concurrency-exception) with no deprecation period.
+
+| Removed | Replacement |
+|---|---|
+| `Vessel.AllowConcurrentMissions` | `MaxParallelVoyages` and `MaxParallelMissionsPerVoyage` (0 = unlimited). A request that still sends the boolean gets `400` with migration guidance instead of having it ignored. |
+| `Captain.CurrentMissionId`, `Captain.CurrentDockId` | `Captain.ActiveMissionIds`; each mission carries its own `DockId` and `ProcessId`. |
+| Helm `--allow-concurrent` | `--max-parallel-voyages` and `--max-parallel-missions-per-voyage`. |
+
+Before and after:
+
+```text
+REST    PUT /api/v1/vessels/{id}   {"AllowConcurrentMissions": true}
+     -> PUT /api/v1/vessels/{id}   {"MaxParallelVoyages": 0, "MaxParallelMissionsPerVoyage": 0}
+
+MCP     update_vessel { "allowConcurrentMissions": false }
+     -> update_vessel { "maxParallelVoyages": 1, "maxParallelMissionsPerVoyage": 1 }
+
+SDK     captain.CurrentMissionId
+     -> captain.ActiveMissionIds   (a list; recompile against the v1.3.0 Armada.Client)
+
+Helm    armada vessel update vsl_... --allow-concurrent
+     -> armada vessel update vsl_... --max-parallel-voyages 0 --max-parallel-missions-per-voyage 0
+```
+
+Helm also parses strictly now: an unknown option (`armada mission list --bogus`) or a stray extra argument fails with a non-zero exit before any request, where earlier versions ignored it.
+
+#### Concurrency and the mission hierarchy (migrations 117 to 121)
+
+| Migration | Change |
+|---|---|
+| 117 | Numeric vessel limits. `AllowConcurrentMissions=false` becomes 1/1 and `true` becomes 0/0, so existing vessels schedule as before. New vessels default to 1 voyage and 4 missions per voyage. |
+| 118 | Captain slots (`MaxConcurrency`), per-mission heartbeat and recovery, and exclusive session ids. Existing ApiEndpoint and Mux captains become concurrency 4; every other runtime becomes 1. |
+| 119 | Mission hierarchy and branch metadata (`ParentMissionId`, `BranchStrategy`, `OwnedPaths`, `Depth`) and `ReadyUtc`/`AssignedUtc`. Rescue links move from `ParentMissionId` to `RescueOfMissionId`. |
+| 120 | Indexed mission wait intervals, deleted with their mission; closed intervals are kept `Concurrency.WaitIntervalRetentionDays`. |
+| 121 | Normalizes live legacy Testing jobs to InProgress, moves process ids and session owners onto missions and sessions, and removes `captains.current_mission_id`, `captains.current_dock_id` and `vessels.allow_concurrent_missions` (SQLite uses native column removal, keeping constraints and indexes). |
+
+**What changes in scheduling after the upgrade:**
+
+- The only scheduling change on upgrade is that ApiEndpoint and Mux captains run up to 4 missions each. Set their `MaxConcurrency` back to 1 to keep serial operation.
+- The endpoint, runtime and global caps (`InferenceOptions.MaxConcurrentMissions`, runtime `MaxConcurrent`, `MaxConcurrentMissions`) now count running missions instead of working captains. With every captain at 1 the numbers are the same, so this changes behavior only together with the endpoint captain change above.
+- Lowering any limit stops new admissions and never stops running work.
+- Verification, review and landing no longer hold a captain slot.
+
+See [SCHEDULING.md](SCHEDULING.md#capacity) for how the limits combine and [CONCURRENCY_TESTING.md](CONCURRENCY_TESTING.md) to test the admission path.
+
+**Settings.** The new `Concurrency` group (defaults for new vessels and captains, `MaxCaptainConcurrency` 256, `MaxHierarchyDepth` 4, `StarvationWarningMinutes` 60, `AdmissionLockTimeoutSeconds` 30, `WaitIntervalRetentionDays`) is written into the settings file on first start and is editable at `PUT /api/v1/settings` with its revision. Setters clamp out-of-range values and log the supplied and effective values; captain defaults are normalized against `MaxCaptainConcurrency` regardless of JSON property order. Negative vessel defaults clamp to 1; zero stays unlimited. The existing `MaxConcurrentMissions` now clamps negative values to 1 and values above 10000 to 10000 instead of rejecting the settings file.
+
+**Architect plans.** Built-in Architect prompts now request `armada-plan` contract version 4 (`parent`, `ownedPaths`, `readsPaths`, `branchStrategy`); versions 2 and 3 are still accepted, and `dependsOn` is read as `parent` with a warning. Untouched built-in persona briefs and prompt templates upgrade automatically; edited ones are kept. See [PIPELINES.md](PIPELINES.md#contract-version-4-hierarchy-and-owned-paths).
+
+**Planning and refinement** persistence remains SQLite-only, as in v1.2.0; the other providers keep their existing unsupported-session behavior.
+
+#### Captain selection (migrations 123 to 130)
+
+Migrations 123 through 128 add immutable selection history, capture timing, current-attempt correlation and operational uncertainty for unreserved work. Migration 127 adds immutable execution attribution, mission recovery authorizations and retained reconsideration deadlines. Migration 128 adds each captain's last assignment time, backfilled from existing mission assignments, so selection tie-breaking no longer depends on unrelated captain updates. Migration 129 adds `captain_selection_omitted_candidates`. Migration 130 rewrites the SQLite default tenant's timestamps as zone-qualified UTC; they were stored without a zone and read as local time. Existing live executions are adopted before dispatch without reconstructing historical decisions.
+
+- The `UsageSelection` mode stays `Observe` with strategy `FirstAvailable`, so routing does not change. Enforce is never enabled by the upgrade.
+- Review the group in Server settings (Captain selection) or `GET /api/v1/settings`, especially `ReservePercent`, `PerAttemptReservationPercent`, `UnknownUsageBehavior` and `DecisionRetentionDays`.
+- If you run the bundled telemetry stack, open the **Armada Captain Selection** Grafana dashboard (uid `armada-captain-selection`) and check Observe divergence and waits before considering Enforce. The **Armada Concurrency** dashboard sits beside it.
+- Decision history retention runs on every provider, pruning decisions older than `DecisionRetentionDays` (default 90) in bounded batches.
+- See the [usage selection operator guide](usage-selection/OPERATIONS.md) for moving to Enforce, and the [implementation and acceptance guide](usage-selection/ENFORCEMENT_AND_MISSION_INSPECTION.md) for inspecting captures and selection diagnostics.
+
+Migration 122 adds fleet action applicability commands and the report-only Audit and Research mission modes.
+
+#### Contract changes to act on
+
+- `POST /api/v1/missions` always answers `201` with the Mission. A mission no captain can take yet stays `Pending` and
+  carries an `X-Armada-Warning` header; earlier versions wrapped it as `{ "Mission": ..., "Warning": ... }`. Read `Id`
+  from the body in both cases. The .NET clients, Helm, the TUI, the Dashboard and Mobile read both shapes. MCP
+  `create_mission` is unchanged.
+- Mission create (REST, MCP and WebSocket) now returns once the mission is admitted, usually `Assigned`, and
+  provisions the dock and launches the agent in the background. Poll the mission, or watch `mission.status_changed`,
+  for `InProgress` instead of expecting it in the create response. A failed launch returns the mission to `Pending`.
+- The captain-selection REST routes now use the same PascalCase bodies and error envelope (`Error`, `Message`, `Data`)
+  as every other route. A stale recovery revision returns `409` with `Data.Code` `RecoveryRevisionConflict`.
+- Decision detail stores the candidates that explain a decision (the selected, proposed and requested captains, plus the
+  25 nearest to eligibility for a wait) and counts the rest by reason in `OmittedCandidates`. Decisions recorded before
+  the upgrade keep every candidate row. An automatic retry is recorded with `Trigger` `Redispatch`.
+- A request-body value that does not bind returns `400` with a message naming the field and what it accepts, and
+  `Data.Code` `InvalidJsonValue` (or `MalformedJson`) with `Data.Field`. Earlier messages named .NET types.
+- Helm writes errors and diagnostics to stderr and shows the server's own message. Scripts that parsed error text from
+  stdout must read stderr; exit codes are unchanged.
+
 ### v1.1.0 to v1.2.0
 
-**Nothing to migrate by hand.** The new schema migrations (96 and later) run automatically at startup, with SQLite backed up first, and every new column has a default. Docker installs pull the `v1.2.0` images (`jchristn77/armada-server:v1.2.0`, `jchristn77/armada-dashboard:v1.2.0`, `jchristn77/armada-proxy:v1.2.0`): `git pull`, then `docker/update.sh` (or `docker\update.bat`). Update each Harbor along with the Admiral.
+**Schema migrations run automatically; review usage capture settings after upgrading.** The new schema migrations (96 to 116, including 103 to 106 for the black box) run automatically at startup, with SQLite backed up first, and every new column has a default. Docker installs pull the `v1.2.0` images (`jchristn77/armada-server:v1.2.0`, `jchristn77/armada-dashboard:v1.2.0`, `jchristn77/armada-proxy:v1.2.0`): `git pull`, then `docker/update.sh` (or `docker\update.bat`). Update each Harbor along with the Admiral.
+
+**Captain usage capture settings:** v1.2.0 includes on-demand usage checks and scheduled monitoring. Capture and the Claude/Gemini PTY fallback default on; review the `UsageCapture` settings and each captain's capture settings. Migration 113 resets existing captain capture flags to unset. Settings files without `UsageCapture.DefaultsRevision: 2` reset `Enabled` and `AllowPtyFallback` once, including opt-outs saved by earlier v1.2.0 builds. Turn capture or the PTY fallback off again after upgrading if you previously opted out. Migration 116 makes usage observations and captain/account links durable across restarts.
 
 **Behavior changes worth knowing:**
 - Every stage attempt is recorded as a stage outcome with its provenance and a suspected cause; failure-cause rules are data you can edit, and the built-in rules are restored at startup if deleted.
 - A Judge may now review work its own captain authored when no other eligible captain is idle. Set `ExcludeReviewAuthorsFromJudge` to true to keep the old exclusion.
 - Whole-list GET routes and `list_*` MCP tools are deprecated in favor of paged `enumerate` replacements; they keep working until 2.0.
 
-**New settings worth reviewing:** `ExcludeReviewAuthorsFromJudge` (default false), `StageCheckTimeoutMinutes` (default 15), and the `Evaluation` group (budget and concurrency for Quick probes and the fixture battery, overall and per inference host, plus `BatteryDirectory`).
+**New settings worth reviewing:** `ExcludeReviewAuthorsFromJudge` (default false), `StageCheckTimeoutMinutes` (default 15), and the `Evaluation` group (budget and concurrency for Quick probes and the fixture battery, overall and per inference host, plus `BatteryDirectory`). The black box adds the `blackBox` group (`enabled`, `captureTimeoutMs`, `storage`, `retention`, `sweeper`, `summaryEndpointId`; defaults keep entries in the database for 180 days); see [the black box notes](#the-mission-and-voyage-black-box-migrations-103-to-106) below.
+
+#### The mission and voyage black box (migrations 103 to 106)
+
+v1.2.0 adds the mission and voyage black box: when a mission or voyage fails, the Admiral writes an entry with
+where, how and why it failed, the FIX THIS brief, and ranked recovery paths. It needs no action to turn on, and there
+are no breaking changes: every new table, column, field and setting is additive. What it is and how to use it are in
+[BLACKBOX.md](BLACKBOX.md).
+
+**Database.** Four schema migrations run at startup on SQLite, PostgreSQL, MySQL and SQL Server, through the normal
+[upgrade procedure](#how-an-upgrade-runs). SQLite is copied to `backups/pre-migration-*` first. On a server provider,
+take a dump first ([Server providers: dump first](#server-providers-dump-first)); with
+`database.requireBackupConfirmationForMigrations` on, the Admiral refuses to migrate until
+`database.confirmedBackupForSchemaVersion` (or `ARMADA_CONFIRM_BACKUP_FOR_SCHEMA_VERSION`) is at least the target
+version it prints (116 for the complete v1.2.0 release).
+
+| Migration | Adds |
+|---|---|
+| 103 | Tables `blackbox_entries`, `blackbox_objects` (object bytes in a BLOB column for the Database storage target; unique on `entry_id, name`), `blackbox_files`, `blackbox_links` and `blackbox_notes`, with their indexes. Nullable columns `missions.last_blackbox_entry_id`, `missions.start_commit`, `voyages.last_blackbox_entry_id` and `vessels.blackbox_retention_days`. |
+| 104 | Table `blackbox_migrations`: one row per storage migration job, so a job resumes after a restart. |
+| 105 | Column `vessels.serialize_overlapping_missions` (default false): chain a dispatched mission after an overlapping active mission. |
+| 106 | Tables `blackbox_successes` (a minimal record of each successful landing, kept `blackBox.successRetentionDays`, default 7) and `blackbox_recovery_outcomes` (which recovery path ran and whether the mission later succeeded). |
+
+No migration rewrites existing rows. The new nullable columns start empty, so missions and voyages that failed before
+the upgrade have no entry until they are captured (see backfill below).
+
+**API fields.** `Mission.LastBlackBoxEntryId`, `Mission.StartCommit`, `Voyage.LastBlackBoxEntryId` and
+`Vessel.BlackBoxRetentionDays` appear on mission, voyage and vessel reads. All are null until set. Clients that
+reject unknown fields need an update; tolerant readers need nothing. `Vessel.BlackBoxRetentionDays` is a per-vessel
+retention override in days (0 keeps that vessel's entries forever, at most 3650, null uses
+`blackBox.retention.retentionDays`); set it with `PUT /api/v1/vessels/{id}`.
+
+**Settings.** A new `blackBox` block. On the first start the Admiral writes it into the settings file with every
+property and its default (nulls included), as it does for every settings object, so expect the file to grow. Values
+outside a range are clamped when the file is read, not rejected. `PUT /api/v1/settings` validates `blackBox.storage`
+before applying anything (400 with the setting named) and applies black box changes without a restart. Storage
+secrets are masked as `********` on reads and kept when written back masked.
+
+| Setting | Default | Range or values |
+|---|---|---|
+| `blackBox.enabled` | `true` | `false` stops capture, the sweeper and garbage collection; existing entries stay readable |
+| `blackBox.captureTimeoutMs` | `2000` | 100 to 30000 |
+| `blackBox.summaryEndpointId` | `null` | A model endpoint id (`mep_...`) that writes a labeled summary; the rules summary is kept on any failure |
+| `blackBox.storage.target` | `Database` | `Database`, `Disk`, `S3`, `AzureBlob`, `GoogleCloud`, `Cifs`, `Nfs` |
+| `blackBox.storage.keyPrefix` | `armada/blackbox` | External targets only; empty restores the default |
+| `blackBox.storage.compress` | `true` | gzip objects when stored |
+| `blackBox.storage.maxEvidenceObjectBytes` | `1048576` (1 MB) | 65536 to 16777216 |
+| `blackBox.storage.maxEntryBytes` | `8388608` (8 MB) | 1048576 to 67108864 |
+| `blackBox.storage.fallbackToDatabase` | `true` | Write the entry to the database when the external store fails |
+| `blackBox.storage.disk.directory` | `null` | `null` is `{DataDirectory}/blackbox`; a relative path resolves against the data directory |
+| `blackBox.storage.s3.*` | `region` `us-east-1`, `usePathStyle` `true`, `useSsl` `true`, the rest `null` | `endpoint`, `region`, `bucket`, `accessKey`, `secretKey` |
+| `blackBox.storage.azureBlob.*` | all `null` | `accountName`, `container`, `accessKey`, `connectionString`, `endpoint` |
+| `blackBox.storage.googleCloud.*` | all `null` | `projectId`, `bucket`, `credentialsPath`, `endpoint` |
+| `blackBox.storage.cifs.*` | `port` `445`, `preferEncryption` `true`, the rest `null` | `hostname`, `port` (1 to 65535), `share`, `domain`, `username`, `password` |
+| `blackBox.storage.nfs.*` | `version` `3`, `userId` `0`, `groupId` `0`, the rest `null` | `hostname`, `exportPath`, `version` (2 to 4), `port` and `mountPort` (1 to 65535, `null` asks the portmapper) |
+| `blackBox.retention.retentionDays` | `180` | 0 to 3650 (0 keeps entries forever) |
+| `blackBox.retention.resolvedRetentionDays` | `30` | 0 to 3650 (0: resolving does not shorten retention) |
+| `blackBox.retention.keepLatestPerMission` | `true` | Keep the current entry of a mission or voyage that still exists, even past expiry |
+| `blackBox.retention.maxEntriesPerVessel` | `1000` | 10 to 100000 |
+| `blackBox.retention.maxTotalBytes` | `1073741824` (1 GB) | 16777216 (16 MB) to 1099511627776 (1 TB) |
+| `blackBox.retention.deleteWithMission` | `false` | Delete a mission's entries when the mission is purged |
+| `blackBox.retention.deleteWithVessel` | `true` | Delete a vessel's entries when the vessel is deleted |
+| `blackBox.retention.gcIntervalMinutes` | `60` | 5 to 1440 |
+| `blackBox.retention.gcBatchSize` | `200` | 10 to 1000 |
+| `blackBox.retention.orphanGraceHours` | `24` | 1 to 720 |
+| `blackBox.sweeper.intervalSeconds` | `60` | 10 to 86400 |
+| `blackBox.sweeper.pageSize` | `100` | 1 to 1000 |
+| `blackBox.sweeper.maxEnrichmentAttempts` | `5` | 1 to 20 |
+
+**Storage.** Keep the default. With `Database`, entries live in `blackbox_objects` inside the Armada database, need no
+configuration, and are inside every SQLite backup. Choose another target only if the database should not hold the
+bytes; the target is recorded per entry, so a change applies to new entries and older ones stay readable where they
+were written. To move existing entries, see
+[Black box retention and storage](OPERATIONS.md#black-box-retention-and-storage).
+
+**Failures from before the upgrade.** The sweeper starts with the Admiral and, every `blackBox.sweeper.intervalSeconds`,
+captures up to `pageSize` missions and `pageSize` voyages that failed and have no current entry, oldest first
+(missions in `Failed`, `LandingFailed` or `Blocked`, or `Cancelled` with a failure kind other than `OperatorAction`;
+voyages in `Failed` or `Cancelled`). So old failures are captured by themselves over the first sweeps. To capture them
+at once, run a backfill as a global admin:
+
+```bash
+curl -X POST -H "Authorization: Bearer <token>" -H "Content-Type: application/json" \
+  http://127.0.0.1:7890/api/v1/blackbox/backfill -d '{"Since": "2026-09-01T00:00:00Z", "MaxSubjects": 1000}'
+```
+
+```json
+{"Mode":"Backfill","Scanned":42,"Captured":41,"Skipped":1,"Failed":0,"EnrichmentRequeued":0,"StartedUtc":"2026-10-29T21:11:40.016805Z","FinishedUtc":"2026-10-29T21:11:52.204113Z"}
+```
+
+`Since` is optional (subjects last updated at or after it); `MaxSubjects` defaults to 1000 and is clamped to 1 to
+100000, applied to missions and to voyages separately. Backfill and sweep are idempotent: a subject with a current
+entry is skipped. Entries made this way have `CaptureMode` `Backfill` or `Sweeper` and lower fidelity than an inline
+capture: they are built from the stored rows, so the exception, command output and checkout state at the failure are
+usually missing. Their retention counts from the capture time, not from the original failure.
+
+**Doctor.** `GET /api/v1/doctor` returns 12 checks instead of 11 (`armada doctor` runs its own local checks and is
+unchanged). The new one, "Black Box Storage", passes when the configured target validates and answers its health check, fails with the reason (and what
+fallback will do) otherwise, and warns when `blackBox.enabled` is false. Scripts that assert the check count need the
+new number.
+
+**Harbors.** Black box capture and storage run on the Admiral only; a Harbor needs no change for it. Update each
+Harbor along with the Admiral as usual. How evidence is read from Harbor docks is in
+[HARBOR.md](HARBOR.md#black-box-evidence-on-harbor-hosted-missions).

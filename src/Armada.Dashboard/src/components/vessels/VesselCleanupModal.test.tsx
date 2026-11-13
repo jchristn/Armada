@@ -1,10 +1,11 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import VesselCleanupModal from './VesselCleanupModal';
-import { getVesselCleanupInventory, runVesselCleanup, type VesselCleanupInventory, type VesselCleanupResource } from '../../api/client';
+import { getVesselCleanupInventory, listVesselCleanupResources, runVesselCleanup, type VesselCleanupInventory, type VesselCleanupResource } from '../../api/client';
 import { translateTemplate } from '../../i18n/runtime';
 
 vi.mock('../../api/client', () => ({
   getVesselCleanupInventory: vi.fn(),
+  listVesselCleanupResources: vi.fn(),
   runVesselCleanup: vi.fn(),
 }));
 vi.mock('../../context/LocaleContext', () => ({
@@ -37,13 +38,32 @@ function inventory(resources: VesselCleanupResource[]): VesselCleanupInventory {
     vesselId: 'vsl_1',
     vesselName: 'project',
     scannedUtc: '2026-10-28T00:00:00Z',
-    resources,
+    resourceCount: resources.length,
     safeCount: resources.filter(r => r.disposition === 'Safe').length,
     inUseCount: resources.filter(r => r.disposition === 'InUse').length,
     unknownCount: resources.filter(r => r.disposition === 'Unknown').length,
     safeMeasuredBytes: resources.filter(r => r.disposition === 'Safe').reduce((s, r) => s + (r.sizeBytes ?? 0), 0),
     safeUnmeasuredCount: 0,
   };
+}
+
+/** Serve the resources through the paged enumeration, filtered by status, exactly like the server. */
+function serve(resources: VesselCleanupResource[]) {
+  vi.mocked(listVesselCleanupResources).mockImplementation(async (_id, params) => {
+    const pageNumber = params?.pageNumber ?? 1;
+    const pageSize = params?.pageSize ?? 10;
+    const rows = resources.filter(r => !params?.status || r.disposition === params.status);
+    return {
+      pageNumber, pageSize, totalRecords: rows.length, totalPages: Math.ceil(rows.length / pageSize),
+      objects: rows.slice((pageNumber - 1) * pageSize, pageNumber * pageSize),
+    } as never;
+  });
+}
+
+/** Mock the summary and the paged resources together. */
+function stock(resources: VesselCleanupResource[]) {
+  serve(resources);
+  return inventory(resources);
 }
 
 const safeDock = resource({});
@@ -65,10 +85,12 @@ describe('VesselCleanupModal', () => {
   beforeEach(() => {
     vi.mocked(getVesselCleanupInventory).mockReset();
     vi.mocked(runVesselCleanup).mockReset();
+    vi.mocked(listVesselCleanupResources).mockReset();
+    serve([]);
   });
 
   it('scans on open and groups resources as safe, in use and unknown with reasons, owners and sizes', async () => {
-    vi.mocked(getVesselCleanupInventory).mockResolvedValue(inventory([safeDock, safeBranch, busyDock, harborDock]));
+    vi.mocked(getVesselCleanupInventory).mockResolvedValue(stock([safeDock, safeBranch, busyDock, harborDock]));
     await renderModal();
 
     expect(getVesselCleanupInventory).toHaveBeenCalledWith('vsl_1');
@@ -102,14 +124,14 @@ describe('VesselCleanupModal', () => {
   });
 
   it('shows the empty state when there is nothing to inventory', async () => {
-    vi.mocked(getVesselCleanupInventory).mockResolvedValue(inventory([]));
+    vi.mocked(getVesselCleanupInventory).mockResolvedValue(stock([]));
     await renderModal();
     expect(screen.getByText(/Nothing to clean up/)).toBeInTheDocument();
     expect(screen.queryByRole('region', { name: 'Safe to clean up' })).toBeNull();
   });
 
   it('shows a scan error with a retry that rescans', async () => {
-    vi.mocked(getVesselCleanupInventory).mockRejectedValueOnce(new Error('Vessel not found')).mockResolvedValueOnce(inventory([safeDock]));
+    vi.mocked(getVesselCleanupInventory).mockRejectedValueOnce(new Error('Vessel not found')).mockResolvedValueOnce(stock([safeDock]));
     await renderModal();
     expect(screen.getByRole('alert')).toHaveTextContent('Vessel not found');
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Retry' })); });
@@ -118,7 +140,7 @@ describe('VesselCleanupModal', () => {
   });
 
   it('cleans up only the selected safe resources after confirmation and shows per-item results with the refreshed inventory', async () => {
-    vi.mocked(getVesselCleanupInventory).mockResolvedValue(inventory([safeDock, safeBranch, busyDock]));
+    vi.mocked(getVesselCleanupInventory).mockResolvedValue(stock([safeDock, safeBranch, busyDock]));
     vi.mocked(runVesselCleanup).mockResolvedValue({
       results: [
         { key: safeDock.key, resourceType: 'Dock', identity: 'dck_1', status: 'Deleted', message: 'Removed.' },
@@ -129,9 +151,20 @@ describe('VesselCleanupModal', () => {
       failed: 1,
       inventory: inventory([safeBranch, busyDock]),
     });
+    vi.mocked(runVesselCleanup).mockImplementation(async () => {
+      serve([safeBranch, busyDock]);
+      return {
+        results: [
+          { key: safeDock.key, resourceType: 'Dock', identity: 'dck_1', status: 'Deleted', message: 'Removed.' },
+          { key: safeBranch.key, resourceType: 'Branch', identity: 'armada/c/two', status: 'Failed', message: 'Branch armada/c/two still exists.' },
+        ],
+        deleted: 1, skipped: 0, failed: 1,
+        inventory: inventory([safeBranch, busyDock]),
+      };
+    });
     await renderModal();
 
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Select all safe resources' }));
+    await act(async () => { fireEvent.click(screen.getByRole('checkbox', { name: 'Select all safe resources' })); });
     const cleanButton = screen.getByRole('button', { name: 'Clean up selected (2)' });
     expect(cleanButton).toBeEnabled();
 
@@ -155,7 +188,7 @@ describe('VesselCleanupModal', () => {
   });
 
   it('cancelling the confirmation deletes nothing', async () => {
-    vi.mocked(getVesselCleanupInventory).mockResolvedValue(inventory([safeDock]));
+    vi.mocked(getVesselCleanupInventory).mockResolvedValue(stock([safeDock]));
     await renderModal();
     fireEvent.click(screen.getByRole('checkbox', { name: 'Select dck_1' }));
     fireEvent.click(screen.getByRole('button', { name: 'Clean up selected (1)' }));
@@ -165,7 +198,7 @@ describe('VesselCleanupModal', () => {
   });
 
   it('reports a failed cleanup request and keeps the inventory', async () => {
-    vi.mocked(getVesselCleanupInventory).mockResolvedValue(inventory([safeDock]));
+    vi.mocked(getVesselCleanupInventory).mockResolvedValue(stock([safeDock]));
     vi.mocked(runVesselCleanup).mockRejectedValue(new Error('Forbidden'));
     await renderModal();
     fireEvent.click(screen.getByRole('checkbox', { name: 'Select dck_1' }));
@@ -173,5 +206,31 @@ describe('VesselCleanupModal', () => {
     await act(async () => { fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Clean up' })); });
     expect(screen.getByRole('alert')).toHaveTextContent('Cleanup failed: Forbidden');
     expect(within(group('Safe to clean up')).getByText('dck_1')).toBeInTheDocument();
+  });
+
+  it('pages each group from the server and loads more instead of treating the first page as everything', async () => {
+    const many = Array.from({ length: 60 }, (_, i) => resource({ key: `dock:dck_s${i}`, identity: `dck_s${i}`, sizeBytes: 10 }));
+    vi.mocked(getVesselCleanupInventory).mockResolvedValue(stock(many));
+    await renderModal();
+    const safe = group('Safe to clean up');
+    expect(within(safe).getByRole('heading', { name: 'Safe to clean up (60)' })).toBeInTheDocument();
+    expect(within(safe).queryByText('dck_s59')).toBeNull();
+    await act(async () => { fireEvent.click(within(safe).getByRole('button', { name: 'Load more' })); });
+    expect(listVesselCleanupResources).toHaveBeenCalledWith('vsl_1', { pageNumber: 2, pageSize: 50, status: 'Safe' });
+    expect(within(safe).getByText('dck_s59')).toBeInTheDocument();
+    expect(within(safe).queryByRole('button', { name: 'Load more' })).toBeNull();
+  });
+
+  it('select all reads every safe page explicitly and cleanup sends every selected key', async () => {
+    const many = Array.from({ length: 1500 }, (_, i) => resource({ key: `dock:dck_m${i}`, identity: `dck_m${i}`, sizeBytes: 1 }));
+    vi.mocked(getVesselCleanupInventory).mockResolvedValue(stock(many));
+    vi.mocked(runVesselCleanup).mockResolvedValue({ results: [], deleted: 1500, skipped: 0, failed: 0, inventory: inventory([]) });
+    await renderModal();
+    await act(async () => { fireEvent.click(screen.getByRole('checkbox', { name: 'Select all safe resources' })); });
+    expect(listVesselCleanupResources).toHaveBeenCalledWith('vsl_1', { pageNumber: 1, pageSize: 1000, status: 'Safe' });
+    expect(listVesselCleanupResources).toHaveBeenCalledWith('vsl_1', { pageNumber: 2, pageSize: 1000, status: 'Safe' });
+    fireEvent.click(screen.getByRole('button', { name: 'Clean up selected (1500)' }));
+    await act(async () => { fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Clean up' })); });
+    expect(vi.mocked(runVesselCleanup).mock.calls[0][1]).toHaveLength(1500);
   });
 });

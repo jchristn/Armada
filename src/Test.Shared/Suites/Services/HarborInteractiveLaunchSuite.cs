@@ -271,9 +271,11 @@ namespace Test.Shared.Suites.Services
 
                 AskMessage reply = (await s.Threads.EnumerateMessagesAsync(owner, thread.Id, null).ConfigureAwait(false))!.Messages.Last();
                 AssertEqual("CodexJsonReply", reply.ContentText, "the final message is the reply");
-                AssertEqual(1, reply.ToolCalls.Count, "the command execution became a tool call");
-                AssertEqual("shell", reply.ToolCalls[0].ToolName);
-                AssertEqual(true, reply.ToolCalls[0].Ok, "exit code 0");
+                EnumerationResult<AskMessageToolCall>? callPage = await s.Threads.EnumerateToolCallsAsync(owner, thread.Id, reply.Id, new EnumerationQuery { PageSize = 1000, Order = EnumerationOrderEnum.CreatedAscending }).ConfigureAwait(false);
+                List<AskMessageToolCall> replyCalls = callPage?.Objects ?? new List<AskMessageToolCall>();
+                AssertEqual(1, replyCalls.Count, "the command execution became a tool call");
+                AssertEqual("shell", replyCalls[0].ToolName);
+                AssertEqual(true, replyCalls[0].Ok, "exit code 0");
                 CaptainChatMetrics? m = reply.Metrics;
                 AssertNotNull(m, "the reply carries the turn telemetry");
                 AssertEqual(1200, m!.PromptTokens, "input from turn.completed");

@@ -7,7 +7,9 @@ namespace Test.Shared.Suites.E2E
     using System.Net.Http;
     using System.Threading;
     using System.Threading.Tasks;
+    using Armada.Core.Enums;
     using Armada.Core.Models;
+    using Armada.Core.Services;
     using Test.Shared.Infrastructure;
     using Touchstone.Core;
     using static Test.Shared.Infrastructure.Asserts;
@@ -609,6 +611,36 @@ namespace Test.Shared.Suites.E2E
                 HttpResponseMessage response = await authClient.GetAsync("/api/v1/merge-queue?pageSize=10000").ConfigureAwait(false);
                 EnumerationResult<MergeEntry> result = await JsonHelper.DeserializeAsync<EnumerationResult<MergeEntry>>(response).ConfigureAwait(false);
                 AssertTrue(result.TotalMs >= 0);
+            }));
+
+            cases.Add(CaseAsync("purge_over_request_limit_rejected", "Batch purge of more than 1000 ids is a REST 400 and an MCP InvalidArgument with Code CollectionLimitExceeded", TestTags.Negative, async () =>
+            {
+                E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this);
+                List<string> ids = Enumerable.Range(0, 1001).Select(i => "mrg_missing" + i).ToList();
+                HttpResponseMessage rest = await fx.AuthClient.PostAsync("/api/v1/merge-queue/purge", JsonHelper.ToJsonContent(new { EntryIds = ids })).ConfigureAwait(false);
+                AssertEqual(HttpStatusCode.BadRequest, rest.StatusCode);
+                E2eLimitErrorBody body = JsonHelper.Deserialize<E2eLimitErrorBody>(await rest.Content.ReadAsStringAsync().ConfigureAwait(false));
+                AssertEqual(CollectionLimitExceededException.ErrorCode, body.Data!.Code);
+                AssertEqual("EntryIds", body.Data.Field);
+                AssertEqual(1000, body.Data.Limit);
+                AssertEqual(1001L, body.Data.Actual);
+
+                HttpResponseMessage atLimit = await fx.AuthClient.PostAsync("/api/v1/merge-queue/purge", JsonHelper.ToJsonContent(new { EntryIds = ids.Take(1000).ToList() })).ConfigureAwait(false);
+                AssertEqual(HttpStatusCode.OK, atLimit.StatusCode, "exactly the limit is accepted");
+                MergeQueuePurgeResult result = JsonHelper.Deserialize<MergeQueuePurgeResult>(await atLimit.Content.ReadAsStringAsync().ConfigureAwait(false));
+                AssertEqual(1000, result.Skipped.Count, "Skipped is bounded by the request");
+
+                using (HttpClient mcp = new HttpClient())
+                {
+                    mcp.BaseAddress = fx.McpClient.BaseAddress;
+                    mcp.DefaultRequestHeaders.Add("X-Api-Key", fx.ApiKey);
+                    string rpc = await McpTestCalls.CallToolAsync(mcp, "purge_merge_entries", new { entryIds = ids }).ConfigureAwait(false);
+                    E2eMcpToolEnvelope envelope = JsonHelper.Deserialize<E2eMcpToolEnvelope>(rpc);
+                    string text = envelope.Result?.Content.FirstOrDefault()?.Text ?? "";
+                    McpToolError error = JsonHelper.Deserialize<McpToolError>(text);
+                    AssertEqual(McpToolErrorCodeEnum.InvalidArgument, error.ErrorCode, text);
+                    AssertEqual(CollectionLimitExceededException.ErrorCode, error.Code, text);
+                }
             }));
 
             return new TestSuiteDescriptor(

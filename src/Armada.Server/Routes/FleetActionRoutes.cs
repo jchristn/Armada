@@ -218,9 +218,9 @@ namespace Armada.Server.Routes
             api => api
                 .WithTag("FleetActions")
                 .WithSummary("Get a fleet action run")
-                .WithDescription("Returns the run and summaries of all of its targets. Output text is not included; use the target endpoint.")
+                .WithDescription("Returns the run with its target counts. Targets are not embedded: page them with POST /api/v1/fleet-action-runs/{id}/targets/enumerate, and read one target's output with the target endpoint.")
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Run ID (far_ prefix)"))
-                .WithResponse(200, OpenApiJson.For<FleetActionRunDetail>("Run with target summaries"))
+                .WithResponse(200, OpenApiJson.For<FleetActionRunDetail>("Run with target counts"))
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())
                 .WithSecurity("ApiKey"));
 
@@ -325,6 +325,10 @@ namespace Armada.Server.Routes
             {
                 req.Http.Response.StatusCode = 404;
                 return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = e.Message };
+            }
+            catch (CollectionLimitExceededException e)
+            {
+                return RouteErrorMapper.LimitExceeded(req, e);
             }
             catch (FleetActionTemplateException e)
             {

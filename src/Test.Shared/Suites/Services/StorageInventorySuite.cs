@@ -24,6 +24,20 @@ namespace Test.Shared.Suites.Services
         {
             return new TestSuiteDescriptor("Services.Storage", "Storage inventory", new List<TestCaseDescriptor>
             {
+                Case("history_breakdowns_fold", ct =>
+                {
+                    Dictionary<string, long> wide = new Dictionary<string, long>();
+                    for (int i = 0; i < 40; i++) wide["hbr_" + i.ToString("D2")] = 1000 + i;
+                    Dictionary<string, long> folded = StorageHistoryPoint.Fold(wide);
+                    AssertEqual(StorageHistoryPoint.MaxBreakdownEntries, folded.Count, "bounded");
+                    AssertEqual(wide.Values.Sum(), folded.Values.Sum(), "nothing dropped: the total is kept");
+                    AssertTrue(folded.ContainsKey("hbr_39") && !folded.ContainsKey("hbr_00"), "largest kept, smallest folded");
+                    long expectedOther = wide.OrderByDescending(kv => kv.Value).Skip(StorageHistoryPoint.MaxBreakdownEntries - 1).Sum(kv => kv.Value);
+                    AssertEqual(expectedOther, folded[StorageHistoryPoint.OtherKey], "other is the sum of the rest");
+                    Dictionary<string, long> small = new Dictionary<string, long> { ["a"] = 1, ["b"] = 2 };
+                    AssertEqual(2, StorageHistoryPoint.Fold(small).Count, "a small breakdown is unchanged");
+                    return Task.CompletedTask;
+                }),
                 Case("overlap", async ct =>
                 {
                     string root = Temp("storage_overlap");
@@ -100,6 +114,16 @@ namespace Test.Shared.Suites.Services
                             remote.Locations[0].Bytes = -1;
                             await connections.OnMessageAsync(id, heartbeat, ct).ConfigureAwait(false);
                             AssertEqual(42L, inventory.Read().Hosts.Single(h => h.HostId == id).Locations[0].Bytes!.Value);
+
+                            // Hosts are paged, Admiral first; the snapshot carries totals and serializes no host list.
+                            StorageSnapshot totals = inventory.Read();
+                            AssertEqual(totals.Hosts.Count, totals.HostCount, "host count");
+                            AssertFalse(System.Text.Json.JsonSerializer.Serialize(totals).Contains("\"Hosts\":[", StringComparison.Ordinal), "no embedded host list");
+                            Armada.Core.Models.EnumerationResult<StorageHostReport> first = inventory.EnumerateHosts(new Armada.Core.Models.EnumerationQuery { PageNumber = 1, PageSize = 1 });
+                            AssertEqual("admiral", first.Objects.Single().HostId, "Admiral first");
+                            AssertEqual((long)totals.HostCount, first.TotalRecords, "exact total");
+                            Armada.Core.Models.EnumerationResult<StorageHostReport> second = inventory.EnumerateHosts(new Armada.Core.Models.EnumerationQuery { PageNumber = 2, PageSize = 1 });
+                            AssertEqual(id, second.Objects.Single().HostId, "then the Harbor");
                         }
                     }
                 }),
@@ -107,7 +131,7 @@ namespace Test.Shared.Suites.Services
                 {
                     StorageSettings settings = new StorageSettings { IntervalSeconds = -1, HistoryCapacity = 99999, MaxEntries = 0 };
                     AssertEqual(30, settings.IntervalSeconds);
-                    AssertEqual(2016, settings.HistoryCapacity);
+                    AssertEqual(CollectionLimits.MaxSummaryBuckets, settings.HistoryCapacity);
                     AssertEqual(100, settings.MaxEntries);
                     using (CancellationTokenSource cancelled = new CancellationTokenSource())
                     {

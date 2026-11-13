@@ -65,12 +65,17 @@ namespace Armada.Core.Services
 
         /// <summary>
         /// Build a PolyPrompt completion (chat / tool-chat) client for the endpoint. The caller owns the
-        /// returned client and must dispose it.
+        /// returned client and must dispose it. With <paramref name="usageSink"/> the client's transport also
+        /// reports allowlisted rate-limit response headers (passive capture on existing inference calls;
+        /// nothing extra is ever requested), on every authentication path including the provider default.
         /// </summary>
         /// <param name="endpoint">Model endpoint.</param>
         /// <param name="logging">Logging module.</param>
+        /// <param name="usageSink">Receives rate-limit header observations, or null (the default) for no capture.</param>
         /// <returns>A configured completion client.</returns>
-        public static CompletionClientBase CreateCompletion(ModelEndpoint endpoint, LoggingModule logging)
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="endpoint"/> or <paramref name="logging"/> is null.</exception>
+        /// <exception cref="InvalidOperationException">Thrown when the provider does not support inference or its configuration is incomplete.</exception>
+        public static CompletionClientBase CreateCompletion(ModelEndpoint endpoint, LoggingModule logging, Action<UsageHeaderObservation>? usageSink = null)
         {
             if (endpoint == null) throw new ArgumentNullException(nameof(endpoint));
             if (logging == null) throw new ArgumentNullException(nameof(logging));
@@ -80,7 +85,7 @@ namespace Armada.Core.Services
 
             string baseUrl = endpoint.BaseUrl ?? String.Empty;
             string apiKey = ModelEndpointAuth.ProviderSecret(endpoint);
-            HttpClient? http = ModelEndpointAuth.CreateHttpClient(endpoint);
+            HttpClient? http = ModelEndpointAuth.CreateHttpClient(endpoint, usageSink);
 
             CompletionClientBase client;
             switch (endpoint.Provider)

@@ -190,6 +190,18 @@ namespace Armada.Tui.Screens.Configuration
         }
 
         /// <inheritdoc />
+        protected override string DeletingTitle
+        {
+            get { return "Deleting persona"; }
+        }
+
+        /// <inheritdoc />
+        protected override string DeletingManyTitle
+        {
+            get { return "{count, plural, one {Deleting # persona} other {Deleting # personas}}"; }
+        }
+
+        /// <inheritdoc />
         protected override Task DeleteAsync(Persona row, CancellationToken token)
         {
             return Context.Client.DeletePersonaAsync(row.Name, token);

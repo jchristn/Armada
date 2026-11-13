@@ -22,6 +22,7 @@ import { useNotifications } from '../context/NotificationContext';
 import { buildPipelineDuplicatePayload } from '../lib/duplicates';
 import { formatStages } from '../lib/configuration';
 import { useResourceTable } from '../lib/useResourceTable';
+import { useDeleteProgress } from '../lib/useDeleteProgress';
 
 interface StageFormEntry {
   personaName: string;
@@ -43,6 +44,7 @@ export default function Pipelines() {
   const { isAdmin, isTenantAdmin, user } = useAuth();
   const viewer: ScopeViewer = { isAdmin, isTenantAdmin, tenantId: user?.user?.tenantId, userId: user?.user?.id };
   const { t, formatRelativeTime, formatDateTime } = useLocale();
+  const deletion = useDeleteProgress();
   const { pushToast } = useNotifications();
   const [pipelines, setPipelines] = useState<Pipeline[]>([]);
   const [loading, setLoading] = useState(true);
@@ -170,11 +172,9 @@ export default function Pipelines() {
       message: t('Delete pipeline "{{name}}"? This cannot be undone.', { name }),
       onConfirm: async () => {
         setConfirm(c => ({ ...c, open: false }));
-        try {
-          await deletePipeline(name);
-          pushToast('warning', t('Pipeline "{{name}}" deleted.', { name }));
-          load();
-        } catch { setError(t('Delete failed.')); }
+        if (!(await deletion.run({ kind: 'pipeline', action: () => deletePipeline(name) }))) return;
+        pushToast('warning', t('Pipeline "{{name}}" deleted.', { name }));
+        load();
       },
     });
   }
@@ -337,6 +337,7 @@ export default function Pipelines() {
       />
 
       {/* Confirm Dialog */}
+      {deletion.dialog}
       <ConfirmDialog open={confirm.open} title={confirm.title} message={confirm.message}
         onConfirm={confirm.onConfirm} onCancel={() => setConfirm(c => ({ ...c, open: false }))} />
 

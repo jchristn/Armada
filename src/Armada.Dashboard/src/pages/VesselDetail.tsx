@@ -1,3 +1,4 @@
+import VesselConcurrencyCard from '../components/vessels/VesselConcurrencyCard';
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useParams, useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { getVessel, listFleets, listMissionSummaries, listPipelines, createVessel, deleteVessel, getVesselReadiness, getVesselLandingPreview } from '../api/client';
@@ -19,9 +20,13 @@ import { usePersistedPageSize } from '../lib/usePersistedPageSize';
 import { useNotifications } from '../context/NotificationContext';
 import { buildVesselDuplicatePayload } from '../lib/duplicates';
 import VesselFormModal from '../components/vessels/VesselFormModal';
+import VesselReservationsCard from '../components/blackbox/VesselReservationsCard';
+import VesselBlackBoxDoctorCard from '../components/blackbox/VesselBlackBoxDoctorCard';
+import { useDeleteProgress } from '../lib/useDeleteProgress';
 
 export default function VesselDetail() {
   const { t, formatDateTime, formatRelativeTime } = useLocale();
+  const deletion = useDeleteProgress();
   const { pushToast } = useNotifications();
   const { id } = useParams<{ id: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -137,11 +142,9 @@ export default function VesselDetail() {
       message: t('Delete vessel "{{name}}"? This cannot be undone.', { name: vessel.name }),
       onConfirm: async () => {
         setConfirm(c => ({ ...c, open: false }));
-        try {
-          await deleteVessel(vessel.id);
-          pushToast('warning', t('Vessel "{{name}}" deleted.', { name: vessel.name }));
-          navigate('/vessels');
-        } catch { setError(t('Delete failed.')); }
+        if (!(await deletion.run({ kind: 'vessel', action: () => deleteVessel(vessel.id) }))) return;
+        pushToast('warning', t('Vessel "{{name}}" deleted.', { name: vessel.name }));
+        navigate('/vessels');
       },
     });
   }
@@ -185,11 +188,10 @@ export default function VesselDetail() {
     <div>
       {/* Breadcrumb */}
       <PageHeader
-        breadcrumb={
-          <>
-            <Link to="/vessels" title={t('Back to the list of all vessels.')}>{t('Vessels')}</Link> <span className="breadcrumb-sep">&gt;</span> <span>{vessel.name}</span>
-          </>
-        }
+        breadcrumb={[
+          { label: t('Vessels'), to: '/vessels', title: t('Back to the list of all vessels.') },
+          { label: vessel.name },
+        ]}
         title={vessel.name}
         actions={
           <>
@@ -254,6 +256,7 @@ export default function VesselDetail() {
 
       <JsonViewer open={jsonData.open} title={jsonData.title} data={jsonData.data} onClose={() => setJsonData({ open: false, title: '', data: null })} />
       <VesselCleanupModal vesselId={vessel.id} vesselName={vessel.name} open={cleanupOpen} onClose={() => setCleanupOpen(false)} />
+      {deletion.dialog}
       <ConfirmDialog open={confirm.open} title={confirm.title} message={confirm.message}
         onConfirm={confirm.onConfirm} onCancel={() => setConfirm(c => ({ ...c, open: false }))} />
 
@@ -352,7 +355,8 @@ export default function VesselDetail() {
         <div className="detail-field"><span className="detail-label" title={t('Block landing until at least one structured check (build, test, lint) has passed for the mission branch. Off by default.')}>{t('Require Passing Checks To Land')}</span><span>{vessel.requirePassingChecksToLand ? t('Yes') : t('No')}</span></div>
         <div className="detail-field"><span className="detail-label" title={t('When the target branch matches a Protected Branch Pattern, only Pull Request or Merge Queue landing is allowed; local merges are blocked. Off by default.')}>{t('Require PR For Protected Branches')}</span><span>{vessel.requirePullRequestForProtectedBranches ? t('Yes') : t('No')}</span></div>
         <div className="detail-field"><span className="detail-label" title={t('Branches starting with the Release Branch Prefix may only land through the merge queue. Off by default.')}>{t('Require Merge Queue For Release Branches')}</span><span>{vessel.requireMergeQueueForReleaseBranches ? t('Yes') : t('No')}</span></div>
-        <div className="detail-field"><span className="detail-label" title={t('Let several missions be active on this vessel at once, each in its own worktree. Off (the default) runs one mission at a time, which avoids merge conflicts between missions.')}>{t('Allow Concurrent Missions')}</span><span>{vessel.allowConcurrentMissions ? t('Yes') : t('No')}</span></div>
+        <div className="detail-field"><span className="detail-label">{t('Parallel voyages')}</span><span>{vessel.maxParallelVoyages === 0 ? t('Unlimited') : vessel.maxParallelVoyages ?? 1}</span></div>
+        <div className="detail-field"><span className="detail-label">{t('Parallel missions per voyage')}</span><span>{vessel.maxParallelMissionsPerVoyage === 0 ? t('Unlimited') : vessel.maxParallelMissionsPerVoyage ?? 4}</span></div>
         <div className="detail-field"><span className="detail-label" title={t('Whether CLI captains run here with their auto-approve (permission bypass) flags. Use captain setting keeps each captain as configured; On or Off overrides every captain on this vessel.')}>{t('Agent Auto-Approve')}</span><span>{vessel.autoApprove === true ? t('On for this vessel') : vessel.autoApprove === false ? t('Off for this vessel') : t('Use captain setting')}</span></div>
         <div className="detail-field"><span className="detail-label" title={t('When on, a passing mission lands unattended only if it meets the file, line and path limits below; anything larger holds for your review. Off uses the normal landing and review rules.')}>{t('Auto-Land Gate')}</span><span>{vessel.autoLandEnabled ? t('Enabled') : t('Disabled')}</span></div>
         {vessel.autoLandEnabled && (
@@ -436,6 +440,10 @@ export default function VesselDetail() {
           <pre className="detail-context-block">{vessel.modelContext}</pre>
         </div>
       )}
+
+      <VesselConcurrencyCard vesselId={vessel.id} />
+      <VesselReservationsCard vesselId={vessel.id} serializeOverlappingMissions={vessel.serializeOverlappingMissions} />
+      <VesselBlackBoxDoctorCard vesselId={vessel.id} onApplied={() => { void load(); }} />
 
       {/* Recent Missions */}
       <div style={{ marginTop: '1rem' }}>

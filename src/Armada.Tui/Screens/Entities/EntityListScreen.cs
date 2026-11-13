@@ -9,6 +9,7 @@ namespace Armada.Tui.Screens.Entities
     using Armada.Core.Models;
     using Armada.Tui.Input;
     using Armada.Tui.Routing;
+    using Armada.Tui.Screens.Kit;
     using Armada.Tui.Services;
     using Armada.Tui.Text;
     using Armada.Tui.Widgets;
@@ -182,7 +183,9 @@ namespace Armada.Tui.Screens.Entities
                 : EntityUi.T(Context, "Delete {{count}} selected records? This cannot be undone.", "count", targets.Count);
             Context.Confirm(title, message, () =>
             {
-                EntityUi.Run(Context, async ct =>
+                string progressTitle = targets.Count == 1 ? DeletingTitle : DeletingManyTitle;
+                int? progressCount = targets.Count == 1 ? (int?)null : targets.Count;
+                DeleteProgress.RunVoid(Context, progressTitle, async ct =>
                 {
                     foreach (T target in targets) await DeleteAsync(target, ct).ConfigureAwait(false);
                 }, () =>
@@ -193,7 +196,7 @@ namespace Armada.Tui.Screens.Entities
                         : EntityUi.T(Context, "Deleted {{count}} records.", "count", targets.Count);
                     EntityUi.Toast(Context, NotificationSeverityEnum.Warning, text);
                     Reload();
-                }, "Delete failed.");
+                }, "Delete failed.", progressCount);
             }, "Delete", DeleteRequiredText);
         }
 
@@ -510,6 +513,24 @@ namespace Armada.Tui.Screens.Entities
         protected virtual string DeleteTitle
         {
             get { return "Delete " + EntityLabel; }
+        }
+
+        /// <summary>
+        /// English title of the progress notice while one row is deleted (for example "Deleting skill"). Default
+        /// "Deleting record".
+        /// </summary>
+        protected virtual string DeletingTitle
+        {
+            get { return "Deleting record"; }
+        }
+
+        /// <summary>
+        /// English ICU plural title of the progress notice while several marked rows are deleted (the count is passed
+        /// as <c>count</c>). Default "{count, plural, one {Deleting # record} other {Deleting # records}}".
+        /// </summary>
+        protected virtual string DeletingManyTitle
+        {
+            get { return "{count, plural, one {Deleting # record} other {Deleting # records}}"; }
         }
 
         /// <summary>

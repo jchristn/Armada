@@ -225,6 +225,56 @@ namespace Test.Shared.Suites.Database
                 AssertFalse(await db.BatteryRuns.DeleteAsync("bat_missing").ConfigureAwait(false), "missing run");
             }));
 
+            cases.Add(CaseAsync("results_enumerate_pages_in_database", "EnumerateByRunAsync pages one run's results with an exact total, outcome filter, both orders, an id tie-break and an empty page past the end", TestTags.Positive, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                DatabaseDriver db = testDb.Driver;
+                BatteryRun run = new BatteryRun();
+                await db.BatteryRuns.CreateAsync(run).ConfigureAwait(false);
+                BatteryRun other = new BatteryRun();
+                await db.BatteryRuns.CreateAsync(other).ConfigureAwait(false);
+                for (int i = 0; i < 7; i++)
+                {
+                    // Pairs share a timestamp so the id tie-break decides their order.
+                    await db.BatteryTaskResults.CreateAsync(new BatteryTaskResult
+                    {
+                        RunId = run.Id,
+                        TaskId = "t" + i,
+                        Outcome = i % 2 == 0 ? BatteryTaskOutcomeEnum.Passed : BatteryTaskOutcomeEnum.Failed,
+                        CreatedUtc = _Fixed.AddMinutes(i / 2)
+                    }).ConfigureAwait(false);
+                }
+
+                await db.BatteryTaskResults.CreateAsync(new BatteryTaskResult { RunId = other.Id, Outcome = BatteryTaskOutcomeEnum.Passed }).ConfigureAwait(false);
+
+                List<string> ascending = new List<string>();
+                for (int pageNumber = 1; pageNumber <= 3; pageNumber++)
+                {
+                    EnumerationResult<BatteryTaskResult> page = await db.BatteryTaskResults.EnumerateByRunAsync(run.Id, new EnumerationQuery { PageNumber = pageNumber, PageSize = 3, Order = EnumerationOrderEnum.CreatedAscending }).ConfigureAwait(false);
+                    AssertEqual(7L, page.TotalRecords, "total counts only this run");
+                    AssertEqual(3, page.TotalPages, "pages");
+                    AssertEqual(pageNumber < 3 ? 3 : 1, page.Objects.Count, "page " + pageNumber + " size");
+                    ascending.AddRange(page.Objects.Select(r => r.Id));
+                }
+
+                AssertEqual(7, ascending.Distinct().Count(), "pages neither overlap nor skip");
+                List<BatteryTaskResult> all = await db.BatteryTaskResults.ReadByRunAsync(run.Id).ConfigureAwait(false);
+                List<string> expected = all.OrderBy(r => r.CreatedUtc).ThenBy(r => r.Id, StringComparer.Ordinal).Select(r => r.Id).ToList();
+                AssertEqual(String.Join(",", expected), String.Join(",", ascending), "created then id ascending");
+
+                EnumerationResult<BatteryTaskResult> newest = await db.BatteryTaskResults.EnumerateByRunAsync(run.Id, new EnumerationQuery { PageSize = 7 }).ConfigureAwait(false);
+                AssertEqual(String.Join(",", Enumerable.Reverse(expected)), String.Join(",", newest.Objects.Select(r => r.Id)), "default order is newest first with the id tie-break");
+
+                EnumerationResult<BatteryTaskResult> passed = await db.BatteryTaskResults.EnumerateByRunAsync(run.Id, new EnumerationQuery { PageSize = 2, Status = "Passed" }).ConfigureAwait(false);
+                AssertEqual(4L, passed.TotalRecords, "outcome filter applies before counting");
+                AssertEqual(2, passed.TotalPages);
+                AssertTrue(passed.Objects.All(r => r.Outcome == BatteryTaskOutcomeEnum.Passed), "filtered rows");
+
+                EnumerationResult<BatteryTaskResult> past = await db.BatteryTaskResults.EnumerateByRunAsync(run.Id, new EnumerationQuery { PageNumber = 5, PageSize = 3 }).ConfigureAwait(false);
+                AssertEqual(0, past.Objects.Count, "empty page past the end");
+                AssertEqual(7L, past.TotalRecords, "accurate total past the end");
+            }));
+
             return new TestSuiteDescriptor(
                 suiteId: SuiteId,
                 displayName: "Database: battery runs and task results",

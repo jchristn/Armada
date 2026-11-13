@@ -31,10 +31,15 @@
   (launch + health poll + rollback) compiles and has protocol round-trip tests, but the live cutover path has
   not been exercised against a running Harbor.
 - Launcher slot-awareness needed only `start-armada-server.ps1` (the HKCU Run key already invokes it);
-  `install-windows-task.bat` was left unchanged. The Linux and macOS startup scripts
-  (`install-systemd-user.sh`, `install-launchd-agent.sh`) are not slot-aware: their unit and agent still launch
+  `install-startup.bat` was left unchanged. The Linux and macOS startup scripts
+  (`scripts/linux/install-startup.sh`, `scripts/macos/install-startup.sh`) are not slot-aware: their unit and agent still launch
   `~/.armada/bin/Armada.Server`, so after a reboot they start the classic publish rather than the slot named by
   `current`.
+  The WSL startup launcher (`scripts/wsl2/install-startup.sh`, `scripts/wsl/install-startup.sh`) and the
+  `start-armada-server.sh` helpers do follow `current`: they run `bin/slots/<current>/Armada.Server` when that file
+  exists and the classic publish otherwise (today that is always the classic publish, since slots name
+  `Armada.Server.exe`). Every `publish-server` script (all five OSes) deletes `bin/current` after publishing, so a
+  fresh publish is never shadowed by an older slot.
 - The source tree is the self vessel's `WorkingDirectory` when it has one (a vessel added from a local path or
   `file://` URL), else its `LocalPath`; `SourcePath` in the request overrides both.
 - Slot names are `<yyyy-MM-dd_HHmmss>_<short-sha>` (UTC), so two builds of the same commit on one day get
@@ -88,7 +93,7 @@ cannot perform itself.
 ## Deployment layout: A/B slots
 
 Publishing over the running exe is impossible on Windows -- it is file-locked,
-which is exactly why `scripts/windows/update-windows-task.bat` stops the server
+which is exactly why `scripts/windows/update-startup.bat` stops the server
 before republishing and eats full-build downtime. Publish into a **new versioned
 slot** while the old server keeps running instead:
 
@@ -270,7 +275,7 @@ slot until Phase 2 lands.
   _Notes:_
 
 - [x] **T7 -- Launcher `current`-awareness.**
-  `scripts/windows/start-armada-server.ps1` and `install-windows-task.bat` launch
+  `scripts/windows/start-armada-server.ps1` and `install-startup.bat` launch
   the exe named by `current` (`slots\<name>\Armada.Server.exe`), keeping the
   existing duplicate-instance guard (match by `ExecutablePath`).
   _Acceptance:_ a fresh reboot comes up on the slot named by `current`.

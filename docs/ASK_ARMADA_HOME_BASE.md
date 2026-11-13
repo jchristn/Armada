@@ -140,12 +140,22 @@ without telemetry.
   tool names and argument shapes as MCP). They go through the identical proposal path: with auto-approve
   off the action is created already approved by the user who submitted the form (the form is the
   confirmation), so it executes immediately and is recorded with `source = QuickAction`. `/fleet-action`,
-  `/health`, and `/import` require tenant admin; `/dispatch` and `/status` do not.
+  `/health`, and `/import` require tenant admin; `/dispatch`, `/status` and `/blackbox` do not. With
+  `Propose: true` the action is not run: it becomes a Pending proposal with a confirm card (the black box
+  card's Fix it, Apply and Propose buttons).
+- **Black box actions.** Approving `run_blackbox_recovery` or `apply_blackbox_recommendation` (from the
+  captain or a card) is the user's confirmation: the server runs the dry run, then the confirmed run with
+  the dry run's token. A proposal with `dryRun: true` runs only the dry run; one that already carries a
+  `confirmToken` runs as written. Notes written from Ask (`annotate_blackbox`, recovery annotations) are
+  `authorKind` AskArmada. See `docs/BLACKBOX.md` section 13.21.
 - **Work linking** is by tool, in one mapping table (`AskWorkLinker`): `dispatch` -> Voyage id,
   `create_mission` / `restart_mission` -> Mission id, `run_fleet_action` -> FleetActionRun
   id, `evaluate_vessel_health` -> Job id, `import_vessels` / `discover_vessels` -> VesselImportBatch (and
   Job) id, `cancel_voyage` / `cancel_mission` / `cancel_fleet_action_run` -> refreshes the existing tracked
-  item.
+  item, `get_blackbox` -> BlackBox entry id (also when the captain reads it in a thread), and the black box
+  write tools refresh that card. Mission ids mentioned in a user message or a reply link the card of the
+  mission's current black box entry when the thread's owner can see it (once per thread, hosted on a System
+  WorkUpdate message). A BlackBox card posts no milestones and starts no report turn.
 - **Needs You.** Pending, unexpired proposals in the caller's own threads also appear in the inbox
   (`POST /api/v1/inbox/enumerate`, MCP `enumerate` with `entityType` `inbox`) as kind `ask_proposal` ("Ask approval: <summary>", linking to
   `/ask/<threadId>`), so the dashboard's Needs You page (`/inbox`) and the TUI's Needs You and Approvals
@@ -280,10 +290,10 @@ syntax).
 |---|---|---|---|
 | POST | `/ask/threads/enumerate` | `{ PageNumber, PageSize, Search, IncludeArchived }` | `EnumerationResult<AskThread>` ordered pinned first, then `LastMessageUtc` desc |
 | POST | `/ask/threads` | `{ Title?, CaptainId?, AutoApprove? }` | 201 `AskThread` |
-| GET | `/ask/threads/{id}` | | `AskThreadDetail { Thread, TrackedWork[], PendingProposals[], PendingCliPermissions[], ActiveTurn? }` (ActiveTurn: the running turn's streamed text, thinking, and tool calls so far) |
+| GET | `/ask/threads/{id}` | | `AskThreadDetail { Thread, TrackedWorkCount, PendingProposalCount, PendingCliPermissionCount, ActiveTurn? }` (ActiveTurn: the running turn's streamed text, thinking, and `ToolCallCount` so far) |
 | PUT | `/ask/threads/{id}` | `{ Title?, CaptainId?, AutoApprove?, Pinned?, Archived? }` | `AskThread` |
 | DELETE | `/ask/threads/{id}` | | 204 |
-| POST | `/ask/threads/{id}/messages/enumerate` | `{ BeforeSequence?, PageSize }` | `{ Messages: AskMessage[] (with ToolCalls[], Proposal?, TrackedWork?), HasMore }` |
+| POST | `/ask/threads/{id}/messages/enumerate` | `{ BeforeSequence?, PageSize }` | `{ Messages: AskMessage[] (with ToolCallCount, Proposal?, TrackedWork?), HasMore }` |
 | POST | `/ask/threads/{id}/messages` | `{ Content, ShowThinking? }` | 202 `{ MessageId, TurnId }` |
 | POST | `/ask/threads/{id}/cancel` | | stops the running captain turn |
 | POST | `/ask/threads/{id}/summarize` | | 202; posts a `Summary` message and sets `SummaryText` |
@@ -292,7 +302,13 @@ syntax).
 | POST | `/ask/threads/{id}/actions` | `{ ToolName, Arguments }` | `AskActionProposal` (executed) |
 | POST | `/ask/threads/{id}/proposals/{pid}/approve` | | `AskActionProposal` |
 | POST | `/ask/threads/{id}/proposals/{pid}/reject` | | `AskActionProposal` |
-| GET | `/ask/threads/{id}/work/{workId}` | | `AskWorkSnapshot` |
+| GET | `/ask/threads/{id}/work/{workId}` | | `AskWorkSnapshot` (counts, `MissionCount`, `TargetCount`) |
+| POST | `/ask/threads/{id}/work/enumerate` | `EnumerationQuery` (`Status`) | `EnumerationResult<AskTrackedWork>` |
+| POST | `/ask/threads/{id}/work/{workId}/missions/enumerate` | `EnumerationQuery` | `EnumerationResult<AskWorkMissionSnapshot>` |
+| POST | `/ask/threads/{id}/work/{workId}/targets/enumerate` | `EnumerationQuery` | `EnumerationResult<AskWorkTargetSnapshot>` |
+| POST | `/ask/threads/{id}/proposals/enumerate` | `EnumerationQuery` (`Status`) | `EnumerationResult<AskActionProposal>` |
+| POST | `/ask/threads/{id}/messages/{messageId}/tool-calls/enumerate` | `EnumerationQuery` | `EnumerationResult<AskMessageToolCall>` |
+| POST | `/ask/threads/{id}/turn/tool-calls/enumerate` | `EnumerationQuery` | `EnumerationResult<AskMessageToolCall>` (the running turn's calls) |
 | PUT | `/ask/threads/{id}/cli-permission-policy` | `{ Policy }` (`Refuse`, `ApproveInArmada`, `Bypass`, or null) | `AskThread` with `CliPermission`; 403 when a non-admin sets `Bypass` |
 | GET | `/ask/quick-actions` | | catalog of quick actions with their argument schemas |
 
@@ -350,6 +366,7 @@ The dashboard, the mobile app, and the TUI share one command catalog: the server
 | `/status` | | Summarizes all active work (quick action, runs at once) |
 | `/health` | | Evaluates the health of every active vessel (quick action, runs at once) |
 | `/import` | | Opens the import wizard |
+| `/blackbox` | `<missionId> [question]` | Shows the black box card of a failed mission (`get_blackbox`); the question, if any, is then sent to the captain. Without a mission id the dashboard opens a form (the TUI fills the composer) |
 | `/new` (alias `/clear`) | | Starts a new conversation with a fresh context and the same captain; the old one stays in the list |
 | `/help` | | Opens the menu with every command and its description |
 | `/summarize` | | Posts a summary of the open conversation |
@@ -498,10 +515,14 @@ camelized by the client; unknown statuses and kinds render as plain text.
 - **AskThread** may carry `ActiveWorkCount` (int, tracked items still `Active`; drives the list's "working" dot until
   live `ask.work` events arrive) and `ActiveTurnId` (string or null; when present it is authoritative for whether a
   captain turn is running after a load or reconnect). An empty `Title` renders as "New conversation".
-- **AskThreadDetail** is `{ Thread, TrackedWork[], PendingProposals[] }`; an `AskTrackedWork` may embed its latest
-  `Snapshot`. Items without one are fetched with `GET .../work/{workId}` (up to 20, active first).
-- **AskMessage** embeds `ToolCalls[]` (`CallId`, `ToolName`, `ArgumentsText`, `ResultText`, `Ok`, `ElapsedMs`),
-  `Proposal`, `TrackedWork`, and has `CreatedUtc`. A message whose `Proposal` was already shown on its
+- **AskThreadDetail** is `{ Thread, TrackedWorkCount, PendingProposalCount, PendingCliPermissionCount, ActiveTurn? }`.
+  The UI reads every page of tracked work (`POST .../work/enumerate`), pending proposals (`POST .../proposals/enumerate`
+  with `Status: Pending`), and pending CLI requests, and composes them into its own `AskThreadView`. An
+  `AskTrackedWork` may embed its latest `Snapshot` (counts only). Items without one are fetched with
+  `GET .../work/{workId}` (up to 20, active first).
+- **AskMessage** carries `ToolCallCount`, `Proposal`, `TrackedWork`, and `CreatedUtc`. The tool calls (`CallId`,
+  `ToolName`, `ArgumentsText`, `ResultText`, `Ok`, `ElapsedMs`) are read with
+  `POST .../messages/{messageId}/tool-calls/enumerate` when the message is shown. A message whose `Proposal` was already shown on its
   `ActionProposal` message does not repeat the card on the `ActionResult`.
 - **Messages enumerate** returns `{ Messages, HasMore }`; without `BeforeSequence` it is the newest page. Order within
   a page does not matter (the UI sorts by `Sequence`). Older pages use `BeforeSequence = <oldest loaded Sequence>`.
@@ -509,11 +530,13 @@ camelized by the client; unknown statuses and kinds render as plain text.
   `Rejected`, `Expired`) is never replaced by a stale `Pending`/`Approved` copy.
 - **AskWorkSnapshot** (flat, all optional except the first four): `TrackedWorkId`, `EntityType`, `EntityId`,
   `Status`, `State`, `Title`, `Counts` (status -> count), `TotalCount`, `CompletedCount`, `FailedCount`,
-  `Missions[]` (`Id`, `Title`, `Status`, `VesselId`, `Persona`, `PipelineStage`, `CaptainId`, `CaptainName`,
+  `MissionCount`, `TargetCount`. Mission rows (`POST .../work/{workId}/missions/enumerate`: `Id`, `Title`, `Status`, `VesselId`, `Persona`, `PipelineStage`, `CaptainId`, `CaptainName`,
   `BranchName`, `CheckRunId`, `CheckRunStatus`, `MergeEntryId`, `MergeQueueStatus`, `PrUrl`, `LandingOutcome`,
-  `FailureReason`, `StartedUtc`, `CompletedUtc`), `Targets[]` (`Id`, `VesselId`, `VesselName`, `Status`, `Reason`,
-  `MissionId`, `VoyageId`), `ErrorText`, `StartedUtc`, `CompletedUtc`, `CapturedUtc`. Progress comes from the rows,
-  else `Counts`, else `CompletedCount`/`TotalCount`.
+  `FailureReason`, `StartedUtc`, `CompletedUtc`) and target rows (`POST .../work/{workId}/targets/enumerate`: `Id`,
+  `VesselId`, `VesselName`, `Status`, `Reason`, `MissionId`, `VoyageId`) are paged; the card loads the first page of
+  100 and shows "Showing N of total rows" when there are more. Other fields: `ErrorText`, `StartedUtc`, `CompletedUtc`,
+  `CapturedUtc`. Progress comes from the rows when every row is loaded, else `Counts`, else
+  `CompletedCount`/`TotalCount`.
 - **Quick actions** (`GET /ask/quick-actions`) are an array (a `{ QuickActions | Actions | Objects }` wrapper is also
   accepted) of `{ Name, Command, Title, Description, ToolName, ArgumentsSchema }`. Names the UI gives forms:
   `dispatch` (tool `dispatch`, args `{ title, vesselId, missions: [{ title, description }], pipelineId? }`),
@@ -552,8 +575,8 @@ These refine the contract above; the dashboard's "UI assumptions" (on `feature/a
   `AskTrackedWork.Snapshot` (embedded in thread detail and in messages), `AskQuickAction.Name` and `ArgumentsSchema`.
   `ask.work` is `{ threadId, trackedWorkId, snapshot, trackedWork }`; `ask.turn` adds `error` on failure.
 - **AskWorkSnapshot** is flat: `TrackedWorkId, ThreadId, EntityType, EntityId, Title, Status, State, Found, TotalCount,
-  CompletedCount, FailedCount, ActiveCount, Progress, Counts, Missions[], Targets[], ErrorText, StartedUtc, CompletedUtc,
-  CapturedUtc`. Mission rows: `Id, Title, Status, VoyageId, VesselId, Persona, PipelineStage, CaptainId, CaptainName,
+  CompletedCount, FailedCount, ActiveCount, Progress, Counts, MissionCount, TargetCount, ErrorText, StartedUtc, CompletedUtc,
+  CapturedUtc`. The rows are paged (`.../missions/enumerate`, `.../targets/enumerate`). Mission rows: `Id, Title, Status, VoyageId, VesselId, Persona, PipelineStage, CaptainId, CaptainName,
   BranchName, CheckRunId, CheckRunStatus, MergeEntryId, MergeQueueStatus` (alias `MergeStatus`)`, PrUrl, LandingOutcome,
   FailureReason, StartedUtc, CompletedUtc`. Target rows: `Id, VesselId, VesselName, Status, Reason, VoyageId, MissionId,
   ExitCode`.

@@ -208,12 +208,12 @@ namespace Armada.Harbor
             List<string> errors = new List<string>();
             if (string.IsNullOrWhiteSpace(Name)) errors.Add("Name is required.");
             if (!Uri.TryCreate(ServerLinkUrl, UriKind.Absolute, out Uri? link) || (link.Scheme != "ws" && link.Scheme != "wss"))
-                errors.Add("Link URL must be an absolute ws:// or wss:// URL, for example ws://127.0.0.1:7890/v1.0/harbor/connect.");
+                errors.Add("Admiral address must be an absolute ws:// or wss:// URL, for example ws://127.0.0.1:7890/v1.0/harbor/connect.");
             if (!Uri.TryCreate(DashboardUrl, UriKind.Absolute, out Uri? dashboard) || (dashboard.Scheme != Uri.UriSchemeHttp && dashboard.Scheme != Uri.UriSchemeHttps))
-                errors.Add("Dashboard URL must be an absolute http:// or https:// URL.");
-            if (HeartbeatIntervalMs < 0) errors.Add("Heartbeat interval cannot be negative (0 turns heartbeats off).");
-            if (HeartbeatIntervalMs > 0 && HeartbeatIntervalMs < 1000) errors.Add("Heartbeat interval must be at least 1000 ms, or 0 to turn heartbeats off.");
-            if (MaxConcurrentJobs < 1 || MaxConcurrentJobs > 64) errors.Add("Maximum concurrent jobs must be between 1 and 64.");
+                errors.Add("Dashboard address must be an absolute http:// or https:// URL.");
+            if (HeartbeatIntervalMs < 0) errors.Add("Heartbeat cannot be negative (0 turns heartbeats off).");
+            if (HeartbeatIntervalMs > 0 && HeartbeatIntervalMs < 1000) errors.Add("Heartbeat must be at least 1000 ms, or 0 to turn heartbeats off.");
+            if (MaxConcurrentJobs < 1 || MaxConcurrentJobs > 64) errors.Add("Jobs at once must be between 1 and 64.");
             if (!string.IsNullOrWhiteSpace(Secret) && string.IsNullOrWhiteSpace(AccessKey)) errors.Add("A secret needs an access key.");
             errors.AddRange(BuildDockSettings().Validate());
             return errors;

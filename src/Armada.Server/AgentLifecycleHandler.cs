@@ -279,6 +279,32 @@ namespace Armada.Server
             return await ResolveDockPlacementAsync(request).ConfigureAwait(false);
         }
 
+        /// <summary>Place an enforced mission on the credential host that supplied its usage, preserving branch continuity and launch permissions.</summary>
+        public async Task<DockPlacement> ResolveUsageDockPlacementAsync(Mission mission, Captain captain, Vessel vessel, string credentialHostId,
+            string localHostId, CancellationToken token = default)
+        {
+            ArgumentNullException.ThrowIfNull(mission); ArgumentNullException.ThrowIfNull(captain); ArgumentNullException.ThrowIfNull(vessel);
+            if (String.IsNullOrWhiteSpace(credentialHostId)) throw new ArgumentException("A credential host is required.", nameof(credentialHostId));
+            token.ThrowIfCancellationRequested();
+            DockPlacementRequest request = new DockPlacementRequest(captain, vessel)
+            {
+                Purpose = "mission " + mission.Id,
+                TenantId = mission.TenantId,
+                UserId = mission.UserId,
+                BranchName = mission.BranchName
+            };
+            Dock? branchDock = await FindLatestBranchDockAsync(mission, vessel).ConfigureAwait(false);
+            if (DockHostResolver.IsHarborDock(branchDock)) request.BranchHarborId = branchDock!.HarborId;
+            else if (branchDock != null) request.BranchOnAdmiral = true;
+            request.RequiredCredentialHostId = credentialHostId;
+            request.CredentialHostIsAdmiral = credentialHostId == localHostId;
+            token.ThrowIfCancellationRequested();
+            DockPlacement result = await ResolveDockPlacementAsync(request).ConfigureAwait(false);
+            token.ThrowIfCancellationRequested();
+            return result;
+        }
+
+
         /// <summary>
         /// Choose where a dock is created for any captain work on a vessel (a mission, a planning session, or a Model
         /// Context build), by the same rules as <see cref="ResolveDockPlacementAsync(Mission, Captain, Vessel)"/>.
@@ -293,8 +319,22 @@ namespace Armada.Server
 
             HarborConnectionManager? harbors = _HarborConnections;
             string? branchHarborId = request.BranchHarborId;
+            if (request.RequiredCredentialHostId != null)
+            {
+                if (request.CredentialHostIsAdmiral)
+                {
+                    if (_Settings.RequireHarborForLaunch) return DockPlacement.WaitFor("captured usage belongs to the Admiral host, but launch policy requires a Harbor");
+                    if (branchHarborId != null) return DockPlacement.WaitFor("captured credentials are on the Admiral host, while the existing branch must remain on its Harbor");
+                    return DockPlacement.OnAdmiral("using the credential host that supplied the admitted usage observation");
+                }
+                if (request.BranchOnAdmiral || branchHarborId != null && branchHarborId != request.RequiredCredentialHostId)
+                    return DockPlacement.WaitFor("the captured credential host differs from the host that must retain the existing branch");
+                branchHarborId = request.RequiredCredentialHostId;
+            }
             if (harbors == null || !harbors.HasConnectedHarbor())
             {
+                if (request.RequiredCredentialHostId != null)
+                    return DockPlacement.WaitFor("the credential Harbor that supplied captured usage is not connected");
                 if (branchHarborId != null)
                     return DockPlacement.WaitFor("its branch " + request.BranchName + " is in the repository on Harbor " + branchHarborId + ", which is not connected; the work runs when that Harbor reconnects");
                 if (_Settings.RequireHarborForLaunch)
@@ -367,6 +407,8 @@ namespace Armada.Server
             }
 
             string why = refusals.Count > 0 ? String.Join("; ", refusals) : decision.Reason;
+            if (request.RequiredCredentialHostId != null)
+                return DockPlacement.WaitFor("the captured credential Harbor cannot serve this mission under the existing routing and repository rules (" + why + ")");
             if (branchHarborId != null)
                 return DockPlacement.WaitFor("its branch " + request.BranchName + " is in the repository on Harbor " + harbors.Describe(branchHarborId) + ", which cannot take it now (" + why + ")");
 
@@ -877,11 +919,17 @@ namespace Armada.Server
         {
             if (_HarborConnections == null) return 0;
             int restored = 0;
-            List<Captain> captains = await _Database.Captains.EnumerateByStateAsync(CaptainStateEnum.Working, token).ConfigureAwait(false);
-            foreach (Captain captain in captains)
+            List<Captain> captains = (await _Database.Captains.EnumerateAsync(token).ConfigureAwait(false))
+                .Where(c => c.State == CaptainStateEnum.Working || c.ActiveMissionCount > 0).ToList();
+            foreach (Captain owner in captains)
+            foreach (Mission assignment in (await _Database.Missions.EnumerateByCaptainAsync(owner.Id, token).ConfigureAwait(false)).Where(m => m.Status == MissionStatusEnum.Assigned || m.Status == MissionStatusEnum.InProgress))
             {
-                if (!captain.ProcessId.HasValue || String.IsNullOrEmpty(captain.CurrentMissionId) || _RemoteMissionRuntimes.ContainsKey(captain.CurrentMissionId)) continue;
-                Mission? mission = await _Database.Missions.ReadAsync(captain.CurrentMissionId, token).ConfigureAwait(false);
+                Captain captain = owner.ForMission(assignment);
+                int? recordedProcess = await _Database.Captains.ReadMissionProcessAsync(owner.Id, assignment.Id, token).ConfigureAwait(false);
+                if (recordedProcess.HasValue && assignment.ProcessId.HasValue && recordedProcess != assignment.ProcessId) continue;
+                if (!captain.ProcessId.HasValue && recordedProcess.HasValue) captain.ProcessId = recordedProcess;
+                if (!captain.ProcessId.HasValue || String.IsNullOrEmpty(captain.Assignment?.Id) || _RemoteMissionRuntimes.ContainsKey(captain.Assignment!.Id!)) continue;
+                Mission? mission = await _Database.Missions.ReadAsync(captain.Assignment!.Id!, token).ConfigureAwait(false);
                 if (mission == null || (mission.Status != MissionStatusEnum.InProgress && mission.Status != MissionStatusEnum.Assigned)
                     || mission.CaptainId != captain.Id || (mission.ProcessId.HasValue && mission.ProcessId != captain.ProcessId) || String.IsNullOrEmpty(mission.DockId)) continue;
                 Dock? dock = await _Database.Docks.ReadAsync(mission.DockId, token).ConfigureAwait(false);
@@ -914,6 +962,7 @@ namespace Armada.Server
                 {
                     captain.ProcessId = restoredProcess;
                     mission.ProcessId = restoredProcess;
+                    await _Database.Captains.TrySetProcessAsync(captain.Id, mission.Id, restoredProcess, token).ConfigureAwait(false);
                     await _Database.Captains.UpdateAsync(captain, token).ConfigureAwait(false);
                     await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
                 }
@@ -964,6 +1013,8 @@ namespace Armada.Server
         /// </summary>
         public async Task<int> HandleLaunchAgentAsync(Captain captain, Mission mission, Dock dock)
         {
+            Captain currentEligibility = await _Database.Captains.ReadAsync(captain.Id).ConfigureAwait(false) ?? captain;
+            CaptainEligibility.RequireActive(currentEligibility);
             _Logging.Info(_Header + "launching " + captain.Runtime + " agent for captain " + captain.Id);
             if (captain.Runtime == AgentRuntimeEnum.ApiEndpoint)
             {
@@ -1458,7 +1509,7 @@ namespace Armada.Server
                     if (String.IsNullOrEmpty(targetMissionId))
                     {
                         Captain? captain = await _Database.Captains.ReadAsync(capturedCaptainId).ConfigureAwait(false);
-                        targetMissionId = captain?.CurrentMissionId;
+                        targetMissionId = captain?.ActiveMissionIds.Count == 1 ? captain.ActiveMissionIds[0] : null;
                     }
 
                     if (String.IsNullOrEmpty(targetMissionId)) return;
@@ -1531,6 +1582,13 @@ namespace Armada.Server
             Mission? mission = await _Database.Missions.ReadAsync(missionId).ConfigureAwait(false);
             if (mission == null) return false;
 
+            // Testing is a progress hint, not a separate execution state. Persisting it would remove a live
+            // process from Assigned/InProgress capacity accounting and lose its exit/restore ownership.
+            if (requested == MissionStatusEnum.Testing)
+            {
+                _Logging.Debug(_Header + "mission " + mission.Id + " reports testing progress; execution remains " + mission.Status);
+                return false;
+            }
             if (!MissionStateMachine.IsAgentReportableTransition(mission.Status, requested))
             {
                 _Logging.Debug(_Header + "ignoring agent status " + requested + " for mission " + mission.Id + " in " + mission.Status);
@@ -1571,7 +1629,7 @@ namespace Armada.Server
                     if (String.IsNullOrEmpty(targetMissionId))
                     {
                         Captain? owner = await _Database.Captains.ReadAsync(capturedCaptainId).ConfigureAwait(false);
-                        targetMissionId = owner?.CurrentMissionId;
+                        targetMissionId = owner?.ActiveMissionIds.Count == 1 ? owner.ActiveMissionIds[0] : null;
                     }
 
                     Mission? mission = null;
@@ -1732,15 +1790,15 @@ namespace Armada.Server
             _StoppingProcesses[processId] = 0;
             try
             {
-                if (captain.CurrentMissionId != null && _RemoteMissionRuntimes.TryGetValue(captain.CurrentMissionId, out RemoteAgentRuntime? remote))
+                if (captain.Assignment?.Id != null && _RemoteMissionRuntimes.TryGetValue(captain.Assignment!.Id!, out RemoteAgentRuntime? remote))
                     await remote.StopAndConfirmAsync().ConfigureAwait(false);
                 else if (_HarborConnections != null && _HarborConnections.IsProcessTracked(processId))
                     await _HarborConnections.StopProcessAndConfirmAsync(processId).ConfigureAwait(false);
                 else
                 {
                     // A missing transient process map does not turn a Harbor PID into a local PID.
-                    Mission? assignment = captain.CurrentMissionId == null ? null
-                        : await _Database.Missions.ReadAsync(captain.CurrentMissionId).ConfigureAwait(false);
+                    Mission? assignment = captain.Assignment?.Id == null ? null
+                        : await _Database.Missions.ReadAsync(captain.Assignment!.Id!).ConfigureAwait(false);
                     Dock? ownedDock = assignment?.DockId == null ? null
                         : await _Database.Docks.ReadAsync(assignment.DockId).ConfigureAwait(false);
                     if (!String.IsNullOrWhiteSpace(ownedDock?.HarborId))

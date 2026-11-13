@@ -3,6 +3,7 @@ namespace Armada.Core.Services
     using System;
     using System.Collections.Generic;
     using System.IO;
+    using System.Linq;
     using System.Security.Cryptography;
     using System.Text.Json;
     using System.Text.Json.Serialization;
@@ -32,7 +33,44 @@ namespace Armada.Core.Services
         #region Public-Methods
 
         /// <summary>
-        /// Load every pack directly under a battery directory, ordered by identifier.
+        /// Load one page of the packs directly under a battery directory, ordered by pack directory name (ordinal; a
+        /// pack's directory is normally named after its identifier). Only the page's manifests are read; TotalRecords
+        /// counts every directory that holds a manifest.
+        /// </summary>
+        /// <param name="batteryDirectory">Battery directory, or null.</param>
+        /// <param name="pageNumber">Page number (values below 1 are normalized to 1).</param>
+        /// <param name="pageSize">Page size (normalized to 1 to 1000).</param>
+        /// <returns>One page of packs; empty when the directory does not exist.</returns>
+        public static EnumerationResult<BatteryPack> LoadPage(string? batteryDirectory, int pageNumber, int pageSize)
+        {
+            int size = pageSize < CollectionLimits.MinPageSize ? CollectionLimits.MinPageSize : (pageSize > CollectionLimits.MaxPageSize ? CollectionLimits.MaxPageSize : pageSize);
+            int number = pageNumber < 1 ? 1 : pageNumber;
+            List<string> directories = new List<string>();
+            if (!String.IsNullOrWhiteSpace(batteryDirectory) && Directory.Exists(batteryDirectory))
+            {
+                foreach (string directory in Directory.GetDirectories(batteryDirectory))
+                {
+                    if (File.Exists(Path.Combine(directory, ManifestFileName))) directories.Add(directory);
+                }
+            }
+
+            directories.Sort((a, b) => String.CompareOrdinal(Path.GetFileName(a), Path.GetFileName(b)));
+            List<BatteryPack> page = new List<BatteryPack>();
+            foreach (string directory in directories.Skip((number - 1) * size).Take(size))
+                page.Add(Load(directory));
+
+            EnumerationResult<BatteryPack> result = new EnumerationResult<BatteryPack>();
+            result.PageNumber = number;
+            result.PageSize = size;
+            result.TotalRecords = directories.Count;
+            result.TotalPages = (int)Math.Ceiling((double)directories.Count / size);
+            result.Objects = page;
+            return result;
+        }
+
+        /// <summary>
+        /// Load every pack directly under a battery directory, ordered by identifier. For in-process lookups (starting a
+        /// run); API reads use <see cref="LoadPage"/>.
         /// </summary>
         /// <param name="batteryDirectory">Battery directory (for example the repository's battery folder).</param>
         /// <returns>The packs; empty when the directory does not exist.</returns>

@@ -22,7 +22,7 @@ namespace Armada.Core.Database
                 {
                     while (await reader.ReadAsync(token).ConfigureAwait(false))
                     {
-                        if (result.Tables.Count >= 2000) { result.Warnings.Add("TableLimit"); result.Status = "Partial"; break; }
+                        if (result.Tables.Count >= StorageDatabase.MaxTables) { result.Warnings.Add("TableLimit"); result.Status = "Partial"; break; }
                         result.Tables.Add(new StorageTable
                         {
                             Schema = reader.GetString(0), Name = reader.GetString(1),

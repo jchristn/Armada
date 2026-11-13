@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { getVessel, getVesselBranches, getVesselCommitActivity, getVesselCommits } from '../api/client';
 import type { Vessel, VesselCommit, VesselCommitActivity } from '../types/models';
 import { useLocale } from '../context/LocaleContext';
@@ -251,13 +251,11 @@ export default function VesselHistory() {
   return (
     <div className="vessel-history">
       <PageHeader
-        breadcrumb={
-          <>
-            <Link to="/vessels" title={t('Back to the list of all vessels.')}>{t('Vessels')}</Link> <span className="breadcrumb-sep">&gt;</span>{' '}
-            <Link to={`/vessels/${vessel.id}`} title={t('Back to this vessel page.')}>{vessel.name}</Link> <span className="breadcrumb-sep">&gt;</span>{' '}
-            <span>{t('History')}</span>
-          </>
-        }
+        breadcrumb={[
+          { label: t('Vessels'), to: '/vessels', title: t('Back to the list of all vessels.') },
+          { label: vessel.name, to: `/vessels/${vessel.id}`, title: t('Back to this vessel page.') },
+          { label: t('History') },
+        ]}
         title={t('History')}
         subtitle={t('Commit activity and history for {{name}}.', { name: vessel.name })}
         actions={

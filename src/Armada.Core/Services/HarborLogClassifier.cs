@@ -368,6 +368,7 @@ namespace Armada.Core.Services
             {
                 case HostCommandKindEnum.CheckRun: return HarborLogCategoryEnum.CheckRun;
                 case HostCommandKindEnum.Command: return HarborLogCategoryEnum.Command;
+                case HostCommandKindEnum.UsageProbe: return HarborLogCategoryEnum.Command;
                 default: return HarborLogCategoryEnum.Git;
             }
         }
@@ -380,6 +381,8 @@ namespace Armada.Core.Services
                 return "Check run" + (String.IsNullOrWhiteSpace(git.Label) ? "" : " " + git.Label!.Trim()) + (where.Length > 0 ? " in " + where : "") + ": " + command;
             if (kind == HostCommandKindEnum.Command)
                 return (String.IsNullOrWhiteSpace(git.Label) ? "Command" : git.Label!.Trim()) + (where.Length > 0 ? " in " + where : "") + ": " + command;
+            if (kind == HostCommandKindEnum.UsageProbe)
+                return "Usage probe" + (String.IsNullOrWhiteSpace(git.Label) ? "" : " " + git.Label!.Trim()) + (where.Length > 0 ? " in " + where : "") + ": " + command;
             string? label = HarborLogFormat.SubjectLabel(entry.VesselName, entry.MissionId);
             if (label == null && where.Length > 0) label = where;
             return (label != null ? label + ": " : "") + command;

@@ -67,5 +67,18 @@ namespace Armada.Core.Database.Interfaces
         /// Enumerates objective refinement sessions by status.
         /// </summary>
         Task<List<ObjectiveRefinementSession>> EnumerateByStatusAsync(ObjectiveRefinementSessionStatusEnum status, CancellationToken token = default);
+
+        /// <summary>
+        /// Read one page of one objective's refinement sessions, most recently updated first for CreatedDescending (the
+        /// default) and least recently updated first for CreatedAscending; the id breaks ties. Scope and filters apply
+        /// before the count. Filters: Status, CaptainId, VesselId, CreatedAfter, CreatedBefore.
+        /// </summary>
+        /// <param name="objectiveId">Objective identifier.</param>
+        /// <param name="tenantId">Only this tenant's sessions, or null for every tenant.</param>
+        /// <param name="userId">Only this user's sessions, or null for every user.</param>
+        /// <param name="query">Paging, order, and filters.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>One page of sessions.</returns>
+        Task<EnumerationResult<ObjectiveRefinementSession>> EnumeratePageByObjectiveAsync(string objectiveId, string? tenantId, string? userId, EnumerationQuery query, CancellationToken token = default);
     }
 }

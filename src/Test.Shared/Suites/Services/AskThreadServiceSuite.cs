@@ -63,7 +63,7 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(1L, (await h.Threads.EnumerateThreadsAsync(owner, null).ConfigureAwait(false)).TotalRecords, "owner enumerate");
             }));
 
-            cases.Add(CaseAsync("detail_sets_cli_permission_decision_flags", "Thread detail sets the caller's decision flags on pending CLI permission requests", TestTags.Positive, async () =>
+            cases.Add(CaseAsync("detail_counts_pending_cli_permissions", "Thread detail counts the thread's pending CLI permission requests instead of embedding them", TestTags.Positive, async () =>
             {
                 using AskTestHarness h = await AskTestHarness.CreateAsync().ConfigureAwait(false);
                 AuthContext admin = AuthContext.Authenticated(Constants.DefaultTenantId, "usr_admin_owner", true, true, "Test");
@@ -82,10 +82,8 @@ namespace Test.Shared.Suites.Services
                     await h.Db.Driver.CliPermissionRequests.CreateAsync(request).ConfigureAwait(false);
 
                     AskThreadDetail? detail = await h.Threads.GetThreadDetailAsync(owner, thread.Id).ConfigureAwait(false);
-                    CliPermissionRequest pending = detail!.PendingCliPermissions.Single();
-                    bool expected = owner.IsAdmin || owner.IsTenantAdmin;
-                    AssertEqual(expected, pending.CanDecide, (expected ? "an admin owner can decide" : "a regular owner cannot decide by default") + " from thread detail");
-                    AssertEqual(expected, pending.CanRemember, "remember follows decide for " + owner.UserId);
+                    AssertEqual(1L, detail!.PendingCliPermissionCount, "one pending request counted for " + owner.UserId);
+                    AssertFalse(System.Text.Json.JsonSerializer.Serialize(detail).Contains("PendingCliPermissions\":[", StringComparison.Ordinal), "the requests are not embedded");
                 }
             }));
 
@@ -256,8 +254,10 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(AskProposalStatusEnum.Pending, card.Proposal!.Status);
                 AssertNotNull(card.Proposal.ExpiresUtc, "pending proposal has ExpiresUtc");
                 AskMessage text = page.Messages.First(m => m.Role == AskMessageRoleEnum.Assistant);
-                AssertEqual(1, text.ToolCalls.Count, "tool call embedded");
-                AssertEqual("mcp__armada__dispatch", text.ToolCalls[0].ToolName);
+                AssertEqual(1, text.ToolCallCount, "tool call counted on the message");
+                List<AskMessageToolCall> calls = await h.ToolCallsAsync(owner, text).ConfigureAwait(false);
+                AssertEqual(1, calls.Count, "tool call read from its page");
+                AssertEqual("mcp__armada__dispatch", calls[0].ToolName);
             }));
 
             return new TestSuiteDescriptor(suiteId: SuiteId, displayName: "Ask Thread Service", cases: cases);

@@ -2,6 +2,7 @@ namespace Armada.Core.Models
 {
     using System.Collections.Generic;
     using Armada.Core.Enums;
+    using Armada.Core.Services;
 
     /// <summary>
     /// Runbook create or update payload.
@@ -46,11 +47,13 @@ namespace Armada.Core.Models
         /// <summary>
         /// Parameter definitions.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxConfigItems)]
         public List<RunbookParameter>? Parameters { get; set; } = null;
 
         /// <summary>
         /// Explicit runbook steps.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxConfigItems)]
         public List<RunbookStep>? Steps { get; set; } = null;
 
         /// <summary>

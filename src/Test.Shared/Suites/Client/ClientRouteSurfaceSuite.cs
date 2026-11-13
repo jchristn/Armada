@@ -49,7 +49,15 @@ namespace Test.Shared.Suites.Client
         private static readonly Dictionary<string, string> _DashboardExportsNotChecked = new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["restartCaptain"] = "Composes deleteCaptain and createCaptain, which are checked themselves",
-            ["getEntity"] = "Generic lookup: the path's entity segment comes from a type map, so it has no single literal route"
+            ["listAllMuxEndpoints"] = "Reads pages through enumerateMuxEndpoints, which is checked itself",
+            ["listMuxEndpoints"] = "Calls listAllMuxEndpoints (pages of enumerateMuxEndpoints, which is checked itself)",
+            ["getEntity"] = "Generic lookup: the path's entity segment comes from a type map, so it has no single literal route",
+            ["getFleet"] = "Unwraps getFleetDetail, which is checked itself",
+            ["listWorkspaceDirectory"] = "Walks getWorkspaceTree pages, which is checked itself",
+            ["listAllWorkspaceChanges"] = "Walks getWorkspaceChanges pages, which is checked itself",
+            ["listAllWorkspaceActiveMissions"] = "Walks listWorkspaceActiveMissions pages, which is checked itself",
+            ["browseAllVesselImport"] = "Walks browseVesselImport pages, which is checked itself",
+            ["listAllStorageHosts"] = "Walks listStorageHosts pages, which is checked itself"
         };
 
         /// <summary>
@@ -63,13 +71,25 @@ namespace Test.Shared.Suites.Client
             ["DELETE /api/v1/signals/{id}"] = "Single delete; the dashboard deletes through POST /api/v1/signals/delete/multiple (DeleteSignalsBatchAsync)",
             ["GET /api/v1/credentials/{id}"] = "The dashboard reads credentials from the list",
             ["GET /api/v1/missions/{id}/evaluate-autoland"] = "Auto-land evaluation, also the MCP tool evaluate_autoland; no dashboard function",
+            ["GET /api/v1/storage/hosts"] = "GET twin of the enumerate route; the dashboard and the client use POST /api/v1/storage/hosts/enumerate (ListStorageHostsAsync)",
             ["GET /api/v1/tenants/{id}"] = "The dashboard reads tenants from the list",
             ["GET /api/v1/token-usage"] = "Raw token-usage records; the dashboard uses the summary (GetTokenUsageAsync)",
             ["GET /api/v1/users/{id}"] = "The dashboard reads users from the list",
+            ["GET /api/v1/vessels/{id}/cleanup/resources"] = "GET twin of the enumerate route; the dashboard and the client use POST .../cleanup/resources/enumerate (ListVesselCleanupResourcesAsync)",
+            ["GET /api/v1/blackbox/recovery-stats"] = "GET twin of the enumerate route; the client uses POST /api/v1/blackbox/recovery-stats/enumerate (GetBlackBoxRecoveryStatsAsync)",
+            ["GET /api/v1/blackbox/{id}/nearby-successes"] = "GET twin of the enumerate route; the client uses POST .../nearby-successes/enumerate (ListBlackBoxNearbySuccessesAsync)",
+            ["GET /api/v1/blackbox/{id}/timeline"] = "GET twin of the enumerate route; the client uses POST .../timeline/enumerate (GetBlackBoxTimelineAsync)",
+            ["GET /api/v1/vessels/{id}/blackbox-doctor"] = "GET twin of the enumerate route; the client uses POST .../blackbox-doctor/enumerate (GetVesselBlackBoxDoctorAsync)",
+            ["GET /api/v1/vessels/{id}/reservations"] = "GET twin of the enumerate route; the client uses POST .../reservations/enumerate (ListVesselReservationsAsync)",
+            ["GET /api/v1/vessels/{id}/health/dependencies"] = "GET twin of the enumerate route; the dashboard and the client use POST .../health/dependencies/enumerate (ListVesselDependenciesAsync)",
+            ["GET /api/v1/workspace/vessels/{vesselId}/active-missions"] = "GET twin of the enumerate route; the dashboard and the client use POST .../active-missions/enumerate (ListWorkspaceActiveMissionsAsync)",
             ["GET /swagger"] = "Swagger UI (HTML); the API Explorer reads /openapi.json (GetOpenApiDocumentAsync)",
             ["PATCH /api/v1/vessels/{id}/context"] = "Context patch (the MCP tool update_vessel_context); the dashboard saves context with PUT /api/v1/vessels/{id}",
             ["POST /api/v1/captains/delete/multiple"] = "Batch delete not offered by the dashboard (captains are deleted one at a time)",
+            ["POST /api/v1/captain-selection-decisions/{id}/candidates/enumerate"] = "Enumerate twin of the GET list; SDK and dashboard use the bounded GET query",
+            ["POST /api/v1/missions/{id}/captain-selection/history/enumerate"] = "Enumerate twin of the GET list; SDK and dashboard use the bounded GET query",
             ["POST /api/v1/captains/enumerate"] = "Enumerate twin of the GET list; the dashboard and the client use the GET list with query parameters",
+            ["POST /api/v1/captains/{id}/tools/enumerate"] = "Enumerate twin of the GET list; the dashboard and the client use the GET list with query parameters",
             ["POST /api/v1/check-runs/enumerate"] = "Enumerate twin of the GET list; the dashboard and the client use the GET list with query parameters",
             ["POST /api/v1/docks/delete/multiple"] = "Batch delete not offered by the dashboard (docks are deleted one at a time)",
             ["POST /api/v1/docks/enumerate"] = "Enumerate twin of the GET list; the dashboard and the client use the GET list with query parameters",
@@ -89,6 +109,10 @@ namespace Test.Shared.Suites.Client
             ["POST /api/v1/playbooks/enumerate"] = "Enumerate twin of the GET list; the dashboard and the client use the GET list with query parameters",
             ["POST /api/v1/project-profiles/enumerate"] = "Enumerate twin of the GET list; the dashboard and the client use the GET list with query parameters",
             ["POST /api/v1/prompt-templates/enumerate"] = "Enumerate twin of the GET list; the dashboard and the client use the GET list with query parameters",
+            ["POST /api/v1/runtimes/mux/endpoints/enumerate"] = "Enumerate twin of the GET list; the dashboard and the client use the GET list with query parameters",
+            ["POST /api/v1/usage/latest/enumerate"] = "Enumerate twin of the GET usage read; the dashboard and Armada.Client use the GET contract with identical filters",
+            ["POST /api/v1/usage/missions/enumerate"] = "Enumerate twin of the GET usage read; the dashboard and Armada.Client use the GET contract with identical filters",
+            ["POST /api/v1/usage/snapshots/enumerate"] = "Enumerate twin of the GET usage read; the dashboard and Armada.Client use the GET contract with identical filters",
             ["POST /api/v1/signals/enumerate"] = "Enumerate twin of the GET list; the dashboard and the client use the GET list with query parameters",
             ["POST /api/v1/skills/enumerate"] = "Enumerate twin of the GET list; the dashboard and the client use the GET list with query parameters",
             ["POST /api/v1/token-usage/delete/by-filter"] = "Token-usage purge; no dashboard function",

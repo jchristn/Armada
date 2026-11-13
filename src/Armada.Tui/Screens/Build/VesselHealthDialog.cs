@@ -3,6 +3,8 @@ namespace Armada.Tui.Screens.Build
     using System;
     using System.Collections.Generic;
     using System.Linq;
+    using System.Threading;
+    using System.Threading.Tasks;
     using Armada.Client;
     using Armada.Core.Enums;
     using Armada.Core.Models;
@@ -162,6 +164,11 @@ namespace Armada.Tui.Screens.Build
             Findings.Activated += (s, f) => StartOverride(f.Criterion);
 
             SetupGrid(Dependencies, "No outdated or vulnerable dependencies were found.");
+            // Dependency rows are paged by the server (the detail carries only DependencyCount).
+            Dependencies.ShowPagingBar = true;
+            Dependencies.PageSize = 50;
+            Dependencies.Dispatcher = screen.Context.Dispatcher;
+            Dependencies.Loader = LoadDependenciesAsync;
             Dependencies.AddColumn(new GridColumn<VesselDependency>("ecosystem", "Ecosystem", d => d.Ecosystem) { Width = 10 });
             Dependencies.AddColumn(new GridColumn<VesselDependency>("project", "Project", d => String.IsNullOrEmpty(d.ProjectPath) ? "-" : d.ProjectPath!) { Weight = 3 });
             Dependencies.AddColumn(new GridColumn<VesselDependency>("package", "Package", d => d.PackageName) { Weight = 3 });
@@ -463,7 +470,7 @@ namespace Armada.Tui.Screens.Build
             for (int i = 0; i < SectionKeys.Length; i++)
             {
                 string label = (i + 1) + " " + T(SectionLabel(SectionKeys[i]));
-                if (SectionKeys[i] == "dependencies" && (Detail?.Dependencies?.Count ?? 0) > 0) label += " (" + Detail!.Dependencies.Count + ")";
+                if (SectionKeys[i] == "dependencies" && (Detail?.DependencyCount ?? 0) > 0) label += " (" + Detail!.DependencyCount + ")";
                 if (SectionKeys[i] == "overrides" && (Detail?.Overrides?.Count ?? 0) > 0) label += " (" + Detail!.Overrides.Count + ")";
                 string text = SectionKeys[i] == Section ? "[" + label + "]" : " " + label + " ";
                 if (tx >= width) break;
@@ -504,6 +511,14 @@ namespace Armada.Tui.Screens.Build
 
         #region Private-Methods
 
+        private async Task<GridPage<VesselDependency>> LoadDependenciesAsync(GridQuery query, CancellationToken token)
+        {
+            EnumerationQuery page = new EnumerationQuery { PageNumber = query.PageNumber, PageSize = query.PageSize };
+            EnumerationResult<VesselDependency>? result = await _Screen.Context.Client.ListVesselDependenciesAsync(VesselId, page, token).ConfigureAwait(false);
+            List<VesselDependency> rows = result?.Objects ?? new List<VesselDependency>();
+            return new GridPage<VesselDependency>(rows, result?.TotalRecords ?? rows.Count);
+        }
+
         private static string SectionLabel(string key)
         {
             switch (key)
@@ -542,12 +557,11 @@ namespace Armada.Tui.Screens.Build
         {
             if (d == null) return;
             d.Findings = d.Findings ?? new List<VesselHealthFinding>();
-            d.Dependencies = d.Dependencies ?? new List<VesselDependency>();
             d.Overrides = d.Overrides ?? new List<VesselHealthOverride>();
             Detail = d;
             List<VesselHealthFinding> ordered = d.Findings.OrderBy(f => { int i = Array.IndexOf(HealthText.Criteria, f.Criterion); return i < 0 ? 99 : i; }).ToList();
             Findings.SetLocalRows(ordered);
-            Dependencies.SetLocalRows(d.Dependencies);
+            Dependencies.Reload();
             Overrides.SetLocalRows(d.Overrides);
             Json.Json = ArmadaJson.Serialize(d);
             SummaryView.Invalidate();

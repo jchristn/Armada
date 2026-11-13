@@ -3,6 +3,7 @@ namespace Armada.Core.Models
     using System;
     using System.Collections.Generic;
     using Armada.Core.Enums;
+    using Armada.Core.Services;
 
     /// <summary>
     /// A task of a pack, as listed by list_battery_packs.
@@ -38,6 +39,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// Toolchain it needs.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxConfigItems)]
         public List<string> Toolchain
         {
             get => _Toolchain;

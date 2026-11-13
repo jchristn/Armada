@@ -6,7 +6,9 @@ import {
   markSignalRead,
   deleteSignalsBatch,
   listCaptains,
+  apiErrorMessage,
 } from '../api/client';
+import { useDeleteProgress } from '../lib/useDeleteProgress';
 import { listAll } from '../api/paging';
 import type { Signal, Captain, SendSignalRequest } from '../types/models';
 import DataTable, { type DataTableColumn } from '../components/shared/DataTable';
@@ -28,6 +30,7 @@ type SortDir = 'asc' | 'desc';
 export default function Signals() {
   const navigate = useNavigate();
   const { t, formatRelativeTime, formatDateTime } = useLocale();
+  const deletion = useDeleteProgress();
   const { pushToast } = useNotifications();
 
   // Data
@@ -167,15 +170,10 @@ export default function Signals() {
     setConfirmAction({
       message: t('Delete {{count}} selected signal(s)?', { count: selected.length }),
       action: async () => {
-        try {
-          await deleteSignalsBatch(selected);
-          pushToast('warning', t('Deleted {{count}} signal(s).', { count: selected.length }));
-          setConfirmAction(null);
-          load();
-        } catch {
-          setError(t('Bulk delete failed.'));
-          setConfirmAction(null);
-        }
+        setConfirmAction(null);
+        if (!(await deletion.run({ kind: 'signal', count: selected.length, action: () => deleteSignalsBatch(selected), errorMessage: (err) => apiErrorMessage(err, t('Bulk delete failed.')) }))) return;
+        pushToast('warning', t('Deleted {{count}} signal(s).', { count: selected.length }));
+        load();
       }
     });
   }
@@ -206,7 +204,7 @@ export default function Signals() {
     {
       key: 'id', label: t('ID'), required: true, sortKey: 'id', headerTitle: t('Unique signal ID (sig_ prefix). Click to sort.'), cellClassName: 'mono table-id-cell',
       render: (sig) => (
-        <span className="id-display" style={{ color: 'var(--primary)' }}>
+        <span className="id-display" style={{ color: 'var(--accent)' }}>
           <span className="id-value" title={sig.id}>{sig.id}</span>
           <CopyButton text={sig.id} onClick={e => e.stopPropagation()} />
         </span>
@@ -244,7 +242,7 @@ export default function Signals() {
           { label: 'View Detail', title: 'Open the signal page with its full payload and sender details.', onClick: () => navigate(`/signals/${sig.id}`) },
           ...(!sig.read ? [{ label: 'Mark Read', title: 'Mark this signal as read so it no longer counts as unread.', onClick: () => handleMarkRead(sig.id) }] : []),
           { label: 'View JSON', title: 'Show the raw signal record as the API returns it.', onClick: () => setJsonView({ title: `${t('Signal')}: ${sig.id}`, data: sig }) },
-          { label: 'Delete', danger: true, title: 'Permanently delete this signal. You confirm first.', onClick: () => setConfirmAction({ message: t('Delete signal {{id}}?', { id: sig.id }), action: async () => { try { await deleteSignalsBatch([sig.id]); pushToast('warning', t('Signal {{id}} deleted.', { id: sig.id })); setConfirmAction(null); load(); } catch { setError(t('Delete failed.')); setConfirmAction(null); } } }) },
+          { label: 'Delete', danger: true, title: 'Permanently delete this signal. You confirm first.', onClick: () => setConfirmAction({ message: t('Delete signal {{id}}?', { id: sig.id }), action: async () => { setConfirmAction(null); if (!(await deletion.run({ kind: 'signal', action: () => deleteSignalsBatch([sig.id]) }))) return; pushToast('warning', t('Signal {{id}} deleted.', { id: sig.id })); load(); } }) },
         ]} />
       ),
     },
@@ -360,6 +358,7 @@ export default function Signals() {
       />
 
       {/* Confirm Dialog */}
+      {deletion.dialog}
       <ConfirmDialog open={confirmAction !== null} message={confirmAction?.message ?? ''} onConfirm={() => confirmAction?.action()} onCancel={() => setConfirmAction(null)} />
     </div>
   );

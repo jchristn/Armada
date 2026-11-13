@@ -236,6 +236,18 @@ namespace Armada.Tui.Screens.Delivery
         }
 
         /// <inheritdoc />
+        protected override string DeletingTitle
+        {
+            get { return "Deleting runbook"; }
+        }
+
+        /// <inheritdoc />
+        protected override string DeletingManyTitle
+        {
+            get { return "{count, plural, one {Deleting # runbook} other {Deleting # runbooks}}"; }
+        }
+
+        /// <inheritdoc />
         protected override Task DeleteAsync(Runbook row, CancellationToken token)
         {
             return Context.Client.DeleteRunbookAsync(row.Id, token);

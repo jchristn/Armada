@@ -4,6 +4,7 @@
  */
 import type { MissionSummary } from '../types/models';
 
+/** One row of POST /api/v1/voyages/progress/enumerate (the status snapshot carries only the voyage counts). */
 export interface VoyageProgress {
   voyage: {
     id: string;
@@ -13,8 +14,14 @@ export interface VoyageProgress {
   totalMissions: number;
   completedMissions: number;
   failedMissions: number;
-  vesselIds: string[];
+  /** Vessel of the voyage's earliest mission, or null. */
+  vesselId?: string | null;
+  /** Distinct vessels the voyage's missions target. */
+  vesselCount?: number;
 }
+
+/** Active voyages the Home page lists (one page; the Voyages tab pages the rest). */
+export const HOME_VOYAGE_PAGE_SIZE = 10;
 
 export interface DashboardStatusData {
   totalCaptains: number;
@@ -22,9 +29,10 @@ export interface DashboardStatusData {
   workingCaptains: number;
   stalledCaptains: number;
   activeVoyages: number;
+  inProgressVoyages?: number;
+  openVoyages?: number;
   memoryPressureDeferrals?: number;
   missionsByStatus: Record<string, number>;
-  voyages: VoyageProgress[];
   recentSignals: Array<{
     id: string;
     type: string;

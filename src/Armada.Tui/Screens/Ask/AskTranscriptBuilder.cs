@@ -267,7 +267,7 @@ namespace Armada.Tui.Screens.Ask
                 .Append(view.ExpandedStats.Contains(message.Id) ? 'S' : 's');
             if (message.Metrics != null)
             {
-                foreach (AskTurnStatistic row in AskTurnStatistics.Rows(message)) sb.Append("|s").Append(row.Key).Append('=').Append(row.Value);
+                foreach (AskTurnStatistic row in AskTurnStatistics.Rows(message, ask.Conversation.ToolCallsFor(message))) sb.Append("|s").Append(row.Key).Append('=').Append(row.Value);
             }
             if (cliRequest != null)
             {
@@ -277,9 +277,9 @@ namespace Armada.Tui.Screens.Ask
                     .Append(request.CanAllowForConversation ? 'B' : 'b');
             }
 
-            if (message.ToolCalls != null)
+            sb.Append("|c").Append(message.ToolCallCount);
             {
-                foreach (AskMessageToolCall call in message.ToolCalls)
+                foreach (AskMessageToolCall call in ask.Conversation.ToolCallsFor(message))
                 {
                     sb.Append('|').Append(call.ToolName).Append(':').Append(call.Ok?.ToString() ?? "?")
                         .Append(':').Append(call.ArgumentsText?.Length ?? -1).Append(':').Append(call.ArgumentsText?.GetHashCode() ?? 0)
@@ -351,7 +351,7 @@ namespace Armada.Tui.Screens.Ask
             block.CopyText = text;
             List<StyledText> lines = block.Lines;
 
-            if ((message.Kind == AskMessageKindEnum.Text || message.Kind == AskMessageKindEnum.WorkReport) && message.Role == AskMessageRoleEnum.Assistant && text.Trim().Length == 0 && (message.ToolCalls == null || message.ToolCalls.Count == 0))
+            if ((message.Kind == AskMessageKindEnum.Text || message.Kind == AskMessageKindEnum.WorkReport) && message.Role == AskMessageRoleEnum.Assistant && text.Trim().Length == 0 && message.ToolCallCount == 0 && conv.ToolCallsFor(message).Count == 0)
                 return null;
 
             if (message.Kind == AskMessageKindEnum.ActionProposal)
@@ -414,7 +414,7 @@ namespace Armada.Tui.Screens.Ask
             }
             else
             {
-                List<AskToolChip> chips = ChipsFor(message.ToolCalls);
+                List<AskToolChip> chips = ChipsFor(conv.ToolCallsFor(message));
                 if (chips.Count > 0) lines.AddRange(ToolChips(chips, view.ExpandedTools.Contains(block.Key), theme, loc, w, conv.Thread?.CliPermission));
                 string name = ask.CaptainName(message.CaptainId) ?? ask.ActiveCaptain?.Name ?? loc.T("Captain");
                 StyledText head = StyledText.From(name, theme.Success.WithAttribute(CellAttributes.Bold, true));
@@ -427,7 +427,7 @@ namespace Armada.Tui.Screens.Ask
                 // measured while the turn streamed in this session.
                 if (message.Metrics == null && conv.Metrics.TryGetValue(message.Id, out AskTurnMetrics? metrics))
                     lines.Add(StyledText.From("  " + metrics.Describe(loc.T("first token"), loc.T("tok/s"), loc.T("tokens"), loc.T("total")), theme.Muted));
-                if (view.ExpandedStats.Contains(block.Key)) lines.AddRange(Statistics(message, theme, loc, w));
+                if (view.ExpandedStats.Contains(block.Key)) lines.AddRange(Statistics(message, conv.ToolCallsFor(message), theme, loc, w));
                 if (!String.IsNullOrWhiteSpace(message.ThinkingText)) lines.AddRange(Thinking(message.ThinkingText!, view.ExpandedThinking.Contains(block.Key), false, theme, loc, w));
                 if (proposal != null) AddConfirmCard(block, lines, proposal, false, view, ask, theme, loc, nowUtc, w);
                 lines.AddRange(Markdown(text, w, theme));
@@ -437,7 +437,7 @@ namespace Armada.Tui.Screens.Ask
             {
                 block.WorkId = workId;
                 AskTrackedWork? work = conv.Work(workId) ?? message.TrackedWork;
-                lines.AddRange(AskCardRenderer.WorkCard(block, work, conv.SnapshotFor(workId), highlight == workId, lines.Count, theme, loc, nowUtc, w));
+                lines.AddRange(AskCardRenderer.WorkCard(block, work, conv.SnapshotFor(workId), conv.WorkRowsFor(workId), highlight == workId, lines.Count, theme, loc, nowUtc, w));
             }
 
             lines.Add(StyledText.Empty);
@@ -468,10 +468,10 @@ namespace Armada.Tui.Screens.Ask
         /// The turn statistics panel of a captain reply: a heading, then one "label  value" pair per row, two pairs to a
         /// line when the width allows (the mobile app's two-column grid).
         /// </summary>
-        private static List<StyledText> Statistics(AskMessage message, ArmadaTheme theme, LocalizationService loc, int w)
+        private static List<StyledText> Statistics(AskMessage message, IReadOnlyList<AskMessageToolCall> calls, ArmadaTheme theme, LocalizationService loc, int w)
         {
             List<StyledText> lines = new List<StyledText>();
-            List<AskTurnStatistic> rows = AskTurnStatistics.Rows(message);
+            List<AskTurnStatistic> rows = AskTurnStatistics.Rows(message, calls);
             if (rows.Count < 1) return lines;
             lines.Add(StyledText.From("  " + loc.T("Turn statistics"), theme.Muted.WithAttribute(CellAttributes.Bold, true)));
             int labelWidth = rows.Max(r => TextCells.Width(loc.T(r.Label)));

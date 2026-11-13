@@ -21,6 +21,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// Command-line arguments. Defaults to a single "--version" argument.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxConfigItems)]
         public List<string> Arguments { get; set; } = new List<string> { "--version" };
 
         /// <summary>

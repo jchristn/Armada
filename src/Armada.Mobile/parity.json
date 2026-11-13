@@ -17,6 +17,14 @@
     },
     {
       "kind": "route",
+      "key": "/*",
+      "status": "not-applicable",
+      "notes": "Browser catch-all renders the shared NotFound recovery page; native routers already handle unmatched routes.",
+      "mobile": "Expo Router +not-found",
+      "workstream": "W0.5"
+    },
+    {
+      "kind": "route",
       "key": "/activity",
       "status": "implemented",
       "mobile": "src/app/(app)/(work)/activity.tsx",
@@ -94,6 +102,30 @@
       "mobile": "src/app/(app)/(work)/backlog/[id].tsx",
       "workstream": "W3.3",
       "notes": "ObjectiveDetailScreen; new creates; ?vesselId= and ?refinementSessionId="
+    },
+    {
+      "kind": "route",
+      "key": "/battery",
+      "status": "not-applicable",
+      "mobile": "src/app/(app)/(work)/battery.tsx",
+      "workstream": "W3.2",
+      "notes": "Server filesystem pack editor is a dashboard administration surface; REST, MCP and ArmadaClient provide programmatic management."
+    },
+    {
+      "kind": "route",
+      "key": "/blackbox",
+      "status": "implemented",
+      "mobile": "src/app/(app)/(work)/blackbox/index.tsx",
+      "workstream": "W2.2",
+      "notes": "redirect to /missions?tab=blackbox (the old tab becomes bbtab, filters kept)"
+    },
+    {
+      "kind": "route",
+      "key": "/blackbox/:id",
+      "status": "implemented",
+      "mobile": "src/app/(app)/(work)/blackbox/[id].tsx",
+      "workstream": "W2.2",
+      "notes": "BlackBoxEntryScreen"
     },
     {
       "kind": "route",
@@ -222,6 +254,22 @@
       "mobile": "src/app/(app)/(work)/environments/[id].tsx",
       "workstream": "W4.1",
       "notes": ""
+    },
+    {
+      "kind": "route",
+      "key": "/evaluations",
+      "status": "not-applicable",
+      "mobile": "",
+      "workstream": "W3.2",
+      "notes": "the mobile app has no captain or model endpoint evaluation screen (see getModelProbeRun); the dashboard Evaluations list and run results page are desktop-only until the app adds evaluation"
+    },
+    {
+      "kind": "route",
+      "key": "/evaluations/:id",
+      "status": "not-applicable",
+      "mobile": "",
+      "workstream": "W3.2",
+      "notes": "the mobile app has no captain or model endpoint evaluation screen (see getModelProbeRun); the dashboard Evaluations list and run results page are desktop-only until the app adds evaluation"
     },
     {
       "kind": "route",
@@ -769,14 +817,6 @@
     },
     {
       "kind": "tab",
-      "key": "Activity:jobs",
-      "status": "implemented",
-      "mobile": "src/screens/activity/JobsScreen.tsx",
-      "workstream": "W4.3",
-      "notes": "JobsScreen embedded: name, kind, status, progress, error, Cancel, full record in a sheet; /jobs redirects here"
-    },
-    {
-      "kind": "tab",
       "key": "Activity:requests",
       "status": "implemented",
       "mobile": "/activity?source=requests",
@@ -798,6 +838,22 @@
       "mobile": "/activity?source=tokens",
       "workstream": "W4.3",
       "notes": "Token Usage"
+    },
+    {
+      "kind": "tab",
+      "key": "Activity:usage-overview",
+      "status": "not-applicable",
+      "mobile": "",
+      "workstream": "AC7",
+      "notes": "Dashboard Captain Usage combines historical quota charts and latest account limits. Native clients open their existing Account Limits surface for this source; historical quota charts remain browser-only as scoped in docs/captain-usage-plan/DASHBOARD_PARITY.md."
+    },
+    {
+      "kind": "tab",
+      "key": "CaptainsHub:battery",
+      "status": "not-applicable",
+      "mobile": "/captains?tab=battery",
+      "workstream": "W3.2",
+      "notes": "Battery Packs tab (moved from /battery): server filesystem pack editor is a dashboard administration surface; REST, MCP and ArmadaClient provide programmatic management."
     },
     {
       "kind": "tab",
@@ -1001,6 +1057,14 @@
     },
     {
       "kind": "tab",
+      "key": "MissionsHub:blackbox",
+      "status": "implemented",
+      "mobile": "/missions?tab=blackbox",
+      "workstream": "W2.2",
+      "notes": "Black Box tab: recent entries filtered by vessel and failure kind, paged; split view on tablets"
+    },
+    {
+      "kind": "tab",
       "key": "MissionsHub:merge-queue",
       "status": "implemented",
       "mobile": "MergeQueueList",
@@ -1113,11 +1177,35 @@
     },
     {
       "kind": "api",
+      "key": "addBlackBoxNote",
+      "status": "implemented",
+      "mobile": "src/screens/blackbox/BlackBoxPanel.tsx (NoteSheet)",
+      "workstream": "W2.2",
+      "notes": "Add note (1 to 8000 characters)"
+    },
+    {
+      "kind": "api",
+      "key": "applyBlackBoxRecommendation",
+      "status": "not-applicable",
+      "mobile": "",
+      "workstream": "W2.2",
+      "notes": "black box browsing, evidence, maintenance and administration are dashboard, TUI, CLI and MCP surfaces (MISSION_BLACKBOX_PLAN.md 11); the app reads entries, briefs, resolve and recovery only"
+    },
+    {
+      "kind": "api",
       "key": "applyFleetRecommendations",
       "status": "implemented",
       "mobile": "src/screens/vessels/import",
       "workstream": "W3.1",
       "notes": "Vessel Import"
+    },
+    {
+      "kind": "api",
+      "key": "applyModelAlertAction",
+      "status": "not-applicable",
+      "mobile": "",
+      "workstream": "W4.3",
+      "notes": "model alerts are advisory; the app lists model_alert items in Needs You as interventions (with the ModelAlert push category) but applying or ignoring their suggested actions is a dashboard, TUI and MCP surface (MODEL_HETEROGENEITY.md Phase 5.3)"
     },
     {
       "kind": "api",
@@ -1158,6 +1246,30 @@
       "mobile": "SignInScreen",
       "workstream": "W0.4",
       "notes": "email + tenant + password sign-in"
+    },
+    {
+      "kind": "api",
+      "key": "authorizeCaptainSelectionRecovery",
+      "status": "implemented",
+      "mobile": "src/screens/operations/mission/SelectionRecoverySheet.tsx",
+      "workstream": "U4",
+      "notes": "Mission Captain Selection section: summary, paged history/comparison, read-only preview, administrator recovery permissions and live captain-selection.changed reload"
+    },
+    {
+      "kind": "api",
+      "key": "backfillBlackBox",
+      "status": "not-applicable",
+      "mobile": "",
+      "workstream": "W2.2",
+      "notes": "black box browsing, evidence, maintenance and administration are dashboard, TUI, CLI and MCP surfaces (MISSION_BLACKBOX_PLAN.md 11); the app reads entries, briefs, resolve and recovery only"
+    },
+    {
+      "kind": "api",
+      "key": "browseAllVesselImport",
+      "status": "implemented",
+      "mobile": "src/Armada.Mobile/src/screens/vessels/import/BrowseTree.tsx",
+      "workstream": "W3.1",
+      "notes": "Used by the existing native workflow, directly or through its shared paged data loader."
     },
     {
       "kind": "api",
@@ -1209,11 +1321,27 @@
     },
     {
       "kind": "api",
+      "key": "cancelModelProbeRun",
+      "status": "not-applicable",
+      "mobile": "",
+      "workstream": "W4.3",
+      "notes": "the mobile app has no captain or model endpoint evaluation screen: the dashboard runs and cancels Quick and Full Evaluates from the captain page and the endpoint health dialog (MODEL_HETEROGENEITY.md Phase 5 item 4); the app adds one when evaluation needs it on the go"
+    },
+    {
+      "kind": "api",
       "key": "cancelVoyage",
       "status": "implemented",
       "mobile": "VoyagesList",
       "workstream": "W2.3",
       "notes": "Voyages"
+    },
+    {
+      "kind": "api",
+      "key": "captureCaptainUsage",
+      "status": "implemented",
+      "mobile": "src/screens/usage/UsageView.tsx",
+      "workstream": "W3.2",
+      "notes": "Phase 6: account/host Limits view, captain usage and capture configuration; shared read contracts remain available."
     },
     {
       "kind": "api",
@@ -1278,6 +1406,14 @@
       "mobile": "src/screens/objectives/useRefinement.ts",
       "workstream": "W3.3",
       "notes": "objective refinement panel"
+    },
+    {
+      "kind": "api",
+      "key": "createBatteryPack",
+      "status": "not-applicable",
+      "mobile": "",
+      "workstream": "W3.2",
+      "notes": "Server filesystem pack editor is a dashboard administration surface; REST, MCP and ArmadaClient provide programmatic management."
     },
     {
       "kind": "api",
@@ -1550,6 +1686,38 @@
       "mobile": "src/screens/objectives",
       "workstream": "W3.3",
       "notes": "Objectives (backlog)"
+    },
+    {
+      "kind": "api",
+      "key": "deleteBatteryPack",
+      "status": "not-applicable",
+      "mobile": "",
+      "workstream": "W3.2",
+      "notes": "Server filesystem pack editor is a dashboard administration surface; REST, MCP and ArmadaClient provide programmatic management."
+    },
+    {
+      "kind": "api",
+      "key": "deleteBatteryPackFile",
+      "status": "not-applicable",
+      "mobile": "",
+      "workstream": "W3.2",
+      "notes": "Server filesystem pack editor is a dashboard administration surface; REST, MCP and ArmadaClient provide programmatic management."
+    },
+    {
+      "kind": "api",
+      "key": "deleteBlackBox",
+      "status": "not-applicable",
+      "mobile": "",
+      "workstream": "W2.2",
+      "notes": "black box browsing, evidence, maintenance and administration are dashboard, TUI, CLI and MCP surfaces (MISSION_BLACKBOX_PLAN.md 11); the app reads entries, briefs, resolve and recovery only"
+    },
+    {
+      "kind": "api",
+      "key": "deleteBlackBoxEntries",
+      "status": "not-applicable",
+      "mobile": "",
+      "workstream": "W2.2",
+      "notes": "black box browsing, evidence, maintenance and administration are dashboard, TUI, CLI and MCP surfaces (MISSION_BLACKBOX_PLAN.md 11); the app reads entries, briefs, resolve and recovery only"
     },
     {
       "kind": "api",
@@ -1889,6 +2057,14 @@
     },
     {
       "kind": "api",
+      "key": "diffBlackBoxEntries",
+      "status": "not-applicable",
+      "mobile": "",
+      "workstream": "W2.2",
+      "notes": "black box operations views (reservations, configuration doctor, attempt diff, recovery statistics) are dashboard, VS Code, TUI, CLI and MCP surfaces (BLACKBOX.md section 12); the app shows dispatch warnings, the timeline, nearby successes and the voyage cascade"
+    },
+    {
+      "kind": "api",
       "key": "disableHarbor",
       "status": "implemented",
       "mobile": "src/screens/configuration/HarborsTab",
@@ -1926,6 +2102,14 @@
       "mobile": "src/screens/system/ServerSettingsTab.tsx (Server*Sections)",
       "workstream": "W4.4",
       "notes": "Backup / Restore"
+    },
+    {
+      "kind": "api",
+      "key": "downloadBlackBox",
+      "status": "not-applicable",
+      "mobile": "",
+      "workstream": "W2.2",
+      "notes": "black box browsing, evidence, maintenance and administration are dashboard, TUI, CLI and MCP surfaces (MISSION_BLACKBOX_PLAN.md 11); the app reads entries, briefs, resolve and recovery only"
     },
     {
       "kind": "api",
@@ -1969,6 +2153,14 @@
     },
     {
       "kind": "api",
+      "key": "enumerateAskProposals",
+      "status": "implemented",
+      "mobile": "src/Armada.Mobile/src/components/approvals/ApprovalCard.tsx",
+      "workstream": "W1.1",
+      "notes": "Used by the existing native workflow, directly or through its shared paged data loader."
+    },
+    {
+      "kind": "api",
       "key": "enumerateAskThreads",
       "status": "implemented",
       "mobile": "AskContext",
@@ -1977,11 +2169,107 @@
     },
     {
       "kind": "api",
+      "key": "enumerateAskToolCalls",
+      "status": "implemented",
+      "mobile": "src/Armada.Dashboard/src/lib/askPaging.ts",
+      "workstream": "W1.1",
+      "notes": "Used by the existing native workflow, directly or through its shared paged data loader."
+    },
+    {
+      "kind": "api",
+      "key": "enumerateAskTurnToolCalls",
+      "status": "implemented",
+      "mobile": "src/Armada.Dashboard/src/lib/askPaging.ts",
+      "workstream": "W1.1",
+      "notes": "Used by the existing native workflow, directly or through its shared paged data loader."
+    },
+    {
+      "kind": "api",
+      "key": "enumerateAskWork",
+      "status": "implemented",
+      "mobile": "src/Armada.Dashboard/src/lib/askPaging.ts",
+      "workstream": "W1.1",
+      "notes": "Used by the existing native workflow, directly or through its shared paged data loader."
+    },
+    {
+      "kind": "api",
+      "key": "enumerateAskWorkMissions",
+      "status": "implemented",
+      "mobile": "src/Armada.Dashboard/src/lib/askPaging.ts",
+      "workstream": "W1.1",
+      "notes": "Used by the existing native workflow, directly or through its shared paged data loader."
+    },
+    {
+      "kind": "api",
+      "key": "enumerateAskWorkTargets",
+      "status": "implemented",
+      "mobile": "src/Armada.Dashboard/src/lib/askPaging.ts",
+      "workstream": "W1.1",
+      "notes": "Used by the existing native workflow, directly or through its shared paged data loader."
+    },
+    {
+      "kind": "api",
       "key": "enumerateBacklog",
       "status": "not-applicable",
       "mobile": "",
       "workstream": "W3.3",
       "notes": "no dashboard page calls it: the backlog pages use the /backlog aliases of the same server resource (listBacklog, getBacklogItem, ...), and so does the app"
+    },
+    {
+      "kind": "api",
+      "key": "enumerateBlackBox",
+      "status": "not-applicable",
+      "mobile": "",
+      "workstream": "W2.2",
+      "notes": "black box browsing, evidence, maintenance and administration are dashboard, TUI, CLI and MCP surfaces (MISSION_BLACKBOX_PLAN.md 11); the app reads entries, briefs, resolve and recovery only"
+    },
+    {
+      "kind": "api",
+      "key": "enumerateBlackBoxFingerprints",
+      "status": "not-applicable",
+      "mobile": "",
+      "workstream": "W2.2",
+      "notes": "black box browsing, evidence, maintenance and administration are dashboard, TUI, CLI and MCP surfaces (MISSION_BLACKBOX_PLAN.md 11); the app reads entries, briefs, resolve and recovery only"
+    },
+    {
+      "kind": "api",
+      "key": "enumerateBlackBoxHotspots",
+      "status": "not-applicable",
+      "mobile": "",
+      "workstream": "W2.2",
+      "notes": "black box browsing, evidence, maintenance and administration are dashboard, TUI, CLI and MCP surfaces (MISSION_BLACKBOX_PLAN.md 11); the app reads entries, briefs, resolve and recovery only"
+    },
+    {
+      "kind": "api",
+      "key": "enumerateBlackBoxNotes",
+      "status": "not-applicable",
+      "mobile": "",
+      "workstream": "W2.2",
+      "notes": "black box browsing, evidence, maintenance and administration are dashboard, TUI, CLI and MCP surfaces (MISSION_BLACKBOX_PLAN.md 11); the app reads entries, briefs, resolve and recovery only"
+    },
+    {
+      "kind": "api",
+      "key": "enumerateBlackBoxObjects",
+      "status": "not-applicable",
+      "mobile": "",
+      "workstream": "W2.2",
+      "notes": "black box browsing, evidence, maintenance and administration are dashboard, TUI, CLI and MCP surfaces (MISSION_BLACKBOX_PLAN.md 11); the app reads entries, briefs, resolve and recovery only"
+    },
+    {
+      "kind": "api",
+      "key": "enumerateBlackBoxResilienceGaps",
+      "status": "not-applicable",
+      "mobile": "",
+      "workstream": "W2.2",
+      "notes": "black box browsing, evidence, maintenance and administration are dashboard, TUI, CLI and MCP surfaces (MISSION_BLACKBOX_PLAN.md 11); the app reads entries, briefs, resolve and recovery only"
+    },
+    {
+      "kind": "api",
+      "key": "enumerateCliPermissionRules",
+      "status": "implemented",
+      "mobile": "src/screens/system/CliPermissionsHub.tsx",
+      "workstream": "W1.2",
+      "notes": "CLI rules list: one bounded page with a truncation note"
     },
     {
       "kind": "api",
@@ -2025,6 +2313,14 @@
     },
     {
       "kind": "api",
+      "key": "enumerateHarbors",
+      "status": "implemented",
+      "mobile": "src/screens/configuration/HarborsTab.tsx",
+      "workstream": "W4.2",
+      "notes": "Harbors list: one bounded page with a truncation note"
+    },
+    {
+      "kind": "api",
       "key": "enumerateHistoryTimeline",
       "status": "implemented",
       "mobile": "src/screens/activity/HistoryTab.tsx",
@@ -2046,6 +2342,54 @@
       "mobile": "",
       "workstream": "W4.2",
       "notes": "the Memories tab already pages, filters and searches on the server through listMemories (GET /api/v1/memories takes the same query fields); it has no sortable column headers, the dashboard table uses this enumerate twin"
+    },
+    {
+      "kind": "api",
+      "key": "enumerateMissionBlackBoxEntries",
+      "status": "not-applicable",
+      "mobile": "",
+      "workstream": "W2.2",
+      "notes": "black box browsing, evidence, maintenance and administration are dashboard, TUI, CLI and MCP surfaces (MISSION_BLACKBOX_PLAN.md 11); the app reads entries, briefs, resolve and recovery only"
+    },
+    {
+      "kind": "api",
+      "key": "enumerateMissionPullRequestChecks",
+      "status": "implemented",
+      "mobile": "src/Armada.Dashboard/src/lib/pullRequestEvidence.ts",
+      "workstream": "W2.2",
+      "notes": "Used by the existing native workflow, directly or through its shared paged data loader."
+    },
+    {
+      "kind": "api",
+      "key": "enumerateMissionPullRequestComments",
+      "status": "not-applicable",
+      "mobile": "",
+      "workstream": "W2.2",
+      "notes": "Native pull-request evidence displays checks and reviews; discussion comments are read on the linked provider page. No separate discussion screen is offered."
+    },
+    {
+      "kind": "api",
+      "key": "enumerateMissionPullRequestReviews",
+      "status": "implemented",
+      "mobile": "src/Armada.Dashboard/src/lib/pullRequestEvidence.ts",
+      "workstream": "W2.2",
+      "notes": "Used by the existing native workflow, directly or through its shared paged data loader."
+    },
+    {
+      "kind": "api",
+      "key": "enumerateModelEndpoints",
+      "status": "implemented",
+      "mobile": "src/screens/configuration/EndpointsTab.tsx",
+      "workstream": "W4.2",
+      "notes": "Endpoints list (one bounded page with a truncation note) and the endpoint pickers through listAll"
+    },
+    {
+      "kind": "api",
+      "key": "enumerateMuxEndpoints",
+      "status": "implemented",
+      "mobile": "src/screens/captains/MuxFields.tsx",
+      "workstream": "W3.1",
+      "notes": "read page by page through listMuxEndpoints"
     },
     {
       "kind": "api",
@@ -2097,6 +2441,14 @@
     },
     {
       "kind": "api",
+      "key": "enumerateVoyageProgress",
+      "status": "implemented",
+      "mobile": "src/Armada.Mobile/src/screens/operations/HomeScreen.tsx",
+      "workstream": "W2.3",
+      "notes": "Used by the existing native workflow, directly or through its shared paged data loader."
+    },
+    {
+      "kind": "api",
       "key": "enumerateWorkflowProfiles",
       "status": "not-applicable",
       "mobile": "",
@@ -2137,6 +2489,14 @@
     },
     {
       "kind": "api",
+      "key": "exportBlackBoxFixture",
+      "status": "not-applicable",
+      "mobile": "",
+      "workstream": "W2.2",
+      "notes": "black box browsing, evidence, maintenance and administration are dashboard, TUI, CLI and MCP surfaces (MISSION_BLACKBOX_PLAN.md 11); the app reads entries, briefs, resolve and recovery only"
+    },
+    {
+      "kind": "api",
       "key": "getAskQuickActions",
       "status": "implemented",
       "mobile": "AskContext",
@@ -2169,6 +2529,94 @@
     },
     {
       "kind": "api",
+      "key": "getBatteryPack",
+      "status": "not-applicable",
+      "mobile": "",
+      "workstream": "W3.2",
+      "notes": "Server filesystem pack editor is a dashboard administration surface; REST, MCP and ArmadaClient provide programmatic management."
+    },
+    {
+      "kind": "api",
+      "key": "getBlackBox",
+      "status": "implemented",
+      "mobile": "src/screens/blackbox/BlackBoxPanel.tsx (/blackbox/:id)",
+      "workstream": "W2.2",
+      "notes": "black box entry screen (MISSION_BLACKBOX_PLAN.md 11.5)"
+    },
+    {
+      "kind": "api",
+      "key": "getBlackBoxBrief",
+      "status": "implemented",
+      "mobile": "src/screens/blackbox/BlackBoxPanel.tsx",
+      "workstream": "W2.2",
+      "notes": "Copy FIX THIS and Share (platform share sheet) and Full report, all showing the single FIX THIS brief"
+    },
+    {
+      "kind": "api",
+      "key": "getBlackBoxBundle",
+      "status": "not-applicable",
+      "mobile": "",
+      "workstream": "W2.2",
+      "notes": "black box browsing, evidence, maintenance and administration are dashboard, TUI, CLI and MCP surfaces (MISSION_BLACKBOX_PLAN.md 11); the app reads entries, briefs, resolve and recovery only"
+    },
+    {
+      "kind": "api",
+      "key": "getBlackBoxFingerprintTrend",
+      "status": "not-applicable",
+      "mobile": "",
+      "workstream": "W2.2",
+      "notes": "black box browsing, evidence, maintenance and administration are dashboard, TUI, CLI and MCP surfaces (MISSION_BLACKBOX_PLAN.md 11); the app reads entries, briefs, resolve and recovery only"
+    },
+    {
+      "kind": "api",
+      "key": "getBlackBoxRecoveryStats",
+      "status": "not-applicable",
+      "mobile": "",
+      "workstream": "W2.2",
+      "notes": "black box operations views (reservations, configuration doctor, attempt diff, recovery statistics) are dashboard, VS Code, TUI, CLI and MCP surfaces (BLACKBOX.md section 12); the app shows dispatch warnings, the timeline, nearby successes and the voyage cascade"
+    },
+    {
+      "kind": "api",
+      "key": "getBlackBoxRetention",
+      "status": "not-applicable",
+      "mobile": "",
+      "workstream": "W2.2",
+      "notes": "black box browsing, evidence, maintenance and administration are dashboard, TUI, CLI and MCP surfaces (MISSION_BLACKBOX_PLAN.md 11); the app reads entries, briefs, resolve and recovery only"
+    },
+    {
+      "kind": "api",
+      "key": "getBlackBoxSection",
+      "status": "not-applicable",
+      "mobile": "",
+      "workstream": "W2.2",
+      "notes": "black box browsing, evidence, maintenance and administration are dashboard, TUI, CLI and MCP surfaces (MISSION_BLACKBOX_PLAN.md 11); the app reads entries, briefs, resolve and recovery only"
+    },
+    {
+      "kind": "api",
+      "key": "getBlackBoxStorage",
+      "status": "not-applicable",
+      "mobile": "",
+      "workstream": "W2.2",
+      "notes": "black box browsing, evidence, maintenance and administration are dashboard, TUI, CLI and MCP surfaces (MISSION_BLACKBOX_PLAN.md 11); the app reads entries, briefs, resolve and recovery only"
+    },
+    {
+      "kind": "api",
+      "key": "getBlackBoxStorageMigration",
+      "status": "not-applicable",
+      "mobile": "",
+      "workstream": "W2.2",
+      "notes": "black box browsing, evidence, maintenance and administration are dashboard, TUI, CLI and MCP surfaces (MISSION_BLACKBOX_PLAN.md 11); the app reads entries, briefs, resolve and recovery only"
+    },
+    {
+      "kind": "api",
+      "key": "getBlackBoxTimeline",
+      "status": "implemented",
+      "mobile": "src/screens/blackbox/BlackBoxInsightSections.tsx",
+      "workstream": "W2.2",
+      "notes": "Timeline section on the entry screen (/blackbox/:id), oldest first, ten per page with Load more"
+    },
+    {
+      "kind": "api",
       "key": "getCaptain",
       "status": "implemented",
       "mobile": "src/screens/captains",
@@ -2182,6 +2630,38 @@
       "mobile": "src/screens/captains",
       "workstream": "W3.2",
       "notes": "Captains"
+    },
+    {
+      "kind": "api",
+      "key": "getCaptainSelection",
+      "status": "implemented",
+      "mobile": "src/screens/operations/mission/CaptainSelectionSection.tsx",
+      "workstream": "U4",
+      "notes": "Mission Captain Selection section: summary, paged history/comparison, read-only preview, administrator recovery permissions and live captain-selection.changed reload"
+    },
+    {
+      "kind": "api",
+      "key": "getCaptainSelectionCandidates",
+      "status": "implemented",
+      "mobile": "src/screens/operations/mission/CaptainSelectionSection.tsx",
+      "workstream": "U4",
+      "notes": "Mission Captain Selection section: summary, paged history/comparison, read-only preview, administrator recovery permissions and live captain-selection.changed reload"
+    },
+    {
+      "kind": "api",
+      "key": "getCaptainSelectionDecision",
+      "status": "implemented",
+      "mobile": "src/screens/operations/mission/CaptainSelectionSection.tsx",
+      "workstream": "U4",
+      "notes": "Mission Captain Selection section: summary, paged history/comparison, read-only preview, administrator recovery permissions and live captain-selection.changed reload"
+    },
+    {
+      "kind": "api",
+      "key": "getCaptainSelectionHistory",
+      "status": "implemented",
+      "mobile": "src/screens/operations/mission/CaptainSelectionSection.tsx",
+      "workstream": "U4",
+      "notes": "Mission Captain Selection section: summary, paged history/comparison, read-only preview, administrator recovery permissions and live captain-selection.changed reload"
     },
     {
       "kind": "api",
@@ -2313,6 +2793,14 @@
     },
     {
       "kind": "api",
+      "key": "getFleetDetail",
+      "status": "implemented",
+      "mobile": "src/screens/fleets/FleetDetailView.tsx",
+      "workstream": "W3.2",
+      "notes": "Fleet detail reads the same fleet from the paged fleet list and loads its vessels separately; the typed detail helper adds no new native operation."
+    },
+    {
+      "kind": "api",
       "key": "getHarbor",
       "status": "implemented",
       "mobile": "src/screens/configuration/HarborsTab",
@@ -2382,6 +2870,22 @@
       "mobile": "MissionDetail",
       "workstream": "W2.2",
       "notes": "Missions"
+    },
+    {
+      "kind": "api",
+      "key": "getMissionBlackBox",
+      "status": "implemented",
+      "mobile": "src/screens/blackbox/BlackBoxPanel.tsx",
+      "workstream": "W2.2",
+      "notes": "mission detail Black Box section (MISSION_BLACKBOX_PLAN.md 11.5)"
+    },
+    {
+      "kind": "api",
+      "key": "getMissionBlackBoxBrief",
+      "status": "implemented",
+      "mobile": "@dashboard/api/client (shared)",
+      "workstream": "W2.2",
+      "notes": "black box read, brief, resolve and recovery are available to the app through the shared client (MISSION_BLACKBOX_PLAN.md 8.4); the mission screen adds a Failure panel when the dashboard does"
     },
     {
       "kind": "api",
@@ -2641,11 +3145,51 @@
     },
     {
       "kind": "api",
+      "key": "getUsageLatest",
+      "status": "implemented",
+      "mobile": "src/screens/usage/UsageView.tsx",
+      "workstream": "W3.2",
+      "notes": "Phase 6: account/host Limits view, captain usage and capture configuration; shared read contracts remain available."
+    },
+    {
+      "kind": "api",
+      "key": "getUsageMissions",
+      "status": "implemented",
+      "mobile": "src/screens/usage/UsageView.tsx",
+      "workstream": "W3.2",
+      "notes": "Phase 6: account/host Limits view, captain usage and capture configuration; shared read contracts remain available."
+    },
+    {
+      "kind": "api",
+      "key": "getUsageSeries",
+      "status": "implemented",
+      "mobile": "src/screens/usage/UsageView.tsx",
+      "workstream": "W3.2",
+      "notes": "Phase 6: account/host Limits view, captain usage and capture configuration; shared read contracts remain available."
+    },
+    {
+      "kind": "api",
+      "key": "getUsageSnapshots",
+      "status": "implemented",
+      "mobile": "src/screens/usage/UsageView.tsx",
+      "workstream": "W3.2",
+      "notes": "Phase 6: account/host Limits view, captain usage and capture configuration; shared read contracts remain available."
+    },
+    {
+      "kind": "api",
       "key": "getVessel",
       "status": "implemented",
       "mobile": "src/screens/vessels",
       "workstream": "W3.1",
       "notes": "Vessels"
+    },
+    {
+      "kind": "api",
+      "key": "getVesselBlackBoxDoctor",
+      "status": "not-applicable",
+      "mobile": "",
+      "workstream": "W2.2",
+      "notes": "black box operations views (reservations, configuration doctor, attempt diff, recovery statistics) are dashboard, VS Code, TUI, CLI and MCP surfaces (BLACKBOX.md section 12); the app shows dispatch warnings, the timeline, nearby successes and the voyage cascade"
     },
     {
       "kind": "api",
@@ -2745,6 +3289,30 @@
     },
     {
       "kind": "api",
+      "key": "getVoyageBlackBox",
+      "status": "implemented",
+      "mobile": "src/screens/blackbox/BlackBoxPanel.tsx",
+      "workstream": "W2.2",
+      "notes": "voyage detail Black Box section (MISSION_BLACKBOX_PLAN.md 11.5)"
+    },
+    {
+      "kind": "api",
+      "key": "getVoyageBlackBoxBrief",
+      "status": "implemented",
+      "mobile": "@dashboard/api/client (shared)",
+      "workstream": "W2.2",
+      "notes": "black box read, brief, resolve and recovery are available to the app through the shared client (MISSION_BLACKBOX_PLAN.md 8.4); the mission screen adds a Failure panel when the dashboard does"
+    },
+    {
+      "kind": "api",
+      "key": "getVoyageBlackBoxCascade",
+      "status": "implemented",
+      "mobile": "src/screens/blackbox/VoyageCascadeSection.tsx",
+      "workstream": "W2.2",
+      "notes": "Cascade section on a failed voyage: missions with status, failure kind, root marker and edges, linked to missions and entries"
+    },
+    {
+      "kind": "api",
       "key": "getVoyageStatus",
       "status": "implemented",
       "mobile": "VoyagesList",
@@ -2809,6 +3377,14 @@
     },
     {
       "kind": "api",
+      "key": "ignoreModelAlert",
+      "status": "not-applicable",
+      "mobile": "",
+      "workstream": "W4.3",
+      "notes": "model alerts are advisory; the app lists model_alert items in Needs You as interventions (with the ModelAlert push category) but applying or ignoring their suggested actions is a dashboard, TUI and MCP surface (MODEL_HETEROGENEITY.md Phase 5.3)"
+    },
+    {
+      "kind": "api",
       "key": "importCheckRun",
       "status": "not-applicable",
       "mobile": "",
@@ -2841,6 +3417,46 @@
     },
     {
       "kind": "api",
+      "key": "lintMissionBrief",
+      "status": "not-applicable",
+      "mobile": "",
+      "workstream": "W2.2",
+      "notes": "the overlap preview the app calls includes the brief lint (briefLint), so the app does not call the lint route separately"
+    },
+    {
+      "kind": "api",
+      "key": "listAllMuxEndpoints",
+      "status": "implemented",
+      "mobile": "src/screens/captains/MuxFields.tsx",
+      "workstream": "W3.1",
+      "notes": "captain form Mux endpoint picker, through listMuxEndpoints"
+    },
+    {
+      "kind": "api",
+      "key": "listAllStorageHosts",
+      "status": "implemented",
+      "mobile": "src/Armada.Mobile/src/screens/system/StorageTab.tsx",
+      "workstream": "W3.2",
+      "notes": "Used by the existing native workflow, directly or through its shared paged data loader."
+    },
+    {
+      "kind": "api",
+      "key": "listAllWorkspaceActiveMissions",
+      "status": "implemented",
+      "mobile": "src/Armada.Mobile/src/screens/workspace/WorkspaceScreen.tsx",
+      "workstream": "W3.1",
+      "notes": "Used by the existing native workflow, directly or through its shared paged data loader."
+    },
+    {
+      "kind": "api",
+      "key": "listAllWorkspaceChanges",
+      "status": "implemented",
+      "mobile": "src/Armada.Mobile/src/screens/workspace/WorkspacePanels.tsx",
+      "workstream": "W3.1",
+      "notes": "Used by the existing native workflow, directly or through its shared paged data loader."
+    },
+    {
+      "kind": "api",
       "key": "listBacklog",
       "status": "implemented",
       "mobile": "src/screens/objectives",
@@ -2854,6 +3470,46 @@
       "mobile": "src/screens/objectives/useRefinement.ts",
       "workstream": "W3.3",
       "notes": "objective refinement panel"
+    },
+    {
+      "kind": "api",
+      "key": "listBatteryPacks",
+      "status": "not-applicable",
+      "mobile": "",
+      "workstream": "W4.3",
+      "notes": "feeds the dashboard's captain Evaluate dialog (pack list); the mobile app has no evaluation screen (see evaluateCaptain)"
+    },
+    {
+      "kind": "api",
+      "key": "listBlackBox",
+      "status": "implemented",
+      "mobile": "src/screens/blackbox/BlackBoxListScreen.tsx",
+      "workstream": "W2.2",
+      "notes": "Black Box list (/blackbox): recent entries filtered by vessel and failure kind, paged"
+    },
+    {
+      "kind": "api",
+      "key": "listBlackBoxNearbySuccesses",
+      "status": "implemented",
+      "mobile": "src/screens/blackbox/BlackBoxInsightSections.tsx",
+      "workstream": "W2.2",
+      "notes": "Nearby successes section on a mission entry screen, ten per page with Load more, linked to the missions"
+    },
+    {
+      "kind": "api",
+      "key": "listBlackBoxNotes",
+      "status": "not-applicable",
+      "mobile": "",
+      "workstream": "W2.2",
+      "notes": "black box browsing, evidence, maintenance and administration are dashboard, TUI, CLI and MCP surfaces (MISSION_BLACKBOX_PLAN.md 11); the app reads entries, briefs, resolve and recovery only"
+    },
+    {
+      "kind": "api",
+      "key": "listBlackBoxObjects",
+      "status": "not-applicable",
+      "mobile": "",
+      "workstream": "W2.2",
+      "notes": "black box browsing, evidence, maintenance and administration are dashboard, TUI, CLI and MCP surfaces (MISSION_BLACKBOX_PLAN.md 11); the app reads entries, briefs, resolve and recovery only"
     },
     {
       "kind": "api",
@@ -3001,6 +3657,14 @@
     },
     {
       "kind": "api",
+      "key": "listMissionBlackBoxEntries",
+      "status": "not-applicable",
+      "mobile": "",
+      "workstream": "W2.2",
+      "notes": "black box browsing, evidence, maintenance and administration are dashboard, TUI, CLI and MCP surfaces (MISSION_BLACKBOX_PLAN.md 11); the app reads entries, briefs, resolve and recovery only"
+    },
+    {
+      "kind": "api",
       "key": "listMissionSummaries",
       "status": "implemented",
       "mobile": "MissionsList",
@@ -3041,6 +3705,14 @@
     },
     {
       "kind": "api",
+      "key": "listObjectiveRefinementMessages",
+      "status": "implemented",
+      "mobile": "src/Armada.Dashboard/src/lib/sessionViews.ts",
+      "workstream": "W3.3",
+      "notes": "Used by the existing native workflow, directly or through its shared paged data loader."
+    },
+    {
+      "kind": "api",
       "key": "listObjectiveRefinementSessions",
       "status": "not-applicable",
       "mobile": "",
@@ -3070,6 +3742,14 @@
       "mobile": "src/screens/configuration/PipelinesTab, PipelineDetail",
       "workstream": "W4.2",
       "notes": "Pipelines"
+    },
+    {
+      "kind": "api",
+      "key": "listPlanningSessionMessages",
+      "status": "implemented",
+      "mobile": "src/Armada.Dashboard/src/lib/sessionViews.ts",
+      "workstream": "W3.3",
+      "notes": "Used by the existing native workflow, directly or through its shared paged data loader."
     },
     {
       "kind": "api",
@@ -3161,6 +3841,14 @@
     },
     {
       "kind": "api",
+      "key": "listStorageHosts",
+      "status": "implemented",
+      "mobile": "src/Armada.Mobile/src/screens/system/StorageTab.tsx via listAllStorageHosts",
+      "workstream": "W3.2",
+      "notes": "Used by the existing native workflow, directly or through its shared paged data loader."
+    },
+    {
+      "kind": "api",
       "key": "listTenants",
       "status": "implemented",
       "mobile": "src/screens/system/TenantsTab.tsx",
@@ -3174,6 +3862,30 @@
       "mobile": "src/screens/system/UsersTab.tsx",
       "workstream": "W4.4",
       "notes": "Users (admin)"
+    },
+    {
+      "kind": "api",
+      "key": "listVesselCleanupResources",
+      "status": "not-applicable",
+      "mobile": "",
+      "workstream": "W3.1",
+      "notes": "Resources belong to the dashboard-only destructive vessel cleanup workflow, like getVesselCleanupInventory; native does not offer repository garbage collection."
+    },
+    {
+      "kind": "api",
+      "key": "listVesselDependencies",
+      "status": "implemented",
+      "mobile": "src/Armada.Mobile/src/screens/vessels/health/HealthDetailSheet.tsx",
+      "workstream": "W3.1",
+      "notes": "Used by the existing native workflow, directly or through its shared paged data loader."
+    },
+    {
+      "kind": "api",
+      "key": "listVesselReservations",
+      "status": "not-applicable",
+      "mobile": "",
+      "workstream": "W2.2",
+      "notes": "black box operations views (reservations, configuration doctor, attempt diff, recovery statistics) are dashboard, VS Code, TUI, CLI and MCP surfaces (BLACKBOX.md section 12); the app shows dispatch warnings, the timeline, nearby successes and the voyage cascade"
     },
     {
       "kind": "api",
@@ -3198,6 +3910,22 @@
       "mobile": "src/screens/configuration/WorkflowProfilesTab, WorkflowProfileDetail",
       "workstream": "W4.2",
       "notes": "Workflow Profiles"
+    },
+    {
+      "kind": "api",
+      "key": "listWorkspaceActiveMissions",
+      "status": "implemented",
+      "mobile": "src/Armada.Mobile/src/screens/workspace/WorkspaceScreen.tsx via listAllWorkspaceActiveMissions",
+      "workstream": "W3.1",
+      "notes": "Used by the existing native workflow, directly or through its shared paged data loader."
+    },
+    {
+      "kind": "api",
+      "key": "listWorkspaceDirectory",
+      "status": "implemented",
+      "mobile": "src/Armada.Mobile/src/screens/workspace/WorkspaceScreen.tsx",
+      "workstream": "W3.1",
+      "notes": "Used by the existing native workflow, directly or through its shared paged data loader."
     },
     {
       "kind": "api",
@@ -3226,10 +3954,10 @@
     {
       "kind": "api",
       "key": "markAskThreadUnread",
-      "status": "planned",
+      "status": "not-applicable",
       "mobile": "",
       "workstream": "W1.1",
-      "notes": "Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md)"
+      "notes": "Native automatically marks an opened thread read; the manual mark-unread action belongs to the dashboard conversation menu."
     },
     {
       "kind": "api",
@@ -3246,6 +3974,14 @@
       "mobile": "src/screens/vessels",
       "workstream": "W3.1",
       "notes": "Vessels"
+    },
+    {
+      "kind": "api",
+      "key": "migrateBlackBoxStorage",
+      "status": "not-applicable",
+      "mobile": "",
+      "workstream": "W2.2",
+      "notes": "black box browsing, evidence, maintenance and administration are dashboard, TUI, CLI and MCP surfaces (MISSION_BLACKBOX_PLAN.md 11); the app reads entries, briefs, resolve and recovery only"
     },
     {
       "kind": "api",
@@ -3289,6 +4025,30 @@
     },
     {
       "kind": "api",
+      "key": "pinBlackBox",
+      "status": "not-applicable",
+      "mobile": "",
+      "workstream": "W2.2",
+      "notes": "black box browsing, evidence, maintenance and administration are dashboard, TUI, CLI and MCP surfaces (MISSION_BLACKBOX_PLAN.md 11); the app reads entries, briefs, resolve and recovery only"
+    },
+    {
+      "kind": "api",
+      "key": "previewCaptainSelection",
+      "status": "implemented",
+      "mobile": "src/screens/operations/mission/CaptainSelectionSection.tsx",
+      "workstream": "U4",
+      "notes": "Mission Captain Selection section: summary, paged history/comparison, read-only preview, administrator recovery permissions and live captain-selection.changed reload"
+    },
+    {
+      "kind": "api",
+      "key": "previewMissionOverlap",
+      "status": "implemented",
+      "mobile": "src/screens/blackbox/DispatchWarnings.tsx",
+      "workstream": "W2.2",
+      "notes": "live overlap and brief check (debounced) on Dispatch, Create Voyage (per mission) and Create Mission; create responses show OverlapWarnings and BriefLintWarnings in a sheet"
+    },
+    {
+      "kind": "api",
       "key": "previewPersonaPrompt",
       "status": "implemented",
       "mobile": "src/screens/configuration/ProjectProfilesTab, ProjectProfileDetail",
@@ -3321,6 +4081,14 @@
     },
     {
       "kind": "api",
+      "key": "purgeBlackBox",
+      "status": "not-applicable",
+      "mobile": "",
+      "workstream": "W2.2",
+      "notes": "black box browsing, evidence, maintenance and administration are dashboard, TUI, CLI and MCP surfaces (MISSION_BLACKBOX_PLAN.md 11); the app reads entries, briefs, resolve and recovery only"
+    },
+    {
+      "kind": "api",
       "key": "purgeMission",
       "status": "implemented",
       "mobile": "MissionsList",
@@ -3342,6 +4110,30 @@
       "mobile": "src/screens/vessels",
       "workstream": "W3.1",
       "notes": "Vessels"
+    },
+    {
+      "kind": "api",
+      "key": "readBatteryPackFile",
+      "status": "not-applicable",
+      "mobile": "",
+      "workstream": "W3.2",
+      "notes": "Server filesystem pack editor is a dashboard administration surface; REST, MCP and ArmadaClient provide programmatic management."
+    },
+    {
+      "kind": "api",
+      "key": "readBlackBoxObject",
+      "status": "not-applicable",
+      "mobile": "",
+      "workstream": "W2.2",
+      "notes": "black box browsing, evidence, maintenance and administration are dashboard, TUI, CLI and MCP surfaces (MISSION_BLACKBOX_PLAN.md 11); the app reads entries, briefs, resolve and recovery only"
+    },
+    {
+      "kind": "api",
+      "key": "reanalyzeBlackBox",
+      "status": "not-applicable",
+      "mobile": "",
+      "workstream": "W2.2",
+      "notes": "black box browsing, evidence, maintenance and administration are dashboard, TUI, CLI and MCP surfaces (MISSION_BLACKBOX_PLAN.md 11); the app reads entries, briefs, resolve and recovery only"
     },
     {
       "kind": "api",
@@ -3430,6 +4222,14 @@
       "mobile": "src/screens/system/ServerSettingsTab.tsx (Server*Sections)",
       "workstream": "W4.4",
       "notes": "Server"
+    },
+    {
+      "kind": "api",
+      "key": "resolveBlackBox",
+      "status": "implemented",
+      "mobile": "src/screens/blackbox/BlackBoxPanel.tsx (ResolveSheet)",
+      "workstream": "W2.2",
+      "notes": "Resolve with resolution, note and link"
     },
     {
       "kind": "api",
@@ -3529,6 +4329,22 @@
     },
     {
       "kind": "api",
+      "key": "runBlackBoxGc",
+      "status": "not-applicable",
+      "mobile": "",
+      "workstream": "W2.2",
+      "notes": "black box browsing, evidence, maintenance and administration are dashboard, TUI, CLI and MCP surfaces (MISSION_BLACKBOX_PLAN.md 11); the app reads entries, briefs, resolve and recovery only"
+    },
+    {
+      "kind": "api",
+      "key": "runBlackBoxRecovery",
+      "status": "implemented",
+      "mobile": "src/screens/blackbox/BlackBoxPanel.tsx (RecoverySheet)",
+      "workstream": "W2.2",
+      "notes": "recovery paths: dry run, confirmation with data-loss acknowledgement, run as Operator"
+    },
+    {
+      "kind": "api",
       "key": "runCheck",
       "status": "implemented",
       "mobile": "src/screens/delivery/CheckRunsTab.tsx, CheckRunDetail.tsx",
@@ -3558,6 +4374,14 @@
       "mobile": "src/screens/workspace",
       "workstream": "W3.1",
       "notes": "Workspace"
+    },
+    {
+      "kind": "api",
+      "key": "searchBlackBox",
+      "status": "not-applicable",
+      "mobile": "",
+      "workstream": "W2.2",
+      "notes": "black box browsing, evidence, maintenance and administration are dashboard, TUI, CLI and MCP surfaces (MISSION_BLACKBOX_PLAN.md 11); the app reads entries, briefs, resolve and recovery only"
     },
     {
       "kind": "api",
@@ -3729,6 +4553,14 @@
     },
     {
       "kind": "api",
+      "key": "unpinBlackBox",
+      "status": "not-applicable",
+      "mobile": "",
+      "workstream": "W2.2",
+      "notes": "black box browsing, evidence, maintenance and administration are dashboard, TUI, CLI and MCP surfaces (MISSION_BLACKBOX_PLAN.md 11); the app reads entries, briefs, resolve and recovery only"
+    },
+    {
+      "kind": "api",
       "key": "unquarantineCaptain",
       "status": "implemented",
       "mobile": "src/screens/captains",
@@ -3750,6 +4582,14 @@
       "mobile": "src/screens/objectives",
       "workstream": "W3.3",
       "notes": "Objectives (backlog)"
+    },
+    {
+      "kind": "api",
+      "key": "updateBatteryPackManifest",
+      "status": "not-applicable",
+      "mobile": "",
+      "workstream": "W3.2",
+      "notes": "Server filesystem pack editor is a dashboard administration surface; REST, MCP and ArmadaClient provide programmatic management."
     },
     {
       "kind": "api",
@@ -3977,6 +4817,14 @@
     },
     {
       "kind": "api",
+      "key": "validateBatteryPack",
+      "status": "not-applicable",
+      "mobile": "",
+      "workstream": "W3.2",
+      "notes": "Server filesystem pack editor is a dashboard administration surface; REST, MCP and ArmadaClient provide programmatic management."
+    },
+    {
+      "kind": "api",
       "key": "validateModelEndpoint",
       "status": "implemented",
       "mobile": "src/screens/configuration/EndpointsTab",
@@ -4014,6 +4862,14 @@
       "mobile": "AuthContext",
       "workstream": "W0.4",
       "notes": "session validation, admin flags, password-change state"
+    },
+    {
+      "kind": "api",
+      "key": "writeBatteryPackFile",
+      "status": "not-applicable",
+      "mobile": "",
+      "workstream": "W3.2",
+      "notes": "Server filesystem pack editor is a dashboard administration surface; REST, MCP and ArmadaClient provide programmatic management."
     },
     {
       "kind": "event",
@@ -4078,6 +4934,14 @@
       "mobile": "AskContext, useAskConversation",
       "workstream": "W1.1",
       "notes": "thread list and activity (AskContext); open conversation (useAskConversation, shared lib/askEvents)"
+    },
+    {
+      "kind": "event",
+      "key": "captain-selection.changed",
+      "status": "implemented",
+      "mobile": "src/screens/operations/mission/CaptainSelectionSection.tsx",
+      "workstream": "U4",
+      "notes": "re-reads the focused mission's authorized selection evidence; the event carries no evidence"
     },
     {
       "kind": "event",
@@ -4310,6 +5174,14 @@
       "mobile": "src/screens/system/ServerPolicySections.tsx",
       "workstream": "W4.4",
       "notes": ""
+    },
+    {
+      "kind": "setting",
+      "key": "settings.blackBox",
+      "status": "not-applicable",
+      "mobile": "ServerSettingsScreen",
+      "workstream": "W4.4",
+      "notes": "Black box storage targets, credentials and retention are admin settings edited on the dashboard Settings page"
     },
     {
       "kind": "setting",

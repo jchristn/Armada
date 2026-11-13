@@ -74,9 +74,70 @@ namespace Armada.Server.Routes
             api => api
                 .WithTag("Vessels")
                 .WithSummary("Vessel cleanup inventory")
-                .WithDescription("Read-only inventory of the vessel's docks, orphaned worktrees, and Armada-managed local branches (armada/ prefix), each classified Safe, InUse, or Unknown with a reason, owning mission/voyage/dock, and a measured size when available (null otherwise). Resources are inspected on the owning host; a disconnected Harbor makes its resources Unknown. Nothing is deleted.")
+                .WithDescription("Read-only inventory summary of the vessel's docks, orphaned worktrees, and Armada-managed local branches (armada/ prefix): ResourceCount, Safe/InUse/Unknown counts, and measured safe bytes. The resources are not embedded: page them with GET /api/v1/vessels/{id}/cleanup/resources or POST .../cleanup/resources/enumerate. Resources are inspected on the owning host; a disconnected Harbor makes its resources Unknown. Nothing is deleted.")
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Vessel ID (vsl_ prefix)"))
-                .WithResponse(200, OpenApiJson.For<VesselCleanupInventory>("Cleanup inventory"))
+                .WithResponse(200, OpenApiJson.For<VesselCleanupInventory>("Cleanup inventory summary"))
+                .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithSecurity("ApiKey"));
+
+            app.Get("/api/v1/vessels/{id}/cleanup/resources", async (ApiRequest req) =>
+            {
+                AuthContext? ctx = await AuthorizeAsync(req, authenticate, authz).ConfigureAwait(false);
+                if (ctx == null) return BuildAuthError(req);
+                Vessel? vessel = await ReadVesselAsync(ctx, req.Parameters["id"]).ConfigureAwait(false);
+                if (vessel == null) return NotFound(req);
+                EnumerationQuery query = new EnumerationQuery();
+                query.ApplyQuerystringOverrides(key => req.Query.GetValueOrDefault(key));
+                try
+                {
+                    return (object)await _Cleanup.EnumerateResourcesAsync(vessel, query).ConfigureAwait(false);
+                }
+                catch (ArgumentException ex)
+                {
+                    return BadRequest(req, ex.Message);
+                }
+            },
+            api => api
+                .WithTag("Vessels")
+                .WithSummary("List vessel cleanup resources")
+                .WithDescription("One page of the vessel's cleanup inventory: docks (oldest first), then each repository's orphaned worktrees and Armada-managed local branches, each classified Safe, InUse, or Unknown with a reason, owning mission/voyage/dock, and a measured size when available. The inventory is read from git and the file system on the owning host and classified as a whole on every request; the page is cut from it and TotalRecords is exact. Querystring: pageNumber (default 1), pageSize (1 to 1000, default 10), status (Safe, InUse, or Unknown). Nothing is deleted.")
+                .WithParameter(OpenApiParameterMetadata.Path("id", "Vessel ID (vsl_ prefix)"))
+                .WithParameter(OpenApiParameterMetadata.Query("pageNumber", "Page number (default 1)", false))
+                .WithParameter(OpenApiParameterMetadata.Query("pageSize", "Page size, 1 to 1000 (default 10)", false))
+                .WithParameter(OpenApiParameterMetadata.Query("status", "Disposition filter: Safe, InUse, or Unknown", false))
+                .WithResponse(200, OpenApiJson.For<EnumerationResult<VesselCleanupResource>>("Cleanup resources"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
+                .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithSecurity("ApiKey"));
+
+            app.Post("/api/v1/vessels/{id}/cleanup/resources/enumerate", async (ApiRequest req) =>
+            {
+                AuthContext? ctx = await AuthorizeAsync(req, authenticate, authz).ConfigureAwait(false);
+                if (ctx == null) return BuildAuthError(req);
+                Vessel? vessel = await ReadVesselAsync(ctx, req.Parameters["id"]).ConfigureAwait(false);
+                if (vessel == null) return NotFound(req);
+                try
+                {
+                    EnumerationQuery query = EnumerationRequestReader.Read(req, _BodyJsonOptions);
+                    return (object)await _Cleanup.EnumerateResourcesAsync(vessel, query).ConfigureAwait(false);
+                }
+                catch (JsonException ex)
+                {
+                    return BadRequest(req, "Request body is not valid: " + ex.Message);
+                }
+                catch (ArgumentException ex)
+                {
+                    return BadRequest(req, ex.Message);
+                }
+            },
+            api => api
+                .WithTag("Vessels")
+                .WithSummary("Enumerate vessel cleanup resources")
+                .WithDescription("POST form of GET /api/v1/vessels/{id}/cleanup/resources: the EnumerationQuery (pageNumber, pageSize, status) comes from the body, and querystring values override it.")
+                .WithParameter(OpenApiParameterMetadata.Path("id", "Vessel ID (vsl_ prefix)"))
+                .WithRequestBody(OpenApiJson.BodyFor<EnumerationQuery>("Paging query; status filters by disposition", false))
+                .WithResponse(200, OpenApiJson.For<EnumerationResult<VesselCleanupResource>>("Cleanup resources"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())
                 .WithSecurity("ApiKey"));
 
@@ -103,12 +164,13 @@ namespace Armada.Server.Routes
 
                 if (body == null || body.Keys == null || body.Keys.Count == 0)
                     return BadRequest(req, "Keys is required and must list at least one resource.");
+                CollectionLimits.RequireRequestItems(body.Keys, "Keys");
 
                 try
                 {
                     return (object)await _Cleanup.CleanupAsync(vessel, body).ConfigureAwait(false);
                 }
-                catch (ArgumentException ex)
+                catch (ArgumentException ex) when (!(ex is CollectionLimitExceededException))
                 {
                     return BadRequest(req, ex.Message);
                 }
@@ -116,7 +178,7 @@ namespace Armada.Server.Routes
             api => api
                 .WithTag("Vessels")
                 .WithSummary("Clean up vessel resources")
-                .WithDescription("Remove the selected inventory resources (Keys from GET /cleanup). Each key is re-inventoried immediately before removal and removed only if it is still Safe; docks run first, then orphaned worktrees, then local branches. Remote branches, default branches, primary checkouts, and paths outside Armada's docks are never removed. Returns per-item Deleted/Skipped/Failed outcomes and the refreshed inventory.")
+                .WithDescription("Remove the selected inventory resources (Keys from GET /cleanup). Each key is re-inventoried immediately before removal and removed only if it is still Safe; docks run first, then orphaned worktrees, then local branches. Remote branches, default branches, primary checkouts, and paths outside Armada's docks are never removed. Keys holds at most 1000 entries (more is 400 CollectionLimitExceeded). Returns per-item Deleted/Skipped/Failed outcomes (one per distinct key) and the refreshed inventory summary; page the refreshed resources with GET .../cleanup/resources.")
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Vessel ID (vsl_ prefix)"))
                 .WithRequestBody(OpenApiJson.BodyFor<VesselCleanupRequest>("Selected resource keys", true))
                 .WithResponse(200, OpenApiJson.For<VesselCleanupResult>("Per-item outcomes and refreshed inventory"))

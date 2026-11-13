@@ -2,6 +2,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
 {
     using Microsoft.Data.Sqlite;
     using Armada.Core.Database.Interfaces;
+    using Armada.Core.Enums;
     using Armada.Core.Models;
     using Armada.Core.Settings;
     using SyslogLogging;
@@ -145,6 +146,36 @@ namespace Armada.Core.Database.Sqlite.Implementations
         {
             if (String.IsNullOrWhiteSpace(objectiveId)) throw new ArgumentNullException(nameof(objectiveId));
             return await EnumerateAsync("SELECT * FROM objective_refinement_messages WHERE objective_id = @objective_id ORDER BY created_utc ASC, sequence ASC;", cmd => cmd.Parameters.AddWithValue("@objective_id", objectiveId), token).ConfigureAwait(false);
+        }
+
+        /// <inheritdoc />
+        public async Task<EnumerationResult<ObjectiveRefinementMessage>> EnumeratePageBySessionAsync(string objectiveRefinementSessionId, EnumerationQuery query, CancellationToken token = default)
+        {
+            if (String.IsNullOrWhiteSpace(objectiveRefinementSessionId)) throw new ArgumentNullException(nameof(objectiveRefinementSessionId));
+            if (query == null) throw new ArgumentNullException(nameof(query));
+            string direction = query.Order == EnumerationOrderEnum.CreatedAscending ? "ASC" : "DESC";
+            using (SqliteConnection conn = new SqliteProviderConnection(_Driver.ConnectionString))
+            {
+                await conn.OpenAsync(token).ConfigureAwait(false);
+                return await SqliteBoundedPage.ReadAsync(conn,
+                    "FROM objective_refinement_messages WHERE objective_refinement_session_id = @session_id",
+                    "sequence " + direction + ", created_utc " + direction + ", id " + direction,
+                    cmd => SqliteCommandHelper.Add(cmd, "@session_id", objectiveRefinementSessionId),
+                    FromReader, query, token).ConfigureAwait(false);
+            }
+        }
+
+        /// <inheritdoc />
+        public async Task<long> CountBySessionAsync(string objectiveRefinementSessionId, CancellationToken token = default)
+        {
+            if (String.IsNullOrWhiteSpace(objectiveRefinementSessionId)) throw new ArgumentNullException(nameof(objectiveRefinementSessionId));
+            using (SqliteConnection conn = new SqliteProviderConnection(_Driver.ConnectionString))
+            {
+                await conn.OpenAsync(token).ConfigureAwait(false);
+                return await SqliteCommandHelper.CountAsync(conn,
+                    "SELECT COUNT(*) FROM objective_refinement_messages WHERE objective_refinement_session_id = @session_id;",
+                    cmd => SqliteCommandHelper.Add(cmd, "@session_id", objectiveRefinementSessionId), token).ConfigureAwait(false);
+            }
         }
 
         private async Task<List<ObjectiveRefinementMessage>> EnumerateAsync(string sql, Action<SqliteCommand> parameterize, CancellationToken token)

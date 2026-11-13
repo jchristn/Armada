@@ -211,6 +211,19 @@ namespace Test.Shared.Suites.E2E
                 EnumerationResult<FailureCauseRule> firstPage = await GetAsync<EnumerationResult<FailureCauseRule>>(a, "/api/v1/failure-cause-rules?pageSize=2").ConfigureAwait(false);
                 AssertEqual(2, firstPage.Objects.Count, "paged");
                 AssertEqual(visible.TotalRecords, firstPage.TotalRecords, "total");
+                List<string> walked = new List<string>();
+                for (int pageNumber = 1; pageNumber <= firstPage.TotalPages; pageNumber++)
+                    walked.AddRange((await GetAsync<EnumerationResult<FailureCauseRule>>(a, "/api/v1/failure-cause-rules?pageSize=2&pageNumber=" + pageNumber).ConfigureAwait(false)).Objects.Select(r => r.Id));
+                AssertEqual(String.Join(",", visible.Objects.Select(r => r.Id)), String.Join(",", walked), "database pages walk the evaluation order without gaps or overlap");
+                EnumerationResult<FailureCauseRule> pastEnd = await GetAsync<EnumerationResult<FailureCauseRule>>(a, "/api/v1/failure-cause-rules?pageSize=2&pageNumber=" + (firstPage.TotalPages + 1)).ConfigureAwait(false);
+                AssertEqual(0, pastEnd.Objects.Count, "a page past the end is empty");
+                AssertEqual(visible.TotalRecords, pastEnd.TotalRecords, "with an accurate total");
+                HttpResponseMessage tooMany = await a.PostAsync("/api/v1/failure-cause-rules", JsonHelper.ToJsonContent(new { Name = "Too many personas", Cause = "Protocol", Match = new { Personas = Enumerable.Range(0, 257).Select(i => "p" + i).ToArray() } })).ConfigureAwait(false);
+                string tooManyBody = await tooMany.Content.ReadAsStringAsync().ConfigureAwait(false);
+                AssertStatusCode(HttpStatusCode.BadRequest, tooMany, "Match list over the limit");
+                E2eLimitErrorBody limit = JsonHelper.Deserialize<E2eLimitErrorBody>(tooManyBody);
+                AssertEqual(CollectionLimitExceededException.ErrorCode, limit.Data?.Code, tooManyBody);
+                AssertEqual("Match.Personas", limit.Data!.Field);
 
                 // A regular user's rule belongs to their tenant even when the body asks for every tenant.
                 HttpResponseMessage created = await a.PostAsync("/api/v1/failure-cause-rules", JsonHelper.ToJsonContent(new { Name = "Prose result", TenantId = (string?)null, Priority = 5, Cause = "Protocol", Match = new { FailureKinds = new[] { "InvalidOutput" }, Personas = new[] { " Worker ", " " }, TextPattern = "result block" } })).ConfigureAwait(false);

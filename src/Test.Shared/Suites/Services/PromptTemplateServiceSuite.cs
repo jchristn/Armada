@@ -6,6 +6,7 @@ namespace Test.Shared.Suites.Services
     using System.Threading;
     using System.Threading.Tasks;
     using SyslogLogging;
+    using Armada.Core.Enums;
     using Armada.Core.Models;
     using Armada.Core.Services;
     using Test.Shared.Infrastructure;
@@ -91,6 +92,27 @@ namespace Test.Shared.Suites.Services
                 await service.SeedDefaultsAsync().ConfigureAwait(false);
                 AssertContains("Operator customization", (await testDb.Driver.PromptTemplates.ReadByNameAsync(template.Name).ConfigureAwait(false))!.Content);
                 AssertContains(oldRule, (await testDb.Driver.PromptTemplates.ReadByNameAsync(template.Name).ConfigureAwait(false))!.Content);
+            }));
+
+            cases.Add(CaseAsync("upgrade_progress_signals_adds_blocked_line_preserves_custom_edits", "An untouched built-in progress_signals template gains the blocked outcome line; an edited one is kept", TestTags.Positive, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync();
+                LoggingModule logging = new LoggingModule(); logging.Settings.EnableConsole = false;
+                PromptTemplateService service = new PromptTemplateService(testDb.Driver, logging);
+                await service.SeedDefaultsAsync().ConfigureAwait(false);
+                PromptTemplate template = (await testDb.Driver.PromptTemplates.ReadByNameAsync("mission.progress_signals").ConfigureAwait(false))!;
+                AssertContains(CaptainBlockedContract.SignalLine, template.Content, "seeded with the blocked line");
+                template.Content = template.Content.Replace(CaptainBlockedContract.SignalLine, String.Empty);
+                await testDb.Driver.PromptTemplates.UpdateAsync(template).ConfigureAwait(false);
+                await service.SeedDefaultsAsync().ConfigureAwait(false);
+                template = (await testDb.Driver.PromptTemplates.ReadByNameAsync(template.Name).ConfigureAwait(false))!;
+                AssertContains(CaptainBlockedContract.SignalLine, template.Content, "the previous shipped default is upgraded");
+                template.Content = template.Content.Replace(CaptainBlockedContract.SignalLine, String.Empty) + "Operator customization";
+                await testDb.Driver.PromptTemplates.UpdateAsync(template).ConfigureAwait(false);
+                await service.SeedDefaultsAsync().ConfigureAwait(false);
+                string kept = (await testDb.Driver.PromptTemplates.ReadByNameAsync(template.Name).ConfigureAwait(false))!.Content;
+                AssertContains("Operator customization", kept);
+                AssertFalse(kept.Contains(CaptainBlockedContract.SignalLine, StringComparison.Ordinal), "an edited template is not changed");
             }));
 
             cases.Add(CaseAsync("resolve_returns_database_template_when_exists", "Resolve returns database template when exists", TestTags.Positive, async () =>
@@ -287,6 +309,40 @@ namespace Test.Shared.Suites.Services
                     await templates.SeedDefaultsAsync().ConfigureAwait(false);
                     row = await testDb.Driver.PromptTemplates.ReadByNameAsync("ask.system").ConfigureAwait(false);
                     AssertEqual("My own Ask prompt.", row!.Content, "operator edit kept");
+                }
+            }));
+
+            cases.Add(CaseAsync("ask_system_blackbox_guidance_and_upgrade", "ask.system carries the black box section (plan 10.2); an untouched previous built-in is upgraded, and an operator edit is kept as written", TestTags.Positive, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                {
+                    LoggingModule logging = new LoggingModule();
+                    PromptTemplateService templates = new PromptTemplateService(testDb.Driver, logging);
+                    await templates.SeedDefaultsAsync().ConfigureAwait(false);
+                    PromptTemplate? row = await testDb.Driver.PromptTemplates.ReadByNameAsync("ask.system").ConfigureAwait(false);
+                    AssertContains(Armada.Core.Services.Ask.AskBlackBoxGuidance.Section, row!.Content, "new installs get the black box section");
+                    foreach (string heading in Armada.Core.Services.Ask.AskBlackBoxGuidance.AnswerHeadings) AssertContains(heading, row.Content, "answer heading " + heading);
+                    AssertContains("get_blackbox", row.Content);
+                    AssertContains("read_blackbox_object", row.Content);
+                    AssertContains("CaptureMode=Sweeper", row.Content);
+                    AssertContains("FailureReason", row.Content);
+                    AssertContains("annotate_blackbox", row.Content);
+                    AssertFalse(row.Content.Contains('\u2014'), "no em-dashes in the prompt");
+
+                    string recap = (string)typeof(PromptTemplateService).GetField("_AskSystemRecapDefault", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!.GetValue(null)!;
+                    AssertFalse(recap.Contains(Armada.Core.Services.Ask.AskBlackBoxGuidance.Heading), "the previous default lacks the section");
+                    row.Content = recap;
+                    await testDb.Driver.PromptTemplates.UpdateAsync(row).ConfigureAwait(false);
+                    await templates.SeedDefaultsAsync().ConfigureAwait(false);
+                    row = await testDb.Driver.PromptTemplates.ReadByNameAsync("ask.system").ConfigureAwait(false);
+                    AssertContains(Armada.Core.Services.Ask.AskBlackBoxGuidance.Heading, row!.Content, "untouched previous built-in upgraded");
+                    AssertEqual(1, CountOf(row.Content, Armada.Core.Services.Ask.AskBlackBoxGuidance.Heading), "the section appears once");
+
+                    row.Content = "My own Ask prompt.";
+                    await testDb.Driver.PromptTemplates.UpdateAsync(row).ConfigureAwait(false);
+                    await templates.SeedDefaultsAsync().ConfigureAwait(false);
+                    row = await testDb.Driver.PromptTemplates.ReadByNameAsync("ask.system").ConfigureAwait(false);
+                    AssertEqual("My own Ask prompt.", row!.Content, "operator edit kept (the turn prompt appends the section instead)");
                 }
             }));
 
@@ -544,6 +600,86 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
+            cases.Add(CaseAsync("concurrency_brief_upgrade_preserves_operator_edits", "Untouched v6 briefs (as written or as a seeded install stored them) upgrade to the ownership briefs; edited ones are kept", TestTags.Positive, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                {
+                    PromptTemplateService service = new PromptTemplateService(testDb.Driver, new LoggingModule());
+                    await service.SeedDefaultsAsync().ConfigureAwait(false);
+                    foreach (string name in new[] { "persona.architect", "persona.worker" })
+                    {
+                        foreach (string untouched in new[] { PersonaPromptImprovements.ConcurrencyBriefs[name], PromptTemplateService.ShippedPersonaContent(name, PersonaPromptImprovements.ConcurrencyBriefs[name]) })
+                        {
+                            PromptTemplate row = (await testDb.Driver.PromptTemplates.ReadByNameAsync(name).ConfigureAwait(false))!;
+                            row.Content = untouched;
+                            await testDb.Driver.PromptTemplates.UpdateAsync(row).ConfigureAwait(false);
+                            await service.SeedDefaultsAsync().ConfigureAwait(false);
+                            row = (await testDb.Driver.PromptTemplates.ReadByNameAsync(name).ConfigureAwait(false))!;
+                            AssertEqual(service.GetEmbeddedDefault(name), row.Content, name + " untouched v6 brief upgraded");
+                        }
+                        PromptTemplate edited = (await testDb.Driver.PromptTemplates.ReadByNameAsync(name).ConfigureAwait(false))!;
+                        edited.Content = PersonaPromptImprovements.ConcurrencyBriefs[name] + "Operator-specific instruction";
+                        await testDb.Driver.PromptTemplates.UpdateAsync(edited).ConfigureAwait(false);
+                        await service.SeedDefaultsAsync().ConfigureAwait(false);
+                        edited = (await testDb.Driver.PromptTemplates.ReadByNameAsync(name).ConfigureAwait(false))!;
+                        AssertTrue(edited.Content.EndsWith("Operator-specific instruction"), name + " edited brief preserved");
+                    }
+                    foreach (PromptVariantEnum variant in new[] { PromptVariantEnum.Lean, PromptVariantEnum.Compact })
+                    {
+                        string variantName = MissionPromptBuilder.GetPersonaVariantTemplateName("persona.architect", variant);
+                        PromptTemplate stored = (await testDb.Driver.PromptTemplates.ReadByNameAsync(variantName).ConfigureAwait(false))!;
+                        stored.Content = PersonaPromptVariants.GetPreviousContents("persona.architect", variant)[0];
+                        await testDb.Driver.PromptTemplates.UpdateAsync(stored).ConfigureAwait(false);
+                        await service.SeedDefaultsAsync().ConfigureAwait(false);
+                        stored = (await testDb.Driver.PromptTemplates.ReadByNameAsync(variantName).ConfigureAwait(false))!;
+                        AssertEqual(PersonaPromptVariants.GetContent("persona.architect", variant), stored.Content, variantName + " untouched previous variant upgraded");
+                        AssertContains("contractVersion:4", stored.Content);
+                        stored.Content = PersonaPromptVariants.GetPreviousContents("persona.architect", variant)[0] + "\nKeep mine.";
+                        await testDb.Driver.PromptTemplates.UpdateAsync(stored).ConfigureAwait(false);
+                        await service.SeedDefaultsAsync().ConfigureAwait(false);
+                        stored = (await testDb.Driver.PromptTemplates.ReadByNameAsync(variantName).ConfigureAwait(false))!;
+                        AssertTrue(stored.Content.EndsWith("Keep mine."), variantName + " edited variant kept");
+                    }
+                    string architect = service.GetEmbeddedDefault("persona.architect")!;
+                    AssertContains("contractVersion:4", architect);
+                    AssertContains("ownedPaths", architect);
+                    AssertContains("{MaxParallelMissionsPerVoyage}", architect);
+                    AssertFalse(architect.Contains("dependsOn"), "the v4 architect names parent, not dependsOn");
+                    AssertContains("sibling missions may run alongside you", service.GetEmbeddedDefault("persona.worker")!);
+                }
+            }));
+
+            cases.Add(CaseAsync("merge_conflict_avoidance_upgrade_and_placeholders", "The previous merge-conflict default upgrades to the ownership text and renders owned, concurrent and parent placeholders; an edited copy is kept", TestTags.Positive, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                {
+                    PromptTemplateService service = new PromptTemplateService(testDb.Driver, new LoggingModule());
+                    await service.SeedDefaultsAsync().ConfigureAwait(false);
+                    const string name = "mission.merge_conflict_avoidance";
+                    PromptTemplate row = (await testDb.Driver.PromptTemplates.ReadByNameAsync(name).ConfigureAwait(false))!;
+                    AssertEqual(MergeConflictPrompt.Default, row.Content, "seeded with the ownership text");
+                    row.Content = MergeConflictPrompt.LegacyDefault;
+                    await testDb.Driver.PromptTemplates.UpdateAsync(row).ConfigureAwait(false);
+                    await service.SeedDefaultsAsync().ConfigureAwait(false);
+                    row = (await testDb.Driver.PromptTemplates.ReadByNameAsync(name).ConfigureAwait(false))!;
+                    AssertEqual(MergeConflictPrompt.Default, row.Content, "the untouched previous default upgrades");
+                    row.Content = MergeConflictPrompt.LegacyDefault + "\nOur own rule.";
+                    await testDb.Driver.PromptTemplates.UpdateAsync(row).ConfigureAwait(false);
+                    await service.SeedDefaultsAsync().ConfigureAwait(false);
+                    row = (await testDb.Driver.PromptTemplates.ReadByNameAsync(name).ConfigureAwait(false))!;
+                    AssertTrue(row.Content.EndsWith("Our own rule."), "an edited copy is kept");
+
+                    string rendered = await service.RenderAsync(name, new Dictionary<string, string>
+                    {
+                        ["OwnedPaths"] = "`src/A.cs`", ["ConcurrentSiblingPaths"] = "\n   - `src/B.cs` (Sibling)", ["ParentSummary"] = "\n   Your parent mission finished.\n"
+                    }).ConfigureAwait(false);
+                    AssertContains("Our own rule.", rendered);
+                    string current = MergeConflictPrompt.Default.Replace("{OwnedPaths}", "`src/A.cs`").Replace("{ConcurrentSiblingPaths}", "x").Replace("{ParentSummary}", "");
+                    AssertContains("Change only your owned paths:** `src/A.cs`", current);
+                    AssertContains("stop and report it as a blocker", current);
+                }
+            }));
+
             cases.Add(CaseAsync("persona_guidance_rendered_for_limited_tools", "All persona briefs carry tool honesty; role-specific evidence and implementation contracts render without changing output protocols", TestTags.Positive, async () =>
             {
                 using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
@@ -602,6 +738,14 @@ namespace Test.Shared.Suites.Services
                 displayName: displayName,
                 executeAsync: (CancellationToken ct) => body(),
                 tags: new List<string> { tag });
+        }
+
+        private static int CountOf(string text, string value)
+        {
+            int count = 0;
+            int index = 0;
+            while ((index = text.IndexOf(value, index, StringComparison.Ordinal)) >= 0) { count++; index += value.Length; }
+            return count;
         }
 
         #endregion

@@ -54,7 +54,7 @@ namespace Armada.Server.Mcp.Tools
                         targetVersion = new { type = "string", description = "Optional target-version filter" },
                         search = new { type = "string", description = "Optional free-text search" },
                         pageNumber = new { type = "integer", description = "Optional page number" },
-                        pageSize = new { type = "integer", description = "Optional page size" }
+                        pageSize = new { type = "integer", description = "Optional page size, 1 to 1000 (default 50)" }
                     }
                 },
                 async (args) =>
@@ -85,7 +85,7 @@ namespace Armada.Server.Mcp.Tools
                         targetVersion = new { type = "string", description = "Optional target-version filter" },
                         search = new { type = "string", description = "Optional free-text search" },
                         pageNumber = new { type = "integer", description = "Optional page number" },
-                        pageSize = new { type = "integer", description = "Optional page size" }
+                        pageSize = new { type = "integer", description = "Optional page size, 1 to 1000 (default 50)" }
                     }
                 },
                 async (args) =>
@@ -413,7 +413,7 @@ namespace Armada.Server.Mcp.Tools
             {
                 register(
                     "list_backlog_refinement_sessions",
-                    "List captain-backed refinement sessions for one backlog item (lightweight, paginated). Returns session metadata only, most-recently-updated first; fetch a session's transcript with get_backlog_refinement_session.",
+                    "List captain-backed refinement sessions for one backlog item, one page at a time (paged in the database). Returns session metadata only, most-recently-updated first; read a session's transcript with list_backlog_refinement_session_messages.",
                     new
                     {
                         type = "object",
@@ -421,7 +421,7 @@ namespace Armada.Server.Mcp.Tools
                         {
                             objectiveId = new { type = "string", description = "Backlog item ID (obj_ prefix)" },
                             pageNumber = new { type = "integer", description = "1-based page number (default 1)" },
-                            pageSize = new { type = "integer", description = "Results per page (default 25, max 100)" }
+                            pageSize = new { type = "integer", description = "Results per page, 1 to 1000 (default 25)" }
                         },
                         required = new[] { "objectiveId" }
                     },
@@ -433,33 +433,10 @@ namespace Armada.Server.Mcp.Tools
                         Objective? objective = await objectiveService.ReadAsync(auth, request.ObjectiveId).ConfigureAwait(false);
                         if (objective == null) return (object)McpToolError.NotFound("Backlog item not found");
 
-                        int pageNumber = request.PageNumber.HasValue ? request.PageNumber.Value : 1;
-                        if (pageNumber < 1) pageNumber = 1;
-                        int pageSize = request.PageSize.HasValue ? request.PageSize.Value : 25;
-                        if (pageSize < 1) pageSize = 1;
-                        if (pageSize > 100) pageSize = 100;
-
-                        List<ObjectiveRefinementSession> sessions = await EnumerateObjectiveRefinementSessionsAsync(database, auth, objective.Id).ConfigureAwait(false);
-                        List<ObjectiveRefinementSession> ordered = sessions
-                            .OrderByDescending(session => session.LastUpdateUtc)
-                            .ToList();
-
-                        long totalRecords = ordered.Count;
-                        int totalPages = pageSize > 0 ? (int)Math.Ceiling((double)totalRecords / pageSize) : 0;
-                        List<ObjectiveRefinementSession> page = ordered
-                            .Skip((pageNumber - 1) * pageSize)
-                            .Take(pageSize)
-                            .ToList();
-
-                        return (object)new
-                        {
-                            success = true,
-                            pageNumber,
-                            pageSize,
-                            totalPages,
-                            totalRecords,
-                            objects = page
-                        };
+                        EnumerationQuery query = new EnumerationQuery();
+                        query.PageNumber = request.PageNumber.HasValue ? request.PageNumber.Value : 1;
+                        query.PageSize = request.PageSize.HasValue ? request.PageSize.Value : 25;
+                        return (object)await EnumerateObjectiveRefinementSessionsAsync(database, auth, objective.Id, query).ConfigureAwait(false);
                     });
 
                 register(
@@ -504,7 +481,7 @@ namespace Armada.Server.Mcp.Tools
 
                 register(
                     "get_backlog_refinement_session",
-                    "Inspect one backlog refinement session, including its transcript, captain, vessel, and linked backlog item.",
+                    "Inspect one backlog refinement session: the session, its captain, vessel, and linked backlog item, and messageCount. Read the transcript with list_backlog_refinement_session_messages.",
                     new
                     {
                         type = "object",
@@ -522,6 +499,31 @@ namespace Armada.Server.Mcp.Tools
                         ObjectiveRefinementSession session = await ReadObjectiveRefinementSessionForContextAsync(database, auth, request.SessionId).ConfigureAwait(false)
                             ?? throw new KeyNotFoundException("Objective refinement session not found.");
                         return (object)await BuildObjectiveRefinementSessionDetailAsync(database, objectiveService, auth, session).ConfigureAwait(false);
+                    });
+
+                register(
+                    "list_backlog_refinement_session_messages",
+                    "Read one page of a backlog refinement session's transcript (paged in the database). Newest first by default; pass order CreatedAscending for oldest first. totalRecords is the transcript length.",
+                    new
+                    {
+                        type = "object",
+                        properties = new
+                        {
+                            sessionId = new { type = "string", description = "Objective refinement session ID (ors_ prefix)" },
+                            pageNumber = new { type = "integer", description = "1-based page number (default 1)" },
+                            pageSize = new { type = "integer", description = "Results per page, 1 to 1000 (default 10)" },
+                            order = new { type = "string", description = "CreatedDescending (newest first, default) or CreatedAscending (oldest first)" }
+                        },
+                        required = new[] { "sessionId" }
+                    },
+                    async (args) =>
+                    {
+                        SessionMessagesArgs request = JsonSerializer.Deserialize<SessionMessagesArgs>(args!.Value, _JsonOptions)
+                            ?? throw new InvalidOperationException("Could not deserialize SessionMessagesArgs.");
+                        AuthContext auth = McpToolHelpers.ResolveCallerContext();
+                        ObjectiveRefinementSession session = await ReadObjectiveRefinementSessionForContextAsync(database, auth, request.SessionId).ConfigureAwait(false)
+                            ?? throw new KeyNotFoundException("Objective refinement session not found.");
+                        return (object)await database.ObjectiveRefinementMessages.EnumeratePageBySessionAsync(session.Id, request.ToQuery()).ConfigureAwait(false);
                     });
 
                 register(
@@ -675,7 +677,7 @@ namespace Armada.Server.Mcp.Tools
 
                 register(
                     "get_backlog_planning_session",
-                    "Inspect one planning session created from backlog/objective work, including its transcript and linked backlog items.",
+                    "Inspect one planning session created from backlog/objective work: the session, its captain and vessel, messageCount, and linkedObjectiveCount. Read the transcript with list_backlog_planning_session_messages and the linked items with list_backlog filtered by planningSessionId.",
                     new
                     {
                         type = "object",
@@ -696,8 +698,33 @@ namespace Armada.Server.Mcp.Tools
                     });
 
                 register(
+                    "list_backlog_planning_session_messages",
+                    "Read one page of a planning session's transcript (paged in the database). Newest first by default; pass order CreatedAscending for oldest first. totalRecords is the transcript length.",
+                    new
+                    {
+                        type = "object",
+                        properties = new
+                        {
+                            sessionId = new { type = "string", description = "Planning session ID (psn_ prefix)" },
+                            pageNumber = new { type = "integer", description = "1-based page number (default 1)" },
+                            pageSize = new { type = "integer", description = "Results per page, 1 to 1000 (default 10)" },
+                            order = new { type = "string", description = "CreatedDescending (newest first, default) or CreatedAscending (oldest first)" }
+                        },
+                        required = new[] { "sessionId" }
+                    },
+                    async (args) =>
+                    {
+                        SessionMessagesArgs request = JsonSerializer.Deserialize<SessionMessagesArgs>(args!.Value, _JsonOptions)
+                            ?? throw new InvalidOperationException("Could not deserialize SessionMessagesArgs.");
+                        AuthContext auth = McpToolHelpers.ResolveCallerContext();
+                        PlanningSession session = await ReadPlanningSessionForContextAsync(database, auth, request.SessionId).ConfigureAwait(false)
+                            ?? throw new KeyNotFoundException("Planning session not found.");
+                        return (object)await database.PlanningSessionMessages.EnumeratePageBySessionAsync(session.Id, request.ToQuery()).ConfigureAwait(false);
+                    });
+
+                register(
                     "dispatch_backlog_planning_session",
-                    "Dispatch a voyage from a planning session and keep the linked backlog item associated with the resulting voyage.",
+                    "Dispatch a voyage from a planning session and link it to every backlog item linked to the session. Returns the voyage and linkedObjectiveCount; list the items with list_backlog filtered by voyageId.",
                     new
                     {
                         type = "object",
@@ -718,19 +745,10 @@ namespace Armada.Server.Mcp.Tools
                         PlanningSession session = await ReadPlanningSessionForContextAsync(database, auth, request.SessionId).ConfigureAwait(false)
                             ?? throw new KeyNotFoundException("Planning session not found.");
                         Voyage voyage = await planningSessionCoordinator.DispatchAsync(session, request.ToDispatchRequest()).ConfigureAwait(false);
-                        List<Objective> linkedObjectives = await objectiveService.EnumerateByPlanningSessionAsync(auth, session.Id).ConfigureAwait(false);
-                        List<Objective> updatedObjectives = new List<Objective>();
-                        foreach (Objective linkedObjective in linkedObjectives)
-                        {
-                            updatedObjectives.Add(await objectiveService.LinkVoyageAsync(auth, linkedObjective.Id, voyage.Id).ConfigureAwait(false));
-                        }
-
-                        return (object)new
-                        {
-                            Voyage = voyage,
-                            Objectives = updatedObjectives,
-                            ObjectiveIds = updatedObjectives.Select(item => item.Id).ToList()
-                        };
+                        PlanningSessionDispatchResult result = new PlanningSessionDispatchResult();
+                        result.Voyage = voyage;
+                        result.LinkedObjectiveCount = await PlanningDispatchLinker.LinkAsync(objectiveService, auth, session.Id, voyage.Id).ConfigureAwait(false);
+                        return (object)result;
                     });
             }
 
@@ -777,19 +795,17 @@ namespace Armada.Server.Mcp.Tools
                 });
         }
 
-        private static async Task<List<ObjectiveRefinementSession>> EnumerateObjectiveRefinementSessionsAsync(
+        private static async Task<EnumerationResult<ObjectiveRefinementSession>> EnumerateObjectiveRefinementSessionsAsync(
             DatabaseDriver database,
             AuthContext auth,
-            string objectiveId)
+            string objectiveId,
+            EnumerationQuery query)
         {
-            List<ObjectiveRefinementSession> sessions = auth.IsAdmin
-                ? await database.ObjectiveRefinementSessions.EnumerateAsync().ConfigureAwait(false)
-                : auth.IsTenantAdmin
-                    ? await database.ObjectiveRefinementSessions.EnumerateAsync(auth.TenantId!).ConfigureAwait(false)
-                    : await database.ObjectiveRefinementSessions.EnumerateAsync(auth.TenantId!, auth.UserId!).ConfigureAwait(false);
-            return sessions
-                .Where(session => String.Equals(session.ObjectiveId, objectiveId, StringComparison.OrdinalIgnoreCase))
-                .ToList();
+            if (auth.IsAdmin)
+                return await database.ObjectiveRefinementSessions.EnumeratePageByObjectiveAsync(objectiveId, null, null, query).ConfigureAwait(false);
+            if (auth.IsTenantAdmin)
+                return await database.ObjectiveRefinementSessions.EnumeratePageByObjectiveAsync(objectiveId, auth.TenantId!, null, query).ConfigureAwait(false);
+            return await database.ObjectiveRefinementSessions.EnumeratePageByObjectiveAsync(objectiveId, auth.TenantId!, auth.UserId!, query).ConfigureAwait(false);
         }
 
         private static async Task<PlanningSession?> ReadPlanningSessionForContextAsync(
@@ -840,7 +856,7 @@ namespace Armada.Server.Mcp.Tools
             return await database.Vessels.ReadAsync(auth.TenantId!, auth.UserId!, id).ConfigureAwait(false);
         }
 
-        private static async Task<object> BuildPlanningSessionDetailAsync(
+        private static async Task<PlanningSessionDetail> BuildPlanningSessionDetailAsync(
             DatabaseDriver database,
             ObjectiveService objectiveService,
             AuthContext auth,
@@ -848,22 +864,13 @@ namespace Armada.Server.Mcp.Tools
         {
             PlanningSession refreshed = await ReadPlanningSessionForContextAsync(database, auth, session.Id).ConfigureAwait(false)
                 ?? throw new KeyNotFoundException("Planning session not found: " + session.Id);
-            List<PlanningSessionMessage> messages = await database.PlanningSessionMessages
-                .EnumerateBySessionAsync(refreshed.Id)
-                .ConfigureAwait(false);
-            Captain? captain = await ReadCaptainForContextAsync(database, auth, refreshed.CaptainId).ConfigureAwait(false);
-            Vessel? vessel = await ReadVesselForContextAsync(database, auth, refreshed.VesselId).ConfigureAwait(false);
-            List<Objective> linkedObjectives = await objectiveService.EnumerateByPlanningSessionAsync(auth, refreshed.Id).ConfigureAwait(false);
-
-            return new
-            {
-                Session = refreshed,
-                Messages = messages.OrderBy(message => message.Sequence).ToList(),
-                Captain = captain,
-                Vessel = vessel,
-                Objectives = linkedObjectives,
-                ObjectiveIds = linkedObjectives.Select(objective => objective.Id).ToList()
-            };
+            PlanningSessionDetail detail = new PlanningSessionDetail();
+            detail.Session = refreshed;
+            detail.MessageCount = await database.PlanningSessionMessages.CountBySessionAsync(refreshed.Id).ConfigureAwait(false);
+            detail.Captain = await ReadCaptainForContextAsync(database, auth, refreshed.CaptainId).ConfigureAwait(false);
+            detail.Vessel = await ReadVesselForContextAsync(database, auth, refreshed.VesselId).ConfigureAwait(false);
+            detail.LinkedObjectiveCount = await objectiveService.CountByPlanningSessionAsync(auth, refreshed.Id).ConfigureAwait(false);
+            return detail;
         }
 
         private static async Task<ObjectiveRefinementSessionDetail> BuildObjectiveRefinementSessionDetailAsync(
@@ -874,9 +881,7 @@ namespace Armada.Server.Mcp.Tools
         {
             ObjectiveRefinementSession refreshed = await ReadObjectiveRefinementSessionForContextAsync(database, auth, session.Id).ConfigureAwait(false)
                 ?? throw new KeyNotFoundException("Objective refinement session not found: " + session.Id);
-            List<ObjectiveRefinementMessage> messages = await database.ObjectiveRefinementMessages
-                .EnumerateBySessionAsync(refreshed.Id)
-                .ConfigureAwait(false);
+            long messageCount = await database.ObjectiveRefinementMessages.CountBySessionAsync(refreshed.Id).ConfigureAwait(false);
             Captain? captain = await ReadCaptainForContextAsync(database, auth, refreshed.CaptainId).ConfigureAwait(false);
             Vessel? vessel = !String.IsNullOrWhiteSpace(refreshed.VesselId)
                 ? await ReadVesselForContextAsync(database, auth, refreshed.VesselId!).ConfigureAwait(false)
@@ -886,7 +891,7 @@ namespace Armada.Server.Mcp.Tools
             return new ObjectiveRefinementSessionDetail
             {
                 Session = refreshed,
-                Messages = messages.OrderBy(message => message.Sequence).ToList(),
+                MessageCount = messageCount,
                 Captain = captain,
                 Vessel = vessel,
                 Objective = objective

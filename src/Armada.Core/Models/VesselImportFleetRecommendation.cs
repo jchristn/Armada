@@ -2,6 +2,7 @@ namespace Armada.Core.Models
 {
     using System;
     using System.Collections.Generic;
+    using Armada.Core.Services;
 
     /// <summary>
     /// One fleet a captain recommended for the vessels of an import batch. Persisted as a row with its vessel links as
@@ -78,6 +79,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// Vessel identifiers (vsl_ prefix) assigned to this fleet, in order. Never null.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxRequestItems, Reason = "Distinct vessels of one batch (at most 1000)")]
         public List<string> VesselIds
         {
             get => _VesselIds;

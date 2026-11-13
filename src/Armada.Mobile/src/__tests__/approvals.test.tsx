@@ -28,6 +28,7 @@ import { socketFactory, type FakeSocket } from '../test/fakeSocket';
 import { ThemeProvider } from '../theme/ThemeContext';
 
 jest.mock('@dashboard/api/client', () => require('../test/askFixtures').askClientMockFactory());
+jest.mock('@dashboard/lib/askPaging', () => require('../test/askFixtures').askPagingMockFactory());
 
 const api = client as jest.Mocked<typeof client>;
 
@@ -64,6 +65,7 @@ describe('approval actions (shared with push actions)', () => {
     expect(approvalTargetFromPush({ kind: 'review', entityId: 'msn_1' })).toEqual({ kind: 'review', missionId: 'msn_1' });
     expect(approvalTargetFromPush({ kind: 'deployment_approval', entityId: 'dpl_1' })).toEqual({ kind: 'deployment_approval', deploymentId: 'dpl_1' });
     expect(approvalTargetFromPush({ kind: 'voyage_finished', entityId: 'vyg_1' })).toBeNull();
+    expect(approvalTargetFromPush({ kind: 'model_alert', entityId: 'mal_1', url: '/inbox?modelAlert=mal_1' })).toBeNull();
     expect(approvalTargetFromPush({ kind: 'ask_proposal', entityId: 'prp_1' })).toBeNull();
     expect(approvalTargetFromPush(null)).toBeNull();
   });
@@ -111,6 +113,8 @@ describe('approval actions (shared with push actions)', () => {
   it('offers and runs the intervention for failures and stalls', async () => {
     expect(interventionFor(LANDING_ITEM)).toEqual({ kind: 'retry_landing', missionId: 'msn_2' });
     expect(interventionFor(item({}))).toEqual({ kind: 'restart_mission', missionId: 'msn_1' });
+    // A model scorecard alert is advisory: no approval target and no one-tap fix; the item links to Needs You.
+    expect(interventionFor({ kind: 'model_alert', entityId: 'mal_1' })).toBeNull();
     expect(interventionFor(STALLED_ITEM)).toEqual({ kind: 'stop_captain', captainId: 'cpt_1' });
     expect(interventionFor(item({ kind: 'merge_failed' }))).toBeNull();
     await runIntervention({ kind: 'retry_landing', missionId: 'msn_2' });
@@ -205,7 +209,7 @@ describe('approvals center', () => {
 
   it('an Ask proposal shows its exact arguments and can be approved in place', async () => {
     api.getInbox.mockResolvedValue([ASK_ITEM]);
-    api.getAskThread.mockResolvedValue({ thread: { id: 'thr_1' } as never, pendingProposals: [{ id: 'prp_1', threadId: 'thr_1', toolName: 'dispatch', argumentsText: '{"vesselId":"vsl_1"}', source: 'Captain', status: 'Pending' }] });
+    (api.enumerateAskProposals as unknown as jest.Mock).mockResolvedValue({ success: true, pageNumber: 1, pageSize: 100, totalPages: 1, totalRecords: 1, totalMs: 0, objects: [{ id: 'prp_1', threadId: 'thr_1', toolName: 'dispatch', argumentsText: '{"vesselId":"vsl_1"}', source: 'Captain', status: 'Pending' }] });
     api.approveAskProposal.mockResolvedValue({ id: 'prp_1', threadId: 'thr_1', toolName: 'dispatch', source: 'Captain', status: 'Executed' });
     await renderApprovals();
     await waitFor(() => expect(screen.getByTestId('proposal-approve-prp_1')).toBeTruthy());

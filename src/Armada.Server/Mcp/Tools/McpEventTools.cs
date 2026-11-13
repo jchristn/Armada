@@ -7,6 +7,7 @@ namespace Armada.Server.Mcp.Tools
     using Armada.Core;
     using Armada.Core.Database;
     using Armada.Core.Models;
+    using Armada.Core.Services;
 
     /// <summary>
     /// Registers MCP tools for event operations (delete single, delete multiple).
@@ -58,7 +59,7 @@ namespace Armada.Server.Mcp.Tools
                     type = "object",
                     properties = new
                     {
-                        ids = new { type = "array", items = new { type = "string" }, description = "List of event IDs to delete (evt_ prefix)" }
+                        ids = new { type = "array", items = new { type = "string" }, description = "List of event IDs to delete (evt_ prefix), at most 1000" }
                     },
                     required = new[] { "ids" }
                 },
@@ -67,6 +68,7 @@ namespace Armada.Server.Mcp.Tools
                     DeleteMultipleArgs request = JsonSerializer.Deserialize<DeleteMultipleArgs>(args!.Value, _JsonOptions)!;
                     if (request.Ids == null || request.Ids.Count == 0)
                         return (object)McpToolError.InvalidArgument("ids is required and must not be empty");
+                    CollectionLimits.RequireRequestItems(request.Ids, "Ids");
 
                     AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     DeleteMultipleResult result = new DeleteMultipleResult();

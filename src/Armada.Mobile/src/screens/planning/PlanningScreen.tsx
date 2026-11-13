@@ -21,6 +21,8 @@ import { usePlanningCatalog } from './usePlanningCatalog';
 
 /** Socket events that change the session list (messages stream into the open session, not the list). */
 export const PLANNING_LIST_EVENTS = ['planning-session.changed', 'planning-session.deleted', 'planning-session.dispatch.created'];
+/** Planning sessions read per page of the list. */
+const SESSION_PAGE_SIZE = 100;
 
 /** Where a prefilled start came from (the dashboard's fromObjective / fromIncident / fromWorkspace / fromSetupWizard). */
 export type PlanningPrefillSource = 'objective' | 'incident' | 'workspace' | 'setup';
@@ -65,7 +67,14 @@ export function PlanningScreen({ initialSessionId = null, embedded = false, tabB
   const fromRoute = useMemo(() => prefillFromParams(params), [params]);
   const catalog = usePlanningCatalog();
   const { busy, run } = useActionRunner();
-  const sessions = useLiveResource(async () => upsertAll(await listPlanningSessions()), [], { live: PLANNING_LIST_EVENTS });
+  // One page of sessions at a time (endless scroll); the total says how many exist in all.
+  const [sessionsTotal, setSessionsTotal] = useState(0);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const sessions = useLiveResource(async () => {
+    const page = await listPlanningSessions({ pageNumber: 1, pageSize: SESSION_PAGE_SIZE });
+    setSessionsTotal(page?.totalRecords ?? 0);
+    return upsertAll(page?.objects ?? []);
+  }, [], { live: PLANNING_LIST_EVENTS });
   const [search, setSearch] = useState('');
   const [startOpen, setStartOpen] = useState(fromRoute.open && !initialSessionId);
   const [selectedId, setSelectedId] = useState<string | null>(initialSessionId);
@@ -74,6 +83,22 @@ export function PlanningScreen({ initialSessionId = null, embedded = false, tabB
   const [confirmDeleteAll, setConfirmDeleteAll] = useState(false);
 
   const all = useMemo(() => sessions.data ?? [], [sessions.data]);
+
+  const loadMore = async () => {
+    if (loadingMore || all.length >= sessionsTotal) return;
+    setLoadingMore(true);
+    try {
+      const page = await listPlanningSessions({ pageNumber: Math.floor(all.length / SESSION_PAGE_SIZE) + 1, pageSize: SESSION_PAGE_SIZE });
+      sessions.setData((cur) => {
+        let merged = cur ?? [];
+        for (const s of page?.objects ?? []) if (!merged.some((x) => x.id === s.id)) merged = [...merged, s];
+        return merged;
+      });
+      setSessionsTotal(page?.totalRecords ?? sessionsTotal);
+    } finally {
+      setLoadingMore(false);
+    }
+  };
   const shown = useMemo(() => {
     const term = search.trim().toLowerCase();
     if (!term) return all;
@@ -105,20 +130,36 @@ export function PlanningScreen({ initialSessionId = null, embedded = false, tabB
     pushToast('warning', t('Planning session deleted.'));
   };
 
-  // Each session is deleted on its own so one that cannot be deleted (still running) does not stop the rest.
+  // Each session is deleted on its own so one that cannot be deleted (still running) does not stop the rest; the
+  // sessions are read in bounded pages until none is left, moving past the ones that could not be deleted.
   const deleteAll = async () => {
-    const targets = all.slice();
-    if (targets.length === 0) return;
+    if (all.length === 0 && sessionsTotal === 0) return;
     await run('deleteAll', async () => {
       let failures = 0;
-      for (const target of targets) {
-        try {
-          await deletePlanningSession(target.id);
-          sessions.setData((cur) => removeSession(cur ?? [], target.id));
-        } catch {
-          failures += 1;
+      const attempted = new Set<string>();
+      let pageNumber = 1;
+      for (;;) {
+        const page = await listPlanningSessions({ pageNumber, pageSize: SESSION_PAGE_SIZE });
+        const objects = page?.objects ?? [];
+        if (objects.length === 0) break;
+        let progressed = false;
+        for (const target of objects) {
+          if (attempted.has(target.id)) continue;
+          attempted.add(target.id);
+          progressed = true;
+          try {
+            await deletePlanningSession(target.id);
+            sessions.setData((cur) => removeSession(cur ?? [], target.id));
+          } catch {
+            failures += 1;
+          }
+        }
+        if (!progressed) {
+          if (pageNumber >= (page?.totalPages ?? 0)) break;
+          pageNumber += 1;
         }
       }
+      setSessionsTotal(failures);
       setSelectedId(null);
       if (failures > 0) pushToast('warning', t('{{count}} planning session(s) could not be deleted (they may still be running).', { count: failures }));
       else pushToast('warning', t('All planning sessions deleted.'));
@@ -144,9 +185,11 @@ export function PlanningScreen({ initialSessionId = null, embedded = false, tabB
       refreshing={sessions.refreshing}
       error={sessions.error}
       onRefresh={() => void sessions.refresh()}
+      onEndReached={() => void loadMore()}
+      loadingMore={loadingMore}
       search={{ value: search, onChange: setSearch, placeholder: t('Search planning sessions') }}
       actions={all.length > 0 ? [{ key: 'delete-all', icon: 'trash-outline', label: t('Delete all planning sessions'), onPress: () => setConfirmDeleteAll(true) }] : []}
-      summary={t('{{count}} total', { count: all.length })}
+      summary={t('{{count}} total', { count: Math.max(sessionsTotal, all.length) })}
       header={(
         <View style={styles.header}>
           <AppText muted style={styles.gap}>{t('Chat with a captain against a specific vessel, preserve the transcript, and dispatch directly from the planning output.')}</AppText>

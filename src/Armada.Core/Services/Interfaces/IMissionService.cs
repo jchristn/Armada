@@ -8,6 +8,11 @@ namespace Armada.Core.Services.Interfaces
     /// </summary>
     public interface IMissionService
     {
+        /// <summary>Invalidate a mission's transient selection retry after an authorized recovery revision and notify clients.</summary>
+        /// <param name="mission">The mission whose recovery authorization changed.</param>
+        /// <exception cref="ArgumentNullException">Mission is null.</exception>
+        void ReconsiderCaptainSelection(Mission mission);
+
         /// <summary>
         /// Delegate invoked synchronously at completion to capture the diff before the worktree can be reclaimed.
         /// </summary>
@@ -29,6 +34,12 @@ namespace Armada.Core.Services.Interfaces
         /// </summary>
         Func<string, string?>? OnGetMissionOutput { get; set; }
 
+        /// <summary>Read-only full preflight for observing a dispatch opportunity; never claims or launches work.</summary>
+        Task<bool> IsAdmissionReadyForMonitoringAsync(Mission mission, CancellationToken token = default);
+
+        /// <summary>Readmit a verified repair through current safety/capacity gates before relaunch.</summary>
+        Task<bool> TryAdmitVerificationResumeAsync(Mission mission, Captain captain, CancellationToken token = default);
+
         /// <summary>
         /// Try to assign a mission to an available captain.
         /// </summary>
@@ -38,8 +49,39 @@ namespace Armada.Core.Services.Interfaces
         Task<bool> TryAssignAsync(Mission mission, Vessel vessel, CancellationToken token = default);
 
         /// <summary>
+        /// Try to assign a mission to an available captain. With <paramref name="launchInBackground"/>, returns once the
+        /// mission is admitted (Assigned, captain slot claimed) and provisions the dock and launches the agent in the
+        /// background; a failure there rolls the mission back to Pending for the next dispatch cycle.
+        /// </summary>
+        /// <param name="mission">Mission to assign.</param>
+        /// <param name="vessel">Target vessel.</param>
+        /// <param name="launchInBackground">Return after admission instead of after launch.</param>
+        /// <param name="token">Cancellation token for admission; the background launch is not cancelled by it.</param>
+        /// <returns>True when the mission was admitted (and, without background launch, launched).</returns>
+        Task<bool> TryAssignAsync(Mission mission, Vessel vessel, bool launchInBackground, CancellationToken token = default);
+
+        /// <summary>
+        /// Close wait intervals that a previous Admiral process left open. Call once at startup, before dispatch.
+        /// </summary>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The number of intervals closed.</returns>
+        Task<int> CloseInterruptedWaitsAsync(CancellationToken token = default) => Task.FromResult(0);
+
+        /// <summary>
+        /// Close tracked waits for missions that are no longer Pending, given a Pending snapshot taken at
+        /// <paramref name="snapshotUtc"/>.
+        /// </summary>
+        /// <param name="pendingMissionIds">Ids of the missions Pending in the snapshot.</param>
+        /// <param name="snapshotUtc">When the snapshot was read.</param>
+        /// <param name="token">Cancellation token.</param>
+        Task ReconcileWaitsAsync(IEnumerable<string> pendingMissionIds, DateTime snapshotUtc, CancellationToken token = default) => Task.CompletedTask;
+
+        /// <summary>Read-only authorized-mission preview of configurable captain selection; no claims, probes or history writes.</summary>
+        Task<CaptainSelectionPreview> PreviewCaptainSelectionAsync(Mission mission, int pageNumber = 1, int pageSize = 25, CancellationToken token = default);
+
+        /// <summary>
         /// Explain why a Pending mission is still waiting for a captain, using the same gates as
-        /// <see cref="TryAssignAsync"/> without changing anything. Returns null when the mission is not Pending.
+        /// <see cref="TryAssignAsync(Mission, Vessel, CancellationToken)"/> without changing anything. Returns null when the mission is not Pending.
         /// </summary>
         /// <param name="mission">Mission.</param>
         /// <param name="token">Cancellation token.</param>

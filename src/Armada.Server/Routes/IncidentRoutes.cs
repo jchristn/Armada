@@ -116,6 +116,7 @@ namespace Armada.Server.Routes
 
                 try
                 {
+                    CollectionBounds.Validate(request);
                     await ValidateObjectivesAsync(ctx, request.ObjectiveIds).ConfigureAwait(false);
                     Incident incident = await _Incidents.CreateAsync(ctx, request).ConfigureAwait(false);
                     await LinkObjectivesAsync(ctx, incident, request.ObjectiveIds).ConfigureAwait(false);
@@ -144,6 +145,7 @@ namespace Armada.Server.Routes
 
                 try
                 {
+                    CollectionBounds.Validate(request);
                     await ValidateObjectivesAsync(ctx, request.ObjectiveIds).ConfigureAwait(false);
                     Incident incident = await _Incidents.UpdateAsync(ctx, req.Parameters["id"], request).ConfigureAwait(false);
                     await LinkObjectivesAsync(ctx, incident, request.ObjectiveIds).ConfigureAwait(false);

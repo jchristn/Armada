@@ -6,6 +6,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
     using System.Threading.Tasks;
     using Microsoft.Data.SqlClient;
     using Armada.Core.Database.Interfaces;
+    using Armada.Core.Enums;
     using Armada.Core.Models;
 
     /// <summary>
@@ -145,6 +146,36 @@ namespace Armada.Core.Database.SqlServer.Implementations
                 "SELECT * FROM objective_refinement_messages WHERE objective_id = @objective_id ORDER BY created_utc ASC, sequence ASC;",
                 cmd => cmd.Parameters.AddWithValue("@objective_id", objectiveId),
                 token).ConfigureAwait(false);
+        }
+
+        /// <inheritdoc />
+        public async Task<EnumerationResult<ObjectiveRefinementMessage>> EnumeratePageBySessionAsync(string objectiveRefinementSessionId, EnumerationQuery query, CancellationToken token = default)
+        {
+            if (String.IsNullOrWhiteSpace(objectiveRefinementSessionId)) throw new ArgumentNullException(nameof(objectiveRefinementSessionId));
+            if (query == null) throw new ArgumentNullException(nameof(query));
+            string direction = query.Order == EnumerationOrderEnum.CreatedAscending ? "ASC" : "DESC";
+            using (SqlConnection conn = new SqlConnection(_Driver.ConnectionString))
+            {
+                await conn.OpenAsync(token).ConfigureAwait(false);
+                return await SqlServerBoundedPage.ReadAsync(conn,
+                    "FROM objective_refinement_messages WHERE objective_refinement_session_id = @session_id",
+                    "sequence " + direction + ", created_utc " + direction + ", id " + direction,
+                    cmd => SqlServerCommandHelper.Add(cmd, "@session_id", objectiveRefinementSessionId),
+                    FromReader, query, token).ConfigureAwait(false);
+            }
+        }
+
+        /// <inheritdoc />
+        public async Task<long> CountBySessionAsync(string objectiveRefinementSessionId, CancellationToken token = default)
+        {
+            if (String.IsNullOrWhiteSpace(objectiveRefinementSessionId)) throw new ArgumentNullException(nameof(objectiveRefinementSessionId));
+            using (SqlConnection conn = new SqlConnection(_Driver.ConnectionString))
+            {
+                await conn.OpenAsync(token).ConfigureAwait(false);
+                return await SqlServerCommandHelper.CountAsync(conn,
+                    "SELECT COUNT(*) FROM objective_refinement_messages WHERE objective_refinement_session_id = @session_id;",
+                    cmd => SqlServerCommandHelper.Add(cmd, "@session_id", objectiveRefinementSessionId), token).ConfigureAwait(false);
+            }
         }
 
         private async Task<List<ObjectiveRefinementMessage>> EnumerateAsync(string sql, Action<SqlCommand> parameterize, CancellationToken token)

@@ -299,17 +299,17 @@ namespace Test.Shared.Suites.Tui
                 refused.Ok = false;
                 refused.ResultText = "permission denied";
                 refused.PermissionDenied = true;
-                reply.ToolCalls.Add(refused);
+                fx.SetToolCalls(reply, refused);
                 AskMessageToolCall fine = new AskMessageToolCall();
                 fine.ToolName = "Read";
                 fine.Ok = false;
                 fine.ResultText = "no such file";
-                reply.ToolCalls.Add(fine);
+                fx.SetToolCalls(reply, fine);
                 fx.AddThread(thread, pending, waiting, allowed, denied, reply);
                 using (TuiTestHost host = TuiCase.SignedIn(160, 90, "/ask/ath_1", fx.Stub))
                 {
                     AskScreen screen = (AskScreen)host.Tui.Shell.Screen!;
-                    AssertTrue(host.PumpUntil(() => host.Tui.Ask.Conversation.Messages.Count == 5 && host.Tui.Ask.Conversation.Thread?.CliPermission != null), "loaded");
+                    AssertTrue(host.PumpUntil(() => host.Tui.Ask.Conversation.Messages.Count == 5 && host.Tui.Ask.Conversation.Thread?.CliPermission != null && host.Tui.Ask.Conversation.ToolCalls.ContainsKey("amg_5")), "loaded");
                     screen.Transcript.Layout(150);
                     string collapsedText = String.Join("\n", screen.Transcript.PlainLines());
                     AssertFalse(collapsedText.Contains("Allowed by a saved rule.", StringComparison.Ordinal), "decided cards start collapsed");

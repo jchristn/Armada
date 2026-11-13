@@ -276,7 +276,10 @@ namespace Armada.Core.Services
                         break;
                     }
                 case HarborFileOperationEnum.List:
-                    result.Tree = WorkspaceFileEngine.GetTree(root, path);
+                    // The page is cut here, on the Harbor, so the reply over the link stays bounded. An Admiral that
+                    // predates paged listings sends no page and gets the first page of the largest size.
+                    Armada.Core.Models.EnumerationQuery listPage = new Armada.Core.Models.EnumerationQuery { PageNumber = request.PageNumber ?? 1, PageSize = request.PageSize ?? CollectionLimits.MaxPageSize };
+                    result.Tree = WorkspaceFileEngine.GetTree(root, path, listPage);
                     result.Success = true;
                     break;
                 case HarborFileOperationEnum.ReadFile:

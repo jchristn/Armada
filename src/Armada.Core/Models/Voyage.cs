@@ -3,6 +3,7 @@ namespace Armada.Core.Models
     using System.Collections.Generic;
     using System.Text.Json.Serialization;
     using Armada.Core.Enums;
+    using Armada.Core.Services;
 
     /// <summary>
     /// A batch of related missions tracked together.
@@ -107,8 +108,10 @@ namespace Armada.Core.Models
         public string? SourcePlanningMessageId { get; set; } = null;
 
         /// <summary>
-        /// Ordered list of playbooks selected for this voyage.
+        /// Ordered list of playbooks selected for this voyage. At most <see cref="CollectionLimits.MaxConfigItems"/>;
+        /// dispatch rejects more.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxConfigItems)]
         public List<SelectedPlaybook> SelectedPlaybooks { get; set; } = new List<SelectedPlaybook>();
 
         /// <summary>
@@ -124,6 +127,27 @@ namespace Armada.Core.Models
         /// the voyage inherits it, so their stage outcomes are tagged IsEvaluation.
         /// </summary>
         public bool IsEvaluation { get; set; } = false;
+
+        /// <summary>
+        /// The voyage's current black box entry (bbx_ prefix), or null when it has none.
+        /// </summary>
+        public string? LastBlackBoxEntryId { get; set; } = null;
+
+        /// <summary>
+        /// Overlap warnings found when this voyage's missions was dispatched (black box prevention, at most 50), or null. Returned by
+        /// the dispatch responses only; never stored.
+        /// </summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        [CollectionBound(Armada.Core.BlackBox.BlackBoxInsightLimits.MaxOverlapWarnings, Reason = "Dispatch keeps the strongest 50")]
+        public List<MissionOverlapWarning>? OverlapWarnings { get; set; } = null;
+
+        /// <summary>
+        /// Brief lint findings found when this voyage's missions was dispatched (at most 50), or null. Returned by the dispatch
+        /// responses only; never stored. Lint never blocks a dispatch.
+        /// </summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        [CollectionBound(Armada.Core.BlackBox.BlackBoxInsightLimits.MaxLintFindings, Reason = "Lint stops at 50")]
+        public List<BriefLintFinding>? BriefLintWarnings { get; set; } = null;
 
         #endregion
 

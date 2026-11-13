@@ -108,7 +108,8 @@ export function buildVesselDuplicatePayload(vessel: Vessel): Partial<Vessel> {
     hotfixBranchPrefix: vessel.hotfixBranchPrefix,
     requirePullRequestForProtectedBranches: vessel.requirePullRequestForProtectedBranches,
     requireMergeQueueForReleaseBranches: vessel.requireMergeQueueForReleaseBranches,
-    allowConcurrentMissions: vessel.allowConcurrentMissions,
+    maxParallelVoyages: vessel.maxParallelVoyages,
+    maxParallelMissionsPerVoyage: vessel.maxParallelMissionsPerVoyage,
     defaultPipelineId: vessel.defaultPipelineId ?? null,
   };
 }
@@ -117,6 +118,7 @@ export function buildCaptainDuplicatePayload(captain: Captain): Partial<Captain>
   return {
     name: duplicateDisplayName(captain.name),
     runtime: captain.runtime,
+    maxConcurrency: captain.maxConcurrency,
     systemInstructions: captain.systemInstructions ?? null,
     model: captain.model ?? null,
     allowedPersonas: captain.allowedPersonas ?? null,

@@ -57,10 +57,16 @@ namespace Armada.Core.Services
         #region Public-Methods
 
         /// <inheritdoc />
-        public async Task<WorkspaceTreeResult> GetTreeAsync(string? path, CancellationToken token = default)
+        public async Task<WorkspaceTreeResult> GetTreeAsync(string? path, EnumerationQuery page, CancellationToken token = default)
         {
-            HarborFileResult result = await SendAsync(NewRequest(HarborFileOperationEnum.List, path), token).ConfigureAwait(false);
-            return result.Tree ?? throw new InvalidOperationException(Describe() + " returned no listing.");
+            if (page == null) throw new ArgumentNullException(nameof(page));
+            HarborFileRequest message = NewRequest(HarborFileOperationEnum.List, path);
+            message.PageNumber = page.PageNumber;
+            message.PageSize = page.PageSize;
+            HarborFileResult result = await SendAsync(message, token).ConfigureAwait(false);
+            WorkspaceTreeResult tree = result.Tree ?? throw new InvalidOperationException(Describe() + " returned no listing.");
+            // A Harbor that predates paged listings answers with every entry; cut the page here so the reply stays bounded.
+            return WorkspaceFileEngine.PageTree(tree, page);
         }
 
         /// <inheritdoc />

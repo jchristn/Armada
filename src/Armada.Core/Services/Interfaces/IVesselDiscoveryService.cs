@@ -41,13 +41,14 @@ namespace Armada.Core.Services.Interfaces
         /// List the browsable subdirectories of a directory, or the allowed roots when no path is given.
         /// </summary>
         /// <param name="path">Absolute directory path, or null or empty for the allowed roots.</param>
+        /// <param name="page">Paging (page size 1 to 1000); null is the first page of 10.</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>The listing.</returns>
         /// <exception cref="ArgumentException">Thrown when the path is relative or malformed.</exception>
         /// <exception cref="Armada.Core.Services.VesselImportPathNotAllowedException">Thrown when the path is outside the allowed roots.</exception>
         /// <exception cref="System.IO.DirectoryNotFoundException">Thrown when the directory does not exist.</exception>
         /// <exception cref="UnauthorizedAccessException">Thrown when the directory cannot be read.</exception>
-        Task<VesselBrowseResult> BrowseAsync(string? path, CancellationToken token = default);
+        Task<VesselBrowseResult> BrowseAsync(string? path, EnumerationQuery? page = null, CancellationToken token = default);
 
         /// <summary>
         /// The effective allowed roots, normalized: Import.AllowedRoots, or the user profile directory when none are

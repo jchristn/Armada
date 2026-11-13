@@ -1,6 +1,7 @@
 namespace Armada.Core.Models
 {
     using System;
+    using System.Text.Json.Serialization;
 
     /// <summary>
     /// Query parameters for skill APIs and storage.
@@ -9,7 +10,7 @@ namespace Armada.Core.Models
     {
         #region Private-Members
 
-        private int _PageSize = 25;
+        private int _PageSize = 10;
 
         #endregion
 
@@ -22,6 +23,20 @@ namespace Armada.Core.Models
         /// User scope or filter.
         /// </summary>
         public string? UserId { get; set; } = null;
+
+        /// <summary>
+        /// When true, only tenant-wide skills plus the user-specific skills owned by <see cref="ViewerUserId"/> are
+        /// returned (the visibility rule for a caller who is neither a global nor a tenant admin), applied in the data source
+        /// before counting. Server-set; never read from a request body.
+        /// </summary>
+        [JsonIgnore]
+        public bool RestrictToViewer { get; set; } = false;
+
+        /// <summary>
+        /// Viewer whose user-specific skills are included when <see cref="RestrictToViewer"/> is true.
+        /// </summary>
+        [JsonIgnore]
+        public string? ViewerUserId { get; set; } = null;
 
         /// <summary>
         /// Category filter.
@@ -44,7 +59,7 @@ namespace Armada.Core.Models
         public int PageNumber { get; set; } = 1;
 
         /// <summary>
-        /// Results per page (1 to 1000, default 25). Values outside the range are clamped, so a request can never ask for
+        /// Results per page (1 to 1000, default 10). Values outside the range are clamped, so a request can never ask for
         /// an unbounded page.
         /// </summary>
         public int PageSize

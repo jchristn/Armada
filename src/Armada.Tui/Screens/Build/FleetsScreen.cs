@@ -9,6 +9,7 @@ namespace Armada.Tui.Screens.Build
     using Armada.Client.Models;
     using Armada.Core.Models;
     using Armada.Tui.Routing;
+    using Armada.Tui.Screens.Kit;
     using Armada.Tui.Screens.Operations;
     using Armada.Tui.Services;
     using Armada.Tui.Widgets;
@@ -121,7 +122,7 @@ namespace Armada.Tui.Screens.Build
             ArmadaPageQuery all = new ArmadaPageQuery(1, 9999);
             Task<EnumerationResult<Fleet>?> fleets = Context.Client.ListFleetsAsync(all, token);
             Task<EnumerationResult<Vessel>?> vessels = Context.Client.ListVesselsAsync(new ArmadaPageQuery(1, 9999), token);
-            Task<EnumerationResult<Pipeline>?> pipelines = Context.Client.ListPipelinesAsync(new ArmadaPageQuery(1, 9999), token);
+            Task<List<Pipeline>> pipelines = ArmadaPaging.ReadAllAsync<Pipeline>((p, ct) => Context.Client.ListPipelinesAsync(new ArmadaPageQuery(p, 1000), ct), ArmadaPaging.DefaultMaxPages, token);
             await Task.WhenAll(fleets, vessels, pipelines).ConfigureAwait(false);
             Dictionary<string, int> counts = new Dictionary<string, int>(StringComparer.Ordinal);
             foreach (Vessel v in vessels.Result?.Objects ?? new List<Vessel>())
@@ -131,7 +132,7 @@ namespace Armada.Tui.Screens.Build
             }
 
             _VesselCounts = counts;
-            _LoadedPipelines = pipelines.Result?.Objects ?? new List<Pipeline>();
+            _LoadedPipelines = pipelines.Result;
             List<Fleet> rows = fleets.Result?.Objects ?? new List<Fleet>();
             return new GridPage<Fleet>(rows, rows.Count);
         }
@@ -183,11 +184,11 @@ namespace Armada.Tui.Screens.Build
         {
             Confirm("Delete Fleet", Tr("Delete fleet \"{{name}}\"? This cannot be undone.", LocalizationArgs.Of("name", fleet.Name)), () =>
             {
-                Run((c, t) => c.DeleteFleetAsync(fleet.Id, t), () =>
+                DeleteProgress.RunVoid(Context, "Deleting fleet", t => Context.Client.DeleteFleetAsync(fleet.Id, t), () =>
                 {
                     Toast(NotificationSeverityEnum.Warning, Tr("Fleet \"{{name}}\" deleted.", LocalizationArgs.Of("name", fleet.Name)));
                     Refresh();
-                }, null, ex => ShowMessage(Tr("Delete failed.")));
+                }, "Delete failed.");
             }, "Delete");
         }
 
@@ -198,12 +199,12 @@ namespace Armada.Tui.Screens.Build
             Confirm("Delete Selected Fleets", Tr("Delete {{count}} selected fleet(s)? This cannot be undone.", LocalizationArgs.Of("count", ids.Count)), () =>
             {
                 Grid.ClearMarks();
-                Call(async (c, t) =>
+                DeleteProgress.Run(Context, "{count, plural, one {Deleting # fleet} other {Deleting # fleets}}", async t =>
                 {
                     int failed = 0;
                     foreach (string id in ids)
                     {
-                        try { await c.DeleteFleetAsync(id, t).ConfigureAwait(false); }
+                        try { await Context.Client.DeleteFleetAsync(id, t).ConfigureAwait(false); }
                         catch (ArmadaApiException) { failed++; }
                     }
 
@@ -220,7 +221,7 @@ namespace Armada.Tui.Screens.Build
 
                     if (failed > 0) ShowMessage(Tr("Deleted {{deleted}} fleets, {{failed}} failed.", LocalizationArgs.Of("deleted", deleted, "failed", failed)));
                     Refresh();
-                }, "Delete failed.");
+                }, "Delete failed.", ids.Count);
             }, "Delete");
         }
 

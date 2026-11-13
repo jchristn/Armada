@@ -8,6 +8,7 @@ namespace Armada.Tui.Screens.Configuration
     using Armada.Core.Models;
     using Armada.Tui.Routing;
     using Armada.Tui.Screens.Entities;
+    using Armada.Tui.Screens.Kit;
     using Armada.Tui.Services;
     using Armada.Tui.Widgets;
 
@@ -174,7 +175,7 @@ namespace Armada.Tui.Screens.Configuration
             if (p == null || !CanManage()) return;
             Context.Confirm("Delete Playbook", EntityUi.T(Context, "Delete \"{{name}}\"? Existing mission snapshots remain immutable, but future dispatches will no longer be able to select it.", "name", p.FileName), () =>
             {
-                EntityUi.Run(Context, ct => Context.Client.DeletePlaybookAsync(p.Id, ct), () =>
+                DeleteProgress.RunVoid(Context, "Deleting playbook", ct => Context.Client.DeletePlaybookAsync(p.Id, ct), () =>
                 {
                     EntityUi.Toast(Context, NotificationSeverityEnum.Warning, EntityUi.T(Context, "Playbook \"{{name}}\" deleted.", "name", p.FileName));
                     Context.Navigate("/configuration?tab=playbooks");

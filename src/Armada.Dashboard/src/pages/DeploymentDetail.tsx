@@ -35,8 +35,10 @@ import CopyButton from '../components/shared/CopyButton';
 import ErrorModal from '../components/shared/ErrorModal';
 import JsonViewer from '../components/shared/JsonViewer';
 import PageHeader from '../components/shared/PageHeader';
+import { ErrorState } from '../components/shared/StateBlocks';
 import StatusBadge from '../components/shared/StatusBadge';
 import { deploymentApprovalLabel } from '../lib/deploymentApprovalLabel';
+import { useDeleteProgress } from '../lib/useDeleteProgress';
 
 interface DeploymentPrefillState {
   prefill?: DeploymentUpsertRequest;
@@ -53,6 +55,7 @@ export default function DeploymentDetail() {
   const { isAdmin, isTenantAdmin } = useAuth();
   const { t, formatDateTime, formatRelativeTime } = useLocale();
   const { pushToast } = useNotifications();
+  const deletion = useDeleteProgress();
 
   const createMode = id === 'new';
   const canManage = isAdmin || isTenantAdmin;
@@ -94,6 +97,8 @@ export default function DeploymentDetail() {
   const [saving, setSaving] = useState(false);
   const [syncingGitHub, setSyncingGitHub] = useState(false);
   const [error, setError] = useState('');
+  // A failed entity load (for example a stale link) renders an error state instead of an empty editor.
+  const [loadFailure, setLoadFailure] = useState<{ id: string | undefined; message: string } | null>(null);
   const [jsonData, setJsonData] = useState<{ open: boolean; title: string; data: unknown }>({ open: false, title: '', data: null });
   const [confirm, setConfirm] = useState<{ open: boolean; title: string; message: string; onConfirm: () => void }>({
     open: false,
@@ -166,7 +171,7 @@ export default function DeploymentDetail() {
         setNotes(result.notes || '');
         setError('');
       } catch (err: unknown) {
-        if (mounted) setError(err instanceof Error ? err.message : t('Failed to load deployment.'));
+        if (mounted) setLoadFailure({ id, message: err instanceof Error ? err.message : t('Failed to load deployment.') });
       } finally {
         if (mounted) setLoading(false);
       }
@@ -274,13 +279,9 @@ export default function DeploymentDetail() {
       message: t('Delete "{{title}}"? This removes only the deployment record.', { title: deployment.title }),
       onConfirm: async () => {
         setConfirm((current) => ({ ...current, open: false }));
-        try {
-          await deleteDeployment(deployment.id);
-          pushToast('warning', t('Deployment "{{title}}" deleted.', { title: deployment.title }));
-          navigate('/deployments');
-        } catch (err: unknown) {
-          setError(err instanceof Error ? err.message : t('Delete failed.'));
-        }
+        if (!(await deletion.run({ kind: 'deployment', action: () => deleteDeployment(deployment.id), errorMessage: (err) => (err instanceof Error ? err.message : t('Delete failed.')) }))) return;
+        pushToast('warning', t('Deployment "{{title}}" deleted.', { title: deployment.title }));
+        navigate('/deployments');
       },
     });
   }
@@ -433,14 +434,22 @@ export default function DeploymentDetail() {
 
   if (loading) return <p className="text-dim">{t('Loading...')}</p>;
 
+  if (!createMode && loadFailure && loadFailure.id === id) {
+    return (
+      <div>
+        <PageHeader breadcrumb={[{ label: t('Deployments'), to: '/deployments' }, { label: id || '' }]} title={id || ''} />
+        <ErrorState message={loadFailure.message} />
+      </div>
+    );
+  }
+
   return (
     <div>
       <PageHeader
-        breadcrumb={
-          <>
-            <Link to="/deployments">{t('Deployments')}</Link> <span className="breadcrumb-sep">&gt;</span> <span>{createMode ? t('New Deployment') : title}</span>
-          </>
-        }
+        breadcrumb={[
+          { label: t('Deployments'), to: '/deployments' },
+          { label: createMode ? t('New Deployment') : title },
+        ]}
         title={createMode ? t('Create Deployment') : title}
         actions={
           <>
@@ -519,6 +528,7 @@ export default function DeploymentDetail() {
         onConfirm={confirm.onConfirm}
         onCancel={() => setConfirm((current) => ({ ...current, open: false }))}
       />
+      {deletion.dialog}
 
       <div className="detail-grid">
         <section className="card detail-panel">

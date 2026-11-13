@@ -37,12 +37,14 @@ import StatusBadge from '../components/shared/StatusBadge';
 import { buildEnvironmentOptions } from '../lib/deploymentEnvironments';
 import { sortByName } from '../lib/sortByName';
 import { DEPLOYMENT_STATUSES, VERIFICATION_STATUSES } from '../lib/deliveryForms';
+import { useDeleteProgress } from '../lib/useDeleteProgress';
 
 export default function Deployments() {
   const navigate = useNavigate();
   const { isAdmin, isTenantAdmin } = useAuth();
   const { t, formatDateTime, formatRelativeTime } = useLocale();
   const { pushToast } = useNotifications();
+  const deletion = useDeleteProgress();
 
   const [deployments, setDeployments] = useState<Deployment[]>([]);
   const [vessels, setVessels] = useState<Vessel[]>([]);
@@ -275,13 +277,9 @@ export default function Deployments() {
       message: t('Delete "{{title}}"? This removes only the deployment record and leaves linked checks, releases, and environments intact.', { title: deployment.title }),
       onConfirm: async () => {
         setConfirm((current) => ({ ...current, open: false }));
-        try {
-          await deleteDeployment(deployment.id);
-          pushToast('warning', t('Deployment "{{title}}" deleted.', { title: deployment.title }));
-          await load();
-        } catch (err: unknown) {
-          setError(err instanceof Error ? err.message : t('Delete failed.'));
-        }
+        if (!(await deletion.run({ kind: 'deployment', action: () => deleteDeployment(deployment.id), errorMessage: (err) => (err instanceof Error ? err.message : t('Delete failed.')) }))) return;
+        pushToast('warning', t('Deployment "{{title}}" deleted.', { title: deployment.title }));
+        await load();
       },
     });
   }
@@ -373,6 +371,7 @@ export default function Deployments() {
         onConfirm={confirm.onConfirm}
         onCancel={() => setConfirm((current) => ({ ...current, open: false }))}
       />
+      {deletion.dialog}
 
       {showCreate && (
         <div className="modal-overlay" onClick={() => setShowCreate(false)}>

@@ -1,11 +1,13 @@
 namespace Armada.Core.Models
 {
     using System.Collections.Generic;
+    using Armada.Core.Services;
 
     /// <summary>
-    /// Full health of one vessel: the health row (effective statuses), the raw findings, the outdated or vulnerable
-    /// dependencies, and the manual overrides. For a vessel never evaluated, Health has a null Id and Unknown statuses
-    /// and the lists are empty.
+    /// Full health of one vessel: the health row (effective statuses), the raw findings, the number of outdated or
+    /// vulnerable dependencies, and the manual overrides. The dependency rows are not embedded; page them with
+    /// GET /api/v1/vessels/{id}/health/dependencies (POST .../enumerate) or MCP list_vessel_dependencies. For a vessel
+    /// never evaluated, Health has a null Id and Unknown statuses and the lists are empty.
     /// </summary>
     public class VesselHealthDetail
     {
@@ -19,16 +21,18 @@ namespace Armada.Core.Models
         /// <summary>
         /// Raw findings, one per criterion. Never null.
         /// </summary>
+        [CollectionBound(16, Reason = "One per VesselHealthCriterionEnum value (11), replaced on each evaluation")]
         public List<VesselHealthFinding> Findings { get; set; } = new List<VesselHealthFinding>();
 
         /// <summary>
-        /// Outdated or vulnerable dependencies. Never null.
+        /// Number of stored outdated or vulnerable dependency rows (the TotalRecords of the dependencies enumeration).
         /// </summary>
-        public List<VesselDependency> Dependencies { get; set; } = new List<VesselDependency>();
+        public long DependencyCount { get; set; } = 0;
 
         /// <summary>
         /// Manual overrides. Never null.
         /// </summary>
+        [CollectionBound(16, Reason = "Unique per vessel and criterion (unique index); one per VesselHealthCriterionEnum value")]
         public List<VesselHealthOverride> Overrides { get; set; } = new List<VesselHealthOverride>();
 
         #endregion

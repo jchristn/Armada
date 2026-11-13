@@ -142,6 +142,18 @@ describe('HarborMetricsPanel', () => {
     expect(within(row).getByRole('img', { name: 'First output trend for ClaudeCode' })).toBeInTheDocument();
   });
 
+  it('labels the server aggregates as Other and says when the link timeline is coalesced', async () => {
+    const metrics = busyMetrics();
+    metrics.launchSpeed = [...metrics.launchSpeed, { ...metrics.launchSpeed[0], runtime: 'Other', isOther: true, runtimeCount: 4 }];
+    metrics.link.segmentsCoalesced = true;
+    metrics.link.rawSegmentCount = 5000;
+    vi.mocked(getHarborMetrics).mockResolvedValue(metrics);
+    renderPanel();
+    const table = await screen.findByRole('table', { name: 'Launch speed per runtime' });
+    expect(within(table).getByText('Other (4)')).toBeInTheDocument();
+    expect(screen.getByTestId('harbor-link-coalesced')).toHaveTextContent('Too many link changes to draw one by one');
+  });
+
   it('asks for the chosen range', async () => {
     vi.mocked(getHarborMetrics).mockResolvedValue(busyMetrics());
     renderPanel();

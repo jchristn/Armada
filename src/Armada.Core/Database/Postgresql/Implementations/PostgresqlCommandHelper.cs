@@ -243,6 +243,18 @@ namespace Armada.Core.Database.Postgresql.Implementations
         }
 
         /// <summary>
+        /// Bind provider-neutral parameters: DateTime values with this provider's timestamp convention, everything else as-is.
+        /// </summary>
+        internal static void Bind(NpgsqlCommand cmd, List<QueryParameter> parameters)
+        {
+            foreach (QueryParameter parameter in parameters)
+            {
+                if (parameter.Value is DateTime dt) AddDate(cmd, parameter.Name, dt);
+                else Add(cmd, parameter.Name, parameter.Value);
+            }
+        }
+
+        /// <summary>
         /// Paging clause appended after ORDER BY.
         /// </summary>
         internal static string Page(int offset, int limit)

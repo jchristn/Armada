@@ -2,6 +2,7 @@ namespace Armada.Core.Models
 {
     using System.Collections.Generic;
     using Armada.Core.Enums;
+    using Armada.Core.Services;
 
     /// <summary>
     /// Readiness summary for one vessel and optional workflow action.
@@ -73,6 +74,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// Check types currently exposed by the resolved profile.
         /// </summary>
+        [CollectionBound(32, Reason = "Distinct CheckRunTypeEnum names (19 values)")]
         public List<string> AvailableCheckTypes { get; set; } = new List<string>();
 
         /// <summary>
@@ -103,16 +105,19 @@ namespace Armada.Core.Models
         /// <summary>
         /// Toolchains inferred from repository contents.
         /// </summary>
+        [CollectionBound(16, Reason = "Subset of the fixed toolchain catalog in VesselReadinessService.ExpectedToolchains (10 entries)")]
         public List<string> DetectedToolchains { get; set; } = new List<string>();
 
         /// <summary>
         /// Detailed toolchain probes with availability and version metadata.
         /// </summary>
+        [CollectionBound(16, Reason = "One per entry of the fixed toolchain catalog in VesselReadinessService.ExpectedToolchains (10 entries)")]
         public List<VesselToolchainProbe> ToolchainProbes { get; set; } = new List<VesselToolchainProbe>();
 
         /// <summary>
         /// Environment names exposed by the resolved profile.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxConfigItems, Reason = "Distinct names of WorkflowProfile.Environments, which is bounded by MaxConfigItems")]
         public List<string> DeploymentEnvironments { get; set; } = new List<string>();
 
         /// <summary>
@@ -123,11 +128,13 @@ namespace Armada.Core.Models
         /// <summary>
         /// Actionable setup checklist items.
         /// </summary>
+        [CollectionBound(16, Reason = "Fixed checklist built in VesselReadinessService.PopulateChecklist (10 items)")]
         public List<VesselSetupChecklistItem> SetupChecklist { get; set; } = new List<VesselSetupChecklistItem>();
 
         /// <summary>
         /// Readiness issues discovered during evaluation.
         /// </summary>
+        [CollectionBound(Constants.VesselReadinessMaxIssues, Reason = "Errors first, then warnings and info; IssueCount is the full count")]
         public List<VesselReadinessIssue> Issues { get; set; } = new List<VesselReadinessIssue>();
 
         /// <summary>
@@ -139,6 +146,12 @@ namespace Armada.Core.Models
         /// Total number of onboarding checklist items.
         /// </summary>
         public int SetupChecklistTotalCount { get; set; }
+
+        /// <summary>
+        /// Number of issues found, including any beyond the <see cref="Constants.VesselReadinessMaxIssues"/> listed in
+        /// <see cref="Issues"/>. ErrorCount and WarningCount count every issue.
+        /// </summary>
+        public int IssueCount { get; set; }
 
         /// <summary>
         /// Number of blocking issues.

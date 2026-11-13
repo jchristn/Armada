@@ -223,18 +223,28 @@ namespace Armada.Server.Routes
                     return (object)new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Email is required" };
                 }
 
-                List<UserMaster> users = await _database.Users.ReadByEmailAnyTenantAsync(lookupReq.Email.ToLowerInvariant()).ConfigureAwait(false);
-                TenantLookupResult result = new TenantLookupResult();
-                foreach (UserMaster u in users)
+                if (int.TryParse(req.Query.GetValueOrDefault("pageNumber"), out int lookupPageNumber)) lookupReq.PageNumber = lookupPageNumber;
+                if (int.TryParse(req.Query.GetValueOrDefault("pageSize"), out int lookupPageSize)) lookupReq.PageSize = lookupPageSize;
+
+                // Paged and counted in the database: one page of the active tenants where the email exists.
+                EnumerationQuery page = new EnumerationQuery { PageNumber = lookupReq.PageNumber, PageSize = lookupReq.PageSize };
+                EnumerationResult<TenantListEntry> tenants = await _database.Users.EnumerateTenantsByEmailAsync(lookupReq.Email.ToLowerInvariant(), page).ConfigureAwait(false);
+                return (object)new TenantLookupResult
                 {
-                    if (u.TenantId == ArmadaConstants.SystemTenantId) continue;
-                    TenantMetadata? t = await _database.Tenants.ReadAsync(u.TenantId).ConfigureAwait(false);
-                    if (t != null && t.Active)
-                        result.Tenants.Add(new TenantListEntry(t.Id, t.Name));
-                }
-                return (object)result;
+                    Tenants = tenants.Objects,
+                    PageNumber = tenants.PageNumber,
+                    PageSize = tenants.PageSize,
+                    TotalPages = tenants.TotalPages,
+                    TotalRecords = tenants.TotalRecords
+                };
             },
-            api => api.WithResponse(200, OpenApiResponseMetadata.Create("Successful response")).WithTag("Authentication").WithSummary("Look up tenants by email").WithResponse(400, OpenApiResponseMetadata.BadRequest()));
+            api => api
+                .WithTag("Authentication")
+                .WithSummary("Look up tenants by email")
+                .WithDescription("Unauthenticated and rate-limited. Returns one page of the active tenants in which a user with the email exists, ordered by tenant name then id, with PageNumber, PageSize, TotalPages and TotalRecords. Paging comes from the body (PageNumber, PageSize 1 to 1000, default 10) or the querystring, which overrides it.")
+                .WithRequestBody(OpenApiJson.BodyFor<TenantLookupRequest>("Email and paging", false))
+                .WithResponse(200, OpenApiJson.For<TenantLookupResult>("One page of tenants"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest()));
 
             // Onboarding
             app.Post("/api/v1/onboarding", async (ApiRequest req) =>

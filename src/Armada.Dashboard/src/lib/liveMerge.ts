@@ -18,6 +18,7 @@ interface Sequenced extends Timestamped {
 interface SessionDetailShape<S extends Timestamped, M extends Sequenced> {
   session: S;
   messages: M[];
+  messageCount?: number;
   captain?: unknown;
 }
 
@@ -59,22 +60,24 @@ export function upsertIfNewer<T extends Timestamped>(items: T[], incoming: T): T
 /**
  * Merges a session detail from a REST response into the current state: the session and each message keep the newer
  * copy, messages only present on one side are kept, and messages stay ordered by sequence. The captain keeps the
- * current copy, since captain.changed events update its state without a timestamp.
+ * current copy, since captain.changed events update its state without a timestamp. A detail without messages (the
+ * server pages the transcript separately) keeps the transcript already loaded; messageCount keeps the larger count.
  */
 export function mergeSessionDetail<S extends Timestamped, M extends Sequenced, D extends SessionDetailShape<S, M>>(
   current: D | null,
-  incoming: D,
+  incoming: Omit<D, 'messages'> & { messages?: M[] },
 ): D {
-  if (!current || current.session.id !== incoming.session.id) return incoming;
+  if (!current || current.session.id !== incoming.session.id) return (incoming.messages ? incoming : { ...incoming, messages: [] }) as D;
 
   let messages: M[] = [...current.messages];
-  for (const message of incoming.messages) messages = upsertIfNewer(messages, message);
+  for (const message of incoming.messages ?? []) messages = upsertIfNewer(messages, message);
   messages.sort((a, b) => a.sequence - b.sequence);
 
   return {
     ...incoming,
     session: newerOf(current.session, incoming.session),
     messages,
+    messageCount: Math.max(incoming.messageCount ?? 0, current.messageCount ?? 0, messages.length),
     captain: current.captain ?? incoming.captain,
-  };
+  } as D;
 }

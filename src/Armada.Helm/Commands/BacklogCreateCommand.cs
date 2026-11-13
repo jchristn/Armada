@@ -4,6 +4,7 @@ namespace Armada.Helm.Commands
     using Spectre.Console;
     using Spectre.Console.Cli;
     using Armada.Core.Models;
+    using Armada.Helm.Infrastructure;
 
     /// <summary>
     /// Creates a backlog item.
@@ -25,7 +26,7 @@ namespace Armada.Helm.Commands
         {
             if (String.IsNullOrWhiteSpace(settings.Title))
             {
-                AnsiConsole.MarkupLine("[red]A title is required.[/] Pass [green]--title[/] to create a backlog item.");
+                HelmConsole.Error.MarkupLine("[red]A title is required.[/] Pass [green]--title[/] to create a backlog item.");
                 return 1;
             }
 
@@ -34,7 +35,7 @@ namespace Armada.Helm.Commands
             Objective? objective = await GetApiClient().CreateBacklogItemAsync(request, cancellationToken).ConfigureAwait(false);
             if (objective == null)
             {
-                AnsiConsole.MarkupLine("[red]Backlog item creation failed.[/]");
+                HelmConsole.Error.MarkupLine("[red]Backlog item creation failed.[/]");
                 return 1;
             }
 

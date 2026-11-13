@@ -54,6 +54,9 @@ namespace Test.Shared.Suites.Database
                 action.RequiresCleanWorkingTree = false;
                 action.IsBuiltIn = true;
                 action.BuiltInKey = "update-deps";
+                action.ApplicabilityCommand = "grep -q pkg package.json";
+                action.ApplicabilityCommandWindows = "Select-String pkg package.json";
+                action.MissionMode = MissionModeEnum.Audit;
                 action.CreatedUtc = _Fixed;
 
                 FleetAction created = await testDb.Driver.FleetActions.CreateAsync(action).ConfigureAwait(false);
@@ -74,6 +77,9 @@ namespace Test.Shared.Suites.Database
                 AssertFalse(read.RequiresCleanWorkingTree, "RequiresCleanWorkingTree");
                 AssertTrue(read.IsBuiltIn, "IsBuiltIn");
                 AssertEqual("update-deps", read.BuiltInKey);
+                AssertEqual("grep -q pkg package.json", read.ApplicabilityCommand);
+                AssertEqual("Select-String pkg package.json", read.ApplicabilityCommandWindows);
+                AssertEqual(MissionModeEnum.Audit, read.MissionMode, "MissionMode");
                 AssertTrue(read.Active, "Active");
                 AssertSameInstant(_Fixed, read.CreatedUtc, "CreatedUtc");
             }));
@@ -203,6 +209,9 @@ namespace Test.Shared.Suites.Database
                 run.CancelledCount = 1;
                 run.StartedUtc = _Fixed;
                 run.CompletedUtc = _Fixed.AddMinutes(5);
+                run.ApplicabilityCommand = "test -f go.mod";
+                run.ApplicabilityCommandWindows = "Test-Path go.mod";
+                run.MissionMode = MissionModeEnum.Research;
 
                 FleetActionRun created = await testDb.Driver.FleetActionRuns.CreateAsync(run).ConfigureAwait(false);
                 FleetActionRun? read = await testDb.Driver.FleetActionRuns.ReadAsync(Constants.DefaultTenantId, created.Id).ConfigureAwait(false);
@@ -221,6 +230,9 @@ namespace Test.Shared.Suites.Database
                 AssertEqual(1, read.CancelledCount);
                 AssertSameInstant(_Fixed, read.StartedUtc!.Value, "StartedUtc");
                 AssertSameInstant(_Fixed.AddMinutes(5), read.CompletedUtc!.Value, "CompletedUtc");
+                AssertEqual("test -f go.mod", read.ApplicabilityCommand);
+                AssertEqual("Test-Path go.mod", read.ApplicabilityCommandWindows);
+                AssertEqual(MissionModeEnum.Research, read.MissionMode, "MissionMode");
             }));
 
             cases.Add(CaseAsync("run_enumerate_status_and_unfinished", "Run EnumerateAsync filters by status; EnumerateUnfinishedAsync spans tenants", TestTags.Positive, async () =>

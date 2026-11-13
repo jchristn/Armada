@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   createWorkflowProfile,
   deleteWorkflowProfile,
@@ -20,10 +20,12 @@ import CopyButton from '../components/shared/CopyButton';
 import ErrorModal from '../components/shared/ErrorModal';
 import JsonViewer from '../components/shared/JsonViewer';
 import PageHeader from '../components/shared/PageHeader';
+import { ErrorState } from '../components/shared/StateBlocks';
 import StatusBadge from '../components/shared/StatusBadge';
 import { canEdit as canEditScoped, type ScopeViewer } from '../lib/scoping';
 import WorkflowCommandPreview from '../components/shared/WorkflowCommandPreview';
 import { buildWorkflowProfileDuplicatePayload } from '../lib/duplicates';
+import { useDeleteProgress } from '../lib/useDeleteProgress';
 
 
 
@@ -74,6 +76,7 @@ export default function WorkflowProfileDetail() {
   const { isAdmin, isTenantAdmin, user } = useAuth();
   const viewer: ScopeViewer = { isAdmin, isTenantAdmin, tenantId: user?.user?.tenantId, userId: user?.user?.id };
   const { t, formatDateTime } = useLocale();
+  const deletion = useDeleteProgress();
   const { pushToast } = useNotifications();
 
   const createMode = id === 'new';
@@ -113,6 +116,8 @@ export default function WorkflowProfileDetail() {
   const [saving, setSaving] = useState(false);
   const [validating, setValidating] = useState(false);
   const [error, setError] = useState('');
+  // A failed entity load (for example a stale link) renders an error state instead of an empty editor.
+  const [loadFailure, setLoadFailure] = useState<{ id: string | undefined; message: string } | null>(null);
   const [jsonData, setJsonData] = useState<{ open: boolean; title: string; data: unknown }>({ open: false, title: '', data: null });
   const [confirm, setConfirm] = useState<{ open: boolean; title: string; message: string; onConfirm: () => void }>({
     open: false,
@@ -175,7 +180,7 @@ export default function WorkflowProfileDetail() {
         setEnvironments(result.environments || []);
         setError('');
       } catch (err: unknown) {
-        if (mounted) setError(err instanceof Error ? err.message : t('Failed to load workflow profile.'));
+        if (mounted) setLoadFailure({ id, message: err instanceof Error ? err.message : t('Failed to load workflow profile.') });
       } finally {
         if (mounted) setLoading(false);
       }
@@ -296,13 +301,9 @@ export default function WorkflowProfileDetail() {
       message: t('Delete "{{name}}"? Existing check runs remain, but future runs will not be able to resolve this profile.', { name: profile.name }),
       onConfirm: async () => {
         setConfirm((current) => ({ ...current, open: false }));
-        try {
-          await deleteWorkflowProfile(profile.id);
-          pushToast('warning', t('Workflow profile "{{name}}" deleted.', { name: profile.name }));
-          navigate('/workflow-profiles');
-        } catch (err: unknown) {
-          setError(err instanceof Error ? err.message : t('Delete failed.'));
-        }
+        if (!(await deletion.run({ kind: 'workflowProfile', action: () => deleteWorkflowProfile(profile.id), errorMessage: (err) => err instanceof Error ? err.message : t('Delete failed.') }))) return;
+        pushToast('warning', t('Workflow profile "{{name}}" deleted.', { name: profile.name }));
+        navigate('/workflow-profiles');
       },
     });
   }
@@ -335,14 +336,22 @@ export default function WorkflowProfileDetail() {
 
   if (loading) return <p className="text-dim">{t('Loading...')}</p>;
 
+  if (!createMode && loadFailure && loadFailure.id === id) {
+    return (
+      <div>
+        <PageHeader breadcrumb={[{ label: t('Workflow Profiles'), to: '/workflow-profiles' }, { label: id || '' }]} title={id || ''} />
+        <ErrorState message={loadFailure.message} />
+      </div>
+    );
+  }
+
   return (
     <div>
       <PageHeader
-        breadcrumb={
-          <>
-            <Link to="/workflow-profiles">{t('Workflow Profiles')}</Link> <span className="breadcrumb-sep">&gt;</span> <span>{createMode ? t('New Workflow Profile') : name}</span>
-          </>
-        }
+        breadcrumb={[
+          { label: t('Workflow Profiles'), to: '/workflow-profiles' },
+          { label: createMode ? t('New Workflow Profile') : name },
+        ]}
         title={createMode ? t('Create Workflow Profile') : name}
         actions={
           <>
@@ -368,6 +377,7 @@ export default function WorkflowProfileDetail() {
 
       <ErrorModal error={error} onClose={() => setError('')} />
       <JsonViewer open={jsonData.open} title={jsonData.title} data={jsonData.data} onClose={() => setJsonData({ open: false, title: '', data: null })} />
+      {deletion.dialog}
       <ConfirmDialog
         open={confirm.open}
         title={confirm.title}

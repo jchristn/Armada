@@ -182,9 +182,10 @@ namespace Test.Shared.Suites.E2E
                         }
                     })).ConfigureAwait(false);
                 AssertEqual(HttpStatusCode.OK, reorderResponse.StatusCode);
-                List<Objective> reordered = await JsonHelper.DeserializeAsync<List<Objective>>(reorderResponse).ConfigureAwait(false);
-                AssertEqual(1, reordered.Count);
-                AssertEqual(5, reordered[0].Rank);
+                ObjectiveReorderResult reordered = await JsonHelper.DeserializeAsync<ObjectiveReorderResult>(reorderResponse).ConfigureAwait(false);
+                AssertEqual(1, reordered.Updated);
+                AssertEqual(_ObjectiveId, reordered.Items[0].ObjectiveId);
+                AssertEqual(5, reordered.Items[0].Rank);
 
                 HttpResponseMessage deleteResponse = await authClient.DeleteAsync("/api/v1/backlog/" + _ObjectiveId).ConfigureAwait(false);
                 AssertEqual(HttpStatusCode.NoContent, deleteResponse.StatusCode);
@@ -224,7 +225,7 @@ namespace Test.Shared.Suites.E2E
                 _RefinementSessionId = createdSession.Session.Id;
                 AssertEqual(_ObjectiveId, createdSession.Session.ObjectiveId);
                 AssertEqual(_CaptainId, createdSession.Session.CaptainId);
-                AssertEqual(0, createdSession.Messages.Count);
+                AssertEqual(0L, createdSession.MessageCount);
 
                 await SetCaptainRuntimeAsync(authClient, _CaptainId, "Custom").ConfigureAwait(false);
 
@@ -236,15 +237,15 @@ namespace Test.Shared.Suites.E2E
                     })).ConfigureAwait(false);
                 AssertEqual(HttpStatusCode.OK, sendResponse.StatusCode, "send refinement message");
 
-                ObjectiveRefinementSessionDetail activeDetail = await WaitForSessionDetailAsync(
+                List<ObjectiveRefinementMessage> activeMessages = await WaitForTranscriptAsync(
                     authClient,
                     _RefinementSessionId,
-                    detail => detail.Session.Status == ObjectiveRefinementSessionStatusEnum.Active
-                        && detail.Messages.Exists(message => message.Role == "Assistant" && !String.IsNullOrWhiteSpace(message.Content))).ConfigureAwait(false);
+                    (detail, messages) => detail.Session.Status == ObjectiveRefinementSessionStatusEnum.Active
+                        && messages.Exists(message => message.Role == "Assistant" && !String.IsNullOrWhiteSpace(message.Content))).ConfigureAwait(false);
 
-                ObjectiveRefinementMessage assistantMessage = activeDetail.Messages.Find(message => message.Role == "Assistant")
+                ObjectiveRefinementMessage assistantMessage = activeMessages.Find(message => message.Role == "Assistant")
                     ?? throw new Exception("Expected assistant refinement transcript message");
-                AssertEqual(2, activeDetail.Messages.Count);
+                AssertEqual(2, activeMessages.Count);
                 AssertContains("Refinement response failed", assistantMessage.Content);
 
                 HttpResponseMessage summarizeResponse = await authClient.PostAsync(
@@ -274,11 +275,11 @@ namespace Test.Shared.Suites.E2E
                 AssertTrue(applied.Objective.RefinementSessionIds.Contains(_RefinementSessionId), "Expected refinement session link after apply.");
                 AssertContains("Refinement response failed", applied.Objective.RefinementSummary ?? String.Empty);
 
-                ObjectiveRefinementSessionDetail selectedDetail = await WaitForSessionDetailAsync(
+                List<ObjectiveRefinementMessage> selectedMessages = await WaitForTranscriptAsync(
                     authClient,
                     _RefinementSessionId,
-                    detail => detail.Messages.Exists(message => message.Id == assistantMessage.Id && message.IsSelected)).ConfigureAwait(false);
-                AssertTrue(selectedDetail.Messages.Exists(message => message.Id == assistantMessage.Id && message.IsSelected), "Expected selected refinement message.");
+                    (detail, messages) => messages.Exists(message => message.Id == assistantMessage.Id && message.IsSelected)).ConfigureAwait(false);
+                AssertTrue(selectedMessages.Exists(message => message.Id == assistantMessage.Id && message.IsSelected), "Expected selected refinement message.");
 
                 HttpResponseMessage deleteSessionResponse = await authClient.DeleteAsync("/api/v1/objective-refinement-sessions/" + _RefinementSessionId).ConfigureAwait(false);
                 AssertEqual(HttpStatusCode.NoContent, deleteSessionResponse.StatusCode, "delete refinement session");
@@ -446,6 +447,31 @@ namespace Test.Shared.Suites.E2E
                     Runtime = runtime
                 })).ConfigureAwait(false);
             AssertEqual(HttpStatusCode.OK, updateResponse.StatusCode, "update captain runtime");
+        }
+
+        private static async Task<List<ObjectiveRefinementMessage>> WaitForTranscriptAsync(
+            HttpClient authClient,
+            string sessionId,
+            Func<ObjectiveRefinementSessionDetail, List<ObjectiveRefinementMessage>, bool> predicate,
+            int timeoutMs = 15000)
+        {
+            MonotonicDeadline deadline = MonotonicDeadline.After(TimeSpan.FromMilliseconds(timeoutMs));
+            while (!deadline.Passed)
+            {
+                HttpResponseMessage response = await authClient.GetAsync("/api/v1/objective-refinement-sessions/" + sessionId).ConfigureAwait(false);
+                AssertEqual(HttpStatusCode.OK, response.StatusCode, "poll refinement session " + sessionId);
+                ObjectiveRefinementSessionDetail detail = await JsonHelper.DeserializeAsync<ObjectiveRefinementSessionDetail>(response).ConfigureAwait(false);
+                HttpResponseMessage pageResponse = await authClient.PostAsync("/api/v1/objective-refinement-sessions/" + sessionId + "/messages/enumerate",
+                    JsonHelper.ToJsonContent(new { PageSize = 1000, Order = "CreatedAscending" })).ConfigureAwait(false);
+                AssertEqual(HttpStatusCode.OK, pageResponse.StatusCode, "page refinement transcript " + sessionId);
+                EnumerationResult<ObjectiveRefinementMessage> page = await JsonHelper.DeserializeAsync<EnumerationResult<ObjectiveRefinementMessage>>(pageResponse).ConfigureAwait(false);
+                if (predicate(detail, page.Objects))
+                    return page.Objects;
+
+                await Task.Delay(100).ConfigureAwait(false);
+            }
+
+            throw new TimeoutException("Timed out waiting for refinement session " + sessionId);
         }
 
         private static async Task<ObjectiveRefinementSessionDetail> WaitForSessionDetailAsync(

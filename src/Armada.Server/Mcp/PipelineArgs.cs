@@ -1,6 +1,7 @@
 namespace Armada.Server.Mcp
 {
     using System.Collections.Generic;
+    using Armada.Core.Services;
 
     /// <summary>
     /// MCP tool arguments for pipeline operations.
@@ -20,6 +21,7 @@ namespace Armada.Server.Mcp
         /// <summary>
         /// Ordered list of pipeline stages.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxConfigItems)]
         public List<PipelineStageArgs>? Stages { get; set; }
 
         /// <summary>

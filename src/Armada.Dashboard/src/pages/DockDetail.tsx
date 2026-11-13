@@ -1,6 +1,8 @@
+import Breadcrumbs from '../components/shared/Breadcrumbs';
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
+  apiErrorMessage,
   getDock,
   deleteDock,
   listCaptains,
@@ -15,10 +17,12 @@ import ErrorModal from '../components/shared/ErrorModal';
 import { useLocale } from '../context/LocaleContext';
 import { useNotifications } from '../context/NotificationContext';
 import { parseDockGitAnchors } from '../lib/dockAnchors';
+import { useDeleteProgress } from '../lib/useDeleteProgress';
 
 export default function DockDetail() {
   const { t, formatDateTime, formatRelativeTime } = useLocale();
   const { pushToast } = useNotifications();
+  const deletion = useDeleteProgress();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
 
@@ -52,15 +56,10 @@ export default function DockDetail() {
     setConfirmAction({
       message: t('Delete dock {{name}}? This will clean up the git worktree and cannot be undone.', { name: id ?? '' }),
       action: async () => {
-        try {
-          await deleteDock(id!);
-          setConfirmAction(null);
-          pushToast('warning', t('Dock {{id}} deleted.', { id: id ?? '' }));
-          navigate('/docks');
-        } catch {
-          setError(t('Delete failed.'));
-          setConfirmAction(null);
-        }
+        setConfirmAction(null);
+        if (!(await deletion.run({ kind: 'dock', action: () => deleteDock(id!), errorMessage: (err) => apiErrorMessage(err, t('Delete failed.')) }))) return;
+        pushToast('warning', t('Dock {{id}} deleted.', { id: id ?? '' }));
+        navigate('/docks');
       }
     });
   }
@@ -79,11 +78,10 @@ export default function DockDetail() {
   return (
     <div>
       {/* Breadcrumb */}
-      <div className="breadcrumb" style={{ marginBottom: 16, fontSize: 13 }}>
-        <Link to="/docks" title={t('Back to the list of all docks.')}>{t('Docks')}</Link>
-        <span className="text-muted"> / </span>
-        <span className="mono">{dock.id}</span>
-      </div>
+      <Breadcrumbs items={[
+        { label: t('Docks'), to: '/docks', title: t('Back to the list of all docks.') },
+        { label: dock.id },
+      ]} />
 
       <ErrorModal error={error} onClose={() => setError('')} />
 
@@ -151,7 +149,7 @@ export default function DockDetail() {
         const anchors = parseDockGitAnchors(dock.gitAnchorsJson);
         if (!anchors) return null;
         return (
-          <div className="detail-card" style={{ marginTop: 16 }}>
+          <div className="card" style={{ marginTop: 16 }}>
             <h3 title={t('Git facts recorded when the dock was created, so a captain resuming the mission knows where the work began.')}>{t('Starting Point')}</h3>
             <div className="detail-grid">
               <div>
@@ -190,6 +188,7 @@ export default function DockDetail() {
 
       {/* Confirm Dialog */}
       <ConfirmDialog open={confirmAction !== null} message={confirmAction?.message ?? ''} onConfirm={() => confirmAction?.action()} onCancel={() => setConfirmAction(null)} />
+      {deletion.dialog}
     </div>
   );
 }

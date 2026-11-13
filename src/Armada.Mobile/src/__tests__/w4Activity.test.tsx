@@ -334,19 +334,19 @@ describe('Jobs', () => {
   it('cancels an unfinished job', async () => {
     api.listJobs.mockResolvedValue(page([{ ...JOBS[1], status: 'Running' }]) as never);
     api.cancelJob.mockResolvedValue({ ...JOBS[1], status: 'Cancelled' });
-    await renderW4Routes(ROUTES, '/jobs');
+    await renderW4Routes(ROUTES, '/activity?source=jobs');
     await waitFor(() => expect(screen.getByText('Health scan')).toBeTruthy());
     await act(async () => { await fireEvent(rowActionTarget(screen.getByTestId('job-row-job_2-swipe'), 'cancel'), 'accessibilityAction', { nativeEvent: { actionName: 'cancel' } }); });
     expect(api.cancelJob).toHaveBeenCalledWith('job_2');
   });
 
-  it('redirects the old /jobs route to the Activity hub Jobs tab', async () => {
+  it('redirects the old /jobs route to the Activity Events tab', async () => {
     api.listJobs.mockResolvedValue(page(JOBS) as never);
     const h = await renderW4Routes(ROUTES, '/jobs');
     await waitFor(() => expect(h.getPathname()).toBe('/activity'));
-    expect(h.getSearchParams()).toEqual(expect.objectContaining({ source: 'jobs' }));
-    await waitFor(() => expect(screen.getByText('Import vessels')).toBeTruthy());
-    expect(screen.getByTestId('jobs')).toBeTruthy();
+    expect(h.getSearchParams()).toEqual(expect.objectContaining({ source: 'events' }));
+    await waitFor(() => expect(screen.getByTestId('activity-tab-events')).toBeTruthy());
+    expect(screen.queryByTestId('jobs')).toBeNull();
   });
 
   it('switches to the Jobs tab from another Activity source', async () => {

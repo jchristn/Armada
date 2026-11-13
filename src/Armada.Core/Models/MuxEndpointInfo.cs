@@ -1,5 +1,6 @@
 namespace Armada.Core.Models
 {
+    using Armada.Core.Services;
     /// <summary>
     /// Machine-readable endpoint metadata returned by `mux endpoint list/show --output-format json`.
     /// </summary>
@@ -58,11 +59,13 @@ namespace Armada.Core.Models
         /// <summary>
         /// Header names configured for the endpoint.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxConfigItems)]
         public List<string> HeaderNames { get; set; } = new List<string>();
 
         /// <summary>
         /// Header values with secrets redacted.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxConfigItems)]
         public Dictionary<string, string> Headers { get; set; } = new Dictionary<string, string>();
     }
 }

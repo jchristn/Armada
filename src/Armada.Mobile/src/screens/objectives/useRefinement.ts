@@ -3,7 +3,6 @@ import {
   applyObjectiveRefinementSummary,
   createBacklogRefinementSession,
   deleteObjectiveRefinementSession,
-  getObjectiveRefinementSession,
   listBacklogRefinementSessions,
   sendObjectiveRefinementMessage,
   stopObjectiveRefinementSession,
@@ -15,6 +14,7 @@ import type {
   ObjectiveRefinementSession,
   ObjectiveRefinementSessionCreateRequest,
   ObjectiveRefinementSessionDetail,
+  ObjectiveRefinementSessionView,
   ObjectiveRefinementSummaryResponse,
   WebSocketMessage,
 } from '@dashboard/types/models';
@@ -26,13 +26,24 @@ import {
 } from '@dashboard/lib/backlogRefinement';
 import { refinementSummaryFromEvent } from '@dashboard/lib/refinementSummary';
 import { mergeSessionDetail, newerOf } from '@dashboard/lib/liveMerge';
+import { loadRefinementSessionView, withOlderRefinementMessages, withStoppedSession } from '@dashboard/lib/sessionViews';
 import { useSocket } from '../../socket/SocketContext';
+
+/** Refinement sessions read per page. */
+const SESSION_PAGE_SIZE = 100;
 
 export interface Refinement {
   sessions: ObjectiveRefinementSession[];
+  /** Number of the item's refinement sessions on the server (every page). */
+  sessionsTotal: number;
+  /** Loads the next page of sessions (offered while fewer than sessionsTotal are loaded). */
+  loadMoreSessions: () => Promise<void>;
   selectedSessionId: string;
   selectSession: (id: string) => void;
-  detail: ObjectiveRefinementSessionDetail | null;
+  /** The session with the transcript pages loaded so far (oldest first); messageCount is the full length. */
+  detail: ObjectiveRefinementSessionView | null;
+  /** Loads the next older transcript page (offered while fewer than messageCount messages are loaded). */
+  loadOlder: () => Promise<void>;
   /** Transcript message the summary / apply actions use (defaults to the latest assistant reply). */
   selectedMessageId: string;
   selectMessage: (id: string) => void;
@@ -55,8 +66,9 @@ export interface Refinement {
 export function useRefinement(objectiveId: string | null, requestedSessionId: string, onObjective: (objective: Objective) => void): Refinement {
   const { subscribe, reconnectCount } = useSocket();
   const [sessions, setSessions] = useState<ObjectiveRefinementSession[]>([]);
+  const [sessionsTotal, setSessionsTotal] = useState(0);
   const [selectedSessionId, setSelectedSessionId] = useState('');
-  const [detail, setDetail] = useState<ObjectiveRefinementSessionDetail | null>(null);
+  const [detail, setDetail] = useState<ObjectiveRefinementSessionView | null>(null);
   const [chosenMessageId, setChosenMessageId] = useState('');
   const [summaryDraft, setSummaryDraft] = useState<ObjectiveRefinementSummaryResponse | null>(null);
   const onObjectiveRef = useRef(onObjective);
@@ -68,13 +80,15 @@ export function useRefinement(objectiveId: string | null, requestedSessionId: st
 
   const loadSessions = useCallback(async (preferred?: string) => {
     if (!objectiveId) return;
-    const list = (await listBacklogRefinementSessions(objectiveId)) ?? [];
+    const page = await listBacklogRefinementSessions(objectiveId, { pageNumber: 1, pageSize: SESSION_PAGE_SIZE });
+    const list = page?.objects ?? [];
     setSessions(list);
+    setSessionsTotal(page?.totalRecords ?? list.length);
     const current = selectedRef.current;
     const next = preferred || (list.some((s) => s.id === current) ? current : '') || list[0]?.id || '';
     selectedRef.current = next;
     setSelectedSessionId(next);
-    setDetail(next ? (await getObjectiveRefinementSession(next)) ?? null : null);
+    setDetail(next ? (await loadRefinementSessionView(next)) ?? null : null);
   }, [objectiveId]);
 
   useEffect(() => {
@@ -88,7 +102,7 @@ export function useRefinement(objectiveId: string | null, requestedSessionId: st
     setSelectedSessionId(id);
     setSummaryDraft(null);
     setChosenMessageId('');
-    void getObjectiveRefinementSession(id).then((d) => setDetail(d ?? null)).catch(() => setDetail(null));
+    void loadRefinementSessionView(id).then((d) => setDetail(d ?? null)).catch(() => setDetail(null));
   }, []);
 
   // The selected message: the user's choice while it exists in the transcript, else the latest assistant reply.
@@ -116,7 +130,11 @@ export function useRefinement(objectiveId: string | null, requestedSessionId: st
         const message = payload?.message;
         if (!payload?.sessionId || payload.objectiveId !== objectiveId || !message) return;
         setDetail((current) => (current && current.session.id === payload.sessionId
-          ? { ...current, messages: upsertRefinementMessage(current.messages, message) }
+          ? {
+            ...current,
+            messages: upsertRefinementMessage(current.messages, message),
+            messageCount: current.messages.some((m) => m.id === message.id) ? current.messageCount : (current.messageCount ?? 0) + 1,
+          }
           : current));
         return;
       }
@@ -155,7 +173,7 @@ export function useRefinement(objectiveId: string | null, requestedSessionId: st
     setSessions((current) => upsertRefinementSession(current, created.session));
     selectedRef.current = created.session.id;
     setSelectedSessionId(created.session.id);
-    setDetail(created);
+    setDetail({ ...created, messages: [] });
     setSummaryDraft(null);
     await loadSessions(created.session.id);
     return created;
@@ -196,7 +214,7 @@ export function useRefinement(objectiveId: string | null, requestedSessionId: st
   const stop = useCallback(async () => {
     if (!detail) return;
     const next = await stopObjectiveRefinementSession(detail.session.id);
-    setDetail(next);
+    setDetail((current) => withStoppedSession(current, next));
     setSessions((current) => upsertRefinementSession(current, next.session));
   }, [detail]);
 
@@ -211,8 +229,25 @@ export function useRefinement(objectiveId: string | null, requestedSessionId: st
     await loadSessions();
   }, [detail, loadSessions]);
 
+  const loadOlder = useCallback(async () => {
+    if (!detail || detail.messages.length >= (detail.messageCount ?? 0)) return;
+    const next = await withOlderRefinementMessages(detail);
+    setDetail((current) => (current && current.session.id === next.session.id ? { ...current, messages: next.messages, messageCount: next.messageCount } : current));
+  }, [detail]);
+
+  const loadMoreSessions = useCallback(async () => {
+    if (!objectiveId) return;
+    const page = await listBacklogRefinementSessions(objectiveId, { pageNumber: Math.floor(sessions.length / SESSION_PAGE_SIZE) + 1, pageSize: SESSION_PAGE_SIZE });
+    setSessions((current) => {
+      let merged = current;
+      for (const s of page?.objects ?? []) if (!merged.some((x) => x.id === s.id)) merged = [...merged, s];
+      return merged;
+    });
+    setSessionsTotal(page?.totalRecords ?? sessionsTotal);
+  }, [objectiveId, sessions.length, sessionsTotal]);
+
   return {
-    sessions, selectedSessionId, selectSession, detail, selectedMessageId, selectMessage: setChosenMessageId, summaryDraft,
+    sessions, sessionsTotal, loadMoreSessions, selectedSessionId, selectSession, detail, loadOlder, selectedMessageId, selectMessage: setChosenMessageId, summaryDraft,
     start, send, summarize, apply, stop, remove,
   };
 }

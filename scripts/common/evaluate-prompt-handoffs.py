@@ -16,6 +16,35 @@ DEPLOY = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(DEPLOY)
 
 
+ANSWER_HEADINGS = ['What happened', 'Why', 'My opinion', 'What could have been done differently', 'Next steps']
+MISSION_PATTERN = re.compile(r'(?<![A-Za-z0-9_])msn_[A-Za-z0-9][A-Za-z0-9_]*[A-Za-z0-9]')
+COMMIT_PATTERN = re.compile(r'(?<![A-Za-z0-9_])(?=[0-9a-f]*[0-9])(?=[0-9a-f]*[a-f])[0-9a-f]{7,40}(?![A-Za-z0-9_])')
+FILE_PATTERN = re.compile(r'(?<![A-Za-z0-9_./-])(?:[A-Za-z0-9_.-]+/)*[A-Za-z0-9_-][A-Za-z0-9_.-]*'
+                          r'\.(?:cs|csproj|sln|ts|tsx|js|jsx|json|md|py|sh|yml|yaml|xml|txt|config|props|targets)(?![A-Za-z0-9_])')
+
+
+def grounding(entry, reply):
+    """Ask black box answer check (mirrors Test.Shared AskBlackBoxGrounding): required headings, a labeled opinion,
+    user and Armada changes separated, and only files, commits and missions that are in the entry."""
+    files = entry.get('files', [])
+    commits = entry.get('commits', [])
+    missions = set(entry.get('missions', []))
+    missing = [h for h in ANSWER_HEADINGS
+               if not re.search(r'(?im)^\s*(?:#+\s*|\*\*|- \*\*)?' + re.escape(h) + r'\b', reply)]
+    unknown_missions = sorted({m for m in MISSION_PATTERN.findall(reply) if m not in missions})
+    unknown_commits = sorted({c for c in COMMIT_PATTERN.findall(reply)
+                              if not any(k.lower().startswith(c.lower()) or c.lower().startswith(k.lower()) for k in commits)})
+    unknown_files = sorted({f for f in FILE_PATTERN.findall(reply)
+                            if not any(k == f or k.endswith('/' + f) for k in files)})
+    opinion = re.search(r'(?i)\b(my opinion|in my opinion|i think|i believe)\b', reply) is not None
+    split = (re.search(r'(?i)\b(you can|user can|you could)\b', reply) is not None
+             and re.search(r'(?i)\barmada (should|could|can)\b', reply) is not None)
+    return {'missingHeadings': missing, 'opinionLabeled': opinion, 'changesSplit': split,
+            'unknownFiles': unknown_files, 'unknownCommits': unknown_commits, 'unknownMissions': unknown_missions,
+            'grounded': not (unknown_files or unknown_commits or unknown_missions),
+            'shaped': not missing and opinion and split}
+
+
 def score(case, reply, metrics=None):
     text = reply
     parsed = None
@@ -29,7 +58,8 @@ def score(case, reply, metrics=None):
             parsed = None
             text = ''
     hits = {check: check.lower() in text.lower() for check in case['checks']}
-    return {'requiredEvidencePresent': hits, 'evidenceCoverage': sum(hits.values()) / len(hits),
+    extra = {'grounding': grounding(case.get('entry', {}), reply)} if case['kind'] == 'blackbox' else {}
+    return {**extra, 'requiredEvidencePresent': hits, 'evidenceCoverage': sum(hits.values()) / len(hits),
             'parseablePlan': parsed is not None if case['kind'] == 'architect' else None,
             'replyCharacters': len(reply), 'completionSignalPresent': '[ARMADA:RESULT] COMPLETE' in reply,
             'toolCallCount': DEPLOY.field(metrics or {}, 'ToolCallCount'),
@@ -57,7 +87,9 @@ def evaluate(cases, additions, base, token, captain_id, output, call=chat):
         pair = {'id': case['id'], 'persona': case['persona'], 'runs': {},
                 'manualReview': {'unsupportedClaims': None, 'acceptanceCorrectness': None, 'residualRisks': None}}
         for variant in ('baseline', 'improved'):
-            instructions = case['baselinePrompt'] + (additions[case['persona']] if variant == 'improved' else '')
+            # A case may carry its own improvement (the Ask black box section); persona cases use the deployed additions.
+            addition = case['improvedAddition'] if 'improvedAddition' in case else additions[case['persona']]
+            instructions = case['baselinePrompt'] + (addition if variant == 'improved' else '')
             message = prefix + instructions + '\n\n## Evaluation task\n' + case['task']
             started = time.monotonic()
             response = call(base, token, captain_id, message)

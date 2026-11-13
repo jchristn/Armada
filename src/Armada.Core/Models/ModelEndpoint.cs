@@ -4,6 +4,7 @@ namespace Armada.Core.Models
     using System.Collections.Generic;
     using System.Text.Json.Serialization;
     using Armada.Core.Enums;
+    using Armada.Core.Services;
 
     /// <summary>
     /// A configured external model endpoint (an embedding or inference/completion model behind a provider
@@ -13,6 +14,11 @@ namespace Armada.Core.Models
     public class ModelEndpoint
     {
         #region Public-Members
+
+        /// <summary>
+        /// Most health-check records kept in <see cref="HealthHistory"/> (500). The health check drops the oldest past it.
+        /// </summary>
+        public const int MaxHealthHistoryRecords = 500;
 
         /// <summary>
         /// Unique identifier (mep_ prefix).
@@ -243,6 +249,7 @@ namespace Armada.Core.Models
         /// value keeps the stored value of the header with the same name (case-insensitive), and an omitted list keeps
         /// the stored headers.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxConfigItems)]
         public List<ModelEndpointHeader> Headers
         {
             get => _Headers;
@@ -280,9 +287,11 @@ namespace Armada.Core.Models
         public long? LastLatencyMs { get; set; } = null;
 
         /// <summary>
-        /// Rolling series of recent health-check probes (oldest first), capped in size. Drives the
-        /// dashboard health-history bar.
+        /// Rolling series of recent health-check probes (oldest first), at most <see cref="MaxHealthHistoryRecords"/>
+        /// (the health check trims the oldest). Owned by the server: a create or update request cannot set it. Drives the
+        /// dashboard health-history bar and the uptime figures.
         /// </summary>
+        [CollectionBound(MaxHealthHistoryRecords, Reason = "Rolling window; the health check trims the oldest record past the limit")]
         public List<ModelEndpointHealthRecord> HealthHistory
         {
             get => _HealthHistory;

@@ -40,6 +40,18 @@ namespace Armada.Server.WebSocket
         public IMissionService? Missions { get; set; } = null;
 
         /// <summary>
+        /// Black box service for blackbox.get, blackbox.brief and blackbox.list, or null (the commands then answer
+        /// Unavailable).
+        /// </summary>
+        public Armada.Core.BlackBox.IBlackBoxService? BlackBox { get; set; } = null;
+
+        /// <summary>
+        /// Black box capture for the operator actions of delete_vessel (step VesselDeleted) and transition_mission_status
+        /// (step OperatorTransition), or null.
+        /// </summary>
+        public Armada.Core.BlackBox.IBlackBoxCapture? BlackBoxCapture { get; set; } = null;
+
+        /// <summary>
         /// Instantiate the command handler.
         /// </summary>
         /// <param name="admiral">Admiral service for command handling.</param>
@@ -148,6 +160,12 @@ namespace Armada.Server.WebSocket
                 // A taken name (or any unique value) is a Conflict reply for this action, never provider text.
                 return WebSocketCommandError.FromException(action, ex);
             }
+            catch (CollectionLimitExceededException ex)
+            {
+                // A collection over its limit (for example a persona's CaptainPriorities) is InvalidArgument naming the
+                // field and the limit, never an internal error.
+                return WebSocketCommandError.FromException(action, ex);
+            }
         }
 
         private async Task<object> DispatchCommandAsync(string action, WebSocketCommand command, string rawBody, AuthContext? caller)
@@ -167,11 +185,11 @@ namespace Armada.Server.WebSocket
 
                 case "stop_captain":
                     string captainId = command.CaptainId ?? "";
-                    await _Admiral.RecallCaptainAsync(captainId).ConfigureAwait(false);
+                    await _Admiral.RecallCaptainAsync(captainId, new OperatorStopContext(OperatorStopContext.SourceWebSocketStopCaptain, caller?.UserId)).ConfigureAwait(false);
                     return new { type = "command.result", action = "stop_captain", data = (object)new { status = "stopped", captainId = captainId } };
 
                 case "stop_all":
-                    await _Admiral.RecallAllAsync().ConfigureAwait(false);
+                    await _Admiral.RecallAllAsync(new OperatorStopContext(OperatorStopContext.SourceWebSocketStopAll, caller?.UserId)).ConfigureAwait(false);
                     return new { type = "command.result", action = "stop_all", data = (object)new { status = "all_stopped" } };
 
                 case "stop_server":
@@ -201,8 +219,9 @@ namespace Armada.Server.WebSocket
                         return WebSocketCommandError.Create("get_fleet", WebSocketCommandErrorCodeEnum.NotFound, "Fleet not found");
                     else
                     {
-                        List<Vessel> fleetVessels = await _Database.Vessels.EnumerateByFleetAsync(getFleetId).ConfigureAwait(false);
-                        return new { type = "command.result", action = "get_fleet", data = (object)new { Fleet = foundFleet, Vessels = fleetVessels } };
+                        // Vessels are not embedded: page them with list_vessels and query.fleetId.
+                        EnumerationResult<Vessel> fleetVesselPage = await _Database.Vessels.EnumerateAsync(new EnumerationQuery { FleetId = getFleetId, PageSize = 1 }).ConfigureAwait(false);
+                        return new { type = "command.result", action = "get_fleet", data = (object)new FleetDetailResponse { Fleet = foundFleet, VesselCount = fleetVesselPage.TotalRecords } };
                     }
 
                 case "create_fleet":
@@ -251,9 +270,25 @@ namespace Armada.Server.WebSocket
 
                 case "create_vessel":
                     Vessel newVessel = JsonSerializer.Deserialize<WebSocketDataCommand<Vessel>>(rawBody, _JsonOptions)?.Data!;
+                    using (JsonDocument vesselInput = JsonDocument.Parse(rawBody))
+                    {
+                        JsonElement data = vesselInput.RootElement.EnumerateObject().First(p => String.Equals(p.Name, "data", StringComparison.OrdinalIgnoreCase)).Value;
+                        if (!data.EnumerateObject().Any(p => String.Equals(p.Name, "maxParallelVoyages", StringComparison.OrdinalIgnoreCase)))
+                            newVessel.MaxParallelVoyages = _Settings?.Concurrency.DefaultVesselMaxParallelVoyages ?? Armada.Core.Constants.DefaultVesselMaxParallelVoyages;
+                        if (!data.EnumerateObject().Any(p => String.Equals(p.Name, "maxParallelMissionsPerVoyage", StringComparison.OrdinalIgnoreCase)))
+                            newVessel.MaxParallelMissionsPerVoyage = _Settings?.Concurrency.DefaultVesselMaxParallelMissionsPerVoyage ?? Armada.Core.Constants.DefaultVesselMaxParallelMissionsPerVoyage;
+                    }
                     if (String.IsNullOrEmpty(newVessel.RepoUrl))
                         return WebSocketCommandError.Create("create_vessel", WebSocketCommandErrorCodeEnum.InvalidArgument, "repoUrl is required when creating a vessel");
                     newVessel.NormalizeGitHubTokenOverride();
+                    try
+                    {
+                        newVessel.WorkerEnvelope = WorkerEnvelopeRules.Normalize(newVessel.WorkerEnvelope);
+                    }
+                    catch (ArgumentException envelopeEx)
+                    {
+                        return WebSocketCommandError.Create("create_vessel", WebSocketCommandErrorCodeEnum.InvalidArgument, envelopeEx.Message);
+                    }
                     await DuplicateEntityGuard.EnsureVesselNameAvailableAsync(_Database, newVessel).ConfigureAwait(false);
                     newVessel = await _Database.Vessels.CreateAsync(newVessel).ConfigureAwait(false);
                     return new { type = "command.result", action = "create_vessel", data = (object)newVessel };
@@ -269,6 +304,14 @@ namespace Armada.Server.WebSocket
                         if (updVesselBody == null)
                             return WebSocketCommandError.Create("update_vessel", WebSocketCommandErrorCodeEnum.InvalidArgument, "data is required");
                         Vessel updVessel = EntityUpdateMerger.MergeVessel(existVessel, updVesselBody);
+                        try
+                        {
+                            updVessel.WorkerEnvelope = WorkerEnvelopeRules.Normalize(updVessel.WorkerEnvelope);
+                        }
+                        catch (ArgumentException envelopeEx)
+                        {
+                            return WebSocketCommandError.Create("update_vessel", WebSocketCommandErrorCodeEnum.InvalidArgument, envelopeEx.Message);
+                        }
                         await DuplicateEntityGuard.EnsureVesselNameAvailableAsync(_Database, updVessel).ConfigureAwait(false);
                         updVessel = await _Database.Vessels.UpdateAsync(updVessel).ConfigureAwait(false);
                         return new { type = "command.result", action = "update_vessel", data = (object)updVessel };
@@ -305,10 +348,14 @@ namespace Armada.Server.WebSocket
                         {
                             if (dvm.Status == MissionStatusEnum.Pending || dvm.Status == MissionStatusEnum.Blocked || dvm.Status == MissionStatusEnum.Assigned || dvm.Status == MissionStatusEnum.InProgress)
                             {
+                                MissionStatusEnum dvmBefore = dvm.Status;
                                 dvm.Status = MissionStatusEnum.Cancelled;
+                                dvm.FailureKind = MissionFailureKindEnum.OperatorAction;
+                                dvm.FailureReason = "Vessel deleted";
                                 dvm.CompletedUtc = DateTime.UtcNow;
                                 dvm.LastUpdateUtc = DateTime.UtcNow;
                                 await _Database.Missions.UpdateAsync(dvm).ConfigureAwait(false);
+                                await BlackBoxOperatorCapture.RecordVesselDeletedAsync(BlackBoxCapture, dvm, dvmBefore, delVessel, "WebSocket").ConfigureAwait(false);
                             }
                         }
                     }
@@ -358,9 +405,20 @@ namespace Armada.Server.WebSocket
                         return WebSocketCommandError.Create("get_voyage", WebSocketCommandErrorCodeEnum.NotFound, "Voyage not found");
                     else
                     {
-                        List<Mission> voyageMissions = await _Database.Missions.EnumerateByVoyageAsync(getVoyageId).ConfigureAwait(false);
-                        return new { type = "command.result", action = "get_voyage", data = (object)new { voyage = foundVoyage, missions = voyageMissions } };
+                        // The voyage with mission counts; its missions are paged with list_missions (query.voyageId).
+                        VoyageProgress voyageProgress = await VoyageProgressReader.ReadAsync(_Database, foundVoyage).ConfigureAwait(false);
+                        return new { type = "command.result", action = "get_voyage", data = (object)voyageProgress };
                     }
+
+                case "list_voyage_progress":
+                {
+                    if (caller == null)
+                        return WebSocketCommandError.Create(action, WebSocketCommandErrorCodeEnum.Unavailable, "Voyage progress needs an authenticated connection.");
+                    EnumerationQuery progressQuery = command.Query ?? new EnumerationQuery();
+                    if (!String.IsNullOrWhiteSpace(command.Status)) progressQuery.Status = command.Status;
+                    EnumerationResult<VoyageProgress> progressPage = await VoyageProgressReader.EnumerateAsync(_Database, caller, progressQuery).ConfigureAwait(false);
+                    return new { type = "command.result", action, data = (object)progressPage };
+                }
 
                 case "create_voyage":
                     WebSocketVoyageData voyageData = JsonSerializer.Deserialize<WebSocketDataCommand<WebSocketVoyageData>>(rawBody, _JsonOptions)?.Data ?? new WebSocketVoyageData();
@@ -369,6 +427,7 @@ namespace Armada.Server.WebSocket
                     string voyVesselId = voyageData.VesselId ?? "";
 
                     List<MissionDescription> missionDescs = voyageData.Missions ?? new List<MissionDescription>();
+                    CollectionLimits.RequireRequestItems(missionDescs, "Missions");
 
                     Voyage createdVoyage;
                     if (String.IsNullOrEmpty(voyVesselId) || missionDescs.Count == 0)
@@ -390,37 +449,13 @@ namespace Armada.Server.WebSocket
                         return WebSocketCommandError.Create("cancel_voyage", WebSocketCommandErrorCodeEnum.NotFound, "Voyage not found");
                     else
                     {
-                        cvVoyage.Status = VoyageStatusEnum.Cancelled;
-                        cvVoyage.CompletedUtc = DateTime.UtcNow;
-                        cvVoyage.LastUpdateUtc = DateTime.UtcNow;
-                        await _Database.Voyages.UpdateAsync(cvVoyage).ConfigureAwait(false);
-                        List<Mission> cvMissions = await _Database.Missions.EnumerateByVoyageAsync(cvId).ConfigureAwait(false);
-                        List<object> cvNotCancelled = new List<object>();
-                        foreach (Mission m in cvMissions)
+                        VoyageCancelResult cvResult = await VoyageCancellation.CancelAsync(_Database, _Admiral, cvVoyage, null).ConfigureAwait(false);
+                        _BroadcastVoyageChange(cvResult.Voyage, VoyageStatusEnum.Cancelled.ToString());
+                        foreach (Mission cvCm in cvResult.Cancelled)
                         {
-                            if (m.Status == MissionStatusEnum.Pending || m.Status == MissionStatusEnum.Assigned || m.Status == MissionStatusEnum.Blocked)
-                            {
-                                try
-                                {
-                                    Mission cancelled = await _Admiral.CancelMissionAsync(m).ConfigureAwait(false);
-                                    m.Status = cancelled.Status;
-                                }
-                                catch (InvalidOperationException ex)
-                                {
-                                    cvNotCancelled.Add(new { MissionId = m.Id, Reason = ex.Message });
-                                }
-                            }
+                            _BroadcastMissionChange(cvCm, MissionStatusEnum.Cancelled.ToString());
                         }
-                        int cvCancelled = cvMissions.Count(m => m.Status == MissionStatusEnum.Cancelled);
-                        _BroadcastVoyageChange(cvVoyage, VoyageStatusEnum.Cancelled.ToString());
-                        foreach (Mission cvCm in cvMissions)
-                        {
-                            if (cvCm.Status == MissionStatusEnum.Cancelled)
-                            {
-                                _BroadcastMissionChange(cvCm, MissionStatusEnum.Cancelled.ToString());
-                            }
-                        }
-                        return new { type = "command.result", action = "cancel_voyage", data = (object)new { Voyage = cvVoyage, CancelledMissions = cvCancelled, NotCancelled = cvNotCancelled } };
+                        return new { type = "command.result", action = "cancel_voyage", data = (object)cvResult };
                     }
                 }
 
@@ -513,6 +548,7 @@ namespace Armada.Server.WebSocket
                 case "create_mission":
                 {
                     Mission newMission = JsonSerializer.Deserialize<WebSocketDataCommand<Mission>>(rawBody, _JsonOptions)?.Data!;
+                    EntityUpdateMerger.ResetMissionConcurrencyMetadata(newMission);
                     newMission = await _Admiral.DispatchMissionAsync(newMission).ConfigureAwait(false);
                     if (newMission.Status == MissionStatusEnum.Pending)
                     {
@@ -536,6 +572,14 @@ namespace Armada.Server.WebSocket
                         if (updMissionBody == null)
                             return WebSocketCommandError.Create("update_mission", WebSocketCommandErrorCodeEnum.InvalidArgument, "data is required");
                         Mission updMission = EntityUpdateMerger.MergeMission(existMission, updMissionBody);
+                        if (updMissionBody.WorkerEnvelope != null)
+                        {
+                            // Same rule as REST PUT: null keeps, {} clears, a change only tightens and only before the mission starts.
+                            Vessel? envelopeVessel = String.IsNullOrEmpty(updMission.VesselId) ? null : await _Database.Vessels.ReadAsync(updMission.VesselId).ConfigureAwait(false);
+                            try { updMission.WorkerEnvelope = WorkerEnvelopeRules.ValidateMissionEnvelopeUpdate(updMission, envelopeVessel?.WorkerEnvelope, updMissionBody.WorkerEnvelope); }
+                            catch (ArgumentException ex) { return WebSocketCommandError.Create("update_mission", WebSocketCommandErrorCodeEnum.InvalidArgument, ex.Message); }
+                            catch (InvalidOperationException ex) { return WebSocketCommandError.Create("update_mission", WebSocketCommandErrorCodeEnum.Conflict, ex.Message); }
+                        }
                         updMission = await _Database.Missions.UpdateAsync(updMission).ConfigureAwait(false);
                         return new { type = "command.result", action = "update_mission", data = (object)updMission };
                     }
@@ -585,11 +629,13 @@ namespace Armada.Server.WebSocket
                     }
                     else
                     {
+                        MissionStatusEnum tmBefore = tmMission.Status;
                         tmMission.Status = tmNewStatus;
                         tmMission.LastUpdateUtc = DateTime.UtcNow;
                         if (tmNewStatus == MissionStatusEnum.Complete || tmNewStatus == MissionStatusEnum.Failed || tmNewStatus == MissionStatusEnum.LandingFailed || tmNewStatus == MissionStatusEnum.Cancelled)
                             tmMission.CompletedUtc = DateTime.UtcNow;
                         await _Database.Missions.UpdateAsync(tmMission).ConfigureAwait(false);
+                        await BlackBoxOperatorCapture.RecordTransitionAsync(BlackBoxCapture, tmMission, tmBefore, "WebSocket").ConfigureAwait(false);
                         Signal tmSignal = new Signal(SignalTypeEnum.Progress, "Mission " + tmId + " transitioned to " + tmNewStatus);
                         if (!String.IsNullOrEmpty(tmMission.CaptainId)) tmSignal.FromCaptainId = tmMission.CaptainId;
                         await _Database.Signals.CreateAsync(tmSignal).ConfigureAwait(false);
@@ -715,22 +761,7 @@ namespace Armada.Server.WebSocket
                         }
                         else
                         {
-                            Dock? mdDock = null;
-                            if (!String.IsNullOrEmpty(mdMission.DockId))
-                            {
-                                mdDock = await _Database.Docks.ReadAsync(mdMission.DockId).ConfigureAwait(false);
-                            }
-                            if (mdDock == null && !String.IsNullOrEmpty(mdMission.CaptainId))
-                            {
-                                Captain? mdCaptain = await _Database.Captains.ReadAsync(mdMission.CaptainId).ConfigureAwait(false);
-                                if (mdCaptain != null && !String.IsNullOrEmpty(mdCaptain.CurrentDockId))
-                                    mdDock = await _Database.Docks.ReadAsync(mdCaptain.CurrentDockId).ConfigureAwait(false);
-                            }
-                            if (mdDock == null && !String.IsNullOrEmpty(mdMission.BranchName) && !String.IsNullOrEmpty(mdMission.VesselId))
-                            {
-                                List<Dock> mdDocks = await _Database.Docks.EnumerateByVesselAsync(mdMission.VesselId).ConfigureAwait(false);
-                                mdDock = mdDocks.FirstOrDefault(d => d.BranchName == mdMission.BranchName && d.Active);
-                            }
+                            Dock? mdDock = await MissionDockResolver.ReadAsync(_Database, mdMission).ConfigureAwait(false);
                             if (mdDock == null || String.IsNullOrEmpty(mdDock.WorktreePath) || !System.IO.Directory.Exists(mdDock.WorktreePath))
                                 return WebSocketCommandError.Create("get_mission_diff", WebSocketCommandErrorCodeEnum.Unavailable, "No diff available - worktree was already reclaimed and no saved diff exists");
                             else if (_Git == null)
@@ -825,6 +856,12 @@ namespace Armada.Server.WebSocket
 
                 case "create_captain":
                     Captain newCaptain = JsonSerializer.Deserialize<WebSocketDataCommand<Captain>>(rawBody, _JsonOptions)?.Data!;
+                    newCaptain.MaxConcurrency = newCaptain.MaxConcurrencySpecified
+                        ? Armada.Core.Services.ConcurrencyClamp.CaptainLimit(newCaptain.MaxConcurrency, _Settings?.Concurrency.MaxCaptainConcurrency ?? 256)
+                        : Armada.Core.Services.CaptainConcurrencyDefaults.For(newCaptain.Runtime, _Settings?.Concurrency);
+                    newCaptain.ActiveMissionCount = 0;
+                    newCaptain.ActiveMissionIds.Clear();
+                    newCaptain.CurrentSessionId = null;
                     await DuplicateEntityGuard.EnsureCaptainNameAvailableAsync(_Database, newCaptain).ConfigureAwait(false);
                     newCaptain = await _Database.Captains.CreateAsync(newCaptain).ConfigureAwait(false);
                     return new { type = "command.result", action = "create_captain", data = (object)newCaptain };
@@ -843,8 +880,12 @@ namespace Armada.Server.WebSocket
                         // Only the fields the command carries change (parity with REST PUT /captains/{id}).
                         string? updCptData = JsonSerializer.Deserialize<WebSocketDataCommand<System.Text.Json.Nodes.JsonObject>>(rawBody, _JsonOptions)?.Data?.ToJsonString();
                         Captain updCpt = EntityUpdateMerger.MergeCaptain(existCpt, updCptBody, CaptainUpdateFieldPresence.FromJson(updCptData, _JsonOptions));
+                        string? updCptUsageError = await CaptainUsageCaptureValidator.ValidateAsync(_Database, updCpt).ConfigureAwait(false);
+                        if (updCptUsageError != null)
+                            return WebSocketCommandError.Create("update_captain", WebSocketCommandErrorCodeEnum.InvalidArgument, updCptUsageError);
                         await DuplicateEntityGuard.EnsureCaptainNameAvailableAsync(_Database, updCpt).ConfigureAwait(false);
-                        updCpt = await _Database.Captains.UpdateAsync(updCpt).ConfigureAwait(false);
+                        updCpt.MaxConcurrency = Armada.Core.Services.ConcurrencyClamp.CaptainLimit(updCpt.MaxConcurrency, _Settings?.Concurrency.MaxCaptainConcurrency ?? 256);
+                        updCpt = await _Database.Captains.UpdateAsync(updCpt, updateConcurrency: CaptainUpdateFieldPresence.FromJson(updCptData, _JsonOptions).Has(nameof(Captain.MaxConcurrency))).ConfigureAwait(false);
                         return new { type = "command.result", action = "update_captain", data = (object)updCpt };
                     }
                 }
@@ -942,10 +983,8 @@ namespace Armada.Server.WebSocket
                 {
                     EnumerationQuery mergeQuery = command.Query ?? new EnumerationQuery();
                     Stopwatch mergeSw = Stopwatch.StartNew();
-                    List<MergeEntry> mergeAll = await _MergeQueue.ListAsync().ConfigureAwait(false);
-                    int mergeTotal = mergeAll.Count;
-                    List<MergeEntry> mergePage = mergeAll.Skip(mergeQuery.Offset).Take(mergeQuery.PageSize).ToList();
-                    EnumerationResult<MergeEntry> mergeResult = EnumerationResult<MergeEntry>.Create(mergeQuery, mergePage, mergeTotal);
+                    // Paged in the database (LIMIT/OFFSET with a COUNT), never loaded whole and sliced.
+                    EnumerationResult<MergeEntry> mergeResult = await _Database.MergeEntries.EnumerateAsync(mergeQuery).ConfigureAwait(false);
                     mergeResult.TotalMs = Math.Round(mergeSw.Elapsed.TotalMilliseconds, 2);
                     return new { type = "command.result", action = "list_merge_queue", data = (object)mergeResult };
                 }
@@ -1034,10 +1073,7 @@ namespace Armada.Server.WebSocket
                         case "merge_queue":
                         case "merge-queue":
                         case "mergequeue":
-                            List<MergeEntry> enumMqAll = await _MergeQueue.ListAsync().ConfigureAwait(false);
-                            int enumMqTotal = enumMqAll.Count;
-                            List<MergeEntry> enumMqPage = enumMqAll.Skip(enumQuery.Offset).Take(enumQuery.PageSize).ToList();
-                            EnumerationResult<MergeEntry> enumMerge = EnumerationResult<MergeEntry>.Create(enumQuery, enumMqPage, enumMqTotal);
+                            EnumerationResult<MergeEntry> enumMerge = await _Database.MergeEntries.EnumerateAsync(enumQuery).ConfigureAwait(false);
                             enumMerge.TotalMs = Math.Round(enumSw.Elapsed.TotalMilliseconds, 2);
                             enumData = enumMerge;
                             break;
@@ -1145,6 +1181,7 @@ namespace Armada.Server.WebSocket
 
                 case "create_pipeline":
                     Pipeline newPipeline = JsonSerializer.Deserialize<WebSocketDataCommand<Pipeline>>(rawBody, _JsonOptions)?.Data!;
+                    CollectionBounds.Validate(newPipeline);
                     await DuplicateEntityGuard.EnsurePipelineNameAvailableAsync(_Database, newPipeline).ConfigureAwait(false);
                     newPipeline = await _Database.Pipelines.CreateAsync(newPipeline).ConfigureAwait(false);
                     return new { type = "command.result", action = "create_pipeline", data = (object)newPipeline };
@@ -1164,6 +1201,7 @@ namespace Armada.Server.WebSocket
                             foreach (PipelineStage stage in existPipeline.Stages)
                                 stage.PipelineId = existPipeline.Id;
                         }
+                        CollectionBounds.Validate(existPipeline);
                         existPipeline = await _Database.Pipelines.UpdateAsync(existPipeline).ConfigureAwait(false);
                         return new { type = "command.result", action = "update_pipeline", data = (object)existPipeline };
                     }
@@ -1178,6 +1216,13 @@ namespace Armada.Server.WebSocket
                     await _Database.Pipelines.DeleteAsync(delPipeline.Id).ConfigureAwait(false);
                     return new { type = "command.result", action = "delete_pipeline", data = (object)new { Status = "deleted", Name = delPipelineName } };
 
+                // ── Black box ──────────────────────────────────────────────
+
+                case "blackbox.get":
+                case "blackbox.brief":
+                case "blackbox.list":
+                    return await HandleBlackBoxAsync(action, command, rawBody, caller).ConfigureAwait(false);
+
                 // ── Default ────────────────────────────────────────────────
 
                 default:
@@ -1185,11 +1230,71 @@ namespace Armada.Server.WebSocket
             }
         }
 
+        private async Task<object> HandleBlackBoxAsync(string action, WebSocketCommand command, string rawBody, AuthContext? caller)
+        {
+            if (BlackBox == null) return WebSocketCommandError.Create(action, WebSocketCommandErrorCodeEnum.Unavailable, "The black box is not available on this server.");
+            AuthContext ctx = caller ?? AuthContext.Authenticated(Armada.Core.Constants.DefaultTenantId, Armada.Core.Constants.DefaultUserId, true, true, "WebSocket", null, null);
+            try
+            {
+                if (action == "blackbox.list")
+                {
+                    BlackBoxEnumerateRequest query = JsonSerializer.Deserialize<WebSocketDataCommand<BlackBoxEnumerateRequest>>(rawBody, _JsonOptions)?.Data ?? new BlackBoxEnumerateRequest();
+                    if (command.Query != null)
+                    {
+                        query.PageNumber = command.Query.PageNumber;
+                        query.PageSize = command.Query.PageSize;
+                        query.Order = command.Query.Order;
+                    }
+
+                    EnumerationResult<BlackBoxEntrySummary> page = await BlackBox.EnumerateAsync(ctx, query).ConfigureAwait(false);
+                    return new { type = "command.result", action = action, data = (object)page };
+                }
+
+                WebSocketBlackBoxData data = JsonSerializer.Deserialize<WebSocketDataCommand<WebSocketBlackBoxData>>(rawBody, _JsonOptions)?.Data ?? new WebSocketBlackBoxData();
+                string? id = String.IsNullOrWhiteSpace(command.Id) ? null : command.Id.Trim();
+                string? entryId = data.EntryId;
+                string? missionId = data.MissionId;
+                string? voyageId = data.VoyageId;
+                if (id != null && entryId == null && missionId == null && voyageId == null)
+                {
+                    if (id.StartsWith(Armada.Core.Constants.MissionIdPrefix, StringComparison.Ordinal)) missionId = id;
+                    else if (id.StartsWith(Armada.Core.Constants.VoyageIdPrefix, StringComparison.Ordinal)) voyageId = id;
+                    else entryId = id;
+                }
+
+                string resolved = await BlackBox.ResolveEntryIdAsync(ctx, missionId, voyageId, entryId).ConfigureAwait(false);
+                if (action == "blackbox.get")
+                {
+                    BlackBoxEntry entry = await BlackBox.GetEntryAsync(ctx, resolved, data.IncludeRecord ?? true).ConfigureAwait(false);
+                    return new { type = "command.result", action = action, data = (object)entry };
+                }
+
+                string brief = await BlackBox.GetBriefAsync(ctx, resolved, data.RedactHosts ?? false).ConfigureAwait(false);
+                return new { type = "command.result", action = action, data = (object)new BlackBoxBriefResult { EntryId = resolved, Brief = brief } };
+            }
+            catch (Armada.Core.BlackBox.BlackBoxNotFoundException ex)
+            {
+                return WebSocketCommandError.Create(action, WebSocketCommandErrorCodeEnum.NotFound, ex.Message);
+            }
+            catch (Armada.Core.BlackBox.BlackBoxStoreUnavailableException ex)
+            {
+                return WebSocketCommandError.Create(action, WebSocketCommandErrorCodeEnum.Unavailable, ex.Message);
+            }
+            catch (Armada.Core.BlackBox.BlackBoxException ex)
+            {
+                return WebSocketCommandError.Create(action, ex is Armada.Core.BlackBox.BlackBoxObjectMissingException ? WebSocketCommandErrorCodeEnum.NotFound : WebSocketCommandErrorCodeEnum.Conflict, ex.Message);
+            }
+            catch (Exception ex) when (ex is ArgumentException || ex is JsonException || ex is UnauthorizedAccessException)
+            {
+                return WebSocketCommandError.FromException(action, ex);
+            }
+        }
+
         private bool IsValidTransition(MissionStatusEnum current, MissionStatusEnum target)
         {
             return MissionStateMachine.IsValidTransition(current, target);
         }
-    
+
         private static WebSocketCommandError PersonaError(string action, PersonaWriteResult result)
         {
             WebSocketCommandErrorCodeEnum code = result.Status == PersonaWriteStatusEnum.NotFound ? WebSocketCommandErrorCodeEnum.NotFound
