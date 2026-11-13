@@ -109,6 +109,7 @@ namespace Test.Shared.Suites.E2E
                     string voyageId = voyage.Id!;
                     AssertStartsWith("vyg_", voyageId);
                     AssertEqual("InProgress", voyage.Status.ToString());
+                    await E2eBackgroundLaunch.SettleAsync(authClient).ConfigureAwait(false);
                     AssertTrue(agents.StartedProcessIds.Count > launchedBefore, "a mission was launched on the stub runtime");
 
                     // Verify voyage details show missions

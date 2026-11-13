@@ -19,4 +19,7 @@ echo "=== Building Armada dashboard image ==="
 echo "=== Building Armada proxy image ==="
 "${SCRIPT_DIR}/build-proxy.sh" "$TAG"
 
-echo "=== All images built for ${TAG} and latest, pushed to Docker Hub, and pulled locally ==="
+echo "=== Building Armada VS Code extension (VSIX) ==="
+"${SCRIPT_DIR}/build-vscode.sh"
+
+echo "=== All images built for ${TAG} and latest, pushed to Docker Hub, and pulled locally; VSIX built in src/Armada.VSCode ==="

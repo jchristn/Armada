@@ -7,6 +7,7 @@ namespace Armada.Helm.Commands
     using Armada.Core.Models;
     using Armada.Core.Services;
     using Armada.Helm.Rendering;
+    using Armada.Helm.Infrastructure;
 
     /// <summary>
     /// Remove a fleet.
@@ -31,7 +32,7 @@ namespace Armada.Helm.Commands
                     }
                     else
                     {
-                        AnsiConsole.MarkupLine($"[red]Fleet not found:[/] {Markup.Escape(settings.Id)}");
+                        HelmConsole.Error.MarkupLine($"[red]Fleet not found:[/] {Markup.Escape(settings.Id)}");
                         return 1;
                     }
                 }

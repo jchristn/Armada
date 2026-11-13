@@ -94,7 +94,27 @@ namespace Armada.Tui.Ask
             if (name == "dispatch") return AskQuickActionFormEnum.Dispatch;
             if (name == "fleet-action" || name == "fleetaction" || name == "fleet_action") return AskQuickActionFormEnum.FleetAction;
             if (name == "import") return AskQuickActionFormEnum.Import;
+            if (name == "blackbox") return AskQuickActionFormEnum.BlackBox;
             return AskQuickActionFormEnum.None;
+        }
+
+        /// <summary>
+        /// The arguments of <c>/blackbox msn_... [question]</c> (the dashboard's parseBlackBoxCommand): the get_blackbox
+        /// missionId and the question the client sends to the captain once the card is shown.
+        /// </summary>
+        /// <param name="args">Text after the command.</param>
+        /// <param name="missionId">Mission id.</param>
+        /// <param name="question">Question, or empty.</param>
+        /// <returns>True when the text starts with a mission id.</returns>
+        public static bool TryParseBlackBox(string? args, out string missionId, out string question)
+        {
+            missionId = "";
+            question = "";
+            System.Text.RegularExpressions.Match match = System.Text.RegularExpressions.Regex.Match(args ?? "", @"^\s*(msn_[A-Za-z0-9_]+)\s*([\s\S]*)$");
+            if (!match.Success) return false;
+            missionId = match.Groups[1].Value;
+            question = match.Groups[2].Value.Trim();
+            return true;
         }
 
         /// <summary>

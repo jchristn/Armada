@@ -566,20 +566,64 @@ Output and exit events a captain produces while the link is down are kept on the
 it reconnects, so a captain that finished during a Wi-Fi drop or a closed lid still reports its result. After the
 reconnect the Admiral compares the jobs it tracks with the jobs the Harbor lists: a started job the Harbor no longer
 has is reported as interrupted within about 20 seconds and its mission is redispatched, and a job the Admiral no longer
-owns is stopped on the Harbor. Stall detection remains the backstop when a Harbor stays away:
+owns is stopped on the Harbor.
+
+### Unreachable is not stalled
+
+While a captain's Harbor is not linked, the captain is **unreachable**, not stalled: it may still be working on the
+Harbor, and the Admiral simply cannot see its output. The health check therefore:
+
+1. Records one `captain.unreachable` event for the outage (payload: `harborId`, `since` (when the Harbor was last
+   heard from), `detectedUtc`, `lastActivityUtc`, `graceMinutes`). It does not judge the captain stalled, starts no
+   recovery, counts no recovery attempt, and leaves the mission `InProgress`, however long the captain has been quiet.
+2. Keeps doing so for `harborDisconnectGraceMinutes` (default 60). After the grace the unreachable captain is handed to
+   normal stall recovery (see below). `0` turns the grace off: an unreachable captain is judged by
+   `stallThresholdMinutes` at once.
+3. When the Harbor reconnects, waits for it to report (its first heartbeat, which follows the replay of its job
+   outbox, or 30 seconds) and then **reconciles** the captain against the job's real state (the jobs the Harbor lists):
+   - **Still running.** Monitoring resumes with the stall clock restarted at the reconnect, so a captain that kept
+     working through the outage is not judged stalled for the time the link was down; activity reported after the
+     reconnect counts. Records `captain.reconciled` with outcome `Resumed`.
+   - **Already exited.** Nothing is stopped or relaunched by the health check: the replayed exit (or, after about 20
+     seconds, the vanished-job report) goes through the normal exit path, which records `captain.reconciled` with
+     outcome `Exited`.
+
+**Stops the Harbor cannot confirm.** When stall recovery (after the grace) asks for the captain's process to stop and
+the owning host does not confirm it (the Harbor is disconnected, or does not answer in time), no replacement is launched
+and the mission keeps its status. The attempt counts ("Automatic recovery N of M" advances), one
+`captain.stop_unconfirmed` event is recorded for the episode (payload: `attempt`, `maxAttempts`, `purpose`,
+`stopRequestedUtc`, `retryDelayMinutes`, `nextRetryUtc`), and recovery waits instead of re-entering on every health
+check: the next attempt runs after a backoff of 1, 2, 4, 8 and then 15 minutes, each with one `captain.stalled` event
+that says it follows an unconfirmed stop. The wait is rebuilt from these events after an Admiral restart, so a restart
+does not start the retries over. The pending stop ends when:
+
+- **The Harbor reconnects.** If the job is still running and has reported activity since the stop was requested, the
+  stop is cancelled (`captain.reconciled`, `Resumed`) and the attempts spent waiting are given back. If it is running
+  and silent, the stop is delivered at once (`captain.stop_redelivered`, with whether the Harbor `confirmed` it) and,
+  once confirmed, recovery continues where it stopped: the captain is relaunched in its dock with the waiting attempt
+  counted once (`captain.reconciled`, `Stopped`). If the job already ended, its exit is applied through the normal exit
+  path.
+- **The process exit is reported** (`captain.reconciled`, `Exited`).
+- **The backoff elapses** and the next attempt's stop is confirmed.
+
+Over a 60-minute outage with the default grace, a captain therefore records two captain events (`captain.unreachable`
+and, after the reconnect, `captain.reconciled`) instead of one stall and one unconfirmed stop every health check.
+
+**When the Harbor stays away past the grace**, stall recovery takes over:
 
 1. The Admiral keeps treating the delegated captain process as alive (it cannot probe a process on another host), so
    the mission is not failed the moment the link drops.
-2. Once no output has arrived for `stallThresholdMinutes` (default 10), the health check marks the captain stalled,
-   asks the Harbor to stop it (a no-op while the Harbor is disconnected), and runs auto-recovery: it relaunches the
+2. Once the grace has passed and no output has arrived for `stallThresholdMinutes` (default 10), the health check
+   marks the captain stalled, asks the Harbor to stop it (the stop cannot be confirmed while the Harbor is disconnected,
+   so recovery waits with the backoff above), and runs auto-recovery once a stop is confirmed: it relaunches the
    captain in the mission's existing dock, up to `maxRecoveryAttempts` (default 3) times. The dock is pinned to its
    Harbor, so the relaunch lands there if that Harbor has reconnected, and never on another Harbor. If it is still
    offline, the relaunch falls back to the Admiral host when `requireHarborForLaunch` is off. When it is on, the
    relaunch is refused and spends one recovery attempt; the captain keeps the mission with no process, and the
    relaunch runs on the first health check after that Harbor reconnects (or at the next stall check if it does not),
    so a Harbor that reconnects within the remaining attempts gets the mission back at once.
-3. When recovery is exhausted, the mission fails with `StallRecoveryExhausted`. A recovery that cannot use the dock
-   fails the mission as `Infra`. `maxMissionRuntimeMinutes` still applies throughout.
+3. When recovery is exhausted and the stop is confirmed, the mission fails with `StallRecoveryExhausted`. A recovery
+   that cannot use the dock fails the mission as `Infra`. `maxMissionRuntimeMinutes` still applies throughout.
 
 **When the Harbor app itself stops** (it crashed, or was killed), a CLI captain it started (Claude Code, Codex, Mux)
 can keep running with nobody reading its output, while the Admiral relaunches the mission into the same dock. Harbor
@@ -593,10 +637,54 @@ before the restart has its recorded exit replayed once its Harbor is back (up to
 and test check waits up to 3 minutes for a briefly disconnected Harbor, so a restart is not mistaken for a failed
 check.
 
-So a short blip costs nothing, while a Harbor that stays away holds its missions for about `stallThresholdMinutes`
-before recovery starts (and, with `requireHarborForLaunch` on, for up to `maxRecoveryAttempts` stall intervals
-before they fail). Lower `stallThresholdMinutes` to recover sooner, at the cost of flagging captains that are
-merely quiet.
+So a short blip costs nothing, while a Harbor that stays away holds its missions for `harborDisconnectGraceMinutes`
+plus about `stallThresholdMinutes` before recovery starts (and, with `requireHarborForLaunch` on, for up to
+`maxRecoveryAttempts` stall intervals before they fail). Lower `harborDisconnectGraceMinutes` to give up on a missing
+Harbor sooner, and `stallThresholdMinutes` to recover a quiet captain sooner, at the cost of flagging captains that
+are merely quiet.
+
+## Black box evidence on Harbor-hosted missions
+
+The black box (see [BLACKBOX.md](BLACKBOX.md)) works the same in split mode, with one rule: everything about an entry
+is decided and stored on the Admiral, and only git and file system reads go to the Harbor.
+
+**At the failure (capture).** The Admiral writes the entry from its own rows. For a mission whose dock or assignment
+names a Harbor, the record's site says `HostKind` `Harbor` and `Host` `Harbor:<harborId>`, the subject names the Harbor,
+and `workspace.harborLinkState` and `workspace.harborLastSeenUtc` record the link as the Admiral saw it at that moment
+(`Linked`, `Silent`, `NotLinked` or `Unknown`, from the Harbor connection manager, with the Harbor row's last-seen time
+as a fallback). Nothing waits on the Harbor during capture.
+
+**After the failure (enrichment).** The enrichers inspect the dock on the host that owns it, through the same
+`VesselGitInspector` and `DockHostResolver` the Admiral uses for landing and vessel cleanup:
+
+- A dock created on a Harbor (it records the Harbor and the repository path on that Harbor) is read on that Harbor.
+  Each git command (branch exists, branch tip, divergence from the target, `git status --porcelain`, unfinished merge
+  conflicts, changed files, commit ranges, the worktree diff) is delegated over the link as a host command
+  (`GitService` over `RemoteHostCommandExecutor`) and runs in the Harbor's repository and worktree; the worktree
+  existence check goes through the Harbor's dock file system the same way. Every other dock, including one created on
+  the Admiral and only launched by a Harbor that shares its file system, is read on the Admiral.
+- A checkout path recorded for a Harbor dock is read on the Harbor; any other checkout path is read on the Admiral.
+- Target movement (commits that landed on the target since the mission started), conflict attribution and concurrent
+  overlap (at most 10 branch reads of other missions) use the same owning host.
+- The mission log tail (`evidence/mission.log`) comes from the Admiral's own log directory
+  (`missions/<missionId>.log`), not from the Harbor; the agent output, diff snapshot, events and stage outcomes come
+  from the Admiral's database.
+
+**When the Harbor is not connected.** The Harbor resolves to no host, so nothing is read from it and nothing fails:
+`workspace.inspectedHost` is null, `workspace.inspectionNote` says "Harbor `<harborId>` is not connected; the
+worktree, branch and target state on it are unknown.", the same sentence goes into the record's truncation notes, and
+target movement is omitted with that reason. A fact the capture already recorded is kept; the rest stays unknown
+(null) rather than guessed. If the Harbor is connected but the worktree check itself fails, the note says the
+worktree on `Harbor:<harborId>` could not be checked, with the error, and the same applies. The `BBX-INFRA-001` rule matches a disconnected or unavailable Harbor and votes the triage
+`External`. When the Harbor is back, a tenant admin can re-read the dock with `POST /api/v1/blackbox/{id}/reanalyze`
+(MCP `reanalyze_blackbox`); facts captured at the failure still win over facts read later. An enricher that fails for
+any other reason (a git error on the Harbor, a timeout) also leaves a note instead of failing the entry.
+
+**Where the objects go.** The Admiral writes every object (`record.json`, the briefs, `evidence/git-status.txt`,
+`evidence/target-commits.txt` and the rest) to its own configured `blackBox.storage` target. Nothing is stored on the
+Harbor and the Harbor needs no black box settings. Text read from the Harbor is redacted like all evidence before it is
+written. Git output read from the Harbor is bounded like any other evidence: tails of 256 KB, file rows
+capped per role, and every object capped at `blackBox.storage.maxEvidenceObjectBytes`.
 
 ## Status
 

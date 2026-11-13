@@ -170,6 +170,17 @@ namespace Armada.Core.Models
         public DateTime LastUpdateUtc { get; set; } = DateTime.UtcNow;
 
         /// <summary>
+        /// Battery run a Full Evaluate started (bat_ prefix), or null.
+        /// </summary>
+        public string? BatteryRunId { get; set; } = null;
+
+        /// <summary>
+        /// The Full Evaluate report, or null for a Quick run (or a Full run that has not reached its report yet). A
+        /// cancelled or timed-out Full run keeps a partial report with Complete false.
+        /// </summary>
+        public ModelEvaluationReport? Report { get; set; } = null;
+
+        /// <summary>
         /// Per-probe results (filled on read by id; empty in list pages).
         /// </summary>
         [CollectionBound(ModelProbeCatalog.ProbeCount, Reason = "One result per probe; ModelProbeService runs the fixed six-probe set once per run")]

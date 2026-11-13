@@ -1,5 +1,15 @@
 @echo off
 setlocal
+if /I "%~1"=="-h" goto :armada_usage
+if /I "%~1"=="--help" goto :armada_usage
+if "%~1"=="/?" goto :armada_usage
+goto :armada_main
+:armada_usage
+echo(Wait up to 30 seconds for ^<base url^>/api/v1/status/health to answer.
+echo(Usage: scripts\windows\healthcheck-server.bat [^<framework^> ^| -f ^<framework^> ^| --framework ^<framework^>] [^<base url^>]
+echo(  ^<base url^>   default ARMADA_BASE_URL, else http://localhost:7890; a leading framework is ignored
+exit /b 0
+:armada_main
 
 set "BASE_URL=%~1"
 if /I "%~1"=="-f" set "BASE_URL=%~3"
@@ -27,5 +37,5 @@ for /l %%I in (1,1,30) do (
     timeout /t 1 /nobreak >nul
 )
 
-echo ERROR: Armada server did not become healthy at %HEALTH_URL%
+echo ERROR: Armada server did not become healthy at %HEALTH_URL% 1>&2
 exit /b 1

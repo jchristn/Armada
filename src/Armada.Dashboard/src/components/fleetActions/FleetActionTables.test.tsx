@@ -61,6 +61,19 @@ describe('FleetActionsTable', () => {
     expect(description.closest('td')).toHaveAttribute('title', 'Builds the solution in each vessel');
   });
 
+  it('marks Audit and Research missions as report-only', async () => {
+    vi.mocked(enumerateFleetActions).mockResolvedValue(page([
+      action,
+      { ...action, id: 'fla_2', name: 'Security review', kind: 'Mission', commandText: null, promptTemplate: 'Review', missionMode: 'Audit' },
+      { ...action, id: 'fla_3', name: 'Fix lint', kind: 'Mission', commandText: null, promptTemplate: 'Fix', missionMode: 'Implementation' },
+    ]) as never);
+    render(<MemoryRouter><FleetActionsTable /></MemoryRouter>);
+    const reviewRow = (await screen.findByText('Security review')).closest('tr') as HTMLElement;
+    expect(within(reviewRow).getByText('Report-only')).toBeInTheDocument();
+    expect(within(screen.getByText('Fix lint').closest('tr') as HTMLElement).queryByText('Report-only')).not.toBeInTheDocument();
+    expect(within(screen.getByText('Build').closest('tr') as HTMLElement).queryByText('Report-only')).not.toBeInTheDocument();
+  });
+
   it('puts refresh and the column chooser in the pager row, with Name locked', async () => {
     const { container } = render(<MemoryRouter><FleetActionsTable /></MemoryRouter>);
     await screen.findByText('Build');

@@ -1,6 +1,6 @@
 import { act, render } from '@testing-library/react';
 import { useEffect } from 'react';
-import { WebSocketProvider, useWebSocket } from './WebSocketContext';
+import { WebSocketProvider, useCaptainSelectionRevision, useWebSocket } from './WebSocketContext';
 import type { WebSocketMessage } from '../types/models';
 
 const auth = { isAuthenticated: true, sessionToken: 'tok_abc' as string | null };
@@ -65,6 +65,25 @@ describe('WebSocketProvider', () => {
     const second = StubSocket.instances[1];
     act(() => { second.readyState = 1; second.onopen?.(); });
     expect(reconnects[reconnects.length - 1]).toBe(1);
+    view.unmount();
+  });
+
+  it('bumps the captain-selection revision only for the matching mission', () => {
+    const revisions: number[] = [];
+    function SelectionConsumer() {
+      const revision = useCaptainSelectionRevision('msn_1');
+      useEffect(() => { revisions.push(revision); }, [revision]);
+      return null;
+    }
+    const view = render(<WebSocketProvider><SelectionConsumer /></WebSocketProvider>);
+    const socket = StubSocket.instances[0];
+    act(() => { socket.readyState = 1; socket.onopen?.(); });
+    const send = (data: unknown) => act(() => { socket.onmessage?.({ data: JSON.stringify(data) }); });
+    send({ type: 'captain-selection.changed', data: { missionId: 'msn_other', outcome: 'Waiting' } });
+    send({ type: 'mission.changed', data: { id: 'msn_1' } });
+    expect(revisions).toEqual([0]);
+    send({ type: 'captain-selection.changed', data: { missionId: 'msn_1', decisionId: 'csd_1', outcome: 'Admitted' } });
+    expect(revisions).toEqual([0, 1]);
     view.unmount();
   });
 });

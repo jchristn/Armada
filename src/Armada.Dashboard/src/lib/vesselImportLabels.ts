@@ -1,7 +1,7 @@
 import type { BadgeIcon, BadgeTone } from './badgeTypes';
 import type { Job, VesselImportBatch, VesselImportBatchStatus, VesselImportCandidateStatus, VesselImportCategorizationStatus, VesselImportOutcome } from '../types/models';
 import type { StatusMeta, Translate } from './fleetActionLabels';
-import { JOBS_PATH } from './navTargets';
+import { BACKGROUND_ACTIVITY_PATH } from './navTargets';
 
 export const CANDIDATE_STATUSES: VesselImportCandidateStatus[] = ['New', 'AlreadyOnboarded', 'Worktree', 'ArmadaManaged', 'NotFound', 'NotGit', 'AccessDenied'];
 export const BATCH_STATUSES: VesselImportBatchStatus[] = ['Discovering', 'Discovered', 'Importing', 'Completed', 'CompletedWithFailures', 'Failed'];
@@ -130,13 +130,15 @@ export function jobFriendlyName(t: Translate, job: Pick<Job, 'kind' | 'name'>): 
   return label ? t(label) : job.name;
 }
 
-/** Dashboard route for a background job: import-related jobs open their batch, everything else the Jobs tab of Activity. */
+/** Dashboard route for a background job: import-related jobs open their batch, usage/health work opens its own view and other work opens Events. */
 export function jobRoute(job: Pick<Job, 'kind' | 'name'>): string {
   const batchId = jobBatchId(job);
   if (batchId && (job.kind === 'VesselDiscovery' || job.kind === 'VesselImport' || job.kind === 'FleetCategorization')) {
     return `/vessels/import?batch=${encodeURIComponent(batchId)}`;
   }
-  return JOBS_PATH;
+  if (job.kind === 'UsageProbe') return '/activity?source=usage-overview';
+  if (job.kind === 'Report' && job.name === 'Vessel health evaluation') return '/vessels/health';
+  return BACKGROUND_ACTIVITY_PATH;
 }
 
 export function outcomeReasonLabel(t: Translate, code: string | null | undefined): string {

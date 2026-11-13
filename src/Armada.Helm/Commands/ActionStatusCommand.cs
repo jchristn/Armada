@@ -8,6 +8,7 @@ namespace Armada.Helm.Commands
     using Spectre.Console.Cli;
     using Armada.Core.Models;
     using Armada.Helm.Rendering;
+    using Armada.Helm.Infrastructure;
 
     /// <summary>
     /// Show a fleet action run and its targets.
@@ -28,7 +29,7 @@ namespace Armada.Helm.Commands
 
             if (detail == null)
             {
-                AnsiConsole.MarkupLine("[red]Run not found.[/]");
+                HelmConsole.Error.MarkupLine("[red]Run not found.[/]");
                 return 1;
             }
 

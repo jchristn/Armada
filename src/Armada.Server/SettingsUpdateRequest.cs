@@ -26,6 +26,28 @@ namespace Armada.Server
     /// </summary>
     public class SettingsUpdateRequest
     {
+        /// <summary>
+        /// Optional usage capture group replacement. Omission or null preserves the group;
+        /// omitted members use UsageCaptureSettings defaults and numeric bounds are clamped.
+        /// </summary>
+        public UsageCaptureSettings? UsageCapture { get; set; }
+
+        /// <summary>Optional usage selection policy update; only the members sent change and omitted members keep their current values.</summary>
+        public UsageSelectionSettings? UsageSelection { get; set; }
+
+        /// <summary>Optional optimistic revision required to replace UsageSelection; stale updates return conflict.</summary>
+        public long? ExpectedUsageSelectionRevision { get; set; }
+
+        /// <summary>
+        /// Optional Concurrency group update. Only the members sent change; values are clamped to their bounds and
+        /// applied live to admission, hierarchy validation and wait retention.
+        /// </summary>
+        public ConcurrencyPatch? Concurrency { get; set; }
+
+        /// <summary>Optional optimistic revision required to change Concurrency; stale updates return conflict.</summary>
+        public long? ExpectedConcurrencyRevision { get; set; }
+
+
         /// <summary>Optional completed mission/event/signal retention in days; zero disables expiry.</summary>
         public int? DataRetentionDays { get; set; }
 
@@ -144,6 +166,12 @@ namespace Armada.Server
 
         /// <summary>Optional background storage inventory settings. Replaces the full group.</summary>
         public StorageSettings? Storage { get; set; }
+
+        /// <summary>
+        /// Black box settings (capture, storage, retention, sweeper), or null to leave unchanged. Storage secrets read back
+        /// masked from GET keep their stored values when written back masked.
+        /// </summary>
+        public BlackBoxSettings? BlackBox { get; set; }
 
         /// <summary>
         /// Optional CLI tool permission settings update (AskDefaultPolicy, MissionDefaultPolicy, AllowOwnerApproval,

@@ -301,7 +301,7 @@ namespace Test.Shared.Suites.Services
             cases.Add(CaseAsync("outcome_links_artifact_without_duplicates", "Recording a stage outcome stores the attempt's artifact with the check result, completing an artifact a launch stored first instead of duplicating it", TestTags.Positive, async () =>
             {
                 using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
-                Captain captain = await testDb.Driver.Captains.CreateAsync(new Captain("judge-cpt", AgentRuntimeEnum.ClaudeCode)).ConfigureAwait(false);
+                Captain captain = await CaptainAssignmentFixture.CreateAsync(testDb.Driver, new Captain("judge-cpt", AgentRuntimeEnum.ClaudeCode)).ConfigureAwait(false);
                 Mission judge = JudgeMission(JudgeOutput(0));
                 judge.CaptainId = captain.Id;
                 judge.Status = MissionStatusEnum.WorkProduced;
@@ -551,7 +551,7 @@ namespace Test.Shared.Suites.Services
 
                 Captain judgeCaptain = new Captain("judge-cpt", AgentRuntimeEnum.Codex);
                 judgeCaptain.State = CaptainStateEnum.Working;
-                judgeCaptain = await testDb.Driver.Captains.CreateAsync(judgeCaptain).ConfigureAwait(false);
+                judgeCaptain = await CaptainAssignmentFixture.CreateAsync(testDb.Driver, judgeCaptain).ConfigureAwait(false);
                 Mission judge = new Mission("[Judge] Parser fix", "Review the parser fix.");
                 judge.VesselId = flow.Vessel.Id;
                 judge.VoyageId = voyage.Id;
@@ -570,9 +570,9 @@ namespace Test.Shared.Suites.Services
                 dock = await testDb.Driver.Docks.CreateAsync(dock).ConfigureAwait(false);
                 judge.DockId = dock.Id;
                 await testDb.Driver.Missions.UpdateAsync(judge).ConfigureAwait(false);
-                judgeCaptain.CurrentMissionId = judge.Id;
-                judgeCaptain.CurrentDockId = dock.Id;
-                await testDb.Driver.Captains.UpdateAsync(judgeCaptain).ConfigureAwait(false);
+                judgeCaptain.Assignment = judge;
+                judgeCaptain.Assignment ??= new Mission("fixture assignment"); judgeCaptain.Assignment.DockId = dock.Id;
+                await CaptainAssignmentFixture.UpdateAsync(testDb.Driver, judgeCaptain).ConfigureAwait(false);
 
                 await flow.Missions.HandleCompletionAsync(judgeCaptain, judge.Id).ConfigureAwait(false);
                 flow.Judge = (await testDb.Driver.Missions.ReadAsync(judge.Id).ConfigureAwait(false))!;
@@ -583,7 +583,7 @@ namespace Test.Shared.Suites.Services
                 AssertContains(PipelineHandoffContext.ArtifactPlaceholder, flow.Rework.Description, "the persisted handoff carries the placeholder, not an excerpt");
                 AssertFalse(flow.Rework.Description!.Contains("src/Parser.cs:42", StringComparison.Ordinal), "no excerpt persisted on the description");
 
-                flow.Reader = await testDb.Driver.Captains.CreateAsync(new Captain("rework-cpt", readerRuntime)).ConfigureAwait(false);
+                flow.Reader = await CaptainAssignmentFixture.CreateAsync(testDb.Driver, new Captain("rework-cpt", readerRuntime)).ConfigureAwait(false);
                 flow.WorktreePath = Path.Combine(Path.GetTempPath(), "armada_handoff_rework_" + Guid.NewGuid().ToString("N"));
                 Directory.CreateDirectory(flow.WorktreePath);
                 return flow;

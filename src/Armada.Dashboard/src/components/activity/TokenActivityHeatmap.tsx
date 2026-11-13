@@ -1,5 +1,6 @@
 import '../vessels/history/vesselHistory.css';
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
+import RefreshButton from '../shared/RefreshButton';
 import { getTokenUsage } from '../../api/client';
 import type { TokenUsageSummaryResult } from '../../types/models';
 import { useLocale } from '../../context/LocaleContext';
@@ -15,11 +16,13 @@ interface TokenActivityHeatmapProps {
   spec?: TokenHeatmapSpec;
 }
 
+export interface TokenActivityHeatmapHandle { refresh: () => Promise<void> }
+
 const LABEL_WIDTH = 56;
 const GAP = 3;
 
 /** Token activity heatmap: UTC days, hours, or minutes, colored by the chosen token metric relative to the peak. */
-export default function TokenActivityHeatmap({ harborId = '', captainId = '', model = '', spec }: TokenActivityHeatmapProps) {
+const TokenActivityHeatmap = forwardRef<TokenActivityHeatmapHandle, TokenActivityHeatmapProps>(function TokenActivityHeatmap({ harborId = '', captainId = '', model = '', spec }, ref) {
   const { t, locale } = useLocale();
   const [ownDays, setOwnDays] = useState(365);
   const [metric, setMetric] = useState<TokenHeatmapMetric>('total');
@@ -27,7 +30,8 @@ export default function TokenActivityHeatmap({ harborId = '', captainId = '', mo
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [selected, setSelected] = useState('');
-  const [refresh, setRefresh] = useState(0);
+  const requestVersion = useRef(0);
+  const [now, setNow] = useState(() => new Date());
   const [cellHeight, setCellHeight] = useState(14);
   const grid = useRef<HTMLDivElement>(null);
   const scroll = useRef<HTMLDivElement>(null);
@@ -37,19 +41,25 @@ export default function TokenActivityHeatmap({ harborId = '', captainId = '', mo
     () => (specKind === 'calendar' ? { kind: 'calendar', days: specSize } : specKind === 'hours' ? { kind: 'hours', hours: specSize } : { kind: 'minutes', minutes: specSize }),
     [specKind, specSize],
   );
-  // The window ends "now" as of the last change of range, filter, or refresh.
-  const now = useMemo(() => new Date(), [active, refresh, harborId, captainId, model]);
-  const query = useMemo(() => tokenHeatmapQuery(active, now), [active, now]);
-
+  const load = useCallback(async () => {
+    const version = ++requestVersion.current;
+    const end = new Date();
+    const query = tokenHeatmapQuery(active, end);
+    setNow(end);
+    setLoading(true); setError(false);
+    try {
+      const value = await getTokenUsage({ fromUtc: query.fromUtc, toUtc: query.toUtc, bucketMinutes: query.bucketMinutes, harborId: harborId || undefined, captainId: captainId || undefined, model: model || undefined });
+      if (version === requestVersion.current) setData(value);
+    } catch (error: unknown) {
+      if (version === requestVersion.current) setError(true);
+      throw error;
+    } finally { if (version === requestVersion.current) setLoading(false); }
+  }, [active, harborId, captainId, model]);
+  useImperativeHandle(ref, () => ({ refresh: load }), [load]);
   useEffect(() => {
-    let alive = true;
-    setLoading(true); setError(false); setData(null);
-    getTokenUsage({ fromUtc: query.fromUtc, toUtc: query.toUtc, bucketMinutes: query.bucketMinutes, harborId: harborId || undefined, captainId: captainId || undefined, model: model || undefined })
-      .then(value => { if (alive) setData(value); })
-      .catch(() => { if (alive) setError(true); })
-      .finally(() => { if (alive) setLoading(false); });
-    return () => { alive = false; };
-  }, [query, harborId, captainId, model]);
+    void load().catch(() => {});
+    return () => { requestVersion.current++; };
+  }, [load]);
 
   const heat = useMemo(() => buildTokenHeatGrid(data, active, metric, now), [data, active, metric, now]);
   const stats = tokenHeatGridStats(heat);
@@ -81,7 +91,8 @@ export default function TokenActivityHeatmap({ harborId = '', captainId = '', mo
     if (!loading && host && cell) {
       const x = cell.getBoundingClientRect().left - host.getBoundingClientRect().left + host.scrollLeft;
       if (x < host.scrollLeft) host.scrollLeft = x;
-      if (x + 20 > host.scrollLeft + host.clientWidth) host.scrollLeft = x + 20 - host.clientWidth;
+      const right = x + cell.offsetWidth;
+      if (right > host.scrollLeft + host.clientWidth) host.scrollLeft = right - host.clientWidth;
     }
   }, [selectedCell, loading]);
 
@@ -137,14 +148,14 @@ export default function TokenActivityHeatmap({ harborId = '', captainId = '', mo
         <label title={t('Which tokens each square\'s color counts: total, input (prompt), output (completion), or cached (served from the prompt cache).')}>{t('Heatmap metric')}<select title={t('Which tokens each square\'s color counts: total, input (prompt), output (completion), or cached (served from the prompt cache).')} value={metric} onChange={e => setMetric(e.target.value as TokenHeatmapMetric)}>
           {TOKEN_HEATMAP_METRICS.map(m => <option key={m} value={m}>{t(m[0].toUpperCase() + m.slice(1))}</option>)}
         </select></label>
-        <button className="btn btn-sm" type="button" onClick={() => setRefresh(r => r + 1)} title={t('Reload the token activity now.')}>{t('Refresh token activity')}</button>
+        <RefreshButton onRefresh={load} title="Refresh token activity" />
       </div>
     </div>
     {loading ? <p role="status">{t('Loading token usage...')}</p> : error ? <p role="alert">{t('Unable to load token activity.')}</p> : <>
       <div className="token-activity-stats"><span title={t('Sum of the chosen metric over the heatmap window.')}>{t('Total')}: <strong>{formatTokens(stats.total)}</strong></span><span title={t('Highest single-square count in the window. It sets the darkest color.')}>{peakLabel}: <strong>{formatTokens(stats.peak)}</strong></span><span title={t('Squares in the window with any token usage.')}>{activeLabel}: <strong>{stats.active}</strong></span></div>
       <div ref={scroll} className="vhist-heatmap-scroll token-activity-scroll">
         <div className="tok-heat-columns" style={gridStyle} aria-hidden="true">
-          <span className="tok-heat-corner" />{columnLabels.map(l => <span className="tok-heat-column-label" key={l.column} style={{ gridColumn: `${l.column + 2} / span ${Math.min(l.span, heat.columns - l.column)}` }}>{l.label}</span>)}
+          <span className="tok-heat-corner" />{columnLabels.map(l => <span className="tok-heat-column-label" key={l.column} style={{ gridColumn: `${l.column + 2} / span ${Math.min(l.span, heat.columns - l.column)}`, justifySelf: l.column + l.span > heat.columns ? 'end' : undefined }}>{l.label}</span>)}
         </div>
         <div ref={grid} className={`tok-heat-grid is-${active.kind}`} style={gridStyle} role="grid" aria-label={t('Token activity')} onKeyDown={keyDown}>
           {heat.rows.map((row, r) => <div role="row" className="vhist-heatmap-row" key={row.key}>
@@ -165,4 +176,6 @@ export default function TokenActivityHeatmap({ harborId = '', captainId = '', mo
       {(data?.syntheticCount ?? 0) > 0 && <p className="text-dim" title={t('Simulated usage an administrator imported, for example for screenshots. It is counted in these totals but is not real model usage.')}>{t('{{count}} synthetic usage records included', { count: data!.syntheticCount })}</p>}
     </>}
   </section>;
-}
+});
+
+export default TokenActivityHeatmap;

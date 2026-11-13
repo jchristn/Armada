@@ -39,7 +39,14 @@ namespace Test.Shared.Suites.Upgrade
 
         private const string SuiteId = "Upgrade.FromBaseline";
 
-        private static readonly MissionStatusEnum[] _AllStatuses = (MissionStatusEnum[])Enum.GetValues(typeof(MissionStatusEnum));
+        // Statuses every supported baseline can reach by manual transitions. Statuses added later (for example Blocked and
+        // Verifying in v1.3.0) cannot exist in a baseline database, so they are not seeded.
+        private static readonly MissionStatusEnum[] _AllStatuses = new[]
+        {
+            MissionStatusEnum.Pending, MissionStatusEnum.Assigned, MissionStatusEnum.InProgress, MissionStatusEnum.WorkProduced,
+            MissionStatusEnum.PullRequestOpen, MissionStatusEnum.Testing, MissionStatusEnum.Review, MissionStatusEnum.Complete,
+            MissionStatusEnum.Failed, MissionStatusEnum.LandingFailed, MissionStatusEnum.Cancelled
+        };
 
         private readonly UpgradeSeedManifest _Seed = new UpgradeSeedManifest();
         private string _WorkDir = "";
@@ -134,7 +141,7 @@ namespace Test.Shared.Suites.Upgrade
                 StyleGuide = "Upgrade test style guide."
             }).ConfigureAwait(false);
             _Seed.VesselId = vessel.Id;
-            Vessel loose = await SendAsync<Vessel>(api, HttpMethod.Post, "/api/v1/vessels", new { Name = "upgrade-loose-vessel", RepoUrl = "https://example.invalid/loose.git", DefaultBranch = "main" }).ConfigureAwait(false);
+            Vessel loose = await SendAsync<Vessel>(api, HttpMethod.Post, "/api/v1/vessels", new { Name = "upgrade-loose-vessel", RepoUrl = "https://example.invalid/loose.git", DefaultBranch = "main", AllowConcurrentMissions = true }).ConfigureAwait(false);
             _Seed.LooseVesselId = loose.Id;
 
             // One mission per status, reached through the baseline's status transitions.
@@ -150,12 +157,18 @@ namespace Test.Shared.Suites.Upgrade
                 string missionId = created.MissionId ?? throw new AssertionException("mission create returned no id");
                 foreach (MissionStatusEnum step in PathTo(status))
                 {
-                    await SendAsync<Mission>(api, HttpMethod.Put, "/api/v1/missions/" + missionId + "/status", new { Status = step.ToString() }).ConfigureAwait(false);
+                    // Newer baselines (v1.1+) refuse manual transitions while an agent or its handoff owns the mission (409).
+                    // Stop there and verify the status the baseline actually holds instead of a status it never allowed.
+                    using StringContent body = new StringContent(System.Text.Json.JsonSerializer.Serialize(new { Status = step.ToString() }), System.Text.Encoding.UTF8, "application/json");
+                    using HttpResponseMessage response = await api.PutAsync("/api/v1/missions/" + missionId + "/status", body).ConfigureAwait(false);
+                    if (response.StatusCode == HttpStatusCode.Conflict) break;
+                    if (!response.IsSuccessStatusCode)
+                        throw new AssertionException("PUT /api/v1/missions/" + missionId + "/status returned " + (int)response.StatusCode + ": " + Truncate(await response.Content.ReadAsStringAsync().ConfigureAwait(false)));
                 }
 
                 Mission readBack = await GetAsync<Mission>(api, "/api/v1/missions/" + missionId).ConfigureAwait(false);
-                AssertEqual(status, readBack.Status, "baseline mission reached " + status);
-                _Seed.MissionStatuses[missionId] = status;
+                if (readBack.Status != status) _Seed.UnreachableStatuses.Add(status);
+                _Seed.MissionStatuses[missionId] = readBack.Status;
                 _Seed.MissionTitles[missionId] = title;
             }
 
@@ -185,8 +198,10 @@ namespace Test.Shared.Suites.Upgrade
             _Seed.BareVoyageId = bare.Id;
 
             // Merge queue: one queued entry, one cancelled.
-            string workProduced = _Seed.MissionStatuses.First(kvp => kvp.Value == MissionStatusEnum.WorkProduced).Key;
-            string landingFailed = _Seed.MissionStatuses.First(kvp => kvp.Value == MissionStatusEnum.LandingFailed).Key;
+            // Prefer the natural statuses; a baseline that refused those transitions still gets two distinct entries.
+            List<string> anyMissions = _Seed.MissionStatuses.Keys.ToList();
+            string workProduced = _Seed.MissionStatuses.FirstOrDefault(kvp => kvp.Value == MissionStatusEnum.WorkProduced).Key ?? anyMissions[0];
+            string landingFailed = _Seed.MissionStatuses.FirstOrDefault(kvp => kvp.Value == MissionStatusEnum.LandingFailed).Key ?? anyMissions.First(id => id != workProduced);
             MergeEntry queued = await SendAsync<MergeEntry>(api, HttpMethod.Post, "/api/v1/merge-queue", new { MissionId = workProduced, VesselId = vessel.Id, BranchName = "armada/upgrade-queued", TargetBranch = "main" }).ConfigureAwait(false);
             MergeEntry cancelled = await SendAsync<MergeEntry>(api, HttpMethod.Post, "/api/v1/merge-queue", new { MissionId = landingFailed, VesselId = vessel.Id, BranchName = "armada/upgrade-cancelled", TargetBranch = "main" }).ConfigureAwait(false);
             HttpResponseMessage cancel = await api.DeleteAsync("/api/v1/merge-queue/" + cancelled.Id).ConfigureAwait(false);
@@ -438,6 +453,12 @@ namespace Test.Shared.Suites.Upgrade
             AssertTrue(fleetVessels.Objects.Any(v => v.Id == _Seed.VesselId), "fleet's vessels page includes its vessel via API");
             Vessel vessel = await GetAsync<Vessel>(api, "/api/v1/vessels/" + _Seed.VesselId).ConfigureAwait(false);
             AssertEqual(_Seed.VesselName, vessel.Name, "vessel via API");
+            // Migration 117: the v1.2 flag becomes numeric limits (false 1/1, true 0/0); migration 118: a CLI captain has one slot.
+            AssertEqual(1, vessel.MaxParallelVoyages, "a serial v1.2 vessel keeps one voyage at a time");
+            AssertEqual(1, vessel.MaxParallelMissionsPerVoyage, "a serial v1.2 vessel keeps one mission at a time");
+            Vessel loose = await GetAsync<Vessel>(api, "/api/v1/vessels/" + _Seed.LooseVesselId).ConfigureAwait(false);
+            AssertEqual(0, loose.MaxParallelVoyages, "a concurrent v1.2 vessel becomes unlimited");
+            AssertEqual(0, loose.MaxParallelMissionsPerVoyage, "a concurrent v1.2 vessel becomes unlimited");
             foreach (string missionId in _Seed.MissionStatuses.Keys)
             {
                 Mission mission = await GetAsync<Mission>(api, "/api/v1/missions/" + missionId).ConfigureAwait(false);
@@ -446,8 +467,22 @@ namespace Test.Shared.Suites.Upgrade
 
             await GetAsync<Voyage>(api, "/api/v1/voyages/" + _Seed.VoyageId).ConfigureAwait(false);
             foreach (string entryId in _Seed.MergeEntryStatuses.Keys) await GetAsync<MergeEntry>(api, "/api/v1/merge-queue/" + entryId).ConfigureAwait(false);
-            await GetAsync<Captain>(api, "/api/v1/captains/" + _Seed.CaptainId).ConfigureAwait(false);
+            Captain upgradedCaptain = await GetAsync<Captain>(api, "/api/v1/captains/" + _Seed.CaptainId).ConfigureAwait(false);
+            AssertEqual(1, upgradedCaptain.MaxConcurrency, "a Claude Code captain runs one mission");
             await GetAsync<Objective>(api, "/api/v1/objectives/" + _Seed.ObjectiveId).ConfigureAwait(false);
+
+            // Usage selection after upgrade: Observe/FirstAvailable defaults, a readable revision, and pre-upgrade missions
+            // that answer selection reads with no fabricated history (migrations 123-128 never invent decisions).
+            Armada.Client.Models.SettingsData upgradedSettings = await GetAsync<Armada.Client.Models.SettingsData>(api, "/api/v1/settings").ConfigureAwait(false);
+            AssertEqual(UsageSelectionModeEnum.Observe, upgradedSettings.UsageSelection!.Mode, "usage selection stays Observe after upgrade");
+            AssertEqual(CaptainSelectionStrategyEnum.FirstAvailable, upgradedSettings.UsageSelection.Strategy, "strategy stays FirstAvailable after upgrade");
+            AssertTrue(upgradedSettings.UsageSelectionRevision >= 0, "selection revision readable");
+            string upgradedMission = _Seed.MissionStatuses.Keys.First();
+            CaptainSelectionSummary selection = await GetAsync<CaptainSelectionSummary>(api, "/api/v1/missions/" + upgradedMission + "/captain-selection").ConfigureAwait(false);
+            AssertFalse(selection.HistoryAvailable, "a pre-upgrade mission has no fabricated selection history");
+            EnumerationResult<CaptainSelectionDecisionView> selectionHistory = await GetAsync<EnumerationResult<CaptainSelectionDecisionView>>(api,
+                "/api/v1/missions/" + upgradedMission + "/captain-selection/history").ConfigureAwait(false);
+            AssertEqual(0L, selectionHistory.TotalRecords, "empty selection history after upgrade");
 
             // The seeded tenant's credential still authenticates, and stays scoped to its tenant.
             using (HttpClient tenantApi = BearerClient(_Current.BaseUrl, _Seed.BearerToken))

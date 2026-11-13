@@ -8,6 +8,9 @@ namespace Armada.Core.Database.Interfaces
     /// </summary>
     public interface IMissionMethods
     {
+        /// <summary>Count execution slots in one snapshot without loading outputs or diffs.</summary>
+        Task<int> CountExecutionSlotsAsync(CancellationToken token = default);
+
         /// <summary>
         /// Create a mission.
         /// </summary>
@@ -72,6 +75,9 @@ namespace Armada.Core.Database.Interfaces
         /// </summary>
         Task UpdateHeartbeatAsync(string id, CancellationToken token = default);
 
+        /// <summary>Update heartbeat and recovery budget only while the recorded execution owner/process still match.</summary>
+        Task<bool> TryUpdateRuntimeContextAsync(string id, string captainId, int? processId, DateTime? heartbeatUtc, int recoveryAttempts, CancellationToken token = default);
+
         /// <summary>
         /// Delete a mission by identifier.
         /// </summary>
@@ -106,6 +112,9 @@ namespace Armada.Core.Database.Interfaces
         /// Enumerate missions by vessel identifier.
         /// </summary>
         Task<List<Mission>> EnumerateByVesselAsync(string vesselId, CancellationToken token = default);
+
+        /// <summary>Read only the indexed vessel's scheduling metadata, excluding outputs, diffs and evidence.</summary>
+        Task<List<MissionAdmissionSnapshot>> EnumerateAdmissionSnapshotsAsync(string vesselId, CancellationToken token = default);
 
         /// <summary>
         /// Enumerate lightweight mission summaries by vessel identifier.

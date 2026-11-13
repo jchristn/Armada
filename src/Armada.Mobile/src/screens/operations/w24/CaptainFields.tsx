@@ -30,7 +30,7 @@ export function CaptainPickerField({ label, captains, value, onChange, disabled,
       placeholder={t('Auto (default routing)')}
       closeLabel={t('Close')}
       searchLabel={t('Search captains')}
-      options={captains.map((c) => ({ value: c.id, label: captainOptionLabel(c, t) }))}
+      options={captains.filter((c) => c.active !== false).map((c) => ({ value: c.id, label: captainOptionLabel(c, t) }))}
       disabled={disabled}
       testID={testID}
     />

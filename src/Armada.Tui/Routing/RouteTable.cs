@@ -68,12 +68,14 @@ namespace Armada.Tui.Routing
             HubDefinition missions = new HubDefinition("tab",
                 new HubTab("missions", "Missions", "MissionsScreen", "W3.8"),
                 new HubTab("voyages", "Voyages", "VoyagesScreen", "W3.9"),
-                new HubTab("merge-queue", "Merge Queue", "MergeQueueScreen", "W3.10"));
+                new HubTab("merge-queue", "Merge Queue", "MergeQueueScreen", "W3.10"),
+                new HubTab("blackbox", "Black Box", "BlackBoxScreen", "BB"));
             HubDefinition activity = new HubDefinition("source",
                 new HubTab("history", "All Activity", "ActivityScreen", "W7.1"),
                 new HubTab("requests", "API Requests", "RequestHistoryScreen", "W7.2"),
                 new HubTab("events", "Events", "EventsScreen", "W7.3"),
                 new HubTab("signals", "Signals", "SignalsScreen", "W7.4"),
+                new HubTab("usage-limits", "Account Limits", "UsageLimitsScreen", "AC6"),
                 new HubTab("tokens", "Token Usage", "TokenUsageScreen", "W7.5"),
                 new HubTab("jobs", "Jobs", "JobsScreen", "W3.11"));
             HubDefinition configuration = new HubDefinition("tab",
@@ -128,6 +130,9 @@ namespace Armada.Tui.Routing
             r.Add(Screen("/workspace/:vesselId/:panel", "Workspace", "WorkspaceScreen", "W4.6"));
             r.Add(Hub("/captains", "Captains", captains));
             r.Add(Screen("/captains/:id", "Captain", "CaptainScreen", "W4.7"));
+            // The dashboard Evaluations list and run page; the TUI shows evaluation runs per captain in the Evaluate view.
+            r.Add(Redirect("/evaluations", "/captains"));
+            r.Add(Redirect("/evaluations/:id", "/captains"));
             r.Add(Hub("/missions", "Missions", missions));
             r.Add(Screen("/missions/:id", "Mission", "MissionScreen", "W3.8"));
             r.Add(Redirect("/voyages", "/missions?tab=voyages"));
@@ -162,6 +167,10 @@ namespace Armada.Tui.Routing
             r.Add(Screen("/skills/:id", "Skill", "SkillScreen", "W6.3"));
             r.Add(Screen("/ask/:threadId?", "Ask Armada", "AskScreen", "W2"));
             r.Add(Screen("/inbox", "Needs You", "InboxScreen", "W3.2"));
+            r.Add(new RouteDefinition("/blackbox", "", "", "", TabLinks.BlackBoxPath, null, false, null,
+                new Dictionary<string, string>(StringComparer.Ordinal) { ["tab"] = TabLinks.BlackBoxSectionParam }));
+            r.Add(Screen("/blackbox/gaps", "Armada Resilience Gaps", "BlackBoxGapsScreen", "BB"));
+            r.Add(Screen("/blackbox/:id", "Black Box Entry", "BlackBoxEntryScreen", "BB"));
             r.Add(Hub("/delivery", "Delivery", delivery));
             r.Add(Hub("/fleet-actions", "Fleet Actions", fleetActions));
             r.Add(Screen("/fleet-actions/runs/:id", "Fleet Action Run", "FleetActionRunScreen", "W3.7"));

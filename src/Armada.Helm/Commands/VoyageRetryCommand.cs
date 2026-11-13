@@ -9,6 +9,7 @@ namespace Armada.Helm.Commands
     using Armada.Core.Models;
     using Armada.Core.Services;
     using Armada.Helm.Rendering;
+    using Armada.Helm.Infrastructure;
 
     /// <summary>
     /// Retry all failed missions in a voyage.
@@ -38,7 +39,7 @@ namespace Armada.Helm.Commands
 
             if (voyage == null)
             {
-                AnsiConsole.MarkupLine($"[red]Voyage not found:[/] {Markup.Escape(settings.Id)}");
+                HelmConsole.Error.MarkupLine($"[red]Voyage not found:[/] {Markup.Escape(settings.Id)}");
                 return 1;
             }
 
@@ -51,7 +52,7 @@ namespace Armada.Helm.Commands
                     EnumerationResult<Mission>? page = await GetAsync<EnumerationResult<Mission>>($"/api/v1/missions?voyageId={voyage.Id}&status={status}&pageNumber={pageNumber}&pageSize=100&order=CreatedAscending").ConfigureAwait(false);
                     if (page == null)
                     {
-                        AnsiConsole.MarkupLine("[red]Failed to fetch missions.[/]");
+                        HelmConsole.Error.MarkupLine("[red]Failed to fetch missions.[/]");
                         return 1;
                     }
 

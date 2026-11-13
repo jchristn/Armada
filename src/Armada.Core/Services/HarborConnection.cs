@@ -34,6 +34,12 @@ namespace Armada.Core.Services
         public DateTime LastSeenUtc { get; set; } = DateTime.UtcNow;
 
         /// <summary>
+        /// When this link was established by its handshake (UTC). A captain on this Harbor that was unreachable while the
+        /// link was down has its stall clock reset to this time when the link returns.
+        /// </summary>
+        public DateTime LinkedUtc { get; set; } = DateTime.UtcNow;
+
+        /// <summary>
         /// The heartbeat interval the Harbor advertised in its handshake, in milliseconds: null when it did not say (an
         /// older Harbor), zero when it sends no heartbeats.
         /// </summary>
@@ -72,6 +78,14 @@ namespace Armada.Core.Services
         /// <see cref="Armada.Core.Harbor.HarborProtocol.OpenTerminalCapability"/>).
         /// </summary>
         public bool OpensTerminals { get; set; } = false;
+
+        /// <summary>
+        /// Whether the Harbor can run account usage capture probes on its host (it advertised
+        /// <see cref="Armada.Core.Harbor.HarborProtocol.UsageProbeCapability"/> in its handshake on this
+        /// link). An Admiral sends a usage probe request only to such a Harbor; an older Harbor answers
+        /// Unsupported with HostUpgradeRequired instead.
+        /// </summary>
+        public bool HostsUsageProbes { get; set; } = false;
 
         /// <summary>
         /// Runtimes whose permission prompts the Harbor can send to Armada (the detail of

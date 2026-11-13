@@ -192,6 +192,39 @@ namespace Armada.Tui.Screens.Operations
         }
 
         /// <summary>
+        /// Add a table whose rows are each followed by an indented, muted detail line (for long explanations that would
+        /// otherwise be truncated in a column). A null or empty detail adds no line.
+        /// </summary>
+        /// <param name="headers">English headers.</param>
+        /// <param name="rows">Rows.</param>
+        /// <param name="details">Detail text per row, aligned with <paramref name="rows"/>.</param>
+        /// <param name="maxColumnWidth">Column cap.</param>
+        /// <returns>This builder.</returns>
+        /// <exception cref="ArgumentException">The detail count differs from the row count.</exception>
+        public OpsDocument TableWithDetails(IList<string> headers, IList<IList<string>> rows, IList<string?> details, int maxColumnWidth = 40)
+        {
+            if (rows.Count != details.Count) throw new ArgumentException("Each row needs a detail entry.", nameof(details));
+            if (rows.Count == 0) return this;
+            List<string> h = headers.Select(x => Loc.T(x)).ToList();
+            List<int> widths = new List<int>();
+            for (int i = 0; i < h.Count; i++)
+            {
+                int w = TextCells.Width(h[i]);
+                foreach (IList<string> r in rows) if (i < r.Count) w = Math.Max(w, TextCells.Width(r[i]));
+                widths.Add(Math.Min(maxColumnWidth, w));
+            }
+
+            Lines.Add(StyledText.From(Join(h, widths), Theme.GridHeader));
+            for (int i = 0; i < rows.Count; i++)
+            {
+                Lines.Add(StyledText.From(Join(rows[i], widths), Theme.Text));
+                if (!String.IsNullOrEmpty(details[i])) Lines.Add(StyledText.From("    " + details[i]!.Replace('\n', ' '), Theme.Muted));
+            }
+
+            return this;
+        }
+
+        /// <summary>
         /// Add a blank line.
         /// </summary>
         /// <returns>This builder.</returns>

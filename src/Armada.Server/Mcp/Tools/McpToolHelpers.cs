@@ -249,13 +249,18 @@ namespace Armada.Server.Mcp.Tools
                 // Get record counts
                 Dictionary<string, long> recordCounts = await GetRecordCountsAsync(databasePath).ConfigureAwait(false);
 
+                // Black box: Database-target entries are in the copied database; external-target entries are listed
+                // because their objects are not in the backup.
+                Armada.Core.Models.BlackBoxBackupInventory blackBox = await Armada.Core.BlackBox.Storage.BlackBoxBackupInventoryBuilder.BuildAsync(database).ConfigureAwait(false);
+
                 // Build manifest
                 object manifest = new
                 {
                     backupTimestampUtc = DateTime.UtcNow.ToString("o"),
                     schemaVersion = schemaVersion,
                     armadaVersion = ArmadaConstants.ProductVersion,
-                    recordCounts = recordCounts
+                    recordCounts = recordCounts,
+                    blackBox = blackBox
                 };
 
                 string manifestJson = JsonSerializer.Serialize(manifest, new JsonSerializerOptions
@@ -292,7 +297,14 @@ namespace Armada.Server.Mcp.Tools
                     TimestampUtc = DateTime.UtcNow.ToString("o"),
                     SchemaVersion = schemaVersion,
                     SizeBytes = sizeBytes,
-                    RecordCounts = recordCounts
+                    RecordCounts = recordCounts,
+                    BlackBox = new
+                    {
+                        blackBox.DatabaseEntries,
+                        blackBox.ExternalEntries,
+                        blackBox.ExternalTargets,
+                        blackBox.Message
+                    }
                 };
             }
             finally
@@ -406,10 +418,14 @@ namespace Armada.Server.Mcp.Tools
 
                 int schemaVersion = await database.GetSchemaVersionAsync().ConfigureAwait(false);
 
+                // Report which restored black box entries point at objects outside the database.
+                Armada.Core.Models.BlackBoxBackupInventory blackBox = await Armada.Core.BlackBox.Storage.BlackBoxBackupInventoryBuilder.BuildAsync(database, 100).ConfigureAwait(false);
+
                 string displayName = !String.IsNullOrEmpty(originalFilename) ? originalFilename : Path.GetFileName(filePath);
                 string message = "Database restored from " + displayName + ". ";
                 if (!settingsRestored)
                     message += "Warning: settings.json was not found in the backup ZIP. ";
+                if (blackBox.ExternalEntries > 0) message += blackBox.Message + " ";
                 message += "Restart the server to reload the restored data.";
 
                 return new
@@ -417,7 +433,16 @@ namespace Armada.Server.Mcp.Tools
                     Status = "restored",
                     BackupPath = safetyBackupPath,
                     SchemaVersion = schemaVersion,
-                    Message = message
+                    Message = message,
+                    BlackBox = new
+                    {
+                        blackBox.DatabaseEntries,
+                        blackBox.ExternalEntries,
+                        blackBox.ExternalTargets,
+                        ExternalEntryIds = blackBox.ExternalEntryRefs.Select(r => r.EntryId).ToList(),
+                        ExternalEntryIdsTruncated = blackBox.ExternalEntryRefsTruncated,
+                        blackBox.Message
+                    }
                 };
             }
             finally

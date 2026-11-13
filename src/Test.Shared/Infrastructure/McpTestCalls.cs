@@ -29,23 +29,46 @@ namespace Test.Shared.Infrastructure
             if (mcp == null) throw new ArgumentNullException(nameof(mcp));
             if (String.IsNullOrEmpty(tool)) throw new ArgumentNullException(nameof(tool));
 
-            HttpRequestMessage init = new HttpRequestMessage(HttpMethod.Post, "/rpc");
+            using HttpRequestMessage init = new HttpRequestMessage(HttpMethod.Post, "/rpc");
             init.Content = JsonHelper.ToJsonContent(new
             {
                 jsonrpc = "2.0", id = 1, method = "initialize",
                 @params = new { protocolVersion = "2024-11-05", capabilities = new { }, clientInfo = new { name = "armada-test", version = "1.0" } }
             });
             using HttpResponseMessage initResponse = await mcp.SendAsync(init).ConfigureAwait(false);
+            string initialized = await initResponse.Content.ReadAsStringAsync().ConfigureAwait(false);
+            AssertTrue(initResponse.IsSuccessStatusCode, "MCP initialize HTTP " + (int)initResponse.StatusCode + ": " + initialized);
+            using JsonDocument initialization = JsonDocument.Parse(initialized);
+            AssertTrue(!initialization.RootElement.TryGetProperty("error", out JsonElement initError) || initError.ValueKind == JsonValueKind.Null, "MCP initialization failed: " + initialized);
             string sessionId = initResponse.Headers.TryGetValues("Mcp-Session-Id", out IEnumerable<string>? values) ? values.First() : String.Empty;
 
-            HttpRequestMessage call = new HttpRequestMessage(HttpMethod.Post, "/rpc");
-            // Serialized with nulls kept, so a test can send an explicit null argument.
-            call.Content = new StringContent(JsonSerializer.Serialize(new { jsonrpc = "2.0", id = 2, method = "tools/call", @params = new { name = tool, arguments = arguments } }), Encoding.UTF8, "application/json");
-            if (!String.IsNullOrEmpty(sessionId)) call.Headers.Add("Mcp-Session-Id", sessionId);
-            using HttpResponseMessage response = await mcp.SendAsync(call).ConfigureAwait(false);
-            string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-            AssertTrue(response.IsSuccessStatusCode, "MCP " + tool + " HTTP " + (int)response.StatusCode + ": " + body);
-            return body;
+            try
+            {
+                using HttpRequestMessage call = new HttpRequestMessage(HttpMethod.Post, "/rpc");
+                // Serialized with nulls kept, so a test can send an explicit null argument.
+                call.Content = new StringContent(JsonSerializer.Serialize(new { jsonrpc = "2.0", id = 2, method = "tools/call", @params = new { name = tool, arguments = arguments } }), Encoding.UTF8, "application/json");
+                if (!String.IsNullOrEmpty(sessionId)) call.Headers.Add("Mcp-Session-Id", sessionId);
+                using HttpResponseMessage response = await mcp.SendAsync(call).ConfigureAwait(false);
+                string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+                AssertTrue(response.IsSuccessStatusCode, "MCP " + tool + " HTTP " + (int)response.StatusCode + ": " + body);
+                return body;
+            }
+            finally
+            {
+                // Each invocation owns its session. Leaving it behind exhausts the transport's session budget
+                // during a whole-process sweep even though each isolated test group passes.
+                if (!String.IsNullOrEmpty(sessionId))
+                {
+                    try
+                    {
+                        using HttpRequestMessage close = new HttpRequestMessage(HttpMethod.Delete, "/rpc");
+                        close.Headers.Add("Mcp-Session-Id", sessionId);
+                        using HttpResponseMessage closed = await mcp.SendAsync(close).ConfigureAwait(false);
+                    }
+                    catch (HttpRequestException) { }
+                    catch (TaskCanceledException) { }
+                }
+            }
         }
 
         #endregion

@@ -70,22 +70,22 @@ namespace Test.Shared.Suites.Services
             await db.InitializeAsync().ConfigureAwait(false);
 
             Voyage voyage = await db.Voyages.CreateAsync(new Voyage("cancel-stop voyage")).ConfigureAwait(false);
-            Captain captain = await db.Captains.CreateAsync(new Captain("cancel-stop") { State = CaptainStateEnum.Working, ProcessId = SyntheticPid }).ConfigureAwait(false);
+            Captain captain = await CaptainAssignmentFixture.CreateAsync(db, new Captain("cancel-stop") { State = CaptainStateEnum.Working, ProcessId = SyntheticPid }).ConfigureAwait(false);
             // Voyage cancel only touches Pending, Assigned and Blocked missions, so the voyage case holds an Assigned one.
             MissionStatusEnum seededStatus = voyageCancel ? MissionStatusEnum.Assigned : MissionStatusEnum.InProgress;
             Mission mission = await db.Missions.CreateAsync(new Mission("running assignment")
             {
                 VoyageId = voyage.Id, CaptainId = captain.Id, Status = seededStatus, ProcessId = SyntheticPid
             }).ConfigureAwait(false);
-            captain.CurrentMissionId = mission.Id;
-            await db.Captains.UpdateAsync(captain).ConfigureAwait(false);
+            captain.Assignment = mission;
+            await CaptainAssignmentFixture.UpdateAsync(db, captain).ConfigureAwait(false);
 
             IAdmiralService admiral = (IAdmiralService)typeof(Armada.Server.ArmadaServer).GetField("_Admiral", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(fx.Server)!;
             Func<Captain, Task>? originalStop = admiral.OnStopAgent;
             List<string> stops = new List<string>();
             admiral.OnStopAgent = held =>
             {
-                stops.Add(held.Id + "|" + held.CurrentMissionId);
+                stops.Add(held.Id + "|" + held.ActiveMissionIds.SingleOrDefault());
                 if (!confirmed) throw new TimeoutException("Owner did not confirm exit.");
                 return Task.CompletedTask;
             };
@@ -105,14 +105,15 @@ namespace Test.Shared.Suites.Services
                     AssertNull(afterMission.ProcessId);
                     AssertEqual(CaptainStateEnum.Idle, after.State);
                     AssertNull(after.ProcessId);
-                    AssertNull(after.CurrentMissionId);
+                    AssertNull(after.ActiveMissionIds.SingleOrDefault());
                 }
                 else
                 {
                     AssertEqual(seededStatus, afterMission.Status, "An unconfirmed stop must not cancel the mission. Reply: " + reply);
                     AssertEqual(CaptainStateEnum.Working, after.State);
-                    AssertEqual((int?)SyntheticPid, after.ProcessId);
-                    AssertEqual(mission.Id, after.CurrentMissionId);
+                    AssertNull(after.ProcessId);
+                    AssertEqual((int?)SyntheticPid, afterMission.ProcessId);
+                    AssertEqual(mission.Id, after.ActiveMissionIds.SingleOrDefault());
                     AssertContains("did not confirm it stopped", reply);
                     if (voyageCancel) AssertContains(mission.Id, reply, "The voyage reply must name the mission it could not cancel.");
                 }
@@ -121,8 +122,8 @@ namespace Test.Shared.Suites.Services
             {
                 // The fixture never owns a real PID: clear the synthetic assignment before server shutdown.
                 captain = (await db.Captains.ReadAsync(captain.Id).ConfigureAwait(false))!;
-                captain.ProcessId = null; captain.CurrentMissionId = null; captain.State = CaptainStateEnum.Idle;
-                await db.Captains.UpdateAsync(captain).ConfigureAwait(false);
+                captain.ProcessId = null; captain.Assignment = null; captain.State = CaptainStateEnum.Idle;
+                await CaptainAssignmentFixture.UpdateAsync(db, captain).ConfigureAwait(false);
                 admiral.OnStopAgent = originalStop;
             }
         }

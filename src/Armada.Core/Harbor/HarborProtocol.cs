@@ -64,6 +64,15 @@ namespace Armada.Core.Harbor
         /// </summary>
         public static readonly string OpenTerminalCapability = "open-terminal";
 
+        /// <summary>
+        /// Capability a Harbor advertises when it can run account usage capture probes on its host (its
+        /// link client was constructed with the host-side usage helper). An Admiral sends a
+        /// <see cref="HarborGitRequest"/> with <see cref="Services.HostCommandKindEnum.UsageProbe"/> only
+        /// to a Harbor that advertises this; for an older Harbor the capture answers Unsupported with
+        /// HostUpgradeRequired instead of probing.
+        /// </summary>
+        public static readonly string UsageProbeCapability = "usage-probe";
+
         #endregion
 
         #region Private-Members

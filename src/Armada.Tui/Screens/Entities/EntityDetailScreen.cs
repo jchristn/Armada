@@ -104,9 +104,11 @@ namespace Armada.Tui.Screens.Entities
             get
             {
                 List<KeyValuePair<string, string>> hints = new List<KeyValuePair<string, string>>();
-                if (_Panels.Count > 1) hints.Add(new KeyValuePair<string, string>("[ ]", "Panels"));
-                hints.Add(new KeyValuePair<string, string>("F10", "Actions"));
-                hints.Add(new KeyValuePair<string, string>("j", "JSON"));
+                // While the record loads or failed to load only the message shows, so the panel and record keys are hidden.
+                if (_Panels.Count > 1 && (Entity != null || IsCreateMode)) hints.Add(new KeyValuePair<string, string>("[ ]", "Panels"));
+                // F10 opens the menu bar at File, so the record's actions get their own key, as on the other detail pages.
+                if (_ActionDefs.Any(a => a.Button != null && a.Button.Visible)) hints.Add(new KeyValuePair<string, string>(".", "Actions"));
+                if (Entity != null && _ActionDefs.Any(a => a.Id == "json")) hints.Add(new KeyValuePair<string, string>("j", "JSON"));
                 return hints;
             }
         }
@@ -321,6 +323,7 @@ namespace Armada.Tui.Screens.Entities
             }
 
             if (Scope.HandleKey(key)) return true;
+            if (key.Code == KeyCode.Character && key.Modifiers == KeyModifiers.None && key.Rune == '.' && ShowActionMenu()) return true;
             if (key.Code == KeyCode.Character && (key.Modifiers & KeyModifiers.Ctrl) != 0 && Char.ToLowerInvariant((char)key.Rune) == 's')
             {
                 DetailPanel? active = _Panels.FirstOrDefault(p => p.Key == PanelTabs.SelectedKey);
@@ -539,6 +542,24 @@ namespace Armada.Tui.Screens.Entities
         #endregion
 
         #region Private-Methods
+
+        private bool ShowActionMenu()
+        {
+            SyncActionVisibility();
+            List<ActionMenuItem> items = new List<ActionMenuItem>();
+            foreach (DetailAction def in _ActionDefs)
+            {
+                if (def.Button == null || !def.Button.Visible) continue;
+                DetailAction action = def;
+                ActionMenuItem item = new ActionMenuItem(def.Label, () => action.Handler(), def.Gesture != null ? KeyLabel(def.Gesture) : "");
+                item.Enabled = def.Button.Enabled;
+                items.Add(item);
+            }
+
+            if (items.Count == 0) return false;
+            ActionMenu.Show(Context.Modals, Entity != null ? HeaderTitle(Entity) : T(CreateTitle), items, Context.Loc, Context.Theme.Current);
+            return true;
+        }
 
         private void SyncActionVisibility()
         {

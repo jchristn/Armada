@@ -1,4 +1,5 @@
 import { StyleSheet, View } from 'react-native';
+import { assignmentAdviceTarget } from '@dashboard/lib/assignmentAdvice';
 import { assignmentBlockerTitle, type MissionLandingState } from '@dashboard/lib/missionActions';
 import type { LandingPreviewResult, MissionAssignmentBlocker } from '@dashboard/types/models';
 import { shownOfTotal, type PullRequestEvidence } from '@dashboard/lib/pullRequestEvidence';
@@ -22,6 +23,13 @@ export function AssignmentBlockerCard({ blocker, onOpen }: { blocker: MissionAss
         <AppText selectable>{blocker.summary}</AppText>
         {blocker.untilUtc ? <AppText muted>{t('Expected to clear at {{time}}', { time: formatDateTime(blocker.untilUtc) })}</AppText> : null}
       </View>
+      {(blocker.advice ?? []).map((advice, index) => {
+        const target = assignmentAdviceTarget(advice, false);
+        return <View key={index} style={[pad, styles.gap]}>
+          <AppText selectable>{advice.text}</AppText>
+          {target ? <Button label={t(target.label)} onPress={() => onOpen(target.path)} /> : null}
+        </View>;
+      })}
       {blocker.dependsOnMissionId ? (
         <ListRow title={t('Depends on')} subtitle={blocker.dependsOnMissionId} onPress={() => onOpen(`/missions/${blocker.dependsOnMissionId}`)} />
       ) : null}

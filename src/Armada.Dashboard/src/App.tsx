@@ -1,34 +1,18 @@
-import { lazy, Suspense } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { lazy } from 'react';
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { LocaleProvider } from './context/LocaleContext';
 import { ThemeProvider } from './context/ThemeContext';
 import { WebSocketProvider } from './context/WebSocketContext';
 import { NotificationProvider } from './context/NotificationContext';
 import ProtectedRoute from './components/ProtectedRoute';
-import LoadingIndicator from './components/shared/LoadingIndicator';
 import Layout from './components/Layout';
-import { CliPermissionsRedirect, PlanningRedirect } from './components/LegacyNavRedirects';
+import { BlackBoxRedirect, CliPermissionsRedirect, PlanningRedirect, LegacyPageRedirect } from './components/LegacyNavRedirects';
 import './App.css';
 
+const NotFound = lazy(() => import('./pages/NotFound'));
 const Dashboard = lazy(() => import('./pages/Dashboard'));
-const Fleets = lazy(() => import('./pages/Fleets'));
-const Vessels = lazy(() => import('./pages/Vessels'));
-const Captains = lazy(() => import('./pages/Captains'));
-const Missions = lazy(() => import('./pages/Missions'));
-const Voyages = lazy(() => import('./pages/Voyages'));
-const Events = lazy(() => import('./pages/Events'));
-const MergeQueue = lazy(() => import('./pages/MergeQueue'));
-const Docks = lazy(() => import('./pages/Docks'));
-const Doctor = lazy(() => import('./pages/Doctor'));
-const Tenants = lazy(() => import('./pages/admin/Tenants'));
-const Users = lazy(() => import('./pages/admin/Users'));
-const Credentials = lazy(() => import('./pages/admin/Credentials'));
-const Dispatch = lazy(() => import('./pages/Dispatch'));
-const Objectives = lazy(() => import('./pages/Objectives'));
 const ObjectiveDetail = lazy(() => import('./pages/ObjectiveDetail'));
-const Signals = lazy(() => import('./pages/Signals'));
-const Server = lazy(() => import('./pages/Server'));
 const FleetDetail = lazy(() => import('./pages/FleetDetail'));
 const VesselDetail = lazy(() => import('./pages/VesselDetail'));
 const VesselOnboarding = lazy(() => import('./pages/VesselOnboarding'));
@@ -41,38 +25,24 @@ const SignalDetail = lazy(() => import('./pages/SignalDetail'));
 const EventDetail = lazy(() => import('./pages/EventDetail'));
 const DockDetail = lazy(() => import('./pages/DockDetail'));
 const MergeQueueDetail = lazy(() => import('./pages/MergeQueueDetail'));
-const Personas = lazy(() => import('./pages/Personas'));
 const PersonaDetail = lazy(() => import('./pages/PersonaDetail'));
-const Pipelines = lazy(() => import('./pages/Pipelines'));
 const PipelineDetail = lazy(() => import('./pages/PipelineDetail'));
-const PromptTemplates = lazy(() => import('./pages/PromptTemplates'));
 const PromptTemplateDetail = lazy(() => import('./pages/PromptTemplateDetail'));
-const Playbooks = lazy(() => import('./pages/Playbooks'));
 const PlaybookDetail = lazy(() => import('./pages/PlaybookDetail'));
-const WorkflowProfiles = lazy(() => import('./pages/WorkflowProfiles'));
 const WorkflowProfileDetail = lazy(() => import('./pages/WorkflowProfileDetail'));
-const ProjectProfiles = lazy(() => import('./pages/ProjectProfiles'));
 const ProjectProfileDetail = lazy(() => import('./pages/ProjectProfileDetail'));
-const Skills = lazy(() => import('./pages/Skills'));
 const SkillDetail = lazy(() => import('./pages/SkillDetail'));
 const AskArmada = lazy(() => import('./pages/AskArmada'));
 const Inbox = lazy(() => import('./pages/Inbox'));
-const CheckRuns = lazy(() => import('./pages/CheckRuns'));
 const CheckRunDetail = lazy(() => import('./pages/CheckRunDetail'));
-const Environments = lazy(() => import('./pages/Environments'));
 const EnvironmentDetail = lazy(() => import('./pages/EnvironmentDetail'));
-const Deployments = lazy(() => import('./pages/Deployments'));
 const DeploymentDetail = lazy(() => import('./pages/DeploymentDetail'));
-const Releases = lazy(() => import('./pages/Releases'));
 const ReleaseDetail = lazy(() => import('./pages/ReleaseDetail'));
-const Incidents = lazy(() => import('./pages/Incidents'));
 const IncidentDetail = lazy(() => import('./pages/IncidentDetail'));
-const Runbooks = lazy(() => import('./pages/Runbooks'));
 const RunbookDetail = lazy(() => import('./pages/RunbookDetail'));
 const Workspace = lazy(() => import('./pages/Workspace'));
 const RequestHistory = lazy(() => import('./pages/RequestHistory'));
 const ApiExplorer = lazy(() => import('./pages/ApiExplorer'));
-const History = lazy(() => import('./pages/History'));
 const Configuration = lazy(() => import('./pages/Configuration'));
 const Activity = lazy(() => import('./pages/Activity'));
 const ServerHub = lazy(() => import('./pages/ServerHub'));
@@ -83,10 +53,9 @@ const DispatchHub = lazy(() => import('./pages/DispatchHub'));
 const DeliveryHub = lazy(() => import('./pages/DeliveryHub'));
 const FleetActions = lazy(() => import('./pages/FleetActions'));
 const FleetActionRunDetail = lazy(() => import('./pages/FleetActionRunDetail'));
-
-function RouteFallback() {
-  return <LoadingIndicator fullHeight label="Loading page..." />;
-}
+const BlackBoxEntry = lazy(() => import('./pages/BlackBoxEntry'));
+const Evaluations = lazy(() => import('./pages/Evaluations'));
+const EvaluationDetail = lazy(() => import('./pages/EvaluationDetail'));
 
 export default function App() {
   return (
@@ -96,112 +65,116 @@ export default function App() {
           <WebSocketProvider>
             <NotificationProvider>
               <BrowserRouter basename="/dashboard">
-                <Suspense fallback={<RouteFallback />}>
-                  <Routes>
-                    <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
-                      <Route index element={<Dashboard />} />
-                      <Route path="dashboard" element={<Navigate to="/" replace />} />
-                      <Route path="planning" element={<PlanningRedirect />} />
-                      <Route path="planning/:id" element={<PlanningRedirect />} />
-                      <Route path="dispatch" element={<DispatchHub />} />
-                      <Route path="backlog" element={<Navigate to="/dispatch?tab=backlog" replace />} />
-                      <Route path="backlog/:id" element={<ObjectiveDetail />} />
-                      <Route path="objectives" element={<Objectives />} />
-                      <Route path="objectives/:id" element={<ObjectiveDetail />} />
+                <Routes>
+                  <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
+                    <Route index element={<Dashboard />} />
+                    <Route path="dashboard" element={<LegacyPageRedirect to="/" />} />
+                    <Route path="planning" element={<PlanningRedirect />} />
+                    <Route path="planning/:id" element={<PlanningRedirect />} />
+                    <Route path="dispatch" element={<DispatchHub />} />
+                    <Route path="backlog" element={<LegacyPageRedirect to="/dispatch?tab=backlog" />} />
+                    <Route path="backlog/:id" element={<ObjectiveDetail />} />
+                    <Route path="objectives" element={<LegacyPageRedirect to="/dispatch?tab=backlog" />} />
+                    <Route path="objectives/:id" element={<ObjectiveDetail />} />
 
-                      <Route path="fleets" element={<Navigate to="/vessels?tab=fleets" replace />} />
-                      <Route path="fleets/:id" element={<FleetDetail />} />
+                    <Route path="fleets" element={<LegacyPageRedirect to="/vessels?tab=fleets" />} />
+                    <Route path="fleets/:id" element={<FleetDetail />} />
 
-                      <Route path="vessels" element={<VesselsHub />} />
-                      <Route path="vessels/import" element={<VesselsHub />} />
-                      <Route path="vessels/health" element={<VesselsHub />} />
-                      <Route path="vessels/:id" element={<VesselDetail />} />
-                      <Route path="vessels/:id/onboarding" element={<VesselOnboarding />} />
-                      <Route path="vessels/:id/history" element={<VesselHistory />} />
-                      <Route path="workspace" element={<Navigate to="/vessels?tab=workspace" replace />} />
-                      <Route path="workspace/:vesselId" element={<Workspace />} />
-                      <Route path="workspace/:vesselId/:panel" element={<Workspace />} />
+                    <Route path="vessels" element={<VesselsHub />} />
+                    <Route path="vessels/import" element={<VesselsHub />} />
+                    <Route path="vessels/health" element={<VesselsHub />} />
+                    <Route path="vessels/:id" element={<VesselDetail />} />
+                    <Route path="vessels/:id/onboarding" element={<VesselOnboarding />} />
+                    <Route path="vessels/:id/history" element={<VesselHistory />} />
+                    <Route path="workspace" element={<LegacyPageRedirect to="/vessels?tab=workspace" />} />
+                    <Route path="workspace/:vesselId" element={<Workspace />} />
+                    <Route path="workspace/:vesselId/:panel" element={<Workspace />} />
 
-                      <Route path="captains" element={<CaptainsHub />} />
-                      <Route path="captains/:id" element={<CaptainDetail />} />
+                    <Route path="battery" element={<LegacyPageRedirect to="/captains?tab=battery" />} />
+                    <Route path="captains" element={<CaptainsHub />} />
+                    <Route path="captains/:id" element={<CaptainDetail />} />
+                    <Route path="evaluations" element={<Evaluations />} />
+                    <Route path="evaluations/:id" element={<EvaluationDetail />} />
 
-                      <Route path="missions" element={<MissionsHub />} />
-                      <Route path="missions/:id" element={<MissionDetail />} />
+                    <Route path="missions" element={<MissionsHub />} />
+                    <Route path="missions/:id" element={<MissionDetail />} />
 
-                      <Route path="voyages" element={<Navigate to="/missions?tab=voyages" replace />} />
-                      <Route path="voyages/create" element={<VoyageCreate />} />
-                      <Route path="voyages/:id" element={<VoyageDetail />} />
+                    <Route path="voyages" element={<LegacyPageRedirect to="/missions?tab=voyages" />} />
+                    <Route path="voyages/create" element={<VoyageCreate />} />
+                    <Route path="voyages/:id" element={<VoyageDetail />} />
 
-                      <Route path="activity" element={<Activity />} />
-                      <Route path="signals" element={<Navigate to="/activity?source=signals" replace />} />
-                      <Route path="history" element={<Navigate to="/activity?source=history" replace />} />
-                      <Route path="signals/:id" element={<SignalDetail />} />
+                    <Route path="activity" element={<Activity />} />
+                    <Route path="signals" element={<LegacyPageRedirect to="/activity?source=signals" />} />
+                    <Route path="history" element={<LegacyPageRedirect to="/activity?source=history" />} />
+                    <Route path="signals/:id" element={<SignalDetail />} />
 
-                      <Route path="events" element={<Navigate to="/activity?source=events" replace />} />
-                      <Route path="events/:id" element={<EventDetail />} />
+                    <Route path="events" element={<LegacyPageRedirect to="/activity?source=events" />} />
+                    <Route path="events/:id" element={<EventDetail />} />
 
-                      <Route path="docks" element={<Navigate to="/captains?tab=docks" replace />} />
-                      <Route path="docks/:id" element={<DockDetail />} />
+                    <Route path="docks" element={<LegacyPageRedirect to="/captains?tab=docks" />} />
+                    <Route path="docks/:id" element={<DockDetail />} />
 
-                      <Route path="merge-queue" element={<Navigate to="/missions?tab=merge-queue" replace />} />
-                      <Route path="merge-queue/:id" element={<MergeQueueDetail />} />
+                    <Route path="merge-queue" element={<LegacyPageRedirect to="/missions?tab=merge-queue" />} />
+                    <Route path="merge-queue/:id" element={<MergeQueueDetail />} />
 
-                      <Route path="jobs" element={<Navigate to="/activity?source=jobs" replace />} />
+                    <Route path="jobs" element={<LegacyPageRedirect to="/activity?source=events" />} />
 
-                      <Route path="configuration" element={<Configuration />} />
-                      <Route path="personas" element={<Navigate to="/configuration?tab=personas" replace />} />
-                      <Route path="personas/:name" element={<PersonaDetail />} />
-                      <Route path="pipelines" element={<Navigate to="/configuration?tab=pipelines" replace />} />
-                      <Route path="pipelines/:name" element={<PipelineDetail />} />
-                      <Route path="prompt-templates" element={<Navigate to="/configuration?tab=prompts" replace />} />
-                      <Route path="prompt-templates/create" element={<PromptTemplateDetail />} />
-                      <Route path="prompt-templates/:name" element={<PromptTemplateDetail />} />
-                      <Route path="playbooks" element={<Navigate to="/configuration?tab=playbooks" replace />} />
-                      <Route path="playbooks/:id" element={<PlaybookDetail />} />
-                      <Route path="workflow-profiles" element={<Navigate to="/configuration?tab=workflow-profiles" replace />} />
-                      <Route path="workflow-profiles/:id" element={<WorkflowProfileDetail />} />
-                      <Route path="project-profiles" element={<Navigate to="/configuration?tab=project-profiles" replace />} />
-                      <Route path="project-profiles/:id" element={<ProjectProfileDetail />} />
-                      <Route path="skills" element={<Navigate to="/configuration?tab=skills" replace />} />
-                      <Route path="skills/:id" element={<SkillDetail />} />
-                      {/* One optional-segment route so moving between /ask and /ask/:threadId keeps the page mounted. */}
-                      <Route path="ask/:threadId?" element={<AskArmada />} />
-                      <Route path="inbox" element={<Inbox />} />
-                      <Route path="cli-permissions" element={<CliPermissionsRedirect />} />
-                      <Route path="delivery" element={<DeliveryHub />} />
-                      <Route path="fleet-actions" element={<FleetActions />} />
-                      <Route path="fleet-actions/runs/:id" element={<FleetActionRunDetail />} />
-                      <Route path="checks" element={<Navigate to="/delivery?tab=checks" replace />} />
-                      <Route path="checks/:id" element={<CheckRunDetail />} />
-                      <Route path="environments" element={<Navigate to="/delivery?tab=environments" replace />} />
-                      <Route path="environments/:id" element={<EnvironmentDetail />} />
-                      <Route path="deployments" element={<Navigate to="/delivery?tab=deployments" replace />} />
-                      <Route path="deployments/:id" element={<DeploymentDetail />} />
-                      <Route path="releases" element={<Navigate to="/delivery?tab=releases" replace />} />
-                      <Route path="releases/new" element={<ReleaseDetail />} />
-                      <Route path="releases/:id" element={<ReleaseDetail />} />
-                      <Route path="incidents" element={<Navigate to="/delivery?tab=incidents" replace />} />
-                      <Route path="incidents/:id" element={<IncidentDetail />} />
-                      <Route path="runbooks" element={<Navigate to="/delivery?tab=runbooks" replace />} />
-                      <Route path="runbooks/:id" element={<RunbookDetail />} />
-                      <Route path="requests" element={<Navigate to="/activity?source=requests" replace />} />
-                      <Route path="requests/:id" element={<RequestHistory />} />
-                      <Route path="api-explorer" element={<ApiExplorer />} />
-                      <Route path="api-explorer/:operationId" element={<ApiExplorer />} />
+                    <Route path="configuration" element={<Configuration />} />
+                    <Route path="personas" element={<LegacyPageRedirect to="/configuration?tab=personas" />} />
+                    <Route path="personas/:name" element={<PersonaDetail />} />
+                    <Route path="pipelines" element={<LegacyPageRedirect to="/configuration?tab=pipelines" />} />
+                    <Route path="pipelines/:name" element={<PipelineDetail />} />
+                    <Route path="prompt-templates" element={<LegacyPageRedirect to="/configuration?tab=prompts" />} />
+                    <Route path="prompt-templates/create" element={<PromptTemplateDetail />} />
+                    <Route path="prompt-templates/:name" element={<PromptTemplateDetail />} />
+                    <Route path="playbooks" element={<LegacyPageRedirect to="/configuration?tab=playbooks" />} />
+                    <Route path="playbooks/:id" element={<PlaybookDetail />} />
+                    <Route path="workflow-profiles" element={<LegacyPageRedirect to="/configuration?tab=workflow-profiles" />} />
+                    <Route path="workflow-profiles/:id" element={<WorkflowProfileDetail />} />
+                    <Route path="project-profiles" element={<LegacyPageRedirect to="/configuration?tab=project-profiles" />} />
+                    <Route path="project-profiles/:id" element={<ProjectProfileDetail />} />
+                    <Route path="skills" element={<LegacyPageRedirect to="/configuration?tab=skills" />} />
+                    <Route path="skills/:id" element={<SkillDetail />} />
+                    {/* One optional-segment route so moving between /ask and /ask/:threadId keeps the page mounted. */}
+                    <Route path="ask/:threadId?" element={<AskArmada />} />
+                    <Route path="inbox" element={<Inbox />} />
+                    <Route path="blackbox" element={<BlackBoxRedirect />} />
+                    <Route path="blackbox/:id" element={<BlackBoxEntry />} />
+                    <Route path="cli-permissions" element={<CliPermissionsRedirect />} />
+                    <Route path="delivery" element={<DeliveryHub />} />
+                    <Route path="fleet-actions" element={<FleetActions />} />
+                    <Route path="fleet-actions/runs/:id" element={<FleetActionRunDetail />} />
+                    <Route path="checks" element={<LegacyPageRedirect to="/delivery?tab=checks" />} />
+                    <Route path="checks/:id" element={<CheckRunDetail />} />
+                    <Route path="environments" element={<LegacyPageRedirect to="/delivery?tab=environments" />} />
+                    <Route path="environments/:id" element={<EnvironmentDetail />} />
+                    <Route path="deployments" element={<LegacyPageRedirect to="/delivery?tab=deployments" />} />
+                    <Route path="deployments/:id" element={<DeploymentDetail />} />
+                    <Route path="releases" element={<LegacyPageRedirect to="/delivery?tab=releases" />} />
+                    <Route path="releases/new" element={<ReleaseDetail />} />
+                    <Route path="releases/:id" element={<ReleaseDetail />} />
+                    <Route path="incidents" element={<LegacyPageRedirect to="/delivery?tab=incidents" />} />
+                    <Route path="incidents/:id" element={<IncidentDetail />} />
+                    <Route path="runbooks" element={<LegacyPageRedirect to="/delivery?tab=runbooks" />} />
+                    <Route path="runbooks/:id" element={<RunbookDetail />} />
+                    <Route path="requests" element={<LegacyPageRedirect to="/activity?source=requests" />} />
+                    <Route path="requests/:id" element={<RequestHistory />} />
+                    <Route path="api-explorer" element={<ApiExplorer />} />
+                    <Route path="api-explorer/:operationId" element={<ApiExplorer />} />
 
-                      <Route path="notifications" element={<Navigate to="/inbox" replace />} />
+                    <Route path="notifications" element={<LegacyPageRedirect to="/inbox" />} />
 
-                      <Route path="admin/tenants" element={<Navigate to="/server?tab=tenants" replace />} />
-                      <Route path="admin/users" element={<Navigate to="/server?tab=users" replace />} />
-                      <Route path="admin/credentials" element={<Navigate to="/server?tab=credentials" replace />} />
+                    <Route path="admin/tenants" element={<LegacyPageRedirect to="/server?tab=tenants" />} />
+                    <Route path="admin/users" element={<LegacyPageRedirect to="/server?tab=users" />} />
+                    <Route path="admin/credentials" element={<LegacyPageRedirect to="/server?tab=credentials" />} />
 
-                      <Route path="storage" element={<Navigate to="/server?tab=storage" replace />} />
-                      <Route path="server" element={<ServerHub />} />
-                      <Route path="doctor" element={<Navigate to="/server?tab=diagnostics" replace />} />
-                      <Route path="settings" element={<Navigate to="/server" replace />} />
-                    </Route>
-                  </Routes>
-                </Suspense>
+                    <Route path="storage" element={<LegacyPageRedirect to="/server?tab=storage" />} />
+                    <Route path="server" element={<ServerHub />} />
+                    <Route path="doctor" element={<LegacyPageRedirect to="/server?tab=diagnostics" />} />
+                    <Route path="settings" element={<LegacyPageRedirect to="/server" />} />
+                    <Route path="*" element={<NotFound />} />
+                  </Route>
+                </Routes>
               </BrowserRouter>
             </NotificationProvider>
           </WebSocketProvider>

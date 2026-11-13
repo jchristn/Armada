@@ -1,0 +1,11 @@
+{
+  "clientInfo": {
+    "name": "armada-usage-probe",
+    "title": null,
+    "version": "1.0.0"
+  },
+  "capabilities": {
+    "experimentalApi": false,
+    "explicitGatewayOauth": false
+  }
+}

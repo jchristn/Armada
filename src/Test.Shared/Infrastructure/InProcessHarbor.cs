@@ -76,6 +76,8 @@ namespace Test.Shared.Infrastructure
         /// <param name="jobs">Runner the Harbor launches captains with (wrapped for recording); defaults to a real
         /// <see cref="LocalHarborJobRunner"/> over <paramref name="runtimes"/>.</param>
         /// <param name="docks">Harbor-side dock manager, or null for a Harbor that predates Harbor-side docks.</param>
+        /// <param name="usageProbe">Host-side usage helper the Harbor runs account usage capture probes with, or null for a
+        /// Harbor that predates usage probes (it does not advertise the capability).</param>
         /// <returns>The connected Harbor.</returns>
         public static async Task<InProcessHarbor> ConnectAsync(
             HarborConnectionManager manager,
@@ -87,14 +89,15 @@ namespace Test.Shared.Infrastructure
             LoggingModule logging,
             IHostCommandExecutor? commands = null,
             IHarborJobRunner? jobs = null,
-            HarborDockManager? docks = null)
+            HarborDockManager? docks = null,
+            IUsageProbe? usageProbe = null)
         {
             string scratchRoot = TestTemp.NewDirectory("harbor_scratch");
             RecordingHarborJobRunner runner = new RecordingHarborJobRunner(jobs ?? new LocalHarborJobRunner(logging, runtimes, scratchRoot));
             List<HarborCapability> advertised = new List<HarborCapability>();
             foreach (string name in capabilities) advertised.Add(new HarborCapability { Name = name, Available = true });
 
-            HarborLinkClient client = new HarborLinkClient(harborId, harborId, advertised, 4, commands ?? new LocalHostCommandExecutor(), logging, 0, null, runner, docks);
+            HarborLinkClient client = new HarborLinkClient(harborId, harborId, advertised, 4, commands ?? new LocalHostCommandExecutor(), logging, 0, null, runner, docks, usageProbe);
             LoopbackHarborTransport transport = new LoopbackHarborTransport(manager, harborId, tenantId, userId);
             InProcessHarbor harbor = new InProcessHarbor(harborId, runner, scratchRoot, transport, client);
 

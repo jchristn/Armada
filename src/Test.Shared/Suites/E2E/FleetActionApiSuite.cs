@@ -61,14 +61,16 @@ namespace Test.Shared.Suites.E2E
                 _VesselBId = await CreateVesselAsync(_AdminB, "fa-vessel-b").ConfigureAwait(false);
             }));
 
-            cases.Add(CaseAsync("enumerate_lists_builtins", "Enumerate lists the five seeded built-ins, also for a regular user", TestTags.Positive, async () =>
+            cases.Add(CaseAsync("enumerate_lists_builtins", "Enumerate lists every seeded built-in, also for a regular user", TestTags.Positive, async () =>
             {
                 await E2EServerFixture.AcquireAsync(this).ConfigureAwait(false);
                 HttpResponseMessage response = await _RegularA!.PostAsync("/api/v1/fleet-actions/enumerate", JsonHelper.ToJsonContent(new { pageSize = 50 })).ConfigureAwait(false);
                 AssertStatusCode(HttpStatusCode.OK, response);
                 EnumerationResult<FleetAction> result = await JsonHelper.DeserializeAsync<EnumerationResult<FleetAction>>(response).ConfigureAwait(false);
-                AssertEqual(5, result.Objects.Count(a => a.IsBuiltIn), "built-ins");
+                AssertEqual(FleetActionSeedService.BuildDefaults(OperatingSystem.IsWindows()).Count, result.Objects.Count(a => a.IsBuiltIn), "built-ins");
                 AssertTrue(result.Objects.Any(a => a.BuiltInKey == "ff-default-branch"), "ff-default-branch present");
+                AssertTrue(result.Objects.Any(a => a.BuiltInKey == FleetActionSeedService.UpdatePackageKey && a.ApplicabilityCommand != null), "update-package present with its applicability check");
+                AssertTrue(result.Objects.Any(a => a.BuiltInKey == FleetActionSeedService.SecurityReviewKey && a.MissionMode == MissionModeEnum.Audit), "security-review is report-only");
             }));
 
             cases.Add(CaseAsync("non_admin_command_create_forbidden", "A non-admin creating a Command action gets 403", TestTags.Negative, async () =>

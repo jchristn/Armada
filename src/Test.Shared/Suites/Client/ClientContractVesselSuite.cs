@@ -65,6 +65,38 @@ namespace Test.Shared.Suites.Client
                 AssertEqual(400, empty.StatusCode, "empty selection is a 400");
             }));
 
+            cases.Add(Case("tree_waits_and_concurrency", "Voyage tree, mission waits, vessel concurrency and concurrency metrics", async (c, fx) =>
+            {
+                VesselSetup setup = await LiveServerSetup.CreateVesselAsync(c, "tree");
+                string id = setup.Vessel.Id;
+                Voyage? voyage = await c.CreateVoyageAsync(new VoyageCreateRequest
+                {
+                    Title = "tree " + ClientContract.Suffix(), VesselId = id,
+                    Missions = new List<DispatchRequest>
+                    {
+                        new DispatchRequest { Title = "parent", Description = "p", Key = "p" },
+                        new DispatchRequest { Title = "child", Description = "c", ParentKey = "p", BranchStrategy = MissionBranchStrategyEnum.ForkFromParent }
+                    }
+                });
+                AssertNotNull(voyage, "voyage created");
+                VoyageTree? tree = await c.GetVoyageTreeAsync(voyage!.Id);
+                AssertEqual(2, tree?.TotalMissions, "tree mission count");
+                AssertFalse(tree!.Truncated, "a small tree is whole");
+                MissionTreeNode parent = tree.Roots.Single(n => n.Mission.Title == "parent");
+                string childId = parent.Children.Single().Mission.Id;
+                EnumerationResult<MissionWaitInterval>? waits = await c.GetMissionWaitsAsync(childId, 1, 10);
+                AssertNotNull(waits, "waits page");
+                AssertEqual(10, waits!.PageSize, "page size honored");
+                EnumerationResult<MissionWaitInterval>? newest = await c.EnumerateMissionWaitsAsync(childId, new EnumerationQuery { PageSize = 5, Order = EnumerationOrderEnum.CreatedDescending });
+                AssertEqual(5, newest?.PageSize, "enumerate page size honored");
+                AssertEqual(waits.TotalRecords, newest!.TotalRecords, "both forms count the same waits");
+                VesselConcurrency? concurrency = await c.GetVesselConcurrencyAsync(id);
+                AssertEqual(id, concurrency?.VesselId, "vessel concurrency");
+                ConcurrencyMetrics? metrics = await c.GetConcurrencyMetricsAsync(DateTime.UtcNow.AddHours(-1), DateTime.UtcNow, id);
+                AssertEqual(id, metrics?.VesselId, "metrics vessel filter");
+                AssertEqual(300, metrics!.BucketSeconds, "a 1 hour window uses 5 minute buckets");
+            }));
+
             cases.Add(Case("vessels_and_branches", "Vessel get, list, update, git status, branches, landing preview, push and merge a branch, build context", async (c, fx) =>
             {
                 VesselSetup setup = await LiveServerSetup.CreateVesselAsync(c, "vessel");

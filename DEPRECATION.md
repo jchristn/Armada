@@ -15,12 +15,18 @@ The `Client.RouteSurface` and `Docs.Deprecation` test suites keep this file hone
 - no first-party client (the dashboard and mobile `api/client.ts`, `Armada.Client` and the TUI, the `armada` CLI,
   `Armada.Core`'s `ArmadaApiClient`) may call a listed or removed route, or list jobs without paging.
 
+## v1.3.0 concurrency removal exception
+
+The owner-approved [concurrency plan](CONCURRENCY_IMPROVEMENTS.md) removes `Captain.CurrentMissionId`, `Captain.CurrentDockId`, `Vessel.AllowConcurrentMissions` and Helm `--allow-concurrent` in v1.3.0, with no aliases. This is the explicit exception to the usual major-release removal policy in [compatibility](docs/COMPATIBILITY.md#v130-concurrency-exception). Use `ActiveMissionIds` and each mission’s dock/process, plus the two numeric vessel limits. Old vessel inputs and the old CLI flag fail with migration guidance. First-party Dashboard, Mobile, TUI, Helm and SDK models use the new fields. These are field/option removals, not retired routes in the route registry below.
+
 ## Active deprecations
 
-Nothing is deprecated right now. The whole-list APIs that were deprecated here were retired; see [Removed](#removed).
+The whole-list APIs that were deprecated here were retired; see [Removed](#removed). Two v1.3.0 concurrency items remain readable for stored data and older plans.
 
 | ID | Surface | Item | Replacement | Deprecated in | Removed in | First-party clients |
 |---|---|---|---|---|---|---|
+| D-025 | Model | `VesselConcurrencyLimit` | `VesselVoyageLimit` and `VoyageMissionLimit` (the reason is kept only so stored events and waits still read) | 1.3.0 | 2.0 | Migrated (no client produces it) |
+| D-026 | Contract | `dependsOn` | `parent` in `armada-plan` contract version 4 (`dependsOn` is read as `parent` with a warning) | 1.3.0 | 2.0 | Migrated (built-in Architect prompts emit `parent`) |
 
 ## Bounded, not retired
 

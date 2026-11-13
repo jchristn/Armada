@@ -38,6 +38,18 @@ namespace Armada.Server.Routes
         private const string _HeaderRestart = "[ArmadaServer] restart: ";
 
         /// <summary>
+        /// The black box runtime (the doctor's storage check and black box settings changes), or null.
+        /// </summary>
+        public Armada.Core.BlackBox.BlackBoxRuntime? BlackBox { get; set; } = null;
+
+        /// <summary>Cancel capture work and rebuild schedules after persisted usage settings change.</summary>
+        public Func<Task>? OnUsageCaptureSettingsChanged { get; set; }
+
+        /// <summary>Shared live policy/settings coordinator, also used by MCP updates.</summary>
+        public UsageSelectionConfigurationService? UsageSelectionConfiguration { get; set; }
+
+
+        /// <summary>
         /// Instantiate.
         /// </summary>
         /// <param name="database">Database driver.</param>
@@ -302,12 +314,16 @@ namespace Armada.Server.Routes
                     }
                 }
 
+                // 12. Black box storage: the configured target's settings and reachability.
+                Armada.Core.BlackBox.Storage.BlackBoxStorageDoctorResult blackBoxStorage = await Armada.Core.BlackBox.Storage.BlackBoxStorageDoctor.CheckAsync(_settings.BlackBox, BlackBox?.Stores).ConfigureAwait(false);
+                results.Add(new { Name = Armada.Core.BlackBox.Storage.BlackBoxStorageDoctorResult.CheckName, Status = blackBoxStorage.Status, Message = blackBoxStorage.Message });
+
                 return results;
             },
             api => api
                 .WithTag("Status")
                 .WithSummary("Run system health diagnostics")
-                .WithDescription("Runs 7 system health checks and returns results as a JSON array.")
+                .WithDescription("Runs 12 system health checks (settings, git, database, server, stalled captains, failed missions, the five agent runtimes and black box storage) and returns results as a JSON array.")
                 .WithSecurity("ApiKey"));
 
             app.Post("/api/v1/server/stop", async (ApiRequest req) =>
@@ -481,8 +497,71 @@ namespace Armada.Server.Routes
                     req.Http.Response.StatusCode = ctx.IsAuthenticated ? 403 : 401;
                     return new ApiErrorResponse { Error = ctx.IsAuthenticated ? ApiResultEnum.Forbidden : ApiResultEnum.NotAuthorized, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
                 }
-                SettingsUpdateRequest body = JsonSerializer.Deserialize<SettingsUpdateRequest>(req.Http.Request.DataAsString, _jsonOptions)
-                    ?? throw new InvalidOperationException("Request body could not be deserialized as SettingsUpdateRequest.");
+                using SettingsUpdateLease? settingsLease = UsageSelectionConfiguration == null ? null
+                    : await UsageSelectionConfiguration.AcquireUpdateAsync(req.CancellationToken).ConfigureAwait(false);
+                SettingsUpdateRequest body;
+                try
+                {
+                    body = JsonSerializer.Deserialize<SettingsUpdateRequest>(req.Http.Request.DataAsString, _jsonOptions)
+                        ?? throw new JsonException("Settings object required.");
+                }
+                catch (JsonException json)
+                {
+                    JsonValueError described = JsonValueErrorTranslator.Describe(json);
+                    req.Http.Response.StatusCode = 400;
+                    return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = described.Message, Data = described };
+                }
+                catch (ArgumentException invalid)
+                {
+                    req.Http.Response.StatusCode = 400;
+                    return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Invalid usage selection numeric value.", Data = new { Code = "InvalidUsageSelection", Field = invalid.ParamName } };
+                }
+
+                // A sent UsageSelection group changes only the members it contains; the rest keep their current values.
+                if (body.UsageSelection != null)
+                {
+                    UsageSelectionPatch? patch = JsonSerializer.Deserialize<UsageSelectionPatchRequest>(req.Http.Request.DataAsString, _jsonOptions)?.UsageSelection;
+                    if (patch != null)
+                    {
+                        try { body.UsageSelection = patch.ApplyTo(_settings.EffectiveUsageSelection); }
+                        catch (ArgumentException invalid)
+                        {
+                            req.Http.Response.StatusCode = 400;
+                            return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = invalid.Message, Data = new { Code = "InvalidUsageSelection", Field = "UsageSelection." + invalid.ParamName } };
+                        }
+                    }
+                }
+
+                if (body.UsageSelection != null)
+                {
+                    if (UsageSelectionConfiguration == null)
+                    {
+                        req.Http.Response.StatusCode = 503;
+                        return new ApiStatusErrorResponse(ApiStatusErrorCodeEnum.ServiceUnavailable, "Usage selection settings coordinator is unavailable.") { Data = new { Code = "UsageSelectionUnavailable" } };
+                    }
+                    try { UsageSelectionConfiguration.ValidateUpdate(body.UsageSelection, ctx, body.ExpectedUsageSelectionRevision); }
+                    catch (UsageSelectionConfigurationException conflict)
+                    {
+                        req.Http.Response.StatusCode = 409;
+                        return new ApiErrorResponse { Error = ApiResultEnum.Conflict, Message = conflict.Message, Data = new { conflict.Code, Field = "UsageSelection" } };
+                    }
+                    catch (ArgumentException invalid)
+                    {
+                        req.Http.Response.StatusCode = 400;
+                        return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = invalid.Message, Data = new { Code = "InvalidUsageSelection", Field = "UsageSelection." + invalid.ParamName } };
+                    }
+                }
+
+                if (body.Concurrency != null && body.ExpectedConcurrencyRevision.HasValue && body.ExpectedConcurrencyRevision.Value != _settings.ConcurrencyRevision)
+                {
+                    req.Http.Response.StatusCode = 409;
+                    return new ApiErrorResponse
+                    {
+                        Error = ApiResultEnum.Conflict,
+                        Message = "Concurrency settings changed since revision " + body.ExpectedConcurrencyRevision.Value + " (current " + _settings.ConcurrencyRevision + "). Reload settings before retrying.",
+                        Data = new { Code = "StaleConcurrencyRevision", Field = "Concurrency", CurrentRevision = _settings.ConcurrencyRevision }
+                    };
+                }
 
                 // Lists stored in settings are bounded (docs/ENUMERATION.md); checked before anything is applied.
                 try
@@ -504,6 +583,18 @@ namespace Armada.Server.Routes
                     // Checked before anything is applied, so a refused request changes no setting.
                     req.Http.Response.StatusCode = 400;
                     return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "StageCheckTimeoutMinutes must be between 1 and 240." };
+                }
+                if (body.BlackBox != null)
+                {
+                    // Storage secrets come back from GET masked; a masked value keeps the stored secret. The target's settings
+                    // are validated before anything is applied (missing bucket, bad endpoint, unknown target).
+                    Armada.Core.BlackBox.BlackBoxSettingsSecrets.KeepMasked(body.BlackBox, _settings.BlackBox, _RedactedSecret);
+                    List<string> storageErrors = Armada.Core.BlackBox.Storage.BlackBoxStorageSettingsValidator.Validate(body.BlackBox.Storage);
+                    if (storageErrors.Count > 0)
+                    {
+                        req.Http.Response.StatusCode = 400;
+                        return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Invalid black box storage settings: " + String.Join(" ", storageErrors) };
+                    }
                 }
                 if (body.DataRetentionDays.HasValue) _settings.DataRetentionDays = body.DataRetentionDays.Value;
                 if (body.RequestHistoryRetentionDays.HasValue) _settings.RequestHistoryRetentionDays = body.RequestHistoryRetentionDays.Value;
@@ -553,6 +644,13 @@ namespace Armada.Server.Routes
                 if (body.BlockDependentsOfFailedStages.HasValue)
                     _settings.BlockDependentsOfFailedStages = body.BlockDependentsOfFailedStages.Value;
 
+                if (body.Concurrency != null)
+                {
+                    // Applied in place: admission, hierarchy validation and retention read this object on every use.
+                    IReadOnlyList<string> adjustments = body.Concurrency.ApplyTo(_settings.Concurrency, out bool concurrencyChanged);
+                    foreach (string adjustment in adjustments) _logging.Info(_Header + adjustment);
+                    if (concurrencyChanged) _settings.ConcurrencyRevision = _settings.ConcurrencyRevision + 1;
+                }
                 if (body.Import != null)
                     _settings.Import = body.Import;
                 if (body.FleetActions != null)
@@ -560,12 +658,37 @@ namespace Armada.Server.Routes
                 if (body.RepositoryHealth != null)
                     _settings.RepositoryHealth = body.RepositoryHealth;
                 if (body.Storage != null) _settings.Storage = body.Storage;
+                Armada.Core.Settings.BlackBoxRetentionSettings? previousBlackBoxRetention = null;
+                if (body.BlackBox != null)
+                {
+                    // Applied in place: the black box runtime holds this settings object, so replacing it would leave the
+                    // stores, garbage collector and capture on the old values.
+                    previousBlackBoxRetention = _settings.BlackBox.Retention.Clone();
+                    _settings.BlackBox.CopyFrom(body.BlackBox);
+                }
                 if (body.Retention != null)
                     _settings.Retention = body.Retention;
                 if (body.Permissions != null)
                     _settings.Permissions = body.Permissions;
                 if (body.Ask != null)
                     _settings.Ask = body.Ask;
+                if (body.UsageCapture != null)
+                {
+                    // UsageAccessService and passive header handlers retain this object. Apply in place,
+                    // so the global switch and bounds take effect on every existing request path.
+                    UsageCaptureSettings incoming = body.UsageCapture;
+                    UsageCaptureSettings current = _settings.UsageCapture;
+                    current.Enabled = incoming.Enabled;
+                    current.MinimumIntervalSeconds = incoming.MinimumIntervalSeconds;
+                    current.AllowPtyFallback = incoming.AllowPtyFallback;
+                    current.ProbeTimeoutSeconds = incoming.ProbeTimeoutSeconds;
+                    current.MaximumConcurrentProbes = incoming.MaximumConcurrentProbes;
+                    current.MaximumConcurrentProbesPerHost = incoming.MaximumConcurrentProbesPerHost;
+                    current.MaximumBackoffSeconds = incoming.MaximumBackoffSeconds;
+                    current.MaximumExcerptBytes = incoming.MaximumExcerptBytes;
+                    current.RawSnapshotRetentionDays = incoming.RawSnapshotRetentionDays;
+                    current.RollupRetentionDays = incoming.RollupRetentionDays;
+                }
                 if (body.Push != null)
                 {
                     // The access token comes back from GET redacted; a redacted value keeps the stored token.
@@ -589,7 +712,26 @@ namespace Armada.Server.Routes
                     _settings.RemoteControl = incoming;
                 }
 
-                await _settings.SaveAsync().ConfigureAwait(false);
+                if (body.UsageSelection != null)
+                {
+                    try
+                    {
+                        await UsageSelectionConfiguration!.ApplyUnderLeaseAsync(settingsLease!, body.UsageSelection, ctx,
+                            body.ExpectedUsageSelectionRevision, req.CancellationToken).ConfigureAwait(false);
+                    }
+                    catch (Exception error) when (error is IOException || error is System.Data.Common.DbException)
+                    {
+                        req.Http.Response.StatusCode = 503;
+                        return new ApiStatusErrorResponse(ApiStatusErrorCodeEnum.ServiceUnavailable, "Captain selection settings could not be persisted. Reload settings before retrying.");
+                    }
+                }
+                else await _settings.SaveAsync().ConfigureAwait(false);
+
+                if (body.UsageCapture != null && OnUsageCaptureSettingsChanged != null)
+                    await OnUsageCaptureSettingsChanged().ConfigureAwait(false);
+
+                if (body.BlackBox != null && BlackBox != null)
+                    _ = BlackBox.ApplySettingsChanged(previousBlackBoxRetention);
 
                 if (remoteControlChanged && _onRemoteControlSettingsChanged != null)
                     await _onRemoteControlSettingsChanged().ConfigureAwait(false);
@@ -601,7 +743,10 @@ namespace Armada.Server.Routes
             api => api
                 .WithTag("Settings")
                 .WithSummary("Update server settings")
-                .WithDescription("Accepts partial update of editable settings. Validates values and persists to settings file. Lists are bounded: Import.AllowedRoots, Import.ExcludedDirectoryNames and FleetActions.OfflineHarborIds hold at most 256 entries each (400 with Data.Code CollectionLimitExceeded otherwise); RepositoryHealth.ScoredCriteria and Push.Categories keep one entry per defined value.")
+                .WithResponse(200, OpenApiResponseMetadata.Create("Server settings including effective usage-selection policy, revision and capabilities"))
+                .WithResponse(409, OpenApiJson.For<ApiErrorResponse>("Usage selection revision/source/capability conflict"))
+                .WithResponse(503, OpenApiJson.For<ApiStatusErrorResponse>("Usage selection persistence unavailable"))
+                .WithDescription("Accepts partial update of editable settings. Validates values and persists to settings file. UsageSelection changes only the members sent (omitted members keep their current values), defaults to Observe/FirstAvailable, supports FirstAvailable/MostRemainingAllowance/MostUsedAllowance, applies live, and optionally checks ExpectedUsageSelectionRevision (409 on stale revision). Concurrency likewise changes only the members sent, clamps each value to its bounds (the captain defaults to MaxCaptainConcurrency), applies live, bumps ConcurrencyRevision when an effective value changes, and optionally checks ExpectedConcurrencyRevision (409 with Data.Code StaleConcurrencyRevision). Environment overrides are read-only; Enforce is refused until capability metadata reports availability. Numeric bounds clamp; invalid enum/non-finite values and cross-field bounds return 400 before mutation. UsageCapture omission/null preserves the group; a supplied object replaces it using defaults for omitted members. Invalid field types return 400 before mutation. UsageCapture numeric bounds clamp: MinimumIntervalSeconds 60..86400, ProbeTimeoutSeconds 1..300, MaximumConcurrentProbes/MaximumConcurrentProbesPerHost 1..64, MaximumBackoffSeconds 60..86400, MaximumExcerptBytes 256..65536, RawSnapshotRetentionDays 1..365, RollupRetentionDays 7..1825. Lists are bounded: Import.AllowedRoots, Import.ExcludedDirectoryNames and FleetActions.OfflineHarborIds hold at most 256 entries each (400 with Data.Code CollectionLimitExceeded otherwise); RepositoryHealth.ScoredCriteria and Push.Categories keep one entry per defined value.")
                 .WithSecurity("ApiKey"));
 
             app.Post("/api/v1/server/reset", async (ApiRequest req) =>
@@ -728,10 +873,21 @@ namespace Armada.Server.Routes
 
         private object BuildSettingsResponse()
         {
+            UsageSelectionConfiguration usageSelection = UsageSelectionConfiguration?.Read() ?? new UsageSelectionConfiguration
+            {
+                Settings = _settings.EffectiveUsageSelection.Copy(), Revision = _settings.UsageSelectionRevision,
+                Capabilities = new UsageSelectionCapabilities { ObserveAvailable = false, AppliedLive = false }
+            };
             return new
             {
                 DataRetentionDays = _settings.DataRetentionDays,
                 RequestHistoryRetentionDays = _settings.RequestHistoryRetentionDays,
+                UsageCapture = _settings.UsageCapture,
+                UsageSelection = usageSelection.Settings,
+                UsageSelectionRevision = usageSelection.Revision,
+                UsageSelectionCapabilities = usageSelection.Capabilities,
+                Concurrency = _settings.Concurrency,
+                ConcurrencyRevision = _settings.ConcurrencyRevision,
                 AdmiralPort = _settings.AdmiralPort,
                 McpPort = _settings.McpPort,
                 MaxCaptains = _settings.MaxCaptains,
@@ -758,6 +914,7 @@ namespace Armada.Server.Routes
                 RepositoryHealth = _settings.RepositoryHealth,
                 Retention = _settings.Retention,
                 Storage = _settings.Storage,
+                BlackBox = Armada.Core.BlackBox.BlackBoxSettingsSecrets.Mask(_settings.BlackBox, _RedactedSecret),
                 Permissions = _settings.Permissions,
                 Ask = _settings.Ask,
                 Push = RedactPush(_settings.Push)

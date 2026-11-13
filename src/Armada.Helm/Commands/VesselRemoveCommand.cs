@@ -7,6 +7,7 @@ namespace Armada.Helm.Commands
     using Armada.Core.Models;
     using Armada.Core.Services;
     using Armada.Helm.Rendering;
+    using Armada.Helm.Infrastructure;
 
     /// <summary>
     /// Remove a vessel by name or ID.
@@ -31,7 +32,7 @@ namespace Armada.Helm.Commands
                     }
                     else
                     {
-                        AnsiConsole.MarkupLine($"[red]Vessel not found:[/] {Markup.Escape(settings.Id)}");
+                        HelmConsole.Error.MarkupLine($"[red]Vessel not found:[/] {Markup.Escape(settings.Id)}");
                         if (vessels.Count > 0)
                         {
                             AnsiConsole.MarkupLine("[dim]Available vessels:[/]");

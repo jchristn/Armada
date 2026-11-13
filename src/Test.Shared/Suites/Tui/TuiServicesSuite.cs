@@ -335,7 +335,7 @@ namespace Test.Shared.Suites.Tui
                 AssertEqual(30000, ArmadaSocket.ReconnectDelayMs(99, 0.5), "clamped attempt");
                 AssertEqual("ws://127.0.0.1:7890/ws?token=a%2Bb", ArmadaSocket.BuildSocketUri("http://127.0.0.1:7890/", "a+b").ToString(), "ws url");
                 AssertEqual("wss://h.example/ws", ArmadaSocket.BuildSocketUri("https://h.example", null).ToString(), "wss url");
-                AssertEqual(28, ArmadaEventTypes.Parity.Count + 0, "parity event list");
+                AssertEqual(29, ArmadaEventTypes.Parity.Count + 0, "parity event list");
                 foreach (string type in ArmadaEventTypes.Parity) AssertNotNull(ArmadaEventTypes.PayloadTypeFor(type), type);
             }));
 

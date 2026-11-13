@@ -22,7 +22,7 @@
 # produce work. Finally compose down -v removes the containers, volumes,
 # and network, and the images it built are removed by tag.
 #
-# The shipped compose.yaml runs the published v1.2.0 images. By default
+# The shipped compose.yaml runs the published v1.3.0 images. By default
 # this harness builds the current checkout into throwaway per-run tags
 # (armada-iv/<image>:<project>) through its generated override, so it
 # verifies the source being tested; --no-build runs the published images.

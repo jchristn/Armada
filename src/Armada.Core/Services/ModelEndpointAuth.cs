@@ -163,6 +163,29 @@ namespace Armada.Core.Services
         }
 
         /// <summary>
+        /// An HTTP client for the endpoint that also reports allowlisted rate-limit response headers to
+        /// <paramref name="usageSink"/>. With a sink the client is created for EVERY authentication type,
+        /// including the provider-default path without extra headers that would otherwise let the provider
+        /// client build its own transport (where no Armada handler could see the response). The provider
+        /// client still applies its own default credential, exactly as it does on the configured-header path.
+        /// Without a sink this is <see cref="CreateHttpClient(ModelEndpoint)"/>.
+        /// </summary>
+        /// <param name="endpoint">Endpoint.</param>
+        /// <param name="usageSink">Receives each response's allowlisted rate-limit headers, or null for no capture.</param>
+        /// <returns>Client, or null when there is no sink and no Armada handler is needed.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="endpoint"/> is null.</exception>
+        public static HttpClient? CreateHttpClient(ModelEndpoint endpoint, Action<UsageHeaderObservation>? usageSink)
+        {
+            if (endpoint == null) throw new ArgumentNullException(nameof(endpoint));
+            if (usageSink == null) return CreateHttpClient(endpoint);
+            HttpMessageHandler inner = endpoint.AuthType == ModelEndpointAuthTypeEnum.ProviderDefault && endpoint.Headers.Count == 0
+                ? _SharedHandler
+                : new ModelEndpointAuthHandler(endpoint, _SharedHandler);
+            // The capture handler is outermost so it observes the final response the provider client receives.
+            return new HttpClient(new UsageRateLimitHandler(usageSink, inner), false);
+        }
+
+        /// <summary>
         /// A stable description of the authentication settings, for grouping endpoints that share a credential.
         /// </summary>
         /// <param name="endpoint">Endpoint.</param>

@@ -59,10 +59,12 @@ namespace Armada.Tui.Routing
             Route = route ?? throw new ArgumentNullException(nameof(route));
             Path = String.IsNullOrEmpty(path) ? "/" : path;
             Parameters = new Dictionary<string, string>(parameters ?? new Dictionary<string, string>(), StringComparer.Ordinal);
-            Query = new Dictionary<string, string>(query ?? new Dictionary<string, string>(), StringComparer.Ordinal);
+            Dictionary<string, string> normalizedQuery = new Dictionary<string, string>(query ?? new Dictionary<string, string>(), StringComparer.Ordinal);
+            Query = normalizedQuery;
             if (route.Hub != null)
             {
                 Query.TryGetValue(route.Hub.QueryParam, out string? key);
+                if (Path == "/activity" && (key == "limits" || key == "usage-overview")) { key = "usage-limits"; normalizedQuery["source"] = key; }
                 Tab = route.Hub.Find(key) ?? route.Hub.Find(route.DefaultTab) ?? route.Hub.Tabs[0];
             }
 

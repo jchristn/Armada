@@ -1,0 +1,56 @@
+{
+  "sourceCommit": "c1526497f50280c6cf7f2c5f70018d8fe06fa8a0",
+  "verifiedUtc": "2026-11-04T03:18:29.109866+00:00",
+  "images": [
+    {
+      "image": "jchristn77/armada-server:v1.3.0",
+      "platforms": [
+        {
+          "os": "linux",
+          "architecture": "amd64",
+          "digest": "sha256:30a0a8915acba7b0a196ac19ce6c78bf3af57992780bcc0b424cd0bf6b7e7ff9"
+        },
+        {
+          "os": "linux",
+          "architecture": "arm64",
+          "digest": "sha256:e3348f65236c3a68373c726aac3a1bc3db5ea2043808eddf35b1e33a6fdaaebd"
+        }
+      ],
+      "localFileAndRecoveryContentProbePassed": true
+    },
+    {
+      "image": "jchristn77/armada-dashboard:v1.3.0",
+      "platforms": [
+        {
+          "os": "linux",
+          "architecture": "amd64",
+          "digest": "sha256:3437a134f86b6520d5e7f86e509f3a26bda611cfaa2af06e94aa2223fa7a5826"
+        },
+        {
+          "os": "linux",
+          "architecture": "arm64",
+          "digest": "sha256:93cada25bd157d8e02036732af29c21fb005a1aa6cd0c4d1320be7a3a726bc7a"
+        }
+      ],
+      "localFileAndRecoveryContentProbePassed": true
+    },
+    {
+      "image": "jchristn77/armada-proxy:v1.3.0",
+      "platforms": [
+        {
+          "os": "linux",
+          "architecture": "amd64",
+          "digest": "sha256:7b7099901e0ff1d41186c64832065f4abdfb78b201ef0aca824c8301cc125b50"
+        },
+        {
+          "os": "linux",
+          "architecture": "arm64",
+          "digest": "sha256:f160081d29837029800a6dda6582bd42d39e0929347e695384a67837632564d2"
+        }
+      ],
+      "localFileAndRecoveryContentProbePassed": true
+    }
+  ],
+  "probeScope": "Local architecture, network disabled, shell entrypoint. Server/proxy assemblies, Core recovery type metadata and bundled Dashboard recovery messages; standalone Dashboard index and recovery messages. Both platform manifests inspected, not a production deployment.",
+  "buildAll": "Succeeded for v1.3.0 and latest, published and pulled all three images; VSIX packaged."
+}

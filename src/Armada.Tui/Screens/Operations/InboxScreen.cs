@@ -3,6 +3,9 @@ namespace Armada.Tui.Screens.Operations
     using System;
     using System.Collections.Generic;
     using System.Linq;
+    using System.Threading;
+    using System.Threading.Tasks;
+    using Armada.Client;
     using Armada.Core.Enums;
     using Armada.Core.Models;
     using Armada.Tui.Approvals;
@@ -20,7 +23,9 @@ namespace Armada.Tui.Screens.Operations
     /// inbox items (severity, title, detail; <c>Enter</c> opens the item), and Recent alerts (the latest unread
     /// notifications, up to eight; <c>Enter</c> marks one read and opens it; <c>m</c> marks all read). The same inbox
     /// also feeds the Approvals center and the sidebar badge. Auto-refresh defaults to 15 s and any socket message
-    /// re-polls the badge. Not thread-safe.
+    /// re-polls the badge. A model scorecard alert (<c>model_alert</c>) shows its latest applied action in Detail;
+    /// <c>Enter</c> or <c>a</c> opens its suggested actions, and nothing changes until one is chosen (unavailable
+    /// actions are listed disabled with the reason). Not thread-safe.
     /// </summary>
     public class InboxScreen : OpsScreen
     {
@@ -56,6 +61,7 @@ namespace Armada.Tui.Screens.Operations
             {
                 List<KeyValuePair<string, string>> hints = new List<KeyValuePair<string, string>>();
                 hints.Add(new KeyValuePair<string, string>("Enter", "Open"));
+                if (IsModelAlert(Items.Current)) hints.Add(new KeyValuePair<string, string>("a", "Suggested actions"));
                 if (UnreadAlerts().Count > 0) hints.Add(new KeyValuePair<string, string>("m", "Mark all read"));
                 return hints;
             }
@@ -86,7 +92,7 @@ namespace Armada.Tui.Screens.Operations
             Items.Dispatcher = context.Dispatcher;
             Items.AddColumn(new GridColumn<InboxItem>("severity", "Severity", i => SeverityLabel(i.Severity)) { Width = 12, Style = (i, t) => SeverityStyle(i.Severity, t) });
             Items.AddColumn(new GridColumn<InboxItem>("title", "Title", i => TitleFor(Context.Loc, i)) { Weight = 3 });
-            Items.AddColumn(new GridColumn<InboxItem>("detail", "Detail", i => i.Detail) { Weight = 3 });
+            Items.AddColumn(new GridColumn<InboxItem>("detail", "Detail", i => DetailFor(Context.Loc, i)) { Weight = 3 });
             Items.Activated += (s, i) => Open(i);
 
             Alerts = new ArmadaGrid<NotificationEntry>(n => n.Id);
@@ -124,6 +130,69 @@ namespace Armada.Tui.Screens.Operations
             if (item == null) throw new ArgumentNullException(nameof(item));
             if (item.Kind == InboxItemKinds.DeploymentApproval) return DeploymentApprovalText.ForInbox(loc, item);
             return item.Title;
+        }
+
+        /// <summary>
+        /// Detail of an inbox item: the server's detail, followed for a model alert by its latest applied action.
+        /// </summary>
+        /// <param name="loc">Localizer, or null for English.</param>
+        /// <param name="item">Inbox item.</param>
+        /// <returns>Detail.</returns>
+        public static string DetailFor(ITextLocalizer? loc, InboxItem item)
+        {
+            if (item == null) throw new ArgumentNullException(nameof(item));
+            ModelAlertActionRecord? last = item.Kind == InboxItemKinds.ModelAlert ? item.ModelAlert?.Actions?.LastOrDefault() : null;
+            if (last == null || String.IsNullOrEmpty(last.Result)) return item.Detail;
+            Dictionary<string, object?> args = LocalizationArgs.Of("result", last.Result);
+            string text = loc != null ? loc.T("Last action: {{result}}", args) : "Last action: " + last.Result;
+            return String.IsNullOrEmpty(item.Detail) ? text : item.Detail + " | " + text;
+        }
+
+        /// <summary>
+        /// Menu rows for a model alert's suggested actions: an available action runs <paramref name="apply"/>, an
+        /// unavailable one is disabled and names the server's reason. Nothing is applied by building the rows.
+        /// </summary>
+        /// <param name="loc">Localizer, or null for English.</param>
+        /// <param name="alert">Model alert.</param>
+        /// <param name="apply">Called with the chosen action.</param>
+        /// <returns>Menu rows, in the server's order.</returns>
+        public static List<ActionMenuItem> ModelAlertMenuItems(ITextLocalizer? loc, ModelAlert alert, Action<ModelAlertSuggestedAction> apply)
+        {
+            if (alert == null) throw new ArgumentNullException(nameof(alert));
+            if (apply == null) throw new ArgumentNullException(nameof(apply));
+            List<ActionMenuItem> items = new List<ActionMenuItem>();
+            foreach (ModelAlertSuggestedAction suggested in alert.SuggestedActions ?? new List<ModelAlertSuggestedAction>())
+            {
+                ModelAlertSuggestedAction chosen = suggested;
+                string label = chosen.Label;
+                if (chosen.Recommended) label += " (" + (loc != null ? loc.T("Recommended") : "Recommended") + ")";
+                if (!chosen.Available)
+                {
+                    string reason = String.IsNullOrEmpty(chosen.UnavailableReason) ? "unavailable" : chosen.UnavailableReason!;
+                    label += " - " + reason;
+                }
+
+                ActionMenuItem row = new ActionMenuItem(label, () => apply(chosen));
+                row.Key = chosen.Action.ToString();
+                row.Enabled = chosen.Available;
+                items.Add(row);
+            }
+
+            return items;
+        }
+
+        /// <summary>
+        /// Open the suggested actions of a model alert item; applying one goes through the REST API, toasts the
+        /// recorded result and reloads the inbox. Other kinds are ignored.
+        /// </summary>
+        /// <param name="item">Inbox item.</param>
+        /// <returns>True when the item is a model alert and the menu opened.</returns>
+        public bool ShowModelAlertActions(InboxItem? item)
+        {
+            if (!IsModelAlert(item)) return false;
+            ModelAlert alert = item!.ModelAlert!;
+            ShowMenu(Tr("Suggested actions"), ModelAlertMenuItems(Context.Loc, alert, a => ApplyModelAlertAction(alert, a)));
+            return true;
         }
 
         /// <summary>
@@ -173,6 +242,11 @@ namespace Armada.Tui.Screens.Operations
             open.Group = Title;
             open.Dispatch = false;
             list.Add(open);
+            ArmadaCommand actions = new ArmadaCommand("inbox.model-alert-actions", "Suggested actions", CommandMenuEnum.Actions, () => ShowModelAlertActions(Items.Current), "a");
+            actions.Group = Title;
+            actions.Dispatch = false;
+            actions.IsEnabled = () => IsModelAlert(Items.Current);
+            list.Add(actions);
             ArmadaCommand mark = new ArmadaCommand("inbox.mark-all-read", "Mark all read", CommandMenuEnum.Actions, () => Context.Notifications.MarkAllRead(), "m");
             mark.Group = Title;
             mark.Dispatch = false;
@@ -189,6 +263,11 @@ namespace Armada.Tui.Screens.Operations
                 if (UnreadAlerts().Count == 0) return false;
                 Context.Notifications.MarkAllRead();
                 return true;
+            }
+
+            if (key.Code == KeyCode.Character && key.Modifiers == KeyModifiers.None && key.Rune == 'a' && ReferenceEquals(Scope.Focused, Items))
+            {
+                return ShowModelAlertActions(Items.Current);
             }
 
             return Scope.HandleKey(key);
@@ -281,8 +360,30 @@ namespace Armada.Tui.Screens.Operations
 
         private void Open(InboxItem item)
         {
-            if (item == null || String.IsNullOrEmpty(item.Href)) return;
+            if (item == null) return;
+            if (ShowModelAlertActions(item)) return;
+            if (String.IsNullOrEmpty(item.Href)) return;
             Context.Navigate(item.Href);
+        }
+
+        private static bool IsModelAlert(InboxItem? item)
+        {
+            return item != null && item.Kind == InboxItemKinds.ModelAlert && item.ModelAlert != null;
+        }
+
+        private void ApplyModelAlertAction(ModelAlert alert, ModelAlertSuggestedAction action)
+        {
+            if (!action.Available) return;
+            string alertId = alert.Id;
+            Func<ArmadaClient, CancellationToken, Task<ModelAlertApplyResult?>> call = action.Action == ModelAlertActionEnum.Ignore
+                ? (c, t) => c.IgnoreModelAlertAsync(alertId, null, t)
+                : (c, t) => c.ApplyModelAlertActionAsync(alertId, new ModelAlertApplyRequest { Action = action.Action }, t);
+            Call(call, result =>
+            {
+                string text = result?.Record?.Result ?? "";
+                if (!String.IsNullOrEmpty(text)) Toast(NotificationSeverityEnum.Success, text);
+                Load();
+            }, "The action could not be applied");
         }
 
         private void OpenAlert(NotificationEntry entry)

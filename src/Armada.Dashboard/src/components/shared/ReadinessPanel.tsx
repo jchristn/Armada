@@ -177,8 +177,8 @@ export default function ReadinessPanel(props: ReadinessPanelProps) {
                   <div key={item.code} className={`readiness-checklist-item${item.isSatisfied ? ' satisfied' : ''}`}>
                     <div className="readiness-checklist-title-row">
                       <strong>{item.title}</strong>
-                      <span className={`readiness-issue-severity ${item.severity.toLowerCase()}`} title={t('Done: satisfied. Error: blocks work until fixed. Warning: recommended. Info: for your information.')}>
-                        {item.isSatisfied ? 'Done' : item.severity}
+                      <span className={`readiness-issue-severity ${item.isSatisfied ? 'done' : item.severity.toLowerCase()}`} title={t('Done: satisfied. Error: blocks work until fixed. Warning: recommended. Info: for your information.')}>
+                        {item.isSatisfied ? t('Done') : t(item.severity)}
                       </span>
                     </div>
                     <div className="text-dim">{item.message}</div>

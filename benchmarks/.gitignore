@@ -1,0 +1,4 @@
+.run/
+data/
+results/*
+!results/.gitkeep

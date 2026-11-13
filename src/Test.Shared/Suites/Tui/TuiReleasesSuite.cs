@@ -142,6 +142,8 @@ namespace Test.Shared.Suites.Tui
                     AssertTrue(screen.ShowPanel("artifacts"), "artifacts panel");
                     TuiCase.Contains(host.Screen(), "dist/app.zip", "artifact path");
                     AssertTrue(screen.ShowPanel("pulls"), "pull requests panel");
+                    // The pull request grid pages from the server through its own async loader, so wait for its rows.
+                    TuiEntityFixtures.WaitFor(host, () => host.Screen().Contains("Add login"), "pull requests loaded");
                     TuiCase.Contains(host.Screen(), "Add login", "pull request");
                     AssertTrue(screen.ShowPanel("backlog"), "backlog panel");
                     TuiCase.Contains(host.Screen(), "No backlog items currently reference this release.", "empty backlog");

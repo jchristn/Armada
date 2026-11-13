@@ -18,6 +18,7 @@ import { useLocale } from '../../i18n/LocaleContext';
 import { planningHref } from '../../navigation/legacyRedirects';
 import { useTheme } from '../../theme/ThemeContext';
 import { spacing, typography } from '../../theme/typography';
+import { UsageView } from '../usage/UsageView';
 import { CaptainChat } from './CaptainChat';
 import { CaptainFormSheet } from './CaptainFormSheet';
 import { CaptainLogView } from './CaptainLogView';
@@ -34,8 +35,8 @@ interface CaptainDetailData {
 async function loadDetail(id: string): Promise<CaptainDetailData> {
   const captain = await getCaptain(id);
   let currentMission: Mission | null = null;
-  if (captain.currentMissionId) {
-    try { currentMission = await getMission(captain.currentMissionId); } catch { currentMission = null; }
+  if (captain.activeMissionIds?.length === 1) {
+    try { currentMission = await getMission(captain.activeMissionIds[0]); } catch { currentMission = null; }
   }
   let missions: MissionSummary[] = [];
   try {
@@ -116,6 +117,7 @@ export function CaptainDetailScreen({ id, embedded, onRemoved }: CaptainDetailSc
             <AppText variant="title" accessibilityRole="header" style={styles.flex}>{captain.name}</AppText>
             <TierBadge tier={captain.tier} />
             <StatusBadge label={captain.state} tone={statusTone(captain.state)} />
+            {captain.active === false ? <StatusBadge label={t('Inactive')} tone="skipped" /> : null}
           </View>
           {resource.error ? <Banner tone="danger" title={resource.error} /> : null}
           {captain.state === 'Quarantined' ? (
@@ -142,9 +144,11 @@ export function CaptainDetailScreen({ id, embedded, onRemoved }: CaptainDetailSc
             <Button label={t('Remove')} icon="trash-outline" variant="danger" onPress={() => actions.request('delete', captain)} testID="captain-remove" />
           </ActionRow>
 
+          <UsageView captain={captain} />
           <Section title={t('Captain')}>
             <InfoRow label={t('ID')} value={captain.id} mono />
             <InfoRow label={t('Tenant ID')} value={captain.tenantId} mono />
+            <InfoRow label={t('Active')} value={t(captain.active === false ? 'No' : 'Yes')} />
             <InfoRow label={t('Runtime')} value={captain.runtime || 'ClaudeCode'} />
             <InfoRow label={t('Model')} value={captain.model || t('Runtime default')} />
             <InfoRow label={t('Reasoning effort')} value={captain.reasoningEffort ? t(captain.reasoningEffort) : t('Runtime default')} />
@@ -183,14 +187,12 @@ export function CaptainDetailScreen({ id, embedded, onRemoved }: CaptainDetailSc
           ) : null}
 
           <Section title={t('Activity')}>
-            {captain.currentMissionId ? (
-              <ListRow title={t('Current Mission')} subtitle={captain.currentMissionId} onPress={() => router.push(`/missions/${captain.currentMissionId}` as Href)} testID="captain-current-mission" />
-            ) : <InfoRow label={t('Current Mission')} value={null} />}
-            {captain.currentDockId ? (
-              <ListRow title={t('Current Dock')} subtitle={captain.currentDockId} onPress={() => router.push(`/docks/${captain.currentDockId}` as Href)} testID="captain-current-dock" />
-            ) : <InfoRow label={t('Current Dock')} value={null} />}
-            <InfoRow label={t('Process ID')} value={captain.processId} />
-            <InfoRow label={t('Recovery Attempts')} value={captain.recoveryAttempts ?? 0} />
+            <InfoRow label={t('Running missions')} value={`${captain.activeMissionCount ?? 0} / ${captain.maxConcurrency ?? 1}`} />
+            {(captain.activeMissionIds ?? []).map(id => <ListRow key={id} title={id} onPress={() => router.push(`/missions/${encodeURIComponent(id)}` as Href)} />)}
+            {captain.currentSessionId ? <>
+              <InfoRow label={t('Process ID')} value={captain.processId} />
+              <InfoRow label={t('Recovery Attempts')} value={captain.recoveryAttempts ?? 0} />
+            </> : null}
             <InfoRow label={t('Last Heartbeat')} value={captain.lastHeartbeatUtc ? `${formatRelativeTime(captain.lastHeartbeatUtc)} (${formatDateTime(captain.lastHeartbeatUtc)})` : null} />
             <InfoRow label={t('Created')} value={`${formatRelativeTime(captain.createdUtc)} (${formatDateTime(captain.createdUtc)})`} />
             <InfoRow label={t('Last Updated')} value={`${formatRelativeTime(captain.lastUpdateUtc)} (${formatDateTime(captain.lastUpdateUtc)})`} />

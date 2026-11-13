@@ -36,28 +36,43 @@ namespace Armada.Server.Mcp.Tools
         /// <param name="git">Git service for diff operations, or null if unavailable.</param>
         /// <param name="landingService">Optional landing service for mission landing operations.</param>
         /// <param name="missionService">Optional mission service for pipeline-aware restart_mission; without it restart answers Unavailable.</param>
-        public static void Register(RegisterToolDelegate register, DatabaseDriver database, IAdmiralService admiral, ArmadaSettings? settings, IGitService? git, ILandingService? landingService = null, IMissionService? missionService = null)
+        /// <param name="blackBox">Optional black box capture for transition_mission_status to Failed, LandingFailed, Cancelled or Blocked (step OperatorTransition).</param>
+        /// <param name="blackBoxHooks">Optional black box lifecycle hooks, called after deletes and updates (retention cascades, expiry recompute).</param>
+        public static void Register(RegisterToolDelegate register, DatabaseDriver database, IAdmiralService admiral, ArmadaSettings? settings, IGitService? git, ILandingService? landingService = null, IMissionService? missionService = null, Armada.Core.BlackBox.IBlackBoxCapture? blackBox = null, Armada.Core.BlackBox.IBlackBoxLifecycleHooks? blackBoxHooks = null)
         {
             register(
                 "mission_status",
-                "Get status of a specific mission",
+                "Get status of a specific mission. LastBlackBoxEntryId names its current black box entry when it failed (read it with get_blackbox). A Pending mission carries AssignmentBlocker; includeWaits adds Waits, its recorded scheduling waits (gate, start, end and detail).",
                 new
                 {
                     type = "object",
                     properties = new
                     {
-                        missionId = new { type = "string", description = "Mission ID (msn_ prefix)" }
+                        missionId = new { type = "string", description = "Mission ID (msn_ prefix)" },
+                        includeWaits = new { type = "boolean", description = "Include Waits, the mission's 100 most recent wait intervals, oldest first (default false)" }
                     },
                     required = new[] { "missionId" }
                 },
                 async (args) =>
                 {
                     AuthContext caller = McpToolHelpers.ResolveCallerContext();
-                    MissionIdArgs request = JsonSerializer.Deserialize<MissionIdArgs>(args!.Value, _JsonOptions)!;
+                    MissionStatusArgs request = JsonSerializer.Deserialize<MissionStatusArgs>(args!.Value, _JsonOptions)!;
                     string missionId = request.MissionId;
                     Mission? mission = await McpCallerScope.ReadMissionAsync(database, caller, missionId).ConfigureAwait(false);
                     if (mission == null) return (object)McpToolError.NotFound("Mission not found");
                     mission.DiffSnapshot = null;
+                    if (request.IncludeWaits == true)
+                    {
+                        // The 100 most recent waits, oldest first; GET /api/v1/missions/{id}/waits pages the rest.
+                        List<MissionWaitInterval> waits = await database.MissionWaitIntervals.EnumerateByMissionAsync(mission.Id, null).ConfigureAwait(false);
+                        mission.Waits = waits.Skip(Math.Max(0, waits.Count - 100)).ToList();
+                    }
+                    if (missionService != null)
+                    {
+                        mission.AssignmentBlocker = await missionService.GetAssignmentBlockerAsync(mission).ConfigureAwait(false);
+                        if (!caller.IsAdmin && mission.AssignmentBlocker != null)
+                            foreach (AssignmentBlockerAdvice advice in mission.AssignmentBlocker.Advice) advice.Action = null;
+                    }
                     return (object)mission;
                 });
 
@@ -100,6 +115,9 @@ namespace Armada.Server.Mcp.Tools
                         mode = new { type = "string", description = "Execution mode: Implementation (default), Audit, or Research. Audit and Research are read-only modes that produce a written report instead of a commit; their empty diff is treated as success." },
                         tier = new { type = "string", description = "Optional minimum captain tier for this mission (Economy, Standard, or Premium); only captains at or above it are assigned" },
                         isEvaluation = new { type = "boolean", description = "True for evaluation work: the mission's stage outcomes never count as production data. A mission added to an evaluation voyage is flagged regardless. Default false." },
+                        parentMissionId = new { type = "string", description = "Optional parent logical mission (msn_ prefix) in the same voyage, or a standalone mission on the same vessel. The new mission waits until the parent's last stage finishes; a failed or cancelled parent cancels it." },
+                        branchStrategy = new { type = "string", description = "Branch relationship to the parent: New (default), ContinueParent (the first child continues the parent's branch) or ForkFromParent (fork from the parent's head)" },
+                        workerEnvelope = McpVesselTools.WorkerEnvelopeSchema("Optional Worker eligibility envelope for this mission. It may only tighten the vessel's default envelope (fewer files or steps, a larger context minimum, more required tools); a looser or invalid one is rejected with InvalidArgument. Omit or pass {} to use the vessel default."),
                         selectedPlaybooks = new
                         {
                             type = "array",
@@ -141,7 +159,33 @@ namespace Armada.Server.Mcp.Tools
                         mission.Mode = missionMode;
                     mission.SelectedPlaybooks = request.SelectedPlaybooks ?? new List<SelectedPlaybook>();
                     mission.IsEvaluation = request.IsEvaluation;
-                    mission = await admiral.DispatchMissionAsync(mission).ConfigureAwait(false);
+                    if (!String.IsNullOrWhiteSpace(request.ParentMissionId))
+                    {
+                        if (await McpCallerScope.ReadMissionAsync(database, caller, request.ParentMissionId).ConfigureAwait(false) == null)
+                            return (object)McpToolError.NotFound("Parent mission not found");
+                        mission.ParentMissionId = request.ParentMissionId;
+                    }
+                    if (!String.IsNullOrWhiteSpace(request.BranchStrategy))
+                    {
+                        if (!Enum.TryParse<MissionBranchStrategyEnum>(request.BranchStrategy.Trim(), true, out MissionBranchStrategyEnum strategy) || !Enum.IsDefined(typeof(MissionBranchStrategyEnum), strategy))
+                            return (object)McpToolError.InvalidArgument("branchStrategy must be New, ContinueParent or ForkFromParent.");
+                        mission.BranchStrategy = strategy;
+                    }
+                    if (request.WorkerEnvelope != null)
+                    {
+                        // Same rule as REST dispatch: a mission may only tighten its vessel's Worker envelope.
+                        Vessel? envelopeVessel = await McpCallerScope.ReadVesselAsync(database, caller, request.VesselId).ConfigureAwait(false);
+                        try
+                        {
+                            mission.WorkerEnvelope = WorkerEnvelopeRules.ValidateMissionEnvelope(envelopeVessel?.WorkerEnvelope, request.WorkerEnvelope);
+                        }
+                        catch (ArgumentException ex)
+                        {
+                            return (object)McpToolError.InvalidArgument(ex.Message);
+                        }
+                    }
+                    try { mission = await admiral.DispatchMissionAsync(mission).ConfigureAwait(false); }
+                    catch (ArgumentException ex) { return (object)McpToolError.InvalidArgument(ex.Message); }
                     if (mission.Status == Armada.Core.Enums.MissionStatusEnum.Pending)
                     {
                         return (object)new
@@ -155,7 +199,7 @@ namespace Armada.Server.Mcp.Tools
 
             register(
                 "update_mission",
-                "Update an existing mission's title, description, priority, vessel, voyage, branch, or PR URL. Operational fields (status, timestamps, captain) are managed by the system.",
+                "Update an existing mission's title, description, priority, vessel, voyage, branch, PR URL, or Worker envelope. Operational fields (status, timestamps, captain) are managed by the system.",
                 new
                 {
                     type = "object",
@@ -171,7 +215,8 @@ namespace Armada.Server.Mcp.Tools
                         prUrl = new { type = "string", description = "Pull request URL" },
                         parentMissionId = new { type = "string", description = "Parent mission ID for sub-tasks (msn_ prefix)" },
                         persona = new { type = "string", description = "Persona for this mission (e.g. Worker, Architect, Judge, Test Engineer)" },
-                        mode = new { type = "string", description = "Execution mode: Implementation, Audit, or Research (read-only report modes)" }
+                        mode = new { type = "string", description = "Execution mode: Implementation, Audit, or Research (read-only report modes)" },
+                        workerEnvelope = McpVesselTools.WorkerEnvelopeSchema("Worker eligibility envelope for this mission. The object replaces the mission's envelope; pass {} to clear it; omit it to keep the stored value. It may only tighten the vessel default (InvalidArgument otherwise) and may only change while the mission is Pending or Assigned and not started (Conflict otherwise).")
                     },
                     required = new[] { "missionId" }
                 },
@@ -202,12 +247,31 @@ namespace Armada.Server.Mcp.Tools
                         mission.BranchName = request.BranchName;
                     if (request.PrUrl != null)
                         mission.PrUrl = request.PrUrl;
+                    string? previousParent = mission.ParentMissionId;
                     if (request.ParentMissionId != null)
-                        mission.ParentMissionId = request.ParentMissionId;
+                        mission.ParentMissionId = request.ParentMissionId.Length == 0 ? null : request.ParentMissionId;
+                    try { await new MissionHierarchyValidator(database, settings ?? new ArmadaSettings()).NormalizeAsync(mission, true, previousParent).ConfigureAwait(false); }
+                    catch (ArgumentException ex) { return (object)McpToolError.InvalidArgument(ex.Message); }
                     if (request.Persona != null)
                         mission.Persona = request.Persona;
                     if (!String.IsNullOrWhiteSpace(request.Mode) && Enum.TryParse<MissionModeEnum>(request.Mode.Trim(), true, out MissionModeEnum updatedMode))
                         mission.Mode = updatedMode;
+                    if (request.WorkerEnvelope != null)
+                    {
+                        Vessel? envelopeVessel = String.IsNullOrEmpty(mission.VesselId) ? null : await McpCallerScope.ReadVesselAsync(database, caller, mission.VesselId).ConfigureAwait(false);
+                        try
+                        {
+                            mission.WorkerEnvelope = WorkerEnvelopeRules.ValidateMissionEnvelopeUpdate(mission, envelopeVessel?.WorkerEnvelope, request.WorkerEnvelope);
+                        }
+                        catch (ArgumentException ex)
+                        {
+                            return (object)McpToolError.InvalidArgument(ex.Message);
+                        }
+                        catch (InvalidOperationException ex)
+                        {
+                            return (object)McpToolError.Conflict(ex.Message);
+                        }
+                    }
                     mission.LastUpdateUtc = DateTime.UtcNow;
                     mission = await database.Missions.UpdateAsync(mission).ConfigureAwait(false);
                     return (object)mission;
@@ -262,6 +326,11 @@ namespace Armada.Server.Mcp.Tools
                     string missionId = request.MissionId;
                     Mission? mission = await McpCallerScope.ReadMissionAsync(database, caller, missionId).ConfigureAwait(false);
                     if (mission == null) return (object)McpToolError.NotFound("Mission not found");
+                    // D17: a parent with unfinished descendants is not purged (REST offers cascade=true for the subtree).
+                    List<Mission> unfinished = await new MissionHierarchyValidator(database, settings ?? new ArmadaSettings()).UnfinishedDescendantsAsync(mission).ConfigureAwait(false);
+                    if (unfinished.Count > 0)
+                        return (object)McpToolError.Conflict("Mission " + missionId + " has " + unfinished.Count + " unfinished descendant mission(s), for example '"
+                            + unfinished[0].Title + "'. Finish or cancel them first.", "HierarchyHasUnfinishedDescendants");
 
                     // Clean up associated dock/worktree if present
                     if (!String.IsNullOrEmpty(mission.DockId))
@@ -300,6 +369,7 @@ namespace Armada.Server.Mcp.Tools
                     }
 
                     await database.Missions.DeleteAsync(missionId).ConfigureAwait(false);
+                    if (blackBoxHooks != null) await blackBoxHooks.OnMissionDeletedAsync(missionId).ConfigureAwait(false);
                     return (object)new { Status = "deleted", MissionId = missionId };
                 });
 
@@ -374,6 +444,7 @@ namespace Armada.Server.Mcp.Tools
                         }
 
                         await database.Missions.DeleteAsync(id).ConfigureAwait(false);
+                        if (blackBoxHooks != null) await blackBoxHooks.OnMissionDeletedAsync(id).ConfigureAwait(false);
                         result.Deleted++;
                     }
                     result.ResolveStatus();
@@ -382,7 +453,7 @@ namespace Armada.Server.Mcp.Tools
 
             register(
                 "restart_mission",
-                "Restart a Failed, LandingFailed, or Cancelled mission, resetting it to Pending for re-dispatch, or start a Pending mission as it is. A later pipeline stage keeps the previous stage's branch, a finished voyage is reopened, and the stages cancelled because this one failed are restored. The mission is then dispatched at once when a captain is available; otherwise it stays Pending for the regular dispatcher. Optionally update title and description (instructions) before restarting.",
+                "Restart a Failed, LandingFailed, or Cancelled mission, resetting it to Pending for re-dispatch, or start a Pending mission as it is. A later pipeline stage keeps the previous stage's branch, a finished voyage is reopened, and the stages cancelled because this one failed are restored, as are descendants cancelled with ParentFailed; RestoredMissionIds lists them. The mission is then dispatched at once when a captain is available; otherwise it stays Pending for the regular dispatcher. Optionally update title and description (instructions) before restarting.",
                 new
                 {
                     type = "object",
@@ -487,6 +558,7 @@ namespace Armada.Server.Mcp.Tools
                         catch (InvalidOperationException ex) { return (object)McpToolError.Conflict(ex.Message); }
                     }
 
+                    MissionStatusEnum statusBefore = mission.Status;
                     mission.Status = newStatus;
                     mission.LastUpdateUtc = DateTime.UtcNow;
 
@@ -494,6 +566,7 @@ namespace Armada.Server.Mcp.Tools
                         mission.CompletedUtc = DateTime.UtcNow;
 
                     mission = await database.Missions.UpdateAsync(mission).ConfigureAwait(false);
+                    await BlackBoxOperatorCapture.RecordTransitionAsync(blackBox, mission, statusBefore, "MCP").ConfigureAwait(false);
 
                     Signal signal = new Signal(SignalTypeEnum.Progress, "Mission " + missionId + " transitioned to " + newStatus);
                     signal.TenantId = mission.TenantId;
@@ -545,24 +618,7 @@ namespace Armada.Server.Mcp.Tools
                         if (git == null)
                             return (object)McpToolError.Unavailable("No saved diff available and git service not configured");
 
-                        Dock? dock = null;
-                        if (!String.IsNullOrEmpty(mission.DockId))
-                        {
-                            dock = await database.Docks.ReadAsync(mission.DockId).ConfigureAwait(false);
-                        }
-
-                        if (dock == null && !String.IsNullOrEmpty(mission.CaptainId))
-                        {
-                            Captain? captain = await database.Captains.ReadAsync(mission.CaptainId).ConfigureAwait(false);
-                            if (captain != null && !String.IsNullOrEmpty(captain.CurrentDockId))
-                                dock = await database.Docks.ReadAsync(captain.CurrentDockId).ConfigureAwait(false);
-                        }
-
-                        if (dock == null && !String.IsNullOrEmpty(mission.BranchName) && !String.IsNullOrEmpty(mission.VesselId))
-                        {
-                            List<Dock> docks = await database.Docks.EnumerateByVesselAsync(mission.VesselId).ConfigureAwait(false);
-                            dock = docks.FirstOrDefault(d => d.BranchName == mission.BranchName && d.Active);
-                        }
+                        Dock? dock = await MissionDockResolver.ReadAsync(database, mission, caller: caller).ConfigureAwait(false);
 
                         if (dock == null || String.IsNullOrEmpty(dock.WorktreePath))
                             return (object)McpToolError.Unavailable("No diff available: no mission worktree or saved diff exists");

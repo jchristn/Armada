@@ -26,10 +26,10 @@ TABS_DIR = os.path.join(APP_DIR, "(app)")
 WORKSTREAMS = {
     "": "W2.1", "dashboard": "W2.1",
     "ask": "W1.1", "inbox": "W1.3", "notifications": "W1.4",
-    "missions": "W2.2", "voyages": "W2.3",
+    "missions": "W2.2", "voyages": "W2.3", "blackbox": "W2.2",
     "dispatch": "W2.4", "merge-queue": "W2.4", "docks": "W2.4", "signals": "W2.4", "events": "W2.4",
     "vessels": "W3.1", "workspace": "W3.1",
-    "fleets": "W3.2", "captains": "W3.2", "fleet-actions": "W3.2",
+    "battery": "W3.2", "fleets": "W3.2", "captains": "W3.2", "evaluations": "W3.2", "fleet-actions": "W3.2",
     "planning": "W3.3", "backlog": "W3.3", "objectives": "W3.3",
     "delivery": "W4.1", "checks": "W4.1", "environments": "W4.1", "deployments": "W4.1", "releases": "W4.1",
     "incidents": "W4.1", "runbooks": "W4.1",
@@ -52,7 +52,7 @@ SECTION_TABS = {
 }
 
 # Checked before the nav sections (Needs You lives in OPERATIONS on the dashboard, but in Approvals on mobile).
-TAB_OVERRIDES = {"/ask": "ask", "/inbox": "approvals", "/notifications": "approvals", "/": "work", "/dashboard": "work"}
+TAB_OVERRIDES = {"/battery": "work", "/ask": "ask", "/inbox": "approvals", "/notifications": "approvals", "/": "work", "/dashboard": "work"}
 
 # Mobile-only routes (status "extension" in the manifest): pattern -> (tab, file, note).
 EXTENSION_ROUTES = {
@@ -116,7 +116,7 @@ TITLE_OVERRIDES = {
     "/vessels/import": "Import Vessels", "/vessels/health": "Vessel Health", "/vessels/:id/onboarding": "Vessel Onboarding",
     "/vessels/:id/history": "View History", "/merge-queue/:id": "Merge Queue Entry", "/fleet-actions/runs/:id": "Fleet Action Run",
     "/workspace/:vesselId": "Workspace", "/workspace/:vesselId/:panel": "Workspace", "/checks/:id": "Check Run",
-    "/doctor": "Diagnostics", "/backlog/:id": "Backlog Item",
+    "/doctor": "Diagnostics", "/backlog/:id": "Backlog Item", "/blackbox": "Black Box", "/blackbox/:id": "Black Box Entry",
 }
 
 
@@ -146,6 +146,15 @@ def title_for(pattern, labels=None):
     return words
 
 
+# These browser administration/recovery pages are explicitly documented as not applicable in mobile/parity.json.
+DASHBOARD_ONLY_ROUTES = {
+    "/*": ("W0.5", "Browser catch-all renders the shared NotFound recovery page; native routers already handle unmatched routes."),
+    "/battery": ("W3.2", "Server filesystem pack editing is dashboard-only; native has no pack editor."),
+    "/evaluations": ("W3.2", "Model evaluation lists remain dashboard-only; native has no evaluation screen."),
+    "/evaluations/:id": ("W3.2", "Model evaluation results remain dashboard-only; native has no evaluation screen."),
+}
+
+
 def build():
     """Every mobile route derived from the dashboard: dicts with dashboard, pattern, tab, file, workstream, redirect."""
     route_list, redirects = routes()
@@ -154,6 +163,9 @@ def build():
     out = []
     seen = set()
     for dashboard in route_list:
+        # Dashboard-only surfaces have explicit parity exceptions and are not native screen paths.
+        if dashboard in DASHBOARD_ONLY_ROUTES:
+            continue
         for pattern in app_patterns(dashboard):
             if pattern in seen:
                 continue

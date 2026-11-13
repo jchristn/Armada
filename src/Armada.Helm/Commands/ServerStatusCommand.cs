@@ -32,19 +32,19 @@ namespace Armada.Helm.Commands
                 }
                 else
                 {
-                    AnsiConsole.MarkupLine("[red]Admiral server returned unhealthy status.[/]");
+                    HelmConsole.Error.MarkupLine("[red]Admiral server returned unhealthy status.[/]");
                     return 1;
                 }
             }
             catch (HttpRequestException)
             {
-                AnsiConsole.MarkupLine("[red]Admiral server is not reachable.[/]");
+                HelmConsole.Error.MarkupLine("[red]Admiral server is not reachable.[/]");
                 AnsiConsole.MarkupLine($"[dim]  Tried: {Markup.Escape(GetBaseUrl())}[/]");
                 return 1;
             }
             catch (TaskCanceledException)
             {
-                AnsiConsole.MarkupLine("[red]Admiral server did not answer within 5 seconds.[/]");
+                HelmConsole.Error.MarkupLine("[red]Admiral server did not answer within 5 seconds.[/]");
                 AnsiConsole.MarkupLine($"[dim]  Tried: {Markup.Escape(GetBaseUrl())}[/]");
                 return 1;
             }

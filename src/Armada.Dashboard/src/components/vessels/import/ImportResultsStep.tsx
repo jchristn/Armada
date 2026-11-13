@@ -6,7 +6,7 @@ import CodeStatusBadge from '../../shared/CodeStatusBadge';
 import DataTable from '../../shared/DataTable';
 import { OUTCOMES, OUTCOME_META, batchStatusBadge, outcomeBadge, outcomeReasonLabel } from '../../../lib/vesselImportLabels';
 import { usePersistedPageSize } from '../../../lib/usePersistedPageSize';
-import { JOBS_PATH } from '../../../lib/navTargets';
+import { BACKGROUND_ACTIVITY_PATH } from '../../../lib/navTargets';
 
 interface ImportResultsStepProps {
   batch: VesselImportBatch;
@@ -58,7 +58,7 @@ export default function ImportResultsStep({ batch, items, selectedCount, polling
           </div>
           <p className="text-dim">
             {t('{{processed}} of {{total}} processed', { processed: processed.toLocaleString(), total: target.toLocaleString() })}
-            {jobId && <> {' - '}<Link to={JOBS_PATH} title={t('See the background job running this import, where it can also be cancelled.')}>{t('Open the Jobs page')}</Link> <span className="mono" title={t('Background job ID for this import.')}>({jobId})</span></>}
+            {jobId && <> {' - '}<Link to={BACKGROUND_ACTIVITY_PATH} title={t('View recorded background task outcomes in Events.')}>{t('View activity')}</Link> <span className="mono" title={t('Background job ID for this import.')}>({jobId})</span></>}
           </p>
           <p className="text-dim">{t('You can close this dialog; the import keeps running and appears in the import history.')}</p>
         </div>

@@ -8,6 +8,7 @@ namespace Armada.Helm.Commands
     using Armada.Core.Models;
     using Armada.Core.Services;
     using Armada.Helm.Rendering;
+    using Armada.Helm.Infrastructure;
 
     /// <summary>
     /// Create a new voyage with missions.
@@ -101,7 +102,7 @@ namespace Armada.Helm.Commands
 
                 if (playbook == null)
                 {
-                    AnsiConsole.MarkupLine($"[red]Playbook not found:[/] {Markup.Escape(token)}");
+                    HelmConsole.Error.MarkupLine($"[red]Playbook not found:[/] {Markup.Escape(token)}");
                     return new List<SelectedPlaybook>();
                 }
 

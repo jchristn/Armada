@@ -14,7 +14,42 @@ namespace Armada.Client
     /// </summary>
     public partial class ArmadaClient
     {
+        private static string Escape(string value) => Uri.EscapeDataString(value);
+
         #region Public-Methods
+
+        /// <summary>GetBatteryPackAsync: server-wide pack management; writes require a global admin.</summary>
+        public Task<BatteryPackDetail?> GetBatteryPackAsync(string packId, CancellationToken token = default) =>
+            GetAsync<BatteryPackDetail>($"/api/v1/battery/packs/{Escape(packId)}", null, token);
+
+        /// <summary>ReadBatteryPackFileAsync: server-wide pack management; writes require a global admin.</summary>
+        public Task<BatteryPackTextFile?> ReadBatteryPackFileAsync(string packId, string path, CancellationToken token = default) =>
+            GetAsync<BatteryPackTextFile>($"/api/v1/battery/packs/{Escape(packId)}/files?path={Escape(path)}", null, token);
+
+        /// <summary>CreateBatteryPackAsync: server-wide pack management; writes require a global admin.</summary>
+        public Task<BatteryPackDetail?> CreateBatteryPackAsync(BatteryPackEditRequest request, CancellationToken token = default) =>
+            PostAsync<BatteryPackDetail>($"/api/v1/battery/packs", request, null, token);
+
+        /// <summary>UpdateBatteryPackManifestAsync: server-wide pack management; writes require a global admin.</summary>
+        public Task<BatteryPackDetail?> UpdateBatteryPackManifestAsync(string packId, string manifestJson, CancellationToken token = default) =>
+            PutAsync<BatteryPackDetail>($"/api/v1/battery/packs/{Escape(packId)}/manifest", new BatteryPackEditRequest { ManifestJson = manifestJson }, null, token);
+
+        /// <summary>WriteBatteryPackFileAsync: server-wide pack management; writes require a global admin.</summary>
+        public Task<BatteryPackDetail?> WriteBatteryPackFileAsync(string packId, string path, string content, CancellationToken token = default) =>
+            PutAsync<BatteryPackDetail>($"/api/v1/battery/packs/{Escape(packId)}/files?path={Escape(path)}", new BatteryPackTextFile { Content = content }, null, token);
+
+        /// <summary>DeleteBatteryPackFileAsync: server-wide pack management; writes require a global admin.</summary>
+        public Task<BatteryPackDetail?> DeleteBatteryPackFileAsync(string packId, string path, CancellationToken token = default) =>
+            DeleteAsync<BatteryPackDetail>($"/api/v1/battery/packs/{Escape(packId)}/files?path={Escape(path)}", null, token);
+
+        /// <summary>DeleteBatteryPackAsync: server-wide pack management; writes require a global admin.</summary>
+        public Task<object?> DeleteBatteryPackAsync(string packId, CancellationToken token = default) =>
+            DeleteAsync<object>($"/api/v1/battery/packs/{Escape(packId)}", null, token);
+
+        /// <summary>ValidateBatteryPackAsync: server-wide pack management; writes require a global admin.</summary>
+        public Task<BatteryPackInfo?> ValidateBatteryPackAsync(string packId, CancellationToken token = default) =>
+            PostAsync<BatteryPackInfo>($"/api/v1/battery/packs/{Escape(packId)}/validate", null, null, token);
+
 
         /// <summary>
         /// GET /api/v1/battery/packs: one page of battery packs, with validation errors for malformed ones.

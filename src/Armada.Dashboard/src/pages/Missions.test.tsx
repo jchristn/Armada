@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import Missions from './Missions';
-import { getMission, createMission, listCaptains, listMissionSummaries, listVessels, listVoyages } from '../api/client';
+import { getMission, createMission, listCaptains, listMissionSummaries, listVessels, listVoyages, previewMissionOverlap } from '../api/client';
 import type { MissionSummary } from '../types/models';
 
 const translate = (text: string, params?: Record<string, string | number | null | undefined>) => {
@@ -29,6 +29,8 @@ vi.mock('../api/client', () => ({
   transitionMission: vi.fn(),
   getMissionDiff: vi.fn(),
   getMissionLog: vi.fn(),
+  previewMissionOverlap: vi.fn(),
+  lintMissionBrief: vi.fn(),
 }));
 vi.mock('../context/LocaleContext', () => ({ useLocale: () => localeValue }));
 vi.mock('../context/NotificationContext', () => ({ useNotifications: () => notifications }));
@@ -116,5 +118,57 @@ describe('Mission duplication', () => {
     expect(getMission).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
     expect(createMission).not.toHaveBeenCalled();
+  });
+});
+
+describe('Mission create dispatch warnings', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+    vi.mocked(listMissionSummaries).mockResolvedValue(page([mission]));
+    vi.mocked(listVessels).mockResolvedValue(page([{ id: 'vsl_1', name: 'Vessel' }]));
+    vi.mocked(listCaptains).mockResolvedValue(page([]));
+    vi.mocked(listVoyages).mockResolvedValue(page([]));
+    vi.mocked(previewMissionOverlap).mockResolvedValue({
+      vesselId: 'vsl_1', serializeOverlappingMissions: false, likelyFiles: ['src/a.ts'], likelyFileCount: 1, scopedFileCount: 1, briefPathCount: 0, trackedFilesKnown: true,
+      warnings: [{ kind: 'ActiveMission', overlappingMissionId: 'msn_1', message: 'Preview overlap with msn_1', files: ['src/a.ts'], fileCount: 1 }], warningCount: 1,
+      suggestedDependsOnMissionId: 'msn_1', activeMissionsCompared: 1, activeMissionsTruncated: false, briefLint: null,
+    } as never);
+  });
+
+  async function fillAndCreate() {
+    render(<MemoryRouter><Missions /></MemoryRouter>);
+    await screen.findByText(mission.title);
+    fireEvent.click(screen.getByRole('button', { name: '+ Mission' }));
+    fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Touch the parser' } });
+    fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'Touch only src/a.ts' } });
+    fireEvent.change(screen.getByLabelText(/^Vessel/), { target: { value: 'vsl_1' } });
+  }
+
+  it('previews overlaps in the form before submit', async () => {
+    vi.mocked(createMission).mockResolvedValue({ ...mission, id: 'msn_new' } as never);
+    await fillAndCreate();
+    expect(await screen.findByText('Preview overlap with msn_1', undefined, { timeout: 3000 })).toBeInTheDocument();
+    const calls = vi.mocked(previewMissionOverlap).mock.calls;
+    expect(calls[calls.length - 1][0]).toBe('vsl_1');
+  });
+
+  it('shows the warnings the create response carried, and nothing when it has none', async () => {
+    vi.mocked(createMission).mockResolvedValueOnce({ ...mission, id: 'msn_new', overlapWarnings: [{ kind: 'Hotspot', directory: 'src', message: 'src is a conflict hotspot' }], briefLintWarnings: [{ ruleId: 'BRIEF-DEP-001', severity: 'Warning', message: 'Dependency without dependsOnMissionId' }] } as never);
+    await fillAndCreate();
+    fireEvent.click(screen.getByRole('button', { name: 'Create' }));
+    const banner = await screen.findByTestId('dispatch-warnings-banner');
+    expect(within(banner).getByText('src is a conflict hotspot')).toBeInTheDocument();
+    expect(within(banner).getByText('BRIEF-DEP-001')).toBeInTheDocument();
+    fireEvent.click(within(banner).getByRole('button', { name: 'Dismiss' }));
+    expect(screen.queryByTestId('dispatch-warnings-banner')).not.toBeInTheDocument();
+
+    vi.mocked(createMission).mockResolvedValueOnce({ ...mission, id: 'msn_clean' } as never);
+    fireEvent.click(screen.getByRole('button', { name: '+ Mission' }));
+    fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Clean' } });
+    fireEvent.change(screen.getByLabelText(/^Vessel/), { target: { value: 'vsl_1' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create' }));
+    await vi.waitFor(() => expect(createMission).toHaveBeenCalledTimes(2));
+    expect(screen.queryByTestId('dispatch-warnings-banner')).not.toBeInTheDocument();
   });
 });

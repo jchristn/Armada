@@ -31,7 +31,6 @@ export const SETUP_TOOLTIPS = {
   workingDirectory: 'Optional path to your own checkout on the Admiral host, for example /home/me/code/repo. Local Merge lands work here, and readiness checks and the workspace read it. Armada never deletes it.',
   landingMode: 'What happens to finished work. Default follows the server setting; None leaves it on a branch for review; Local Merge merges into the working directory; Merge and Push also pushes; Pull Request opens a PR; Merge Queue queues it.',
   enableModelContext: 'When on, captains save what they learn about the repository (build quirks, layout, test patterns) onto the vessel, and later missions receive it in their prompt.',
-  allowConcurrentMissions: 'When off (the default), only one mission at a time can be active on this vessel. Turn on to let several captains work on it in parallel, which can cause merge conflicts.',
   projectContext: 'Optional notes added to every captain prompt for this vessel: what the project is, its architecture, key files, and how to build and test it.',
   styleGuide: 'Optional coding rules added to every captain prompt for this vessel: naming, patterns to use or avoid, and preferred libraries.',
   captainSelect: 'An idle captain to take the first mission. Only captains that are not working right now are listed; runtime and state are shown in parentheses.',
@@ -57,14 +56,17 @@ export function upsertById<T extends { id: string }>(items: T[], item: T): T[] {
 }
 
 /** The mission (and any warning) from a dispatch response, which may wrap it as { mission, warning }. */
-export function normalizeMissionResponse(value: unknown): { mission: Mission | null; warning?: string } {
+export function normalizeMissionResponse(value: unknown, waitingWarning?: string): { mission: Mission | null; warning?: string } {
+  // Servers before v1.3.0 wrapped a mission no captain could take yet as { Mission, Warning }; current servers return
+  // the Mission itself, left Pending.
   const maybeWrapped = value as { mission?: Mission; warning?: string } | null;
   if (maybeWrapped?.mission?.id) {
-    return { mission: maybeWrapped.mission, warning: maybeWrapped.warning };
+    return { mission: maybeWrapped.mission, warning: waitingWarning ?? maybeWrapped.warning };
   }
 
   const maybeMission = value as Mission | null;
-  return maybeMission?.id ? { mission: maybeMission } : { mission: null };
+  if (!maybeMission?.id) return { mission: null };
+  return maybeMission.status === 'Pending' && waitingWarning ? { mission: maybeMission, warning: waitingWarning } : { mission: maybeMission };
 }
 
 /** The first 12 characters of an id, or '-'. */
@@ -88,4 +90,29 @@ export function relevantWorkflowProfiles(profiles: WorkflowProfile[], fleetId: s
     if (profile.scope === 'Vessel') return profile.vesselId === vesselId;
     return false;
   });
+}
+
+
+/** Most captains or slots the setup wizard plans in one step. */
+export const MAX_SETUP_PARALLELISM = 16;
+
+export interface PlannedCaptain {
+  name: string;
+  maxConcurrency: number;
+}
+
+/** True for runtimes that serve several missions from one captain (an API endpoint or a Mux endpoint). */
+export function isMultiSlotRuntime(runtime: string): boolean {
+  return runtime === 'ApiEndpoint' || runtime === 'Mux';
+}
+
+/**
+ * Captains to create for "how many missions should run at once": one captain with that many slots for an endpoint
+ * runtime, or that many single-slot captains (name, name 2, name 3, ...) for a CLI runtime. Clamped to 1..16.
+ */
+export function planSetupCaptains(name: string, runtime: string, parallelism: number): PlannedCaptain[] {
+  const count = Math.min(MAX_SETUP_PARALLELISM, Math.max(1, Math.trunc(Number.isFinite(parallelism) ? parallelism : 1)));
+  const base = name.trim();
+  if (isMultiSlotRuntime(runtime)) return [{ name: base, maxConcurrency: count }];
+  return Array.from({ length: count }, (_, i) => ({ name: i === 0 ? base : `${base} ${i + 1}`, maxConcurrency: 1 }));
 }

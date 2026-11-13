@@ -43,6 +43,22 @@ namespace Test.Shared.Suites.Services
                     Path.Combine("scripts", "macos", "install.sh"),
                     Path.Combine("scripts", "macos", "publish-server.sh"),
                     Path.Combine("scripts", "macos", "healthcheck-server.sh"),
+                    Path.Combine("scripts", "windows", "install-startup.bat"),
+                    Path.Combine("scripts", "windows", "update-startup.bat"),
+                    Path.Combine("scripts", "windows", "remove-startup.bat"),
+                    Path.Combine("scripts", "linux", "install-startup.sh"),
+                    Path.Combine("scripts", "linux", "update-startup.sh"),
+                    Path.Combine("scripts", "linux", "remove-startup.sh"),
+                    Path.Combine("scripts", "macos", "install-startup.sh"),
+                    Path.Combine("scripts", "macos", "update-startup.sh"),
+                    Path.Combine("scripts", "macos", "remove-startup.sh"),
+                    Path.Combine("scripts", "wsl", "install-startup.sh"),
+                    Path.Combine("scripts", "wsl", "update-startup.sh"),
+                    Path.Combine("scripts", "wsl", "remove-startup.sh"),
+                    Path.Combine("scripts", "wsl2", "install-startup.sh"),
+                    Path.Combine("scripts", "wsl2", "update-startup.sh"),
+                    Path.Combine("scripts", "wsl2", "remove-startup.sh"),
+                    // Deprecated names kept as forwarders to the *-startup scripts.
                     Path.Combine("scripts", "windows", "install-windows-task.bat"),
                     Path.Combine("scripts", "windows", "update-windows-task.bat"),
                     Path.Combine("scripts", "windows", "remove-windows-task.bat"),
@@ -79,27 +95,27 @@ namespace Test.Shared.Suites.Services
                 string startupDocContents = File.ReadAllText(Path.Combine(root, "docs", "RUN_ON_STARTUP.md"));
 
                 AssertContains("docs/RUN_ON_STARTUP.md", readmeContents, "README should link to the run-on-startup guide");
-                AssertContains("scripts/linux/install-systemd-user.sh", readmeContents, "README should reference the Linux local deployment installer");
-                AssertContains("scripts/macos/install-launchd-agent.sh", readmeContents, "README should reference the macOS local deployment installer");
-                AssertContains("scripts/windows/install-windows-task.bat", readmeContents, "README should reference the Windows local deployment installer");
-                AssertContains("scripts/linux/update-systemd-user.sh", readmeContents, "README should reference the Linux local deployment updater");
-                AssertContains("scripts/macos/update-launchd-agent.sh", readmeContents, "README should reference the macOS local deployment updater");
-                AssertContains("scripts/windows/update-windows-task.bat", readmeContents, "README should reference the Windows local deployment updater");
+                AssertContains("scripts/linux/install-startup.sh", readmeContents, "README should reference the Linux local deployment installer");
+                AssertContains("scripts/macos/install-startup.sh", readmeContents, "README should reference the macOS local deployment installer");
+                AssertContains("scripts/windows/install-startup.bat", readmeContents, "README should reference the Windows local deployment installer");
+                AssertContains("scripts/linux/update-startup.sh", readmeContents, "README should reference the Linux local deployment updater");
+                AssertContains("scripts/macos/update-startup.sh", readmeContents, "README should reference the macOS local deployment updater");
+                AssertContains("scripts/windows/update-startup.bat", readmeContents, "README should reference the Windows local deployment updater");
                 AssertContains("scripts/linux/healthcheck-server.sh", readmeContents, "README should reference the Linux health-check helper");
                 AssertContains("scripts/macos/healthcheck-server.sh", readmeContents, "README should reference the macOS health-check helper");
                 AssertContains("scripts/windows/healthcheck-server.bat", readmeContents, "README should reference the Windows health-check helper");
-                AssertContains("scripts/linux/install-systemd-user.sh", gettingStartedContents, "Getting Started should reference the Linux local deployment installer");
-                AssertContains("scripts/macos/install-launchd-agent.sh", gettingStartedContents, "Getting Started should reference the macOS local deployment installer");
-                AssertContains("scripts/windows/install-windows-task.bat", gettingStartedContents, "Getting Started should reference the Windows local deployment installer");
-                AssertContains("scripts/linux/update-systemd-user.sh", gettingStartedContents, "Getting Started should reference the Linux local deployment updater");
-                AssertContains("scripts/macos/update-launchd-agent.sh", gettingStartedContents, "Getting Started should reference the macOS local deployment updater");
-                AssertContains("scripts/windows/update-windows-task.bat", gettingStartedContents, "Getting Started should reference the Windows local deployment updater");
+                AssertContains("scripts/linux/install-startup.sh", gettingStartedContents, "Getting Started should reference the Linux local deployment installer");
+                AssertContains("scripts/macos/install-startup.sh", gettingStartedContents, "Getting Started should reference the macOS local deployment installer");
+                AssertContains("scripts/windows/install-startup.bat", gettingStartedContents, "Getting Started should reference the Windows local deployment installer");
+                AssertContains("scripts/linux/update-startup.sh", gettingStartedContents, "Getting Started should reference the Linux local deployment updater");
+                AssertContains("scripts/macos/update-startup.sh", gettingStartedContents, "Getting Started should reference the macOS local deployment updater");
+                AssertContains("scripts/windows/update-startup.bat", gettingStartedContents, "Getting Started should reference the Windows local deployment updater");
                 AssertContains("scripts/linux/healthcheck-server.sh", gettingStartedContents, "Getting Started should reference the Linux health-check helper");
                 AssertContains("scripts/macos/healthcheck-server.sh", gettingStartedContents, "Getting Started should reference the macOS health-check helper");
                 AssertContains("scripts/windows/healthcheck-server.bat", gettingStartedContents, "Getting Started should reference the Windows health-check helper");
-                AssertContains("scripts/windows/install-windows-task.bat", startupDocContents, "Startup guide should reference the Windows installer script");
-                AssertContains("scripts/linux/install-systemd-user.sh", startupDocContents, "Startup guide should reference the Linux installer script");
-                AssertContains("scripts/macos/install-launchd-agent.sh", startupDocContents, "Startup guide should reference the macOS installer script");
+                AssertContains("scripts/windows/install-startup.bat", startupDocContents, "Startup guide should reference the Windows installer script");
+                AssertContains("scripts/linux/install-startup.sh", startupDocContents, "Startup guide should reference the Linux installer script");
+                AssertContains("scripts/macos/install-startup.sh", startupDocContents, "Startup guide should reference the macOS installer script");
                 AssertContains("scripts/common/publish-server.sh", startupDocContents, "Startup guide should reference the shared shell publish helper");
                 AssertContains("scripts/windows/healthcheck-server.bat", startupDocContents, "Startup guide should reference the Windows health-check helper");
             }));
@@ -107,7 +123,7 @@ namespace Test.Shared.Suites.Services
             cases.Add(Case("windows_startup_registration_is_user_scoped", "Windows Startup Registration Is User Scoped", TestTags.Positive, () =>
             {
                 string root = FindRepositoryRoot();
-                string installTaskContents = File.ReadAllText(Path.Combine(root, "scripts", "windows", "install-windows-task.bat"));
+                string installTaskContents = File.ReadAllText(Path.Combine(root, "scripts", "windows", "install-startup.bat"));
                 string startupDocContents = File.ReadAllText(Path.Combine(root, "docs", "RUN_ON_STARTUP.md"));
 
                 AssertContains(@"CurrentVersion\Run", installTaskContents, "Windows installer should register a current-user Run entry");

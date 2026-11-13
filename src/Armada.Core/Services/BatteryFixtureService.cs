@@ -229,7 +229,6 @@ namespace Armada.Core.Services
                 DefaultBranch = BranchOf(pack),
                 DefaultPipelineId = pipeline.Id,
                 LandingMode = LandingModeEnum.None,
-                AllowConcurrentMissions = false,
                 ProjectContext = "Fixture vessel of battery pack " + pack.Id + " (docs/MODEL_HETEROGENEITY.md). Missions here are evaluation work; "
                     + "the fixture is reset before each task. " + (pack.Manifest?.Description ?? String.Empty)
             };

@@ -1,5 +1,6 @@
 namespace Test.Shared.Suites.Models
 {
+    using System.Linq;
     using System;
     using System.Collections.Generic;
     using System.Text.Json;
@@ -27,6 +28,18 @@ namespace Test.Shared.Suites.Models
         public TestSuiteDescriptor Build()
         {
             List<TestCaseDescriptor> cases = new List<TestCaseDescriptor>();
+            cases.Add(Case("active_defaults_and_serialization", "Active defaults true for omitted JSON and round-trips false independently of State", TestTags.Positive, () =>
+            {
+                AssertTrue(new Captain().Active);
+                AssertTrue(JsonSerializer.Deserialize<Captain>("{}")!.Active);
+                Captain disabled = JsonSerializer.Deserialize<Captain>("{\"Active\":false}")!;
+                AssertFalse(disabled.Active);
+                AssertEqual(CaptainStateEnum.Idle, disabled.State);
+                AssertFalse(JsonSerializer.Deserialize<Captain>(JsonSerializer.Serialize(disabled))!.Active);
+                AssertThrows<ArgumentException>(() => Armada.Core.Services.CaptainEligibility.RequireActive(disabled));
+                disabled.Active = true;
+                Armada.Core.Services.CaptainEligibility.RequireActive(disabled);
+            }));
 
             cases.Add(Case("default_constructor_generates_id_with_prefix", "Captain default constructor generates id with prefix", TestTags.Positive, () =>
             {
@@ -48,8 +61,8 @@ namespace Test.Shared.Suites.Models
                 AssertEqual(AgentRuntimeEnum.ClaudeCode, captain.Runtime);
                 AssertNull(captain.Model);
                 AssertEqual(CaptainStateEnum.Idle, captain.State);
-                AssertNull(captain.CurrentMissionId);
-                AssertNull(captain.CurrentDockId);
+                AssertNull(captain.ActiveMissionIds.SingleOrDefault());
+                AssertNull(captain.Assignment?.DockId);
                 AssertNull(captain.ProcessId);
                 AssertEqual(0, captain.RecoveryAttempts);
                 AssertNull(captain.LastHeartbeatUtc);
@@ -95,7 +108,7 @@ namespace Test.Shared.Suites.Models
                 captain.Model = "gpt-5.4-mini";
                 captain.RuntimeOptionsJson = "{\"schemaVersion\":1,\"endpoint\":\"mux-dev\"}";
                 captain.State = CaptainStateEnum.Working;
-                captain.CurrentMissionId = "msn_test";
+                captain.Assignment = new Mission { Id = "msn_test" };
                 captain.ProcessId = 12345;
                 captain.RecoveryAttempts = 2;
 

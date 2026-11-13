@@ -13,6 +13,9 @@ namespace Armada.Core.Models
     {
         #region Public-Members
 
+        /// <summary>Optional stable usage-selection subreason for clients that support localized selection diagnostics.</summary>
+        public string? SelectionReasonCode { get; set; } = null;
+
         /// <summary>
         /// Typed reason.
         /// </summary>
@@ -23,10 +26,17 @@ namespace Armada.Core.Models
         /// </summary>
         public string Summary { get; set; } = "";
 
+        /// <summary>Bounded next steps computed from the same limits as admission.</summary>
+        [CollectionBound(MaxListed, Reason = "At most MaxListed actionable next steps")]
+        public List<AssignmentBlockerAdvice> Advice { get; set; } = new List<AssignmentBlockerAdvice>();
+
         /// <summary>
         /// Earliest time the blocker is expected to clear on its own (for example when a quarantine ends), or null.
         /// </summary>
         public DateTime? UntilUtc { get; set; } = null;
+
+        /// <summary>Usage-policy retry/reset hint, not a guaranteed recovery or start time.</summary>
+        public DateTime? SelectionNextReconsiderUtc { get; set; }
 
         /// <summary>
         /// The mission this one waits for, for dependency reasons.

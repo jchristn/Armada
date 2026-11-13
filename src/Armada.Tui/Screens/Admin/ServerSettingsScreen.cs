@@ -209,6 +209,30 @@ namespace Armada.Tui.Screens.Admin
         /// <summary>Retention: decided CLI tool permission requests.</summary>
         public InputField RetentionCliPermissions { get; } = new InputField();
 
+        /// <summary>Black box retention: days until an unpinned entry expires.</summary>
+        public InputField BlackBoxRetentionDays { get; } = new InputField();
+
+        /// <summary>Black box retention: days after resolution until a resolved entry expires.</summary>
+        public InputField BlackBoxResolvedRetentionDays { get; } = new InputField();
+
+        /// <summary>Black box retention: most entries per vessel.</summary>
+        public InputField BlackBoxMaxEntriesPerVessel { get; } = new InputField();
+
+        /// <summary>Black box retention: global cap in megabytes.</summary>
+        public InputField BlackBoxMaxTotalMegabytes { get; } = new InputField();
+
+        /// <summary>Black box retention: minutes between garbage collection runs.</summary>
+        public InputField BlackBoxGcInterval { get; } = new InputField();
+
+        /// <summary>Black box retention: keep the current entry of a mission that still exists.</summary>
+        public ToggleField BlackBoxKeepLatest { get; } = new ToggleField();
+
+        /// <summary>Black box retention: delete a mission's entries when it is purged.</summary>
+        public ToggleField BlackBoxDeleteWithMission { get; } = new ToggleField();
+
+        /// <summary>Black box retention: delete a vessel's entries when it is deleted.</summary>
+        public ToggleField BlackBoxDeleteWithVessel { get; } = new ToggleField();
+
         /// <summary>Ask Armada: the captain reports the outcome of finished work.</summary>
         public ToggleField AskReportResults { get; } = new ToggleField();
 
@@ -302,6 +326,28 @@ namespace Armada.Tui.Screens.Admin
             VesselHealthCriterionEnum.ArmadaReadiness, VesselHealthCriterionEnum.MissionOutcomes,
         };
 
+        private readonly SelectField<string> _UsageEnabled = new SelectField<string>();
+        private readonly SelectField<string> _UsagePty = new SelectField<string>();
+        private readonly InputField _UsageInterval = new InputField();
+        private readonly InputField _UsageTimeout = new InputField();
+        private readonly InputField _UsageConcurrency = new InputField();
+        private readonly InputField _UsageHostConcurrency = new InputField();
+        private readonly InputField _UsageBackoff = new InputField();
+        private readonly SelectField<string> _SelectionMode = new SelectField<string>();
+        private readonly SelectField<string> _SelectionStrategy = new SelectField<string>();
+        private readonly SelectField<string> _SelectionUnknown = new SelectField<string>();
+        private readonly InputField _SelectionReserve = new InputField();
+        private readonly InputField _SelectionComfortable = new InputField();
+        private readonly InputField _SelectionPerAttempt = new InputField();
+        private readonly InputField _SelectionFreshness = new InputField();
+        private readonly InputField _SelectionUnknownRetry = new InputField();
+        private readonly InputField _SelectionCooldown = new InputField();
+        private readonly InputField _SelectionSettlementLag = new InputField();
+        private readonly InputField _SelectionMaxUnsettled = new InputField();
+        private readonly InputField _SelectionRetention = new InputField();
+        private readonly InputField _SelectionMaxCandidates = new InputField();
+        private readonly TextBlock _SelectionNote = new TextBlock("", t => t.Muted);
+        private readonly TextBlock _SelectionCross = new TextBlock("", t => t.Error);
         private readonly Dictionary<string, ServerSettingsGroup> _Groups = new Dictionary<string, ServerSettingsGroup>(StringComparer.Ordinal);
         private readonly Dictionary<IWidget, ServerSettingsGroup> _MemberGroups = new Dictionary<IWidget, ServerSettingsGroup>();
         private readonly List<KeyValuePair<FormRow, TextBlock>> _Notes = new List<KeyValuePair<FormRow, TextBlock>>();
@@ -518,6 +564,7 @@ namespace Armada.Tui.Screens.Admin
             List<string> cross = HealthCrossErrors();
             _HealthCross.Text = String.Join("\n", cross);
             if (_HealthCrossRow != null) _HealthCrossRow.Height = Math.Max(1, cross.Count);
+            _SelectionCross.Text = String.Join("\n", SelectionCrossErrors());
             _HealthNoCriteria.Text = Criteria.Values.Any(c => c.Value) ? "" : "With no scored criteria every vessel is Unknown overall.";
             int noteWidth = Math.Max(20, width * 2 / 3 - 2);
             foreach (KeyValuePair<FormRow, TextBlock> note in _Notes)
@@ -617,7 +664,10 @@ namespace Armada.Tui.Screens.Admin
             BuildRepositoryHealth();
             BuildImportAndFleet();
             BuildCliPermissions();
+            BuildUsage();
+            BuildSelection();
             BuildRetention();
+            BuildBlackBoxRetention();
             BuildAsk();
             BuildRemoteControl();
             BuildMcp();
@@ -774,6 +824,179 @@ namespace Armada.Tui.Screens.Admin
             AddButtons(g);
         }
 
+        private void BuildUsage()
+        {
+            Form.AddSection("Usage capture");
+            if (!IsAdmin) AddNote("Only administrators can change these settings.");
+            foreach (IWidget widget in new IWidget[] { _UsageEnabled, _UsagePty, _UsageInterval, _UsageTimeout, _UsageConcurrency, _UsageHostConcurrency, _UsageBackoff }) _AdminOnlyEditable.Add(widget);
+            ServerSettingsGroup group = Group("usageCapture", "Save Usage Settings", SaveUsage, () => DiscardGroup("usageCapture"));
+            foreach (SelectField<string> field in new[] { _UsageEnabled, _UsagePty })
+            {
+                field.ModalHost = Context.Modals;
+                field.Options = new List<SelectOption<string>> { new SelectOption<string>("inherit", Context.Loc.T("Inherit (enabled)")), new SelectOption<string>("true", Context.Loc.T("Enabled")), new SelectOption<string>("false", Context.Loc.T("Disabled")) };
+                field.SetValue("inherit");
+            }
+            AddTracked(group, "Capture account usage", _UsageEnabled, null);
+            AddTracked(group, "Allow PTY fallback", _UsagePty, null);
+            AddNumber(group, "Minimum interval", _UsageInterval, "60..86400", v => ServerSettingsRules.WholeNumberRange(Context.Loc, v, 60, 86400));
+            AddNumber(group, "Probe timeout", _UsageTimeout, "1..300", v => ServerSettingsRules.WholeNumberRange(Context.Loc, v, 1, 300));
+            AddNumber(group, "Maximum concurrent probes", _UsageConcurrency, "1..64", v => ServerSettingsRules.WholeNumberRange(Context.Loc, v, 1, 64));
+            AddNumber(group, "Maximum probes per host", _UsageHostConcurrency, "1..64", v => ServerSettingsRules.WholeNumberRange(Context.Loc, v, 1, 64));
+            AddNumber(group, "Maximum backoff", _UsageBackoff, "60..86400", v => ServerSettingsRules.WholeNumberRange(Context.Loc, v, 60, 86400));
+            AddButtons(group);
+        }
+        private void SaveUsage()
+        {
+            if (!IsAdmin) return;
+            SaveWith(_Groups["usageCapture"], () =>
+            {
+                UsageCaptureSettings usage = Settings?.UsageCapture ?? new UsageCaptureSettings();
+                usage.Enabled = _UsageEnabled.Value == "inherit" ? null : _UsageEnabled.Value == "true";
+                usage.AllowPtyFallback = _UsagePty.Value == "inherit" ? null : _UsagePty.Value == "true";
+                usage.MinimumIntervalSeconds = IntOf(_UsageInterval);
+                usage.ProbeTimeoutSeconds = IntOf(_UsageTimeout);
+                usage.MaximumConcurrentProbes = IntOf(_UsageConcurrency);
+                usage.MaximumConcurrentProbesPerHost = IntOf(_UsageHostConcurrency);
+                usage.MaximumBackoffSeconds = IntOf(_UsageBackoff);
+                return new SettingsData { UsageCapture = usage };
+            }, "Usage settings saved and applied.");
+        }
+
+        private void BuildSelection()
+        {
+            Form.AddSection("usageSelection.title");
+            AddNoteBlock(_SelectionNote);
+            if (!IsAdmin) AddNote("usageSelection.adminOnly");
+            InputField[] numbers = new[] { _SelectionReserve, _SelectionComfortable, _SelectionPerAttempt, _SelectionFreshness, _SelectionUnknownRetry, _SelectionCooldown,
+                _SelectionSettlementLag, _SelectionMaxUnsettled, _SelectionRetention, _SelectionMaxCandidates };
+            foreach (IWidget widget in new IWidget[] { _SelectionMode, _SelectionStrategy, _SelectionUnknown }.Concat(numbers)) _AdminOnlyEditable.Add(widget);
+            ServerSettingsGroup group = Group("usageSelection", "usageSelection.save", SaveSelection, () => DiscardGroup("usageSelection"));
+            group.RequireDirty = true;
+            foreach (SelectField<string> field in new[] { _SelectionMode, _SelectionStrategy, _SelectionUnknown }) field.ModalHost = Context.Modals;
+            _SelectionMode.Options = SelectionModeOptions(true);
+            _SelectionStrategy.Options = new List<SelectOption<string>>
+            {
+                new SelectOption<string>(nameof(CaptainSelectionStrategyEnum.FirstAvailable), Context.Loc.T("usageSelection.firstAvailable")),
+                new SelectOption<string>(nameof(CaptainSelectionStrategyEnum.MostRemainingAllowance), Context.Loc.T("usageSelection.mostRemaining")),
+                new SelectOption<string>(nameof(CaptainSelectionStrategyEnum.MostUsedAllowance), Context.Loc.T("usageSelection.mostUsed"))
+            };
+            _SelectionUnknown.Options = new List<SelectOption<string>>
+            {
+                new SelectOption<string>(nameof(UsageUnknownBehaviorEnum.AllowDeprioritized), Context.Loc.T("usageSelection.allowUnknown")),
+                new SelectOption<string>(nameof(UsageUnknownBehaviorEnum.Wait), Context.Loc.T("usageSelection.waitUnknown"))
+            };
+            _SelectionMode.ValueChanged += (s, e) => UpdateSelectionNote();
+            AddTracked(group, "usageSelection.mode", _SelectionMode, null);
+            AddTracked(group, "usageSelection.strategy", _SelectionStrategy, "usageSelection.strategyHint");
+            AddTracked(group, "usageSelection.unknown", _SelectionUnknown, null);
+            AddNote("usageSelection.advanced");
+            AddNumber(group, "usageSelection.reservePercent", _SelectionReserve, "0..95", v => ServerSettingsRules.DecimalRange(Context.Loc, v, 0, 95));
+            AddNumber(group, "usageSelection.comfortableHeadroomPercent", _SelectionComfortable, "1..100", v => ServerSettingsRules.DecimalRange(Context.Loc, v, 1, 100));
+            AddNumber(group, "usageSelection.perAttemptReservationPercent", _SelectionPerAttempt, "0.1..25", v => ServerSettingsRules.DecimalRange(Context.Loc, v, 0.1, 25));
+            AddNumber(group, "usageSelection.maximumFreshnessSeconds", _SelectionFreshness, "120..86400", v => ServerSettingsRules.WholeNumberRange(Context.Loc, v, 120, 86400));
+            AddNumber(group, "usageSelection.unknownRetrySeconds", _SelectionUnknownRetry, "5..3600", v => ServerSettingsRules.WholeNumberRange(Context.Loc, v, 5, 3600));
+            AddNumber(group, "usageSelection.providerCooldownSeconds", _SelectionCooldown, "5..3600", v => ServerSettingsRules.WholeNumberRange(Context.Loc, v, 5, 3600));
+            AddNumber(group, "usageSelection.settlementLagSeconds", _SelectionSettlementLag, "0..3600", v => ServerSettingsRules.WholeNumberRange(Context.Loc, v, 0, 3600));
+            AddNumber(group, "usageSelection.maximumUnsettledSeconds", _SelectionMaxUnsettled, "60..86400", v => ServerSettingsRules.WholeNumberRange(Context.Loc, v, 60, 86400));
+            AddNumber(group, "usageSelection.decisionRetentionDays", _SelectionRetention, "7..1825", v => ServerSettingsRules.WholeNumberRange(Context.Loc, v, 7, 1825));
+            AddNumber(group, "usageSelection.maximumCandidates", _SelectionMaxCandidates, "1..10000", v => ServerSettingsRules.WholeNumberRange(Context.Loc, v, 1, 10000));
+            group.CrossErrors = SelectionCrossErrors;
+            Form.AddField("", _SelectionCross);
+            AddButtons(group);
+            UpdateSelectionNote();
+        }
+
+        private List<SelectOption<string>> SelectionModeOptions(bool enforcementAvailable)
+        {
+            List<SelectOption<string>> options = new List<SelectOption<string>>
+            {
+                new SelectOption<string>(nameof(UsageSelectionModeEnum.Disabled), Context.Loc.T("usageSelection.disabled")),
+                new SelectOption<string>(nameof(UsageSelectionModeEnum.Observe), Context.Loc.T("usageSelection.observe"))
+            };
+            if (enforcementAvailable) options.Add(new SelectOption<string>(nameof(UsageSelectionModeEnum.Enforce), Context.Loc.T("usageSelection.enforce")));
+            return options;
+        }
+
+        /// <summary>
+        /// Captain selection protected reserve field (percentage points).
+        /// </summary>
+        public InputField SelectionReserve => _SelectionReserve;
+
+        /// <summary>
+        /// Captain selection comfortable headroom field (percentage points).
+        /// </summary>
+        public InputField SelectionComfortable => _SelectionComfortable;
+
+        /// <summary>
+        /// Captain selection mode, policy and override explanation shown above the group.
+        /// </summary>
+        public TextBlock SelectionNote => _SelectionNote;
+
+        /// <summary>
+        /// Captain selection cross-field errors (comfortable headroom must exceed the reserve).
+        /// </summary>
+        public TextBlock SelectionCross => _SelectionCross;
+
+        private bool SelectionReadOnly
+        {
+            get
+            {
+                UsageSelectionCapabilities? capability = Settings?.UsageSelectionCapabilities;
+                return capability != null && (capability.EnvironmentOverride || !capability.AppliedLive);
+            }
+        }
+
+        private void UpdateSelectionNote()
+        {
+            string key = _SelectionMode.Value == nameof(UsageSelectionModeEnum.Enforce) ? "usageSelection.enforceDescription"
+                : _SelectionMode.Value == nameof(UsageSelectionModeEnum.Disabled) ? "usageSelection.disabledDescription" : "usageSelection.description";
+            string text = Context.Loc.T(key);
+            UsageSelectionCapabilities? capability = Settings?.UsageSelectionCapabilities;
+            if (SelectionReadOnly) text += "\n" + Context.Loc.T("usageSelection.environment");
+            if (capability != null && !capability.EnforcementAvailable) text += "\n" + Context.Loc.T("usageSelection.enforcementUnavailable");
+            _SelectionNote.Text = text;
+        }
+
+        private List<string> SelectionCrossErrors()
+        {
+            double? reserve = ServerSettingsRules.ParseDouble(_SelectionReserve.Value);
+            double? comfortable = ServerSettingsRules.ParseDouble(_SelectionComfortable.Value);
+            List<string> errors = new List<string>();
+            if (reserve.HasValue && comfortable.HasValue && comfortable.Value <= reserve.Value) errors.Add(Context.Loc.T("usageSelection.invalid"));
+            return errors;
+        }
+
+        private void SaveSelection()
+        {
+            if (!IsAdmin || SelectionReadOnly) return;
+            SaveWith(_Groups["usageSelection"], () =>
+            {
+                double reserve = ServerSettingsRules.ParseDouble(_SelectionReserve.Value) ?? throw new ArgumentException(Context.Loc.T("usageSelection.invalid"));
+                double comfortable = ServerSettingsRules.ParseDouble(_SelectionComfortable.Value) ?? throw new ArgumentException(Context.Loc.T("usageSelection.invalid"));
+                double perAttempt = ServerSettingsRules.ParseDouble(_SelectionPerAttempt.Value) ?? throw new ArgumentException(Context.Loc.T("usageSelection.invalid"));
+                UsageSelectionSettings selection = Settings?.UsageSelection?.Copy() ?? new UsageSelectionSettings();
+                selection.Mode = Enum.Parse<UsageSelectionModeEnum>(_SelectionMode.Value ?? nameof(UsageSelectionModeEnum.Observe));
+                selection.Strategy = Enum.Parse<CaptainSelectionStrategyEnum>(_SelectionStrategy.Value ?? nameof(CaptainSelectionStrategyEnum.FirstAvailable));
+                selection.UnknownUsageBehavior = Enum.Parse<UsageUnknownBehaviorEnum>(_SelectionUnknown.Value ?? nameof(UsageUnknownBehaviorEnum.AllowDeprioritized));
+                selection.ReservePercent = reserve;
+                selection.ComfortableHeadroomPercent = comfortable;
+                selection.PerAttemptReservationPercent = perAttempt;
+                selection.MaximumFreshnessSeconds = IntOf(_SelectionFreshness);
+                selection.UnknownRetrySeconds = IntOf(_SelectionUnknownRetry);
+                selection.ProviderCooldownSeconds = IntOf(_SelectionCooldown);
+                selection.SettlementLagSeconds = IntOf(_SelectionSettlementLag);
+                selection.MaximumUnsettledSeconds = IntOf(_SelectionMaxUnsettled);
+                selection.DecisionRetentionDays = IntOf(_SelectionRetention);
+                selection.MaximumCandidates = IntOf(_SelectionMaxCandidates);
+                return new SettingsData { UsageSelection = selection, ExpectedUsageSelectionRevision = Settings?.UsageSelectionRevision };
+            }, "usageSelection.saved");
+        }
+
+        private static string Dec(double value)
+        {
+            return value.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture);
+        }
+
         private void BuildRetention()
         {
             Form.AddSection("Data Retention");
@@ -786,6 +1009,26 @@ namespace Armada.Tui.Screens.Admin
             AddNumber(g, "Job retention (days)", RetentionJobs, "Finished background jobs older than this are deleted; the latest of each kind is kept (0-3650, default 30).", range);
             AddNumber(g, "Import history retention (days)", RetentionImports, "Finished vessel import batches older than this are deleted; imported vessels are not affected (0-3650, default 90).", range);
             AddNumber(g, "CLI permission request retention (days)", RetentionCliPermissions, "Decided, expired, and cancelled CLI tool permission requests older than this are deleted; pending ones are kept (0-3650, default 90).", range);
+            AddButtons(g);
+        }
+
+        private void BuildBlackBoxRetention()
+        {
+            Form.AddSection("Black Box Retention");
+            AddNote("How long the black box keeps failure records and when garbage collection removes them. Pinned entries never expire. Storage status and a GC dry run are on the Storage tab. Changes apply immediately.");
+            ServerSettingsGroup g = Group("blackBox", "Save Black Box Retention", SaveBlackBoxRetention, () => DiscardGroup("blackBox"));
+            g.RequireDirty = true;
+            AddNumber(g, "Retention (days)", BlackBoxRetentionDays, "Age at which an unpinned entry expires; 0 keeps entries forever (0-3650, default 180).", v => ServerSettingsRules.WholeNumberRange(Context.Loc, v, 0, 3650));
+            AddNumber(g, "Resolved retention (days)", BlackBoxResolvedRetentionDays, "Days after resolution at which a resolved entry expires, when sooner; 0 means resolution does not shorten retention (0-3650, default 30).", v => ServerSettingsRules.WholeNumberRange(Context.Loc, v, 0, 3650));
+            AddNumber(g, "Max entries per vessel", BlackBoxMaxEntriesPerVessel, "Above it the oldest unpinned, non-current entries are evicted (10-100000, default 1000).", v => ServerSettingsRules.WholeNumberRange(Context.Loc, v, 10, 100000));
+            AddNumber(g, "Max total size (MB)", BlackBoxMaxTotalMegabytes, "Global cap on stored bytes; above it the oldest unpinned resolved entries go first (16-1048576, default 1024).", v => ServerSettingsRules.WholeNumberRange(Context.Loc, v, 16, 1048576));
+            AddNumber(g, "GC interval (minutes)", BlackBoxGcInterval, "Minutes between garbage collection runs (5-1440, default 60).", v => ServerSettingsRules.WholeNumberRange(Context.Loc, v, 5, 1440));
+            BlackBoxKeepLatest.Caption = "Keep the latest entry of each mission";
+            AddTracked(g, "Keep the latest entry of each mission", BlackBoxKeepLatest, "The current entry of a mission or voyage that still exists is kept past expiry.");
+            BlackBoxDeleteWithMission.Caption = "Delete with the mission";
+            AddTracked(g, "Delete with the mission", BlackBoxDeleteWithMission, "When a mission is purged, delete its entries too.");
+            BlackBoxDeleteWithVessel.Caption = "Delete with the vessel";
+            AddTracked(g, "Delete with the vessel", BlackBoxDeleteWithVessel, "When a vessel is deleted, delete its entries.");
             AddButtons(g);
         }
 
@@ -978,6 +1221,9 @@ namespace Armada.Tui.Screens.Admin
             foreach (ServerSettingsGroup g in _Groups.Values) g.Editable = !locked && Settings != null;
             _Groups["repositoryHealth"].Editable = !locked && IsAdmin && Settings != null;
             // CLI tool permissions are global-admin settings; everyone else sees them read-only.
+            _Groups["usageCapture"].Editable = !locked && IsAdmin && Settings != null;
+            // Captain selection is a global-admin policy; an environment override makes it read-only for everyone.
+            _Groups["usageSelection"].Editable = !locked && IsAdmin && Settings != null && !SelectionReadOnly;
             _Groups["permissions"].Editable = !locked && IsAdmin && Settings != null;
             if (Form.Scope.Focused is ArmadaWidget focused && !focused.CanFocus) Form.Scope.FocusFirst();
         }
@@ -1057,6 +1303,36 @@ namespace Armada.Tui.Screens.Admin
                 FleetMaxOutput.Value = Num(fa.MaxOutputBytes);
                 FleetRetention.Value = Num(fa.RunRetentionDays);
             });
+            Apply("usageCapture", force, () =>
+            {
+                UsageCaptureSettings usage = s.UsageCapture ?? new UsageCaptureSettings();
+                _UsageEnabled.SetValue(usage.Enabled?.ToString().ToLowerInvariant() ?? "inherit");
+                _UsagePty.SetValue(usage.AllowPtyFallback?.ToString().ToLowerInvariant() ?? "inherit");
+                _UsageInterval.Value = Num(usage.MinimumIntervalSeconds);
+                _UsageTimeout.Value = Num(usage.ProbeTimeoutSeconds);
+                _UsageConcurrency.Value = Num(usage.MaximumConcurrentProbes);
+                _UsageHostConcurrency.Value = Num(usage.MaximumConcurrentProbesPerHost);
+                _UsageBackoff.Value = Num(usage.MaximumBackoffSeconds);
+            });
+            Apply("usageSelection", force, () =>
+            {
+                UsageSelectionSettings selection = s.UsageSelection ?? new UsageSelectionSettings();
+                _SelectionMode.Options = SelectionModeOptions(s.UsageSelectionCapabilities?.EnforcementAvailable != false || selection.Mode == UsageSelectionModeEnum.Enforce);
+                _SelectionMode.SetValue(selection.Mode.ToString());
+                _SelectionStrategy.SetValue(selection.Strategy.ToString());
+                _SelectionUnknown.SetValue(selection.UnknownUsageBehavior.ToString());
+                _SelectionReserve.Value = Dec(selection.ReservePercent);
+                _SelectionComfortable.Value = Dec(selection.ComfortableHeadroomPercent);
+                _SelectionPerAttempt.Value = Dec(selection.PerAttemptReservationPercent);
+                _SelectionFreshness.Value = Num(selection.MaximumFreshnessSeconds);
+                _SelectionUnknownRetry.Value = Num(selection.UnknownRetrySeconds);
+                _SelectionCooldown.Value = Num(selection.ProviderCooldownSeconds);
+                _SelectionSettlementLag.Value = Num(selection.SettlementLagSeconds);
+                _SelectionMaxUnsettled.Value = Num(selection.MaximumUnsettledSeconds);
+                _SelectionRetention.Value = Num(selection.DecisionRetentionDays);
+                _SelectionMaxCandidates.Value = Num(selection.MaximumCandidates);
+                UpdateSelectionNote();
+            });
             Apply("retention", force, () =>
             {
                 RetentionSettings r = s.Retention ?? new RetentionSettings();
@@ -1065,6 +1341,18 @@ namespace Armada.Tui.Screens.Admin
                 RetentionJobs.Value = Num(r.JobRetentionDays);
                 RetentionImports.Value = Num(r.ImportBatchRetentionDays);
                 RetentionCliPermissions.Value = Num(r.CliPermissionRequestRetentionDays);
+            });
+            Apply("blackBox", force, () =>
+            {
+                BlackBoxRetentionSettings r = s.BlackBox?.Retention ?? new BlackBoxRetentionSettings();
+                BlackBoxRetentionDays.Value = Num(r.RetentionDays);
+                BlackBoxResolvedRetentionDays.Value = Num(r.ResolvedRetentionDays);
+                BlackBoxMaxEntriesPerVessel.Value = Num(r.MaxEntriesPerVessel);
+                BlackBoxMaxTotalMegabytes.Value = Num((int)Math.Min(Int32.MaxValue, r.MaxTotalBytes / (1024L * 1024L)));
+                BlackBoxGcInterval.Value = Num(r.GcIntervalMinutes);
+                BlackBoxKeepLatest.SetValue(r.KeepLatestPerMission, false);
+                BlackBoxDeleteWithMission.SetValue(r.DeleteWithMission, false);
+                BlackBoxDeleteWithVessel.SetValue(r.DeleteWithVessel, false);
             });
             // The ask group is saved whole; keep the stored captain auto-approve (not edited here) so a save never changes it.
             _AskCaptainAutoApprove = s.Ask?.CaptainAutoApprove ?? false;
@@ -1251,7 +1539,7 @@ namespace Armada.Tui.Screens.Admin
 
             group.Saving = true;
             group.SaveButton.Label = "Saving...";
-            string originalLabel = SaveLabelOf(group.Key);
+            string originalLabel = group.SaveLabel;
             Task.Run(async () =>
             {
                 SettingsData? updated = null;
@@ -1295,24 +1583,6 @@ namespace Armada.Tui.Screens.Admin
                     after?.Invoke();
                 });
             });
-        }
-
-        private static string SaveLabelOf(string key)
-        {
-            switch (key)
-            {
-                case "server": return "Save Server Config";
-                case "rebuild": return "Save Rebuild Settings";
-                case "agent": return "Save Agent Settings";
-                case "planning": return "Save Planning Session Settings";
-                case "repositoryHealth": return "Save Repository Health Settings";
-                case "import": return "Save Import Settings";
-                case "fleetActions": return "Save Fleet Action Settings";
-                case "retention": return "Save Retention Settings";
-                case "permissions": return "Save CLI Tool Permissions";
-                case "ask": return "Save Ask Armada Settings";
-                default: return "Save Remote Control Settings";
-            }
         }
 
         private int IntOf(InputField field)
@@ -1448,6 +1718,32 @@ namespace Armada.Tui.Screens.Admin
                 d.Retention = r;
                 return d;
             }, "Retention settings saved and applied.");
+        }
+
+        private void SaveBlackBoxRetention()
+        {
+            SaveWith(_Groups["blackBox"], () =>
+            {
+                // The black box object is saved whole: start from the loaded settings (storage secrets come back masked and
+                // the server keeps the stored ones) and change only the retention fields edited here.
+                BlackBoxSettings? loaded = Settings?.BlackBox;
+                if (loaded == null) throw new ArgumentException(Context.Loc.T("The server did not report black box settings."));
+                BlackBoxSettings b = new BlackBoxSettings();
+                b.CopyFrom(loaded);
+                BlackBoxRetentionSettings r = loaded.Retention.Clone();
+                r.RetentionDays = IntOf(BlackBoxRetentionDays);
+                r.ResolvedRetentionDays = IntOf(BlackBoxResolvedRetentionDays);
+                r.MaxEntriesPerVessel = IntOf(BlackBoxMaxEntriesPerVessel);
+                r.MaxTotalBytes = (long)IntOf(BlackBoxMaxTotalMegabytes) * 1024L * 1024L;
+                r.GcIntervalMinutes = IntOf(BlackBoxGcInterval);
+                r.KeepLatestPerMission = BlackBoxKeepLatest.Value;
+                r.DeleteWithMission = BlackBoxDeleteWithMission.Value;
+                r.DeleteWithVessel = BlackBoxDeleteWithVessel.Value;
+                b.Retention = r;
+                SettingsData d = new SettingsData();
+                d.BlackBox = b;
+                return d;
+            }, "Black box retention saved and applied.");
         }
 
         private void SaveAsk()

@@ -68,7 +68,7 @@ namespace Armada.Core.Database.Mysql.Implementations
         {
             if (String.IsNullOrEmpty(runId)) throw new ArgumentNullException(nameof(runId));
             return await MysqlCommandHelper.QueryAsync(_ConnectionString,
-                "SELECT * FROM battery_task_results WHERE run_id = @run_id ORDER BY created_utc ASC, id ASC;",
+                "SELECT * FROM battery_task_results WHERE run_id = @run_id ORDER BY created_utc ASC, BINARY id ASC;",
                 cmd => MysqlCommandHelper.Add(cmd, "@run_id", runId), FromReader, token).ConfigureAwait(false);
         }
 
@@ -94,7 +94,9 @@ namespace Armada.Core.Database.Mysql.Implementations
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 long total = await MysqlCommandHelper.CountAsync(conn, "SELECT COUNT(*) FROM battery_task_results" + where + ";", bind, token).ConfigureAwait(false);
                 List<BatteryTaskResult> rows = await MysqlCommandHelper.QueryAsync(conn,
-                    "SELECT * FROM battery_task_results" + where + " ORDER BY created_utc " + direction + ", id " + direction + MysqlCommandHelper.Page(offset, pageSize) + ";",
+                    // Ordinal id tie-break: the default collation is case-insensitive, so ids that share a timestamp would sort
+                    // differently from the other providers.
+                    "SELECT * FROM battery_task_results" + where + " ORDER BY created_utc " + direction + ", BINARY id " + direction + MysqlCommandHelper.Page(offset, pageSize) + ";",
                     bind, FromReader, token).ConfigureAwait(false);
 
                 EnumerationResult<BatteryTaskResult> result = new EnumerationResult<BatteryTaskResult>();

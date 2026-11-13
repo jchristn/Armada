@@ -120,12 +120,16 @@ namespace Armada.Core.Services
             Mission? current = null;
             while (true)
             {
-                List<Mission> missions = await _Database.Missions.EnumerateByVoyageAsync(voyage.Id, token).ConfigureAwait(false);
+                List<Mission> missions = await _Database.Missions.EnumerateByVoyageAsync(voyage.Id, CancellationToken.None).ConfigureAwait(false);
                 current = missions.OrderBy(m => m.CreatedUtc).LastOrDefault();
                 if (current != null && missions.All(m => FinishedStatuses.Contains(m.Status))) break;
-                if (DateTime.UtcNow >= deadline)
+                bool cancelled = token.IsCancellationRequested;
+                if (cancelled || DateTime.UtcNow >= deadline)
                 {
-                    result.TimedOut = true;
+                    // Timed out or cancelled (a Full Evaluate stopping): cancel what is still open so its dock and captain
+                    // are released, then report what is there.
+                    if (cancelled) result.Cancelled = true;
+                    else result.TimedOut = true;
                     foreach (Mission open in missions.Where(m => !FinishedStatuses.Contains(m.Status)))
                     {
                         try
@@ -134,20 +138,33 @@ namespace Armada.Core.Services
                         }
                         catch (Exception ex)
                         {
-                            _Logging.Warn(_Header + "could not cancel timed-out mission " + open.Id + ": " + ex.Message);
+                            _Logging.Warn(_Header + "could not cancel " + (cancelled ? "stopped" : "timed-out") + " mission " + open.Id + ": " + ex.Message);
                         }
+                    }
+
+                    if (cancelled)
+                    {
+                        List<Mission> after = await _Database.Missions.EnumerateByVoyageAsync(voyage.Id, CancellationToken.None).ConfigureAwait(false);
+                        current = after.OrderBy(m => m.CreatedUtc).LastOrDefault() ?? current;
                     }
 
                     break;
                 }
 
-                await Task.Delay(_PollInterval, token).ConfigureAwait(false);
+                try
+                {
+                    await Task.Delay(_PollInterval, token).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    // Checked at the top of the next pass, which cancels the open missions.
+                }
             }
 
             result.Mission = current;
             if (current != null && !String.IsNullOrEmpty(current.DockId))
             {
-                Dock? dock = await _Database.Docks.ReadAsync(current.DockId!, token).ConfigureAwait(false);
+                Dock? dock = await _Database.Docks.ReadAsync(current.DockId!, CancellationToken.None).ConfigureAwait(false);
                 if (dock != null && !String.IsNullOrWhiteSpace(dock.WorktreePath))
                 {
                     DockHost host = DockHosts != null ? DockHosts.ForDock(dock) : new DockHostResolver(new GitService(_Logging), _Logging, null).Local;

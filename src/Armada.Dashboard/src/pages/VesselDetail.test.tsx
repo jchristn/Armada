@@ -39,7 +39,7 @@ const vessel = {
   protectedBranchPatterns: ['main'], releaseBranchPrefix: 'rel/', hotfixBranchPrefix: 'fix/',
   requirePullRequestForProtectedBranches: false, requireMergeQueueForReleaseBranches: true,
   autoLandEnabled: true, autoLandMaxFiles: 5, autoLandMaxLines: 0, autoLandPathAllowGlobs: ['src/**'], autoLandPathDenyGlobs: [],
-  allowConcurrentMissions: true, autoApprove: false, defaultPipelineId: null, active: true,
+  maxParallelVoyages: 0, maxParallelMissionsPerVoyage: 0, autoApprove: false, defaultPipelineId: null, active: true,
   preferredHarborId: 'hbr_1',
   createdUtc: '2026-10-01T00:00:00Z', lastUpdateUtc: '2026-10-01T00:00:00Z',
 } as unknown as Vessel;
@@ -69,7 +69,8 @@ describe('VesselDetail Edit (F13)', () => {
     expect(screen.getByLabelText(/Landing Mode/)).toHaveValue('MergeQueue');
     expect(screen.getByLabelText(/Branch Cleanup/)).toHaveValue('LocalOnly');
     expect(screen.getByLabelText(/Agent Auto-Approve/)).toHaveValue('off');
-    expect(screen.getByLabelText('Allow Concurrent Missions')).toBeChecked();
+    expect(screen.getByLabelText('Parallel voyages')).toHaveValue(0);
+    expect(screen.getByLabelText('Parallel missions per voyage')).toHaveValue(0);
     expect(screen.getByLabelText('Auto-land small changes')).toBeChecked();
     expect(screen.getByLabelText(/Release Branch Prefix/)).toHaveValue('rel/');
 
@@ -83,7 +84,6 @@ describe('VesselDetail Edit (F13)', () => {
       landingMode: 'PullRequest',
       branchCleanupPolicy: 'LocalOnly',
       autoApprove: false,
-      allowConcurrentMissions: true,
       autoLandEnabled: true,
       autoLandMaxFiles: 5,
       autoLandPathAllowGlobs: ['src/**'],

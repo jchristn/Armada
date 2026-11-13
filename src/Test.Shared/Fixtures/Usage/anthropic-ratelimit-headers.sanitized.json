@@ -1,0 +1,15 @@
+{
+  "anthropic-ratelimit-requests-limit": "1000",
+  "anthropic-ratelimit-requests-remaining": "993",
+  "anthropic-ratelimit-requests-reset": "2026-10-27T13:00:05Z",
+  "anthropic-ratelimit-input-tokens-limit": "400000",
+  "anthropic-ratelimit-input-tokens-remaining": "398120",
+  "anthropic-ratelimit-input-tokens-reset": "2026-10-27T13:00:05Z",
+  "anthropic-ratelimit-output-tokens-limit": "80000",
+  "anthropic-ratelimit-output-tokens-remaining": "79640",
+  "anthropic-ratelimit-output-tokens-reset": "2026-10-27T13:00:05Z",
+  "anthropic-ratelimit-tokens-limit": "480000",
+  "anthropic-ratelimit-tokens-remaining": "477760",
+  "anthropic-ratelimit-tokens-reset": "2026-10-27T13:00:05Z",
+  "retry-after": "30"
+}

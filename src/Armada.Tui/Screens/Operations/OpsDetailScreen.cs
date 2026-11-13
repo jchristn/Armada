@@ -73,6 +73,14 @@ namespace Armada.Tui.Screens.Operations
             get { return Tabs.SelectedIndex >= 0 && Tabs.SelectedIndex < _Panels.Count ? _Panels[Tabs.SelectedIndex] : null; }
         }
 
+        /// <summary>
+        /// Key of the current panel, or null.
+        /// </summary>
+        public string? CurrentPanelKey
+        {
+            get { return Tabs.SelectedIndex >= 0 && Tabs.SelectedIndex < _Panels.Count ? Tabs.SelectedKey : null; }
+        }
+
         /// <inheritdoc />
         public override bool CanFocus { get; set; } = true;
 
@@ -82,9 +90,18 @@ namespace Armada.Tui.Screens.Operations
             get
             {
                 List<KeyValuePair<string, string>> hints = new List<KeyValuePair<string, string>>();
+                string? panel = CurrentPanelKey;
+                if (panel != null)
+                {
+                    // The current panel's own keys come first, so they are discoverable from that panel.
+                    if (_PanelHints.TryGetValue(panel, out List<KeyValuePair<string, string>>? extra)) hints.AddRange(extra);
+                    foreach (OpsScreenAction a in Actions.Where(a => a.Panel == panel && a.Key != null && a.Available))
+                        hints.Add(new KeyValuePair<string, string>(KeyLabelOf(a.Key!), a.DynamicLabel != null ? a.DynamicLabel() : a.Label));
+                }
+
                 hints.Add(new KeyValuePair<string, string>(".", "Actions"));
                 if (_Panels.Count > 1) hints.Add(new KeyValuePair<string, string>("[ ]", "Panels"));
-                foreach (OpsScreenAction a in Actions.Where(a => a.Key != null && a.Available).Take(4))
+                foreach (OpsScreenAction a in Actions.Where(a => a.Panel == null && a.Key != null && a.Available).Take(4))
                     hints.Add(new KeyValuePair<string, string>(KeyLabelOf(a.Key!), a.Label));
                 return hints;
             }
@@ -95,6 +112,7 @@ namespace Armada.Tui.Screens.Operations
         #region Private-Members
 
         private readonly List<IWidget> _Panels = new List<IWidget>();
+        private readonly Dictionary<string, List<KeyValuePair<string, string>>> _PanelHints = new Dictionary<string, List<KeyValuePair<string, string>>>(StringComparer.Ordinal);
         private bool _ActionsBuilt = false;
 
         #endregion
@@ -142,6 +160,7 @@ namespace Armada.Tui.Screens.Operations
 
             Tabs.Add(key, label);
             _Panels.Add(panel);
+            Tabs.CanFocus = _Panels.Count > 1;
             if (_Panels.Count == 1) ShowPanel();
             return panel;
         }
@@ -169,6 +188,7 @@ namespace Armada.Tui.Screens.Operations
                 OpsScreenAction action = a;
                 ActionMenuItem item = new ActionMenuItem((a.Danger ? "! " : "") + Tr(a.DynamicLabel != null ? a.DynamicLabel() : a.Label), () => action.Run(), a.Key != null ? KeyLabelOf(a.Key) : "");
                 item.Destructive = a.Danger;
+                item.Enabled = a.CanExecute;
                 items.Add(item);
             }
 
@@ -183,7 +203,7 @@ namespace Armada.Tui.Screens.Operations
         public bool RunAction(string id)
         {
             OpsScreenAction? action = Actions.FirstOrDefault(a => a.Id == id);
-            if (action == null || !action.Available) return false;
+            if (action == null || !action.CanExecute) return false;
             action.Run();
             return true;
         }
@@ -206,11 +226,11 @@ namespace Armada.Tui.Screens.Operations
             {
                 OpsScreenAction action = a;
                 ArmadaCommand c = a.Key != null
-                    ? new ArmadaCommand(ScreenKey + "." + a.Id, a.Label, CommandMenuEnum.Actions, () => { if (action.Available) action.Run(); }, a.Key)
-                    : new ArmadaCommand(ScreenKey + "." + a.Id, a.Label, CommandMenuEnum.Actions, () => { if (action.Available) action.Run(); });
+                    ? new ArmadaCommand(ScreenKey + "." + a.Id, a.Label, CommandMenuEnum.Actions, () => { if (action.CanExecute) action.Run(); }, a.Key)
+                    : new ArmadaCommand(ScreenKey + "." + a.Id, a.Label, CommandMenuEnum.Actions, () => { if (action.CanExecute) action.Run(); });
                 c.Group = Title;
                 c.Dispatch = false;
-                c.IsEnabled = () => action.Available;
+                c.IsEnabled = () => action.CanExecute;
                 list.Add(c);
             }
 
@@ -224,6 +244,8 @@ namespace Armada.Tui.Screens.Operations
             bool typing = leaf is TextInput || leaf is OpsTextArea || (leaf is ScrollTextView scroll && scroll.Searching);
             if (!typing)
             {
+                // A focused panel that owns keys (the Failure tab) runs them before the screen's single-key actions.
+                if (CurrentPanel is IPanelKeyHandler owner && ReferenceEquals(leaf, CurrentPanel) && owner.HandlePanelKey(key)) return true;
                 if (key.Code == KeyCode.Character && key.Modifiers == KeyModifiers.None && key.Rune == '.')
                 {
                     ShowActionMenu();
@@ -232,7 +254,7 @@ namespace Armada.Tui.Screens.Operations
 
                 foreach (OpsScreenAction a in Actions)
                 {
-                    if (a.Key != null && MatchesKey(a.Key, key) && a.Available)
+                    if (a.Key != null && MatchesKey(a.Key, key) && a.CanExecute)
                     {
                         a.Run();
                         return true;
@@ -288,6 +310,7 @@ namespace Armada.Tui.Screens.Operations
                 if (a != null)
                 {
                     b.Visible = a.Available;
+                    b.Enabled = a.CanExecute;
                     b.Label = a.DynamicLabel != null ? a.DynamicLabel() : a.Label;
                 }
             }
@@ -310,7 +333,17 @@ namespace Armada.Tui.Screens.Operations
             if (panel != null)
             {
                 Rect area = stack.Fill(panel);
-                if (!area.IsEmpty) Scope.RenderChild(surface, panel, area);
+                if (!area.IsEmpty && LoadError != null && !Loaded)
+                {
+                    // The record never loaded: the panels have nothing to show, and their own placeholders ("Loading...",
+                    // "Open this tab to ...") would contradict the error above.
+                    SurfaceText.Draw(surface, 0, area.Y, Tr("Nothing to show until this record loads. Press F5 to retry."), Theme.Muted, width);
+                    Scope.Place(panel, area);
+                }
+                else if (!area.IsEmpty)
+                {
+                    Scope.RenderChild(surface, panel, area);
+                }
             }
         }
 
@@ -349,6 +382,41 @@ namespace Armada.Tui.Screens.Operations
             return a;
         }
 
+        /// <summary>
+        /// Add an action that belongs to a panel: available only while that panel is current, and listed first in the
+        /// status bar hints there.
+        /// </summary>
+        /// <param name="panel">Panel key.</param>
+        /// <param name="id">Id.</param>
+        /// <param name="label">English label.</param>
+        /// <param name="run">Handler.</param>
+        /// <param name="key">Key, or null.</param>
+        /// <param name="when">Further availability, or null.</param>
+        /// <returns>The action.</returns>
+        protected OpsScreenAction PanelAction(string panel, string id, string label, Action run, string? key = null, Func<bool>? when = null)
+        {
+            OpsScreenAction a = Action(id, label, run, key, () => CurrentPanelKey == panel && (when == null || when()));
+            a.Panel = panel;
+            return a;
+        }
+
+        /// <summary>
+        /// Add a status bar hint shown while a panel is current (a key the panel widget itself handles, such as Enter).
+        /// </summary>
+        /// <param name="panel">Panel key.</param>
+        /// <param name="key">Key label.</param>
+        /// <param name="label">English label.</param>
+        protected void PanelHint(string panel, string key, string label)
+        {
+            if (!_PanelHints.TryGetValue(panel, out List<KeyValuePair<string, string>>? list))
+            {
+                list = new List<KeyValuePair<string, string>>();
+                _PanelHints[panel] = list;
+            }
+
+            list.Add(new KeyValuePair<string, string>(key, label));
+        }
+
         #endregion
 
         #region Private-Methods
@@ -366,7 +434,7 @@ namespace Armada.Tui.Screens.Operations
             foreach (OpsScreenAction a in Actions.Where(a => a.Toolbar))
             {
                 OpsScreenAction action = a;
-                Button b = new Button(a.Label, () => { if (action.Available) action.Run(); });
+                Button b = new Button(a.Label, () => { if (action.CanExecute) action.Run(); });
                 b.Hint = a.Key != null ? KeyLabelOf(a.Key) : null;
                 a.Tag = b;
                 ActionBar.Add(b);

@@ -191,7 +191,7 @@ export default function VesselCleanupModal({ vesselId, vesselName, open, onClose
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        style={{ width: 'min(1100px, 96vw)', maxWidth: 'min(1100px, 96vw)', maxHeight: '92vh', overflowY: 'auto' }}
+        style={{ width: '95vw', maxWidth: '95vw', height: '95vh', maxHeight: '95vh', overflowY: 'auto' }}
         onClick={e => e.stopPropagation()}
       >
         <h3 id={titleId} style={{ marginTop: 0 }}>{t('Cleanup: {{name}}', { name: vesselName })}</h3>

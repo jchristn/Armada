@@ -9,6 +9,7 @@ namespace Armada.Helm.Commands
     using Armada.Core.Models;
     using Armada.Core.Services;
     using Armada.Helm.Rendering;
+    using Armada.Helm.Infrastructure;
 
     /// <summary>
     /// Cancel a mission. Accepts ID or title.
@@ -34,7 +35,7 @@ namespace Armada.Helm.Commands
             }
             catch (HttpRequestException)
             {
-                AnsiConsole.MarkupLine("[red]Mission not found or could not be cancelled.[/]");
+                HelmConsole.Error.MarkupLine("[red]Mission not found or could not be cancelled.[/]");
                 AnsiConsole.MarkupLine("List missions with [green]armada mission list[/].");
                 return 1;
             }

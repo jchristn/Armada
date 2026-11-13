@@ -4,6 +4,7 @@ namespace Armada.Core.Services
     using System.Collections.Generic;
     using System.Linq;
     using SyslogLogging;
+    using Armada.Core.BlackBox;
     using Armada.Core.Database;
     using Armada.Core.Enums;
     using Armada.Core.Models;
@@ -14,6 +15,15 @@ namespace Armada.Core.Services
     /// </summary>
     public class VoyageService : IVoyageService
     {
+        #region Public-Members
+
+        /// <summary>
+        /// Black box capture for voyages that settle as Failed, or null.
+        /// </summary>
+        public IBlackBoxCapture? BlackBox { get; set; } = null;
+
+        #endregion
+
         #region Private-Members
 
         private string _Header = "[VoyageService] ";
@@ -64,7 +74,7 @@ namespace Armada.Core.Services
                     missionsInMergeQueue ??= await MergeQueueMissionActivity.GetMissionIdsWithActiveEntriesAsync(_Database, token).ConfigureAwait(false)).ConfigureAwait(false);
                 if (settled == null) continue;
 
-                await VoyageSettlement.ApplyAsync(_Database, voyage, settled.Value, missions, token).ConfigureAwait(false);
+                await VoyageSettlement.ApplyAsync(_Database, voyage, settled.Value, missions, token, BlackBox).ConfigureAwait(false);
                 _Logging.Info(_Header + "voyage " + voyage.Id + " reached terminal status " + voyage.Status);
                 completedVoyages.Add(voyage);
             }

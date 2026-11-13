@@ -187,7 +187,10 @@ namespace Armada.Tui.Screens.Operations
             Editor.Render(surface);
             if (Editor.Text.Length == 0 && !String.IsNullOrEmpty(Placeholder))
             {
-                SurfaceText.Draw(surface, IsFocused ? 1 : 0, 0, T(Placeholder), style.WithForeground(Theme.Muted.Foreground), width - 1);
+                // A multi-line placeholder (one example per line) draws one line per row, not run together.
+                string[] lines = T(Placeholder).Split('\n');
+                for (int i = 0; i < lines.Length && i < height; i++)
+                    SurfaceText.Draw(surface, IsFocused ? 1 : 0, i, lines[i], style.WithForeground(Theme.Muted.Foreground), width - 1);
             }
 
             if (IsFocused && ExternalEditor != null && height > 1)

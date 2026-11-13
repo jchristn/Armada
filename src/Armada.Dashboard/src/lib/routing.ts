@@ -13,6 +13,7 @@ function entityTypeKey(entityType: string): string {
 }
 
 const ENTITY_TYPE_ROUTES: Record<string, (id: string) => string> = {
+  modelendpoint: (id) => `/configuration?tab=endpoints&editEndpoint=${encodeURIComponent(id)}`,
   fleet: (id) => `/fleets/${id}`,
   vessel: (id) => `/vessels/${id}`,
   captain: (id) => `/captains/${id}`,

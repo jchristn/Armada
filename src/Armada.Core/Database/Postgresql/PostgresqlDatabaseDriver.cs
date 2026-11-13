@@ -262,11 +262,14 @@ namespace Armada.Core.Database.Postgresql
         /// <inheritdoc />
         internal override async Task ReplayMigrationsAsync(CancellationToken token = default)
         {
+            int version = await GetSchemaVersionAsync(token).ConfigureAwait(false);
             using (NpgsqlConnection conn = new NpgsqlConnection(_ConnectionString))
             {
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 foreach (SchemaMigration migration in TableQueries.GetMigrations())
                 {
+                    // v121 is a destructive boundary: verify historical migrations on an upgrade fixture, never recreate removed columns.
+                    if (version >= 121 && migration.Version < 119) continue;
                     using (NpgsqlTransaction tx = await conn.BeginTransactionAsync(token).ConfigureAwait(false))
                     {
                         await ExecuteMigrationAsync(conn, tx, migration, token).ConfigureAwait(false);
@@ -311,6 +314,8 @@ namespace Armada.Core.Database.Postgresql
             Fleets = new FleetMethods(this, _Settings, _Logging);
             Vessels = new VesselMethods(this, _Settings, _Logging);
             Captains = new CaptainMethods(this, _Settings, _Logging);
+            MissionWaitIntervals = new Armada.Core.Database.MissionWaitIntervalMethods(() => new Npgsql.NpgsqlConnection(_ConnectionString));
+            CaptainSelections = new Armada.Core.Database.CaptainSelectionMethods(() => new Npgsql.NpgsqlConnection(_ConnectionString));
             Missions = new MissionMethods(this, _Settings, _Logging);
             Voyages = new VoyageMethods(this, _Settings, _Logging);
             PlanningSessions = new PlanningSessionMethods(this, _Settings, _Logging);
@@ -331,9 +336,19 @@ namespace Armada.Core.Database.Postgresql
             CliPermissionRequests = new CliPermissionRequestMethods(this, _Settings, _Logging);
             CliPermissionRules = new CliPermissionRuleMethods(this, _Settings, _Logging);
             StageOutcomes = new StageOutcomeMethods(this, _Settings, _Logging);
+            BlackBoxEntries = new BlackBoxEntryMethods(this);
+            BlackBoxObjects = new BlackBoxObjectMethods(this);
+            BlackBoxFiles = new BlackBoxFileMethods(this);
+            BlackBoxLinks = new BlackBoxLinkMethods(this);
+            BlackBoxNotes = new BlackBoxNoteMethods(this);
+            BlackBoxMigrations = new BlackBoxMigrationMethods(this);
+            BlackBoxSuccesses = new BlackBoxSuccessMethods(this);
+            BlackBoxRecoveryOutcomes = new BlackBoxRecoveryOutcomeMethods(this);
             HandoffArtifacts = new HandoffArtifactMethods(this, _Settings, _Logging);
             FailureCauseRules = new FailureCauseRuleMethods(this, _Settings, _Logging);
             ModelProbeRuns = new ModelProbeRunMethods(this, _Settings, _Logging);
+            ModelProfiles = new ModelProfileMethods(this, _Settings, _Logging);
+            ModelAlerts = new ModelAlertMethods(this, _Settings, _Logging);
             ModelProbeResults = new ModelProbeResultMethods(this, _Settings, _Logging);
             BatteryRuns = new BatteryRunMethods(this, _Settings, _Logging);
             BatteryTaskResults = new BatteryTaskResultMethods(this, _Settings, _Logging);
@@ -351,6 +366,9 @@ namespace Armada.Core.Database.Postgresql
             VesselHealthFindings = new VesselHealthFindingMethods(this, _Settings, _Logging);
             VesselDependencies = new VesselDependencyMethods(this, _Settings, _Logging);
             VesselHealthOverrides = new VesselHealthOverrideMethods(this, _Settings, _Logging);
+            UsageSnapshots = new UsageSnapshotMethods(this, _Settings, _Logging);
+            UsageMemberships = new UsageAccountMembershipMethods(this, _Settings, _Logging);
+            UsageRollups = new UsageHourlyRollupMethods(this, _Settings, _Logging);
             ObjectiveRefinementSessions = new ObjectiveRefinementSessionMethods(this, _Settings, _Logging);
             ObjectiveRefinementMessages = new ObjectiveRefinementMessageMethods(this, _Settings, _Logging);
             Docks = new DockMethods(this, _Settings, _Logging);

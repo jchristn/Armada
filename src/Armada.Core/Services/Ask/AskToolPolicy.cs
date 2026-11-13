@@ -34,6 +34,8 @@ namespace Armada.Core.Services.Ask
             "status",
             "enumerate",
             "voyage_status",
+            "voyage_tree",
+            "vessel_concurrency",
             "list_voyage_progress",
             "mission_status",
             "fleet_action_run_status",
@@ -41,6 +43,7 @@ namespace Armada.Core.Services.Ask
             "list_vessel_dependencies",
             "papercut_summary",
             "token_usage_summary",
+            "usage_status",
             "search_memory",
             "evaluate_autoland",
             "get_cli_permission_request",
@@ -101,11 +104,55 @@ namespace Armada.Core.Services.Ask
             // Evaluate run readers
             "get_model_probe_run",
             "list_model_probe_runs",
+            "get_model_profile",
+            "list_model_profiles",
+            "get_model_scorecard",
+            "list_model_alerts",
+            "get_model_alert",
+            "get_model_alert_thresholds",
+
+            // Pack mutations intentionally stay proposal-gated.
+            "get_battery_pack",
+            "read_battery_pack_file",
+            "validate_battery_pack",
 
             // Fixture battery readers
             "list_battery_packs",
             "get_battery_run",
-            "list_battery_results"
+            "list_battery_results",
+
+            // Black box readers (plan 10.1): every BlackBox tool the MCP authorization registry declares as a Read,
+            // including the admin-level ones (get_blackbox_retention TenantAdmin; get_blackbox_storage and
+            // export_blackbox_fixture AdminOnly), like validate_workflow_profile: the gate sits outside the registry
+            // check, so a thread call still runs as the thread owner and is refused (Forbidden) without the role. The
+            // write tools (run_blackbox_recovery, apply_blackbox_recommendation, resolve_blackbox, annotate_blackbox, pin,
+            // delete, purge, gc, reanalyze) stay behind the Ask gate as proposals.
+            "get_blackbox",
+            "read_blackbox_section",
+            "list_blackbox_objects",
+            "read_blackbox_object",
+            "list_blackbox_entries",
+            "search_blackbox",
+            "list_blackbox_notes",
+            "get_blackbox_bundle",
+            "list_blackbox_hotspots",
+            "list_blackbox_fingerprints",
+            "list_blackbox_resilience_gaps",
+            "get_blackbox_fingerprint_trend",
+            "get_blackbox_retention",
+            "get_blackbox_storage",
+            "export_blackbox_fixture",
+
+            // Black box prevention, forensics and operations readers
+            "preview_mission_overlap",
+            "list_vessel_reservations",
+            "lint_mission_brief",
+            "get_vessel_blackbox_doctor",
+            "diff_blackbox_entries",
+            "list_blackbox_nearby_successes",
+            "get_blackbox_timeline",
+            "get_voyage_blackbox_cascade",
+            "get_blackbox_recovery_stats"
         };
 
         private static readonly HashSet<string> _GateExempt = new HashSet<string>(StringComparer.Ordinal)

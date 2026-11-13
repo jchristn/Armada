@@ -1,5 +1,5 @@
-import TokenActivityHeatmap from '../components/activity/TokenActivityHeatmap';
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import TokenActivityHeatmap, { type TokenActivityHeatmapHandle } from '../components/activity/TokenActivityHeatmap';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useSearchParams } from 'react-router-dom';
 import { getTokenUsage, listCaptains } from '../api/client';
@@ -7,6 +7,7 @@ import { ErrorState } from '../components/shared/StateBlocks';
 import type { Captain, TokenUsageSummaryResult } from '../types/models';
 import { useLocale } from '../context/LocaleContext';
 import { copyOrDownloadSvgImage } from '../lib/chartImage';
+import RefreshButton from '../components/shared/RefreshButton';
 import { tokenHeatmapSpecForHours } from '../lib/tokenHeatmap';
 import { computeYTicks, formatTokens, splitTokenTypes, TOKEN_USAGE_TIME_RANGES } from '../lib/tokenUsage';
 
@@ -49,6 +50,7 @@ function truncate(text: string, max: number): string {
   return text.length > max ? text.slice(0, max - 1) + '…' : text;
 }
 
+/** Token usage charts, available directly from Activity's main navigation. */
 export default function TokenUsage() {
   const { t } = useLocale();
   // ?harborId= (from a Harbor's charts) limits the page to captains run on that Harbor.
@@ -64,12 +66,15 @@ export default function TokenUsage() {
   const [shape, setShape] = useState<Shape>('bars');
   const [data, setData] = useState<TokenUsageSummaryResult | null>(null);
   const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [reloadKey, setReloadKey] = useState(0);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [tooltip, setTooltip] = useState<TooltipData | null>(null);
   const [copiedTime, setCopiedTime] = useState<CopyState>('idle');
   const [copiedModel, setCopiedModel] = useState<CopyState>('idle');
 
+  const requestVersion = useRef(0);
+  const abortRef = useRef<AbortController | null>(null);
+  const captainRequestVersion = useRef(0);
+  const heatmapRef = useRef<TokenActivityHeatmapHandle>(null);
   const timeChartRef = useRef<SVGSVGElement | null>(null);
   const modelChartRef = useRef<SVGSVGElement | null>(null);
   const tipRef = useRef<HTMLDivElement | null>(null);
@@ -78,13 +83,16 @@ export default function TokenUsage() {
   const range = TIME_RANGES.find(r => r.value === timeRange)!;
   const heatmapSpec = useMemo(() => tokenHeatmapSpecForHours(range.hours), [range.hours]);
 
-  useEffect(() => {
-    let cancelled = false;
-    listCaptains({ pageSize: 1000 })
-      .then((result) => { if (!cancelled) setCaptains([...(result?.objects ?? [])].sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id))); })
-      .catch(() => { if (!cancelled) setCaptains([]); });
-    return () => { cancelled = true; };
+  const loadCaptains = useCallback(async () => {
+    const version = ++captainRequestVersion.current;
+    const result = await listCaptains({ pageSize: 1000 });
+    if (version !== captainRequestVersion.current) return;
+    setCaptains([...(result?.objects ?? [])].sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id)));
   }, []);
+  useEffect(() => {
+    void loadCaptains().catch(() => {});
+    return () => { captainRequestVersion.current++; };
+  }, [loadCaptains]);
 
   useLayoutEffect(() => {
     if (!tooltip || !tipRef.current) return;
@@ -99,32 +107,38 @@ export default function TokenUsage() {
     setTipPos({ left, top });
   }, [tooltip]);
 
-  useEffect(() => {
+  const load = useCallback(async () => {
+    const version = ++requestVersion.current;
+    abortRef.current?.abort();
     const controller = new AbortController();
-    let cancelled = false;
+    abortRef.current = controller;
     const end = new Date();
     const start = new Date(end.getTime() - range.hours * 3600000);
     setLoading(true);
-    getTokenUsage({ fromUtc: start.toISOString(), toUtc: end.toISOString(), bucketMinutes: range.stepMinutes, modelLimit: MODEL_LIMIT, harborId: harborId || undefined, captainId: captainId || undefined, model: modelFilter || undefined }, { signal: controller.signal })
-      .then((result) => {
-        if (cancelled) return;
-        setData(result);
-        setLoadError(null);
-        // Remember every model seen, so the picker still lists the others while one model is selected.
-        const seen = (result?.byModel ?? []).map(m => m.model).filter(m => Boolean(m) && m !== OTHER_MODELS_KEY);
-        setKnownModels(prev => (seen.every(m => prev.includes(m)) ? prev : [...new Set([...prev, ...seen])].sort()));
-      })
-      .catch(() => {
-        if (cancelled) return;
+    try {
+      const result = await getTokenUsage({ fromUtc: start.toISOString(), toUtc: end.toISOString(), bucketMinutes: range.stepMinutes, modelLimit: MODEL_LIMIT, harborId: harborId || undefined, captainId: captainId || undefined, model: modelFilter || undefined }, { signal: controller.signal });
+      if (version !== requestVersion.current) return;
+      setData(result);
+      setLoadFailed(false);
+      // Remember every model seen, so the picker still lists the others while one model is selected.
+      const seen = (result?.byModel ?? []).map(m => m.model).filter(m => Boolean(m) && m !== OTHER_MODELS_KEY);
+      setKnownModels(prev => (seen.every(m => prev.includes(m)) ? prev : [...new Set([...prev, ...seen])].sort()));
+    } catch (error: unknown) {
+      if (version === requestVersion.current) {
         setData(null);
-        setLoadError(t('Could not load token usage.'));
-      })
-      .finally(() => { if (!cancelled) setLoading(false); });
+        setLoadFailed(true);
+      }
+      throw error;
+    } finally { if (version === requestVersion.current) setLoading(false); }
+  }, [range.hours, range.stepMinutes, harborId, captainId, modelFilter]);
+  useEffect(() => {
+    void load().catch(() => {});
     return () => {
-      cancelled = true;
-      controller.abort();
+      requestVersion.current++;
+      abortRef.current?.abort();
     };
-  }, [range.hours, range.stepMinutes, timeRange, harborId, captainId, modelFilter, reloadKey]);
+  }, [load]);
+  const refresh = async () => { await Promise.all([load(), loadCaptains(), heatmapRef.current?.refresh()]); };
 
   const bucketTimestamps = useMemo<number[]>(
     () => (data?.buckets || []).map(b => new Date(b.bucketStartUtc).getTime()),
@@ -255,13 +269,16 @@ export default function TokenUsage() {
             )}
           </select>
         </label>
-        <div className="mission-history-time-tabs">
-          <button className={'mission-history-time-tab' + (metric === 'total' ? ' active' : '')} onClick={() => setMetric('total')} title={t('Color the usage-over-time chart by model, showing each model\'s total tokens. The usage-by-model chart is always split by token type.')}>{t('Total')}</button>
-          <button className={'mission-history-time-tab' + (metric === 'byType' ? ' active' : '')} onClick={() => setMetric('byType')} title={t('Split the usage-over-time chart into uncached input, cached input, and output tokens instead of by model. The parts add up to the total.')}>{t('By token type')}</button>
-        </div>
-        <div className="mission-history-time-tabs">
-          <button className={'mission-history-time-tab' + (shape === 'bars' ? ' active' : '')} onClick={() => setShape('bars')} title={t('Draw usage over time as stacked bars, so each bar\'s height is the bucket total.')}>{t('Stacked bars')}</button>
-          <button className={'mission-history-time-tab' + (shape === 'lines' ? ' active' : '')} onClick={() => setShape('lines')} title={t('Draw usage over time as one line per series, which makes trends easier to compare.')}>{t('Lines')}</button>
+        <div className="token-usage-view-controls">
+          <div className="mission-history-time-tabs">
+            <button className={'mission-history-time-tab' + (metric === 'total' ? ' active' : '')} onClick={() => setMetric('total')} title={t('Color the usage-over-time chart by model, showing each model\'s total tokens. The usage-by-model chart is always split by token type.')}>{t('Total')}</button>
+            <button className={'mission-history-time-tab' + (metric === 'byType' ? ' active' : '')} onClick={() => setMetric('byType')} title={t('Split the usage-over-time chart into uncached input, cached input, and output tokens instead of by model. The parts add up to the total.')}>{t('By token type')}</button>
+          </div>
+          <div className="mission-history-time-tabs">
+            <button className={'mission-history-time-tab' + (shape === 'bars' ? ' active' : '')} onClick={() => setShape('bars')} title={t('Draw usage over time as stacked bars, so each bar\'s height is the bucket total.')}>{t('Stacked bars')}</button>
+            <button className={'mission-history-time-tab' + (shape === 'lines' ? ' active' : '')} onClick={() => setShape('lines')} title={t('Draw usage over time as one line per series, which makes trends easier to compare.')}>{t('Lines')}</button>
+          </div>
+          <RefreshButton onRefresh={refresh} title="Refresh token usage" />
         </div>
       </div>
 
@@ -275,10 +292,10 @@ export default function TokenUsage() {
         )}
       </div>
 
-      <TokenActivityHeatmap harborId={harborId} captainId={captainId} model={modelFilter} spec={heatmapSpec} />
+      <TokenActivityHeatmap ref={heatmapRef} harborId={harborId} captainId={captainId} model={modelFilter} spec={heatmapSpec} />
 
-      {loadError && (
-        <ErrorState message={loadError} onRetry={() => setReloadKey((key) => key + 1)} />
+      {loadFailed && (
+        <ErrorState message={t('Could not load token usage.')} onRetry={() => { void load().catch(() => {}); }} />
       )}
 
       {/* Chart 1 -- Usage over time. Title + axis labels live inside the SVG so the copied image includes them. */}
@@ -288,7 +305,7 @@ export default function TokenUsage() {
         </div>
         {loading ? (
           <div className="mission-history-empty">{t('Loading token usage...')}</div>
-        ) : loadError ? null : !hasTimeData ? (
+        ) : loadFailed ? null : !hasTimeData ? (
           <div className="mission-history-empty">{t('No token usage for this time range')}</div>
         ) : (
           <>
@@ -359,7 +376,7 @@ export default function TokenUsage() {
         </div>
         {loading ? (
           <div className="mission-history-empty">{t('Loading token usage...')}</div>
-        ) : loadError ? null : !hasModelData ? (
+        ) : loadFailed ? null : !hasModelData ? (
           <div className="mission-history-empty">{t('No token usage for this time range')}</div>
         ) : (
           <>

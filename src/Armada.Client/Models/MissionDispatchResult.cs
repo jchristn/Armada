@@ -1,12 +1,14 @@
 namespace Armada.Client.Models
 {
     using System;
+    using Armada.Core.Enums;
     using Armada.Core.Models;
+    using Armada.Core.Services;
 
     /// <summary>
-    /// Reply of <c>POST /api/v1/missions</c>. The server returns the bare mission when a captain took it, and
-    /// <c>{ Mission, Warning }</c> when the mission was created but no captain could take it yet (status Pending).
-    /// Both shapes are read into this class, so the mission id and the warning are never lost.
+    /// Reply of <c>POST /api/v1/missions</c>. The server returns the Mission and, when no captain could take it yet,
+    /// leaves it Pending with an <c>X-Armada-Warning</c> header. Servers before v1.3.0 wrapped that case as
+    /// <c>{ Mission, Warning }</c>. Both shapes are read into this class, so the mission id and the warning are never lost.
     /// </summary>
     public class MissionDispatchResult
     {
@@ -18,7 +20,8 @@ namespace Armada.Client.Models
         public Mission? Mission { get; set; } = null;
 
         /// <summary>
-        /// Warning from the wrapped reply (no captain could take the mission yet), or null.
+        /// Warning when no captain could take the mission yet: the older wrapped reply's text, or the shared
+        /// <c>usageSelection.missionWaiting</c> message for a Pending mission. Null when a captain took it.
         /// </summary>
         public string? Warning { get; set; } = null;
 
@@ -46,6 +49,8 @@ namespace Armada.Client.Models
 
             MissionDispatchResult plain = new MissionDispatchResult();
             plain.Mission = ArmadaJson.Deserialize<Mission>(json);
+            if (plain.Mission != null && plain.Mission.Status == MissionStatusEnum.Pending)
+                plain.Warning = UsageSelectionText.Get("usageSelection.missionWaiting");
             return plain;
         }
 

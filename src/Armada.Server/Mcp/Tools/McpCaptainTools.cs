@@ -157,6 +157,8 @@ namespace Armada.Server.Mcp.Tools
                         muxMaxTokens = new { type = "integer", description = "Optional Mux max tokens override" },
                         muxSystemPromptPath = new { type = "string", description = "Optional Mux system prompt file path" },
                         muxApprovalPolicy = new { type = "string", description = "Optional Mux approval policy override" },
+                        maxConcurrency = new { type = "integer", description = "Maximum simultaneous missions, 1..256 and bounded by the server ceiling. Defaults: CLI 1, ApiEndpoint/Mux 4. Lowering does not stop existing work." },
+                        active = new { type = "boolean", description = "Whether this captain may accept new work. Defaults true on create; omit on update to preserve. Disabling preserves in-flight work." },
                         autoApprove = new { type = "boolean", description = "Whether the CLI captain runs with its auto-approve or permission-bypass flag (default true). False runs it without auto-approve where the runtime supports it (Claude Code acceptEdits, Codex workspace-write sandbox, Gemini auto_edit, Cursor without --force, OpenCode without --auto, Pi without its bash and powershell tools, Mux deny)." }
                     },
                     required = new[] { "name" }
@@ -179,6 +181,10 @@ namespace Armada.Server.Mcp.Tools
                     captain.ReasoningEffort = ParseReasoningEffort(request.ReasoningEffort);
                     captain.Tier = ParseTier(request.Tier);
                     ApplyMuxOptions(captain, request);
+                    captain.MaxConcurrency = request.MaxConcurrency.HasValue
+                        ? ConcurrencyClamp.CaptainLimit(request.MaxConcurrency.Value, settings?.Concurrency.MaxCaptainConcurrency ?? 256)
+                        : CaptainConcurrencyDefaults.For(captain.Runtime, settings?.Concurrency);
+                    captain.Active = request.Active ?? true;
                     captain.RuntimeOptionsJson = CaptainRuntimeOptions.WithAutoApprove(captain.RuntimeOptionsJson, request.AutoApprove);
 
                     if (agentLifecycle != null)
@@ -218,6 +224,8 @@ namespace Armada.Server.Mcp.Tools
                         muxMaxTokens = new { type = "integer", description = "Optional Mux max tokens override" },
                         muxSystemPromptPath = new { type = "string", description = "Optional Mux system prompt file path; empty string clears it" },
                         muxApprovalPolicy = new { type = "string", description = "Optional Mux approval policy override; empty string clears it" },
+                        maxConcurrency = new { type = "integer", description = "Maximum simultaneous missions, 1..256 and bounded by the server ceiling. Defaults: CLI 1, ApiEndpoint/Mux 4. Lowering does not stop existing work." },
+                        active = new { type = "boolean", description = "Whether this captain may accept new work. Defaults true on create; omit on update to preserve. Disabling preserves in-flight work." },
                         autoApprove = new { type = "boolean", description = "Whether the CLI captain runs with its auto-approve or permission-bypass flag. Omit to keep the current value." }
                     },
                     required = new[] { "captainId" }
@@ -229,6 +237,7 @@ namespace Armada.Server.Mcp.Tools
                     string captainId = request.CaptainId;
                     Captain? captain = await McpCallerScope.ReadCaptainAsync(database, caller, captainId).ConfigureAwait(false);
                     if (captain == null) return (object)McpToolError.NotFound("Captain not found");
+                    if (request.Active.HasValue) captain.Active = request.Active.Value;
                     if (request.Name != null)
                         captain.Name = request.Name;
                     if (!String.IsNullOrEmpty(request.Runtime) && Enum.TryParse<AgentRuntimeEnum>(request.Runtime, true, out AgentRuntimeEnum rt))
@@ -266,7 +275,8 @@ namespace Armada.Server.Mcp.Tools
 
                     captain.LastUpdateUtc = DateTime.UtcNow;
                     await DuplicateEntityGuard.EnsureCaptainNameAvailableAsync(database, captain).ConfigureAwait(false);
-                    captain = await database.Captains.UpdateAsync(captain).ConfigureAwait(false);
+                    if (request.MaxConcurrency.HasValue) captain.MaxConcurrency = ConcurrencyClamp.CaptainLimit(request.MaxConcurrency.Value, settings?.Concurrency.MaxCaptainConcurrency ?? 256);
+                    captain = await database.Captains.UpdateAsync(captain, updateActive: request.Active.HasValue, updateConcurrency: request.MaxConcurrency.HasValue).ConfigureAwait(false);
                     return (object)captain;
                 });
 

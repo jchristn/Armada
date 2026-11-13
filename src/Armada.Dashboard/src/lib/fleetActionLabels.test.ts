@@ -5,9 +5,15 @@ import {
   RUN_STATUS_META,
   SKIP_REASON_LABELS,
   TARGET_STATUS_META,
+  MISSION_MODES,
+  MISSION_MODE_LABELS,
+  TEMPLATE_VARIABLES,
+  isReportOnly,
   reasonLabel,
   formatDurationMs,
 } from './fleetActionLabels';
+import { findUnknownTemplateVariables, renderTemplatePreview } from './fleetActionTemplate';
+import { buildRunReportMarkdown, reportFileName } from './fleetActionReport';
 import {
   BATCH_STATUS_META,
   CANDIDATE_STATUS_META,
@@ -98,5 +104,51 @@ describe('formatDurationMs', () => {
     expect(formatDurationMs(t, 'en', 4200)).toBe('4.2 s');
     expect(formatDurationMs(t, 'en', 185000)).toBe('3 min 5 s');
     expect(formatDurationMs(t, 'en', null)).toBe('-');
+  });
+});
+
+describe('report-only missions and new skip reasons', () => {
+  it('labels NotApplicable and every mission mode', () => {
+    expect(reasonLabel(t, 'NotApplicable', null)).toBe('Not applicable');
+    expect(MISSION_MODES.map((m) => MISSION_MODE_LABELS[m])).toEqual(['Implementation', 'Audit (read-only)', 'Research (read-only)']);
+  });
+
+  it('treats only Audit and Research Mission actions as report-only', () => {
+    expect(isReportOnly({ kind: 'Mission', missionMode: 'Audit' })).toBe(true);
+    expect(isReportOnly({ kind: 'Mission', missionMode: 'Research' })).toBe(true);
+    expect(isReportOnly({ kind: 'Mission', missionMode: 'Implementation' })).toBe(false);
+    expect(isReportOnly({ kind: 'Mission' })).toBe(false);
+    expect(isReportOnly({ kind: 'Command', missionMode: 'Audit' })).toBe(false);
+    expect(isReportOnly(null)).toBe(false);
+  });
+});
+
+describe('template variables', () => {
+  it('knows the outdated and license report commands', () => {
+    expect(TEMPLATE_VARIABLES.map((v) => v.name)).toEqual(expect.arrayContaining(['vessel.outdatedCommand', 'vessel.licensesCommand']));
+    expect(findUnknownTemplateVariables('{{vessel.outdatedCommand}} && {{ VESSEL.LICENSESCOMMAND }} {{vessel.nope}}')).toEqual(['vessel.nope']);
+    for (const v of TEMPLATE_VARIABLES) expect(findUnknownTemplateVariables(`{{${v.name}}}`)).toEqual([]);
+  });
+
+  it('leaves a missing build command for the server to resolve instead of warning it will be skipped', () => {
+    const vessel = { id: 'vsl_1', name: 'web', defaultBranch: 'main', workingDirectory: '/w' };
+    expect(renderTemplatePreview('{{vessel.buildCommand}}', vessel, '')).toEqual({ text: '{{vessel.buildCommand}}', usesHealthSummary: false, missingBuildCommand: false });
+    expect(renderTemplatePreview('{{vessel.buildCommand}}', { ...vessel, definitionOfDoneBuildCommand: 'make' }, '').text).toBe('make');
+  });
+});
+
+describe('run report markdown', () => {
+  it('writes a vessel and status heading per target with the report, or the reason when there is none', () => {
+    const run = { id: 'far/1', actionName: 'Security review', kind: 'Mission' as const, missionMode: 'Audit' as const, targetCount: 2, createdUtc: '2026-11-01T00:00:00Z' };
+    const text = buildRunReportMarkdown(t, run, [
+      { id: 'a', vesselId: 'vsl_a', vesselName: 'api', status: 'Succeeded', skipReason: null, failureReason: null, outputText: '  All clear.  ', outputTruncated: true },
+      { id: 'b', vesselId: 'vsl_b', vesselName: 'web', status: 'Skipped', skipReason: 'NotApplicable', failureReason: null, outputText: null, outputTruncated: false },
+    ]);
+    expect(text).toBe([
+      '# Security review', '', '- Run: far/1', '- Mission mode: Audit (read-only)', '- Targets: 2', '- Created: 2026-11-01T00:00:00Z',
+      '', '## api (Succeeded)', '', '_Only the end of this report was kept._', '', 'All clear.',
+      '', '## web (Skipped)', '', '_Not applicable_', '',
+    ].join('\n'));
+    expect(reportFileName('far/1')).toBe('fleet-action-report-far_1.md');
   });
 });

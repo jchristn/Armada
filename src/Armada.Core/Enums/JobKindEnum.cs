@@ -50,6 +50,13 @@ namespace Armada.Core.Enums
         /// A captain analyzing imported repositories and recommending fleets for them.
         /// </summary>
         [EnumMember(Value = "FleetCategorization")]
-        FleetCategorization
+        FleetCategorization,
+
+        /// <summary>
+        /// An account usage capture attempt: one probe of one captain account group on its credential
+        /// host. A dedicated job, separate from mission launch slots and a captain's Working/Idle state.
+        /// </summary>
+        [EnumMember(Value = "UsageProbe")]
+        UsageProbe
     }
 }

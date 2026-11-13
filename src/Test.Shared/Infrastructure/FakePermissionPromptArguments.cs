@@ -1,6 +1,7 @@
 namespace Test.Shared.Infrastructure
 {
     using System.Collections.Generic;
+    using System.Text.Json;
     using System.Text.Json.Serialization;
 
     /// <summary>
@@ -15,10 +16,10 @@ namespace Test.Shared.Infrastructure
         public string? ToolName { get; set; } = null;
 
         /// <summary>
-        /// input (string values).
+        /// Tool input, including numeric options such as bash timeout.
         /// </summary>
         [JsonPropertyName("input")]
-        public Dictionary<string, string>? Input { get; set; } = null;
+        public Dictionary<string, JsonElement>? Input { get; set; } = null;
 
         /// <summary>
         /// tool_use_id.

@@ -28,6 +28,7 @@ import { planningDispatchHref } from './planningDispatch';
 import type { PlanningCatalog } from './usePlanningCatalog';
 import { usePlanningSession } from './usePlanningSession';
 import { useReducedMotion } from '../../lib/accessibility';
+import { dispatchWarningsOf, firstWarningMessage, warningCount } from '../blackbox/insightModel';
 
 export interface PlanningSessionViewProps {
   sessionId: string;
@@ -194,7 +195,11 @@ export function PlanningSessionView({ sessionId, catalog, embedded, initialCompo
       title: dispatchTitle.trim() || undefined,
       description: dispatchDescription.trim(),
     }), t('Dispatch created from planning session.'));
-    if (voyage) router.push(`/voyages/${voyage.id}` as Href);
+    if (voyage) {
+      const dispatchWarnings = dispatchWarningsOf(voyage);
+      if (warningCount(dispatchWarnings) > 0) pushToast('warning', t('Dispatched with {{count}} warning(s): {{message}}', { count: warningCount(dispatchWarnings), message: firstWarningMessage(dispatchWarnings) }));
+      router.push(`/voyages/${voyage.id}` as Href);
+    }
   };
 
   // Committing planning output to dispatch releases the reserved captain and dock (best-effort, like the dashboard).

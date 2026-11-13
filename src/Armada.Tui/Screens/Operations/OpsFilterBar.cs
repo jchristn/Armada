@@ -115,17 +115,33 @@ namespace Armada.Tui.Screens.Operations
             int height = surface.Size.Height;
             SurfaceText.FillRect(surface, new Rect(0, 0, width, height), Theme.Text);
             List<Rect> rects = Layout(width);
+            int rows = rects.Select(r => r.Y).DefaultIfEmpty(0).Max() + 1;
+            // Shorter than its rows (a short terminal): scroll so the focused field shows, and say how many are hidden.
+            int offset = 0;
+            int focusedIndex = _Items.FindIndex(i => ReferenceEquals(Scope.Focused, i.Widget));
+            if (rows > height && IsFocused && focusedIndex >= 0 && rects[focusedIndex].Y >= height) offset = rects[focusedIndex].Y - height + 1;
+            int lastRowEnd = 0;
             for (int i = 0; i < _Items.Count; i++)
             {
                 OpsFilterItem item = _Items[i];
-                Rect r = rects[i];
+                Rect r = new Rect(rects[i].X, rects[i].Y - offset, rects[i].Width, rects[i].Height);
+                if (r.Y < 0) continue;
                 if (r.Y >= height) break;
+                if (r.Y == height - 1) lastRowEnd = Math.Max(lastRowEnd, r.X + r.Width);
                 string label = T(item.Label) + ":";
                 bool focused = IsFocused && ReferenceEquals(Scope.Focused, item.Widget);
                 // The focused field's label is bold and underlined as well as colored, so focus does not rely on color.
                 CellStyle labelStyle = focused ? Theme.Accent.WithAttribute(CellAttributes.Bold, true).WithAttribute(CellAttributes.Underline, true) : Theme.Muted;
                 int lw = SurfaceText.Draw(surface, r.X, r.Y, label, labelStyle, width - r.X);
                 Scope.RenderChild(surface, item.Widget, new Rect(r.X + lw + 1, r.Y, Math.Max(1, Math.Min(item.Width, width - r.X - lw - 1)), 1));
+            }
+
+            int hidden = rows - height;
+            if (hidden > 0)
+            {
+                string more = "/ " + T("More filters");
+                int mw = TextCells.Width(more);
+                if (lastRowEnd + 2 + mw <= width) SurfaceText.Draw(surface, width - mw, height - 1, more, Theme.Muted, mw);
             }
         }
 

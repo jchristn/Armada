@@ -37,7 +37,7 @@ namespace Test.Shared.Suites.Services
                 using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
                 Vessel vessel = await CreateVesselAsync(testDb).ConfigureAwait(false);
                 Mission failed = await CreateFailedMissionAsync(testDb, vessel.Id, MissionFailureKindEnum.TestFail, "test failed").ConfigureAwait(false);
-                Mission reapply = await testDb.Driver.Missions.CreateAsync(new Mission("reapply", "same work") { VesselId = vessel.Id, ParentMissionId = failed.Id, Status = MissionStatusEnum.InProgress }).ConfigureAwait(false);
+                Mission reapply = await testDb.Driver.Missions.CreateAsync(new Mission("reapply", "same work") { VesselId = vessel.Id, RescueOfMissionId = failed.Id, Status = MissionStatusEnum.InProgress }).ConfigureAwait(false);
                 MissionRecoveryCoordinator coordinator = new MissionRecoveryCoordinator(CreateLogging(), testDb.Driver, new ArmadaSettings { MaxMissionRecoveryAttempts = 2 });
                 await coordinator.MaintainAsync().ConfigureAwait(false);
                 await coordinator.MaintainAsync().ConfigureAwait(false);
@@ -119,7 +119,7 @@ namespace Test.Shared.Suites.Services
                 Mission? rescue = await testDb.Driver.Missions.ReadAsync(incident.RescueMissionIds[0]).ConfigureAwait(false);
                 AssertNotNull(rescue, "the rescue mission should exist");
                 AssertEqual(MissionStatusEnum.Pending, rescue!.Status, "the rescue mission starts Pending for dispatch");
-                AssertEqual(failed.Id, rescue.ParentMissionId, "the rescue links back to the failed mission");
+                AssertEqual(failed.Id, rescue.RescueOfMissionId, "the rescue links back to the failed mission");
                 AssertTrue(rescue.Title.StartsWith("[Rescue]", StringComparison.Ordinal), "the rescue title is marked");
             }));
 
@@ -243,7 +243,7 @@ namespace Test.Shared.Suites.Services
                 for (int i = 0; i < 2; i++)
                 {
                     Mission orphan = await CreateFailedMissionAsync(testDb, vessel.Id, MissionFailureKindEnum.LandingConflict, "Error merging locally").ConfigureAwait(false);
-                    // Purging the original cleared ParentMissionId (ON DELETE SET NULL); only the rescue flag remains.
+                    // Purging the original cleared RescueOfMissionId (ON DELETE SET NULL); only the rescue flag remains.
                     orphan.Title = "[Rescue] Do the thing";
                     orphan.IsRescue = true;
                     await testDb.Driver.Missions.UpdateAsync(orphan).ConfigureAwait(false);

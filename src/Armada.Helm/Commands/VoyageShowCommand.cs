@@ -8,6 +8,7 @@ namespace Armada.Helm.Commands
     using Armada.Core.Models;
     using Armada.Core.Services;
     using Armada.Helm.Rendering;
+    using Armada.Helm.Infrastructure;
 
     /// <summary>
     /// Show voyage details. Accepts ID or title.
@@ -43,7 +44,7 @@ namespace Armada.Helm.Commands
 
             if (voyage == null)
             {
-                AnsiConsole.MarkupLine($"[red]Voyage not found:[/] {Markup.Escape(settings.Id)}");
+                HelmConsole.Error.MarkupLine($"[red]Voyage not found:[/] {Markup.Escape(settings.Id)}");
                 AnsiConsole.MarkupLine("List voyages with [green]armada voyage list[/].");
                 return 1;
             }

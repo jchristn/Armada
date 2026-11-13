@@ -1,0 +1,422 @@
+{
+  "results": [
+    {
+      "theme": "light",
+      "width": 1280,
+      "locale": "en",
+      "overflow": false,
+      "dialogWidth": 760,
+      "clippedButtons": 0,
+      "missingKeys": false,
+      "checkboxes": [
+        {
+          "width": 16,
+          "gap": 12
+        },
+        {
+          "width": 16,
+          "gap": 12
+        }
+      ],
+      "focusInside": true,
+      "passed": true
+    },
+    {
+      "theme": "light",
+      "width": 1280,
+      "locale": "es",
+      "overflow": false,
+      "dialogWidth": 760,
+      "clippedButtons": 0,
+      "missingKeys": false,
+      "checkboxes": [
+        {
+          "width": 16,
+          "gap": 12
+        },
+        {
+          "width": 16,
+          "gap": 12
+        }
+      ],
+      "focusInside": true,
+      "passed": true
+    },
+    {
+      "theme": "light",
+      "width": 1280,
+      "locale": "ja",
+      "overflow": false,
+      "dialogWidth": 760,
+      "clippedButtons": 0,
+      "missingKeys": false,
+      "checkboxes": [
+        {
+          "width": 16,
+          "gap": 12
+        },
+        {
+          "width": 16,
+          "gap": 12
+        }
+      ],
+      "focusInside": true,
+      "passed": true
+    },
+    {
+      "theme": "light",
+      "width": 768,
+      "locale": "en",
+      "overflow": false,
+      "dialogWidth": 736,
+      "clippedButtons": 0,
+      "missingKeys": false,
+      "checkboxes": [
+        {
+          "width": 16,
+          "gap": 12
+        },
+        {
+          "width": 16,
+          "gap": 12
+        }
+      ],
+      "focusInside": true,
+      "passed": true
+    },
+    {
+      "theme": "light",
+      "width": 768,
+      "locale": "es",
+      "overflow": false,
+      "dialogWidth": 736,
+      "clippedButtons": 0,
+      "missingKeys": false,
+      "checkboxes": [
+        {
+          "width": 16,
+          "gap": 12
+        },
+        {
+          "width": 16,
+          "gap": 12
+        }
+      ],
+      "focusInside": true,
+      "passed": true
+    },
+    {
+      "theme": "light",
+      "width": 768,
+      "locale": "ja",
+      "overflow": false,
+      "dialogWidth": 736,
+      "clippedButtons": 0,
+      "missingKeys": false,
+      "checkboxes": [
+        {
+          "width": 16,
+          "gap": 12
+        },
+        {
+          "width": 16,
+          "gap": 12
+        }
+      ],
+      "focusInside": true,
+      "passed": true
+    },
+    {
+      "theme": "light",
+      "width": 390,
+      "locale": "en",
+      "overflow": false,
+      "dialogWidth": 390,
+      "clippedButtons": 0,
+      "missingKeys": false,
+      "checkboxes": [
+        {
+          "width": 16,
+          "gap": 12
+        },
+        {
+          "width": 16,
+          "gap": 12
+        }
+      ],
+      "focusInside": true,
+      "passed": true
+    },
+    {
+      "theme": "light",
+      "width": 390,
+      "locale": "es",
+      "overflow": false,
+      "dialogWidth": 390,
+      "clippedButtons": 0,
+      "missingKeys": false,
+      "checkboxes": [
+        {
+          "width": 16,
+          "gap": 12
+        },
+        {
+          "width": 16,
+          "gap": 12
+        }
+      ],
+      "focusInside": true,
+      "passed": true
+    },
+    {
+      "theme": "light",
+      "width": 390,
+      "locale": "ja",
+      "overflow": false,
+      "dialogWidth": 390,
+      "clippedButtons": 0,
+      "missingKeys": false,
+      "checkboxes": [
+        {
+          "width": 16,
+          "gap": 12
+        },
+        {
+          "width": 16,
+          "gap": 12
+        }
+      ],
+      "focusInside": true,
+      "passed": true
+    },
+    {
+      "theme": "dark",
+      "width": 1280,
+      "locale": "en",
+      "overflow": false,
+      "dialogWidth": 760,
+      "clippedButtons": 0,
+      "missingKeys": false,
+      "checkboxes": [
+        {
+          "width": 16,
+          "gap": 12
+        },
+        {
+          "width": 16,
+          "gap": 12
+        }
+      ],
+      "focusInside": true,
+      "passed": true
+    },
+    {
+      "theme": "dark",
+      "width": 1280,
+      "locale": "es",
+      "overflow": false,
+      "dialogWidth": 760,
+      "clippedButtons": 0,
+      "missingKeys": false,
+      "checkboxes": [
+        {
+          "width": 16,
+          "gap": 12
+        },
+        {
+          "width": 16,
+          "gap": 12
+        }
+      ],
+      "focusInside": true,
+      "passed": true
+    },
+    {
+      "theme": "dark",
+      "width": 1280,
+      "locale": "ja",
+      "overflow": false,
+      "dialogWidth": 760,
+      "clippedButtons": 0,
+      "missingKeys": false,
+      "checkboxes": [
+        {
+          "width": 16,
+          "gap": 12
+        },
+        {
+          "width": 16,
+          "gap": 12
+        }
+      ],
+      "focusInside": true,
+      "passed": true
+    },
+    {
+      "theme": "dark",
+      "width": 768,
+      "locale": "en",
+      "overflow": false,
+      "dialogWidth": 736,
+      "clippedButtons": 0,
+      "missingKeys": false,
+      "checkboxes": [
+        {
+          "width": 16,
+          "gap": 12
+        },
+        {
+          "width": 16,
+          "gap": 12
+        }
+      ],
+      "focusInside": true,
+      "passed": true
+    },
+    {
+      "theme": "dark",
+      "width": 768,
+      "locale": "es",
+      "overflow": false,
+      "dialogWidth": 736,
+      "clippedButtons": 0,
+      "missingKeys": false,
+      "checkboxes": [
+        {
+          "width": 16,
+          "gap": 12
+        },
+        {
+          "width": 16,
+          "gap": 12
+        }
+      ],
+      "focusInside": true,
+      "passed": true
+    },
+    {
+      "theme": "dark",
+      "width": 768,
+      "locale": "ja",
+      "overflow": false,
+      "dialogWidth": 736,
+      "clippedButtons": 0,
+      "missingKeys": false,
+      "checkboxes": [
+        {
+          "width": 16,
+          "gap": 12
+        },
+        {
+          "width": 16,
+          "gap": 12
+        }
+      ],
+      "focusInside": true,
+      "passed": true
+    },
+    {
+      "theme": "dark",
+      "width": 390,
+      "locale": "en",
+      "overflow": false,
+      "dialogWidth": 390,
+      "clippedButtons": 0,
+      "missingKeys": false,
+      "checkboxes": [
+        {
+          "width": 16,
+          "gap": 12
+        },
+        {
+          "width": 16,
+          "gap": 12
+        }
+      ],
+      "focusInside": true,
+      "passed": true
+    },
+    {
+      "theme": "dark",
+      "width": 390,
+      "locale": "es",
+      "overflow": false,
+      "dialogWidth": 390,
+      "clippedButtons": 0,
+      "missingKeys": false,
+      "checkboxes": [
+        {
+          "width": 16,
+          "gap": 12
+        },
+        {
+          "width": 16,
+          "gap": 12
+        }
+      ],
+      "focusInside": true,
+      "passed": true
+    },
+    {
+      "theme": "dark",
+      "width": 390,
+      "locale": "ja",
+      "overflow": false,
+      "dialogWidth": 390,
+      "clippedButtons": 0,
+      "missingKeys": false,
+      "checkboxes": [
+        {
+          "width": 16,
+          "gap": 12
+        },
+        {
+          "width": 16,
+          "gap": 12
+        }
+      ],
+      "focusInside": true,
+      "passed": true
+    },
+    {
+      "view": "RTL enlarged text",
+      "overflow": false,
+      "focusInside": true,
+      "passed": true
+    },
+    {
+      "view": "keyboard focus trap",
+      "escaped": [],
+      "passed": true
+    },
+    {
+      "view": "Escape closes and returns focus",
+      "passed": true
+    },
+    {
+      "view": "retained audit with long explanation",
+      "placeholder": false,
+      "overflow": false,
+      "record": true,
+      "keys": false,
+      "passed": true
+    },
+    {
+      "view": "stale edit recovery",
+      "overflow": false,
+      "alert": true,
+      "refresh": true,
+      "disabled": true,
+      "reason": "Preserve this operator reason",
+      "passed": true
+    },
+    {
+      "view": "refresh preserves draft reason",
+      "alert": false,
+      "disabled": false,
+      "reason": "Preserve this operator reason",
+      "passed": true
+    }
+  ],
+  "errors": []
+}

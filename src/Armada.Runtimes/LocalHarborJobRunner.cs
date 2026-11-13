@@ -292,6 +292,9 @@ namespace Armada.Runtimes
             // endpoint runtime reads ARMADA_MCP_URL / ARMADA_MCP_TOKEN; CLI runtimes get the same per-invocation binding
             // as a local mission launch, against the MCP URL the Admiral advertised in the handshake.
             Dictionary<string, string> environment = new Dictionary<string, string>(request.Environment ?? new Dictionary<string, string>());
+            // A launch without a scoped binding must not inherit the Harbor process's credentials.
+            environment[CaptainThreadMcpPlanner.TokenEnvironmentVariable] = String.Empty;
+            environment["ARMADA_MCP_URL"] = String.Empty;
             bool bindMcp = false;
             int mcpPort = 0;
             if (!String.IsNullOrEmpty(request.McpSessionToken) && !String.IsNullOrWhiteSpace(mcpBaseUrl))

@@ -105,6 +105,11 @@ namespace Test.Shared.Infrastructure
             TuiStartOptions options = new TuiStartOptions();
             options.ServerUrl = serverUrl;
             options.PreferencesPath = Path.Combine(TempDir, "tui.json");
+            // Layout assertions need a stable starting palette, independent of the invoking shell's NO_COLOR.
+            // Auto/high-contrast behavior is exercised explicitly by the theme/display suites.
+            PreferencesService preferences = new PreferencesService(options.PreferencesPath);
+            preferences.Current.Theme = Armada.Tui.Theming.ThemeModeEnum.Dark;
+            preferences.Save();
             options.Live = false;
             options.Utf8Probe = () => true;
             configure?.Invoke(options);

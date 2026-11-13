@@ -35,17 +35,19 @@ namespace Armada.Server.Mcp.Tools
         /// <param name="mergeQueue">Optional merge queue service for merge queue enumeration.</param>
         /// <param name="inbox">Optional inbox service, for entityType inbox.</param>
         /// <param name="cliPermissions">Optional CLI permission service, for entityTypes cli_permission_rules and cli_permission_requests.</param>
-        public static void Register(RegisterToolDelegate register, DatabaseDriver database, IMergeQueueService? mergeQueue = null, InboxService? inbox = null, CliPermissionService? cliPermissions = null)
+        /// <param name="blackBox">Optional black box service, for entityType blackbox.</param>
+        /// <param name="selections">Shared authorized captain-selection inspection service.</param>
+        public static void Register(RegisterToolDelegate register, DatabaseDriver database, IMergeQueueService? mergeQueue = null, InboxService? inbox = null, CliPermissionService? cliPermissions = null, Armada.Core.BlackBox.IBlackBoxService? blackBox = null, CaptainSelectionAccessService? selections = null)
         {
             register(
                 "enumerate",
-                "Find and browse entities with paginated, filtered, sorted access to: inbox (the needs-you items, most urgent first), cli_permission_rules, cli_permission_requests, objectives, fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, personas, prompt_templates, pipelines, playbooks, workflow_profiles, project_profiles, skills, check_runs, releases, deployments, incidents, runbooks, runbook_executions, vessel_import_batch, fleet_action, fleet_action_run, fleet_action_run_target, and vessel_health. Returns paginated results with total counts. Filter by vesselId, fleetId, captainId, voyageId, status, date range, and more.",
+                "Find and browse entities with paginated, filtered, sorted access to: inbox (the needs-you items, most urgent first), cli_permission_rules, cli_permission_requests, objectives, fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, personas, prompt_templates, pipelines, playbooks, workflow_profiles, project_profiles, skills, check_runs, releases, deployments, incidents, runbooks, runbook_executions, vessel_import_batch, fleet_action, fleet_action_run, fleet_action_run_target, vessel_health, captain_selection_decision (requires missionId), captain_selection_candidate (requires decisionId), and blackbox (black box entry summaries, newest first). Returns paginated results with total counts. Filter by vesselId, fleetId, captainId, voyageId, status, date range, and more.",
                 new
                 {
                     type = "object",
                     properties = new
                     {
-                        entityType = new { type = "string", description = "Entity type to enumerate: inbox (needs-you items, most urgent first), cli_permission_rules (vesselId and captainId filter), cli_permission_requests (newest first; status, missionId, threadId, captainId, vesselId filter), objectives, jobs, model_endpoints, harbors, fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, personas, prompt_templates, pipelines, playbooks, workflow_profiles, project_profiles, skills, check_runs, releases, deployments, incidents, runbooks, runbook_executions, vessel_import_batch, fleet_action, fleet_action_run, fleet_action_run_target (requires runId), vessel_health (status filters overall status, fleetId and search narrow by fleet and vessel name)" },
+                        entityType = new { type = "string", description = "Entity type to enumerate: captain_selection_decision (missionId required; status is Admitted or Waiting), captain_selection_candidate (decisionId required), inbox (needs-you items, most urgent first), cli_permission_rules (vesselId and captainId filter), cli_permission_requests (newest first; status, missionId, threadId, captainId, vesselId filter), objectives, jobs, model_endpoints, harbors, fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, personas, prompt_templates, pipelines, playbooks, workflow_profiles, project_profiles, skills, check_runs, releases, deployments, incidents, runbooks, runbook_executions, vessel_import_batch, fleet_action, fleet_action_run, fleet_action_run_target (requires runId), vessel_health (status filters overall status, fleetId and search narrow by fleet and vessel name), blackbox (black box entry summaries; status filters resolution, search matches reason, summary and notes; vesselId, voyageId, missionId, captainId, fleetId and the date range filter)" },
                         pageNumber = new { type = "integer", description = "Page number (1-based, default 1)" },
                         pageSize = new { type = "integer", description = "Results per page (default 10, normalized into 1..1000; a few entity types apply their REST route's lower maximum, and the result's PageSize reports the size used)" },
                         order = new { type = "string", description = "Sort order: CreatedAscending, CreatedDescending (default)" },
@@ -57,11 +59,17 @@ namespace Armada.Server.Mcp.Tools
                         vesselId = new { type = "string", description = "Filter by vessel ID (missions, docks)" },
                         captainId = new { type = "string", description = "Filter by captain ID (missions, events, signals)" },
                         voyageId = new { type = "string", description = "Filter by voyage ID (missions, events)" },
-                        missionId = new { type = "string", description = "Filter by mission ID (events)" },
+                        missionId = new { type = "string", description = "Filter by mission ID; required for captain_selection_decision" },
+                        decisionId = new { type = "string", description = "Required decision ID for captain_selection_candidate" },
+                        tenantId = new { type = "string", description = "Optional tenant override for captain_selection_candidate; requires global administrator" },
                         eventType = new { type = "string", description = "Filter by event type string (events only)" },
                         signalType = new { type = "string", description = "Filter by signal type (signals only)" },
                         toCaptainId = new { type = "string", description = "Filter by recipient captain ID (signals only)" },
                         unreadOnly = new { type = "boolean", description = "Return only unread signals (signals only)" },
+                        parentMissionId = new { type = "string", description = "Return the direct children of this logical mission (missions only)" },
+                        maxConcurrency = new { type = "integer", description = "Return only captains with exactly this many mission slots, for example 1 for serial captains (captains only)" },
+                        rootsOnly = new { type = "boolean", description = "Return only top-level logical missions: no parent and not a later pipeline stage (missions only)" },
+                        waitingGate = new { type = "string", description = "Return only Pending missions currently waiting on this gate (missions only): " + McpToolHelpers.EnumNames<MissionWaitGateEnum>() },
                         includeDescription = new { type = "boolean", description = "Add the full Description to mission/voyage rows (default false; returns descriptionLength hint when false). Rows stay scalar: use get_mission / voyage_status for the full model" },
                         includeContext = new { type = "boolean", description = "Include ProjectContext and StyleGuide on vessels (default false; returns length hints when false)" },
                         includeTestOutput = new { type = "boolean", description = "Include TestOutput on merge queue entries (default false; returns testOutputLength hint when false)" },
@@ -86,6 +94,20 @@ namespace Armada.Server.Mcp.Tools
 
                     switch (entityType)
                     {
+                        case "captain_selection_decision":
+                            if (selections == null) return (object)McpToolError.Unavailable("Selection service unavailable.");
+                            if (String.IsNullOrWhiteSpace(request.MissionId)) throw new ArgumentException("missionId is required.");
+                            DateTime? after = SelectionDate(request.CreatedAfter);
+                            DateTime? before = SelectionDate(request.CreatedBefore);
+                            return (object)await selections.HistoryAsync(callerCtx, request.MissionId, new CaptainSelectionHistoryQuery
+                            {
+                                PageNumber = request.PageNumber ?? 1, PageSize = request.PageSize ?? 25,
+                                Outcome = request.Status, FromUtc = after, ToUtc = before
+                            }).ConfigureAwait(false);
+                        case "captain_selection_candidate":
+                            if (selections == null) return (object)McpToolError.Unavailable("Selection service unavailable.");
+                            if (String.IsNullOrWhiteSpace(request.DecisionId)) throw new ArgumentException("decisionId is required.");
+                            return (object)await selections.CandidatesAsync(callerCtx, request.DecisionId, request.TenantId, request.PageNumber ?? 1, request.PageSize ?? 25).ConfigureAwait(false);
                         case "objectives":
                         case "objective":
                         case "backlog":
@@ -195,7 +217,7 @@ namespace Armada.Server.Mcp.Tools
                                     {
                                         v.Id, v.FleetId, v.Name, v.RepoUrl, v.LocalPath, v.WorkingDirectory,
                                         v.DefaultBranch, v.LandingMode, v.BranchCleanupPolicy,
-                                        v.AllowConcurrentMissions, v.AutoApprove, v.Active, v.CreatedUtc, v.LastUpdateUtc,
+                                        v.MaxParallelVoyages, v.MaxParallelMissionsPerVoyage, v.AutoApprove, v.Active, v.CreatedUtc, v.LastUpdateUtc,
                                         v.HasGitHubTokenOverride,
                                         ProjectContextLength = v.ProjectContext?.Length ?? 0,
                                         StyleGuideLength = v.StyleGuide?.Length ?? 0,
@@ -220,7 +242,7 @@ namespace Armada.Server.Mcp.Tools
                                 Objects = captains.Objects.Select(c => new
                                 {
                                     c.Id, c.TenantId, c.UserId, c.Name, c.Runtime, c.State,
-                                    c.CurrentMissionId, c.CurrentDockId, c.ProcessId,
+                                    c.MaxConcurrency, c.ActiveMissionCount, c.ActiveMissionIds, c.CurrentSessionId, c.ProcessId,
                                     c.RecoveryAttempts, c.LastHeartbeatUtc, c.CreatedUtc, c.LastUpdateUtc,
                                     SystemInstructionsLength = c.SystemInstructions?.Length ?? 0
                                 }).ToList(),
@@ -643,8 +665,35 @@ namespace Armada.Server.Mcp.Tools
                                 Objects = targets.Objects.Select(FleetActionRunTargetSummary.FromTarget).ToList(),
                                 TotalMs = targets.TotalMs
                             };
+                        case "blackbox":
+                        case "black_box":
+                        case "blackbox_entries":
+                        case "blackbox-entries":
+                            if (blackBox == null) return (object)McpToolError.Unavailable("The black box is not available on this server.");
+                            BlackBoxEnumerateRequest blackBoxQuery = new BlackBoxEnumerateRequest
+                            {
+                                PageNumber = query.PageNumber,
+                                PageSize = query.PageSize,
+                                Order = query.Order,
+                                CreatedAfter = query.CreatedAfter,
+                                CreatedBefore = query.CreatedBefore,
+                                FleetId = query.FleetId,
+                                VesselId = query.VesselId,
+                                VoyageId = query.VoyageId,
+                                MissionId = query.MissionId,
+                                CaptainId = query.CaptainId,
+                                SearchText = String.IsNullOrWhiteSpace(request.Search) ? null : request.Search.Trim()
+                            };
+                            if (!String.IsNullOrWhiteSpace(query.Status))
+                            {
+                                if (!Armada.Core.EnumNames.TryParse(query.Status.Trim(), true, out BlackBoxResolutionEnum blackBoxResolution) || blackBoxResolution == BlackBoxResolutionEnum.Unknown)
+                                    return (object)McpToolError.InvalidArgument("Unknown black box resolution: " + query.Status + " (Open, Resolved, Duplicate, WontFix or ArmadaFixed)");
+                                blackBoxQuery.Resolution = blackBoxResolution;
+                            }
+
+                            return (object)await blackBox.EnumerateAsync(callerCtx, blackBoxQuery).ConfigureAwait(false);
                         default:
-                            return (object)McpToolError.InvalidArgument("Unknown entity type: " + entityType + ". Valid types: inbox, cli_permission_rules, cli_permission_requests, fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, personas, prompt_templates, pipelines, playbooks, workflow_profiles, project_profiles, skills, check_runs, releases, jobs, model_endpoints, vessel_import_batch, fleet_action, fleet_action_run, fleet_action_run_target, vessel_health");
+                            return (object)McpToolError.InvalidArgument("Unknown entity type: " + entityType + ". Valid types: inbox, cli_permission_rules, cli_permission_requests, fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, personas, prompt_templates, pipelines, playbooks, workflow_profiles, project_profiles, skills, check_runs, releases, jobs, model_endpoints, vessel_import_batch, fleet_action, fleet_action_run, fleet_action_run_target, vessel_health, blackbox");
                     }
                 });
         }
@@ -667,6 +716,14 @@ namespace Armada.Server.Mcp.Tools
             if (ctx.IsAdmin) return;
             tenantId = ctx.TenantId ?? Constants.DefaultTenantId;
             if (!ctx.IsTenantAdmin) userId = ctx.UserId;
+        }
+        private static DateTime? SelectionDate(string? value)
+        {
+            if (String.IsNullOrWhiteSpace(value)) return null;
+            if (!DateTimeOffset.TryParse(value, System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.AssumeUniversal, out DateTimeOffset result))
+                throw new ArgumentException("Selection date filters must be ISO 8601 timestamps.");
+            return result.UtcDateTime;
         }
     }
 }

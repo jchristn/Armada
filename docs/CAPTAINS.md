@@ -1,5 +1,13 @@
 # Captain Support Matrix
 
+## Captain capacity
+
+Since v1.3.0 a captain runs up to `MaxConcurrency` (JSON `maxConcurrency`) missions at once, one per slot. Create and update clamp it to 1..`Concurrency.MaxCaptainConcurrency` (hard ceiling 256). The default depends on the runtime: 4 for ApiEndpoint and Mux and 1 for every other runtime (the CLI runtimes and Custom), unless the server's `Concurrency.DefaultCliCaptainMaxConcurrency` or `DefaultEndpointCaptainMaxConcurrency` say otherwise. Updates that omit it keep the current value, and changing the runtime alone does not rewrite it. Lowering it does not stop running work; the captain takes no new mission until it is below the new limit.
+
+REST, MCP and WebSocket return the server-owned `ActiveMissionCount`, `ActiveMissionIds` and `CurrentSessionId`; client writes cannot replace them. The singular `CurrentMissionId` and `CurrentDockId` fields were removed: use `ActiveMissionIds`, and each mission's own `DockId` and `ProcessId`.
+
+A captain takes a new mission only when it is active, has a free slot, holds no exclusive session, and is `Idle` or `Working`. Planning, Refining and Analyzing are exclusive: they start only on a captain with no active missions, and the captain takes no missions while in them. A `Stopping` or `Quarantined` captain takes no new missions; missions already running on it continue. A stalled mission is handled on its own, and the captain becomes `Stalled` (and takes nothing new) only when all of its active missions are stalled. Routing prefers the eligible captain with the fewest active missions (see [CAPTAIN_ROUTING.md](CAPTAIN_ROUTING.md#busy-classes-and-exhausted-hierarchies)). For how slots combine with vessel, endpoint, runtime and global limits, see [SCHEDULING.md](SCHEDULING.md#capacity). See also [testing](CONCURRENCY_TESTING.md).
+
 A captain is whatever actually does the work on a mission: a coding-agent CLI that Armada launches as a child
 process, or an in-process loop that talks to an inference endpoint directly. Armada ships eight runtimes. They are not
 equal. Claude Code gets the most attention in the code (token streaming, tool cards), Mux,
@@ -556,4 +564,4 @@ legacy guidance is upgraded automatically; operator-edited templates are preserv
 
 Claude missions are bounded jobs. Armada excludes the native `ScheduleWakeup` and `CronCreate` tools, disables session cron, turns automatic subagent fork mode off so delegated research can finish in the foreground, and sets a one-second idle-query exit delay. This does not change shell permission policy, remove foreground agent work, or alter nonmission chat/model-validation lifecycle settings. Mission completion still requires the real process outcome and the existing completion/review gates; output markers alone cannot approve work. Update Harbor as well as the Admiral for Harbor-owned jobs.
 
-Heartbeat stalls publish caller-scoped `captain.stalled` history with elapsed inactivity, configured threshold, recovery availability and remediation. Successful recovery preserves that history even when the active mission no longer has a failure reason. Exhausted recovery includes the details in the mission failure reason.
+Heartbeat stalls publish caller-scoped `captain.stalled` history with elapsed inactivity, configured threshold, recovery availability and remediation. A captain whose Harbor lost its link is not judged stalled: it records one `captain.unreachable` and is held for `HarborDisconnectGraceMinutes` (default 60), then reconciled when the Harbor reconnects (`captain.reconciled`); see [HARBOR.md](HARBOR.md#unreachable-is-not-stalled). Successful recovery preserves that history even when the active mission no longer has a failure reason. Exhausted recovery includes the details in the mission failure reason.

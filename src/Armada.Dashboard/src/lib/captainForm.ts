@@ -17,6 +17,8 @@ export type CaptainFormState = {
   tier: string;
   allowedPersonas?: string;
   preferredPersona?: string;
+  active?: boolean;
+  maxConcurrency?: string;
   autoApprove: boolean;
   /** CLI tool permission policy; null inherits. Saved through its own endpoint on edit. */
   cliPermissionPolicy: CliPermissionPolicy | null;
@@ -77,13 +79,15 @@ export const CAPTAIN_TIERS = ['Economy', 'Standard', 'Premium'];
 
 /** An empty create form (auto-approve on, CLI policy inherited). */
 export function emptyCaptainForm(): CaptainFormState {
-  return { name: '', runtime: '', systemInstructions: '', model: '', modelEndpointId: '', reasoningEffort: '', tier: '', autoApprove: true, cliPermissionPolicy: null, ...EMPTY_MUX_CAPTAIN_FORM };
+  return { active: true, name: '', runtime: '', systemInstructions: '', model: '', modelEndpointId: '', reasoningEffort: '', tier: '', autoApprove: true, cliPermissionPolicy: null, ...EMPTY_MUX_CAPTAIN_FORM };
 }
 
 /** The form for editing a captain. `withPersonas` adds the persona fields (the detail page's form). */
 export function captainFormFromCaptain(c: Captain, options: { withEndpoint?: boolean; withPersonas?: boolean; defaultRuntime?: string } = {}): CaptainFormState {
   const form: CaptainFormState = {
     name: c.name,
+    active: c.active ?? true,
+    maxConcurrency: String(c.maxConcurrency ?? (c.runtime === 'ApiEndpoint' || c.runtime === 'Mux' ? 4 : 1)),
     runtime: c.runtime || options.defaultRuntime || '',
     systemInstructions: c.systemInstructions ?? '',
     model: c.model ?? '',
@@ -126,7 +130,7 @@ export function captainFormErrorMessage(error: CaptainFormError): string {
  * admin endpoint on edit; `buildCaptainCreatePayload` adds it on create).
  */
 export function buildCaptainPayload(form: CaptainFormState): Record<string, unknown> {
-  const payload = { ...form } as Record<string, unknown>;
+  const payload = { ...form, active: form.active ?? true } as Record<string, unknown>;
   payload.systemInstructions = form.systemInstructions ? form.systemInstructions : null;
   payload.model = form.model.trim() ? form.model.trim() : null;
   if ('modelEndpointId' in form) payload.modelEndpointId = form.runtime === 'ApiEndpoint' ? (form.modelEndpointId || null) : null;
@@ -136,6 +140,8 @@ export function buildCaptainPayload(form: CaptainFormState): Record<string, unkn
   if ('preferredPersona' in form) payload.preferredPersona = form.preferredPersona?.trim() ? form.preferredPersona.trim() : null;
   payload.runtimeOptionsJson = applyAutoApprove(buildMuxRuntimeOptionsJson(form.runtime, form), form.autoApprove || !supportsAutoApproveSwitch(form.runtime));
   delete payload.autoApprove;
+  if (form.maxConcurrency?.trim()) payload.maxConcurrency = Math.min(256, Math.max(1, Math.trunc(Number(form.maxConcurrency) || 1)));
+  else delete payload.maxConcurrency;
   delete payload.muxConfigDirectory;
   delete payload.muxEndpoint;
   delete payload.muxBaseUrl;

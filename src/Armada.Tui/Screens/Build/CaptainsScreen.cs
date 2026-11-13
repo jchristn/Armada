@@ -10,6 +10,7 @@ namespace Armada.Tui.Screens.Build
     using Armada.Core.Enums;
     using Armada.Core.Models;
     using Armada.Tui.Routing;
+    using Armada.Tui.Screens.Activity;
     using Armada.Tui.Screens.Kit;
     using Armada.Tui.Screens.Operations;
     using Armada.Tui.Services;
@@ -24,6 +25,9 @@ namespace Armada.Tui.Screens.Build
     /// </summary>
     public class CaptainsScreen : OpsListScreen<Captain>
     {
+        private List<UsageSnapshotView> _UsageViews = new List<UsageSnapshotView>();
+        private string? _UsageError;
+
         #region Public-Members
 
         /// <inheritdoc />
@@ -65,16 +69,22 @@ namespace Armada.Tui.Screens.Build
             : base(route, context, c => c.Id, "CaptainsScreen", "Captains")
         {
             Grid.EmptyText = "No captains configured.";
+            Grid.PageSizes = new List<int> { 10, 25, 50, 100 };
             UserScope = UserScopeFilter();
             NameFilter = TextFilter("Name", 16, "Filter...");
             RuntimeFilter = TextFilter("Runtime", 12, "Filter...");
             StateFilter = TextFilter("State", 12, "Filter...");
 
+            Column("active", "Active", c => c.Active ? "Yes" : "No", 1);
             Column("name", "Name", c => c.Name + (c.Tier.HasValue ? "  [" + Tr(c.Tier.Value.ToString()) + "]" : ""), 3, null, c => c.Name.ToLowerInvariant()).Pinned = true;
             Column("id", "ID", c => c.Id, 0, 26);
+            Column("usage", "Usage", c => !c.UsageCaptureActive ? Tr("Capture disabled") : _UsageError ?? UsagePresentation.Headline(_UsageViews.Where(v => v.CaptainIds.Contains(c.Id)), Context.Clock.UtcNow, Context.Loc), 0, 25);
+            RowActions.Add(new OpsAction<Captain>("usage", "View Usage", c => Context.Navigate("/captains/" + Uri.EscapeDataString(c.Id) + "?section=usage"), "U"));
+            Grid.QueryChanged += (sender, query) => LoadUsage();
+            SubscribeCoalesced("usage.snapshot", LoadUsage);
             Column("runtime", "Runtime", c => c.Runtime.ToString(), 0, 12, c => c.Runtime.ToString().ToLowerInvariant());
             Column("state", "State", StateText, 0, 28, c => c.State.ToString().ToLowerInvariant(), (c, t) => StatusBadge.Style(c.State, t));
-            Column("mission", "Current Mission", c => String.IsNullOrEmpty(c.CurrentMissionId) ? "-" : BuildText.Short(c.CurrentMissionId) + "...", 0, 16);
+            Column("mission", "Current Mission", c => String.Join(", ", c.ActiveMissionIds.Select(BuildText.Short)), 0, 16);
             Column("heartbeat", "Heartbeat", c => c.LastHeartbeatUtc.HasValue ? Context.Loc.FormatRelative(c.LastHeartbeatUtc.Value, Context.Clock.UtcNow) : "-", 0, 14);
             Column("createdUtc", "Created", c => Context.Loc.FormatRelative(c.CreatedUtc, Context.Clock.UtcNow), 0, 14, c => c.CreatedUtc);
 
@@ -94,7 +104,7 @@ namespace Armada.Tui.Screens.Build
             RowActions.Add(new OpsAction<Captain>("tools", "View Tools", c => CaptainTools.Show(this, c.Id, c.Name), "t"));
             RowActions.Add(new OpsAction<Captain>("json", "View JSON", c => ShowJson(Tr("Captain") + ": " + c.Name, c), "j"));
             RowActions.Add(new OpsAction<Captain>("notifications", "View Notifications", c => Context.Navigate("/inbox"), "i"));
-            RowActions.Add(new OpsAction<Captain>("mission", "Open Mission", c => Context.Navigate("/missions/" + Uri.EscapeDataString(c.CurrentMissionId!)), "m", c => !String.IsNullOrEmpty(c.CurrentMissionId)));
+            RowActions.Add(new OpsAction<Captain>("mission", "Open Mission", c => Context.Navigate("/missions/" + Uri.EscapeDataString(c.ActiveMissionIds[0])), "m", c => c.ActiveMissionIds.Count == 1));
             RowActions.Add(new OpsAction<Captain>("copy-id", "Copy ID", c => Copy(c.Id, "Captain ID"), "y"));
             RowActions.Add(new OpsAction<Captain>("stop", "Stop", Stop, "x"));
             RowActions.Add(new OpsAction<Captain>("recall", "Recall", Recall, "R"));
@@ -156,7 +166,19 @@ namespace Armada.Tui.Screens.Build
         /// <inheritdoc />
         protected override void OnLoaded(IReadOnlyList<Captain> rows)
         {
+            _UsageCaptains = rows.ToList();
+            if (Grid.PageSize > 100) Grid.SetPageSize(100);
+            else LoadUsage();
             Grid.EmptyText = rows.Count == 0 ? "No captains configured." : "No captains match the current filters.";
+        }
+
+        /// <inheritdoc />
+        private List<Captain> _UsageCaptains = new List<Captain>();
+        private void LoadUsage()
+        {
+            List<string> ids = FilterLocal(_UsageCaptains).Skip((Grid.PageNumber - 1) * Grid.PageSize).Take(Math.Min(100, Grid.PageSize)).Select(c => c.Id).ToList();
+            if (ids.Count == 0) return;
+            Call((client, token) => client.GetUsageLatestAsync(new UsageQuery { CaptainIds = ids, PageSize = 100 }, token), result => { _UsageViews = result?.Objects ?? new List<UsageSnapshotView>(); _UsageError = null; }, null, error => { _UsageError = Tr("Usage could not be loaded."); });
         }
 
         /// <inheritdoc />

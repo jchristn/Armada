@@ -10,6 +10,16 @@ namespace Armada.Core.Models
     /// </summary>
     public class Mission
     {
+        // Bound to the locally owned launch/cleanup operation, never serialized or used to select an account.
+        internal string? UsageAdmissionExecutionKey { get; set; }
+
+        // Monitoring may resolve scalar routing preferences without persisting or changing the caller's mission.
+        internal Mission AdmissionView() => (Mission)MemberwiseClone();
+
+        /// <summary>Transient admission-only recovery authorization, resolved from the scoped audit ledger.</summary>
+        [System.Text.Json.Serialization.JsonIgnore]
+        internal UsageSelectionRecovery? UsageRecovery { get; set; }
+
         #region Public-Members
 
         /// <summary>
@@ -138,6 +148,12 @@ namespace Armada.Core.Models
         public bool IsEvaluation { get; set; } = false;
 
         /// <summary>
+        /// Worker eligibility envelope tightened for this mission (for example by the Architect), or null to use the
+        /// vessel default. It can only tighten the vessel's default; dispatch combines both and uses the tightest.
+        /// </summary>
+        public WorkerEnvelope? WorkerEnvelope { get; set; } = null;
+
+        /// <summary>
         /// For a Worker the Judge sent back for rework, its rework round (1 for the first); 0 for any other mission. Stored
         /// so rework state never depends on the title, which an operator can change.
         /// </summary>
@@ -164,6 +180,25 @@ namespace Armada.Core.Models
         /// </summary>
         public string? ParentMissionId { get; set; } = null;
 
+        /// <summary>Original failed mission this rescue addresses; distinct from hierarchy ancestry.</summary>
+        public string? RescueOfMissionId { get; set; }
+        /// <summary>Branch strategy for hierarchy dispatch.</summary>
+        public MissionBranchStrategyEnum BranchStrategy { get; set; } = MissionBranchStrategyEnum.New;
+        /// <summary>Recorded base branch for a forked mission.</summary>
+        public string? BaseBranchName { get; set; }
+        /// <summary>First capacity-ready observation.</summary>
+        public DateTime? ReadyUtc { get; set; }
+        /// <summary>Time execution capacity was last assigned.</summary>
+        public DateTime? AssignedUtc { get; set; }
+        /// <summary>Stored hierarchy depth, zero for roots.</summary>
+        public int Depth { get; set; }
+        /// <summary>Declared writable paths, serialized as JSON.</summary>
+        public string? OwnedPathsJson { get; set; }
+        /// <summary>Declared read-only paths, serialized as JSON.</summary>
+        public string? ReadsPathsJson { get; set; }
+
+
+
         /// <summary>
         /// Git branch name for this mission's work.
         /// </summary>
@@ -178,6 +213,12 @@ namespace Armada.Core.Models
         /// Operating system process identifier for the agent working this mission.
         /// </summary>
         public int? ProcessId { get; set; } = null;
+
+        /// <summary>Last actual output heartbeat of this mission, independent of sibling output.</summary>
+        public DateTime? LastHeartbeatUtc { get; set; } = null;
+
+        /// <summary>Stall recovery attempts for this mission, independent of siblings.</summary>
+        public int StallRecoveryAttempts { get; set; }
 
         /// <summary>
         /// Pull request URL if created.
@@ -226,6 +267,35 @@ namespace Armada.Core.Models
         /// value; <see cref="FailureReason"/> is human-readable text only and is never parsed.
         /// </summary>
         public MissionFailureKindEnum? FailureKind { get; set; } = null;
+
+        /// <summary>
+        /// The mission's current black box entry (bbx_ prefix), or null when it has none. Set when a failure is captured
+        /// and kept when a restart clears <see cref="FailureReason"/> and <see cref="FailureKind"/>, so the evidence of
+        /// the earlier failure stays reachable.
+        /// </summary>
+        public string? LastBlackBoxEntryId { get; set; } = null;
+
+        /// <summary>
+        /// Overlap warnings found when this mission was dispatched (black box prevention, at most 50), or null. Returned by
+        /// the dispatch responses only; never stored.
+        /// </summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        [CollectionBound(Armada.Core.BlackBox.BlackBoxInsightLimits.MaxOverlapWarnings, Reason = "Dispatch keeps the strongest 50")]
+        public List<MissionOverlapWarning>? OverlapWarnings { get; set; } = null;
+
+        /// <summary>
+        /// Brief lint findings found when this mission was dispatched (at most 50), or null. Returned by the dispatch
+        /// responses only; never stored. Lint never blocks a dispatch.
+        /// </summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        [CollectionBound(Armada.Core.BlackBox.BlackBoxInsightLimits.MaxLintFindings, Reason = "Lint stops at 50")]
+        public List<BriefLintFinding>? BriefLintWarnings { get; set; } = null;
+
+        /// <summary>
+        /// The target-branch commit the mission's dock started from (recorded at assignment), or null when unknown.
+        /// The base for "what moved on the target since this mission started".
+        /// </summary>
+        public string? StartCommit { get; set; } = null;
 
         /// <summary>
         /// When true, a Worker mission waits for other implementation pipelines in the voyage, including reviews
@@ -302,6 +372,22 @@ namespace Armada.Core.Models
         /// </summary>
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public RuntimeActivity? Activity { get; set; } = null;
+
+        /// <summary>
+        /// The mission's recorded scheduling waits, oldest first. Returned only when a single mission is read with
+        /// waits requested (MCP mission_status includeWaits; REST GET /api/v1/missions/{id}/waits); not stored here.
+        /// </summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        [CollectionBound(100, Reason = "The 100 most recent waits; page the rest through GET /api/v1/missions/{id}/waits")]
+        public List<MissionWaitInterval>? Waits { get; set; } = null;
+
+        /// <summary>
+        /// Missions a restart returned to Pending along with this one: later pipeline stages and dependents cancelled
+        /// because it failed, and descendants cancelled with ParentFailed. Set only on a restart response; not stored.
+        /// </summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        [CollectionBound(CollectionLimits.MaxLinkedIds)]
+        public List<string>? RestoredMissionIds { get; set; } = null;
 
         /// <summary>
         /// Creation timestamp in UTC.

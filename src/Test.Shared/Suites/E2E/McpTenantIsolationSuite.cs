@@ -52,6 +52,7 @@ namespace Test.Shared.Suites.E2E
             ["approve_deployment"] = "deployment (DeploymentService scopes by caller)",
             ["verify_deployment"] = "deployment (DeploymentService scopes by caller)",
             ["rollback_deployment"] = "deployment (DeploymentService scopes by caller)",
+            ["get_captain_selection_decision"] = "Retained decision IDs require selection ledger fixtures; cross-tenant scope covered by E2E.CaptainSelectionApi",
             ["get_runbook"] = "runbook (RunbookService scopes by caller)",
             ["get_runbook_execution"] = "runbook execution (RunbookService scopes by caller)",
             ["start_runbook_execution"] = "runbook (RunbookService scopes by caller)",
@@ -73,8 +74,22 @@ namespace Test.Shared.Suites.E2E
             ["get_failure_cause_rule"] = "Failure-cause rule (StageOutcomeAccessService scopes by caller; tenant isolation covered by E2E.StageOutcomes)",
             ["update_failure_cause_rule"] = "Failure-cause rule (StageOutcomeAccessService scopes by caller; tenant isolation covered by E2E.StageOutcomes)",
             ["delete_failure_cause_rule"] = "Failure-cause rule (StageOutcomeAccessService scopes by caller; tenant isolation covered by E2E.StageOutcomes)",
-            ["evaluate_captain"] = "Captain or model endpoint (ModelProbeAccessService scopes by caller; starts an Evaluate run, so tenant isolation is covered by E2E.ModelProbes with canned probe answers)",
+            ["evaluate_captain"] = "Captain or model endpoint, and for Full the evaluator captain (ModelProbeAccessService scopes each by caller; starts an Evaluate run, so tenant isolation is covered by E2E.ModelProbes mcp_tools with canned probe answers)",
             ["get_model_probe_run"] = "Evaluate run (ModelProbeAccessService scopes by caller; tenant isolation covered by E2E.ModelProbes)",
+            ["cancel_model_probe_run"] = "Evaluate run (ModelProbeAccessService resolves the run by caller before cancelling; tenant isolation covered by E2E.ModelProbes mcp_tools)",
+            ["get_model_profile"] = "Model profile (ModelProfileAccessService scopes by caller; tenant isolation covered by E2E.ModelProfiles)",
+            ["get_model_scorecard"] = "Model profile scorecard (ModelProfileAccessService resolves the profile by caller first; tenant isolation covered by E2E.ModelProfiles)",
+            ["get_model_alert"] = "Model alert (ModelAlertAccessService resolves the alert by caller first; tenant isolation covered by E2E.ModelProfiles model_alerts and Services.ModelAlerts tenant_scoping)",
+            ["apply_model_alert_action"] = "Model alert action (the alert is resolved by caller before the action is validated; covered by E2E.ModelProfiles model_alerts)",
+            ["ignore_model_alert"] = "Model alert ignore (the alert is resolved by caller before days are validated; covered by E2E.ModelProfiles model_alerts)",
+            ["get_battery_pack"] = "Server-wide on-disk pack; global-admin mutations and authenticated reads covered by E2E.Battery",
+            ["read_battery_pack_file"] = "Server-wide on-disk pack; global-admin mutations and authenticated reads covered by E2E.Battery",
+            ["write_battery_pack_file"] = "Server-wide on-disk pack; global-admin mutations and authenticated reads covered by E2E.Battery",
+            ["delete_battery_pack_file"] = "Server-wide on-disk pack; global-admin mutations and authenticated reads covered by E2E.Battery",
+            ["create_battery_pack"] = "Server-wide on-disk pack; global-admin mutations and authenticated reads covered by E2E.Battery",
+            ["update_battery_pack_manifest"] = "Server-wide on-disk pack; global-admin mutations and authenticated reads covered by E2E.Battery",
+            ["delete_battery_pack"] = "Server-wide on-disk pack; global-admin mutations and authenticated reads covered by E2E.Battery",
+            ["validate_battery_pack"] = "Server-wide on-disk pack; global-admin mutations and authenticated reads covered by E2E.Battery",
             ["get_battery_run"] = "Battery run (BatteryAccessService scopes by caller; tenant isolation covered by E2E.Battery)",
             ["list_battery_results"] = "Battery run results (BatteryAccessService scopes the run by caller; tenant isolation covered by E2E.Battery)",
             ["approve_ask_proposal"] = "Ask conversation (AskThreadService scopes by owning user; covered by E2E.AskThreads)",
@@ -111,7 +126,19 @@ namespace Test.Shared.Suites.E2E
             "list_stage_outcomes",
             "reclassify_stage_outcomes",
             "list_model_probe_runs",
-            "discover_vessels"
+            "list_model_profiles",
+            "list_model_alerts",
+            "discover_vessels",
+            // vesselId only filters the caller's own recovery runs
+            "get_blackbox_recovery_stats",
+            "list_blackbox_entries",
+            "search_blackbox",
+            "get_blackbox_bundle",
+            "list_blackbox_hotspots",
+            "list_blackbox_fingerprints",
+            "list_blackbox_resilience_gaps",
+            "purge_blackbox",
+            "export_blackbox_fixture"
         };
 
         // Every entity type the enumerate tool accepts (fleet_action_run_target needs a run id and is checked by id).
@@ -121,7 +148,7 @@ namespace Test.Shared.Suites.E2E
             "voyages", "docks", "signals", "events", "releases", "deployments", "incidents", "runbooks", "runbook_executions",
             "merge_queue", "personas", "memories", "prompt_templates", "pipelines", "playbooks", "workflow_profiles",
             "project_profiles", "skills", "check_runs", "vessel_import_batch", "fleet_action", "fleet_action_run",
-            "inbox", "cli_permission_rules", "cli_permission_requests"
+            "inbox", "cli_permission_rules", "cli_permission_requests", "blackbox"
         };
 
         private SecurityTestServer? _Server;
@@ -157,6 +184,7 @@ namespace Test.Shared.Suites.E2E
                 }
 
                 await SeedTenantAAsync().ConfigureAwait(false);
+                await SeedBlackBoxAsync().ConfigureAwait(false);
                 AssertTrue(_Ids.Count >= 15, "expected the tenant A seed to cover the core entity types, got " + _Ids.Count);
             }));
 
@@ -171,7 +199,9 @@ namespace Test.Shared.Suites.E2E
                     foreach (McpRemoteTool tool in tools.Where(t => IsOwnerReadControl(t.Name)))
                     {
                         string? args = BuildArguments(tool, out List<string> unmapped, out bool usesId);
-                        if (args == null || !usesId) continue;
+                        // An unseeded tool can still map an optional id (get_model_scorecard's vesselId) while its own
+                        // required id stays unmapped; its service suite covers the owner read.
+                        if (args == null || !usesId || _UnseededIdTools.ContainsKey(tool.Name)) continue;
                         Armada.Runtimes.Mcp.McpToolCallResult result;
                         try
                         {
@@ -667,6 +697,34 @@ namespace Test.Shared.Suites.E2E
         }
 
         /// <summary>
+        /// Capture a black box entry for tenant A's failed mission through the server's own runtime (its reason carries the
+        /// marker), so every black box tool is checked with a real entry id.
+        /// </summary>
+        private async Task SeedBlackBoxAsync()
+        {
+            Armada.Core.BlackBox.BlackBoxRuntime runtime = _Server!.Server.BlackBox ?? throw new InvalidOperationException("the server has no black box runtime");
+            Mission mission;
+            using (DatabaseDriver db = await OpenDatabaseAsync().ConfigureAwait(false))
+            {
+                mission = (await db.Missions.ReadAsync(_Ids["mission"]).ConfigureAwait(false))!;
+            }
+
+            mission.FailureReason = "black box " + _Marker;
+            Armada.Core.BlackBox.BlackBoxCaptureContext context = new Armada.Core.BlackBox.BlackBoxCaptureContext
+            {
+                Mission = mission,
+                StatusBefore = MissionStatusEnum.InProgress,
+                Step = BlackBoxStepEnum.ScopeViolation,
+                Note = _Marker
+            };
+            context.OutOfScopeFiles.Add("iso/" + _Marker + ".cs");
+            string? entryId = await runtime.Capture.CaptureMissionFailureAsync(context).ConfigureAwait(false);
+            AssertNotNull(entryId, "tenant A black box entry");
+            await runtime.Queue.DrainAsync().ConfigureAwait(false);
+            _Ids["blackbox"] = entryId!;
+        }
+
+        /// <summary>
         /// Build arguments for a tool from its input schema: id-like properties get tenant A's ids, other required
         /// properties get harmless values. Returns null when the schema cannot be read.
         /// </summary>
@@ -745,7 +803,14 @@ namespace Test.Shared.Suites.E2E
                 case "dockId":
                     single = _Ids["dock"]; break;
                 case "entryId":
-                    single = _Ids["merge"]; break;
+                    single = tool.Contains("blackbox", StringComparison.Ordinal) ? _Ids["blackbox"] : _Ids["merge"]; break;
+                case "otherEntryId":
+                    single = _Ids["blackbox"]; break;
+                case "pathId":
+                case "recommendationId":
+                    // Recovery path and recommendation ids are local to the entry; the entry id carries the tenant.
+                    if (tool.Contains("blackbox", StringComparison.Ordinal)) single = property == "pathId" ? "rp1" : "rc1";
+                    break;
                 case "checkRunId":
                     single = _Ids["checkrun"]; break;
                 case "objectiveId":
@@ -798,7 +863,7 @@ namespace Test.Shared.Suites.E2E
                 case "planningSessionIds": listKey = "planning"; break;
                 case "refinementSessionIds": listKey = "refinement"; break;
                 case "blockedByObjectiveIds": listKey = "objective"; break;
-                case "entryIds": listKey = "merge"; break;
+                case "entryIds": listKey = tool.Contains("blackbox", StringComparison.Ordinal) ? "blackbox" : "merge"; break;
                 case "ids":
                     if (tool == "delete_vessels") listKey = "vessel";
                     else if (tool == "delete_fleets") listKey = "fleet";
@@ -834,11 +899,14 @@ namespace Test.Shared.Suites.E2E
         {
             switch (property)
             {
+                case "recovery": return "{\"expectedRevision\":0,\"allowFallback\":false,\"reserveException\":false,\"reason\":\"Tenant isolation contract check\"}";
                 case "status": return tool == "set_vessel_health_override" ? "\"Pass\"" : "\"Cancelled\"";
                 case "criterion": return "\"Overall\"";
                 case "type": return "\"Build\"";
                 case "deliveryMode": return "\"InlineFullContent\"";
                 case "entityType": return "\"missions\"";
+                case "section": return "\"Status\"";
+                case "resolution": return "\"Resolved\"";
             }
 
             switch (type)

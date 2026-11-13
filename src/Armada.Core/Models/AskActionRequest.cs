@@ -26,6 +26,13 @@ namespace Armada.Core.Models
         [CollectionBound(CollectionLimits.MaxConfigItems, Reason = "Top-level tool arguments of one quick action; SubmitQuickActionAsync rejects more.")]
         public JsonObject? Arguments { get; set; } = null;
 
+        /// <summary>
+        /// When true the action is not run: it becomes a Pending proposal with a confirm card that the user approves or
+        /// rejects (the black box card's Fix it and Apply buttons). Default false: the submission is the confirmation and
+        /// the action runs at once.
+        /// </summary>
+        public bool Propose { get; set; } = false;
+
         #endregion
 
         #region Private-Members

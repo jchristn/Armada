@@ -59,6 +59,110 @@ namespace Armada.Server.Mcp.Tools
                     return Task.FromResult((object)service.ListPacks(caller, request.PageNumber, request.PageSize));
                 });
 
+            register("get_battery_pack", "Get battery pack. Writes require a global admin; paths cannot traverse or follow symlinks; text is limited to 1 MiB.",
+                new { type = "object", properties = new { packId = new { type = "string" } }, required = new[] { "packId" } },
+                args =>
+                {
+                    if (service == null) return Task.FromResult((object)McpToolError.Unavailable(UnavailableMessage));
+                    AuthContext caller = McpToolHelpers.ResolveCallerContext();
+                    string? id = PackArgument(args, "packId");
+                    string? path = PackArgument(args, "path");
+                    string? content = PackArgument(args, "content");
+                    string? manifest = PackArgument(args, "manifestJson");
+                    return Task.FromResult((object)service.GetPack(caller, id));
+                });
+
+            register("read_battery_pack_file", "Read battery pack text file. Writes require a global admin; paths cannot traverse or follow symlinks; text is limited to 1 MiB.",
+                new { type = "object", properties = new { packId = new { type = "string" }, path = new { type = "string" } }, required = new[] { "packId", "path" } },
+                args =>
+                {
+                    if (service == null) return Task.FromResult((object)McpToolError.Unavailable(UnavailableMessage));
+                    AuthContext caller = McpToolHelpers.ResolveCallerContext();
+                    string? id = PackArgument(args, "packId");
+                    string? path = PackArgument(args, "path");
+                    string? content = PackArgument(args, "content");
+                    string? manifest = PackArgument(args, "manifestJson");
+                    return Task.FromResult((object)service.ReadPackFile(caller, id, path));
+                });
+
+            register("write_battery_pack_file", "Write battery pack text file. Writes require a global admin; paths cannot traverse or follow symlinks; text is limited to 1 MiB.",
+                new { type = "object", properties = new { packId = new { type = "string" }, path = new { type = "string" }, content = new { type = "string" } }, required = new[] { "packId", "path", "content" } },
+                args =>
+                {
+                    if (service == null) return Task.FromResult((object)McpToolError.Unavailable(UnavailableMessage));
+                    AuthContext caller = McpToolHelpers.ResolveCallerContext();
+                    string? id = PackArgument(args, "packId");
+                    string? path = PackArgument(args, "path");
+                    string? content = PackArgument(args, "content");
+                    string? manifest = PackArgument(args, "manifestJson");
+                    return Task.FromResult((object)service.WritePackFile(caller, id, path, content));
+                });
+
+            register("delete_battery_pack_file", "Delete battery pack text file. Writes require a global admin; paths cannot traverse or follow symlinks; text is limited to 1 MiB.",
+                new { type = "object", properties = new { packId = new { type = "string" }, path = new { type = "string" } }, required = new[] { "packId", "path" } },
+                args =>
+                {
+                    if (service == null) return Task.FromResult((object)McpToolError.Unavailable(UnavailableMessage));
+                    AuthContext caller = McpToolHelpers.ResolveCallerContext();
+                    string? id = PackArgument(args, "packId");
+                    string? path = PackArgument(args, "path");
+                    string? content = PackArgument(args, "content");
+                    string? manifest = PackArgument(args, "manifestJson");
+                    return Task.FromResult((object)service.DeletePackFile(caller, id, path));
+                });
+
+            register("create_battery_pack", "Create battery pack. Writes require a global admin; paths cannot traverse or follow symlinks; text is limited to 1 MiB.",
+                new { type = "object", properties = new { packId = new { type = "string" }, manifestJson = new { type = "string" } }, required = new[] { "packId", "manifestJson" } },
+                args =>
+                {
+                    if (service == null) return Task.FromResult((object)McpToolError.Unavailable(UnavailableMessage));
+                    AuthContext caller = McpToolHelpers.ResolveCallerContext();
+                    string? id = PackArgument(args, "packId");
+                    string? path = PackArgument(args, "path");
+                    string? content = PackArgument(args, "content");
+                    string? manifest = PackArgument(args, "manifestJson");
+                    return Task.FromResult((object)service.CreatePack(caller, new BatteryPackEditRequest { PackId = id ?? String.Empty, ManifestJson = manifest ?? String.Empty }));
+                });
+
+            register("update_battery_pack_manifest", "Update battery pack manifest. Writes require a global admin; paths cannot traverse or follow symlinks; text is limited to 1 MiB.",
+                new { type = "object", properties = new { packId = new { type = "string" }, manifestJson = new { type = "string" } }, required = new[] { "packId", "manifestJson" } },
+                args =>
+                {
+                    if (service == null) return Task.FromResult((object)McpToolError.Unavailable(UnavailableMessage));
+                    AuthContext caller = McpToolHelpers.ResolveCallerContext();
+                    string? id = PackArgument(args, "packId");
+                    string? path = PackArgument(args, "path");
+                    string? content = PackArgument(args, "content");
+                    string? manifest = PackArgument(args, "manifestJson");
+                    return Task.FromResult((object)service.UpdatePackManifest(caller, id, manifest));
+                });
+
+            register("delete_battery_pack", "Delete battery pack. Writes require a global admin; paths cannot traverse or follow symlinks; text is limited to 1 MiB.",
+                new { type = "object", properties = new { packId = new { type = "string" } }, required = new[] { "packId" } },
+                args =>
+                {
+                    if (service == null) return Task.FromResult((object)McpToolError.Unavailable(UnavailableMessage));
+                    AuthContext caller = McpToolHelpers.ResolveCallerContext();
+                    string? id = PackArgument(args, "packId");
+                    string? path = PackArgument(args, "path");
+                    string? content = PackArgument(args, "content");
+                    string? manifest = PackArgument(args, "manifestJson");
+                    return Task.FromResult((object)service.DeletePack(caller, id));
+                });
+
+            register("validate_battery_pack", "Validate battery pack without writing. Writes require a global admin; paths cannot traverse or follow symlinks; text is limited to 1 MiB.",
+                new { type = "object", properties = new { packId = new { type = "string" } }, required = new[] { "packId" } },
+                args =>
+                {
+                    if (service == null) return Task.FromResult((object)McpToolError.Unavailable(UnavailableMessage));
+                    AuthContext caller = McpToolHelpers.ResolveCallerContext();
+                    string? id = PackArgument(args, "packId");
+                    string? path = PackArgument(args, "path");
+                    string? content = PackArgument(args, "content");
+                    string? manifest = PackArgument(args, "manifestJson");
+                    return Task.FromResult((object)service.ValidatePack(caller, id));
+                });
+
             register(
                 "run_battery",
                 "Run fixture battery packs against a captain. Before each task the fixture is reset; the task is dispatched as a mission on the pack's fixture vessel under the built-in ModelEvaluation pipeline (pinned to the captain, no landing) and graded per its manifest. Returns the queued run at once; poll get_battery_run. runCount defaults to 3. A task whose toolchain the Harbor lacks is CouldNotRun, never Failed; rubric-graded tasks are PendingEvaluation. Battery missions never count in production stage outcomes. Needs a global admin or a tenant admin of the captain's tenant. Set createFixtureVessel to create a pack's fixture vessel the first time.",
@@ -148,6 +252,13 @@ namespace Armada.Server.Mcp.Tools
         #endregion
 
         #region Private-Methods
+
+        private static string? PackArgument(JsonElement? args, string name)
+        {
+            if (!args.HasValue || !args.Value.TryGetProperty(name, out JsonElement value)) return null;
+            if (value.ValueKind != JsonValueKind.String) throw new ArgumentException(name + " must be a string.");
+            return value.GetString();
+        }
 
         private static T Read<T>(JsonElement? args) where T : class, new()
         {

@@ -1,0 +1,9 @@
+version: 1
+name: Armada black box REST example mock
+slug: blackbox
+protocol: http
+interceptRequests: true
+scenarios:
+  - name: default
+    path: ./default.js
+    default: true

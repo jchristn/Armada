@@ -96,6 +96,7 @@ namespace Armada.Tui.Screens.Build
             Captain copy = new Captain(BuildText.DuplicateName(captain.Name), captain.Runtime);
             copy.SystemInstructions = captain.SystemInstructions;
             copy.Model = captain.Model;
+            copy.MaxConcurrency = captain.MaxConcurrency;
             copy.AllowedPersonas = captain.AllowedPersonas;
             copy.PreferredPersona = captain.PreferredPersona;
             copy.RuntimeOptionsJson = captain.RuntimeOptionsJson;
@@ -129,6 +130,18 @@ namespace Armada.Tui.Screens.Build
             SelectField<AgentRuntimeEnum?> runtime = screen.NewSelect("Runtime", runtimes.Select(r => new SelectOption<AgentRuntimeEnum?>(r, RuntimeLabel(r))).ToList(), "Select runtime...");
             runtime.Required = true;
             if (currentRuntime != null) runtime.SetValue(currentRuntime);
+
+            SelectField<string> usageEnabled = screen.NewSelect("Capture account usage", new List<SelectOption<string>> { new SelectOption<string>("inherit", loc.T("Inherit (enabled)")), new SelectOption<string>("true", loc.T("Enabled")), new SelectOption<string>("false", loc.T("Disabled")) });
+            usageEnabled.SetValue(editing?.UsageCaptureEnabled?.ToString().ToLowerInvariant() ?? "inherit");
+            SelectField<string> usageMode = screen.NewSelect("Capture mode", new List<SelectOption<string>> { new SelectOption<string>("Auto", loc.T("Auto")), new SelectOption<string>("Disabled", loc.T("Disabled")), new SelectOption<string>("Custom", loc.T("Custom executable")) });
+            usageMode.SetValue(editing?.UsageCaptureMode.ToString() ?? "Auto");
+            InputField usageInterval = new InputField { Value = (editing?.UsageCaptureIntervalSeconds ?? 300).ToString(CultureInfo.InvariantCulture) };
+            usageInterval.Validator = text => Int32.TryParse(text, out int seconds) && seconds >= 60 && seconds <= 86400 ? null : loc.T("Interval must be a whole number of seconds from 60 to 86400.");
+            SelectField<string> usageHarbor = screen.NewSelect("Credential Harbor", new List<SelectOption<string>> { new SelectOption<string>("", loc.T("Automatic (current dock or standalone Admiral)")) });
+            if (editing?.UsageCaptureHarborId != null)
+                usageHarbor.Options.Add(new SelectOption<string>(editing.UsageCaptureHarborId, editing.UsageCaptureHarborId));
+            usageHarbor.SetValue(editing?.UsageCaptureHarborId ?? "");
+            InputField usageCommand = new InputField { Value = editing?.UsageCaptureCommand ?? "" };
 
             InputField model = new InputField();
             model.Value = editing?.Model ?? "";
@@ -164,6 +177,9 @@ namespace Armada.Tui.Screens.Build
             cliPolicy.CanFocus = canManagePolicy;
             Armada.Tui.Approvals.CliPermissionPolicyChoice.GuardBypass(screen.Context, cliPolicy, () => canManagePolicy);
 
+            InputField concurrency = new InputField { Value = editing?.MaxConcurrency.ToString(CultureInfo.InvariantCulture) ?? "" };
+            concurrency.Validator = value => String.IsNullOrWhiteSpace(value) || (Int32.TryParse(value, out int n) && n >= 1 && n <= 256) ? null : "Enter 1 to 256, or leave blank for the default.";
+            OpsCheckField active = new OpsCheckField("Active", editing?.Active ?? true);
             OpsCheckField autoApprove = new OpsCheckField("Auto-approve agent tool use (runs the CLI with its permission-bypass flag)", editing == null || CaptainRuntimeOptions.GetAutoApprove(editing));
 
             MuxCaptainOptions mux = (editing != null && editing.Runtime == AgentRuntimeEnum.Mux ? SafeMux(editing) : null) ?? new MuxCaptainOptions();
@@ -219,8 +235,15 @@ namespace Armada.Tui.Screens.Build
             dialog.AddField("Inference Endpoint", endpoint);
             dialog.AddField("Reasoning effort", effort);
             dialog.AddField("Capability tier", tier, detail ? "Missions requiring a tier route to captains at or above it. Leave on Auto to classify from the model name." : null);
+            dialog.AddField("Maximum Concurrent Missions", concurrency, "CLI defaults to 1; ApiEndpoint and Mux to 4. Lowering capacity leaves running missions alone.");
+            dialog.AddField("Active", active);
             dialog.AddField("Auto-approve", autoApprove);
             dialog.AddField("CLI tool permissions", cliPolicy, "How this captain handles shell commands, file edits, and fetches that need permission. Inherit: missions follow the auto-approve option when it is set, then the server default; Ask conversations use the server default (Settings > CLI Tool Permissions). A conversation can override it." + (canManagePolicy ? "" : " Only admins can change this."));
+            dialog.AddField("Capture account usage", usageEnabled);
+            dialog.AddField("Capture mode", usageMode);
+            dialog.AddField("Requested interval", usageInterval);
+            dialog.AddField("Credential Harbor", usageHarbor, "The machine where this runtime is signed in. Used for scheduled capture even while idle; does not change mission placement.");
+            dialog.AddField("Custom command JSON", usageCommand);
             dialog.AddField("Mux Config Directory", muxConfig);
             dialog.AddField("Mux Endpoint", muxEndpoint);
             dialog.AddField("", muxPick);
@@ -328,6 +351,21 @@ namespace Armada.Tui.Screens.Build
                 if (runtime.Value == AgentRuntimeEnum.Mux && discovered.Count == 0) loadMux();
             };
 
+            screen.Call((c, t) => c.ListHarborsAsync(t), list =>
+            {
+                string selected = usageHarbor.Value ?? "";
+                usageHarbor.Options = new List<SelectOption<string>> { new SelectOption<string>("", loc.T("Automatic (current dock or standalone Admiral)")) };
+                foreach (Harbor host in list ?? new List<Harbor>())
+                    if (host.TenantId == (editing?.TenantId ?? screen.Context.Session.Identity?.Tenant?.Id))
+                        usageHarbor.Options.Add(new SelectOption<string>(host.Id, host.Name));
+                if (selected.Length > 0 && !(list ?? new List<Harbor>()).Any(host => host.Id == selected))
+                    usageHarbor.Options.Add(new SelectOption<string>(selected, selected));
+                usageHarbor.SetValue(selected);
+            }, null, ex =>
+            {
+                dialog.Form.Rows.First(row => ReferenceEquals(row.Field, usageHarbor)).Hint = loc.T("Credential Harbors could not be loaded.");
+            });
+
             screen.Call((c, t) => c.ListModelEndpointsAsync(t), list =>
             {
                 inference.Clear();
@@ -357,8 +395,14 @@ namespace Armada.Tui.Screens.Build
             {
                 AgentRuntimeEnum r = runtime.Value ?? AgentRuntimeEnum.ClaudeCode;
                 Captain body = editing != null ? CopyOf(editing) : new Captain(name.Value.Trim());
+                body.UsageCaptureHarborId = usageHarbor.Value;
+                body.UsageCaptureEnabled = usageEnabled.Value == "inherit" ? null : usageEnabled.Value == "true";
+                body.UsageCaptureIntervalSeconds = Int32.Parse(usageInterval.Value, CultureInfo.InvariantCulture);
+                body.UsageCaptureMode = Enum.Parse<UsageCaptureModeEnum>(usageMode.Value!);
+                body.UsageCaptureCommand = body.UsageCaptureMode == UsageCaptureModeEnum.Custom ? usageCommand.Value : null;
                 body.Name = name.Value.Trim();
                 body.Runtime = r;
+                if (Int32.TryParse(concurrency.Value, out int maxConcurrency)) body.MaxConcurrency = maxConcurrency;
                 body.SystemInstructions = String.IsNullOrEmpty(instructions.Text) ? null : instructions.Text;
                 body.Model = String.IsNullOrWhiteSpace(model.Value) ? null : model.Value.Trim();
                 body.ModelEndpointId = r == AgentRuntimeEnum.ApiEndpoint && !String.IsNullOrEmpty(endpoint.Value) ? endpoint.Value : null;
@@ -380,6 +424,7 @@ namespace Armada.Tui.Screens.Build
                 options.MaxTokens = Int32.TryParse(muxMaxTokens.Value.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int max) ? max : (int?)null;
                 options.SystemPromptPath = muxPrompt.Value;
                 options.ApprovalPolicy = muxPolicy.Value;
+                body.Active = active.Checked;
                 body.RuntimeOptionsJson = RuntimeOptionsJson(r, options, autoApprove.Checked);
                 CliPermissionPolicyEnum? chosenPolicy = Armada.Tui.Approvals.CliPermissionPolicyChoice.Parse(cliPolicy.Value);
                 string label = body.Name;

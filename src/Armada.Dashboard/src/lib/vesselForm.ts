@@ -1,4 +1,4 @@
-import type { Vessel } from '../types/models';
+import type { Vessel, WorkerEnvelope } from '../types/models';
 
 /**
  * Editable vessel fields as held by the shared vessel form (Vessels list Create/Edit and the vessel page Edit).
@@ -19,7 +19,9 @@ export interface VesselFormState {
   clearGitHubTokenOverride: boolean;
   landingMode: string;
   branchCleanupPolicy: string;
-  allowConcurrentMissions: boolean;
+  maxParallelVoyages: string;
+  maxParallelMissionsPerVoyage: string;
+  serializeOverlappingMissions: boolean;
   autoApproveMode: string;
   defaultPipelineId: string;
   requirePassingChecksToLand: boolean;
@@ -43,6 +45,12 @@ export interface VesselFormState {
   testCommand: string;
   lintCommand: string;
   auditCommand: string;
+  /** Worker eligibility envelope: blank numbers and no required tools mean no envelope. */
+  envelopeMaxFiles: string;
+  envelopeMaxSteps: string;
+  envelopeMinServedContextTokens: string;
+  envelopeRequireTools: boolean;
+  envelopeRequireMcp: boolean;
 }
 
 /** Landing-mode option with a short label and a full explanation. */
@@ -57,13 +65,14 @@ export interface LandingModeOption {
 export const emptyVesselForm: VesselFormState = {
   name: '', fleetId: '', repoUrl: '', defaultBranch: 'main', localPath: '', workingDirectory: '',
   projectContext: '', styleGuide: '', enableModelContext: true, modelContext: '', gitHubTokenOverride: '', clearGitHubTokenOverride: false,
-  landingMode: 'LocalMerge', branchCleanupPolicy: 'LocalAndRemote', allowConcurrentMissions: false, autoApproveMode: 'inherit', defaultPipelineId: '',
+  landingMode: 'LocalMerge', branchCleanupPolicy: 'LocalAndRemote', maxParallelVoyages: '1', maxParallelMissionsPerVoyage: '4', serializeOverlappingMissions: true, autoApproveMode: 'inherit', defaultPipelineId: '',
   requirePassingChecksToLand: false, protectedBranchPatterns: '', releaseBranchPrefix: 'release/', hotfixBranchPrefix: 'hotfix/',
   requirePullRequestForProtectedBranches: false, requireMergeQueueForReleaseBranches: false,
   secretScanEnabled: false, protectedPathPatterns: '', privateIdentifierDenylist: '',
   autoLandEnabled: false, autoLandMaxFiles: '', autoLandMaxLines: '', autoLandPathAllowGlobs: '', autoLandPathDenyGlobs: '',
   definitionOfDoneEnabled: false, definitionOfDoneBuildCommand: '', definitionOfDoneTestCommand: '', definitionOfDoneTimeoutSeconds: '',
   testCommand: '', lintCommand: '', auditCommand: '',
+  envelopeMaxFiles: '', envelopeMaxSteps: '', envelopeMinServedContextTokens: '', envelopeRequireTools: false, envelopeRequireMcp: false,
 };
 
 /** Landing-mode metadata shared by the vessel form, the Vessels filter, and the Vessels table. */
@@ -117,7 +126,9 @@ export function vesselToForm(v: Vessel): VesselFormState {
     clearGitHubTokenOverride: false,
     landingMode: v.landingMode ?? '',
     branchCleanupPolicy: v.branchCleanupPolicy ?? '',
-    allowConcurrentMissions: v.allowConcurrentMissions,
+    maxParallelVoyages: String(v.maxParallelVoyages ?? 1),
+    maxParallelMissionsPerVoyage: String(v.maxParallelMissionsPerVoyage ?? 4),
+    serializeOverlappingMissions: v.serializeOverlappingMissions ?? false,
     autoApproveMode: v.autoApprove === true ? 'on' : v.autoApprove === false ? 'off' : 'inherit',
     defaultPipelineId: v.defaultPipelineId ?? '',
     requirePassingChecksToLand: v.requirePassingChecksToLand ?? false,
@@ -141,7 +152,37 @@ export function vesselToForm(v: Vessel): VesselFormState {
     testCommand: v.testCommand || '',
     lintCommand: v.lintCommand || '',
     auditCommand: v.auditCommand || '',
+    envelopeMaxFiles: v.workerEnvelope?.maxFiles ? String(v.workerEnvelope.maxFiles) : '',
+    envelopeMaxSteps: v.workerEnvelope?.maxSteps ? String(v.workerEnvelope.maxSteps) : '',
+    envelopeMinServedContextTokens: v.workerEnvelope?.minServedContextTokens ? String(v.workerEnvelope.minServedContextTokens) : '',
+    envelopeRequireTools: (v.workerEnvelope?.requiredTools ?? []).includes('tools'),
+    envelopeRequireMcp: (v.workerEnvelope?.requiredTools ?? []).includes('mcp'),
   };
+}
+
+function parseEnvelopeCount(text: string): number | null {
+  const trimmed = text.trim();
+  if (!trimmed) return null;
+  const value = parseInt(trimmed, 10);
+  return Number.isFinite(value) ? value : null;
+}
+
+/**
+ * Builds the vessel's Worker eligibility envelope from the form, or null when the form sets nothing (no envelope,
+ * routing unchanged). Out-of-range numbers are sent as typed so the server's validation message reaches the operator.
+ */
+export function buildWorkerEnvelope(form: VesselFormState): WorkerEnvelope | null {
+  const requiredTools: string[] = [];
+  if (form.envelopeRequireTools) requiredTools.push('tools');
+  if (form.envelopeRequireMcp) requiredTools.push('mcp');
+  const envelope: WorkerEnvelope = {
+    maxFiles: parseEnvelopeCount(form.envelopeMaxFiles),
+    maxSteps: parseEnvelopeCount(form.envelopeMaxSteps),
+    minServedContextTokens: parseEnvelopeCount(form.envelopeMinServedContextTokens),
+    requiredTools,
+  };
+  if (envelope.maxFiles === null && envelope.maxSteps === null && envelope.minServedContextTokens === null && requiredTools.length === 0) return null;
+  return envelope;
 }
 
 function splitLines(text: string): string[] {
@@ -170,7 +211,13 @@ export function buildVesselPayload(form: VesselFormState, existing: Vessel | nul
   payload.modelContext = form.modelContext || null;
   payload.landingMode = form.landingMode || null;
   payload.branchCleanupPolicy = form.branchCleanupPolicy || null;
-  payload.allowConcurrentMissions = form.allowConcurrentMissions;
+  const limit = (value: string, fallback: number) => {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) && value.trim() ? (parsed < 0 ? 1 : Math.min(1000, Math.trunc(parsed))) : fallback;
+  };
+  payload.maxParallelVoyages = limit(form.maxParallelVoyages, 1);
+  payload.maxParallelMissionsPerVoyage = limit(form.maxParallelMissionsPerVoyage, 4);
+  payload.serializeOverlappingMissions = form.serializeOverlappingMissions;
   payload.autoApprove = form.autoApproveMode === 'on' ? true : form.autoApproveMode === 'off' ? false : null;
   payload.defaultPipelineId = form.defaultPipelineId || null;
   payload.requirePassingChecksToLand = form.requirePassingChecksToLand;
@@ -197,6 +244,7 @@ export function buildVesselPayload(form: VesselFormState, existing: Vessel | nul
   payload.testCommand = form.testCommand.trim() || null;
   payload.lintCommand = form.lintCommand.trim() || null;
   payload.auditCommand = form.auditCommand.trim() || null;
+  payload.workerEnvelope = buildWorkerEnvelope(form);
 
   // GitHub token override: omit to keep the stored value; an empty string clears it.
   if (existing && form.clearGitHubTokenOverride) payload.gitHubTokenOverride = '';

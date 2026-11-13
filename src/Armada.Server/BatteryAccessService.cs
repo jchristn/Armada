@@ -16,7 +16,7 @@ namespace Armada.Server
     /// admin sees every tenant). Captain sessions are refused. Errors are typed exceptions the route and tool layers map
     /// to 400/403/404.
     /// </summary>
-    public class BatteryAccessService
+    public partial class BatteryAccessService
     {
         #region Private-Members
 
@@ -67,7 +67,12 @@ namespace Armada.Server
             result.PageSize = page.PageSize;
             result.TotalRecords = page.TotalRecords;
             result.TotalPages = page.TotalPages;
-            result.Objects = page.Objects.Select(p => p.ToInfo()).ToList();
+            result.Objects = page.Objects.Select(p =>
+            {
+                BatteryPackInfo info = p.ToInfo();
+                info.Id = System.IO.Path.GetFileName(p.Directory);
+                return info;
+            }).ToList();
             return result;
         }
 

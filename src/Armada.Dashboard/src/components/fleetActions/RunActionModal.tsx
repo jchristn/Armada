@@ -14,6 +14,7 @@ import type {
   FleetActionKind,
   FleetActionRunRequest,
   FleetActionRunStartResult,
+  FleetActionTargetStatus,
   FleetActionUpsertRequest,
   Pipeline,
   Vessel,
@@ -23,14 +24,19 @@ import { useNotifications } from '../../context/NotificationContext';
 import DialogShell from '../shared/DialogShell';
 import CodeStatusBadge from '../shared/CodeStatusBadge';
 import TemplateVariableHelp from './TemplateVariableHelp';
-import { KIND_DESCRIPTIONS, KIND_LABELS } from '../../lib/fleetActionLabels';
+import { KIND_DESCRIPTIONS, KIND_LABELS, TARGET_STATUS_META } from '../../lib/fleetActionLabels';
 import { findUnknownTemplateVariables, renderTemplatePreview } from '../../lib/fleetActionTemplate';
 import {
+  DEFAULT_FOLLOW_UP_STATUSES,
+  FOLLOW_UP_STATUSES,
   MAX_RUN_VESSELS,
+  PACKAGE_INPUT_PATTERN,
   adHocFromDefinition,
+  asFollowUpRequest,
   buildAdHocDefinition,
   buildSavedRunRequest,
   emptyAdHoc,
+  validateInputValues,
   validateRunInputs,
   type AdHocRunForm,
   type RunMode,
@@ -53,6 +59,13 @@ export interface RunActionModalProps {
   initialDefinition?: FleetActionUpsertRequest | null;
   /** Called after the server accepted the run. When omitted the modal navigates to the run detail page. */
   onStarted?: (result: FleetActionRunStartResult) => void;
+  /**
+   * Follow-up mode: target the vessels of this earlier run by target status instead of `vesselIds` (send an empty
+   * list). `statuses` preselects the status checkboxes (default Findings and Failed).
+   */
+  followUp?: { runId: string; statuses?: FleetActionTargetStatus[] } | null;
+  /** Vessel used for the rendered preview when `vesselIds` is empty (follow-up mode). */
+  previewVesselId?: string | null;
 }
 
 type Mode = RunMode;
@@ -64,7 +77,7 @@ type AdHocForm = AdHocRunForm;
  * define an ad hoc one, previews the rendered text for the first vessel, sets concurrency, confirms, and
  * starts the run. Used by the Vessels bulk bar, the Fleet Actions page, and (later) the Health page.
  */
-export default function RunActionModal({ open, vesselIds, onClose, initialActionId, initialKind, initialDefinition, onStarted }: RunActionModalProps) {
+export default function RunActionModal({ open, vesselIds, onClose, initialActionId, initialKind, initialDefinition, onStarted, followUp, previewVesselId }: RunActionModalProps) {
   const { t } = useLocale();
   const { pushToast } = useNotifications();
   const navigate = useNavigate();
@@ -85,8 +98,16 @@ export default function RunActionModal({ open, vesselIds, onClose, initialAction
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [serverError, setServerError] = useState('');
+  const [followUpStatuses, setFollowUpStatuses] = useState<FleetActionTargetStatus[]>(followUp?.statuses ?? DEFAULT_FOLLOW_UP_STATUSES);
+  const followUpRunId = followUp?.runId ?? null;
+  const followUpInitialKey = (followUp?.statuses ?? DEFAULT_FOLLOW_UP_STATUSES).join(',');
 
   // Reset whenever the modal is (re)opened.
+  useEffect(() => {
+    if (!open) return;
+    setFollowUpStatuses(FOLLOW_UP_STATUSES.filter((s) => followUpInitialKey.split(',').includes(s)));
+  }, [open, followUpRunId, followUpInitialKey]);
+
   useEffect(() => {
     if (!open) return;
     setStep('configure');
@@ -128,12 +149,13 @@ export default function RunActionModal({ open, vesselIds, onClose, initialAction
     return () => { cancelled = true; };
   }, [open, initialKind, t]);
 
+  const previewId = vesselIds[0] ?? previewVesselId ?? null;
   useEffect(() => {
-    if (!open || vesselIds.length === 0) { setPreviewVessel(null); return; }
+    if (!open || !previewId) { setPreviewVessel(null); return; }
     let cancelled = false;
-    getVessel(vesselIds[0]).then((v) => { if (!cancelled) setPreviewVessel(v); }).catch(() => { if (!cancelled) setPreviewVessel(null); });
+    getVessel(previewId).then((v) => { if (!cancelled) setPreviewVessel(v); }).catch(() => { if (!cancelled) setPreviewVessel(null); });
     return () => { cancelled = true; };
-  }, [open, vesselIds]);
+  }, [open, previewId]);
 
   const selectedAction = useMemo(() => actions.find((a) => a.id === selectedActionId) ?? null, [actions, selectedActionId]);
 
@@ -154,9 +176,19 @@ export default function RunActionModal({ open, vesselIds, onClose, initialAction
     ? (cleanTreeOverride ?? selectedAction?.requiresCleanWorkingTree ?? true)
     : adHoc.requiresCleanWorkingTree;
 
-  const errors = validateRunInputs({ vesselCount: vesselIds.length, mode, action: selectedAction, concurrency, adHoc });
+  const errors = validateRunInputs({ vesselCount: vesselIds.length, mode, action: selectedAction, concurrency, adHoc, followUp: followUpRunId ? { statuses: followUpStatuses } : null });
+  const inputErrors = validateInputValues(inputDefinitions, inputValues);
   const unknownVars = findUnknownTemplateVariables(bodyText, inputDefinitions.map(i => i.name));
-  const hasErrors = Object.keys(errors).length > 0;
+  const hasErrors = Object.keys(errors).length > 0 || Object.keys(inputErrors).length > 0;
+  // A malformed package name shows as soon as it is typed; a missing required value only after Review and run.
+  const inputError = (name: string, type: string) => {
+    const message = inputErrors[name];
+    if (!message) return '';
+    return submitted || (type === 'package' && (inputValues[name] ?? '').trim() !== '') ? t(message) : '';
+  };
+  const toggleFollowUpStatus = (status: FleetActionTargetStatus, checked: boolean) => setFollowUpStatuses((current) => (checked
+    ? FOLLOW_UP_STATUSES.filter((s) => s === status || current.includes(s))
+    : current.filter((s) => s !== status)));
   const showError = (field: string) => (submitted && errors[field] ? errors[field] : '');
 
   const preview = useMemo(() => {
@@ -177,14 +209,15 @@ export default function RunActionModal({ open, vesselIds, onClose, initialAction
     const c = parseInt(concurrency, 10);
     try {
       let result: FleetActionRunStartResult;
+      const target = (request: FleetActionRunRequest) => (followUpRunId ? asFollowUpRequest(request, followUpRunId, followUpStatuses) : request);
       if (mode === 'saved' && selectedAction) {
         const request: FleetActionRunRequest = buildSavedRunRequest(vesselIds, c, selectedAction, cleanTreeOverride);
         if (selectedAction.inputs?.length) request.InputValues = inputValues;
         if (effectiveKind === 'Mission') request.Overrides = { ...request.Overrides, ApprovalOptions: approvalOptions };
-        result = await runFleetAction(selectedAction.id, request);
+        result = await runFleetAction(selectedAction.id, target(request));
       } else {
         const definition: FleetActionUpsertRequest = buildAdHocDefinition(adHoc);
-        result = await runAdHocFleetAction({ VesselIds: vesselIds, Concurrency: c, Definition: definition, ...(inputDefinitions.length ? { InputValues: inputValues } : {}), ...(effectiveKind === 'Mission' ? { Overrides: { ApprovalOptions: approvalOptions } } : {}) });
+        result = await runAdHocFleetAction(target({ VesselIds: vesselIds, Concurrency: c, Definition: definition, ...(inputDefinitions.length ? { InputValues: inputValues } : {}), ...(effectiveKind === 'Mission' ? { Overrides: { ApprovalOptions: approvalOptions } } : {}) }));
       }
       pushToast('success', t('{count, plural, one {Fleet action started on # vessel.} other {Fleet action started on # vessels.}}', { count: result.targetCount }));
       onClose();
@@ -200,6 +233,7 @@ export default function RunActionModal({ open, vesselIds, onClose, initialAction
 
   const count = vesselIds.length;
   const concurrencyNumber = parseInt(concurrency, 10) || 1;
+  const followUpStatusText = followUpStatuses.map((s) => t(TARGET_STATUS_META[s].label)).join(', ');
 
   const footer = step === 'configure' ? (
     <>
@@ -212,7 +246,7 @@ export default function RunActionModal({ open, vesselIds, onClose, initialAction
     <>
       <button type="button" className="btn" onClick={() => setStep('configure')} disabled={submitting} title={t('Return to the options to change them.')}>{t('Back')}</button>
       <button type="button" className={`btn ${effectiveKind === 'Command' ? 'btn-danger' : 'btn-primary'}`} onClick={() => void start()} disabled={submitting} title={effectiveKind === 'Command' ? t('Start the run now. The command executes in each vessel checkout and cannot be undone; you can cancel the run to stop pending vessels.') : t('Start the run now. Captain voyages are dispatched per vessel; you can cancel the run later.')}>
-        {submitting ? t('Starting...') : t('{count, plural, one {Run on # vessel} other {Run on # vessels}}', { count })}
+        {submitting ? t('Starting...') : followUpRunId ? t('Start follow-up run') : t('{count, plural, one {Run on # vessel} other {Run on # vessels}}', { count })}
       </button>
     </>
   );
@@ -223,7 +257,7 @@ export default function RunActionModal({ open, vesselIds, onClose, initialAction
       onClose={onClose}
       dismissible={!submitting}
       title={t('Run fleet action')}
-      subtitle={t('{count, plural, one {# vessel selected} other {# vessels selected}}', { count })}
+      subtitle={followUpRunId ? t('Follow-up of run {{id}}', { id: followUpRunId }) : t('{count, plural, one {# vessel selected} other {# vessels selected}}', { count })}
       footer={footer}
       className="run-action-modal"
     >
@@ -232,6 +266,21 @@ export default function RunActionModal({ open, vesselIds, onClose, initialAction
 
       {step === 'configure' && (
         <>
+          {followUpRunId && (
+            <fieldset className="form-fieldset run-action-follow-up">
+              <legend className="form-label" title={t('The run targets the vessels of the earlier run whose result matches a checked status.')}>
+                {t('Targets: vessels from run {{id}} with status', { id: followUpRunId })}
+              </legend>
+              <div className="checkbox-group">
+                {FOLLOW_UP_STATUSES.map((s) => (
+                  <label key={s} className="checkbox-row" title={t(TARGET_STATUS_META[s].description)}>
+                    <input type="checkbox" checked={followUpStatuses.includes(s)} onChange={(e) => toggleFollowUpStatus(s, e.target.checked)} />
+                    <span>{t(TARGET_STATUS_META[s].label)}</span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+          )}
           <div className="segmented" role="radiogroup" aria-label={t('Action source')}>
             <label className={`segmented-option${mode === 'saved' ? ' active' : ''}`} title={t('Run one of the saved fleet actions.')}>
               <input type="radio" name="run-mode" checked={mode === 'saved'} onChange={() => setMode('saved')} />
@@ -346,11 +395,20 @@ export default function RunActionModal({ open, vesselIds, onClose, initialAction
             <label className="form-field" key={input.name}>
               <span>{input.name}{input.required ? ' *' : ''}</span>
               {input.type === 'enum'
-                ? <select required={input.required} value={inputValues[input.name] ?? ''} onChange={e => setInputValues(v => ({ ...v, [input.name]: e.target.value }))}>
+                ? <select required={input.required} value={inputValues[input.name] ?? ''} onChange={e => setInputValues(v => ({ ...v, [input.name]: e.target.value }))} aria-invalid={Boolean(inputError(input.name, input.type))}>
                     <option value="">-</option>{input.allowedValues.map(value => <option key={value} value={value}>{value}</option>)}
                   </select>
-                : <input required={input.required} value={inputValues[input.name] ?? ''} onChange={e => setInputValues(v => ({ ...v, [input.name]: e.target.value }))} placeholder={input.type === 'semver' ? '1.2.3' : undefined} />}
+                : <input
+                    required={input.required}
+                    value={inputValues[input.name] ?? ''}
+                    onChange={e => setInputValues(v => ({ ...v, [input.name]: e.target.value }))}
+                    placeholder={input.type === 'semver' ? '1.2.3' : input.type === 'package' ? 'Newtonsoft.Json' : undefined}
+                    pattern={input.type === 'package' ? PACKAGE_INPUT_PATTERN.source.slice(1, -1) : undefined}
+                    spellCheck={input.type === 'package' ? false : undefined}
+                    aria-invalid={Boolean(inputError(input.name, input.type))}
+                  />}
               {input.description && <span className="text-dim">{input.description}</span>}
+              {inputError(input.name, input.type) && <span className="field-error">{inputError(input.name, input.type)}</span>}
             </label>
           ))}
           <label className="form-field run-action-concurrency">
@@ -377,7 +435,6 @@ export default function RunActionModal({ open, vesselIds, onClose, initialAction
               <>
                 <pre className="code-block" data-i18n-skip="true">{preview.text}</pre>
                 {preview.usesHealthSummary && <p className="text-dim form-help">{t('{{health.summary}} is rendered on the server from each vessel\'s latest health evaluation.')}</p>}
-                {preview.missingBuildCommand && <p className="field-warning">{t('This vessel has no build command, so it will be skipped.')}</p>}
               </>
             )}
           </div>
@@ -387,7 +444,25 @@ export default function RunActionModal({ open, vesselIds, onClose, initialAction
       {step === 'confirm' && (
         <div className="run-action-confirm">
           <h4>{mode === 'saved' ? selectedAction?.name : adHoc.name}</h4>
-          {effectiveKind === 'Command' ? (
+          {followUpRunId && (
+            <div className="alert alert-info" role="note">
+              <p>{t('Targets the vessels from run {{id}} with status: {{statuses}}.', { id: followUpRunId, statuses: followUpStatusText })}</p>
+            </div>
+          )}
+          {followUpRunId ? (
+            effectiveKind === 'Command' ? (
+              <div className="alert alert-warning" role="note">
+                <p>{t('This runs the command below in the working directory of each matching vessel.')}</p>
+                <p>{effectiveCleanTree
+                  ? t('Vessels with uncommitted changes are skipped.')
+                  : t('The clean-tree check is off: the command also runs in vessels with uncommitted changes.')}</p>
+              </div>
+            ) : (
+              <div className="alert alert-info" role="note">
+                <p>{t('{count, plural, one {At most # voyage from this run is active at a time.} other {At most # voyages from this run are active at a time.}}', { count: concurrencyNumber })}</p>
+              </div>
+            )
+          ) : effectiveKind === 'Command' ? (
             <div className="alert alert-warning" role="note">
               <p>{t('{count, plural, one {This runs the command below in the working directory of # vessel, on the Admiral host or the vessel\'s preferred Harbor.} other {This runs the command below in the working directory of each of # vessels, on the Admiral host or each vessel\'s preferred Harbor.}}', { count })}</p>
               <p>{effectiveCleanTree
@@ -405,7 +480,9 @@ export default function RunActionModal({ open, vesselIds, onClose, initialAction
             {effectiveKind === 'Mission' && <><dt>{t('Approve all')}</dt><dd>{approvalOptions.approveAll ? t('Yes') : t('No')}</dd>
               {!approvalOptions.approveAll && <><dt>{t('Approval timeout (seconds)')}</dt><dd>{approvalOptions.timeoutSeconds}</dd><dt>{t('Default answer on timeout')}</dt><dd>{t(approvalOptions.timeoutDecision)}</dd></>}
             </>}
-            <dt title={t('Number of vessels this run will act on.')}>{t('Vessels')}</dt><dd>{count.toLocaleString()}</dd>
+            {followUpRunId
+              ? <><dt title={t('The run targets the vessels of the earlier run whose result matches a checked status.')}>{t('Vessels')}</dt><dd>{t('From run {{id}}', { id: followUpRunId })}</dd></>
+              : <><dt title={t('Number of vessels this run will act on.')}>{t('Vessels')}</dt><dd>{count.toLocaleString()}</dd></>}
             <dt title={t('How many vessels are worked on at once.')}>{t('Concurrency')}</dt><dd>{concurrencyNumber.toLocaleString()}</dd>
           </dl>
         </div>

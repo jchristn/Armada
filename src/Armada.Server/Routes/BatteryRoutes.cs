@@ -106,6 +106,187 @@ namespace Armada.Server.Routes
                 .WithResponse(400, OpenApiResponseMetadata.BadRequest())
                 .WithSecurity("ApiKey"));
 
+            app.Get("/api/v1/battery/packs/{packId}", async (ApiRequest req) =>
+            {
+                AuthContext ctx = await authenticate(req.Http).ConfigureAwait(false);
+                ApiErrorResponse? denied = Deny(req, ctx, authz);
+                if (denied != null) return denied;
+                try
+                {
+                    return (object)_Service.GetPack(ctx, req.Parameters["packId"]);
+                }
+                catch (Exception ex) when (RouteErrorMapper.IsMapped(ex))
+                {
+                    return RouteErrorMapper.ToResponse(req, ex, 409);
+                }
+            }, api => api.WithTag("Battery").WithSummary("Get battery pack")
+                .WithParameter(OpenApiParameterMetadata.Path("packId", "Pack directory slug"))
+                .WithResponse(200, OpenApiJson.For<BatteryPackDetail>("Result"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
+                .WithResponse(403, OpenApiJson.For<ApiErrorResponse>("Global admin required for writes"))
+                .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithResponse(409, OpenApiJson.For<ApiErrorResponse>("Pack conflict"))
+                .WithSecurity("ApiKey"));
+
+            app.Get("/api/v1/battery/packs/{packId}/files", async (ApiRequest req) =>
+            {
+                AuthContext ctx = await authenticate(req.Http).ConfigureAwait(false);
+                ApiErrorResponse? denied = Deny(req, ctx, authz);
+                if (denied != null) return denied;
+                try
+                {
+                    return (object)_Service.ReadPackFile(ctx, req.Parameters["packId"], ReadPackPath(req));
+                }
+                catch (Exception ex) when (RouteErrorMapper.IsMapped(ex))
+                {
+                    return RouteErrorMapper.ToResponse(req, ex, 409);
+                }
+            }, api => api.WithTag("Battery").WithSummary("Read battery pack file")
+                .WithParameter(OpenApiParameterMetadata.Path("packId", "Pack directory slug"))
+                .WithParameter(OpenApiParameterMetadata.Query("path", "Relative path inside the pack", true, OpenApiSchemaMetadata.String()))
+                .WithResponse(200, OpenApiJson.For<BatteryPackTextFile>("Result"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
+                .WithResponse(403, OpenApiJson.For<ApiErrorResponse>("Global admin required for writes"))
+                .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithResponse(409, OpenApiJson.For<ApiErrorResponse>("Pack conflict"))
+                .WithSecurity("ApiKey"));
+
+            app.Post("/api/v1/battery/packs", async (ApiRequest req) =>
+            {
+                AuthContext ctx = await authenticate(req.Http).ConfigureAwait(false);
+                ApiErrorResponse? denied = Deny(req, ctx, authz);
+                if (denied != null) return denied;
+                try
+                {
+                    return (object)_Service.CreatePack(ctx, ReadPackBody<BatteryPackEditRequest>(req));
+                }
+                catch (Exception ex) when (RouteErrorMapper.IsMapped(ex))
+                {
+                    return RouteErrorMapper.ToResponse(req, ex, 409);
+                }
+            }, api => api.WithTag("Battery").WithSummary("Create battery pack")
+                .WithRequestBody(OpenApiJson.BodyFor<BatteryPackEditRequest>("Pack edit", true))
+                .WithResponse(200, OpenApiJson.For<BatteryPackDetail>("Result"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
+                .WithResponse(403, OpenApiJson.For<ApiErrorResponse>("Global admin required for writes"))
+                .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithResponse(409, OpenApiJson.For<ApiErrorResponse>("Pack conflict"))
+                .WithSecurity("ApiKey"));
+
+            app.Put("/api/v1/battery/packs/{packId}/manifest", async (ApiRequest req) =>
+            {
+                AuthContext ctx = await authenticate(req.Http).ConfigureAwait(false);
+                ApiErrorResponse? denied = Deny(req, ctx, authz);
+                if (denied != null) return denied;
+                try
+                {
+                    return (object)_Service.UpdatePackManifest(ctx, req.Parameters["packId"], ReadPackBody<BatteryPackEditRequest>(req).ManifestJson);
+                }
+                catch (Exception ex) when (RouteErrorMapper.IsMapped(ex))
+                {
+                    return RouteErrorMapper.ToResponse(req, ex, 409);
+                }
+            }, api => api.WithTag("Battery").WithSummary("Update battery pack manifest")
+                .WithParameter(OpenApiParameterMetadata.Path("packId", "Pack directory slug"))
+                .WithRequestBody(OpenApiJson.BodyFor<BatteryPackEditRequest>("Pack edit", true))
+                .WithResponse(200, OpenApiJson.For<BatteryPackDetail>("Result"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
+                .WithResponse(403, OpenApiJson.For<ApiErrorResponse>("Global admin required for writes"))
+                .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithResponse(409, OpenApiJson.For<ApiErrorResponse>("Pack conflict"))
+                .WithSecurity("ApiKey"));
+
+            app.Put("/api/v1/battery/packs/{packId}/files", async (ApiRequest req) =>
+            {
+                AuthContext ctx = await authenticate(req.Http).ConfigureAwait(false);
+                ApiErrorResponse? denied = Deny(req, ctx, authz);
+                if (denied != null) return denied;
+                try
+                {
+                    return (object)_Service.WritePackFile(ctx, req.Parameters["packId"], ReadPackPath(req), ReadPackBody<BatteryPackTextFile>(req).Content);
+                }
+                catch (Exception ex) when (RouteErrorMapper.IsMapped(ex))
+                {
+                    return RouteErrorMapper.ToResponse(req, ex, 409);
+                }
+            }, api => api.WithTag("Battery").WithSummary("Write battery pack file")
+                .WithParameter(OpenApiParameterMetadata.Path("packId", "Pack directory slug"))
+                .WithParameter(OpenApiParameterMetadata.Query("path", "Relative path inside the pack", true, OpenApiSchemaMetadata.String()))
+                .WithRequestBody(OpenApiJson.BodyFor<BatteryPackTextFile>("Pack edit", true))
+                .WithResponse(200, OpenApiJson.For<BatteryPackDetail>("Result"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
+                .WithResponse(403, OpenApiJson.For<ApiErrorResponse>("Global admin required for writes"))
+                .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithResponse(409, OpenApiJson.For<ApiErrorResponse>("Pack conflict"))
+                .WithSecurity("ApiKey"));
+
+            app.Delete("/api/v1/battery/packs/{packId}/files", async (ApiRequest req) =>
+            {
+                AuthContext ctx = await authenticate(req.Http).ConfigureAwait(false);
+                ApiErrorResponse? denied = Deny(req, ctx, authz);
+                if (denied != null) return denied;
+                try
+                {
+                    return (object)_Service.DeletePackFile(ctx, req.Parameters["packId"], ReadPackPath(req));
+                }
+                catch (Exception ex) when (RouteErrorMapper.IsMapped(ex))
+                {
+                    return RouteErrorMapper.ToResponse(req, ex, 409);
+                }
+            }, api => api.WithTag("Battery").WithSummary("Delete battery pack file")
+                .WithParameter(OpenApiParameterMetadata.Path("packId", "Pack directory slug"))
+                .WithParameter(OpenApiParameterMetadata.Query("path", "Relative path inside the pack", true, OpenApiSchemaMetadata.String()))
+                .WithResponse(200, OpenApiJson.For<BatteryPackDetail>("Result"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
+                .WithResponse(403, OpenApiJson.For<ApiErrorResponse>("Global admin required for writes"))
+                .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithResponse(409, OpenApiJson.For<ApiErrorResponse>("Pack conflict"))
+                .WithSecurity("ApiKey"));
+
+            app.Delete("/api/v1/battery/packs/{packId}", async (ApiRequest req) =>
+            {
+                AuthContext ctx = await authenticate(req.Http).ConfigureAwait(false);
+                ApiErrorResponse? denied = Deny(req, ctx, authz);
+                if (denied != null) return denied;
+                try
+                {
+                    return (object)_Service.DeletePack(ctx, req.Parameters["packId"]);
+                }
+                catch (Exception ex) when (RouteErrorMapper.IsMapped(ex))
+                {
+                    return RouteErrorMapper.ToResponse(req, ex, 409);
+                }
+            }, api => api.WithTag("Battery").WithSummary("Delete battery pack")
+                .WithParameter(OpenApiParameterMetadata.Path("packId", "Pack directory slug"))
+                .WithResponse(200, OpenApiJson.For<object>("Result"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
+                .WithResponse(403, OpenApiJson.For<ApiErrorResponse>("Global admin required for writes"))
+                .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithResponse(409, OpenApiJson.For<ApiErrorResponse>("Pack conflict"))
+                .WithSecurity("ApiKey"));
+
+            app.Post("/api/v1/battery/packs/{packId}/validate", async (ApiRequest req) =>
+            {
+                AuthContext ctx = await authenticate(req.Http).ConfigureAwait(false);
+                ApiErrorResponse? denied = Deny(req, ctx, authz);
+                if (denied != null) return denied;
+                try
+                {
+                    return (object)_Service.ValidatePack(ctx, req.Parameters["packId"]);
+                }
+                catch (Exception ex) when (RouteErrorMapper.IsMapped(ex))
+                {
+                    return RouteErrorMapper.ToResponse(req, ex, 409);
+                }
+            }, api => api.WithTag("Battery").WithSummary("Validate battery pack")
+                .WithParameter(OpenApiParameterMetadata.Path("packId", "Pack directory slug"))
+                .WithResponse(200, OpenApiJson.For<BatteryPackInfo>("Result"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
+                .WithResponse(403, OpenApiJson.For<ApiErrorResponse>("Global admin required for writes"))
+                .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithResponse(409, OpenApiJson.For<ApiErrorResponse>("Pack conflict"))
+                .WithSecurity("ApiKey"));
+
             app.Post("/api/v1/battery/runs", async (ApiRequest req) =>
             {
                 AuthContext ctx = await authenticate(req.Http).ConfigureAwait(false);
@@ -226,6 +407,22 @@ namespace Armada.Server.Routes
         #endregion
 
         #region Private-Methods
+
+        private static string? ReadPackPath(ApiRequest req)
+        {
+            string? path = req.Query.GetValueOrDefault("path");
+            return path == null ? null : Uri.UnescapeDataString(path.Replace("+", " "));
+        }
+
+        private T ReadPackBody<T>(ApiRequest req) where T : class
+        {
+            try
+            {
+                return JsonSerializer.Deserialize<T>(req.Http.Request.DataAsString ?? "", _JsonOptions)
+                    ?? throw new ArgumentException("A request body is required.");
+            }
+            catch (JsonException ex) { throw new ArgumentException("Invalid request body: " + ex.Message, ex); }
+        }
 
         private BatteryRunRequest? ReadBody(ApiRequest req)
         {

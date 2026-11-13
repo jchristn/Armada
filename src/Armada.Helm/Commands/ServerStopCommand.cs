@@ -29,7 +29,7 @@ namespace Armada.Helm.Commands
                     throw CredentialError(target, response.StatusCode, "POST /api/v1/server/stop");
                 if (!response.IsSuccessStatusCode)
                 {
-                    AnsiConsole.MarkupLine("[red]The Admiral refused to stop:[/] HTTP " + (int)response.StatusCode + " from " + Markup.Escape(target.Describe()));
+                    HelmConsole.Error.MarkupLine("[red]The Admiral refused to stop:[/] HTTP " + (int)response.StatusCode + " from " + Markup.Escape(target.Describe()));
                     return 1;
                 }
 

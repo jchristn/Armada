@@ -70,6 +70,11 @@ namespace Armada.PerfSeed
         /// </summary>
         public int Seed { get; set; } = 42;
 
+        /// <summary>
+        /// Captain-selection decisions to seed (default 2000); the first 200 form one mission's history. Zero skips them.
+        /// </summary>
+        public int SelectionDecisions { get; set; } = 2000;
+
         #endregion
 
         #region Public-Methods
@@ -102,6 +107,7 @@ namespace Armada.PerfSeed
                     case "--jobs": options.Jobs = Int(value, name); break;
                     case "--ask-threads": options.AskThreads = Int(value, name); break;
                     case "--seed": options.Seed = Int(value, name); break;
+                    case "--selection-decisions": options.SelectionDecisions = Int(value, name); break;
                     default: throw new ArgumentException("unknown option " + name);
                 }
             }

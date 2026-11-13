@@ -154,7 +154,7 @@ namespace Test.Shared.Infrastructure
         /// </summary>
         public static List<string> Events()
         {
-            Regex re = new Regex("'((?:mission|voyage|captain|deployment|objective|incident|planning-session|objective-refinement-session|ask)\\.[a-z][a-z.\\-]*)'");
+            Regex re = new Regex("'((?:mission|voyage|captain|captain-selection|deployment|objective|incident|planning-session|objective-refinement-session|ask)\\.[a-z][a-z.\\-]*)'");
             HashSet<string> found = new HashSet<string>(StringComparer.Ordinal);
             foreach (string file in Directory.EnumerateFiles(Src(), "*.*", SearchOption.AllDirectories))
             {

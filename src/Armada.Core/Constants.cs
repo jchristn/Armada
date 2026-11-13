@@ -5,6 +5,8 @@ namespace Armada.Core
     /// </summary>
     public static class Constants
     {
+        /// <summary>Prefix for mission wait interval identifiers.</summary>
+        public const string MissionWaitIntervalIdPrefix = "mwi_";
         #region Public-Members
 
         /// <summary>
@@ -20,7 +22,7 @@ namespace Armada.Core
         /// <summary>
         /// Product version.
         /// </summary>
-        public static readonly string ProductVersion = "1.2.0";
+        public static readonly string ProductVersion = "1.3.0";
 
         /// <summary>
         /// Environment variable that overrides the default data directory. When set to a non-empty path it is
@@ -133,6 +135,51 @@ namespace Armada.Core
         /// simultaneously. 0 means unlimited.
         /// </summary>
         public static readonly int DefaultMaxConcurrentMissions = 0;
+
+        /// <summary>Concurrency configuration hard ceiling.</summary>
+        public const int CaptainConcurrencyCeiling = 256;
+
+        /// <summary>Concurrency configuration hard ceiling.</summary>
+        public const int VesselConcurrencyCeiling = 1000;
+
+        /// <summary>Concurrency configuration hard ceiling.</summary>
+        public const int GlobalMissionConcurrencyCeiling = 10000;
+
+        /// <summary>Concurrency configuration hard ceiling.</summary>
+        public const int HierarchyDepthCeiling = 16;
+
+        /// <summary>Concurrency configuration hard ceiling.</summary>
+        public const int StarvationWarningMinutesCeiling = 10080;
+
+        /// <summary>Concurrency configuration hard ceiling.</summary>
+        public const int AdmissionLockTimeoutSecondsCeiling = 600;
+
+        /// <summary>Concurrency configuration hard ceiling.</summary>
+        public const int WaitIntervalRetentionDaysCeiling = 3650;
+
+        /// <summary>Concurrency configuration default.</summary>
+        public const int DefaultVesselMaxParallelVoyages = 1;
+
+        /// <summary>Concurrency configuration default.</summary>
+        public const int DefaultVesselMaxParallelMissionsPerVoyage = 4;
+
+        /// <summary>Concurrency configuration default.</summary>
+        public const int DefaultCliCaptainMaxConcurrency = 1;
+
+        /// <summary>Concurrency configuration default.</summary>
+        public const int DefaultEndpointCaptainMaxConcurrency = 4;
+
+        /// <summary>Concurrency configuration default.</summary>
+        public const int DefaultMaxHierarchyDepth = 4;
+
+        /// <summary>Concurrency configuration default.</summary>
+        public const int DefaultStarvationWarningMinutes = 60;
+
+        /// <summary>Concurrency configuration default.</summary>
+        public const int DefaultAdmissionLockTimeoutSeconds = 30;
+
+        /// <summary>Concurrency configuration default.</summary>
+        public const int DefaultWaitIntervalRetentionDays = 90;
 
         /// <summary>
         /// Default maximum log file size in bytes (10 MB).
@@ -285,6 +332,22 @@ namespace Armada.Core
         public static readonly string ModelProbeResultIdPrefix = "mpo_";
 
         /// <summary>
+        /// ID prefix for model profiles (the model as served: runtime, provider, model and served context; mpr_ is taken by
+        /// model probe runs).
+        /// </summary>
+        public static readonly string ModelProfileIdPrefix = "mdl_";
+
+        /// <summary>
+        /// ID prefix for model profile revisions (one immutable runtime version, model digest and sampling of a profile).
+        /// </summary>
+        public static readonly string ModelProfileRevisionIdPrefix = "mdv_";
+
+        /// <summary>
+        /// ID prefix for model alerts (one scorecard threshold crossed for a profile, revision group, persona and vessel).
+        /// </summary>
+        public static readonly string ModelAlertIdPrefix = "mal_";
+
+        /// <summary>
         /// ID prefix for battery runs (one run of the fixture battery against a captain).
         /// </summary>
         public static readonly string BatteryRunIdPrefix = "bat_";
@@ -318,6 +381,31 @@ namespace Armada.Core
         /// ID prefix for work tracked by Ask Armada threads.
         /// </summary>
         public static readonly string AskTrackedWorkIdPrefix = "atw_";
+
+        /// <summary>
+        /// ID prefix for usage snapshots (one row per capture attempt against an account on a host).
+        /// </summary>
+        public static readonly string UsageSnapshotIdPrefix = "usg_";
+
+        /// <summary>
+        /// ID prefix for usage snapshot-captain links (the members an account group covered at capture time).
+        /// </summary>
+        public static readonly string UsageSnapshotCaptainIdPrefix = "usl_";
+
+        /// <summary>
+        /// ID prefix for usage account memberships (effective-dated captain/account/host attribution periods).
+        /// </summary>
+        public static readonly string UsageMembershipIdPrefix = "usm_";
+
+        /// <summary>
+        /// ID prefix for usage hourly rollups (bounded per-account utilization aggregates per UTC hour).
+        /// </summary>
+        public static readonly string UsageRollupIdPrefix = "ush_";
+
+        /// <summary>
+        /// ID prefix for usage latest-state rows (per-account last-good and last-error summary).
+        /// </summary>
+        public static readonly string UsageLatestStateIdPrefix = "ust_";
 
         /// <summary>
         /// Default per-phase timeout, in seconds, for the in-dock Definition-of-Done gate (30 minutes).
@@ -471,6 +559,46 @@ namespace Armada.Core
         /// Agent runtime ID prefix.
         /// </summary>
         public static readonly string AgentRuntimeIdPrefix = "art_";
+
+        /// <summary>
+        /// Black box entry ID prefix (blackbox_entries).
+        /// </summary>
+        public static readonly string BlackBoxEntryIdPrefix = "bbx_";
+
+        /// <summary>
+        /// Black box object ID prefix (blackbox_objects).
+        /// </summary>
+        public static readonly string BlackBoxObjectIdPrefix = "bbo_";
+
+        /// <summary>
+        /// Black box file row ID prefix (blackbox_files).
+        /// </summary>
+        public static readonly string BlackBoxFileIdPrefix = "bbf_";
+
+        /// <summary>
+        /// Black box link row ID prefix (blackbox_links).
+        /// </summary>
+        public static readonly string BlackBoxLinkIdPrefix = "bbl_";
+
+        /// <summary>
+        /// Black box note ID prefix (blackbox_notes).
+        /// </summary>
+        public static readonly string BlackBoxNoteIdPrefix = "bbn_";
+
+        /// <summary>
+        /// Black box storage migration job ID prefix.
+        /// </summary>
+        public static readonly string BlackBoxStorageMigrationIdPrefix = "bbm_";
+
+        /// <summary>
+        /// Black box success record ID prefix (blackbox_successes).
+        /// </summary>
+        public static readonly string BlackBoxSuccessIdPrefix = "bbs_";
+
+        /// <summary>
+        /// Black box recovery outcome ID prefix (blackbox_recovery_outcomes).
+        /// </summary>
+        public static readonly string BlackBoxRecoveryOutcomeIdPrefix = "bro_";
 
         /// <summary>
         /// Default data retention period in days for completed records.

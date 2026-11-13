@@ -8,6 +8,7 @@ namespace Armada.Harbor
     using Armada.Client;
     using Armada.Core.Hosting;
     using Avalonia;
+    using Avalonia.Automation;
     using Avalonia.Controls;
     using Avalonia.Controls.Templates;
     using Avalonia.Input.Platform;
@@ -70,6 +71,11 @@ namespace Armada.Harbor
             {
                 if (!_UpdatingSources) RefreshList();
             };
+            AutomationProperties.SetName(_Category, "Logs to browse");
+            AutomationProperties.SetName(_NameFilter, "Filter log files by name");
+            AutomationProperties.SetName(_MissionId, "Mission or captain ID");
+            AutomationProperties.SetName(_Severity, "Minimum log level");
+            AutomationProperties.SetName(_Find, "Find in log");
             ToolTip.SetTip(_Category, "Which logs to list: Harbor's own log, the logs of jobs run on this computer, or the Admiral's logs");
             ToolTip.SetTip(_NameFilter, "Show only log files whose name contains this text");
             ToolTip.SetTip(_MissionId, "A mission ID (msn_) or captain ID (cpt_) whose log you want; press Enter or Open");

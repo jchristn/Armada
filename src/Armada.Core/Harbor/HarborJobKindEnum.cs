@@ -54,6 +54,13 @@ namespace Armada.Core.Harbor
         ModelProbe,
 
         /// <summary>
+        /// An account usage capture probe: its own isolated host job, never a captain mission launch. A
+        /// Harbor that does not know the value still accepts the launch.
+        /// </summary>
+        [EnumMember(Value = "UsageProbe")]
+        UsageProbe,
+
+        /// <summary>
         /// Any other captain launch.
         /// </summary>
         [EnumMember(Value = "Other")]

@@ -19,28 +19,28 @@ namespace Armada.Helm.Commands
         /// Optional status filter.
         /// </summary>
         [Description("Filter by mission status")]
-        [CommandOption("--status|-s")]
+        [CommandOption("--status|-s <STATUS>")]
         public string? Status { get; set; }
 
         /// <summary>
         /// Optional vessel filter.
         /// </summary>
         [Description("Filter by vessel name or ID")]
-        [CommandOption("--vessel|-v")]
+        [CommandOption("--vessel|-v <VESSEL>")]
         public string? Vessel { get; set; }
 
         /// <summary>
         /// Optional captain filter.
         /// </summary>
         [Description("Filter by captain name or ID")]
-        [CommandOption("--captain|-c")]
+        [CommandOption("--captain|-c <CAPTAIN>")]
         public string? Captain { get; set; }
 
         /// <summary>
         /// Optional voyage filter.
         /// </summary>
         [Description("Filter by voyage ID or title")]
-        [CommandOption("--voyage")]
+        [CommandOption("--voyage <VOYAGE>")]
         public string? Voyage { get; set; }
     }
 }

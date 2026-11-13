@@ -126,7 +126,7 @@ namespace Armada.Helm.Commands
         /// </summary>
         protected bool IsJsonMode(TSettings settings)
         {
-            if (settings is BaseSettings bs) return bs.Json;
+            if (settings is OutputSettings output) return output.Json;
             return false;
         }
 
@@ -332,7 +332,7 @@ namespace Armada.Helm.Commands
             // Harbors, so never auto-create captains on a remote target.
             if (!IsLocalTarget())
             {
-                AnsiConsole.MarkupLine("[red]No captains on " + Markup.Escape(GetTarget().Describe()) + ".[/]");
+                HelmConsole.Error.MarkupLine("[red]No captains on " + Markup.Escape(GetTarget().Describe()) + ".[/]");
                 AnsiConsole.MarkupLine("[dim]Add one there with: armada captain add <name> --runtime <runtime> (it runs on the Admiral's host or a Harbor).[/]");
                 return new List<Captain>();
             }
@@ -345,7 +345,7 @@ namespace Armada.Helm.Commands
             {
                 if (!AgentRuntimeParser.TryParse(settings.DefaultRuntime, out runtimeValue))
                 {
-                    AnsiConsole.MarkupLine("[red]DefaultRuntime setting: " + Markup.Escape(AgentRuntimeParser.DescribeInvalid(settings.DefaultRuntime)) + "[/]");
+                    HelmConsole.Error.MarkupLine("[red]DefaultRuntime setting: " + Markup.Escape(AgentRuntimeParser.DescribeInvalid(settings.DefaultRuntime)) + "[/]");
                     return new List<Captain>();
                 }
 
@@ -361,7 +361,7 @@ namespace Armada.Helm.Commands
                 Armada.Core.Enums.AgentRuntimeEnum? detected = RuntimeDetectionService.DetectDefaultRuntime();
                 if (detected == null)
                 {
-                    AnsiConsole.MarkupLine("[red]No agent runtimes found on PATH.[/]");
+                    HelmConsole.Error.MarkupLine("[red]No agent runtimes found on PATH.[/]");
                     AnsiConsole.MarkupLine($"[dim]Install Claude Code: {RuntimeDetectionService.GetInstallHint(Armada.Core.Enums.AgentRuntimeEnum.ClaudeCode)}[/]");
                     AnsiConsole.MarkupLine($"[dim]Install Codex:       {RuntimeDetectionService.GetInstallHint(Armada.Core.Enums.AgentRuntimeEnum.Codex)}[/]");
                     AnsiConsole.MarkupLine($"[dim]Install Mux:         {RuntimeDetectionService.GetInstallHint(Armada.Core.Enums.AgentRuntimeEnum.Mux)}[/]");
@@ -415,7 +415,7 @@ namespace Armada.Helm.Commands
             // Check if it's a git repo
             if (!GitInference.IsGitRepository(directory))
             {
-                AnsiConsole.MarkupLine($"[red]Not a git repository:[/] {Markup.Escape(directory)}");
+                HelmConsole.Error.MarkupLine($"[red]Not a git repository:[/] {Markup.Escape(directory)}");
                 return null;
             }
 
@@ -458,7 +458,7 @@ namespace Armada.Helm.Commands
             // Auto-register
             if (string.IsNullOrEmpty(remoteUrl))
             {
-                AnsiConsole.MarkupLine("[red]No git remote 'origin' found.[/] Register a vessel manually with [green]armada vessel add[/].");
+                HelmConsole.Error.MarkupLine("[red]No git remote 'origin' found.[/] Register a vessel manually with [green]armada vessel add[/].");
                 return null;
             }
 

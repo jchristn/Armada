@@ -1,0 +1,500 @@
+[
+  {
+    "page": "events",
+    "theme": "light",
+    "width": 1440,
+    "overflow": false,
+    "breadcrumbCount": 1,
+    "breadcrumbs": "Dashboard>Activity>Events",
+    "tabs": [
+      "All Activity",
+      "API Requests",
+      "Events",
+      "Signals",
+      "Token Usage",
+      "Captain Usage"
+    ],
+    "url": "/dashboard/activity?source=events",
+    "routineIndicator": false
+  },
+  {
+    "page": "signals",
+    "theme": "light",
+    "width": 1440,
+    "overflow": false,
+    "breadcrumbCount": 1,
+    "breadcrumbs": "Dashboard>Activity>Signals",
+    "tabs": [
+      "All Activity",
+      "API Requests",
+      "Events",
+      "Signals",
+      "Token Usage",
+      "Captain Usage"
+    ],
+    "url": "/dashboard/activity?source=signals",
+    "routineIndicator": false
+  },
+  {
+    "page": "needs-you",
+    "theme": "light",
+    "width": 1440,
+    "overflow": false,
+    "breadcrumbCount": 1,
+    "breadcrumbs": "Dashboard>Needs You",
+    "tabs": [],
+    "url": "/dashboard/inbox",
+    "routineIndicator": false
+  },
+  {
+    "page": "legacy-jobs",
+    "theme": "light",
+    "width": 1440,
+    "overflow": false,
+    "breadcrumbCount": 1,
+    "breadcrumbs": "Dashboard>Activity>Events",
+    "tabs": [
+      "All Activity",
+      "API Requests",
+      "Events",
+      "Signals",
+      "Token Usage",
+      "Captain Usage"
+    ],
+    "url": "/dashboard/activity?source=events",
+    "routineIndicator": false
+  },
+  {
+    "page": "legacy-source",
+    "theme": "light",
+    "width": 1440,
+    "overflow": false,
+    "breadcrumbCount": 1,
+    "breadcrumbs": "Dashboard>Activity>Events",
+    "tabs": [
+      "All Activity",
+      "API Requests",
+      "Events",
+      "Signals",
+      "Token Usage",
+      "Captain Usage"
+    ],
+    "url": "/dashboard/activity?source=events",
+    "routineIndicator": false
+  },
+  {
+    "page": "events",
+    "theme": "light",
+    "width": 768,
+    "overflow": false,
+    "breadcrumbCount": 1,
+    "breadcrumbs": "Dashboard>Activity>Events",
+    "tabs": [
+      "All Activity",
+      "API Requests",
+      "Events",
+      "Signals",
+      "Token Usage",
+      "Captain Usage"
+    ],
+    "url": "/dashboard/activity?source=events",
+    "routineIndicator": false
+  },
+  {
+    "page": "signals",
+    "theme": "light",
+    "width": 768,
+    "overflow": false,
+    "breadcrumbCount": 1,
+    "breadcrumbs": "Dashboard>Activity>Signals",
+    "tabs": [
+      "All Activity",
+      "API Requests",
+      "Events",
+      "Signals",
+      "Token Usage",
+      "Captain Usage"
+    ],
+    "url": "/dashboard/activity?source=signals",
+    "routineIndicator": false
+  },
+  {
+    "page": "needs-you",
+    "theme": "light",
+    "width": 768,
+    "overflow": false,
+    "breadcrumbCount": 1,
+    "breadcrumbs": "Dashboard>Needs You",
+    "tabs": [],
+    "url": "/dashboard/inbox",
+    "routineIndicator": false
+  },
+  {
+    "page": "legacy-jobs",
+    "theme": "light",
+    "width": 768,
+    "overflow": false,
+    "breadcrumbCount": 1,
+    "breadcrumbs": "Dashboard>Activity>Events",
+    "tabs": [
+      "All Activity",
+      "API Requests",
+      "Events",
+      "Signals",
+      "Token Usage",
+      "Captain Usage"
+    ],
+    "url": "/dashboard/activity?source=events",
+    "routineIndicator": false
+  },
+  {
+    "page": "legacy-source",
+    "theme": "light",
+    "width": 768,
+    "overflow": false,
+    "breadcrumbCount": 1,
+    "breadcrumbs": "Dashboard>Activity>Events",
+    "tabs": [
+      "All Activity",
+      "API Requests",
+      "Events",
+      "Signals",
+      "Token Usage",
+      "Captain Usage"
+    ],
+    "url": "/dashboard/activity?source=events",
+    "routineIndicator": false
+  },
+  {
+    "page": "events",
+    "theme": "light",
+    "width": 390,
+    "overflow": false,
+    "breadcrumbCount": 1,
+    "breadcrumbs": "Dashboard>Activity>Events",
+    "tabs": [
+      "All Activity",
+      "API Requests",
+      "Events",
+      "Signals",
+      "Token Usage",
+      "Captain Usage"
+    ],
+    "url": "/dashboard/activity?source=events",
+    "routineIndicator": false
+  },
+  {
+    "page": "signals",
+    "theme": "light",
+    "width": 390,
+    "overflow": false,
+    "breadcrumbCount": 1,
+    "breadcrumbs": "Dashboard>Activity>Signals",
+    "tabs": [
+      "All Activity",
+      "API Requests",
+      "Events",
+      "Signals",
+      "Token Usage",
+      "Captain Usage"
+    ],
+    "url": "/dashboard/activity?source=signals",
+    "routineIndicator": false
+  },
+  {
+    "page": "needs-you",
+    "theme": "light",
+    "width": 390,
+    "overflow": false,
+    "breadcrumbCount": 1,
+    "breadcrumbs": "Dashboard>Needs You",
+    "tabs": [],
+    "url": "/dashboard/inbox",
+    "routineIndicator": false
+  },
+  {
+    "page": "legacy-jobs",
+    "theme": "light",
+    "width": 390,
+    "overflow": false,
+    "breadcrumbCount": 1,
+    "breadcrumbs": "Dashboard>Activity>Events",
+    "tabs": [
+      "All Activity",
+      "API Requests",
+      "Events",
+      "Signals",
+      "Token Usage",
+      "Captain Usage"
+    ],
+    "url": "/dashboard/activity?source=events",
+    "routineIndicator": false
+  },
+  {
+    "page": "legacy-source",
+    "theme": "light",
+    "width": 390,
+    "overflow": false,
+    "breadcrumbCount": 1,
+    "breadcrumbs": "Dashboard>Activity>Events",
+    "tabs": [
+      "All Activity",
+      "API Requests",
+      "Events",
+      "Signals",
+      "Token Usage",
+      "Captain Usage"
+    ],
+    "url": "/dashboard/activity?source=events",
+    "routineIndicator": false
+  },
+  {
+    "page": "events",
+    "theme": "dark",
+    "width": 1440,
+    "overflow": false,
+    "breadcrumbCount": 1,
+    "breadcrumbs": "Dashboard>Activity>Events",
+    "tabs": [
+      "All Activity",
+      "API Requests",
+      "Events",
+      "Signals",
+      "Token Usage",
+      "Captain Usage"
+    ],
+    "url": "/dashboard/activity?source=events",
+    "routineIndicator": false
+  },
+  {
+    "page": "signals",
+    "theme": "dark",
+    "width": 1440,
+    "overflow": false,
+    "breadcrumbCount": 1,
+    "breadcrumbs": "Dashboard>Activity>Signals",
+    "tabs": [
+      "All Activity",
+      "API Requests",
+      "Events",
+      "Signals",
+      "Token Usage",
+      "Captain Usage"
+    ],
+    "url": "/dashboard/activity?source=signals",
+    "routineIndicator": false
+  },
+  {
+    "page": "needs-you",
+    "theme": "dark",
+    "width": 1440,
+    "overflow": false,
+    "breadcrumbCount": 1,
+    "breadcrumbs": "Dashboard>Needs You",
+    "tabs": [],
+    "url": "/dashboard/inbox",
+    "routineIndicator": false
+  },
+  {
+    "page": "legacy-jobs",
+    "theme": "dark",
+    "width": 1440,
+    "overflow": false,
+    "breadcrumbCount": 1,
+    "breadcrumbs": "Dashboard>Activity>Events",
+    "tabs": [
+      "All Activity",
+      "API Requests",
+      "Events",
+      "Signals",
+      "Token Usage",
+      "Captain Usage"
+    ],
+    "url": "/dashboard/activity?source=events",
+    "routineIndicator": false
+  },
+  {
+    "page": "legacy-source",
+    "theme": "dark",
+    "width": 1440,
+    "overflow": false,
+    "breadcrumbCount": 1,
+    "breadcrumbs": "Dashboard>Activity>Events",
+    "tabs": [
+      "All Activity",
+      "API Requests",
+      "Events",
+      "Signals",
+      "Token Usage",
+      "Captain Usage"
+    ],
+    "url": "/dashboard/activity?source=events",
+    "routineIndicator": false
+  },
+  {
+    "page": "events",
+    "theme": "dark",
+    "width": 768,
+    "overflow": false,
+    "breadcrumbCount": 1,
+    "breadcrumbs": "Dashboard>Activity>Events",
+    "tabs": [
+      "All Activity",
+      "API Requests",
+      "Events",
+      "Signals",
+      "Token Usage",
+      "Captain Usage"
+    ],
+    "url": "/dashboard/activity?source=events",
+    "routineIndicator": false
+  },
+  {
+    "page": "signals",
+    "theme": "dark",
+    "width": 768,
+    "overflow": false,
+    "breadcrumbCount": 1,
+    "breadcrumbs": "Dashboard>Activity>Signals",
+    "tabs": [
+      "All Activity",
+      "API Requests",
+      "Events",
+      "Signals",
+      "Token Usage",
+      "Captain Usage"
+    ],
+    "url": "/dashboard/activity?source=signals",
+    "routineIndicator": false
+  },
+  {
+    "page": "needs-you",
+    "theme": "dark",
+    "width": 768,
+    "overflow": false,
+    "breadcrumbCount": 1,
+    "breadcrumbs": "Dashboard>Needs You",
+    "tabs": [],
+    "url": "/dashboard/inbox",
+    "routineIndicator": false
+  },
+  {
+    "page": "legacy-jobs",
+    "theme": "dark",
+    "width": 768,
+    "overflow": false,
+    "breadcrumbCount": 1,
+    "breadcrumbs": "Dashboard>Activity>Events",
+    "tabs": [
+      "All Activity",
+      "API Requests",
+      "Events",
+      "Signals",
+      "Token Usage",
+      "Captain Usage"
+    ],
+    "url": "/dashboard/activity?source=events",
+    "routineIndicator": false
+  },
+  {
+    "page": "legacy-source",
+    "theme": "dark",
+    "width": 768,
+    "overflow": false,
+    "breadcrumbCount": 1,
+    "breadcrumbs": "Dashboard>Activity>Events",
+    "tabs": [
+      "All Activity",
+      "API Requests",
+      "Events",
+      "Signals",
+      "Token Usage",
+      "Captain Usage"
+    ],
+    "url": "/dashboard/activity?source=events",
+    "routineIndicator": false
+  },
+  {
+    "page": "events",
+    "theme": "dark",
+    "width": 390,
+    "overflow": false,
+    "breadcrumbCount": 1,
+    "breadcrumbs": "Dashboard>Activity>Events",
+    "tabs": [
+      "All Activity",
+      "API Requests",
+      "Events",
+      "Signals",
+      "Token Usage",
+      "Captain Usage"
+    ],
+    "url": "/dashboard/activity?source=events",
+    "routineIndicator": false
+  },
+  {
+    "page": "signals",
+    "theme": "dark",
+    "width": 390,
+    "overflow": false,
+    "breadcrumbCount": 1,
+    "breadcrumbs": "Dashboard>Activity>Signals",
+    "tabs": [
+      "All Activity",
+      "API Requests",
+      "Events",
+      "Signals",
+      "Token Usage",
+      "Captain Usage"
+    ],
+    "url": "/dashboard/activity?source=signals",
+    "routineIndicator": false
+  },
+  {
+    "page": "needs-you",
+    "theme": "dark",
+    "width": 390,
+    "overflow": false,
+    "breadcrumbCount": 1,
+    "breadcrumbs": "Dashboard>Needs You",
+    "tabs": [],
+    "url": "/dashboard/inbox",
+    "routineIndicator": false
+  },
+  {
+    "page": "legacy-jobs",
+    "theme": "dark",
+    "width": 390,
+    "overflow": false,
+    "breadcrumbCount": 1,
+    "breadcrumbs": "Dashboard>Activity>Events",
+    "tabs": [
+      "All Activity",
+      "API Requests",
+      "Events",
+      "Signals",
+      "Token Usage",
+      "Captain Usage"
+    ],
+    "url": "/dashboard/activity?source=events",
+    "routineIndicator": false
+  },
+  {
+    "page": "legacy-source",
+    "theme": "dark",
+    "width": 390,
+    "overflow": false,
+    "breadcrumbCount": 1,
+    "breadcrumbs": "Dashboard>Activity>Events",
+    "tabs": [
+      "All Activity",
+      "API Requests",
+      "Events",
+      "Signals",
+      "Token Usage",
+      "Captain Usage"
+    ],
+    "url": "/dashboard/activity?source=events",
+    "routineIndicator": false
+  }
+]

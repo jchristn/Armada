@@ -31,5 +31,11 @@ namespace Armada.Core.Services
         /// Why dispatch failed, or null.
         /// </summary>
         public string? FailureReason { get; set; } = null;
+
+        /// <summary>
+        /// Whether the wait was cancelled (a Full Evaluate was cancelled or timed out); the open missions were cancelled,
+        /// which releases their docks and captains.
+        /// </summary>
+        public bool Cancelled { get; set; } = false;
     }
 }

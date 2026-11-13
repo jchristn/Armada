@@ -31,7 +31,7 @@ echo "========================================"
 
 echo
 echo "[1/4] Pulling the images named in the compose file..."
-# The compose files pin release tags (for example jchristn77/armada-server:v1.2.0); edit the tags to move
+# The compose files pin release tags (for example jchristn77/armada-server:v1.3.0); edit the tags to move
 # to another release before running this.
 docker compose -f "$COMPOSE_FILE" pull
 

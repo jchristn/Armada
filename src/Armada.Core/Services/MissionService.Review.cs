@@ -4,6 +4,7 @@ namespace Armada.Core.Services
     using System.Text.Json;
     using SyslogLogging;
     using Armada.Core;
+    using Armada.Core.BlackBox;
     using Armada.Core.Database;
     using Armada.Core.Enums;
     using Armada.Core.Models;
@@ -84,6 +85,11 @@ namespace Armada.Core.Services
                 mission.CompletedUtc = DateTime.UtcNow;
                 mission.LastUpdateUtc = DateTime.UtcNow;
                 await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
+                await RecordFailureAsync(mission, MissionStatusEnum.WorkProduced, BlackBoxStepEnum.ReviewApprovedDockMissing, null, context =>
+                {
+                    context.GitFacts = new BlackBoxGitFacts { WorktreeExisted = false };
+                    context.Note = "The review was approved but dock " + (mission.DockId ?? "(none)") + " could not be read.";
+                }, token).ConfigureAwait(false);
                 await UpdateVoyageTerminalStatusAsync(mission.VoyageId, token).ConfigureAwait(false);
                 return mission;
             }
@@ -112,6 +118,12 @@ namespace Armada.Core.Services
             if (mission.Status != MissionStatusEnum.Pending && mission.Status != MissionStatusEnum.Failed
                 && mission.Status != MissionStatusEnum.Cancelled && mission.Status != MissionStatusEnum.LandingFailed)
                 throw new InvalidOperationException("Only Pending, Failed, LandingFailed, or Cancelled missions can be restarted (current: " + mission.Status + ").");
+
+            // A verifier that blocked on a product defect cannot correct product code: restarting it would only re-run
+            // verification against the same commit and block again. Send the work back to its Worker instead, as the
+            // failure's remediation says, with the operator's description as guidance for that Worker.
+            if (IsBlockedVerifierAwaitingWorker(mission))
+                return await RestartBlockedVerifierFromWorkerAsync(mission, description, token).ConfigureAwait(false);
 
             if (!String.IsNullOrEmpty(title)) mission.Title = title!;
             if (!String.IsNullOrEmpty(description)) mission.Description = description!;
@@ -159,52 +171,111 @@ namespace Armada.Core.Services
             ResetForRestart(mission, keptBranch);
             mission = await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
 
+            List<string> restoredIds = new List<string>();
             if (!String.IsNullOrEmpty(mission.VoyageId))
-            {
-                Voyage? voyage = await _Database.Voyages.ReadAsync(mission.VoyageId!, token).ConfigureAwait(false);
-                if (voyage != null && (voyage.Status == VoyageStatusEnum.Failed || voyage.Status == VoyageStatusEnum.Cancelled || voyage.Status == VoyageStatusEnum.Complete))
-                {
-                    voyage.Status = VoyageStatusEnum.InProgress;
-                    voyage.CompletedUtc = null;
-                    voyage.LastUpdateUtc = DateTime.UtcNow;
-                    await _Database.Voyages.UpdateAsync(voyage, token).ConfigureAwait(false);
-                    _Logging.Info(_Header + "reopened voyage " + voyage.Id + " for restarted mission " + mission.Id);
-                }
+                restoredIds.AddRange(await ReopenVoyageAndRestoreDependentsAsync(mission, new HashSet<string>(StringComparer.Ordinal) { mission.Id }, token).ConfigureAwait(false));
 
-                // Restore the stages cancelled because this one failed (the chain hanging off it), and a final integration
-                // slice stopped because of it, which keeps its branch: its own dependency was not restarted.
-                List<Mission> voyageMissions = await _Database.Missions.EnumerateByVoyageAsync(mission.VoyageId!, token).ConfigureAwait(false);
-                HashSet<string> chain = new HashSet<string>(StringComparer.Ordinal) { mission.Id };
-                foreach (Mission integration in voyageMissions.Where(m => (m.Status == MissionStatusEnum.Cancelled || m.Status == MissionStatusEnum.Blocked)
-                    && m.FailureKind == MissionFailureKindEnum.DependencyFailed && m.FailureReason != null
-                    && m.FailureReason.StartsWith(_IntegrationBlockedPrefix, StringComparison.Ordinal)
-                    && m.FailureReason.Contains("(" + mission.Id + ")", StringComparison.Ordinal)).ToList())
-                {
-                    ResetForRestart(integration, integration.BranchName);
-                    integration.Description = RemoveIntegrationMergeSection(integration.Description);
-                    await _Database.Missions.UpdateAsync(integration, token).ConfigureAwait(false);
-                    chain.Add(integration.Id);
-                    _Logging.Info(_Header + "restored integration mission " + integration.Id + " with restarted mission " + mission.Id);
-                }
-                bool grew = true;
-                while (grew)
-                {
-                    grew = false;
-                    foreach (Mission candidate in voyageMissions)
-                    {
-                        if (chain.Contains(candidate.Id) || String.IsNullOrEmpty(candidate.DependsOnMissionId) || !chain.Contains(candidate.DependsOnMissionId!)) continue;
-                        if ((candidate.Status != MissionStatusEnum.Cancelled && candidate.Status != MissionStatusEnum.Blocked)
-                            || candidate.FailureKind != MissionFailureKindEnum.DependencyFailed) continue;
-                        chain.Add(candidate.Id);
-                        ResetForRestart(candidate, null);
-                        await _Database.Missions.UpdateAsync(candidate, token).ConfigureAwait(false);
-                        grew = true;
-                    }
-                }
+            // D18: restarting a parent brings back the descendants that were cancelled only because it failed.
+            Mission root = mission;
+            for (int hops = 0; !String.IsNullOrEmpty(root.DependsOnMissionId) && hops < 32; hops++)
+            {
+                Mission? upstream = await _Database.Missions.ReadAsync(root.DependsOnMissionId!, token).ConfigureAwait(false);
+                if (upstream == null) break;
+                root = upstream;
             }
+            restoredIds.AddRange(await RestoreDescendantsCancelledForParentAsync(root, token).ConfigureAwait(false));
 
             _Logging.Info(_Header + "restarted mission " + mission.Id + (keptBranch != null ? " on branch " + keptBranch : ""));
-            return await TryDispatchRestartedMissionAsync(mission, token).ConfigureAwait(false);
+            Mission restarted = await TryDispatchRestartedMissionAsync(mission, token).ConfigureAwait(false);
+            restarted.RestoredMissionIds = restoredIds.Distinct(StringComparer.Ordinal).Where(id => id != restarted.Id).Take(CollectionLimits.MaxLinkedIds).ToList();
+            return restarted;
+        }
+
+        private async Task<List<string>> ReopenVoyageAndRestoreDependentsAsync(Mission mission, HashSet<string> seedIds, CancellationToken token)
+        {
+            Voyage? voyage = await _Database.Voyages.ReadAsync(mission.VoyageId!, token).ConfigureAwait(false);
+            if (voyage != null && (voyage.Status == VoyageStatusEnum.Failed || voyage.Status == VoyageStatusEnum.Cancelled || voyage.Status == VoyageStatusEnum.Complete))
+            {
+                voyage.Status = VoyageStatusEnum.InProgress;
+                voyage.CompletedUtc = null;
+                voyage.LastUpdateUtc = DateTime.UtcNow;
+                await _Database.Voyages.UpdateAsync(voyage, token).ConfigureAwait(false);
+                _Logging.Info(_Header + "reopened voyage " + voyage.Id + " for restarted mission " + mission.Id);
+            }
+
+            // Restore the stages cancelled because this one failed (the chain hanging off it), and a final integration
+            // slice stopped because of it, which keeps its branch: its own dependency was not restarted.
+            List<Mission> voyageMissions = await _Database.Missions.EnumerateByVoyageAsync(mission.VoyageId!, token).ConfigureAwait(false);
+            HashSet<string> chain = new HashSet<string>(seedIds, StringComparer.Ordinal);
+            foreach (Mission integration in voyageMissions.Where(m => (m.Status == MissionStatusEnum.Cancelled || m.Status == MissionStatusEnum.Blocked)
+                && m.FailureKind == MissionFailureKindEnum.DependencyFailed && m.FailureReason != null
+                && m.FailureReason.StartsWith(_IntegrationBlockedPrefix, StringComparison.Ordinal)
+                && m.FailureReason.Contains("(" + mission.Id + ")", StringComparison.Ordinal)).ToList())
+            {
+                ResetForRestart(integration, integration.BranchName);
+                integration.Description = RemoveIntegrationMergeSection(integration.Description);
+                await _Database.Missions.UpdateAsync(integration, token).ConfigureAwait(false);
+                chain.Add(integration.Id);
+                _Logging.Info(_Header + "restored integration mission " + integration.Id + " with restarted mission " + mission.Id);
+            }
+            bool grew = true;
+            while (grew)
+            {
+                grew = false;
+                foreach (Mission candidate in voyageMissions)
+                {
+                    if (chain.Contains(candidate.Id) || String.IsNullOrEmpty(candidate.DependsOnMissionId) || !chain.Contains(candidate.DependsOnMissionId!)) continue;
+                    if ((candidate.Status != MissionStatusEnum.Cancelled && candidate.Status != MissionStatusEnum.Blocked)
+                        || candidate.FailureKind != MissionFailureKindEnum.DependencyFailed) continue;
+                    chain.Add(candidate.Id);
+                    ResetForRestart(candidate, null);
+                    await _Database.Missions.UpdateAsync(candidate, token).ConfigureAwait(false);
+                    grew = true;
+                }
+            }
+            return chain.Where(id => !seedIds.Contains(id)).ToList();
+        }
+
+        private static bool IsBlockedVerifierAwaitingWorker(Mission mission)
+        {
+            return mission.Status == MissionStatusEnum.Failed
+                && mission.FailureKind == MissionFailureKindEnum.JudgeRejected
+                && VerifierContract.Applies(mission.Persona)
+                && VerifierContract.IsBlocked(mission.AgentOutput)
+                && !String.IsNullOrEmpty(mission.VoyageId)
+                && !String.IsNullOrEmpty(mission.DependsOnMissionId);
+        }
+
+        private async Task<Mission> RestartBlockedVerifierFromWorkerAsync(Mission verifier, string? guidance, CancellationToken token)
+        {
+            string? unavailable = null;
+            string? nextReviewerId = null;
+            bool scheduled = await TryScheduleReworkAsync(verifier, token, reason => unavailable = reason,
+                operatorRestart: true, onReviewerCreated: id => nextReviewerId = id, operatorGuidance: guidance).ConfigureAwait(false);
+            if (!scheduled || nextReviewerId == null)
+                throw new InvalidOperationException("The blocked " + verifier.Persona + " stage " + verifier.Id + " cannot be sent back to its Worker: "
+                    + (unavailable ?? "no rework chain was written") + " Restarting the " + verifier.Persona + " alone would re-verify the unchanged product code.");
+
+            // The blocked stage has done its job (it found the defect), exactly as when automatic rework was available:
+            // it stays as produced work and the new chain hangs off it.
+            verifier.Status = MissionStatusEnum.WorkProduced;
+            verifier.FailureReason = null;
+            verifier.FailureKind = null;
+            verifier.LastUpdateUtc = DateTime.UtcNow;
+            await _Database.Missions.UpdateAsync(verifier, token).ConfigureAwait(false);
+
+            // The stages cancelled after the blocked stage now follow the new verifier: restore them with it.
+            await ReopenVoyageAndRestoreDependentsAsync(verifier, new HashSet<string>(StringComparer.Ordinal) { verifier.Id, nextReviewerId }, token).ConfigureAwait(false);
+
+            List<Mission> voyageMissions = await _Database.Missions.EnumerateByVoyageAsync(verifier.VoyageId!, token).ConfigureAwait(false);
+            Mission? rework = voyageMissions.Where(m => m.DependsOnMissionId == verifier.Id && PersonaCatalog.Matches(m.Persona, PersonaCatalog.Worker)
+                && m.Status == MissionStatusEnum.Pending).OrderByDescending(m => m.CreatedUtc).FirstOrDefault();
+            if (rework == null)
+                throw new InvalidOperationException("The rework Worker for blocked " + verifier.Persona + " stage " + verifier.Id + " was not found after scheduling.");
+
+            _Logging.Info(_Header + "restart of blocked " + verifier.Persona + " mission " + verifier.Id + " sent the work back to Worker mission "
+                + rework.Id + " (rework round " + rework.ReworkRound + ", re-verification " + nextReviewerId + ")");
+            return await TryDispatchRestartedMissionAsync(rework, token).ConfigureAwait(false);
         }
 
         private async Task<Mission> TryDispatchRestartedMissionAsync(Mission mission, CancellationToken token)
@@ -287,6 +358,9 @@ namespace Armada.Core.Services
 
             if (effectiveAction == ReviewDenyActionEnum.FailPipeline)
             {
+                // The approval timer's default answer arrives without a reviewer once the deadline has passed.
+                bool timedOut = reviewedByUserId == null && mission.ReviewDeadlineUtc.HasValue && mission.ReviewDeadlineUtc.Value <= DateTime.UtcNow;
+                MissionStatusEnum deniedStatusBefore = mission.Status;
                 mission.Status = MissionStatusEnum.Failed;
                 mission.FailureReason = BuildReviewDeniedFailureReason(reviewComment);
                 mission.FailureKind = MissionFailureKindEnum.ReviewDenied;
@@ -295,6 +369,10 @@ namespace Armada.Core.Services
                 mission.DockId = null;
                 mission.LastUpdateUtc = DateTime.UtcNow;
                 await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
+                await RecordFailureAsync(mission, deniedStatusBefore, timedOut ? BlackBoxStepEnum.ReviewTimeout : BlackBoxStepEnum.ReviewDenied, dock, context =>
+                {
+                    context.Note = timedOut ? "The approval timer expired and its default answer denied the review." : "Denied by " + (reviewedByUserId ?? "a reviewer") + ".";
+                }, token).ConfigureAwait(false);
 
                 await CancelDependentPipelineStagesAsync(mission, token).ConfigureAwait(false);
                 await UpdateVoyageTerminalStatusAsync(mission.VoyageId, token).ConfigureAwait(false);

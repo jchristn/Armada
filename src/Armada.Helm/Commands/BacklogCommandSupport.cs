@@ -1,5 +1,6 @@
 namespace Armada.Helm.Commands
 {
+    using System.ComponentModel;
     using System.Globalization;
     using System.Linq;
     using Spectre.Console;
@@ -188,139 +189,162 @@ namespace Armada.Helm.Commands
         /// <summary>
         /// Gets or sets the backlog item title.
         /// </summary>
-        [CommandOption("--title|-t")]
+        [Description("Backlog item title")]
+        [CommandOption("--title|-t <TITLE>")]
         public string? Title { get; set; }
 
         /// <summary>
         /// Gets or sets the backlog item description.
         /// </summary>
-        [CommandOption("--description|-d")]
+        [Description("Backlog item description")]
+        [CommandOption("--description|-d <TEXT>")]
         public string? Description { get; set; }
 
         /// <summary>
         /// Gets or sets the objective status.
         /// </summary>
-        [CommandOption("--status")]
+        [Description("Status: Draft, Scoped, Planned, InProgress, Released, Deployed, Completed, Blocked, Cancelled")]
+        [CommandOption("--status <STATUS>")]
         public string? Status { get; set; }
 
         /// <summary>
         /// Gets or sets the objective kind.
         /// </summary>
-        [CommandOption("--kind")]
+        [Description("Kind: Feature, Bug, Refactor, Research, Chore, Initiative")]
+        [CommandOption("--kind <KIND>")]
         public string? Kind { get; set; }
 
         /// <summary>
         /// Gets or sets the backlog category.
         /// </summary>
-        [CommandOption("--category")]
+        [Description("Free-form category")]
+        [CommandOption("--category <CATEGORY>")]
         public string? Category { get; set; }
 
         /// <summary>
         /// Gets or sets the objective priority.
         /// </summary>
-        [CommandOption("--priority")]
+        [Description("Priority: P0, P1, P2, P3")]
+        [CommandOption("--priority <PRIORITY>")]
         public string? Priority { get; set; }
 
         /// <summary>
         /// Gets or sets the backlog rank.
         /// </summary>
-        [CommandOption("--rank")]
+        [Description("Rank in the backlog (lower sorts first)")]
+        [CommandOption("--rank <RANK>")]
         public int? Rank { get; set; }
 
         /// <summary>
         /// Gets or sets the backlog state.
         /// </summary>
-        [CommandOption("--backlog-state")]
+        [Description("Backlog state: Inbox, Triaged, Refining, ReadyForPlanning, ReadyForDispatch, Dispatched")]
+        [CommandOption("--backlog-state <STATE>")]
         public string? BacklogState { get; set; }
 
         /// <summary>
         /// Gets or sets the effort estimate.
         /// </summary>
-        [CommandOption("--effort")]
+        [Description("Effort estimate: XS, S, M, L, XL")]
+        [CommandOption("--effort <EFFORT>")]
         public string? Effort { get; set; }
 
         /// <summary>
         /// Gets or sets the owner.
         /// </summary>
-        [CommandOption("--owner")]
+        [Description("Owner (person or team)")]
+        [CommandOption("--owner <OWNER>")]
         public string? Owner { get; set; }
 
         /// <summary>
         /// Gets or sets the target version.
         /// </summary>
-        [CommandOption("--target-version")]
+        [Description("Target release version")]
+        [CommandOption("--target-version <VERSION>")]
         public string? TargetVersion { get; set; }
 
         /// <summary>
         /// Gets or sets the due UTC timestamp.
         /// </summary>
-        [CommandOption("--due-utc")]
+        [Description("Due date, UTC (yyyy-MM-dd or ISO 8601)")]
+        [CommandOption("--due-utc <DATE>")]
         public string? DueUtc { get; set; }
 
         /// <summary>
         /// Gets or sets the parent objective identifier.
         /// </summary>
-        [CommandOption("--parent")]
+        [Description("Parent backlog item ID (obj_)")]
+        [CommandOption("--parent <ITEM>")]
         public string? ParentObjectiveId { get; set; }
 
         /// <summary>
         /// Gets or sets the blocking objective identifiers.
         /// </summary>
-        [CommandOption("--blocked-by")]
+        [Description("Backlog item ID (obj_) that blocks this one (repeatable)")]
+        [CommandOption("--blocked-by <ITEM>")]
         public string[]? BlockedByObjectiveIds { get; set; }
 
         /// <summary>
         /// Gets or sets the refinement summary.
         /// </summary>
-        [CommandOption("--summary")]
+        [Description("Refinement summary")]
+        [CommandOption("--summary <TEXT>")]
         public string? RefinementSummary { get; set; }
 
         /// <summary>
         /// Gets or sets the suggested pipeline identifier.
         /// </summary>
-        [CommandOption("--pipeline")]
+        [Description("Suggested pipeline ID")]
+        [CommandOption("--pipeline <PIPELINE>")]
         public string? SuggestedPipelineId { get; set; }
 
         /// <summary>
         /// Gets or sets the tags.
         /// </summary>
-        [CommandOption("--tag")]
+        [Description("Tag (repeatable)")]
+        [CommandOption("--tag <TAG>")]
         public string[]? Tags { get; set; }
 
         /// <summary>
         /// Gets or sets the acceptance criteria.
         /// </summary>
-        [CommandOption("--acceptance")]
+        [Description("Acceptance criterion (repeatable)")]
+        [CommandOption("--acceptance <TEXT>")]
         public string[]? AcceptanceCriteria { get; set; }
 
         /// <summary>
         /// Gets or sets the non-goals.
         /// </summary>
-        [CommandOption("--non-goal")]
+        [Description("Non-goal (repeatable)")]
+        [CommandOption("--non-goal <TEXT>")]
         public string[]? NonGoals { get; set; }
 
         /// <summary>
         /// Gets or sets the rollout constraints.
         /// </summary>
-        [CommandOption("--constraint")]
+        [Description("Rollout constraint (repeatable)")]
+        [CommandOption("--constraint <TEXT>")]
         public string[]? RolloutConstraints { get; set; }
 
         /// <summary>
         /// Gets or sets the evidence links.
         /// </summary>
-        [CommandOption("--evidence")]
+        [Description("Evidence link (repeatable)")]
+        [CommandOption("--evidence <TEXT>")]
         public string[]? EvidenceLinks { get; set; }
 
         /// <summary>
         /// Gets or sets the fleet identifiers.
         /// </summary>
-        [CommandOption("--fleet")]
+        [Description("Fleet ID (repeatable)")]
+        [CommandOption("--fleet <FLEET>")]
         public string[]? FleetIds { get; set; }
 
         /// <summary>
         /// Gets or sets the vessel identifiers.
         /// </summary>
-        [CommandOption("--vessel")]
+        [Description("Vessel ID (repeatable)")]
+        [CommandOption("--vessel <VESSEL>")]
         public string[]? VesselIds { get; set; }
     }
 }

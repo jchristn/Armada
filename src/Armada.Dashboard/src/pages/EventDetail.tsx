@@ -1,3 +1,4 @@
+import Breadcrumbs from '../components/shared/Breadcrumbs';
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
@@ -83,11 +84,10 @@ export default function EventDetail() {
   return (
     <div>
       {/* Breadcrumb */}
-      <div style={{ marginBottom: 16, fontSize: 13 }}>
-        <Link to="/events">{t('Events')}</Link>
-        <span className="text-muted"> / </span>
-        <span className="mono">{event.id}</span>
-      </div>
+      <Breadcrumbs items={[
+        { label: t('Events'), to: '/events' },
+        { label: event.id },
+      ]} />
 
       <ErrorModal error={error} onClose={() => setError('')} />
 
@@ -111,7 +111,7 @@ export default function EventDetail() {
           </div>
           <div>
             <div className="text-muted" style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', marginBottom: 4 }} title={t('What happened, as a dotted name such as mission.completed or mission.failed.')}>{t('Event Type')}</div>
-            <span className="status" title={t('Event type name. The Event Type filter on the Events list matches on it.')}>{event.eventType}</span>
+            <span className="tag" title={t('Event type name. The Event Type filter on the Events list matches on it.')}>{event.eventType}</span>
           </div>
           <div>
             <div className="text-muted" style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', marginBottom: 4 }} title={t('Plain-language description of the event.')}>{t('Message')}</div>
@@ -171,7 +171,8 @@ export default function EventDetail() {
         <div className="card">
           <h3 title={t('Extra structured data recorded with the event, shown as formatted JSON.')}>{t('Payload')}</h3>
           <pre style={{
-            background: '#f5f5fa',
+            background: 'var(--bg-hover)',
+            color: 'var(--text)',
             padding: 16,
             borderRadius: 'var(--radius)',
             overflow: 'auto',

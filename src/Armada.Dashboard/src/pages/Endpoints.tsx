@@ -3,7 +3,9 @@ import { duplicateDisplayName } from '../lib/duplicates';
 import { defaultInferenceOptions, parseAllowedTools, validateInferenceOptions } from '../lib/inferenceOptions';
 import type { InferenceOptions } from '../types/models';
 import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
+  getModelEndpoint,
   enumerateModelEndpoints,
   createModelEndpoint,
   createCaptain,
@@ -119,6 +121,7 @@ const EP_ENABLED_TIP = 'On: the endpoint is available for use and is health-chec
 
 export default function Endpoints() {
   const { isAdmin, isTenantAdmin, user } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
   const viewer: ScopeViewer = { isAdmin, isTenantAdmin, tenantId: user?.user?.tenantId, userId: user?.user?.id };
   const { t, formatRelativeTime, formatDateTime } = useLocale();
   const { pushToast } = useNotifications();
@@ -188,6 +191,15 @@ export default function Endpoints() {
     setForm((current) => ({ ...current, headers: [...current.headers, newHeaderRow()] }));
   }
 
+  useEffect(() => {
+    const endpointId = searchParams.get('editEndpoint');
+    if (!isAdmin || !endpointId) return;
+    let cancelled = false;
+    getModelEndpoint(endpointId).then(endpoint => { if (!cancelled) openEdit(endpoint); })
+      .catch(() => { if (!cancelled) setError(t('Failed to load endpoint.')); });
+    return () => { cancelled = true; };
+  }, [isAdmin, searchParams]);
+
   function openCreate() {
     setCreateLinkedCaptain(false);
     setCaptainName('');
@@ -198,6 +210,7 @@ export default function Endpoints() {
   }
 
   function openEdit(endpoint: ModelEndpoint) {
+    if (searchParams.has('editEndpoint')) setSearchParams(current => { const next = new URLSearchParams(current); next.delete('editEndpoint'); return next; }, { replace: true });
     setCreateLinkedCaptain(false);
     setCaptainName('');
     setDuplicateSource(null);
@@ -685,7 +698,7 @@ export default function Endpoints() {
               </label>}
             </fieldset>}
             <ScopeSelect viewer={viewer} value={form.scope} onChange={(scope) => setForm({ ...form, scope })} />
-            <label className="checkbox-row" title={t(EP_ENABLED_TIP)}>
+            <label className="checkbox-row" style={{ display: 'flex' }} title={t(EP_ENABLED_TIP)}>
               <input type="checkbox" title={t(EP_ENABLED_TIP)} checked={form.enabled} onChange={(e) => setForm({ ...form, enabled: e.target.checked })} />
               <span>{t('Enabled')}</span>
             </label>

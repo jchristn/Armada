@@ -276,6 +276,17 @@ namespace Armada.Server.WebSocket
         }
 
         /// <summary>
+        /// Provide the black box service for the blackbox.get, blackbox.brief and blackbox.list WebSocket commands.
+        /// </summary>
+        /// <param name="service">Service, or null.</param>
+        /// <param name="capture">Capture for the operator actions of delete_vessel and transition_mission_status, or null.</param>
+        public void SetBlackBoxService(Armada.Core.BlackBox.IBlackBoxService? service, Armada.Core.BlackBox.IBlackBoxCapture? capture = null)
+        {
+            _CommandHandler.BlackBox = service;
+            _CommandHandler.BlackBoxCapture = capture;
+        }
+
+        /// <summary>
         /// Deliver a CLI permission event (cli_permission.requested or cli_permission.resolved) to the request's
         /// approvers and owner: global admins (of this tenant, or opted in to all tenants), the tenant's tenant admins,
         /// and the owning user. Each recipient's copy carries its own canDecide and canRemember.
@@ -384,6 +395,23 @@ namespace Armada.Server.WebSocket
             MissionStatusEnum? effective = null;
             if (!String.IsNullOrEmpty(statusOverride) && Enum.TryParse<MissionStatusEnum>(statusOverride, true, out MissionStatusEnum parsed)) effective = parsed;
             FeedPush(push => push.OnMissionChanged(mission, effective));
+        }
+
+        /// <summary>
+        /// Broadcast that a mission's captain-selection state changed, scoped like <c>mission.changed</c>. The payload
+        /// carries identifiers and the stable outcome only; clients re-fetch authorized detail through REST or MCP.
+        /// </summary>
+        /// <param name="change">Committed selection change.</param>
+        public void BroadcastCaptainSelectionChange(CaptainSelectionChange change)
+        {
+            if (change == null || String.IsNullOrEmpty(change.MissionId)) return;
+            BroadcastToTenant(change.TenantId, "captain-selection.changed", new
+            {
+                missionId = change.MissionId,
+                voyageId = change.VoyageId,
+                decisionId = change.DecisionId,
+                outcome = change.Outcome
+            });
         }
 
         /// <summary>

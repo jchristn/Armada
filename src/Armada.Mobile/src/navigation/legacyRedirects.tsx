@@ -3,7 +3,8 @@ import { Redirect, useLocalSearchParams, type Href } from 'expo-router';
 /**
  * Routes that became hub tabs in the v1.2.0 nav consolidation, mirroring the dashboard's LegacyNavRedirects:
  * CLI Tool Permissions is the Settings hub's cli-permissions tab (its own Requests / Rules sub-tabs in ?section=),
- * and Planning is the Dispatch hub's planning tab (an open session in ?session=). /jobs and /storage are plain
+ * Planning is the Dispatch hub's planning tab (an open session in ?session=), and the Black Box is the Missions
+ * hub's blackbox tab (the dashboard's own Black Box sections in ?bbtab=). /jobs and /storage are plain
  * dashboard redirects (RouteRedirect). These keep the query, so push, inbox, and deep links such as
  * /cli-permissions?request=cpr_1 or /planning/pls_1?prompt=... still open the same request or session.
  */
@@ -15,6 +16,9 @@ export const CLI_PERMISSIONS_PATH = '/server?tab=cli-permissions';
 
 /** The Dispatch tab that hosts Planning. */
 export const PLANNING_PATH = '/dispatch?tab=planning';
+
+/** The Missions tab that hosts the Black Box. */
+export const BLACKBOX_PATH = '/missions?tab=blackbox';
 
 /** The Activity source that lists background jobs. */
 export const JOBS_PATH = '/activity?source=jobs';
@@ -63,6 +67,14 @@ export function planningRedirectTarget(params: Params): string {
   return planningHref(first(params.id) ?? first(params.session) ?? null, Object.fromEntries(Object.entries(params).filter(([key]) => key !== 'id')));
 }
 
+/** /blackbox[?tab=fingerprints&vesselId=...] -> Missions > Black Box; the old `tab` becomes `bbtab`, filters are kept. */
+export function blackBoxRedirectTarget(params: Params): string {
+  const head: Record<string, string> = { tab: 'blackbox' };
+  const section = first(params.tab) ?? first(params.bbtab);
+  if (section) head.bbtab = section;
+  return build('/missions', head, params, ['tab', 'bbtab']);
+}
+
 export function CliPermissionsRedirect() {
   const params = useLocalSearchParams<Record<string, string>>();
   return <Redirect href={cliPermissionsRedirectTarget(params) as Href} />;
@@ -71,4 +83,9 @@ export function CliPermissionsRedirect() {
 export function PlanningRedirect() {
   const params = useLocalSearchParams<Record<string, string>>();
   return <Redirect href={planningRedirectTarget(params) as Href} />;
+}
+
+export function BlackBoxRedirect() {
+  const params = useLocalSearchParams<Record<string, string>>();
+  return <Redirect href={blackBoxRedirectTarget(params) as Href} />;
 }

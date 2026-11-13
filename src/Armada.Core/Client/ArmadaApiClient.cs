@@ -11,7 +11,7 @@ namespace Armada.Core.Client
     /// Typed HTTP client for the Armada Admiral REST API.
     /// Auto-generated style client covering all /api/v1/ endpoints.
     /// </summary>
-    public class ArmadaApiClient : IDisposable
+    public partial class ArmadaApiClient : IDisposable
     {
         #region Private-Members
 
@@ -569,8 +569,8 @@ namespace Armada.Core.Client
         }
 
         /// <summary>
-        /// Create a mission. The server replies with the bare mission, or with <c>{ Mission, Warning }</c>
-        /// (<see cref="MissionCreateResponse"/>) when the mission stays Pending; both shapes return the created mission.
+        /// Create a mission. The server replies with the Mission; servers before v1.3.0 wrapped a mission that stayed
+        /// Pending as <c>{ Mission, Warning }</c> (<see cref="MissionCreateResponse"/>). Both shapes return the created mission.
         /// </summary>
         public async Task<Mission?> CreateMissionAsync(Mission mission, CancellationToken token = default)
         {
@@ -632,13 +632,152 @@ namespace Armada.Core.Client
             try
             {
                 HttpResponseMessage response = await _Client.GetAsync(_BaseUrl + "/api/v1/missions/" + id + "/diff", token).ConfigureAwait(false);
-                response.EnsureSuccessStatusCode();
+                await EnsureSuccessAsync(response, token).ConfigureAwait(false);
                 return await response.Content.ReadAsStringAsync(token).ConfigureAwait(false);
             }
             catch
             {
                 return null;
             }
+        }
+
+        #endregion
+
+        #region Public-Methods-BlackBox
+
+        /// <summary>
+        /// Get a mission's current black box entry with its record (GET /api/v1/missions/{id}/blackbox). Throws
+        /// <see cref="HttpRequestException"/> with status 404 when the mission has no entry.
+        /// </summary>
+        /// <param name="missionId">Mission ID (msn_ prefix).</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The entry.</returns>
+        public async Task<BlackBoxEntry?> GetMissionBlackBoxAsync(string missionId, CancellationToken token = default)
+        {
+            return await GetAsync<BlackBoxEntry>("/api/v1/missions/" + Uri.EscapeDataString(missionId) + "/blackbox", token).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Get a voyage's current black box entry with its record (GET /api/v1/voyages/{id}/blackbox).
+        /// </summary>
+        /// <param name="voyageId">Voyage ID (vyg_ prefix).</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The entry.</returns>
+        public async Task<BlackBoxEntry?> GetVoyageBlackBoxAsync(string voyageId, CancellationToken token = default)
+        {
+            return await GetAsync<BlackBoxEntry>("/api/v1/voyages/" + Uri.EscapeDataString(voyageId) + "/blackbox", token).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Get a black box entry with its record (GET /api/v1/blackbox/{id}).
+        /// </summary>
+        /// <param name="entryId">Entry ID (bbx_ prefix).</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The entry.</returns>
+        public async Task<BlackBoxEntry?> GetBlackBoxAsync(string entryId, CancellationToken token = default)
+        {
+            return await GetAsync<BlackBoxEntry>("/api/v1/blackbox/" + Uri.EscapeDataString(entryId), token).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Get the Markdown FIX THIS brief of a black box entry (GET /api/v1/blackbox/{id}/brief).
+        /// </summary>
+        /// <param name="entryId">Entry ID (bbx_ prefix).</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The Markdown brief.</returns>
+        public async Task<string> GetBlackBoxBriefAsync(string entryId, CancellationToken token = default)
+        {
+            HttpResponseMessage response = await _Client.GetAsync(_BaseUrl + "/api/v1/blackbox/" + Uri.EscapeDataString(entryId) + "/brief", token).ConfigureAwait(false);
+            await EnsureSuccessAsync(response, token).ConfigureAwait(false);
+            return await response.Content.ReadAsStringAsync(token).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Get the Markdown FIX THIS brief of a mission's current black box entry (GET /api/v1/missions/{id}/blackbox/brief).
+        /// </summary>
+        /// <param name="missionId">Mission ID (msn_ prefix).</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The Markdown brief.</returns>
+        public async Task<string> GetMissionBlackBoxBriefAsync(string missionId, CancellationToken token = default)
+        {
+            HttpResponseMessage response = await _Client.GetAsync(_BaseUrl + "/api/v1/missions/" + Uri.EscapeDataString(missionId) + "/blackbox/brief", token).ConfigureAwait(false);
+            await EnsureSuccessAsync(response, token).ConfigureAwait(false);
+            return await response.Content.ReadAsStringAsync(token).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Get one section of a black box record (GET /api/v1/blackbox/{id}/sections/{section}).
+        /// </summary>
+        /// <param name="entryId">Entry ID (bbx_ prefix).</param>
+        /// <param name="section">Section.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The section.</returns>
+        public async Task<BlackBoxSectionResult?> GetBlackBoxSectionAsync(string entryId, BlackBoxSectionEnum section, CancellationToken token = default)
+        {
+            return await GetAsync<BlackBoxSectionResult>("/api/v1/blackbox/" + Uri.EscapeDataString(entryId) + "/sections/" + section.ToString(), token).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Enumerate black box entries visible to the caller (POST /api/v1/blackbox/enumerate).
+        /// </summary>
+        /// <param name="query">Filters and paging, or null for the first page.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>One page.</returns>
+        public async Task<EnumerationResult<BlackBoxEntrySummary>?> EnumerateBlackBoxAsync(BlackBoxEnumerateRequest? query = null, CancellationToken token = default)
+        {
+            return await PostAsync<EnumerationResult<BlackBoxEntrySummary>>("/api/v1/blackbox/enumerate", query ?? new BlackBoxEnumerateRequest(), token).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Enumerate the objects of a black box entry (POST /api/v1/blackbox/{id}/objects/enumerate).
+        /// </summary>
+        /// <param name="entryId">Entry ID (bbx_ prefix).</param>
+        /// <param name="query">Paging, or null for the first page.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>One page.</returns>
+        public async Task<EnumerationResult<BlackBoxObjectSummary>?> EnumerateBlackBoxObjectsAsync(string entryId, EnumerationQuery? query = null, CancellationToken token = default)
+        {
+            return await PostAsync<EnumerationResult<BlackBoxObjectSummary>>("/api/v1/blackbox/" + Uri.EscapeDataString(entryId) + "/objects/enumerate", query ?? new EnumerationQuery(), token).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Enumerate the notes on a black box entry (POST /api/v1/blackbox/{id}/notes/enumerate).
+        /// </summary>
+        /// <param name="entryId">Entry ID (bbx_ prefix).</param>
+        /// <param name="query">Paging, or null for the first page.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>One page.</returns>
+        public async Task<EnumerationResult<BlackBoxNote>?> EnumerateBlackBoxNotesAsync(string entryId, EnumerationQuery? query = null, CancellationToken token = default)
+        {
+            return await PostAsync<EnumerationResult<BlackBoxNote>>("/api/v1/blackbox/" + Uri.EscapeDataString(entryId) + "/notes/enumerate", query ?? new EnumerationQuery(), token).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Resolve a black box entry (POST /api/v1/blackbox/{id}/resolve).
+        /// </summary>
+        /// <param name="entryId">Entry ID (bbx_ prefix).</param>
+        /// <param name="request">Resolution, note and link.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The updated entry.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when request is null.</exception>
+        public async Task<BlackBoxEntry?> ResolveBlackBoxAsync(string entryId, BlackBoxResolveRequest request, CancellationToken token = default)
+        {
+            if (request == null) throw new ArgumentNullException(nameof(request));
+            return await PostAsync<BlackBoxEntry>("/api/v1/blackbox/" + Uri.EscapeDataString(entryId) + "/resolve", request, token).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Run a recorded recovery path of a black box entry (POST /api/v1/blackbox/{id}/recovery/{pathId}). A dry run (the
+        /// default) returns the plan and a confirm token; the real run needs that token.
+        /// </summary>
+        /// <param name="entryId">Entry ID (bbx_ prefix).</param>
+        /// <param name="pathId">Recovery path ID.</param>
+        /// <param name="request">Dry run, confirm token and data-loss acknowledgement, or null for a dry run.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The plan or the step results.</returns>
+        public async Task<BlackBoxRecoveryRunResult?> RunBlackBoxRecoveryAsync(string entryId, string pathId, BlackBoxRecoveryRunRequest? request = null, CancellationToken token = default)
+        {
+            return await PostAsync<BlackBoxRecoveryRunResult>("/api/v1/blackbox/" + Uri.EscapeDataString(entryId) + "/recovery/" + Uri.EscapeDataString(pathId), request ?? new BlackBoxRecoveryRunRequest(), token).ConfigureAwait(false);
         }
 
         #endregion
@@ -679,6 +818,43 @@ namespace Armada.Core.Client
         public async Task<VoyageProgress?> GetVoyageProgressAsync(string id, CancellationToken token = default)
         {
             return await GetAsync<VoyageProgress>("/api/v1/voyages/" + id, token).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Get a voyage's missions arranged as logical missions with their stages and children (GET /api/v1/voyages/{id}/tree).
+        /// </summary>
+        public async Task<VoyageTree?> GetVoyageTreeAsync(string id, CancellationToken token = default)
+        {
+            return await GetAsync<VoyageTree>("/api/v1/voyages/" + Uri.EscapeDataString(id) + "/tree", token).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Get one page of a mission's recorded wait intervals, oldest first (GET /api/v1/missions/{id}/waits).
+        /// </summary>
+        public async Task<EnumerationResult<MissionWaitInterval>?> GetMissionWaitsAsync(string id, int pageNumber = 1, int pageSize = 100, CancellationToken token = default)
+        {
+            return await GetAsync<EnumerationResult<MissionWaitInterval>>("/api/v1/missions/" + Uri.EscapeDataString(id) + "/waits?pageNumber=" + pageNumber + "&pageSize=" + pageSize, token).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Get a vessel's slots, waiting missions and recent slot wait (GET /api/v1/vessels/{id}/concurrency).
+        /// </summary>
+        public async Task<VesselConcurrency?> GetVesselConcurrencyAsync(string id, CancellationToken token = default)
+        {
+            return await GetAsync<VesselConcurrency>("/api/v1/vessels/" + Uri.EscapeDataString(id) + "/concurrency", token).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Get wait aggregates over a window (GET /api/v1/metrics/concurrency); the server defaults to the last 24 hours.
+        /// </summary>
+        public async Task<ConcurrencyMetrics?> GetConcurrencyMetricsAsync(DateTime? fromUtc = null, DateTime? toUtc = null, string? vesselId = null, string? captainId = null, CancellationToken token = default)
+        {
+            List<string> parts = new List<string>();
+            if (fromUtc.HasValue) parts.Add("from=" + Uri.EscapeDataString(fromUtc.Value.ToUniversalTime().ToString("o", System.Globalization.CultureInfo.InvariantCulture)));
+            if (toUtc.HasValue) parts.Add("to=" + Uri.EscapeDataString(toUtc.Value.ToUniversalTime().ToString("o", System.Globalization.CultureInfo.InvariantCulture)));
+            if (!String.IsNullOrEmpty(vesselId)) parts.Add("vesselId=" + Uri.EscapeDataString(vesselId));
+            if (!String.IsNullOrEmpty(captainId)) parts.Add("captainId=" + Uri.EscapeDataString(captainId));
+            return await GetAsync<ConcurrencyMetrics>("/api/v1/metrics/concurrency" + (parts.Count == 0 ? "" : "?" + String.Join("&", parts)), token).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -1643,6 +1819,41 @@ namespace Armada.Core.Client
 
         #region Private-Methods
 
+        // A failed response becomes an HttpRequestException that keeps the status code and carries the server's own
+        // explanation (the error envelope's Message, plus Data.Code when present), never a raw JSON body.
+        private static async Task EnsureSuccessAsync(HttpResponseMessage response, CancellationToken token)
+        {
+            if (response.IsSuccessStatusCode) return;
+            string body = response.Content == null ? "" : await response.Content.ReadAsStringAsync(token).ConfigureAwait(false);
+            throw Failure(response, body);
+        }
+
+        private static HttpRequestException Failure(HttpResponseMessage response, string body)
+        {
+            int status = (int)response.StatusCode;
+            string reason = String.IsNullOrWhiteSpace(response.ReasonPhrase) ? response.StatusCode.ToString() : response.ReasonPhrase!;
+            string? message = null;
+            string? code = null;
+            if (!String.IsNullOrWhiteSpace(body) && body.TrimStart().StartsWith("{", StringComparison.Ordinal))
+            {
+                try
+                {
+                    ApiErrorEnvelope? envelope = JsonSerializer.Deserialize<ApiErrorEnvelope>(body, _JsonOptions);
+                    message = envelope?.Message;
+                    code = envelope?.Data?.Code;
+                }
+                catch (JsonException)
+                {
+                    message = null;
+                }
+            }
+            if (String.IsNullOrWhiteSpace(message))
+                message = !String.IsNullOrWhiteSpace(body) && body.Length <= 300 && !body.TrimStart().StartsWith("{", StringComparison.Ordinal) && !body.TrimStart().StartsWith("<", StringComparison.Ordinal)
+                    ? body.Trim() : reason + ".";
+            string suffix = " (HTTP " + status.ToString(System.Globalization.CultureInfo.InvariantCulture) + (String.IsNullOrWhiteSpace(code) ? "" : ", " + code) + ")";
+            return new HttpRequestException(message!.TrimEnd() + suffix, null, response.StatusCode);
+        }
+
         private async Task<List<T>> EnumerateAllAsync<T>(string path, CancellationToken token)
         {
             // Each request returns one page; read pages until the total is reached (a safety stop of 100 pages).
@@ -1661,7 +1872,7 @@ namespace Armada.Core.Client
         private async Task<T?> GetAsync<T>(string path, CancellationToken token) where T : class
         {
             HttpResponseMessage response = await _Client.GetAsync(_BaseUrl + path, token).ConfigureAwait(false);
-            response.EnsureSuccessStatusCode();
+            await EnsureSuccessAsync(response, token).ConfigureAwait(false);
             string json = await response.Content.ReadAsStringAsync(token).ConfigureAwait(false);
             return JsonSerializer.Deserialize<T>(json, _JsonOptions);
         }
@@ -1671,8 +1882,7 @@ namespace Armada.Core.Client
         {
             HttpResponseMessage response = await _Client.PostAsJsonAsync(_BaseUrl + path, body, _JsonOptions, token).ConfigureAwait(false);
             string json = await response.Content.ReadAsStringAsync(token).ConfigureAwait(false);
-            if (!response.IsSuccessStatusCode)
-                throw new HttpRequestException(json.Length > 0 ? json : response.ReasonPhrase, null, response.StatusCode);
+            if (!response.IsSuccessStatusCode) throw Failure(response, json);
             return JsonSerializer.Deserialize<TResponse>(json, _JsonOptions);
         }
 
@@ -1680,8 +1890,7 @@ namespace Armada.Core.Client
         {
             HttpResponseMessage response = await _Client.PostAsJsonAsync(_BaseUrl + path, body, _JsonOptions, token).ConfigureAwait(false);
             string json = await response.Content.ReadAsStringAsync(token).ConfigureAwait(false);
-            if (!response.IsSuccessStatusCode)
-                throw new HttpRequestException(json.Length > 0 ? json : response.ReasonPhrase, null, response.StatusCode);
+            if (!response.IsSuccessStatusCode) throw Failure(response, json);
             return json;
         }
 
@@ -1689,22 +1898,21 @@ namespace Armada.Core.Client
         {
             HttpResponseMessage response = await _Client.PostAsJsonAsync(_BaseUrl + path, body, _JsonOptions, token).ConfigureAwait(false);
             string json = await response.Content.ReadAsStringAsync(token).ConfigureAwait(false);
-            if (!response.IsSuccessStatusCode)
-                throw new HttpRequestException(json.Length > 0 ? json : response.ReasonPhrase, null, response.StatusCode);
+            if (!response.IsSuccessStatusCode) throw Failure(response, json);
             return JsonSerializer.Deserialize<T>(json, _JsonOptions);
         }
 
         private async Task PostAsync(string path, CancellationToken token)
         {
             HttpResponseMessage response = await _Client.PostAsync(_BaseUrl + path, null, token).ConfigureAwait(false);
-            response.EnsureSuccessStatusCode();
+            await EnsureSuccessAsync(response, token).ConfigureAwait(false);
         }
 
         private async Task<TResponse?> PutAsync<TResponse, TBody>(string path, TBody body, CancellationToken token)
             where TResponse : class
         {
             HttpResponseMessage response = await _Client.PutAsJsonAsync(_BaseUrl + path, body, _JsonOptions, token).ConfigureAwait(false);
-            response.EnsureSuccessStatusCode();
+            await EnsureSuccessAsync(response, token).ConfigureAwait(false);
             string json = await response.Content.ReadAsStringAsync(token).ConfigureAwait(false);
             return JsonSerializer.Deserialize<TResponse>(json, _JsonOptions);
         }
@@ -1712,7 +1920,7 @@ namespace Armada.Core.Client
         private async Task<T?> PutAsync<T>(string path, object body, CancellationToken token) where T : class
         {
             HttpResponseMessage response = await _Client.PutAsJsonAsync(_BaseUrl + path, body, _JsonOptions, token).ConfigureAwait(false);
-            response.EnsureSuccessStatusCode();
+            await EnsureSuccessAsync(response, token).ConfigureAwait(false);
             string json = await response.Content.ReadAsStringAsync(token).ConfigureAwait(false);
             return JsonSerializer.Deserialize<T>(json, _JsonOptions);
         }
@@ -1720,7 +1928,7 @@ namespace Armada.Core.Client
         private async Task DeleteAsync(string path, CancellationToken token)
         {
             HttpResponseMessage response = await _Client.DeleteAsync(_BaseUrl + path, token).ConfigureAwait(false);
-            response.EnsureSuccessStatusCode();
+            await EnsureSuccessAsync(response, token).ConfigureAwait(false);
         }
 
         #endregion

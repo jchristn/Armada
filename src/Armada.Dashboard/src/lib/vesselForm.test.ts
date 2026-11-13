@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { findLandingMode, getLandingModes } from './vesselForm';
+import { buildVesselPayload, buildWorkerEnvelope, emptyVesselForm, findLandingMode, getLandingModes, vesselToForm } from './vesselForm';
+import type { Vessel } from '../types/models';
 
 const identity = (text: string) => text;
 
@@ -30,5 +31,77 @@ describe('getLandingModes', () => {
     const tagged = getLandingModes((text) => `[${text}]`);
     expect(findLandingMode(tagged, 'MergeAndPush').label).toBe('[Merge and Push -- verify and push to the remote]');
     expect(findLandingMode(tagged, 'MergeAndPush').short).toBe('[local + push]');
+  });
+});
+
+describe('serializeOverlappingMissions', () => {
+  it('is on for a new vessel and sent on create', () => {
+    expect(emptyVesselForm.serializeOverlappingMissions).toBe(true);
+    expect(buildVesselPayload({ ...emptyVesselForm, name: 'v' }, null).serializeOverlappingMissions).toBe(true);
+  });
+
+  it('round-trips through the form and the payload', () => {
+    const stored = { id: 'vsl_1', name: 'Core', defaultBranch: 'main', enableModelContext: true, serializeOverlappingMissions: true } as unknown as Vessel;
+    const form = vesselToForm(stored);
+    expect(form.serializeOverlappingMissions).toBe(true);
+    expect(buildVesselPayload({ ...form, serializeOverlappingMissions: false }, stored).serializeOverlappingMissions).toBe(false);
+  });
+
+  it('treats a vessel from an older server (no field) as off', () => {
+    const legacy = { id: 'vsl_2', name: 'Old', defaultBranch: 'main', enableModelContext: true, } as unknown as Vessel;
+    expect(vesselToForm(legacy).serializeOverlappingMissions).toBe(false);
+  });
+});
+
+describe('workerEnvelope', () => {
+  it('is null for a new vessel and when every field is blank', () => {
+    expect(buildVesselPayload({ ...emptyVesselForm, name: 'v' }, null).workerEnvelope).toBeNull();
+    expect(buildWorkerEnvelope({ ...emptyVesselForm, envelopeMaxFiles: '  ', envelopeMaxSteps: '', envelopeMinServedContextTokens: '' })).toBeNull();
+  });
+
+  it('clears a stored envelope when the form is blanked on edit', () => {
+    const stored = { id: 'vsl_1', name: 'Core', defaultBranch: 'main', enableModelContext: true, workerEnvelope: { maxFiles: 5, requiredTools: ['mcp'] } } as unknown as Vessel;
+    const form = { ...vesselToForm(stored), envelopeMaxFiles: '', envelopeRequireMcp: false };
+    expect(buildVesselPayload(form, stored).workerEnvelope).toBeNull();
+  });
+
+  it('builds the payload from populated fields', () => {
+    const form = { ...emptyVesselForm, name: 'v', envelopeMaxFiles: '8', envelopeMaxSteps: '40', envelopeMinServedContextTokens: '64000', envelopeRequireTools: true, envelopeRequireMcp: true };
+    expect(buildVesselPayload(form, null).workerEnvelope).toEqual({ maxFiles: 8, maxSteps: 40, minServedContextTokens: 64000, requiredTools: ['tools', 'mcp'] });
+  });
+
+  it('sends a tools-only envelope with null counts', () => {
+    expect(buildWorkerEnvelope({ ...emptyVesselForm, envelopeRequireMcp: true })).toEqual({ maxFiles: null, maxSteps: null, minServedContextTokens: null, requiredTools: ['mcp'] });
+  });
+
+  it('round-trips a stored envelope through the form and the payload', () => {
+    const stored = { id: 'vsl_1', name: 'Core', defaultBranch: 'main', enableModelContext: true, workerEnvelope: { maxFiles: 3, maxSteps: null, minServedContextTokens: 128000, requiredTools: ['tools'] } } as unknown as Vessel;
+    const form = vesselToForm(stored);
+    expect(form.envelopeMaxFiles).toBe('3');
+    expect(form.envelopeMaxSteps).toBe('');
+    expect(form.envelopeMinServedContextTokens).toBe('128000');
+    expect(form.envelopeRequireTools).toBe(true);
+    expect(form.envelopeRequireMcp).toBe(false);
+    expect(buildVesselPayload(form, stored).workerEnvelope).toEqual({ maxFiles: 3, maxSteps: null, minServedContextTokens: 128000, requiredTools: ['tools'] });
+  });
+
+  it('reads a vessel without the field as no envelope', () => {
+    const stored = { id: 'vsl_1', name: 'Core', defaultBranch: 'main', enableModelContext: true, } as unknown as Vessel;
+    expect(buildVesselPayload(vesselToForm(stored), stored).workerEnvelope).toBeNull();
+  });
+});
+
+
+describe('vessel admission limits', () => {
+  it('sends explicit defaults and keeps zero unlimited', () => {
+    expect(buildVesselPayload(emptyVesselForm, null)).toMatchObject({ maxParallelVoyages: 1, maxParallelMissionsPerVoyage: 4 });
+    expect(buildVesselPayload({ ...emptyVesselForm, maxParallelVoyages: '0', maxParallelMissionsPerVoyage: '0' }, null)).toMatchObject({ maxParallelVoyages: 0, maxParallelMissionsPerVoyage: 0 });
+  });
+  it('uses server fields on edit and clamps negative input safely', () => {
+    const vessel = { ...emptyVesselForm, id: 'vsl_1', maxParallelVoyages: 2, maxParallelMissionsPerVoyage: 7 } as unknown as Vessel;
+    const form = vesselToForm(vessel);
+    expect(form.maxParallelVoyages).toBe('2');
+    expect(form.maxParallelMissionsPerVoyage).toBe('7');
+    expect(buildVesselPayload({ ...form, maxParallelVoyages: '-1', maxParallelMissionsPerVoyage: '10000' }, vessel)).toMatchObject({ maxParallelVoyages: 1, maxParallelMissionsPerVoyage: 1000 });
   });
 });

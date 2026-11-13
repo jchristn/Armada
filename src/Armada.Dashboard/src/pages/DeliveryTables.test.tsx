@@ -11,7 +11,6 @@ import Environments from './Environments';
 import Endpoints from './Endpoints';
 import CheckRuns from './CheckRuns';
 import History from './History';
-import Jobs from './Jobs';
 import { asPage } from '../test/asPage';
 
 vi.mock('../api/client', () => ({
@@ -28,8 +27,6 @@ vi.mock('../api/client', () => ({
   listCheckRuns: vi.fn(), runCheck: vi.fn(), getVesselReadiness: vi.fn(), previewWorkflowProfileForVessel: vi.fn(),
   // History
   enumerateHistoryTimeline: vi.fn(), listObjectives: vi.fn(), deleteRequestHistoryEntry: vi.fn(),
-  // Jobs
-  listJobs: vi.fn(), cancelJob: vi.fn(),
 }));
 
 const localeValue = {
@@ -58,7 +55,6 @@ beforeEach(() => {
     vi.mocked(fn).mockResolvedValue(empty);
   }
   vi.mocked(client.enumerateHistoryTimeline).mockResolvedValue(page([]));
-  vi.mocked(client.listJobs).mockResolvedValue(page([]));
   vi.mocked(client.listModelEndpoints).mockResolvedValue([] as never);
   vi.mocked(client.enumerateModelEndpoints).mockImplementation((async () => asPage(await client.listModelEndpoints())) as never);
 });
@@ -188,21 +184,7 @@ describe('Batch C tables on the shared DataTable', () => {
     await expectTableChrome(container, 'Title');
   });
 
-  it('Jobs: the error reason is its own one-line column, not a second line under the name', async () => {
-    vi.mocked(client.listJobs).mockResolvedValue(page([{
-      id: 'job_1', name: 'reindex', kind: 'Index', status: 'Failed', progress: 40, errorReason: 'Disk full on volume',
-      createdUtc: NOW, lastUpdateUtc: NOW,
-    }]));
-    const { container } = await renderPage(<Jobs />, 'reindex');
-    const nameCell = screen.getByText('reindex').closest('td') as HTMLElement;
-    expect(within(nameCell).queryByText('Disk full on volume')).not.toBeInTheDocument();
-    expect(nameCell.getAttribute('title')).toContain('Disk full on volume');
-    expect(screen.getByText('Disk full on volume')).toHaveClass('cell-one-line');
-    await expectTableChrome(container, 'Name');
-  });
-});
 
-describe('Delivery record duplication drafts', () => {
   it('deployment copies remain unexecuted drafts until reviewed and saved', async () => {
     vi.mocked(client.listDeployments).mockResolvedValue(page([{ id: 'dpl_copy_source', title: 'Production rollout', sourceRef: 'release/1', status: 'Succeeded', verificationStatus: 'NotRun', approvalRequired: true, environmentName: 'prod', lastUpdateUtc: NOW, checkRunIds: [] }]));
     await renderPage(<Deployments />, 'Production rollout');

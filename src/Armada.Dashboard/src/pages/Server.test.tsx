@@ -9,6 +9,7 @@ import { onlyCallArgs } from '../test/mockCalls';
 vi.mock('../api/client', () => ({
   getHealth: vi.fn(),
   getSettings: vi.fn(),
+  getUsageLatest: vi.fn(() => Promise.resolve({ objects: [], totalRecords: 0 })),
   updateSettings: vi.fn(),
   stopServer: vi.fn(),
   restartServer: vi.fn(),
@@ -21,6 +22,7 @@ vi.mock('../api/client', () => ({
   downloadBackup: vi.fn(),
   restoreBackup: vi.fn(),
   getProxySessionContext: vi.fn(() => Promise.resolve(null)),
+  isApiStatus: (error: { status?: number }, status: number) => error?.status === status,
 }));
 
 const localeValue = {
@@ -119,5 +121,25 @@ describe('Server agent settings Harbor requirement', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save Agent Settings' }));
     await waitFor(() => expect(updateSettings).toHaveBeenCalledTimes(1));
     expect(onlyCallArgs(vi.mocked(updateSettings))[0]).not.toHaveProperty('requireHarborForLaunch');
+  });
+});
+
+describe('Server settings permission boundary', () => {
+  beforeEach(() => {
+    vi.mocked(getHealth).mockResolvedValue({ status: 'Healthy', uptime: '1m', version: '1.0.0' } as never);
+  });
+
+  it('shows a neutral administrator notice instead of a load failure when settings return 403', async () => {
+    vi.mocked(getSettings).mockRejectedValue(Object.assign(new Error('Forbidden'), { status: 403 }));
+    renderServer();
+    expect(await screen.findByText('Server configuration and backups require a global administrator. Health is shown below.')).toBeInTheDocument();
+    expect(screen.queryByText(/Failed to load server settings/)).toBeNull();
+  });
+
+  it('still reports a real settings failure', async () => {
+    vi.mocked(getSettings).mockRejectedValue(Object.assign(new Error('Boom'), { status: 500 }));
+    renderServer();
+    expect(await screen.findByText(/Failed to load server settings/)).toBeInTheDocument();
+    expect(screen.queryByText(/require a global administrator/)).toBeNull();
   });
 });

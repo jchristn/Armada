@@ -71,6 +71,7 @@ namespace Armada.Server
         public async Task<CaptainLaunchDecision> DecideAsync(CaptainLaunchContext context, CancellationToken token = default)
         {
             if (context == null) throw new ArgumentNullException(nameof(context));
+            Armada.Core.Services.CaptainEligibility.RequireActive(context.Captain);
 
             CaptainLaunchDecision result = new CaptainLaunchDecision();
             result.HarborRequired = _Settings.RequireHarborForLaunch ||
@@ -153,6 +154,7 @@ namespace Armada.Server
         public async Task<CaptainLaunchTarget> SelectAsync(CaptainLaunchContext context, CancellationToken token = default)
         {
             if (context == null) throw new ArgumentNullException(nameof(context));
+            Armada.Core.Services.CaptainEligibility.RequireActive(context.Captain);
 
             if (context.Captain.Runtime == AgentRuntimeEnum.ApiEndpoint
                 && (String.IsNullOrWhiteSpace(context.Captain.ModelEndpointId) || _EndpointResolver?.Invoke(context.Captain.ModelEndpointId)?.InferenceOptions.RequireHarbor != true))

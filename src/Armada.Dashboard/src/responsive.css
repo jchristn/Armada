@@ -21,3 +21,11 @@
 @media (max-width: 640px) {
     .workspace-header-toolbar { flex-wrap: wrap; }
 }
+
+/* Tablet portrait (481-768px): App.css stacks detail grids and KPI cards into one column at 768px and below,
+   which left long single-column field lists (mission, captain, server details). Two columns fit here. */
+@media (min-width: 481px) and (max-width: 768px) {
+    .detail-grid,
+    .server-detail-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

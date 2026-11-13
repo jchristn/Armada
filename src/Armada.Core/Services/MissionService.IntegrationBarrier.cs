@@ -4,6 +4,7 @@ namespace Armada.Core.Services
     using System.Text.Json;
     using SyslogLogging;
     using Armada.Core;
+    using Armada.Core.BlackBox;
     using Armada.Core.Database;
     using Armada.Core.Enums;
     using Armada.Core.Models;
@@ -50,6 +51,11 @@ namespace Armada.Core.Services
             integration.LastUpdateUtc = DateTime.UtcNow;
             if (!await _Database.Missions.TryUpdateIfStatusAsync(integration, new MissionStatusEnum[] { observed }, token).ConfigureAwait(false)) return;
             _Logging.Info(_Header + (block ? "blocked" : "cancelled") + " integration mission " + integration.Id + " because sibling mission " + failed.Id + " ended " + failed.Status);
+            await RecordFailureAsync(integration, observed, BlackBoxStepEnum.IntegrationBarrier, null, context =>
+            {
+                context.Note = (block ? "Non-terminal: held as Blocked" : "Cancelled") + " because sibling slice " + failed.Id + " ended " + failed.Status
+                    + (failed.LastBlackBoxEntryId != null ? " (entry " + failed.LastBlackBoxEntryId + ")" : "") + ".";
+            }, token).ConfigureAwait(false);
             await CancelDependentPipelineStagesAsync(integration, token).ConfigureAwait(false);
         }
 

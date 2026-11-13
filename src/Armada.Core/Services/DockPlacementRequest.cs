@@ -53,6 +53,12 @@ namespace Armada.Core.Services
         /// </summary>
         public bool BranchOnAdmiral { get; set; } = false;
 
+        /// <summary>Credential host whose verified usage authorized this admission. Null keeps existing placement.</summary>
+        public string? RequiredCredentialHostId { get; set; }
+
+        /// <summary>True when RequiredCredentialHostId is the Admiral's protected local usage identity.</summary>
+        public bool CredentialHostIsAdmiral { get; set; }
+
         #endregion
 
         #region Constructors-and-Factories

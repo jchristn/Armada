@@ -18,6 +18,11 @@ namespace Test.Shared.Suites.Tui.Bodies
         public string? Runtime { get; set; } = null;
 
         /// <summary>
+        /// Mission slots sent for the captain.
+        /// </summary>
+        public int? MaxConcurrency { get; set; } = null;
+
+        /// <summary>
         /// Tier as sent.
         /// </summary>
         public string? Tier { get; set; } = null;

@@ -6,10 +6,427 @@ All notable changes to Armada are documented in this file.
 
 ## Unreleased
 
+- The token usage page shows an error and a retry control when the summary request fails. A successful response with no usage still says the time range is empty. A failed load for a new filter does not keep the previous filter's chart.
+
+## v1.3.0 (2026-11-06)
+
+v1.3.0 has two marquee features: **parallelization and concurrency**, and **out-of-the-box fleet actions for common repository tasks**. Concurrency improvements keep more independent work in flight with bounded capacity: vessels limit parallel voyages and missions per voyage, captains run several missions in slots, architects split work into a hierarchy of small missions with owned files, every wait is recorded with its reason, and usage-based captain selection routes work by account headroom. The release removes the single-mission captain and vessel fields with no deprecation period; read **Breaking changes** below and back up before upgrading. The default fleet action catalog provides ready-to-run performance reviews and fixes, code cleanliness and cleanup, security and vulnerability checks, and license compliance checks, alongside build, test, lint, dependency, and documentation tasks.
+
+### Breaking changes
+
+- Remove `Captain.CurrentMissionId`, `Captain.CurrentDockId`, `Vessel.AllowConcurrentMissions` and Helm `--allow-concurrent`, as explicitly approved for v1.3.0. Use `ActiveMissionIds` and mission-owned dock/process fields, and the numeric vessel limits. Old vessel inputs and the CLI flag return migration guidance. Captain process IDs are reserved for exclusive sessions. Keep agent Testing hints informational so live execution never disappears from slot accounting; migrate existing live Testing jobs safely. Halt voyage siblings through their individual owned processes, preserving unrelated work on the same captain.
+- Migrations 119–121 preserve active execution/session ownership and separate rescue provenance from hierarchy. MySQL resumes partially applied final migrations. Restoring the pre-upgrade backup is required before downgrading. See [upgrade guidance](docs/UPGRADING.md#v120-to-v130).
+- Deprecate the `VesselConcurrencyLimit` blocker reason (kept only so stored events read) and architect plan `dependsOn` (read as `parent`); see [DEPRECATION.md](DEPRECATION.md#active-deprecations). Both are removed in 2.0.
+- Helm rejects unknown options and stray arguments (strict parsing) instead of ignoring them; such commands now exit non-zero before contacting the Admiral.
+
+### Fleet actions: built-in catalog, follow-up runs, and report-only actions
+
+- 25 built-in fleet actions (20 new) seed into every tenant at startup: Repository status report, Update a specific dependency, Upgrade runtime or framework, Standardize repository files, Sync docs with code, Run tests, Fix failing tests, Improve test coverage, Lint, Fix lint findings, Code cleanliness review, Remove dead code and unused dependencies, Performance review, Apply performance fixes, Vulnerability audit, Fix vulnerable dependencies, Outdated dependencies report, Secrets scan, Security review and License compliance, alongside the existing five. Build, Add a test project and Update outdated dependencies changed; a tenant's copy is upgraded only when nobody edited it (it still matches the earlier shipped definition), and deleted built-ins stay deleted. See [docs/FLEET_ACTIONS.md](docs/FLEET_ACTIONS.md#built-in-actions).
+- Applicability checks: `ApplicabilityCommand` / `ApplicabilityCommandWindows` run in each working directory before a target executes or dispatches; a non-zero exit skips the vessel with the new reason `NotApplicable`. "Update a specific dependency" uses one so only vessels whose manifests mention the package get a captain. Actions with a check require tenant admin.
+- Report-only Mission actions: `MissionMode` `Audit` or `Research` dispatches each mission read-only on the Worker-only pipeline with landing mode `None`. Every Mission target now records the captain's final message (the report, for report-only actions) on `OutputText`; the dashboard and TUI show and download a run's reports together.
+- Follow-up runs: `FromRunId` and `FromTargetStatuses` (default `Findings` and `Failed`) on the run request target an earlier run's vessels instead of `VesselIds`, so a fix action runs only where its scan found something. Available over REST, MCP `run_fleet_action` (`fromRunId`, `fromTargetStatuses`), the dashboard and TUI **Follow up**, and `armada action run --from-run` / `--from-status`. `armada action run` also gains `--input name=value`.
+- `package` input type: a shell-safe package identifier, so a package name can go into a command. `{{vessel.buildCommand}}` falls back to the repository's build script or the ecosystem default; new `{{vessel.outdatedCommand}}` and `{{vessel.licensesCommand}}`. A Command that references an ecosystem command that resolves to nothing is skipped with `NoMatchingEcosystem`. `OutputParser` `auto` picks the parser matching the vessel's audit command. A Command without a parser stores its exit code and output tail as `ScanSummary` for `{{scan.summary}}`.
+- Fix fleet actions with inputs failing on .NET 8: the package-identifier pattern exceeded .NET 8's regular-expression automaton limit, so the validator failed to initialize.
+- Migration 122 adds `applicability_command`, `applicability_command_windows` and `mission_mode` to `fleet_actions` and `fleet_action_runs` on SQLite, PostgreSQL, MySQL and SQL Server.
+
+### Concurrency limits and mission hierarchy
+
+- Enable Serialize overlapping missions by default for new vessels across the model, REST/MCP, Dashboard and TUI creation paths. Explicit opt-outs and existing stored values are preserved.
+- Add shared numeric bounds and runtime-specific captain default helpers (CLI runtimes, including pi: 1; ApiEndpoint and Mux: 4). Add the `Concurrency` settings-file group, normalize cross-field defaults after JSON binding, and report adjusted values when loading or saving configuration.
+- Clamp the existing global `MaxConcurrentMissions` setting to 0..10000. Zero remains unlimited; negative values become 1 instead of preventing startup.
+- Align .NET projects, product version, Dashboard, Mobile, VS Code extension, and development compose tags to 1.3.0.
+- Add persisted `MaxParallelVoyages` and `MaxParallelMissionsPerVoyage` vessel limits, migration 117 for all four providers, and conservative 1/1 or unlimited backfills from the previous flag. New vessels default to 1/4; zero means unlimited.
+- Serialize admission check/claim across dispatch entry points, enforce the global mission cap at assignment, retain voyage slots through review/landing, and report the holding missions with `VesselVoyageLimit` and `VoyageMissionLimit` explanations.
+- Expose numeric limits in Dashboard, Mobile and TUI vessel forms, setup wizards and detail views, plus REST and MCP. Add a model-free HTTP/git/process end-to-end scenario and a 50-request dispatch race test.
+- Add multi-mission captains: runtime defaults (CLI 1, ApiEndpoint/Mux 4), atomic durable mission slots in migration 118, per-mission heartbeat/recovery, independent completion/cancellation and restart/Harbor reconnection. Read-only active mission IDs/counts accompany capacity editors in Dashboard, Mobile and TUI and REST/MCP/WebSocket fields. Lowering capacity preserves running missions; planning/refinement remain exclusive.
+- Complete migrations 119–121 across SQLite, PostgreSQL, MySQL and SQL Server: add mission metadata and indexed wait storage, separate rescue linkage in storage, mission navigation and black-box evidence, preserve running processes and exclusive sessions during upgrade, and remove the legacy captain pointers and vessel boolean from storage and all clients. Reject removed vessel/Helm inputs with migration guidance. See [testing instructions](docs/CONCURRENCY_TESTING.md).
+- Add mission hierarchy execution: a child waits for its parent with `ParentNotFinished`, the first child continues the parent's branch and later children fork from its head, a failed parent cancels its Pending descendants (`ParentFailed`) and restarting it restores them, and the merge queue lands a child only after its parent. Voyage dispatch accepts `Key`/`ParentKey` to build a tree in one call; REST and MCP validate parents (same voyage, no cycles, depth limit) and purge refuses a parent with unfinished descendants unless `cascade=true`.
+- Add mission wait telemetry: every admission attempt records the gate a Pending mission waits on in `mission_wait_intervals`, and assignment stamps `ReadyUtc`/`AssignedUtc`. New metrics cover slot wait, queue time, wait per gate, admission lock wait, starving missions and captain/vessel slot usage, with a provisioned **Armada Concurrency** Grafana dashboard. See [TELEMETRY.md](docs/TELEMETRY.md#mission-wait-time).
+- Architect plan contract v4: missions name a `parent` (only when they need its code), `ownedPaths`, `readsPaths` and an optional `branchStrategy`. Plans whose parallel missions own the same files are rejected with a repair message naming both missions; v3 plans only warn, and `dependsOn` is read as `parent`. Slices become children of their parent slice instead of depending on its last stage, so a parent now lands before its child continues its branch. Prompts favor small missions with disjoint files: new Architect and Worker briefs, a merge-conflict section that names the mission's owned paths and those of missions running alongside it, Ask Armada splitting guidance, multi-mission planning drafts and suggested slices from objective refinement. Untouched built-in templates upgrade at startup; edited ones are kept. After each stage Armada checks the changed files against ownership and records `OwnershipViolation` as a warning. See [PERSONAS_GUIDE.md](docs/PERSONAS_GUIDE.md#the-architect-special-case).
+- Add mission tree, wait and concurrency reads: `GET /api/v1/voyages/{id}/tree`, `GET /api/v1/missions/{id}/waits`, `GET /api/v1/vessels/{id}/concurrency` and `GET /api/v1/metrics/concurrency`, with MCP `voyage_tree`, `vessel_concurrency` and `mission_status includeWaits`, Helm `voyage tree` and `vessel concurrency`, and `Armada.Client` methods. Mission enumeration filters by `parentMissionId`, `rootsOnly` and `waitingGate`, captain enumeration by `maxConcurrency`, and concurrency metrics by `vesselId` or `captainId` (waits are attributed to the captain that takes the mission). REST voyage dispatch now honors `Key`, `ParentKey` and `BranchStrategy`, MCP `create_mission` and Helm `mission create --parent` set a parent, and restarts list the missions they re-pended in `RestoredMissionIds`. The `Concurrency` settings group is editable through `PUT /api/v1/settings` (only sent members change, values clamp, `ExpectedConcurrencyRevision` guards stale writes). WebSocket clients receive `mission.waiting_gate_changed`, `mission.starving` and `concurrency.limit_exceeded`. See [REST_API.md](docs/REST_API.md#v130-mission-tree-waits-and-concurrency).
+- Dashboard, TUI and Mobile views: a voyage Mission Tree (logical missions indented under their parent with pipeline stages, branch markers and the running count against the per-voyage limit), mission Wait Time and Children, vessel Concurrency (voyage slots, slot wait over 24 hours and 7 days, waiting missions), an Activity > Concurrency tab with slot-wait charts in the dashboard, the Voyage Create parent picker, branch choice and owned paths, and a setup wizard question "How many missions should run at once?" that creates that many CLI captains or one endpoint captain with that many slots. Wait detail codes read as words, and launch backoff is labeled "Automatic retry".
+- Mission create does less git work per request: fetches of one repository run one at a time and a caller that waited while a newer fetch ran reuses it, and the dispatch advisor reuses each active mission's branch paths for 30 seconds, so a burst of creates on one vessel reads each branch once.
+
+### Usage-based captain selection
+
+- Usage-based captain selection ([plan](archive/USAGE_BASED_CAPTAIN_SELECTION_PLAN.md), [operator guide](docs/usage-selection/OPERATIONS.md)): shared-account headroom, deterministic routing strategies, atomic reservations and durable decision history, with Observe/FirstAvailable as the default and Enforce opt-in. The executable headroom policy, typed settings and evidence fixtures are described in the [baseline and contract review](docs/usage-selection/BASELINE_AND_CONTRACT.md).
+- Add usage-selection storage foundations (migrations 123/124): structured tenant-scoped decision history, captured policy/strategy evidence, guarded reservation lifecycle and atomic Observe-mode slot/history writes. Add configurable FirstAvailable, MostRemainingAllowance and MostUsedAllowance policy strategies; settings-file contracts default to Observe/FirstAvailable.
+- Preserve mission ownership in PostgreSQL/MySQL mission reads, preventing read/update and verification repair from dropping the owning user. Add shared-provider regression coverage.
+- Add opt-in usage-policy enforcement with atomic mission/slot/decision/account reservation writes on all four database providers, fresh evidence and revision rechecks, six-decimal conservative accounting, and credential-host placement pinning. Track unresolved usage from Disabled and pre-upgrade executions without fabricating selection history; settle only against a verified post-execution active capture. Migration 126 adds this operational uncertainty ledger and internal execution correlation. Algorithm `usage-bands-v2` puts known eligible captains before explicitly permitted unknown usage within routing tiers.
+- Preserve selection evidence across raw capture pruning/restart and test authenticated retained reads. Make preview honor placement policy and retry backoff without writes; label preview choices Proposed, and keep translated status cells visible on phone layouts.
+- Add mobile mission selection inspection with shared native controls: recorded/runtime model provenance, paged captain comparisons, filtered history, retained JSON, read-only preview reasons and permission-loss clearing. Pause polling off-screen/background; synchronize native/TUI API parity inventories.
+- Add a shared-control mission selection card with recorded versus runtime-reported models, a three-column captain comparison, paginated/filterable history, safe retained-captain links, polling and read-only preview. Add `armada mission selection`, typed Core-client reads, and scoped MCP `enumerate` decision/candidate types. Share semantic English messages across web/native and translate the new dashboard strings in all eight supported non-English locales.
+- Add live configurable captain-selection strategies with optimistic revision checks, environment-override metadata and recoverable settings-file persistence. Record Observe decisions atomically with actual slot claims; add tenant/owner-scoped REST/MCP history and preview, SDK reads, intended/reported model separation and bounded conservative shadow-estimate reconciliation. Add migration 125 for historical display evidence/current attempt correlation and translated Dashboard Server settings controls. Enforce is now opt-in; see the admission and mission-inspection additions below.
+- Complete the captain-selection client surfaces (U4): `captain-selection.changed` WebSocket invalidation, the TUI mission Captain Selection tab, Mobile recovery permissions and live reload, `armada mission selection-recovery`, `mission.selection_waiting` events and the `selection_blocked` Needs You kind, native TUI/Mobile selection settings, and Armada reservation estimates shown beside observed usage. Postman covers every selection route and the settings revision flow.
+- Add captain-selection telemetry (U5): bounded decision, wait, Observe divergence, stage latency, admission outcome, reservation state, reconciliation, cooldown, persistence-failure and retention instruments with `selection.<stage>` spans, plus a provisioned **Armada Captain Selection** Grafana dashboard linked from External services. See [TELEMETRY.md](docs/TELEMETRY.md#captain-selection).
+- Apply `UsageSelection.DecisionRetentionDays` on every database provider. The ledger supported pruning but nothing scheduled it, so history grew without bound; it now runs with data expiry in bounded batches and keeps decisions with open reservations or running missions.
+- Track fixed-window reset generations. Claude, Codex and Gemini windows with an absolute reset are declared `Fixed`; their reservations carry a `fixed:<reset minute>` generation, and ended old-generation debt closes once a fresh post-reset capture shows the next generation. Rate-limit headers are `Rolling`; everything else stays on conservative continuous accounting. The reservation reconciler now reads each policy, account and captain once per batch.
+- Seed 2,000 captain-selection decisions in `perf-baseline.sh` and measure the selection summary, history, detail, candidates and preview routes and latest usage.
+- Add a black-box admission benchmark (`src/Armada.Benchmark`, `benchmarks/`) that compares Disabled, Observe and Enforce over REST with a 20% p95 budget and a capture-aware accounting check.
+- Fix captain-selection issues found in a simulated-user session ([report](docs/usage-selection/SIMULATED_USER_SESSION.md)): malformed JSON on selection routes returns 400 instead of an HTML 500; a partial `UsageSelection` group on `PUT /api/v1/settings` changes only the members sent instead of resetting the rest; history filters reject unknown values; captures with whole-second timestamps now settle ended work (reservations could stay unsettled indefinitely); admitted decisions record `SelectedByRouting`, `AuthorizedFallback` or `AuthorizedReserveException` when those chose the captain.
+- Act on the owner's decisions for the simulated-user findings: decisions store the candidates that explain them and count the rest by reason (migration 129), so admission over 1000 captains no longer writes thousands of rows; selection routes use PascalCase and the standard error envelope; mission create always returns the Mission with an `X-Armada-Warning` header when it waits; JSON binding errors name the field and accepted values; Helm writes errors to stderr with the server's message; viewers see a permission notice on Server settings; automatic retries are recorded as `Redispatch` and take over their earlier no-work attempt's reservation; a deleted captain's reservations settle from a fresh capture of the same account; pinned waits suggest the recovery permissions that would help; the SQLite default tenant's timestamps are stored and read as UTC (migration 130); Dashboard times name their zone and usage tables show captain names. See [UPGRADING.md](docs/UPGRADING.md).
+- Mission create returns once the mission is admitted and provisions the dock and launches the agent in the background. Creates no longer queue behind other missions' per-repository git work (about 15.6 s each at 16 concurrent clients before).
+- Add an enforced 200-mission stress test and a fleet-action fan-out test where the protected reserve is the binding limit: concurrent admission fills each account exactly to its reserve and never past it.
+
+### Scheduling admission
+
+- Bind mission instructions, live REST/MCP diffs and completion capture to the recorded mission dock. Remove captain/branch worktree guesses, enforce dock scope, preserve saved snapshots, and keep sibling assignments intact. Dashboard mission diff viewers now show read failures instead of reporting “No modified files.”
+
+- Atomically reserve captains for exclusive planning/refinement sessions before provisioning. Guard runtime updates, recovery and release by session ownership, preserve newer work during losing creation or late stop/cleanup, and resolve waiting-card links from the recorded owner. Ordinary captain edits cannot acquire or erase a session reservation.
+
+- Unify captain selection for dispatch, read-only waiting diagnostics, stuck-admission preflight and launch retry checks; reuse the eligibility predicate for verification repairs. Resolve voyage preferences without writes during diagnostics, preserve persona/default/strict routing, report full eligible captains even when unrelated captains are free, and explain ineligible spare slots on working captains. Add parity and retry-backoff regressions.
+
+- Extend capacity observation to global, runtime and shared endpoint usage, reusing admission accounting and an artifact-free atomic global count. Aggregate observations are global-admin-only; mixed alias limits stay unknown rather than being called admission bugs. Add bounded three-opportunity stuck-admission observations with full preflight, deferral/version guards, scoped events and metrics; monitor routing never persists preferences or claims work. Endpoint events link to the existing configuration editor. Fix event payload contrast in dark mode using the dashboard theme colors.
+- Release captain execution capacity while stage checks queue/run, retaining durable verification ownership for restart recovery. Verification missions no longer appear in active execution IDs/counts; successful checks complete without reclaiming capacity, while repairs re-enter current admission gates and reuse versioned persisted evidence when waiting. Preserve sibling assignments, recall/cancellation and exclusive sessions. Add a translated Dashboard explanation and verification lifecycle regressions.
+- Add health-tick captain/vessel capacity monitoring after durable slot reconciliation. Share sticky voyage grouping with admission; log and persist scoped `concurrency.limit_exceeded` events with bounded `gate`/`cause` metrics. Observed limit reductions drain without preemption; uncertain startup/edit ordering stays unknown. Unchanged observations are deduplicated and deleted entities lose their baselines. 
+- Serialize vessel gates per vessel, then shared global/runtime/endpoint/captain claims with a fixed lock order. Both waits are bounded; timed-out requests retry on the next cycle and increment `armada.admission.lock_timeouts` by gate. Idle registry entries are removed, and neither lock is held while provisioning docks or launching processes.
+- Spread equivalent work across eligible captains with fewer occupied slots while preserving explicit captain selection, persona preferences, priority classes and tier routing. Add lock isolation/cleanup and 200-mission mixed-limit regression coverage.
+
+### Waiting diagnostics and remedies
+
+- Share dependency/handoff and integration readiness checks between dispatch and waiting diagnostics before any slot is claimed. Failed integration summaries now correctly name the configured Blocked or Cancelled transition. Add dependency-state, handoff and single-slot integration progress regressions.
+- Share running branch/broad-scope safety decisions between dispatch and waiting diagnostics, and reuse the exact runtime/endpoint admission filter. A free captain behind a saturated runtime or endpoint now reports `RuntimeMissionLimit` or `EndpointMissionLimit`; disabled, unhealthy and circuit-broken endpoints report `EndpointUnavailable`.
+- Add bounded `Advice` next steps to REST mission reads and MCP `mission_status`. Suggestions use occupied capacity, preserve running work after a limit reduction, never suggest unlimited or exceed hard ceilings, and suggest adding CLI captains instead of raising their parallelism. Readers without global-admin privileges receive explanation text without configuration actions.
+- Show compact next steps in the Dashboard's waiting card, with direct links into existing vessel/captain/endpoint edit forms. Mobile and TUI display the same explanations. Existing breadcrumbs and card spacing are retained. Advice links match the action buttons’ height, and the captain detail editor now uses the same modal sizing as the Captains list editor.
+
+### Background task feedback
+
+- Remove the Dashboard’s Jobs tab/page and command shortcut. Preserve old Jobs bookmarks by redirecting to Events; route ongoing imports and health work to their existing views, and keep routine usage probes out of the header indicator.
+- Record terminal job outcomes in Events and actual failures as Error signals. Add scoped, paged `background_job_failed` interventions to Needs You; retries supersede old failures, and routine captures, cancellations and expected configuration discards do not become action items. Keep job APIs for workflow polling/cancellation.
+- Keep Captain Usage’s account-scope guidance in an accessible About usage control beside the filters, with a compact Coverage indicator when applicable. Remove the legacy membership/correlation notice and visible chart-interaction instructions from this page. Preserve other coverage messages and chart keyboard/screen-reader instructions.
+
+### Usage chart clarity
+
+- Consolidate Usage Overview and Account Limits into **Captain Usage**: charts first, current account limits at the bottom, shared identity filters and page refresh. Preserve old account-limit bookmarks and provider-history links, and update the shared breadcrumb/tab labels.
+
+- Label Activity’s account usage views to explain that captain-reported usage may include direct Claude Code, Codex or other harness activity outside Armada on the same provider account. Keep the note on Captain Usage, with translations for every supported locale.
+
+- Remove the unlabeled 75% and 90% horizontal threshold guides from Limit utilization. Use compact provider/window legend names, with stable source numbers when accounts or hosts would otherwise be ambiguous. Account/host details remain available on hover, in point tooltips and in the data table.
+
+### Activity refresh controls
+
+- Add the shared rotating-arrow/success-check refresh button to Activity > Captain Usage and Token Usage; standardize the token heatmap's local refresh control too. The remaining Activity tabs already expose the same control through their tables.
+- Refresh overview charts, filter choices and the selected mission bucket while preserving URL filters, draft filters and selection. Token Usage refreshes totals, both charts, the heatmap and captain choices without resetting its range or filters. Loading feedback follows the requests, failures remain retryable, and stale responses cannot replace newer data.
+
+### Dashboard navigation
+
+- Move breadcrumb placement into the shared layout for every page, with one renderer, consistent Dashboard/hub ancestry, canonical collection links, loaded entity labels, and cleanup on navigation. Keep the trail visible during lazy loading and use the actual visible hub tab for role-gated views.
+- Audit every dashboard page and route. Remove unused router page loaders and the orphan legacy Settings page; expose its account usage-capture controls on the active Settings page. Retired list URLs retain filters and navigation state, and unknown URLs show a recovery page.
+- Add route/module/link inventory and rendered breadcrumb regression checks. See [dashboard navigation](docs/DASHBOARD_NAVIGATION.md).
+
+### Fixes
+
+- Fix captain evaluation battery results listing in a different order on MySQL and SQL Server than on SQLite and PostgreSQL when several results share a timestamp. The id tie-break now compares ordinally on every provider, so pages are stable and identical across providers.
+
+---
+
+## v1.2.0 (2026-10-29)
+
+### Anchor features
+
+- **Captain usage checks and monitoring.** Check a captain's account usage on demand, configure recurring capture, and monitor reported account limits, utilization, and reset windows over time. The captain detail page exposes **Capture now** and capture settings; the Account Limits view brings the reported usage together for monitoring.
+- **Model fit-for-purpose evaluation by persona.** Evaluate how well a captain's model suits given personas and workloads before assigning it work. Quick probes check runtime behavior; Full evaluations run selected battery packs for selected personas and produce per-persona outcomes and a report. Start runs from Captains or a captain's Evaluations page, then open in-progress or completed results to inspect the evidence.
+
+### Release overview
+
+v1.2.0 adds the mission and voyage black box: every failure writes an entry that says where, how and why it
+failed, which missions and files it collided with, and how to recover, with a FIX THIS brief for any coding agent (see
+the black box sections below). It also adds pi (pi.dev) as a first-class captain runtime, with Armada MCP, Approve in Armada and Refuse support (see
+its section below). Model evaluation records how well each model does the work
+it is given. Every stage attempt is recorded as a stage outcome with its provenance (runtime version, model
+digest, escalation record) and a suspected cause; Quick probes give a captain or model endpoint a probe-only
+**Evaluate**; the fixture battery runs data-defined task packs (starting with C#) through real dispatch; and handoffs
+are delivered with their reader in mind. The release also improves captain usage visibility and management, and adds
+mobile interfaces for the new surfaces. Since v1.1.0 was cut it also includes the `ExcludeReviewAuthorsFromJudge`
+setting, Quick probes, and the fixture battery with its C# pack. Schema migrations 96 to 116 apply automatically at
+startup; see [UPGRADING.md](docs/UPGRADING.md#v110-to-v120).
+
+### Captain usage history and operations
+
+- Commit observations, latest account state and durable captain links atomically on
+  all four database providers. Persist capture intervals/context, recover missing
+  projections during migration 116, and retain original observations after restart
+  without an implicit 24-hour cutoff on latest reads.
+- Match Account Limits to API Requests: collapsible Filters card, immediate dropdown
+  filters, Reset, shared refresh/auto-refresh controls, persisted page size, column
+  selection, backend sorting and query timing.
+
+- Complete account usage contract documentation and variable-driven Postman read,
+  enumerate, capture and error examples; declare host/account filters in MCP.
+- Preserve hourly quota history before raw pruning in atomic provider transactions.
+  Retain numeric weights, failure gaps and original observation times; expire
+  ninety-day rollups and inactive metadata, and clean usage history on tenant deletion.
+- Add bounded usage metrics/spans and the Usage Grafana dashboard. Bundled compose
+  now exports through an OpenTelemetry collector to Prometheus, Tempo and Loki.
+  Set ARMADA_GRAFANA_ADMIN_PASSWORD before starting the bundled stack; observability
+  browser ports bind to loopback. Existing standalone telemetry settings remain valid.
+- Align native Account Limits links and provide dashboard-home observability links.
+
+
+### Readable usage labels
+
+- Captain state cells separate the state badge from the eligibility label with explicit spacing and show Active or Inactive. Shorten the weekly usage label to Weekly.
+
+- Captain usage cells show clearly separated text such as "96% used · Weekly" with consistent severity colors in both themes. Fix shared table-link CSS overriding their layout.
+- Humanize provider window identifiers across the captain card, account limits, charts and mobile views. Codex windows use their reported duration; missing durations remain primary/secondary limits rather than assumed periods. Preserve model-specific scope and raw API filter values.
+
+### Idle captain usage capture
+
+- Save a credential Harbor on the captain, independently of mission placement. Capture requests with an explicit HarborId save that choice for subsequent scheduled reads; dashboard, TUI and mobile editors expose it. Null keeps automatic dock/standalone resolution.
+- Validate host ownership within the captain's tenant, retain the selected host while disconnected and reject disabled hosts. Unresolved host selection is now a distinct conflict with recovery guidance rather than a misleading offline error.
+- Manual first capture bypasses scheduler startup jitter, while observed cooldowns, provider backoff, single-flight and persisted leases remain enforced.
+
+### Dashboard styling
+
+- Style captain evaluation navigation and downloads as shared action buttons. Align evaluation metadata, history, battery results, filters and pagination with dashboard spacing, status colors and responsive tables.
+- Reuse shared badges, cards and responsive form layouts on pipeline, dock, event, inbox, skill and project-profile pages; style check output with aligned line numbers and bounded scrolling.
+
+### Captain account usage (phase 6)
+
+- Account usage capture and the Claude/Gemini PTY fallback now default on. Missing/null values inherit on; explicit false and Disabled mode opt out. Native TUI/mobile views show account/host limits, capture state, settings and expiring cooldowns.
+- **Upgrade action:** migration 113 resets existing captain capture flags to unset. Settings files without `UsageCapture.DefaultsRevision: 2` reset `Enabled` and `AllowPtyFallback` once. This also resets opt-outs saved by earlier v1.2.0 builds; turn capture or PTY fallback off again after upgrading if required.
+- Add host-local Claude OAuth and Gemini Code Assist quota readers, bounded enumerate forms, collection declarations and seven-day raw snapshot pruning. Unsupported and missing-auth sources never fabricate utilization. Hourly rollups retain quota history before raw snapshots are pruned.
+
+
+### Captain usage dashboard prerequisites
+
+- Add an authenticated latest-usage `captainIds` batch filter for 1..100 distinct
+  tenant-visible captains. Filter before account paging, preserve shared accounts,
+  and reject invalid batches or foreign IDs. This supports batched captain usage reads in the dashboard.
+
+### Account usage query and public surfaces (Phase 4)
+
+- MCP `capture_captain_usage` called without its required `captainId` (empty
+  or absent `arguments`) now answers a JSON-RPC invalid-params protocol error
+  (`error.code` -32602, `error.data` `{ tool, argument }`) instead of an
+  `isError` tool result. `McpRequiredArgumentGuard` wraps the MCP library's
+  `tools/call` dispatcher only for the usage tools listed in
+  `McpUsageTools.ProtocolRequiredArguments`; every other call, wrong-type
+  arguments and every other tool keep the previous behavior. The schema still
+  declares `captainId` required.
+- `armada mcp stdio` installs the same guard, so an initialized stdio session
+  also answers `capture_captain_usage` without `captainId` with JSON-RPC
+  -32602 (it previously returned `result.isError`) and keeps serving later
+  calls. Live regressions: `E2E.UsageMcpTransportParity` drives the real Helm
+  stdio process and an HTTP session through the error and a recovery call.
+- Tests: `E2E.McpTool` `ToolsList_ContainsAllExpectedToolNames` follows the
+  paginated `tools/list` cursor; the new `capture_captain_usage` tool had moved
+  `get_release` onto the second page.
+
+- Add tenant-scoped account snapshot/latest queries, bounded limit/token series,
+  completion-time mission drill-down, and capture receipts across REST, MCP and
+  Armada.Client. Preserve shared-account ownership and nullable attribution.
+- Declare authorization for the new routes/tools, allow read-only usage status in
+  Ask, and publish committed usage notifications only within the owning tenant.
+- Extend the local REST/MCP/WebSocket documentation and reusable Usage Postman
+  requests without changing collection authentication or publishing a workspace.
+
+### Captain Active setting
+
+- Add persisted captain `Active` eligibility (default true, including migration of existing rows) across REST, MCP, Dashboard, mobile, TUI, Helm and the legacy web UI. Disabled captains cannot accept new work; runtime State and in-flight work are preserved. Operational snapshots cannot overwrite an Active configuration edit.
+- Align Dashboard captain auto-approve and Active checkboxes with the inline form convention, preserving keyboard focus and wrapping labels on narrow screens.
+
+
+### Recovery validation
+
+- Restarting a verifier stage that failed on a blocking product defect (for
+  example a Test Engineer whose block exhausted the automatic rework budget)
+  now sends the work back to its Worker as an operator-approved rework round,
+  followed by a fresh verifier, instead of re-running verification against the
+  unchanged product code. The failure's remediation text names that restart.
+  Previously the black box recovery `bbx-rev-002.restart` restarted only the
+  verifier, which could never correct the product and blocked again.
+
+- Recover preserved AC2 and model collection bounds together. Harbor launches clear inherited MCP
+  credentials unless the request supplies a scoped binding. Alert evaluation reports complete counts
+  beyond its response caps; scorecards report revision truncation and retain compatibility pooling
+  through omitted historical bridges. Add boundary regressions and document the limits.
+
+### Captain usage capture phase 3: runtime probes and routing (AC3)
+
+- **Runtime probes (D4).** New `Armada.Runtimes.Usage` probes plug into the host runner through `UsageProbeRegistry`, which the Admiral (`ArmadaServer`) and every Harbor (`HarborLinkHost`) now compose. Only verified read-only sources are active: `CodexUsageProbe` opens a local `codex app-server` stdio session, sends `initialize`, `initialized` and `account/rateLimits/read` (never a thread or turn, so no model is invoked), HMACs the reported account id on the host, caps every line and the session, refuses truncated or oversized answers, and terminates the helper's process tree in `finally` on timeout and cancellation. `ClaudeUsageProbe` stays Unsupported because the OAuth usage endpoint is undocumented and unverified; Gemini, OpenCode, Cursor, Mux, Pi, ApiEndpoint (passive only) and the Custom runtime without a command answer Unsupported with stable codes. PTY is never an automatic fallback and no PTY adapter ships. The Custom contract moved to `CustomUsageProbe` unchanged, plus refusal of unnamed windows and a percentage that disagrees with its used and limit counts.
+- **Typed versioned parsers.** Core `Protocol` gains the Codex app-server DTOs (`CodexRateLimitsReadResponse`, snapshot, window, credits, `account/rateLimits/updated` params and JSON-RPC envelopes). `CodexRateLimitUsage` and `ClaudeRateLimitUsage` normalize them (durations are data, null windows are skipped, an empty answer is Unsupported, impossible values reject the observation) and `UsageResetConverter` converts absolute (epoch, RFC 3339, HTTP date) and relative (seconds, Go durations) resets from the observation time with an 8-day bound, leaving `ProviderResetParser`'s 24-hour error policy untouched. `UsageCaptureSourceEnum` gains `AppServer` and `HarnessEvent`.
+- **Passive capture.** `ClaudeMissionStreamDecoder` now reports each `rate_limit_event` as a typed entry in the new `MissionStreamDecodeResult.UsageObservations` list, still never as output or transcript text. `UsageRateLimitHandler` (Core) is an outermost `DelegatingHandler` that hands allowlisted `anthropic-ratelimit-*`, `x-ratelimit-*` and `retry-after` response headers to a sink as soon as the headers arrive, before any body is read, so error statuses and streamed responses that end early still report them; `ModelEndpointAuth.CreateHttpClient(endpoint, sink)` and `ModelEndpointClientFactory.CreateCompletion(endpoint, logging, sink)` attach it on every authentication path, including the provider-default path that previously let the provider build its own transport. `ApiAgentRuntime.UsageHeaders` (`HeaderUsageCapture`) is attached by the production client factory and parses the latest observation (absent headers Unsupported, 401/403 AuthMissing, 429 keeps Retry-After, 5xx Failed, malformed numbers rejected). Without a sink the factory behaves exactly as before.
+- **Quota routing (D6).** `UsageQuotaPolicy` decides Hold, Release or NoChange: only fresh (within max(2 x interval, 120 s)) Ok, non-Derived observations for the captain's own account route; per-model windows only affect captains on that model; a passed reset expires. `CaptainService.ApplyUsageQuotaAsync` holds only idle captains, never interrupts a working one, extends or clears only quota-owned holds (`UsageQuotaHold` reason prefix `usage quota: `), leaves manual, health, crash-loop, configuration and provider-error quarantines untouched, and refuses samples no newer than the one that set the current hold (compare-and-set on the recorded capture time). Rejected observations keep the account's last-good data.
+- **Tests.** New shared suites `Services.UsageParsers` (13 cases, including a local HTTP provider fixture that verifies URL, credential, payload and response handling with capture attached), `Services.UsageQuarantine` (5) and `Services.UsageSecrets` (5). Details and evidence: `docs/captain-usage-plan/PHASE3_RUNTIME_PROBES.md`.
+
+### Captain usage capture phase 2: host execution and scheduler (AC2)
+
+- **Host probe framework.** New Core services define the account usage capture contract: `IUsageProbe` (the host-side usage helper invoked through the host-command seam), `UsageProbeHost` (the safe probe context that travels the link: tenant, stable credential host identity, runtime, mode and Custom command, never credential contents), and `UsageProbeResult` (the sanitized answer: allowlisted status and source, host-derived account key, windows, redacted diagnostics, a stable error code and an optional provider Retry-After). `AgentRuntimeCapabilities` reports per-runtime usage capture support beside planning sessions (`SupportsUsageCapture` plus a richer capability descriptor naming the source kind and the reason a runtime has none).
+- **Host execution through the seam.** `HostCommandKindEnum` gains `UsageProbe`: `LocalHostCommandExecutor` runs the registered host helper in-process on the Admiral's host, and `RemoteHostCommandExecutor` sends the probe to a Harbor as a typed payload on the git-request path with the bounded round-trip deadline (execution deadline plus the 15-second reply grace). A Harbor advertises the new `usage-probe` capability when its link client carries the helper (`HarborLinkClient`, `HarborConnectionManager.HostsUsageProbes`); an older Harbor answers Unsupported with `HostUpgradeRequired` and a disconnected host answers Failed with `HostUnavailable`, never a fallback to the Admiral's credentials. `UsageProbeHostRunner` (Runtimes) is the host-side helper: it runs the administrator-chosen Custom executable contract (executable plus argument list, no shell interpolation, bounded output readers, the documented single JSON object output validated against schema version, status, window and timestamp bounds) with a host execution deadline, process-tree termination on expiry or cancellation, cleanup in finally, the host-owned account HMAC and redacted, byte-capped diagnostics. Auto mode runs only registered read-only runtime probes; none ship yet (phase 3), so Auto answers Unsupported with a stable reason rather than guessing.
+- **Scheduler and capture service.** `UsageCaptureScheduler` rebuilds capture groups from the enabled captains (tenant, resolved credential host, runtime and Custom command fingerprint) with randomized initial due times; `UsageCaptureService` owns the single-flight gate and the persisted lease per group (a dedicated `UsageProbe` background job, also visible on the Jobs page), the per-host and overall concurrency gates (separate from mission launch slots), one sanitized snapshot with member links, effective-dated account memberships and per-account latest state per attempt, and the retry policy: success reschedules the effective interval (shortest requested among members, floored by the server-wide minimum) with 0.9-1.1 jitter, failures back off at 2x per consecutive failure up to the configured bound and honor a longer Retry-After, AuthMissing retries hourly, Unsupported waits for a configuration change, and a result is never applied after its lease expired or its settings generation changed. Manual captures join an in-flight attempt and return its job id, respect the cooldown and the server switch, and cancelling the job from Jobs stops the probe process tree. Captains' states, missions and launch slots are untouched by capture work.
+- **Server composition.** `ArmadaServer` composes the account resolver (a persisted host identity and protected HMAC key under the data directory), the host runner, the capture service and the scheduler; the scheduler rebuilds at startup and ticks with the health loop while `UsageCapture.Enabled` is on (still disabled by default). No new REST, MCP or WebSocket surface.
+- **Jobs view.** The Jobs kind tooltip names the new `UsageProbe` job kind in every shipped locale.
+- **Rework: production Harbor helper wiring.** `HarborLinkHost` (the production Harbor) now composes the host-side usage helper once for the host's lifetime, from a `UsageAccountResolver` persisted under the Harbor's settings directory and named by its Harbor id, and supplies it to its link client: an upgraded Harbor advertises the `usage-probe` capability and executes usage probes on its own host, where before it constructed the link client without the helper and could neither advertise nor run it.
+- **Rework: configuration changes invalidate running work.** `UsageCaptureScheduler` invalidates the capture service when a tick observes capture newly disabled and when a rebuild observes a configuration change (a captain stopped capturing, a group disappeared, a group's configuration revision changed or it lost a member). `Invalidate` now also cancels the attempts the change orphaned, and the commit path rejects their stale writes: a result is never applied after its settings generation changed, after capture was disabled, or once its group has no member left to attribute (a captain that opted out mid-flight is never attributed the result). The failure path is guarded the same way.
+- **Rework: lease safety.** The persisted-lease lookup traverses every page of the active usage-probe jobs, so newer unrelated jobs can no longer hide an unexpired lease behind the first page and let a second attempt start. An attempt's lease clock starts at dispatch, before the concurrency gates, and is validated both before the probe runs and before its result commits, so waiting for a free slot consumes the lease.
+- **Rework: Custom contract validation.** The host helper refuses a reported observation time outside the accepted bounds instead of replacing it with a fresh one, and measures the whole answer rather than its stored prefix, so output past the 64 KiB cap is refused instead of trimmed into an accepted document.
+- **Rework: host resolution is not connection state.** `UsageAccountResolver` decides a split deployment by whether a Harbor has ever registered, not by the number of live connections, so a dockless captain stays unresolved while every Harbor is disconnected instead of being captured on the Admiral's credentials.
+- **Rework: dashboard state styling.** The Jobs `Running` and `Succeeded` status chips now use the in-progress and complete color pairs like the same states elsewhere, and the shared form fields (the settings and captain forms) keep the app-wide keyboard focus ring that their own `outline: none` was outranking. Rendered verification of the present usage surfaces at 1280, 768 and 390 pixels in light and dark is recorded in `docs/captain-usage-plan/DASHBOARD_SURFACE_INVENTORY.md`.
+- **Rework round 2: a cancelled host waiter gives back its permits.** An attempt that had taken a server-wide concurrency slot and then waited for its credential host's slot leaked the global permit when the configuration changed: the host-gate wait sat before the release block, so a cancelled waiter never returned the slot, and repeated cancellations could stall capture on every host until the process restarted. Each acquired permit (the overall gate and the per-host gate) is now protected by its own `finally`, so a cancellation raised anywhere in the gate sequence returns what the attempt holds.
+- **Rework round 2: disabling capture stops the work it still has in flight.** The server's health loop skipped the usage scheduler tick while `UsageCapture.Enabled` was false, so the scheduler's disabled-switch branch, which invalidates the generation and cancels the queued and running probes, was unreachable from production. The tick is now unconditional: the scheduler decides what a disabled switch means, invalidating once on the enabled-to-disabled transition and starting nothing, so turning capture off stops the probes within one heartbeat instead of at the next restart.
+- **Rework round 2: scheduling settings changes invalidate the schedule.** The scheduler's rebuild compared only the probe configuration (host, runtime, command fingerprint) and the member list, so raising the global minimum interval, or changing the opt-in PTY switch, the host execution deadline, the concurrency bounds, the backoff cap or a member's own requested interval, moved the effective interval without cancelling the work that had been queued under the old bounds. Groups now carry a scheduling revision of the bounds they were scheduled under, and a rebuild that observes a different revision invalidates the capture service, cancels the probes it orphaned and reschedules the group from scratch with the new bounds.
+- **Rework round 3: changed concurrency limits govern later probes.** The server-wide gate kept the capacity it was constructed with and each per-host gate kept the capacity of its first use, so lowering `MaximumConcurrentProbes` or `MaximumConcurrentProbesPerHost` still let the old number of probes reach a host, and raising them left capture constrained until a restart. Both gates are now `UsageConcurrencyGate`s whose capacity is re-read from the current settings before every wait and on every invalidation: a lowered limit queues later attempts until enough holders release, a raised limit admits queued attempts at once, and every permit is still returned to the gate that granted it.
+- **Rework round 4: cancelling a remote probe stops it on the Harbor.** Cancelling a capture whose probe ran on a Harbor (cancelling its job, an invalidation, or disabling capture) only stopped the Admiral waiting for the reply: the Harbor kept running the Custom process until its execution deadline, the attempt reported `ProbeTimeout`, and the released slots could admit replacement work while the old process was still active. The Admiral now sends a request-specific cancel (`HarborGitRequest.CancelsRequestId`) for that probe only; the Harbor cancels just that probe, its helper terminates the probe's process tree and reaps it, and the Admiral waits (bounded, 15 seconds by default) for that confirmation before reporting `ProbeCancelled` and releasing the attempt's slots. Concurrent probes and commands on the same Harbor keep running.
+
+### Battery packs in the server image and the Evaluate dialog link
+
+- **The server image ships the fixture battery packs.** `src/Armada.Server/Dockerfile` copied only source projects into the build, so `Armada.Server.csproj` published no `battery/` and Evaluate had no packs. The image now carries them at `/app/battery` and sets `ARMADA_BATTERY_DIR=/app/data/battery-packs`, a writable directory the Admiral seeds with missing bundled packs on every start without overwriting edited or custom packs or recreating deleted ones (`BatteryPackSeeder`, marker `.armada-seeded-packs`). The compose files mount the named volume `battery-packs` there. `Evaluation.BatteryDirectory` is seeded the same way and still takes precedence.
+- **Manage packs link.** The Evaluate dialog's Manage packs link was a raw `href="/battery"` that skipped the router's `/dashboard` basename, so the standalone dashboard proxied it to the Admiral and showed a JSON 404. It is now a router link to `/dashboard/battery`.
+
+- Captain evaluation panels resume existing runs, show live probe and battery progress, expose failures inline, and provide the last ten runs with reports and profile revision links.
+### Captains list Evaluate action
+
+- **Evaluate... in the captain row menu.** The Captains list Actions menu has an Evaluate... item (after View Tools, shown to global and tenant admins) that opens the same Evaluate dialog as the captain page. Submitting starts the run through `POST /api/v1/captains/{id}/evaluate` and opens `/captains/{id}?evaluationRun=<run id>` with a toast naming the run. No server change.
+
+### Full Evaluate follow-up (model heterogeneity Phase 5, item 4)
+
+- **Incomplete reports on the profile.** A cancelled or timed-out Full Evaluate (or one whose battery could not run) is now also recorded as an advisory model profile revision, marked `EvaluationIncomplete`. It never changes an earlier revision, never fills `measured`, is never preferred over a complete report, and observations never pool into it. Nothing reads it for routing. No migration.
+- **`measured` block.** `GET /api/v1/model-profiles/{id}` and MCP `get_model_profile` return `Measured`: the counts from the latest complete Full report (run, revision and battery run ids, report time, packs, one count per probe kind, and per persona one count per pack with passed, failed, could not run, pending evaluation and attempted). Counts only, no derived scores; null until a complete report exists.
+- **Dashboard Evaluate dialog.** The captain page's Full Evaluate control opens a dialog with depth (Full by default), the evaluator captain (idle captains, with a note when one shares the evaluated captain's model family), battery packs, personas and run count, and submits to `POST /api/v1/captains/{id}/evaluate`. The report view is unchanged. New client helper `listBatteryPacks`.
+- **TUI Evaluate view.** The TUI captain page has an Evaluate action (`v`) with the same options, then a viewer that polls the run, shows its probe results and report, and cancels it with `c`.
+
+### Worker eligibility envelope (model heterogeneity Phase 6, item 1)
+
+- **Vessel default.** A vessel may carry a default `WorkerEnvelope` (`maxFiles`, `maxSteps`, `minServedContextTokens`, `requiredTools` of `tools`/`mcp`), set through REST vessel create/update, WebSocket `create_vessel`/`update_vessel`, MCP `add_vessel`/`update_vessel` (`workerEnvelope`; `{}` clears it, omitted keeps it) and the dashboard and TUI vessel forms; `get_vessel` returns it. Out-of-range values or unknown tools are rejected (`400`, MCP `InvalidArgument`). No envelope is the default, so routing is unchanged until a vessel sets one. Stored in a new column (migration 110 on SQLite, PostgreSQL, SQL Server and MySQL).
+- **Missions may only tighten it.** A mission may carry a tighter envelope (fewer files or steps, a larger context minimum, more required tools). REST dispatch rejects a loosened envelope with `400`; a `workerEnvelope` on a mission in the Architect's plan is clamped to the vessel default and an event `mission.worker_envelope_clamped` is recorded.
+- **Dispatch enforces it for the Worker stage.** Only captains whose model profile records at least the minimum served context and the required tools are eligible; a captain with no profile, or a profile missing a needed field, is excluded. When no idle eligible captain exists, the mission escalates to a stronger compatible captain within the Worker persona's allowed captains; when none exists it stays Pending with a visible reason. Each decision (which captains were excluded and why) is recorded as event `mission.worker_envelope`, shown in the mission timeline and the black box.
+- **Prompts.** New prompt template placeholder `{WorkerEnvelope}`, used in the Architect and Judge templates, renders a short description of the envelope (empty when none). Listed in the dashboard and TUI placeholder panels.
+- **Mission update and creation.** REST `PUT /api/v1/missions/{id}` and MCP/WebSocket `update_mission` set or clear a mission's envelope (`{}` clears, omitted keeps) with the dispatch validation (`400` / `InvalidArgument` when invalid or looser than the vessel default); a change is only accepted while the mission is Pending, or Assigned and not started (`409` / `Conflict` otherwise). MCP `create_mission` takes an optional `workerEnvelope` and `armada mission create` takes `--max-files`, `--max-steps`, `--min-context-tokens` and `--require-tool`.
+- **Customized templates.** An Architect or Judge template customized before `{WorkerEnvelope}` existed is not rewritten; when it lacks the placeholder and an envelope applies, the rendered envelope section is appended after it and a warning is logged once per template.
+
+### Landing verification
+
+- Landing verification for the Armada repository now runs the smoke tests (`dotnet test "src/Test.Smoke/Test.Smoke.csproj" -c Release -f net10.0`) instead of the long `src/Test.Automated` suite list, which was being killed (exit 143) and blocking landings.
+
+### Full Evaluate (model heterogeneity Phase 5, item 4)
+
+- **`evaluate_captain` and `POST /api/v1/captains/{id}/evaluate` (and `/model-endpoints/{id}/evaluate`) accept depth `Full`.** Full runs the Quick probes, then a fixture battery run for the candidate (packs default to those matching the languages of the tenant's repositories; personas default to every persona the captain is allowed), then an evaluator captain grades the battery attempts that need a subjective grade and writes strengths and weaknesses from the mechanical counts. Parameters: `evaluatorCaptainId`, `packs`, `personas`, `runCount`. Quick stays the default. A Full Evaluate of a model endpoint needs an admin (`403` otherwise).
+- **Evaluator selection.** By default the highest-tier idle captain of a different model family from the candidate; a same-family evaluator only when no other is idle, with a warning in the report; with none, the mechanical report is still produced and the narrative is `Skipped` with the reason.
+- **Counts are the source of truth.** The report (`ModelProbeRun.Report`) holds per-persona counts (total and per task) and probe counts. Every count the evaluator's narrative cites must match them; a reply that does not parse or cites a wrong count is `Rejected` with the reason and the mechanical report is kept. The run does not fail.
+- **Advisory profile update.** A complete Full report is recorded as a new immutable model profile revision (`EvaluationRunId`, `EvaluationReport`, migration 109), marked compatible with the revision it was recorded on so the scorecard pools them. Nothing changes routing, persona captain lists or prompts.
+- **Isolation, budget and limits.** Battery missions are flagged `IsEvaluation`, so they never count in scorecards or alerts. New settings `evaluation.fullRunTokenBudget` (default 3,000,000 estimated battery tokens, within the daily evaluation budgets) and `evaluation.fullRunTimeoutMinutes` (default 720). A Full run holds the evaluation slot of its inference host for its whole run, so models sharing one machine are evaluated one at a time.
+- **Cancel.** `POST /api/v1/model-probe-runs/{id}/cancel` and MCP `cancel_model_probe_run` (admins) stop a Quick or Full run; a cancelled or timed-out Full run ends `Cancelled` with a partial report marked incomplete, and its open battery mission is cancelled, releasing its dock and captain. New run status `Cancelled` (also on battery runs).
+- **Dashboard.** The captain page and the endpoint health dialog have a Full Evaluate button next to Evaluate, a Cancel button while a run is going, and show the Full report (completeness, evaluator, warnings, per-persona counts, strengths, weaknesses, observed problems, how to work with the model, or why the narrative was skipped or rejected). Full uses the server defaults there; the parameters are REST and MCP only.
+
+### Model alerts (model heterogeneity Phase 5, item 3)
+
+- Scorecard alerts as inbox items (kind `model_alert`, admins only) with suggested actions; advisory, no automatic changes. A periodic pass (`ModelAlerts.IntervalMinutes`, default 60; `ModelAlerts.Enabled`) and on-demand evaluation check every (model profile, persona) with recent production attempts against Decision 13's thresholds (first pass below 50% over 8+ missions, 3 escalations away in a row, protocol repairs above 30% over 8+ attempts, tokens per accepted result above 2x the persona median across other profiles with 5+ accepted results on each side), with per-persona overrides in `ModelAlerts.Thresholds`. Unavailable metrics make a rule inactive and are reported.
+- One alert per (profile, revision group, persona, vessel or all, rule), stored in `model_alerts` (migration 108 on SQLite, PostgreSQL, SQL Server and MySQL), kept while the condition holds, resolved when it clears and reopened when it returns.
+- Suggested actions, applied only on request and recorded on the alert: move down in the persona's priorities, remove from the persona, re-evaluate (Quick Evaluate), ignore for N days (default 7). The compact template is listed as unavailable (no prompt variant per profile and persona).
+- REST `/api/v1/model-alerts` (list, enumerate, get, evaluate, thresholds get/put, apply, ignore), MCP `list_model_alerts`, `get_model_alert`, `evaluate_model_alerts`, `get_model_alert_thresholds`, `update_model_alert_thresholds`, `apply_model_alert_action`, `ignore_model_alert`, and `Armada.Client` methods. The scorecard adds `escalations.inARow`.
+- Optional push (`ModelAlerts.PushEnabled`, default false) under the new push category `ModelAlert`.
+
+### Model profiles (model heterogeneity Phase 5, item 1)
+
+- New advisory **model profile** entity (`mdl_` prefix): the model as served, identified by runtime, provider, model and
+  served context, shared by every captain and Harbor that runs it, with editable capabilities (`ToolsAvailable`,
+  `McpAvailable`), explicit rendering overrides (`Template`, `RepeatContractAtEnd`, `MaxFilesPerMission`) and notes.
+  Profiles do not set `Captain.Tier` and do not change routing or dispatch.
+- Immutable **revisions** (`mdv_` prefix) record the runtime version, model digest, sampling, tool configuration and first
+  seen time. A new runtime major version, a new model digest or a change in sampling starts a new revision; a runtime
+  minor or patch release pools into the current one; a change in served context is a new profile. Administrators can
+  mark revisions compatible; revisions are never edited.
+- Armada finds or creates the profile and revision whenever it records a captain's runtime and model (every stage
+  outcome and every Quick Evaluate run), best effort, and sets the new server-owned `Captain.ModelProfileId`. Vendor CLI
+  captains are profiled too.
+- REST: `GET /api/v1/model-profiles`, `POST /api/v1/model-profiles/enumerate`, `GET /api/v1/model-profiles/{id}`,
+  `PUT /api/v1/model-profiles/{id}` and `PUT /api/v1/model-profiles/{id}/revisions/{revisionId}/compatible-with`. MCP:
+  `get_model_profile` and `list_model_profiles`. .NET client: `ListModelProfilesAsync`, `EnumerateModelProfilesAsync`,
+  `GetModelProfileAsync`, `UpdateModelProfileAsync`, `SetModelProfileRevisionCompatibilityAsync`.
+- Schema migration 107 adds `model_profiles`, `model_profile_revisions`, `model_profile_revision_compat` and
+  `captains.model_profile_id` on SQLite, PostgreSQL, SQL Server and MySQL (additive).
+
+### Model scorecard (model heterogeneity Phase 5, item 2)
+
+- New read-only scorecard per (model profile, persona), optionally per vessel, computed from existing stage outcomes,
+  token usage and timing over the last 30 days or 50 missions, whichever is smaller (both configurable): first-pass
+  success, accepted results, stage-check status counts (skipped by reason), Judge verdicts on the profile's work,
+  protocol repairs and repairs that ran out, tool failures, resumes in place and stalls, escalations away and what
+  followed, suspected causes (Unknown and Mixed as their own buckets), and tokens and wall time per accepted result
+  summed over every attempt that led to it. Every rate is a count of a denominator with a 95% Wilson interval; metrics
+  Armada does not record (finding categories, tool failure kinds, recovered stalls) are returned as unavailable with the
+  reason. Revisions are shown separately unless marked compatible. The attribution rules applied (evaluation and battery
+  missions, NotTheModel, Infra, OperatorAction, runtime environment, unsettled, other stages, Judge verdicts on other
+  captains' work) are listed with how many items each removed. No routing or captain change and no schema migration.
+- REST `GET /api/v1/model-profiles/{id}/scorecard` (query `persona`, `vesselId`, `windowDays`, `windowMissions`), MCP
+  `get_model_scorecard` (Ask read-only), .NET client `GetModelScorecardAsync`.
+
+### Dashboard
+
+- Needs You failure cards (Failed and Landing failed) gain **Copy JSON** next to **Copy Markdown**: it copies the
+  mission's black box entry and its versioned record, like the black box panel. The Copy Markdown tooltip and toast no
+  longer say "FIX THIS".
+
+### Mission and voyage black box
+
+Every mission or voyage failure, of any kind and including landing failures, now writes a black box entry at the
+moment of failure: where it failed (phase, step, host, code site), how (exception, exit code, failing command, git
+error), status before and after, why (classified cause with rule ids and confidence), conflicting missions with the
+files and directories they collided on, the configuration in effect and what would have prevented the failure, Armada
+behavior changes that could address it, and ranked recovery paths with exact commands. Each entry renders a FIX THIS
+brief to paste into any coding agent. Entries are stored in the database by default (BLOBs indexed by mission,
+voyage, vessel, captain and other ids), or on disk, S3 and S3-compatible stores, Azure Blob, Google Cloud Storage,
+CIFS or NFS, with configurable retention and garbage collection. Available in the dashboard, the VS Code extension,
+the mobile app, REST, MCP, WebSocket and Ask Armada (read tools); the TUI Failure tab and Helm `armada blackbox`
+commands arrive with their own changes. Schema migrations 103 and 104 apply at startup. See
+[docs/BLACKBOX.md](docs/BLACKBOX.md) and [docs/BLACKBOX_SCHEMA.md](docs/BLACKBOX_SCHEMA.md).
+
+- Capture: every failure write (dispatch, provision, execution, completion, review, handoff, landing, merge queue, recovery, voyage settlement, operator transitions and vessel deletion) records an entry after the row update, within `blackBox.captureTimeoutMs` (2000), and never breaks failure handling. Each attempt keeps its own entry; `Mission.LastBlackBoxEntryId` and `Voyage.LastBlackBoxEntryId` point at the current one, and clearing a mission's failure reason no longer loses the evidence. A sweeper captures any failure without an entry (`CaptureMode` Sweeper), and `POST /api/v1/blackbox/backfill` captures failures from before the upgrade (Backfill). Every capture emits `mission.status_changed` with `PreviousStatus`, and missions record their start commit (`Mission.StartCommit`) at every provision.
+- Enrichment runs git on the host that owns the dock (the Admiral, or a Harbor over the Harbor link): worktree and branch state, `git status` of the worktree and target, target commits since the start commit, conflict attribution by `Armada-Mission-Id` trailer, concurrent missions on the same files, directory roll-ups, earlier attempts and rescues, evidence objects (agent output, mission log tail, diff and diff stat, check and verification output, merge entry, events) and the effective configuration with the source of every value.
+- Every black box entry is analyzed by a versioned rule catalog (66 rules, `BBX-LAND-001` to `BBX-UNKNOWN-001`, every failure phase covered): why findings with confidence and evidence, configuration recommendations, Armada improvement hypotheses with source pointers, ranked recovery paths with MCP, REST and CLI commands, a weighted triage verdict (a tie reports Unknown and both candidates) and a plain-language summary. Entries analyzed with older rules are re-analyzed in the background.
+- Recovery paths and configuration recommendations run only the action recorded in the entry: a dry run returns the plan and a 10-minute, single-use confirm token bound to the entry, the path and the mission version; the confirmed run re-checks the mission, refuses data-loss paths without `acknowledgeDataLoss`, authorizes every step as if the caller called the tool directly, annotates the entry and emits `blackbox.recovery_run`.
+- The effective configuration in an entry names the source of every value (mission, voyage, vessel, workflow profile, captain, persona, global or default), with the landing handler's precedence.
+- With `blackBox.summaryEndpointId` set, a model endpoint writes the entry summary (labeled model-written); any failure keeps the rules summary.
+- Every entry has one FIX THIS brief (`brief.md`), written for a coding agent: it asks the reader to triage the failure (UserConfig, MissionBrief, Transient, ArmadaDefect or External) and then fix it with evidence, and every surface serves it. The maintainer bundle groups up to 50 entries by fingerprint and asks for ranked Armada mission briefs; fingerprint trends count a failure mode per Armada version; entries export as sanitized regression fixtures.
+- `update_vessel` accepts `landingMode` (or `Default` to clear the vessel's override).
+- Resilience bias: the black box has a strong bias toward finding problems within Armada's own handoff and landing. In the handoff and landing scope (phases Handoff, Landing, MergeQueue, Recovery and Provision, output contract parsing, check harness errors, a false scope check, and dock, worktree, branch and target-sync facts of any phase) the advisor adds the `BBX-PRIOR-ARMADA` vote for ArmadaDefect, so ArmadaDefect wins unless a rule has strong, specific evidence for another verdict; a verdict that rests on the prior alone is a suspected Armada defect with Low confidence. Outside the scope triage is unchanged.
+- Every analyzed entry has an Armada resilience section (`analysis.resilience`): whether Armada could have healed the failure by itself and how, the detection gap and the invariant that should hold, code pointers into the handoff and landing services at the build commit, proposed Armada changes as mission briefs ranked by impact (severity escalates with recurrence: once Medium, 3 or more High, 5 or more or across 2 Armada versions Critical), the regression test, and the recoveries Armada already attempted. Rules version 2 adds resilience content to every handoff and landing rule and 24 new rules (moved targets, rejected pushes, credentials, pull requests, missing branches, exhausted retries and deferrals, unpublished ancestry, stale merge entries, queue repository and push failures, check harness errors and flakes, stale worktrees, branch and start commit provisioning, vanished docks, plan parsing, stage hardening, integration barriers, unconfirmed stops, orphaned exits, missing merge handoffs, exhausted redispatches). Existing entries are re-analyzed in the background.
+- In scope the enrichment records the handoff and landing trail (`record.handoff`, `evidence/handoff-timeline.json`): the ordered completion, stage check, handoff, landing, retry, deferral and reconcile steps, the automatic recoveries and their outcomes, dock and lease transitions and target movement.
+- The brief puts `## Armada resilience` right after the Summary and, in scope, asks the reader to look for the Armada fix (with a test) first; the summary leads with "Armada's landing could not ...; Armada could have ..."; the model-written summary and the Ask Armada guidance carry the same bias, and Ask offers Draft an Armada fix mission from the top proposed change.
+- Armada resilience gaps: `POST /api/v1/blackbox/resilience-gaps/enumerate`, MCP `list_blackbox_resilience_gaps`, `ArmadaClient.EnumerateBlackBoxResilienceGapsAsync` and `armada blackbox gaps` list the handoff and landing failure modes triaged ArmadaDefect, grouped by fingerprint with occurrences, Armada versions and severity; `list_blackbox_entries` and the enumerate route take `resilienceScope`; `get_blackbox`'s summary carries the self-healable verdict, detection gap and top proposed change; `read_blackbox_section` reads `Resilience` and `Handoff`. The maintainer bundle defaults to the resilience gaps (`allFailures` for every failure), ranks groups by severity and recurrence, carries each group's proposed Armada changes and regression tests and asks for Armada missions.
+- The dashboard panel, TUI, mobile app, VS Code extension and `armada blackbox show` show the Armada resilience section with a Suspected Armada defect marker and a Draft Armada fix mission action; the dashboard Black Box tab and the TUI have an Armada resilience gaps view.
+- Objects: `record.json` (versioned, JSON Schema in `docs/blackbox-record.schema.json`), `brief.md` (the FIX THIS brief) and `evidence/*`, all redacted (registered secrets, private keys, authorization headers, credentials in URLs, GitHub, Anthropic, OpenAI, AWS, Azure, Google and Slack tokens, JWTs, secret pairs) and bounded (record 256 KB, briefs 40 KB, evidence `maxEvidenceObjectBytes`).
+- REST (tag `BlackBox`, 40 routes): mission and voyage entries and briefs (`redactHosts`), entries per mission, entry reads, sections, objects with ranged reads (1 MB per read, `X-BlackBox-Next-Offset`, `ETag` the SHA-256), `.zip` download with `manifest.json`, notes, resolve, pin and unpin, recovery and recommendation dry runs and confirmed runs, reanalyze, export-fixture, list, enumerate and search, maintainer bundle, hotspots, fingerprints and fingerprint trends, resilience gaps, delete and bulk delete (1000 ids), purge, garbage collection, retention, storage status, storage migration and backfill. Errors carry `Data.Code`: `BlackBoxNotFound` (404, also for another tenant's entry), `BlackBoxDeleting`, `BlackBoxObjectCorrupt` and `BlackBoxConfirmationRequired` (409), `BlackBoxObjectMissing` (410), `BlackBoxStoreUnavailable` (503).
+- MCP: 24 tools (`get_blackbox`, `read_blackbox_section`, `list_blackbox_objects`, `read_blackbox_object` in 64 KB chunks, `list_blackbox_entries`, `search_blackbox`, `list_blackbox_notes`, `get_blackbox_bundle`, `list_blackbox_hotspots`, `list_blackbox_fingerprints`, `get_blackbox_fingerprint_trend`, `get_blackbox_retention`, `get_blackbox_storage`, `list_blackbox_resilience_gaps`, `annotate_blackbox`, `resolve_blackbox`, `run_blackbox_recovery`, `apply_blackbox_recommendation`, `pin_blackbox`, `delete_blackbox_entries`, `purge_blackbox`, `run_blackbox_gc`, `export_blackbox_fixture`, `reanalyze_blackbox`), entity type `blackbox` in `enumerate`, `LastBlackBoxEntryId` on `mission_status` and `voyage_status`, resources `armada://blackbox/{entryId}/brief.md`, `.../record.json`, `.../objects/{name}` and `armada://missions/{missionId}/blackbox`, and prompts `review_blackbox` and `explain_blackbox`. The read tools are on the Ask Armada read-only allowlist; the write tools become Ask proposals.
+- WebSocket: commands `blackbox.get`, `blackbox.brief` and `blackbox.list`, and events `blackbox.captured`, `blackbox.capture_failed`, `blackbox.analyzed`, `blackbox.resolved`, `blackbox.deleted`, `blackbox.storage_fallback`, `blackbox.gc_completed` and `blackbox.recovery_run`.
+- Clients: `Armada.Client` has a method per route (`GetMissionBlackBoxAsync`, `GetBlackBoxBriefAsync`, `ReadBlackBoxObjectAsync`, `RunBlackBoxRecoveryAsync`, `MigrateBlackBoxStorageAsync`, ...), the legacy core client (`ArmadaApiClient`) covers the read, brief, section, resolve and recovery calls, and the dashboard TypeScript client (shared with the mobile app) covers every route.
+- New `blackBox` settings: `enabled` (true), `captureTimeoutMs` (2000), `storage` (`target` Database, `keyPrefix`, `compress`, `maxEvidenceObjectBytes` 1 MB, `maxEntryBytes` 8 MB, `fallbackToDatabase` true, and `disk`, `s3`, `azureBlob`, `googleCloud`, `cifs` and `nfs` blocks whose secrets are masked on read and never logged), `retention` (`retentionDays` 180, `resolvedRetentionDays` 30, `keepLatestPerMission`, `maxEntriesPerVessel` 1000, `maxTotalBytes` 1 GB, `deleteWithMission` false, `deleteWithVessel` true, `gcIntervalMinutes` 60, `gcBatchSize` 200, `orphanGraceHours` 24), `sweeper` (`intervalSeconds` 60, `pageSize` 100, `maxEnrichmentAttempts` 5) and `summaryEndpointId`. Vessels gain `BlackBoxRetentionDays`.
+- Storage targets: Database (default, included in backups), Disk, S3 and S3-compatible (Less3, MinIO), Azure Blob, Google Cloud Storage, CIFS and NFS through Blobject 6.1.2; the target is recorded per entry, failed external writes fall back to the database (`blackbox.storage_fallback`), a resumable, SHA-256-verified migration job moves entries between targets, `GET /api/v1/doctor` gains a Black Box Storage check, the storage inventory reports black box bytes per target, and the backup manifest lists entries stored outside the database.
+- Retention and garbage collection: expiry, per-vessel and global quotas, cascades on vessel, mission and tenant deletion, two-phase deletes, an orphan sweep for external targets and a missing-object check, every `gcIntervalMinutes` and on demand (dry run available); pinning keeps an entry; purge by filter is a dry run by default. Prometheus metrics `armada_blackbox_entries_total`, `armada_blackbox_bytes`, `armada_blackbox_gc_deleted_total` and `armada_blackbox_capture_failures_total`.
+- Dashboard: a black box panel on mission and voyage pages (sections following the brief, Copy Markdown (the FIX THIS brief), Copy JSON, a .zip download, recovery and recommendation dry runs with confirmation, Resolve, Pin, Reanalyze, notes, attempts, Ask Armada about this failure, live updates), a Black Box tab on the Missions page (`/missions?tab=blackbox`, with its own sections Entries with saved filters, Fingerprints, Hotspots, Recovery stats, and Retention with a GC preview and purge by filter; `/blackbox` redirects there and the command palette lists it), a `/blackbox/{id}` entry page, Black Box storage and retention settings with a health check and migration, Inbox failure actions and a storage usage category, in every locale.
+- VS Code extension (`src/Armada.VSCode`): an Armada Failures view, Copy, Open and Send FIX THIS, recovery with a dry run and confirmation, resolve, notes, Ask Armada, conflict and hotspot file decorations, and live updates.
+- Mobile app: the black box on mission and voyage detail (summary, recovery with confirmation, resolve, notes, copy, share sheet, Ask Armada), and a Black Box tab on the Missions hub with an entry screen.
+- Postman: a Black Box folder with a request, tests and saved examples per route, and a mock in `postman/mocks/blackbox`.
+- Breaking changes: none. New fields and routes are additive.
+
+### Black box prevention, forensics and operations
+
+- Dispatch warns about overlapping work: a mission's likely files (its scoped-files directive and the repository paths its brief names that exist in the vessel) are compared with the vessel's active missions, black box conflict hotspots and reserved directories, and the warnings come back as `OverlapWarnings` on REST `POST /api/v1/missions` and `POST /api/v1/voyages` and MCP `create_mission` and `dispatch`. `POST /api/v1/vessels/{id}/overlap-preview` (MCP `preview_mission_overlap`) shows the same before dispatching.
+- `Vessel.SerializeOverlappingMissions` (default false; REST, `add_vessel`, `update_vessel`) chains a dispatched mission after the overlapping active mission with `DependsOnMissionId`; an explicit dependency is never replaced.
+- Soft directory reservations: an active mission's scoped files in a directory the black box marks hot (`blackBox.hotspotReservationThreshold`, default 3, 0 off) reserve it; a second mission there is warned or chained. `GET /api/v1/vessels/{id}/reservations`, MCP `list_vessel_reservations`.
+- The brief linter flags dependency language without `dependsOnMissionId`, verification-only briefs likely to fail as NoOp, host and parent-relative paths, and paths outside the vessel; dispatch returns the findings as `BriefLintWarnings` and never blocks. `POST /api/v1/missions/lint-brief`, MCP `lint_mission_brief`.
+- The configuration doctor lists the recommendations that recur across a vessel's black box entries (count, first and last seen, an example entry): `GET /api/v1/vessels/{id}/blackbox-doctor`, MCP `get_vessel_blackbox_doctor`.
+- Attempt diff (`GET /api/v1/blackbox/{id}/diff/{otherId}`, MCP `diff_blackbox_entries`), combined timeline across the entry, mission, dock, merge entry, captain and Harbor link (`GET /api/v1/blackbox/{id}/timeline`, MCP `get_blackbox_timeline`) and the voyage cascade graph (`GET /api/v1/voyages/{id}/blackbox/cascade`, MCP `get_voyage_blackbox_cascade`).
+- The success flight recorder keeps a minimal record of each successful landing for `blackBox.successRetentionDays` (default 7, 0 off); a failure's record lists nearby successes on the same vessel that touched the same files (`Related.NearbySuccesses`, `GET /api/v1/blackbox/{id}/nearby-successes`, MCP `list_blackbox_nearby_successes`).
+- Recovery paths link to runbooks tagged `blackbox: <path, rule, step or kind>` and a confirmed run starts the runbook instead of the tool steps. Every confirmed recovery run is tracked until the mission's next terminal status; per-path success rates (`GET /api/v1/blackbox/recovery-stats`, MCP `get_blackbox_recovery_stats`) break ties between equally weighted paths.
+- New tables `blackbox_successes` and `blackbox_recovery_outcomes` and the column `vessels.serialize_overlapping_missions` (migrations 105 and 106, every provider); `Armada.Client` gains the matching methods.
+
+### Black box evidence fixes
+
+- A verified fast-forward into a dirty target checkout reports the checkout's real `git status --porcelain` paths (tracked and untracked) in `GitDirtyCheckoutException.ModifiedPaths`, instead of parsing a sentence into a garbage path.
+- `retry_landing` lists conflicted files from the worktree where the merge ran (the dock worktree, then the target checkout), and from the conflicted files a merge read before it aborted, instead of from the owning repository, where the list was nearly always empty.
+- The merge queue reads the conflicted files of a failed merge before aborting it and names them in the entry's output and the mission's failure reason.
+- The merge queue classifies a failed entry by the step that failed: a real merge conflict is `LandingConflict`, a landing check that ran and failed is `TestFail` (`Timeout` when it ran out of time), and an unresolvable repository, a failed fetch or worktree, a check that could not run or rewrote the commit, and a refused push are `Infra`. Every merge queue failure was `LandingConflict` before, so non-conflict failures were auto-rescued. The structured facts (`MergeQueueFailure`: step, kind, conflicted files, target commit) are the Payload of the `mission.landing_failed` event the queue records; landing checks that do not pass raise `LandingVerificationException` with the command, exit code and commit.
+- `mission.landing_target_advanced` carries a payload (`LandingTargetAdvancedPayload`): the dock head `Before` and `After` integrating the target, the target branch, and the remote and local target tips it integrated against.
+- Every mission failure write records a `FailureKind`: a stranded landing handoff (`LandingConflict` for a real conflict, otherwise `Infra`), a lost merge queue handoff, an unverified orphan exit, a stop or recall the owning host never confirmed, a landing that was not attempted, and an unresolvable retry repository are `Infra`; missions cancelled because their vessel was deleted are `OperatorAction`. A kindless `LandingFailed` mission was classified as a landing conflict and auto-rescued.
+- `maxLandingRetries` (default 3) now limits automatic retries of a landing deferred on a dirty checkout: each deferral is retried at most that many times (recorded as `mission.landing_auto_retry`), then `mission.landing_retries_exhausted` is recorded once and the landing waits for a manual retry; 0 disables automatic retries. The setting was never read before.
+
+### Harbor and Helm packaging
+
 - macOS Harbor bundles store the pi permission-gate extension in `Contents/Resources/Pi`, and pi resolves it there as well as beside portable binaries. This prevents ARM64 code signing from treating TypeScript resources as unsigned nested code. The DMG verifier checks the resource layout.
 - After building and verifying both Harbor DMGs, `build-harbor-app.sh` installs the native app into `~/Applications`, staging and signature-checking a fresh bundle before replacement. `--no-install` opts out, and `--no-build` remains verification-only.
 - Helm's NuGet tool package preserves battery fixture `.gitignore` and `.gitattributes` files instead of excluding them with NU5119 warnings. Installer verification checks every packaged framework for those files.
-- The token usage page shows an error and a retry control when the summary request fails. A successful response with no usage still says the time range is empty. A failed load for a new filter does not keep the previous filter's chart.
 
 ### Landing failure prevention
 
@@ -110,6 +527,8 @@ Request lists over their limit are a typed `CollectionLimitExceeded` error (REST
 
 #### Added
 
+- Complete usage-selection enforcement/recovery: persist classified shared-account provider cooldowns against actual execution attribution; retain retry hints in history; distinguish proven-unstarted cleanup from ambiguous launches. Add audited, revision-checked administrator permissions for eligible fallback and soft-reserve exceptions through Dashboard, REST, MCP and .NET clients. Preserve strict assignments and all hard gates. Migration 127 and four-provider contention/lifecycle tests accompany the change.
+
 - REST: `POST /api/v1/ask/threads/{id}/work/enumerate`, `.../work/{workId}/missions/enumerate`,
   `.../work/{workId}/targets/enumerate`, `.../proposals/enumerate`, `.../messages/{messageId}/tool-calls/enumerate`,
   `.../turn/tool-calls/enumerate`, `POST /api/v1/planning-sessions/{id}/messages/enumerate`, and
@@ -181,6 +600,10 @@ Part of the bounded enumeration contract ([docs/ENUMERATION.md](docs/ENUMERATION
 - Conditional landing and merge-queue status writes preserve concurrent cancellation/newer attempts. Queue reconciliation records the verified integration SHA before publication for restart recovery.
 - Cancellation and deletion preserve tenant-scoped mission archives with failure, branch, commit, dock, stage attempts and recent diagnostics. Cascade cleanup retains archives; the receipt explicitly distinguishes stopping recovery from verified resolution.
 - Health reports include the running binary's embedded build version and source commit. Updated landing-mode guidance and translations describe isolated publication.
+- A captain whose Harbor lost its link to the Admiral is unreachable, not stalled. It records one `captain.unreachable` event (typed payload: `harborId`, `since`, `lastActivityUtc`), starts no recovery, counts no recovery attempt, and keeps its mission `InProgress` for up to the new `HarborDisconnectGraceMinutes` setting (default 60, 0 turns the grace off, 0 to 1440); after the grace it is handed to normal stall recovery. Previously a DNS outage of the Admiral's host name made every health check record `captain.stalled` and `captain.stop_unconfirmed` (317 of each in 56 minutes) without the attempt counter advancing.
+- When the Harbor reconnects (after its first heartbeat, or 30 seconds), the captain is reconciled against the job's real state and `captain.reconciled` records the outcome: a captain still working resumes with its stall clock restarted at the reconnect; a pending stop of a job that is still running and silent is re-sent (`captain.stop_redelivered`) and recovery continues once it is confirmed; a stop is cancelled, and the waiting attempts given back, when the job reported activity after it; a job that already exited is left to the normal exit path.
+- A stop the owning host cannot confirm no longer re-enters recovery on every health check: one `captain.stop_unconfirmed` per episode (typed payload with the attempt, purpose and next retry), each attempt counts ("Automatic recovery N of M" advances), and retries back off 1, 2, 4, 8, then 15 minutes, with one `captain.stalled` per real attempt that says it follows an unconfirmed stop. The episode is rebuilt from its events after an Admiral restart, so a restart does not restart the retries.
+- The black box resolves the Open entries of a mission that later completes (`mission.completed`, or `mission.landing_reconciled` when its work is proven landed): resolution `Resolved`, note "Mission completed after this failure at <utc>; commit <sha>" (plus the landed commit when known), a System note, and recomputed expiry. Operator-resolved entries are left alone; pinned entries stay pinned. Recovery paths that no longer apply to the mission carry `notApplicableReason` ("Not applicable: the mission is Complete."), which the brief, summary and dashboard show instead of recommending them. New rule BBX-RECOV-006 describes an unconfirmed stop while the Harbor was disconnected as "Harbor link lost; the captain may still be working" (rules version 3).
 
 ### Added
 
@@ -237,19 +660,7 @@ Part of the bounded enumeration contract ([docs/ENUMERATION.md](docs/ENUMERATION
 - Vessels gain nullable `TestCommand`, `LintCommand` and `AuditCommand` overrides (schema migration 99 on all four providers), exposed through REST, MCP `add_vessel`/`update_vessel`, the .NET client, the dashboard vessel form and the Postman collection.
 - Fleet action templates accept `{{vessel.ecosystems}}`, `{{vessel.testCommand}}`, `{{vessel.lintCommand}}` and `{{vessel.auditCommand}}`; existing variables are unchanged.
 
-## v1.2.0 (2026-10-27)
-
-v1.2.0 adds pi (pi.dev) as a first-class captain runtime, with Armada MCP, Approve in Armada and Refuse support (see
-the first section below). The rest of the release is about model evaluation: knowing how well each model does the work
-it is given, and handing work to it in a form it can use. Every stage attempt is recorded as a stage outcome with its provenance (runtime version, model
-digest, escalation record) and a suspected cause; Quick probes give a captain or model endpoint a probe-only
-**Evaluate**; the fixture battery runs data-defined task packs (starting with C#) through real dispatch; and handoffs
-are delivered with their reader in mind. The release also improves captain usage visibility and management, and adds
-mobile interfaces for the new surfaces. Since v1.1.0 was cut it also includes the `ExcludeReviewAuthorsFromJudge`
-setting, Quick probes, and the fixture battery with its C# pack. Schema migrations 96 and later apply automatically at
-startup; see [UPGRADING.md](docs/UPGRADING.md#v110-to-v120).
-
-### pi runtime (lead highlight)
+### pi runtime
 
 - **pi as a captain runtime.** New captain runtime `Pi` for the pi coding agent (pi.dev, verified with pi 1.4.0 on macOS): `armada captain add pi-1 --runtime pi`. Captains launch `pi -p --mode json --no-session` with the prompt on stdin, `--model provider/id`, and reasoning effort mapped 1:1 to `--thinking off|minimal|low|medium|high`. `AgentRuntimeEnum.Pi` is appended last (runtimes are stored by name; no migration). The CLI, settings and MCP accept `pi`, `Pi` and `pi-coding-agent`.
 - pi exits 0 in JSON mode even when the provider fails, so Armada reads the stream: a run fails unless it reached `agent_end` with a normal stop (`error`, `aborted`, `length`, or no `agent_end` give a nonzero exit code). Provider errors are classified from the terminal records by their leading HTTP status (a retry that recovers is not reported). Token usage and cost come from each assistant `message_end`; mission output, Ask turns and planning sessions show readable text, thinking and tool calls, never raw JSON.
@@ -1408,6 +1819,17 @@ Focus: stickiness and reliability -- making Armada a daily driver through per-pr
 - Added an `inbox` MCP tool so agent harnesses can answer "is there anything waiting on me / that needs my attention / any action items from Armada?". It returns the same consolidated attention list as the dashboard's Needs You and the `armada inbox` CLI (REST: `GET /api/v1/inbox`), with counts and per-item kind/severity/title/detail/entity/href.
 - Broadened the inbox definitions beyond missions + stalled captains to cover the full human-in-the-loop / human-out-of-the-loop set: missions in Review, landing-failed and failed missions, **failed merges**, **deployments pending approval**, **failed/verification-failed deployments**, and stalled captains. Purely informational events (completions, normal progress) are excluded.
 - Documented in MCP_API.md (with the kind/severity table) and added the tool to every `INSTRUCTIONS_FOR_*` orchestrator reference.
+
+### Scheduling admission
+
+- Serialize vessel gates per vessel, then shared global/runtime/endpoint/captain claims with a fixed lock order. Both waits are bounded; timed-out requests retry on the next cycle and increment `armada.admission.lock_timeouts` by gate. Idle registry entries are removed, and neither lock is held while provisioning docks or launching processes.
+- Spread equivalent work across eligible captains with fewer occupied slots while preserving explicit captain selection, persona preferences, priority classes and tier routing. Add lock isolation/cleanup and 200-mission mixed-limit regression coverage.
+
+### Waiting diagnostics and remedies
+
+- Share running branch/broad-scope safety decisions between dispatch and waiting diagnostics, and reuse the exact runtime/endpoint admission filter. A free captain behind a saturated runtime or endpoint now reports `RuntimeMissionLimit` or `EndpointMissionLimit`; disabled, unhealthy and circuit-broken endpoints report `EndpointUnavailable`.
+- Add bounded `Advice` next steps to REST mission reads and MCP `mission_status`. Suggestions use occupied capacity, preserve running work after a limit reduction, never suggest unlimited or exceed hard ceilings, and suggest adding CLI captains instead of raising their parallelism. Readers without global-admin privileges receive explanation text without configuration actions.
+- Show compact next steps in the Dashboard's waiting card, with direct links into existing vessel/captain/endpoint edit forms. Mobile and TUI display the same explanations. Existing breadcrumbs and card spacing are retained. Advice links match the action buttons’ height, and the captain detail editor now uses the same modal sizing as the Captains list editor.
 
 ### Dashboard navigation consolidation
 - Regrouped the dashboard from ~35 nav destinations across 6 sections to ~13 workflow-grouped destinations, without removing any capability: every folded page is reachable as a tab, a filter, the notification bell, or the command palette, and every old route redirects.

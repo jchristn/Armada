@@ -359,6 +359,7 @@ namespace Test.Smoke
             "Services.VesselHealthRollup",
             "Services.VesselHealthTestInfra",
             "Services.VoyageCancel",
+            "Services.WorkerEnvelope",
             "Services.WorkspaceDiff",
             "Services.WorkspaceExec",
             "Services.WorkspaceService",

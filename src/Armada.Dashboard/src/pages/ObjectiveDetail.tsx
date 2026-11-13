@@ -76,6 +76,7 @@ import ConfirmDialog from '../components/shared/ConfirmDialog';
 import ErrorModal from '../components/shared/ErrorModal';
 import JsonViewer from '../components/shared/JsonViewer';
 import PageHeader from '../components/shared/PageHeader';
+import { ErrorState } from '../components/shared/StateBlocks';
 import StatusBadge from '../components/shared/StatusBadge';
 import { buildObjectiveDuplicatePayload } from '../lib/duplicates';
 import { refinementSummaryFromEvent } from '../lib/refinementSummary';
@@ -161,6 +162,8 @@ export default function ObjectiveDetail() {
   const [saving, setSaving] = useState(false);
   const [refreshingGitHub, setRefreshingGitHub] = useState(false);
   const [error, setError] = useState('');
+  // A failed entity load (for example a stale link) renders an error state instead of an empty editor.
+  const [loadFailure, setLoadFailure] = useState<{ id: string | undefined; message: string } | null>(null);
   const [jsonData, setJsonData] = useState<{ open: boolean; title: string; data: unknown }>({ open: false, title: '', data: null });
   const [confirm, setConfirm] = useState<{ open: boolean; title: string; message: string; onConfirm: () => void }>({
     open: false,
@@ -489,7 +492,7 @@ export default function ObjectiveDetail() {
         await loadRefinementSessions(result.id, requestedRefinementSessionId || undefined);
         setError('');
       } catch (err: unknown) {
-        if (mounted) setError(err instanceof Error ? err.message : t('Failed to load backlog item.'));
+        if (mounted) setLoadFailure({ id, message: err instanceof Error ? err.message : t('Failed to load backlog item.') });
       } finally {
         if (mounted) setLoading(false);
       }
@@ -829,20 +832,22 @@ export default function ObjectiveDetail() {
     );
   }
 
+  if (!createMode && loadFailure && loadFailure.id === id) {
+    return (
+      <div>
+        <PageHeader breadcrumb={[{ label: t('Backlog'), to: canonicalListPath }, { label: id || '' }]} title={id || ''} />
+        <ErrorState message={loadFailure.message} />
+      </div>
+    );
+  }
+
   return (
     <div>
       <PageHeader
-        breadcrumb={
-          <>
-            <Link to={canonicalListPath}>{t('Backlog')}</Link> <span className="breadcrumb-sep">&gt;</span> <span>{createMode ? t('New Backlog Item') : title}</span>
-            {!isBacklogPath && !createMode && objective && (
-              <>
-                <span className="breadcrumb-sep">&gt;</span>
-                <Link to={canonicalItemPath(objective.id)} title={t('Open this item at its standard /backlog address, the link to bookmark or share.')}>{t('Canonical Backlog Route')}</Link>
-              </>
-            )}
-          </>
-        }
+        breadcrumb={[
+          { label: t('Backlog'), to: canonicalListPath },
+          { label: createMode ? t('New Backlog Item') : title },
+        ]}
         title={createMode ? t('Create Backlog Item') : title}
         subtitle={
           !createMode && objective ? (
@@ -857,6 +862,9 @@ export default function ObjectiveDetail() {
         }
         actions={
           <>
+          {!isBacklogPath && !createMode && objective && (
+            <Link className="btn btn-sm" to={canonicalItemPath(objective.id)} title={t('Open this item at its standard /backlog address, the link to bookmark or share.')}>{t('Canonical Backlog Route')}</Link>
+          )}
           {!createMode && (
             <button className="btn btn-sm" onClick={() => setJsonData({ open: true, title, data: objective })} title={t('Show the raw backlog item record as the API returns it.')}>
               {t('View JSON')}

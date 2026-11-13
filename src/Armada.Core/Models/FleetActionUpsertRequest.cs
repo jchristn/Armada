@@ -17,6 +17,12 @@ namespace Armada.Core.Models
         public string? OutputParser { get; set; }
         /// <summary>Source action built-in key (or ID) for {{scan.summary}}.</summary>
         public string? ScanSourceActionKey { get; set; }
+        /// <summary>Optional applicability check command (POSIX); an empty string clears it.</summary>
+        public string? ApplicabilityCommand { get; set; }
+        /// <summary>Optional Windows applicability check command; an empty string clears it.</summary>
+        public string? ApplicabilityCommandWindows { get; set; }
+        /// <summary>Mission mode for Mission actions (Implementation, Audit, or Research).</summary>
+        public MissionModeEnum? MissionMode { get; set; }
         /// <summary>Executable names required on the target host PATH.</summary>
         [CollectionBound(CollectionLimits.MaxConfigItems)]
         public System.Collections.Generic.List<string>? RequiredTools { get; set; }

@@ -51,7 +51,7 @@ namespace Test.Shared.Suites.Services
                 h.Captains.OnLaunchAgent = (_, _, _) => throw new InvalidOperationException("launch must not be reached");
 
                 Vessel vessel = await CreateVesselAsync(testDb).ConfigureAwait(false);
-                Captain captain = await testDb.Driver.Captains.CreateAsync(new Captain("provision-fails")).ConfigureAwait(false);
+                Captain captain = await CaptainAssignmentFixture.CreateAsync(testDb.Driver, new Captain("provision-fails")).ConfigureAwait(false);
                 Mission mission = await testDb.Driver.Missions.CreateAsync(new Mission("Work", "Do it") { VesselId = vessel.Id }).ConfigureAwait(false);
 
                 bool assigned = await h.Missions.TryAssignAsync(mission, vessel).ConfigureAwait(false);
@@ -63,7 +63,7 @@ namespace Test.Shared.Suites.Services
                 AssertNull(reverted.DockId);
                 Captain? idle = await testDb.Driver.Captains.ReadAsync(captain.Id).ConfigureAwait(false);
                 AssertEqual(CaptainStateEnum.Idle, idle!.State);
-                AssertNull(idle.CurrentMissionId);
+                AssertNull(idle.ActiveMissionIds.SingleOrDefault());
             }));
 
             cases.Add(CaseAsync("launch_failure_rolls_back_once", "A launch exception rolls back the mission, captain and dock through one boundary", TestTags.Negative, async () =>
@@ -73,7 +73,7 @@ namespace Test.Shared.Suites.Services
                 h.Captains.OnLaunchAgent = (_, _, _) => throw new IOException("simulated launch failure");
 
                 Vessel vessel = await CreateVesselAsync(testDb).ConfigureAwait(false);
-                Captain captain = await testDb.Driver.Captains.CreateAsync(new Captain("launch-fails")).ConfigureAwait(false);
+                Captain captain = await CaptainAssignmentFixture.CreateAsync(testDb.Driver, new Captain("launch-fails")).ConfigureAwait(false);
                 Mission mission = await testDb.Driver.Missions.CreateAsync(new Mission("Work", "Do it") { VesselId = vessel.Id }).ConfigureAwait(false);
 
                 AssertFalse(await h.Missions.TryAssignAsync(mission, vessel).ConfigureAwait(false));
@@ -83,7 +83,7 @@ namespace Test.Shared.Suites.Services
                 AssertNull(reverted.DockId);
                 Captain? idle = await testDb.Driver.Captains.ReadAsync(captain.Id).ConfigureAwait(false);
                 AssertEqual(CaptainStateEnum.Idle, idle!.State, "the claimed captain is released");
-                AssertNull(idle.CurrentDockId);
+                AssertNull(idle.Assignment?.DockId);
                 List<Dock> docks = await testDb.Driver.Docks.EnumerateAsync().ConfigureAwait(false);
                 AssertFalse(docks.Any(d => d.Active && d.CaptainId == captain.Id), "the provisioned dock is reclaimed");
             }));
@@ -107,7 +107,7 @@ namespace Test.Shared.Suites.Services
                 };
 
                 Vessel vessel = await CreateVesselAsync(testDb).ConfigureAwait(false);
-                Captain captain = await db.Captains.CreateAsync(new Captain("fast-exit")).ConfigureAwait(false);
+                Captain captain = await CaptainAssignmentFixture.CreateAsync(db, new Captain("fast-exit")).ConfigureAwait(false);
                 Mission mission = await db.Missions.CreateAsync(new Mission("Work", "Do it") { VesselId = vessel.Id }).ConfigureAwait(false);
 
                 AssertTrue(await h.Missions.TryAssignAsync(mission, vessel).ConfigureAwait(false));
@@ -128,7 +128,7 @@ namespace Test.Shared.Suites.Services
                 h.Captains.OnLaunchAgent = (_, _, _) => throw new HarborDockNotFoundException("hbr_missing", "/nowhere", "the Harbor does not have this dock");
 
                 Vessel vessel = await CreateVesselAsync(testDb).ConfigureAwait(false);
-                Captain captain = await db.Captains.CreateAsync(new Captain("dock-missing")).ConfigureAwait(false);
+                Captain captain = await CaptainAssignmentFixture.CreateAsync(db, new Captain("dock-missing")).ConfigureAwait(false);
                 Voyage voyage = await db.Voyages.CreateAsync(new Voyage("dock-missing") { Status = VoyageStatusEnum.InProgress }).ConfigureAwait(false);
                 Mission worker = await db.Missions.CreateAsync(new Mission("[Worker] Build", "Build it") { VesselId = vessel.Id, VoyageId = voyage.Id, Persona = "Worker" }).ConfigureAwait(false);
                 Mission judge = await db.Missions.CreateAsync(new Mission("[Judge] Review", "Review it") { VesselId = vessel.Id, VoyageId = voyage.Id, Persona = "Judge", DependsOnMissionId = worker.Id }).ConfigureAwait(false);
@@ -162,7 +162,7 @@ namespace Test.Shared.Suites.Services
                 admiral.OnReconcileManualLandings = _ => throw new InvalidOperationException("simulated reconciliation failure");
 
                 Vessel vessel = await CreateVesselAsync(testDb).ConfigureAwait(false);
-                await db.Captains.CreateAsync(new Captain("dispatch-after-failure")).ConfigureAwait(false);
+                await CaptainAssignmentFixture.CreateAsync(db, new Captain("dispatch-after-failure")).ConfigureAwait(false);
                 Mission mission = await db.Missions.CreateAsync(new Mission("Work", "Do it") { VesselId = vessel.Id }).ConfigureAwait(false);
 
                 await admiral.HealthCheckAsync().ConfigureAwait(false);
@@ -180,7 +180,7 @@ namespace Test.Shared.Suites.Services
                 DatabaseDriver db = testDb.Driver;
 
                 Vessel vessel = await CreateVesselAsync(testDb).ConfigureAwait(false);
-                Captain judgeCaptain = await db.Captains.CreateAsync(new Captain("no-verdict-judge") { State = CaptainStateEnum.Working }).ConfigureAwait(false);
+                Captain judgeCaptain = await CaptainAssignmentFixture.CreateAsync(db, new Captain("no-verdict-judge") { State = CaptainStateEnum.Working }).ConfigureAwait(false);
                 Voyage voyage = await db.Voyages.CreateAsync(new Voyage("repair") { Status = VoyageStatusEnum.InProgress }).ConfigureAwait(false);
                 Mission judge = await CreateRunningMissionAsync(testDb, h, vessel, voyage, judgeCaptain, "Judge", false).ConfigureAwait(false);
 
@@ -208,7 +208,7 @@ namespace Test.Shared.Suites.Services
                 DatabaseDriver db = testDb.Driver;
 
                 Vessel vessel = await CreateVesselAsync(testDb).ConfigureAwait(false);
-                Captain judgeCaptain = await db.Captains.CreateAsync(new Captain("gated-judge") { State = CaptainStateEnum.Working }).ConfigureAwait(false);
+                Captain judgeCaptain = await CaptainAssignmentFixture.CreateAsync(db, new Captain("gated-judge") { State = CaptainStateEnum.Working }).ConfigureAwait(false);
                 Voyage voyage = await db.Voyages.CreateAsync(new Voyage("gated") { Status = VoyageStatusEnum.InProgress }).ConfigureAwait(false);
                 Mission judge = await CreateRunningMissionAsync(testDb, h, vessel, voyage, judgeCaptain, "Judge", true).ConfigureAwait(false);
 
@@ -231,7 +231,7 @@ namespace Test.Shared.Suites.Services
                 DatabaseDriver db = testDb.Driver;
 
                 Vessel vessel = await CreateVesselAsync(testDb).ConfigureAwait(false);
-                Captain captain = await db.Captains.CreateAsync(new Captain("continuity")).ConfigureAwait(false);
+                Captain captain = await CaptainAssignmentFixture.CreateAsync(db, new Captain("continuity")).ConfigureAwait(false);
                 Voyage voyage = await db.Voyages.CreateAsync(new Voyage("continuity") { Status = VoyageStatusEnum.InProgress }).ConfigureAwait(false);
                 Mission upstream = await db.Missions.CreateAsync(new Mission("[Worker] Build", "Build it")
                 {
@@ -266,7 +266,7 @@ namespace Test.Shared.Suites.Services
                 DatabaseDriver db = testDb.Driver;
 
                 Vessel vessel = await CreateVesselAsync(testDb).ConfigureAwait(false);
-                await db.Captains.CreateAsync(new Captain("continuity-ok")).ConfigureAwait(false);
+                await CaptainAssignmentFixture.CreateAsync(db, new Captain("continuity-ok")).ConfigureAwait(false);
                 Mission upstream = await db.Missions.CreateAsync(new Mission("[Worker] Build", "Build it")
                 {
                     VesselId = vessel.Id, Persona = "Worker", Status = MissionStatusEnum.Complete,
@@ -292,7 +292,7 @@ namespace Test.Shared.Suites.Services
                 DatabaseDriver db = testDb.Driver;
 
                 Vessel vessel = await CreateVesselAsync(testDb).ConfigureAwait(false);
-                Captain captain = await db.Captains.CreateAsync(new Captain("records-commit") { State = CaptainStateEnum.Working }).ConfigureAwait(false);
+                Captain captain = await CaptainAssignmentFixture.CreateAsync(db, new Captain("records-commit") { State = CaptainStateEnum.Working }).ConfigureAwait(false);
                 Voyage voyage = await db.Voyages.CreateAsync(new Voyage("records") { Status = VoyageStatusEnum.InProgress }).ConfigureAwait(false);
                 Mission worker = await CreateRunningMissionAsync(testDb, h, vessel, voyage, captain, "Worker", false).ConfigureAwait(false);
                 await db.Missions.CreateAsync(new Mission("[Judge] Review", "Review it")
@@ -319,8 +319,8 @@ namespace Test.Shared.Suites.Services
                 second.InferenceOptions = new InferenceOptions { MaxConcurrentMissions = 1 };
                 second = await db.ModelEndpoints.CreateAsync(second).ConfigureAwait(false);
 
-                await db.Captains.CreateAsync(new Captain("busy-local", AgentRuntimeEnum.ApiEndpoint) { ModelEndpointId = first.Id, State = CaptainStateEnum.Working, CurrentMissionId = "msn_elsewhere" }).ConfigureAwait(false);
-                Captain idle = await db.Captains.CreateAsync(new Captain("idle-local", AgentRuntimeEnum.ApiEndpoint) { ModelEndpointId = second.Id }).ConfigureAwait(false);
+                await CaptainAssignmentFixture.CreateAsync(db, new Captain("busy-local", AgentRuntimeEnum.ApiEndpoint) { ModelEndpointId = first.Id, State = CaptainStateEnum.Working, Assignment = new Mission { Id = "msn_elsewhere" }}).ConfigureAwait(false);
+                Captain idle = await CaptainAssignmentFixture.CreateAsync(db, new Captain("idle-local", AgentRuntimeEnum.ApiEndpoint) { ModelEndpointId = second.Id }).ConfigureAwait(false);
 
                 Vessel vessel = await CreateVesselAsync(testDb).ConfigureAwait(false);
                 Mission mission = await db.Missions.CreateAsync(new Mission("Work", "Do it") { VesselId = vessel.Id }).ConfigureAwait(false);
@@ -342,8 +342,8 @@ namespace Test.Shared.Suites.Services
                 DatabaseDriver db = testDb.Driver;
 
                 ModelEndpoint gpu = await db.ModelEndpoints.CreateAsync(new ModelEndpoint { Name = "gpu", BaseUrl = "http://gpu-box:11434", Model = "qwen" }).ConfigureAwait(false);
-                Captain first = await db.Captains.CreateAsync(new Captain("gpu-one", AgentRuntimeEnum.ApiEndpoint) { ModelEndpointId = gpu.Id }).ConfigureAwait(false);
-                await db.Captains.CreateAsync(new Captain("gpu-two", AgentRuntimeEnum.ApiEndpoint) { ModelEndpointId = gpu.Id }).ConfigureAwait(false);
+                Captain first = await CaptainAssignmentFixture.CreateAsync(db, new Captain("gpu-one", AgentRuntimeEnum.ApiEndpoint) { ModelEndpointId = gpu.Id }).ConfigureAwait(false);
+                await CaptainAssignmentFixture.CreateAsync(db, new Captain("gpu-two", AgentRuntimeEnum.ApiEndpoint) { ModelEndpointId = gpu.Id }).ConfigureAwait(false);
 
                 for (int i = 0; i < 3; i++) await h.Missions.RecordEndpointOutcomeAsync(first, false).ConfigureAwait(false);
 
@@ -364,7 +364,7 @@ namespace Test.Shared.Suites.Services
 
                 ModelEndpoint gpu = await db.ModelEndpoints.CreateAsync(new ModelEndpoint { Name = "gpu", BaseUrl = "http://gpu-box:11434", Model = "qwen",
                     HealthStatus = EndpointHealthStatusEnum.Unhealthy, LastHealthCheckUtc = DateTime.UtcNow.AddMinutes(-1), LastHealthError = "connection refused" }).ConfigureAwait(false);
-                await db.Captains.CreateAsync(new Captain("gpu-captain", AgentRuntimeEnum.ApiEndpoint) { ModelEndpointId = gpu.Id }).ConfigureAwait(false);
+                await CaptainAssignmentFixture.CreateAsync(db, new Captain("gpu-captain", AgentRuntimeEnum.ApiEndpoint) { ModelEndpointId = gpu.Id }).ConfigureAwait(false);
                 Vessel vessel = await CreateVesselAsync(testDb).ConfigureAwait(false);
                 Mission mission = await db.Missions.CreateAsync(new Mission("Work", "Do it") { VesselId = vessel.Id }).ConfigureAwait(false);
                 AssertFalse(await h.Missions.TryAssignAsync(mission, vessel).ConfigureAwait(false), "a recently unhealthy endpoint gets no new mission");
@@ -388,7 +388,7 @@ namespace Test.Shared.Suites.Services
                     DatabaseDriver db = testDb.Driver;
 
                     Vessel vessel = await CreateVesselAsync(testDb).ConfigureAwait(false);
-                    Captain captain = await db.Captains.CreateAsync(new Captain("stopped-early") { State = CaptainStateEnum.Working }).ConfigureAwait(false);
+                    Captain captain = await CaptainAssignmentFixture.CreateAsync(db, new Captain("stopped-early") { State = CaptainStateEnum.Working }).ConfigureAwait(false);
                     Voyage voyage = await db.Voyages.CreateAsync(new Voyage("stopped") { Status = VoyageStatusEnum.InProgress }).ConfigureAwait(false);
                     Mission mission = await CreateRunningMissionAsync(testDb, h, vessel, voyage, captain, "Worker", false).ConfigureAwait(false);
                     mission.StartedUtc = DateTime.UtcNow.AddMinutes(-3);
@@ -421,7 +421,7 @@ namespace Test.Shared.Suites.Services
                 DatabaseDriver db = testDb.Driver;
 
                 Vessel vessel = await CreateVesselAsync(testDb).ConfigureAwait(false);
-                Captain captain = await db.Captains.CreateAsync(new Captain("resumed-then-noop") { State = CaptainStateEnum.Working }).ConfigureAwait(false);
+                Captain captain = await CaptainAssignmentFixture.CreateAsync(db, new Captain("resumed-then-noop") { State = CaptainStateEnum.Working }).ConfigureAwait(false);
                 Voyage voyage = await db.Voyages.CreateAsync(new Voyage("noop") { Status = VoyageStatusEnum.InProgress }).ConfigureAwait(false);
                 Mission mission = await CreateRunningMissionAsync(testDb, h, vessel, voyage, captain, "Worker", false).ConfigureAwait(false);
                 mission.RedispatchAttempts = 2;
@@ -444,14 +444,14 @@ namespace Test.Shared.Suites.Services
                 h.Captains.OnLaunchAgent = (_, _, _) => Task.FromResult(9401);
                 DatabaseDriver db = testDb.Driver;
 
-                await db.Captains.CreateAsync(new Captain("mux-busy", AgentRuntimeEnum.Mux) { State = CaptainStateEnum.Working, CurrentMissionId = "msn_elsewhere" }).ConfigureAwait(false);
-                await db.Captains.CreateAsync(new Captain("mux-idle", AgentRuntimeEnum.Mux)).ConfigureAwait(false);
+                await CaptainAssignmentFixture.CreateAsync(db, new Captain("mux-busy", AgentRuntimeEnum.Mux) { State = CaptainStateEnum.Working, Assignment = new Mission { Id = "msn_elsewhere" }}).ConfigureAwait(false);
+                await CaptainAssignmentFixture.CreateAsync(db, new Captain("mux-idle", AgentRuntimeEnum.Mux)).ConfigureAwait(false);
                 Vessel vessel = await CreateVesselAsync(testDb).ConfigureAwait(false);
                 Mission mission = await db.Missions.CreateAsync(new Mission("Work", "Do it") { VesselId = vessel.Id }).ConfigureAwait(false);
 
                 AssertFalse(await h.Missions.TryAssignAsync(mission, vessel).ConfigureAwait(false), "Mux is at MaxConcurrent");
 
-                await db.Captains.CreateAsync(new Captain("claude-idle", AgentRuntimeEnum.ClaudeCode)).ConfigureAwait(false);
+                await CaptainAssignmentFixture.CreateAsync(db, new Captain("claude-idle", AgentRuntimeEnum.ClaudeCode)).ConfigureAwait(false);
                 AssertTrue(await h.Missions.TryAssignAsync(mission, vessel).ConfigureAwait(false), "another runtime still takes the work");
                 Mission? running = await db.Missions.ReadAsync(mission.Id).ConfigureAwait(false);
                 Captain? taker = await db.Captains.ReadAsync(running!.CaptainId!).ConfigureAwait(false);
@@ -463,8 +463,8 @@ namespace Test.Shared.Suites.Services
                 using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
                 Harness h = new Harness(testDb, new DirCreatingGitService());
                 DatabaseDriver db = testDb.Driver;
-                Captain broken = await db.Captains.CreateAsync(new Captain("a-broken")).ConfigureAwait(false);
-                Captain healthy = await db.Captains.CreateAsync(new Captain("b-healthy")).ConfigureAwait(false);
+                Captain broken = await CaptainAssignmentFixture.CreateAsync(db, new Captain("a-broken")).ConfigureAwait(false);
+                Captain healthy = await CaptainAssignmentFixture.CreateAsync(db, new Captain("b-healthy")).ConfigureAwait(false);
                 List<string> attempts = new List<string>();
                 h.Captains.OnLaunchAgent = (Captain c, Mission m, Dock d) =>
                 {
@@ -489,7 +489,7 @@ namespace Test.Shared.Suites.Services
                 Harness h = new Harness(testDb, new DirCreatingGitService());
                 DatabaseDriver db = testDb.Driver;
                 h.Captains.OnLaunchAgent = (_, _, _) => throw new MissionLaunchConfigurationException("This API captain has tools disabled; enable tools under Configuration > Endpoints.");
-                Captain captain = await db.Captains.CreateAsync(new Captain("misconfigured")).ConfigureAwait(false);
+                Captain captain = await CaptainAssignmentFixture.CreateAsync(db, new Captain("misconfigured")).ConfigureAwait(false);
 
                 Vessel vessel = await CreateVesselAsync(testDb).ConfigureAwait(false);
                 Mission first = await db.Missions.CreateAsync(new Mission("First", "Do it") { VesselId = vessel.Id }).ConfigureAwait(false);
@@ -563,7 +563,7 @@ namespace Test.Shared.Suites.Services
                 Directory.CreateDirectory(dock.WorktreePath);
                 dock = await db.Docks.CreateAsync(dock).ConfigureAwait(false);
                 Mission mission = await db.Missions.CreateAsync(new Mission("Work", "Do it") { VesselId = vessel.Id, Status = MissionStatusEnum.InProgress, ProcessId = 4300, DockId = dock.Id }).ConfigureAwait(false);
-                Captain captain = await db.Captains.CreateAsync(new Captain("waits") { State = CaptainStateEnum.Working, CurrentMissionId = mission.Id, CurrentDockId = dock.Id, ProcessId = 4300 }).ConfigureAwait(false);
+                Captain captain = await CaptainAssignmentFixture.CreateAsync(db, new Captain("waits") { State = CaptainStateEnum.Working, ProcessId = 4300 , Assignment = new Mission { Id = mission.Id, DockId = dock.Id }}).ConfigureAwait(false);
 
                 RuntimeProviderError stream = new RuntimeProviderError { ErrorType = "llm_stream_error", Reason = "lost the stream" };
                 Stopwatch watch = Stopwatch.StartNew();
@@ -601,8 +601,8 @@ namespace Test.Shared.Suites.Services
                 Voyage voyage = await db.Voyages.CreateAsync(new Voyage("independent") { Status = VoyageStatusEnum.InProgress }).ConfigureAwait(false);
                 Mission failing = await db.Missions.CreateAsync(new Mission("A", "Do A") { VesselId = vessel.Id, VoyageId = voyage.Id, Status = MissionStatusEnum.InProgress, ProcessId = 4400 }).ConfigureAwait(false);
                 Mission sibling = await db.Missions.CreateAsync(new Mission("B", "Do B") { VesselId = vessel.Id, VoyageId = voyage.Id, Status = MissionStatusEnum.InProgress, ProcessId = 4401 }).ConfigureAwait(false);
-                Captain first = await db.Captains.CreateAsync(new Captain("first") { State = CaptainStateEnum.Working, CurrentMissionId = failing.Id, ProcessId = 4400 }).ConfigureAwait(false);
-                Captain second = await db.Captains.CreateAsync(new Captain("second") { State = CaptainStateEnum.Working, CurrentMissionId = sibling.Id, ProcessId = 4401 }).ConfigureAwait(false);
+                Captain first = await CaptainAssignmentFixture.CreateAsync(db, new Captain("first") { State = CaptainStateEnum.Working, ProcessId = 4400 , Assignment = new Mission { Id = failing.Id }}).ConfigureAwait(false);
+                Captain second = await CaptainAssignmentFixture.CreateAsync(db, new Captain("second") { State = CaptainStateEnum.Working, ProcessId = 4401 , Assignment = new Mission { Id = sibling.Id }}).ConfigureAwait(false);
                 failing.CaptainId = first.Id;
                 await db.Missions.UpdateAsync(failing).ConfigureAwait(false);
                 sibling.CaptainId = second.Id;
@@ -615,7 +615,7 @@ namespace Test.Shared.Suites.Services
                 lock (stopped) AssertTrue(stopped.Contains(second.Id), "the running sibling's captain was stopped");
                 Captain? released = await db.Captains.ReadAsync(second.Id).ConfigureAwait(false);
                 AssertEqual(CaptainStateEnum.Idle, released!.State);
-                AssertNull(released.CurrentMissionId);
+                AssertNull(released.ActiveMissionIds.SingleOrDefault());
             }));
 
             cases.Add(CaseAsync("dangling_handoff_recovery_keeps_the_judge_gate", "Restart recovery does not hand an unsubstantiated Judge's work to the next stage", TestTags.Negative, async () =>
@@ -651,7 +651,7 @@ namespace Test.Shared.Suites.Services
                 DatabaseDriver db = testDb.Driver;
 
                 Vessel vessel = await CreateVesselAsync(testDb).ConfigureAwait(false);
-                Captain judgeCaptain = await db.Captains.CreateAsync(new Captain("conflict-judge") { State = CaptainStateEnum.Working }).ConfigureAwait(false);
+                Captain judgeCaptain = await CaptainAssignmentFixture.CreateAsync(db, new Captain("conflict-judge") { State = CaptainStateEnum.Working }).ConfigureAwait(false);
                 Voyage voyage = await db.Voyages.CreateAsync(new Voyage("conflict") { Status = VoyageStatusEnum.InProgress }).ConfigureAwait(false);
                 Mission judge = await CreateRunningMissionAsync(testDb, h, vessel, voyage, judgeCaptain, "Judge", false).ConfigureAwait(false);
 
@@ -673,7 +673,7 @@ namespace Test.Shared.Suites.Services
                 DatabaseDriver db = testDb.Driver;
 
                 Vessel vessel = await CreateVesselAsync(testDb).ConfigureAwait(false);
-                Captain judgeCaptain = await db.Captains.CreateAsync(new Captain("vague-judge") { State = CaptainStateEnum.Working }).ConfigureAwait(false);
+                Captain judgeCaptain = await CaptainAssignmentFixture.CreateAsync(db, new Captain("vague-judge") { State = CaptainStateEnum.Working }).ConfigureAwait(false);
                 Voyage voyage = await db.Voyages.CreateAsync(new Voyage("vague") { Status = VoyageStatusEnum.InProgress }).ConfigureAwait(false);
                 Mission judge = await CreateRunningMissionAsync(testDb, h, vessel, voyage, judgeCaptain, "Judge", false).ConfigureAwait(false);
 
@@ -733,7 +733,7 @@ namespace Test.Shared.Suites.Services
                     DatabaseDriver db = testDb.Driver;
 
                     Vessel vessel = await CreateVesselAsync(testDb).ConfigureAwait(false);
-                    Captain captain = await db.Captains.CreateAsync(new Captain("leftover") { State = CaptainStateEnum.Working }).ConfigureAwait(false);
+                    Captain captain = await CaptainAssignmentFixture.CreateAsync(db, new Captain("leftover") { State = CaptainStateEnum.Working }).ConfigureAwait(false);
                     Voyage voyage = await db.Voyages.CreateAsync(new Voyage("leftover") { Status = VoyageStatusEnum.InProgress }).ConfigureAwait(false);
                     Mission worker = await CreateRunningMissionAsync(testDb, h, vessel, voyage, captain, "Worker", false).ConfigureAwait(false);
 
@@ -849,9 +849,9 @@ namespace Test.Shared.Suites.Services
                 fx.Mission.ProcessId = 8181;
                 fx.Mission.CaptainId = fx.Captain.Id;
                 fx.Captain.ProcessId = 8181;
-                fx.Captain.CurrentMissionId = fx.Mission.Id;
+                fx.Captain.Assignment = fx.Mission;
                 await fx.Db.Driver.Missions.UpdateAsync(fx.Mission).ConfigureAwait(false);
-                await fx.Db.Driver.Captains.UpdateAsync(fx.Captain).ConfigureAwait(false);
+                await CaptainAssignmentFixture.UpdateAsync(fx.Db.Driver, fx.Captain).ConfigureAwait(false);
                 int resumed = 0;
                 fx.Captains.OnLaunchAgent = (_, _, _) => { resumed++; return Task.FromResult(9999); };
                 Task exit = fx.Admiral.HandleProcessExitAsync(8181, new RuntimeExitInfo { ExitCode = 0 }, fx.Captain.Id, fx.Mission.Id);
@@ -1002,9 +1002,9 @@ namespace Test.Shared.Suites.Services
                 fx.Mission.ProcessId = 8282;
                 fx.Mission.CaptainId = fx.Captain.Id;
                 fx.Captain.ProcessId = 8282;
-                fx.Captain.CurrentMissionId = fx.Mission.Id;
+                fx.Captain.Assignment = fx.Mission;
                 await fx.Db.Driver.Missions.UpdateAsync(fx.Mission).ConfigureAwait(false);
-                await fx.Db.Driver.Captains.UpdateAsync(fx.Captain).ConfigureAwait(false);
+                await CaptainAssignmentFixture.UpdateAsync(fx.Db.Driver, fx.Captain).ConfigureAwait(false);
                 int launches = 0;
                 int handoffs = 0;
                 fx.Captains.OnLaunchAgent = (_, _, _) => { launches++; return Task.FromResult(9999); };
@@ -1162,7 +1162,7 @@ namespace Test.Shared.Suites.Services
 
                 Vessel vessel = await CreateVesselAsync(testDb).ConfigureAwait(false);
                 Mission running = await db.Missions.CreateAsync(new Mission("Running", "Do it") { VesselId = vessel.Id, Status = MissionStatusEnum.InProgress, ProcessId = 4500 }).ConfigureAwait(false);
-                Captain captain = await db.Captains.CreateAsync(new Captain("over-quota") { State = CaptainStateEnum.Working, CurrentMissionId = running.Id, ProcessId = 4500 }).ConfigureAwait(false);
+                Captain captain = await CaptainAssignmentFixture.CreateAsync(db, new Captain("over-quota") { State = CaptainStateEnum.Working, ProcessId = 4500 , Assignment = new Mission { Id = running.Id }}).ConfigureAwait(false);
                 running.CaptainId = captain.Id;
                 await db.Missions.UpdateAsync(running).ConfigureAwait(false);
                 Mission waiting = await db.Missions.CreateAsync(new Mission("Waiting", "Do it next") { VesselId = vessel.Id }).ConfigureAwait(false);
@@ -1172,11 +1172,46 @@ namespace Test.Shared.Suites.Services
 
                 Captain? after = await db.Captains.ReadAsync(captain.Id).ConfigureAwait(false);
                 AssertEqual(CaptainStateEnum.Quarantined, after!.State);
-                AssertNull(after.CurrentMissionId);
+                AssertNull(after.ActiveMissionIds.SingleOrDefault());
                 AssertEqual(0, launches, "the quarantined captain was not given the waiting mission");
                 Mission? stillWaiting = await db.Missions.ReadAsync(waiting.Id).ConfigureAwait(false);
                 AssertEqual(MissionStatusEnum.Pending, stillWaiting!.Status);
             }));
+
+            foreach (string mode in new[] { "own", "missing", "wrong-vessel" })
+                cases.Add(CaseAsync("completion_dock_isolation_" + mode, "Completion uses its mission dock and preserves a sibling: " + mode, TestTags.Positive, async () =>
+                {
+                    using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync(); var db = testDb.Driver;
+                    StubGitService git = new StubGitService { DiffResult = "diff --git a/report b/report\n+own report\n" };
+                    Harness h = new Harness(testDb, git);
+                    List<string> captured = new List<string>();
+                    h.Missions.OnCaptureDiff = (_, dock) => { captured.Add(dock.Id); return Task.CompletedTask; };
+                    Vessel vessel = await CreateVesselAsync(testDb);
+                    Vessel otherVessel = await db.Vessels.CreateAsync(new Vessel("other repository", "https://example.invalid/other"));
+                    string siblingPath = TestTemp.NewDirectory("sibling_dock"), ownPath = TestTemp.NewDirectory("own_dock");
+                    Captain captain = await CaptainAssignmentFixture.CreateAsync(db, new Captain("parallel") { MaxConcurrency = 3 });
+                    Dock siblingDock = await db.Docks.CreateAsync(new Dock(vessel.Id) { CaptainId = captain.Id, WorktreePath = siblingPath });
+                    Dock ownDock = await db.Docks.CreateAsync(new Dock(mode == "wrong-vessel" ? otherVessel.Id : vessel.Id) { CaptainId = captain.Id, WorktreePath = ownPath });
+                    Mission sibling = await db.Missions.CreateAsync(new Mission("sibling") { VesselId = vessel.Id, DockId = siblingDock.Id });
+                    AssertTrue(await db.Captains.TryClaimAsync(captain.Id, sibling.Id, siblingDock.Id));
+                    Mission target = await db.Missions.CreateAsync(new Mission("target", "produce a detailed report") { VesselId = vessel.Id,
+                        DockId = mode == "missing" ? null : ownDock.Id, Mode = MissionModeEnum.Research });
+                    AssertTrue(await db.Captains.TryClaimAsync(captain.Id, target.Id, target.DockId));
+                    target = (await db.Missions.ReadAsync(target.Id))!;
+                    target.Status = MissionStatusEnum.InProgress; await db.Missions.UpdateAsync(target);
+                    try
+                    {
+                        await h.Missions.HandleCompletionAsync((await db.Captains.ReadAsync(captain.Id))!, target.Id);
+                        AssertFalse(git.DiffCalls.Contains(siblingPath));
+                        AssertEqual(mode == "own", captured.Contains(ownDock.Id));
+                        AssertFalse(captured.Contains(siblingDock.Id));
+                        AssertEqual(MissionStatusEnum.Complete, (await db.Missions.ReadAsync(target.Id))!.Status);
+                        Captain stored = (await db.Captains.ReadAsync(captain.Id))!;
+                        AssertEqual(1, stored.ActiveMissionCount); AssertTrue(stored.HoldsMission(sibling.Id));
+                        AssertTrue((await db.Docks.ReadAsync(siblingDock.Id))!.Active);
+                    }
+                    finally { TestTemp.TryDelete(siblingPath); TestTemp.TryDelete(ownPath); }
+                }));
 
             return new TestSuiteDescriptor(
                 suiteId: SuiteId,
@@ -1260,9 +1295,9 @@ namespace Test.Shared.Suites.Services
 
             mission.DockId = dock.Id;
             await testDb.Driver.Missions.UpdateAsync(mission).ConfigureAwait(false);
-            captain.CurrentMissionId = mission.Id;
-            captain.CurrentDockId = dock.Id;
-            await testDb.Driver.Captains.UpdateAsync(captain).ConfigureAwait(false);
+            captain.Assignment = mission;
+            captain.Assignment ??= new Mission("fixture assignment"); captain.Assignment.DockId = dock.Id;
+            await CaptainAssignmentFixture.UpdateAsync(testDb.Driver, captain).ConfigureAwait(false);
             return mission;
         }
 
@@ -1276,8 +1311,8 @@ namespace Test.Shared.Suites.Services
 
             Captain? captain = await db.Captains.ReadAsync(captainId).ConfigureAwait(false);
             captain!.State = CaptainStateEnum.Working;
-            captain.CurrentMissionId = missionId;
-            await db.Captains.UpdateAsync(captain).ConfigureAwait(false);
+            captain.Assignment = new Mission { Id = missionId };
+            await CaptainAssignmentFixture.UpdateAsync(db, captain).ConfigureAwait(false);
         }
 
         private static int CountOccurrences(string text, string value)
@@ -1356,7 +1391,7 @@ namespace Test.Shared.Suites.Services
                 Directory.CreateDirectory(metadata);
                 File.WriteAllText(Path.Combine(metadata, dock.Id + ".start"), start + "\n");
 
-                fx.Captain = await db.Captains.CreateAsync(new Captain("frontier", AgentRuntimeEnum.ClaudeCode) { State = CaptainStateEnum.Working }).ConfigureAwait(false);
+                fx.Captain = await CaptainAssignmentFixture.CreateAsync(db, new Captain("frontier", AgentRuntimeEnum.ClaudeCode) { State = CaptainStateEnum.Working }).ConfigureAwait(false);
                 fx.Mission = await db.Missions.CreateAsync(new Mission("Work", "Do it") { VesselId = vessel.Id, DockId = dock.Id, Persona = "Worker", Status = MissionStatusEnum.InProgress }).ConfigureAwait(false);
                 return fx;
             }

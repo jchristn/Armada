@@ -9,6 +9,7 @@ namespace Armada.Helm.Commands
     using Armada.Core.Models;
     using Armada.Core.Services;
     using Armada.Helm.Rendering;
+    using Armada.Helm.Infrastructure;
 
     /// <summary>
     /// Remove a captain. Accepts name or ID.
@@ -33,7 +34,7 @@ namespace Armada.Helm.Commands
                     }
                     else
                     {
-                        AnsiConsole.MarkupLine($"[red]Captain not found:[/] {Markup.Escape(settings.Id)}");
+                        HelmConsole.Error.MarkupLine($"[red]Captain not found:[/] {Markup.Escape(settings.Id)}");
                         return 1;
                     }
                 }

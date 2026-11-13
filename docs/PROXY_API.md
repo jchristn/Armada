@@ -1,6 +1,6 @@
 # Proxy API
 
-**Version:** 1.2.0
+**Version:** 1.3.0
 
 `Armada.Proxy` is a portal and relay for the real Armada dashboard. It has no remote operations UI or feature API of its
 own: the browser uses the normal Armada dashboard, and the proxy relays its traffic to a connected Armada instance.
@@ -212,7 +212,7 @@ clears the session cookie. Returns `{ "success": true }`. The token is rejected 
 ```json
 {
   "product": "Armada.Proxy",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "status": "ok",
   "startUtc": "2026-05-16T18:00:00Z",
   "uptimeSeconds": 1800,
@@ -230,7 +230,7 @@ Requires a proxy session (`401` otherwise). Returns `{ "count": 1, "instances": 
 {
   "instanceId": "armada-1f2e3d4c5b6a",
   "state": "connected",
-  "armadaVersion": "1.2.0",
+  "armadaVersion": "1.3.0",
   "protocolVersion": "2026-04-04",
   "capabilities": ["dashboard.http.relay", "dashboard.websocket.relay"],
   "remoteAddress": "203.0.113.10",

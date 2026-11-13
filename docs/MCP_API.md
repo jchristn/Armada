@@ -1,6 +1,26 @@
 # Armada MCP API Reference
 
-**Version:** 1.2.0
+### v1.3.0 configurable captain selection
+
+`authorize_captain_selection_recovery` uses the same audited administrator service as REST. Arguments are `missionId` and `recovery: { expectedRevision, allowFallback, reserveException, reason }`; property names use camelCase. The mission must still be Pending. Permissions default false, hard gates remain enforced, and stale revisions require a refresh. Use `get_captain_selection` to obtain the current authorization/revision.
+
+`get_usage_selection_settings` and `update_usage_selection_settings` expose the same live policy coordinator as REST and require global administrator access. Update arguments are `settings` (complete group) and optional `expectedRevision`. `get_captain_selection`, `get_captain_selection_history`, `get_captain_selection_decision` and `preview_captain_selection` use shared tenant/owner/mission-token scope. The default is Observe/FirstAvailable; the other strategies are MostRemainingAllowance and MostUsedAllowance. Enforce is available as an explicit opt-in. `enumerate` also supports `captain_selection_decision` (requires `missionId`, optional `status=Admitted|Waiting`, UTC date range) and `captain_selection_candidate` (requires `decisionId`, optional global-admin-only `tenantId`); authorization precedes counts and paging. See the [current enforcement guide](usage-selection/ENFORCEMENT_AND_MISSION_INSPECTION.md) and [contracts, scope and examples](usage-selection/LIVE_CONFIGURATION_AND_OBSERVE.md).
+
+
+### v1.3.0 concurrency schema boundary
+
+Migrations 119–121 complete the storage transition. Captain responses contain `MaxConcurrency`, `ActiveMissionCount`, `ActiveMissionIds` and `CurrentSessionId`; `CurrentMissionId` and `CurrentDockId` are removed. Read each mission for its `DockId`, `ProcessId`, heartbeat and recovery attempts. Captain `ProcessId` is reserved for exclusive sessions. Vessel requests use `MaxParallelVoyages` and `MaxParallelMissionsPerVoyage`; `AllowConcurrentMissions` is removed and supplying it returns an explicit migration error. Helm rejects `--allow-concurrent` with replacement options.
+
+Mission metadata adds `RescueOfMissionId`, `BranchStrategy`, `BaseBranchName`, `ReadyUtc`, `AssignedUtc`, `Depth`, `OwnedPathsJson` and `ReadsPathsJson`. Rescue links migrate out of `ParentMissionId`; deleting the original clears the rescue link. Assignment time is recorded atomically with the slot claim. A live agent’s `Testing` marker is progress information; execution remains `InProgress` so capacity and exit ownership are retained. Migration 121 normalizes live legacy Testing jobs and preserves their process handles. Hierarchy execution, branch strategies and wait reporting remain separate plan items; persisted metadata and wait storage do not imply those operations are available yet.
+
+This is an owner-approved compatibility exception for v1.3.0; see [compatibility](COMPATIBILITY.md#v130-concurrency-exception) and [upgrade guidance](UPGRADING.md#v120-to-v130). Back up before upgrading and restore that backup before running an older release.
+
+
+## v1.3.0: parallelization and concurrency
+
+Captain create/update accepts `MaxConcurrency` (JSON `maxConcurrency`), clamped to 1..`Concurrency.MaxCaptainConcurrency` (hard ceiling 256). Creation defaults to 1 for CLI runtimes and 4 for ApiEndpoint/Mux, or configured server defaults. Updates that omit it preserve the current value. Lowering it does not stop running work. REST, MCP and WebSocket return server-owned `ActiveMissionCount`, `ActiveMissionIds` and `CurrentSessionId`; client writes cannot replace these ownership fields. Planning/refinement/analysis are exclusive, and a quarantined captain accepts no new missions while existing work continues. The singular `CurrentMissionId` and `CurrentDockId` fields were removed in migration 121; use active mission IDs to find each mission’s dock and process. Admission serializes vessel checks separately from shared capacity claims, with bounded lock waits. A lock timeout leaves the mission Pending for retry; no new endpoint or request field is needed. Equivalent captains with fewer occupied slots are preferred after explicit/persona/tier routing. See [testing](CONCURRENCY_TESTING.md).
+
+**Version:** 1.3.0
 **Default URL:** `http://localhost:7891/mcp`
 **Protocol:** [Model Context Protocol](https://modelcontextprotocol.io/) (MCP), Streamable HTTP transport
 **Server Library:** Voltaic (McpHttpServer)
@@ -38,6 +58,7 @@ If/when MCP-over-tunnel is added, this document will gain explicit routed-tool s
     - [stop_server](#stop_server)
   - **Enumeration**
     - [enumerate](#enumerate)
+  - [Captain Selection](#captain-selection)
   - **Fleets**
     - [get_fleet](#get_fleet)
     - [create_fleet](#create_fleet)
@@ -152,11 +173,51 @@ If/when MCP-over-tunnel is added, this document will gain explicit routed-tool s
     - [evaluate_captain](#evaluate_captain)
     - [get_model_probe_run](#get_model_probe_run)
     - [list_model_probe_runs](#list_model_probe_runs)
+    - [cancel_model_probe_run](#cancel_model_probe_run)
+  - **Model Profiles**
+    - [get_model_profile](#get_model_profile)
+    - [list_model_profiles](#list_model_profiles)
+    - [get_model_scorecard](#get_model_scorecard)
+  - **Model Alerts**
+    - [list_model_alerts](#list_model_alerts)
+    - [get_model_alert](#get_model_alert)
+    - [evaluate_model_alerts](#evaluate_model_alerts)
+    - [get_model_alert_thresholds](#get_model_alert_thresholds)
+    - [update_model_alert_thresholds](#update_model_alert_thresholds)
+    - [apply_model_alert_action](#apply_model_alert_action)
+    - [ignore_model_alert](#ignore_model_alert)
   - **Fixture Battery**
     - [list_battery_packs](#list_battery_packs)
     - [run_battery](#run_battery)
     - [get_battery_run](#get_battery_run)
     - [list_battery_results](#list_battery_results)
+  - **Black Box**
+    - [get_blackbox](#get_blackbox)
+    - [read_blackbox_section](#read_blackbox_section)
+    - [list_blackbox_objects](#list_blackbox_objects)
+    - [read_blackbox_object](#read_blackbox_object)
+    - [list_blackbox_entries](#list_blackbox_entries)
+    - [search_blackbox](#search_blackbox)
+    - [list_blackbox_notes](#list_blackbox_notes)
+    - [get_blackbox_bundle](#get_blackbox_bundle)
+    - [list_blackbox_hotspots](#list_blackbox_hotspots)
+    - [list_blackbox_fingerprints](#list_blackbox_fingerprints)
+    - [list_blackbox_resilience_gaps](#list_blackbox_resilience_gaps)
+    - [get_blackbox_fingerprint_trend](#get_blackbox_fingerprint_trend)
+    - [get_blackbox_retention](#get_blackbox_retention)
+    - [get_blackbox_storage](#get_blackbox_storage)
+    - [annotate_blackbox](#annotate_blackbox)
+    - [resolve_blackbox](#resolve_blackbox)
+    - [run_blackbox_recovery](#run_blackbox_recovery)
+    - [apply_blackbox_recommendation](#apply_blackbox_recommendation)
+    - [pin_blackbox](#pin_blackbox)
+    - [delete_blackbox_entries](#delete_blackbox_entries)
+    - [purge_blackbox](#purge_blackbox)
+    - [run_blackbox_gc](#run_blackbox_gc)
+    - [export_blackbox_fixture](#export_blackbox_fixture)
+    - [reanalyze_blackbox](#reanalyze_blackbox)
+    - [Resources and prompts](#resources-and-prompts)
+    - [Reviewing a black box and taking action](#reviewing-a-black-box-and-taking-action)
   - **Ask Armada**
     - [list_ask_threads](#list_ask_threads)
     - [get_ask_thread](#get_ask_thread)
@@ -315,7 +376,7 @@ To register Armada with Claude Code manually, add it as an HTTP MCP server:
 claude mcp add --transport http --scope user armada http://localhost:7891/mcp
 ```
 
-Drop `--scope user` to add it for the current project only. While the Admiral listens on localhost (the default), no token or header is required; if you changed `mcpPort`, substitute your port. When the Admiral listens on any other address (for example in Docker), every MCP call needs a credential: add `--header "Authorization: Bearer <token>"` (or `X-Api-Key`). `armada mcp install --server <url> --token <token>` (or `--profile <name>`) writes the remote URL and the header for Claude Code, Gemini CLI, Cursor, Mux, OpenCode, and pi, and configures Codex to read the token from `ARMADA_TOKEN`; without a remote target it writes the local, credential-less entries. See [REMOTE_SERVER.md](REMOTE_SERVER.md#mcp-clients-claude-code-codex-gemini-cli-cursor-mux-opencode).
+Drop `--scope user` to add it for the current project only. While the Admiral listens on localhost (the default), no token or header is required; if you changed `mcpPort`, substitute your port. When the Admiral listens on any other address (for example in Docker), every MCP call needs a credential: add `--header "Authorization: Bearer <token>"` (or `X-Api-Key`). `armada mcp install --server <url> --token <token>` (or `--profile <name>`) writes the remote URL and the header for Claude Code, Gemini CLI, Cursor, Mux, OpenCode, and pi, and configures Codex to read the token from `ARMADA_TOKEN`; without a remote target it writes the local, credential-less entries. See [REMOTE_SERVER.md](REMOTE_SERVER.md#mcp-clients-claude-code-codex-gemini-cli-cursor-mux-opencode-pi).
 
 **Enterprise-managed Claude Code.** If the add is rejected with `Cannot add MCP server 'armada': not allowed by enterprise policy`, your organization's Claude Code managed settings restrict which MCP servers may be added (via `allowedMcpServers` / `managed-mcp.json`). This is enforced by IT and **cannot** be overridden by a user, a project `.mcp.json`, or `--mcp-config`. Ask your Claude Code administrator to allow the Armada endpoint by adding it to `allowedMcpServers` in the managed settings - on Windows `C:\Program Files\ClaudeCode\managed-settings.json` (or, higher priority, the Claude.ai admin console at Admin Settings > Claude Code > Managed settings):
 
@@ -333,7 +394,7 @@ The legacy `/rpc` + `/events` (separate SSE) endpoints remain served for older c
 
 ### Stdio Transport
 
-Armada also supports an MCP stdio transport (`armada mcp stdio`) for direct process-based communication. Both transports register the same tool names via `McpToolRegistrar`. The stdio server runs standalone against the database (no Admiral process), so the tools that need the Admiral answer `ErrorCode` `Unavailable` over stdio: `stop_server`, and the fleet action tools (`create_fleet_action`, `update_fleet_action`, `delete_fleet_action`, `run_fleet_action`, `fleet_action_run_status`, `cancel_fleet_action_run`), whose runs are executed and tracked by the Admiral's runner. Use stdio when running Armada as a child process of an MCP client.
+Armada also supports an MCP stdio transport (`armada mcp stdio`) for direct process-based communication. Both transports register the same tool names via `McpToolRegistrar`. The stdio server runs standalone against the database (no Admiral process), so the tools that need the Admiral answer `ErrorCode` `Unavailable` over stdio: `stop_server`, and the fleet action tools (`create_fleet_action`, `update_fleet_action`, `delete_fleet_action`, `run_fleet_action`, `fleet_action_run_status`, `cancel_fleet_action_run`), whose runs are executed and tracked by the Admiral's runner, and the [black box](#black-box) tools (and `enumerate` `entityType` `blackbox`), which need the Admiral's black box service. The black box resources and prompts are not served over stdio. Use stdio when running Armada as a child process of an MCP client.
 
 ### Port Configuration
 
@@ -369,9 +430,9 @@ call against the caller (including Ask Armada proposals executed after approval)
 
 | Level | Tools |
 |---|---|
-| Authenticated | Reads (`status`, `enumerate`, `get_*`, `list_*`, `mission_status`, `voyage_status`, logs, diffs, `vessel_health`, `search_memory`, `token_usage_summary`, ...), writes to caller-owned resources (memories, model endpoints, harbors), persona, pipeline, and prompt-template writes (as on REST: a regular user creates only `UserSpecific` ones and edits only their own), and `cli_permission_prompt` and `decide_cli_permission_request` (the handlers check the caller; see [CLI Permissions](#cli-permissions)) |
-| TenantAdmin | Every other write or execution (dispatch, captains, missions, voyages, docks, merge queue, signals, events, objectives, backlog, playbooks, workflow profiles (including `validate_workflow_profile`, as on REST), releases, deployments, runbooks, check runs, fleet actions, vessel import, vessel health) |
-| AdminOnly | `backup`, `restore`, `stop_server` (a credential is required even on loopback; use `X-Api-Key` from `settings.json`) |
+| Authenticated | Reads (`status`, `enumerate`, `get_*`, `list_*`, `mission_status`, `voyage_status`, logs, diffs, `vessel_health`, `search_memory`, `token_usage_summary`, ...), writes to caller-owned resources (memories, model endpoints, harbors), persona, pipeline, and prompt-template writes (as on REST: a regular user creates only `UserSpecific` ones and edits only their own), and `cli_permission_prompt` and `decide_cli_permission_request` (the handlers check the caller; see [CLI Permissions](#cli-permissions)), and the black box readers plus `annotate_blackbox`, `resolve_blackbox`, `pin_blackbox`, `run_blackbox_recovery` and `apply_blackbox_recommendation` (a recovery step is then authorized as its own tool; see [Black Box](#black-box)) |
+| TenantAdmin | Every other write or execution (dispatch, captains, missions, voyages, docks, merge queue, signals, events, objectives, backlog, playbooks, workflow profiles (including `validate_workflow_profile`, as on REST), releases, deployments, runbooks, check runs, fleet actions, vessel import, vessel health), and the black box `get_blackbox_retention`, `delete_blackbox_entries` and `reanalyze_blackbox` |
+| AdminOnly | `backup`, `restore`, `stop_server` (a credential is required even on loopback; use `X-Api-Key` from `settings.json`), and the black box `get_blackbox_storage`, `purge_blackbox`, `run_blackbox_gc` and `export_blackbox_fixture` |
 
 A denied call returns an `McpToolError` with `ErrorCode` `Forbidden` whose message names the required level. The full per-tool list is in
 [SECURITY_REVIEW.md](SECURITY_REVIEW.md#mcp-tools); a test fails when a registered tool has no declaration.
@@ -430,7 +491,10 @@ handler is registered through the Ask gate, which checks that claim:
   `list_backlog_planning_session_messages`, `list_objectives`, `list_prompt_templates`,
   plus `get_cli_permission_request`), and the Ask Armada
   readers (`list_ask_threads`, `get_ask_thread`, `list_ask_messages`, `list_ask_quick_actions`, `get_ask_work`,
-  `list_ask_work`, `list_ask_work_missions`, `list_ask_work_targets`, `list_ask_proposals`, `list_ask_tool_calls`). The list lives in
+  `list_ask_work`, `list_ask_work_missions`, `list_ask_work_targets`, `list_ask_proposals`, `list_ask_tool_calls`), and the black box
+  readers (`get_blackbox`, `read_blackbox_section`, `list_blackbox_objects`, `read_blackbox_object`,
+  `list_blackbox_entries`, `search_blackbox`, `list_blackbox_notes`, `get_blackbox_bundle`, `list_blackbox_hotspots`,
+  `list_blackbox_fingerprints`, `list_blackbox_resilience_gaps`, `get_blackbox_fingerprint_trend`, `get_blackbox_retention`, `get_blackbox_storage`). The list lives in
   `AskToolPolicy`; any tool not on it (including tools added later) is treated as state-changing.
 - **`cli_permission_prompt`** (the captain CLI's own permission prompt) runs without becoming a proposal: an approver
   answers it as a [CLI permission request](#cli-permissions).
@@ -558,7 +622,7 @@ No parameters required.
     "LatencyMs": null,
     "CapabilityManifest": {
       "ProtocolVersion": "2026-04-03",
-      "ArmadaVersion": "1.2.0",
+      "ArmadaVersion": "1.3.0",
       "Features": [
         "remoteControl.handshake",
         "remoteControl.heartbeat",
@@ -718,7 +782,7 @@ No parameters required.
 
 ### enumerate
 
-Paginated enumeration of any entity type with filtering and sorting. This is the MCP equivalent of the `POST /api/v1/{entity}/enumerate` REST endpoints. Returns paginated results with total counts, page metadata, and query timing. Supports: inbox (the needs-you items, most urgent first; replaces the removed `inbox` tool), cli_permission_rules (replaces the removed `list_cli_permission_rules`), cli_permission_requests (replaces the removed `list_cli_permission_requests`), objectives (aliases `backlog`, `backlog_item`, `backlog_items`), fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, harbors, playbooks, personas, memories, prompt_templates, pipelines, workflow_profiles, project_profiles, skills, check_runs, releases, deployments, incidents, runbooks, runbook_executions, jobs, model_endpoints, vessel_import_batch, fleet_action, fleet_action_run, fleet_action_run_target, vessel_health.
+Paginated enumeration of any entity type with filtering and sorting. This is the MCP equivalent of the `POST /api/v1/{entity}/enumerate` REST endpoints. Returns paginated results with total counts, page metadata, and query timing. Supports: inbox (the needs-you items, most urgent first; replaces the removed `inbox` tool), cli_permission_rules (replaces the removed `list_cli_permission_rules`), cli_permission_requests (replaces the removed `list_cli_permission_requests`), objectives (aliases `backlog`, `backlog_item`, `backlog_items`), fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, harbors, playbooks, personas, memories, prompt_templates, pipelines, workflow_profiles, project_profiles, skills, check_runs, releases, deployments, incidents, runbooks, runbook_executions, jobs, model_endpoints, vessel_import_batch, fleet_action, fleet_action_run, fleet_action_run_target, vessel_health, blackbox (black box entry summaries, newest first; see [Black Box](#black-box)).
 
 **Input Schema:**
 
@@ -726,14 +790,14 @@ Paginated enumeration of any entity type with filtering and sorting. This is the
 {
   "type": "object",
   "properties": {
-    "entityType": { "type": "string", "description": "Entity type to enumerate (inbox [the needs-you items, most urgent first], cli_permission_rules [vesselId and captainId filter], cli_permission_requests [newest first; status, missionId, threadId, captainId, vesselId filter], objectives [aliases backlog, backlog_item, backlog_items], fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, harbors, playbooks, personas, memories, prompt_templates, pipelines, workflow_profiles, project_profiles, skills, check_runs, releases, deployments, incidents, runbooks, runbook_executions, jobs, model_endpoints, vessel_import_batch, fleet_action, fleet_action_run, fleet_action_run_target, vessel_health)" },
+    "entityType": { "type": "string", "description": "Entity type to enumerate (inbox [the needs-you items, most urgent first], cli_permission_rules [vesselId and captainId filter], cli_permission_requests [newest first; status, missionId, threadId, captainId, vesselId filter], objectives [aliases backlog, backlog_item, backlog_items], fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, harbors, playbooks, personas, memories, prompt_templates, pipelines, workflow_profiles, project_profiles, skills, check_runs, releases, deployments, incidents, runbooks, runbook_executions, jobs, model_endpoints, vessel_import_batch, fleet_action, fleet_action_run, fleet_action_run_target, vessel_health, blackbox [black box entry summaries; status filters resolution, search matches reason, summary and notes])" },
     "pageNumber": { "type": "integer", "description": "Page number (1-based, default 1)" },
     "pageSize": { "type": "integer", "description": "Results per page (default 10, normalized into 1..1000; a few entity types apply their REST route's lower maximum, and the result's PageSize reports the size used)" },
     "order": { "type": "string", "description": "Sort order: CreatedAscending, CreatedDescending" },
     "createdAfter": { "type": "string", "description": "ISO 8601 timestamp filter" },
     "createdBefore": { "type": "string", "description": "ISO 8601 timestamp filter" },
     "status": { "type": "string", "description": "Filter by status (entity-specific)" },
-    "search": { "type": "string", "description": "Free-text search where supported (releases, deployments, incidents, runbooks, runbook_executions, memories, objectives; vessel name for vessel_health)" },
+    "search": { "type": "string", "description": "Free-text search where supported (releases, deployments, incidents, runbooks, runbook_executions, memories, objectives; vessel name for vessel_health; reason, summary and notes for blackbox)" },
     "fleetId": { "type": "string", "description": "Filter by fleet ID (vessels)" },
     "vesselId": { "type": "string", "description": "Filter by vessel ID (missions, docks)" },
     "captainId": { "type": "string", "description": "Filter by captain ID (missions, events, signals)" },
@@ -792,8 +856,9 @@ Paginated enumeration of any entity type with filtering and sorting. This is the
 | `vessel_import_batch` (aliases `vessel_import_batches`, `vessel-import-batch`, `import_batches`) | `status` (Discovered/Importing/Completed/CompletedWithFailures/Failed/Discovering), `createdAfter`, `createdBefore`, `order`. Scoped to the caller's tenant. Items are not included; read a batch with items through `GET /api/v1/vessels/import/batches/{id}`. |
 | `fleet_action` | `includeInactive`, `createdAfter`, `createdBefore` |
 | `fleet_action_run` | `status` (Pending/Running/Completed/CompletedWithFailures/Cancelled/Failed), `createdAfter`, `createdBefore` |
-| `fleet_action_run_target` | `runId` (required), `status` (Pending/Skipped/Running/Succeeded/Failed/Cancelled/TimedOut) |
+| `fleet_action_run_target` | `runId` (required), `status` (Pending/Skipped/Running/Succeeded/Failed/Cancelled/TimedOut/Findings) |
 | `vessel_health` (aliases `vessel-health`, `health`) | `status` (overall status: Pass/Warn/Fail/NotApplicable/Unknown), `fleetId`, `search` (vessel name substring). Every active vessel appears, including never-evaluated ones. Rows are sorted by vessel name; for richer filters and sorting use `POST /api/v1/vessel-health/enumerate` |
+| `blackbox` (aliases `black_box`, `blackbox_entries`, `blackbox-entries`) | `status` (the resolution: Open/Resolved/Duplicate/WontFix/ArmadaFixed; `InvalidArgument` otherwise), `search` (case-insensitive substring of the reason, summary and notes), `fleetId`, `vesselId`, `voyageId`, `missionId`, `captainId`, `createdAfter`, `createdBefore`, `order`. Rows are `BlackBoxEntrySummary` objects, visible to the caller exactly as with [list_blackbox_entries](#list_blackbox_entries), which takes the richer filters (phase, step, kind, triage, fingerprint, path, pinned, isCurrent). `Unavailable` when the black box is not running (always over stdio) |
 
 **Page contract (docs/ENUMERATION.md):** every `entityType` returns the same page shape as the REST enumerate routes:
 `PageNumber`, `PageSize`, `TotalPages`, `TotalRecords`, `Objects` (plus `Success` and `TotalMs`). `pageSize` defaults to
@@ -855,7 +920,7 @@ work?"*. It replaces the removed `inbox` tool (D-012), which returned every item
 **What qualifies.** Two kinds of item appear:
 
 - **Awaiting your decision (human-in-the-loop):** a mission in `Review` (approve or reject), a deployment in `PendingApproval`, a pending Ask Armada action proposal in one of your own conversations, or a pending CLI permission request (a captain waiting to run one of its own tools, such as a shell command).
-- **Failed and needs intervention (human-out-of-the-loop):** a failed mission, a mission whose work could not be merged (landing failed), a failed merge, a failed or verification-failed deployment, or a stalled captain.
+- **Failed and needs intervention (human-out-of-the-loop):** a failed mission, a mission whose work could not be merged (landing failed), a failed merge, a failed or verification-failed deployment, a stalled captain, or the latest actionable background task failure.
 
 Purely informational events (completions, normal progress) are deliberately excluded -- the inbox answers *"what needs me?"*, not *"what happened?"* (use `enumerate` or the Activity log for history). An empty page (`TotalRecords` 0) means nothing currently needs the operator. Operational items are scoped like other reads (global admin: everything; tenant admin: the tenant; regular user: own items); Ask proposals are always limited to the caller's own threads, and proposals older than `Ask.ProposalExpiryMinutes` are left out (the same rule as `GET /api/v1/inbox`). Every item is returned (no category is capped), so `count` is the true number of items needing attention; only pending CLI permission requests stop at 1000, since they expire within minutes. Items are ordered by severity (`Critical` first), then title.
 
@@ -866,12 +931,16 @@ Purely informational events (completions, normal progress) are deliberately excl
 | `review` | Mission awaiting your review/approval | `Warning`, or `Critical` if the review deadline has passed |
 | `landing_failed` | Mission produced work that could not be merged | `Critical` |
 | `failed` | Mission failed | `Warning` |
+| `background_job_failed` | Latest actionable failed attempt of background work; follow `Href` to the related workflow and retry | `Warning` |
+| `selection_blocked` | Pending mission waiting 15 minutes or more for captain selection for an operator-actionable reason; follow `Href` to the mission's Captain selection section | `Warning` |
 | `merge_failed` | Queued merge failed testing or landing | `Critical` |
 | `deployment_approval` | Deployment waiting for your approval before it runs | `Warning` |
 | `deployment_failed` | Deployment failed or failed verification | `Critical` |
 | `stalled_captain` | Captain is stalled and may need recovery or a dock reclaim | `Warning` |
 | `ask_proposal` | Ask Armada action proposal waiting for your approval (`Href` is the conversation, `/ask/<threadId>`) | `Warning` |
 | `cli_permission` | CLI permission request waiting for an approver; visible to global admins, the tenant's tenant admins, and the owner of the thread or mission (`Href` is `/ask/<threadId>` for the caller's own conversation, otherwise `/server?tab=cli-permissions&request=<id>`; the pre-v1.2.0 `/cli-permissions?request=<id>` still redirects there) | `Warning` |
+
+Background failures are scoped to the same tenant/user rules as Jobs. Only the latest attempt per tenant, user, kind and name qualifies; a newer queued/running/successful/cancelled attempt supersedes the previous failure. Expected usage-capture discards (`SettingsGenerationChanged`, `CaptureDisabled`, `NoMembers`) and successful captures do not appear. No approve/reject decision is needed for these items. Terminal outcomes remain available through `enumerate` for `events` (`job.succeeded`, `job.failed`, `job.cancelled`); actual failures also emit `Error` signals. Existing job status and cancellation operations remain available for workflows and clients.
 
 Each object on the page is an `InboxItem` with `Kind`, `Severity`, `Title`, `Detail`, `EntityType`, `EntityName`
 (display name of the referenced entity; use it instead of parsing `Title`), `EntityId`, and a dashboard `Href`.
@@ -945,12 +1014,17 @@ Create a reusable action.
 | `commandText` | string | Command | Shell command template |
 | `promptTemplate` | string | Mission | Prompt template |
 | `pipelineId` | string | No | Pipeline for Mission dispatch |
-| `persona` | string | No | Persona name (stored; not yet applied at dispatch) |
+| `persona` | string | No | Persona name applied at dispatch (Mission kind) |
 | `timeoutSeconds` | int | No | Per-target timeout, 5-7200 (default from settings) |
 | `defaultConcurrency` | int | No | 1-32, default 4 |
 | `requiresCleanWorkingTree` | bool | No | Skip dirty working trees; default true for Command |
 | `requiredTools` | string[] | No | Executable names required on the host (at most 256) |
-| `inputs` | object[] | No | Typed runtime inputs (at most 256; each `allowedValues` at most 256) |
+| `inputs` | object[] | No | Typed runtime inputs (at most 256; each `allowedValues` at most 256). `type` is `string`, `semver`, `enum`, or `package` (a shell-safe package identifier) |
+| `outputParser` | string | No | Registered parser ID, or `auto` for the parser matching the vessel's audit command |
+| `scanSourceActionKey` | string | No | Built-in key or ID of the scan action whose latest result `{{scan.summary}}` cites |
+| `applicabilityCommand` | string | No | Shell check run in each working directory first; a non-zero exit skips the vessel (`NotApplicable`). Requires tenant admin |
+| `applicabilityCommandWindows` | string | No | PowerShell variant of the applicability check |
+| `missionMode` | string | No | Mission kind: `Implementation` (default), or `Audit` / `Research` for report-only actions (read-only, Worker-only pipeline, nothing lands, the report is the target output) |
 
 A list over its limit is `InvalidArgument` with `Code` `CollectionLimitExceeded` (also on `update_fleet_action` and
 `run_fleet_action`, where `vesselIds` may hold at most 1000 entries and `inputValues` at most 256).
@@ -979,7 +1053,10 @@ Start a run. Pass `actionId` for a saved action, or the inline definition fields
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
-| `vesselIds` | string[] | Yes | Target vessel IDs in the caller's tenant (1-500; more than 1000 entries is `CollectionLimitExceeded`). One unknown or cross-tenant vessel rejects the whole request (404). |
+| `vesselIds` | string[] | Unless `fromRunId` | Target vessel IDs in the caller's tenant (1-500; more than 1000 entries is `CollectionLimitExceeded`). One unknown or cross-tenant vessel rejects the whole request (404). |
+| `fromRunId` | string | No | Follow-up run: target the vessels of this earlier run (`far_`) whose status is in `fromTargetStatuses`, for example a fix after a scan. Do not combine with `vesselIds` |
+| `fromTargetStatuses` | string[] | No | Statuses selected from `fromRunId` (default `Findings` and `Failed`) |
+| `inputValues` | object | No | Values for the action's declared inputs |
 | `actionId` | string | No | Saved action ID (`fac_`). Omit for ad hoc. |
 | `concurrency` | int | No | 1-32; defaults to the action's `defaultConcurrency` |
 | `name`, `kind`, `commandText`, `promptTemplate` | string | Ad hoc | Inline definition |
@@ -1008,6 +1085,25 @@ Start a run. Pass `actionId` for a saved action, or the inline definition fields
 Pending targets are cancelled, running commands are killed, and unlanded voyages of a Mission run are cancelled. **Response:** the updated FleetActionRun. Returns an error with `StatusCode` 409 when the run already finished.
 
 ---
+
+## Captain Selection
+
+These tools mirror the [REST captain-selection routes](REST_API.md#captain-selection) and use the same scoped service:
+the mission or decision is authorized before paging, unseen resources return the structured not-found error, and
+internal account keys are never accepted or returned.
+
+| Tool | Arguments | Purpose |
+|---|---|---|
+| `get_captain_selection` | `missionId` | Current admitted attempt, latest retained decision, recovery permissions and `CanManageRecovery` |
+| `get_captain_selection_history` | `missionId`, optional `query` (`pageNumber`, `pageSize`, `trigger`, `outcome`, `fromUtc`, `toUtc`) | Paged retained decisions; filters apply before counts |
+| `get_captain_selection_decision` | `decisionId`, optional `tenantId` (global administrators), `pageNumber`, `pageSize` | Immutable decision, recorded policy, candidate page and runtime model evidence |
+| `preview_captain_selection` | `missionId`, optional `pageNumber`, `pageSize` | Read-only evaluation of a Pending mission; no capture, write, claim or launch |
+| `authorize_captain_selection_recovery` | `missionId`, `recovery` (`expectedRevision`, `allowFallback`, `reserveException`, `reason`) | Audited recovery permissions; tenant or system administrator; stale revision is a conflict |
+| `get_usage_selection_settings` | none | Effective server-wide policy, live revision and override metadata (global administrator) |
+| `update_usage_selection_settings` | `settings`, optional `expectedRevision` | Replace the live policy (global administrator); environment overrides stay read-only |
+
+`enumerate` also accepts the entity types `captain_selection_decision` and `captain_selection_candidate` with the same
+scoping. See the [v1.3.0 note](#v130-configurable-captain-selection) above for argument details.
 
 ## Memory
 
@@ -1336,19 +1432,31 @@ many more there were (a `completionLines` marker starts with `[ARMADA:TRUNCATED]
 Evaluate runs probe-only mechanical probes (output contract, served context, ASCII and format rules, tool calling,
 speed, determinism) against a captain through its own runtime, or against a model endpoint through the API endpoint
 runtime, and records a run (`mpr_`) with one result per probe: `Passed`, `Failed`, or `CouldNotRun` with the reason (a
-probe a runtime cannot run is never `Failed`). Only depth `Quick` is implemented; `Full` is refused ("not implemented until
-Phase 5"). Runs are tagged as evaluation, never count in stage outcomes, and change no routing or captain settings. The
+probe a runtime cannot run is never `Failed`). Depth `Quick` (the default) runs only those probes. Depth `Full` adds a
+fixture battery run (packs default to those matching the languages of the tenant's repositories; personas default to all
+the captain is allowed), then an evaluator captain (default: the highest-tier idle captain of a different model family; a
+same-family one only when no other is idle, with a warning in the report) grades the battery attempts that need a
+subjective grade and writes strengths and weaknesses from the mechanical counts only. Every count the evaluator cites
+must match; a reply that does not parse or cites a wrong count is rejected with the reason and the mechanical report is
+kept. The run carries a `report` (per-persona counts, the narrative, evaluator, warnings, `complete`); a complete report
+is also recorded as an advisory model profile revision. A cancelled or timed-out Full run ends `Cancelled` with a partial
+report marked incomplete and its open battery mission cancelled. Full has its own token budget
+(`evaluation.fullRunTokenBudget`) and timeout (`evaluation.fullRunTimeoutMinutes`) and holds the per-inference-host
+evaluation slot for its whole run. Runs are tagged as evaluation, never count in stage outcomes, scorecards or alerts,
+and change no routing, persona captain lists, prompts or captain settings. The
 REST equivalents and the run shape are in [REST_API.md](REST_API.md#evaluate-model-probe-runs); the tools enforce the
 same access rules through the same service. Errors are `McpToolError`s: `NotFound` (missing, or another tenant's),
-`Forbidden` (not an admin for a captain, or a captain session), `InvalidArgument` (not exactly one id, an unknown depth or
-status, depth `Full`), and `Unavailable` on the stdio server. `get_model_probe_run` and `list_model_probe_runs` are on the
+`Forbidden` (not an admin for a captain, a Full Evaluate or a cancel, or a captain session), `InvalidArgument` (not
+exactly one id, an unknown depth or status, an unknown pack, a persona the captain is not allowed, a run count outside 1
+to 10), and `Unavailable` on the stdio server. `get_model_probe_run` and `list_model_probe_runs` are on the
 Ask read-only list; `evaluate_captain` becomes a proposal inside an Ask conversation.
 
 | Tool | Caller |
 |---|---|
 | `evaluate_captain` with `captainId` | Global admin, or a tenant admin of the captain's tenant |
-| `evaluate_captain` with `modelEndpointId` | Anyone who can read the endpoint |
+| `evaluate_captain` with `modelEndpointId` | Quick: anyone who can read the endpoint; Full: a global admin or a tenant admin |
 | `get_model_probe_run`, `list_model_probe_runs` | Any authenticated person: global admins every tenant, everyone else their own tenant |
+| `cancel_model_probe_run` | Global admin, or a tenant admin of the run's tenant |
 
 ### evaluate_captain
 
@@ -1356,7 +1464,11 @@ Ask read-only list; `evaluate_captain` becomes a proposal inside an Ask conversa
 |---|---|---|---|
 | `captainId` | string | One of | Captain to evaluate (`cpt_`) |
 | `modelEndpointId` | string | One of | Model endpoint to evaluate (`mep_`) |
-| `depth` | string | No | `Quick` (default); `Full` is not implemented until Phase 5 |
+| `depth` | string | No | `Quick` (default) or `Full` |
+| `evaluatorCaptainId` | string | No | Full only: evaluator captain (`cpt_`, same tenant); default the highest-tier idle captain of another model family |
+| `packs` | string[] | No | Full only: battery packs; default those matching the tenant's repository languages |
+| `personas` | string[] | No | Full only: personas to score; default all the captain is allowed |
+| `runCount` | integer | No | Full only: runs of each battery task (1-10, default 3) |
 
 **Response:** the queued ModelProbeRun; the probes run in the background. Poll `get_model_probe_run`.
 
@@ -1373,10 +1485,151 @@ Ask read-only list; `evaluate_captain` becomes a proposal inside an Ask conversa
 | Parameter | Type | Required | Description |
 |---|---|---|---|
 | `captainId`, `modelEndpointId` | string | No | Filters |
-| `status` | string | No | `Queued`, `Running`, `Completed`, or `Failed` |
+| `status` | string | No | `Queued`, `Running`, `Completed`, `Failed`, or `Cancelled` |
 | `pageNumber`, `pageSize` | integer | No | Paging (page size 1-1000, default 25) |
 
 **Response:** `EnumerationResult<ModelProbeRun>` (without results), newest first.
+
+### cancel_model_probe_run
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `id` | string | Yes | Run ID (`mpr_`) |
+
+**Response:** the ModelProbeRun after the cancellation (it may still be stopping); a finished run is returned unchanged.
+
+---
+
+## Model Profiles
+
+A model profile (`mdl_`) is the model as served: runtime, provider, model and served context, shared by every captain and
+Harbor that runs it. Armada creates profiles when it records a captain's runtime and model (stage outcomes and Quick
+Evaluate runs) and sets the captain's `modelProfileId`. Each profile keeps immutable revisions (`mdv_`: runtime version,
+model digest, sampling, tool configuration, `compatibleWith`, `firstSeenUtc`); a new runtime major version, model digest
+or sampling starts a new revision and a runtime minor or patch release pools into the current one. Profiles are advisory:
+they do not set a captain's tier or change routing. Updating the mutable parts (capabilities, rendering overrides, notes)
+and marking revisions compatible are REST only ([REST_API.md](REST_API.md#model-profiles)). All three tools are on the
+Ask read-only list. Errors are `McpToolError`s: `NotFound` (missing, or another tenant's) and `Unavailable` on the stdio
+server; a non-integer page argument is refused by the schema before the tool runs.
+
+| Tool | Caller |
+|---|---|
+| `get_model_profile`, `list_model_profiles`, `get_model_scorecard` | Any authenticated person: global admins every tenant, everyone else their own tenant |
+
+### get_model_profile
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `id` | string | Yes | Model profile ID (`mdl_`) |
+
+**Response:** the ModelProfile with `identity`, `capabilities`, `rendering`, `notes` and `revisions` (oldest first).
+
+### list_model_profiles
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `runtime`, `provider` | string | No | Filters (case-insensitive) |
+| `model` | string | No | Only models whose name contains this text (case-insensitive) |
+| `pageNumber`, `pageSize` | integer | No | Paging (page size 1-1000, default 25) |
+
+**Response:** `EnumerationResult<ModelProfile>` (without revisions), newest first.
+
+### get_model_scorecard
+
+The read-only scorecard of one (profile, persona), optionally one vessel, computed from stage outcomes, token usage and
+timing. Same rules and shape as `GET /api/v1/model-profiles/{id}/scorecard`
+([REST_API.md](REST_API.md#model-scorecard)): revision groups (pooled only when marked compatible), metrics as count of
+denominator with a 95% Wilson interval, unavailable metrics with a reason, and the exclusions each attribution rule
+applied. The profile is resolved before the other arguments are validated, so another tenant's profile is `NotFound`
+and an out-of-range window on a visible profile is `InvalidArgument`.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `id` | string | Yes | Model profile ID (`mdl_`) |
+| `persona` | string | Yes | Persona, for example `Worker` or `Judge` (case-insensitive) |
+| `vesselId` | string | No | Only stages on this vessel |
+| `windowDays` | integer | No | Window length in days (1-365, default 30) |
+| `windowMissions` | integer | No | Window length in missions (1-500, default 50) |
+
+**Response:** a ModelScorecard (`profileId`, `identity`, `persona`, `windowDays`, `windowMissions`, `windowLimitedBy`,
+`windowStartUtc`, `windowEndUtc`, `missions`, `attempts`, `truncated`, `exclusions`, `groups`).
+
+---
+
+## Model Alerts
+
+Scorecard thresholds crossed for a (model profile, revision group, persona, vessel or all vessels, rule), raised as inbox
+items (kind `model_alert`) with suggested actions. Same rules, defaults and shapes as REST `/api/v1/model-alerts`
+([REST_API.md](REST_API.md#model-alerts)): evaluation reads scorecard data only, alerts are deduplicated per condition and
+resolve themselves when the condition no longer holds, and a suggested action changes something only when applied. The
+alert is resolved before the other arguments are validated, so another tenant's alert is `NotFound`. `list_model_alerts`,
+`get_model_alert` and `get_model_alert_thresholds` are on the Ask read-only list.
+
+| Tool | Caller |
+|---|---|
+| `list_model_alerts`, `get_model_alert`, `get_model_alert_thresholds` | Any authenticated person: global admins every tenant, everyone else their own tenant |
+| `evaluate_model_alerts`, `apply_model_alert_action`, `ignore_model_alert` | A global admin, or a tenant admin of the alert's tenant (`Forbidden` otherwise) |
+| `update_model_alert_thresholds` | Global admins only (the thresholds are server settings) |
+
+### list_model_alerts
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `status` | string | No | `Open` or `Resolved` (default both) |
+| `profileId` | string | No | Model profile ID (`mdl_`) |
+| `persona` | string | No | Persona (case-insensitive) |
+| `includeIgnored` | boolean | No | Include alerts hidden by Ignore (default true) |
+| `pageNumber`, `pageSize` | integer | No | Paging (page size 1-1000, default 25) |
+
+**Response:** `EnumerationResult<ModelAlert>`, most recently raised first, each with `suggestedActions` and `actions`.
+
+### get_model_alert
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `id` | string | Yes | Model alert ID (`mal_`) |
+
+**Response:** the ModelAlert (`rule`, `status`, `title`, `detail`, `count`, `of`, `value`, `threshold`, `revisionGroup`,
+`persona`, `vesselId`, `ignoredUntilUtc`, `actions`, `suggestedActions`).
+
+### evaluate_model_alerts
+
+No parameters. Runs one evaluation pass now (a tenant admin's tenant, or every tenant for a global admin).
+
+**Response:** a ModelAlertEvaluation (`pairs`, `targets` with every rule's `state`, counts, threshold and reason - inactive
+rules are `Unavailable`, rules below their minimum `MinimumNotMet` - `raised`, `stillOpen`, `resolved`).
+
+### get_model_alert_thresholds
+
+No parameters. **Response:** `defaults` (every value set) and per-persona `overrides`.
+
+### update_model_alert_thresholds
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `defaults` | object | No | `firstPassMinRate`, `firstPassMinMissions`, `escalationsInARow`, `protocolRepairMaxRate`, `protocolRepairMinAttempts`, `costMedianMultiplier`, `costMinAccepted` (null uses the built-in default) |
+| `overrides` | array | No | Per-persona overrides: `persona` plus any of the default fields (null keeps the default) |
+
+**Response:** the stored thresholds. `InvalidArgument` for a value out of range or a persona listed twice.
+
+### apply_model_alert_action
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `id` | string | Yes | Model alert ID (`mal_`) |
+| `action` | string | Yes | `MoveDown`, `RemoveFromPersona`, `CompactTemplate` (always unavailable), `Reevaluate` or `Ignore` |
+| `days` | integer | No | For `Ignore`: days to hide the alert (1-365, default 7) |
+
+**Response:** a ModelAlertApplyResult (`record`, `alert`). `InvalidArgument` for an unknown or unavailable action.
+
+### ignore_model_alert
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `id` | string | Yes | Model alert ID (`mal_`) |
+| `days` | integer | No | Days to hide the alert (1-365, default 7) |
+
+**Response:** a ModelAlertApplyResult.
 
 ---
 
@@ -1407,6 +1660,30 @@ Ask conversation.
 | `list_battery_packs` | Any authenticated person |
 | `run_battery` | Global admin, or a tenant admin of the captain's tenant |
 | `get_battery_run`, `list_battery_results` | Any authenticated person: global admins every tenant, everyone else their own tenant |
+
+### Battery pack management
+
+These tools share the REST pack management service and return the same typed payloads and errors.
+All arguments below are required strings. Reads and validation require an authenticated person; writes require
+a global admin. Captain sessions cannot use battery tools. Ask allows the three readers without approval;
+all five write/delete tools remain proposal-gated.
+
+| Tool | Arguments | Result |
+|------|-----------|--------|
+| `get_battery_pack` | `packId` | `BatteryPackDetail`: raw `ManifestJson`, validated `Info`, relative file tree |
+| `read_battery_pack_file` | `packId`, `path` | `BatteryPackTextFile`: path and UTF-8 content |
+| `write_battery_pack_file` | `packId`, `path`, `content` | Updated `BatteryPackDetail` |
+| `delete_battery_pack_file` | `packId`, `path` | Updated `BatteryPackDetail` |
+| `create_battery_pack` | `packId`, `manifestJson` | New `BatteryPackDetail`; creates fixture/ and tasks/ |
+| `update_battery_pack_manifest` | `packId`, `manifestJson` | Updated `BatteryPackDetail`, including validation errors |
+| `delete_battery_pack` | `packId` | `{ Deleted: true }` |
+| `validate_battery_pack` | `packId` | `BatteryPackInfo`, without writing |
+
+Pack ids are lowercase safe slugs (`[a-z0-9][a-z0-9._-]*`). Paths cannot be absolute, contain dot segments, or
+follow symlinks. Editable files must be under fixture/ or tasks/; battery-pack.json uses the manifest tool and
+cannot be deleted separately. UTF-8 text is capped at 1 MiB and the management tree at 256 entries. Parseable
+manifest JSON is saved even when validation fails; invalid JSON is refused. In-process active packs refuse
+mutation with Conflict; the guard cannot lock external writers or concurrent run startup.
 
 ### list_battery_packs
 
@@ -1454,6 +1731,997 @@ grader's evidence (the first 256 false positives, with `falsePositiveCount`) and
 missing run or another tenant's run.
 
 ---
+
+## Black Box
+
+A black box entry (`bbx_`) records where, how and why a mission or voyage failed, with evidence and the advisor's
+analysis (findings, a triage verdict, configuration recommendations and ranked recovery paths). The REST equivalents,
+the entry and record shapes, and every limit are in [REST_API.md](REST_API.md#black-box); concepts are in
+[BLACKBOX.md](BLACKBOX.md). Every tool calls `IBlackBoxService` as the MCP caller, so tenant scope and visibility match
+REST: a global admin sees every tenant, a tenant admin their tenant, and a regular user their own entries; an entry the
+caller cannot see is `NotFound` with `Code` `BlackBoxNotFound`, never `Forbidden`.
+
+**Naming the entry.** Tools that act on one entry take `entryId` (`bbx_`), or `missionId` / `voyageId` for that mission's
+or voyage's **current** entry. One of the three is required (`InvalidArgument` otherwise). `mission_status` and
+`voyage_status` carry `LastBlackBoxEntryId`, so a client can find the entry from the mission.
+
+**Errors** are `McpToolError`s with the black box code in `Code`:
+
+| `ErrorCode` | `Code` | When |
+|---|---|---|
+| `NotFound` | `BlackBoxNotFound` | The entry, the mission's or voyage's entry, the object, the recovery path or the recommendation does not exist or is not visible |
+| `NotFound` | `BlackBoxObjectMissing` | The object's row exists but the store lost its bytes |
+| `Conflict` | `BlackBoxDeleting` | The entry is being deleted |
+| `Conflict` | `BlackBoxObjectCorrupt` | The object's bytes do not match its SHA-256 |
+| `Conflict` | `BlackBoxConfirmationRequired` | A confirmed recovery or recommendation run without a valid `confirmToken` (missing, expired, used, another caller's, or the mission or plan changed), or a `dataLossRisk` path without `acknowledgeDataLoss` |
+| `Unavailable` | `BlackBoxStoreUnavailable` | The storage target is unreachable |
+| `Unavailable` | `BlackBoxActionsUnavailable` | A confirmed run on a host with no action executor wired |
+| `Unavailable` | null | The black box is not available on this server (every tool on the stdio server) |
+| `InvalidArgument` | null, or `CollectionLimitExceeded` | A missing or invalid argument (format, section, resolution, order, offset, length, a note body outside 1 to 8000 characters, a search query outside 1 to 200); more than 1000 `entryIds` is `CollectionLimitExceeded` |
+| `Forbidden` | null | The tool's permission level, or a recovery step whose tool the caller could not call directly |
+
+```json
+{
+  "Error": "Black box entry bbx_doesnotexist_0000000000 not found.",
+  "ErrorCode": "NotFound",
+  "Code": "BlackBoxNotFound",
+  "StatusCode": null
+}
+```
+
+**Permissions** (`McpToolAuthorizationRegistry`, resource `BlackBox`):
+
+| Tool | Level |
+|---|---|
+| `get_blackbox`, `read_blackbox_section`, `list_blackbox_objects`, `read_blackbox_object`, `list_blackbox_entries`, `search_blackbox`, `list_blackbox_notes`, `get_blackbox_bundle`, `list_blackbox_hotspots`, `list_blackbox_fingerprints`, `list_blackbox_resilience_gaps`, `get_blackbox_fingerprint_trend` | Authenticated |
+| `annotate_blackbox`, `resolve_blackbox`, `pin_blackbox` | Authenticated |
+| `run_blackbox_recovery`, `apply_blackbox_recommendation` | Authenticated; each recorded step is then authorized as its own tool (`restart_mission`, `retry_landing`, `update_vessel` and the other supported tools are TenantAdmin) |
+| `get_blackbox_retention`, `delete_blackbox_entries`, `reanalyze_blackbox` | TenantAdmin |
+| `get_blackbox_storage`, `purge_blackbox`, `run_blackbox_gc`, `export_blackbox_fixture` | AdminOnly |
+
+**Ask Armada.** The 14 read tools (`get_blackbox`, `read_blackbox_section`, `list_blackbox_objects`,
+`read_blackbox_object`, `list_blackbox_entries`, `search_blackbox`, `list_blackbox_notes`, `get_blackbox_bundle`,
+`list_blackbox_hotspots`, `list_blackbox_fingerprints`, `list_blackbox_resilience_gaps`, `get_blackbox_fingerprint_trend`,
+`get_blackbox_retention`, `get_blackbox_storage`) are on the Ask read-only allowlist (`AskToolPolicy`), so they run directly inside an Ask
+conversation (still subject to their permission level). The write tools become proposals there.
+
+**Stdio.** `armada mcp stdio` registers the same 24 tools without the service, so each answers `Unavailable`; the
+resources and prompts below are served only by the Admiral's HTTP MCP server.
+
+### get_blackbox
+
+Start here when asked why something failed.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `entryId` / `missionId` / `voyageId` | string | One of them | The entry, or the current entry of a mission or voyage |
+| `format` | string | No | `summary` (default, about 2 KB), `brief` or `json` |
+| `redactHosts` | boolean | No | Strip absolute paths, host names and user names from the brief (default false) |
+
+**Response:** `summary` returns a `BlackBoxDigest`: where it failed (phase, step, host, source file and method), how
+(mechanism), status before and after, why (the top findings), the triage verdict and confidence, the Armada resilience
+angle, and the top recovery paths. The resilience fields: `TriageSuspected` (the `ArmadaDefect` verdict rests on the
+handoff and landing prior `BBX-PRIOR-ARMADA` alone), `ResilienceInScope` (the failure is in Armada's own handoff and
+landing), `SelfHealable` (`Yes`, `No` or `Unknown`: could Armada have healed it by itself), `SelfHealingProposal` (what
+Armada could have done), `DetectionGap` (why Armada did not catch it earlier), `ResilienceSeverity` (escalated by
+recurrence) and `TopProposedChange` (the most impactful proposed Armada change, its `MissionBrief` left out; read the
+`Resilience` section for it). When `ResilienceInScope` is true, first assess whether Armada could have handled it. `brief` returns `{ EntryId, ContentType, Brief }` (the Markdown FIX THIS brief, rendered live; there is one brief per
+entry).
+`json` returns the full `BlackBoxRecord`.
+
+```json
+{ "missionId": "msn_mvu1fjp0_9Wd6Uuyp262", "format": "summary" }
+```
+
+```json
+{
+  "EntryId": "bbx_mvu1ftcv_zcdofOBmjhY",
+  "SubjectType": "Mission",
+  "MissionId": "msn_mvu1fjp0_9Wd6Uuyp262",
+  "VoyageId": "vyg_mvu1fjoz_xO6urNkcaHp",
+  "Title": "Retry landings deferred on a dirty checkout",
+  "VesselName": "demo-api",
+  "Attempt": 1,
+  "CaptureMode": "Backfill",
+  "State": "Analyzed",
+  "Phase": "Execution",
+  "Step": "ProcessCrash",
+  "Host": "Admiral",
+  "SourceFile": null,
+  "SourceLine": null,
+  "Method": null,
+  "Kind": "Crash",
+  "Reason": "Captain process exited with code 134 after 4m12s while running dotnet test (Test.Automated aborted: Fatal error. System.AccessViolationException in SQLitePCL.raw.sqlite3_step). Retry once the test host is stable.",
+  "Mechanism": null,
+  "StatusBefore": null,
+  "StatusAfter": "Failed",
+  "Triage": "Transient",
+  "TriageConfidence": "Low",
+  "TriageSuspected": false,
+  "ResilienceInScope": false,
+  "SelfHealable": "No",
+  "SelfHealingProposal": null,
+  "DetectionGap": null,
+  "ResilienceSeverity": "Low",
+  "TopProposedChange": null,
+  "Summary": "Mission \"Retry landings deferred on a dirty checkout\" (msn_mvu1fjp0_9Wd6Uuyp262) failed during Execution at step ProcessCrash (kind Crash). The captain's process exited with code unknown before finishing. Triage: Transient (low confidence). Suggested next step: restart the mission (bbx-exec-006.restart).",
+  "Why": [
+    { "RuleId": "BBX-EXEC-006", "Statement": "The captain's process exited with code unknown before finishing.", "Confidence": "Medium", "EvidenceRefs": [ "mechanism.exitCode", "evidence/agent-output.txt" ] }
+  ],
+  "RecoveryPaths": [
+    {
+      "Id": "bbx-exec-006.restart",
+      "Rank": 1,
+      "Title": "Restart the mission",
+      "Preconditions": [],
+      "Steps": [
+        {
+          "Order": 1,
+          "Description": "Restart msn_mvu1fjp0_9Wd6Uuyp262.",
+          "McpCommand": "restart_mission {\"missionId\": \"msn_mvu1fjp0_9Wd6Uuyp262\"}",
+          "RestCommand": "POST /api/v1/missions/msn_mvu1fjp0_9Wd6Uuyp262/restart",
+          "CliCommand": "armada mission restart msn_mvu1fjp0_9Wd6Uuyp262",
+          "Action": { "Tool": "restart_mission", "Arguments": { "missionId": "msn_mvu1fjp0_9Wd6Uuyp262" } },
+          "DataLossRisk": false
+        }
+      ],
+      "Action": { "Tool": "restart_mission", "Arguments": { "missionId": "msn_mvu1fjp0_9Wd6Uuyp262" } },
+      "Risk": "Low",
+      "DataLossRisk": false,
+      "ExpectedOutcome": "A fresh process runs the mission.",
+      "RuleId": "BBX-EXEC-006"
+    }
+  ],
+  "ConflictedFileTotal": 0,
+  "ObjectCount": 5,
+  "Resolution": "Resolved",
+  "CreatedUtc": "2026-10-29T21:11:05.310433Z"
+}
+```
+
+`format` `brief`:
+
+```json
+{
+  "EntryId": "bbx_mvu1ftcv_zcdofOBmjhY",
+  "ContentType": "text/markdown",
+  "Brief": "# FIX THIS: Retry landings deferred on a dirty checkout (mission msn_mvu1fjp0_9Wd6Uuyp262)\n\nYou are asked to FIX THIS. This brief is a self-contained black box entry from Armada, a multi-agent orchestration system. ...\n\n## Summary\n\n..."
+}
+```
+
+`InvalidArgument` for another `format`; `NotFound` (`BlackBoxNotFound`) when there is no entry.
+
+### read_blackbox_section
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `entryId` / `missionId` / `voyageId` | string | One of them | The entry |
+| `section` | string | Yes | `Subject`, `Status`, `Site`, `Mechanism`, `Classification`, `Workspace` (dirty paths, checkout), `Conflict` (conflicted files and the missions that landed them), `Scope`, `Configuration` (each setting and where it came from), `Attempts`, `Evidence` (the object index), `Analysis` (findings, triage, recovery paths, recommendations), `Resilience` (the `Analysis` with only `Resilience` and `Triage`: whether Armada could have healed it, the detection gap and invariant, code pointers at the build commit, proposed Armada changes as mission briefs, the regression test), `Handoff` (the handoff and landing trail: ordered steps, automatic recoveries Armada already tried, dock transitions, target movement), `Related`, `Voyage`, `Redaction` or `Truncation` (case-insensitive) |
+
+**Response:** a `BlackBoxSectionResult`: the record with the header fields and the requested section; the other
+sections are null (`Attempts` is an empty list, and `Redaction` and `Truncation` are always present).
+
+```json
+{ "entryId": "bbx_mvu1ftcv_zcdofOBmjhY", "section": "Mechanism" }
+```
+
+```json
+{
+  "EntryId": "bbx_mvu1ftcv_zcdofOBmjhY",
+  "Section": "Mechanism",
+  "Record": {
+    "EntryId": "bbx_mvu1ftcv_zcdofOBmjhY",
+    "SchemaVersion": 1,
+    "RulesVersion": 1,
+    "CaptureMode": "Backfill",
+    "State": "Analyzed",
+    "CreatedUtc": "2026-10-29T21:11:05.310433Z",
+    "Subject": null,
+    "Status": null,
+    "Site": null,
+    "Mechanism": { "ExceptionType": null, "ExceptionMessage": null, "StackFrames": [], "ExitCode": null, "RuntimeFailureKind": null, "FailingCommand": null, "CommandExitCode": null, "CommandOutputTail": null, "GitOperation": null, "GitStderrTail": null },
+    "Classification": null,
+    "Workspace": null,
+    "Conflict": null,
+    "Scope": null,
+    "Configuration": null,
+    "Attempts": [],
+    "Evidence": null,
+    "Analysis": null,
+    "Related": null,
+    "Voyage": null,
+    "Redaction": { "RulesApplied": [], "RedactedCount": 0 },
+    "Truncation": { "Fields": [], "FieldTotal": 0, "TimedOut": false, "Notes": [] }
+  }
+}
+```
+
+### list_blackbox_objects
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `entryId` / `missionId` / `voyageId` | string | One of them | The entry |
+| `pageNumber`, `pageSize` | integer | No | Paging (page size 1-1000, default 10; out-of-range values are normalized) |
+| `order` | string | No | `CreatedDescending` (default) or `CreatedAscending` |
+
+**Response:** `EnumerationResult<BlackBoxObjectSummary>` (`Name`, `ContentType`, `ContentEncoding`, `SizeBytes` stored,
+`UncompressedBytes`, `Sha256`, `IsMissing`, `CreatedUtc`):
+
+```json
+{
+  "Success": true,
+  "PageNumber": 1,
+  "PageSize": 10,
+  "TotalPages": 1,
+  "TotalRecords": 5,
+  "Objects": [
+    { "Name": "brief.md", "ContentType": "text/markdown", "ContentEncoding": "gzip", "SizeBytes": 2720, "UncompressedBytes": 6450, "Sha256": "0d9b1fd5d99d9bb7a46a0f68703c085c971a22d630d2dc9c73deda2c84a7d9d0", "IsMissing": false, "CreatedUtc": "2026-10-29T21:11:39.855168Z" },
+    { "Name": "evidence/events.json", "ContentType": "application/json", "ContentEncoding": "gzip", "SizeBytes": 303, "UncompressedBytes": 892, "Sha256": "5e24fe18f6c54c862503ff3203ef61ff55bd21ad5fcb5f96e5140441fa70f326", "IsMissing": false, "CreatedUtc": "2026-10-29T21:11:39.855526Z" },
+    { "Name": "record.json", "ContentType": "application/json", "ContentEncoding": "gzip", "SizeBytes": 3165, "UncompressedBytes": 11635, "Sha256": "942dfae0729b7a51a2a59c67441fa499513fbd9378e060fb28b0bbe29b88aed2", "IsMissing": false, "CreatedUtc": "2026-10-29T21:11:39.854618Z" }
+  ],
+  "TotalMs": 0
+}
+```
+
+(Trimmed to three of the five objects.) The stored `brief*.md` objects are snapshots written at capture and analysis;
+`get_blackbox` `format` `brief` renders the brief live with the newest notes.
+
+### read_blackbox_object
+
+Read a chunk of one object without flooding context.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `entryId` / `missionId` / `voyageId` | string | One of them | The entry |
+| `name` | string | Yes | Object name, unencoded (for example `evidence/git-status.txt`) |
+| `offset` | integer | No | Byte offset (default 0; not negative) |
+| `length` | integer | No | Bytes to read, 1-65536 (default 65536, 64 KB) |
+
+**Response:** a `BlackBoxObjectChunk`: `Content` (UTF-8 text for text objects, cut back to a character boundary;
+base64 otherwise, with `Encoding` `utf-8` or `base64`), `Offset`, `Length` (bytes returned), `TotalBytes`, `Sha256`, and
+`NextOffset` while more remains (null at the end). Call again with `offset` = `NextOffset` to page through a large log.
+
+```json
+{ "entryId": "bbx_mvu1ftcv_zcdofOBmjhY", "name": "brief.md", "length": 400 }
+```
+
+```json
+{
+  "EntryId": "bbx_mvu1ftcv_zcdofOBmjhY",
+  "Name": "brief.md",
+  "ContentType": "text/markdown",
+  "Offset": 0,
+  "Length": 400,
+  "TotalBytes": 6450,
+  "NextOffset": 400,
+  "Encoding": "utf-8",
+  "Content": "# FIX THIS: Retry landings deferred on a dirty checkout (mission msn_mvu1fjp0_9Wd6Uuyp262)\n\nYou are asked to FIX THIS. This brief is a self-contained black box entry from Armada, a multi-agent orchestration system. It records where, how and why a mission failed, with evidence.\n\nBefore changing anything, triage the failure. Decide which one it is, and say why, quoting the evidence below:\n\n1. **User",
+  "Sha256": "0d9b1fd5d99d9bb7a46a0f68703c085c971a22d630d2dc9c73deda2c84a7d9d0"
+}
+```
+
+`InvalidArgument` without `name`, for a negative `offset` or a `length` outside 1-65536; `NotFound`
+(`BlackBoxNotFound`, or `BlackBoxObjectMissing` when the store lost the bytes); `Conflict` (`BlackBoxObjectCorrupt`);
+`Unavailable` (`BlackBoxStoreUnavailable`).
+
+### list_blackbox_entries
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `vesselId`, `voyageId`, `missionId`, `captainId`, `fleetId` | string | No | Id filters |
+| `subjectType` | string | No | `Mission` or `Voyage` |
+| `phase` | string | No | `Dispatch`, `Provision`, `Execution`, `Completion`, `Review`, `Handoff`, `Landing`, `MergeQueue`, `Recovery`, `Voyage`, `External` |
+| `step` | string | No | `BlackBoxStepEnum` name (for example `DirtyCheckout`) |
+| `kind` | string | No | `MissionFailureKindEnum` name |
+| `triage` | string | No | `Unknown`, `UserConfig`, `MissionBrief`, `Transient`, `ArmadaDefect`, `External` |
+| `resolution` | string | No | `Open`, `Resolved`, `Duplicate`, `WontFix`, `ArmadaFixed` |
+| `state` | string | No | `Captured`, `Enriched`, `Analyzed`, `EnrichmentFailed`, `ObjectMissing` |
+| `fingerprint` | string | No | Entries of the same failure mode |
+| `pinned`, `isCurrent` | boolean | No | Pinned or current entries only (true), or the others (false) |
+| `path` | string | No | Repository path recorded in any file role |
+| `resilienceScope` | boolean | No | Entries in Armada's handoff and landing scope (true) or outside it (false) |
+| `createdAfter`, `createdBefore` | string | No | ISO 8601 (inclusive / exclusive) |
+| `pageNumber`, `pageSize`, `order` | | No | Paging (1-1000, default 10), `CreatedDescending` (default) or `CreatedAscending` |
+
+The `BlackBoxEnumerateRequest` fields the schema does not list (`harborId`, `captureMode`) are also accepted.
+**Response:** `EnumerationResult<BlackBoxEntrySummary>`, newest first:
+
+```json
+{ "vesselId": "vsl_mvu1ffz5_4Vb0gY5fhKv", "isCurrent": true, "pageSize": 5 }
+```
+
+```json
+{
+  "Success": true,
+  "PageNumber": 1,
+  "PageSize": 5,
+  "TotalPages": 1,
+  "TotalRecords": 3,
+  "Objects": [
+    {
+      "Id": "bbx_mvu1ftew_95PyT7WmtrV",
+      "SubjectType": "Voyage",
+      "MissionId": null,
+      "VoyageId": "vyg_mvu1fjoz_xO6urNkcaHp",
+      "VesselId": "vsl_mvu1ffz5_4Vb0gY5fhKv",
+      "CaptainId": null,
+      "MissionTitle": "Harden landing retries",
+      "VesselName": "demo-api",
+      "Attempt": 1,
+      "IsCurrent": true,
+      "Phase": "Voyage",
+      "Step": "SettlementFailed",
+      "FailureKind": "Crash",
+      "StatusBefore": null,
+      "StatusAfter": "Failed",
+      "Triage": "Transient",
+      "Fingerprint": "bcb7be821991076ba7d7551c9c5714b099bddaa13843c800b1bd4ee271e37329",
+      "CaptureMode": "Backfill",
+      "State": "Analyzed",
+      "Resolution": "Open",
+      "Pinned": false,
+      "ReasonExcerpt": "Mission msn_mvu1fjp0_9Wd6Uuyp262 failed: Captain process exited with code 134 after 4m12s while running dotnet test ...",
+      "TotalBytes": 9199,
+      "ObjectCount": 5,
+      "CreatedUtc": "2026-10-29T21:11:05.382585Z",
+      "ExpiresUtc": "2027-04-27T21:11:05.382585Z"
+    }
+  ],
+  "TotalMs": 0
+}
+```
+
+(Trimmed to one row.)
+
+### search_blackbox
+
+Full-text search (case-insensitive substring) over the reason, summary and notes of the visible entries.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `query` | string | Yes | 1-200 characters |
+| filters and paging | | No | As [list_blackbox_entries](#list_blackbox_entries) |
+
+```json
+{ "query": "SQLitePCL", "pageSize": 5 }
+```
+
+**Response:** `EnumerationResult<BlackBoxEntrySummary>` (rows as above). `InvalidArgument` for an empty or over-long
+query.
+
+### list_blackbox_notes
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `entryId` / `missionId` / `voyageId` | string | One of them | The entry |
+| `pageNumber`, `pageSize`, `order` | | No | Paging (1-1000, default 10) |
+
+**Response:** `EnumerationResult<BlackBoxNote>`, newest first. Every recovery dry run and run adds a note:
+
+```json
+{
+  "Success": true,
+  "PageNumber": 1,
+  "PageSize": 10,
+  "TotalPages": 1,
+  "TotalRecords": 2,
+  "Objects": [
+    {
+      "Id": "bbn_mvu1gjz0_6I5xZubo4wF",
+      "EntryId": "bbx_mvu1ftcv_zcdofOBmjhY",
+      "TenantId": "default",
+      "UserId": "default",
+      "AuthorKind": "Operator",
+      "Body": "Ran recovery path bbx-exec-006.restart (Restart the mission): succeeded. 1. restart_mission: ok ({\"id\":\"msn_mvu1fjp0_9Wd6Uuyp262\", ...)",
+      "CreatedUtc": "2026-10-29T21:11:39.804858Z"
+    },
+    {
+      "Id": "bbn_mvu1gjri_gmnRF09pl9P",
+      "EntryId": "bbx_mvu1ftcv_zcdofOBmjhY",
+      "TenantId": "default",
+      "UserId": "default",
+      "AuthorKind": "Operator",
+      "Body": "Reproduced locally: the test host crashes in SQLitePCL under parallel suites. Restarting after pinning the native library.",
+      "CreatedUtc": "2026-10-29T21:11:39.5342Z"
+    }
+  ],
+  "TotalMs": 0
+}
+```
+
+### get_blackbox_bundle
+
+A maintainer bundle: up to `max` of the newest matching entries grouped by fingerprint (highest resilience severity
+first, then most frequent), each group with its brief, proposed Armada changes and regression test, to produce Armada
+missions on the Armada vessel. By default (no `allFailures`, `triage` or `resilienceScope`) it holds the Armada
+resilience gaps: entries in handoff and landing scope triaged `ArmadaDefect`.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| filters | | No | The [list_blackbox_entries](#list_blackbox_entries) filters |
+| `max` | integer | No | Entries, 1-50 (default 50) |
+| `format` | string | No | `Markdown` (default) or `Json` |
+| `redactHosts` | boolean | No | Strip absolute paths, host names and user names (default false) |
+| `allFailures` | boolean | No | Bundle every failure instead of the resilience gaps (default false) |
+
+**Response:** `{ Format, EntryCount, FingerprintCount, Content, Truncated }`; `Content` is capped at 1 MB. With
+`format` `Json`, `Content` is a camelCase JSON document (`preamble`, `entryCount`, `fingerprintCount`, `groups`; each group adds `severity`, `selfHealable`, `proposedChanges` and `regressionTest`):
+
+```json
+{
+  "Format": "Json",
+  "EntryCount": 3,
+  "FingerprintCount": 3,
+  "Content": "{\n  \"preamble\": \"These are 3 Armada black box entries in 3 failure modes, grouped by fingerprint (most frequent first). You are asked to improve Armada itself. ...\",\n  \"entryCount\": 3,\n  \"fingerprintCount\": 3,\n  \"groups\": [ ... ]\n}",
+  "Truncated": false
+}
+```
+
+### list_blackbox_hotspots
+
+Directories that recur in failures, most files first.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `vesselId` | string | No | Vessel filter |
+| `role` | string | No | `Conflicted` (the default when omitted), `DirtyInCheckout`, `OutOfScope`, `ChangedByMission`, `ChangedByConflictingMission`, `BoundaryViolation` |
+| `createdAfter`, `createdBefore` | string | No | ISO 8601 |
+| `pageNumber`, `pageSize`, `order` | | No | Paging (1-1000, default 10) |
+
+**Response:** `EnumerationResult<BlackBoxHotspot>` (`VesselId`, `Directory`, `FileCount`, `EntryCount`, `LastSeenUtc`):
+
+```json
+{
+  "Success": true,
+  "PageNumber": 1,
+  "PageSize": 5,
+  "TotalPages": 1,
+  "TotalRecords": 2,
+  "Objects": [
+    { "VesselId": "vsl_mvu1ffz5_4Vb0gY5fhKv", "Directory": "src/Armada.Server/Routes", "FileCount": 12, "EntryCount": 1, "LastSeenUtc": "2026-10-29T21:11:05.310433Z" },
+    { "VesselId": "vsl_mvu1ffz5_4Vb0gY5fhKv", "Directory": "src/Armada.Core/Services", "FileCount": 8, "EntryCount": 1, "LastSeenUtc": "2026-10-29T21:11:05.310433Z" }
+  ],
+  "TotalMs": 0
+}
+```
+
+### list_blackbox_fingerprints
+
+Failure modes (entries grouped by fingerprint), by count, then last seen. Compare one mode's entries with
+`list_blackbox_entries {fingerprint}`.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `vesselId` | string | No | Vessel filter |
+| `resolution` | string | No | Count only entries with this resolution |
+| `createdAfter`, `createdBefore` | string | No | ISO 8601 |
+| `pageNumber`, `pageSize`, `order` | | No | Paging (1-1000, default 10) |
+
+```json
+{
+  "Success": true,
+  "PageNumber": 1,
+  "PageSize": 5,
+  "TotalPages": 1,
+  "TotalRecords": 3,
+  "Objects": [
+    { "Fingerprint": "0c0d4699f8052fede78fbc067119a0dd57940124eefd9ae8b0bfc8df8d7a0149", "Count": 1, "OpenCount": 1, "FirstSeenUtc": "2026-10-29T21:11:05.377352Z", "LastSeenUtc": "2026-10-29T21:11:05.377352Z", "LatestEntryId": "bbx_mvu1ftep_b5OtDr4leub", "Phase": "Handoff", "Step": "DependencyCancelled", "FailureKind": "DependencyFailed" }
+  ],
+  "TotalMs": 0
+}
+```
+
+(Trimmed to one row.)
+
+### list_blackbox_resilience_gaps
+
+Armada resilience gaps: failure modes (fingerprints) in Armada's own handoff and landing that the black box triaged
+`ArmadaDefect`, most severe first within the page (then occurrences, then last seen). Use it to pick the Armada
+missions that make handoff and landing more resilient.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `vesselId` | string | No | Vessel filter |
+| `resolution` | string | No | Count only entries with this resolution |
+| `phase` | string | No | `Handoff`, `Landing`, `MergeQueue`, `Recovery`, `Provision`, `Completion` or `Review` (default: the whole scope) |
+| `createdAfter`, `createdBefore` | string | No | ISO 8601 |
+| `pageNumber`, `pageSize`, `order` | | No | Paging (page size at most 50; larger values are capped) |
+
+**Response:** `EnumerationResult<BlackBoxResilienceGap>`: `Fingerprint`, `Phase`, `Step`, `FailureKind`, `Occurrences`,
+`OpenCount`, `FirstSeenUtc`, `LastSeenUtc`, `LatestEntryId`, `LatestMissionId`, `LatestMissionTitle`, `VesselName`,
+`ArmadaVersions`, `Severity` (escalated by recurrence: 1 Medium, 3 High, 5 or two Armada versions Critical),
+`SelfHealable`, `Suspected`, `DetectionGap`, `TopProposedChange` (its `MissionBrief` left out) and `RuleIds`. Scoped
+to what the caller can see; `InvalidArgument` when `createdAfter` is after `createdBefore`.
+
+```json
+{
+  "Success": true,
+  "PageNumber": 1,
+  "PageSize": 10,
+  "TotalPages": 1,
+  "TotalRecords": 1,
+  "Objects": [
+    {
+      "Fingerprint": "9c1f0e6d2a7b4c3e8f5a1d0b6c2e7f4a9b3d8c1e5f0a2b7c4d9e6f3a8b1c5d2e",
+      "Phase": "Landing",
+      "Step": "TargetIntegration",
+      "FailureKind": "LandingConflict",
+      "Occurrences": 3,
+      "OpenCount": 3,
+      "FirstSeenUtc": "2026-10-27T09:14:02.110000Z",
+      "LastSeenUtc": "2026-10-29T21:11:05.310433Z",
+      "LatestEntryId": "bbx_mvu1ftew_95PyT7WmtrV",
+      "LatestMissionId": "msn_mvu1fjp0_9Wd6Uuyp262",
+      "LatestMissionTitle": "Retry landings deferred on a dirty checkout",
+      "VesselName": "demo-api",
+      "ArmadaVersions": [ "1.3.0" ],
+      "Severity": "High",
+      "SelfHealable": "Yes",
+      "Suspected": false,
+      "TopProposedChange": { "Rank": 1, "Title": "Recreate a missing dock worktree from the branch before landing", "Severity": "High", "RuleId": "BBX-LAND-002", "MissionBrief": null },
+      "DetectionGap": "The dock was reclaimed or its directory removed while the mission still had to land ...",
+      "RuleIds": [ "BBX-LAND-002", "BBX-PRIOR-ARMADA" ]
+    }
+  ],
+  "TotalMs": 0
+}
+```
+
+(`TopProposedChange` trimmed.)
+
+### get_blackbox_fingerprint_trend
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `fingerprint` | string | Yes | From an entry or `list_blackbox_fingerprints` |
+
+**Response:** occurrences per Armada version, ordered by first sighting, with open and `ArmadaFixed` counts (at most
+1000 entries and 100 versions; `Truncated` when cut):
+
+```json
+{
+  "Fingerprint": "bcb7be821991076ba7d7551c9c5714b099bddaa13843c800b1bd4ee271e37329",
+  "Phase": "Voyage",
+  "Step": "SettlementFailed",
+  "Total": 1,
+  "Truncated": false,
+  "Versions": [
+    { "ArmadaVersion": "1.3.0+5de469cff2709733b1ffb68fbc45d1303e9e41be", "Count": 1, "OpenCount": 1, "ArmadaFixedCount": 0, "FirstSeenUtc": "2026-10-29T21:11:05.382585Z", "LastSeenUtc": "2026-10-29T21:11:05.382585Z" }
+  ]
+}
+```
+
+### get_blackbox_retention
+
+No arguments. TenantAdmin: a tenant admin sees their tenant's counts, a global admin every tenant.
+
+```json
+{
+  "Policy": { "RetentionDays": 180, "ResolvedRetentionDays": 30, "KeepLatestPerMission": true, "MaxEntriesPerVessel": 1000, "MaxTotalBytes": 1073741824, "DeleteWithMission": false, "DeleteWithVessel": true, "GcIntervalMinutes": 60, "GcBatchSize": 200, "OrphanGraceHours": 24 },
+  "TotalEntries": 3,
+  "TotalBytes": 28653,
+  "PinnedEntries": 0,
+  "DeletingEntries": 0,
+  "ExpiredEntries": 0,
+  "LastRun": null,
+  "NextRunUtc": "2026-10-29T22:10:34.41649Z"
+}
+```
+
+### get_blackbox_storage
+
+No arguments. AdminOnly. The configured target for new entries, its health, `FallbackToDatabase`, entries and bytes per
+target (`Usage`, where existing entries are) and `ActiveMigrationId`:
+
+```json
+{
+  "Target": "Database",
+  "Health": { "Target": "Database", "Healthy": true, "Message": "Database store reachable.", "LatencyMs": 0, "CheckedUtc": "2026-10-29T21:12:14.102016Z" },
+  "FallbackToDatabase": true,
+  "Usage": [ { "Target": "Disk", "Entries": 3, "Bytes": 28653 } ],
+  "ActiveMigrationId": null
+}
+```
+
+(Captured after a storage migration moved every entry to `Disk` while the configured target stayed `Database`.)
+
+### annotate_blackbox
+
+Add a note (recorded with `AuthorKind` `Agent`). Annotate what you found and what you did, so the next reader does not
+repeat it.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `entryId` / `missionId` / `voyageId` | string | One of them | The entry |
+| `body` | string | Yes | Note text, 1-8000 characters |
+
+```json
+{ "entryId": "bbx_mvu1ftcv_zcdofOBmjhY", "body": "Agent: confirmed the crash is in the test host, not the mission change." }
+```
+
+```json
+{
+  "Id": "bbn_mvu1hafs_7Ea3fazlj3b",
+  "EntryId": "bbx_mvu1ftcv_zcdofOBmjhY",
+  "TenantId": "default",
+  "UserId": "default",
+  "AuthorKind": "Agent",
+  "Body": "Agent: confirmed the crash is in the test host, not the mission change.",
+  "CreatedUtc": "2026-10-29T21:12:14.104947Z"
+}
+```
+
+### resolve_blackbox
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `entryId` / `missionId` / `voyageId` | string | One of them | The entry |
+| `resolution` | string | Yes | `Open` (reopens), `Resolved`, `Duplicate`, `WontFix` or `ArmadaFixed` |
+| `note` | string | No | What fixed it (up to 2000 characters) |
+| `link` | string | No | The landed commit, a pull request or a mission (up to 1000 characters) |
+
+```json
+{ "missionId": "msn_mvu1fjp0_9Wd6Uuyp262", "resolution": "Resolved", "note": "Landed after restart.", "link": "msn_mvu1fjp0_9Wd6Uuyp262" }
+```
+
+**Response:** the updated `BlackBoxEntry` (`Record` null), with `Resolution`, `ResolutionNote`, `ResolutionLink`,
+`ResolvedUtc` and the recomputed `ExpiresUtc`; emits `blackbox.resolved`. `InvalidArgument` for another resolution.
+
+### run_blackbox_recovery
+
+Run one recovery path recorded in the entry's analysis. It never takes a free-form command: only the recorded steps
+run (tools `retry_landing`, `restart_mission`, `cancel_mission`, `unstick_dock`, `repair_dock`, `update_vessel`,
+`update_mission`, targeting the entry's own mission, vessel or dock), each authorized as if you had called that tool.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `entryId` / `missionId` / `voyageId` | string | One of them | The entry |
+| `pathId` | string | Yes | Recovery path id from the analysis (for example `bbx-land-001.stash-retry`) |
+| `dryRun` | boolean | No | Default **true**: return the plan and a `confirmToken` without acting |
+| `confirmToken` | string | When `dryRun` is false | The token from the dry run (`bbc_...`, 10 minutes, single use) |
+| `acknowledgeDataLoss` | boolean | For a `dataLossRisk` path | `true` after the user confirmed (paths that use `cancel_mission` or `unstick_dock`) |
+
+The token binds the entry, the path, the caller, the plan and the mission's current version. Pass `dryRun: false`
+explicitly to run: a call with a `confirmToken` but no `dryRun` is another dry run. Every dry run and run is annotated on
+the entry (`AuthorKind` `Agent`) and emits `blackbox.recovery_run`.
+
+Dry run:
+
+```json
+{ "entryId": "bbx_mvu1ftcv_zcdofOBmjhY", "pathId": "bbx-exec-006.restart", "dryRun": true }
+```
+
+```json
+{
+  "EntryId": "bbx_mvu1ftcv_zcdofOBmjhY",
+  "PathId": "bbx-exec-006.restart",
+  "DryRun": true,
+  "ConfirmToken": "bbc_55295476af829b0bce6827f00e3ef896",
+  "ConfirmTokenExpiresUtc": "2026-10-29T21:22:14.120578Z",
+  "Plan": [
+    {
+      "Order": 1,
+      "Description": "Restart msn_mvu1fjp0_9Wd6Uuyp262.",
+      "McpCommand": "restart_mission {\"missionId\": \"msn_mvu1fjp0_9Wd6Uuyp262\"}",
+      "RestCommand": "POST /api/v1/missions/msn_mvu1fjp0_9Wd6Uuyp262/restart",
+      "CliCommand": "armada mission restart msn_mvu1fjp0_9Wd6Uuyp262",
+      "Action": { "Tool": "restart_mission", "Arguments": { "missionId": "msn_mvu1fjp0_9Wd6Uuyp262" } },
+      "DataLossRisk": false
+    }
+  ],
+  "StepResults": [],
+  "Succeeded": true,
+  "Refused": false,
+  "UnmetPreconditions": [],
+  "Message": "Would run: restart_mission {\"missionId\": \"msn_mvu1fjp0_9Wd6Uuyp262\"}. Confirm with confirmToken before 2026-10-29 21:22:14Z."
+}
+```
+
+Confirm:
+
+```json
+{ "entryId": "bbx_mvu1ftcv_zcdofOBmjhY", "pathId": "bbx-exec-006.restart", "dryRun": false, "confirmToken": "bbc_55295476af829b0bce6827f00e3ef896" }
+```
+
+**Response:** `DryRun` false and `StepResults` (`Order`, `Tool`, `Succeeded`, `Message`); the first failed step stops
+the run and the rest report "Not run", and a manual step is reported, not run. Step preconditions (for example
+`restart_mission` needs a Failed, LandingFailed or Cancelled mission, not one already Pending) are checked on the dry
+run and on the confirm: when one is not met, `Refused` is `true`, `Succeeded` `false` and `UnmetPreconditions` names the
+step; a refused dry run has no `ConfirmToken` and a refused confirm runs nothing. Without a token (or with a used, expired
+or foreign one):
+
+```json
+{
+  "Error": "A confirmToken is required: do a dry run of this recovery path first (dryRun true) and confirm with the token it returns.",
+  "ErrorCode": "Conflict",
+  "Code": "BlackBoxConfirmationRequired",
+  "StatusCode": null
+}
+```
+
+`InvalidArgument` without `pathId`, or when a step names an unsupported tool or another subject; `NotFound` for an
+unknown path; `Forbidden` when you could not call a step's tool directly; `Unavailable`
+(`BlackBoxActionsUnavailable`) without an action executor.
+
+### apply_blackbox_recommendation
+
+Apply one configuration recommendation recorded in the analysis (`recommendationId`, for example
+`bbx-land-001.landing-mode`) to prevent the failure next time. It runs only the recorded `applyAction` (for example an
+`update_vessel` patch), authorized as that tool. Same flow as `run_blackbox_recovery`: dry run first, tell the user what
+will change, then call with `dryRun: false` and the token.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `entryId` / `missionId` / `voyageId` | string | One of them | The entry |
+| `recommendationId` | string | Yes | Recommendation id from the analysis |
+| `dryRun` | boolean | No | Default true |
+| `confirmToken` | string | When `dryRun` is false | The token from the dry run |
+
+**Response:** `{ EntryId, RecommendationId, DryRun, ConfirmToken, ConfirmTokenExpiresUtc, Action, Succeeded, Message }`.
+An unknown recommendation:
+
+```json
+{
+  "Error": "Recommendation nope is not recorded on black box entry bbx_mvu1ftcv_zcdofOBmjhY.",
+  "ErrorCode": "NotFound",
+  "Code": "BlackBoxNotFound",
+  "StatusCode": null
+}
+```
+
+`InvalidArgument` for an advice-only recommendation (no `applyAction`); `Conflict` (`BlackBoxConfirmationRequired`)
+without a valid token.
+
+### pin_blackbox
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `entryId` / `missionId` / `voyageId` | string | One of them | The entry |
+| `pinned` | boolean | No | `true` (default) to pin, `false` to unpin |
+
+**Response:** the updated `BlackBoxEntry` (`Record` null). Garbage collection never deletes a pinned entry: pinning
+clears `ExpiresUtc` and unpinning recomputes it.
+
+### delete_blackbox_entries
+
+Delete entries by id. This cannot be undone: pin entries you want to keep instead. TenantAdmin.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `entryIds` | string[] | Yes | Entries to delete (`bbx_`), at most 1000 |
+
+```json
+{ "entryIds": [ "bbx_doesnotexist_0000000000" ] }
+```
+
+```json
+{ "Requested": 1, "Deleted": 0, "Pending": 0, "BytesFreed": 0, "Skipped": [ "bbx_doesnotexist_0000000000" ] }
+```
+
+Missing or invisible ids are skipped. More than 1000 ids is `InvalidArgument` with `Code` `CollectionLimitExceeded`
+before anything is deleted. An entry whose store delete fails stays `Deleting` (counted in `Pending`) and is retried by
+garbage collection.
+
+### purge_blackbox
+
+Delete every entry matching the filters, oldest first. AdminOnly. Run the dry run, show the user the counts, and only
+then purge with `dryRun` false.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| filters | | No | The [list_blackbox_entries](#list_blackbox_entries) filters |
+| `dryRun` | boolean | No | Default **true**: report without deleting |
+| `includePinned` | boolean | No | Also delete pinned entries (default false) |
+| `maxEntries` | integer | No | 1-100000 (default 10000) |
+
+```json
+{ "DryRun": true, "Matched": 0, "Deleted": 0, "Pending": 0, "SkippedPinned": 0, "BytesFreed": 0, "SampleEntryIds": [] }
+```
+
+### run_blackbox_gc
+
+One garbage collection pass now (expiry, quotas, cascades, retried deletes, orphan sweep). AdminOnly. `dryRun`
+(default **false**) lists the candidates without deleting.
+
+```json
+{
+  "DryRun": true,
+  "StartedUtc": "2026-10-29T21:12:14.136134Z",
+  "FinishedUtc": "2026-10-29T21:12:14.141594Z",
+  "DurationMs": 5,
+  "Expired": 0,
+  "Evicted": 0,
+  "Cascaded": 0,
+  "RetriedDeletes": 0,
+  "OrphansRemoved": 0,
+  "ObjectsMissing": 0,
+  "BytesFreed": 0,
+  "Failures": 0,
+  "CandidateEntryIds": [],
+  "Errors": []
+}
+```
+
+### export_blackbox_fixture
+
+Export an entry as a sanitized regression fixture (record without secrets, tenant and user ids, host paths or
+repository URL, plus the rule ids and triage the advisor produces now), to add under
+`src/Test.Shared/Fixtures/BlackBox` with a test. AdminOnly.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `entryId` / `missionId` / `voyageId` | string | One of them | The entry |
+| `name` | string | No | Fixture name (file name without `.json`) |
+
+```json
+{
+  "Name": "exec-006-process-crash",
+  "Description": "Black box fixture for Execution / ProcessCrash.",
+  "Source": "msn_mvu1fjp0_9Wd6Uuyp262",
+  "RulesVersion": 1,
+  "ExpectedRuleIds": [ "BBX-EXEC-006" ],
+  "ExpectedTriage": "Transient",
+  "Record": { "EntryId": "bbx_mvu1ftcv_zcdofOBmjhY", "Subject": { "TenantId": null, "UserId": null, "VesselRepoUrl": "https://example.invalid/demo-api.git" } }
+}
+```
+
+(`Record` trimmed.)
+
+### reanalyze_blackbox
+
+Re-run enrichment and analysis with the current rules (rewrites `record.json` and the briefs). TenantAdmin. Takes
+`entryId`, `missionId` or `voyageId`. **Response:** the re-analyzed `BlackBoxEntry`; emits `blackbox.analyzed`.
+
+### Resources and prompts
+
+The Admiral's HTTP MCP server (not `armada mcp stdio`) also serves black box **resource templates** and **prompts**,
+registered when the black box is running. Every read runs as the MCP caller through `IBlackBoxService`.
+
+| URI template | MIME type | Content |
+|---|---|---|
+| `armada://blackbox/{entryId}/brief.md` | `text/markdown` | The FIX THIS brief, rendered live |
+| `armada://blackbox/{entryId}/record.json` | `application/json` | The record, camelCase (the `record.json` serializer) |
+| `armada://blackbox/{entryId}/objects/{name}` | the object's | The first 64 KB of one object. URL-encode a name with a folder (`evidence%2Fgit-status.txt`). A text object longer than 64 KB ends with a `[first N of M bytes; read the rest with read_blackbox_object offset N]` line; a binary object is returned as a base64 `blob` |
+| `armada://missions/{missionId}/blackbox` | `application/json` | The digest (what `get_blackbox` `format` `summary` returns) of the mission's current entry, camelCase |
+
+A read of an entry, object or mission the caller cannot see (missing, or in another tenant) is the MCP resource-not-found
+error, JSON-RPC code `-32002`, whose `data` carries the `uri` and the same typed error a black box tool returns
+(`errorCode` `NotFound`, `code` `BlackBoxNotFound` or `BlackBoxObjectMissing`). Any other black box error (an entry being
+deleted, a corrupt object, an unavailable store) is `-32602` with the same `data` shape:
+
+```json
+{ "jsonrpc": "2.0", "id": 33, "error": { "code": -32002, "message": "Black box entry bbx_missing not found.", "data": { "uri": "armada://blackbox/bbx_missing/record.json", "error": "Black box entry bbx_missing not found.", "errorCode": "NotFound", "code": "BlackBoxNotFound" } } }
+```
+
+`resources/list` is empty (there are no fixed resources); discover the templates with `resources/templates/list`:
+
+```json
+{ "jsonrpc": "2.0", "id": 32, "method": "resources/templates/list" }
+```
+
+```json
+{
+  "jsonrpc": "2.0",
+  "result": {
+    "resourceTemplates": [
+      { "uriTemplate": "armada://blackbox/{entryId}/brief.md", "name": "blackbox_brief", "description": "The FIX THIS brief of a black box entry, as Markdown.", "mimeType": "text/markdown" },
+      { "uriTemplate": "armada://blackbox/{entryId}/record.json", "name": "blackbox_record", "description": "The versioned record (record.json) of a black box entry.", "mimeType": "application/json" },
+      { "uriTemplate": "armada://blackbox/{entryId}/objects/{name}", "name": "blackbox_object", "description": "The first 64 KB of one object of a black box entry (URL-encode a name with a folder, for example evidence%2Fgit-status.txt). Page a larger object with the read_blackbox_object tool.", "mimeType": "text/plain" },
+      { "uriTemplate": "armada://missions/{missionId}/blackbox", "name": "mission_blackbox", "description": "The summary (digest) of a mission's current black box entry: where, how and why it failed, triage and the top recovery paths.", "mimeType": "application/json" }
+    ]
+  },
+  "id": 32
+}
+```
+
+`resources/read`:
+
+```json
+{ "jsonrpc": "2.0", "id": 33, "method": "resources/read", "params": { "uri": "armada://missions/msn_mvu1fjp0_9Wd6Uuyp262/blackbox" } }
+```
+
+```json
+{
+  "jsonrpc": "2.0",
+  "result": {
+    "contents": [
+      {
+        "uri": "armada://missions/msn_mvu1fjp0_9Wd6Uuyp262/blackbox",
+        "mimeType": "application/json",
+        "text": "{\n  \"entryId\": \"bbx_mvu1ftcv_zcdofOBmjhY\",\n  \"subjectType\": \"Mission\",\n  \"missionId\": \"msn_mvu1fjp0_9Wd6Uuyp262\",\n  \"phase\": \"Execution\",\n  \"step\": \"ProcessCrash\",\n  \"triage\": \"Transient\",\n  ...\n}"
+      }
+    ]
+  },
+  "id": 33
+}
+```
+
+A read for an entry or object that does not exist, or is not visible, currently fails with the generic JSON-RPC error
+`-32603` `Internal error`, not a typed `BlackBoxNotFound`; use the tools when the caller needs to tell the cases apart:
+
+```json
+{ "jsonrpc": "2.0", "error": { "code": -32603, "message": "Internal error" }, "id": 35 }
+```
+
+**Prompts.** `prompts/list` returns `review_blackbox` (arguments `missionId`, required, and `goal`: explain, fix,
+prevent, fix Armada, compare or clean up, default explain) and `explain_blackbox` (`missionId`). Both expand to one
+`user` message that carries the consumption flow below and the safety guidance.
+
+```json
+{ "jsonrpc": "2.0", "id": 37, "method": "prompts/get", "params": { "name": "review_blackbox", "arguments": { "missionId": "msn_mvu1fjp0_9Wd6Uuyp262", "goal": "fix it" } } }
+```
+
+```json
+{
+  "jsonrpc": "2.0",
+  "result": {
+    "description": "Review the black box of mission msn_mvu1fjp0_9Wd6Uuyp262",
+    "messages": [
+      {
+        "role": "user",
+        "content": {
+          "type": "text",
+          "text": "Review the black box for mission msn_mvu1fjp0_9Wd6Uuyp262 and fix it.\n\n1. Call get_blackbox {missionId: \"msn_mvu1fjp0_9Wd6Uuyp262\", format: \"summary\"} first.\n2. First assess whether Armada's own handoff and landing could have handled the failure: when the summary says ResilienceInScope, read read_blackbox_section {section: \"Resilience\"} (and Handoff for the step timeline and the recoveries Armada already tried), state whether Armada could have healed it, the detection gap and the proposed Armada change with its test, and offer Draft an Armada fix mission, before concluding it is the user's configuration or a transient.\n3. Read only the other sections the goal needs with read_blackbox_section (Conflict, Workspace, Analysis), and page evidence with read_blackbox_object instead of loading it whole.\n4. Map the goal to tools: explain (get_blackbox summary or brief, sections, objects); fix or recover (run_blackbox_recovery with a ranked path: dry run, then confirm); prevent (apply_blackbox_recommendation: dry run, then confirm); fix Armada (the Resilience section's top proposed change as a mission on the Armada vessel, or get_blackbox_bundle and list_blackbox_resilience_gaps for the recurring gaps); compare (list_blackbox_entries {fingerprint}, search_blackbox, list_blackbox_resilience_gaps); clean up (resolve_blackbox, pin_blackbox, delete_blackbox_entries).\n\nRead the black box summary first. Quote evidence, not guesses. State the triage verdict and whether you agree. If you act, use only recovery paths or recommendations from the entry, do a dry run, tell the user what will happen, and confirm before running anything marked dataLossRisk. Annotate the entry with what you did.\n"
+        }
+      }
+    ]
+  },
+  "id": 37
+}
+```
+
+`explain_blackbox` asks for what happened, the quoted evidence, the triage verdict and whether you agree, whether
+Armada's handoff and landing could have handled it (the Resilience section, offering Draft an Armada fix mission), an opinion
+clearly marked as such, and the recorded recovery paths and recommendations, and says "Do not run anything."
+
+### Reviewing a black box and taking action
+
+The flow for any MCP client asked to "review the black box for mission X and take action":
+
+```
+User:  Review the black box for mission msn_abc and fix it.
+Agent: get_blackbox {missionId: "msn_abc", format: "summary"}
+       -> where, how, why, triage UserConfig (High), recovery paths [bbx-land-001.stash-retry, bbx-land-001.pull-request]
+Agent: read_blackbox_section {entryId, section: "Workspace"}                  (dirty paths, checkout)
+Agent: read_blackbox_object {entryId, name: "evidence/git-status.txt"}        (64 KB at a time)
+       -> ..., NextOffset: 65536; read_blackbox_object {entryId, name, offset: 65536} until NextOffset is null
+Agent: run_blackbox_recovery {entryId, pathId: "bbx-land-001.pull-request", dryRun: true}
+       -> "Would run: update_vessel {...}, then retry_landing {...}"; ConfirmToken bbc_...
+Agent: (tells the user, or proceeds if told to act)
+       run_blackbox_recovery {entryId, pathId: "bbx-land-001.pull-request", dryRun: false, confirmToken: "bbc_..."}
+       -> per-step results; the entry is annotated automatically with what ran and the outcome
+Agent: resolve_blackbox {entryId, resolution: "Resolved", note: "...", link: "msn_abc landed at <sha>"}
+```
+
+| Goal | Tools |
+|---|---|
+| Explain it | `get_blackbox` (summary or brief), `read_blackbox_section`, `read_blackbox_object` |
+| Fix it, recover it | `run_blackbox_recovery` with a ranked path: dry run, then confirm |
+| Prevent it | `apply_blackbox_recommendation` (a configuration patch): dry run, then confirm |
+| Fix Armada | `read_blackbox_section {section: "Resilience"}` (the proposed Armada changes as mission briefs), `list_blackbox_resilience_gaps` or `get_blackbox_bundle`, then a mission on the Armada vessel |
+| Compare | `list_blackbox_entries {fingerprint}`, `list_blackbox_fingerprints`, `list_blackbox_resilience_gaps`, `get_blackbox_fingerprint_trend`, `search_blackbox` |
+| Clean up | `resolve_blackbox`, `pin_blackbox`, `delete_blackbox_entries` |
+
+**Safety rules.** `run_blackbox_recovery` and `apply_blackbox_recommendation` run only actions recorded in the entry,
+never free-form commands; each step is authorized as if the caller called that tool directly; a dry run is required
+first, and the confirm token binds the entry, the path, the caller and the mission's current version, so a mission
+that changed since the dry run must be re-checked; steps that can lose work are marked `dataLossRisk` and are refused
+without `acknowledgeDataLoss: true`; every run is annotated on the entry and emits `blackbox.recovery_run`. The action
+tool descriptions and both prompts carry this guidance (`McpBlackBoxTools.SafetyGuidance`):
+
+> Read the black box summary first. Quote evidence, not guesses. State the triage verdict and whether you agree. If you
+> act, use only recovery paths or recommendations from the entry, do a dry run, tell the user what will happen, and
+> confirm before running anything marked dataLossRisk. Annotate the entry with what you did.
+
+> **Plan differences.** MISSION_BLACKBOX_PLAN.md section 9 shows the confirmed call as
+> `run_blackbox_recovery {entryId, pathId, confirmToken}`; in the code `dryRun` defaults to true even with a token, so
+> the confirmed call must pass `dryRun: false`. The plan's section 8.2 also lists neither `get_blackbox_fingerprint_trend`
+> nor `export_blackbox_fixture`, and treats the resources and prompts as conditional on Voltaic support; the code
+> registers all of them (resources and prompts on the HTTP server only), and `get_blackbox_retention` and
+> `get_blackbox_storage` require a tenant admin and a global admin even though they are on the Ask read-only list.
+
+---
+
 
 ## Ask Armada
 
@@ -1854,7 +3122,7 @@ time with [enumerate](#enumerate) (`entityType` `missions`, `voyageId`).
 | Parameter | Type | Required | Default | Description |
 |---|---|---|---|---|
 | `voyageId` | string | Yes | -- | Voyage ID (prefix `vyg_`) |
-| `summary` | boolean | No | `true` | Trimmed voyage (`Id`, `Title`, `Description`, `Status`, `CreatedUtc`, `LastUpdateUtc`, `ApprovalOptions`, `IsEvaluation`) with the counts; `false` returns the full voyage with the counts |
+| `summary` | boolean | No | `true` | Trimmed voyage (`Id`, `Title`, `Description`, `Status`, `CreatedUtc`, `LastUpdateUtc`, `ApprovalOptions`, `IsEvaluation`, `LastBlackBoxEntryId`) with the counts; `false` returns the full voyage with the counts |
 
 `includeMissions: true` is rejected with `ErrorCode` `InvalidArgument` naming the replacement; the former
 `includeDescription`, `includeDiffs` and `includeLogs` flags are gone.
@@ -1882,7 +3150,7 @@ time with [enumerate](#enumerate) (`entityType` `missions`, `voyageId`).
 
 | Field | Type | Description |
 |---|---|---|
-| `Voyage` | object | [Voyage](#voyage) object (a subset of its fields in summary mode) |
+| `Voyage` | object | [Voyage](#voyage) object (a subset of its fields in summary mode). Both modes carry `LastBlackBoxEntryId`, the voyage's current [black box](#black-box) entry (null until a failure is captured) |
 | `TotalMissions` | int | Total number of missions in this voyage |
 | `MissionCountsByStatus` | object | Map of status string to count (at most one entry per mission status) |
 
@@ -1939,7 +3207,7 @@ Get status of a specific mission.
 |---|---|---|---|
 | `missionId` | string | Yes | Mission ID (prefix `msn_`) |
 
-**Response:** [Mission](#mission) object, or `{ "Error": "Mission not found", "ErrorCode": "NotFound" }` if the ID does not exist.
+**Response:** [Mission](#mission) object, or `{ "Error": "Mission not found", "ErrorCode": "NotFound" }` if the ID does not exist. `LastBlackBoxEntryId` names the mission's current [black box](#black-box) entry (`bbx_`) after a failure was captured (null otherwise); pass it, or the mission id, to `get_blackbox`.
 
 > **Note:** The `DiffSnapshot` field is excluded from status responses to keep payloads compact. Use `get_mission_diff` to retrieve the full diff.
 
@@ -2015,6 +3283,8 @@ Returns `{ "Error": "Fleet not found", "ErrorCode": "NotFound" }` if the ID does
 
 Register a new vessel (git repository) in a fleet.
 
+`serializeOverlappingMissions` defaults to `true` when omitted. Set it to `false` for warnings without automatic dependency chaining. `update_vessel` preserves the stored value when omitted.
+
 **Input Schema:**
 
 ```json
@@ -2053,10 +3323,9 @@ Register a new vessel (git repository) in a fleet.
       "type": "string",
       "description": "Optional per-vessel GitHub token override. Leave unset to use the global configured token."
     },
-    "allowConcurrentMissions": {
-      "type": "boolean",
-      "description": "Allow multiple concurrent missions on this vessel (default false)"
-    },
+    "maxParallelVoyages": { "type": "integer", "description": "Admitted voyage groups; 0 is unlimited; default 1" },
+    "maxParallelMissionsPerVoyage": { "type": "integer", "description": "Running missions per voyage; 0 is unlimited; default 4" },
+    "allowConcurrentMissions": { "type": "boolean", "description": "Legacy stored flag; use numeric limits" },
     "autoApprove": {
       "type": "boolean",
       "description": "Per-vessel auto-approve override for missions on this vessel: true or false wins over the captain's setting; omit to use the captain's setting"
@@ -2084,10 +3353,13 @@ Register a new vessel (git repository) in a fleet.
 | `styleGuide` | string | No | Style guide describing naming conventions, patterns, and library preferences |
 | `workingDirectory` | string | No | Optional local directory where completed mission changes will be pulled after merge. When `repoUrl` is a local clone (a `file://` URL or an existing local path) and this is omitted, it is set automatically to that local clone so the vessel is immediately usable (e.g. for Rebuild Armada). |
 | `gitHubTokenOverride` | string | No | Optional per-vessel GitHub token override. The raw token is accepted on create but never returned by MCP reads. |
-| `allowConcurrentMissions` | boolean | No | Allow multiple concurrent missions on this vessel (default false) |
+| `maxParallelVoyages` | integer | No | Admitted voyage groups, 0..1000; zero unlimited; negative becomes 1; configured default (1) on creation |
+| `maxParallelMissionsPerVoyage` | integer | No | Running missions per voyage, same bounds; configured default (4) on creation |
+| `allowConcurrentMissions` | boolean | No | Legacy stored field; use numeric limits |
 | `autoApprove` | boolean | No | Per-vessel auto-approve override for missions on this vessel: true or false wins over the captain's setting; omit to use the captain's setting |
 | `enableModelContext` | boolean | No | Enable model context accumulation (default true) |
 | `defaultPipelineId` | string | No | Default pipeline ID for voyages dispatched to this vessel |
+| `workerEnvelope` | object | No | Default Worker eligibility envelope: `maxFiles` (integer 1-1000), `maxSteps` (integer 1-1000), `minServedContextTokens` (integer 1-100000000), `requiredTools` (array of `tools`, `mcp`). Only captains whose model profile meets it run Worker missions on this vessel; the Architect may tighten it per mission but never loosen it. Omit or pass `{}` for no envelope. Out-of-range values or unknown tools return an `InvalidArgument` tool error |
 
 **Example Input:**
 
@@ -2553,6 +3825,8 @@ Returns the cancelled mission. Cancelling stops the mission's agent first: the c
 
 Restart a Failed, LandingFailed, or Cancelled mission, resetting it to `Pending` for re-dispatch, or start a `Pending` mission as it is. Optionally update the title and description (instructions) before restarting. A failed or cancelled mission has the captain assignment, dock, PR URL, commit, failure, review, and timing fields cleared; a Pending one keeps every other field. A later pipeline stage keeps the previous stage's branch (a first stage starts on a fresh branch), a finished voyage is reopened, and the stages cancelled because this one failed are restored to Pending. The mission is then dispatched at once when a captain is free under the normal dispatch rules, and the result shows it `Assigned` or `InProgress`; otherwise it stays `Pending` (not an error) for the regular dispatcher. `Conflict` for any other status.
 
+A verifier stage (Test Engineer, Linter, Usability Engineer) that failed because it reported a blocking product defect (`FailureKind` `JudgeRejected` with a standalone `[ARMADA:STAGE-OUTCOME] BLOCKED` line, for example after the automatic rework budget ran out) is not re-run on the unchanged product code: the restart sends the work back to its Worker as one more operator-approved rework round on the preserved branch (normal captain routing, outside the automatic budget), followed by a fresh verifier and the stages that followed the blocked one. The blocked stage keeps its affected case and becomes produced work, the voyage is reopened, and the result is the new rework Worker mission (a different id). A given description is added to that Worker as operator guidance; the title is ignored. `Conflict` when the Worker cannot be found in the dependency chain.
+
 **Input Schema:**
 
 ```json
@@ -2866,7 +4140,8 @@ Update an existing vessel's properties.
     "styleGuide": { "type": "string", "description": "New style guide" },
     "workingDirectory": { "type": "string", "description": "New local directory where completed mission changes will be pulled after merge" },
     "gitHubTokenOverride": { "type": "string", "description": "Optional per-vessel GitHub token override. Empty string clears the existing override." },
-    "allowConcurrentMissions": { "type": "boolean", "description": "Allow multiple concurrent missions on this vessel" },
+    "maxParallelVoyages": { "type": "integer", "description": "Admitted voyage groups; 0 is unlimited" },
+    "maxParallelMissionsPerVoyage": { "type": "integer", "description": "Running missions per voyage; 0 is unlimited" },
     "autoApprove": { "type": "boolean", "description": "Per-vessel auto-approve override for missions on this vessel: true or false wins over the captain's setting" },
     "clearAutoApprove": { "type": "boolean", "description": "Remove the per-vessel auto-approve override so the captain's own setting applies" },
     "enableModelContext": { "type": "boolean", "description": "Enable or disable model context accumulation" },
@@ -2880,11 +4155,14 @@ Update an existing vessel's properties.
     "definitionOfDoneEnabled": { "type": "boolean", "description": "Run the in-dock build + unit tests before acceptance; a failure blocks landing with a classified reason (Compile/TestFail/Timeout/Infra)" },
     "definitionOfDoneBuildCommand": { "type": "string", "description": "Shell command that builds the project inside the mission checkout (e.g. dotnet build)" },
     "definitionOfDoneTestCommand": { "type": "string", "description": "Shell command that runs unit tests inside the mission checkout (e.g. dotnet test)" },
-    "definitionOfDoneTimeoutSeconds": { "type": "integer", "description": "Per-phase timeout in seconds, clamped to [30, 7200] (default 1800)" }
+    "definitionOfDoneTimeoutSeconds": { "type": "integer", "description": "Per-phase timeout in seconds, clamped to [30, 7200] (default 1800)" },
+    "workerEnvelope": { "type": "object", "description": "Default Worker eligibility envelope (maxFiles, maxSteps, minServedContextTokens, requiredTools). The object replaces the stored envelope; pass {} to clear it; omit it to keep the stored value." }
   },
   "required": ["vesselId"]
 }
 ```
+
+`workerEnvelope` fields: `maxFiles` and `maxSteps` (integers 1-1000) guide the Architect's slicing and the Judge; `minServedContextTokens` (integer 1-100000000) and `requiredTools` (array of `tools`, `mcp`) restrict which captains may run Worker missions (the captain's model profile must record at least that served context and those capabilities). Out-of-range values or unknown tools return an `InvalidArgument` tool error and nothing is saved.
 
 **Response:** Updated [Vessel](#vessel) object, or `{ "Error": "Vessel not found", "ErrorCode": "NotFound" }`. A taken name returns `{ "Error": "A vessel named '...' already exists.", "ErrorCode": "Conflict", "Code": "DuplicateEntity" }`.
 
@@ -3143,6 +4421,7 @@ Create and dispatch a standalone mission to a vessel. The Admiral assigns a capt
     "mode": { "type": "string", "description": "Execution mode: Implementation (default), Audit, or Research. Audit and Research are read-only modes that produce a written report instead of a commit; their empty diff is treated as success, not a no-op failure." },
     "tier": { "type": "string", "description": "Optional minimum captain tier for this mission (Economy, Standard, or Premium); only captains at or above it are assigned" },
     "isEvaluation": { "type": "boolean", "description": "True for evaluation work: the mission's stage outcomes never count as production data. A mission added to an evaluation voyage is flagged regardless. Default false." },
+    "workerEnvelope": { "type": "object", "description": "Optional Worker eligibility envelope for this mission (maxFiles, maxSteps, minServedContextTokens, requiredTools); it may only tighten the vessel default." },
     "selectedPlaybooks": {
       "type": "array",
       "description": "Optional ordered playbook selections for this mission",
@@ -3162,6 +4441,7 @@ Create and dispatch a standalone mission to a vessel. The Admiral assigns a capt
 
 **Response:** [Mission](#mission) object. Without `tier` the mission routes to any idle captain (treated as `Standard`).
 The returned mission carries `isEvaluation`: true when the argument was set or `voyageId` names an evaluation voyage.
+`workerEnvelope` has the same fields as on `add_vessel`; omit it or pass `{}` to use the vessel default. A looser or invalid envelope returns an `InvalidArgument` tool error (the same reason as REST dispatch) and no mission is created.
 
 ---
 
@@ -3185,7 +4465,8 @@ Update an existing mission's metadata fields. Operational fields (status, timest
     "prUrl": { "type": "string", "description": "Pull request URL" },
     "parentMissionId": { "type": "string", "description": "Parent mission ID for sub-tasks (msn_ prefix)" },
     "persona": { "type": "string", "description": "Persona for this mission (e.g. Worker, Architect, Judge, Test Engineer)" },
-    "mode": { "type": "string", "description": "Execution mode: Implementation, Audit, or Research (read-only report modes)" }
+    "mode": { "type": "string", "description": "Execution mode: Implementation, Audit, or Research (read-only report modes)" },
+    "workerEnvelope": { "type": "object", "description": "Worker eligibility envelope for this mission. The object replaces the mission's envelope; pass {} to clear it; omit it to keep the stored value." }
   },
   "required": ["missionId"]
 }
@@ -3204,6 +4485,7 @@ Update an existing mission's metadata fields. Operational fields (status, timest
 | `parentMissionId` | No | Parent mission ID for sub-tasks |
 | `persona` | No | Persona for this mission |
 | `mode` | No | Execution mode: Implementation, Audit, or Research |
+| `workerEnvelope` | No | Worker eligibility envelope (same fields as `add_vessel`). Replaces the mission's envelope, `{}` clears it, omitted keeps it. It may only tighten the vessel default (`InvalidArgument` otherwise) and may only change while the mission is Pending, or Assigned and not started (`Conflict` otherwise) |
 
 **Response:** Updated [Mission](#mission) object, or `{ "Error": "Mission not found", "ErrorCode": "NotFound" }`.
 
@@ -5975,7 +7257,6 @@ Paginated result wrapper returned by `enumerate`.
 | `gitHubTokenOverride` | string \| null | Write-only JSON input for the GitHub token override. This allows create and update requests to supply the token without Armada ever returning it. |
 | `EnableModelContext` | bool | Whether model context accumulation is enabled for this vessel. When true, captains are instructed to update the model context with key information discovered during missions. |
 | `ModelContext` | string \| null | Agent-accumulated context about this repository. Contains key information discovered by AI agents during missions, such as architectural insights, testing patterns, build quirks, and other knowledge useful for future missions. Updated by agents via update_vessel_context when EnableModelContext is true. |
-| `AllowConcurrentMissions` | bool | Whether this vessel allows multiple concurrent missions. Default false. When false, only one mission may be in an active state (Assigned, InProgress, WorkProduced, PullRequestOpen) at a time. |
 | `AutoApprove` | bool \| null | Per-vessel override of the captain auto-approve setting for missions on this vessel. Null (the default) leaves the captain's own setting in effect; true or false wins over the captain setting, so a vessel can require CLI captains to run without their auto-approve or permission-bypass flags (or allow them). |
 | `RequirePassingChecksToLand` | bool | Whether successful landing requires at least one passing structured check for the current branch or mission context. |
 | `ProtectedBranchPatterns` | array | Optional protected-branch glob or exact-match patterns. |
@@ -5995,6 +7276,7 @@ Paginated result wrapper returned by `enumerate`.
 | `HotfixBranchPrefix` | string | Prefix used to classify hotfix branches. |
 | `RequirePullRequestForProtectedBranches` | bool | Whether protected branches must land via PR-oriented flow. |
 | `RequireMergeQueueForReleaseBranches` | bool | Whether release branches must land via merge queue. |
+| `WorkerEnvelope` | object \| null | Default Worker eligibility envelope (`maxFiles`, `maxSteps`, `minServedContextTokens`, `requiredTools`); null means no envelope and routing is unchanged. Returned by `get_vessel`. |
 | `DefaultPipelineId` | string \| null | Default pipeline to use for dispatches to this vessel. Vessel setting overrides fleet setting. Null uses WorkerOnly pipeline. |
 
 #### Voyage
@@ -6034,6 +7316,14 @@ Paginated result wrapper returned by `enumerate`.
 | `SelectedPlaybooks` | array\<[SelectedPlaybook](#selectedplaybook)\> | Ordered playbook selections requested for the mission |
 | `PlaybookSnapshots` | array\<[MissionPlaybookSnapshot](#missionplaybooksnapshot)\> | Immutable playbook materialization used for execution |
 | `ParentMissionId` | string \| null | Parent mission ID for sub-tasks |
+| `RescueOfMissionId` | string \| null | Server-owned original failed mission addressed by a rescue; cleared when the original is purged |
+| `BranchStrategy` | string | Persisted branch metadata, default New; hierarchy execution remains in the plan |
+| `BaseBranchName` | string \| null | Server-owned base branch metadata |
+| `Depth` | int | Server-owned hierarchy depth, default 0 |
+| `ReadyUtc` | string \| null | Server-owned readiness timestamp |
+| `AssignedUtc` | string \| null | Server-owned atomic assignment timestamp |
+| `OwnedPathsJson` | string \| null | Server-owned writable-scope metadata |
+| `ReadsPathsJson` | string \| null | Server-owned read-scope metadata |
 | `BranchName` | string \| null | Git branch name created for this mission |
 | `DockId` | string \| null | Assigned dock (worktree) ID |
 | `ProcessId` | int \| null | OS process ID of the agent working this mission |
@@ -6075,9 +7365,11 @@ Paginated result wrapper returned by `enumerate`.
 | `Runtime` | string | [AgentRuntimeEnum](#agentruntimeenum) value |
 | `Model` | string \| null | Optional model override for this captain |
 | `State` | string | [CaptainStateEnum](#captainstateenum) value |
-| `CurrentMissionId` | string \| null | Currently assigned mission ID |
-| `CurrentDockId` | string \| null | Currently assigned dock (worktree) ID |
-| `ProcessId` | int \| null | OS process ID of the agent |
+| `MaxConcurrency` | int | Maximum simultaneous execution assignments (1..256, server ceiling applies) |
+| `ActiveMissionCount` | int | Server-owned number of Assigned/InProgress execution slots |
+| `ActiveMissionIds` | string[] | Server-owned execution mission IDs; use each mission for its dock and process |
+| `CurrentSessionId` | string \| null | Server-owned exclusive planning/refinement/analysis owner |
+| `ProcessId` | int \| null | Exclusive-session process ID; execution process IDs are on each mission |
 | `RecoveryAttempts` | int | Number of recovery attempts after stalls |
 | `LastHeartbeatUtc` | string \| null | ISO 8601 last heartbeat timestamp |
 | `CreatedUtc` | string | ISO 8601 creation timestamp |
@@ -6619,10 +7911,130 @@ Any MCP-compatible client can connect to the Armada MCP server using the HTTP tr
 
 ### Persona prompt improvements
 
-The default persona guidance and additive replication procedure are documented in [Prompt and Handoff Improvements](../PROMPT_AND_HANDOFF_IMPROVEMENTS.md). Live prompt-template edits apply when future mission instructions are generated; they do not rewrite in-flight briefs. No request fields, output signals, plan schema, or endpoints change. Embedded defaults in upgraded builds include the guidance; startup upgrades only recognized untouched previous defaults and retains operator-edited templates.
+The default persona guidance and additive replication procedure are documented in [Prompt and Handoff Improvements](../archive/PROMPT_AND_HANDOFF_IMPROVEMENTS.md). Live prompt-template edits apply when future mission instructions are generated; they do not rewrite in-flight briefs. No request fields, output signals, plan schema, or endpoints change. Embedded defaults in upgraded builds include the guidance; startup upgrades only recognized untouched previous defaults and retains operator-edited templates.
 
 Synthetic activity generation is an operator CLI/global-admin REST workflow (`POST /api/v1/activity/synthetic`), with no new MCP write tool. Existing enumerate/history/token-summary tools can read the generated synthetic records. See [synthetic activity guide](SYNTHETIC_ACTIVITY.md).
 
 ### Strict captain assignments
 
 Set `captainAssignments[].strictCaptain` to `true` alongside `captainId` to wait for that selected captain instead of falling back when busy/unavailable. The default is `false`; tier fallback remains unchanged. Exact persona overrides take precedence over `*`. Strict selection also prevents automatic rework escalation to a different captain: an exhausted or stagnant chain reports remediation and preserves its work. Without a selected captain this flag has no effect. C# clients share `CaptainAssignmentOverride.StrictCaptain`. See [PIPELINES.md](PIPELINES.md#validated-slice-contracts) for plan validation and full-pipeline rework.
+
+## Account usage
+
+`usage_status` is an authenticated, read-only Ask tool. Optional `captainId`,
+`harborId`, `hostId`, `runtime`, `provider`, `accountKey`, `from`, `to`, `tenantId`,
+`pageNumber` and `pageSize` select the same tenant-scoped public views as REST.
+Without dates it returns latest account groups; dates select bounded snapshots.
+The default page is 1 with 25 objects, bounded to 100. A global administrator
+can explicitly select one tenant; omission does not combine tenants.
+
+`capture_captain_usage` requires `captainId`; optional `harborId` selects and saves
+the credential Harbor for this captain, including idle and scheduled capture. The
+Harbor must belong to the captain's tenant. It requires tenant administration and
+remains an Ask mutation. Without a saved Harbor, automatic resolution uses the
+current dock or standalone Admiral; a dockless split captain returns HostUnresolved.
+A call that omits `captainId` (an empty or absent `arguments` object) is a
+JSON-RPC protocol error, not a tool result:
+`{"jsonrpc":"2.0","error":{"code":-32602,"message":"Tool 'capture_captain_usage' arguments is missing required property 'captainId'.","data":{"tool":"capture_captain_usage","argument":"captainId"}},"id":2}`.
+The same protocol error is returned over both transports: the Admiral's HTTP
+MCP endpoint (stateful and stateless) and `armada mcp stdio`.
+Required names are case-sensitive, as in JSON Schema. A `captainId` of the
+wrong type is still a schema-validation tool result with `isError: true`, and
+other tools keep that form for missing arguments too. The tool returns the
+same queued receipt or original passive observation as REST. Shared attempts
+return the existing JobId with JoinedExisting. Disabled capture, cooldown and
+unavailable hosts are explicit errors; AuthMissing observations remain readable
+with empty windows and their original observation time. Neither tool exposes
+credentials or ordinary-user raw excerpts. Foreign identifiers are NotFound;
+invalid filters are InvalidArgument; insufficient role is Forbidden.
+
+
+### Usage examples and failures
+
+```json
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"usage_status","arguments":{"provider":"anthropic","hostId":"hbr_example","pageSize":25}}}
+```
+
+```json
+{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"capture_captain_usage","arguments":{"captainId":"cpt_example","harborId":"hbr_example"}}}
+```
+
+The IDs above are illustrative. A status page with no observations has Objects=[],
+TotalRecords=0 and TotalPages=0; it does not imply zero account usage. AuthMissing
+is an observation status with empty windows and a stable error code. It remains
+readable and tells the operator to authenticate on the named credential host.
+A capture receipt has JobId, Status, JoinedExisting and NextEligibleUtc. Passive
+capture returns original observations without refreshing their age or starting a
+model prompt. Capture is on by default; nullable settings inherit on and Disabled
+mode wins. Custom executable configuration remains administrator-only.
+
+Tool errors use the existing isError result envelope. Disabled or unresolved capture
+is Conflict, cooldown is Conflict carrying its stable code, and disconnected hosts
+are Unavailable. NotFound is used for invisible IDs before validating secondary
+filters; Forbidden covers an authenticated caller lacking tenant administration.
+Only the missing required capture argument uses the -32602 protocol error described
+above. REST Retry-After headers have no MCP header equivalent; use the returned
+structured error details and the next eligible time when supplied. Both tools
+retain tenant isolation even for a GlobalAdmin; explicit tenant selection never
+combines tenants. See REST_API.md, Account Usage, for settings, history resolution,
+retention and completion-time attribution. MCP adds no resources or prompts.
+
+## v1.3.0 verification capacity
+
+A mission in `Verifying` retains its captain/dock association and exited-process recovery record but occupies no execution slot. Captain `ActiveMissionCount` and `ActiveMissionIds` describe Assigned/InProgress execution, excluding verification; a captain with only verification work may be Idle and accept independent work. Checks keep their branch safety fence. Successful verification completes without reclaiming a captain slot. A failed check remains Verifying while a repair waits for current captain/global/runtime/endpoint/vessel admission. Health ticks replay this work after restart even when the captain is Idle. Disabling/quarantining the captain or filling its capacity prevents a repair launch.
+
+`mission.stage_check` event payloads add an optional `verificationVersion` UTC timestamp matching the mission version checked. Armada reuses persisted results only for that exact verification version; stale results cannot complete/relaunch newer work. No endpoint or mission/captain response fields were added. Existing verification associations remain available through mission reads and event history; recall includes verification even when the captain's active execution count is zero.
+
+## v1.3.0 concurrency overrun events
+
+Existing event reads expose `concurrency.limit_exceeded` from health-tick observation. `Payload` contains `Gate` (`captain`, `vessel_voyages`, `voyage_missions`, `global`, `runtime`, `endpoint`), `Count`, `Limit`, and `Cause` (`limit_lowered`, `unexpected`, `unknown`). Captain/vessel events retain the resource's scope. Global/runtime/endpoint observations have null tenant/user scope and are visible only to global administrators because usage may cross owners. No contributing mission IDs, endpoint URLs or credentials appear in payloads. Endpoint events identify the affected endpoint; the dashboard opens its existing configuration editor.
+
+Global occupancy counts Assigned/InProgress in a single SQL snapshot. Runtime and endpoint accounting match admission, including staged legacy Working-state compatibility and normalized shared endpoint URLs. Different alias limits are ambiguous and stay unknown. Unchanged observations are deduplicated within the process; startup resets the baseline. Observation does not preempt running work.
+
+`mission.admission_stuck` is scoped to its mission and links to that mission. Its payload contains `ReadyObservations` (3) and `MissionVersionUtc`. The monitor samples at most 64 Pending missions per tick in rotating three-tick windows, requiring the same Pending version to pass readiness before and after dispatch. Memory/global deferrals, launch-policy or placement waits, in-flight assignments and known preparation/launch failures do not count. Readiness probes do not persist routing preferences or claim/launch work. This is a sampled investigation signal, not proof that capacity stayed continuously available or an automatic retry/cancel. Unchanged episodes are deduplicated; changes/blockers reset the count. Event endpoints and response fields remain unchanged.
+
+## v1.3.0 exclusive session ownership
+
+Planning and backlog refinement reserve a captain atomically before provisioning or activating the session. They require an active idle captain with no execution slots; spare mission capacity does not permit an exclusive session. Competing creation keeps the existing REST conflict response (409) or MCP tool error and cannot release the winner. Runtime updates and stop/failure cleanup are scoped to the session id. Recovery reclaims an available captain or its matching owner; if another session or mission owns it, the recovering session fails with an ownership explanation while that work is preserved. Pending waiting links use the recorded session owner. No request fields or response shapes change.
+
+## v1.3.0 mission worktree isolation
+
+Live mission diffs and instruction files resolve only the mission’s recorded `DockId`, checked against its tenant/vessel and the caller’s dock access. A captain’s singular dock pointer and same-branch active docks are never substitutes. Saved diff files/database snapshots and instruction snapshots remain available through the existing paths. When neither the mission’s dock nor a saved artifact is available, REST retains its 404 response and MCP `get_mission_diff` returns `Unavailable`; existing Harbor-access failures retain 503/Unavailable. Response fields are unchanged. Dashboard diff viewers show the error separately from a successful empty diff.
+
+## v1.3.0 waiting diagnostics
+
+Pending mission reads include `AssignmentBlocker` (`assignmentBlocker` after camel-case client normalization). REST `GET /api/v1/missions/{id}` and MCP `mission_status` compute the same explanation; non-Pending missions have no blocker. The existing safety, capacity, tenant and user restrictions still apply.
+
+Captain eligibility uses the same selection path as dispatch, including unresolved voyage overrides, strict pins, persona defaults/priorities, tiers, author exclusions, Worker envelopes and runtime/endpoint capacity. Diagnostics resolve preferences on a temporary view without changing the mission version, claiming slots, launching work or recording envelope decision events. `CaptainConcurrencyLimit` identifies full eligible captains even when unrelated captains are free. A Working captain with spare slots includes `EligibleForMission` and a `Detail` explanation when its routing rules exclude this mission. Snapshot readiness does not reserve capacity or guarantee launch success.
+
+Dependency readiness is checked before capacity, using the same path as dispatch. Missing or unfinished dependencies report `DependencyNotFinished`; a `WorkProduced` dependency whose handoff is not prepared reports `DependencyHandoffPending`. Integration missions report `WaitingForVoyageWorkers` until sibling pipelines settle. A failed sibling summary predicts `Blocked` when `BlockDependentsOfFailedStages` is enabled, otherwise `Cancelled`; reading diagnostics does not apply that transition or claim slots. Dispatch applies it on the next pass. Existing reason values and response fields are unchanged.
+
+New reasons: `RuntimeMissionLimit`, `EndpointMissionLimit` and `EndpointUnavailable`. A free captain does not imply dispatch readiness when its runtime or shared endpoint is full. Endpoint unavailability has no concurrency-increase recommendation.
+
+`Advice` is an optional/additive list of at most 25 items, each containing `Text`, nullable `Action`, `TargetType`, `TargetId`, `Setting`, nullable `CurrentValue` and nullable `SuggestedValue`. Actions are `EditVessel`, `EditCaptain`, `AddCaptain`, `EditSettings`, `EditEndpoint`, `OpenMission` or `OpenVoyage`. The client maps these known actions to local routes; the server never supplies an executable URL. Non-global-admin callers retain the text with `Action` omitted/null. Configuration writes retain their existing authorization checks.
+
+Suggestions are the smallest supported finite increase that admits another mission now (`running + 1` when full). When a limit is lowered below usage, existing work continues and new admissions wait; suggestions account for the actual running count. Advice never suggests increasing a CLI captain above its normal serial setting. File-only runtime/server-ceiling settings are explained as settings.json changes rather than linking to a nonexistent editor.
+
+Example (admin):
+
+```json
+{
+  "Reason": "VoyageMissionLimit",
+  "Advice": [{
+    "Text": "To admit one more mission now, raise maximum parallel missions per voyage from 2 to 3.",
+    "Action": "EditVessel", "TargetType": "vessel", "TargetId": "vsl_example",
+    "Setting": "MaxParallelMissionsPerVoyage", "CurrentValue": 2, "SuggestedValue": 3
+  }]
+}
+```
+
+## v1.3.0 mission tree, waits and concurrency
+
+- `voyage_tree` (`voyageId`): the same `VoyageTree` as `GET /api/v1/voyages/{id}/tree`.
+- `vessel_concurrency` (`vesselId`): the same `VesselConcurrency` as `GET /api/v1/vessels/{id}/concurrency`, with the same per-user listing rule.
+- `mission_status` accepts `includeWaits`; when true the mission carries `Waits`, its recorded wait intervals.
+- `enumerate` for missions accepts `parentMissionId`, `rootsOnly` and `waitingGate`; for captains it accepts `maxConcurrency` (an exact slot count).
+- `create_mission` accepts `parentMissionId` (visible to the caller, same voyage or a standalone mission on the same vessel) and `branchStrategy` (`New`, `ContinueParent` or `ForkFromParent`; anything else is `InvalidArgument`).
+- `restart_mission` results carry `RestoredMissionIds`.
+
+All of these are read-only except `create_mission` and `restart_mission`; `voyage_tree` and `vessel_concurrency` are available to Ask Armada.

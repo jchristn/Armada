@@ -124,6 +124,58 @@ describe('RunActionModal', () => {
     await waitFor(() => expect(runFleetAction).toHaveBeenCalledWith('fac_1', { VesselIds: ['vsl_1', 'vsl_2'], Concurrency: 4, InputValues: { version: '2.0.0', mode: 'fast', note: 'release' } }));
   });
 
+  it('validates package inputs on the client before the run starts', async () => {
+    vi.mocked(enumerateFleetActions).mockResolvedValue({ success: true, pageNumber: 1, pageSize: 500, totalPages: 1, totalRecords: 1, totalMs: 1, objects: [{ ...commandAction, commandText: 'dotnet add package {{input.pkg}}', inputs: [
+      { name: 'pkg', type: 'package', required: true, default: null, allowedValues: [], description: 'Package to update' },
+    ] }] });
+    renderModal();
+    const pkg = await screen.findByLabelText(/pkg/);
+    expect(pkg).toHaveAttribute('placeholder', 'Newtonsoft.Json');
+    fireEvent.click(screen.getByRole('button', { name: 'Review and run' }));
+    expect(screen.getByText('This input is required.')).toBeInTheDocument();
+    fireEvent.change(pkg, { target: { value: 'evil; rm -rf /' } });
+    expect(screen.getByText('Use a package name such as Newtonsoft.Json or @scope/name.')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Review and run' }));
+    expect(screen.queryByRole('button', { name: /Run on/ })).not.toBeInTheDocument();
+    fireEvent.change(pkg, { target: { value: '@scope/name' } });
+    expect(screen.queryByText('Use a package name such as Newtonsoft.Json or @scope/name.')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Review and run' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Run on 2 vessels' }));
+    await waitFor(() => expect(runFleetAction).toHaveBeenCalledWith('fac_1', { VesselIds: ['vsl_1', 'vsl_2'], Concurrency: 4, InputValues: { pkg: '@scope/name' } }));
+  });
+
+  it('runs a follow-up on the vessels of an earlier run chosen by status', async () => {
+    render(
+      <MemoryRouter initialEntries={['/vessels']}>
+        <Routes>
+          <Route path="/vessels" element={<RunActionModal open vesselIds={[]} followUp={{ runId: 'far_9' }} previewVesselId="vsl_1" initialActionId="fac_1" onClose={vi.fn()} />} />
+          <Route path="/fleet-actions/runs/:id" element={<div>run detail page</div>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    expect(await screen.findByText('Targets: vessels from run far_9 with status')).toBeInTheDocument();
+    expect(screen.getByText('Follow-up of run far_9')).toBeInTheDocument();
+    // The preview uses the run's vessel even though no vessels are passed.
+    expect(await screen.findByText('git -C /code/api pull --ff-only')).toBeInTheDocument();
+    expect(screen.getByLabelText('Findings')).toBeChecked();
+    expect(screen.getByLabelText('Failed')).toBeChecked();
+    expect(screen.getByLabelText('Succeeded')).not.toBeChecked();
+    expect(screen.getByLabelText('Timed out')).not.toBeChecked();
+
+    // With no status checked the run cannot start.
+    fireEvent.click(screen.getByLabelText('Findings'));
+    fireEvent.click(screen.getByLabelText('Failed'));
+    fireEvent.click(screen.getByRole('button', { name: 'Review and run' }));
+    expect(screen.getByText('Choose at least one target status.')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByLabelText('Timed out'));
+    fireEvent.click(screen.getByLabelText('Failed'));
+    fireEvent.click(screen.getByRole('button', { name: 'Review and run' }));
+    expect(screen.getByText('Targets the vessels from run far_9 with status: Failed, Timed out.')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Start follow-up run' }));
+    await waitFor(() => expect(runFleetAction).toHaveBeenCalledWith('fac_1', { VesselIds: [], Concurrency: 4, FromRunId: 'far_9', FromTargetStatuses: ['Failed', 'TimedOut'] }));
+  });
+
   it('previews the rendered command for the first vessel and confirms a saved Command run', async () => {
     renderModal();
     expect(await screen.findByText('git -C /code/api pull --ff-only')).toBeInTheDocument();

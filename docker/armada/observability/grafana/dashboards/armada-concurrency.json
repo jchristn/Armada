@@ -1,0 +1,376 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "graphTooltip": 0,
+  "title": "Armada Concurrency",
+  "uid": "armada-concurrency",
+  "tags": [
+    "armada",
+    "concurrency"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "refresh": "30s",
+  "templating": {
+    "list": []
+  },
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Slot wait p95 (s)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "armada-prometheus"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 0,
+        "y": 0
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(armada_missions_slot_wait_seconds_bucket[15m])))",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Missions waiting",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "armada-prometheus"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 6,
+        "y": 0
+      },
+      "targets": [
+        {
+          "expr": "sum(armada_missions_waiting)",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Limit violations (24h)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "armada-prometheus"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 12,
+        "y": 0
+      },
+      "targets": [
+        {
+          "expr": "sum(increase(armada_concurrency_limit_violations_total[24h]))",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Starving missions (24h)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "armada-prometheus"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 18,
+        "y": 0
+      },
+      "targets": [
+        {
+          "expr": "sum(increase(armada_missions_starving_total[24h]))",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Slot wait p50 / p95 / p99 (s)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "armada-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 4
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.5, sum by (le) (rate(armada_missions_slot_wait_seconds_bucket[15m])))",
+          "legendFormat": "p50",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(armada_missions_slot_wait_seconds_bucket[15m])))",
+          "legendFormat": "p95",
+          "refId": "B"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(armada_missions_slot_wait_seconds_bucket[15m])))",
+          "legendFormat": "p99",
+          "refId": "C"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Wait by gate (s per 5m)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "armada-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 4
+      },
+      "targets": [
+        {
+          "expr": "sum by (gate) (increase(armada_missions_gate_wait_seconds_sum[5m]))",
+          "legendFormat": "{{gate}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "stacking": {
+              "mode": "normal"
+            }
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Missions waiting by gate",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "armada-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 12
+      },
+      "targets": [
+        {
+          "expr": "sum by (gate) (armada_missions_waiting)",
+          "legendFormat": "{{gate}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Queue time p95 by persona (s)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "armada-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 12
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le, persona) (rate(armada_missions_queue_seconds_bucket[15m])))",
+          "legendFormat": "{{persona}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Captain slot utilization by runtime",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "armada-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 20
+      },
+      "targets": [
+        {
+          "expr": "sum by (runtime) (armada_captains_slots_in_use) / clamp_min(sum by (runtime) (armada_captains_slots_total), 1)",
+          "legendFormat": "{{runtime}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "max": 1,
+          "min": 0
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Vessel voyage slot utilization",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "armada-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 20
+      },
+      "targets": [
+        {
+          "expr": "sum(armada_vessels_voyage_slots_in_use) / clamp_min(sum(armada_vessels_voyage_slots_total), 1)",
+          "legendFormat": "limited vessels",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(armada_vessels_unlimited)",
+          "legendFormat": "unlimited vessels",
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Admission lock wait p95 (s) and timeouts",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "armada-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 28
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le, lock) (rate(armada_admission_lock_wait_seconds_bucket[15m])))",
+          "legendFormat": "p95 {{lock}}",
+          "refId": "A"
+        },
+        {
+          "expr": "sum by (gate) (increase(armada_admission_lock_timeouts_total[5m]))",
+          "legendFormat": "timeouts {{gate}}",
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Limit violations, stuck and starving (per 5m)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "armada-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 28
+      },
+      "targets": [
+        {
+          "expr": "sum by (gate, cause) (increase(armada_concurrency_limit_violations_total[5m]))",
+          "legendFormat": "violation {{gate}} {{cause}}",
+          "refId": "A"
+        },
+        {
+          "expr": "sum by (gate) (increase(armada_admission_stuck_total[5m]))",
+          "legendFormat": "stuck {{gate}}",
+          "refId": "B"
+        },
+        {
+          "expr": "sum by (gate) (increase(armada_missions_starving_total[5m]))",
+          "legendFormat": "starving {{gate}}",
+          "refId": "C"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    }
+  ]
+}

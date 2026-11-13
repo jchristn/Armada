@@ -134,26 +134,66 @@ namespace Armada.Tui.Widgets
         public override void Render(ISurface surface)
         {
             _Starts.Clear();
-            int x = 0;
-            SurfaceText.FillRow(surface, 0, 0, surface.Size.Width, Theme.Text);
+            int width = surface.Size.Width;
+            SurfaceText.FillRow(surface, 0, 0, width, Theme.Text);
+            List<string> shown = new List<string>();
+            int total = 0;
             for (int i = 0; i < Keys.Count; i++)
             {
-                string label = " " + T(Labels[i]) + " ";
+                string label = T(Labels[i]);
+                bool active = i == _Selected;
+                // The selected tab is bracketed; while the tab bar itself has focus its brackets become arrows, so the
+                // focused tab reads without color (and the bar's box is drawn focused, see RegionFrames).
+                shown.Add(active ? (IsFocused ? ">" + label + "<" : "[" + label + "]") : " " + label + " ");
+                total += TextCells.Width(shown[i]) + (i > 0 ? 1 : 0);
+            }
+
+            // When the tabs do not fit, scroll so the selected tab is always whole and on screen, with "<" and ">"
+            // marking tabs hidden to the left and right (reached with [ and ], or by clicking the marker).
+            int first = 0;
+            if (total > width && _Selected > 0)
+            {
+                while (first < _Selected && EndOf(shown, first, _Selected) > width - (_Selected < Keys.Count - 1 ? 2 : 0)) first++;
+            }
+
+            int x = first > 0 ? 2 : 0;
+            if (first > 0) SurfaceText.Draw(surface, 0, 0, "<", Theme.Muted, width);
+            for (int i = 0; i < Keys.Count; i++)
+            {
+                if (i < first)
+                {
+                    _Starts.Add(Int32.MinValue);
+                    continue;
+                }
+
+                int w = TextCells.Width(shown[i]);
+                int limit = i < Keys.Count - 1 && total > width ? width - 2 : width;
+                if (x >= width || (x + w > limit && i != first))
+                {
+                    _Starts.Add(Math.Min(x, width - 1));
+                    if (x < width) SurfaceText.Draw(surface, width - 1, 0, ">", Theme.Muted, 1);
+                    for (int j = i + 1; j < Keys.Count; j++) _Starts.Add(Int32.MaxValue);
+                    break;
+                }
+
                 bool active = i == _Selected;
                 CellStyle style = active ? (IsFocused ? Theme.Selection : Theme.TabActive) : Theme.TabInactive;
                 _Starts.Add(x);
-                // The selected tab is bracketed; while the tab bar itself has focus its brackets become arrows, so the
-                // focused tab reads without color (and the bar's box is drawn focused, see RegionFrames).
-                string shown = active ? (IsFocused ? ">" + label.Trim() + "<" : "[" + label.Trim() + "]") : label;
-                x += SurfaceText.Draw(surface, x, 0, shown, style, surface.Size.Width - x);
+                x += SurfaceText.Draw(surface, x, 0, shown[i], style, width - x);
                 x += 1;
-                if (x >= surface.Size.Width) break;
             }
         }
 
         #endregion
 
         #region Private-Methods
+
+        private static int EndOf(List<string> shown, int first, int last)
+        {
+            int x = first > 0 ? 2 : 0;
+            for (int i = first; i <= last; i++) x += TextCells.Width(shown[i]) + (i < last ? 1 : 0);
+            return x;
+        }
 
         private bool Select(int index, bool raise)
         {

@@ -20,6 +20,21 @@ namespace Armada.Core.Models
         public string? OutputParser { get; set; }
         /// <summary>Source action built-in key (or ID) for {{scan.summary}}.</summary>
         public string? ScanSourceActionKey { get; set; }
+        /// <summary>
+        /// Optional applicability check: a shell command (POSIX; Windows uses <see cref="ApplicabilityCommandWindows"/>
+        /// when set) rendered with the same variables and run in each vessel's working directory before the target
+        /// executes or dispatches. A non-zero exit skips the vessel with reason NotApplicable, so a run touches only the
+        /// vessels the action applies to (for example, the vessels that reference a package). A vessel without a working
+        /// directory is not checked.
+        /// </summary>
+        public string? ApplicabilityCommand { get; set; } = null;
+        /// <summary>Optional Windows (PowerShell) applicability check; falls back to ApplicabilityCommand.</summary>
+        public string? ApplicabilityCommandWindows { get; set; } = null;
+        /// <summary>
+        /// Mission mode for Mission actions. Audit and Research are report-only: each mission runs read-only on a
+        /// Worker-only pipeline with landing mode None, and the captain's report is recorded on the run target.
+        /// </summary>
+        public MissionModeEnum MissionMode { get; set; } = MissionModeEnum.Implementation;
         /// <summary>Executable names required on the target host PATH.</summary>
         [CollectionBound(CollectionLimits.MaxConfigItems)]
         public System.Collections.Generic.List<string> RequiredTools { get => _RequiredTools; set => _RequiredTools = value ?? new(); }

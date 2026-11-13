@@ -736,6 +736,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
             Dock dock = new Dock();
             dock.Id = reader["id"].ToString()!;
             dock.TenantId = NullableString(reader["tenant_id"]);
+            dock.UserId = NullableString(reader["user_id"]);
             dock.VesselId = reader["vessel_id"].ToString()!;
             dock.CaptainId = NullableString(reader["captain_id"]);
             dock.WorktreePath = NullableString(reader["worktree_path"]);

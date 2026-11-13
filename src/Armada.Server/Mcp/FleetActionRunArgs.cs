@@ -22,5 +22,17 @@ namespace Armada.Server.Mcp
         public int? Concurrency { get; set; }
         /// <summary>Runtime input values.</summary>
         public Dictionary<string, string>? InputValues { get; set; }
+
+        /// <summary>
+        /// Follow-up run: target the vessels of this earlier run whose status is in FromTargetStatuses (instead of
+        /// vesselIds).
+        /// </summary>
+        public string? FromRunId { get; set; }
+
+        /// <summary>
+        /// Target statuses selected from FromRunId (Findings, Failed, Succeeded, Skipped, TimedOut, Cancelled). Defaults
+        /// to Findings and Failed.
+        /// </summary>
+        public List<string>? FromTargetStatuses { get; set; }
     }
 }
