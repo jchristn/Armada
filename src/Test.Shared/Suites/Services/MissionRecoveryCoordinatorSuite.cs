@@ -328,6 +328,91 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(0, recovery.Count, "the recorded kind decides, not the reason text");
             }));
 
+            cases.Add(CaseAsync("long_task_rescue_keeps_prior_stage_handoff", "A rescue brief keeps the first 3000 task characters and the complete prior-stage handoff", TestTags.Positive, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                {
+                    ArmadaSettings settings = new ArmadaSettings();
+                    settings.MaxMissionRecoveryAttempts = 2;
+                    MissionRecoveryCoordinator coordinator = new MissionRecoveryCoordinator(CreateLogging(), testDb.Driver, settings);
+                    IncidentService incidents = new IncidentService(testDb.Driver);
+                    Vessel vessel = await CreateVesselAsync(testDb).ConfigureAwait(false);
+
+                    Mission stage = new Mission("Prior stage", "Scoped acceptance criteria");
+                    stage.Persona = "Worker";
+                    stage.BranchName = "feature/prior-stage";
+                    stage.CommitHash = "0123456789abcdef0123456789abcdef01234567";
+                    string handoff = PipelineHandoffContext.Build(stage);
+                    string taskHead = "task-head-marker";
+                    string taskTail = "task-tail-beyond-prefix";
+                    string task = taskHead + new string('t', 4000) + taskTail;
+                    AssertTrue(task.Length > 3000, "the task prefix is longer than the rescue task budget");
+                    AssertFalse(task.Substring(0, 3000).Contains(taskTail, StringComparison.Ordinal), "the task tail sits past the budget");
+                    AssertContains("## Prior Stage Output", handoff, "the handoff carries the prior-stage heading");
+                    AssertContains("Branch: feature/prior-stage", handoff, "the handoff carries the branch");
+                    AssertContains("Commit: 0123456789abcdef0123456789abcdef01234567", handoff, "the handoff carries the commit");
+                    AssertContains("list_handoff_artifacts", handoff, "the handoff carries the retrieval instruction");
+
+                    string embedded = await RescueTaskTextAsync(testDb, coordinator, incidents, vessel.Id, task + handoff).ConfigureAwait(false);
+                    string expected = task.Substring(0, 3000) + handoff;
+                    AssertEqual(expected, embedded, "the rescue keeps the task prefix and the handoff bytes");
+                    AssertTrue(embedded.Length <= 3000 + handoff.Length, "the preserved text stays within the task budget plus the handoff");
+                    AssertFalse(embedded.Contains(taskTail, StringComparison.Ordinal), "task characters past the budget are omitted");
+
+                    Vessel handoffVessel = new Vessel("handoff-recovery-vessel", "https://github.com/test/handoff.git");
+                    handoffVessel.DefaultBranch = "main";
+                    handoffVessel = await testDb.Driver.Vessels.CreateAsync(handoffVessel).ConfigureAwait(false);
+                    string handoffOnly = await RescueTaskTextAsync(testDb, coordinator, incidents, handoffVessel.Id, handoff).ConfigureAwait(false);
+                    AssertEqual(handoff, handoffOnly, "a description that is the handoff keeps that block");
+                }
+            }));
+
+            cases.Add(CaseAsync("long_description_without_handoff_keeps_trim", "A long description without a prior-stage handoff keeps the existing 3000-character trim", TestTags.Positive, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                {
+                    ArmadaSettings settings = new ArmadaSettings();
+                    settings.MaxMissionRecoveryAttempts = 2;
+                    MissionRecoveryCoordinator coordinator = new MissionRecoveryCoordinator(CreateLogging(), testDb.Driver, settings);
+                    IncidentService incidents = new IncidentService(testDb.Driver);
+                    Vessel vessel = await CreateVesselAsync(testDb).ConfigureAwait(false);
+
+                    string taskHead = "plain-task-head";
+                    string taskTail = "plain-task-tail-beyond-limit";
+                    string task = taskHead + new string('p', 4000) + taskTail;
+                    AssertTrue(task.Length > 3000, "the description is longer than the rescue task budget");
+                    AssertFalse(task.Substring(0, 3000).Contains(taskTail, StringComparison.Ordinal), "the tail sits past the budget");
+
+                    string embedded = await RescueTaskTextAsync(testDb, coordinator, incidents, vessel.Id, task).ConfigureAwait(false);
+                    AssertEqual(task.Substring(0, 3000) + "...(truncated)", embedded, "a description without a handoff keeps the existing trim");
+                    AssertFalse(embedded.Contains(taskTail, StringComparison.Ordinal), "characters past the budget are omitted");
+                }
+            }));
+
+            cases.Add(CaseAsync("separator_without_handoff_mission_line_keeps_trim", "A prior-stage heading without the handoff mission line keeps the existing trim", TestTags.Negative, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                {
+                    ArmadaSettings settings = new ArmadaSettings();
+                    settings.MaxMissionRecoveryAttempts = 2;
+                    MissionRecoveryCoordinator coordinator = new MissionRecoveryCoordinator(CreateLogging(), testDb.Driver, settings);
+                    IncidentService incidents = new IncidentService(testDb.Driver);
+                    Vessel vessel = await CreateVesselAsync(testDb).ConfigureAwait(false);
+
+                    string taskTail = "fake-handoff-tail";
+                    string task = new string('f', 2500)
+                        + "\n\n---\n## Prior Stage Output\nThis is ordinary task text.\n"
+                        + new string('f', 1000)
+                        + taskTail;
+                    AssertTrue(task.Length > 3000, "the imitated heading sits in a long description");
+                    AssertFalse(task.Substring(0, 3000).Contains(taskTail, StringComparison.Ordinal), "the tail sits past the budget");
+
+                    string embedded = await RescueTaskTextAsync(testDb, coordinator, incidents, vessel.Id, task).ConfigureAwait(false);
+                    AssertEqual(task.Substring(0, 3000) + "...(truncated)", embedded, "an imitated heading does not keep the rest of the task");
+                    AssertFalse(embedded.Contains(taskTail, StringComparison.Ordinal), "the imitated suffix is not preserved");
+                }
+            }));
+
             foreach (string operation in new[] { "cancel_original", "delete_original", "cancel_rescue", "delete_rescue" })
             {
                 cases.Add(CaseAsync("operator_" + operation + "_stops_recovery", "Operator " + operation + " stops further rescue dispatch", TestTags.Negative, async () =>
@@ -392,6 +477,45 @@ namespace Test.Shared.Suites.Services
             mission.FailureReason = failureReason;
             mission.DiffSnapshot = "diff --git a/x.cs b/x.cs\n+++ b/x.cs\n+broken";
             return await testDb.Driver.Missions.CreateAsync(mission).ConfigureAwait(false);
+        }
+
+        private static async Task<string> RescueTaskTextAsync(
+            TestDatabase testDb,
+            MissionRecoveryCoordinator coordinator,
+            IncidentService incidents,
+            string vesselId,
+            string description)
+        {
+            Mission failed = await CreateFailedMissionAsync(
+                testDb,
+                vesselId,
+                MissionFailureKindEnum.Compile,
+                "Definition-of-Done gate failed (Compile): build phase exited 1").ConfigureAwait(false);
+            failed.Title = "Keep the prior stage";
+            failed.Description = description;
+            await testDb.Driver.Missions.UpdateAsync(failed).ConfigureAwait(false);
+
+            await coordinator.MaintainAsync().ConfigureAwait(false);
+
+            List<Incident> recovery = await ReadRecoveryIncidentsAsync(incidents).ConfigureAwait(false);
+            Incident incident = recovery.Single(item => item.MissionId == failed.Id);
+            Mission rescue = (await testDb.Driver.Missions.ReadAsync(incident.RescueMissionIds[0]).ConfigureAwait(false))!;
+            string brief = rescue.Description ?? String.Empty;
+            AssertContains("+broken", brief, "the prior diff excerpt remains");
+            AssertContains("Definition-of-Done gate failed (Compile)", brief, "the failure reason remains");
+            return EmbeddedOriginalDescription(brief, failed.Title);
+        }
+
+        private static string EmbeddedOriginalDescription(string brief, string title)
+        {
+            string startToken = "## Original Mission\n" + title + "\n\n";
+            int start = brief.IndexOf(startToken, StringComparison.Ordinal);
+            AssertTrue(start >= 0, "the rescue brief contains the original mission heading");
+            int textAt = start + startToken.Length;
+            string endToken = "\n\n## Failure To Fix\n";
+            int end = brief.IndexOf(endToken, textAt, StringComparison.Ordinal);
+            AssertTrue(end >= textAt, "the rescue brief contains the failure section");
+            return brief.Substring(textAt, end - textAt);
         }
 
         private static async Task FailMissionAsync(TestDatabase testDb, string missionId, MissionFailureKindEnum failureKind, string failureReason)
