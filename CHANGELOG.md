@@ -433,6 +433,9 @@ commands arrive with their own changes. Schema migrations 103 and 104 apply at s
 ### Git credential prompts
 
 - **Git launches fail without opening a credential prompt.** Shared Git launch settings disable terminal and Git Credential Manager interaction, so unattended commands return an authentication error when credentials are missing.
+### Secret redaction for fine-grained GitHub, Slack, and GitLab tokens
+
+- **Runtime logs and captured requests redact three more token shapes.** `SecretRedactor` removes a fine-grained GitHub personal access token (82 or more token characters), a Slack token whose prefix letter is a, b, p, r, or s, and a GitLab personal access token (20 or more token characters). Classic GitHub tokens and the other existing rules are unchanged.
 
 ### Landing failure prevention
 
