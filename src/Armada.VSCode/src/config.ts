@@ -1,12 +1,14 @@
 import * as vscode from 'vscode';
-import { AuthHeaderMode, normalizeBaseUrl } from './api/blackbox';
 
-/** Snapshot of the `armada.*` settings. */
+/**
+ * Snapshot of the `armada.*` settings. These are preferences only: which Admiral to use and its credential come from
+ * the Armada settings on this machine (connection/endpoints.ts) and the "Armada: Connect" picker.
+ */
 export interface ArmadaSettings {
-  url: string;
   tenant: string;
-  authHeader: AuthHeaderMode;
+  /** Explicit dashboard URL; empty means the connected Admiral's /dashboard. */
   dashboardUrl: string;
+  showFailuresInExplorer: boolean;
   filterToWorkspaceVessel: boolean;
   includeResolved: boolean;
   maxEntries: number;
@@ -21,13 +23,11 @@ export interface ArmadaSettings {
 /** Reads the current settings, clamping numbers into their allowed ranges. */
 export function readSettings(): ArmadaSettings {
   const c = vscode.workspace.getConfiguration('armada');
-  const url = String(c.get<string>('url', 'http://localhost:7890') ?? '').trim();
   const dashboard = String(c.get<string>('dashboardUrl', '') ?? '').trim();
   return {
-    url,
     tenant: String(c.get<string>('tenant', '') ?? '').trim(),
-    authHeader: c.get<string>('authHeader', 'Bearer') === 'X-Api-Key' ? 'X-Api-Key' : 'Bearer',
-    dashboardUrl: dashboard ? dashboard.replace(/\/+$/, '') : url ? `${normalizeBaseUrl(url)}/dashboard` : '',
+    dashboardUrl: dashboard ? dashboard.replace(/\/+$/, '') : '',
+    showFailuresInExplorer: c.get<boolean>('failures.showInExplorer', false) === true,
     filterToWorkspaceVessel: c.get<boolean>('failures.filterToWorkspaceVessel', true) !== false,
     includeResolved: c.get<boolean>('failures.includeResolved', false) === true,
     maxEntries: clamp(c.get<number>('failures.maxEntries', 50), 1, 500, 50),

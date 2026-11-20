@@ -11,6 +11,9 @@ declared requirements from `RouteAuthorizationRegistry` and `McpToolAuthorizatio
 `Authenticated`, `TenantAdmin` (tenant administrator or global administrator), `AdminOnly` (global
 administrator).
 
+Client contract version: `1.0` (reported as `ContractVersion` by
+`GET /api/v1/status/health`; clients compare its major part with their own).
+
 ## Contents
 
 - [Counts](#counts)

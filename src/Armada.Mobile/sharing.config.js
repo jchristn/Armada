@@ -1,5 +1,6 @@
-// What the mobile app shares with the web dashboard. One list, read by Metro, Jest, ESLint, and the
-// shared-module test (src/__tests__/sharedModules.test.ts).
+// What the mobile app and the VS Code extension share with the web dashboard. One list, read by Metro, Jest, ESLint,
+// the shared-module test (src/__tests__/sharedModules.test.ts), and the extension's shared-module lint
+// (src/Armada.VSCode/eslint.dashboard-shared.config.mjs, `npm run lint:shared` there).
 //
 // Shared: every non-test module under the dashboard's api/, types/, and lib/ folders, plus i18n/catalog.ts. Shared
 // modules must be host-agnostic: no window, document, localStorage, navigator, import.meta, or react-dom.

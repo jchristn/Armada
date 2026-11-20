@@ -1,6 +1,6 @@
 import * as assert from 'assert';
 import { describe, it } from 'node:test';
-import { EntryNode, FailureNode, FailuresTreeProvider, MessageNode, VesselNode } from '../../src/tree/failuresTreeProvider';
+import { EntryNode, FailureNode, FailuresTreeProvider, MessageNode, VesselNode } from '../../src/surfaces/blackbox/failuresTreeProvider';
 import { MockFetch, page } from '../fakes/fetch';
 import { summary, VESSEL_A } from '../fakes/fixtures';
 import { makeStore, standardMock } from '../fakes/storeHelpers';
@@ -44,7 +44,7 @@ describe('FailuresTreeProvider', () => {
     assert.strictEqual(vesselItem.description, '2 open');
 
     const children = tree.getChildren(vessels[0]) as EntryNode[];
-    assert.deepStrictEqual(children.map((c) => c.entry.Id), ['bbx_1', 'bbx_2']);
+    assert.deepStrictEqual(children.map((c) => c.entry.id), ['bbx_1', 'bbx_2']);
     const item = tree.getTreeItem(children[0]);
     assert.strictEqual(item.label, 'Add login (msn_x)');
     assert.strictEqual(item.description, 'LandingConflict, LocalMerge, 3h ago');

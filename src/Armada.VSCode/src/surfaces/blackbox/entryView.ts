@@ -1,8 +1,10 @@
 import * as crypto from 'crypto';
 import * as vscode from 'vscode';
-import { ArmadaBlackBoxClient, describeError } from '../api/blackbox';
-import { BlackBoxDoctorPage, BlackBoxEntrySummary, BlackBoxNote } from '../api/types';
-import { entryLabel } from '../util/format';
+import { getBlackBox, getVesselBlackBoxDoctor, listBlackBoxNotes } from '@dashboard/api/client';
+import type { BlackBoxDoctorPage, BlackBoxEntrySummary, BlackBoxNote } from '@dashboard/types/blackbox';
+import { describeError } from '../../transport/errors';
+import { entryLabel } from '../../util/format';
+import { CommandConnection } from './blackBoxCommands';
 import { isEntryViewMessage, renderEntryErrorHtml, renderEntryHtml } from './entryHtml';
 
 /** Map from webview actions to extension commands. */
@@ -21,33 +23,31 @@ const ACTION_COMMANDS: Record<string, string> = {
 
 /** Shows black box entries in webview panels, one panel per entry. */
 export class EntryViewManager implements vscode.Disposable {
-  private readonly _GetClient: () => ArmadaBlackBoxClient;
-  private readonly _GetDashboardUrl: () => string;
+  private readonly _RequireConnection: () => CommandConnection;
   private readonly _Panels = new Map<string, vscode.WebviewPanel>();
 
   /**
-   * @throws Error when getClient is missing.
+   * @throws Error when requireConnection is missing.
    */
-  public constructor(getClient: () => ArmadaBlackBoxClient, getDashboardUrl: () => string = () => '') {
-    if (!getClient) throw new Error('getClient is required');
-    this._GetClient = getClient;
-    this._GetDashboardUrl = getDashboardUrl;
+  public constructor(requireConnection: () => CommandConnection) {
+    if (!requireConnection) throw new Error('requireConnection is required');
+    this._RequireConnection = requireConnection;
   }
 
   /** Opens (or reveals) the panel for an entry and renders it. */
   public async open(entry: BlackBoxEntrySummary): Promise<void> {
-    let panel = this._Panels.get(entry.Id);
+    let panel = this._Panels.get(entry.id);
     if (panel) {
       panel.reveal();
     } else {
-      panel = vscode.window.createWebviewPanel('armadaBlackBox', `Black Box: ${entry.MissionId ?? entry.VoyageId ?? entry.Id}`, vscode.ViewColumn.Active, {
+      panel = vscode.window.createWebviewPanel('armadaBlackBox', `Black Box: ${entry.missionId ?? entry.voyageId ?? entry.id}`, vscode.ViewColumn.Active, {
         enableScripts: true,
         retainContextWhenHidden: false,
         localResourceRoots: [],
       });
       const created = panel;
-      this._Panels.set(entry.Id, created);
-      created.onDidDispose(() => this._Panels.delete(entry.Id));
+      this._Panels.set(entry.id, created);
+      created.onDidDispose(() => this._Panels.delete(entry.id));
       created.webview.onDidReceiveMessage((message: unknown) => {
         if (!isEntryViewMessage(message)) return;
         if (message.action === 'refresh') {
@@ -71,24 +71,24 @@ export class EntryViewManager implements vscode.Disposable {
   private async render(panel: vscode.WebviewPanel, summary: BlackBoxEntrySummary): Promise<void> {
     const nonce = crypto.randomBytes(16).toString('base64');
     try {
-      const client = this._GetClient();
-      const entry = await client.getEntry(summary.Id);
+      const connection = this._RequireConnection();
+      const entry = await getBlackBox(summary.id);
       let notes: BlackBoxNote[] = [];
       try {
-        notes = (await client.listNotes(summary.Id)).Objects;
+        notes = (await listBlackBoxNotes(summary.id)).objects;
       } catch {
         notes = [];
       }
       let doctor: BlackBoxDoctorPage | null = null;
-      if (entry.VesselId) {
+      if (entry.vesselId) {
         try {
-          doctor = await client.getDoctor(entry.VesselId, undefined, 1, 5);
+          doctor = await getVesselBlackBoxDoctor(entry.vesselId, { pageNumber: 1, pageSize: 5 });
         } catch {
           doctor = null;
         }
       }
-      panel.title = `Black Box: ${entry.MissionId ?? entry.VoyageId ?? entry.Id}`;
-      panel.webview.html = renderEntryHtml(entry, notes, nonce, panel.webview.cspSource, { dashboardUrl: this._GetDashboardUrl(), doctor });
+      panel.title = `Black Box: ${entry.missionId ?? entry.voyageId ?? entry.id}`;
+      panel.webview.html = renderEntryHtml(entry, notes, nonce, panel.webview.cspSource, { dashboardUrl: connection.dashboardUrl, doctor });
     } catch (err) {
       panel.webview.html = renderEntryErrorHtml(entryLabel(summary), describeError(err), nonce);
     }

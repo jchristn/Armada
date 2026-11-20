@@ -1239,6 +1239,8 @@ voyages, and signals. The same scoping applies to the MCP `status` tool and the 
 
 Health check endpoint. **Does not require authentication.** `BuildVersion` and `CommitHash` identify the source revision embedded in the running binary; `CommitHash` is null for a build without source revision information. These fields are not read from the current checkout.
 
+`ContractVersion` (`major.minor`) is the version of the client contract. Clients that are not served by the Admiral, such as the VS Code extension, read it before anything else and compare its major part with the one they were built for: a lower server major means the Admiral is too old for the client, a higher one means the client is too old. The minor part grows with compatible additions; the major part changes only with a breaking change in a major release ([COMPATIBILITY.md](COMPATIBILITY.md)).
+
 **Permission:** NoAuthRequired
 
 **Response:** `200 OK`
@@ -1250,6 +1252,7 @@ Health check endpoint. **Does not require authentication.** `BuildVersion` and `
   "StartUtc": "2026-03-07T08:00:00Z",
   "Uptime": "0.04:00:00",
   "Version": "1.3.0",
+  "ContractVersion": "1.0",
   "BuildVersion": "1.3.0+<source-revision>",
   "CommitHash": "<source-revision>",
   "Ports": {

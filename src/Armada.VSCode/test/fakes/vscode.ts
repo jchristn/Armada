@@ -28,6 +28,15 @@ export const fake = {
   info: [] as Responder[],
   error: [] as Responder[],
   executeHandlers: new Map<string, (...args: any[]) => any>(),
+  statusBarItems: [] as FakeStatusBarItem[],
+  logLines: [] as string[],
+  treeViews: [] as string[],
+  /** The last value set for each context key through setContext. */
+  contextKeys(): Map<string, unknown> {
+    const map = new Map<string, unknown>();
+    for (const e of this.executed) if (e.command === 'setContext') map.set(e.args[0] as string, e.args[1]);
+    return map;
+  },
   reset(): void {
     this.config.clear();
     this.configUpdates = [];
@@ -47,6 +56,9 @@ export const fake = {
     this.info = [];
     this.error = [];
     this.executeHandlers.clear();
+    this.statusBarItems = [];
+    this.logLines = [];
+    this.treeViews = [];
   },
 };
 
@@ -109,6 +121,42 @@ export class Uri {
 }
 
 export enum TreeItemCollapsibleState { None = 0, Collapsed = 1, Expanded = 2 }
+export enum StatusBarAlignment { Left = 1, Right = 2 }
+
+/** A status bar item that records what the extension shows. */
+export class FakeStatusBarItem {
+  public text = '';
+  public tooltip: string | MarkdownString | undefined;
+  public command: string | undefined;
+  public name: string | undefined;
+  public backgroundColor: ThemeColor | undefined;
+  public visible = false;
+  public constructor(public readonly id: string) {}
+  public show(): void {
+    this.visible = true;
+  }
+  public hide(): void {
+    this.visible = false;
+  }
+  public dispose(): void {
+    this.visible = false;
+  }
+}
+
+/** In-memory Memento (globalState). */
+export class FakeMemento {
+  public readonly values = new Map<string, unknown>();
+  public get<T>(key: string, defaultValue?: T): T | undefined {
+    return this.values.has(key) ? (this.values.get(key) as T) : defaultValue;
+  }
+  public async update(key: string, value: unknown): Promise<void> {
+    if (value === undefined) this.values.delete(key);
+    else this.values.set(key, value);
+  }
+  public keys(): string[] {
+    return Array.from(this.values.keys());
+  }
+}
 export enum ViewColumn { Active = -1, Beside = -2, One = 1 }
 export enum ConfigurationTarget { Global = 1, Workspace = 2, WorkspaceFolder = 3 }
 
@@ -164,8 +212,19 @@ export const window = {
   showQuickPick: (items: any, options?: any) => Promise.resolve(items).then((resolved) => respond(fake.quickPick, resolved, options)),
   showInputBox: (options?: any) => Promise.resolve(respond(fake.inputBox, options)),
   showTextDocument: (doc: any) => Promise.resolve({ document: doc }),
-  createOutputChannel: () => ({ appendLine: () => undefined, dispose: () => undefined }),
-  createTreeView: () => ({ badge: undefined, description: undefined, dispose: () => undefined }),
+  createOutputChannel: () => {
+    const log = (level: string) => (line: string) => fake.logLines.push(`${level} ${line}`);
+    return { appendLine: log('line'), info: log('info'), warn: log('warn'), error: log('error'), debug: log('debug'), trace: log('trace'), show: () => undefined, dispose: () => undefined };
+  },
+  createStatusBarItem: (id: string) => {
+    const item = new FakeStatusBarItem(id);
+    fake.statusBarItems.push(item);
+    return item;
+  },
+  createTreeView: (id: string) => {
+    fake.treeViews.push(id);
+    return { badge: undefined, description: undefined, dispose: () => undefined };
+  },
   registerFileDecorationProvider: () => new Disposable(() => undefined),
   createWebviewPanel: () => {
     throw new Error('webviews are not faked');

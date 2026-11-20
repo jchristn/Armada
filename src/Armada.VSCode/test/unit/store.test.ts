@@ -14,7 +14,7 @@ describe('BlackBoxStore', () => {
     assert.strictEqual(store.status, 'ready');
     assert.strictEqual(store.filtered, true);
     assert.deepStrictEqual(store.matchedVesselIds(), ['vsl_a']);
-    assert.deepStrictEqual(store.entries.map((e) => e.Id), ['bbx_1', 'bbx_2']);
+    assert.deepStrictEqual(store.entries.map((e) => e.id), ['bbx_1', 'bbx_2']);
     assert.strictEqual(store.openCount, 12, 'open count uses TotalRecords of the Open query');
     const body = mock.calls('POST', '/api/v1/blackbox/enumerate')[0].body as Record<string, unknown>;
     assert.strictEqual(body.VesselId, 'vsl_a');
@@ -31,7 +31,7 @@ describe('BlackBoxStore', () => {
     assert.deepStrictEqual(Array.from(files.keys()).sort(), ['src/a.ts', 'src/b.ts']);
     assert.strictEqual(files.get('src/a.ts')?.missionId, 'msn_x');
     assert.strictEqual(files.get('src/a.ts')?.count, 2);
-    assert.strictEqual(store.hotspots.get('/work/alpha')?.get('src')?.EntryCount, 3);
+    assert.strictEqual(store.hotspots.get('/work/alpha')?.get('src')?.entryCount, 3);
   });
 
   it('shows every vessel when no workspace folder matches, and flags it', async () => {
@@ -39,7 +39,7 @@ describe('BlackBoxStore', () => {
     await store.refresh();
     assert.strictEqual(store.filtered, false);
     assert.strictEqual(store.unmatchedWorkspace, true);
-    assert.deepStrictEqual(store.entries.map((e) => e.Id), ['bbx_3', 'bbx_1', 'bbx_2']);
+    assert.deepStrictEqual(store.entries.map((e) => e.id), ['bbx_3', 'bbx_1', 'bbx_2']);
     assert.strictEqual(store.conflictedFiles.size, 0);
   });
 
@@ -78,7 +78,7 @@ describe('BlackBoxStore', () => {
   });
 
   it('reports 503 store unavailable from the enumerate route', async () => {
-    const mock = standardMock().on('POST', '/api/v1/blackbox/enumerate', { status: 503, json: { Error: 'BlackBoxStoreUnavailable', Message: 'disk offline' } });
+    const mock = standardMock().on('POST', '/api/v1/blackbox/enumerate', { status: 503, json: { Error: 'ServiceUnavailable', Message: 'disk offline', Data: { Code: 'BlackBoxStoreUnavailable' } } });
     const store = makeStore(mock);
     await store.refresh();
     assert.strictEqual(store.status, 'error');

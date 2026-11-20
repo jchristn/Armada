@@ -37,6 +37,7 @@ namespace Test.Shared.Infrastructure.ApiSurface
         {
             if (server == null) throw new ArgumentNullException(nameof(server));
             ApiSurfaceDocument document = new ApiSurfaceDocument();
+            document.ContractVersion = Armada.Core.Constants.ContractVersion;
             document.Rest = BuildRest(server.GetRestRouteDescriptors());
             document.Mcp = BuildMcp(server.RegisteredMcpToolDescriptors);
             document.WebSocket = BuildWebSocket();

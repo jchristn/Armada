@@ -1,0 +1,104 @@
+name: vscode-extension
+
+# Builds and checks the VS Code extension (src/Armada.VSCode, VSCODE_EXTENSION_PLAN.md 9.2) on every push and pull
+# request that touches it, the dashboard modules it shares (api/, types/, lib/), the sharing contract, or the inputs of
+# its parity manifest. Publishing is not wired up yet (milestone V1).
+
+on:
+  push:
+    paths:
+      - 'src/Armada.VSCode/**'
+      - 'src/Armada.Dashboard/src/api/**'
+      - 'src/Armada.Dashboard/src/types/**'
+      - 'src/Armada.Dashboard/src/lib/**'
+      - 'src/Armada.Dashboard/src/App.tsx'
+      - 'src/Armada.Dashboard/src/pages/**'
+      - 'src/Armada.Dashboard/src/components/settings/**'
+      - 'src/Armada.Mobile/sharing.config.js'
+      - 'src/Armada.Mobile/eslint.shared.js'
+      - 'src/Armada.Tui/parity.json'
+      - 'src/Armada.Core/Hosting/HarborMenuCommandEnum.cs'
+      - 'src/Armada.Harbor/**'
+      - 'scripts/vscode/**'
+      - 'scripts/tui/client_exports.py'
+      - 'scripts/tui/dashboard_surfaces.py'
+      - '.github/workflows/vscode-extension.yml'
+  pull_request:
+    paths:
+      - 'src/Armada.VSCode/**'
+      - 'src/Armada.Dashboard/src/api/**'
+      - 'src/Armada.Dashboard/src/types/**'
+      - 'src/Armada.Dashboard/src/lib/**'
+      - 'src/Armada.Dashboard/src/App.tsx'
+      - 'src/Armada.Dashboard/src/pages/**'
+      - 'src/Armada.Dashboard/src/components/settings/**'
+      - 'src/Armada.Mobile/sharing.config.js'
+      - 'src/Armada.Mobile/eslint.shared.js'
+      - 'src/Armada.Tui/parity.json'
+      - 'src/Armada.Core/Hosting/HarborMenuCommandEnum.cs'
+      - 'src/Armada.Harbor/**'
+      - 'scripts/vscode/**'
+      - 'scripts/tui/client_exports.py'
+      - 'scripts/tui/dashboard_surfaces.py'
+      - '.github/workflows/vscode-extension.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: src/Armada.VSCode
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The @dashboard/* alias compiles the dashboard's shared TypeScript modules straight from source; they import no
+      # packages, so the dashboard's own node_modules are not needed.
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: src/Armada.VSCode/.nvmrc
+          cache: npm
+          cache-dependency-path: src/Armada.VSCode/package-lock.json
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build (typecheck and bundle)
+        run: npm run build
+
+      - name: Lint (extension and the shared-module contract)
+        run: npm run lint
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Integration tests
+        run: xvfb-run -a npm run test:integration
+
+      - name: Parity manifest
+        working-directory: .
+        run: python3 scripts/vscode/generate-parity-manifest.py --check
+
+      - name: Package the VSIX
+        run: |
+          npm run package
+          cd ../../vsix
+          version=$(node -p "require('../src/Armada.VSCode/package.json').version")
+          sha256sum "armada-vscode-${version}.vsix" > "armada-vscode-${version}.vsix.sha256"
+          cat "armada-vscode-${version}.vsix.sha256"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: armada-vscode-vsix
+          path: |
+            vsix/armada-vscode-*.vsix
+            vsix/armada-vscode-*.vsix.sha256
+          if-no-files-found: error

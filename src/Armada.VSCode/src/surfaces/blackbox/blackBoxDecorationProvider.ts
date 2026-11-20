@@ -1,7 +1,7 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { BlackBoxStore } from '../state/blackBoxStore';
-import { formatDate } from '../util/format';
+import { formatDate } from '../../util/format';
+import { BlackBoxStore } from './blackBoxStore';
 
 /** Badge shown on a file that conflicted in an open entry's landing. */
 export const CONFLICT_BADGE = 'BX';
@@ -49,10 +49,10 @@ export class BlackBoxDecorationProvider implements vscode.FileDecorationProvider
       if (rel === null) continue;
       const hotspot = dirs.get(rel);
       if (hotspot) {
-        const count = hotspot.EntryCount;
-        const files = hotspot.FileCount !== undefined ? ` (${hotspot.FileCount} file${hotspot.FileCount === 1 ? '' : 's'})` : '';
+        const count = hotspot.entryCount;
+        const files = hotspot.fileCount !== undefined ? ` (${hotspot.fileCount} file${hotspot.fileCount === 1 ? '' : 's'})` : '';
         const detail = count !== undefined ? `in ${count} black box entr${count === 1 ? 'y' : 'ies'}${files}` : 'frequent in black box entries';
-        const last = hotspot.LastSeenUtc ? `, last ${formatDate(hotspot.LastSeenUtc)}` : '';
+        const last = hotspot.lastSeenUtc ? `, last ${formatDate(hotspot.lastSeenUtc)}` : '';
         const decoration = new vscode.FileDecoration(HOTSPOT_BADGE, `Armada hotspot: ${detail}${last}`, new vscode.ThemeColor('list.warningForeground'));
         decoration.propagate = false;
         return decoration;

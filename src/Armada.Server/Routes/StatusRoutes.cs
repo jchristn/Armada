@@ -137,6 +137,7 @@ namespace Armada.Server.Routes
                     StartUtc = _startUtc,
                     Uptime = uptime.ToString(@"d\.hh\:mm\:ss"),
                     Version = ArmadaConstants.ProductVersion,
+                    ContractVersion = ArmadaConstants.ContractVersion,
                     BuildVersion = BuildIdentity.InformationalVersion,
                     CommitHash = BuildIdentity.CommitHash,
                     Ports = new

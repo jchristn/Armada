@@ -2,7 +2,7 @@ import * as assert from 'assert';
 import * as path from 'path';
 import { describe, it } from 'node:test';
 import * as vscode from 'vscode';
-import { BlackBoxDecorationProvider, CONFLICT_BADGE, HOTSPOT_BADGE, relativeInside } from '../../src/decorations/blackBoxDecorationProvider';
+import { BlackBoxDecorationProvider, CONFLICT_BADGE, HOTSPOT_BADGE, relativeInside } from '../../src/surfaces/blackbox/blackBoxDecorationProvider';
 import { makeStore, standardMock } from '../fakes/storeHelpers';
 import { ThemeColor, Uri } from '../fakes/vscode';
 

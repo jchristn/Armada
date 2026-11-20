@@ -7,6 +7,10 @@ node_modules/**
 **/*.ts
 tsconfig*.json
 esbuild.mjs
+package-vsix.mjs
+eslint*.mjs
+parity.json
+.nvmrc
 .vscode-test/**
 .gitignore
 *.vsix

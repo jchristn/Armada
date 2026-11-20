@@ -21,6 +21,12 @@ namespace Test.Shared.Infrastructure.ApiSurface
         public string Generator { get; set; } = "scripts/common/generate-api-surface.sh";
 
         /// <summary>
+        /// Client contract version (major.minor) the Admiral reports as ContractVersion on GET /api/v1/status/health
+        /// (Armada.Core.Constants.ContractVersion). Empty in a baseline written before the field existed.
+        /// </summary>
+        public string ContractVersion { get; set; } = "";
+
+        /// <summary>
         /// REST routes.
         /// </summary>
         public List<ApiRestRoute> Rest { get; set; } = new List<ApiRestRoute>();

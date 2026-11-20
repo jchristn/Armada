@@ -1,10 +1,13 @@
 import * as vscode from 'vscode';
-import { ArmadaApiError, ArmadaBlackBoxClient, askArmadaPrompt, dashboardAskUrl, describeError } from '../api/blackbox';
-import { BlackBoxEntrySummary, BlackBoxRecoveryPath, BlackBoxRecoveryResult, BlackBoxResolution, RESOLUTION_CHOICES } from '../api/types';
-import { ArmadaSettings } from '../config';
-import { changeBrief, rankedChanges } from '../views/entryHtml';
-import { BlackBoxStore } from '../state/blackBoxStore';
-import { entryKind, entryLabel, entrySubjectId, formatAge } from '../util/format';
+import { addBlackBoxNote, enumerateBlackBox, getBlackBox, getBlackBoxBrief, resolveBlackBox, runBlackBoxRecovery } from '@dashboard/api/client';
+import { blackBoxEntryAskPrompt } from '@dashboard/lib/blackbox';
+import type { BlackBoxEntrySummary, BlackBoxRecoveryPath, BlackBoxRecoveryRunResult, BlackBoxResolution } from '@dashboard/types/blackbox';
+import { ArmadaSettings } from '../../config';
+import { describeError, hasStatus, needsConnection, serverMessage } from '../../transport/errors';
+import { dashboardAskUrl, getEntryForAnyId } from '../../transport/hostClient';
+import { entryKind, entryLabel, entrySubjectId, formatAge } from '../../util/format';
+import { BlackBoxStore } from './blackBoxStore';
+import { changeBrief, rankedChanges } from './entryHtml';
 
 /** The chat command feature-detected by "Send FIX THIS to Chat". */
 export const CHAT_OPEN_COMMAND = 'workbench.action.chat.open';
@@ -18,9 +21,24 @@ export type DraftOutcome = 'chat' | 'copied' | 'noChange' | 'cancelled' | 'faile
 /** Outcome of "Send FIX THIS to Chat". */
 export type ChatOutcome = 'chatWithAttachment' | 'chatWithText' | 'copied' | 'cancelled' | 'failed';
 
+/** The resolutions an operator can pick when resolving an entry. */
+export const RESOLUTION_CHOICES: BlackBoxResolution[] = ['Resolved', 'Duplicate', 'WontFix', 'ArmadaFixed'];
+
+/** What the commands need from the connection. */
+export interface CommandConnection {
+  /** Tenant filter (armada.tenant), if any. */
+  tenant: string | undefined;
+  /** Dashboard base URL, for Ask Armada. */
+  dashboardUrl: string;
+}
+
 /** Dependencies of the command handlers. */
 export interface CommandDeps {
-  getClient(): ArmadaBlackBoxClient;
+  /**
+   * The active connection.
+   * @throws NotConnectedError when there is none.
+   */
+  requireConnection(): CommandConnection;
   store: BlackBoxStore;
   getSettings(): ArmadaSettings;
   /** Folder for temporary brief files handed to chat. */
@@ -128,11 +146,12 @@ export class BlackBoxCommands {
     return this.guard<DraftOutcome>(async () => {
       const summary = await this.pickEntry(arg, 'Draft Armada Fix Mission');
       if (!summary) return 'cancelled';
-      const entry = await this._Deps.getClient().getEntry(summary.Id);
-      const resilience = entry.Record?.Analysis?.Resilience ?? null;
+      this._Deps.requireConnection();
+      const entry = await getBlackBox(summary.id);
+      const resilience = entry.record?.analysis?.resilience ?? null;
       const top = rankedChanges(resilience)[0];
       if (!top) {
-        void vscode.window.showInformationMessage(`Armada: ${resilience?.NoChangeReason ?? `entry ${entry.Id} proposes no Armada change.`}`);
+        void vscode.window.showInformationMessage(`Armada: ${resilience?.noChangeReason ?? `entry ${entry.id} proposes no Armada change.`}`);
         return 'noChange';
       }
       const brief = changeBrief(top);
@@ -146,7 +165,7 @@ export class BlackBoxCommands {
           // fall through to the copied message
         }
       }
-      void vscode.window.showInformationMessage(`Armada: the Armada fix mission brief "${top.Title}" was copied. Dispatch it on the Armada vessel.`);
+      void vscode.window.showInformationMessage(`Armada: the Armada fix mission brief "${top.title}" was copied. Dispatch it on the Armada vessel.`);
       return 'copied';
     }, 'failed');
   }
@@ -156,21 +175,21 @@ export class BlackBoxCommands {
     return this.guard<RecoveryOutcome>(async () => {
       const summary = await this.pickEntry(arg, 'Run Recovery Path');
       if (!summary) return 'cancelled';
-      const client = this._Deps.getClient();
-      const entry = await client.getEntry(summary.Id);
-      const paths = entry.Record?.Analysis?.RecoveryPaths ?? [];
+      this._Deps.requireConnection();
+      const entry = await getBlackBox(summary.id);
+      const paths = entry.record?.analysis?.recoveryPaths ?? [];
       if (!paths.length) {
-        void vscode.window.showInformationMessage(`Armada: entry ${entry.Id} has no recovery paths.`);
+        void vscode.window.showInformationMessage(`Armada: entry ${entry.id} has no recovery paths.`);
         return 'noPaths';
       }
 
-      let path: BlackBoxRecoveryPath | undefined = pathId ? paths.find((p) => p.Id === pathId) : undefined;
+      let path: BlackBoxRecoveryPath | undefined = pathId ? paths.find((p) => p.id === pathId) : undefined;
       if (!path) {
         const picked = await vscode.window.showQuickPick(
           paths.map((p, i) => ({
-            label: `${i + 1}. ${p.Title}`,
-            description: [p.Id, p.Risk ? `risk ${p.Risk}` : '', p.DataLossRisk ? 'DATA LOSS RISK' : ''].filter(Boolean).join(', '),
-            detail: p.ExpectedOutcome,
+            label: `${i + 1}. ${p.title}`,
+            description: [p.id, p.risk ? `risk ${p.risk}` : '', p.dataLossRisk ? 'DATA LOSS RISK' : ''].filter(Boolean).join(', '),
+            detail: p.expectedOutcome ?? undefined,
             path: p,
           })),
           { title: `Recovery paths for ${entryLabel(entry)}`, placeHolder: 'Pick a recovery path to dry run (nothing runs until you confirm)', ignoreFocusOut: true },
@@ -179,51 +198,52 @@ export class BlackBoxCommands {
         path = picked.path;
       }
 
-      const dry = await client.dryRunRecovery(entry.Id, path.Id);
-      if (!dry.ConfirmToken) {
-        void vscode.window.showErrorMessage(`Armada: the dry run for ${path.Id} returned no confirm token, so nothing was run.${dry.Message ? ` ${dry.Message}` : ''}`);
+      const dry = await runBlackBoxRecovery(entry.id, path.id, { dryRun: true, authorKind: 'Operator' });
+      if (!dry.confirmToken) {
+        void vscode.window.showErrorMessage(`Armada: the dry run for ${path.id} returned no confirm token, so nothing was run.${dry.message ? ` ${dry.message}` : ''}`);
         return 'noToken';
       }
 
-      const dataLoss = path.DataLossRisk === true || (dry.Plan ?? []).some((s) => s.DataLossRisk === true);
+      const dataLoss = path.dataLossRisk === true || (dry.plan ?? []).some((s) => s.dataLossRisk === true);
       if (dataLoss) {
         const ack = await vscode.window.showQuickPick([{ label: DATA_LOSS_ACK_LABEL, picked: false }], {
-          title: `"${path.Title}" can permanently lose work`,
+          title: `"${path.title}" can permanently lose work`,
           placeHolder: 'Tick the acknowledgement and press Enter to continue, or Escape to refuse',
           canPickMany: true,
           ignoreFocusOut: true,
         });
         if (!ack || ack.length === 0) {
-          void vscode.window.showWarningMessage(`Armada: refused to run "${path.Title}" because it can lose data and the risk was not acknowledged.`);
+          void vscode.window.showWarningMessage(`Armada: refused to run "${path.title}" because it can lose data and the risk was not acknowledged.`);
           return 'refusedDataLoss';
         }
       }
 
       const choice = await vscode.window.showWarningMessage(
-        `Run recovery path "${path.Title}" for ${entrySubjectId(entry)}?`,
+        `Run recovery path "${path.title}" for ${entrySubjectId(entry)}?`,
         { modal: true, detail: describePlan(path, dry, dataLoss) },
         'Run',
       );
       if (choice !== 'Run') return 'cancelled';
 
-      let result: BlackBoxRecoveryResult;
+      let result: BlackBoxRecoveryRunResult;
       try {
-        result = await client.runRecovery(entry.Id, path.Id, dry.ConfirmToken, dataLoss);
+        result = await runBlackBoxRecovery(entry.id, path.id, { dryRun: false, confirmToken: dry.confirmToken, acknowledgeDataLoss: dataLoss, authorKind: 'Operator' });
       } catch (err) {
-        if (err instanceof ArmadaApiError && err.kind === 'conflict') {
-          void vscode.window.showWarningMessage(`Armada: the confirm token expired or the mission changed since the dry run. Run the recovery path again to get a new dry run.${err.serverMessage ? ` (${err.serverMessage})` : ''}`);
+        if (hasStatus(err, 409)) {
+          const detail = serverMessage(err);
+          void vscode.window.showWarningMessage(`Armada: the confirm token expired or the mission changed since the dry run. Run the recovery path again to get a new dry run.${detail ? ` (${detail})` : ''}`);
           return 'conflict';
         }
         throw err;
       }
 
-      const failedSteps = (result.StepResults ?? []).filter((s) => s.Succeeded === false);
+      const failedSteps = (result.stepResults ?? []).filter((s) => s.succeeded === false);
       void this._Deps.store.refresh();
-      if (result.Succeeded === false || failedSteps.length > 0) {
-        void vscode.window.showWarningMessage(`Armada: recovery path "${path.Title}" finished with errors. ${failedSteps.map((s) => s.Message ?? s.Tool ?? '').filter(Boolean).join('; ') || result.Message || ''}`.trim());
+      if (result.succeeded === false || failedSteps.length > 0) {
+        void vscode.window.showWarningMessage(`Armada: recovery path "${path.title}" finished with errors. ${failedSteps.map((s) => s.message ?? s.tool ?? '').filter(Boolean).join('; ') || result.message || ''}`.trim());
         return 'ranWithErrors';
       }
-      void vscode.window.showInformationMessage(`Armada: recovery path "${path.Title}" ran. ${result.Message ?? path.ExpectedOutcome ?? ''}`.trim());
+      void vscode.window.showInformationMessage(`Armada: recovery path "${path.title}" ran. ${result.message ?? path.expectedOutcome ?? ''}`.trim());
       return 'ran';
     }, 'failed');
   }
@@ -240,8 +260,9 @@ export class BlackBoxCommands {
       const link = await vscode.window.showInputBox({ title: `Resolve ${entryLabel(entry)} (3/3)`, prompt: 'Resolution link (optional): mission id, commit, pull request or issue URL', ignoreFocusOut: true });
       if (link === undefined) return undefined;
       const value = resolution.label as BlackBoxResolution;
-      await this._Deps.getClient().resolve(entry.Id, { Resolution: value, Note: note, Link: link });
-      void vscode.window.showInformationMessage(`Armada: ${entry.Id} resolved as ${value}.`);
+      this._Deps.requireConnection();
+      await resolveBlackBox(entry.id, { resolution: value, note: note.trim() || null, link: link.trim() || null });
+      void vscode.window.showInformationMessage(`Armada: ${entry.id} resolved as ${value}.`);
       void this._Deps.store.refresh();
       return value;
     }, undefined);
@@ -259,8 +280,9 @@ export class BlackBoxCommands {
         validateInput: (v) => (!v.trim() ? 'A note cannot be empty' : v.length > 8000 ? 'Limited to 8000 characters' : undefined),
       });
       if (!body || !body.trim()) return false;
-      await this._Deps.getClient().addNote(entry.Id, body);
-      void vscode.window.showInformationMessage(`Armada: note added to ${entry.Id}.`);
+      this._Deps.requireConnection();
+      await addBlackBoxNote(entry.id, body.trim());
+      void vscode.window.showInformationMessage(`Armada: note added to ${entry.id}.`);
       return true;
     }, false);
   }
@@ -271,17 +293,13 @@ export class BlackBoxCommands {
     return this.guard(async () => {
       const entry = await this.pickEntry(arg, 'Ask Armada About This Failure');
       if (!entry) return undefined;
-      const settings = this._Deps.getSettings();
-      if (!settings.dashboardUrl) throw new ArmadaApiError('notConfigured', 'No dashboard URL.');
-      const prompt = askArmadaPrompt(entrySubjectId(entry));
-      const target = dashboardAskUrl(settings.dashboardUrl, prompt);
-      if (!target.prefilled) await vscode.env.clipboard.writeText(prompt);
+      const { dashboardUrl } = this._Deps.requireConnection();
+      const prompt = blackBoxEntryAskPrompt(entry);
+      const target = { url: dashboardAskUrl(dashboardUrl, prompt), prefilled: true };
       const opened = await vscode.env.openExternal(vscode.Uri.parse(target.url));
-      if (!opened && target.prefilled) await vscode.env.clipboard.writeText(prompt);
-      if (!target.prefilled || !opened) {
-        void vscode.window.showInformationMessage(opened
-          ? 'Armada: the Ask Armada prompt was copied. Paste it into the new conversation.'
-          : `Armada: could not open the dashboard Ask page. The Ask Armada prompt was copied to the clipboard.`);
+      if (!opened) {
+        await vscode.env.clipboard.writeText(prompt);
+        void vscode.window.showInformationMessage('Armada: could not open the dashboard Ask page. The Ask Armada prompt was copied to the clipboard.');
       }
       return target;
     }, undefined);
@@ -294,13 +312,13 @@ export class BlackBoxCommands {
   public async pickEntry(arg: unknown, title: string): Promise<BlackBoxEntrySummary | undefined> {
     const fromArg = entryFromArg(arg);
     if (fromArg) return fromArg;
-    const client = this._Deps.getClient();
-    if (typeof arg === 'string' && arg.trim()) return client.getEntryForAnyId(arg);
+    const connection = this._Deps.requireConnection();
+    if (typeof arg === 'string' && arg.trim()) return getEntryForAnyId(arg);
 
     let recent = this._Deps.store.entries;
     if (!recent.length) {
       try {
-        recent = (await client.enumerateEntries({ IsCurrent: true, PageSize: 25 })).Objects;
+        recent = (await enumerateBlackBox({ tenantId: connection.tenant, isCurrent: true, order: 'CreatedDescending', pageNumber: 1, pageSize: 25 })).objects;
       } catch {
         recent = [];
       }
@@ -310,8 +328,8 @@ export class BlackBoxCommands {
       { label: ENTER_ID_LABEL, alwaysShow: true },
       ...recent.map((e) => ({
         label: entryLabel(e),
-        description: [entryKind(e), e.Step, formatAge(e.CreatedUtc)].filter(Boolean).join(', '),
-        detail: [e.VesselName ?? e.VesselId, e.Id, e.Resolution && e.Resolution !== 'Open' ? e.Resolution : ''].filter(Boolean).join('  '),
+        description: [entryKind(e), e.step, formatAge(e.createdUtc)].filter(Boolean).join(', '),
+        detail: [e.vesselName ?? e.vesselId, e.id, e.resolution && e.resolution !== 'Open' ? e.resolution : ''].filter(Boolean).join('  '),
         entry: e,
       })),
     ];
@@ -325,11 +343,12 @@ export class BlackBoxCommands {
       validateInput: (v) => (v.trim() ? undefined : 'Enter an id'),
     });
     if (!id || !id.trim()) return undefined;
-    return client.getEntryForAnyId(id);
+    return getEntryForAnyId(id);
   }
 
   private brief(entry: BlackBoxEntrySummary): Promise<string> {
-    return this._Deps.getClient().getBrief(entry.Id);
+    this._Deps.requireConnection();
+    return getBlackBoxBrief(entry.id);
   }
 
   private async writeBriefFile(entry: BlackBoxEntrySummary, brief: string): Promise<vscode.Uri | undefined> {
@@ -338,7 +357,7 @@ export class BlackBoxCommands {
     try {
       const dir = vscode.Uri.joinPath(base, 'briefs');
       await vscode.workspace.fs.createDirectory(dir);
-      const file = vscode.Uri.joinPath(dir, `FIX-THIS-${entry.Id.replace(/[^A-Za-z0-9_-]/g, '_')}.md`);
+      const file = vscode.Uri.joinPath(dir, `FIX-THIS-${entry.id.replace(/[^A-Za-z0-9_-]/g, '_')}.md`);
       await vscode.workspace.fs.writeFile(file, Buffer.from(brief, 'utf8'));
       return file;
     } catch {
@@ -351,7 +370,7 @@ export class BlackBoxCommands {
       return await fn();
     } catch (err) {
       const message = describeError(err);
-      if (err instanceof ArmadaApiError && (err.kind === 'notConfigured' || err.kind === 'unauthorized')) {
+      if (needsConnection(err)) {
         void vscode.window.showErrorMessage(`Armada: ${message}`, 'Connect').then((choice) => {
           if (choice === 'Connect') void vscode.commands.executeCommand('armada.connect');
         });
@@ -366,32 +385,32 @@ export class BlackBoxCommands {
 /** Extracts an entry from a tree node, an entry object, or a webview argument. */
 export function entryFromArg(arg: unknown): BlackBoxEntrySummary | undefined {
   if (!arg || typeof arg !== 'object') return undefined;
-  const node = arg as { kind?: unknown; entry?: unknown; Id?: unknown; CreatedUtc?: unknown };
-  if (node.kind === 'entry' && node.entry && typeof node.entry === 'object' && typeof (node.entry as { Id?: unknown }).Id === 'string') {
+  const node = arg as { kind?: unknown; entry?: unknown; id?: unknown };
+  if (node.kind === 'entry' && node.entry && typeof node.entry === 'object' && typeof (node.entry as { id?: unknown }).id === 'string') {
     return node.entry as BlackBoxEntrySummary;
   }
-  if (typeof node.Id === 'string' && node.Id) return arg as BlackBoxEntrySummary;
+  if (typeof node.id === 'string' && node.id) return arg as BlackBoxEntrySummary;
   return undefined;
 }
 
 /** Describes what a dry run says will happen. */
-export function describePlan(path: BlackBoxRecoveryPath, dry: BlackBoxRecoveryResult, dataLoss: boolean): string {
+export function describePlan(path: BlackBoxRecoveryPath, dry: BlackBoxRecoveryRunResult, dataLoss: boolean): string {
   const lines: string[] = [];
-  if (dry.Message) lines.push(dry.Message, '');
-  const steps = dry.Plan ?? [];
+  if (dry.message) lines.push(dry.message, '');
+  const steps = dry.plan ?? [];
   if (steps.length) {
     lines.push('Will run:');
     steps.forEach((s, i) => {
-      const args = s.Action?.Arguments && Object.keys(s.Action.Arguments).length ? ` ${JSON.stringify(s.Action.Arguments)}` : '';
-      const call = s.Action ? `${s.Action.Tool}${args}` : (s.McpCommand ?? s.CliCommand ?? 'step');
-      lines.push(`${i + 1}. ${s.Description ? `${s.Description} (${call})` : call}${s.DataLossRisk ? ' [data loss risk]' : ''}`);
+      const args = s.action?.arguments && Object.keys(s.action.arguments).length ? ` ${JSON.stringify(s.action.arguments)}` : '';
+      const call = s.action ? `${s.action.tool}${args}` : (s.mcpCommand ?? s.cliCommand ?? 'step');
+      lines.push(`${i + 1}. ${s.description ? `${s.description} (${call})` : call}${s.dataLossRisk ? ' [data loss risk]' : ''}`);
     });
-  } else if (path.Action) {
-    lines.push(`Will run: ${path.Action.Tool}${path.Action.Arguments ? ` ${JSON.stringify(path.Action.Arguments)}` : ''}`);
+  } else if (path.action) {
+    lines.push(`Will run: ${path.action.tool}${path.action.arguments ? ` ${JSON.stringify(path.action.arguments)}` : ''}`);
   }
-  const outcome = path.ExpectedOutcome;
+  const outcome = path.expectedOutcome;
   if (outcome) lines.push('', `Expected outcome: ${outcome}`);
   if (dataLoss) lines.push('', 'WARNING: this path is marked dataLossRisk. You acknowledged that work can be lost.');
-  if (dry.ConfirmTokenExpiresUtc) lines.push('', `The confirmation expires at ${dry.ConfirmTokenExpiresUtc}.`);
+  if (dry.confirmTokenExpiresUtc) lines.push('', `The confirmation expires at ${dry.confirmTokenExpiresUtc}.`);
   return lines.join('\n');
 }

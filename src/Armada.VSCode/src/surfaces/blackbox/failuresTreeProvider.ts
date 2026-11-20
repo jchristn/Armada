@@ -1,10 +1,13 @@
 import * as vscode from 'vscode';
-import { BlackBoxEntrySummary } from '../api/types';
-import { BlackBoxStore } from '../state/blackBoxStore';
-import { entryKind, entryLabel, formatAge, isOpen } from '../util/format';
+import type { BlackBoxEntrySummary } from '@dashboard/types/blackbox';
+import { entryKind, entryLabel, formatAge, isOpen } from '../../util/format';
+import { BlackBoxStore } from './blackBoxStore';
 
-/** Tree view id (package.json contributes.views.explorer). */
+/** Tree view id in the Armada container (package.json contributes.views.armada). */
 export const FAILURES_VIEW_ID = 'armadaFailures';
+
+/** Tree view id of the optional copy in the Explorer (armada.failures.showInExplorer). */
+export const FAILURES_EXPLORER_VIEW_ID = 'armadaFailuresExplorer';
 
 /** A vessel group. */
 export interface VesselNode {
@@ -60,7 +63,7 @@ export class FailuresTreeProvider implements vscode.TreeDataProvider<FailureNode
   /** Short description for the view header. */
   public viewDescription(): string | undefined {
     if (this._Store.status !== 'ready') return undefined;
-    if (this._Store.filtered) return this._Store.matches.map((m) => m.vessel.Name || m.vessel.Id).filter((v, i, a) => a.indexOf(v) === i).join(', ');
+    if (this._Store.filtered) return this._Store.matches.map((m) => m.vessel.name || m.vessel.id).filter((v, i, a) => a.indexOf(v) === i).join(', ');
     return 'all vessels';
   }
 
@@ -92,17 +95,17 @@ export class FailuresTreeProvider implements vscode.TreeDataProvider<FailureNode
     const entry = element.entry;
     const open = isOpen(entry);
     const item = new vscode.TreeItem(entryLabel(entry), vscode.TreeItemCollapsibleState.None);
-    item.id = `entry:${entry.Id}`;
-    const parts = [entryKind(entry), entry.Step, formatAge(entry.CreatedUtc, this._Now())].filter((p) => !!p);
+    item.id = `entry:${entry.id}`;
+    const parts = [entryKind(entry), entry.step, formatAge(entry.createdUtc, this._Now())].filter((p) => !!p);
     item.description = parts.join(', ');
     const tooltip = new vscode.MarkdownString(undefined, false);
     tooltip.appendMarkdown(`**${escapeMd(entryLabel(entry))}**\n\n`);
-    tooltip.appendMarkdown(`- Entry: \`${entry.Id}\`\n`);
-    if (entry.Phase || entry.Step) tooltip.appendMarkdown(`- Where: ${escapeMd([entry.Phase, entry.Step].filter(Boolean).join(' / '))}\n`);
-    if (entry.StatusBefore || entry.StatusAfter) tooltip.appendMarkdown(`- Status: ${escapeMd(`${entry.StatusBefore ?? '?'} to ${entry.StatusAfter ?? '?'}`)}\n`);
-    if (entry.Triage) tooltip.appendMarkdown(`- Triage: ${escapeMd(entry.Triage)}\n`);
-    tooltip.appendMarkdown(`- Resolution: ${escapeMd(entry.Resolution ?? 'Open')}\n`);
-    tooltip.appendMarkdown(`- Captured: ${escapeMd(entry.CreatedUtc)}\n`);
+    tooltip.appendMarkdown(`- Entry: \`${entry.id}\`\n`);
+    if (entry.phase || entry.step) tooltip.appendMarkdown(`- Where: ${escapeMd([entry.phase, entry.step].filter(Boolean).join(' / '))}\n`);
+    if (entry.statusBefore || entry.statusAfter) tooltip.appendMarkdown(`- Status: ${escapeMd(`${entry.statusBefore ?? '?'} to ${entry.statusAfter ?? '?'}`)}\n`);
+    if (entry.triage) tooltip.appendMarkdown(`- Triage: ${escapeMd(entry.triage)}\n`);
+    tooltip.appendMarkdown(`- Resolution: ${escapeMd(entry.resolution ?? 'Open')}\n`);
+    tooltip.appendMarkdown(`- Captured: ${escapeMd(entry.createdUtc)}\n`);
     item.tooltip = tooltip;
     item.iconPath = new vscode.ThemeIcon(open ? 'error' : 'pass', new vscode.ThemeColor(open ? 'problemsErrorIcon.foreground' : 'testing.iconPassed'));
     item.contextValue = open ? 'armadaEntryOpen' : 'armadaEntryResolved';
@@ -128,11 +131,11 @@ export class FailuresTreeProvider implements vscode.TreeDataProvider<FailureNode
 
     const groups = new Map<string, VesselNode>();
     for (const entry of store.entries) {
-      const vesselId = entry.VesselId || '(none)';
+      const vesselId = entry.vesselId || '(none)';
       let group = groups.get(vesselId);
       if (!group) {
-        const vessel = store.vessels.find((v) => v.Id === entry.VesselId);
-        group = { kind: 'vessel', vesselId, vesselName: entry.VesselName || vessel?.Name || (entry.VesselId ? entry.VesselId : 'No vessel'), entries: [] };
+        const vessel = store.vessels.find((v) => v.id === entry.vesselId);
+        group = { kind: 'vessel', vesselId, vesselName: entry.vesselName || vessel?.name || (entry.vesselId ? entry.vesselId : 'No vessel'), entries: [] };
         groups.set(vesselId, group);
       }
       group.entries.push(entry);

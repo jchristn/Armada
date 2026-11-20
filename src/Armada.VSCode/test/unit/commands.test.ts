@@ -1,20 +1,20 @@
 import * as assert from 'assert';
 import { beforeEach, describe, it } from 'node:test';
 import * as vscode from 'vscode';
-import { ArmadaApiError, askArmadaPrompt } from '../../src/api/blackbox';
-import { BlackBoxEntrySummary, BlackBoxRecoveryResult } from '../../src/api/types';
-import { BlackBoxCommands, CHAT_OPEN_COMMAND, DATA_LOSS_ACK_LABEL, describePlan, entryFromArg } from '../../src/commands/blackBoxCommands';
+import { blackBoxAskPrompt } from '@dashboard/lib/blackbox';
+import type { BlackBoxEntrySummary } from '@dashboard/types/blackbox';
 import { ArmadaSettings } from '../../src/config';
+import { BlackBoxCommands, CHAT_OPEN_COMMAND, CommandConnection, DATA_LOSS_ACK_LABEL, describePlan, entryFromArg } from '../../src/surfaces/blackbox/blackBoxCommands';
+import { NotConnectedError } from '../../src/transport/errors';
 import { MockFetch, page } from '../fakes/fetch';
-import { client, fullEntry, summary } from '../fakes/fixtures';
+import { fullEntry, summary } from '../fakes/fixtures';
 import { makeStore } from '../fakes/storeHelpers';
 import { fake, Uri } from '../fakes/vscode';
 
 const SETTINGS: ArmadaSettings = {
-  url: 'http://armada.test:7890',
   tenant: '',
-  authHeader: 'Bearer',
-  dashboardUrl: 'http://armada.test:7890/dashboard',
+  dashboardUrl: '',
+  showFailuresInExplorer: false,
   filterToWorkspaceVessel: true,
   includeResolved: false,
   maxEntries: 50,
@@ -26,21 +26,24 @@ const SETTINGS: ArmadaSettings = {
   previewFixThis: true,
 };
 
+const CONNECTION: CommandConnection = { tenant: undefined, dashboardUrl: 'http://armada.test:7890/dashboard' };
+
 const NODE = { kind: 'entry', entry: summary() };
 
-function recoveryMock(dry: Partial<BlackBoxRecoveryResult>, real: Partial<BlackBoxRecoveryResult> | { status: number; json: unknown } = { Succeeded: true, Message: 'landed' }): MockFetch {
+type ServerBody = Record<string, unknown>;
+
+function recoveryMock(dry: ServerBody, real: ServerBody | { status: number; json: unknown } = { Succeeded: true, Message: 'landed' }): MockFetch {
   return new MockFetch()
     .on('GET', '/api/v1/blackbox/bbx_1', { json: fullEntry() })
     .on('POST', '/api/v1/blackbox/enumerate', { json: page([]) })
     .on('GET', '/api/v1/vessels', { json: page([]) })
-    .on('POST', '/api/v1/blackbox/bbx_1/recovery/rp1', (req) => ((req.body as { DryRun: boolean }).DryRun ? { json: { DryRun: true, ...dry } } : 'status' in real ? real : { json: real }))
-    .on('POST', '/api/v1/blackbox/bbx_1/recovery/rp2', (req) => ((req.body as { DryRun: boolean }).DryRun ? { json: { DryRun: true, ...dry } } : { json: { Success: true } }));
+    .on('POST', '/api/v1/blackbox/bbx_1/recovery/rp1', (req) => (req.body.DryRun ? { json: { DryRun: true, ...dry } } : 'status' in real ? (real as { status: number; json: unknown }) : { json: real }))
+    .on('POST', '/api/v1/blackbox/bbx_1/recovery/rp2', (req) => (req.body.DryRun ? { json: { DryRun: true, ...dry } } : { json: { Succeeded: true } }));
 }
 
 function commands(mock: MockFetch, settings: Partial<ArmadaSettings> = {}, opened: BlackBoxEntrySummary[] = []): BlackBoxCommands {
-  const c = client(mock);
   return new BlackBoxCommands({
-    getClient: () => c,
+    requireConnection: () => CONNECTION,
     store: makeStore(mock),
     getSettings: () => ({ ...SETTINGS, ...settings }),
     storageUri: Uri.file('/tmp/armada-vscode-test-storage') as unknown as vscode.Uri,
@@ -51,7 +54,7 @@ function commands(mock: MockFetch, settings: Partial<ArmadaSettings> = {}, opene
 }
 
 function realRuns(mock: MockFetch, pathId = 'rp1'): unknown[] {
-  return mock.calls('POST', `/api/v1/blackbox/bbx_1/recovery/${pathId}`).map((r) => r.body).filter((b) => (b as { DryRun: boolean }).DryRun === false);
+  return mock.calls('POST', `/api/v1/blackbox/bbx_1/recovery/${pathId}`).map((r) => r.body).filter((b) => b.DryRun === false);
 }
 
 beforeEach(() => fake.reset());
@@ -75,7 +78,7 @@ describe('Run Recovery Path', () => {
 
   it('lets the user pick the path from a quick pick', async () => {
     const mock = recoveryMock({ ConfirmToken: 'tok' });
-    fake.quickPick.push((items: Array<{ label: string; description: string; path: { Id: string } }>) => {
+    fake.quickPick.push((items: Array<{ label: string; description: string; path: { id: string } }>) => {
       assert.strictEqual(items.length, 2);
       assert.match(items[1].description, /DATA LOSS RISK/);
       return items[0];
@@ -164,11 +167,11 @@ describe('Run Recovery Path', () => {
   it('shows a 503 error and never throws', async () => {
     const mock = new MockFetch().otherwise(() => ({ status: 503, json: { Error: 'ServiceUnavailable', Data: { Code: 'BlackBoxStoreUnavailable' } } }));
     assert.strictEqual(await commands(mock).runRecoveryPath(NODE), 'failed');
-    assert.ok(fake.messages.some((m) => m.level === 'error' && /store is unavailable/.test(m.text)));
+    assert.ok(fake.messages.some((m) => m.level === 'error' && /black box store is unavailable/.test(m.text)));
   });
 
   it('describes the plan from the path action when the dry run lists no steps', () => {
-    const text = describePlan({ Id: 'rp', Title: 't', Action: { Tool: 'update_vessel', Arguments: { landingMode: 'PullRequest' } } }, { ConfirmTokenExpiresUtc: '2026-10-28T10:10:00Z' }, false);
+    const text = describePlan({ id: 'rp', rank: 1, title: 't', action: { tool: 'update_vessel', arguments: { landingMode: 'PullRequest' } } }, { entryId: 'bbx_1', pathId: 'rp', dryRun: true, succeeded: true, confirmTokenExpiresUtc: '2026-10-28T10:10:00Z' }, false);
     assert.match(text, /Will run: update_vessel \{"landingMode":"PullRequest"\}/);
     assert.match(text, /expires at 2026-10-28T10:10:00Z/);
   });
@@ -231,7 +234,7 @@ describe('FIX THIS commands', () => {
   });
 
   it('shows a 404 for a mission without an entry', async () => {
-    const mock = new MockFetch().on('GET', '/api/v1/missions/msn_none/blackbox', { status: 404, json: { Error: 'BlackBoxNotFound', Message: 'none' } });
+    const mock = new MockFetch().on('GET', '/api/v1/missions/msn_none/blackbox', { status: 404, json: { Error: 'NotFound', Message: 'none', Data: { Code: 'BlackBoxNotFound' } } });
     assert.strictEqual(await commands(mock).copyFixThis('msn_none'), undefined);
     assert.ok(fake.messages.some((m) => m.level === 'error' && /No black box entry was found/.test(m.text)));
     assert.strictEqual(fake.clipboard, '');
@@ -249,8 +252,8 @@ describe('FIX THIS commands', () => {
 
   it('shows a clear message when not connected', async () => {
     const c = new BlackBoxCommands({
-      getClient: () => {
-        throw new ArmadaApiError('notConfigured', 'Armada is not connected.');
+      requireConnection: () => {
+        throw new NotConnectedError();
       },
       store: makeStore(undefined),
       getSettings: () => SETTINGS,
@@ -264,11 +267,11 @@ describe('FIX THIS commands', () => {
 describe('Entry picking, resolve, notes and Ask Armada', () => {
   it('picks a recent failure from the quick pick and opens it', async () => {
     const mock = new MockFetch().on('POST', '/api/v1/blackbox/enumerate', { json: page([summary({ Id: 'bbx_7' })]) });
-    fake.quickPick.push((items: Array<{ label: string; entry?: BlackBoxEntrySummary }>) => items.find((i) => i.entry?.Id === 'bbx_7'));
+    fake.quickPick.push((items: Array<{ label: string; entry?: BlackBoxEntrySummary }>) => items.find((i) => i.entry?.id === 'bbx_7'));
     const opened: BlackBoxEntrySummary[] = [];
     const result = await commands(mock, {}, opened).openBlackBox();
-    assert.strictEqual(result?.Id, 'bbx_7');
-    assert.strictEqual(opened[0].Id, 'bbx_7');
+    assert.strictEqual(result?.id, 'bbx_7');
+    assert.strictEqual(opened[0].id, 'bbx_7');
   });
 
   it('accepts a pasted mission id', async () => {
@@ -278,7 +281,7 @@ describe('Entry picking, resolve, notes and Ask Armada', () => {
     fake.quickPick.push((items: Array<{ label: string }>) => items[0]);
     fake.inputBox.push(' msn_pasted ');
     const result = await commands(mock).openBlackBox();
-    assert.strictEqual(result?.Id, 'bbx_p');
+    assert.strictEqual(result?.id, 'bbx_p');
   });
 
   it('returns nothing when the pick is cancelled', async () => {
@@ -318,7 +321,7 @@ describe('Entry picking, resolve, notes and Ask Armada', () => {
   it('opens the dashboard Ask page with the canonical prompt pre-filled, without touching the clipboard', async () => {
     const before = fake.clipboard;
     const result = await commands(new MockFetch()).askArmada(NODE);
-    const url = 'http://armada.test:7890/dashboard/ask?prompt=' + encodeURIComponent(askArmadaPrompt('msn_x'));
+    const url = 'http://armada.test:7890/dashboard/ask?prompt=' + encodeURIComponent(blackBoxAskPrompt('msn_x'));
     assert.deepStrictEqual(result, { url, prefilled: true });
     assert.deepStrictEqual(fake.openedExternal, [url]);
     assert.strictEqual(fake.clipboard, before, 'nothing copied when the page is pre-filled');
@@ -327,13 +330,13 @@ describe('Entry picking, resolve, notes and Ask Armada', () => {
   it('copies the prompt when the browser cannot be opened', async () => {
     fake.openExternalResult = false;
     await commands(new MockFetch()).askArmada(NODE);
-    assert.strictEqual(fake.clipboard, askArmadaPrompt('msn_x'));
+    assert.strictEqual(fake.clipboard, blackBoxAskPrompt('msn_x'));
     assert.ok(fake.messages.some((m) => /could not open/.test(m.text)));
   });
 
   it('extracts entries from tree nodes and entry objects only', () => {
-    assert.strictEqual(entryFromArg(NODE)?.Id, 'bbx_1');
-    assert.strictEqual(entryFromArg(summary({ Id: 'bbx_9' }))?.Id, 'bbx_9');
+    assert.strictEqual(entryFromArg(NODE)?.id, 'bbx_1');
+    assert.strictEqual(entryFromArg(summary({ Id: 'bbx_9' }))?.id, 'bbx_9');
     assert.strictEqual(entryFromArg({ kind: 'vessel' }), undefined);
     assert.strictEqual(entryFromArg('bbx_1'), undefined);
     assert.strictEqual(entryFromArg(undefined), undefined);

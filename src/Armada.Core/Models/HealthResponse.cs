@@ -33,6 +33,11 @@ namespace Armada.Core.Models
         /// </summary>
         public string? Version { get; set; }
 
+        /// <summary>
+        /// Client contract version (major.minor); a client whose supported major differs is incompatible.
+        /// </summary>
+        public string? ContractVersion { get; set; }
+
         /// <summary>The informational version embedded in the running binary.</summary>
         public string? BuildVersion { get; set; }
 

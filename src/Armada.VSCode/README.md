@@ -1,15 +1,79 @@
 # Armada for VS Code
 
-The Armada extension brings the Armada **mission and voyage black box** into the editor. When a mission or voyage
-fails, the Admiral records a black box entry: where it failed, how, why, which files and missions conflicted, and the
-ranked recovery paths. This extension lists those entries for the repository you have open, hands the **FIX THIS**
-brief to your coding agent, and runs recovery paths with a dry run and a confirmation.
+The Armada extension brings Armada into the editor. It connects to your Armada Admiral (the local one with no setup),
+shows the Armada navigation in its own view container, and works the **mission and voyage black box**: when a mission or
+voyage fails, the Admiral records where it failed, how, why, which files and missions conflicted, and the ranked
+recovery paths. The extension lists those entries for the repository you have open, hands the **FIX THIS** brief to
+your coding agent, and runs recovery paths with a dry run and a confirmation.
 
-## Features
+The extension is being built out to full parity with the dashboard, the TUI, Harbor and the CLI
+([VSCODE_EXTENSION_PLAN.md](../../VSCODE_EXTENSION_PLAN.md)). Today, areas other than the black box open the matching
+dashboard page in your browser.
 
-- **Armada Failures** view in the Explorer: recent black box entries grouped by vessel, with kind, step and age. By
-  default it shows only the vessel whose repository is open (matched by git remote URL against the vessel's
-  `RepoUrl`). The view badge counts open entries.
+## The Armada view container
+
+The Armada icon in the activity bar opens two views:
+
+- **Navigation**: the dashboard's navigation model (the same one the dashboard sidebar and the mobile app use):
+  Dashboard, Ask Armada, then OPERATIONS, BUILD, CONFIGURATION and SYSTEM, with hub tabs such as Planning and Black Box.
+  Each page opens in the dashboard in your browser until the extension has its own view for it.
+- **Failures**: the black box tree (below).
+
+While the extension is not connected, both views show what to do: connect, or open the output.
+
+## Connecting
+
+The extension connects by itself after VS Code starts; nothing runs while the extension is activating. It takes the
+Admiral and the credential from the Armada settings already on the machine, so nothing about the connection lives in
+VS Code settings. It looks, in this order, at:
+
+1. **Harbor**: `~/.armada-harbor/settings.json` (or `$ARMADA_HARBOR_HOME`). `ServerLinkUrl` names the Admiral Harbor
+   links to, whose REST API is the same host and port over http or https, and `AccessKey` is sent as a bearer token.
+   A running Harbor puts its Admiral first.
+2. **The local Admiral**: `~/.armada/settings.json` (or `$ARMADA_DATA_DIR`): `admiralPort` and the local `apiKey`,
+   sent as `X-Api-Key` to `http://127.0.0.1:<port>`. The Admiral writes the key the first time it starts.
+3. **The TUI's server profiles**: `~/.armada/tui.json`, with each profile's session token from the TUI's credential
+   store (the macOS Keychain or libsecret, else `tui-credentials.json`).
+
+Entries for the same Admiral are merged, and every credential found for it is tried in turn. At startup the extension
+connects to the Admiral last picked with **Armada: Connect**, else to the first one that answers and accepts a
+credential.
+
+**Armada: Connect** is the one connect command. It lists the Admirals found on the machine (with where each came from,
+whether it responds, and whether a credential was found) and **Enter an Admiral URL...** for any other. A key is asked
+for only when no stored credential works; it is tried as a bearer token and then as `X-Api-Key`, and the one that
+works is kept in VS Code secret storage for that Admiral.
+
+Each connection probes `GET /api/v1/status/health`, checks the Admiral's contract version (the major part must match
+the extension's; otherwise it says whether the Admiral or the extension is too old; an Admiral from before contract
+versions, 1.3.0 and earlier, reports none and is treated as contract 1), then proves the credential with
+`GET /api/v1/whoami`. The context keys `armada.connected`, `armada.connectionState`, `armada.role.globalAdmin` and
+`armada.role.tenantAdmin` follow the result, for menus and `when` clauses.
+
+The status bar shows the state and the target (`Armada: local`, `Armada: armada.example.com`, `Armada: server too
+old`, ...), and its tooltip says where the Admiral was found and which credential is in use. Click it for connection
+actions: open the dashboard, connect to another Admiral, reconnect or retry, disconnect, show the output, open the
+settings. **Armada: Show Output** opens the **Armada** log, which
+records every connection attempt and live-update change (never a key).
+
+**Armada: Disconnect** drops the connection and removes a stored remote key; the extension then stays disconnected,
+also after a restart, until you run **Armada: Connect**.
+
+The extension does not start an Admiral yet; start Armada yourself (for example with `armada server start`).
+
+## Live updates
+
+The extension keeps one WebSocket connection (`/ws`) per Admiral, subscribes once, and passes every event to the
+surfaces that listen (today the black box). When the socket drops it reconnects after 5 seconds, doubling up to 5
+minutes, and meanwhile polls every `armada.liveUpdates.pollIntervalSeconds`. With `armada.liveUpdates.useWebSocket`
+off it only polls.
+
+## Black box
+
+- **Failures** view in the Armada container (and, with `armada.failures.showInExplorer`, as **Armada Failures** in the
+  Explorer): recent black box entries grouped by vessel, with kind, step and age. By default it shows only the vessel
+  whose repository is open (matched by git remote URL against the vessel's `RepoUrl`). The view badge counts open
+  entries.
 - **FIX THIS**: copy the brief, open it as a Markdown document with a preview, or send it to the editor chat.
 - **Recovery paths**: a dry run shows what will happen, a modal dialog confirms, and only then does the path run.
   Paths marked `dataLossRisk` are refused unless you tick an explicit acknowledgement.
@@ -35,45 +99,33 @@ brief to your coding agent, and runs recovery paths with a dry run and a confirm
   warnings (active missions, reserved and hotspot directories) and brief lint warnings dispatch would return.
 - **File decorations**: files that conflicted in an open entry's landing get a `BX` badge and the hover text
   "conflicted in msn_x landing, 2026-10-28"; the vessel's hotspot directories get an `H` badge.
-- **Live updates** over the Armada WebSocket, with a polling fallback when the socket is unavailable.
+- **Live updates** from the extension's single Armada WebSocket connection (see [Live updates](#live-updates)).
 
-> Screenshot placeholder: the Armada Failures view with an open entry selected.
->
-> Screenshot placeholder: the entry view showing the Recovery section.
->
-> Screenshot placeholder: a conflicted file decoration in the Explorer.
 
 ## Requirements
 
 - VS Code 1.101 or later (or a compatible editor such as Cursor).
-- An Armada Admiral 1.2.0 or later with the black box routes, and a credential: a bearer token from
-  `POST /api/v1/credentials` (recommended) or the settings API key.
+- An Armada Admiral with contract version 1.x (or one from before contract versions), and a credential for it: one
+  already on the machine (Harbor's access key, the local API key, a TUI session), or a bearer token from
+  `POST /api/v1/credentials` or an API key entered in **Armada: Connect**.
 
-## Install from a VSIX
+## Install
 
-Build the package (see [Development](#development)) or take `armada-vscode-<version>.vsix` from a release, then:
+From the VS Code Marketplace: search the Extensions view for **Armada AI**, or run
+`code --install-extension LatticeAI.armada-ai`.
 
-- In VS Code: open the Extensions view, choose **...** (Views and More Actions), **Install from VSIX...**, and pick the
-  file.
-- From a terminal: `code --install-extension armada-vscode-1.3.0.vsix`
+From source: `./build-vscode.sh --install` (or `build-vscode.bat --install`) at the repository root builds
+`vsix/armada-vscode-<version>.vsix` and installs it. For a `.vsix` from a release, use
+`code --install-extension <file>`.
 
-## Configure
-
-1. Run **Armada: Connect** from the Command Palette.
-2. Enter the Admiral URL (for example `http://localhost:7890`; a trailing `/dashboard` is ignored).
-3. Enter your API key or bearer token. It is checked against the server and then stored in VS Code secret storage,
-   never in settings files.
-
-**Armada: Disconnect** removes the stored key. Until you connect, the Command Palette lists only **Armada: Connect**
-and **Armada: Toggle Workspace Vessel Filter**; the other Armada commands appear once a connection is made.
+## Settings
 
 | Setting | Default | Meaning |
 |---|---|---|
-| `armada.url` | `http://localhost:7890` | Admiral URL |
 | `armada.tenant` | empty | Optional tenant id; admin credentials use it to narrow lists to one tenant |
-| `armada.authHeader` | `Bearer` | Send the key as `Authorization: Bearer` or as the deprecated `X-Api-Key` |
-| `armada.dashboardUrl` | empty | Dashboard URL for Ask Armada; empty means `armada.url` plus `/dashboard` |
+| `armada.dashboardUrl` | empty | Dashboard URL for links and Ask Armada; empty means Harbor's `DashboardUrl` for Harbor's Admiral, else the connected Admiral plus `/dashboard` |
 | `armada.fixThis.openPreview` | `true` | Open a Markdown preview beside the FIX THIS editor |
+| `armada.failures.showInExplorer` | `false` | Also show the black box tree in the Explorer, as **Armada Failures** |
 | `armada.failures.filterToWorkspaceVessel` | `true` | Show only the open repository's vessel (falls back to all vessels when none matches) |
 | `armada.failures.includeResolved` | `false` | Also list resolved entries |
 | `armada.failures.maxEntries` | `50` | Entries loaded per vessel |
@@ -87,8 +139,13 @@ and **Armada: Toggle Workspace Vessel Filter**; the other Armada commands appear
 
 | Command | What it does |
 |---|---|
-| Armada: Connect | Prompt for the URL and key, verify, store the key in secret storage |
-| Armada: Disconnect | Remove the stored key |
+| Armada: Connect | Pick an Admiral found on this machine or enter a URL, and connect (asks for a key only when none works) |
+| Armada: Reconnect | Connect again to the current Admiral |
+| Armada: Disconnect | Drop the connection and remove a key entered for that Admiral |
+| Armada: Connection Actions... | The status bar's quick pick of connection actions |
+| Armada: Show Output | Open the Armada log |
+| Armada: Open Settings | Open `~/.armada/settings.json`, Harbor's settings, the TUI profiles, or the extension's preferences |
+| Armada: Open Dashboard | Open the connected Admiral's dashboard in the browser |
 | Armada: Refresh Failures | Reload vessels and entries |
 | Armada: Toggle Workspace Vessel Filter | Switch between the open repository's vessel and every vessel |
 | Armada: Open Black Box for Mission... | Quick pick of recent failures, or paste a mission, voyage or entry id |
@@ -115,48 +172,49 @@ the clipboard instead.
 
 ## Errors
 
-The extension never crashes on server errors. It explains each one: no connection, a rejected key (401), a forbidden
-action (403), a missing entry (404), a changed mission or expired confirm token (409), a missing black box object
-(410), and an unavailable black box store (503). The tree view shows the current error with a click-to-retry row.
+The extension never crashes on server errors. It explains each one: no connection, an unreachable Admiral, an Admiral
+or extension that is too old, a rejected key (401), a forbidden action (403), a missing entry (404), a changed mission
+or expired confirm token (409), a missing black box object (410), and an unavailable black box store or action host
+(503). The Failures view shows the current error with a click-to-retry row.
 
-## Server surface
+## How it is built
 
-The extension was written against `MISSION_BLACKBOX_PLAN.md` section 8.1. Every route and DTO lives in `src/api/`
-(`blackbox.ts` and `types.ts`), so it can be reconciled with the server in one place.
-
-REST routes:
-
-- `GET /api/v1/vessels?pageNumber=&pageSize=[&tenantId=]`
-- `POST /api/v1/blackbox/enumerate`
-- `GET /api/v1/blackbox/{id}`
-- `GET /api/v1/blackbox/{id}/brief`
-- `GET /api/v1/blackbox/{id}/sections/Conflict`
-- `GET /api/v1/blackbox/{id}/notes`, `POST /api/v1/blackbox/{id}/notes`
-- `POST /api/v1/blackbox/{id}/resolve`
-- `POST /api/v1/blackbox/{id}/recovery/{pathId}`
-- `POST /api/v1/blackbox/hotspots/enumerate`
-- `GET /api/v1/missions/{id}/blackbox`, `GET /api/v1/voyages/{id}/blackbox`
-- `POST /api/v1/vessels/{id}/overlap-preview`, `POST /api/v1/missions/lint-brief`
-- `POST /api/v1/vessels/{id}/reservations/enumerate`, `POST /api/v1/vessels/{id}/blackbox-doctor/enumerate`
-- `GET /api/v1/blackbox/{id}/diff/{otherId}`, `POST /api/v1/blackbox/{id}/timeline/enumerate`,
-  `POST /api/v1/blackbox/{id}/nearby-successes/enumerate`
-- `POST /api/v1/blackbox/recovery-stats/enumerate`, `GET /api/v1/voyages/{id}/blackbox/cascade`
-- `POST /api/v1/blackbox/resilience-gaps/enumerate`
-
-WebSocket (`/ws?token=`): `blackbox.captured`, `blackbox.analyzed`, `blackbox.resolved`, `blackbox.deleted`.
+- **Thin client.** The extension imports the dashboard's own API client, types and helpers (`@dashboard/api/client`,
+  `@dashboard/types/*`, `@dashboard/lib/*`) through the `@dashboard/*` alias the mobile app uses (`tsconfig.json`
+  paths and the esbuild alias in `esbuild.mjs`), so there is no second copy of any route or DTO.
+  `npm run lint:shared` lints those shared modules against the same sharing contract as the mobile app
+  (`src/Armada.Mobile/sharing.config.js` and `eslint.shared.js`) plus the Node host's rules, so a dashboard change
+  that breaks a non-browser host fails here and in the mobile app.
+- **Shared client gaps.** `src/transport/hostClient.ts` holds the few things the shared client does not: pointing it at
+  an Admiral with the extension's credential, a typed reading of the health response (the shared `getHealth` returns a
+  plain record), the mission/voyage/entry id dispatch for black box lookups, and dashboard URL builders.
+  `src/transport/errors.ts` turns the shared client's errors into messages.
+- **Layout.** `src/connection/` (discovery, contract check, connection manager, status bar), `src/transport/`
+  (shared client host side, the `/ws` event bus), `src/surfaces/nav/` and `src/surfaces/blackbox/`.
+- **Parity.** `parity.json` tracks every dashboard route, tab, client call, event and settings field, the TUI-only
+  surfaces, Harbor's menu and windows, and the CLI commands in scope, with the status of each; it is generated by
+  `scripts/vscode/generate-parity-manifest.py` and checked by the `VsCode.Parity` test suite.
 
 ## Development
 
 ```bash
 cd src/Armada.VSCode
 npm ci
-npm run build              # type check and bundle to dist/extension.js
+npm run build              # type check (src and tests) and bundle to dist/extension.js
+npm run lint               # ESLint, then the shared-module contract (lint:shared)
 npm test                   # unit tests (Node test runner, fake vscode module, no VS Code needed)
 npm run test:integration   # @vscode/test-electron; skipped when offline or without a display
-npm run package            # armada-vscode-<version>.vsix
+npm run package            # ../../vsix/armada-vscode-<version>.vsix
 ```
 
-From the repository root, `build-vscode.sh` (or `build-vscode.bat`) runs the same steps.
+The integration tests never read your `~/.armada`: they point `ARMADA_DATA_DIR` at an empty temporary directory. To
+run them against a throwaway Admiral, start one with its own data directory and set `ARMADA_VSCODE_TEST_DATA_DIR` to
+it and `ARMADA_VSCODE_EXPECT_ADMIRAL=1`; the suite then checks the connection, whoami, the role keys, the navigation
+tree, the black box store and the WebSocket subscription.
+
+From the repository root, `build-vscode.sh` (or `build-vscode.bat`) runs install, build, lint, tests and packaging into
+`vsix/`, and the `vscode-extension` GitHub workflow does the same in CI, plus the integration tests and the parity
+check.
 
 ## License
 

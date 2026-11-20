@@ -25,6 +25,14 @@ namespace Armada.Core
         public static readonly string ProductVersion = "1.3.0";
 
         /// <summary>
+        /// Version (major.minor) of the client contract reported by GET /api/v1/status/health as ContractVersion. Clients
+        /// that are not served by the Admiral (the VS Code extension) compare the major part with their own: a different
+        /// major means one side is too old. The minor part grows with compatible additions; the major part changes only
+        /// with a breaking change in a major release (docs/COMPATIBILITY.md).
+        /// </summary>
+        public const string ContractVersion = "1.0";
+
+        /// <summary>
         /// Environment variable that overrides the default data directory. When set to a non-empty path it is
         /// used verbatim as the data directory (holding settings.json, the database, logs, docks, and repos),
         /// which enables isolated/ephemeral instances, side-by-side servers, and containerized deployments.
