@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- The extension is now `latticetech.armada` (publisher `latticetech`, name `armada`, display name Armada). It was
+- The extension is now `lattice-ai.armada` (publisher `lattice-ai`, name `armada`, display name Armada). It was
   never published as `jchristn.armada-vscode`, so nothing migrates.
 - **Armada view container** in the activity bar with a **Navigation** view (the dashboard's navigation model:
   Dashboard, Ask Armada, OPERATIONS, BUILD, CONFIGURATION, SYSTEM; pages open in the dashboard for now) and the

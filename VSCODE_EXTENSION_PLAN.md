@@ -271,7 +271,7 @@ the parity manifest updated. Sizes are relative (S, M, L, XL).
 | V7 | Harbor | Harbor view, status bar link state, jobs and logs, metrics, headless start and stop, settings panel, menu parity; depends on 8.4 | M |
 | V8 | Hardening and parity gate | Remote-SSH, WSL and Codespaces passes; proxy mode; localization; accessibility (keyboard paths and screen reader labels for every tree and panel); performance with large fleets; remove the dashboard fallback; flip the gate to zero `planned`; docs; first stable Marketplace and Open VSX release | L |
 
-**Status (2026-11-19): V0 slice 1 is done** on `feature/vscode-extension`: identity `latticetech.armada`; the Armada
+**Status (2026-11-19): V0 slice 1 is done** on `feature/vscode-extension`: identity `lattice-ai.armada`; the Armada
 view container with the navigation tree (pages open in the browser) and the black box tree (also in the Explorer behind
 `armada.failures.showInExplorer`); the connection manager with local discovery, the remote URL and key flow, health,
 contract check, whoami and role context keys, a shared in-flight attempt, the status bar and the output channel; the
@@ -393,9 +393,9 @@ From `~/Code/Mux/PUBLISH_VSCODE.md`:
 4. Open VSX: sign in with GitHub, sign the Eclipse publisher agreement, create a token, run
    `npx ovsx create-namespace <publisher> -p <token>` once, and store the token as `OVSX_PAT`.
 5. Confirm the extension `name` and `displayName` are free on both registries before the first publish. Mux had both
-   rejected (`mux`, then the displayName). The decided identity is the reverse-DNS identifier `ai.latticetech.armada`, which
-   the registries spell as publisher `latticetech` and name `armada` (extension ID `latticetech.armada`; publisher IDs
-   cannot contain dots), with display name "Armada", falling back to "Armada for VSCode" if "Armada" is taken
+   rejected (`mux`, then the displayName). The decided identity is publisher `lattice-ai` and name `armada` (extension ID
+   `lattice-ai.armada`; registry publisher IDs and names allow only letters, digits and hyphens, so the reverse-DNS
+   `ai.latticetech.armada` cannot be one), with display name "Armada", falling back to "Armada for VSCode" if "Armada" is taken
    (decision 1). Change `publisher` and `name` in `package.json`, the only place the ID lives.
 
 ### 9.5 Listing
@@ -453,9 +453,9 @@ root README.
 
 ## 12. Owner decisions (2026-11-19)
 
-1. **Publisher and name.** Identifier `ai.latticetech.armada`. On the Marketplace and Open VSX that is publisher
-   `latticetech` and extension name `armada` (extension ID `latticetech.armada`), since registry publisher IDs cannot
-   contain dots; anywhere a dotted identifier is allowed, use `ai.latticetech.armada`. Display name "Armada", falling
+1. **Publisher and name.** Publisher `lattice-ai` and extension name `armada` on the Marketplace and Open VSX
+   (extension ID `lattice-ai.armada`; registry IDs allow only letters, digits and hyphens, so `ai.latticetech.armada`
+   is not possible there). Anywhere a dotted identifier is allowed, use `ai.latticetech.armada`. Display name "Armada", falling
    back to "Armada for VSCode" if the registries reject "Armada". The current `jchristn.armada-vscode` was never
    published, so nothing migrates.
 2. **Binaries.** Bundle the self-contained CLI and headless Harbor in six platform-specific VSIX builds, and always run
