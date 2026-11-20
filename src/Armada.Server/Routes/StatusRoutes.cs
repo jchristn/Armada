@@ -150,7 +150,7 @@ namespace Armada.Server.Routes
             api => api
                 .WithTag("Status")
                 .WithSummary("Health check")
-                .WithDescription("Returns health status, the product version and the client contract version (ContractVersion, major.minor). Does not require authentication."));
+                .WithDescription("Returns health status. Does not require authentication."));
 
             app.Get("/api/v1/doctor", async (ApiRequest req) =>
             {
