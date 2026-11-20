@@ -726,6 +726,7 @@ Part of the bounded enumeration contract ([docs/ENUMERATION.md](docs/ENUMERATION
 - The check run page clears the previous run when you open a different run, and shows the error when that run cannot be loaded. A reload of the same run keeps the run on screen.
 - The Needs You badge runs one inbox read at a time. The throttle starts when the read starts, so a slow or failed read does not start another read for socket activity inside that window. A failed read keeps the last count.
 - The Server page copies Codex MCP configuration as a TOML table for `~/.codex/config.toml`. The HTTP url ends in `/mcp`. The stdio block sets `command` and `args` for `armada mcp stdio`.
+- A model endpoint health probe writes health columns only when the stored update time still matches the row it read. A configuration save during the probe stays as saved. Health history stays capped at 500 entries.
 
 ### Handoff and landing integrity
 
