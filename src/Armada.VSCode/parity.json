@@ -4753,6 +4753,14 @@
     },
     {
       "kind": "api",
+      "key": "updateVesselContext",
+      "status": "planned",
+      "surface": "",
+      "milestone": "",
+      "notes": "Vessels"
+    },
+    {
+      "kind": "api",
       "key": "updateWorkflowProfile",
       "status": "planned",
       "surface": "",
