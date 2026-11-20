@@ -3,6 +3,7 @@ import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { readSettings } from './config';
+import { DetailAction } from './surfaces/ops/detailHtml';
 import { loadCatalog } from './i18n';
 import { ConnectionManager } from './connection/connectionManager';
 import { harborDirectory, tuiPreferencesPath } from './connection/endpoints';
@@ -20,6 +21,7 @@ import { resourceCatalog } from './surfaces/resources/resourceCatalog';
 import { extendCatalog, resourceCatalogExtras } from './surfaces/resources/resourceCatalogExtras';
 import { ResourceSpec } from './surfaces/resources/resourceSpec';
 import { ResourceController, ResourceStore, ResourceTreeProvider, resourceViewOrder } from './surfaces/resources/resourceViews';
+import { TreeTabManager } from './surfaces/tabs/treeTab';
 import { DetailPanelManager } from './surfaces/ops/detailPanels';
 import { registerExtraCommands } from './surfaces/ops/extraCommands';
 import { registerLocalCommands, watchNeedsYou } from './surfaces/ops/localCommands';
@@ -71,6 +73,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<Armada
   // The native operational views (Needs You, Missions, Voyages, Captains, Fleet, Merge Queue) over one live store.
   const ops = new OpsStore({ isConnected: () => connection.connected, log: (line) => output.warn(line) });
   context.subscriptions.push({ dispose: () => ops.dispose() });
+  // Every sidebar view can also open as an editor tab (more room than the sidebar).
+  const tabs = new TreeTabManager();
+  context.subscriptions.push(tabs);
   const opsTrees: Array<[string, OpsTreeProvider]> = [
     [OPS_VIEW_IDS.needsYou, new NeedsYouTreeProvider(ops)],
     [OPS_VIEW_IDS.missions, new MissionsTreeProvider(ops)],
@@ -79,6 +84,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<Armada
     [OPS_VIEW_IDS.fleet, new FleetTreeProvider(ops)],
     [OPS_VIEW_IDS.merge, new MergeQueueTreeProvider(ops)],
   ];
+  for (const [id, provider] of opsTrees) tabs.register({ viewId: id, title: VIEW_TITLES[id] ?? id, provider, actions: VIEW_ACTIONS[id] });
   for (const [id, provider] of opsTrees) {
     const view = vscode.window.createTreeView(id, { treeDataProvider: provider, showCollapseAll: id !== OPS_VIEW_IDS.needsYou });
     context.subscriptions.push(provider, view, ops.onDidChange(() => {
@@ -124,6 +130,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<Armada
   for (const [key, viewId] of resourceViewOrder()) {
     const provider = new ResourceTreeProvider(specs.filter((s) => s.view === key && !s.hidden), resources, () => connection.connected);
     resourceTrees.push(provider);
+    tabs.register({ viewId, title: VIEW_TITLES[viewId] ?? viewId, provider, actions: VIEW_ACTIONS[viewId] });
     context.subscriptions.push(provider, vscode.window.createTreeView(viewId, { treeDataProvider: provider, showCollapseAll: true, canSelectMany: true }));
   }
   const resourceController = new ResourceController(specs, resources, async () => connection.connected || connection.connect({ interactive: true }), (key) => {
@@ -153,6 +160,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<Armada
   // view's `when` clause reads the setting).
 
   const tree = new FailuresTreeProvider(store);
+  tabs.register({ viewId: FAILURES_VIEW_ID, title: 'Failures', provider: tree, actions: [{ label: 'Search the Black Box...', command: 'armada.blackbox.search', primary: true }] });
   const failureViews = [FAILURES_VIEW_ID, FAILURES_EXPLORER_VIEW_ID].map((id) => vscode.window.createTreeView(id, { treeDataProvider: tree, showCollapseAll: true }));
   context.subscriptions.push(tree, ...failureViews);
   const updateViews = (): void => {
@@ -252,6 +260,23 @@ export async function activate(context: vscode.ExtensionContext): Promise<Armada
   register('armada.openSettings', () => openSettings(context.extension.id));
   register('armada.openDashboard', () => openDashboard(connection, '/'));
   register('armada.ask.open', () => vscode.commands.executeCommand(`${ASK_VIEW_ID}.focus`));
+  register('armada.ask.openInEditor', () => askView.openInEditor());
+  register('armada.tab.open', async (viewId) => {
+    let id = typeof viewId === 'string' ? viewId : undefined;
+    if (!id) {
+      const picked = await vscode.window.showQuickPick([{ label: 'Ask Armada', id: ASK_VIEW_ID }, ...Object.entries(VIEW_TITLES).map(([key, label]) => ({ label, id: key }))], { title: 'Armada: open a view in an editor tab' });
+      id = picked?.id;
+    }
+    if (!id) return;
+    if (id === ASK_VIEW_ID) askView.openInEditor();
+    else await tabs.open(id);
+  });
+  register('armada.tab.refresh', async (viewId) => {
+    void ops.refreshAll();
+    await resourceController.refreshAll();
+    if (typeof viewId === 'string') await tabs.render(viewId);
+  });
+  for (const viewId of Object.keys(VIEW_TITLES)) register(`armada.tab.${viewId}`, () => tabs.open(viewId));
   register('armada.ask.new', () => askView.newConversation());
   register('armada.ask.history', () => askView.pickConversation());
   register('armada.refreshFailures', () => {
@@ -300,6 +325,36 @@ export async function activate(context: vscode.ExtensionContext): Promise<Armada
 
   return { connection, events: bus, store, commands, ops, details, ask: askView, resources: { specs, store: resources }, liveMode: () => bus.mode };
 }
+
+/** Titles of the views that open as editor tabs. */
+const VIEW_TITLES: Record<string, string> = {
+  armadaNeedsYou: 'Needs You',
+  armadaMissions: 'Missions',
+  armadaVoyages: 'Voyages',
+  armadaCaptains: 'Captains',
+  armadaFleet: 'Fleet',
+  armadaMergeQueue: 'Merge Queue',
+  armadaFailures: 'Failures',
+  armadaBacklog: 'Backlog & Planning',
+  armadaFleetActions: 'Fleet Actions',
+  armadaDelivery: 'Delivery',
+  armadaConfiguration: 'Configuration',
+  armadaActivity: 'Activity',
+  armadaSystem: 'System',
+};
+
+/** The main actions of each view's tab. */
+const VIEW_ACTIONS: Record<string, DetailAction[]> = {
+  armadaNeedsYou: [{ label: 'Armada Overview', command: 'armada.home', primary: true }],
+  armadaMissions: [{ label: 'Dispatch Mission', command: 'armada.dispatch', primary: true }],
+  armadaVoyages: [{ label: 'Dispatch Voyage', command: 'armada.dispatchVoyage', primary: true }],
+  armadaCaptains: [{ label: 'New Captain', command: 'armada.captain.create', primary: true }],
+  armadaFleet: [{ label: 'New Vessel', command: 'armada.vessel.create', primary: true }, { label: 'Import Vessels', command: 'armada.vessel.import' }],
+  armadaMergeQueue: [{ label: 'Process Queue', command: 'armada.merge.processAll', primary: true }],
+  armadaBacklog: [{ label: 'New Planning Session', command: 'armada.planning.new', primary: true }],
+  armadaActivity: [{ label: 'Activity Charts', command: 'armada.charts', primary: true }],
+  armadaSystem: [{ label: 'Call the Armada API', command: 'armada.api.call', primary: true }],
+};
 
 /** The language for Armada's labels: armada.language, or VS Code's display language when it is "auto". */
 function displayLanguage(): string {

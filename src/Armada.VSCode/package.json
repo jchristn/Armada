@@ -885,6 +885,101 @@
         "command": "armada.showResult",
         "title": "Show Result",
         "category": "Armada"
+      },
+      {
+        "command": "armada.ask.openInEditor",
+        "title": "Ask Armada in an Editor Tab",
+        "category": "Armada",
+        "icon": "$(link-external)"
+      },
+      {
+        "command": "armada.tab.open",
+        "title": "Open a View in an Editor Tab...",
+        "category": "Armada",
+        "icon": "$(link-external)"
+      },
+      {
+        "command": "armada.tab.refresh",
+        "title": "Refresh View Tab",
+        "category": "Armada"
+      },
+      {
+        "command": "armada.tab.armadaNeedsYou",
+        "title": "Open in Editor Tab",
+        "category": "Armada",
+        "icon": "$(link-external)"
+      },
+      {
+        "command": "armada.tab.armadaMissions",
+        "title": "Open in Editor Tab",
+        "category": "Armada",
+        "icon": "$(link-external)"
+      },
+      {
+        "command": "armada.tab.armadaVoyages",
+        "title": "Open in Editor Tab",
+        "category": "Armada",
+        "icon": "$(link-external)"
+      },
+      {
+        "command": "armada.tab.armadaCaptains",
+        "title": "Open in Editor Tab",
+        "category": "Armada",
+        "icon": "$(link-external)"
+      },
+      {
+        "command": "armada.tab.armadaFleet",
+        "title": "Open in Editor Tab",
+        "category": "Armada",
+        "icon": "$(link-external)"
+      },
+      {
+        "command": "armada.tab.armadaMergeQueue",
+        "title": "Open in Editor Tab",
+        "category": "Armada",
+        "icon": "$(link-external)"
+      },
+      {
+        "command": "armada.tab.armadaFailures",
+        "title": "Open in Editor Tab",
+        "category": "Armada",
+        "icon": "$(link-external)"
+      },
+      {
+        "command": "armada.tab.armadaBacklog",
+        "title": "Open in Editor Tab",
+        "category": "Armada",
+        "icon": "$(link-external)"
+      },
+      {
+        "command": "armada.tab.armadaFleetActions",
+        "title": "Open in Editor Tab",
+        "category": "Armada",
+        "icon": "$(link-external)"
+      },
+      {
+        "command": "armada.tab.armadaDelivery",
+        "title": "Open in Editor Tab",
+        "category": "Armada",
+        "icon": "$(link-external)"
+      },
+      {
+        "command": "armada.tab.armadaConfiguration",
+        "title": "Open in Editor Tab",
+        "category": "Armada",
+        "icon": "$(link-external)"
+      },
+      {
+        "command": "armada.tab.armadaActivity",
+        "title": "Open in Editor Tab",
+        "category": "Armada",
+        "icon": "$(link-external)"
+      },
+      {
+        "command": "armada.tab.armadaSystem",
+        "title": "Open in Editor Tab",
+        "category": "Armada",
+        "icon": "$(link-external)"
       }
     ],
     "menus": {
@@ -1243,6 +1338,68 @@
         {
           "command": "armada.showResult",
           "when": "false"
+        },
+        {
+          "command": "armada.tab.armadaNeedsYou",
+          "when": "false"
+        },
+        {
+          "command": "armada.tab.armadaMissions",
+          "when": "false"
+        },
+        {
+          "command": "armada.tab.armadaVoyages",
+          "when": "false"
+        },
+        {
+          "command": "armada.tab.armadaCaptains",
+          "when": "false"
+        },
+        {
+          "command": "armada.tab.armadaFleet",
+          "when": "false"
+        },
+        {
+          "command": "armada.tab.armadaMergeQueue",
+          "when": "false"
+        },
+        {
+          "command": "armada.tab.armadaFailures",
+          "when": "false"
+        },
+        {
+          "command": "armada.tab.armadaBacklog",
+          "when": "false"
+        },
+        {
+          "command": "armada.tab.armadaFleetActions",
+          "when": "false"
+        },
+        {
+          "command": "armada.tab.armadaDelivery",
+          "when": "false"
+        },
+        {
+          "command": "armada.tab.armadaConfiguration",
+          "when": "false"
+        },
+        {
+          "command": "armada.tab.armadaActivity",
+          "when": "false"
+        },
+        {
+          "command": "armada.tab.armadaSystem",
+          "when": "false"
+        },
+        {
+          "command": "armada.ask.openInEditor"
+        },
+        {
+          "command": "armada.tab.open"
+        },
+        {
+          "command": "armada.tab.refresh",
+          "when": "false"
         }
       ],
       "view/title": [
@@ -1455,6 +1612,76 @@
           "command": "armada.about",
           "when": "view == armadaSystem",
           "group": "7_help@0"
+        },
+        {
+          "command": "armada.tab.armadaNeedsYou",
+          "when": "view == armadaNeedsYou",
+          "group": "navigation@98"
+        },
+        {
+          "command": "armada.tab.armadaMissions",
+          "when": "view == armadaMissions",
+          "group": "navigation@98"
+        },
+        {
+          "command": "armada.tab.armadaVoyages",
+          "when": "view == armadaVoyages",
+          "group": "navigation@98"
+        },
+        {
+          "command": "armada.tab.armadaCaptains",
+          "when": "view == armadaCaptains",
+          "group": "navigation@98"
+        },
+        {
+          "command": "armada.tab.armadaFleet",
+          "when": "view == armadaFleet",
+          "group": "navigation@98"
+        },
+        {
+          "command": "armada.tab.armadaMergeQueue",
+          "when": "view == armadaMergeQueue",
+          "group": "navigation@98"
+        },
+        {
+          "command": "armada.tab.armadaFailures",
+          "when": "view == armadaFailures",
+          "group": "navigation@98"
+        },
+        {
+          "command": "armada.tab.armadaBacklog",
+          "when": "view == armadaBacklog",
+          "group": "navigation@98"
+        },
+        {
+          "command": "armada.tab.armadaFleetActions",
+          "when": "view == armadaFleetActions",
+          "group": "navigation@98"
+        },
+        {
+          "command": "armada.tab.armadaDelivery",
+          "when": "view == armadaDelivery",
+          "group": "navigation@98"
+        },
+        {
+          "command": "armada.tab.armadaConfiguration",
+          "when": "view == armadaConfiguration",
+          "group": "navigation@98"
+        },
+        {
+          "command": "armada.tab.armadaActivity",
+          "when": "view == armadaActivity",
+          "group": "navigation@98"
+        },
+        {
+          "command": "armada.tab.armadaSystem",
+          "when": "view == armadaSystem",
+          "group": "navigation@98"
+        },
+        {
+          "command": "armada.ask.openInEditor",
+          "when": "view == armadaAsk",
+          "group": "navigation@0"
         }
       ],
       "view/item/context": [

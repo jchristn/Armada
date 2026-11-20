@@ -202,3 +202,20 @@ describe('needs you notifications', () => {
     assert.deepStrictEqual(newInboxItems(new Set([inboxKey(a)]), [a, b]), [b]);
   });
 });
+
+describe('views as editor tabs', () => {
+  it('lays a tree out as a page: groups become sections, items keep their click command', async () => {
+    const { treePage } = await import('../../src/surfaces/tabs/treeTab');
+    admiral();
+    const store = new OpsStore({ isConnected: () => true });
+    await Promise.all([store.refresh('missions'), store.refresh('fleet'), store.refresh('captains')]);
+    const provider = new MissionsTreeProvider(store, () => NOW);
+    const page = await treePage({ viewId: 'armadaMissions', title: 'Missions', provider, actions: [{ label: 'Dispatch Mission', command: 'armada.dispatch', primary: true }] });
+    assert.strictEqual(page.title, 'Missions');
+    assert.deepStrictEqual(page.sections.map((s) => s.kind === 'list' ? s.title : ''), ['Needs Review (1)', 'Active (1)', 'Queued (1)', 'Recent (2)']);
+    const active = page.sections[1];
+    assert.ok(active.kind === 'list' && active.items[0].link?.command === 'armada.mission.open' && active.items[0].link.args?.[0] === 'msn_a');
+    assert.ok(active.kind === 'list' && active.items[0].description === 'In Progress · Armada · 30m');
+    assert.deepStrictEqual(page.actions.map((a) => a.command), ['armada.dispatch', 'armada.tab.refresh']);
+  });
+});

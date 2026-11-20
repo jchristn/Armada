@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- **Editor tabs**: Ask Armada and every sidebar view open as editor tabs (a button on each view, and **Open a View in
+  an Editor Tab...**); view tabs are full-width live pages of the view's groups and records with its main actions.
+- **Ask Armada conversation settings**: pick the captain (or none), turn auto-approve on or off (with the dashboard's
+  warning), and set the CLI tool policy (inherit, ask in Armada, refuse, bypass for global admins) with the policy in
+  force shown; a new conversation starts with the chosen settings.
 - **Full dashboard parity, natively**: every entry of the parity manifest (`parity.json`, 759 entries) is implemented
   or not applicable. Added since the first native views: planning and backlog refinement chats that dispatch a plan or
   apply a refinement; the vessel workspace as a VS Code file system (`armada-vessel:`) with search, run a command,

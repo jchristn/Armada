@@ -141,6 +141,10 @@ export async function run(): Promise<void> {
     log('home overview opened');
     await vscode.commands.executeCommand('armada.charts');
     log('activity charts opened');
+    await vscode.commands.executeCommand('armada.tab.armadaMissions');
+    await vscode.commands.executeCommand('armada.tab.armadaDelivery');
+    await vscode.commands.executeCommand('armada.ask.openInEditor');
+    log('Missions, Delivery and Ask Armada opened as editor tabs');
 
     // Ask Armada: the chat view opens and shows an earlier conversation from the Admiral.
     const latest = await api.ask.latestConversationId();

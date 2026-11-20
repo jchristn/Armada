@@ -17,10 +17,13 @@ chat. The extension is being built out to full parity with the dashboard, the TU
 The Armada icon in the activity bar opens these views. They update live from the Admiral's event stream, and a status
 bar item shows the active mission count and what needs you.
 
-- **Ask Armada**: a chat with the Ask captain, as on the dashboard's Ask page: streaming replies, tool calls, and cards
-  to approve or reject the actions it proposes and the CLI tools it asks to run. Its buttons start a new
-  conversation, reopen or delete an earlier one, and run quick actions (summarize, rename, mark unread, set the CLI
-  tool policy, show the work the conversation tracks, and the Admiral's own quick actions).
+- **Ask Armada**: a chat with a captain, as on the dashboard's Ask page: streaming replies, tool calls, and cards to
+  approve or reject the actions it proposes and the CLI tools it asks to run. Its header picks the **Captain** that
+  answers (or none, for quick actions only), turns **Auto-approve** on or off (proposed actions run without a confirm
+  card; it asks before turning on), and sets **CLI tools** (inherit, ask in Armada, refuse, or bypass for global
+  admins), showing the policy in force. Its buttons open it in an editor tab, start a new conversation, reopen or
+  delete an earlier one, and run quick actions (summarize, rename, mark unread, show the work the conversation
+  tracks, and the Admiral's own quick actions).
 - **Needs You**: reviews waiting for approval, failures, stalled captains, CLI permission requests and model alerts.
   Reviews have Approve and Deny inline; permission requests and model alerts are answered from a quick pick. New items
   also pop up as notifications (`armada.notifications.needsYou`). The home button opens the **Armada Overview**.
@@ -63,6 +66,11 @@ bar item shows the active mission count and what needs you.
   restore, change password, the API explorer (**Call the Armada API...**), the local Harbor (start, stop, restart,
   show, log, folder, id), copy the MCP URL or diagnostics, **Install Armada MCP for Agents...**, documentation and
   **About Armada**.
+
+**Editor tabs.** The sidebar is narrow, so every view also opens as an editor tab: the button at the top of each view
+(or **Armada: Open a View in an Editor Tab...**) shows its groups and records as a full-width page that stays live,
+with the view's main actions on top; Ask Armada opens as a tab with **Ask Armada in an Editor Tab** (the sidebar and
+the tab show the same conversation).
 
 Every record opens as a page drawn with the VS Code theme; **+** creates one and Edit and Delete work from the page or
 the context menu (several at once when you select several), through native forms with confirmations. Logs and changes

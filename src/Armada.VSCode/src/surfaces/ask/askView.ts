@@ -16,6 +16,7 @@ import {
   deleteAskThread,
   getAskQuickActions,
   getAskWorkSnapshot,
+  listCaptains,
   markAskThreadUnread,
   runAskQuickAction,
   enumerateAskMessages,
@@ -31,7 +32,7 @@ import { ConversationAction, conversationReducer, ConversationState, initialConv
 import { parseAskEvent } from '@dashboard/lib/askEvents';
 import { loadAskThreadView, withToolCalls } from '@dashboard/lib/askPaging';
 import { parseCliPermissionEvent } from '@dashboard/lib/cliPermissions';
-import type { AskMessage, AskQuickAction, WebSocketMessage } from '@dashboard/types/models';
+import type { AskMessage, AskQuickAction, Captain, CliPermissionPolicy, WebSocketMessage } from '@dashboard/types/models';
 import { ConnectionManager } from '../../connection/connectionManager';
 import { describeError } from '../../transport/errors';
 import { ArmadaEventBus } from '../../transport/eventBus';
@@ -45,6 +46,12 @@ export const ASK_VIEW_ID = 'armadaAsk';
 /** globalState key of the conversation the chat last showed. */
 const LAST_THREAD_KEY = 'armada.ask.lastThread';
 
+/** globalState key of the captain new conversations start with. */
+const CAPTAIN_KEY = 'armada.ask.captain';
+
+/** The warning shown before auto-approve is turned on (the dashboard's wording). */
+const AUTO_APPROVE_WARNING = 'Auto-approve runs state-changing actions the captain proposes immediately, without a confirm card. Only turn it on for conversations you trust; every action is still recorded here.';
+
 const MESSAGE_PAGE_SIZE = 30;
 
 /** Messages the chat webview posts. */
@@ -57,7 +64,11 @@ type ChatInbound =
   | { type: 'quick' }
   | { type: 'older' }
   | { type: 'decide'; kind: 'proposal' | 'cli'; id: string; approve: boolean }
-  | { type: 'link'; href: string };
+  | { type: 'link'; href: string }
+  | { type: 'openInEditor' }
+  | { type: 'setCaptain'; id: string }
+  | { type: 'setAutoApprove'; value: boolean }
+  | { type: 'setCliPolicy'; value: string };
 
 /** Host dependencies. */
 export interface AskViewDeps {
@@ -71,7 +82,13 @@ export interface AskViewDeps {
 export class AskViewProvider implements vscode.WebviewViewProvider, vscode.Disposable {
   private readonly _Deps: AskViewDeps;
   private readonly _Subscriptions: Array<{ dispose(): void }> = [];
-  private _View: vscode.WebviewView | undefined;
+  private _SideView: vscode.WebviewView | undefined;
+  private _Panel: vscode.WebviewPanel | undefined;
+  private readonly _Hosts = new Set<vscode.Webview>();
+  private _Captains: Captain[] = [];
+  private _DraftCaptainId: string | undefined;
+  private _DraftAutoApprove = false;
+  private _DraftCliPolicy: CliPermissionPolicy | null = null;
   private _State: ConversationState = initialConversation();
   private _Error: string | null = null;
   private _RenderTimer: ReturnType<typeof setTimeout> | undefined;
@@ -86,29 +103,56 @@ export class AskViewProvider implements vscode.WebviewViewProvider, vscode.Dispo
     this._Deps = deps;
     this._Subscriptions.push(deps.bus.subscribe((event) => this.onSocket(event as unknown as WebSocketMessage)));
     this._Subscriptions.push(deps.connection.onDidChange((state) => {
-      if (state.phase === 'connected' && this._View && !this._Loaded) void this.restore();
+      if (state.phase === 'connected' && this._Hosts.size && !this._Loaded) void this.restore();
       if (state.phase !== 'connecting') this.render();
     }));
   }
 
   public resolveWebviewView(view: vscode.WebviewView): void {
-    this._View = view;
-    view.webview.options = { enableScripts: true, localResourceRoots: [] };
-    view.webview.html = chatHtml(crypto.randomBytes(16).toString('base64'));
-    view.webview.onDidReceiveMessage((message: ChatInbound) => void this.onMessage(message));
+    this._SideView = view;
+    this.attach(view.webview, false);
     view.onDidDispose(() => {
-      this._View = undefined;
+      this._Hosts.delete(view.webview);
+      this._SideView = undefined;
     });
     view.onDidChangeVisibility(() => {
       if (view.visible && this._State.threadId) void markAskThreadRead(this._State.threadId).catch(() => undefined);
     });
   }
 
+  /** Opens the chat in an editor tab (the same conversation as the sidebar), or reveals it. */
+  public openInEditor(): void {
+    if (this._Panel) {
+      this._Panel.reveal(undefined, false);
+      return;
+    }
+    const panel = vscode.window.createWebviewPanel('armada.ask', 'Ask Armada', vscode.ViewColumn.Active, { enableScripts: true, retainContextWhenHidden: true, enableFindWidget: true });
+    this._Panel = panel;
+    this.attach(panel.webview, true);
+    panel.onDidDispose(() => {
+      this._Hosts.delete(panel.webview);
+      this._Panel = undefined;
+    });
+  }
+
+  /** Shows the chat: the editor tab when one is open, else the sidebar view. */
+  private async focus(): Promise<void> {
+    if (this._Panel) this._Panel.reveal(undefined, false);
+    else await vscode.commands.executeCommand(`${ASK_VIEW_ID}.focus`);
+  }
+
+  private attach(webview: vscode.Webview, inEditor: boolean): void {
+    webview.options = { enableScripts: true, localResourceRoots: [] };
+    webview.html = chatHtml(crypto.randomBytes(16).toString('base64'), inEditor);
+    webview.onDidReceiveMessage((message: ChatInbound) => void this.onMessage(message));
+    this._Hosts.add(webview);
+  }
+
   /** Starts a new conversation with a prompt, showing the chat (Ask Armada About This Failure and similar). */
   public async ask(prompt: string): Promise<void> {
-    await vscode.commands.executeCommand(`${ASK_VIEW_ID}.focus`);
+    await this.focus();
     this.dispatch({ type: 'reset', threadId: null });
-    if (!this._View) {
+    if (!this._Hosts.size) {
       this._Queued = prompt;
       return;
     }
@@ -117,7 +161,7 @@ export class AskViewProvider implements vscode.WebviewViewProvider, vscode.Dispo
 
   /** Starts a new, empty conversation. */
   public async newConversation(): Promise<void> {
-    await vscode.commands.executeCommand(`${ASK_VIEW_ID}.focus`);
+    await this.focus();
     this.dispatch({ type: 'reset', threadId: null });
     this._Error = null;
     await this._Deps.globalState.update(LAST_THREAD_KEY, undefined);
@@ -125,7 +169,7 @@ export class AskViewProvider implements vscode.WebviewViewProvider, vscode.Dispo
 
   /** Opens a conversation by id. */
   public async openConversation(threadId: string): Promise<void> {
-    await vscode.commands.executeCommand(`${ASK_VIEW_ID}.focus`);
+    await this.focus();
     await this.load(threadId);
   }
 
@@ -172,7 +216,7 @@ export class AskViewProvider implements vscode.WebviewViewProvider, vscode.Dispo
     });
     quickPick.dispose();
     if (!picked) return;
-    await vscode.commands.executeCommand(`${ASK_VIEW_ID}.focus`);
+    await this.focus();
     await this.load(picked);
   }
 
@@ -186,7 +230,6 @@ export class AskViewProvider implements vscode.WebviewViewProvider, vscode.Dispo
       { label: '$(mail) Mark this conversation unread', description: '', detail: 'It shows as unread in the conversation list', action: { name: '__unread' } as AskQuickAction },
       { label: '$(edit) Rename this conversation', description: '', detail: '', action: { name: '__rename' } as AskQuickAction },
       { label: '$(pulse) Show the work this conversation tracks', description: '', detail: 'Voyages, missions and runs Armada started for you here', action: { name: '__work' } as AskQuickAction },
-      { label: '$(shield) CLI tool permissions for this conversation', description: '', detail: 'Whether the captain asks, refuses or runs tools without asking', action: { name: '__policy' } as AskQuickAction },
     ] : [];
     const picked = await vscode.window.showQuickPick([...builtIn, ...actions.map((a) => ({ label: a.title ?? a.name, description: a.command ?? '', detail: a.description, action: a }))], { title: 'Ask Armada: Quick Actions', matchOnDetail: true });
     if (!picked) return;
@@ -209,18 +252,6 @@ export class AskViewProvider implements vscode.WebviewViewProvider, vscode.Dispo
       const title = await vscode.window.showInputBox({ title: 'Rename conversation', value: this._State.thread?.title ?? '', ignoreFocusOut: true });
       if (!title?.trim()) return;
       const thread = await updateAskThread(threadId, { title: title.trim() });
-      this.dispatch({ type: 'thread', thread });
-      return;
-    }
-    if (threadId && picked.action.name === '__policy') {
-      const policy = await vscode.window.showQuickPick([
-        { label: 'Ask in Armada', value: 'ApproveInArmada' as const },
-        { label: 'Refuse', value: 'Refuse' as const },
-        { label: 'Bypass (run without asking)', value: 'Bypass' as const },
-        { label: 'Use the default', value: null },
-      ], { title: 'CLI tool permissions for this conversation' });
-      if (!policy) return;
-      const thread = await setAskThreadCliPermissionPolicy(threadId, policy.value);
       this.dispatch({ type: 'thread', thread });
       return;
     }
@@ -287,6 +318,18 @@ export class AskViewProvider implements vscode.WebviewViewProvider, vscode.Dispo
         case 'link':
           await this.openLink(message.href);
           return;
+        case 'openInEditor':
+          this.openInEditor();
+          return;
+        case 'setCaptain':
+          await this.setCaptain(message.id || null);
+          return;
+        case 'setAutoApprove':
+          await this.setAutoApprove(message.value === true);
+          return;
+        case 'setCliPolicy':
+          await this.setCliPolicy(isCliPolicy(message.value) ? message.value : null);
+          return;
       }
     } catch (err) {
       this._Error = describeError(err);
@@ -301,6 +344,7 @@ export class AskViewProvider implements vscode.WebviewViewProvider, vscode.Dispo
   private async restore(): Promise<void> {
     if (!this._Deps.connection.connected) return;
     this._Loaded = true;
+    await this.loadCaptains();
     const last = this._Deps.globalState.get<string>(LAST_THREAD_KEY);
     if (last) await this.load(last).catch(() => this._Deps.globalState.update(LAST_THREAD_KEY, undefined));
   }
@@ -340,7 +384,8 @@ export class AskViewProvider implements vscode.WebviewViewProvider, vscode.Dispo
     this._Error = null;
     let threadId = this._State.threadId;
     if (!threadId) {
-      const created = await createAskThread({});
+      let created = await createAskThread({ captainId: this.draftCaptainId() ?? null, autoApprove: this._DraftAutoApprove });
+      if (this._DraftCliPolicy) created = await setAskThreadCliPermissionPolicy(created.id, this._DraftCliPolicy);
       threadId = created.id;
       this.dispatch({ type: 'reset', threadId });
       this.dispatch({ type: 'thread', thread: created });
@@ -414,13 +459,84 @@ export class AskViewProvider implements vscode.WebviewViewProvider, vscode.Dispo
   }
 
   private render(): void {
-    if (!this._View) return;
-    void this._View.webview.postMessage({ type: 'state', view: buildChatView(this._State, this._Deps.connection.connected, this._Error) });
+    if (!this._Hosts.size) return;
+    const thread = this._State.thread;
+    const controls = {
+      captains: this._Captains.map((c) => ({ id: c.id, label: `${c.name}${c.model || c.runtime ? ` (${c.model || c.runtime})` : ''}` })),
+      captainId: thread ? thread.captainId ?? '' : this.draftCaptainId() ?? '',
+      autoApprove: thread ? thread.autoApprove === true : this._DraftAutoApprove,
+      cliPolicy: (thread ? thread.cliPermissionPolicy ?? null : this._DraftCliPolicy) ?? '',
+      cliEffective: thread?.cliPermission ? `${policyLabel(thread.cliPermission.effective)} (from ${humanizeSource(thread.cliPermission.source)})` : '',
+      canBypass: this._Deps.connection.state.identity?.globalAdmin === true,
+    };
+    const message = { type: 'state', view: buildChatView(this._State, this._Deps.connection.connected, this._Error), controls };
+    for (const host of this._Hosts) void host.postMessage(message);
+  }
+
+  private draftCaptainId(): string | undefined {
+    if (this._DraftCaptainId !== undefined) return this._DraftCaptainId || undefined;
+    const stored = this._Deps.globalState.get<string>(CAPTAIN_KEY);
+    if (stored && this._Captains.some((c) => c.id === stored)) return stored;
+    return this._Captains[0]?.id;
+  }
+
+  private async loadCaptains(): Promise<void> {
+    try {
+      this._Captains = ((await listCaptains({ pageNumber: 1, pageSize: 500 })).objects ?? []).sort((a, b) => a.name.localeCompare(b.name));
+    } catch {
+      this._Captains = [];
+    }
+    this.render();
+  }
+
+  private async setCaptain(captainId: string | null): Promise<void> {
+    const thread = this._State.thread;
+    if (thread) {
+      this.dispatch({ type: 'thread', thread: await updateAskThread(thread.id, { captainId }) });
+    } else {
+      this._DraftCaptainId = captainId ?? '';
+      this.render();
+    }
+    await this._Deps.globalState.update(CAPTAIN_KEY, captainId ?? undefined);
+  }
+
+  private async setAutoApprove(value: boolean): Promise<void> {
+    if (value && (await vscode.window.showWarningMessage(AUTO_APPROVE_WARNING, { modal: true }, 'Turn On Auto-approve')) !== 'Turn On Auto-approve') {
+      this.render();
+      return;
+    }
+    const thread = this._State.thread;
+    if (thread) this.dispatch({ type: 'thread', thread: await updateAskThread(thread.id, { autoApprove: value }) });
+    else {
+      this._DraftAutoApprove = value;
+      this.render();
+    }
+  }
+
+  private async setCliPolicy(policy: CliPermissionPolicy | null): Promise<void> {
+    const thread = this._State.thread;
+    if (thread) this.dispatch({ type: 'thread', thread: await setAskThreadCliPermissionPolicy(thread.id, policy) });
+    else {
+      this._DraftCliPolicy = policy;
+      this.render();
+    }
   }
 }
 
+function policyLabel(policy: string): string {
+  return policy === 'ApproveInArmada' ? 'Ask in Armada' : policy === 'Bypass' ? 'Bypass' : policy === 'Refuse' ? 'Refuse' : policy;
+}
+
+function humanizeSource(source: string): string {
+  return source.replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase();
+}
+
+function isCliPolicy(value: unknown): value is CliPermissionPolicy {
+  return value === 'Refuse' || value === 'ApproveInArmada' || value === 'Bypass';
+}
+
 /** The chat page: header, messages, composer. Renders the ChatView the host posts. */
-function chatHtml(nonce: string): string {
+function chatHtml(nonce: string, inEditor: boolean): string {
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -435,6 +551,11 @@ header .title { flex: 1; font-weight: 600; white-space: nowrap; overflow: hidden
 .icon { background: none; border: none; color: var(--vscode-icon-foreground); cursor: pointer; padding: 3px 6px; border-radius: 4px; font: inherit; }
 .icon:hover { background: var(--vscode-toolbar-hoverBackground); }
 .icon:focus-visible, button:focus-visible, textarea:focus { outline: 1px solid var(--vscode-focusBorder); outline-offset: -1px; }
+.controls { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding: 5px 8px; border-bottom: 1px solid var(--vscode-sideBarSectionHeader-border, var(--vscode-panel-border)); font-size: 0.9em; color: var(--vscode-descriptionForeground); }
+.controls label { display: inline-flex; align-items: center; gap: 5px; }
+.controls select { max-width: 220px; color: var(--vscode-dropdown-foreground); background: var(--vscode-dropdown-background); border: 1px solid var(--vscode-dropdown-border, var(--vscode-panel-border)); border-radius: 2px; padding: 1px 4px; font: inherit; }
+.controls .auto.on { color: var(--vscode-charts-yellow); }
+.controls .effective { font-size: 0.9em; }
 #messages { flex: 1; overflow-y: auto; padding: 8px 10px 4px; }
 .msg { margin: 0 0 12px; line-height: 1.5; overflow-wrap: anywhere; }
 .msg .meta { font-size: 0.8em; color: var(--vscode-descriptionForeground); margin-bottom: 2px; }
@@ -481,10 +602,17 @@ textarea { resize: none; border: none; background: transparent; color: var(--vsc
 <body>
 <header>
   <span class="title" id="title">Ask Armada</span>
+  ${inEditor ? '' : '<button class="icon" id="openInEditor" title="Open in an editor tab" aria-label="Open in an editor tab">⧉</button>'}
   <button class="icon" id="quick" title="Quick actions" aria-label="Quick actions">⚡</button>
   <button class="icon" id="history" title="Earlier conversations" aria-label="Earlier conversations">⟲</button>
   <button class="icon" id="new" title="New conversation" aria-label="New conversation">＋</button>
 </header>
+<div class="controls" role="group" aria-label="Conversation settings">
+  <label title="The captain (AI agent) that answers in this conversation. Changing it applies to the next message; no captain means only quick actions work.">Captain <select id="captain" aria-label="Captain"></select></label>
+  <label class="auto" title="${AUTO_APPROVE_WARNING}"><input type="checkbox" id="auto" role="switch"> Auto-approve</label>
+  <label title="How the captain CLI handles shell commands, file edits, and fetches that need permission in this conversation. Inherit uses the captain policy, then the server default.">CLI tools <select id="cli" aria-label="CLI tools"><option value="">Inherit</option><option value="ApproveInArmada">Ask in Armada</option><option value="Refuse">Refuse</option><option value="Bypass">Bypass (no prompts)</option></select></label>
+  <span class="effective" id="effective"></span>
+</div>
 <div id="messages" role="log" aria-live="polite"></div>
 <div class="error" id="error" role="alert" hidden></div>
 <footer>
@@ -567,8 +695,26 @@ document.addEventListener('click', (e) => {
   if (el.id === 'older') { vscode.postMessage({ type: 'older' }); return; }
   if (el.id === 'connect') { vscode.postMessage({ type: 'link', href: 'command:connect' }); }
 });
+let captainOptions = '';
+function renderControls(c) {
+  if (!c) return;
+  const options = '<option value="">No captain (quick actions only)</option>' + c.captains.map((x) => '<option value="' + esc(x.id) + '">' + esc(x.label) + '</option>').join('');
+  if (options !== captainOptions) { $('captain').innerHTML = options; captainOptions = options; }
+  $('captain').value = c.captainId || '';
+  $('captain').disabled = !!(view && view.turnActive);
+  $('auto').checked = !!c.autoApprove;
+  $('auto').parentElement.classList.toggle('on', !!c.autoApprove);
+  const bypass = $('cli').querySelector('option[value="Bypass"]');
+  bypass.disabled = !c.canBypass && c.cliPolicy !== 'Bypass';
+  $('cli').value = c.cliPolicy || '';
+  $('effective').textContent = c.cliEffective ? 'In force: ' + c.cliEffective : '';
+}
+$('captain').addEventListener('change', () => vscode.postMessage({ type: 'setCaptain', id: $('captain').value }));
+$('auto').addEventListener('change', () => vscode.postMessage({ type: 'setAutoApprove', value: $('auto').checked }));
+$('cli').addEventListener('change', () => vscode.postMessage({ type: 'setCliPolicy', value: $('cli').value }));
+if ($('openInEditor')) $('openInEditor').addEventListener('click', () => vscode.postMessage({ type: 'openInEditor' }));
 window.addEventListener('message', (event) => {
-  if (event.data && event.data.type === 'state') { view = event.data.view; render(); }
+  if (event.data && event.data.type === 'state') { view = event.data.view; render(); renderControls(event.data.controls); }
 });
 grow();
 vscode.postMessage({ type: 'ready' });
