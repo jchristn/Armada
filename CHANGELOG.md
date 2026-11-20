@@ -711,6 +711,7 @@ Part of the bounded enumeration contract ([docs/ENUMERATION.md](docs/ENUMERATION
 - The dashboard websocket relay removes a receive-loop session by instance before it publishes an error or a close, and the loop's final removal matches that same instance. A frame sent from the error event finds no session. A new session that reuses the proxy socket id during close stays registered.
 - Check runs keep captured command output when a local or Harbor command times out.
 - A slow WebSocket client no longer blocks event delivery to other clients. Each authenticated connection has a bounded outbound queue and one sender. Broadcasts, CLI permission events, subscribe snapshots, command replies, and errors are queued without waiting for the network. A full queue or a failed send aborts only that connection, so the client must reconnect and refresh its state. Tenant and user filters are unchanged.
+- A dashboard notification for a deployment, an objective, or an incident opens that record. The notification stores the event time when the event time is usable. It stores the browser time when the event has no usable time.
 
 ### Handoff and landing integrity
 
