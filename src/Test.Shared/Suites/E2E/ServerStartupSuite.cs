@@ -9,6 +9,8 @@ namespace Test.Shared.Suites.E2E
     using System.Net.Sockets;
     using System.Threading;
     using System.Threading.Tasks;
+    using Microsoft.Data.Sqlite;
+    using Armada.Core.Database;
     using Armada.Core.Enums;
     using Armada.Core.Models;
     using Armada.Core.Services;
@@ -30,6 +32,7 @@ namespace Test.Shared.Suites.E2E
         #region Private-Members
 
         private const string SuiteId = "E2E.ServerStartup";
+        private const string InterruptedCheckSummary = "The command died with the process and this record has no verdict.";
 
         #endregion
 
@@ -383,6 +386,105 @@ namespace Test.Shared.Suites.E2E
                 }
             }));
 
+            cases.Add(CaseAsync("startup_cancels_armada_checks_left_running_by_a_stopped_process", "Startup cancels Armada checks left Running by a stopped process", TestTags.Positive, async () =>
+            {
+                string tempDir = TestTemp.NewDirectory("startup-checks");
+                ArmadaServer? server = null;
+                try
+                {
+                    DatabaseSettings database = await PrepareStartupDatabaseAsync(tempDir).ConfigureAwait(false);
+                    ArmadaSettings settings = CreateStartupSettings(tempDir, database);
+                    LoggingModule logging = new LoggingModule();
+                    logging.Settings.EnableConsole = false;
+
+                    string oldId;
+                    string nullStartId;
+                    string externalId;
+                    string currentId;
+                    using (DatabaseDriver seed = DatabaseDriverFactory.Create(database, logging))
+                    {
+                        await seed.InitializeAsync().ConfigureAwait(false);
+                        CheckRun oldRun = await SeedRunningCheckAsync(seed, CheckRunSourceEnum.Armada, DateTime.UtcNow.AddDays(-1), null, 88001L, null).ConfigureAwait(false);
+                        CheckRun nullStart = await SeedRunningCheckAsync(seed, CheckRunSourceEnum.Armada, null, "kept output", 42L, null).ConfigureAwait(false);
+                        CheckRun external = await SeedRunningCheckAsync(seed, CheckRunSourceEnum.External, DateTime.UtcNow.AddDays(-1), "external output", 9L, "imported run").ConfigureAwait(false);
+                        CheckRun current = await SeedRunningCheckAsync(seed, CheckRunSourceEnum.Armada, DateTime.UtcNow.AddDays(1), "current output", 11L, null).ConfigureAwait(false);
+                        oldId = oldRun.Id;
+                        nullStartId = nullStart.Id;
+                        externalId = external.Id;
+                        currentId = current.Id;
+
+                        CheckRun storedOld = (await seed.CheckRuns.ReadAsync(oldId).ConfigureAwait(false))!;
+                        CheckRun storedNull = (await seed.CheckRuns.ReadAsync(nullStartId).ConfigureAwait(false))!;
+                        CheckRun storedExternal = (await seed.CheckRuns.ReadAsync(externalId).ConfigureAwait(false))!;
+                        CheckRun storedCurrent = (await seed.CheckRuns.ReadAsync(currentId).ConfigureAwait(false))!;
+                        AssertEqual(CheckRunStatusEnum.Running, storedOld.Status, "seeded old Armada run");
+                        AssertEqual(CheckRunStatusEnum.Running, storedNull.Status, "seeded Armada run with no start");
+                        AssertFalse(storedNull.StartedUtc.HasValue, "a null start is stored as null");
+                        AssertEqual(CheckRunSourceEnum.External, storedExternal.Source, "seeded external source");
+                        AssertEqual(CheckRunStatusEnum.Running, storedExternal.Status, "seeded external run");
+                        AssertEqual(CheckRunStatusEnum.Running, storedCurrent.Status, "seeded current Armada run");
+                        AssertTrue(storedOld.StartedUtc.HasValue && storedCurrent.StartedUtc.HasValue && storedCurrent.StartedUtc.Value > storedOld.StartedUtc.Value, "the current run starts after the old run");
+                    }
+
+                    server = await StartOnFreePortsAsync(settings).ConfigureAwait(false);
+
+                    CheckRun? oldAfter = null;
+                    CheckRun? nullAfter = null;
+                    using (DatabaseDriver reader = DatabaseDriverFactory.Create(database, logging))
+                    {
+                        MonotonicDeadline deadline = MonotonicDeadline.After(TimeSpan.FromSeconds(20));
+                        while (!deadline.Passed)
+                        {
+                            oldAfter = await reader.CheckRuns.ReadAsync(oldId).ConfigureAwait(false);
+                            nullAfter = await reader.CheckRuns.ReadAsync(nullStartId).ConfigureAwait(false);
+                            if (oldAfter != null
+                                && oldAfter.Status == CheckRunStatusEnum.Canceled
+                                && nullAfter != null
+                                && nullAfter.Status == CheckRunStatusEnum.Canceled)
+                            {
+                                break;
+                            }
+
+                            await Task.Delay(100).ConfigureAwait(false);
+                        }
+
+                        AssertNotNull(oldAfter, "old Armada run still exists");
+                        AssertEqual(CheckRunStatusEnum.Canceled, oldAfter!.Status, "old Armada run after startup");
+                        AssertEqual(InterruptedCheckSummary, oldAfter.Summary, "old Armada run summary");
+                        AssertEqual(InterruptedCheckSummary, oldAfter.Output, "empty output receives the summary");
+                        AssertTrue(oldAfter.CompletedUtc.HasValue, "old Armada run has a completion time");
+                        AssertEqual(88001L, oldAfter.DurationMs ?? -1L, "old Armada run duration is unchanged");
+
+                        AssertNotNull(nullAfter, "Armada run with no start still exists");
+                        AssertEqual(CheckRunStatusEnum.Canceled, nullAfter!.Status, "Armada run with no start after startup");
+                        AssertEqual(InterruptedCheckSummary, nullAfter.Summary, "null-start summary");
+                        AssertEqual("kept output", nullAfter.Output, "stored output is kept");
+                        AssertTrue(nullAfter.CompletedUtc.HasValue, "null-start run has a completion time");
+                        AssertEqual(42L, nullAfter.DurationMs ?? -1L, "null-start duration is unchanged");
+                        AssertFalse(nullAfter.StartedUtc.HasValue, "null start stays null");
+
+                        CheckRun externalAfter = (await reader.CheckRuns.ReadAsync(externalId).ConfigureAwait(false))!;
+                        AssertEqual(CheckRunStatusEnum.Running, externalAfter.Status, "external run stays Running");
+                        AssertEqual("imported run", externalAfter.Summary, "external summary stays");
+                        AssertEqual("external output", externalAfter.Output, "external output stays");
+                        AssertFalse(externalAfter.CompletedUtc.HasValue, "external run has no completion time");
+                        AssertEqual(9L, externalAfter.DurationMs ?? -1L, "external duration stays");
+
+                        CheckRun currentAfter = (await reader.CheckRuns.ReadAsync(currentId).ConfigureAwait(false))!;
+                        AssertEqual(CheckRunStatusEnum.Running, currentAfter.Status, "Armada run started after the process stays Running");
+                        AssertEqual("current output", currentAfter.Output, "current output stays");
+                        AssertFalse(currentAfter.CompletedUtc.HasValue, "current run has no completion time");
+                        AssertEqual(11L, currentAfter.DurationMs ?? -1L, "current duration stays");
+                    }
+                }
+                finally
+                {
+                    if (server != null) { try { server.Stop(); } catch (Exception) { } }
+                    SqliteConnection.ClearAllPools();
+                    TestTemp.TryDelete(tempDir);
+                }
+            }));
+
             return new TestSuiteDescriptor(suiteId: SuiteId, displayName: "Server Startup", cases: cases);
         }
 
@@ -451,6 +553,56 @@ namespace Test.Shared.Suites.E2E
                     throw;
                 }
             }).ConfigureAwait(false);
+        }
+
+        private static async Task<DatabaseSettings> PrepareStartupDatabaseAsync(string tempDir)
+        {
+            if (TestDatabaseConfig.IsSqlite)
+            {
+                string sqlitePath = Path.Combine(tempDir, "armada.db");
+                TestDatabaseHelper.SeedDatabaseFile(sqlitePath);
+                DatabaseSettings sqlite = new DatabaseSettings();
+                sqlite.Type = DatabaseTypeEnum.Sqlite;
+                sqlite.Filename = sqlitePath;
+                return sqlite;
+            }
+
+            TestDatabase prepared = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+            prepared.Dispose();
+            // CreateDatabaseAsync resets one shared server database. Its name is the configured base name plus this suffix.
+            return TestDatabaseConfig.BuildSettings(TestDatabaseConfig.BaseDatabaseName + "_shared");
+        }
+
+        private static ArmadaSettings CreateStartupSettings(string tempDir, DatabaseSettings database)
+        {
+            ArmadaSettings settings = new ArmadaSettings();
+            settings.DataDirectory = tempDir;
+            settings.Database = database;
+            if (database.Type == DatabaseTypeEnum.Sqlite) settings.DatabasePath = database.Filename;
+            settings.LogDirectory = Path.Combine(tempDir, "logs");
+            settings.DocksDirectory = Path.Combine(tempDir, "docks");
+            settings.ReposDirectory = Path.Combine(tempDir, "repos");
+            settings.ApiKey = "test-key-" + Guid.NewGuid().ToString("N");
+            settings.HeartbeatIntervalSeconds = 300;
+            settings.Rest.Hostname = "127.0.0.1";
+            settings.SettingsFilePath = Path.Combine(tempDir, "settings.json");
+            return settings;
+        }
+
+        private static async Task<CheckRun> SeedRunningCheckAsync(DatabaseDriver database, CheckRunSourceEnum source, DateTime? startedUtc, string? output, long durationMs, string? summary)
+        {
+            CheckRun run = new CheckRun
+            {
+                Source = source,
+                Status = CheckRunStatusEnum.Running,
+                Command = "echo interrupted",
+                StartedUtc = startedUtc,
+                Output = output,
+                Summary = summary,
+                DurationMs = durationMs,
+                Type = CheckRunTypeEnum.Build
+            };
+            return await database.CheckRuns.CreateAsync(run).ConfigureAwait(false);
         }
 
         private static ArmadaSettings CreateSettings(out string tempDir, bool presetApiKey = true)
