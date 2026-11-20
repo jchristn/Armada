@@ -587,6 +587,10 @@ Events, Memories, Merge Queue, Missions, Request History, Signals, and Voyages a
 - Mission prompts instruct captains to push their branch only for PullRequest landing and for a landing mode the product does not define. Audit and Research prompts do not ask for commits or pushes. Other known landing modes ask for commits without a captain push. Seeding updates an untouched built-in mission rules template that still matches a previously shipped default, and leaves operator edits in place.
 - MCP voyage cancellation now broadcasts the updated voyage and cancelled missions to WebSocket subscribers.
 
+### Helm waits for local server shutdown before deleting data
+
+- `armada reset` and the wipe path in `armada config init` now keep existing data when they cannot prove the local Admiral has stopped. They poll the local health endpoint for up to 30 seconds and treat every HTTP response, including an error response, as a live process. They delete data only after the endpoint refuses a connection.
+
 ### Landing failure prevention
 
 - Every dashboard and TUI delete, bulk delete and purge now shows a progress modal (for example "Deleting vessel" or "Deleting 12 missions": "This may take some time while related records are cleaned up.") that stays up until the server answers, cannot be dismissed while pending, and offers Retry and Dismiss if the delete fails. Duplicate submissions are ignored. Ask Armada uses the same shared dialog.
