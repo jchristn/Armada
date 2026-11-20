@@ -8,7 +8,7 @@ namespace Armada.Core.Services
     using Armada.Core.Enums;
     using Armada.Core.Models;
 
-    // Mission hierarchy (CONCURRENCY_IMPROVEMENTS.md section 7, D13 to D18). ParentMissionId links logical missions: it
+    // Mission hierarchy (archive/CONCURRENCY_IMPROVEMENTS.md section 7, D13 to D18). ParentMissionId links logical missions: it
     // always names a root, and a child root starts once its parent's terminal pipeline stage finishes.
     public partial class MissionService
     {

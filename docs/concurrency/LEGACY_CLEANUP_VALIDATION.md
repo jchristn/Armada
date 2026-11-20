@@ -1,6 +1,6 @@
 # Legacy ownership cleanup and final schema validation
 
-This segment completes M1 and the remaining M2 cleanup from [the concurrency plan](../../CONCURRENCY_IMPROVEMENTS.md). It removes the singular captain mission/dock pointers and vessel concurrency boolean from production models, storage and first-party clients. Missions own their dock, process, heartbeat and recovery budget; planning/refinement own an exclusive session. Captain responses expose active mission IDs and counts.
+This segment completes M1 and the remaining M2 cleanup from [the concurrency plan](../../archive/CONCURRENCY_IMPROVEMENTS.md). It removes the singular captain mission/dock pointers and vessel concurrency boolean from production models, storage and first-party clients. Missions own their dock, process, heartbeat and recovery budget; planning/refinement own an exclusive session. Captain responses expose active mission IDs and counts.
 
 ## Upgrade and compatibility
 

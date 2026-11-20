@@ -15,7 +15,7 @@ namespace Test.Shared.Suites.Tui
     using static Test.Shared.Infrastructure.Asserts;
 
     /// <summary>
-    /// TUI concurrency views (CONCURRENCY_IMPROVEMENTS.md M9): the voyage Tree tab, the mission Wait Time and Children
+    /// TUI concurrency views (archive/CONCURRENCY_IMPROVEMENTS.md M9): the voyage Tree tab, the mission Wait Time and Children
     /// sections, and the vessel Concurrency section. Set ARMADA_TUI_FRAMES to a directory to keep the rendered frames.
     /// </summary>
     public sealed class TuiConcurrencyViewsSuite : IArmadaTestSuite

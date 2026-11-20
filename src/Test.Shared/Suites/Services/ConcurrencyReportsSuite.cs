@@ -16,7 +16,7 @@ namespace Test.Shared.Suites.Services
     using static Test.Shared.Infrastructure.Asserts;
 
     /// <summary>
-    /// Mission tree, wait and concurrency reports (CONCURRENCY_IMPROVEMENTS.md 7.6 and 8.3): the tree builder, the
+    /// Mission tree, wait and concurrency reports (archive/CONCURRENCY_IMPROVEMENTS.md 7.6 and 8.3): the tree builder, the
     /// parentMissionId/rootsOnly/waitingGate filters, the cross-mission interval query, the vessel report, windowed
     /// metrics and the Concurrency settings patch.
     /// </summary>

@@ -10,7 +10,7 @@ namespace Armada.Core.Services
     using Armada.Core.Models;
 
     /// <summary>
-    /// Path ownership in mission prompts (CONCURRENCY_IMPROVEMENTS.md 10.2): <c>{ConcurrentSiblingPaths}</c> lists the
+    /// Path ownership in mission prompts (archive/CONCURRENCY_IMPROVEMENTS.md 10.2): <c>{ConcurrentSiblingPaths}</c> lists the
     /// paths owned by voyage missions that may run at the same time (not this mission's ancestors or descendants) and
     /// <c>{ParentSummary}</c> what its parent finished.
     /// </summary>

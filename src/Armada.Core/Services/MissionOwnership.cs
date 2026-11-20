@@ -8,7 +8,7 @@ namespace Armada.Core.Services
     using Armada.Core.Models;
 
     /// <summary>
-    /// Mission path ownership across a voyage (CONCURRENCY_IMPROVEMENTS.md 10.2 and 10.4): which logical missions can run
+    /// Mission path ownership across a voyage (archive/CONCURRENCY_IMPROVEMENTS.md 10.2 and 10.4): which logical missions can run
     /// alongside a mission and what they own, and whether a mission's changed files stayed inside its owned paths.
     /// </summary>
     public static class MissionOwnership

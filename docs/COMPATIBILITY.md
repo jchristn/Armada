@@ -10,7 +10,7 @@ experimental items are marked and graduated.
 
 ## v1.3.0 concurrency exception
 
-The project owner explicitly approved removal of the singular captain mission/dock fields and the vessel concurrency boolean in [the v1.3.0 plan, decisions D3 and D7](../CONCURRENCY_IMPROVEMENTS.md). This is a breaking exception to the usual same-major promise above. Update integrations together with the server: use captain `ActiveMissionIds` and each mission’s `DockId`/`ProcessId`, and replace vessel `AllowConcurrentMissions` / Helm `--allow-concurrent` with the two numeric limits. The removed vessel field and CLI flag produce migration guidance rather than being silently accepted. No compatibility aliases or legacy columns remain after migration 121.
+The project owner explicitly approved removal of the singular captain mission/dock fields and the vessel concurrency boolean in [the v1.3.0 plan, decisions D3 and D7](../archive/CONCURRENCY_IMPROVEMENTS.md). This is a breaking exception to the usual same-major promise above. Update integrations together with the server: use captain `ActiveMissionIds` and each mission’s `DockId`/`ProcessId`, and replace vessel `AllowConcurrentMissions` / Helm `--allow-concurrent` with the two numeric limits. The removed vessel field and CLI flag produce migration guidance rather than being silently accepted. No compatibility aliases or legacy columns remain after migration 121.
 
 The API surface baseline is regenerated for this explicitly approved boundary. Database upgrades preserve active assignments, process IDs and exclusive session ownership; downgrades require restoring the pre-upgrade backup. Hierarchy and wait-reporting APIs are still tracked separately.
 

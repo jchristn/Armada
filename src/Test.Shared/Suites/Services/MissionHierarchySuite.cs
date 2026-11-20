@@ -18,7 +18,7 @@ namespace Test.Shared.Suites.Services
     using static Test.Shared.Infrastructure.Asserts;
 
     /// <summary>
-    /// Mission hierarchy (CONCURRENCY_IMPROVEMENTS.md section 7): children wait for their parent's terminal stage, continue
+    /// Mission hierarchy (archive/CONCURRENCY_IMPROVEMENTS.md section 7): children wait for their parent's terminal stage, continue
     /// or fork its branch, are cancelled with it and restored by its restart; trees are validated and dispatched by key.
     /// </summary>
     public sealed class MissionHierarchySuite : IArmadaTestSuite
