@@ -382,7 +382,7 @@ namespace Test.Shared.Suites.Runtimes
                     AssertTrue(result.Success, "run_process: " + result.Content);
                     RunProcessOutput? output = JsonSerializer.Deserialize<RunProcessOutput>(result.Content);
                     AssertNotNull(output, "run_process output");
-                    AssertEqual("absent" + Environment.NewLine, output!.Stdout, "the child process must not receive the initial admin password");
+                    AssertEqual("absent", (output!.Stdout ?? String.Empty).TrimEnd(), "the child process must not receive the initial admin password");
                 }
                 finally
                 {
