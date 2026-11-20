@@ -776,6 +776,160 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
+            cases.Add(CaseAsync("readiness_exit_and_return_are_not_missing_commands", "Readiness does not report exit or return as a missing command", TestTags.Positive, async () =>
+            {
+                await AssertNoMissingCommandAsync("echo failed; exit 1").ConfigureAwait(false);
+                await AssertNoMissingCommandAsync("return 1").ConfigureAwait(false);
+            }));
+
+            cases.Add(CaseAsync("readiness_colon_keeps_the_following_command", "Readiness still probes the program after a colon builtin", TestTags.Negative, async () =>
+            {
+                string missing = NewMissingCommandName();
+                await AssertOnlyMissingCommandAsync(": " + missing, missing).ConfigureAwait(false);
+            }));
+
+            cases.Add(CaseAsync("readiness_source_keeps_the_next_segment_command", "Readiness probes the program in the segment after source", TestTags.Negative, async () =>
+            {
+                string missing = NewMissingCommandName();
+                await AssertOnlyMissingCommandAsync("source env.sh && " + missing, missing).ConfigureAwait(false);
+            }));
+
+            cases.Add(CaseAsync("readiness_for_header_is_not_a_missing_command", "Readiness does not probe a for-loop header as a command", TestTags.Positive, async () =>
+            {
+                await AssertNoMissingCommandAsync("for item in a b; do true; done").ConfigureAwait(false);
+            }));
+
+            cases.Add(CaseAsync("readiness_select_header_is_not_a_missing_command", "Readiness does not probe a select header as a command", TestTags.Positive, async () =>
+            {
+                await AssertNoMissingCommandAsync("select choice in a b; do true; done").ConfigureAwait(false);
+            }));
+
+            cases.Add(CaseAsync("readiness_case_header_is_not_a_missing_command", "Readiness does not probe a case header or esac as a command", TestTags.Positive, async () =>
+            {
+                await AssertNoMissingCommandAsync("case $choice in a) true;; esac").ConfigureAwait(false);
+            }));
+
+            cases.Add(CaseAsync("readiness_missing_command_in_case_arm_is_reported", "Readiness still reports a missing program in a case arm", TestTags.Negative, async () =>
+            {
+                string missing = NewMissingCommandName();
+                await AssertOnlyMissingCommandAsync("case x in y) " + missing + ";; esac", missing).ConfigureAwait(false);
+            }));
+
+            cases.Add(CaseAsync("readiness_while_keeps_the_condition_command", "Readiness probes the condition of a while loop", TestTags.Negative, async () =>
+            {
+                string missing = NewMissingCommandName();
+                await AssertOnlyMissingCommandAsync("while " + missing + "; do true; done", missing).ConfigureAwait(false);
+            }));
+
+            cases.Add(CaseAsync("readiness_until_keeps_the_condition_command", "Readiness probes the condition of an until loop", TestTags.Negative, async () =>
+            {
+                string missing = NewMissingCommandName();
+                await AssertOnlyMissingCommandAsync("until " + missing + "; do true; done", missing).ConfigureAwait(false);
+            }));
+
+            cases.Add(CaseAsync("readiness_elif_keeps_the_condition_command", "Readiness probes the condition of an elif branch", TestTags.Negative, async () =>
+            {
+                string missing = NewMissingCommandName();
+                await AssertOnlyMissingCommandAsync("if false; then true; elif " + missing + "; then true; fi", missing).ConfigureAwait(false);
+            }));
+
+            cases.Add(CaseAsync("readiness_else_keeps_the_branch_command", "Readiness probes the program in an else branch", TestTags.Negative, async () =>
+            {
+                string missing = NewMissingCommandName();
+                await AssertOnlyMissingCommandAsync("if false; then true; else " + missing + "; fi", missing).ConfigureAwait(false);
+            }));
+
+            cases.Add(CaseAsync("readiness_negation_keeps_the_command", "Readiness probes the program after a shell negation", TestTags.Negative, async () =>
+            {
+                string missing = NewMissingCommandName();
+                await AssertOnlyMissingCommandAsync("! " + missing, missing).ConfigureAwait(false);
+            }));
+
+            cases.Add(CaseAsync("readiness_brace_group_keeps_the_command", "Readiness probes the program inside a brace group", TestTags.Negative, async () =>
+            {
+                string missing = NewMissingCommandName();
+                await AssertOnlyMissingCommandAsync("{ " + missing + "; }", missing).ConfigureAwait(false);
+            }));
+
+            cases.Add(CaseAsync("readiness_variable_command_is_not_probed", "Readiness does not probe a command named by a shell variable", TestTags.Positive, async () =>
+            {
+                await AssertNoMissingCommandAsync("$runner --version").ConfigureAwait(false);
+            }));
+
+            cases.Add(CaseAsync("readiness_missing_command_in_loop_body_is_reported", "Readiness still reports a missing program in a loop body", TestTags.Negative, async () =>
+            {
+                string missing = NewMissingCommandName();
+                await AssertOnlyMissingCommandAsync("for item in a b; do " + missing + " --version; done", missing).ConfigureAwait(false);
+            }));
+
+            cases.Add(CaseAsync("readiness_plain_missing_command_is_reported", "Readiness still reports a plain missing program", TestTags.Negative, async () =>
+            {
+                string missing = NewMissingCommandName();
+                await AssertOnlyMissingCommandAsync(missing + " build", missing).ConfigureAwait(false);
+            }));
+
+            cases.Add(CaseAsync("readiness_trap_is_not_a_missing_command", "Readiness does not report trap as a missing command", TestTags.Positive, async () =>
+            {
+                await AssertNoMissingCommandAsync("trap 'echo hi' EXIT").ConfigureAwait(false);
+            }));
+
+            cases.Add(CaseAsync("readiness_trap_keeps_the_next_segment_command", "Readiness probes the program in the segment after trap", TestTags.Negative, async () =>
+            {
+                string missing = NewMissingCommandName();
+                await AssertOnlyMissingCommandAsync("trap 'echo hi' EXIT && " + missing, missing).ConfigureAwait(false);
+            }));
+
+            cases.Add(CaseAsync("readiness_esac_is_not_a_missing_command", "Readiness does not report a lone esac as a missing command", TestTags.Positive, async () =>
+            {
+                await AssertNoMissingCommandAsync("esac").ConfigureAwait(false);
+            }));
+
+            cases.Add(CaseAsync("readiness_esac_keeps_a_following_command", "Readiness still probes a program written after esac in the same segment", TestTags.Negative, async () =>
+            {
+                string missing = NewMissingCommandName();
+                await AssertOnlyMissingCommandAsync("esac " + missing, missing).ConfigureAwait(false);
+            }));
+
+            cases.Add(CaseAsync("readiness_eval_keeps_the_following_command", "Readiness probes the program after eval", TestTags.Negative, async () =>
+            {
+                string missing = NewMissingCommandName();
+                await AssertOnlyMissingCommandAsync("eval " + missing, missing).ConfigureAwait(false);
+            }));
+
+            cases.Add(CaseAsync("readiness_exec_keeps_the_following_command", "Readiness probes the program after exec", TestTags.Negative, async () =>
+            {
+                string missing = NewMissingCommandName();
+                await AssertOnlyMissingCommandAsync("exec " + missing, missing).ConfigureAwait(false);
+            }));
+
+            cases.Add(CaseAsync("readiness_unset_does_not_probe_the_name", "Readiness does not probe an unset name and still probes the next segment", TestTags.Negative, async () =>
+            {
+                string missing = NewMissingCommandName();
+                await AssertOnlyMissingCommandAsync("unset NAME && " + missing, missing).ConfigureAwait(false);
+            }));
+
+            cases.Add(CaseAsync("readiness_shift_does_not_probe_the_count", "Readiness does not probe a shift count and still probes the next segment", TestTags.Negative, async () =>
+            {
+                string missing = NewMissingCommandName();
+                await AssertOnlyMissingCommandAsync("shift 2 && " + missing, missing).ConfigureAwait(false);
+            }));
+
+            cases.Add(CaseAsync("readiness_argument_builtins_are_not_missing_commands", "Readiness does not probe argument-only shell builtins", TestTags.Positive, async () =>
+            {
+                List<string> commands = new List<string>
+                {
+                    "wait",
+                    "local name",
+                    "readonly name",
+                    "declare name",
+                    "ulimit -n",
+                    "umask 022",
+                    "shopt -s nocaseglob"
+                };
+                foreach (string command in commands)
+                    await AssertNoMissingCommandAsync(command).ConfigureAwait(false);
+            }));
+
             cases.Add(CaseAsync("missing_profile_is_actionable", "With no workflow profile, readiness says dispatch still works and links to creating one for the vessel", TestTags.Positive, async () =>
             {
                 using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
@@ -869,6 +1023,73 @@ namespace Test.Shared.Suites.Services
             return OperatingSystem.IsWindows()
                 ? "type .\\" + relativePath.Replace('/', '\\')
                 : "cat \"" + relativePath + "\"";
+        }
+
+        private static string NewMissingCommandName()
+        {
+            return "armada-missing-command-" + Guid.NewGuid().ToString("N");
+        }
+
+        private static async Task AssertNoMissingCommandAsync(string command)
+        {
+            VesselReadinessResult result = await EvaluateRequestedUnitTestAsync(command).ConfigureAwait(false);
+            List<string> messages = MissingCommandMessages(result);
+            AssertEqual(0, messages.Count, command + " => " + String.Join(" | ", messages));
+            AssertTrue(result.IsReady, command + " blocked readiness: " + String.Join(" | ", result.Issues.Select(issue => issue.Code + " " + issue.Message)));
+        }
+
+        private static async Task AssertOnlyMissingCommandAsync(string command, string missing)
+        {
+            VesselReadinessResult result = await EvaluateRequestedUnitTestAsync(command).ConfigureAwait(false);
+            List<string> messages = MissingCommandMessages(result);
+            AssertEqual(1, messages.Count, command + " => " + String.Join(" | ", messages));
+            AssertContains("'" + missing + "'", messages[0]);
+            AssertFalse(result.IsReady, command + " did not block readiness.");
+        }
+
+        private static List<string> MissingCommandMessages(VesselReadinessResult result)
+        {
+            return result.Issues
+                .Where(issue => String.Equals(issue.Code, "command_dependency_missing", StringComparison.Ordinal))
+                .Select(issue => issue.Message)
+                .ToList();
+        }
+
+        private static async Task<VesselReadinessResult> EvaluateRequestedUnitTestAsync(string command)
+        {
+            using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+            LoggingModule logging = CreateLogging();
+            WorkflowProfileService workflowProfiles = new WorkflowProfileService(testDb.Driver, logging);
+            VesselReadinessService readiness = new VesselReadinessService(testDb.Driver, workflowProfiles, logging);
+
+            await EnsureTenantAndUserAsync(testDb, "ten_shell", "usr_shell").ConfigureAwait(false);
+            string workingDirectory = TestTemp.NewDirectory("readiness-shell");
+            try
+            {
+                Vessel vessel = CreateVessel("ten_shell", "usr_shell", workingDirectory);
+                await testDb.Driver.Vessels.CreateAsync(vessel).ConfigureAwait(false);
+
+                WorkflowProfile profile = new WorkflowProfile
+                {
+                    TenantId = "ten_shell",
+                    UserId = "usr_shell",
+                    Name = "Shell Readiness",
+                    Scope = WorkflowProfileScopeEnum.Vessel,
+                    VesselId = vessel.Id,
+                    UnitTestCommand = command
+                };
+                await testDb.Driver.WorkflowProfiles.CreateAsync(profile).ConfigureAwait(false);
+
+                AuthContext auth = AuthContext.Authenticated("ten_shell", "usr_shell", false, false, "UnitTest");
+                return await readiness.EvaluateAsync(
+                    auth,
+                    vessel,
+                    requestedCheckType: CheckRunTypeEnum.UnitTest).ConfigureAwait(false);
+            }
+            finally
+            {
+                TestTemp.TryDelete(workingDirectory);
+            }
         }
 
         private static void TryDeleteDirectory(string path)
