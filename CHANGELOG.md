@@ -453,6 +453,9 @@ commands arrive with their own changes. Schema migrations 103 and 104 apply at s
 ### Captain updates validate the model binding only when it changes
 
 - **Name, instruction, persona, and tier edits skip live model validation when the binding is unchanged.** `PUT /api/v1/captains/{id}` and MCP `update_captain` validate the model only when the merged update changes `Model`, `Runtime`, or `ModelEndpointId`. Create still validates. A binding change that fails validation is not stored. WebSocket `update_captain` does not validate.
+### OpenCode error events fail the turn
+
+- An OpenCode `type=error` event fails Ask, planning, and refinement even when earlier assistant text arrived and the process exits 0. The operator sees a short provider message and the HTTP status when one is present. The response body, headers, URL, and session id stay out of that text. The planning or refinement session stays active. A text event with no error is unchanged. Stderr provider parsing is unchanged.
 
 ### Landing failure prevention
 
