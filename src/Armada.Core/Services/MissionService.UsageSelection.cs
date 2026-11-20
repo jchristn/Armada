@@ -48,8 +48,8 @@ namespace Armada.Core.Services
             if (OnCaptainSelectionChanged == null || String.IsNullOrEmpty(mission.TenantId)) return;
             try
             {
-                OnCaptainSelectionChanged(new CaptainSelectionChange { TenantId = mission.TenantId, MissionId = mission.Id,
-                    VoyageId = mission.VoyageId, DecisionId = decisionId, Outcome = outcome });
+                OnCaptainSelectionChanged(new CaptainSelectionChange { TenantId = mission.TenantId, UserId = mission.UserId,
+                    MissionId = mission.Id, VoyageId = mission.VoyageId, DecisionId = decisionId, Outcome = outcome });
             }
             catch (Exception ex)
             {

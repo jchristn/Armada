@@ -436,6 +436,9 @@ commands arrive with their own changes. Schema migrations 103 and 104 apply at s
 ### Secret redaction for fine-grained GitHub, Slack, and GitLab tokens
 
 - **Runtime logs and captured requests redact three more token shapes.** `SecretRedactor` removes a fine-grained GitHub personal access token (82 or more token characters), a Slack token whose prefix letter is a, b, p, r, or s, and a GitLab personal access token (20 or more token characters). Classic GitHub tokens and the other existing rules are unchanged.
+### Record WebSocket events follow the record read
+
+- **Mission, voyage, captain, and check-run events reach the sockets that can read the record.** `mission.changed`, `mission.activity`, `approval-needed`, `voyage.changed`, `captain.changed`, and `check-run.changed` go to the owning user, a tenant administrator of that tenant, and a global administrator who already receives that tenant. A record with no user id still reaches that tenant's tenant administrators and those global administrators. A record with no tenant id reaches global administrators only. Objective, incident, deployment, runbook, and environment events stay on the tenant broadcast. Ask events stay with that user. CLI permission events stay with the viewers `CliPermissionAccess.CanView` admits.
 
 ### Landing failure prevention
 

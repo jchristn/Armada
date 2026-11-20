@@ -11,6 +11,9 @@ namespace Armada.Core.Models
         /// <summary>Mission tenant; scopes delivery.</summary>
         public string TenantId { get; set; } = String.Empty;
 
+        /// <summary>Mission owner, or null when the mission has none; scopes delivery with the tenant.</summary>
+        public string? UserId { get; set; } = null;
+
         /// <summary>Mission identifier.</summary>
         public string MissionId { get; set; } = String.Empty;
 

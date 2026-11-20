@@ -130,7 +130,8 @@ entitled to:
 
 | Event family | Delivered to |
 |---|---|
-| Entity changes (`mission.changed`, `voyage.changed`, `captain.changed`, `check-run.changed`, `objective.changed`, `deployment.*`, `incident.changed`, `runbook-execution.changed`, `approval-needed`, planning and objective-refinement session events, generic events) | Sockets of the entity's tenant. Global admins may opt in to every tenant with `{ "Route": "subscribe", "AllTenants": true }`. Events whose tenant cannot be resolved go to global admins only. |
+| Record events (`mission.changed`, `mission.activity`, `captain-selection.changed`, `approval-needed`, `voyage.changed`, `captain.changed`, `check-run.changed`) | The owning user, a tenant administrator of the record's tenant, and a global administrator who already receives that tenant (the socket's own tenant, or every tenant after `{ "Route": "subscribe", "AllTenants": true }`). A record with no user id still reaches that tenant's tenant administrators and those global administrators. A record with no tenant id reaches global administrators only. |
+| Other entity changes (`objective.changed`, `deployment.*`, `incident.changed`, `runbook-execution.changed`, planning and objective-refinement session events, generic events) | Sockets of the entity's tenant. Global admins may opt in to every tenant with `{ "Route": "subscribe", "AllTenants": true }`. Events whose tenant cannot be resolved go to global admins only. |
 | Black box events (`blackbox.*`) | Sockets of the entry's tenant, plus global admins opted in to all tenants (not narrowed to the entry's owner). `blackbox.gc_completed` has no tenant and goes to global admins only. |
 | Ask Armada events (`ask.*`) | Only the sockets of the thread owner (same tenant and user). The all-tenants opt-in does not apply. |
 | CLI permission events (`cli_permission.*`) | The request's approvers and owner: global admins of the request's tenant or opted in to all tenants, the tenant's tenant admins, and the owner of the Ask thread or mission. Each copy carries that recipient's own `canDecide` and `canRemember`. |
@@ -282,7 +283,7 @@ See [Command Actions](#command-actions) for the current operational action set. 
 
 ## Server-Pushed Events
 
-These events are delivered to the connected clients **entitled to them** (see [Authentication](#authentication): the entity's tenant, plus opted-in global admins) whenever state changes occur in the Armada system. Clients do not need to request these -- they are pushed automatically to every authenticated socket, whether or not it
+These events are delivered to the connected clients **entitled to them** (see [Authentication](#authentication)) whenever state changes occur in the Armada system. Clients do not need to request these -- they are pushed automatically to every authenticated socket, whether or not it
 has sent `subscribe`.
 
 ### status.snapshot
@@ -401,9 +402,9 @@ a second per mission (the newest wins). Not recorded as an event.
 
 ### captain-selection.changed
 
-Broadcast to the mission's tenant, the same recipients as `mission.changed`, after a captain-selection change commits:
-an admitted dispatch or repair attempt, a new materially different waiting decision, or an administrator recovery
-authorization. Repeated waiting evaluations with unchanged evidence do not broadcast. The event is an invalidation
+Broadcast to the sockets that can read the mission, the same recipients as `mission.changed`, after a captain-selection
+change commits: an admitted dispatch or repair attempt, a new materially different waiting decision, or an administrator
+recovery authorization. Repeated waiting evaluations with unchanged evidence do not broadcast. The event is an invalidation
 signal only. It never carries candidates, usage percentages or account identity; clients re-fetch
 `GET /api/v1/missions/{id}/captain-selection` (or the MCP `get_captain_selection` tool), which applies the caller's
 authorization. Not recorded as an event.
