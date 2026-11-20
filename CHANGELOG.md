@@ -699,6 +699,7 @@ Part of the bounded enumeration contract ([docs/ENUMERATION.md](docs/ENUMERATION
 - A voyage whose every mission is cancelled finishes as Cancelled. A settled voyage with a cancelled mission and no completed mission finishes as Failed. A voyage with a completed mission and no failed or landing-failed mission still finishes as Complete, and a voyage whose missions are only WorkProduced still finishes as Complete.
 - The dashboard websocket relay removes a receive-loop session by instance before it publishes an error or a close, and the loop's final removal matches that same instance. A frame sent from the error event finds no session. A new session that reuses the proxy socket id during close stays registered.
 - Check runs keep captured command output when a local or Harbor command times out.
+- A slow WebSocket client no longer blocks event delivery to other clients. Each authenticated connection has a bounded outbound queue and one sender. Broadcasts, CLI permission events, subscribe snapshots, command replies, and errors are queued without waiting for the network. A full queue or a failed send aborts only that connection, so the client must reconnect and refresh its state. Tenant and user filters are unchanged.
 
 ### Handoff and landing integrity
 
