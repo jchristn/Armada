@@ -12,6 +12,7 @@ All notable changes to Armada are documented in this file.
 - Merge queue delete confirmations predict whether the entry will be deleted or cancelled from its current status. Bulk results report expected outcomes and failed requests separately.
 - The Server page keeps a field you have edited when its timer reloads settings or when you save another section. A field you have not edited takes the new server value. The reload button still replaces unsaved edits.
 - The token usage page shows an error and a retry control when the summary request fails. A successful response with no usage still says the time range is empty. A failed load for a new filter does not keep the previous filter's chart.
+- A dashboard detail page keeps the record for the route that was requested last. Mission, captain, vessel, fleet, voyage, dock, and event pages clear the previous record when the route changes and show the loading state until that route's request returns. A refresh of the same record does not apply an older response. Mission and voyage refreshes keep the current record on screen.
 
 ## v1.3.0 (2026-11-06)
 
