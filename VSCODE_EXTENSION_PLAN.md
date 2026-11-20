@@ -1,6 +1,6 @@
 # VS Code extension plan: full Armada parity inside the editor
 
-Status: approved plan, not started. Written 2026-11-19 against `main` at `294174381` (v1.3.0). The owner's decisions
+Status: approved plan; milestone V0 in progress (see the status note in section 7). Written 2026-11-19 against `main` at `294174381` (v1.3.0). The owner's decisions
 (2026-11-19) are recorded in section 12 and folded into the sections below.
 
 ## 1. Goal
@@ -267,6 +267,17 @@ the parity manifest updated. Sizes are relative (S, M, L, XL).
 | V6 | System and administration | Server settings, storage, diagnostics and doctor (Problems panel), CLI permissions, tenants, users, credentials, backup and restore, server lifecycle, setup wizard and walkthrough | M |
 | V7 | Harbor | Harbor view, status bar link state, jobs and logs, metrics, headless start and stop, settings panel, menu parity; depends on 8.4 | M |
 | V8 | Hardening and parity gate | Remote-SSH, WSL and Codespaces passes; proxy mode; localization; accessibility (keyboard paths and screen reader labels for every tree and panel); performance with large fleets; remove the dashboard fallback; flip the gate to zero `planned`; docs; first stable Marketplace and Open VSX release | L |
+
+**Status (2026-11-19): V0 slice 1 is done** on `feature/vscode-extension`: identity `latticetech.armada`; the Armada
+view container with the navigation tree (pages open in the browser) and the black box tree (also in the Explorer behind
+`armada.failures.showInExplorer`); the connection manager with local discovery, the remote URL and key flow, health,
+contract check, whoami and role context keys, a shared in-flight attempt, the status bar and the output channel; the
+shared client through `@dashboard/*` with the extension in the `lint:shared` contract; the `/ws` event bus; the
+`ContractVersion` field on the health route; the parity generator and `VsCode.Parity` with everything else `planned`;
+and the CI `build` job. Remaining in V0: the webview host (router, theme bridge, platform and storage adapters, host
+transport, CSP, serializer) and the interim dashboard fallback panel; the dashboard shared-module changes in 8.1
+(injected transport and socket factory, event-source interfaces); Admiral autostart (needs the bundled binaries from
+4.7); the other auth modes (username and password, proxy) and profiles.
 
 V1 through V6 can overlap once V0 lands, since each domain is a separate folder over the same infrastructure. The
 first Marketplace and Open VSX publish is a pre-release at the end of V1 (decision 6); each later milestone ships as a

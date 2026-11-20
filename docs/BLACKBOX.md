@@ -370,15 +370,16 @@ inside the Armada repository, else into `-o`.
 
 ### VS Code
 
-The extension in `src/Armada.VSCode` (see its [README](../src/Armada.VSCode/README.md)) adds an **Armada Failures**
-view in the Explorer (entries grouped by vessel, filtered to the open repository's vessel by remote URL, with a badge
+The extension in `src/Armada.VSCode` (see its [README](../src/Armada.VSCode/README.md)) adds a **Failures**
+view to its Armada view container, and optionally to the Explorer with `armada.failures.showInExplorer` (entries grouped by vessel, filtered to the open repository's vessel by remote URL, with a badge
 for open entries), **Copy FIX THIS**, **Open FIX THIS in Editor**, **Send FIX THIS to Chat**, **Run Recovery Path...**
 (dry run, modal confirmation, explicit acknowledgement for data-loss paths), **Resolve Black Box Entry**, **Add
 Note**, **Ask Armada about this failure**, an entry view, `BX` decorations on files that conflicted in an open entry and
 `H` decorations on hotspot directories, the Armada resilience section right after the Summary in the entry view (with
 the suspected badge), **Draft Armada Fix Mission** (copies the top proposed change's mission brief and opens the editor
-chat with it), **Show Resilience Gaps** (25 per page, filtered to the open repository's vessel), and live updates over the WebSocket with a polling fallback. Connect with
-**Armada: Connect** (the key is kept in VS Code secret storage).
+chat with it), **Show Resilience Gaps** (25 per page, filtered to the open repository's vessel), and live updates over the WebSocket with a polling fallback. It connects to the
+local Admiral from `~/.armada/settings.json` with no prompt, or to a remote one with **Armada: Connect to a Remote
+Admiral...** (the key is kept in VS Code secret storage).
 
 ### Mobile
 
