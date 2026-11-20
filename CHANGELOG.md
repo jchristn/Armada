@@ -9,6 +9,7 @@ All notable changes to Armada are documented in this file.
 ### Fixes
 
 - Fix a timestamp with no kind being shifted by the server's local UTC offset when it was written or filtered. Armada stores every timestamp in UTC, so such a value is now marked UTC; a local value still converts to UTC and a UTC value is unchanged. This covers SQLite and SQL Server text timestamps, MySQL's text binding for fleets, vessels, voyages, missions, docks, captains, events, signals, merge entries and the other tables it writes as text, PostgreSQL's event, signal and merge-entry helpers, deployment and objective timestamps and query filters on every provider, mission wait intervals, captain selection history and usage probe times. Stored text with no offset now reads back as UTC. One shared `UtcClock` helper replaces the per-file conversions.
+- Report a gap in the migration ledger instead of ignoring it. Startup read only the highest applied version, so a declared migration below it with no `schema_migrations` row went unnoticed and was never run. Startup now logs a warning that names the provider and every missing version, and keeps running; a version this build does not declare (a retired number, or a row above every declared migration) is not a gap. `GET /api/v1/doctor` gains a thirteenth check, "Migration Ledger", which warns with the same list (scripts that assert the check count need the new number).
 
 ---
 
@@ -437,7 +438,6 @@ commands arrive with their own changes. Schema migrations 103 and 104 apply at s
 - macOS Harbor bundles store the pi permission-gate extension in `Contents/Resources/Pi`, and pi resolves it there as well as beside portable binaries. This prevents ARM64 code signing from treating TypeScript resources as unsigned nested code. The DMG verifier checks the resource layout.
 - After building and verifying both Harbor DMGs, `build-harbor-app.sh` installs the native app into `~/Applications`, staging and signature-checking a fresh bundle before replacement. `--no-install` opts out, and `--no-build` remains verification-only.
 - Helm's NuGet tool package preserves battery fixture `.gitignore` and `.gitattributes` files instead of excluding them with NU5119 warnings. Installer verification checks every packaged framework for those files.
-- Startup stops when the migration ledger has an applied maximum and a lower migration still declared by this build has no row. A version number this build does not declare does not stop startup.
 
 ### Landing failure prevention
 

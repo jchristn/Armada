@@ -175,6 +175,8 @@ Every migration on every provider is held to two rules, and `Database.MigrationH
 
 Migration version numbers increase but are not contiguous, and they differ per provider; each provider's `schema_migrations` table is the source of truth for that database.
 
+Startup applies only the migrations above the highest recorded version. If a migration this build declares below that maximum has no row (for example a row was deleted by hand, or a development database ran a branch with different numbering), it is never run. The Admiral does not refuse to start: it logs a warning that names the provider and every missing version, and the "Migration Ledger" check in `GET /api/v1/doctor` warns with the same list. Compare the schema with a freshly created database, or restore a backup taken before the gap. A version number the build does not declare (a retired number, or a row above every declared migration) is not a gap.
+
 ## Data retention
 
 Long-running installs accumulate conversations, job records, and import history. Retention runs in the background on the health-check loop's slow cadence (every 100 health-check cycles, about every 17 minutes with the default 10-second `heartbeatIntervalSeconds`), works on every provider, and applies setting changes immediately. Set any value to 0 to keep that data forever.

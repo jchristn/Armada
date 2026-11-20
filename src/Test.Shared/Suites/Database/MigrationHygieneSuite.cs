@@ -341,6 +341,37 @@ namespace Test.Shared.Suites.Database
 
         private static void AddMigrationLedgerCases(List<TestCaseDescriptor> cases)
         {
+            cases.Add(Case("ledger_report_lists_declared_gaps_only", "The ledger report lists declared versions missing below the applied maximum, and nothing else", TestTags.Positive, ct =>
+            {
+                List<SchemaMigration> declared = new List<SchemaMigration>
+                {
+                    new SchemaMigration(1, "one", "SELECT 1;"),
+                    new SchemaMigration(2, "two", "SELECT 1;"),
+                    new SchemaMigration(4, "four", "SELECT 1;"),
+                    new SchemaMigration(5, "five", "SELECT 1;"),
+                    new SchemaMigration(6, "six", "SELECT 1;"),
+                    new SchemaMigration(9, "nine", "SELECT 1;")
+                };
+
+                MigrationLedgerReport empty = MigrationLedgerReport.Build("SQLite", declared, new List<int>());
+                AssertFalse(empty.HasGaps, "an empty ledger is a fresh database, not a gap");
+                AssertEqual(0, empty.AppliedMaximum, "empty maximum");
+
+                MigrationLedgerReport complete = MigrationLedgerReport.Build("SQLite", declared, new List<int> { 1, 2, 4, 5, 6 });
+                AssertFalse(complete.HasGaps, "declared 9 above the maximum is pending, retired 3 is absent: no gap");
+                AssertEqual(DoctorCheckStatusEnum.Pass, complete.DoctorStatus, "complete passes");
+
+                MigrationLedgerReport gaps = MigrationLedgerReport.Build("MySQL", declared, new List<int> { 1, 5, 6, 42 });
+                AssertTrue(gaps.HasGaps, "gaps found");
+                AssertEqual("2,4,9", String.Join(",", gaps.MissingVersions), "declared versions below 42 without a row, ascending; 3 is retired");
+                AssertEqual(42, gaps.AppliedMaximum, "maximum includes an unknown higher row");
+                AssertEqual(DoctorCheckStatusEnum.Warn, gaps.DoctorStatus, "gaps warn, never fail");
+                AssertContains("MySQL schema_migrations has no row for declared migration versions 2, 4, 9 below the applied maximum 42", gaps.Message, "message lists the versions");
+
+                AssertThrows<ArgumentNullException>(() => MigrationLedgerReport.Build("", declared, new List<int>()), "empty provider");
+                return Task.CompletedTask;
+            }));
+
             AddProviderLedgerCases(cases, DatabaseTypeEnum.Sqlite, "sqlite", "SQLite");
             AddProviderLedgerCases(cases, DatabaseTypeEnum.Postgresql, "postgresql", "PostgreSQL");
             AddProviderLedgerCases(cases, DatabaseTypeEnum.Mysql, "mysql", "MySQL");
@@ -349,9 +380,9 @@ namespace Test.Shared.Suites.Database
 
         private static void AddProviderLedgerCases(List<TestCaseDescriptor> cases, DatabaseTypeEnum provider, string dbType, string label)
         {
-            cases.Add(ProviderCase(provider, dbType, dbType + "_missing_known_version_refuses_startup",
-                label + " startup stops when a declared migration below the applied maximum has no ledger row",
-                TestTags.Negative, ct => AssertMissingKnownVersionRefusesStartupAsync(provider, label, ct)));
+            cases.Add(ProviderCase(provider, dbType, dbType + "_missing_known_version_warns_and_starts",
+                label + " startup reports a declared migration below the applied maximum with no ledger row, and keeps running",
+                TestTags.Negative, ct => AssertMissingKnownVersionReportedAsync(provider, label, ct)));
             cases.Add(ProviderCase(provider, dbType, dbType + "_complete_ledger_starts",
                 label + " startup succeeds when every declared migration has a ledger row",
                 TestTags.Positive, ct => AssertCompleteLedgerStartsAsync(provider, ct)));
@@ -383,13 +414,15 @@ namespace Test.Shared.Suites.Database
                 skipReason: reason);
         }
 
-        private static async Task AssertMissingKnownVersionRefusesStartupAsync(DatabaseTypeEnum provider, string label, CancellationToken token)
+        private static async Task AssertMissingKnownVersionReportedAsync(DatabaseTypeEnum provider, string label, CancellationToken token)
         {
             AssertEqual(provider, TestDatabaseConfig.Type, "selected provider");
             using (IsolatedTestDatabase isolated = await IsolatedTestDatabase.CreateAsync("ledger-missing", null, token).ConfigureAwait(false))
             using (DatabaseDriver driver = DatabaseDriverFactory.Create(isolated.Settings, QuietLogging()))
             {
                 await driver.InitializeAsync(token).ConfigureAwait(false);
+                AssertNotNull(driver.MigrationLedger, "ledger read on first start");
+                AssertFalse(driver.MigrationLedger!.HasGaps, "a fresh database has no gap");
                 IReadOnlyList<SchemaMigration> migrations = driver.GetMigrationsForVerification();
                 int missing = LowestDeclaredVersion(migrations);
                 int maximum = HighestDeclaredVersion(migrations);
@@ -400,19 +433,19 @@ namespace Test.Shared.Suites.Database
                 AssertEqual(1L, await MigrationCountAsync(isolated, maximum, token).ConfigureAwait(false), "applied maximum remains");
                 List<string> schemaBefore = await isolated.SnapshotSchemaAsync(token).ConfigureAwait(false);
 
-                InvalidOperationException? error = null;
-                try
-                {
-                    await driver.InitializeAsync(token).ConfigureAwait(false);
-                }
-                catch (InvalidOperationException ex)
-                {
-                    error = ex;
-                }
+                // A gap must not stop startup (refusing could brick an existing or development database).
+                await driver.InitializeAsync(token).ConfigureAwait(false);
 
-                AssertTrue(error != null, label + " startup must stop when declared version " + missing + " is missing below the applied maximum");
-                AssertContains(label, error!.Message, "provider");
-                AssertContains("version " + missing + " below", error.Message, "missing version");
+                MigrationLedgerReport? ledger = driver.MigrationLedger;
+                AssertNotNull(ledger, "ledger read on restart");
+                AssertTrue(ledger!.HasGaps, label + " reports declared version " + missing + " missing below the applied maximum");
+                AssertEqual(1, ledger.MissingVersions.Count, "exactly one missing version");
+                AssertEqual(missing, ledger.MissingVersions[0], "the missing version");
+                AssertEqual(maximum, ledger.AppliedMaximum, "applied maximum");
+                AssertEqual(DoctorCheckStatusEnum.Warn, ledger.DoctorStatus, "doctor warns");
+                AssertContains(label, ledger.Message, "provider");
+                AssertContains("version " + missing + " below the applied maximum " + maximum, ledger.Message, "missing version");
+                AssertEqual(maximum, await driver.GetSchemaVersionAsync(token).ConfigureAwait(false), "schema version unchanged");
                 AssertEqual(0L, await MigrationCountAsync(isolated, missing, token).ConfigureAwait(false), "missing migration was not recorded");
                 AssertEqual(1L, await MigrationCountAsync(isolated, maximum, token).ConfigureAwait(false), "applied maximum was not rewritten");
                 AssertSameSchema(schemaBefore, await isolated.SnapshotSchemaAsync(token).ConfigureAwait(false), label + " missing migration was not applied");
@@ -435,6 +468,8 @@ namespace Test.Shared.Suites.Database
 
                 await AssertDeclaredRowsAsync(isolated, migrations, token).ConfigureAwait(false);
                 AssertEqual(maximum, await driver.GetSchemaVersionAsync(token).ConfigureAwait(false), "complete ledger stays at the highest declared version");
+                AssertFalse(driver.MigrationLedger!.HasGaps, "complete ledger reports no gap");
+                AssertEqual(DoctorCheckStatusEnum.Pass, driver.MigrationLedger.DoctorStatus, "complete ledger passes the doctor");
             }
         }
 
@@ -456,6 +491,7 @@ namespace Test.Shared.Suites.Database
                 AssertEqual(0L, await MigrationCountAsync(isolated, retired, token).ConfigureAwait(false), "retired version stays absent");
                 await AssertDeclaredRowsAsync(isolated, migrations, token).ConfigureAwait(false);
                 AssertEqual(maximum, await driver.GetSchemaVersionAsync(token).ConfigureAwait(false), "retired gap does not change the applied maximum");
+                AssertFalse(driver.MigrationLedger!.HasGaps, "a retired version number is not a gap");
             }
         }
 
@@ -481,6 +517,7 @@ namespace Test.Shared.Suites.Database
                 AssertEqual(unknown, await driver.GetSchemaVersionAsync(token).ConfigureAwait(false), "schema version stays at the unknown higher row");
                 AssertEqual(0, await driver.GetPendingMigrationCountAsync(token).ConfigureAwait(false), "no declared migration is pending above an unknown higher row");
                 AssertSameSchema(schemaBefore, await isolated.SnapshotSchemaAsync(token).ConfigureAwait(false), "unknown higher version");
+                AssertFalse(driver.MigrationLedger!.HasGaps, "an unknown higher version is not a gap");
             }
         }
 

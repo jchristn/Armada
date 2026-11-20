@@ -318,12 +318,19 @@ namespace Armada.Server.Routes
                 Armada.Core.BlackBox.Storage.BlackBoxStorageDoctorResult blackBoxStorage = await Armada.Core.BlackBox.Storage.BlackBoxStorageDoctor.CheckAsync(_settings.BlackBox, BlackBox?.Stores).ConfigureAwait(false);
                 results.Add(new { Name = Armada.Core.BlackBox.Storage.BlackBoxStorageDoctorResult.CheckName, Status = blackBoxStorage.Status, Message = blackBoxStorage.Message });
 
+                // 13. Migration ledger: declared migrations below the applied maximum with no schema_migrations row.
+                MigrationLedgerReport? ledger = _database.MigrationLedger;
+                if (ledger == null)
+                    results.Add(new { Name = MigrationLedgerReport.CheckName, Status = DoctorCheckStatusEnum.Warn, Message = "The database has not been initialized, so the migration ledger was not read." });
+                else
+                    results.Add(new { Name = MigrationLedgerReport.CheckName, Status = ledger.DoctorStatus, Message = ledger.Message });
+
                 return results;
             },
             api => api
                 .WithTag("Status")
                 .WithSummary("Run system health diagnostics")
-                .WithDescription("Runs 12 system health checks (settings, git, database, server, stalled captains, failed missions, the five agent runtimes and black box storage) and returns results as a JSON array.")
+                .WithDescription("Runs 13 system health checks (settings, git, database, server, stalled captains, failed missions, the five agent runtimes, black box storage and the migration ledger) and returns results as a JSON array.")
                 .WithSecurity("ApiKey"));
 
             app.Post("/api/v1/server/stop", async (ApiRequest req) =>

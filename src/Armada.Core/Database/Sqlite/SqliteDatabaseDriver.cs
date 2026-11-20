@@ -336,7 +336,7 @@ namespace Armada.Core.Database.Sqlite
 
                 // Apply pending migrations
                 List<SchemaMigration> migrations = TableQueries.GetMigrations();
-                RequireDeclaredMigrationsPresent("SQLite", migrations, appliedVersions);
+                RecordMigrationLedger("SQLite", migrations, appliedVersions, _Logging, _Header);
                 int applied = 0;
 
                 foreach (SchemaMigration migration in migrations)

@@ -152,7 +152,7 @@ namespace Armada.Core.Database.Postgresql
 
                 // Apply pending migrations
                 List<SchemaMigration> migrations = TableQueries.GetMigrations();
-                RequireDeclaredMigrationsPresent("PostgreSQL", migrations, appliedVersions);
+                RecordMigrationLedger("PostgreSQL", migrations, appliedVersions, _Logging, _Header);
                 int applied = 0;
 
                 foreach (SchemaMigration migration in migrations)

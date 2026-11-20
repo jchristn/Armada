@@ -177,7 +177,7 @@ namespace Armada.Core.Database.Mysql
 
                 // Apply pending migrations
                 List<SchemaMigration> migrations = GetMigrations();
-                RequireDeclaredMigrationsPresent("MySQL", migrations, appliedVersions);
+                RecordMigrationLedger("MySQL", migrations, appliedVersions, _Logging, _Header);
                 int applied = 0;
 
                 foreach (SchemaMigration migration in migrations)

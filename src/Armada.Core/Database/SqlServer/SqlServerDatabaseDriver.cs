@@ -184,7 +184,7 @@ namespace Armada.Core.Database.SqlServer
 
                 // Apply pending migrations
                 List<SchemaMigration> migrations = TableQueries.GetMigrations();
-                RequireDeclaredMigrationsPresent("SQL Server", migrations, appliedVersions);
+                RecordMigrationLedger("SQL Server", migrations, appliedVersions, _Logging, _Header);
                 int applied = 0;
 
                 foreach (SchemaMigration migration in migrations)
