@@ -213,6 +213,8 @@ namespace Armada.Server.Mcp.Tools
                         return (object)McpToolError.Forbidden("You may only delete your own pipelines; a tenant-wide pipeline requires a tenant admin.");
                     if (pipeline.IsBuiltIn) return (object)McpToolError.Conflict("Cannot delete built-in pipeline: " + name);
 
+                    ObjectiveService objectives = new ObjectiveService(database);
+                    await objectives.ClearSuggestedPipelineAsync(pipeline.Id).ConfigureAwait(false);
                     await database.Pipelines.DeleteAsync(pipeline.Id).ConfigureAwait(false);
                     return (object)new { Status = "deleted", Name = name };
                 });

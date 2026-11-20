@@ -196,6 +196,8 @@ namespace Armada.Server.Routes
                 if (existing == null || !ScopedVisibility.CanView(ctx, existing.Scope, existing.TenantId, existing.UserId)) { req.Http.Response.StatusCode = 404; return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Pipeline not found" }; }
                 if (!ScopedVisibility.CanEdit(ctx, existing.Scope, existing.TenantId, existing.UserId)) { req.Http.Response.StatusCode = 403; return new ApiErrorResponse { Error = ApiResultEnum.Forbidden, Message = "You may only delete your own pipelines; a tenant-wide pipeline requires a tenant admin." }; }
                 if (existing.IsBuiltIn) { req.Http.Response.StatusCode = 400; return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Built-in pipelines cannot be deleted" }; }
+                ObjectiveService objectives = new ObjectiveService(_database);
+                await objectives.ClearSuggestedPipelineAsync(existing.Id).ConfigureAwait(false);
                 await _database.Pipelines.DeleteAsync(existing.Id).ConfigureAwait(false);
                 req.Http.Response.StatusCode = 204;
                 return null;
