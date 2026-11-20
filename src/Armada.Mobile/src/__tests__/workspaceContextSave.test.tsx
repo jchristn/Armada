@@ -23,7 +23,7 @@ describe('workspace context save', () => {
 
   it('saves the three context fields through the context patch', async () => {
     configureClient({ baseUrl: 'http://example.test' });
-    const fetchMock = jest.fn(async () => ({
+    const fetchMock = jest.fn(async (_url: string, _init?: { method?: string; body?: string }) => ({
       ok: true,
       status: 200,
       json: async () => ({
@@ -55,7 +55,7 @@ describe('workspace context save', () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
 
     const url = String(fetchMock.mock.calls[0][0]);
-    const init = fetchMock.mock.calls[0][1] as { method?: string; body?: string };
+    const init = fetchMock.mock.calls[0][1] ?? {};
     expect(url).toBe('/api/v1/vessels/vsl_ctx/context');
     expect(init.method).toBe('PATCH');
     expect(JSON.parse(init.body ?? '{}')).toEqual({
