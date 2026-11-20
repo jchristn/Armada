@@ -450,6 +450,9 @@ commands arrive with their own changes. Schema migrations 103 and 104 apply at s
 
 - Resume merge entries left in `Testing` after the processing lease expires. Entries without a start time are also
   resumed; entries with a recent start time remain untouched.
+### Captain updates validate the model binding only when it changes
+
+- **Name, instruction, persona, and tier edits skip live model validation when the binding is unchanged.** `PUT /api/v1/captains/{id}` and MCP `update_captain` validate the model only when the merged update changes `Model`, `Runtime`, or `ModelEndpointId`. Create still validates. A binding change that fails validation is not stored. WebSocket `update_captain` does not validate.
 
 ### Landing failure prevention
 

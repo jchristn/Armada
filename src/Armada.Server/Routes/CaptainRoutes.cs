@@ -331,7 +331,10 @@ namespace Armada.Server.Routes
                     return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = updateUsageError };
                 }
                 bool usageConfigurationChanged = CaptainUsageCaptureValidator.ConfigurationChanged(existing, updated);
-                CaptainModelValidationFailure? updateValidationError = await _agentLifecycle.ValidateCaptainModelDetailedAsync(updated).ConfigureAwait(false);
+                // Live model validation runs only when the merged update changes Model, Runtime, or ModelEndpointId.
+                CaptainModelValidationFailure? updateValidationError = null;
+                if (AgentLifecycleHandler.ModelBindingChanged(existing, updated))
+                    updateValidationError = await _agentLifecycle.ValidateCaptainModelDetailedAsync(updated).ConfigureAwait(false);
                 if (updateValidationError != null)
                 {
                     req.Http.Response.StatusCode = 400;
