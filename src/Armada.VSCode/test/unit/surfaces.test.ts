@@ -4,13 +4,12 @@ import * as os from 'os';
 import * as path from 'path';
 import { beforeEach, describe, it } from 'node:test';
 import * as vscode from 'vscode';
-import { askArmadaModelItem, dashboardModelItem, navModelSections, navShortcuts } from '@dashboard/lib/navModel';
 import { ConnectionState } from '../../src/connection/connectionManager';
 import { connectionActions, describeStatus } from '../../src/connection/statusBar';
 import { activate, ArmadaExtensionApi } from '../../src/extension';
 import { FAILURES_EXPLORER_VIEW_ID, FAILURES_VIEW_ID } from '../../src/surfaces/blackbox/failuresTreeProvider';
-import { NAV_ICONS, NAVIGATION_VIEW_ID, NavigationTreeProvider, NavNode, NavPageNode, NavSectionNode, navigationRoots, OPEN_DASHBOARD_PAGE_COMMAND, routeFromArg } from '../../src/surfaces/nav/navigationTree';
-import { fake, FakeMemento, FakeSecretStorage, ThemeIcon, TreeItemCollapsibleState, Uri } from '../fakes/vscode';
+import { OPS_VIEW_IDS } from '../../src/surfaces/ops/opsTrees';
+import { fake, FakeMemento, FakeSecretStorage, Uri } from '../fakes/vscode';
 
 /** The extension manifest; the extension ID is read from it, never written in a test. */
 interface Manifest {
@@ -54,50 +53,6 @@ async function activateWithFakes(): Promise<{ api: ArmadaExtensionApi; context: 
 
 beforeEach(() => fake.reset());
 
-describe('navigation tree', () => {
-  it('mirrors the dashboard navigation model: Dashboard, Ask Armada, then OPERATIONS, BUILD, CONFIGURATION and SYSTEM', () => {
-    const roots = navigationRoots();
-    const pages = roots.filter((n): n is NavPageNode => n.kind === 'page');
-    const sections = roots.filter((n): n is NavSectionNode => n.kind === 'section');
-    assert.deepStrictEqual(pages.map((p) => p.route), [dashboardModelItem.to, askArmadaModelItem.to]);
-    assert.deepStrictEqual(sections.map((s) => s.label), ['OPERATIONS', 'BUILD', 'CONFIGURATION', 'SYSTEM']);
-    assert.deepStrictEqual(sections.map((s) => s.label), navModelSections.map((s) => s.label));
-    for (const section of navModelSections) {
-      const node = sections.find((s) => s.key === section.key);
-      assert.ok(node, section.key);
-      const sidebar = section.items.filter((i) => !i.hidden).map((i) => i.to);
-      assert.deepStrictEqual(node.pages.filter((p) => !p.shortcut).map((p) => p.route), sidebar, `${section.label} items`);
-      const shortcuts = navShortcuts.filter((s) => s.section === section.label).map((s) => s.to);
-      assert.deepStrictEqual(node.pages.filter((p) => p.shortcut).map((p) => p.route), shortcuts, `${section.label} shortcuts`);
-    }
-  });
-
-  it('has a codicon for every icon key the model uses', () => {
-    const keys = new Set([dashboardModelItem.icon, askArmadaModelItem.icon, ...navModelSections.flatMap((s) => s.items.map((i) => i.icon)), ...navShortcuts.map((s) => s.icon)]);
-    for (const key of keys) assert.ok(NAV_ICONS[key], `icon for ${key}`);
-  });
-
-  it('is empty while disconnected, and each page opens its dashboard route', () => {
-    let connected = false;
-    const tree = new NavigationTreeProvider(() => connected);
-    assert.deepStrictEqual(tree.getChildren(), []);
-    connected = true;
-    const roots = tree.getChildren();
-    const operations = roots.find((n): n is NavSectionNode => n.kind === 'section' && n.label === 'OPERATIONS');
-    assert.ok(operations);
-    const sectionItem = tree.getTreeItem(operations) as unknown as { collapsibleState: TreeItemCollapsibleState };
-    assert.strictEqual(sectionItem.collapsibleState, TreeItemCollapsibleState.Expanded);
-    const missions = tree.getChildren(operations).find((n: NavNode) => n.kind === 'page' && n.route === '/missions') as NavPageNode;
-    const item = tree.getTreeItem(missions) as unknown as { command: { command: string; arguments: unknown[] }; iconPath: ThemeIcon };
-    assert.strictEqual(item.command.command, OPEN_DASHBOARD_PAGE_COMMAND);
-    assert.deepStrictEqual(item.command.arguments, ['/missions']);
-    assert.strictEqual(item.iconPath.id, 'checklist');
-    assert.strictEqual(routeFromArg(missions), '/missions');
-    assert.strictEqual(routeFromArg('/server?tab=storage'), '/server?tab=storage');
-    assert.strictEqual(routeFromArg('missions'), undefined);
-  });
-});
-
 describe('status bar', () => {
   it('shows the state and target', () => {
     const connected = describeStatus(CONNECTED, 'websocket');
@@ -125,20 +80,21 @@ describe('status bar', () => {
 
 describe('extension manifest and activation', () => {
   it('reads its identity from package.json and keeps the product version', () => {
-    assert.match(EXTENSION_ID, /^[a-z0-9-]+\.[a-z0-9-]+$/);
+    // Marketplace publisher ids keep their case (LatticeAI); extension names are lowercase.
+    assert.match(EXTENSION_ID, /^[A-Za-z0-9][A-Za-z0-9-]*\.[a-z0-9-]+$/);
     assert.match(MANIFEST.version, /^\d+\.\d+\.\d+$/);
     assert.deepStrictEqual(MANIFEST.activationEvents, ['onStartupFinished']);
   });
 
-  it('contributes the Armada container with the navigation and failures views, and the Explorer copy behind its setting', () => {
+  it('contributes the Armada container with the native views and the failures view, and the Explorer copy behind its setting', () => {
     const container = MANIFEST.contributes.viewsContainers.activitybar.find((c) => c.id === 'armada');
     assert.ok(container);
     assert.ok(fs.existsSync(path.join(ROOT, container.icon)), 'container icon exists');
-    assert.deepStrictEqual(MANIFEST.contributes.views.armada.map((v) => v.id), [NAVIGATION_VIEW_ID, FAILURES_VIEW_ID]);
+    assert.deepStrictEqual(MANIFEST.contributes.views.armada.map((v) => v.id), [...Object.values(OPS_VIEW_IDS), FAILURES_VIEW_ID]);
     const explorer = MANIFEST.contributes.views.explorer.find((v) => v.id === FAILURES_EXPLORER_VIEW_ID);
     assert.strictEqual(explorer?.when, 'config.armada.failures.showInExplorer');
     assert.strictEqual(MANIFEST.contributes.configuration.properties['armada.failures.showInExplorer'].default, false);
-    for (const view of [NAVIGATION_VIEW_ID, FAILURES_VIEW_ID, FAILURES_EXPLORER_VIEW_ID]) {
+    for (const view of [OPS_VIEW_IDS.needsYou, FAILURES_VIEW_ID, FAILURES_EXPLORER_VIEW_ID]) {
       const welcome = MANIFEST.contributes.viewsWelcome.filter((w) => w.view === view);
       assert.ok(welcome.some((w) => w.when.includes('!armada.connected') && w.contents.includes('command:armada.connect')), `disconnected welcome for ${view}`);
     }
@@ -158,9 +114,8 @@ describe('extension manifest and activation', () => {
       for (const welcome of MANIFEST.contributes.viewsWelcome) {
         for (const match of welcome.contents.matchAll(/command:([A-Za-z.]+)/g)) assert.ok(contributed.includes(match[1]), `welcome link ${match[1]}`);
       }
-      assert.deepStrictEqual(fake.treeViews, [NAVIGATION_VIEW_ID, FAILURES_VIEW_ID, FAILURES_EXPLORER_VIEW_ID]);
-      assert.strictEqual(fake.statusBarItems.length, 1);
-      assert.strictEqual(fake.statusBarItems[0].command, 'armada.showConnectionActions');
+      assert.deepStrictEqual(fake.treeViews, [...Object.values(OPS_VIEW_IDS), FAILURES_VIEW_ID, FAILURES_EXPLORER_VIEW_ID]);
+      assert.deepStrictEqual(fake.statusBarItems.map((i) => i.command), [`${OPS_VIEW_IDS.missions}.focus`, 'armada.showConnectionActions']);
       assert.strictEqual(api.connection.state.phase, 'disconnected', 'no network work during activate');
       assert.strictEqual(api.liveMode(), 'stopped');
       for (const s of context.subscriptions) s.dispose();

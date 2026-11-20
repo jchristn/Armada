@@ -1,23 +1,42 @@
 # Armada for VS Code
 
 The Armada extension brings Armada into the editor. It connects to your Armada Admiral (the local one with no setup),
-shows the Armada navigation in its own view container, and works the **mission and voyage black box**: when a mission or
+shows your missions, voyages, captains, fleet, merge queue and everything that needs you as live VS Code views, and
+works the **mission and voyage black box**: when a mission or
 voyage fails, the Admiral records where it failed, how, why, which files and missions conflicted, and the ranked
 recovery paths. The extension lists those entries for the repository you have open, hands the **FIX THIS** brief to
 your coding agent, and runs recovery paths with a dry run and a confirmation.
 
-The extension is being built out to full parity with the dashboard, the TUI, Harbor and the CLI
-([VSCODE_EXTENSION_PLAN.md](../../VSCODE_EXTENSION_PLAN.md)). Today, areas other than the black box open the matching
-dashboard page in your browser.
+Everything is native VS Code: trees with live updates, context menus and inline actions, detail pages drawn with the
+editor's own theme, logs and changes as read-only documents, and forms for dispatch. The extension is being built out
+to full parity with the dashboard, the TUI, Harbor and the CLI ([VSCODE_EXTENSION_PLAN.md](../../VSCODE_EXTENSION_PLAN.md));
+areas without a native view yet (configuration pages such as personas, pipelines and prompt templates) are reachable
+only through **Armada: Open Dashboard in Browser**.
 
 ## The Armada view container
 
-The Armada icon in the activity bar opens two views:
+The Armada icon in the activity bar opens:
 
-- **Navigation**: the dashboard's navigation model (the same one the dashboard sidebar and the mobile app use):
-  Dashboard, Ask Armada, then OPERATIONS, BUILD, CONFIGURATION and SYSTEM, with hub tabs such as Planning and Black Box.
-  Each page opens in the dashboard in your browser until the extension has its own view for it.
+- **Needs You**: reviews waiting for approval, failed work, stalled captains, CLI permission requests and alerts. A
+  review has Approve and Deny inline; a permission request is answered from a quick pick; the rest open their page.
+- **Missions**: Needs Review, Active, Queued and Recent, with status icons, the vessel and the running time. Click a
+  mission for its page; right-click to view the log or changes, approve or deny a review, cancel, restart, open the
+  black box or copy the id. **+** dispatches a mission.
+- **Voyages**: active voyages with their progress and missions, and recent ones. A rocket button dispatches a voyage.
+- **Captains**: each captain's state, runtime and model, with the missions it is working; view the log, stop or
+  restart it.
+- **Fleet**: fleets and their vessels; dispatch to a vessel, or open a vessel's local folder.
+- **Merge Queue**: queued and recent landings; process or remove an entry, or process the whole queue.
 - **Failures**: the black box tree (below).
+
+All of them update live from the Admiral's event stream. A status bar item shows the active mission count and what
+needs you.
+
+**Pages and documents.** A mission, voyage, captain or merge entry opens as a page in an editor tab, drawn with the VS
+Code theme: its status, fields, brief or failure, the live end of the log while it runs, and buttons for its actions.
+Logs (mission and captain) and a mission's changes open as read-only documents (`.log`, `.diff`) with search, folding
+and diff highlighting; an open log follows a running mission. **Dispatch Mission** and **Dispatch Voyage** are forms
+with the open repository's vessel preselected.
 
 While the extension is not connected, both views show what to do: connect, or open the output.
 
@@ -145,7 +164,11 @@ From source: `./build-vscode.sh --install` (or `build-vscode.bat --install`) at 
 | Armada: Connection Actions... | The status bar's quick pick of connection actions |
 | Armada: Show Output | Open the Armada log |
 | Armada: Open Settings | Open `~/.armada/settings.json`, Harbor's settings, the TUI profiles, or the extension's preferences |
-| Armada: Open Dashboard | Open the connected Admiral's dashboard in the browser |
+| Armada: Open Dashboard in Browser | Open the connected Admiral's dashboard in the browser |
+| Armada: Dispatch Mission... | The dispatch form (vessel, title, brief, priority) |
+| Armada: Dispatch Voyage... | The voyage form (one mission per line) |
+| Armada: Process Merge Queue | Land everything queued |
+| Armada: Refresh | Reload the Armada views |
 | Armada: Refresh Failures | Reload vessels and entries |
 | Armada: Toggle Workspace Vessel Filter | Switch between the open repository's vessel and every vessel |
 | Armada: Open Black Box for Mission... | Quick pick of recent failures, or paste a mission, voyage or entry id |

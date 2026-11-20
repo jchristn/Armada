@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- **Native Armada views** replace the Navigation link list: Needs You, Missions, Voyages, Captains, Fleet and Merge
+  Queue are VS Code trees with live updates from the Admiral's event stream, status icons, rich tooltips, inline
+  actions and context menus (view log and changes, approve and deny reviews, cancel, restart, stop and restart
+  captains, process the merge queue, answer CLI permission requests). Missions, voyages, captains and merge entries
+  open as pages drawn with the VS Code theme, with their actions and the live end of the log; logs and changes open
+  as read-only documents. **Dispatch Mission** and **Dispatch Voyage** are native forms. A status bar item shows active
+  missions and what needs you. Dashboard links in black box entries open the native pages.
 - The extension is now `LatticeAI.armada-ai` (publisher `LatticeAI`, name `armada-ai`, display name Armada AI), on the
   VS Code Marketplace. It was never published as `jchristn.armada-vscode`, so nothing migrates.
 - **Armada view container** in the activity bar with a **Navigation** view (the dashboard's navigation model:

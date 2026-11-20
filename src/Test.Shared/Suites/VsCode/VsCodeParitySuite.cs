@@ -155,7 +155,7 @@ namespace Test.Shared.Suites.VsCode
             cases.Add(Case("extension_id_lives_in_package_json", "The extension ID is read from package.json, and the integration test does not hard-code it", () =>
             {
                 VsCodePackageManifest package = LoadPackage();
-                AssertTrue(Regex.IsMatch(package.Publisher, "^[a-z0-9-]+$"), "publisher id: " + package.Publisher);
+                AssertTrue(Regex.IsMatch(package.Publisher, "^[A-Za-z0-9][A-Za-z0-9-]*$"), "publisher id: " + package.Publisher);
                 AssertTrue(Regex.IsMatch(package.Name, "^[a-z0-9-]+$"), "extension name: " + package.Name);
                 string id = package.Publisher + "." + package.Name;
                 string tests = Path.Combine(DashboardSource.RepoRoot(), "src", "Armada.VSCode", "test");

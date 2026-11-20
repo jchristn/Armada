@@ -3,7 +3,7 @@ import { dashboardPageUrl } from '../../transport/hostClient';
 import { directoryPath, entryKind, entryLabel, filePath, formatDate, isOpen } from '../../util/format';
 
 /** Actions the entry view can post back to the extension. */
-export type EntryViewAction = 'copyFixThis' | 'openFixThis' | 'sendToChat' | 'runRecovery' | 'resolve' | 'addNote' | 'askArmada' | 'timeline' | 'compareAttempts' | 'draftFix' | 'refresh';
+export type EntryViewAction = 'copyFixThis' | 'openFixThis' | 'sendToChat' | 'runRecovery' | 'resolve' | 'addNote' | 'askArmada' | 'timeline' | 'compareAttempts' | 'draftFix' | 'refresh' | 'openRoute';
 
 /** Optional extras for the entry page. */
 export interface EntryHtmlOptions {
@@ -17,6 +17,8 @@ export interface EntryHtmlOptions {
 export interface EntryViewMessage {
   action: EntryViewAction;
   pathId?: string;
+  /** For openRoute: the dashboard route a link points to ("/missions/msn_x"), opened natively where possible. */
+  route?: string;
 }
 
 /** Escapes text for HTML. */
@@ -192,6 +194,14 @@ ${sections.join('\n')}
 <script nonce="${nonce}">
 const vscode = acquireVsCodeApi();
 document.addEventListener('click', (event) => {
+  const link = event.target instanceof Element ? event.target.closest('a[href]') : null;
+  const href = link ? link.getAttribute('href') || '' : '';
+  const at = href.indexOf('/dashboard/');
+  if (link && at >= 0) {
+    event.preventDefault();
+    vscode.postMessage({ action: 'openRoute', route: href.slice(at + '/dashboard'.length) });
+    return;
+  }
   const target = event.target instanceof Element ? event.target.closest('button[data-action]') : null;
   if (!target) return;
   vscode.postMessage({ action: target.getAttribute('data-action'), pathId: target.getAttribute('data-path') || undefined });
@@ -306,8 +316,10 @@ function table(rows: Array<[string, unknown]>): string {
 export function isEntryViewMessage(value: unknown): value is EntryViewMessage {
   if (!value || typeof value !== 'object') return false;
   const action = (value as { action?: unknown }).action;
-  const allowed: EntryViewAction[] = ['copyFixThis', 'openFixThis', 'sendToChat', 'runRecovery', 'resolve', 'addNote', 'askArmada', 'timeline', 'compareAttempts', 'draftFix', 'refresh'];
+  const allowed: EntryViewAction[] = ['copyFixThis', 'openFixThis', 'sendToChat', 'runRecovery', 'resolve', 'addNote', 'askArmada', 'timeline', 'compareAttempts', 'draftFix', 'refresh', 'openRoute'];
   if (typeof action !== 'string' || !allowed.includes(action as EntryViewAction)) return false;
+  const route = (value as { route?: unknown }).route;
+  if (action === 'openRoute' && (typeof route !== 'string' || !route.startsWith('/'))) return false;
   const pathId = (value as { pathId?: unknown }).pathId;
   return pathId === undefined || pathId === null || typeof pathId === 'string';
 }

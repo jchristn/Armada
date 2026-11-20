@@ -120,10 +120,43 @@
     "views": {
       "armada": [
         {
-          "id": "armadaNavigation",
-          "name": "Navigation",
+          "id": "armadaNeedsYou",
+          "name": "Needs You",
           "contextualTitle": "Armada",
           "icon": "media/icon.png"
+        },
+        {
+          "id": "armadaMissions",
+          "name": "Missions",
+          "contextualTitle": "Armada",
+          "icon": "media/icon.png"
+        },
+        {
+          "id": "armadaVoyages",
+          "name": "Voyages",
+          "contextualTitle": "Armada",
+          "icon": "media/icon.png"
+        },
+        {
+          "id": "armadaCaptains",
+          "name": "Captains",
+          "contextualTitle": "Armada",
+          "icon": "media/icon.png",
+          "visibility": "collapsed"
+        },
+        {
+          "id": "armadaFleet",
+          "name": "Fleet",
+          "contextualTitle": "Armada",
+          "icon": "media/icon.png",
+          "visibility": "collapsed"
+        },
+        {
+          "id": "armadaMergeQueue",
+          "name": "Merge Queue",
+          "contextualTitle": "Armada",
+          "icon": "media/icon.png",
+          "visibility": "collapsed"
         },
         {
           "id": "armadaFailures",
@@ -143,16 +176,6 @@
     },
     "viewsWelcome": [
       {
-        "view": "armadaNavigation",
-        "contents": "Connecting to the Armada Admiral...",
-        "when": "armada.connectionState == connecting"
-      },
-      {
-        "view": "armadaNavigation",
-        "contents": "Not connected to an Armada Admiral. The extension uses the Admiral of a running Harbor, the local Admiral (~/.armada/settings.json) or a TUI profile, with the credentials already on this machine.\n[Connect](command:armada.connect)\n[Show Output](command:armada.showOutput)",
-        "when": "!armada.connected && armada.connectionState != connecting"
-      },
-      {
         "view": "armadaFailures",
         "contents": "Connecting to the Armada Admiral...",
         "when": "armada.connectionState == connecting"
@@ -169,6 +192,41 @@
       },
       {
         "view": "armadaFailuresExplorer",
+        "contents": "Not connected to an Armada Admiral. The extension uses the Admiral of a running Harbor, the local Admiral (~/.armada/settings.json) or a TUI profile, with the credentials already on this machine.\n[Connect](command:armada.connect)\n[Show Output](command:armada.showOutput)",
+        "when": "!armada.connected && armada.connectionState != connecting"
+      },
+      {
+        "view": "armadaNeedsYou",
+        "contents": "Connecting to the Armada Admiral...",
+        "when": "armada.connectionState == connecting"
+      },
+      {
+        "view": "armadaMissions",
+        "contents": "Connecting to the Armada Admiral...",
+        "when": "armada.connectionState == connecting"
+      },
+      {
+        "view": "armadaVoyages",
+        "contents": "Connecting to the Armada Admiral...",
+        "when": "armada.connectionState == connecting"
+      },
+      {
+        "view": "armadaCaptains",
+        "contents": "Connecting to the Armada Admiral...",
+        "when": "armada.connectionState == connecting"
+      },
+      {
+        "view": "armadaFleet",
+        "contents": "Connecting to the Armada Admiral...",
+        "when": "armada.connectionState == connecting"
+      },
+      {
+        "view": "armadaMergeQueue",
+        "contents": "Connecting to the Armada Admiral...",
+        "when": "armada.connectionState == connecting"
+      },
+      {
+        "view": "armadaNeedsYou",
         "contents": "Not connected to an Armada Admiral. The extension uses the Admiral of a running Harbor, the local Admiral (~/.armada/settings.json) or a TUI profile, with the credentials already on this machine.\n[Connect](command:armada.connect)\n[Show Output](command:armada.showOutput)",
         "when": "!armada.connected && armada.connectionState != connecting"
       }
@@ -212,13 +270,7 @@
       },
       {
         "command": "armada.openDashboard",
-        "title": "Open Dashboard",
-        "category": "Armada",
-        "icon": "$(link-external)"
-      },
-      {
-        "command": "armada.openDashboardPage",
-        "title": "Open Dashboard Page",
+        "title": "Open Dashboard in Browser",
         "category": "Armada",
         "icon": "$(link-external)"
       },
@@ -316,14 +368,158 @@
         "title": "Show Resilience Gaps",
         "category": "Armada",
         "icon": "$(shield)"
+      },
+      {
+        "command": "armada.ops.refresh",
+        "title": "Refresh",
+        "category": "Armada",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "armada.dispatch",
+        "title": "Dispatch Mission...",
+        "category": "Armada",
+        "icon": "$(add)"
+      },
+      {
+        "command": "armada.dispatchVoyage",
+        "title": "Dispatch Voyage...",
+        "category": "Armada",
+        "icon": "$(rocket)"
+      },
+      {
+        "command": "armada.mission.open",
+        "title": "Open Mission",
+        "category": "Armada"
+      },
+      {
+        "command": "armada.mission.viewLog",
+        "title": "View Mission Log",
+        "category": "Armada",
+        "icon": "$(output)"
+      },
+      {
+        "command": "armada.mission.viewDiff",
+        "title": "View Mission Changes",
+        "category": "Armada",
+        "icon": "$(diff)"
+      },
+      {
+        "command": "armada.mission.cancel",
+        "title": "Cancel Mission",
+        "category": "Armada",
+        "icon": "$(circle-slash)"
+      },
+      {
+        "command": "armada.mission.restart",
+        "title": "Restart Mission",
+        "category": "Armada",
+        "icon": "$(debug-restart)"
+      },
+      {
+        "command": "armada.mission.approve",
+        "title": "Approve Review",
+        "category": "Armada",
+        "icon": "$(check)"
+      },
+      {
+        "command": "armada.mission.deny",
+        "title": "Deny Review...",
+        "category": "Armada",
+        "icon": "$(close)"
+      },
+      {
+        "command": "armada.mission.copyId",
+        "title": "Copy Mission ID",
+        "category": "Armada",
+        "icon": "$(copy)"
+      },
+      {
+        "command": "armada.voyage.open",
+        "title": "Open Voyage",
+        "category": "Armada"
+      },
+      {
+        "command": "armada.voyage.cancel",
+        "title": "Cancel Voyage",
+        "category": "Armada",
+        "icon": "$(circle-slash)"
+      },
+      {
+        "command": "armada.captain.open",
+        "title": "Open Captain",
+        "category": "Armada"
+      },
+      {
+        "command": "armada.captain.viewLog",
+        "title": "View Captain Log",
+        "category": "Armada",
+        "icon": "$(output)"
+      },
+      {
+        "command": "armada.captain.stop",
+        "title": "Stop Captain",
+        "category": "Armada",
+        "icon": "$(debug-stop)"
+      },
+      {
+        "command": "armada.captain.restart",
+        "title": "Restart Captain",
+        "category": "Armada",
+        "icon": "$(debug-restart)"
+      },
+      {
+        "command": "armada.merge.open",
+        "title": "Open Merge Entry",
+        "category": "Armada"
+      },
+      {
+        "command": "armada.merge.process",
+        "title": "Process Merge Entry",
+        "category": "Armada",
+        "icon": "$(play)"
+      },
+      {
+        "command": "armada.merge.cancel",
+        "title": "Remove from Merge Queue",
+        "category": "Armada",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "armada.merge.processAll",
+        "title": "Process Merge Queue",
+        "category": "Armada",
+        "icon": "$(run-all)"
+      },
+      {
+        "command": "armada.inbox.open",
+        "title": "Open",
+        "category": "Armada"
+      },
+      {
+        "command": "armada.vessel.openFolder",
+        "title": "Open Vessel Folder in New Window",
+        "category": "Armada",
+        "icon": "$(folder-opened)"
+      },
+      {
+        "command": "armada.copyText",
+        "title": "Copy",
+        "category": "Armada"
+      },
+      {
+        "command": "armada.openUrl",
+        "title": "Open URL",
+        "category": "Armada"
+      },
+      {
+        "command": "armada.openInBrowser",
+        "title": "Open in Browser",
+        "category": "Armada"
       }
     ],
     "menus": {
       "commandPalette": [
-        {
-          "command": "armada.openDashboardPage",
-          "when": "false"
-        },
         {
           "command": "armada.disconnect",
           "when": "armada.connected || armada.connectionState == failed"
@@ -395,18 +591,142 @@
         {
           "command": "armada.showResilienceGaps",
           "when": "armada.connected"
+        },
+        {
+          "command": "armada.mission.open",
+          "when": "false"
+        },
+        {
+          "command": "armada.voyage.open",
+          "when": "false"
+        },
+        {
+          "command": "armada.captain.open",
+          "when": "false"
+        },
+        {
+          "command": "armada.merge.open",
+          "when": "false"
+        },
+        {
+          "command": "armada.inbox.open",
+          "when": "false"
+        },
+        {
+          "command": "armada.copyText",
+          "when": "false"
+        },
+        {
+          "command": "armada.openUrl",
+          "when": "false"
+        },
+        {
+          "command": "armada.openInBrowser",
+          "when": "false"
+        },
+        {
+          "command": "armada.vessel.openFolder",
+          "when": "false"
+        },
+        {
+          "command": "armada.mission.viewLog",
+          "when": "false"
+        },
+        {
+          "command": "armada.mission.viewDiff",
+          "when": "false"
+        },
+        {
+          "command": "armada.mission.cancel",
+          "when": "false"
+        },
+        {
+          "command": "armada.mission.restart",
+          "when": "false"
+        },
+        {
+          "command": "armada.mission.approve",
+          "when": "false"
+        },
+        {
+          "command": "armada.mission.deny",
+          "when": "false"
+        },
+        {
+          "command": "armada.mission.copyId",
+          "when": "false"
+        },
+        {
+          "command": "armada.voyage.cancel",
+          "when": "false"
+        },
+        {
+          "command": "armada.captain.viewLog",
+          "when": "false"
+        },
+        {
+          "command": "armada.captain.stop",
+          "when": "false"
+        },
+        {
+          "command": "armada.captain.restart",
+          "when": "false"
+        },
+        {
+          "command": "armada.merge.process",
+          "when": "false"
+        },
+        {
+          "command": "armada.merge.cancel",
+          "when": "false"
+        },
+        {
+          "command": "armada.ops.refresh",
+          "when": "armada.connected"
+        },
+        {
+          "command": "armada.dispatch",
+          "when": "armada.connected"
+        },
+        {
+          "command": "armada.dispatchVoyage",
+          "when": "armada.connected"
+        },
+        {
+          "command": "armada.merge.processAll",
+          "when": "armada.connected"
         }
       ],
       "view/title": [
         {
-          "command": "armada.openDashboard",
-          "when": "view == armadaNavigation && armada.connected",
+          "command": "armada.dispatch",
+          "when": "view == armadaMissions && armada.connected",
           "group": "navigation@1"
         },
         {
+          "command": "armada.dispatchVoyage",
+          "when": "view == armadaVoyages && armada.connected",
+          "group": "navigation@1"
+        },
+        {
+          "command": "armada.merge.processAll",
+          "when": "view == armadaMergeQueue && armada.connected",
+          "group": "navigation@1"
+        },
+        {
+          "command": "armada.ops.refresh",
+          "when": "view =~ /^armada(NeedsYou|Missions|Voyages|Captains|Fleet|MergeQueue)$/ && armada.connected",
+          "group": "navigation@9"
+        },
+        {
           "command": "armada.showConnectionActions",
-          "when": "view == armadaNavigation",
-          "group": "navigation@2"
+          "when": "view == armadaNeedsYou",
+          "group": "navigation@10"
+        },
+        {
+          "command": "armada.openDashboard",
+          "when": "view == armadaNeedsYou && armada.connected",
+          "group": "z_browser@1"
         },
         {
           "command": "armada.refreshFailures",
@@ -509,6 +829,131 @@
           "command": "armada.compareBlackBoxAttempts",
           "when": "view =~ /^armadaFailures/ && viewItem =~ /^armadaEntry/",
           "group": "4_forensics@2"
+        },
+        {
+          "command": "armada.mission.viewLog",
+          "when": "viewItem =~ /armadaMission\\b/",
+          "group": "inline@1"
+        },
+        {
+          "command": "armada.mission.approve",
+          "when": "viewItem =~ /armadaMission\\.(Review)\\b/",
+          "group": "inline@2"
+        },
+        {
+          "command": "armada.mission.viewLog",
+          "when": "viewItem =~ /armadaMission\\b/",
+          "group": "1_view@1"
+        },
+        {
+          "command": "armada.mission.viewDiff",
+          "when": "viewItem =~ /armadaMission\\b/",
+          "group": "1_view@2"
+        },
+        {
+          "command": "armada.mission.approve",
+          "when": "viewItem =~ /armadaMission\\.(Review)\\b/",
+          "group": "2_review@1"
+        },
+        {
+          "command": "armada.mission.deny",
+          "when": "viewItem =~ /armadaMission\\.(Review)\\b/",
+          "group": "2_review@2"
+        },
+        {
+          "command": "armada.mission.cancel",
+          "when": "viewItem =~ /armadaMission\\.(Pending|Blocked|Assigned|InProgress|WorkProduced|PullRequestOpen|Testing|Verifying|Review)\\b/",
+          "group": "3_act@1"
+        },
+        {
+          "command": "armada.mission.restart",
+          "when": "viewItem =~ /armadaMission\\.(Failed|LandingFailed|Cancelled)\\b/",
+          "group": "3_act@2"
+        },
+        {
+          "command": "armada.openBlackBox",
+          "when": "viewItem =~ /armadaMission\\.(Failed|LandingFailed)\\b/",
+          "group": "3_act@3"
+        },
+        {
+          "command": "armada.mission.copyId",
+          "when": "viewItem =~ /armadaMission\\b/",
+          "group": "9_copy@1"
+        },
+        {
+          "command": "armada.voyage.cancel",
+          "when": "viewItem =~ /armadaVoyage\\.(Open|InProgress)\\b/",
+          "group": "3_act@1"
+        },
+        {
+          "command": "armada.captain.viewLog",
+          "when": "viewItem =~ /armadaCaptain\\b/",
+          "group": "inline@1"
+        },
+        {
+          "command": "armada.captain.viewLog",
+          "when": "viewItem =~ /armadaCaptain\\b/",
+          "group": "1_view@1"
+        },
+        {
+          "command": "armada.captain.stop",
+          "when": "viewItem =~ /armadaCaptain\\.(Working|Planning|Refining|Analyzing|Stalled)\\b/",
+          "group": "3_act@1"
+        },
+        {
+          "command": "armada.captain.restart",
+          "when": "viewItem =~ /armadaCaptain\\b/",
+          "group": "3_act@2"
+        },
+        {
+          "command": "armada.dispatch",
+          "when": "viewItem =~ /armadaVessel\\b/",
+          "group": "inline@1"
+        },
+        {
+          "command": "armada.dispatch",
+          "when": "viewItem =~ /armadaVessel\\b/",
+          "group": "1_act@1"
+        },
+        {
+          "command": "armada.vessel.openFolder",
+          "when": "viewItem =~ /armadaVessel\\.local\\b/",
+          "group": "1_act@2"
+        },
+        {
+          "command": "armada.merge.process",
+          "when": "viewItem =~ /armadaMerge\\.(Queued|Passed|Failed)\\b/",
+          "group": "inline@1"
+        },
+        {
+          "command": "armada.merge.process",
+          "when": "viewItem =~ /armadaMerge\\.(Queued|Passed|Failed)\\b/",
+          "group": "3_act@1"
+        },
+        {
+          "command": "armada.merge.cancel",
+          "when": "viewItem =~ /armadaMerge\\.(Queued|Testing|Failed)\\b/",
+          "group": "3_act@2"
+        },
+        {
+          "command": "armada.mission.approve",
+          "when": "viewItem =~ /armadaInbox\\.review\\b/",
+          "group": "inline@1"
+        },
+        {
+          "command": "armada.mission.approve",
+          "when": "viewItem =~ /armadaInbox\\.review\\b/",
+          "group": "2_review@1"
+        },
+        {
+          "command": "armada.mission.deny",
+          "when": "viewItem =~ /armadaInbox\\.review\\b/",
+          "group": "2_review@2"
+        },
+        {
+          "command": "armada.mission.viewLog",
+          "when": "viewItem =~ /armadaInbox\\.entity\\.(mission|Mission)\\b/",
+          "group": "1_view@1"
         }
       ]
     }

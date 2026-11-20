@@ -54,6 +54,11 @@ export class EntryViewManager implements vscode.Disposable {
           void this.render(created, entry);
           return;
         }
+        if (message.action === 'openRoute' && message.route) {
+          const [command, arg] = nativeCommandForRoute(message.route);
+          void vscode.commands.executeCommand(command, arg);
+          return;
+        }
         const command = ACTION_COMMANDS[message.action];
         if (!command) return;
         if (message.action === 'runRecovery') void vscode.commands.executeCommand(command, entry, message.pathId ?? undefined);
@@ -93,4 +98,23 @@ export class EntryViewManager implements vscode.Disposable {
       panel.webview.html = renderEntryErrorHtml(entryLabel(summary), describeError(err), nonce);
     }
   }
+}
+
+/**
+ * The extension command that shows a dashboard route natively: missions, voyages, captains, merge entries and black
+ * box entries open in VS Code; anything else opens in the browser.
+ */
+export function nativeCommandForRoute(route: string): [string, string] {
+  const match = /^\/(missions|voyages|captains|merge-queue|blackbox)\/([^/?#]+)/.exec(route);
+  if (match) {
+    const id = decodeURIComponent(match[2]);
+    switch (match[1]) {
+      case 'missions': return ['armada.mission.open', id];
+      case 'voyages': return ['armada.voyage.open', id];
+      case 'captains': return ['armada.captain.open', id];
+      case 'merge-queue': return ['armada.merge.open', id];
+      case 'blackbox': return ['armada.openBlackBox', id];
+    }
+  }
+  return ['armada.openInBrowser', route];
 }

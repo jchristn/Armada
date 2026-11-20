@@ -17,7 +17,7 @@ import type { ArmadaExtensionApi } from '../../../src/extension';
 interface Manifest {
   name: string;
   publisher: string;
-  contributes: { commands: Array<{ command: string }>; views: Record<string, Array<{ id: string }>>; viewsContainers: { activitybar: Array<{ id: string }> } };
+  contributes: { commands: Array<{ command: string }>; views: { armada: Array<{ id: string }> } & Record<string, Array<{ id: string }>>; viewsContainers: { activitybar: Array<{ id: string }> } };
 }
 
 const ROOT = path.resolve(__dirname, '..', '..', '..', '..');
@@ -33,6 +33,17 @@ async function waitFor(condition: () => boolean, timeoutMs: number, label: strin
 
 function log(line: string): void {
   console.log(`[integration] ${line}`);
+}
+
+async function capture(dir: string, name: string): Promise<void> {
+  if (process.platform !== 'darwin') return;
+  fs.mkdirSync(dir, { recursive: true });
+  await new Promise((r) => setTimeout(r, 2500));
+  const file = path.join(dir, `${name}.png`);
+  await new Promise<void>((resolve) => execFile('screencapture', ['-x', file], (err) => {
+    log(err ? `screenshot ${name} failed: ${err.message}` : `screenshot ${file}`);
+    resolve();
+  }));
 }
 
 async function screenshots(dir: string): Promise<void> {
@@ -83,18 +94,37 @@ export async function run(): Promise<void> {
     assert.ok(state.identity, 'whoami returned an identity');
     assert.strictEqual(state.identity.globalAdmin, true, 'the local API key is a global admin (armada.role.globalAdmin)');
     assert.strictEqual(state.identity.tenantAdmin, true, 'armada.role.tenantAdmin');
-    const roots = api.navigation.getChildren();
-    assert.ok(roots.length >= 6, 'the navigation tree shows the dashboard sections');
     await waitFor(() => api.events.mode === 'websocket', 15000, 'the /ws event bus');
     await waitFor(() => api.events.received > 0, 15000, 'the status.snapshot reply to subscribe');
     await waitFor(() => api.store.status === 'ready', 15000, 'the black box store');
     log(`whoami ${state.identity.email ?? ''}; events received ${api.events.received}; store ${api.store.status} with ${api.store.entries.length} entries`);
+
+    // The native views load live data, and a mission opens as a native detail page and its log as a document.
+    for (const domain of ['missions', 'voyages', 'captains', 'fleet', 'merge', 'inbox'] as const) {
+      await waitFor(() => api.ops.state(domain) === 'ready', 20000, `the ${domain} view`);
+    }
+    log(`ops: ${api.ops.missions.length} missions, ${api.ops.voyages.length} voyages, ${api.ops.captains.length} captains, ${api.ops.vessels.length} vessels, ${api.ops.mergeQueue.length} merge entries, ${api.ops.inbox.length} need you`);
+    for (const view of MANIFEST.contributes.views.armada) await vscode.commands.executeCommand(`${view.id}.focus`);
+    const mission = api.ops.missions[0];
+    if (mission) {
+      await vscode.commands.executeCommand('armada.mission.open', mission.id);
+      await waitFor(() => api.details.openCount === 1, 10000, 'the mission page');
+      await vscode.commands.executeCommand('armada.mission.viewLog', mission.id);
+      await waitFor(() => vscode.window.activeTextEditor?.document.uri.scheme === 'armada', 10000, 'the mission log document');
+      log(`mission ${mission.id}: page open, log document ${vscode.window.activeTextEditor?.document.uri.path} (${vscode.window.activeTextEditor?.document.lineCount} lines)`);
+      const shots = process.env.ARMADA_VSCODE_SCREENSHOT_DIR;
+      if (shots) {
+        await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+        await vscode.commands.executeCommand(`${MANIFEST.contributes.views.armada[1].id}.focus`);
+        await capture(shots, 'armada-native-mission');
+      }
+    }
   } else {
     assert.strictEqual(state.phase, 'failed');
     assert.strictEqual(state.failure?.kind, 'noAdmiral', 'no Admiral, Harbor or TUI profile in the empty data directory');
     assert.strictEqual(api.store.status, 'disconnected');
     assert.strictEqual(api.liveMode(), 'stopped');
-    assert.deepStrictEqual(api.navigation.getChildren(), [], 'the welcome view shows instead of the tree');
+    assert.strictEqual(api.ops.state('missions'), 'disconnected', 'the welcome view shows instead of the trees');
     // Without a connection, commands show an error and resolve instead of throwing.
     const result = await vscode.commands.executeCommand('armada.copyFixThis', { kind: 'entry', entry: { id: 'bbx_none', createdUtc: new Date().toISOString() } });
     assert.strictEqual(result, undefined);

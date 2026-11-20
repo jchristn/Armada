@@ -14,7 +14,12 @@ import { BlackBoxStore } from './surfaces/blackbox/blackBoxStore';
 import { EntryViewManager } from './surfaces/blackbox/entryView';
 import { FAILURES_EXPLORER_VIEW_ID, FAILURES_VIEW_ID, FailuresTreeProvider } from './surfaces/blackbox/failuresTreeProvider';
 import { InsightCommands } from './surfaces/blackbox/insightCommands';
-import { NAVIGATION_VIEW_ID, NavigationTreeProvider, OPEN_DASHBOARD_PAGE_COMMAND, routeFromArg } from './surfaces/nav/navigationTree';
+import { DetailPanelManager } from './surfaces/ops/detailPanels';
+import { ARMADA_DOCUMENT_SCHEME, ArmadaDocumentProvider } from './surfaces/ops/opsDocuments';
+import { registerOpsCommands } from './surfaces/ops/opsCommands';
+import { OpsStatusBar } from './surfaces/ops/opsStatusBar';
+import { OpsStore } from './surfaces/ops/opsStore';
+import { CaptainsTreeProvider, FleetTreeProvider, MergeQueueTreeProvider, MissionsTreeProvider, NeedsYouTreeProvider, OPS_VIEW_IDS, OpsTreeProvider, VoyagesTreeProvider } from './surfaces/ops/opsTrees';
 import { ArmadaEventBus, LiveMode } from './transport/eventBus';
 import { dashboardPageUrl } from './transport/hostClient';
 
@@ -24,7 +29,8 @@ export interface ArmadaExtensionApi {
   events: ArmadaEventBus;
   store: BlackBoxStore;
   commands: BlackBoxCommands;
-  navigation: NavigationTreeProvider;
+  ops: OpsStore;
+  details: DetailPanelManager;
   liveMode(): LiveMode;
 }
 
@@ -50,11 +56,31 @@ export async function activate(context: vscode.ExtensionContext): Promise<Armada
     getSettings: () => readSettings(),
   });
 
-  // Navigation (the dashboard's nav model) and the black box tree, in the Armada container; the black box tree also
-  // in the Explorer when armada.failures.showInExplorer is on (the view's `when` clause reads the setting).
-  const navigation = new NavigationTreeProvider(() => connection.connected);
-  const navigationView = vscode.window.createTreeView(NAVIGATION_VIEW_ID, { treeDataProvider: navigation });
-  context.subscriptions.push(navigation, navigationView);
+  // The native operational views (Needs You, Missions, Voyages, Captains, Fleet, Merge Queue) over one live store.
+  const ops = new OpsStore({ isConnected: () => connection.connected, log: (line) => output.warn(line) });
+  context.subscriptions.push({ dispose: () => ops.dispose() });
+  const opsTrees: Array<[string, OpsTreeProvider]> = [
+    [OPS_VIEW_IDS.needsYou, new NeedsYouTreeProvider(ops)],
+    [OPS_VIEW_IDS.missions, new MissionsTreeProvider(ops)],
+    [OPS_VIEW_IDS.voyages, new VoyagesTreeProvider(ops)],
+    [OPS_VIEW_IDS.captains, new CaptainsTreeProvider(ops)],
+    [OPS_VIEW_IDS.fleet, new FleetTreeProvider(ops)],
+    [OPS_VIEW_IDS.merge, new MergeQueueTreeProvider(ops)],
+  ];
+  for (const [id, provider] of opsTrees) {
+    const view = vscode.window.createTreeView(id, { treeDataProvider: provider, showCollapseAll: id !== OPS_VIEW_IDS.needsYou });
+    context.subscriptions.push(provider, view, ops.onDidChange(() => {
+      view.badge = provider.badge();
+    }));
+  }
+  const details = new DetailPanelManager(ops);
+  const documents = new ArmadaDocumentProvider(ops);
+  context.subscriptions.push(details, documents, vscode.workspace.registerTextDocumentContentProvider(ARMADA_DOCUMENT_SCHEME, documents), new OpsStatusBar(ops));
+  context.subscriptions.push(...registerOpsCommands({ store: ops, details, connection }));
+  context.subscriptions.push(bus.subscribe((event) => ops.onEvent(event.type)), bus.onPoll(() => void ops.refreshAll()));
+
+  // The black box tree, in the Armada container, and in the Explorer when armada.failures.showInExplorer is on (the
+  // view's `when` clause reads the setting).
 
   const tree = new FailuresTreeProvider(store);
   const failureViews = [FAILURES_VIEW_ID, FAILURES_EXPLORER_VIEW_ID].map((id) => vscode.window.createTreeView(id, { treeDataProvider: tree, showCollapseAll: true }));
@@ -119,15 +145,18 @@ export async function activate(context: vscode.ExtensionContext): Promise<Armada
   };
 
   context.subscriptions.push(connection.onDidChange((state) => {
-    navigation.refresh();
     if (state.phase === 'connected') {
       store.invalidateVessels();
       void store.refresh();
+      void ops.refreshAll();
       restartBus();
       return;
     }
     bus.stop();
-    if (state.phase !== 'connecting') void store.refresh();
+    if (state.phase !== 'connecting') {
+      void store.refresh();
+      void ops.refreshAll();
+    }
   }));
 
   const register = (id: string, fn: (...args: unknown[]) => unknown): void => {
@@ -140,7 +169,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<Armada
   register('armada.showOutput', () => output.show(true));
   register('armada.openSettings', () => openSettings(context.extension.id));
   register('armada.openDashboard', () => openDashboard(connection, '/'));
-  register(OPEN_DASHBOARD_PAGE_COMMAND, (arg) => openDashboard(connection, routeFromArg(arg) ?? '/'));
   register('armada.refreshFailures', () => {
     store.invalidateVessels();
     return store.refresh();
@@ -179,7 +207,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<Armada
   const startup = setTimeout(() => void connection.restore(), 0);
   context.subscriptions.push({ dispose: () => clearTimeout(startup) });
 
-  return { connection, events: bus, store, commands, navigation, liveMode: () => bus.mode };
+  return { connection, events: bus, store, commands, ops, details, liveMode: () => bus.mode };
 }
 
 /** Extension shutdown. */

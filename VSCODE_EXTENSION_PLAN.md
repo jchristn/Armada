@@ -113,6 +113,17 @@ src/Armada.VSCode/
 | SCM integration (read-only) | Show a mission's changed files grouped like a source-control view, with open-diff and land actions |
 | Walkthrough (`contributes.walkthroughs`) | First-run: install Armada, connect, add a vessel, create captains, dispatch a mission; replaces nothing, points at the setup wizard panel |
 
+### 4.2a Status (2026-11-20): native operational views
+
+Built, replacing the Navigation link list: Needs You, Missions, Voyages, Captains, Fleet and Merge Queue trees over
+one live store (`src/surfaces/ops/opsStore.ts`, reloaded by `mission.*`, `voyage.*`, `captain.*`, `merge*` events and
+the poll tick); mission, voyage, captain and merge entry pages rendered from data with the `--vscode-*` tokens
+(`detailHtml.ts`, `detailPages.ts`); mission and captain logs and mission changes as `armada:` documents; dispatch
+forms (`formPanel.ts`, modeled on Mux's FormPanel); an ops status bar item. The owner rejected embedding the
+dashboard in a webview: every surface is native, as in Mux. Next: Ask Armada as a sidebar chat view (Mux's
+ChatViewProvider pattern), then the configuration domains (personas, pipelines, prompt templates, workflow profiles)
+as trees with forms.
+
 ### 4.3 Webview panels
 
 Panels render what has no native shape: rich detail pages, chat, charts and large forms. One React bundle
