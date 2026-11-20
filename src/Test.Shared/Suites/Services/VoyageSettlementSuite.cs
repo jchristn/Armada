@@ -36,9 +36,13 @@ namespace Test.Shared.Suites.Services
                 {
                     using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
                     DatabaseDriver database = testDb.Driver;
-                    Voyage voyage = await database.Voyages.CreateAsync(new Voyage("completed") { Status = VoyageStatusEnum.InProgress }).ConfigureAwait(false);
+                    TenantMetadata tenant = await database.Tenants.CreateAsync(new TenantMetadata { Name = "voyage-owner" }, token).ConfigureAwait(false);
+                    UserMaster user = await database.Users.CreateAsync(new UserMaster { TenantId = tenant.Id, Email = "voyage-owner@acceptance.invalid" }, token).ConfigureAwait(false);
+                    Voyage voyage = await database.Voyages.CreateAsync(new Voyage("completed") { TenantId = tenant.Id, UserId = user.Id, Status = VoyageStatusEnum.InProgress }).ConfigureAwait(false);
                     await database.Missions.CreateAsync(new Mission("finished")
                     {
+                        TenantId = tenant.Id,
+                        UserId = user.Id,
                         VoyageId = voyage.Id,
                         Status = MissionStatusEnum.Complete
                     }).ConfigureAwait(false);
@@ -54,6 +58,10 @@ namespace Test.Shared.Suites.Services
                     List<ArmadaEvent> completed = events.Where(evt => evt.EventType == "voyage.completed").ToList();
                     AssertEqual(1, completed.Count, "the transition stores one completion event");
                     AssertEqual(voyage.Id, completed[0].VoyageId);
+                    AssertEqual("voyage", completed[0].EntityType);
+                    AssertEqual(voyage.Id, completed[0].EntityId);
+                    AssertEqual(tenant.Id, completed[0].TenantId, "the event stays in the voyage owner's tenant");
+                    AssertEqual(user.Id, completed[0].UserId, "the event stays in the voyage owner's scope");
 
                     List<Mission> missions = await database.Missions.EnumerateByVoyageAsync(voyage.Id, token).ConfigureAwait(false);
                     await VoyageSettlement.ApplyAsync(database, settled!, VoyageStatusEnum.Complete, missions, token).ConfigureAwait(false);
