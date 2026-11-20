@@ -1,4 +1,4 @@
-import { BlackBoxDirectoryCount, BlackBoxEntrySummary } from '../api/types';
+import type { BlackBoxDirectoryCount, BlackBoxEntrySummary } from '@dashboard/types/blackbox';
 
 /** Short relative age ("just now", "5m", "3h", "2d") of an ISO timestamp, relative to now. */
 export function formatAge(iso: string | null | undefined, now: Date = new Date()): string {
@@ -24,23 +24,23 @@ export function formatDate(iso: string | null | undefined): string {
 
 /** The failure kind to show for an entry. */
 export function entryKind(entry: BlackBoxEntrySummary): string {
-  return entry.FailureKind || entry.Phase || 'Failure';
+  return entry.failureKind || entry.phase || 'Failure';
 }
 
 /** The subject id an entry is about (mission id, else voyage id, else the entry id). */
 export function entrySubjectId(entry: BlackBoxEntrySummary): string {
-  return entry.MissionId || entry.VoyageId || entry.Id;
+  return entry.missionId || entry.voyageId || entry.id;
 }
 
 /** A readable label for an entry. */
 export function entryLabel(entry: BlackBoxEntrySummary): string {
   const subject = entrySubjectId(entry);
-  return entry.MissionTitle ? `${entry.MissionTitle} (${subject})` : subject;
+  return entry.missionTitle ? `${entry.missionTitle} (${subject})` : subject;
 }
 
 /** True when the entry is still open (no resolution, or Open). */
 export function isOpen(entry: BlackBoxEntrySummary): boolean {
-  return !entry.Resolution || entry.Resolution === 'Open';
+  return !entry.resolution || entry.resolution === 'Open';
 }
 
 /** Normalizes a repository-relative file path from a record section. */
@@ -54,7 +54,7 @@ export function filePath(ref: string | null | undefined): string | null {
 export function directoryPath(dir: BlackBoxDirectoryCount | string | null | undefined): string | null {
   if (!dir) return null;
   if (typeof dir === 'string') return normalizeRelPath(dir);
-  return dir.Directory ? normalizeRelPath(dir.Directory) : null;
+  return dir.directory ? normalizeRelPath(dir.directory) : null;
 }
 
 /** Repository-relative path with forward slashes and no leading `./` or `/`. */

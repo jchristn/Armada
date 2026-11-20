@@ -1,16 +1,18 @@
 import * as assert from 'assert';
 import { beforeEach, describe, it } from 'node:test';
-import { ArmadaApiError, Routes } from '../../src/api/blackbox';
-import { BlackBoxAttemptDiff, BlackBoxEntrySummary, BlackBoxTimelinePage, MissionOverlapPreview } from '../../src/api/types';
-import { InsightCommands, TIMELINE_NEXT } from '../../src/commands/insightCommands';
-import { isEntryViewMessage, recoveryExtras, renderEntryHtml } from '../../src/views/entryHtml';
-import { cell, renderDiffMarkdown, renderOverlapMarkdown, renderTimelineMarkdown } from '../../src/views/insightMarkdown';
+import type { BlackBoxAttemptDiff, BlackBoxDoctorPage, BlackBoxEntrySummary, BlackBoxTimelinePage, MissionOverlapPreview } from '@dashboard/types/blackbox';
+import { InsightCommands, TIMELINE_NEXT } from '../../src/surfaces/blackbox/insightCommands';
+import { isEntryViewMessage, recoveryExtras, renderEntryHtml } from '../../src/surfaces/blackbox/entryHtml';
+import { cell, renderDiffMarkdown, renderOverlapMarkdown, renderTimelineMarkdown } from '../../src/surfaces/blackbox/insightMarkdown';
 import { MockFetch, page } from '../fakes/fetch';
-import { client, fullEntry, summary, VESSEL_A, VESSEL_B } from '../fakes/fixtures';
+import { fromServer, fullEntry, SERVER_VESSEL_A, SERVER_VESSEL_B, summary } from '../fakes/fixtures';
 import { makeStore } from '../fakes/storeHelpers';
 import { fake } from '../fakes/vscode';
 
-function timelinePage(pageNumber: number, totalPages: number, overrides: Partial<BlackBoxTimelinePage> = {}): BlackBoxTimelinePage {
+type Server = Record<string, unknown>;
+
+/** A timeline page in the server's shape. */
+function timelinePage(pageNumber: number, totalPages: number, overrides: Server = {}): Server {
   return {
     PageNumber: pageNumber,
     PageSize: 100,
@@ -27,7 +29,7 @@ function timelinePage(pageNumber: number, totalPages: number, overrides: Partial
   };
 }
 
-const DIFF: BlackBoxAttemptDiff = {
+const SERVER_DIFF: Server = {
   EntryId: 'bbx_1',
   OtherEntryId: 'bbx_0',
   SameMission: true,
@@ -44,7 +46,9 @@ const DIFF: BlackBoxAttemptDiff = {
   ChangedFilesKnown: true,
 };
 
-const PREVIEW: MissionOverlapPreview = {
+const DIFF = fromServer<BlackBoxAttemptDiff>(SERVER_DIFF);
+
+const SERVER_PREVIEW: Server = {
   VesselId: 'vsl_a',
   SerializeOverlappingMissions: true,
   LikelyFiles: ['src/auth/login.ts'],
@@ -60,82 +64,38 @@ const PREVIEW: MissionOverlapPreview = {
   BriefLint: { Findings: [{ RuleId: 'BRIEF-DEP-001', Severity: 'Warning', Message: 'The brief describes a dependency', Excerpt: 'after mission 2 lands', Suggestion: 'Set dependsOnMissionId' }], FindingCount: 1, Clean: false, PathsChecked: true },
 };
 
+const PREVIEW = fromServer<MissionOverlapPreview>(SERVER_PREVIEW);
+
 function insights(mock: MockFetch, picked: BlackBoxEntrySummary | null = summary(), storeOptions: Parameters<typeof makeStore>[1] = {}): InsightCommands {
-  const c = client(mock);
-  return new InsightCommands({ getClient: () => c, store: makeStore(mock, storeOptions), pickEntry: async () => picked ?? undefined });
+  const store = makeStore(mock, storeOptions);
+  return new InsightCommands({ requireConnection: () => ({ tenant: undefined, dashboardUrl: 'http://armada.test:7890/dashboard' }), store, pickEntry: async () => picked ?? undefined });
 }
 
 beforeEach(() => fake.reset());
 
-describe('insight API', () => {
-  it('posts the overlap preview with the trimmed brief and reads the PascalCase result', async () => {
-    const mock = new MockFetch().on('POST', '/api/v1/vessels/vsl_a/overlap-preview', { json: PREVIEW });
-    const result = await client(mock).previewOverlap('vsl_a', { Title: '  Login  ', Description: ' Touch only src/auth/login.ts ', DependsOnMissionId: 'msn_d' });
-    assert.strictEqual(result.Warnings?.[0].OverlappingMissionId, 'msn_y');
-    assert.deepStrictEqual(mock.requests[0].body, { Title: 'Login', Description: 'Touch only src/auth/login.ts', DependsOnMissionId: 'msn_d' });
+describe('insight routes through the shared client', () => {
+  it('pages the timeline oldest first with GET query parameters', async () => {
+    const mock = new MockFetch().on('GET', '/api/v1/blackbox/bbx_1/timeline', { json: timelinePage(1, 1) });
+    await insights(mock).showTimeline();
+    const query = mock.calls('GET', '/api/v1/blackbox/bbx_1/timeline')[0].query;
+    assert.deepStrictEqual([query.get('order'), query.get('pageNumber'), query.get('pageSize')], ['CreatedAscending', '1', '100']);
   });
 
-  it('rejects an overlap preview without a vessel or brief, without calling the server', async () => {
-    const mock = new MockFetch();
-    await assert.rejects(client(mock).previewOverlap('', { Title: 'x' }), (e: ArmadaApiError) => e.kind === 'badRequest');
-    await assert.rejects(client(mock).previewOverlap('vsl_a', { Title: ' ', Description: '' }), (e: ArmadaApiError) => e.kind === 'badRequest');
-    await assert.rejects(client(mock).lintBrief({}), (e: ArmadaApiError) => e.kind === 'badRequest');
-    assert.strictEqual(mock.requests.length, 0);
-  });
-
-  it('pages the timeline oldest first and newest first', async () => {
-    const mock = new MockFetch().on('POST', '/api/v1/blackbox/bbx_1/timeline/enumerate', { json: timelinePage(2, 3) });
-    const c = client(mock);
-    const result = await c.getTimeline('bbx_1', 2, 25);
-    await c.getTimeline('bbx_1', 1, 25, true);
-    assert.strictEqual(result.PageNumber, 2);
-    assert.deepStrictEqual(mock.requests[0].body, { PageNumber: 2, PageSize: 25, Order: 'CreatedAscending' });
-    assert.strictEqual((mock.requests[1].body as { Order: string }).Order, 'CreatedDescending');
-  });
-
-  it('calls every other insight route with paging bodies', async () => {
+  it('posts the overlap preview with the trimmed title and brief and reads the camelized result', async () => {
     const mock = new MockFetch()
-      .on('POST', '/api/v1/vessels/vsl_a/reservations/enumerate', { json: { ...page([{ Directory: 'src/', MissionId: 'msn_y' }]), Threshold: 3 } })
-      .on('POST', '/api/v1/missions/lint-brief', { json: { Findings: [], FindingCount: 0, Clean: true, PathsChecked: false } })
-      .on('POST', '/api/v1/vessels/vsl_a/blackbox-doctor/enumerate', { json: { ...page([]), WindowDays: 7 } })
-      .on('POST', '/api/v1/blackbox/recovery-stats/enumerate', { json: page([{ PathId: 'bbx-land-001.retry', Runs: 4, SuccessRate: 0.75 }]) })
-      .on('GET', '/api/v1/blackbox/bbx_1/diff/bbx_0', { json: DIFF })
-      .on('POST', '/api/v1/blackbox/bbx_1/nearby-successes/enumerate', { json: page([{ SuccessId: 'bbs_1', MissionId: 'msn_ok' }]) })
-      .on('GET', '/api/v1/voyages/vyg_1/blackbox/cascade', { json: { VoyageId: 'vyg_1', Nodes: [], Edges: [] } });
-    const c = client(mock);
-    assert.strictEqual((await c.listReservations('vsl_a', 2, 5)).Threshold, 3);
-    assert.strictEqual((await c.lintBrief({ Title: 't', VesselId: 'vsl_a' })).Clean, true);
-    assert.strictEqual((await c.getDoctor('vsl_a', 7)).WindowDays, 7);
-    assert.strictEqual((await c.getRecoveryStats({ ruleId: 'BBX-LAND-001', vesselId: 'vsl_a' })).Objects[0].SuccessRate, 0.75);
-    assert.strictEqual((await c.diffEntries('bbx_1', 'bbx_0')).DifferenceCount, 2);
-    assert.strictEqual((await c.listNearbySuccesses('bbx_1')).Objects[0].SuccessId, 'bbs_1');
-    assert.strictEqual((await c.getVoyageCascade('vyg_1')).VoyageId, 'vyg_1');
-    assert.deepStrictEqual(mock.calls('POST', '/api/v1/vessels/vsl_a/reservations/enumerate')[0].body, { PageNumber: 2, PageSize: 5 });
-    assert.deepStrictEqual(mock.calls('POST', '/api/v1/missions/lint-brief')[0].body, { Title: 't', Description: null, VesselId: 'vsl_a' });
-    assert.deepStrictEqual(mock.calls('POST', '/api/v1/vessels/vsl_a/blackbox-doctor/enumerate')[0].body, { PageNumber: 1, PageSize: 10, WindowDays: 7 });
-    assert.deepStrictEqual(mock.calls('POST', '/api/v1/blackbox/recovery-stats/enumerate')[0].body, { PageNumber: 1, PageSize: 10, RuleId: 'BBX-LAND-001', VesselId: 'vsl_a' });
-  });
-
-  it('refuses to diff an entry with itself and maps a 404 diff', async () => {
-    const mock = new MockFetch().on('GET', '/api/v1/blackbox/bbx_1/diff/bbx_9', { status: 404, json: { Error: 'NotFound', Message: 'not found', Data: { Code: 'BlackBoxNotFound' } } });
-    await assert.rejects(client(mock).diffEntries('bbx_1', 'bbx_1'), (e: ArmadaApiError) => e.kind === 'badRequest');
-    await assert.rejects(client(mock).diffEntries('bbx_1', 'bbx_9'), (e: ArmadaApiError) => e.kind === 'notFound' && e.code === 'BlackBoxNotFound');
-  });
-
-  it('rejects a timeline response that is not a page', async () => {
-    const mock = new MockFetch().on('POST', '/api/v1/blackbox/bbx_1/timeline/enumerate', { json: { EntryId: 'bbx_1' } });
-    await assert.rejects(client(mock).getTimeline('bbx_1'), (e: ArmadaApiError) => e.kind === 'invalidResponse');
-  });
-
-  it('builds dashboard runbook and entry links', () => {
-    assert.strictEqual(Routes.dashboardRunbook('rbk 1'), '/runbooks/rbk%201');
-    assert.strictEqual(Routes.dashboardEntry('bbx_1'), '/blackbox/bbx_1');
+      .on('GET', '/api/v1/vessels', { json: page([SERVER_VESSEL_A]) })
+      .on('POST', '/api/v1/blackbox/enumerate', { json: page([]) })
+      .on('POST', '/api/v1/blackbox/hotspots/enumerate', { json: page([]) })
+      .on('POST', '/api/v1/vessels/vsl_a/overlap-preview', { json: SERVER_PREVIEW });
+    fake.inputBox.push('  Login  ', ' Touch only src/auth/login.ts ');
+    assert.strictEqual(await insights(mock).previewOverlap(), 'shown');
+    assert.deepStrictEqual(mock.calls('POST', '/api/v1/vessels/vsl_a/overlap-preview')[0].body, { Title: 'Login', Description: 'Touch only src/auth/login.ts' });
   });
 });
 
 describe('insight Markdown', () => {
   it('renders a timeline page with escaped cells and source counts', () => {
-    const md = renderTimelineMarkdown(summary(), timelinePage(1, 2, { Truncated: true }));
+    const md = renderTimelineMarkdown(summary(), fromServer<BlackBoxTimelinePage>(timelinePage(1, 2, { Truncated: true })));
     assert.match(md, /Page 1 of 2, 4 events in all/);
     assert.ok(md.includes('merge \\| conflicted'));
     assert.match(md, /\| Entry \| 1 \| yes \|/);
@@ -143,7 +103,7 @@ describe('insight Markdown', () => {
   });
 
   it('renders an empty timeline', () => {
-    const md = renderTimelineMarkdown(summary(), { ...timelinePage(1, 0), Objects: [], TotalRecords: 0, Sources: [] });
+    const md = renderTimelineMarkdown(summary(), fromServer<BlackBoxTimelinePage>({ ...timelinePage(1, 0), Objects: [], TotalRecords: 0, Sources: [] }));
     assert.match(md, /No timeline events were recorded/);
     assert.match(md, /Page 1 of 1/);
   });
@@ -159,7 +119,7 @@ describe('insight Markdown', () => {
   });
 
   it('renders a diff with no differences and unknown files', () => {
-    const md = renderDiffMarkdown({ ...DIFF, Differences: [], DifferenceCount: 0, ChangedFilesKnown: false }, 'a', 'b');
+    const md = renderDiffMarkdown(fromServer<BlackBoxAttemptDiff>({ ...SERVER_DIFF, Differences: [], DifferenceCount: 0, ChangedFilesKnown: false }), 'a', 'b');
     assert.match(md, /No recorded values differ/);
     assert.match(md, /changed files are not known/);
   });
@@ -176,7 +136,7 @@ describe('insight Markdown', () => {
   });
 
   it('renders a clean preview', () => {
-    const md = renderOverlapMarkdown({ VesselId: 'vsl_a', Warnings: [], WarningCount: 0, BriefLint: { Findings: [], FindingCount: 0, Clean: true }, TrackedFilesKnown: false }, 'alpha', '');
+    const md = renderOverlapMarkdown(fromServer<MissionOverlapPreview>({ VesselId: 'vsl_a', Warnings: [], WarningCount: 0, BriefLint: { Findings: [], FindingCount: 0, Clean: true }, TrackedFilesKnown: false }), 'alpha', '');
     assert.match(md, /No overlaps with active missions/);
     assert.match(md, /The brief is clean/);
     assert.match(md, /no local repository on the Admiral/);
@@ -190,17 +150,17 @@ describe('insight Markdown', () => {
 
 describe('Show Black Box Timeline', () => {
   it('opens the first page and follows Next Page', async () => {
-    const mock = new MockFetch().on('POST', '/api/v1/blackbox/bbx_1/timeline/enumerate', (req) => ({ json: timelinePage((req.body as { PageNumber: number }).PageNumber, 2) }));
+    const mock = new MockFetch().on('GET', '/api/v1/blackbox/bbx_1/timeline', (req) => ({ json: timelinePage(Number(req.query.get('pageNumber')), 2) }));
     fake.info.push(TIMELINE_NEXT);
     const pages = await insights(mock).showTimeline();
-    assert.deepStrictEqual(pages.map((p) => p.PageNumber), [1, 2]);
+    assert.deepStrictEqual(pages.map((p) => p.pageNumber), [1, 2]);
     assert.strictEqual(fake.documents.length, 2);
     assert.match(fake.documents[1].content ?? '', /page 2 created/);
     assert.strictEqual(fake.documents[0].language, 'markdown');
   });
 
   it('stops after one page when there is only one, and does nothing when the pick is cancelled', async () => {
-    const mock = new MockFetch().on('POST', '/api/v1/blackbox/bbx_1/timeline/enumerate', { json: timelinePage(1, 1) });
+    const mock = new MockFetch().on('GET', '/api/v1/blackbox/bbx_1/timeline', { json: timelinePage(1, 1) });
     assert.strictEqual((await insights(mock).showTimeline()).length, 1);
     assert.deepStrictEqual(fake.messages.map((m) => m.text), []);
     fake.reset();
@@ -209,7 +169,7 @@ describe('Show Black Box Timeline', () => {
   });
 
   it('shows an error for a missing entry', async () => {
-    const mock = new MockFetch().on('POST', '/api/v1/blackbox/bbx_1/timeline/enumerate', { status: 404, json: { Error: 'NotFound', Data: { Code: 'BlackBoxNotFound' } } });
+    const mock = new MockFetch().on('GET', '/api/v1/blackbox/bbx_1/timeline', { status: 404, json: { Error: 'NotFound', Data: { Code: 'BlackBoxNotFound' } } });
     assert.strictEqual((await insights(mock).showTimeline()).length, 0);
     assert.strictEqual(fake.messages[0].level, 'error');
     assert.match(fake.messages[0].text, /No black box entry was found/);
@@ -220,33 +180,33 @@ describe('Compare Black Box Attempts', () => {
   it('offers the mission\'s other attempts and opens the diff', async () => {
     const mock = new MockFetch()
       .on('GET', '/api/v1/missions/msn_x/blackbox/entries', { json: page([summary({ Id: 'bbx_1', Attempt: 2 }), summary({ Id: 'bbx_0', Attempt: 1 })]) })
-      .on('GET', '/api/v1/blackbox/bbx_1/diff/bbx_0', { json: DIFF });
+      .on('GET', '/api/v1/blackbox/bbx_1/diff/bbx_0', { json: SERVER_DIFF });
     fake.quickPick.push((items: Array<{ label: string; entry?: BlackBoxEntrySummary }>) => {
-      assert.deepStrictEqual(items.map((i) => i.entry?.Id ?? 'enter'), ['bbx_0', 'enter']);
+      assert.deepStrictEqual(items.map((i) => i.entry?.id ?? 'enter'), ['bbx_0', 'enter']);
       return items[0];
     });
     const diff = await insights(mock).compareAttempts();
-    assert.strictEqual(diff?.DifferenceCount, 2);
+    assert.strictEqual(diff?.differenceCount, 2);
     assert.match(fake.documents[0].content ?? '', /\| Subject \| Model \| opus \| sonnet \|/);
   });
 
   it('asks for an entry id when the mission has no other attempts', async () => {
     const mock = new MockFetch()
       .on('GET', '/api/v1/missions/msn_x/blackbox/entries', { json: page([summary()]) })
-      .on('GET', '/api/v1/blackbox/bbx_1/diff/bbx_7', { json: { ...DIFF, OtherEntryId: 'bbx_7' } });
+      .on('GET', '/api/v1/blackbox/bbx_1/diff/bbx_7', { json: { ...SERVER_DIFF, OtherEntryId: 'bbx_7' } });
     fake.inputBox.push((options: { prompt: string; validateInput: (v: string) => string | undefined }) => {
       assert.match(options.prompt, /no other attempts/);
       assert.strictEqual(options.validateInput('bbx_1'), 'Pick a different entry');
       return ' bbx_7 ';
     });
     const diff = await insights(mock).compareAttempts();
-    assert.strictEqual(diff?.OtherEntryId, 'bbx_7');
+    assert.strictEqual(diff?.otherEntryId, 'bbx_7');
   });
 
   it('uses an explicit other id and returns nothing when the id prompt is cancelled', async () => {
     const mock = new MockFetch()
       .on('GET', '/api/v1/missions/msn_x/blackbox/entries', { json: page([summary()]) })
-      .on('GET', '/api/v1/blackbox/bbx_1/diff/bbx_3', { json: DIFF });
+      .on('GET', '/api/v1/blackbox/bbx_1/diff/bbx_3', { json: SERVER_DIFF });
     assert.ok(await insights(mock).compareAttempts(undefined, 'bbx_3'));
     assert.strictEqual(mock.calls('GET', '/api/v1/missions/msn_x/blackbox/entries').length, 0);
     fake.reset();
@@ -264,7 +224,7 @@ describe('Compare Black Box Attempts', () => {
 });
 
 describe('Preview Mission Overlap', () => {
-  function overlapMock(preview: unknown = PREVIEW, vessels = [VESSEL_A, VESSEL_B]): MockFetch {
+  function overlapMock(preview: unknown = SERVER_PREVIEW, vessels = [SERVER_VESSEL_A, SERVER_VESSEL_B]): MockFetch {
     return new MockFetch()
       .on('GET', '/api/v1/vessels', { json: page(vessels) })
       .on('POST', '/api/v1/blackbox/enumerate', { json: page([]) })
@@ -293,16 +253,16 @@ describe('Preview Mission Overlap', () => {
 
   it('lets the user pick a vessel when none matches the workspace', async () => {
     const mock = overlapMock();
-    fake.quickPick.push((items: Array<{ label: string; vessel: { Id: string } }>, options: { placeHolder: string }) => {
+    fake.quickPick.push((items: Array<{ label: string; vessel: { id: string } }>, options: { placeHolder: string }) => {
       assert.match(options.placeHolder, /No vessel matches the open repository/);
-      return items.find((i) => i.vessel.Id === 'vsl_a');
+      return items.find((i) => i.vessel.id === 'vsl_a');
     });
     fake.inputBox.push('t', 'b');
     assert.strictEqual(await insights(mock, summary(), { remotes: {} }).previewOverlap(), 'shown');
   });
 
   it('says so when the server has no vessels', async () => {
-    const mock = overlapMock(PREVIEW, []);
+    const mock = overlapMock(SERVER_PREVIEW, []);
     assert.strictEqual(await insights(mock, summary(), { remotes: {} }).previewOverlap(), 'noVessel');
     assert.match(fake.messages[0].text, /no vessels are registered/);
   });
@@ -347,7 +307,7 @@ describe('entry view insight extras', () => {
   it('shows success rates, runbook links and the vessel doctor', () => {
     const html = renderEntryHtml(withPaths(), [], 'n', 'c', {
       dashboardUrl: 'http://armada.test:7890/dashboard/',
-      doctor: { ...page([{ Key: 'k', Setting: 'LandingMode', CurrentValue: 'LocalMerge', SuggestedValue: 'PullRequest', Count: 6, ExampleEntryId: 'bbx_9', RuleId: 'BBX-LAND-001', Applicable: true }], 8), WindowDays: 30 },
+      doctor: fromServer<BlackBoxDoctorPage>({ ...page([{ Key: 'k', Setting: 'LandingMode', CurrentValue: 'LocalMerge', SuggestedValue: 'PullRequest', Count: 6, ExampleEntryId: 'bbx_9', RuleId: 'BBX-LAND-001', Applicable: true }], 8), WindowDays: 30 }),
     });
     assert.ok(html.includes('recovered 67% of 3 tracked runs'));
     assert.ok(html.includes('<a href="http://armada.test:7890/dashboard/runbooks/rbk_1">Landing &lt;runbook&gt;</a>'));
@@ -363,8 +323,8 @@ describe('entry view insight extras', () => {
     const html = renderEntryHtml(withPaths(), [], 'n', 'c');
     assert.ok(!html.includes('Recurring on this vessel'));
     assert.ok(html.includes('Runbook: Landing &lt;runbook&gt; <code>rbk_1</code>'));
-    assert.strictEqual(recoveryExtras({ Id: 'x', Title: 'x' }, ''), '');
-    assert.ok(!renderEntryHtml(withPaths(), [], 'n', 'c', { doctor: { ...page([]), WindowDays: 30 } }).includes('Recurring on this vessel'));
+    assert.strictEqual(recoveryExtras({ id: 'x', rank: 1, title: 'x' }, ''), '');
+    assert.ok(!renderEntryHtml(withPaths(), [], 'n', 'c', { doctor: fromServer<BlackBoxDoctorPage>({ ...page([]), WindowDays: 30 }) }).includes('Recurring on this vessel'));
   });
 
   it('accepts the new webview actions', () => {

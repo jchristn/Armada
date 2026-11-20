@@ -6,7 +6,7 @@ rem The VSIX version comes from src/Armada.VSCode/package.json.
 
 if not "%~1"=="" (
     echo Usage: build-vscode.bat
-    echo Builds src\Armada.VSCode\armada-vscode-^<version^>.vsix ^(version from its package.json^).
+    echo Builds src\Armada.VSCode\armada-^<version^>.vsix ^(version from its package.json^).
     endlocal
     exit /b 1
 )
@@ -20,6 +20,11 @@ if not "%EXIT_CODE%"=="0" goto :done
 
 echo Building the extension...
 call npm run build
+set "EXIT_CODE=%ERRORLEVEL%"
+if not "%EXIT_CODE%"=="0" goto :done
+
+echo Linting the extension and the dashboard modules it shares...
+call npm run lint
 set "EXIT_CODE=%ERRORLEVEL%"
 if not "%EXIT_CODE%"=="0" goto :done
 

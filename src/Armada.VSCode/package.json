@@ -1,9 +1,9 @@
 {
-  "name": "armada-vscode",
+  "name": "armada",
   "displayName": "Armada",
-  "description": "Armada mission and voyage black box in VS Code: recent failures, FIX THIS briefs, recovery paths, timelines, attempt diffs, overlap previews, conflict decorations and live updates.",
+  "description": "Armada in VS Code: connect to your Armada Admiral, navigate every Armada area, and work the mission and voyage black box (failures, FIX THIS briefs, recovery, timelines, attempt diffs, overlap previews, conflict decorations) with live updates.",
   "version": "1.3.0",
-  "publisher": "jchristn",
+  "publisher": "latticetech",
   "license": "MIT",
   "icon": "media/icon.png",
   "homepage": "https://github.com/jchristn/armada",
@@ -26,22 +26,32 @@
   "keywords": [
     "armada",
     "agents",
+    "orchestration",
+    "missions",
     "black box",
-    "failures",
-    "orchestration"
+    "failures"
   ],
   "main": "./dist/extension.js",
   "activationEvents": [
     "onStartupFinished"
   ],
   "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "armada",
+          "title": "Armada",
+          "icon": "media/icon.png"
+        }
+      ]
+    },
     "configuration": {
       "title": "Armada",
       "properties": {
         "armada.url": {
           "type": "string",
-          "default": "http://localhost:7890",
-          "description": "URL of the Armada Admiral (REST API). A trailing /dashboard is ignored.",
+          "default": "",
+          "markdownDescription": "URL of a remote Armada Admiral (REST API). Leave empty to use the local Admiral: its port and API key are read from `~/.armada/settings.json` (or `$ARMADA_DATA_DIR/settings.json`) with no prompt. A trailing `/dashboard` is ignored.",
           "order": 0
         },
         "armada.tenant": {
@@ -61,18 +71,23 @@
             "Send the key as X-Api-Key (the deprecated settings API key)."
           ],
           "default": "Bearer",
-          "description": "How the stored API key is sent. The key itself is kept in VS Code secret storage, never in settings.",
+          "description": "How the stored API key of a remote Admiral is sent. The key itself is kept in VS Code secret storage, never in settings. The local Admiral always uses its settings API key as X-Api-Key.",
           "order": 2
         },
         "armada.dashboardUrl": {
           "type": "string",
           "default": "",
-          "description": "Armada dashboard URL used by Ask Armada. Empty means armada.url followed by /dashboard."
+          "description": "Armada dashboard URL used for dashboard links and Ask Armada. Empty means the connected Admiral followed by /dashboard."
         },
         "armada.fixThis.openPreview": {
           "type": "boolean",
           "default": true,
           "description": "Open a Markdown preview beside the FIX THIS editor."
+        },
+        "armada.failures.showInExplorer": {
+          "type": "boolean",
+          "default": false,
+          "description": "Also show the Armada Failures view in the Explorer (it always appears in the Armada view container)."
         },
         "armada.failures.filterToWorkspaceVessel": {
           "type": "boolean",
@@ -123,19 +138,59 @@
       }
     },
     "views": {
-      "explorer": [
+      "armada": [
+        {
+          "id": "armadaNavigation",
+          "name": "Navigation",
+          "contextualTitle": "Armada",
+          "icon": "media/icon.png"
+        },
         {
           "id": "armadaFailures",
+          "name": "Failures",
+          "contextualTitle": "Armada",
+          "icon": "media/icon.png"
+        }
+      ],
+      "explorer": [
+        {
+          "id": "armadaFailuresExplorer",
           "name": "Armada Failures",
-          "contextualTitle": "Armada"
+          "contextualTitle": "Armada",
+          "when": "config.armada.failures.showInExplorer"
         }
       ]
     },
     "viewsWelcome": [
       {
+        "view": "armadaNavigation",
+        "contents": "Connecting to the Armada Admiral...",
+        "when": "armada.connectionState == connecting"
+      },
+      {
+        "view": "armadaNavigation",
+        "contents": "Not connected to an Armada Admiral. The local Admiral is found through ~/.armada/settings.json; start Armada on this machine, or connect to a remote Admiral.\n[Connect](command:armada.connect)\n[Connect to a Remote Admiral](command:armada.connectRemote)\n[Show Output](command:armada.showOutput)",
+        "when": "!armada.connected && armada.connectionState != connecting"
+      },
+      {
         "view": "armadaFailures",
-        "contents": "Connect to an Armada Admiral to see mission and voyage failures for this repository.\n[Connect to Armada](command:armada.connect)",
-        "when": "!armada.connected"
+        "contents": "Connecting to the Armada Admiral...",
+        "when": "armada.connectionState == connecting"
+      },
+      {
+        "view": "armadaFailures",
+        "contents": "Not connected to an Armada Admiral. The local Admiral is found through ~/.armada/settings.json; start Armada on this machine, or connect to a remote Admiral.\n[Connect](command:armada.connect)\n[Connect to a Remote Admiral](command:armada.connectRemote)\n[Show Output](command:armada.showOutput)",
+        "when": "!armada.connected && armada.connectionState != connecting"
+      },
+      {
+        "view": "armadaFailuresExplorer",
+        "contents": "Connecting to the Armada Admiral...",
+        "when": "armada.connectionState == connecting"
+      },
+      {
+        "view": "armadaFailuresExplorer",
+        "contents": "Not connected to an Armada Admiral. The local Admiral is found through ~/.armada/settings.json; start Armada on this machine, or connect to a remote Admiral.\n[Connect](command:armada.connect)\n[Connect to a Remote Admiral](command:armada.connectRemote)\n[Show Output](command:armada.showOutput)",
+        "when": "!armada.connected && armada.connectionState != connecting"
       }
     ],
     "commands": [
@@ -146,10 +201,58 @@
         "icon": "$(plug)"
       },
       {
+        "command": "armada.connectRemote",
+        "title": "Connect to a Remote Admiral...",
+        "category": "Armada",
+        "icon": "$(remote)"
+      },
+      {
+        "command": "armada.useLocalAdmiral",
+        "title": "Use the Local Admiral",
+        "category": "Armada",
+        "icon": "$(home)"
+      },
+      {
+        "command": "armada.reconnect",
+        "title": "Reconnect",
+        "category": "Armada",
+        "icon": "$(refresh)"
+      },
+      {
         "command": "armada.disconnect",
         "title": "Disconnect",
         "category": "Armada",
         "icon": "$(debug-disconnect)"
+      },
+      {
+        "command": "armada.showConnectionActions",
+        "title": "Connection Actions...",
+        "category": "Armada",
+        "icon": "$(plug)"
+      },
+      {
+        "command": "armada.showOutput",
+        "title": "Show Output",
+        "category": "Armada",
+        "icon": "$(output)"
+      },
+      {
+        "command": "armada.openSettings",
+        "title": "Open Settings",
+        "category": "Armada",
+        "icon": "$(gear)"
+      },
+      {
+        "command": "armada.openDashboard",
+        "title": "Open Dashboard",
+        "category": "Armada",
+        "icon": "$(link-external)"
+      },
+      {
+        "command": "armada.openDashboardPage",
+        "title": "Open Dashboard Page",
+        "category": "Armada",
+        "icon": "$(link-external)"
       },
       {
         "command": "armada.refreshFailures",
@@ -250,12 +353,24 @@
     "menus": {
       "commandPalette": [
         {
-          "command": "armada.openEntry",
+          "command": "armada.openDashboardPage",
           "when": "false"
         },
         {
           "command": "armada.disconnect",
+          "when": "armada.connected || armada.connectionState == failed"
+        },
+        {
+          "command": "armada.reconnect",
           "when": "armada.connected"
+        },
+        {
+          "command": "armada.openDashboard",
+          "when": "armada.connected"
+        },
+        {
+          "command": "armada.openEntry",
+          "when": "false"
         },
         {
           "command": "armada.refreshFailures",
@@ -316,115 +431,127 @@
       ],
       "view/title": [
         {
+          "command": "armada.openDashboard",
+          "when": "view == armadaNavigation && armada.connected",
+          "group": "navigation@1"
+        },
+        {
+          "command": "armada.showConnectionActions",
+          "when": "view == armadaNavigation",
+          "group": "navigation@2"
+        },
+        {
           "command": "armada.refreshFailures",
-          "when": "view == armadaFailures && armada.connected",
+          "when": "view =~ /^armadaFailures/ && armada.connected",
           "group": "navigation@1"
         },
         {
           "command": "armada.toggleWorkspaceFilter",
-          "when": "view == armadaFailures && armada.connected",
+          "when": "view =~ /^armadaFailures/ && armada.connected",
           "group": "navigation@2"
         },
         {
           "command": "armada.openBlackBox",
-          "when": "view == armadaFailures && armada.connected",
+          "when": "view =~ /^armadaFailures/ && armada.connected",
           "group": "navigation@3"
         },
         {
           "command": "armada.previewMissionOverlap",
-          "when": "view == armadaFailures && armada.connected",
+          "when": "view =~ /^armadaFailures/ && armada.connected",
           "group": "navigation@4"
         },
         {
           "command": "armada.showResilienceGaps",
-          "when": "view == armadaFailures && armada.connected",
+          "when": "view =~ /^armadaFailures/ && armada.connected",
           "group": "navigation@5"
         },
         {
           "command": "armada.connect",
-          "when": "view == armadaFailures",
+          "when": "view =~ /^armadaFailures/ && !armada.connected",
           "group": "connection@1"
         },
         {
           "command": "armada.disconnect",
-          "when": "view == armadaFailures && armada.connected",
+          "when": "view =~ /^armadaFailures/ && armada.connected",
           "group": "connection@2"
         }
       ],
       "view/item/context": [
         {
           "command": "armada.copyFixThis",
-          "when": "view == armadaFailures && viewItem =~ /^armadaEntry/",
+          "when": "view =~ /^armadaFailures/ && viewItem =~ /^armadaEntry/",
           "group": "inline@1"
         },
         {
           "command": "armada.runRecoveryPath",
-          "when": "view == armadaFailures && viewItem == armadaEntryOpen",
+          "when": "view =~ /^armadaFailures/ && viewItem == armadaEntryOpen",
           "group": "inline@2"
         },
         {
           "command": "armada.openBlackBox",
-          "when": "view == armadaFailures && viewItem =~ /^armadaEntry/",
+          "when": "view =~ /^armadaFailures/ && viewItem =~ /^armadaEntry/",
           "group": "1_open@1"
         },
         {
           "command": "armada.copyFixThis",
-          "when": "view == armadaFailures && viewItem =~ /^armadaEntry/",
+          "when": "view =~ /^armadaFailures/ && viewItem =~ /^armadaEntry/",
           "group": "2_fixthis@1"
         },
         {
           "command": "armada.openFixThisInEditor",
-          "when": "view == armadaFailures && viewItem =~ /^armadaEntry/",
+          "when": "view =~ /^armadaFailures/ && viewItem =~ /^armadaEntry/",
           "group": "2_fixthis@2"
         },
         {
           "command": "armada.sendFixThisToChat",
-          "when": "view == armadaFailures && viewItem =~ /^armadaEntry/",
+          "when": "view =~ /^armadaFailures/ && viewItem =~ /^armadaEntry/",
           "group": "2_fixthis@3"
         },
         {
           "command": "armada.askArmada",
-          "when": "view == armadaFailures && viewItem =~ /^armadaEntry/",
+          "when": "view =~ /^armadaFailures/ && viewItem =~ /^armadaEntry/",
           "group": "2_fixthis@4"
         },
         {
           "command": "armada.draftArmadaFixMission",
-          "when": "view == armadaFailures && viewItem =~ /^armadaEntry/",
+          "when": "view =~ /^armadaFailures/ && viewItem =~ /^armadaEntry/",
           "group": "2_fixthis@5"
         },
         {
           "command": "armada.runRecoveryPath",
-          "when": "view == armadaFailures && viewItem == armadaEntryOpen",
+          "when": "view =~ /^armadaFailures/ && viewItem == armadaEntryOpen",
           "group": "3_act@1"
         },
         {
           "command": "armada.resolveEntry",
-          "when": "view == armadaFailures && viewItem == armadaEntryOpen",
+          "when": "view =~ /^armadaFailures/ && viewItem == armadaEntryOpen",
           "group": "3_act@2"
         },
         {
           "command": "armada.addNote",
-          "when": "view == armadaFailures && viewItem =~ /^armadaEntry/",
+          "when": "view =~ /^armadaFailures/ && viewItem =~ /^armadaEntry/",
           "group": "3_act@3"
         },
         {
           "command": "armada.showBlackBoxTimeline",
-          "when": "view == armadaFailures && viewItem =~ /^armadaEntry/",
+          "when": "view =~ /^armadaFailures/ && viewItem =~ /^armadaEntry/",
           "group": "4_forensics@1"
         },
         {
           "command": "armada.compareBlackBoxAttempts",
-          "when": "view == armadaFailures && viewItem =~ /^armadaEntry/",
+          "when": "view =~ /^armadaFailures/ && viewItem =~ /^armadaEntry/",
           "group": "4_forensics@2"
         }
       ]
     }
   },
   "scripts": {
-    "typecheck": "tsc -p ./ --noEmit",
+    "typecheck": "tsc -p ./ && tsc -p ./tsconfig.test.json",
     "bundle": "node esbuild.mjs --production",
     "build": "npm run typecheck && npm run bundle",
-    "compile-tests": "tsc -p ./tsconfig.test.json",
+    "lint": "eslint . --max-warnings 0 && npm run lint:shared",
+    "lint:shared": "cd .. && node Armada.VSCode/node_modules/eslint/bin/eslint.js --max-warnings 0 --config Armada.VSCode/eslint.dashboard-shared.config.mjs Armada.Dashboard/src",
+    "compile-tests": "node esbuild.mjs --tests",
     "test": "npm run compile-tests && node --require ./out/test/setup.js --test \"out/test/unit/**/*.test.js\"",
     "test:integration": "npm run build && npm run compile-tests && node ./out/test/integration/runTest.js",
     "package": "vsce package --no-dependencies",
@@ -433,9 +560,13 @@
   "devDependencies": {
     "@types/node": "22.20.4",
     "@types/vscode": "1.101.0",
+    "@typescript-eslint/eslint-plugin": "8.71.1",
+    "@typescript-eslint/parser": "8.71.1",
     "@vscode/test-electron": "3.1.0",
     "@vscode/vsce": "3.9.2",
     "esbuild": "0.28.2",
-    "typescript": "5.9.3"
+    "eslint": "9.39.5",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.71.1"
   }
 }

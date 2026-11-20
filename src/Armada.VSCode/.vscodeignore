@@ -7,6 +7,9 @@ node_modules/**
 **/*.ts
 tsconfig*.json
 esbuild.mjs
+eslint*.mjs
+parity.json
+.nvmrc
 .vscode-test/**
 .gitignore
 *.vsix

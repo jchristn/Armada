@@ -7,14 +7,13 @@
     "strict": true,
     "noImplicitReturns": true,
     "noFallthroughCasesInSwitch": true,
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,
-    "rootDir": ".",
-    "outDir": "out",
-    "sourceMap": true
+    "noEmit": true,
+    "paths": {
+      "@dashboard/*": ["../Armada.Dashboard/src/*"]
+    }
   },
   "include": ["src/**/*.ts"]
 }

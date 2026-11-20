@@ -2,6 +2,11 @@
  * @vscode/test-electron integration test launcher. Downloads VS Code, starts it with this extension in development
  * mode and runs suite/index.ts inside the extension host.
  *
+ * The extension host never sees the developer's ~/.armada: ARMADA_DATA_DIR points at ARMADA_VSCODE_TEST_DATA_DIR when
+ * set (the data directory of a throwaway Admiral, for the connected smoke run with ARMADA_VSCODE_EXPECT_ADMIRAL=1),
+ * otherwise at an empty temporary directory (the disconnected run). ARMADA_VSCODE_SCREENSHOT_DIR, when set, asks the
+ * suite for light and dark screenshots of the Armada container (macOS only).
+ *
  * Skipped (exit code 0, with a message) when ARMADA_VSCODE_SKIP_INTEGRATION=1, when Linux has no display, or when VS
  * Code cannot be downloaded (offline or blocked). A test failure inside VS Code exits 1.
  */
@@ -31,18 +36,27 @@ async function main(): Promise<void> {
 
   // A short user data directory: the IPC socket path inside it must stay under the 103-character Unix limit.
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'avsc-'));
+  const emptyDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'avsc-data-'));
+  const dataDir = process.env.ARMADA_VSCODE_TEST_DATA_DIR || emptyDataDir;
+  console.log(`[integration] ARMADA_DATA_DIR for the extension host: ${dataDir}`);
   try {
     await runTests({
       vscodeExecutablePath,
       extensionDevelopmentPath,
       extensionTestsPath,
-      launchArgs: ['--disable-extensions', '--skip-welcome', '--skip-release-notes', `--user-data-dir=${userDataDir}`],
+      launchArgs: ['--disable-extensions', '--skip-welcome', '--skip-release-notes', '--disable-workspace-trust', `--user-data-dir=${userDataDir}`],
+      extensionTestsEnv: {
+        ARMADA_DATA_DIR: dataDir,
+        ARMADA_VSCODE_EXPECT_ADMIRAL: process.env.ARMADA_VSCODE_EXPECT_ADMIRAL ?? '',
+        ARMADA_VSCODE_SCREENSHOT_DIR: process.env.ARMADA_VSCODE_SCREENSHOT_DIR ?? '',
+      },
     });
   } catch (err) {
     console.error(`[integration] failed: ${err instanceof Error ? err.message : String(err)}`);
     process.exit(1);
   } finally {
     fs.rmSync(userDataDir, { recursive: true, force: true });
+    fs.rmSync(emptyDataDir, { recursive: true, force: true });
   }
 }
 

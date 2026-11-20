@@ -1,11 +1,12 @@
 import * as assert from 'assert';
 import { describe, it } from 'node:test';
-import { escapeHtml, isEntryViewMessage, renderEntryErrorHtml, renderEntryHtml } from '../../src/views/entryHtml';
-import { fullEntry, summary } from '../fakes/fixtures';
+import { escapeHtml, isEntryViewMessage, renderEntryErrorHtml, renderEntryHtml } from '../../src/surfaces/blackbox/entryHtml';
+import type { BlackBoxEntry, BlackBoxNote } from '@dashboard/types/blackbox';
+import { fromServer, fullEntry, serverSummary } from '../fakes/fixtures';
 
 describe('renderEntryHtml', () => {
   it('renders the summary sections, recovery buttons and the nonce', () => {
-    const html = renderEntryHtml(fullEntry(), [{ Body: 'checked the merge', AuthorKind: 'Operator', CreatedUtc: '2026-10-28T11:00:00Z' }], 'NONCE123', 'vscode-resource:');
+    const html = renderEntryHtml(fullEntry(), [fromServer<BlackBoxNote>({ Id: 'bbn_1', EntryId: 'bbx_1', Body: 'checked the merge', AuthorKind: 'Operator', CreatedUtc: '2026-10-28T11:00:00Z' })], 'NONCE123', 'vscode-resource:');
     for (const heading of ['Summary', 'Where', 'How', 'Status', 'Why', 'Conflict', 'Recovery', 'Notes']) {
       assert.ok(html.includes(`<h2>${heading}</h2>`), heading);
     }
@@ -27,7 +28,7 @@ describe('renderEntryHtml', () => {
   });
 
   it('handles an entry without a record and hides Resolve when resolved', () => {
-    const html = renderEntryHtml({ ...summary({ Resolution: 'Resolved' }), Record: null }, [], 'n', 'c');
+    const html = renderEntryHtml(fromServer<BlackBoxEntry>({ ...serverSummary({ Resolution: 'Resolved' }), Record: null }), [], 'n', 'c');
     assert.ok(html.includes('No analysis summary yet'));
     assert.ok(html.includes('No recovery paths recorded.'));
     assert.ok(!html.includes('data-action="resolve"'));

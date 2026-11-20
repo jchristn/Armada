@@ -1,22 +1,26 @@
 import * as assert from 'assert';
 import { beforeEach, describe, it } from 'node:test';
 import * as vscode from 'vscode';
-import { BlackBoxEntry, BlackBoxResilience, BlackBoxResilienceGap, EnumerationResult } from '../../src/api/types';
-import { BlackBoxCommands, CHAT_OPEN_COMMAND } from '../../src/commands/blackBoxCommands';
-import { InsightCommands, TIMELINE_NEXT } from '../../src/commands/insightCommands';
+import type { BlackBoxEntry, BlackBoxResilience, BlackBoxResilienceGap } from '@dashboard/types/blackbox';
+import type { EnumerationResult } from '@dashboard/types/models';
 import { ArmadaSettings } from '../../src/config';
-import { changeBrief, isEntryViewMessage, rankedChanges, renderEntryHtml, suspectedDefect } from '../../src/views/entryHtml';
-import { renderGapsMarkdown } from '../../src/views/insightMarkdown';
+import { BlackBoxCommands, CHAT_OPEN_COMMAND } from '../../src/surfaces/blackbox/blackBoxCommands';
+import { changeBrief, isEntryViewMessage, rankedChanges, renderEntryHtml, suspectedDefect } from '../../src/surfaces/blackbox/entryHtml';
+import { InsightCommands, TIMELINE_NEXT } from '../../src/surfaces/blackbox/insightCommands';
+import { renderGapsMarkdown } from '../../src/surfaces/blackbox/insightMarkdown';
 import { MockFetch, page } from '../fakes/fetch';
-import { client, fullEntry, summary } from '../fakes/fixtures';
+import { fromServer, fullEntry, serverEntry, summary } from '../fakes/fixtures';
 import { makeStore } from '../fakes/storeHelpers';
 import { fake, Uri } from '../fakes/vscode';
 
+type Server = Record<string, unknown>;
+
 const SETTINGS: ArmadaSettings = {
-  url: 'http://armada.test:7890',
+  url: '',
   tenant: '',
   authHeader: 'Bearer',
-  dashboardUrl: 'http://armada.test:7890/dashboard',
+  dashboardUrl: '',
+  showFailuresInExplorer: false,
   filterToWorkspaceVessel: true,
   includeResolved: false,
   maxEntries: 50,
@@ -28,7 +32,9 @@ const SETTINGS: ArmadaSettings = {
   previewFixThis: true,
 };
 
-const IN_SCOPE: BlackBoxResilience = {
+const CONNECTION = { tenant: undefined, dashboardUrl: 'http://armada.test:7890/dashboard' };
+
+const SERVER_IN_SCOPE: Server = {
   InScope: true,
   ScopeReason: 'phase Landing (step TargetIntegration) is Armada\'s handoff and landing',
   SelfHealable: 'Yes',
@@ -50,17 +56,25 @@ const IN_SCOPE: BlackBoxResilience = {
   AttemptedRecoveries: ['LandingRetry x2 (Expired)'],
 };
 
-function withResilience(resilience: BlackBoxResilience | null, verdict = 'ArmadaDefect', suspected = false): BlackBoxEntry {
-  const base = fullEntry();
-  return { ...base, Triage: verdict, Record: { ...base.Record, Analysis: { ...base.Record?.Analysis, Resilience: resilience, Triage: { Verdict: verdict, Confidence: 'Low', Suspected: suspected } } } };
+const IN_SCOPE = fromServer<BlackBoxResilience>(SERVER_IN_SCOPE);
+
+/** An entry in the server's shape with the resilience section and triage verdict. */
+function withResilience(resilience: Server | null, verdict = 'ArmadaDefect', suspected = false): Server {
+  const base = serverEntry() as { Record: { Analysis: Server } };
+  return { ...base, Triage: verdict, Record: { ...base.Record, Analysis: { ...base.Record.Analysis, Resilience: resilience, Triage: { Verdict: verdict, Confidence: 'Low', Suspected: suspected } } } };
+}
+
+/** The same entry as the extension sees it. */
+function entryWith(resilience: Server | null, verdict = 'ArmadaDefect', suspected = false): BlackBoxEntry {
+  return fromServer<BlackBoxEntry>(withResilience(resilience, verdict, suspected));
 }
 
 function commands(mock: MockFetch): BlackBoxCommands {
-  const c = client(mock);
-  return new BlackBoxCommands({ getClient: () => c, store: makeStore(mock), getSettings: () => SETTINGS, storageUri: Uri.file('/tmp/armada-vscode-test-storage') as unknown as vscode.Uri });
+  return new BlackBoxCommands({ requireConnection: () => CONNECTION, store: makeStore(mock), getSettings: () => SETTINGS, storageUri: Uri.file('/tmp/armada-vscode-test-storage') as unknown as vscode.Uri });
 }
 
-function gapsPage(pageNumber: number, totalPages: number): EnumerationResult<BlackBoxResilienceGap> {
+/** A page of gaps in the server's shape. */
+function gapsPage(pageNumber: number, totalPages: number): Server {
   return {
     PageNumber: pageNumber,
     PageSize: 25,
@@ -88,7 +102,7 @@ beforeEach(() => fake.reset());
 
 describe('Armada resilience in the entry view', () => {
   it('renders the section right after the summary, with the suspected badge and the draft button', () => {
-    const html = renderEntryHtml(withResilience(IN_SCOPE, 'ArmadaDefect', true), [], 'n', 'c');
+    const html = renderEntryHtml(entryWith(SERVER_IN_SCOPE, 'ArmadaDefect', true), [], 'n', 'c');
     const summaryAt = html.indexOf('<h2>Summary</h2>');
     const resilienceAt = html.indexOf('<h2>Armada resilience</h2>');
     assert.ok(summaryAt > 0 && resilienceAt > summaryAt && resilienceAt < html.indexOf('<h2>Where</h2>'), 'right after the summary');
@@ -107,7 +121,7 @@ describe('Armada resilience in the entry view', () => {
   });
 
   it('outside handoff and landing it is one line and offers no draft; old entries have no section', () => {
-    const html = renderEntryHtml(withResilience({ InScope: false, ProposedChanges: [], NoChangeReason: 'No Armada change suggested: outside scope.' }, 'Transient'), [], 'n', 'c');
+    const html = renderEntryHtml(entryWith({ InScope: false, ProposedChanges: [], NoChangeReason: 'No Armada change suggested: outside scope.' }, 'Transient'), [], 'n', 'c');
     assert.ok(html.includes('No Armada change suggested: outside scope.'));
     assert.ok(!html.includes('data-action="draftFix"'));
     assert.ok(!html.includes('Suspected Armada defect'));
@@ -115,10 +129,10 @@ describe('Armada resilience in the entry view', () => {
   });
 
   it('ranks changes and builds briefs', () => {
-    assert.deepStrictEqual(rankedChanges(IN_SCOPE).map((c) => c.Rank), [1, 2]);
+    assert.deepStrictEqual(rankedChanges(IN_SCOPE).map((c) => c.rank), [1, 2]);
     assert.strictEqual(changeBrief(rankedChanges(IN_SCOPE)[0]), 'Recreate a missing dock worktree\n\nRecreate it before git runs.');
     assert.strictEqual(changeBrief(rankedChanges(IN_SCOPE)[1]), 'Never reclaim a leased dock\n\nRefuse reclaims while WorkProduced.\n\nAcceptance test: Services.DockLease: refused.');
-    assert.ok(suspectedDefect(withResilience(IN_SCOPE)));
+    assert.ok(suspectedDefect(entryWith(SERVER_IN_SCOPE)));
     assert.ok(!suspectedDefect(fullEntry()));
   });
 });
@@ -126,7 +140,7 @@ describe('Armada resilience in the entry view', () => {
 describe('Draft Armada Fix Mission', () => {
   it('opens chat with the top change as a mission brief and copies it', async () => {
     fake.availableCommands = [CHAT_OPEN_COMMAND];
-    const mock = new MockFetch().on('GET', '/api/v1/blackbox/bbx_1', { json: withResilience(IN_SCOPE) });
+    const mock = new MockFetch().on('GET', '/api/v1/blackbox/bbx_1', { json: withResilience(SERVER_IN_SCOPE) });
     assert.strictEqual(await commands(mock).draftArmadaFixMission({ kind: 'entry', entry: summary() }), 'chat');
     assert.strictEqual(fake.clipboard, 'Recreate a missing dock worktree\n\nRecreate it before git runs.');
     const call = fake.executed.find((e) => e.command === CHAT_OPEN_COMMAND);
@@ -135,7 +149,7 @@ describe('Draft Armada Fix Mission', () => {
 
   it('copies when the host has no chat, and says so when there is no change', async () => {
     fake.availableCommands = [];
-    const mock = new MockFetch().on('GET', '/api/v1/blackbox/bbx_1', { json: withResilience(IN_SCOPE) });
+    const mock = new MockFetch().on('GET', '/api/v1/blackbox/bbx_1', { json: withResilience(SERVER_IN_SCOPE) });
     assert.strictEqual(await commands(mock).draftArmadaFixMission({ kind: 'entry', entry: summary() }), 'copied');
     assert.ok(fake.messages.some((m) => /was copied/.test(m.text)));
     fake.reset();
@@ -148,27 +162,32 @@ describe('Draft Armada Fix Mission', () => {
 
 describe('Show Resilience Gaps', () => {
   it('posts the paged request, renders the gaps and follows Next Page', async () => {
-    const mock = new MockFetch().on('POST', '/api/v1/blackbox/resilience-gaps/enumerate', (req) => ({ json: gapsPage((req.body as { PageNumber: number }).PageNumber, 2) }));
+    const mock = new MockFetch().on('POST', '/api/v1/blackbox/resilience-gaps/enumerate', (req) => ({ json: gapsPage(req.body.PageNumber, 2) }));
     fake.info.push(TIMELINE_NEXT);
-    const c = client(mock);
-    const insights = new InsightCommands({ getClient: () => c, store: makeStore(mock), pickEntry: async () => undefined });
+    const insights = new InsightCommands({ requireConnection: () => CONNECTION, store: makeStore(mock), pickEntry: async () => undefined });
     const pages = await insights.showResilienceGaps();
-    assert.deepStrictEqual(pages.map((p) => p.PageNumber), [1, 2]);
+    assert.deepStrictEqual(pages.map((p) => p.pageNumber), [1, 2]);
     const body = mock.calls('POST', '/api/v1/blackbox/resilience-gaps/enumerate')[0].body as { PageNumber: number; PageSize: number };
     assert.deepStrictEqual([body.PageNumber, body.PageSize], [1, 25]);
     assert.match(fake.documents[1].content ?? '', /Recreate dock page 2/);
   });
 
   it('renders an empty page and escapes table cells', () => {
-    assert.match(renderGapsMarkdown({ PageNumber: 1, PageSize: 25, TotalPages: 0, TotalRecords: 0, Objects: [] }), /No Armada resilience gaps were recorded/);
-    const md = renderGapsMarkdown(gapsPage(1, 1));
+    assert.match(renderGapsMarkdown(fromServer<EnumerationResult<BlackBoxResilienceGap>>({ PageNumber: 1, PageSize: 25, TotalPages: 0, TotalRecords: 0, Objects: [] })), /No Armada resilience gaps were recorded/);
+    const md = renderGapsMarkdown(fromServer<EnumerationResult<BlackBoxResilienceGap>>(gapsPage(1, 1)));
     assert.match(md, /\| Critical \| Landing \/ TargetIntegration \| 5 \(4 open\) \| Yes \(suspected\) \| Recreate dock page 1 \| 1\.1\.0, 1\.2\.0 \| bbx_1 \|/);
     assert.match(md, /Detection gap: The dock \\\| was reclaimed\./);
   });
 
-  it('caps the page size at 50', async () => {
-    const mock = new MockFetch().on('POST', '/api/v1/blackbox/resilience-gaps/enumerate', { json: page([]) });
-    await client(mock).getResilienceGaps({ vesselId: 'vsl_a', resolution: 'Open' }, 2, 500);
-    assert.deepStrictEqual(mock.calls('POST', '/api/v1/blackbox/resilience-gaps/enumerate')[0].body, { PageNumber: 2, PageSize: 50, VesselId: 'vsl_a', Resolution: 'Open' });
+  it('filters the gaps to the single workspace vessel', async () => {
+    const mock = new MockFetch()
+      .on('GET', '/api/v1/vessels', { json: page([{ Id: 'vsl_a', Name: 'alpha', RepoUrl: 'https://github.com/org/alpha.git' }]) })
+      .on('POST', '/api/v1/blackbox/enumerate', { json: page([]) })
+      .on('POST', '/api/v1/blackbox/hotspots/enumerate', { json: page([]) })
+      .on('POST', '/api/v1/blackbox/resilience-gaps/enumerate', { json: page([]) });
+    const store = makeStore(mock);
+    await store.refresh();
+    await new InsightCommands({ requireConnection: () => CONNECTION, store, pickEntry: async () => undefined }).showResilienceGaps();
+    assert.deepStrictEqual(mock.calls('POST', '/api/v1/blackbox/resilience-gaps/enumerate')[0].body, { PageNumber: 1, PageSize: 25, VesselId: 'vsl_a' });
   });
 });

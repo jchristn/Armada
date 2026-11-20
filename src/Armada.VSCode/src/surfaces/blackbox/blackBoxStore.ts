@@ -1,7 +1,10 @@
-import { ArmadaBlackBoxClient, describeError } from '../api/blackbox';
-import { BlackBoxConflict, BlackBoxEntrySummary, BlackBoxHotspot, Vessel } from '../api/types';
-import { directoryPath, filePath, isOpen } from '../util/format';
-import { readGitRemoteUrls, sameRepository } from '../util/repoUrl';
+import { enumerateBlackBox, enumerateBlackBoxHotspots, getBlackBoxSection } from '@dashboard/api/client';
+import type { BlackBoxConflict, BlackBoxEntrySummary, BlackBoxHotspot } from '@dashboard/types/blackbox';
+import type { Vessel } from '@dashboard/types/models';
+import { describeError } from '../../transport/errors';
+import { listAllVessels } from '../../transport/hostClient';
+import { directoryPath, filePath, isOpen } from '../../util/format';
+import { readGitRemoteUrls, sameRepository } from '../../util/repoUrl';
 
 /** A workspace folder whose git remote matches a vessel. */
 export interface FolderMatch {
@@ -29,9 +32,16 @@ export interface StoreSettings {
   hotspotLimit: number;
 }
 
+/** The connection the store reads through (the shared client is already pointed at its Admiral). */
+export interface StoreConnection {
+  /** Tenant filter (armada.tenant), if any. */
+  tenant: string | undefined;
+}
+
 /** Host dependencies, injected so the store is testable without VS Code. */
 export interface StoreHost {
-  getClient(): ArmadaBlackBoxClient | undefined;
+  /** The active connection, or undefined while disconnected. */
+  getConnection(): StoreConnection | undefined;
   getWorkspaceFolderPaths(): string[];
   getSettings(): StoreSettings;
   readRemotes?(folderPath: string): string[];
@@ -85,14 +95,14 @@ export class BlackBoxStore {
 
   /** The vessel ids matched to workspace folders. */
   public matchedVesselIds(): string[] {
-    return Array.from(new Set(this.matches.map((m) => m.vessel.Id)));
+    return Array.from(new Set(this.matches.map((m) => m.vessel.id)));
   }
 
   /** Reloads everything. Never throws; failures set status to 'error'. */
   public async refresh(): Promise<void> {
     const sequence = ++this._Sequence;
-    const client = this._Host.getClient();
-    if (!client) {
+    const connection = this._Host.getConnection();
+    if (!connection) {
       this.reset('disconnected');
       this.emit();
       return;
@@ -103,7 +113,7 @@ export class BlackBoxStore {
 
     try {
       if (!this._VesselsLoaded) {
-        const vessels = await client.listAllVessels();
+        const vessels = await listAllVessels(connection.tenant);
         if (sequence !== this._Sequence) return;
         this.vessels = vessels;
         this._VesselsLoaded = true;
@@ -111,29 +121,31 @@ export class BlackBoxStore {
       const matches = this.computeMatches();
 
       const useFilter = settings.filterToWorkspaceVessel && matches.length > 0;
-      const vesselIds = useFilter ? Array.from(new Set(matches.map((m) => m.vessel.Id))) : [undefined];
+      const vesselIds = useFilter ? Array.from(new Set(matches.map((m) => m.vessel.id))) : [undefined];
       const entries: BlackBoxEntrySummary[] = [];
       let openCount = 0;
       for (const vesselId of vesselIds) {
-        const page = await client.enumerateEntries({
-          VesselId: vesselId,
-          IsCurrent: true,
-          Resolution: settings.includeResolved ? undefined : 'Open',
-          PageNumber: 1,
-          PageSize: settings.maxEntries,
+        const page = await enumerateBlackBox({
+          tenantId: connection.tenant,
+          vesselId,
+          isCurrent: true,
+          resolution: settings.includeResolved ? undefined : 'Open',
+          order: 'CreatedDescending',
+          pageNumber: 1,
+          pageSize: settings.maxEntries,
         });
-        entries.push(...page.Objects);
-        if (!settings.includeResolved) openCount += page.TotalRecords ?? page.Objects.length;
+        entries.push(...page.objects);
+        if (!settings.includeResolved) openCount += page.totalRecords ?? page.objects.length;
       }
       if (settings.includeResolved) openCount = entries.filter(isOpen).length;
-      entries.sort((a, b) => Date.parse(b.CreatedUtc) - Date.parse(a.CreatedUtc));
+      entries.sort((a, b) => Date.parse(b.createdUtc) - Date.parse(a.createdUtc));
 
       const conflicted = new Map<string, Map<string, ConflictInfo>>();
       const hotspots = new Map<string, Map<string, BlackBoxHotspot>>();
       if (settings.decorationsEnabled) {
         for (const match of matches) {
-          conflicted.set(match.folderPath, await this.loadConflicts(client, entries, match.vessel.Id));
-          hotspots.set(match.folderPath, await this.loadHotspots(client, match.vessel.Id, settings.hotspotLimit));
+          conflicted.set(match.folderPath, await this.loadConflicts(entries, match.vessel.id));
+          hotspots.set(match.folderPath, await this.loadHotspots(connection.tenant, match.vessel.id, settings.hotspotLimit));
         }
       }
       if (sequence !== this._Sequence) return;
@@ -162,46 +174,46 @@ export class BlackBoxStore {
     const matches: FolderMatch[] = [];
     for (const folderPath of this._Host.getWorkspaceFolderPaths()) {
       const remotes = readRemotes(folderPath);
-      const vessel = this.vessels.find((v) => remotes.some((r) => sameRepository(r, v.RepoUrl)));
+      const vessel = this.vessels.find((v) => remotes.some((r) => sameRepository(r, v.repoUrl)));
       if (vessel) matches.push({ folderPath, vessel });
     }
     return matches;
   }
 
-  private async loadConflicts(client: ArmadaBlackBoxClient, entries: BlackBoxEntrySummary[], vesselId: string): Promise<Map<string, ConflictInfo>> {
+  private async loadConflicts(entries: BlackBoxEntrySummary[], vesselId: string): Promise<Map<string, ConflictInfo>> {
     const result = new Map<string, ConflictInfo>();
-    const candidates = entries.filter((e) => e.VesselId === vesselId && isOpen(e)).slice(0, MAX_DECORATION_ENTRIES);
+    const candidates = entries.filter((e) => e.vesselId === vesselId && isOpen(e)).slice(0, MAX_DECORATION_ENTRIES);
     for (const entry of candidates) {
       let conflict: BlackBoxConflict | undefined;
       try {
-        conflict = (await client.getSection(entry.Id, 'Conflict')).Record?.Conflict ?? undefined;
+        conflict = (await getBlackBoxSection(entry.id, 'Conflict')).record?.conflict ?? undefined;
       } catch {
         continue; // a missing section or object must not hide the other entries' decorations
       }
-      for (const ref of conflict?.ConflictedFiles ?? []) {
+      for (const ref of conflict?.conflictedFiles ?? []) {
         const path = filePath(ref);
         if (!path) continue;
         const existing = result.get(path);
         const info: ConflictInfo = {
-          missionId: entry.MissionId || entry.VoyageId || entry.Id,
-          entryId: entry.Id,
-          createdUtc: entry.CreatedUtc,
+          missionId: entry.missionId || entry.voyageId || entry.id,
+          entryId: entry.id,
+          createdUtc: entry.createdUtc,
           count: (existing?.count ?? 0) + 1,
         };
-        if (!existing || Date.parse(entry.CreatedUtc) > Date.parse(existing.createdUtc)) result.set(path, info);
+        if (!existing || Date.parse(entry.createdUtc) > Date.parse(existing.createdUtc)) result.set(path, info);
         else existing.count = info.count;
       }
     }
     return result;
   }
 
-  private async loadHotspots(client: ArmadaBlackBoxClient, vesselId: string, limit: number): Promise<Map<string, BlackBoxHotspot>> {
+  private async loadHotspots(tenantId: string | undefined, vesselId: string, limit: number): Promise<Map<string, BlackBoxHotspot>> {
     const result = new Map<string, BlackBoxHotspot>();
     if (limit <= 0) return result;
     try {
-      const page = await client.listHotspots(vesselId, limit);
-      for (const hotspot of page.Objects.slice(0, limit)) {
-        const dir = directoryPath(hotspot.Directory);
+      const page = await enumerateBlackBoxHotspots({ vesselId, tenantId, pageNumber: 1, pageSize: limit });
+      for (const hotspot of page.objects.slice(0, limit)) {
+        const dir = directoryPath(hotspot.directory);
         if (dir) result.set(dir, hotspot);
       }
     } catch {
