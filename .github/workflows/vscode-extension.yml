@@ -89,8 +89,9 @@ jobs:
 
       - name: Package the VSIX
         run: |
-          version=$(node -p "require('./package.json').version")
-          npx @vscode/vsce package --no-dependencies --out "armada-vscode-${version}.vsix"
+          npm run package
+          cd ../../vsix
+          version=$(node -p "require('../src/Armada.VSCode/package.json').version")
           sha256sum "armada-vscode-${version}.vsix" > "armada-vscode-${version}.vsix.sha256"
           cat "armada-vscode-${version}.vsix.sha256"
 
@@ -98,6 +99,6 @@ jobs:
         with:
           name: armada-vscode-vsix
           path: |
-            src/Armada.VSCode/armada-vscode-*.vsix
-            src/Armada.VSCode/armada-vscode-*.vsix.sha256
+            vsix/armada-vscode-*.vsix
+            vsix/armada-vscode-*.vsix.sha256
           if-no-files-found: error

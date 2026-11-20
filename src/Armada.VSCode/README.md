@@ -99,11 +99,9 @@ off it only polls.
 
 ## Install from a VSIX
 
-Build the package (see [Development](#development)) or take the `.vsix` from a release, then:
-
-- In VS Code: open the Extensions view, choose **...** (Views and More Actions), **Install from VSIX...**, and pick the
-  file.
-- From a terminal: `code --install-extension armada-1.3.0.vsix`
+From the repository root, `./build-vscode.sh --install` (or `build-vscode.bat --install`) builds
+`vsix/armada-vscode-<version>.vsix` and installs it. For a `.vsix` from a release, use
+`code --install-extension <file>`.
 
 ## Settings
 
@@ -195,7 +193,7 @@ npm run build              # type check (src and tests) and bundle to dist/exten
 npm run lint               # ESLint, then the shared-module contract (lint:shared)
 npm test                   # unit tests (Node test runner, fake vscode module, no VS Code needed)
 npm run test:integration   # @vscode/test-electron; skipped when offline or without a display
-npm run package            # armada-<version>.vsix
+npm run package            # ../../vsix/armada-vscode-<version>.vsix
 ```
 
 The integration tests never read your `~/.armada`: they point `ARMADA_DATA_DIR` at an empty temporary directory. To
@@ -203,8 +201,9 @@ run them against a throwaway Admiral, start one with its own data directory and 
 it and `ARMADA_VSCODE_EXPECT_ADMIRAL=1`; the suite then checks the connection, whoami, the role keys, the navigation
 tree, the black box store and the WebSocket subscription.
 
-From the repository root, `build-vscode.sh` (or `build-vscode.bat`) runs install, build, lint, tests and packaging, and
-the `vscode-extension` GitHub workflow does the same in CI, plus the integration tests and the parity check.
+From the repository root, `build-vscode.sh` (or `build-vscode.bat`) runs install, build, lint, tests and packaging into
+`vsix/`, and the `vscode-extension` GitHub workflow does the same in CI, plus the integration tests and the parity
+check.
 
 ## License
 

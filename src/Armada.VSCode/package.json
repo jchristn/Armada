@@ -554,7 +554,7 @@
     "compile-tests": "node esbuild.mjs --tests",
     "test": "npm run compile-tests && node --require ./out/test/setup.js --test \"out/test/unit/**/*.test.js\"",
     "test:integration": "npm run build && npm run compile-tests && node ./out/test/integration/runTest.js",
-    "package": "vsce package --no-dependencies",
+    "package": "node package-vsix.mjs",
     "vscode:prepublish": "npm run build"
   },
   "devDependencies": {

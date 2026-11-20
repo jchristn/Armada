@@ -21,6 +21,8 @@
   reconnect backoff and polling fallback.
 - Parity manifest (`parity.json`), ESLint, Node 22 pinned in `.nvmrc`, and a `vscode-extension` CI workflow that
   builds, lints, tests, checks parity and packages the VSIX.
+- Packages build into `vsix/armada-vscode-<version>.vsix` at the repository root; `build-vscode.sh --install` (or
+  `build-vscode.bat --install`) builds and installs it in one step.
 
 ## 1.3.0
 
