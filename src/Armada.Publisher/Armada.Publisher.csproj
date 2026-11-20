@@ -11,4 +11,8 @@
     <Description>Packaging orchestrator: reads publisher.json and produces signed installers and package-manager entries.</Description>
   </PropertyGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="Test.Shared" />
+  </ItemGroup>
+
 </Project>

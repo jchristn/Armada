@@ -96,7 +96,7 @@ namespace Armada.Publisher.Channels
             return SecurityElement.Escape(value ?? string.Empty) ?? string.Empty;
         }
 
-        private static string BuildWxs(ChannelContext context, PublishedArtifact published)
+        internal static string BuildWxs(ChannelContext context, PublishedArtifact published)
         {
             ArtifactDefinition artifact = context.Artifact;
             string binaryFile = Path.GetFileName(published.BinaryPath);

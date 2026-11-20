@@ -28,4 +28,9 @@
     <ProjectReference Include="..\Armada.Helm\Armada.Helm.csproj" />
   </ItemGroup>
 
+  <!-- The Publisher is a net10.0-only build tool; its suite (Services.Publisher) compiles for net10.0 only. -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
+    <ProjectReference Include="..\Armada.Publisher\Armada.Publisher.csproj" />
+  </ItemGroup>
+
 </Project>

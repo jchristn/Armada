@@ -888,12 +888,12 @@ Installing from source (above) is the path the project uses day to day. Release 
 | Platform | What you get |
 |----------|--------------|
 | Any OS with .NET | The CLI as a global tool: `dotnet tool install --global Armada.Helm` |
-| Windows | Harbor `.exe` (Inno Setup) and the Admiral server `.msi` (WiX) |
-| macOS | `Armada Harbor.app` in a `.dmg`, and the Admiral server `.pkg` |
+| Windows | Harbor `.exe` (Inno Setup), the CLI `.msi` (`armada`, `armada tui`, and the embedded Admiral; adds `armada` to PATH), and the Admiral server `.msi` (WiX) |
+| macOS | `Armada Harbor.app` in a `.dmg`, the CLI `.pkg` (`/usr/local/bin/armada`, with `armada tui`), and the Admiral server `.pkg` |
 | Linux | `.deb` and `.rpm` packages for the CLI, Harbor, and the server |
 | Docker | Admiral, dashboard, and proxy images on Docker Hub (`jchristn77/armada-server`, `jchristn77/armada-dashboard`, `jchristn77/armada-proxy`; tags `v1.3.0` and `latest`). `docker/update.sh` or `docker/update.bat` pulls them and recreates the stack without touching its data |
 
-Each release carries a `SHA256SUMS` file. Installers are code-signed only when the release was built with signing credentials; an unsigned Windows installer shows a SmartScreen prompt ("More info", then "Run anyway"), and an unsigned macOS app or package must be allowed once in **System Settings > Privacy & Security** ("Open Anyway"). See [BUILDING_INSTALLERS.md](BUILDING_INSTALLERS.md).
+Each release carries a `SHA256SUMS` file. Installers are code-signed only when the release was built with signing credentials; an unsigned Windows installer shows a SmartScreen prompt ("More info", then "Run anyway"), and an unsigned macOS app or package must be allowed once in **System Settings > Privacy & Security** ("Open Anyway"), or cleared with `xattr -dr com.apple.quarantine "/Applications/Armada Harbor.app"`. See [BUILDING_INSTALLERS.md](BUILDING_INSTALLERS.md).
 
 ### Deploy locally
 
