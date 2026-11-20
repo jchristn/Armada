@@ -548,6 +548,10 @@ commands arrive with their own changes. Schema migrations 103 and 104 apply at s
 - An open check run reloads when that run changes, without replacing the page with a loading message. When the comparison page contains fewer runs than the total, the page says how many runs it searched.
 - Home reload follows the selected auto-refresh interval, so None stops the extra 30 second home reload. A refresh that arrives during a load runs once after that load, and the mission history chart reloads with it while keeping the history already on screen.
 
+### SQL Server captain delete keeps signal references with the captain
+
+- **Scoped deletes.** Each SQL Server captain delete clears `signals.from_captain_id` and `signals.to_captain_id` only for captains that match that delete, then deletes those captains, in one transaction. The id delete matches `id`. The tenant delete matches `tenant_id` and `id`. The user delete matches `tenant_id`, `user_id`, and `id`. A delete that matches no captain leaves the captain and both signal references unchanged. A delete that fails because another row still references the captain rolls the signal updates back. SQL Server still cannot declare two `ON DELETE SET NULL` keys from `signals` to `captains`, so this delete nulls the references.
+
 ### Landing failure prevention
 
 - Every dashboard and TUI delete, bulk delete and purge now shows a progress modal (for example "Deleting vessel" or "Deleting 12 missions": "This may take some time while related records are cleaned up.") that stays up until the server answers, cannot be dismissed while pending, and offers Retry and Dismiss if the delete fails. Duplicate submissions are ignored. Ask Armada uses the same shared dialog.
