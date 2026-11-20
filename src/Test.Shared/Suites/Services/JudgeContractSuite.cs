@@ -125,6 +125,91 @@ namespace Test.Shared.Suites.Services
                     "a verdict line is not a heading and stays in the section body");
             }));
 
+            cases.Add(Case("section_headings_accepted_before_stay_accepted", "Every heading form accepted before wrapped decoration support is still accepted", TestTags.Positive, () =>
+            {
+                string[] accepted = new[]
+                {
+                    "## Correctness",
+                    "Correctness",
+                    "Correctness:",
+                    "Correctness - notes follow",
+                    "Correctness looks fine",
+                    "**Correctness**: looks fine",
+                    "**Correctness**",
+                    "__Correctness__",
+                    "`Correctness`",
+                    "1. Correctness",
+                    "- **Correctness**",
+                    "* Correctness",
+                    "## **Correctness**",
+                    "### 2. Correctness:",
+                    "  #### correctness  "
+                };
+                List<string> lost = new List<string>();
+                foreach (string line in accepted)
+                {
+                    if (!JudgeContract.ContainsSection("Intro text.\n" + line + "\nBody text.", JudgeContract.LensCorrectness)) lost.Add(line);
+                }
+
+                string[] bodies = new[] { "## Affected Case", "**Affected Case**:", "Affected Case", "- Affected Case:", "## **Affected Case**" };
+                foreach (string heading in bodies)
+                {
+                    string output = heading + "\nFile: src/Core/RequestHandler.cs\n## Verdict\n[ARMADA:VERDICT] FAIL";
+                    if (!JudgeContract.ExhibitsAffectedCase(output)) lost.Add("affected case under " + heading);
+                }
+
+                AssertEqual(0, lost.Count, "forms no longer accepted: " + String.Join(" | ", lost));
+            }));
+
+            cases.Add(Case("wrapped_section_headings_are_accepted", "Headings with emphasis around the heading marks or the whole name are accepted, and prose is not", TestTags.Positive, () =>
+            {
+                string[] wrapped = new[]
+                {
+                    "**## Correctness**",
+                    "*## Correctness*",
+                    "__## Correctness__",
+                    "`## Correctness`",
+                    "**## Correctness:**",
+                    "**## Correctness**:",
+                    "*Correctness*",
+                    "_Correctness_",
+                    "***Correctness***",
+                    "**1. Correctness**",
+                    "- *Correctness*",
+                    "** ## Correctness **",
+                    "**Correctness:** looks fine",
+                    "__Correctness:__ looks fine"
+                };
+                foreach (string line in wrapped)
+                {
+                    AssertTrue(JudgeContract.ContainsSection("Intro text.\n" + line + "\nBody text.", JudgeContract.LensCorrectness), "wrapped heading accepted: " + line);
+                }
+
+                string[] rejected = new[]
+                {
+                    "The review covers Correctness and its edge cases.",
+                    "**## Correctness review of edge cases**",
+                    "**## Incorrectness**",
+                    "No correctness section here."
+                };
+                foreach (string line in rejected)
+                {
+                    AssertFalse(JudgeContract.ContainsSection("Intro text.\n" + line + "\nBody text.", JudgeContract.LensCorrectness), "not a heading: " + line);
+                }
+
+                foreach (string heading in new[] { "**## Affected Case**", "*Affected Case*", "**Affected Case:**", "_## Affected Case_" })
+                {
+                    string output = heading + "\nScenario: an empty request reaches the invalid branch and returns 500\n**## Other Findings**\nFile: src/Unrelated.cs";
+                    AssertTrue(JudgeContract.ExhibitsAffectedCase(output), "affected case read under wrapped heading: " + heading);
+                    AssertEqual("scenario:an empty request reaches the invalid branch and returns 500", JudgeContract.AffectedCaseKey(output), "the body stops at the next wrapped heading: " + heading);
+                }
+
+                string noise = new string('*', 5000) + "x";
+                DateTime started = DateTime.UtcNow;
+                AssertFalse(JudgeContract.ContainsSection(noise + "\n" + noise, JudgeContract.LensCorrectness), "a long run of asterisks is not a heading");
+                AssertTrue(DateTime.UtcNow - started < TimeSpan.FromSeconds(2), "a long run of asterisks does not backtrack");
+            }));
+
             cases.Add(Case("output_contract_names_lenses_and_case", "The output contract names the three lenses and the affected-case rule", TestTags.Positive, () =>
             {
                 string contract = JudgeContract.OutputContract();

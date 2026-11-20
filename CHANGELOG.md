@@ -11,6 +11,7 @@ All notable changes to Armada are documented in this file.
 - Rescue briefs keep an appended prior-stage handoff. Both the re-implementation brief and the integration brief (for a failed mission that left a commit) keep the first 3000 characters of the task text and the complete prior-stage handoff block. A description without that block keeps the existing 3000-character trim. (#50)
 - `armada mcp install` and `armada mcp remove` back up a config file that has comments or trailing commas before rewriting it, to `<file>.armada-backup-<yyyyMMddHHmmss>` (UTC) next to the original, and say in the output that the comments were not preserved and where the backup is. An install whose Armada entry already matches leaves such a file untouched. A file whose top-level value is not a JSON object is refused and left unchanged instead of being replaced with a new object. (#57)
 - A deleted objective stays deleted when another user wrote a snapshot of it. Deleting an objective now removes every snapshot of it in the tenant, including snapshots the caller cannot see and tenant-less snapshots a system admin wrote, so the startup backfill and later reads no longer restore it. Who may delete is unchanged: the caller must still see the objective or one of its own snapshots. (#66)
+- Judge lens, Affected Case and Spec Conflict headings are recognized when Markdown emphasis wraps the heading marks or the whole name on its own line (`**## Correctness**`, `*Correctness*`, `**1. Correctness**`), and as a bold label with the colon inside (`**Correctness:** looks fine`). Every heading form accepted before is still accepted. A heading whose marks are wrapped in emphasis also ends the preceding section body. (#68)
 
 ## v1.3.0 (2026-11-06)
 
@@ -437,10 +438,6 @@ commands arrive with their own changes. Schema migrations 103 and 104 apply at s
 - macOS Harbor bundles store the pi permission-gate extension in `Contents/Resources/Pi`, and pi resolves it there as well as beside portable binaries. This prevents ARM64 code signing from treating TypeScript resources as unsigned nested code. The DMG verifier checks the resource layout.
 - After building and verifying both Harbor DMGs, `build-harbor-app.sh` installs the native app into `~/Applications`, staging and signature-checking a fresh bundle before replacement. `--no-install` opts out, and `--no-build` remains verification-only.
 - Helm's NuGet tool package preserves battery fixture `.gitignore` and `.gitattributes` files instead of excluding them with NU5119 warnings. Installer verification checks every packaged framework for those files.
-
-### Judge headings tolerate wrapped Markdown decoration
-
-- Required Judge sections are recognized when emphasis marks wrap the heading marks. Decorated section headings also end the preceding section body, so a following lens or conflict section does not become part of the previous section.
 
 ### Landing failure prevention
 

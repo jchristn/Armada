@@ -74,6 +74,14 @@ namespace Armada.Core.Services
             @"^\s*(?:[-*]\s*)?(?:\*\*|__)?(?<label>File|Scenario)(?:\*\*|__)?\s*:\s*(?:\*\*|__)?\s*(?<value>.*?)\s*$",
             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
+        // Emphasis and code marks with spacing on one line, as an atomic group so a long run of asterisks cannot
+        // backtrack.
+        private const string DecorationPattern = @"(?>[*_` \t]*)";
+
+        private static readonly Regex _AnyHeadingLine = new Regex(
+            @"^\s*" + DecorationPattern + @"#{1,6}\s+\S",
+            RegexOptions.CultureInvariant | RegexOptions.Compiled);
+
         private static readonly Regex _FileReference = new Regex(
             @"^`?(?<path>[^\s`]*[/\\.][^\s`]*?)(?::\d+(?::\d+)?)?`?$",
             RegexOptions.CultureInvariant | RegexOptions.Compiled);
@@ -84,7 +92,11 @@ namespace Armada.Core.Services
 
         /// <summary>
         /// Whether the Judge output contains a section with the given heading (tolerating heading level,
-        /// list markers, numbering, and bold/italic/code wrapping).
+        /// list markers, numbering, and bold/italic/code wrapping). Two forms count: a line that starts with the
+        /// name after the usual heading marks (for example <c>## Correctness</c>, <c>Correctness: fine</c> or
+        /// <c>**Correctness:** looks fine</c>),
+        /// and a line that is only the name wrapped in Markdown decoration, including emphasis around the heading marks
+        /// (for example <c>**## Correctness**</c> or <c>*Correctness*</c>).
         /// </summary>
         /// <param name="output">Judge agent output.</param>
         /// <param name="sectionName">Section heading to look for.</param>
@@ -93,12 +105,14 @@ namespace Armada.Core.Services
         {
             if (String.IsNullOrWhiteSpace(output) || String.IsNullOrWhiteSpace(sectionName)) return false;
 
-            foreach (string line in output.Replace("\r\n", "\n").Split('\n'))
-            {
-                string normalized = NormalizeHeadingLine(line, out _);
-                if (String.Equals(normalized, sectionName, StringComparison.OrdinalIgnoreCase)) return true;
-            }
-            return false;
+            // The closing mark may also follow the colon, as in **Correctness:** followed by the review text.
+            string leading =
+                @"(?im)^\s*(?:#{1,6}\s*)?(?:[-*]\s*)?(?:\d+\.\s*)?(?:\*\*|__|`)?"
+                + Regex.Escape(sectionName)
+                + @"(?:\*\*|__|`)?\s*(?::|-)?(?:\*\*|__|`)?(?:\s|$)";
+            if (Regex.IsMatch(output, leading)) return true;
+
+            return Regex.IsMatch(output, "(?im)" + WrappedHeadingPattern(sectionName));
         }
 
         /// <summary>
@@ -291,12 +305,16 @@ namespace Armada.Core.Services
         private static string ExtractSectionBody(string output, string sectionName)
         {
             string[] lines = output.Replace("\r\n", "\n").Split('\n');
+            string headingPattern =
+                @"(?i)^\s*(?:#{1,6}\s*)?(?:[-*]\s*)?(?:\d+\.\s*)?(?:\*\*|__|`)?"
+                + Regex.Escape(sectionName)
+                + @"(?:\*\*|__|`)?\s*(?::|-)?\s*$";
+            string wrappedHeadingPattern = "(?i)" + WrappedHeadingPattern(sectionName);
 
             int start = -1;
             for (int i = 0; i < lines.Length; i++)
             {
-                string normalized = NormalizeHeadingLine(lines[i], out _);
-                if (String.Equals(normalized, sectionName, StringComparison.OrdinalIgnoreCase))
+                if (Regex.IsMatch(lines[i], headingPattern) || Regex.IsMatch(lines[i], wrappedHeadingPattern))
                 {
                     start = i + 1;
                     break;
@@ -307,88 +325,21 @@ namespace Armada.Core.Services
             List<string> body = new List<string>();
             for (int i = start; i < lines.Length; i++)
             {
-                string normalized = NormalizeHeadingLine(lines[i], out bool hasHeadingMarker);
-                if (hasHeadingMarker && normalized.Length > 0) break;
+                if (_AnyHeadingLine.IsMatch(lines[i])) break;
                 body.Add(lines[i]);
             }
             return String.Join("\n", body).Trim();
         }
 
-        private static string NormalizeHeadingLine(string line, out bool hasHeadingMarker)
+        private static string WrappedHeadingPattern(string sectionName)
         {
-            string value = (line ?? String.Empty).Trim();
-            hasHeadingMarker = false;
-            bool removedTrailingPunctuation = false;
-
-            bool changed;
-            do
-            {
-                changed = false;
-                value = value.TrimStart();
-
-                Match heading = Regex.Match(value, @"^#{1,6}\s+");
-                if (heading.Success)
-                {
-                    value = value.Substring(heading.Length);
-                    hasHeadingMarker = true;
-                    changed = true;
-                    continue;
-                }
-
-                Match list = Regex.Match(value, @"^(?:[-*]\s+|\d+\.\s+)");
-                if (list.Success)
-                {
-                    value = value.Substring(list.Length);
-                    changed = true;
-                    continue;
-                }
-
-                string? leadingDecoration = GetLeadingDecoration(value);
-                if (leadingDecoration != null)
-                {
-                    value = value.Substring(leadingDecoration.Length);
-                    changed = true;
-                    continue;
-                }
-
-                value = value.TrimEnd();
-                string? trailingDecoration = GetTrailingDecoration(value);
-                if (trailingDecoration != null)
-                {
-                    value = value.Substring(0, value.Length - trailingDecoration.Length);
-                    changed = true;
-                    continue;
-                }
-
-                if (!removedTrailingPunctuation
-                    && (value.EndsWith(":", StringComparison.Ordinal) || value.EndsWith("-", StringComparison.Ordinal)))
-                {
-                    value = value.Substring(0, value.Length - 1);
-                    removedTrailingPunctuation = true;
-                    changed = true;
-                }
-            }
-            while (changed);
-
-            return value.Trim();
-        }
-
-        private static string? GetLeadingDecoration(string value)
-        {
-            foreach (string decoration in new[] { "**", "__", "`", "*", "_" })
-            {
-                if (value.StartsWith(decoration, StringComparison.Ordinal)) return decoration;
-            }
-            return null;
-        }
-
-        private static string? GetTrailingDecoration(string value)
-        {
-            foreach (string decoration in new[] { "**", "__", "`", "*", "_" })
-            {
-                if (value.EndsWith(decoration, StringComparison.Ordinal)) return decoration;
-            }
-            return null;
+            // The whole line must be the name: decoration, heading marks, a list marker or number, more decoration,
+            // the name, an optional colon or dash, and closing decoration. Prose that merely starts with the name
+            // is left to the leading-name pattern.
+            return @"^" + DecorationPattern + @"(?:#{1,6}[ \t]*)?" + DecorationPattern + @"(?:-[ \t]+)?" + DecorationPattern
+                + @"(?:\d+\.[ \t]*)?" + DecorationPattern
+                + Regex.Escape(sectionName)
+                + @"[ \t]*(?::|-)?" + DecorationPattern + @"(?::|-)?[ \t\r]*$";
         }
 
         #endregion
