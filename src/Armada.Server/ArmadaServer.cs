@@ -2258,7 +2258,8 @@ namespace Armada.Server
                 _ModelAlertAccess,
                 _UsageAccess,
                 _UsageSelectionConfiguration,
-                EmitEventAsync);
+                EmitEventAsync,
+                _WebSocketHub);
         }
 
         /// <summary>

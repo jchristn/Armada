@@ -92,6 +92,7 @@ namespace Armada.Server.Mcp
         /// <param name="usageSelectionConfiguration">Shared live policy coordinator; null returns configuration Unavailable.</param>
         /// <param name="emitEvent">Event sink shared with the REST delete routes. Dock and event MCP deletes emit
         /// through it after a successful delete. Null records nothing.</param>
+        /// <param name="webSocketHub">Optional WebSocket hub used for live MCP voyage updates.</param>
         public static void RegisterAll(
             RegisterToolDelegate register,
             DatabaseDriver database,
@@ -139,7 +140,8 @@ namespace Armada.Server.Mcp
             ModelAlertAccessService? modelAlerts = null,
             UsageAccessService? usage = null,
             UsageSelectionConfigurationService? usageSelectionConfiguration = null,
-            Func<string, string, string?, string?, string?, string?, string?, string?, Task>? emitEvent = null)
+            Func<string, string, string?, string?, string?, string?, string?, string?, Task>? emitEvent = null,
+            Armada.Server.WebSocket.ArmadaWebSocketHub? webSocketHub = null)
         {
             if (register == null) throw new ArgumentNullException(nameof(register));
             register = MapToolExceptions(MarkExperimental(register));
@@ -148,7 +150,7 @@ namespace Armada.Server.Mcp
             McpFleetTools.Register(register, database);
             McpVesselTools.Register(register, database, dockService, vesselService, settings, admiral, blackBoxCapture, blackBoxHooks);
             if (vesselImportService != null) McpVesselImportTools.Register(register, vesselImportService, fleetCategorizationService);
-            McpVoyageTools.Register(register, database, admiral, settings, logging);
+            McpVoyageTools.Register(register, database, admiral, settings, logging, webSocketHub);
             McpConcurrencyTools.Register(register, database);
             McpMissionTools.Register(register, database, admiral, settings, git, landingService, missionService, blackBoxCapture, blackBoxHooks);
             McpCaptainTools.Register(register, database, admiral, settings, onStopCaptain, agentLifecycle, captainToolService);
@@ -221,7 +223,8 @@ namespace Armada.Server.Mcp
             FleetActionService? fleetActionService = null,
             VesselHealthService? vesselHealthService = null,
             IFleetCategorizationService? fleetCategorizationService = null,
-            CliPermissionService? cliPermissionService = null)
+            CliPermissionService? cliPermissionService = null,
+            Armada.Server.WebSocket.ArmadaWebSocketHub? webSocketHub = null)
         {
             List<CaptainToolSummary> tools = new List<CaptainToolSummary>();
 
@@ -245,7 +248,7 @@ namespace Armada.Server.Mcp
             RegisterCatalogGroup("Armada MCP / Fleets", register => McpFleetTools.Register(register, database));
             RegisterCatalogGroup("Armada MCP / Vessels", register => McpVesselTools.Register(register, database, dockService, vesselService, settings, admiral));
             if (vesselImportService != null) RegisterCatalogGroup("Armada MCP / Vessel Import", register => McpVesselImportTools.Register(register, vesselImportService, fleetCategorizationService));
-            RegisterCatalogGroup("Armada MCP / Voyages", register => McpVoyageTools.Register(register, database, admiral, settings, logging));
+            RegisterCatalogGroup("Armada MCP / Voyages", register => McpVoyageTools.Register(register, database, admiral, settings, logging, webSocketHub));
             RegisterCatalogGroup("Armada MCP / Concurrency", register => McpConcurrencyTools.Register(register, database));
             RegisterCatalogGroup("Armada MCP / Missions", register => McpMissionTools.Register(register, database, admiral, settings, git, landingService));
             RegisterCatalogGroup("Armada MCP / Captains", register => McpCaptainTools.Register(register, database, admiral, settings, onStopCaptain, agentLifecycle));

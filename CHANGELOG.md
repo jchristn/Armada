@@ -585,6 +585,7 @@ Events, Memories, Merge Queue, Missions, Request History, Signals, and Voyages a
 ### Mission push instructions follow the landing mode
 
 - Mission prompts instruct captains to push their branch only for PullRequest landing and for a landing mode the product does not define. Audit and Research prompts do not ask for commits or pushes. Other known landing modes ask for commits without a captain push. Seeding updates an untouched built-in mission rules template that still matches a previously shipped default, and leaves operator edits in place.
+- MCP voyage cancellation now broadcasts the updated voyage and cancelled missions to WebSocket subscribers.
 
 ### Landing failure prevention
 
