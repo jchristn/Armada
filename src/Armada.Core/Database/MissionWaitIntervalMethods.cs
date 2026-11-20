@@ -13,7 +13,7 @@ namespace Armada.Core.Database
         private readonly SqliteWriteGate? _Gate;
         internal MissionWaitIntervalMethods(Func<DbConnection> factory, SqliteWriteGate? gate = null) { _Factory = factory; _Gate = gate; }
         private static object Date(DbConnection connection, DateTime value) => connection.GetType().Name.Contains("Sqlite") || connection.GetType().Name == "SqlConnection"
-            ? value.ToUniversalTime().ToString("o", CultureInfo.InvariantCulture) : value.ToUniversalTime();
+            ? UtcClock.Format(value, "o") : UtcClock.ToUtc(value);
         private static void Add(DbCommand cmd, string name, object? value) { DbParameter p = cmd.CreateParameter(); p.ParameterName = name; p.Value = value ?? DBNull.Value; cmd.Parameters.Add(p); }
         private async Task<T> Run<T>(Func<DbConnection, Task<T>> action, CancellationToken token)
         {
@@ -62,7 +62,7 @@ namespace Armada.Core.Database
         {
             using DbDataReader r = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false); List<MissionWaitInterval> rows = new();
             string? Text(string key) => r[key] == DBNull.Value ? null : r[key].ToString();
-            DateTime Time(string key) => r[key] is DateTime value ? DateTime.SpecifyKind(value, DateTimeKind.Utc) : DateTime.Parse((string)r[key], CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind).ToUniversalTime();
+            DateTime Time(string key) => r[key] is DateTime value ? DateTime.SpecifyKind(value, DateTimeKind.Utc) : UtcClock.Parse((string)r[key]);
             while (rows.Count < maxRows && await r.ReadAsync(token).ConfigureAwait(false)) rows.Add(new MissionWaitInterval { Id = Text("id")!, TenantId = Text("tenant_id"), MissionId = Text("mission_id")!, VesselId = Text("vessel_id"), VoyageId = Text("voyage_id"), CaptainId = Text("captain_id"), Gate = Enum.Parse<MissionWaitGateEnum>(Text("gate")!), StartedUtc = Time("started_utc"), EndedUtc = r["ended_utc"] == DBNull.Value ? null : Time("ended_utc"), Detail = Text("detail") });
             return rows;
         }

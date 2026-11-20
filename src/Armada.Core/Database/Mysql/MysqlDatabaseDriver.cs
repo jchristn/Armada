@@ -1553,7 +1553,7 @@ namespace Armada.Core.Database.Mysql
 
         internal static string ToIso8601(DateTime dt)
         {
-            return dt.ToUniversalTime().ToString(_Iso8601Format, CultureInfo.InvariantCulture);
+            return UtcClock.Format(dt, _Iso8601Format);
         }
 
         internal static DateTime FromIso8601(string value)

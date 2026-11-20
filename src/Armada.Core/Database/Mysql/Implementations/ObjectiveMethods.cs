@@ -272,7 +272,7 @@ namespace Armada.Core.Database.Mysql.Implementations
         {
             foreach (SqlFilterParameter parameter in filter.Parameters)
             {
-                if (parameter.IsDate) cmd.Parameters.AddWithValue(parameter.Name, MysqlDatabaseDriver.ToIso8601(((DateTime)parameter.Value).ToUniversalTime()));
+                if (parameter.IsDate) cmd.Parameters.AddWithValue(parameter.Name, MysqlDatabaseDriver.ToIso8601((DateTime)parameter.Value));
                 else MysqlCommandHelper.Add(cmd, parameter.Name, parameter.Value);
             }
         }

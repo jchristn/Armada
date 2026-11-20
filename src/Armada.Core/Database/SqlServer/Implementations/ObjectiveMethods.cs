@@ -274,7 +274,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
         {
             foreach (SqlFilterParameter parameter in filter.Parameters)
             {
-                if (parameter.IsDate) cmd.Parameters.AddWithValue(parameter.Name, SqlServerDatabaseDriver.ToIso8601(((DateTime)parameter.Value).ToUniversalTime()));
+                if (parameter.IsDate) cmd.Parameters.AddWithValue(parameter.Name, SqlServerDatabaseDriver.ToIso8601((DateTime)parameter.Value));
                 else SqlServerCommandHelper.Add(cmd, parameter.Name, parameter.Value);
             }
         }

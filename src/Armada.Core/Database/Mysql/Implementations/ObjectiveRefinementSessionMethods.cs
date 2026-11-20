@@ -223,8 +223,8 @@ namespace Armada.Core.Database.Mysql.Implementations
                         if (!String.IsNullOrEmpty(query.Status)) MysqlCommandHelper.Add(cmd, "@status", query.Status);
                         if (!String.IsNullOrEmpty(query.CaptainId)) MysqlCommandHelper.Add(cmd, "@captain_id", query.CaptainId);
                         if (!String.IsNullOrEmpty(query.VesselId)) MysqlCommandHelper.Add(cmd, "@vessel_id", query.VesselId);
-                        if (query.CreatedAfter.HasValue) cmd.Parameters.AddWithValue("@created_after", MysqlDatabaseDriver.ToIso8601(query.CreatedAfter.Value.ToUniversalTime()));
-                        if (query.CreatedBefore.HasValue) cmd.Parameters.AddWithValue("@created_before", MysqlDatabaseDriver.ToIso8601(query.CreatedBefore.Value.ToUniversalTime()));
+                        if (query.CreatedAfter.HasValue) cmd.Parameters.AddWithValue("@created_after", MysqlDatabaseDriver.ToIso8601(query.CreatedAfter.Value));
+                        if (query.CreatedBefore.HasValue) cmd.Parameters.AddWithValue("@created_before", MysqlDatabaseDriver.ToIso8601(query.CreatedBefore.Value));
                     }, FromReader, query, token).ConfigureAwait(false);
             }
         }

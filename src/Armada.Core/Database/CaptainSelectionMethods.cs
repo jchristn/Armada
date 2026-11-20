@@ -51,8 +51,8 @@ namespace Armada.Core.Database
             command.Parameters.Add(parameter);
         }
 
-        private static string Utc(DateTime value) => value.ToUniversalTime().ToString("o", CultureInfo.InvariantCulture);
-        private static DateTime ParseUtc(object value) => value is DateTime date ? DateTime.SpecifyKind(date, DateTimeKind.Utc) : DateTime.Parse(Convert.ToString(value, CultureInfo.InvariantCulture)!, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind).ToUniversalTime();
+        private static string Utc(DateTime value) => UtcClock.Format(value, "o");
+        private static DateTime ParseUtc(object value) => value is DateTime date ? DateTime.SpecifyKind(date, DateTimeKind.Utc) : UtcClock.Parse(Convert.ToString(value, CultureInfo.InvariantCulture)!);
         private static string PageSql(DbConnection connection) => connection.GetType().Name == "SqlConnection"
             ? " OFFSET @skip ROWS FETCH NEXT @take ROWS ONLY" : " LIMIT @take OFFSET @skip";
         private static void Required(string value, string name)

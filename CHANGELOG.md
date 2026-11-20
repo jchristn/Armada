@@ -4,6 +4,14 @@ All notable changes to Armada are documented in this file.
 
 ---
 
+## Unreleased
+
+### Fixes
+
+- Fix a timestamp with no kind being shifted by the server's local UTC offset when it was written or filtered. Armada stores every timestamp in UTC, so such a value is now marked UTC; a local value still converts to UTC and a UTC value is unchanged. This covers SQLite and SQL Server text timestamps, MySQL's text binding for fleets, vessels, voyages, missions, docks, captains, events, signals, merge entries and the other tables it writes as text, PostgreSQL's event, signal and merge-entry helpers, deployment and objective timestamps and query filters on every provider, mission wait intervals, captain selection history and usage probe times. Stored text with no offset now reads back as UTC. One shared `UtcClock` helper replaces the per-file conversions.
+
+---
+
 ## v1.3.0 (2026-11-06)
 
 v1.3.0 has two marquee features: **parallelization and concurrency**, and **out-of-the-box fleet actions for common repository tasks**. Concurrency improvements keep more independent work in flight with bounded capacity: vessels limit parallel voyages and missions per voyage, captains run several missions in slots, architects split work into a hierarchy of small missions with owned files, every wait is recorded with its reason, and usage-based captain selection routes work by account headroom. The release removes the single-mission captain and vessel fields with no deprecation period; read **Breaking changes** below and back up before upgrading. The default fleet action catalog provides ready-to-run performance reviews and fixes, code cleanliness and cleanup, security and vulnerability checks, and license compliance checks, alongside build, test, lint, dependency, and documentation tasks.
@@ -429,10 +437,6 @@ commands arrive with their own changes. Schema migrations 103 and 104 apply at s
 - macOS Harbor bundles store the pi permission-gate extension in `Contents/Resources/Pi`, and pi resolves it there as well as beside portable binaries. This prevents ARM64 code signing from treating TypeScript resources as unsigned nested code. The DMG verifier checks the resource layout.
 - After building and verifying both Harbor DMGs, `build-harbor-app.sh` installs the native app into `~/Applications`, staging and signature-checking a fresh bundle before replacement. `--no-install` opts out, and `--no-build` remains verification-only.
 - Helm's NuGet tool package preserves battery fixture `.gitignore` and `.gitattributes` files instead of excluding them with NU5119 warnings. Installer verification checks every packaged framework for those files.
-
-### Database timestamps
-
-- **SQL Server and SQLite text timestamps.** `ToIso8601` writes a UTC ISO 8601 string. A value with no kind keeps its clock and is marked UTC before conversion. A local value still converts to UTC. A UTC value is unchanged. MySQL and PostgreSQL timestamp binding is unchanged.
 
 ### Landing failure prevention
 

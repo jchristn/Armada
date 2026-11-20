@@ -223,8 +223,8 @@ namespace Armada.Core.Database.Postgresql.Implementations
                         if (!String.IsNullOrEmpty(query.Status)) PostgresqlCommandHelper.Add(cmd, "@status", query.Status);
                         if (!String.IsNullOrEmpty(query.CaptainId)) PostgresqlCommandHelper.Add(cmd, "@captain_id", query.CaptainId);
                         if (!String.IsNullOrEmpty(query.VesselId)) PostgresqlCommandHelper.Add(cmd, "@vessel_id", query.VesselId);
-                        if (query.CreatedAfter.HasValue) cmd.Parameters.AddWithValue("@created_after", query.CreatedAfter.Value.ToUniversalTime());
-                        if (query.CreatedBefore.HasValue) cmd.Parameters.AddWithValue("@created_before", query.CreatedBefore.Value.ToUniversalTime());
+                        if (query.CreatedAfter.HasValue) cmd.Parameters.AddWithValue("@created_after", UtcClock.ToUtc(query.CreatedAfter.Value));
+                        if (query.CreatedBefore.HasValue) cmd.Parameters.AddWithValue("@created_before", UtcClock.ToUtc(query.CreatedBefore.Value));
                     }, FromReader, query, token).ConfigureAwait(false);
             }
         }

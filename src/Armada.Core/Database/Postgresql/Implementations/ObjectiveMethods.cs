@@ -274,7 +274,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
         {
             foreach (SqlFilterParameter parameter in filter.Parameters)
             {
-                if (parameter.IsDate) cmd.Parameters.AddWithValue(parameter.Name, ((DateTime)parameter.Value).ToUniversalTime());
+                if (parameter.IsDate) cmd.Parameters.AddWithValue(parameter.Name, UtcClock.ToUtc((DateTime)parameter.Value));
                 else PostgresqlCommandHelper.Add(cmd, parameter.Name, parameter.Value);
             }
         }

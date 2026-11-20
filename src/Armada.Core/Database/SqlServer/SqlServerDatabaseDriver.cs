@@ -364,8 +364,7 @@ namespace Armada.Core.Database.SqlServer
         /// <returns>ISO 8601 formatted string.</returns>
         internal static string ToIso8601(DateTime dt)
         {
-            if (dt.Kind == DateTimeKind.Unspecified) dt = DateTime.SpecifyKind(dt, DateTimeKind.Utc);
-            return dt.ToUniversalTime().ToString(_Iso8601Format, CultureInfo.InvariantCulture);
+            return UtcClock.Format(dt, _Iso8601Format);
         }
 
         /// <summary>
@@ -375,7 +374,7 @@ namespace Armada.Core.Database.SqlServer
         /// <returns>DateTime value.</returns>
         internal static DateTime FromIso8601(string value)
         {
-            return DateTime.Parse(value, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind).ToUniversalTime();
+            return UtcClock.Parse(value);
         }
 
         /// <summary>

@@ -18,14 +18,13 @@ namespace Test.Shared.Suites.Database
     /// pruning via DeleteByFilterAsync using a date cutoff. Positive cases cover persistence and the
     /// query/prune happy paths; negative audit cases cover a not-found read returning null and a
     /// filter that matches nothing deleting zero rows. One case checks that a created time with no
-    /// kind keeps its UTC clock on SQL Server and SQLite text storage.
+    /// kind keeps its UTC clock on every provider.
     /// </summary>
     public sealed class RequestHistoryDatabaseSuite : IArmadaTestSuite
     {
         #region Private-Members
 
         private const string SuiteId = "Database.RequestHistoryDatabase";
-        private static readonly SemaphoreSlim _ClockZone = new SemaphoreSlim(1, 1);
 
         #endregion
 
@@ -143,18 +142,14 @@ namespace Test.Shared.Suites.Database
                 }
             }));
 
-            bool textClockProvider = TestDatabaseConfig.Type == DatabaseTypeEnum.Sqlite
-                || TestDatabaseConfig.Type == DatabaseTypeEnum.SqlServer;
             cases.Add(new TestCaseDescriptor(
                 suiteId: SuiteId,
                 caseId: "unspecified_created_utc_keeps_utc_clock",
                 displayName: "A created time with no kind keeps its UTC clock",
                 executeAsync: (CancellationToken ct) => UnspecifiedCreatedUtcKeepsUtcClockAsync(),
                 tags: new List<string> { TestTags.Positive },
-                skip: !textClockProvider,
-                skipReason: textClockProvider
-                    ? null
-                    : "SQL Server and SQLite store this clock as text. MySQL and PostgreSQL bind a native timestamp and this case does not cover them."));
+                skip: OperatingSystem.IsWindows(),
+                skipReason: OperatingSystem.IsWindows() ? "The TZ variable does not change the .NET local zone on Windows." : null));
 
             return new TestSuiteDescriptor(
                 suiteId: SuiteId,
@@ -203,22 +198,13 @@ namespace Test.Shared.Suites.Database
 
         private static async Task UnspecifiedCreatedUtcKeepsUtcClockAsync()
         {
-            await _ClockZone.WaitAsync().ConfigureAwait(false);
-            string? previousZone = null;
-            bool zoneChanged = false;
-            try
+            using (LocalTimeZoneScope zone = await LocalTimeZoneScope.EnterAsync().ConfigureAwait(false))
             {
-                previousZone = Environment.GetEnvironmentVariable("TZ");
-                Environment.SetEnvironmentVariable("TZ", "America/New_York");
-                zoneChanged = true;
-                TimeZoneInfo.ClearCachedData();
                 DateTime wall = new DateTime(2020, 6, 15, 15, 0, 0);
                 DateTime unspecified = DateTime.SpecifyKind(wall, DateTimeKind.Unspecified);
                 DateTime utc = DateTime.SpecifyKind(wall, DateTimeKind.Utc);
                 DateTime local = new DateTime(2020, 6, 15, 15, 0, 0, DateTimeKind.Local);
                 DateTime localUtc = local.ToUniversalTime();
-                Assert(localUtc.Ticks != utc.Ticks,
-                    "TZ=America/New_York did not move 2020-06-15 15:00 off UTC. Unset DOTNET_SYSTEM_GLOBALIZATION_INVARIANT and install tzdata. A zero offset does not prove this case.");
 
                 using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
                 {
@@ -235,16 +221,6 @@ namespace Test.Shared.Suites.Database
                     AssertEqual(DateTimeKind.Utc, unspecifiedRead.Kind, "unspecified kind");
                     AssertEqual(utc.Ticks, unspecifiedRead.Ticks, "unspecified ticks");
                 }
-            }
-            finally
-            {
-                if (zoneChanged)
-                {
-                    Environment.SetEnvironmentVariable("TZ", previousZone);
-                    TimeZoneInfo.ClearCachedData();
-                }
-
-                _ClockZone.Release();
             }
         }
 
