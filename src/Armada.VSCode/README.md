@@ -109,9 +109,12 @@ off it only polls.
   already on the machine (Harbor's access key, the local API key, a TUI session), or a bearer token from
   `POST /api/v1/credentials` or an API key entered in **Armada: Connect**.
 
-## Install from a VSIX
+## Install
 
-From the repository root, `./build-vscode.sh --install` (or `build-vscode.bat --install`) builds
+From the VS Code Marketplace: search the Extensions view for **Armada AI**, or run
+`code --install-extension LatticeAI.armada-ai`.
+
+From source: `./build-vscode.sh --install` (or `build-vscode.bat --install`) at the repository root builds
 `vsix/armada-vscode-<version>.vsix` and installs it. For a `.vsix` from a release, use
 `code --install-extension <file>`.
 

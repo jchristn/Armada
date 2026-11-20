@@ -271,7 +271,7 @@ the parity manifest updated. Sizes are relative (S, M, L, XL).
 | V7 | Harbor | Harbor view, status bar link state, jobs and logs, metrics, headless start and stop, settings panel, menu parity; depends on 8.4 | M |
 | V8 | Hardening and parity gate | Remote-SSH, WSL and Codespaces passes; proxy mode; localization; accessibility (keyboard paths and screen reader labels for every tree and panel); performance with large fleets; remove the dashboard fallback; flip the gate to zero `planned`; docs; first stable Marketplace and Open VSX release | L |
 
-**Status (2026-11-19): V0 slice 1 is done** on `feature/vscode-extension`: identity `lattice-ai.armada`; the Armada
+**Status (2026-11-19): V0 slice 1 is done** on `feature/vscode-extension`: identity `LatticeAI.armada-ai`; the Armada
 view container with the navigation tree (pages open in the browser) and the black box tree (also in the Explorer behind
 `armada.failures.showInExplorer`); the connection manager with local discovery, the remote URL and key flow, health,
 contract check, whoami and role context keys, a shared in-flight attempt, the status bar and the output channel; the
@@ -393,9 +393,11 @@ From `~/Code/Mux/PUBLISH_VSCODE.md`:
 4. Open VSX: sign in with GitHub, sign the Eclipse publisher agreement, create a token, run
    `npx ovsx create-namespace <publisher> -p <token>` once, and store the token as `OVSX_PAT`.
 5. Confirm the extension `name` and `displayName` are free on both registries before the first publish. Mux had both
-   rejected (`mux`, then the displayName). The decided identity is publisher `lattice-ai` and name `armada` (extension ID
-   `lattice-ai.armada`; registry publisher IDs and names allow only letters, digits and hyphens, so the reverse-DNS
-   `ai.latticetech.armada` cannot be one), with display name "Armada", falling back to "Armada for VSCode" if "Armada" is taken
+   rejected (`mux`, then the displayName). The decided identity is publisher `LatticeAI`
+   (https://marketplace.visualstudio.com/manage/publishers/LatticeAI) and name `armada-ai` (extension ID
+   `LatticeAI.armada-ai`; registry publisher IDs and names allow only letters, digits and hyphens, so the reverse-DNS
+   `ai.latticetech.armada` cannot be one), with display name "Armada AI". The Marketplace already had the name `armada`
+   (hakan-akgul.armada) and the display name "Armada" (thefunktion.armada-vscode); the owner chose `armada-ai`
    (decision 1). Change `publisher` and `name` in `package.json`, the only place the ID lives.
 
 ### 9.5 Listing
@@ -453,11 +455,11 @@ root README.
 
 ## 12. Owner decisions (2026-11-19)
 
-1. **Publisher and name.** Publisher `lattice-ai` and extension name `armada` on the Marketplace and Open VSX
-   (extension ID `lattice-ai.armada`; registry IDs allow only letters, digits and hyphens, so `ai.latticetech.armada`
-   is not possible there). Anywhere a dotted identifier is allowed, use `ai.latticetech.armada`. Display name "Armada", falling
-   back to "Armada for VSCode" if the registries reject "Armada". The current `jchristn.armada-vscode` was never
-   published, so nothing migrates.
+1. **Publisher and name.** Publisher `LatticeAI`, extension name `armada-ai`, display name "Armada AI" on the
+   Marketplace and Open VSX: extension ID `LatticeAI.armada-ai`, first published to the Marketplace on 2026-11-20 as
+   1.3.0. Registry IDs allow only letters, digits and hyphens, so `ai.latticetech.armada` is not possible there; use
+   it anywhere a dotted identifier is allowed. The name `armada` and the display name "Armada" were already taken. The
+   earlier `jchristn.armada-vscode` was never published, so nothing migrates.
 2. **Binaries.** Bundle the self-contained CLI and headless Harbor in six platform-specific VSIX builds, and always run
    the bundled copies, while connecting to an Admiral that is already running rather than starting a second (4.4,
    4.7).
@@ -467,4 +469,5 @@ root README.
 5. **Dashboard refactors.** Approved: refactor the dashboard's shared code domain by domain so its pages render in the
    webviews, with no fork (8.1).
 6. **Pre-release publishing.** Pre-releases on the Marketplace and Open VSX from the end of V1; the first stable release
-   at V8 (7, 9.3).
+   at V8 (7, 9.3). Superseded 2026-11-20: the owner published 1.3.0 (V0 slice 1) to the Marketplace as a regular
+   release, not a pre-release.

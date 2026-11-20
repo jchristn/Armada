@@ -2,8 +2,8 @@
 
 ## Unreleased
 
-- The extension is now `lattice-ai.armada` (publisher `lattice-ai`, name `armada`, display name Armada). It was
-  never published as `jchristn.armada-vscode`, so nothing migrates.
+- The extension is now `LatticeAI.armada-ai` (publisher `LatticeAI`, name `armada-ai`, display name Armada AI), on the
+  VS Code Marketplace. It was never published as `jchristn.armada-vscode`, so nothing migrates.
 - **Armada view container** in the activity bar with a **Navigation** view (the dashboard's navigation model:
   Dashboard, Ask Armada, OPERATIONS, BUILD, CONFIGURATION, SYSTEM; pages open in the dashboard for now) and the
   **Failures** view, which moved here from the Explorer. `armada.failures.showInExplorer` (off by default) also shows
