@@ -721,6 +721,7 @@ Part of the bounded enumeration contract ([docs/ENUMERATION.md](docs/ENUMERATION
 - A dashboard notification for a deployment, an objective, or an incident opens that record. The notification stores the event time when the event time is usable. It stores the browser time when the event has no usable time.
 - The check run page clears the previous run when you open a different run, and shows the error when that run cannot be loaded. A reload of the same run keeps the run on screen.
 - The Needs You badge runs one inbox read at a time. The throttle starts when the read starts, so a slow or failed read does not start another read for socket activity inside that window. A failed read keeps the last count.
+- The Server page copies Codex MCP configuration as a TOML table for `~/.codex/config.toml`. The HTTP url ends in `/mcp`. The stdio block sets `command` and `args` for `armada mcp stdio`.
 
 ### Handoff and landing integrity
 
