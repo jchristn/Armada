@@ -213,46 +213,57 @@ export default function MergeQueue() {
 
   // Delete
   function handleDelete(id: string) {
+    const entry = sorted.find(candidate => candidate.id === id);
+    if (!entry) return;
+    const isTerminal = ['Landed', 'Failed', 'Cancelled'].includes(entry.status);
     setConfirm({
       open: true,
-      title: t('Delete Entry'),
-      message: t('Delete merge entry {{id}}? This cannot be undone.', { id }),
+      title: t(isTerminal ? 'Delete Entry' : 'Cancel Entry'),
+      message: isTerminal
+        ? t('Permanently delete merge entry {{id}}?', { id })
+        : t('Cancel merge entry {{id}}? The entry will be kept.', { id }),
       onConfirm: async () => {
         setConfirm(c => ({ ...c, open: false }));
         if (!(await deletion.run({ kind: 'mergeEntry', action: () => deleteMergeEntry(id), errorMessage: (err) => apiErrorMessage(err, t('Delete failed.')) }))) return;
-        pushToast('warning', t('Merge entry {{id}} deleted.', { id }));
+        pushToast('warning', isTerminal
+          ? t('Merge entry {{id}} deleted.', { id })
+          : t('Merge entry {{id}} cancelled. The entry is expected to remain.', { id }));
         load();
       },
     });
   }
 
   function handleBulkDelete() {
+    const selectedEntries = sorted.filter(entry => selected.includes(entry.id));
+    const expectedDeleted = selectedEntries.filter(entry => ['Landed', 'Failed', 'Cancelled'].includes(entry.status)).length;
+    const expectedCancelled = selectedEntries.length - expectedDeleted;
     setConfirm({
       open: true,
       title: t('Delete Selected Entries'),
-      message: t('Delete {{count}} selected merge queue entries? This cannot be undone.', { count: selected.length }),
+      message: t('{{deleted}} expected to be deleted and {{cancelled}} expected to be cancelled. Cancelled entries will be kept.', { deleted: expectedDeleted, cancelled: expectedCancelled }),
       onConfirm: async () => {
         setConfirm(c => ({ ...c, open: false }));
         const ids = [...selected];
         setSelected([]);
-        let failed = 0;
+        const failedIds = new Set<string>();
         if (!(await deletion.run({
           kind: 'mergeEntry',
           count: ids.length,
           action: async () => {
-            failed = 0;
+            failedIds.clear();
             for (const id of ids) {
-              try { await deleteMergeEntry(id); } catch { failed++; }
+              try { await deleteMergeEntry(id); } catch { failedIds.add(id); }
             }
           },
         }))) return;
-        const deleted = ids.length - failed;
-        if (deleted > 0) {
-          pushToast(failed > 0 ? 'warning' : 'success', failed > 0
-            ? t('Deleted {{deleted}} merge entries. {{failed}} failed.', { deleted, failed })
-            : t('Deleted {{deleted}} merge entries.', { deleted }));
+        const successfulEntries = selectedEntries.filter(entry => !failedIds.has(entry.id));
+        const failed = failedIds.size;
+        const deleted = successfulEntries.filter(entry => ['Landed', 'Failed', 'Cancelled'].includes(entry.status)).length;
+        const cancelled = successfulEntries.length - deleted;
+        if (successfulEntries.length > 0 || failed > 0) {
+          pushToast(failed > 0 ? 'warning' : 'success', t('{{deleted}} expected deleted, {{cancelled}} expected cancelled, {{failed}} failed.', { deleted, cancelled, failed }));
         }
-        if (failed > 0) setError(t('Deleted {{deleted}} entries, {{failed}} failed.', { deleted: ids.length - failed, failed }));
+        if (failed > 0) setError(t('{{deleted}} expected deleted, {{cancelled}} expected cancelled, {{failed}} failed.', { deleted, cancelled, failed }));
         load();
       },
     });
