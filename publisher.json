@@ -67,6 +67,8 @@
     { "name": "winget-cli",    "kind": "Winget",      "artifact": "helm",   "enabled": false,  "packageId": "jchristn.ArmadaCLI", "secretName": "WINGET_TOKEN", "runtimes": ["win-x64"] },
     { "name": "linux-cli",     "kind": "DebRpm",      "artifact": "helm",   "enabled": true,  "runtimes": ["linux-x64", "linux-arm64"] },
     { "name": "appimage-cli",  "kind": "AppImage",    "artifact": "helm",   "enabled": false,  "runtimes": ["linux-x64", "linux-arm64"] },
+    { "name": "wix-cli",       "kind": "Wix",         "artifact": "helm",   "enabled": true,  "runtimes": ["win-x64", "win-arm64"] },
+    { "name": "pkg-cli",       "kind": "Pkg",         "artifact": "helm",   "enabled": true,  "runtimes": ["osx-x64", "osx-arm64"] },
 
     { "name": "inno-harbor",   "kind": "Inno",        "artifact": "harbor", "enabled": true,  "runtimes": ["win-x64", "win-arm64"] },
     { "name": "dmg-harbor",    "kind": "Dmg",         "artifact": "harbor", "enabled": true,  "runtimes": ["osx-x64", "osx-arm64"] },

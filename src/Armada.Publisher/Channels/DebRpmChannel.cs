@@ -174,7 +174,9 @@ namespace Armada.Publisher.Channels
                 "-p", context.OutputDirectory,
                 "--force"
             };
-            foreach (string dependency in Dependencies(outputType))
+            List<string> dependencies = Dependencies(outputType);
+            if (context.Artifact.Kind == ArtifactKindEnum.Tray) dependencies.AddRange(DesktopDependencies(outputType));
+            foreach (string dependency in dependencies)
             {
                 arguments.Add("-d");
                 arguments.Add(dependency);
@@ -207,6 +209,23 @@ namespace Armada.Publisher.Channels
                 "tzdata",
                 "git"
             };
+        }
+
+        /// <summary>
+        /// Extra dependencies for a tray (Avalonia desktop) artifact: the X11 client libraries and fontconfig it loads
+        /// to open its window. Without them Harbor cannot show a window and runs headless. These are the packages
+        /// Harbor names when one is missing.
+        /// </summary>
+        /// <param name="outputType">fpm output type: deb or rpm.</param>
+        /// <returns>Dependency expressions, one per -d argument.</returns>
+        public static List<string> DesktopDependencies(string outputType)
+        {
+            if (string.Equals(outputType, "rpm", StringComparison.OrdinalIgnoreCase))
+            {
+                return new List<string> { "libX11", "libICE", "libSM", "libXext", "libXrandr", "libXi", "libXcursor", "libXfixes", "fontconfig" };
+            }
+
+            return new List<string> { "libx11-6", "libice6", "libsm6", "libxext6", "libxrandr2", "libxi6", "libxcursor1", "libxfixes3", "libfontconfig1" };
         }
 
         #endregion

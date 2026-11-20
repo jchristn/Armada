@@ -38,7 +38,7 @@ jobs:
           fi
 
   # ------------------------------------------------------------------
-  # Windows: Inno (.exe) for Harbor + WiX (.msi) for the server.
+  # Windows: Inno (.exe) for Harbor + WiX (.msi) for the CLI/TUI and the server.
   # ------------------------------------------------------------------
   windows:
     needs: version
@@ -62,7 +62,7 @@ jobs:
       - name: Install packaging tools
         run: |
           choco install innosetup -y
-          dotnet tool install --global wix
+          dotnet tool install --global wix --version 6.0.2
       - name: Build the publisher
         run: dotnet build src/Armada.Publisher/Armada.Publisher.csproj -c Release
       - name: Preflight
@@ -73,6 +73,7 @@ jobs:
           WINDOWS_CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
         run: |
           dotnet run --project src/Armada.Publisher -c Release -- --channel inno-harbor --version ${{ needs.version.outputs.version }}
+          dotnet run --project src/Armada.Publisher -c Release -- --channel wix-cli      --version ${{ needs.version.outputs.version }}
           dotnet run --project src/Armada.Publisher -c Release -- --channel wix-server   --version ${{ needs.version.outputs.version }}
       - uses: actions/upload-artifact@v4
         with:
@@ -80,7 +81,7 @@ jobs:
           path: artifacts/**/*
 
   # ------------------------------------------------------------------
-  # macOS: .app + .dmg (Harbor) and .pkg (server); notarize + staple.
+  # macOS: .app + .dmg (Harbor) and .pkg (CLI/TUI, server); notarize + staple.
   # ------------------------------------------------------------------
   macos:
     needs: version
@@ -115,6 +116,7 @@ jobs:
           APPLE_NOTARY_ISSUER: ${{ secrets.APPLE_NOTARY_ISSUER }}
         run: |
           dotnet run --project src/Armada.Publisher -c Release -- --channel dmg-harbor  --version ${{ needs.version.outputs.version }}
+          dotnet run --project src/Armada.Publisher -c Release -- --channel pkg-cli     --version ${{ needs.version.outputs.version }}
           dotnet run --project src/Armada.Publisher -c Release -- --channel pkg-server  --version ${{ needs.version.outputs.version }}
       # Layout, Info.plist (LSUIElement, version), icon, signature, and --install-startup --dry-run of the built app.
       # Reports whether the images are notarized; add --require-notarized once the Apple secrets are configured.

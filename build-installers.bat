@@ -35,6 +35,7 @@ set "FAILED="
 
 rem --- channels this OS owns -------------------------------------------------
 call :build inno-harbor
+call :build wix-cli
 call :build wix-server
 call :build nuget-cli
 

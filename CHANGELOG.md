@@ -110,6 +110,12 @@ v1.3.0 has two marquee features: **parallelization and concurrency**, and **out-
 - Audit every dashboard page and route. Remove unused router page loaders and the orphan legacy Settings page; expose its account usage-capture controls on the active Settings page. Retired list URLs retain filters and navigation state, and unknown URLs show a recovery page.
 - Add route/module/link inventory and rendered breadcrumb regression checks. See [dashboard navigation](docs/DASHBOARD_NAVIGATION.md).
 
+### Installers
+
+- Windows and macOS now get a CLI installer, so `armada` (with `armada tui` and the embedded Admiral, `armada server start`) installs without the .NET SDK: `armada-<version>-win-<arch>.msi` (channel `wix-cli`) installs `armada.exe` under Program Files and adds it to the system PATH, and `armada-<version>-osx-<arch>.pkg` (channel `pkg-cli`) installs it under `/usr/local/lib/armada` with `/usr/local/bin/armada`. With Harbor and the server installers, every platform now has native installers for everything that runs on a developer machine.
+- The Linux Harbor `.deb` and `.rpm` now depend on the X11 client libraries and fontconfig the Harbor window loads (`libx11-6`, `libice6`, `libsm6`, `libxext6`, `libxrandr2`, `libxi6`, `libxcursor1`, `libxfixes3`, `libfontconfig1`, or the Fedora equivalents), so installing the package installs them instead of Harbor starting without a window.
+- Fix the release workflow failing on Windows before packaging anything: the Publisher preflight reported `signtool` as missing when no Windows certificate was configured. `signtool` is now required only when the certificate secret is set, and is reported as skipped otherwise.
+
 ### Fixes
 
 - Fix captain evaluation battery results listing in a different order on MySQL and SQL Server than on SQLite and PostgreSQL when several results share a timestamp. The id tie-break now compares ordinally on every provider, so pages are stable and identical across providers.

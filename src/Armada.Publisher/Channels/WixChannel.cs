@@ -14,7 +14,8 @@ namespace Armada.Publisher.Channels
     /// Builds a Windows Installer package (.msi) per Windows runtime identifier with the WiX v5+ CLI
     /// (dotnet tool install --global wix). Mirrors the Inno recipe: the whole self-contained publish is
     /// installed under Program Files, and service or startup registration is delegated to the artifact's
-    /// own install/uninstall arguments through deferred custom actions. The MSI is Authenticode-signed
+    /// own install/uninstall arguments through deferred custom actions. A CLI artifact is installed under its
+    /// command name with its folder added to the system PATH. The MSI is Authenticode-signed
     /// when the certificate secret is present.
     /// </summary>
     public class WixChannel : IChannel
@@ -36,8 +37,8 @@ namespace Armada.Publisher.Channels
         {
             return new List<ToolRequirement>
             {
-                new ToolRequirement("wix", "dotnet tool install --global wix", "win"),
-                new ToolRequirement("signtool", "Install the Windows SDK (ships on windows-latest); needed to Authenticode-sign the installer.", "win")
+                new ToolRequirement("wix", "dotnet tool install --global wix --version 6.0.2", "win"),
+                ToolRequirement.WindowsSigntool()
             };
         }
 
@@ -136,7 +137,19 @@ namespace Armada.Publisher.Channels
             wxs.AppendLine("    </StandardDirectory>");
             wxs.AppendLine("    <ComponentGroup Id=\"ProductFiles\" Directory=\"INSTALLFOLDER\">");
             wxs.AppendLine("      <Component>");
-            wxs.AppendLine("        <File Id=\"MainExecutable\" Source=\"" + Esc(published.BinaryPath) + "\" KeyPath=\"yes\" />");
+            if (artifact.Kind == ArtifactKindEnum.Cli)
+            {
+                // A CLI is typed by name: install it as <binaryName>.exe (the apphost is named after the assembly, for
+                // example Armada.Helm.exe) and put the install folder on the system PATH. Windows Installer removes the
+                // PATH entry on uninstall because the Environment element belongs to this component.
+                string commandFile = artifact.BinaryName + ".exe";
+                wxs.AppendLine("        <File Id=\"MainExecutable\" Source=\"" + Esc(published.BinaryPath) + "\" Name=\"" + Esc(commandFile) + "\" KeyPath=\"yes\" />");
+                wxs.AppendLine("        <Environment Id=\"PathEntry\" Name=\"PATH\" Value=\"[INSTALLFOLDER]\" Permanent=\"no\" Part=\"last\" Action=\"set\" System=\"yes\" />");
+            }
+            else
+            {
+                wxs.AppendLine("        <File Id=\"MainExecutable\" Source=\"" + Esc(published.BinaryPath) + "\" KeyPath=\"yes\" />");
+            }
             wxs.AppendLine("      </Component>");
             wxs.AppendLine("      <Files Include=\"" + Esc(published.OutputDirectory) + "\\**\">");
             wxs.AppendLine("        <Exclude Files=\"" + Esc(published.BinaryPath) + "\" />");

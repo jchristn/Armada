@@ -89,8 +89,10 @@ Packaging is driven by `publisher.json` and `src/Armada.Publisher`. The 1.0 inst
 | Any | Docker images (`scripts/<os>/build-all`, run by hand) | Admiral, dashboard, proxy |
 | Any | NuGet global tool (`nuget-cli`) | CLI (`armada`) |
 | Windows | Inno Setup (`inno-harbor`) | Harbor `.exe` installer |
+| Windows | WiX (`wix-cli`) | CLI (`armada`, with the TUI) `.msi` |
 | Windows | WiX (`wix-server`) | Admiral `.msi` |
 | macOS | `.app` in a `.dmg` (`dmg-harbor`) | Harbor |
+| macOS | `.pkg` (`pkg-cli`) | CLI (`armada`, with the TUI) |
 | macOS | `.pkg` (`pkg-server`) | Admiral |
 | Linux | fpm (`linux-cli`, `linux-harbor`, `linux-server`) | `.deb` and `.rpm` for all three |
 

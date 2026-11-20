@@ -19,8 +19,8 @@ Armada 1.0 ships these install paths and no others (decision D1 in `archive/V1_R
 | Platform | Deliverable | Channel in `publisher.json` |
 |----------|-------------|-----------------------------|
 | Any | CLI as a .NET global tool (`dotnet tool install -g Armada.Helm`) | `nuget-cli` |
-| Windows | Harbor `.exe` (Inno Setup), Server `.msi` (WiX) | `inno-harbor`, `wix-server` |
-| macOS | Harbor `.app` in a `.dmg`, Server `.pkg` | `dmg-harbor`, `pkg-server` |
+| Windows | Harbor `.exe` (Inno Setup), CLI `.msi` and Server `.msi` (WiX) | `inno-harbor`, `wix-cli`, `wix-server` |
+| macOS | Harbor `.app` in a `.dmg`, CLI `.pkg` and Server `.pkg` | `dmg-harbor`, `pkg-cli`, `pkg-server` |
 | Linux | `.deb` and `.rpm` for the CLI, Harbor, and Server | `linux-cli`, `linux-harbor`, `linux-server` |
 | Docker | Admiral, dashboard, and proxy images | `docker/` (see [docs/DOCKER.md](docs/DOCKER.md)) |
 
@@ -30,21 +30,25 @@ disabled (`"enabled": false`) because their recipes are not implemented. `--all`
 
 ## Windows
 
-Produces the Harbor `.exe` (Inno), the Server `.msi` (WiX), and the CLI NuGet tool.
+Produces the Harbor `.exe` (Inno), the CLI `.msi` and Server `.msi` (WiX), and the CLI NuGet tool.
 
 ```powershell
 choco install innosetup -y
-dotnet tool install --global wix
+dotnet tool install --global wix --version 6.0.2
 .\build-installers.bat 1.0.0
 ```
 
 The WiX recipe (`src/Armada.Publisher/Channels/WixChannel.cs`) generates a `.wxs` per Windows runtime next to the
 `.msi`, uses a stable UpgradeCode derived from the product, artifact, and runtime so new versions upgrade in place,
-and needs WiX v5 or later (it harvests the publish directory with the `Files` element).
+and needs WiX v5 or v6, because it harvests the publish directory with the `Files` element. CI pins 6.0.2, since WiX 7
+refuses to build until its EULA is accepted. The CLI `.msi` installs the
+executable as `armada.exe` under `Program Files\Armada CLI` and adds that folder to the system PATH (open a new
+terminal after installing); uninstalling removes the PATH entry. `signtool` is needed only when `WINDOWS_CERT_BASE64`
+is set; without it the preflight reports it as skipped and the installers are unsigned.
 
 ## macOS
 
-Produces the Harbor `.app` bundle wrapped in a `.dmg`, and the Server `.pkg`. Everything used ships with macOS and
+Produces the Harbor `.app` bundle wrapped in a `.dmg`, and the CLI and Server `.pkg` files. Everything used ships with macOS and
 the Xcode command-line tools (`hdiutil`, `sips`, `iconutil`, `codesign`, `pkgbuild`, `productbuild`, `xcrun`); there is
 nothing to `brew install`.
 
@@ -66,6 +70,9 @@ chmod +x build-installers.sh
   `--install-startup --dry-run`), run `scripts/macos/build-harbor-app.sh` (default version from
   `src/Directory.Build.props`, output in `installers/<version>/`). Without Apple credentials the app is ad-hoc signed,
   which is enough to run it on the Mac that built it.
+- **CLI `.pkg`**: installs the self-contained `armada` CLI (which also hosts `armada tui` and `armada server start`)
+  to `/usr/local/lib/armada/` with a symlink at `/usr/local/bin/armada`. There is no install step beyond copying
+  files. `sudo /usr/local/lib/armada/uninstall.sh` removes it and leaves `~/.armada` alone.
 - **Server `.pkg`**: installs the binary to `/usr/local/lib/armada-server/`, a symlink at
   `/usr/local/bin/armada-server`, and a LaunchAgent at `/Library/LaunchAgents/com.joelchristner.armada.server.plist`
   that runs the Admiral in each user's login session (captains need the user's home directory, git credentials,
@@ -75,7 +82,8 @@ chmod +x build-installers.sh
 
 ## Linux
 
-Produces `.deb` / `.rpm` for all three components.
+Produces `.deb` / `.rpm` for all three components. Every package depends on ICU, OpenSSL, CA certificates, tzdata,
+and git; the Harbor packages also depend on the X11 client libraries and fontconfig its window needs.
 
 ```bash
 sudo gem install --no-document fpm
@@ -92,8 +100,10 @@ flattened into a version-specific directory with a `SHA256SUMS` manifest:
 installers/
   1.0.0/
     armada-harbor-1.0.0-win-x64.exe
+    armada-1.0.0-win-x64.msi
     armada-server-1.0.0-win-x64.msi
     armada-harbor-1.0.0-osx-arm64.dmg
+    armada-1.0.0-osx-arm64.pkg
     armada-server-1.0.0-osx-arm64.pkg
     armada-harbor_1.0.0_amd64.deb
     Armada.Helm.1.0.0.nupkg

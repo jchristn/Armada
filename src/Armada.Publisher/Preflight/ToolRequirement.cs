@@ -1,6 +1,7 @@
 namespace Armada.Publisher.Preflight
 {
     using System;
+    using Armada.Publisher.Manifest;
 
     /// <summary>
     /// A single external tool a channel needs, paired with the exact command to install it so a
@@ -27,6 +28,17 @@ namespace Armada.Publisher.Preflight
         /// </summary>
         public string OperatingSystems { get; set; }
 
+        /// <summary>
+        /// Condition under which the tool is needed, evaluated against the manifest and the current environment.
+        /// Null means always. When it returns false the Doctor reports the tool as skipped, not missing.
+        /// </summary>
+        public Func<PublisherManifest, bool>? RequiredWhen { get; set; }
+
+        /// <summary>
+        /// Why the tool is not needed when <see cref="RequiredWhen"/> returns false, printed by the Doctor.
+        /// </summary>
+        public string NotRequiredReason { get; set; } = string.Empty;
+
         #endregion
 
         #region Constructors-and-Factories
@@ -42,6 +54,20 @@ namespace Armada.Publisher.Preflight
             Executable = executable ?? throw new ArgumentNullException(nameof(executable));
             InstallCommand = installCommand ?? throw new ArgumentNullException(nameof(installCommand));
             OperatingSystems = operatingSystems ?? string.Empty;
+        }
+
+        /// <summary>
+        /// The signtool requirement shared by the Windows installer channels. signtool is needed only when the
+        /// Windows certificate secret is set; without it the installers are built unsigned.
+        /// </summary>
+        /// <returns>Conditional signtool requirement.</returns>
+        public static ToolRequirement WindowsSigntool()
+        {
+            return new ToolRequirement("signtool", "Install the Windows SDK and put signtool.exe on PATH; needed to Authenticode-sign the installer.", "win")
+            {
+                RequiredWhen = manifest => !string.IsNullOrEmpty(Environment.GetEnvironmentVariable(manifest.Signing.Windows.CertBase64Secret)),
+                NotRequiredReason = "Windows certificate secret not set; installers will be unsigned"
+            };
         }
 
         #endregion

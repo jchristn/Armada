@@ -3,7 +3,7 @@
 #  build-installers.sh - build the installers this OS can produce (CLI, Harbor,
 #  Server) and land them in installers/<version>/.
 #
-#  On macOS this builds the Harbor .app in a .dmg and the Server .pkg; on Linux
+#  On macOS this builds the Harbor .app in a .dmg and the CLI and Server .pkg; on Linux
 #  it builds .deb / .rpm. Both also pack the CLI NuGet tool. Windows installers
 #  (.exe/.msi) cannot be built here;
 #  run build-installers.bat on Windows, or push a tag to let the CI matrix build
@@ -54,6 +54,7 @@ OS="$(uname -s)"
 case "$OS" in
   Darwin)
     build dmg-harbor
+    build pkg-cli
     build pkg-server
     ;;
   Linux)

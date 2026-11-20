@@ -55,6 +55,12 @@ namespace Armada.Publisher.Preflight
                     if (!AppliesToCurrentOs(requirement, currentOs)) continue;
                     if (!reported.Add(requirement.Executable)) continue;
 
+                    if (requirement.RequiredWhen != null && !requirement.RequiredWhen(_Manifest))
+                    {
+                        Console.WriteLine("  [skip]    " + requirement.Executable + "  (" + requirement.NotRequiredReason + ")");
+                        continue;
+                    }
+
                     bool present = ProcessRunner.Exists(requirement.Executable);
                     if (present)
                     {

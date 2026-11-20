@@ -32,7 +32,7 @@ namespace Armada.Publisher.Channels
             return new List<ToolRequirement>
             {
                 new ToolRequirement("iscc", "choco install innosetup -y", "win"),
-                new ToolRequirement("signtool", "Install the Windows SDK (ships on windows-latest); needed to Authenticode-sign the installer.", "win")
+                ToolRequirement.WindowsSigntool()
             };
         }
 
