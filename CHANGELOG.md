@@ -471,6 +471,10 @@ commands arrive with their own changes. Schema migrations 103 and 104 apply at s
 ### Mission success state
 
 - Clear an old failure reason and kind when completion, review approval, or merge reconciliation moves a mission to a success state. Keep new reasons written by later failures.
+### Process liveness heartbeat
+
+- Capture the cancellation token before starting the liveness task, and let an old loop remove only its own entry.
+  This prevents a stop race from faulting the task on a disposed source or removing a replacement loop.
 
 ### Landing failure prevention
 
