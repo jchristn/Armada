@@ -251,16 +251,20 @@ namespace Test.Shared.Suites.Services
                     Name = "Harbor checks",
                     Scope = WorkflowProfileScopeEnum.Vessel,
                     VesselId = vessel.Id,
-                    // Runs in the platform shell (cmd on Windows), so only syntax both shells share; the artifact is written
-                    // into the Harbor's checkout below, where the run's artifact collection finds it.
+                    // Runs in the platform shell (cmd on Windows), so only syntax both shells share apart from the copy;
+                    // the command writes the artifact into the Harbor's checkout, since only artifacts the run wrote are
+                    // parsed.
                     UnitTestCommand = "echo Passed!  - Failed: 0, Passed: 3, Skipped: 1, Total: 4, Duration: 1.5 s"
                         + " && echo on-stderr 1>&2"
-                        + " && git ls-files --error-unmatch README.md",
+                        + " && git ls-files --error-unmatch README.md"
+                        + (OperatingSystem.IsWindows()
+                            ? " && cmd /c copy /y out\\coverage-source.xml out\\coverage.cobertura.xml >nul"
+                            : " && cp out/coverage-source.xml out/coverage.cobertura.xml"),
                     ExpectedArtifacts = new List<string> { "out/coverage.cobertura.xml", "out/missing.xml" }
                 };
                 await s.Db.Driver.WorkflowProfiles.CreateAsync(profile).ConfigureAwait(false);
                 Directory.CreateDirectory(Path.Combine(git.Checkout, "out"));
-                File.WriteAllText(Path.Combine(git.Checkout, "out", "coverage.cobertura.xml"),
+                File.WriteAllText(Path.Combine(git.Checkout, "out", "coverage-source.xml"),
                     "<coverage line-rate=\"0.75\" branch-rate=\"0.5\" lines-covered=\"15\" lines-valid=\"20\" branches-covered=\"4\" branches-valid=\"8\"></coverage>");
 
                 CheckRun run = await s.CheckRuns.RunAsync(s.Admin, new CheckRunRequest { VesselId = vessel.Id, Type = CheckRunTypeEnum.UnitTest, Label = "Unit tests" }).ConfigureAwait(false);
