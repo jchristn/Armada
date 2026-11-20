@@ -6,6 +6,7 @@ namespace Armada.Core.Services
     using System.Threading;
     using System.Text.Json;
     using System.Text.Json.Serialization;
+    using SyslogLogging;
     using Armada.Core.Database;
     using Armada.Core.Enums;
     using Armada.Core.Models;
@@ -21,6 +22,7 @@ namespace Armada.Core.Services
         public Action<Objective>? OnObjectiveChanged { get; set; }
 
         private readonly DatabaseDriver _Database;
+        private readonly LoggingModule? _Logging;
         private readonly SemaphoreSlim _BackfillLock = new SemaphoreSlim(1, 1);
         private bool _BackfillCompleted = false;
         private static readonly JsonSerializerOptions _JsonOptions = new JsonSerializerOptions
@@ -32,9 +34,10 @@ namespace Armada.Core.Services
         /// <summary>
         /// Instantiate.
         /// </summary>
-        public ObjectiveService(DatabaseDriver database)
+        public ObjectiveService(DatabaseDriver database, LoggingModule? logging = null)
         {
             _Database = database ?? throw new ArgumentNullException(nameof(database));
+            _Logging = logging;
         }
 
         /// <summary>
@@ -192,7 +195,7 @@ namespace Armada.Core.Services
 
             SanitizeObjective(objective);
             CollectionBounds.Validate(objective);
-            await ValidateLinksAsync(auth, objective, token).ConfigureAwait(false);
+            await ValidateLinksAsync(auth, objective, token, request.IncidentIds == null).ConfigureAwait(false);
             ApplyLifecycleTimestamps(objective);
             await PersistObjectiveAsync(auth, objective, token).ConfigureAwait(false);
             OnObjectiveChanged?.Invoke(objective);
@@ -248,7 +251,7 @@ namespace Armada.Core.Services
 
                 SanitizeObjective(objective);
                 CollectionBounds.Validate(objective);
-                await ValidateLinksAsync(auth, objective, token).ConfigureAwait(false);
+                await ValidateLinksAsync(auth, objective, token, tolerateDanglingIncidents: true).ConfigureAwait(false);
                 ApplyLifecycleTimestamps(objective);
                 await PersistObjectiveAsync(auth, objective, token).ConfigureAwait(false);
                 OnObjectiveChanged?.Invoke(objective);
@@ -735,7 +738,11 @@ namespace Armada.Core.Services
                 .ToList();
         }
 
-        private async Task ValidateLinksAsync(AuthContext auth, Objective objective, CancellationToken token)
+        private async Task ValidateLinksAsync(
+            AuthContext auth,
+            Objective objective,
+            CancellationToken token,
+            bool tolerateDanglingIncidents = false)
         {
             if (!String.IsNullOrWhiteSpace(objective.ParentObjectiveId)
                 && !await ReadObjectiveExistsAsync(auth, objective.ParentObjectiveId, token).ConfigureAwait(false))
@@ -753,7 +760,19 @@ namespace Armada.Core.Services
             await ValidateIdsAsync(objective.CheckRunIds, async id => await ReadCheckRunAsync(auth, id, token).ConfigureAwait(false), "Check run").ConfigureAwait(false);
             await ValidateIdsAsync(objective.ReleaseIds, async id => await ReadReleaseAsync(auth, id, token).ConfigureAwait(false), "Release").ConfigureAwait(false);
             await ValidateIdsAsync(objective.DeploymentIds, async id => await ReadDeploymentAsync(auth, id, token).ConfigureAwait(false), "Deployment").ConfigureAwait(false);
-            await ValidateIdsAsync(objective.IncidentIds, async id => await ReadIncidentAsync(auth, id, token).ConfigureAwait(false), "Incident").ConfigureAwait(false);
+            if (tolerateDanglingIncidents)
+            {
+                foreach (string incidentId in objective.IncidentIds)
+                {
+                    bool exists = await ReadIncidentAsync(auth, incidentId, token).ConfigureAwait(false);
+                    if (!exists)
+                        _Logging?.Warn("[ObjectiveService] Objective " + objective.Id + " retains unresolved incident link " + incidentId + ".");
+                }
+            }
+            else
+            {
+                await ValidateIdsAsync(objective.IncidentIds, async id => await ReadIncidentAsync(auth, id, token).ConfigureAwait(false), "Incident").ConfigureAwait(false);
+            }
 
             if (!String.IsNullOrWhiteSpace(objective.SuggestedPipelineId)
                 && !await ReadPipelineAsync(objective.SuggestedPipelineId, token).ConfigureAwait(false))
@@ -948,7 +967,7 @@ namespace Armada.Core.Services
             objective.LastUpdateUtc = DateTime.UtcNow;
             SanitizeObjective(objective);
             CollectionBounds.Validate(objective);
-            await ValidateLinksAsync(auth, objective, token).ConfigureAwait(false);
+            await ValidateLinksAsync(auth, objective, token, tolerateDanglingIncidents: true).ConfigureAwait(false);
             ApplyLifecycleTimestamps(objective);
             await PersistObjectiveAsync(auth, objective, token).ConfigureAwait(false);
             OnObjectiveChanged?.Invoke(objective);

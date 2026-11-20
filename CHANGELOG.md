@@ -507,6 +507,7 @@ commands arrive with their own changes. Schema migrations 103 and 104 apply at s
 ### Unfinished work counts only a completion line
 
 - **A quoted completion marker does not finish a stage.** `IsUnfinishedWork` treats `[ARMADA:RESULT] COMPLETE` as present only when that text is its own line outside a fenced block, the same rule `ModelProbeScorer.HasWorkerResultLine` already uses. A marker inside a sentence, inside a fence, or with more words on the same line leaves an empty diff on the start commit unfinished. A standalone completion line still counts as finished. The fast no-op length and time limits are unchanged.
+- Preserve existing incident links when an objective update, voyage link, or reorder cannot resolve the linked incident. New incident links remain validated.
 
 ### Landing failure prevention
 
