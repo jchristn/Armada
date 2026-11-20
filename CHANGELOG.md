@@ -6,13 +6,95 @@ All notable changes to Armada are documented in this file.
 
 ## Unreleased
 
-### Dashboard delete wording
+### Security
+
+- Exported Admiral logs redact secret-shaped text from the message and the exception, send that text as one structured message without the exception object, and count forwarding failures.
+- **Runtime logs and captured requests redact three more token shapes.** `SecretRedactor` removes a fine-grained GitHub personal access token (82 or more token characters), a Slack token whose prefix letter is a, b, p, r, or s, and a GitLab personal access token (20 or more token characters). Classic GitHub tokens and the other existing rules are unchanged.
+- **Mission, voyage, captain, and check-run events reach the sockets that can read the record.** `mission.changed`, `mission.activity`, `approval-needed`, `voyage.changed`, `captain.changed`, and `check-run.changed` go to the owning user, a tenant administrator of that tenant, and a global administrator who already receives that tenant. A record with no user id still reaches that tenant's tenant administrators and those global administrators. A record with no tenant id reaches global administrators only. Objective, incident, deployment, runbook, and environment events stay on the tenant broadcast. Ask events stay with that user. CLI permission events stay with the viewers `CliPermissionAccess.CanView` admits.
+- Captain processes and `run_process` commands do not inherit `ARMADA_INITIAL_ADMIN_PASSWORD`. Armada still reads this
+  variable during server startup to set the initial admin password.
+
+### Fixes
+
+- **Git launches fail without opening a credential prompt.** Shared Git launch settings disable terminal and Git Credential Manager interaction, so unattended commands return an authentication error when credentials are missing.
+- Cascade cleanup treats `NotSupportedException` from planning-session enumeration as an empty list, so captain deletion can finish on providers that do not store planning sessions. Other enumeration failures still propagate.
+- Resume merge entries left in `Testing` after the processing lease expires. Entries without a start time are also
+  resumed; entries with a recent start time remain untouched.
+- **Name, instruction, persona, and tier edits skip live model validation when the binding is unchanged.** `PUT /api/v1/captains/{id}` and MCP `update_captain` validate the model only when the merged update changes `Model`, `Runtime`, or `ModelEndpointId`. Create still validates. A binding change that fails validation is not stored. WebSocket `update_captain` does not validate.
+- An OpenCode `type=error` event fails Ask, planning, and refinement even when earlier assistant text arrived and the process exits 0. The operator sees a short provider message and the HTTP status when one is present. The response body, headers, URL, and session id stay out of that text. The planning or refinement session stays active. A text event with no error is unchanged. Stderr provider parsing is unchanged.
+- **A complete think block in assistant text is removed before the reply is emitted or stored.** The tool loop and plain chat both keep the remaining text for the reply event, the final text, and the final message file. The opening tag must be `think` with a tag boundary, so a longer name such as `thinking` stays. An unmatched tag stays. Text with no complete block is unchanged. The Judge parser is unchanged: one distinct standalone verdict line is a verdict, and two different lines are not.
+- `run_process` captures stdout and stderr as UTF-8 byte streams with a separate 100 KB budget for each stream. Long output keeps its beginning and end, and the truncation note reports the number of omitted bytes. The reader keeps a bounded buffer while the process runs; the JSON result envelope is outside the per-stream budgets.
+- Command-dependency probes treat shell syntax as syntax. A requested check recognizes `exit`, `return`, `:`, `source`, `unset`, `shift`, `eval`, `exec`, `trap`, `wait`, `local`, `readonly`, `declare`, `ulimit`, `umask`, `shopt`, `esac`, conditional and loop keywords, and `for`/`select`/`case` headers. A command name that is a shell variable is not probed. A program later in the same segment, and a program in a later `&&`, `||`, or `;` segment, is still probed. A missing program remains a blocking `command_dependency_missing` error.
+- **A failed voyage is announced as failed.** When the health check settles a voyage, `voyage.changed` and the push title use the status already stored on the voyage. A voyage with a Failed or LandingFailed mission is stored as Failed and announced as Failed. A voyage whose missions finished without a failure is announced as Complete. Cancelling a voyage still announces Cancelled.
+- Clear an old failure reason and kind when completion, review approval, or merge reconciliation moves a mission to a success state. Keep new reasons written by later failures.
+- Capture the cancellation token before starting the liveness task, and let an old loop remove only its own entry.
+  This prevents a stop race from faulting the task on a disposed source or removing a replacement loop.
+- Cancelling a merge entry that is already Landed, Failed or Cancelled keeps its stored status. Queued and other active entries still
+  become Cancelled.
+- Readiness checks split command chains only on separators outside double-quoted arguments. Escaped double quotes keep their quoted span open.
+- A workflow command that starts with `NAME=value` was reported as `command_dependency_missing` for that assignment when the value contained `/` or `\`. Readiness now skips the assignment and checks the next command. A name that starts with a digit stays a command name.
+- A landed merge-queue entry keeps its mission branch when the policy is `None`, deletes only the local ref when the policy is `LocalOnly`, and deletes the local and origin refs when the policy is `LocalAndRemote`. The vessel policy overrides the global setting. A landed branch that git does not show as contained in the target stays. A cancelled entry loses both refs when git shows that the branch is merged. The queue removes the temporary integration worktree when it finishes an entry.
+- A landing preview counts only check runs with status `Passed` as passing evidence. A completed failed or canceled run with exit code zero no longer hides the required-check blocker. Imported check status remains authoritative, while a passed run still counts when its exit code is absent.
+- REST and MCP resolve selected playbooks before they store a bare voyage. REST returns the mapped not-found or bad-request response for a missing or inactive playbook. A valid selection is stored after the voyage is created.
+- **A `dotnet test` run with several projects reports the combined counts.** Each project prints its own Passed or Failed summary line, and the command prints no combined line. The check summary adds failed, passed, skipped, and total across those lines. Duration is the longest project duration. A TRX, JUnit, NUnit, or Jest artifact still replaces the console summary.
+- Additional Architect workers keep the template Worker mode, and cloned pipeline stages keep their matching template stage mode.
+- **Ordinary playbooks are not runbooks.** List, read, update, delete, and start-execution apply only when the playbook content starts with the runbook metadata marker `<!-- armada:runbook`. A plain playbook is absent from the runbook list. Read returns no runbook. Update, delete, and start-execution report `Runbook not found.` and leave the playbook row and its content in place. Leading whitespace before the marker does not qualify. A record that starts with the marker remains a runbook.
+- **A quoted completion marker does not finish a stage.** `IsUnfinishedWork` treats `[ARMADA:RESULT] COMPLETE` as present only when that text is its own line outside a fenced block, the same rule `ModelProbeScorer.HasWorkerResultLine` already uses. A marker inside a sentence, inside a fence, or with more words on the same line leaves an empty diff on the start commit unfinished. A standalone completion line still counts as finished. The fast no-op length and time limits are unchanged.
+- Preserve existing incident links when an objective update, voyage link, or reorder cannot resolve the linked incident. New incident links remain validated.
+- GitHub objective re-import keeps `Completed` and `Cancelled` when a merged pull request maps to `Released`. An explicit `StatusOverride` still applies.
+- When a process exits with a failure, Armada stores captured output on the failed mission if the mission has no output yet. Existing output stays in place, and an empty capture stays empty.
+- Startup cancels each Armada check that is still Running from before this process started. The command died with that process, so the record has no verdict. The summary says so, and an empty output is set to that summary. A check started at or after this process start stays Running. An imported check stays Running. The stored duration is left unchanged.
+- **A container stop reaches `ArmadaServer.Stop`.** SIGTERM cancels the runtime's default
+  termination and sets the same stop handle as Ctrl+C. The main thread calls `Stop` after
+  the wait, then disposes the registration. A platform without SIGTERM still starts. A
+  repeated signal does not run `Stop` again.
+- MCP `delete_dock` and `delete_event` record `dock.deleted` and `event.deleted` after a successful delete, with the same event name, entity, and message as the REST delete routes. A refused delete records nothing.
+- **A full pipe no longer blocks Helm.** MCP client install and remove read standard output and standard error while the client runs. On Unix, `armada server start` sends the Admiral's standard streams to `/dev/null` and releases the process handle without stopping a healthy server. The server build, TypeScript, and Vite steps read both streams while the child runs, then report the child's exit status and standard error.
+- REST query values are decoded once before a route parses or filters them. A literal plus sign stays a plus sign. A malformed percent escape is kept, and the route still answers.
+- Deleting a custom pipeline clears that pipeline from objective suggestions and from snapshot restore. The next objective read does not write the deleted pipeline id.
+- Mission prompts instruct captains to push their branch only for PullRequest landing and for a landing mode the product does not define. Audit and Research prompts do not ask for commits or pushes. Other known landing modes ask for commits without a captain push. Seeding updates an untouched built-in mission rules template that still matches a previously shipped default, and leaves operator edits in place.
+- MCP voyage cancellation now broadcasts the updated voyage and cancelled missions to WebSocket subscribers.
+- `armada reset` and the wipe path in `armada config init` now keep existing data when they cannot prove the local Admiral has stopped. They poll the local health endpoint for up to 30 seconds and treat every HTTP response, including an error response, as a live process. They delete data only after the endpoint refuses a connection.
+- WebSocket `get_mission_diff` reads a Harbor mission worktree through that Harbor's git service when no saved diff file or snapshot exists. A missing worktree or an unavailable Harbor still returns Unavailable. Saved diffs and snapshots keep their existing precedence. REST and MCP results are unchanged.
+- A tunnel request applies its deadline to the send and to the response wait. A sender that does not return times out. Caller cancellation stays a cancellation, and the pending response entry is removed when the call ends.
+- A voyage whose every mission is cancelled finishes as Cancelled. A settled voyage with a cancelled mission and no completed mission finishes as Failed. A voyage with a completed mission and no failed or landing-failed mission still finishes as Complete, and a voyage whose missions are only WorkProduced still finishes as Complete.
+- The dashboard websocket relay removes a receive-loop session by instance before it publishes an error or a close, and the loop's final removal matches that same instance. A frame sent from the error event finds no session. A new session that reuses the proxy socket id during close stays registered.
+- Check runs keep captured command output when a local or Harbor command times out.
+- A slow WebSocket client no longer blocks event delivery to other clients. Each authenticated connection has a bounded outbound queue and one sender. Broadcasts, CLI permission events, subscribe snapshots, command replies, and errors are queued without waiting for the network. A full queue or a failed send aborts only that connection, so the client must reconnect and refresh its state. Tenant and user filters are unchanged.
+
+### Database providers
+
+- **Scoped deletes.** Each SQL Server captain delete clears `signals.from_captain_id` and `signals.to_captain_id` only for captains that match that delete, then deletes those captains, in one transaction. The id delete matches `id`. The tenant delete matches `tenant_id` and `id`. The user delete matches `tenant_id`, `user_id`, and `id`. A delete that matches no captain leaves the captain and both signal references unchanged. A delete that fails because another row still references the captain rolls the signal updates back. SQL Server still cannot declare two `ON DELETE SET NULL` keys from `signals` to `captains`, so this delete nulls the references.
+- **A pipeline and its stages are stored in one transaction.** Create, update, and delete write the parent row and every stage row on the connection those methods already open. This is the same on SQLite, PostgreSQL, MySQL, and SQL Server. A failure rolls the transaction back. A failed update keeps the previous stages. A failed create leaves no pipeline row. A failed delete keeps the parent row and its stages.
+- Full mission lists and mission summaries apply the `MissionId` filter in global, tenant, and user scopes. Row
+  results and totals use the same filter on all four database providers.
+- Tenant and user dock lists order by `created_utc` descending. Tenant deletion can now enumerate its docks before it removes them.
+- **A damaged objective field is no longer read as an empty list or a default enum.** Non-empty list or playbook JSON that cannot be decoded, and a non-empty objective enum name that is not a defined member, throw `StoredObjectiveDataException` with the objective id and the field name. A single-row read and an enumeration both fail. The stored text stays as it was, so a later update of another field cannot replace it. Empty or null text still reads as an empty list or the existing enum fallback. A numeric enum string that `Enum.TryParse` accepts is unchanged. Refinement-session enum reads keep their own fallback.
+- PostgreSQL `TIMESTAMP` parameters bind through `PostgresqlCommandHelper.AddDate` as `timestamp without time zone`. A UTC `DateTime` keeps its clock digits when the session time zone is not UTC, and range filters compare that column. Objective and model-endpoint reads label those clocks `DateTimeKind.Utc`. Text timestamp columns stay text.
+- Database reads now fail with the row ID and column name when stored JSON is invalid, so later updates
+  cannot replace it with an empty value.
+- A model endpoint health probe writes health columns only when the stored update time still matches the row it read. A configuration save during the probe stays as saved. Health history stays capped at 500 entries.
+
+### Dashboard
 
 - Mission delete confirmations and success messages now explain that the action cancels the mission and keeps its record.
 - Merge queue delete confirmations predict whether the entry will be deleted or cancelled from its current status. Bulk results report expected outcomes and failed requests separately.
 - The Server page keeps a field you have edited when its timer reloads settings or when you save another section. A field you have not edited takes the new server value. The reload button still replaces unsaved edits.
 - The token usage page shows an error and a retry control when the summary request fails. A successful response with no usage still says the time range is empty. A failed load for a new filter does not keep the previous filter's chart.
 - A dashboard detail page keeps the record for the route that was requested last. Mission, captain, vessel, fleet, voyage, dock, and event pages clear the previous record when the route changes and show the loading state until that route's request returns. A refresh of the same record does not apply an older response. Mission and voyage refreshes keep the current record on screen.
+- **Filter signals by signal type.** The Signals page sends its selected type as `signalType`, which matches the server's signal filter.
+- The backlog item editor keeps unsaved edits when a live update arrives. A reload action applies the newer server copy. A form with no unsaved edits still takes the update.
+- Dashboard planning and refinement transcripts keep the reader's position when new streamed text arrives.
+- An open check run reloads when that run changes, without replacing the page with a loading message. When the comparison page contains fewer runs than the total, the page says how many runs it searched.
+- Home reload follows the selected auto-refresh interval, so None stops the extra 30 second home reload. A refresh that arrives during a load runs once after that load, and the mission history chart reloads with it while keeping the history already on screen.
+- Events, Memories, Merge Queue, Missions, Request History, Signals, and Voyages ask the server for one page. When rows expire, are deleted, or a filter leaves the requested page past the end, the list moves to the last page that still exists and loads that page. The empty page is discarded. Rows from the previous successful page stay until the valid page returns. A response for an older page leaves the newer page in place. An empty list stays on page 1.
+- Workspace context editors save project context, style guide, and model context through PATCH /api/v1/vessels/{id}/context. This keeps the vessel name, repository URL, landing settings, auto-land settings, and Definition-of-Done values. Full vessel form saves use PUT.
+- A dashboard notification for a deployment, an objective, or an incident opens that record. The notification stores the event time when the event time is usable. It stores the browser time when the event has no usable time.
+- The check run page clears the previous run when you open a different run, and shows the error when that run cannot be loaded. A reload of the same run keeps the run on screen.
+- The Needs You badge runs one inbox read at a time. The throttle starts when the read starts, so a slow or failed read does not start another read for socket activity inside that window. A failed read keeps the last count.
+- The Server page copies Codex MCP configuration as a TOML table for `~/.codex/config.toml`. The HTTP url ends in `/mcp`. The stdio block sets `command` and `args` for `armada mcp stdio`.
+
+---
 
 ## v1.3.0 (2026-11-06)
 
@@ -439,157 +521,6 @@ commands arrive with their own changes. Schema migrations 103 and 104 apply at s
 - macOS Harbor bundles store the pi permission-gate extension in `Contents/Resources/Pi`, and pi resolves it there as well as beside portable binaries. This prevents ARM64 code signing from treating TypeScript resources as unsigned nested code. The DMG verifier checks the resource layout.
 - After building and verifying both Harbor DMGs, `build-harbor-app.sh` installs the native app into `~/Applications`, staging and signature-checking a fresh bundle before replacement. `--no-install` opts out, and `--no-build` remains verification-only.
 - Helm's NuGet tool package preserves battery fixture `.gitignore` and `.gitattributes` files instead of excluding them with NU5119 warnings. Installer verification checks every packaged framework for those files.
-- Exported Admiral logs redact secret-shaped text from the message and the exception, send that text as one structured message without the exception object, and count forwarding failures.
-
-### Git credential prompts
-
-- **Git launches fail without opening a credential prompt.** Shared Git launch settings disable terminal and Git Credential Manager interaction, so unattended commands return an authentication error when credentials are missing.
-### Secret redaction for fine-grained GitHub, Slack, and GitLab tokens
-
-- **Runtime logs and captured requests redact three more token shapes.** `SecretRedactor` removes a fine-grained GitHub personal access token (82 or more token characters), a Slack token whose prefix letter is a, b, p, r, or s, and a GitLab personal access token (20 or more token characters). Classic GitHub tokens and the other existing rules are unchanged.
-### Record WebSocket events follow the record read
-
-- **Mission, voyage, captain, and check-run events reach the sockets that can read the record.** `mission.changed`, `mission.activity`, `approval-needed`, `voyage.changed`, `captain.changed`, and `check-run.changed` go to the owning user, a tenant administrator of that tenant, and a global administrator who already receives that tenant. A record with no user id still reaches that tenant's tenant administrators and those global administrators. A record with no tenant id reaches global administrators only. Objective, incident, deployment, runbook, and environment events stay on the tenant broadcast. Ask events stay with that user. CLI permission events stay with the viewers `CliPermissionAccess.CanView` admits.
-### Keep the initial admin password out of child processes
-
-- Captain processes and `run_process` commands do not inherit `ARMADA_INITIAL_ADMIN_PASSWORD`. Armada still reads this
-  variable during server startup to set the initial admin password.
-### Captain deletion supports providers without planning sessions
-
-- Cascade cleanup treats `NotSupportedException` from planning-session enumeration as an empty list, so captain deletion can finish on providers that do not store planning sessions. Other enumeration failures still propagate.
-### Merge queue recovery
-
-- Resume merge entries left in `Testing` after the processing lease expires. Entries without a start time are also
-  resumed; entries with a recent start time remain untouched.
-### Captain updates validate the model binding only when it changes
-
-- **Name, instruction, persona, and tier edits skip live model validation when the binding is unchanged.** `PUT /api/v1/captains/{id}` and MCP `update_captain` validate the model only when the merged update changes `Model`, `Runtime`, or `ModelEndpointId`. Create still validates. A binding change that fails validation is not stored. WebSocket `update_captain` does not validate.
-### OpenCode error events fail the turn
-
-- An OpenCode `type=error` event fails Ask, planning, and refinement even when earlier assistant text arrived and the process exits 0. The operator sees a short provider message and the HTTP status when one is present. The response body, headers, URL, and session id stay out of that text. The planning or refinement session stays active. A text event with no error is unchanged. Stderr provider parsing is unchanged.
-### API-endpoint replies drop a complete think block
-
-- **A complete think block in assistant text is removed before the reply is emitted or stored.** The tool loop and plain chat both keep the remaining text for the reply event, the final text, and the final message file. The opening tag must be `think` with a tag boundary, so a longer name such as `thinking` stays. An unmatched tag stays. Text with no complete block is unchanged. The Judge parser is unchanged: one distinct standalone verdict line is a verdict, and two different lines are not.
-### Bounded run_process output
-
-- `run_process` captures stdout and stderr as UTF-8 byte streams with a separate 100 KB budget for each stream. Long output keeps its beginning and end, and the truncation note reports the number of omitted bytes. The reader keeps a bounded buffer while the process runs; the JSON result envelope is outside the per-stream budgets.
-### Readiness
-
-- Command-dependency probes treat shell syntax as syntax. A requested check recognizes `exit`, `return`, `:`, `source`, `unset`, `shift`, `eval`, `exec`, `trap`, `wait`, `local`, `readonly`, `declare`, `ulimit`, `umask`, `shopt`, `esac`, conditional and loop keywords, and `for`/`select`/`case` headers. A command name that is a shell variable is not probed. A program later in the same segment, and a program in a later `&&`, `||`, or `;` segment, is still probed. A missing program remains a blocking `command_dependency_missing` error.
-### Settled voyages announce their stored status
-
-- **A failed voyage is announced as failed.** When the health check settles a voyage, `voyage.changed` and the push title use the status already stored on the voyage. A voyage with a Failed or LandingFailed mission is stored as Failed and announced as Failed. A voyage whose missions finished without a failure is announced as Complete. Cancelling a voyage still announces Cancelled.
-### Mission success state
-
-- Clear an old failure reason and kind when completion, review approval, or merge reconciliation moves a mission to a success state. Keep new reasons written by later failures.
-### Process liveness heartbeat
-
-- Capture the cancellation token before starting the liveness task, and let an old loop remove only its own entry.
-  This prevents a stop race from faulting the task on a disposed source or removing a replacement loop.
-### Merge queue cancellation preserves completed outcomes
-
-- Cancelling a merge entry that is already Landed, Failed or Cancelled keeps its stored status. Queued and other active entries still
-  become Cancelled.
-### Workflow readiness
-
-- Readiness checks split command chains only on separators outside double-quoted arguments. Escaped double quotes keep their quoted span open.
-### Readiness skips a path-valued shell assignment
-
-- A workflow command that starts with `NAME=value` was reported as `command_dependency_missing` for that assignment when the value contained `/` or `\`. Readiness now skips the assignment and checks the next command. A name that starts with a digit stays a command name.
-### Merge queue purge follows BranchCleanupPolicy
-
-- A landed merge-queue entry keeps its mission branch when the policy is `None`, deletes only the local ref when the policy is `LocalOnly`, and deletes the local and origin refs when the policy is `LocalAndRemote`. The vessel policy overrides the global setting. A landed branch that git does not show as contained in the target stays. A cancelled entry loses both refs when git shows that the branch is merged. The queue removes the temporary integration worktree when it finishes an entry.
-### Landing preview check evidence
-
-- A landing preview counts only check runs with status `Passed` as passing evidence. A completed failed or canceled run with exit code zero no longer hides the required-check blocker. Imported check status remains authoritative, while a passed run still counts when its exit code is absent.
-### Validate playbooks before creating a bare voyage
-
-- REST and MCP resolve selected playbooks before they store a bare voyage. REST returns the mapped not-found or bad-request response for a missing or inactive playbook. A valid selection is stored after the voyage is created.
-### Check results sum every .NET project summary
-
-- **A `dotnet test` run with several projects reports the combined counts.** Each project prints its own Passed or Failed summary line, and the command prints no combined line. The check summary adds failed, passed, skipped, and total across those lines. Duration is the longest project duration. A TRX, JUnit, NUnit, or Jest artifact still replaces the console summary.
-### Architect fan-out preserves mission mode
-
-- Additional Architect workers keep the template Worker mode, and cloned pipeline stages keep their matching template stage mode.
-### Runbook operations stay on runbook records
-
-- **Ordinary playbooks are not runbooks.** List, read, update, delete, and start-execution apply only when the playbook content starts with the runbook metadata marker `<!-- armada:runbook`. A plain playbook is absent from the runbook list. Read returns no runbook. Update, delete, and start-execution report `Runbook not found.` and leave the playbook row and its content in place. Leading whitespace before the marker does not qualify. A record that starts with the marker remains a runbook.
-### Unfinished work counts only a completion line
-
-- **A quoted completion marker does not finish a stage.** `IsUnfinishedWork` treats `[ARMADA:RESULT] COMPLETE` as present only when that text is its own line outside a fenced block, the same rule `ModelProbeScorer.HasWorkerResultLine` already uses. A marker inside a sentence, inside a fence, or with more words on the same line leaves an empty diff on the start commit unfinished. A standalone completion line still counts as finished. The fast no-op length and time limits are unchanged.
-- Preserve existing incident links when an objective update, voyage link, or reorder cannot resolve the linked incident. New incident links remain validated.
-- GitHub objective re-import keeps `Completed` and `Cancelled` when a merged pull request maps to `Released`. An explicit `StatusOverride` still applies.
-
-### Failed process exits keep captured output
-
-- When a process exits with a failure, Armada stores captured output on the failed mission if the mission has no output yet. Existing output stays in place, and an empty capture stays empty.
-
-### Checks left Running by a stopped process are cancelled at startup
-
-- Startup cancels each Armada check that is still Running from before this process started. The command died with that process, so the record has no verdict. The summary says so, and an empty output is set to that summary. A check started at or after this process start stays Running. An imported check stays Running. The stored duration is left unchanged.
-
-### SIGTERM runs the existing Admiral stop
-
-- **A container stop reaches `ArmadaServer.Stop`.** SIGTERM cancels the runtime's default
-  termination and sets the same stop handle as Ctrl+C. The main thread calls `Stop` after
-  the wait, then disposes the registration. A platform without SIGTERM still starts. A
-  repeated signal does not run `Stop` again.
-- MCP `delete_dock` and `delete_event` record `dock.deleted` and `event.deleted` after a successful delete, with the same event name, entity, and message as the REST delete routes. A refused delete records nothing.
-
-### Helm child processes
-
-- **A full pipe no longer blocks Helm.** MCP client install and remove read standard output and standard error while the client runs. On Unix, `armada server start` sends the Admiral's standard streams to `/dev/null` and releases the process handle without stopping a healthy server. The server build, TypeScript, and Vite steps read both streams while the child runs, then report the child's exit status and standard error.
-
-### Signal type filters
-
-- **Filter signals by signal type.** The Signals page sends its selected type as `signalType`, which matches the server's signal filter.
-- The backlog item editor keeps unsaved edits when a live update arrives. A reload action applies the newer server copy. A form with no unsaved edits still takes the update.
-- Dashboard planning and refinement transcripts keep the reader's position when new streamed text arrives.
-- An open check run reloads when that run changes, without replacing the page with a loading message. When the comparison page contains fewer runs than the total, the page says how many runs it searched.
-- Home reload follows the selected auto-refresh interval, so None stops the extra 30 second home reload. A refresh that arrives during a load runs once after that load, and the mission history chart reloads with it while keeping the history already on screen.
-
-### SQL Server captain delete keeps signal references with the captain
-
-- **Scoped deletes.** Each SQL Server captain delete clears `signals.from_captain_id` and `signals.to_captain_id` only for captains that match that delete, then deletes those captains, in one transaction. The id delete matches `id`. The tenant delete matches `tenant_id` and `id`. The user delete matches `tenant_id`, `user_id`, and `id`. A delete that matches no captain leaves the captain and both signal references unchanged. A delete that fails because another row still references the captain rolls the signal updates back. SQL Server still cannot declare two `ON DELETE SET NULL` keys from `signals` to `captains`, so this delete nulls the references.
-
-### Pipeline stage writes commit together
-
-- **A pipeline and its stages are stored in one transaction.** Create, update, and delete write the parent row and every stage row on the connection those methods already open. This is the same on SQLite, PostgreSQL, MySQL, and SQL Server. A failure rolls the transaction back. A failed update keeps the previous stages. A failed create leaves no pipeline row. A failed delete keeps the parent row and its stages.
-
-### Mission enumeration filters
-
-- Full mission lists and mission summaries apply the `MissionId` filter in global, tenant, and user scopes. Row
-  results and totals use the same filter on all four database providers.
-
-### SQL Server dock enumeration
-
-- Tenant and user dock lists order by `created_utc` descending. Tenant deletion can now enumerate its docks before it removes them.
-
-### Server-paged lists return to the last page
-
-Events, Memories, Merge Queue, Missions, Request History, Signals, and Voyages ask the server for one page. When rows expire, are deleted, or a filter leaves the requested page past the end, the list moves to the last page that still exists and loads that page. The empty page is discarded. Rows from the previous successful page stay until the valid page returns. A response for an older page leaves the newer page in place. An empty list stays on page 1.
-- Workspace context editors save project context, style guide, and model context through PATCH /api/v1/vessels/{id}/context. This keeps the vessel name, repository URL, landing settings, auto-land settings, and Definition-of-Done values. Full vessel form saves use PUT.
-- REST query values are decoded once before a route parses or filters them. A literal plus sign stays a plus sign. A malformed percent escape is kept, and the route still answers.
-- Deleting a custom pipeline clears that pipeline from objective suggestions and from snapshot restore. The next objective read does not write the deleted pipeline id.
-
-### Stored objective fields that cannot be decoded fail the read
-
-- **A damaged objective field is no longer read as an empty list or a default enum.** Non-empty list or playbook JSON that cannot be decoded, and a non-empty objective enum name that is not a defined member, throw `StoredObjectiveDataException` with the objective id and the field name. A single-row read and an enumeration both fail. The stored text stays as it was, so a later update of another field cannot replace it. Empty or null text still reads as an empty list or the existing enum fallback. A numeric enum string that `Enum.TryParse` accepts is unchanged. Refinement-session enum reads keep their own fallback.
-
-### PostgreSQL UTC clocks
-
-- PostgreSQL `TIMESTAMP` parameters bind through `PostgresqlCommandHelper.AddDate` as `timestamp without time zone`. A UTC `DateTime` keeps its clock digits when the session time zone is not UTC, and range filters compare that column. Objective and model-endpoint reads label those clocks `DateTimeKind.Utc`. Text timestamp columns stay text.
-- Database reads now fail with the row ID and column name when stored JSON is invalid, so later updates
-  cannot replace it with an empty value.
-
-### Mission push instructions follow the landing mode
-
-- Mission prompts instruct captains to push their branch only for PullRequest landing and for a landing mode the product does not define. Audit and Research prompts do not ask for commits or pushes. Other known landing modes ask for commits without a captain push. Seeding updates an untouched built-in mission rules template that still matches a previously shipped default, and leaves operator edits in place.
-- MCP voyage cancellation now broadcasts the updated voyage and cancelled missions to WebSocket subscribers.
-
-### Helm waits for local server shutdown before deleting data
-
-- `armada reset` and the wipe path in `armada config init` now keep existing data when they cannot prove the local Admiral has stopped. They poll the local health endpoint for up to 30 seconds and treat every HTTP response, including an error response, as a live process. They delete data only after the endpoint refuses a connection.
 
 ### Landing failure prevention
 
@@ -755,17 +686,6 @@ Part of the bounded enumeration contract ([docs/ENUMERATION.md](docs/ENUMERATION
 - Breaking: `POST /api/v1/workflow-profiles/delete/multiple` and MCP `delete_workflow_profiles` reject more than 1000 ids with `CollectionLimitExceeded`.
 - Breaking: MCP `enumerate` rows for `missions` and `voyages` with `includeDescription=true` are scalar rows (the summary fields plus `Description`) instead of full Mission / Voyage models, so a page never embeds playbook snapshots, selected playbooks or assignment blockers. `harbors` and `model_endpoints` pages now carry `TotalPages` like every other entity type.
 - Helm `playbook show`, `playbook remove` and `voyage create --playbook` resolve playbooks across every page instead of the first page; TUI pipeline, playbook and workflow-profile pickers read every page.
-- WebSocket `get_mission_diff` reads a Harbor mission worktree through that Harbor's git service when no saved diff file or snapshot exists. A missing worktree or an unavailable Harbor still returns Unavailable. Saved diffs and snapshots keep their existing precedence. REST and MCP results are unchanged.
-- A tunnel request applies its deadline to the send and to the response wait. A sender that does not return times out. Caller cancellation stays a cancellation, and the pending response entry is removed when the call ends.
-- A voyage whose every mission is cancelled finishes as Cancelled. A settled voyage with a cancelled mission and no completed mission finishes as Failed. A voyage with a completed mission and no failed or landing-failed mission still finishes as Complete, and a voyage whose missions are only WorkProduced still finishes as Complete.
-- The dashboard websocket relay removes a receive-loop session by instance before it publishes an error or a close, and the loop's final removal matches that same instance. A frame sent from the error event finds no session. A new session that reuses the proxy socket id during close stays registered.
-- Check runs keep captured command output when a local or Harbor command times out.
-- A slow WebSocket client no longer blocks event delivery to other clients. Each authenticated connection has a bounded outbound queue and one sender. Broadcasts, CLI permission events, subscribe snapshots, command replies, and errors are queued without waiting for the network. A full queue or a failed send aborts only that connection, so the client must reconnect and refresh its state. Tenant and user filters are unchanged.
-- A dashboard notification for a deployment, an objective, or an incident opens that record. The notification stores the event time when the event time is usable. It stores the browser time when the event has no usable time.
-- The check run page clears the previous run when you open a different run, and shows the error when that run cannot be loaded. A reload of the same run keeps the run on screen.
-- The Needs You badge runs one inbox read at a time. The throttle starts when the read starts, so a slow or failed read does not start another read for socket activity inside that window. A failed read keeps the last count.
-- The Server page copies Codex MCP configuration as a TOML table for `~/.codex/config.toml`. The HTTP url ends in `/mcp`. The stdio block sets `command` and `args` for `armada mcp stdio`.
-- A model endpoint health probe writes health columns only when the stored update time still matches the row it read. A configuration save during the probe stays as saved. Health history stays capped at 500 entries.
 
 ### Handoff and landing integrity
 
