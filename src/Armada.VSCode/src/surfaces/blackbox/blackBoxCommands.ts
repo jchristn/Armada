@@ -45,6 +45,8 @@ export interface CommandDeps {
   storageUri: vscode.Uri | undefined;
   /** Opens the entry view. */
   openEntryView?(entry: BlackBoxEntrySummary): Promise<void>;
+  /** Asks Armada in the extension's chat view. */
+  askInChat?(prompt: string): Promise<void>;
 }
 
 /** Text of the data loss acknowledgement checkbox. */
@@ -287,8 +289,8 @@ export class BlackBoxCommands {
     }, false);
   }
 
-  /** Ask Armada About This Failure: opens the dashboard Ask page with the prompt pre-filled (?prompt=); copies the prompt
-   * when the dashboard cannot be pre-filled or the browser cannot be opened. */
+  /** Ask Armada About This Failure: asks in the Ask Armada chat view (or, without one, opens the dashboard Ask page
+   * with the prompt pre-filled); copies the prompt when neither works. */
   public async askArmada(arg?: unknown): Promise<{ url: string; prefilled: boolean } | undefined> {
     return this.guard(async () => {
       const entry = await this.pickEntry(arg, 'Ask Armada About This Failure');
@@ -296,6 +298,10 @@ export class BlackBoxCommands {
       const { dashboardUrl } = this._Deps.requireConnection();
       const prompt = blackBoxEntryAskPrompt(entry);
       const target = { url: dashboardAskUrl(dashboardUrl, prompt), prefilled: true };
+      if (this._Deps.askInChat) {
+        await this._Deps.askInChat(prompt);
+        return target;
+      }
       const opened = await vscode.env.openExternal(vscode.Uri.parse(target.url));
       if (!opened) {
         await vscode.env.clipboard.writeText(prompt);

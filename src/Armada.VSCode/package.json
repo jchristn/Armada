@@ -120,6 +120,13 @@
     "views": {
       "armada": [
         {
+          "id": "armadaAsk",
+          "name": "Ask Armada",
+          "type": "webview",
+          "contextualTitle": "Armada",
+          "icon": "media/icon.png"
+        },
+        {
           "id": "armadaNeedsYou",
           "name": "Needs You",
           "contextualTitle": "Armada",
@@ -516,6 +523,24 @@
         "command": "armada.openInBrowser",
         "title": "Open in Browser",
         "category": "Armada"
+      },
+      {
+        "command": "armada.ask.open",
+        "title": "Ask Armada",
+        "category": "Armada",
+        "icon": "$(comment-discussion)"
+      },
+      {
+        "command": "armada.ask.new",
+        "title": "New Ask Armada Conversation",
+        "category": "Armada",
+        "icon": "$(add)"
+      },
+      {
+        "command": "armada.ask.history",
+        "title": "Ask Armada: Earlier Conversations",
+        "category": "Armada",
+        "icon": "$(history)"
       }
     ],
     "menus": {
@@ -695,9 +720,30 @@
         {
           "command": "armada.merge.processAll",
           "when": "armada.connected"
+        },
+        {
+          "command": "armada.ask.open"
+        },
+        {
+          "command": "armada.ask.new",
+          "when": "armada.connected"
+        },
+        {
+          "command": "armada.ask.history",
+          "when": "armada.connected"
         }
       ],
       "view/title": [
+        {
+          "command": "armada.ask.new",
+          "when": "view == armadaAsk",
+          "group": "navigation@1"
+        },
+        {
+          "command": "armada.ask.history",
+          "when": "view == armadaAsk",
+          "group": "navigation@2"
+        },
         {
           "command": "armada.dispatch",
           "when": "view == armadaMissions && armada.connected",

@@ -8,6 +8,7 @@ import { ConnectionState } from '../../src/connection/connectionManager';
 import { connectionActions, describeStatus } from '../../src/connection/statusBar';
 import { activate, ArmadaExtensionApi } from '../../src/extension';
 import { FAILURES_EXPLORER_VIEW_ID, FAILURES_VIEW_ID } from '../../src/surfaces/blackbox/failuresTreeProvider';
+import { ASK_VIEW_ID } from '../../src/surfaces/ask/askView';
 import { OPS_VIEW_IDS } from '../../src/surfaces/ops/opsTrees';
 import { fake, FakeMemento, FakeSecretStorage, Uri } from '../fakes/vscode';
 
@@ -90,7 +91,7 @@ describe('extension manifest and activation', () => {
     const container = MANIFEST.contributes.viewsContainers.activitybar.find((c) => c.id === 'armada');
     assert.ok(container);
     assert.ok(fs.existsSync(path.join(ROOT, container.icon)), 'container icon exists');
-    assert.deepStrictEqual(MANIFEST.contributes.views.armada.map((v) => v.id), [...Object.values(OPS_VIEW_IDS), FAILURES_VIEW_ID]);
+    assert.deepStrictEqual(MANIFEST.contributes.views.armada.map((v) => v.id), [ASK_VIEW_ID, ...Object.values(OPS_VIEW_IDS), FAILURES_VIEW_ID]);
     const explorer = MANIFEST.contributes.views.explorer.find((v) => v.id === FAILURES_EXPLORER_VIEW_ID);
     assert.strictEqual(explorer?.when, 'config.armada.failures.showInExplorer');
     assert.strictEqual(MANIFEST.contributes.configuration.properties['armada.failures.showInExplorer'].default, false);

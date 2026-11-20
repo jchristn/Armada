@@ -206,6 +206,7 @@ function message(level: 'info' | 'warning' | 'error', queue: Responder[], text: 
 }
 
 export const window = {
+  registerWebviewViewProvider: () => new Disposable(() => undefined),
   showInformationMessage: (text: string, ...rest: any[]) => message('info', fake.info, text, ...rest),
   showWarningMessage: (text: string, ...rest: any[]) => message('warning', fake.warning, text, ...rest),
   showErrorMessage: (text: string, ...rest: any[]) => message('error', fake.error, text, ...rest),

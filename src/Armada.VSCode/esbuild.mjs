@@ -14,7 +14,11 @@ const watch = process.argv.includes('--watch');
 const tests = process.argv.includes('--tests');
 
 /** The alias shared with Mobile (src/Armada.Mobile/tsconfig.json) and this project's tsconfig.json paths. */
-const alias = { '@dashboard': path.resolve(root, '..', 'Armada.Dashboard', 'src') };
+const alias = {
+  '@dashboard': path.resolve(root, '..', 'Armada.Dashboard', 'src'),
+  // Shared dashboard modules that also export a React hook import react; the extension never calls the hooks.
+  react: path.resolve(root, 'src', 'shims', 'react.ts'),
+};
 
 const common = {
   bundle: true,

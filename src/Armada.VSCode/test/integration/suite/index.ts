@@ -105,6 +105,18 @@ export async function run(): Promise<void> {
     }
     log(`ops: ${api.ops.missions.length} missions, ${api.ops.voyages.length} voyages, ${api.ops.captains.length} captains, ${api.ops.vessels.length} vessels, ${api.ops.mergeQueue.length} merge entries, ${api.ops.inbox.length} need you`);
     for (const view of MANIFEST.contributes.views.armada) await vscode.commands.executeCommand(`${view.id}.focus`);
+    // Ask Armada: the chat view opens and shows an earlier conversation from the Admiral.
+    const latest = await api.ask.latestConversationId();
+    if (latest) {
+      await api.ask.openConversation(latest);
+      await waitFor(() => api.ask.shown.threadId === latest && api.ask.shown.messages > 0, 15000, 'the Ask conversation to load');
+      log(`ask: conversation ${latest} with ${api.ask.shown.messages} messages`);
+      const shots = process.env.ARMADA_VSCODE_SCREENSHOT_DIR;
+      if (shots) await capture(shots, 'armada-ask');
+    } else {
+      await vscode.commands.executeCommand('armadaAsk.focus');
+      log('ask: no earlier conversations on this Admiral; the chat view opened empty');
+    }
     const mission = api.ops.missions[0];
     if (mission) {
       await vscode.commands.executeCommand('armada.mission.open', mission.id);

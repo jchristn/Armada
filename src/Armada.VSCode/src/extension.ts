@@ -14,6 +14,7 @@ import { BlackBoxStore } from './surfaces/blackbox/blackBoxStore';
 import { EntryViewManager } from './surfaces/blackbox/entryView';
 import { FAILURES_EXPLORER_VIEW_ID, FAILURES_VIEW_ID, FailuresTreeProvider } from './surfaces/blackbox/failuresTreeProvider';
 import { InsightCommands } from './surfaces/blackbox/insightCommands';
+import { ASK_VIEW_ID, AskViewProvider } from './surfaces/ask/askView';
 import { DetailPanelManager } from './surfaces/ops/detailPanels';
 import { ARMADA_DOCUMENT_SCHEME, ArmadaDocumentProvider } from './surfaces/ops/opsDocuments';
 import { registerOpsCommands } from './surfaces/ops/opsCommands';
@@ -31,6 +32,7 @@ export interface ArmadaExtensionApi {
   commands: BlackBoxCommands;
   ops: OpsStore;
   details: DetailPanelManager;
+  ask: AskViewProvider;
   liveMode(): LiveMode;
 }
 
@@ -79,6 +81,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<Armada
   context.subscriptions.push(...registerOpsCommands({ store: ops, details, connection }));
   context.subscriptions.push(bus.subscribe((event) => ops.onEvent(event.type)), bus.onPoll(() => void ops.refreshAll()));
 
+  // Ask Armada: the chat view at the top of the Armada sidebar.
+  const askView = new AskViewProvider({ extensionUri: context.extensionUri, connection, bus, globalState: context.globalState });
+  context.subscriptions.push(askView, vscode.window.registerWebviewViewProvider(ASK_VIEW_ID, askView, { webviewOptions: { retainContextWhenHidden: true } }));
+
   // The black box tree, in the Armada container, and in the Explorer when armada.failures.showInExplorer is on (the
   // view's `when` clause reads the setting).
 
@@ -105,6 +111,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<Armada
     getSettings: () => readSettings(),
     storageUri: context.globalStorageUri,
     openEntryView: (entry) => entryViews.open(entry),
+    askInChat: (prompt) => askView.ask(prompt),
   });
   const insights = new InsightCommands({
     requireConnection,
@@ -169,6 +176,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<Armada
   register('armada.showOutput', () => output.show(true));
   register('armada.openSettings', () => openSettings(context.extension.id));
   register('armada.openDashboard', () => openDashboard(connection, '/'));
+  register('armada.ask.open', () => vscode.commands.executeCommand(`${ASK_VIEW_ID}.focus`));
+  register('armada.ask.new', () => askView.newConversation());
+  register('armada.ask.history', () => askView.pickConversation());
   register('armada.refreshFailures', () => {
     store.invalidateVessels();
     return store.refresh();
@@ -207,7 +217,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<Armada
   const startup = setTimeout(() => void connection.restore(), 0);
   context.subscriptions.push({ dispose: () => clearTimeout(startup) });
 
-  return { connection, events: bus, store, commands, ops, details, liveMode: () => bus.mode };
+  return { connection, events: bus, store, commands, ops, details, ask: askView, liveMode: () => bus.mode };
 }
 
 /** Extension shutdown. */
