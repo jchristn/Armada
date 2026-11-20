@@ -459,6 +459,9 @@ commands arrive with their own changes. Schema migrations 103 and 104 apply at s
 ### API-endpoint replies drop a complete think block
 
 - **A complete think block in assistant text is removed before the reply is emitted or stored.** The tool loop and plain chat both keep the remaining text for the reply event, the final text, and the final message file. The opening tag must be `think` with a tag boundary, so a longer name such as `thinking` stays. An unmatched tag stays. Text with no complete block is unchanged. The Judge parser is unchanged: one distinct standalone verdict line is a verdict, and two different lines are not.
+### Bounded run_process output
+
+- `run_process` captures stdout and stderr as UTF-8 byte streams with a separate 100 KB budget for each stream. Long output keeps its beginning and end, and the truncation note reports the number of omitted bytes. The reader keeps a bounded buffer while the process runs; the JSON result envelope is outside the per-stream budgets.
 
 ### Landing failure prevention
 
