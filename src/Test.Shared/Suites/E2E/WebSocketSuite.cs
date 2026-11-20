@@ -626,7 +626,10 @@ namespace Test.Shared.Suites.E2E
                 string activeBody = await activeResponse.Content.ReadAsStringAsync().ConfigureAwait(false);
                 MissionCreateResponse activeWrapper = JsonHelper.Deserialize<MissionCreateResponse>(activeBody);
                 Mission activeMission = activeWrapper.Mission ?? JsonHelper.Deserialize<Mission>(activeBody);
-                AssertEqual(MissionStatusEnum.InProgress, activeMission.Status);
+                AssertTrue(activeMission.Status == MissionStatusEnum.Assigned || activeMission.Status == MissionStatusEnum.InProgress,
+                    "the requested captain takes the mission: " + activeMission.Status);
+                Captain holdingCaptain = await GetViaRestAsync<Captain>(authClient, "/api/v1/captains/" + captainId).ConfigureAwait(false);
+                AssertTrue(holdingCaptain.ActiveMissionIds.Contains(activeMission.Id), "the captain holds the mission before the vessel is deleted");
 
                 HttpResponseMessage reviewResponse = await authClient.PostAsync("/api/v1/missions",
                     JsonHelper.ToJsonContent(new Mission { Title = "ws-del-vessel-review", VesselId = vesselId })).ConfigureAwait(false);

@@ -32,7 +32,7 @@ namespace Test.Shared.Suites.Services
 
         #region Public-Methods
 
-        /// <summary>Build one case per surface and target, with a confirmed and an unconfirmed stop.</summary>
+        /// <summary>Build one case per surface and target, with a confirmed and an unconfirmed stop, plus WebSocket vessel delete.</summary>
         /// <returns>The suite descriptor.</returns>
         public TestSuiteDescriptor Build()
         {
@@ -48,6 +48,17 @@ namespace Test.Shared.Suites.Services
                     + (confirmed ? "the agent is stopped once before the mission is cancelled and the captain released"
                                  : "an unconfirmed stop is reported and leaves the mission, captain and process unchanged");
                 cases.Add(new TestCaseDescriptor(Suite, name, description, async ct => await RunAsync(s, v, confirmed).ConfigureAwait(false),
+                    tags: confirmed ? null : new List<string> { TestTags.Negative }));
+            }
+
+            foreach (bool confirm in new[] { true, false })
+            {
+                bool confirmed = confirm;
+                string name = "ws_vessel_delete" + (confirmed ? "_stops_agent" : "_unconfirmed_stop_is_reported");
+                string description = "WebSocket vessel delete: " + (confirmed
+                    ? "the agent is stopped once before the mission is cancelled as Vessel deleted and the captain released"
+                    : "an unconfirmed stop is reported as a warning and leaves the mission, captain and process unchanged");
+                cases.Add(new TestCaseDescriptor(Suite, name, description, async ct => await RunVesselDeleteAsync(confirmed).ConfigureAwait(false),
                     tags: confirmed ? null : new List<string> { TestTags.Negative }));
             }
 
@@ -121,6 +132,91 @@ namespace Test.Shared.Suites.Services
             finally
             {
                 // The fixture never owns a real PID: clear the synthetic assignment before server shutdown.
+                captain = (await db.Captains.ReadAsync(captain.Id).ConfigureAwait(false))!;
+                captain.ProcessId = null; captain.Assignment = null; captain.State = CaptainStateEnum.Idle;
+                await CaptainAssignmentFixture.UpdateAsync(db, captain).ConfigureAwait(false);
+                admiral.OnStopAgent = originalStop;
+            }
+        }
+
+        private static async Task RunVesselDeleteAsync(bool confirmed)
+        {
+            using SecurityTestServer fx = await SecurityTestServer.PrepareAsync("127.0.0.1", null).ConfigureAwait(false);
+            await fx.StartAsync().ConfigureAwait(false);
+            fx.Server.RuntimeFactory.Override(AgentRuntimeEnum.ClaudeCode, () => throw new InvalidOperationException("Synthetic PID fixture forbids local process operations."));
+
+            LoggingModule quiet = new LoggingModule(); quiet.Settings.EnableConsole = false;
+            using DatabaseDriver db = DatabaseDriverFactory.Create(fx.Settings.Database, quiet);
+            await db.InitializeAsync().ConfigureAwait(false);
+
+            Vessel vessel = await db.Vessels.CreateAsync(new Vessel("cancel-stop-vessel-" + Guid.NewGuid().ToString("N").Substring(0, 6), "https://example.invalid/cancel-stop.git")).ConfigureAwait(false);
+            Captain captain = await CaptainAssignmentFixture.CreateAsync(db, new Captain("cancel-stop-vessel") { State = CaptainStateEnum.Working, ProcessId = SyntheticPid }).ConfigureAwait(false);
+            Mission mission = await db.Missions.CreateAsync(new Mission("running assignment")
+            {
+                VesselId = vessel.Id, CaptainId = captain.Id, Status = MissionStatusEnum.InProgress, ProcessId = SyntheticPid
+            }).ConfigureAwait(false);
+            Mission blocked = await db.Missions.CreateAsync(new Mission("blocked mission")
+            {
+                VesselId = vessel.Id, Status = MissionStatusEnum.Blocked
+            }).ConfigureAwait(false);
+            captain.Assignment = mission;
+            await CaptainAssignmentFixture.UpdateAsync(db, captain).ConfigureAwait(false);
+
+            IAdmiralService admiral = (IAdmiralService)typeof(Armada.Server.ArmadaServer).GetField("_Admiral", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(fx.Server)!;
+            Func<Captain, Task>? originalStop = admiral.OnStopAgent;
+            List<string> stops = new List<string>();
+            admiral.OnStopAgent = held =>
+            {
+                stops.Add(held.Id + "|" + held.ActiveMissionIds.SingleOrDefault());
+                if (!confirmed) throw new TimeoutException("Owner did not confirm exit.");
+                return Task.CompletedTask;
+            };
+
+            try
+            {
+                Uri rest = new Uri(fx.BaseUrl);
+                string? reply;
+                using (WebSocketTestClient ws = await WebSocketTestClient.ConnectAsync(rest.Port, null, new Dictionary<string, string> { ["X-Api-Key"] = fx.ApiKey }).ConfigureAwait(false))
+                {
+                    await ws.SendAsync(new { Route = "command", action = "delete_vessel", id = vessel.Id }).ConfigureAwait(false);
+                    reply = await ws.WaitForAsync(m => m.Contains("\"delete_vessel\"") && (m.Contains("command.result") || m.Contains("command.error"))).ConfigureAwait(false);
+                }
+                AssertNotNull(reply, "No WebSocket reply to delete_vessel");
+                AssertContains("command.result", reply!, "The vessel is deleted even when a stop is not confirmed.");
+                AssertNull(await db.Vessels.ReadAsync(vessel.Id).ConfigureAwait(false), "The vessel row is deleted. Reply: " + reply);
+
+                Captain after = (await db.Captains.ReadAsync(captain.Id).ConfigureAwait(false))!;
+                Mission afterMission = (await db.Missions.ReadAsync(mission.Id).ConfigureAwait(false))!;
+                Mission afterBlocked = (await db.Missions.ReadAsync(blocked.Id).ConfigureAwait(false))!;
+
+                AssertEqual(1, stops.Count, "The owned lifecycle must receive exactly one stop. Reply: " + reply);
+                AssertEqual(captain.Id + "|" + mission.Id, stops[0], "The stop must run while the captain still points at the mission.");
+                AssertEqual(MissionStatusEnum.Cancelled, afterBlocked.Status, "A Blocked mission holds no agent and is cancelled. Reply: " + reply);
+                AssertEqual("Vessel deleted", afterBlocked.FailureReason);
+
+                if (confirmed)
+                {
+                    AssertEqual(MissionStatusEnum.Cancelled, afterMission.Status, "Reply: " + reply);
+                    AssertEqual("Vessel deleted", afterMission.FailureReason);
+                    AssertEqual((MissionFailureKindEnum?)MissionFailureKindEnum.OperatorAction, afterMission.FailureKind);
+                    AssertNull(afterMission.ProcessId);
+                    AssertEqual(CaptainStateEnum.Idle, after.State);
+                    AssertNull(after.ActiveMissionIds.SingleOrDefault());
+                    AssertContains("\"warningCount\":0", reply!, "A clean delete reports no warnings.");
+                }
+                else
+                {
+                    AssertEqual(MissionStatusEnum.InProgress, afterMission.Status, "An unconfirmed stop must not cancel the mission. Reply: " + reply);
+                    AssertEqual(CaptainStateEnum.Working, after.State);
+                    AssertEqual((int?)SyntheticPid, afterMission.ProcessId);
+                    AssertEqual(mission.Id, after.ActiveMissionIds.SingleOrDefault());
+                    AssertContains("\"warningCount\":1", reply!, "The failed stop is reported, not hidden.");
+                    AssertContains("Mission " + mission.Id, reply!, "The warning names the mission it could not cancel.");
+                    AssertContains("did not confirm it stopped", reply!);
+                }
+            }
+            finally
+            {
                 captain = (await db.Captains.ReadAsync(captain.Id).ConfigureAwait(false))!;
                 captain.ProcessId = null; captain.Assignment = null; captain.State = CaptainStateEnum.Idle;
                 await CaptainAssignmentFixture.UpdateAsync(db, captain).ConfigureAwait(false);

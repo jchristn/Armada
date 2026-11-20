@@ -9,6 +9,7 @@ All notable changes to Armada are documented in this file.
 ### Fixes
 
 - **Completed voyages record `voyage.completed`.** The shared settlement path (the background voyage check and mission completion) stores one event, in the voyage owner's tenant and user scope, when it changes a voyage to Complete. Failed and cancelled voyages do not emit it, and settling an already-complete voyage does not duplicate it. If the event cannot be stored, the voyage status stays saved and the failure is logged.
+- **WebSocket `delete_vessel` stops active captains.** It now cancels the vessel's Pending, Blocked, Assigned, InProgress, Review and Testing missions through the same cancel path as REST and MCP, which stops each running agent first and records one `VesselDeleted` black box entry, instead of only writing the Cancelled status while the agent kept running. A mission whose agent did not confirm it stopped is left unchanged and reported in the result's new `warnings` and `warningCount` fields (the `VesselDeleteResult` shape MCP returns); the vessel is still deleted. Database errors while reading the vessel's missions now return a command error instead of being ignored.
 
 ## v1.3.0 (2026-11-06)
 

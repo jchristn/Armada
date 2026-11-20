@@ -340,31 +340,23 @@ namespace Armada.Server.WebSocket
                     if (delVessel == null)
                         return WebSocketCommandError.Create("delete_vessel", WebSocketCommandErrorCodeEnum.NotFound, "Vessel not found");
 
-                    // Cancel active missions on this vessel
+                    // Cancel active missions on this vessel through the shared cancel path, as REST and MCP do: it stops the
+                    // agent first and records the single VesselDeleted entry. A stop that is not confirmed leaves that
+                    // mission as it was and is reported in the result's warnings; the vessel is still deleted.
+                    List<string> delVesselWarnings = new List<string>();
                     List<Mission> delVesselMissions = await _Database.Missions.EnumerateByVesselAsync(delVesselId).ConfigureAwait(false);
                     foreach (Mission dvm in delVesselMissions)
                     {
                         if (dvm.Status == MissionStatusEnum.Pending
+                            || dvm.Status == MissionStatusEnum.Blocked
                             || dvm.Status == MissionStatusEnum.Assigned
                             || dvm.Status == MissionStatusEnum.InProgress
                             || dvm.Status == MissionStatusEnum.Review
                             || dvm.Status == MissionStatusEnum.Testing)
                         {
-                            try
-                            {
-                                await _Admiral.CancelMissionAsync(dvm).ConfigureAwait(false);
-                            }
-                            catch (InvalidOperationException)
-                            {
-                                continue;
-                            }
-                        }
-                        else if (dvm.Status == MissionStatusEnum.Blocked)
-                        {
-                            dvm.Status = MissionStatusEnum.Cancelled;
-                            dvm.CompletedUtc = DateTime.UtcNow;
-                            dvm.LastUpdateUtc = DateTime.UtcNow;
-                            await _Database.Missions.UpdateAsync(dvm).ConfigureAwait(false);
+                            MissionStatusEnum dvmBefore = dvm.Status;
+                            try { await _Admiral.CancelMissionAsync(dvm, BlackBoxOperatorCapture.VesselDeletedCancel(dvmBefore, delVessel, dvm.VesselId, "WebSocket")).ConfigureAwait(false); }
+                            catch (InvalidOperationException ex) { delVesselWarnings.Add("Mission " + dvm.Id + ": " + ex.Message); }
                         }
                     }
 
@@ -393,7 +385,7 @@ namespace Armada.Server.WebSocket
                     }
 
                     await _Database.Vessels.DeleteAsync(delVesselId).ConfigureAwait(false);
-                    return new { type = "command.result", action = "delete_vessel", data = (object)new { status = "deleted" } };
+                    return new { type = "command.result", action = "delete_vessel", data = (object)VesselDeleteResult.Create(delVesselId, delVesselWarnings) };
                 }
 
                 // ── Voyage actions ─────────────────────────────────────────
