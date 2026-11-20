@@ -41,7 +41,14 @@ namespace Armada.Helm.Commands
                 }
                 else if (!settings.DryRun)
                 {
-                    WriteResult(await McpConfigHelper.RemoveTargetAsync(target).ConfigureAwait(false));
+                    try
+                    {
+                        WriteResult(await McpConfigHelper.RemoveTargetAsync(target).ConfigureAwait(false));
+                    }
+                    catch (InvalidDataException ex)
+                    {
+                        HelmConsole.Error.MarkupLine($"[red]{target.ClientName}[/]: not changed: {Markup.Escape(target.FilePath)}: {Markup.Escape(ex.Message)}");
+                    }
                 }
                 else
                 {

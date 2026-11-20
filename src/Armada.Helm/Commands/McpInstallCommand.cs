@@ -106,10 +106,17 @@ namespace Armada.Helm.Commands
                 }
                 else if (!settings.DryRun)
                 {
-                    McpConfigHelper.ApplyResult result = await McpConfigHelper.InstallTargetAsync(target).ConfigureAwait(false);
-                    if (remote && (target.ManualConfig != null || (target.Kind == McpClientKindEnum.ClaudeCode && target.ArmadaConfig != null)))
-                        McpConfigHelper.RestrictToOwner(target.FilePath);
-                    WriteResult(result);
+                    try
+                    {
+                        McpConfigHelper.ApplyResult result = await McpConfigHelper.InstallTargetAsync(target).ConfigureAwait(false);
+                        if (remote && (target.ManualConfig != null || (target.Kind == McpClientKindEnum.ClaudeCode && target.ArmadaConfig != null)))
+                            McpConfigHelper.RestrictToOwner(target.FilePath);
+                        WriteResult(result);
+                    }
+                    catch (InvalidDataException ex)
+                    {
+                        HelmConsole.Error.MarkupLine($"[red]{target.ClientName}[/]: not changed: {Markup.Escape(target.FilePath)}: {Markup.Escape(ex.Message)}");
+                    }
                 }
                 else
                 {

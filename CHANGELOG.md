@@ -9,6 +9,7 @@ All notable changes to Armada are documented in this file.
 ### Fixes
 
 - Rescue briefs keep an appended prior-stage handoff. Both the re-implementation brief and the integration brief (for a failed mission that left a commit) keep the first 3000 characters of the task text and the complete prior-stage handoff block. A description without that block keeps the existing 3000-character trim. (#50)
+- `armada mcp install` and `armada mcp remove` back up a config file that has comments or trailing commas before rewriting it, to `<file>.armada-backup-<yyyyMMddHHmmss>` (UTC) next to the original, and say in the output that the comments were not preserved and where the backup is. An install whose Armada entry already matches leaves such a file untouched. A file whose top-level value is not a JSON object is refused and left unchanged instead of being replaced with a new object. (#57)
 
 ## v1.3.0 (2026-11-06)
 
