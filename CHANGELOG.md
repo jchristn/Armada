@@ -543,6 +543,7 @@ commands arrive with their own changes. Schema migrations 103 and 104 apply at s
 - **Filter signals by signal type.** The Signals page sends its selected type as `signalType`, which matches the server's signal filter.
 - The backlog item editor keeps unsaved edits when a live update arrives. A reload action applies the newer server copy. A form with no unsaved edits still takes the update.
 - Dashboard planning and refinement transcripts keep the reader's position when new streamed text arrives.
+- An open check run reloads when that run changes, without replacing the page with a loading message. When the comparison page contains fewer runs than the total, the page says how many runs it searched.
 
 ### Landing failure prevention
 

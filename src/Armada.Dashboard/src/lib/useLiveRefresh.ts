@@ -8,23 +8,41 @@ export const LIVE_REFRESH_DEBOUNCE_MS = 300;
 /**
  * Reload a detail view when the server reports a change it may show: calls `onRefresh` (debounced) for every
  * WebSocket event whose type starts with one of `typePrefixes` (for example `mission.` and `voyage.`), and once
- * after the socket reconnects, since events sent while it was down are lost. The latest `onRefresh` is always used.
+ * after the socket reconnects, since events sent while it was down are lost. A matching event is passed through.
+ * A reconnect calls `onRefresh` with no event. When `includeEvent` is set, a burst reloads once if any event in that
+ * burst is included, and a burst of excluded events does not reload. The latest `onRefresh` is always used.
  */
-export function useLiveRefresh(typePrefixes: readonly string[], onRefresh: () => void): void {
+export function useLiveRefresh(
+  typePrefixes: readonly string[],
+  onRefresh: (message?: WebSocketMessage) => void,
+  includeEvent?: (message: WebSocketMessage) => boolean,
+): void {
   const { subscribe, reconnectCount } = useWebSocket();
   const refreshRef = useRef(onRefresh);
   refreshRef.current = onRefresh;
+  const includeRef = useRef(includeEvent);
+  includeRef.current = includeEvent;
   const prefixKey = typePrefixes.join('|');
 
   useEffect(() => {
     const prefixes = prefixKey.split('|').filter(Boolean);
     let timer: ReturnType<typeof setTimeout> | null = null;
+    let queued: WebSocketMessage | undefined;
+    let accepted: WebSocketMessage | undefined;
     const unsubscribe = subscribe((message: WebSocketMessage) => {
       if (!prefixes.some((prefix) => message.type.startsWith(prefix))) return;
+      queued = message;
+      const include = includeRef.current;
+      if (!include || include(message)) accepted = message;
       if (timer) clearTimeout(timer);
       timer = setTimeout(() => {
         timer = null;
-        refreshRef.current();
+        const chosen = accepted;
+        const fallback = queued;
+        accepted = undefined;
+        queued = undefined;
+        if (includeRef.current && !chosen) return;
+        refreshRef.current(chosen ?? fallback);
       }, LIVE_REFRESH_DEBOUNCE_MS);
     });
     return () => {
