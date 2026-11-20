@@ -112,10 +112,10 @@ describe('MergeQueue table', () => {
     fireEvent.click(screen.getByRole('checkbox', { name: 'Select all entries' }));
     fireEvent.click(screen.getByRole('button', { name: /Delete Selected/ }));
     const dialog = screen.getByRole('alertdialog');
-    expect(within(dialog).getByText(/2 expected to be deleted and 1 expected to be cancelled/i)).toBeInTheDocument();
+    expect(within(dialog).getByText(/2 will be deleted and 1 will be cancelled/i)).toBeInTheDocument();
     fireEvent.click(within(dialog).getByRole('button', { name: 'Yes' }));
 
     await waitFor(() => expect(deleteMergeEntry).toHaveBeenCalledTimes(3));
-    expect(notifications.pushToast).toHaveBeenCalledWith('warning', expect.stringMatching(/1 expected deleted.*1 expected cancelled.*1 failed/i));
+    expect(notifications.pushToast).toHaveBeenCalledWith('warning', expect.stringMatching(/1 should now be deleted, 1 cancelled and kept, and 1 failed/i));
   });
 });

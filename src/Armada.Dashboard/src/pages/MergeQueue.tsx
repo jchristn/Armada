@@ -240,7 +240,7 @@ export default function MergeQueue() {
     setConfirm({
       open: true,
       title: t('Delete Selected Entries'),
-      message: t('{{deleted}} expected to be deleted and {{cancelled}} expected to be cancelled. Cancelled entries will be kept.', { deleted: expectedDeleted, cancelled: expectedCancelled }),
+      message: t('Based on their current status, {{deleted}} will be deleted and {{cancelled}} will be cancelled. Cancelled entries are kept.', { deleted: expectedDeleted, cancelled: expectedCancelled }),
       onConfirm: async () => {
         setConfirm(c => ({ ...c, open: false }));
         const ids = [...selected];
@@ -261,9 +261,9 @@ export default function MergeQueue() {
         const deleted = successfulEntries.filter(entry => ['Landed', 'Failed', 'Cancelled'].includes(entry.status)).length;
         const cancelled = successfulEntries.length - deleted;
         if (successfulEntries.length > 0 || failed > 0) {
-          pushToast(failed > 0 ? 'warning' : 'success', t('{{deleted}} expected deleted, {{cancelled}} expected cancelled, {{failed}} failed.', { deleted, cancelled, failed }));
+          pushToast(failed > 0 ? 'warning' : 'success', t('{{deleted}} should now be deleted, {{cancelled}} cancelled and kept, and {{failed}} failed.', { deleted, cancelled, failed }));
         }
-        if (failed > 0) setError(t('{{deleted}} expected deleted, {{cancelled}} expected cancelled, {{failed}} failed.', { deleted, cancelled, failed }));
+        if (failed > 0) setError(t('{{deleted}} should now be deleted, {{cancelled}} cancelled and kept, and {{failed}} failed.', { deleted, cancelled, failed }));
         load();
       },
     });
