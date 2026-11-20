@@ -457,6 +457,20 @@ namespace Armada.Core.Services
 
                 throw new TimeoutException("Check command timed out after " + timeout.TotalMinutes.ToString("0") + " minutes.");
             }
+            catch (OperationCanceledException) when (token.IsCancellationRequested)
+            {
+                try { if (!process.HasExited) process.Kill(true); }
+                catch { }
+                throw;
+            }
+
+            Task outputDrain = Task.WhenAll(stdoutTask, stderrTask);
+            if (await Task.WhenAny(outputDrain, Task.Delay(TimeSpan.FromSeconds(2))).ConfigureAwait(false) != outputDrain)
+            {
+                try { if (!process.HasExited) process.Kill(true); }
+                catch { }
+                return new CommandExecutionResult { ExitCode = -1, Output = "Command output was incomplete because the output drain exceeded its limit." };
+            }
 
             string stdout = await stdoutTask.ConfigureAwait(false);
             string stderr = await stderrTask.ConfigureAwait(false);
