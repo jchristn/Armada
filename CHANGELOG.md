@@ -673,6 +673,7 @@ Part of the bounded enumeration contract ([docs/ENUMERATION.md](docs/ENUMERATION
 - Breaking: MCP `enumerate` rows for `missions` and `voyages` with `includeDescription=true` are scalar rows (the summary fields plus `Description`) instead of full Mission / Voyage models, so a page never embeds playbook snapshots, selected playbooks or assignment blockers. `harbors` and `model_endpoints` pages now carry `TotalPages` like every other entity type.
 - Helm `playbook show`, `playbook remove` and `voyage create --playbook` resolve playbooks across every page instead of the first page; TUI pipeline, playbook and workflow-profile pickers read every page.
 - WebSocket `get_mission_diff` reads a Harbor mission worktree through that Harbor's git service when no saved diff file or snapshot exists. A missing worktree or an unavailable Harbor still returns Unavailable. Saved diffs and snapshots keep their existing precedence. REST and MCP results are unchanged.
+- A tunnel request applies its deadline to the send and to the response wait. A sender that does not return times out. Caller cancellation stays a cancellation, and the pending response entry is removed when the call ends.
 
 ### Handoff and landing integrity
 
