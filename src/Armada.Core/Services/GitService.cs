@@ -1920,16 +1920,7 @@ namespace Armada.Core.Services
 
             if (await BranchExistsAsync(repoPath, branchName).ConfigureAwait(false))
             {
-                GitDivergenceCounts? divergence = await GetDivergenceAsync(
-                    repoPath,
-                    "refs/heads/" + branchName,
-                    "refs/remotes/origin/" + branchName,
-                    CancellationToken.None).ConfigureAwait(false);
-
-                if (divergence != null && divergence.Behind == 0 && divergence.Ahead > 0)
-                {
-                    await RunGitAsync(repoPath, "branch", "-f", branchName, "refs/remotes/origin/" + branchName).ConfigureAwait(false);
-                }
+                await FastForwardLocalBranchAsync(repoPath, branchName).ConfigureAwait(false);
             }
             else
             {
@@ -1937,6 +1928,35 @@ namespace Armada.Core.Services
             }
 
             return true;
+        }
+
+        // Move an existing local branch to origin's tip only when that is a fast-forward (the local tip is a strict ancestor
+        // of the remote tip). A branch that is ahead of origin, has diverged from it, or cannot be compared keeps its tip, so
+        // no local commit is ever discarded; the branch is left as it is and a warning names both commits.
+        private async Task FastForwardLocalBranchAsync(string repoPath, string branchName)
+        {
+            string localRef = "refs/heads/" + branchName;
+            string remoteRef = "refs/remotes/origin/" + branchName;
+            string localCommit = await ResolveCommitAsync(repoPath, localRef).ConfigureAwait(false);
+            string remoteCommit = await ResolveCommitAsync(repoPath, remoteRef).ConfigureAwait(false);
+            if (String.Equals(localCommit, remoteCommit, StringComparison.OrdinalIgnoreCase)) return;
+
+            // Ahead counts commits only on the remote ref, Behind commits only on the local ref.
+            GitDivergenceCounts? divergence = await GetDivergenceAsync(repoPath, localRef, remoteRef, CancellationToken.None).ConfigureAwait(false);
+            if (divergence != null && divergence.Behind == 0 && divergence.Ahead > 0)
+            {
+                // update-ref with the expected old value refuses the move if the branch changed since it was read.
+                await RunGitAsync(repoPath, "update-ref", "-m", "armada: fast-forward to origin/" + branchName, localRef, remoteCommit, localCommit).ConfigureAwait(false);
+                _Logging.Debug(_Header + "fast-forwarded " + branchName + " from " + localCommit + " to origin " + remoteCommit);
+                return;
+            }
+
+            string state = divergence == null
+                ? "could not be compared with"
+                : divergence.Ahead == 0 ? "is ahead of" : "has diverged from";
+            _Logging.Warn(_Header + "keeping local branch " + branchName + " at " + localCommit + ": it " + state + " origin/" + branchName + " at " + remoteCommit
+                + (divergence == null ? "" : " (" + divergence.Behind + " local-only, " + divergence.Ahead + " remote-only commits)")
+                + "; it was not reset, so its local commits are kept");
         }
 
         private async Task<bool> IsBranchCheckedOutInWorktreeAsync(string repoPath, string branchName)
