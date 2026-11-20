@@ -446,6 +446,10 @@ commands arrive with their own changes. Schema migrations 103 and 104 apply at s
 ### Captain deletion supports providers without planning sessions
 
 - Cascade cleanup treats `NotSupportedException` from planning-session enumeration as an empty list, so captain deletion can finish on providers that do not store planning sessions. Other enumeration failures still propagate.
+### Merge queue recovery
+
+- Resume merge entries left in `Testing` after the processing lease expires. Entries without a start time are also
+  resumed; entries with a recent start time remain untouched.
 
 ### Landing failure prevention
 
