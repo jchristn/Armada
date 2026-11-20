@@ -32,12 +32,40 @@ namespace Test.Shared.Infrastructure.ApiSurface
             if (baseline == null) throw new ArgumentNullException(nameof(baseline));
             if (live == null) throw new ArgumentNullException(nameof(live));
             ApiSurfaceDiff diff = new ApiSurfaceDiff();
+            CompareContractVersion(baseline.ContractVersion, live.ContractVersion, diff);
             CompareRest(baseline.Rest, live.Rest, diff);
             CompareMcp(baseline.Mcp, live.Mcp, diff);
             CompareWebSocket(baseline.WebSocket, live.WebSocket, diff);
             CompareCli(baseline.Cli, live.Cli, diff);
             CompareSettings(baseline.Settings, live.Settings, diff);
             return diff;
+        }
+
+        /// <summary>
+        /// The client contract version: a different major is breaking, a new minor is an addition, and a baseline written
+        /// before the field existed only gains it.
+        /// </summary>
+        /// <param name="baseline">Baseline contract version.</param>
+        /// <param name="live">Live contract version.</param>
+        /// <param name="diff">Diff to fill.</param>
+        private static void CompareContractVersion(string baseline, string live, ApiSurfaceDiff diff)
+        {
+            string before = (baseline ?? String.Empty).Trim();
+            string after = (live ?? String.Empty).Trim();
+            if (String.Equals(before, after, StringComparison.Ordinal)) return;
+            if (before.Length == 0)
+            {
+                diff.Additions.Add("contractVersion: " + after);
+                return;
+            }
+
+            if (after.Length == 0 || !String.Equals(before.Split('.')[0], after.Split('.')[0], StringComparison.Ordinal))
+            {
+                diff.Breaking.Add("contractVersion: major changed " + before + " -> " + (after.Length == 0 ? "(none)" : after));
+                return;
+            }
+
+            diff.Additions.Add("contractVersion: " + before + " -> " + after);
         }
 
         /// <summary>

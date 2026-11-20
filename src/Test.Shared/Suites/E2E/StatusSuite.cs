@@ -294,6 +294,16 @@ namespace Test.Shared.Suites.E2E
                 wrongKeyClient.Dispose();
             }));
 
+            cases.Add(CaseAsync("get_health_reports_contract_version", "GetHealth_ReportsContractVersion", TestTags.Positive, async () =>
+            {
+                E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this);
+                HttpResponseMessage response = await fx.UnauthClient.GetAsync("/api/v1/status/health");
+                AssertEqual(HttpStatusCode.OK, response.StatusCode);
+                HealthResponse health = await JsonHelper.DeserializeAsync<HealthResponse>(response);
+                AssertEqual(Armada.Core.Constants.ContractVersion, health.ContractVersion, "ContractVersion");
+                AssertTrue(System.Text.RegularExpressions.Regex.IsMatch(health.ContractVersion ?? "", @"^\d+\.\d+$"), "ContractVersion is major.minor: " + health.ContractVersion);
+            }));
+
             cases.Add(CaseAsync("get_health_has_timestamp", "GetHealth_HasTimestamp", TestTags.Positive, async () =>
             {
                 E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this);

@@ -34,6 +34,12 @@ namespace Test.Shared.Infrastructure.ApiSurface
             sb.Append("`Authenticated`, `TenantAdmin` (tenant administrator or global administrator), `AdminOnly` (global\n");
             sb.Append("administrator).\n\n");
 
+            if (!String.IsNullOrEmpty(document.ContractVersion))
+            {
+                sb.Append("Client contract version: `" + document.ContractVersion + "` (reported as `ContractVersion` by\n");
+                sb.Append("`GET /api/v1/status/health`; clients compare its major part with their own).\n\n");
+            }
+
             sb.Append("## Contents\n\n");
             sb.Append("- [Counts](#counts)\n- [REST API](#rest-api)\n- [MCP tools](#mcp-tools)\n- [WebSocket](#websocket)\n- [CLI](#cli)\n- [Settings](#settings)\n\n");
 

@@ -1,6 +1,7 @@
 {
   "surfaceVersion": "1.0",
   "generator": "scripts/common/generate-api-surface.sh",
+  "contractVersion": "1.0",
   "rest": [
     {
       "method": "PUT",

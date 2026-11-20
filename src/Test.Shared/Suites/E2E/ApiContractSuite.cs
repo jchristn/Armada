@@ -372,6 +372,25 @@ namespace Test.Shared.Suites.E2E
                 AssertTrue(diff.Additions.Count >= 4, "additions are reported");
             }));
 
+            cases.Add(Case("contract_version_is_frozen", "The baseline records the client contract version the Admiral reports", TestTags.Positive, () =>
+            {
+                ApiSurfaceDocument baseline = ApiSurfaceFiles.LoadBaseline();
+                AssertEqual(Armada.Core.Constants.ContractVersion, baseline.ContractVersion, "contractVersion in docs/" + ApiSurfaceFiles.JsonFileName);
+                AssertTrue(Regex.IsMatch(baseline.ContractVersion, @"^\d+\.\d+$"), "contractVersion is major.minor: " + baseline.ContractVersion);
+            }));
+
+            cases.Add(Case("comparer_flags_contract_major_change", "A new contract major is breaking; a new minor is an addition", TestTags.Negative, () =>
+            {
+                ApiSurfaceDocument baseline = ApiSurfaceFiles.LoadBaseline();
+                ApiSurfaceDocument live = Clone(baseline);
+                live.ContractVersion = "99.0";
+                AssertBreaking(baseline, live, "contractVersion: major changed");
+                live.ContractVersion = baseline.ContractVersion.Split('.')[0] + ".99";
+                ApiSurfaceDiff diff = ApiSurfaceComparer.Compare(baseline, live);
+                AssertTrue(diff.Breaking.Count == 0, "a minor bump is not breaking:\n" + ApiSurfaceComparer.Format(diff));
+                AssertTrue(diff.Additions.Any(a => a.StartsWith("contractVersion:", StringComparison.Ordinal)), "a minor bump is reported as an addition");
+            }));
+
             return new TestSuiteDescriptor(
                 suiteId: SuiteId,
                 displayName: "API Contract",
