@@ -90,6 +90,8 @@ namespace Armada.Server.Mcp
         /// <param name="blackBoxInsights">Optional black box insight service; without it the black box prevention and forensics tools answer Unavailable.</param>
         /// <param name="usage">Caller-scoped account usage service.</param>
         /// <param name="usageSelectionConfiguration">Shared live policy coordinator; null returns configuration Unavailable.</param>
+        /// <param name="emitEvent">Event sink shared with the REST delete routes. Dock and event MCP deletes emit
+        /// through it after a successful delete. Null records nothing.</param>
         public static void RegisterAll(
             RegisterToolDelegate register,
             DatabaseDriver database,
@@ -136,7 +138,8 @@ namespace Armada.Server.Mcp
             ModelProfileAccessService? modelProfiles = null,
             ModelAlertAccessService? modelAlerts = null,
             UsageAccessService? usage = null,
-            UsageSelectionConfigurationService? usageSelectionConfiguration = null)
+            UsageSelectionConfigurationService? usageSelectionConfiguration = null,
+            Func<string, string, string?, string?, string?, string?, string?, string?, Task>? emitEvent = null)
         {
             if (register == null) throw new ArgumentNullException(nameof(register));
             register = MapToolExceptions(MarkExperimental(register));
@@ -150,12 +153,12 @@ namespace Armada.Server.Mcp
             McpMissionTools.Register(register, database, admiral, settings, git, landingService, missionService, blackBoxCapture, blackBoxHooks);
             McpCaptainTools.Register(register, database, admiral, settings, onStopCaptain, agentLifecycle, captainToolService);
             McpSignalTools.Register(register, database);
-            McpEventTools.Register(register, database);
+            McpEventTools.Register(register, database, emitEvent);
             McpPapercutTools.Register(register, database);
             McpTokenUsageTools.Register(register, database);
             McpUsageTools.Register(register, usage);
             McpCaptainSelectionTools.Register(register, missionService == null || settings == null ? null : new CaptainSelectionAccessService(database, missionService, settings), usageSelectionConfiguration);
-            McpDockTools.Register(register, database, dockService);
+            McpDockTools.Register(register, database, dockService, emitEvent);
             if (logging != null) McpPlaybookTools.Register(register, database, logging);
             if (mergeQueue != null) McpMergeQueueTools.Register(register, mergeQueue, database);
             if (checkRunService != null) McpCheckRunTools.Register(register, database, checkRunService);

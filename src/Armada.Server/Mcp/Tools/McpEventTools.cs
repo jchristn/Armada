@@ -25,7 +25,11 @@ namespace Armada.Server.Mcp.Tools
         /// </summary>
         /// <param name="register">Delegate to register each tool.</param>
         /// <param name="database">Database driver for event data access.</param>
-        public static void Register(RegisterToolDelegate register, DatabaseDriver database)
+        /// <param name="emitEvent">Event sink used by the REST delete route. Null leaves the tool without an audit record.</param>
+        public static void Register(
+            RegisterToolDelegate register,
+            DatabaseDriver database,
+            Func<string, string, string?, string?, string?, string?, string?, string?, Task>? emitEvent = null)
         {
             register(
                 "delete_event",
@@ -48,6 +52,11 @@ namespace Armada.Server.Mcp.Tools
                     if (evt == null || !CanSeeEvent(caller, evt)) return (object)McpToolError.NotFound("Event not found");
                     if (!caller.IsAdmin && Armada.Core.Services.CommandAudit.IsAuditEvent(evt.EventType)) return (object)McpToolError.Forbidden("Audit events can be deleted only by a global admin");
                     await database.Events.DeleteAsync(eventId).ConfigureAwait(false);
+                    if (emitEvent != null)
+                    {
+                        await emitEvent("event.deleted", "Deleted event " + eventId,
+                            "event", eventId, null, null, null, null).ConfigureAwait(false);
+                    }
                     return (object)new { Status = "deleted", EventId = eventId };
                 });
 

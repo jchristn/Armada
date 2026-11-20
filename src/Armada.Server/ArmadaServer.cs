@@ -2257,7 +2257,8 @@ namespace Armada.Server
                 _ModelProfileAccess,
                 _ModelAlertAccess,
                 _UsageAccess,
-                _UsageSelectionConfiguration);
+                _UsageSelectionConfiguration,
+                EmitEventAsync);
         }
 
         /// <summary>

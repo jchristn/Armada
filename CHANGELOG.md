@@ -524,6 +524,7 @@ commands arrive with their own changes. Schema migrations 103 and 104 apply at s
   termination and sets the same stop handle as Ctrl+C. The main thread calls `Stop` after
   the wait, then disposes the registration. A platform without SIGTERM still starts. A
   repeated signal does not run `Stop` again.
+- MCP `delete_dock` and `delete_event` record `dock.deleted` and `event.deleted` after a successful delete, with the same event name, entity, and message as the REST delete routes. A refused delete records nothing.
 
 ### Landing failure prevention
 
