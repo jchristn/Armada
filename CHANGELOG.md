@@ -500,6 +500,9 @@ commands arrive with their own changes. Schema migrations 103 and 104 apply at s
 ### Architect fan-out preserves mission mode
 
 - Additional Architect workers keep the template Worker mode, and cloned pipeline stages keep their matching template stage mode.
+### Runbook operations stay on runbook records
+
+- **Ordinary playbooks are not runbooks.** List, read, update, delete, and start-execution apply only when the playbook content starts with the runbook metadata marker `<!-- armada:runbook`. A plain playbook is absent from the runbook list. Read returns no runbook. Update, delete, and start-execution report `Runbook not found.` and leave the playbook row and its content in place. Leading whitespace before the marker does not qualify. A record that starts with the marker remains a runbook.
 
 ### Landing failure prevention
 
