@@ -6,15 +6,15 @@ namespace Armada.Core.Services
     using System.Text;
 
     /// <summary>
-    /// Shared launch settings for git and gh processes: a fixed C locale so any text that is still read
-    /// does not depend on the host language, and UTF-8 decoding so verbatim (-z) paths survive intact.
+    /// Shared launch settings for git and gh processes: credential prompts are disabled, and a fixed C locale
+    /// and UTF-8 decoding keep output independent of the host language and preserve verbatim (-z) paths.
     /// </summary>
     public static class GitProcessEnvironment
     {
         #region Public-Methods
 
         /// <summary>
-        /// Apply the locale and encoding settings to a process start info. Requires UseShellExecute = false.
+        /// Apply the shared Git prompt, locale, and encoding settings to a process start info. Requires UseShellExecute = false.
         /// </summary>
         /// <param name="startInfo">Start info to update.</param>
         public static void Apply(ProcessStartInfo startInfo)
@@ -23,6 +23,8 @@ namespace Armada.Core.Services
             startInfo.Environment["LC_ALL"] = "C";
             startInfo.Environment["LANG"] = "C";
             startInfo.Environment.Remove("LANGUAGE");
+            startInfo.Environment["GIT_TERMINAL_PROMPT"] = "0";
+            startInfo.Environment["GCM_INTERACTIVE"] = "Never";
             if (startInfo.RedirectStandardOutput) startInfo.StandardOutputEncoding = new UTF8Encoding(false);
             if (startInfo.RedirectStandardError) startInfo.StandardErrorEncoding = new UTF8Encoding(false);
         }
