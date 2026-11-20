@@ -27,6 +27,7 @@ namespace Armada.Core.Services
             worker.VesselId = architect.VesselId;
             worker.IsEvaluation = architect.IsEvaluation;
             worker.Persona = "Worker";
+            worker.Mode = template.Mode;
             worker.WaitForVoyageWorkers = parsed[index].WaitForOtherMissions;
             worker.DependsOnMissionId = architect.Id;
             worker.RequiresReview = template.RequiresReview;
