@@ -9,6 +9,7 @@ All notable changes to Armada are documented in this file.
 ### Fixes
 
 - The no-op completion check judges a dock's work from the files changed since the dock start commit (committed, tracked and untracked; scratch files such as backups do not count), so earlier commits on a reused branch no longer count as this dock's work. The diff stored for landing is still taken against the vessel default branch. When the start commit is unknown or Git cannot answer, the check falls back to the stored diff as before; it is never skipped. Audit and Research missions are still exempt.
+- Landing previews make every decision from the effective landing mode (the voyage mode for a mission, then the vessel mode, then the server setting, then MergeAndPush), so the expected action, the manual-landing warning and the protected, release and hotfix branch checks match what the landing handler will do. `LandingMode` still reports the mode stored on the vessel, so the dashboard and TUI keep showing Inherited; vessel previews now also return `EffectiveLandingMode`. The inherited-mode warning appears only when neither the vessel nor, for a mission, the voyage sets a mode.
 
 ## v1.3.0 (2026-11-06)
 
@@ -435,10 +436,6 @@ commands arrive with their own changes. Schema migrations 103 and 104 apply at s
 - macOS Harbor bundles store the pi permission-gate extension in `Contents/Resources/Pi`, and pi resolves it there as well as beside portable binaries. This prevents ARM64 code signing from treating TypeScript resources as unsigned nested code. The DMG verifier checks the resource layout.
 - After building and verifying both Harbor DMGs, `build-harbor-app.sh` installs the native app into `~/Applications`, staging and signature-checking a fresh bundle before replacement. `--no-install` opts out, and `--no-build` remains verification-only.
 - Helm's NuGet tool package preserves battery fixture `.gitignore` and `.gitattributes` files instead of excluding them with NU5119 warnings. Installer verification checks every packaged framework for those files.
-
-### Landing preview uses the effective landing mode
-
-- **Preview checks follow the landing handler.** A mission preview resolves the landing mode before it describes the action or applies branch policy: the voyage mode, then the vessel mode, then the server setting, then MergeAndPush. A vessel preview uses the same order without a voyage. The reported landing mode is that resolved mode. The inherited-mode warning still appears when the stored vessel mode is empty and, for a mission, the stored voyage mode is empty. The warning text is unchanged. Branch cleanup policy and the landing handler are unchanged.
 
 ### Landing failure prevention
 

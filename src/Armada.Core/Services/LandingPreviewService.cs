@@ -44,7 +44,7 @@ namespace Armada.Core.Services
             if (vessel == null) throw new ArgumentNullException(nameof(vessel));
 
             // Same order as mission landing: vessel, then the Admiral default, then MergeAndPush. A vessel preview has no voyage.
-            LandingModeEnum resolvedLandingMode = vessel.LandingMode ?? _Settings?.LandingMode ?? LandingModeEnum.MergeAndPush;
+            LandingModeEnum effectiveLandingMode = ResolveEffectiveLandingMode(vessel, null);
             bool landingModeInherited = !vessel.LandingMode.HasValue;
 
             LandingPreviewResult result = new LandingPreviewResult
@@ -52,7 +52,8 @@ namespace Armada.Core.Services
                 VesselId = vessel.Id,
                 SourceBranch = NormalizeEmpty(sourceBranch),
                 TargetBranch = !String.IsNullOrWhiteSpace(vessel.DefaultBranch) ? vessel.DefaultBranch : "main",
-                LandingMode = resolvedLandingMode,
+                LandingMode = vessel.LandingMode,
+                EffectiveLandingMode = effectiveLandingMode,
                 BranchCleanupPolicy = vessel.BranchCleanupPolicy,
                 RequirePassingChecksToLand = vessel.RequirePassingChecksToLand,
                 RequirePullRequestForProtectedBranches = vessel.RequirePullRequestForProtectedBranches,
@@ -84,7 +85,7 @@ namespace Armada.Core.Services
 
             // Same order as MissionLandingHandler: voyage, then vessel, then the Admiral default, then MergeAndPush.
             Voyage? voyage = String.IsNullOrEmpty(mission.VoyageId) ? null : await _Database.Voyages.ReadAsync(mission.VoyageId, token).ConfigureAwait(false);
-            LandingModeEnum resolvedLandingMode = voyage?.LandingMode ?? vessel.LandingMode ?? _Settings?.LandingMode ?? LandingModeEnum.MergeAndPush;
+            LandingModeEnum effectiveLandingMode = ResolveEffectiveLandingMode(vessel, voyage);
             bool landingModeInherited = !vessel.LandingMode.HasValue && voyage?.LandingMode == null;
 
             LandingPreviewResult result = new LandingPreviewResult
@@ -93,9 +94,9 @@ namespace Armada.Core.Services
                 MissionId = mission.Id,
                 SourceBranch = NormalizeEmpty(mission.BranchName),
                 TargetBranch = !String.IsNullOrWhiteSpace(vessel.DefaultBranch) ? vessel.DefaultBranch : "main",
-                LandingMode = resolvedLandingMode,
-                EffectiveLandingMode = resolvedLandingMode,
-                ManualLandingOnly = resolvedLandingMode == LandingModeEnum.None,
+                LandingMode = vessel.LandingMode,
+                EffectiveLandingMode = effectiveLandingMode,
+                ManualLandingOnly = effectiveLandingMode == LandingModeEnum.None,
                 BranchCleanupPolicy = vessel.BranchCleanupPolicy,
                 RequirePassingChecksToLand = vessel.RequirePassingChecksToLand,
                 RequirePullRequestForProtectedBranches = vessel.RequirePullRequestForProtectedBranches,
@@ -155,9 +156,14 @@ namespace Armada.Core.Services
                 || (run.CompletedUtc.HasValue && run.ExitCode.HasValue && run.ExitCode.Value == 0));
         }
 
+        private LandingModeEnum ResolveEffectiveLandingMode(Vessel vessel, Voyage? voyage)
+        {
+            return voyage?.LandingMode ?? vessel.LandingMode ?? _Settings?.LandingMode ?? LandingModeEnum.MergeAndPush;
+        }
+
         private static void EvaluateCommonIssues(LandingPreviewResult result, bool landingModeInherited)
         {
-            result.ExpectedLandingAction = DescribeLandingAction(result.LandingMode);
+            result.ExpectedLandingAction = DescribeLandingAction(result.EffectiveLandingMode);
 
             if (String.IsNullOrWhiteSpace(result.SourceBranch))
             {
@@ -179,14 +185,14 @@ namespace Armada.Core.Services
                     "This vessel does not declare a landing mode directly, so global or voyage settings may change the final behavior.");
             }
 
-            if (result.LandingMode == LandingModeEnum.None)
+            if (result.EffectiveLandingMode == LandingModeEnum.None)
             {
                 AddIssue(
                     result,
                     "manual_landing_only",
                     ReadinessSeverityEnum.Warning,
                     "Landing is manual",
-                    "This vessel is configured for manual landing only. Armada will not merge or open a pull request automatically.");
+                    "The effective landing mode is None, so landing is manual only. Armada will not merge or open a pull request automatically.");
             }
 
             if (!String.IsNullOrWhiteSpace(result.SourceBranch)
@@ -234,7 +240,7 @@ namespace Armada.Core.Services
 
             if (result.TargetBranchProtected && result.RequirePullRequestForProtectedBranches)
             {
-                if (result.LandingMode != LandingModeEnum.PullRequest && result.LandingMode != LandingModeEnum.MergeQueue)
+                if (result.EffectiveLandingMode != LandingModeEnum.PullRequest && result.EffectiveLandingMode != LandingModeEnum.MergeQueue)
                 {
                     AddIssue(
                         result,
@@ -247,7 +253,7 @@ namespace Armada.Core.Services
 
             if (String.Equals(result.BranchCategory, "Release", StringComparison.OrdinalIgnoreCase)
                 && result.RequireMergeQueueForReleaseBranches
-                && result.LandingMode != LandingModeEnum.MergeQueue)
+                && result.EffectiveLandingMode != LandingModeEnum.MergeQueue)
             {
                 AddIssue(
                     result,
@@ -260,7 +266,7 @@ namespace Armada.Core.Services
             if (String.Equals(result.BranchCategory, "Hotfix", StringComparison.OrdinalIgnoreCase)
                 && result.TargetBranchProtected
                 && result.RequirePullRequestForProtectedBranches
-                && (result.LandingMode == LandingModeEnum.LocalMerge || result.LandingMode == LandingModeEnum.MergeAndPush))
+                && (result.EffectiveLandingMode == LandingModeEnum.LocalMerge || result.EffectiveLandingMode == LandingModeEnum.MergeAndPush))
             {
                 AddIssue(
                     result,

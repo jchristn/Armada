@@ -84,7 +84,7 @@ namespace Test.Shared.Suites.Services
             {
                 LandingPreviewResult preview = await PreviewAsync(MissionStatusEnum.WorkProduced, LandingModeEnum.MergeAndPush, LandingModeEnum.LocalMerge).ConfigureAwait(false);
                 AssertEqual("Merge the branch into the target branch in the working directory, without pushing", preview.ExpectedLandingAction, "expected action");
-                AssertEqual(LandingModeEnum.LocalMerge, preview.LandingMode, "reported landing mode");
+                AssertEqual(LandingModeEnum.MergeAndPush, preview.LandingMode, "stored vessel landing mode is reported unchanged");
                 AssertEqual(LandingModeEnum.LocalMerge, preview.EffectiveLandingMode, "effective mode");
             }));
 
@@ -124,7 +124,7 @@ namespace Test.Shared.Suites.Services
                 LandingPreviewResult preview = await PreviewAsync(MissionStatusEnum.WorkProduced, LandingModeEnum.None, LandingModeEnum.LocalMerge).ConfigureAwait(false);
                 AssertFalse(preview.Issues.Exists(i => i.Code == "manual_landing_only"), "manual landing warning");
                 AssertEqual("Merge the branch into the target branch in the working directory, without pushing", preview.ExpectedLandingAction, "expected action");
-                AssertEqual(LandingModeEnum.LocalMerge, preview.LandingMode, "reported landing mode");
+                AssertEqual(LandingModeEnum.None, preview.LandingMode, "stored vessel landing mode is reported unchanged");
                 AssertFalse(preview.ManualLandingOnly, "voyage mode applies");
                 AssertEqual(LandingModeEnum.LocalMerge, preview.EffectiveLandingMode, "effective mode from the voyage");
             }));
@@ -144,7 +144,8 @@ namespace Test.Shared.Suites.Services
                     }).ConfigureAwait(false);
                 AssertFalse(preview.Issues.Exists(issue => issue.Code == "protected_branch_requires_pr"), "protected branch error");
                 AssertTrue(preview.IsReadyToLand, "ready when no other error exists");
-                AssertEqual(LandingModeEnum.PullRequest, preview.LandingMode, "reported landing mode");
+                AssertEqual(LandingModeEnum.LocalMerge, preview.LandingMode, "stored vessel landing mode is reported unchanged");
+                AssertEqual(LandingModeEnum.PullRequest, preview.EffectiveLandingMode, "effective mode from the voyage");
                 AssertEqual("Open or update a pull request", preview.ExpectedLandingAction, "expected action");
             }));
 
@@ -162,7 +163,7 @@ namespace Test.Shared.Suites.Services
                 AssertEqual("Open or update a pull request", preview.ExpectedLandingAction, "expected action");
                 AssertTrue(preview.Issues.Exists(issue => issue.Code == "landing_mode_inherited"), "inherited warning");
                 AssertFalse(preview.Issues.Exists(issue => issue.Code == "manual_landing_only"), "manual landing warning");
-                AssertEqual(LandingModeEnum.PullRequest, preview.LandingMode, "reported landing mode");
+                AssertNull(preview.LandingMode, "an inherited vessel mode stays null so clients show Inherited");
                 AssertEqual(LandingModeEnum.PullRequest, preview.EffectiveLandingMode, "effective mode");
             }));
 
@@ -183,8 +184,38 @@ namespace Test.Shared.Suites.Services
                 AssertFalse(preview.Issues.Exists(issue => issue.Code == "protected_branch_requires_pr"), "protected branch error");
                 AssertEqual("Open or update a pull request", preview.ExpectedLandingAction, "expected action");
                 AssertTrue(preview.Issues.Exists(issue => issue.Code == "landing_mode_inherited"), "inherited warning");
-                AssertEqual(LandingModeEnum.PullRequest, preview.LandingMode, "reported landing mode");
+                AssertNull(preview.LandingMode, "an inherited vessel mode stays null so clients show Inherited");
+                AssertEqual(LandingModeEnum.PullRequest, preview.EffectiveLandingMode, "effective mode");
                 AssertTrue(preview.IsReadyToLand, "ready when no other error exists");
+            }));
+
+            cases.Add(CaseAsync("voyage_none_over_vessel_merge_and_push_is_manual", "A voyage None makes the preview manual while LandingMode keeps the vessel value", TestTags.Negative, async () =>
+            {
+                LandingPreviewResult preview = await PreviewAsync(MissionStatusEnum.WorkProduced, LandingModeEnum.MergeAndPush, LandingModeEnum.None).ConfigureAwait(false);
+                AssertEqual(LandingModeEnum.MergeAndPush, preview.LandingMode, "stored vessel landing mode is reported unchanged");
+                AssertEqual(LandingModeEnum.None, preview.EffectiveLandingMode, "effective mode from the voyage");
+                AssertTrue(preview.Issues.Exists(issue => issue.Code == "manual_landing_only"), "manual landing warning");
+                AssertFalse(preview.Issues.Exists(issue => issue.Code == "landing_mode_inherited"), "the vessel declares a mode");
+                AssertTrue(preview.ManualLandingOnly, "manual landing only");
+                AssertFalse(preview.IsReadyToLand, "not ready");
+            }));
+
+            cases.Add(CaseAsync("vessel_preview_global_merge_queue_on_release_branch", "A vessel preview checks the release merge-queue rule against the global mode", TestTags.Negative, async () =>
+            {
+                ArmadaSettings settings = new ArmadaSettings();
+                settings.LandingMode = LandingModeEnum.MergeQueue;
+                LandingPreviewResult preview = await PreviewVesselAsync(
+                    null,
+                    "release/1.0",
+                    vessel =>
+                    {
+                        vessel.ReleaseBranchPrefix = "release/";
+                        vessel.RequireMergeQueueForReleaseBranches = true;
+                    },
+                    settings).ConfigureAwait(false);
+                AssertNull(preview.LandingMode, "an inherited vessel mode stays null so clients show Inherited");
+                AssertEqual(LandingModeEnum.MergeQueue, preview.EffectiveLandingMode, "effective mode from the global setting");
+                AssertFalse(preview.Issues.Exists(issue => issue.Code == "release_branch_requires_merge_queue"), "the global merge queue satisfies the release rule");
             }));
 
             cases.Add(CaseAsync("complete_mission_not_ready", "A Complete mission is not Ready To Land", TestTags.Negative, async () =>
