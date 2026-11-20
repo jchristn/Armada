@@ -16,9 +16,7 @@ import { fake, Uri } from '../fakes/vscode';
 type Server = Record<string, unknown>;
 
 const SETTINGS: ArmadaSettings = {
-  url: '',
   tenant: '',
-  authHeader: 'Bearer',
   dashboardUrl: '',
   showFailuresInExplorer: false,
   filterToWorkspaceVessel: true,

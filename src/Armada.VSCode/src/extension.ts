@@ -1,6 +1,11 @@
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 import * as vscode from 'vscode';
 import { readSettings } from './config';
 import { ConnectionManager } from './connection/connectionManager';
+import { harborDirectory, tuiPreferencesPath } from './connection/endpoints';
+import { discoverLocalAdmiral } from './connection/localDiscovery';
 import { ConnectionStatusBar, CONNECTION_ACTIONS_COMMAND, showConnectionActions } from './connection/statusBar';
 import { BlackBoxCommands, CommandConnection } from './surfaces/blackbox/blackBoxCommands';
 import { BlackBoxDecorationProvider } from './surfaces/blackbox/blackBoxDecorationProvider';
@@ -129,13 +134,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<Armada
     context.subscriptions.push(vscode.commands.registerCommand(id, fn));
   };
   register('armada.connect', () => connection.connect({ interactive: true }));
-  register('armada.connectRemote', () => connection.connectRemote());
-  register('armada.useLocalAdmiral', () => connection.useLocal());
   register('armada.reconnect', () => connection.reconnect());
   register('armada.disconnect', () => connection.disconnect());
-  register(CONNECTION_ACTIONS_COMMAND, () => showConnectionActions(connection, readSettings().url !== ''));
+  register(CONNECTION_ACTIONS_COMMAND, () => showConnectionActions(connection));
   register('armada.showOutput', () => output.show(true));
-  register('armada.openSettings', () => vscode.commands.executeCommand('workbench.action.openSettings', `@ext:${context.extension.id}`));
+  register('armada.openSettings', () => openSettings(context.extension.id));
   register('armada.openDashboard', () => openDashboard(connection, '/'));
   register(OPEN_DASHBOARD_PAGE_COMMAND, (arg) => openDashboard(connection, routeFromArg(arg) ?? '/'));
   register('armada.refreshFailures', () => {
@@ -165,10 +168,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<Armada
   context.subscriptions.push(vscode.workspace.onDidChangeWorkspaceFolders(() => void store.refresh()));
   context.subscriptions.push(vscode.workspace.onDidChangeConfiguration((e) => {
     if (!e.affectsConfiguration('armada')) return;
-    if (e.affectsConfiguration('armada.url') || e.affectsConfiguration('armada.authHeader')) {
-      void connection.onSettingsChanged();
-      return;
-    }
     if (e.affectsConfiguration('armada.tenant')) store.invalidateVessels();
     if (e.affectsConfiguration('armada.liveUpdates')) restartBus();
     void store.refresh();
@@ -187,6 +186,33 @@ export async function activate(context: vscode.ExtensionContext): Promise<Armada
 export function deactivate(): void {
   _Bus?.dispose();
   _Bus = undefined;
+}
+
+/**
+ * "Armada: Open Settings": the Armada settings files this machine has (~/.armada/settings.json, Harbor's
+ * settings.json, the TUI's tui.json), which is where the connection comes from, plus the extension's own preferences.
+ */
+async function openSettings(extensionId: string): Promise<void> {
+  const local = discoverLocalAdmiral();
+  const files: Array<{ label: string; file: string }> = [
+    { label: 'Armada settings', file: local.settingsPath },
+    { label: 'Harbor settings', file: path.join(harborDirectory(), 'settings.json') },
+    { label: 'TUI profiles', file: tuiPreferencesPath() },
+  ].filter((f) => fs.existsSync(f.file));
+  const items: Array<vscode.QuickPickItem & { file?: string }> = files.map((f) => ({ label: `$(file) ${f.label}`, description: displayHomePath(f.file), file: f.file }));
+  items.push({ label: '$(settings-gear) Extension Preferences', description: 'views, live updates, decorations' });
+  const picked = items.length === 1 ? items[0] : await vscode.window.showQuickPick(items, { title: 'Armada: Open Settings', placeHolder: 'The Armada settings the extension connects with, or its own preferences' });
+  if (!picked) return;
+  if (picked.file) {
+    await vscode.window.showTextDocument(vscode.Uri.file(picked.file));
+    return;
+  }
+  await vscode.commands.executeCommand('workbench.action.openSettings', `@ext:${extensionId}`);
+}
+
+function displayHomePath(file: string): string {
+  const home = os.homedir();
+  return file.startsWith(home + path.sep) ? `~${file.slice(home.length)}` : file;
 }
 
 async function openDashboard(connection: ConnectionManager, route: string): Promise<boolean> {

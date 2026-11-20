@@ -48,36 +48,16 @@
     "configuration": {
       "title": "Armada",
       "properties": {
-        "armada.url": {
-          "type": "string",
-          "default": "",
-          "markdownDescription": "URL of a remote Armada Admiral (REST API). Leave empty to use the local Admiral: its port and API key are read from `~/.armada/settings.json` (or `$ARMADA_DATA_DIR/settings.json`) with no prompt. A trailing `/dashboard` is ignored.",
-          "order": 0
-        },
         "armada.tenant": {
           "type": "string",
           "default": "",
           "description": "Optional tenant id (ten_...). Admin credentials use it to narrow lists to one tenant; other credentials are already scoped to their own tenant.",
           "order": 1
         },
-        "armada.authHeader": {
-          "type": "string",
-          "enum": [
-            "Bearer",
-            "X-Api-Key"
-          ],
-          "enumDescriptions": [
-            "Send the key as Authorization: Bearer (credential tokens, recommended).",
-            "Send the key as X-Api-Key (the deprecated settings API key)."
-          ],
-          "default": "Bearer",
-          "description": "How the stored API key of a remote Admiral is sent. The key itself is kept in VS Code secret storage, never in settings. The local Admiral always uses its settings API key as X-Api-Key.",
-          "order": 2
-        },
         "armada.dashboardUrl": {
           "type": "string",
           "default": "",
-          "description": "Armada dashboard URL used for dashboard links and Ask Armada. Empty means the connected Admiral followed by /dashboard."
+          "description": "Armada dashboard URL used for dashboard links and Ask Armada. Empty means Harbor's configured dashboard for Harbor's Admiral, else the connected Admiral followed by /dashboard."
         },
         "armada.fixThis.openPreview": {
           "type": "boolean",
@@ -169,7 +149,7 @@
       },
       {
         "view": "armadaNavigation",
-        "contents": "Not connected to an Armada Admiral. The local Admiral is found through ~/.armada/settings.json; start Armada on this machine, or connect to a remote Admiral.\n[Connect](command:armada.connect)\n[Connect to a Remote Admiral](command:armada.connectRemote)\n[Show Output](command:armada.showOutput)",
+        "contents": "Not connected to an Armada Admiral. The extension uses the Admiral of a running Harbor, the local Admiral (~/.armada/settings.json) or a TUI profile, with the credentials already on this machine.\n[Connect](command:armada.connect)\n[Show Output](command:armada.showOutput)",
         "when": "!armada.connected && armada.connectionState != connecting"
       },
       {
@@ -179,7 +159,7 @@
       },
       {
         "view": "armadaFailures",
-        "contents": "Not connected to an Armada Admiral. The local Admiral is found through ~/.armada/settings.json; start Armada on this machine, or connect to a remote Admiral.\n[Connect](command:armada.connect)\n[Connect to a Remote Admiral](command:armada.connectRemote)\n[Show Output](command:armada.showOutput)",
+        "contents": "Not connected to an Armada Admiral. The extension uses the Admiral of a running Harbor, the local Admiral (~/.armada/settings.json) or a TUI profile, with the credentials already on this machine.\n[Connect](command:armada.connect)\n[Show Output](command:armada.showOutput)",
         "when": "!armada.connected && armada.connectionState != connecting"
       },
       {
@@ -189,7 +169,7 @@
       },
       {
         "view": "armadaFailuresExplorer",
-        "contents": "Not connected to an Armada Admiral. The local Admiral is found through ~/.armada/settings.json; start Armada on this machine, or connect to a remote Admiral.\n[Connect](command:armada.connect)\n[Connect to a Remote Admiral](command:armada.connectRemote)\n[Show Output](command:armada.showOutput)",
+        "contents": "Not connected to an Armada Admiral. The extension uses the Admiral of a running Harbor, the local Admiral (~/.armada/settings.json) or a TUI profile, with the credentials already on this machine.\n[Connect](command:armada.connect)\n[Show Output](command:armada.showOutput)",
         "when": "!armada.connected && armada.connectionState != connecting"
       }
     ],
@@ -199,18 +179,6 @@
         "title": "Connect",
         "category": "Armada",
         "icon": "$(plug)"
-      },
-      {
-        "command": "armada.connectRemote",
-        "title": "Connect to a Remote Admiral...",
-        "category": "Armada",
-        "icon": "$(remote)"
-      },
-      {
-        "command": "armada.useLocalAdmiral",
-        "title": "Use the Local Admiral",
-        "category": "Armada",
-        "icon": "$(home)"
       },
       {
         "command": "armada.reconnect",

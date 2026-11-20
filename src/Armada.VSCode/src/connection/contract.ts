@@ -1,7 +1,9 @@
 /*
  * The Admiral contract this build of the extension speaks. The Admiral reports ContractVersion (major.minor) on
  * GET /api/v1/status/health (Armada.Core Constants.ContractVersion); a different major means one side is too old, and
- * the extension refuses to connect with a message that says which. Pure, so it is unit tested directly.
+ * the extension refuses to connect with a message that says which. Admirals released before the contract version
+ * existed (1.3.0 and earlier) do not report one; they speak contract 1, so they are accepted. Pure, so it is unit
+ * tested directly.
  */
 
 /** The contract major this extension is built for. */
@@ -16,7 +18,7 @@ export interface ContractCheck {
   problem?: ContractProblem;
   /** Short text for the status bar. */
   summary: string;
-  /** Full explanation; empty when compatible. */
+  /** Full explanation; empty when compatible, except for a note when the server reports no contract version. */
   reason: string;
 }
 
@@ -26,10 +28,9 @@ export function checkContract(serverContractVersion: string | null | undefined, 
   const product = serverVersion ? ` ${serverVersion}` : '';
   if (!raw) {
     return {
-      compatible: false,
-      problem: 'serverTooOld',
-      summary: 'server too old',
-      reason: `The Armada Admiral${product} does not report a contract version, so it is older than this extension. Update Armada to use this extension.`,
+      compatible: true,
+      summary: '',
+      reason: `The Armada Admiral${product} does not report a contract version; it predates contract versions, which makes it contract 1.`,
     };
   }
   const major = /^\d+/.exec(raw) ? Number.parseInt(raw, 10) : Number.NaN;

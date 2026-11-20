@@ -1,12 +1,11 @@
 import * as vscode from 'vscode';
-import { AuthHeaderMode } from './transport/hostClient';
 
-/** Snapshot of the `armada.*` settings. */
+/**
+ * Snapshot of the `armada.*` settings. These are preferences only: which Admiral to use and its credential come from
+ * the Armada settings on this machine (connection/endpoints.ts) and the "Armada: Connect" picker.
+ */
 export interface ArmadaSettings {
-  /** Remote Admiral URL; empty means the local Admiral found through ~/.armada/settings.json. */
-  url: string;
   tenant: string;
-  authHeader: AuthHeaderMode;
   /** Explicit dashboard URL; empty means the connected Admiral's /dashboard. */
   dashboardUrl: string;
   showFailuresInExplorer: boolean;
@@ -26,9 +25,7 @@ export function readSettings(): ArmadaSettings {
   const c = vscode.workspace.getConfiguration('armada');
   const dashboard = String(c.get<string>('dashboardUrl', '') ?? '').trim();
   return {
-    url: String(c.get<string>('url', '') ?? '').trim(),
     tenant: String(c.get<string>('tenant', '') ?? '').trim(),
-    authHeader: c.get<string>('authHeader', 'Bearer') === 'X-Api-Key' ? 'X-Api-Key' : 'Bearer',
     dashboardUrl: dashboard ? dashboard.replace(/\/+$/, '') : '',
     showFailuresInExplorer: c.get<boolean>('failures.showInExplorer', false) === true,
     filterToWorkspaceVessel: c.get<boolean>('failures.filterToWorkspaceVessel', true) !== false,

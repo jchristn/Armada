@@ -19,29 +19,41 @@ The Armada icon in the activity bar opens two views:
   Each page opens in the dashboard in your browser until the extension has its own view for it.
 - **Failures**: the black box tree (below).
 
-While the extension is not connected, both views show what to do: connect, connect to a remote Admiral, or open the
-output.
+While the extension is not connected, both views show what to do: connect, or open the output.
 
 ## Connecting
 
-The extension connects by itself after VS Code starts; nothing runs while the extension is activating.
+The extension connects by itself after VS Code starts; nothing runs while the extension is activating. It takes the
+Admiral and the credential from the Armada settings already on the machine, so nothing about the connection lives in
+VS Code settings. It looks, in this order, at:
 
-- **Local Admiral (default).** With `armada.url` empty, the extension reads the Admiral's port (`admiralPort`) and
-  local API key (`apiKey`) from `~/.armada/settings.json` (or `$ARMADA_DATA_DIR/settings.json`), the same file the
-  Armada CLI, TUI and Harbor use, and connects to `http://127.0.0.1:<port>` with no prompt. The Admiral writes the key
-  the first time it starts.
-- **Remote Admiral.** Run **Armada: Connect to a Remote Admiral...**, enter the URL (a trailing `/dashboard` is
-  ignored) and an API key or bearer token. The extension checks them against the server, then stores the key in VS
-  Code secret storage (never in settings files) and the URL in `armada.url`.
+1. **Harbor**: `~/.armada-harbor/settings.json` (or `$ARMADA_HARBOR_HOME`). `ServerLinkUrl` names the Admiral Harbor
+   links to, whose REST API is the same host and port over http or https, and `AccessKey` is sent as a bearer token.
+   A running Harbor puts its Admiral first.
+2. **The local Admiral**: `~/.armada/settings.json` (or `$ARMADA_DATA_DIR`): `admiralPort` and the local `apiKey`,
+   sent as `X-Api-Key` to `http://127.0.0.1:<port>`. The Admiral writes the key the first time it starts.
+3. **The TUI's server profiles**: `~/.armada/tui.json`, with each profile's session token from the TUI's credential
+   store (the macOS Keychain or libsecret, else `tui-credentials.json`).
+
+Entries for the same Admiral are merged, and every credential found for it is tried in turn. At startup the extension
+connects to the Admiral last picked with **Armada: Connect**, else to the first one that answers and accepts a
+credential.
+
+**Armada: Connect** is the one connect command. It lists the Admirals found on the machine (with where each came from,
+whether it responds, and whether a credential was found) and **Enter an Admiral URL...** for any other. A key is asked
+for only when no stored credential works; it is tried as a bearer token and then as `X-Api-Key`, and the one that
+works is kept in VS Code secret storage for that Admiral.
 
 Each connection probes `GET /api/v1/status/health`, checks the Admiral's contract version (the major part must match
-the extension's; otherwise it says whether the Admiral or the extension is too old), then proves the credential with
+the extension's; otherwise it says whether the Admiral or the extension is too old; an Admiral from before contract
+versions, 1.3.0 and earlier, reports none and is treated as contract 1), then proves the credential with
 `GET /api/v1/whoami`. The context keys `armada.connected`, `armada.connectionState`, `armada.role.globalAdmin` and
 `armada.role.tenantAdmin` follow the result, for menus and `when` clauses.
 
 The status bar shows the state and the target (`Armada: local`, `Armada: armada.example.com`, `Armada: server too
-old`, ...); click it for connection actions: open the dashboard, reconnect, connect to a remote Admiral, use the
-local Admiral, disconnect, show the output, open the settings. **Armada: Show Output** opens the **Armada** log, which
+old`, ...), and its tooltip says where the Admiral was found and which credential is in use. Click it for connection
+actions: open the dashboard, connect to another Admiral, reconnect or retry, disconnect, show the output, open the
+settings. **Armada: Show Output** opens the **Armada** log, which
 records every connection attempt and live-update change (never a key).
 
 **Armada: Disconnect** drops the connection and removes a stored remote key; the extension then stays disconnected,
@@ -93,9 +105,9 @@ off it only polls.
 ## Requirements
 
 - VS Code 1.101 or later (or a compatible editor such as Cursor).
-- An Armada Admiral that reports contract version 1.x on `GET /api/v1/status/health`, and, for a remote Admiral, a
-  credential: a bearer token from `POST /api/v1/credentials` (recommended) or the settings API key with
-  `armada.authHeader` set to `X-Api-Key`.
+- An Armada Admiral with contract version 1.x (or one from before contract versions), and a credential for it: one
+  already on the machine (Harbor's access key, the local API key, a TUI session), or a bearer token from
+  `POST /api/v1/credentials` or an API key entered in **Armada: Connect**.
 
 ## Install from a VSIX
 
@@ -107,10 +119,8 @@ From the repository root, `./build-vscode.sh --install` (or `build-vscode.bat --
 
 | Setting | Default | Meaning |
 |---|---|---|
-| `armada.url` | empty | Remote Admiral URL; empty means the local Admiral from `~/.armada/settings.json` |
 | `armada.tenant` | empty | Optional tenant id; admin credentials use it to narrow lists to one tenant |
-| `armada.authHeader` | `Bearer` | How a remote key is sent: `Authorization: Bearer` or the deprecated `X-Api-Key` (the local Admiral always uses `X-Api-Key`) |
-| `armada.dashboardUrl` | empty | Dashboard URL for links and Ask Armada; empty means the connected Admiral plus `/dashboard` |
+| `armada.dashboardUrl` | empty | Dashboard URL for links and Ask Armada; empty means Harbor's `DashboardUrl` for Harbor's Admiral, else the connected Admiral plus `/dashboard` |
 | `armada.fixThis.openPreview` | `true` | Open a Markdown preview beside the FIX THIS editor |
 | `armada.failures.showInExplorer` | `false` | Also show the black box tree in the Explorer, as **Armada Failures** |
 | `armada.failures.filterToWorkspaceVessel` | `true` | Show only the open repository's vessel (falls back to all vessels when none matches) |
@@ -126,14 +136,12 @@ From the repository root, `./build-vscode.sh --install` (or `build-vscode.bat --
 
 | Command | What it does |
 |---|---|
-| Armada: Connect | Connect to the configured Admiral (the local one by default) |
-| Armada: Connect to a Remote Admiral... | Prompt for the URL and key, verify, store the key in secret storage |
-| Armada: Use the Local Admiral | Clear `armada.url` and connect to the local Admiral |
+| Armada: Connect | Pick an Admiral found on this machine or enter a URL, and connect (asks for a key only when none works) |
 | Armada: Reconnect | Connect again to the current Admiral |
-| Armada: Disconnect | Drop the connection and remove a stored remote key |
+| Armada: Disconnect | Drop the connection and remove a key entered for that Admiral |
 | Armada: Connection Actions... | The status bar's quick pick of connection actions |
 | Armada: Show Output | Open the Armada log |
-| Armada: Open Settings | Open the extension's settings |
+| Armada: Open Settings | Open `~/.armada/settings.json`, Harbor's settings, the TUI profiles, or the extension's preferences |
 | Armada: Open Dashboard | Open the connected Admiral's dashboard in the browser |
 | Armada: Refresh Failures | Reload vessels and entries |
 | Armada: Toggle Workspace Vessel Filter | Switch between the open repository's vessel and every vessel |

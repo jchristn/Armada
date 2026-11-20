@@ -2,9 +2,10 @@
  * @vscode/test-electron integration test launcher. Downloads VS Code, starts it with this extension in development
  * mode and runs suite/index.ts inside the extension host.
  *
- * The extension host never sees the developer's ~/.armada: ARMADA_DATA_DIR points at ARMADA_VSCODE_TEST_DATA_DIR when
- * set (the data directory of a throwaway Admiral, for the connected smoke run with ARMADA_VSCODE_EXPECT_ADMIRAL=1),
- * otherwise at an empty temporary directory (the disconnected run). ARMADA_VSCODE_SCREENSHOT_DIR, when set, asks the
+ * The extension host never sees the developer's ~/.armada or ~/.armada-harbor: ARMADA_DATA_DIR, and the Harbor and
+ * TUI paths under it, point at ARMADA_VSCODE_TEST_DATA_DIR when set (the data directory of a throwaway Admiral, for
+ * the connected smoke run with ARMADA_VSCODE_EXPECT_ADMIRAL=1), otherwise at an empty temporary directory (the
+ * disconnected run). ARMADA_VSCODE_SCREENSHOT_DIR, when set, asks the
  * suite for light and dark screenshots of the Armada container (macOS only).
  *
  * Skipped (exit code 0, with a message) when ARMADA_VSCODE_SKIP_INTEGRATION=1, when Linux has no display, or when VS
@@ -47,6 +48,10 @@ async function main(): Promise<void> {
       launchArgs: ['--disable-extensions', '--skip-welcome', '--skip-release-notes', '--disable-workspace-trust', `--user-data-dir=${userDataDir}`],
       extensionTestsEnv: {
         ARMADA_DATA_DIR: dataDir,
+        // Discovery also reads Harbor's settings and the TUI's profiles; keep both inside the test data directory.
+        ARMADA_HARBOR_HOME: path.join(dataDir, 'harbor'),
+        ARMADA_TUI_PREFERENCES: path.join(dataDir, 'tui.json'),
+        ARMADA_TUI_CREDENTIALS: path.join(dataDir, 'tui-credentials.json'),
         ARMADA_VSCODE_EXPECT_ADMIRAL: process.env.ARMADA_VSCODE_EXPECT_ADMIRAL ?? '',
         ARMADA_VSCODE_SCREENSHOT_DIR: process.env.ARMADA_VSCODE_SCREENSHOT_DIR ?? '',
       },

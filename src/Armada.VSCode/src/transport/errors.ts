@@ -33,7 +33,7 @@ export function describeError(err: unknown): string {
   if (err instanceof NotConnectedError) return 'Armada is not connected. Run "Armada: Connect", or start the local Admiral.';
   if (err instanceof TimeoutError) return 'The Armada server did not respond in time. Try again, or check the Admiral.';
   if (err instanceof RequestCancelledError) return 'The request was cancelled.';
-  if (err instanceof NetworkError) return `Cannot reach the Armada server: ${networkMessage(err)}. Check that the Admiral is running and armada.url is right.`;
+  if (err instanceof NetworkError) return `Cannot reach the Armada server: ${networkMessage(err)}. Check that the Admiral is running, or pick another with "Armada: Connect".`;
   if (err instanceof ApiError) {
     const code = apiErrorCode(err);
     const message = serverMessage(err);

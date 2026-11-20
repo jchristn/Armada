@@ -1,11 +1,15 @@
 /*
  * The connection to one Admiral (VSCODE_EXTENSION_PLAN.md 4.4, modeled on Mux's src/server/lifecycle.ts):
  *
- * 1. Target: with `armada.url` empty, the local Admiral from ~/.armada/settings.json (port and API key, no prompt);
- *    otherwise that URL with the key kept in SecretStorage (or the local key when the URL is the local Admiral).
- * 2. Probe GET /api/v1/status/health, check the contract major, then prove the credential with GET /api/v1/whoami and
- *    set the role context keys.
- * 3. Concurrent callers share one in-flight attempt.
+ * 1. Endpoints come from what the machine already has (endpoints.ts): a running Harbor's Admiral
+ *    (~/.armada-harbor/settings.json), the local Admiral (~/.armada/settings.json) and the TUI's server profiles
+ *    (~/.armada/tui.json), each with the credentials already stored for it. Nothing is configured in VS Code settings.
+ * 2. Startup connects with no prompt: to the endpoint last picked with "Armada: Connect", else to the first
+ *    discovered endpoint that answers and accepts one of its credentials.
+ * 3. "Armada: Connect" is the one connect command: a picker of the discovered endpoints plus "Enter an Admiral
+ *    URL...". A key is asked for only when no stored credential works, and is then kept in SecretStorage for that URL.
+ * 4. Each attempt probes GET /api/v1/status/health, checks the contract major, then proves a credential with
+ *    GET /api/v1/whoami and sets the role context keys. Concurrent callers share one in-flight attempt.
  *
  * Starting an Admiral is not done here yet; it needs the bundled binaries (plan 4.7).
  */
@@ -17,10 +21,8 @@ import { ArmadaSettings, readSettings } from '../config';
 import { describeError, NotConnectedError } from '../transport/errors';
 import { HostCredential, normalizeBaseUrl, readHealth, useAdmiral } from '../transport/hostClient';
 import { checkContract } from './contract';
-import { discoverLocalAdmiral, isLocalAdmiral, isLoopbackUrl, LocalAdmiral, LocalAdmiralMissing } from './localDiscovery';
-
-/** SecretStorage key of the remote API key or token. */
-export const API_KEY_SECRET = 'armada.apiKey';
+import { AdmiralEndpoint, canonicalBaseUrl, discoverEndpoints, EndpointCredential } from './endpoints';
+import { discoverLocalAdmiral, isLocalAdmiral, isLoopbackUrl } from './localDiscovery';
 
 /** Context key: connected to an Admiral. */
 export const CONNECTED_CONTEXT_KEY = 'armada.connected';
@@ -37,11 +39,19 @@ export const TENANT_ADMIN_CONTEXT_KEY = 'armada.role.tenantAdmin';
 /** globalState key set by "Disconnect", so a restart does not reconnect until "Connect". */
 export const MANUAL_DISCONNECT_KEY = 'armada.connection.manualDisconnect';
 
+/** globalState key: the base URL last picked with "Armada: Connect"; startup reconnects to it. */
+export const ENDPOINT_KEY = 'armada.connection.endpoint';
+
+/** SecretStorage key of the credential entered for an Admiral (JSON { secret, header }). */
+export function credentialSecretKey(baseUrl: string): string {
+  return `armada.credential:${canonicalBaseUrl(baseUrl)}`;
+}
+
 /** Connection phase. */
 export type ConnectionPhase = 'disconnected' | 'connecting' | 'connected' | 'failed';
 
 /** Why the last attempt failed. */
-export type FailureKind = 'noLocalAdmiral' | 'noCredential' | 'unreachable' | 'unauthorized' | 'incompatible' | 'error';
+export type FailureKind = 'noAdmiral' | 'noCredential' | 'unreachable' | 'unauthorized' | 'incompatible' | 'error';
 
 /** The Admiral being talked to. */
 export interface ConnectionTarget {
@@ -49,7 +59,7 @@ export interface ConnectionTarget {
   baseUrl: string;
   /** "local" or host:port. */
   label: string;
-  /** Where the target came from: the settings file path, or armada.url. */
+  /** Where the endpoint was found (a settings file, a TUI profile, or entered). */
   source: string;
 }
 
@@ -70,6 +80,8 @@ export interface ConnectionState {
   serverVersion?: string | null;
   contractVersion?: string | null;
   identity?: ConnectionIdentity;
+  /** What the credential in use is ("Harbor access key"). */
+  credentialOrigin?: string;
 }
 
 /** What surfaces need while connected. */
@@ -78,7 +90,7 @@ export interface ActiveConnection {
   baseUrl: string;
   /** Tenant filter from armada.tenant, if any. */
   tenant: string | undefined;
-  /** The dashboard base URL (armada.dashboardUrl, or the Admiral's /dashboard). */
+  /** The dashboard base URL (armada.dashboardUrl, Harbor's DashboardUrl, or the Admiral's /dashboard). */
   dashboardUrl: string;
   /** The credential for the WebSocket `token` query parameter. */
   socketToken: string | undefined;
@@ -97,23 +109,34 @@ export interface ConnectionManagerDeps {
   globalState?: vscode.Memento;
   log: ConnectionLog;
   getSettings?: () => ArmadaSettings;
-  discover?: () => LocalAdmiral | LocalAdmiralMissing;
+  /** The endpoints this machine knows about, in priority order. */
+  discover?: () => Promise<AdmiralEndpoint[]>;
+  /** True when an Admiral answers its health route; used to annotate the picker. */
+  probe?: (baseUrl: string) => Promise<boolean>;
 }
 
-interface ResolvedTarget {
-  target: ConnectionTarget;
-  credential: HostCredential | undefined;
+interface Failure {
+  kind: FailureKind;
+  summary: string;
+  message: string;
+}
+
+interface PickItem extends vscode.QuickPickItem {
+  endpoint?: AdmiralEndpoint;
+  enterUrl?: boolean;
 }
 
 /** Connection lifecycle for the extension. */
 export class ConnectionManager implements vscode.Disposable {
   private readonly _Deps: ConnectionManagerDeps;
   private readonly _GetSettings: () => ArmadaSettings;
-  private readonly _Discover: () => LocalAdmiral | LocalAdmiralMissing;
+  private readonly _Discover: () => Promise<AdmiralEndpoint[]>;
+  private readonly _Probe: (baseUrl: string) => Promise<boolean>;
   private readonly _OnDidChange = new vscode.EventEmitter<ConnectionState>();
   private _State: ConnectionState = { phase: 'disconnected' };
   private _Credential: HostCredential | undefined;
-  private _InFlight: Promise<boolean> | undefined;
+  private _Endpoint: AdmiralEndpoint | undefined;
+  private _InFlight: Promise<Failure | undefined> | undefined;
 
   /** Fires after every state change. */
   public readonly onDidChange: vscode.Event<ConnectionState> = this._OnDidChange.event;
@@ -127,7 +150,8 @@ export class ConnectionManager implements vscode.Disposable {
     if (!deps.log) throw new Error('log is required');
     this._Deps = deps;
     this._GetSettings = deps.getSettings ?? readSettings;
-    this._Discover = deps.discover ?? (() => discoverLocalAdmiral());
+    this._Discover = deps.discover ?? (() => discoverEndpoints());
+    this._Probe = deps.probe ?? probeHealth;
   }
 
   /** The current state. */
@@ -149,7 +173,7 @@ export class ConnectionManager implements vscode.Disposable {
       target,
       baseUrl: target.baseUrl,
       tenant: settings.tenant || undefined,
-      dashboardUrl: settings.dashboardUrl || `${target.baseUrl}/dashboard`,
+      dashboardUrl: this.dashboardUrl(),
       socketToken: this._Credential?.secret,
     };
   }
@@ -164,11 +188,12 @@ export class ConnectionManager implements vscode.Disposable {
     return active;
   }
 
-  /** The dashboard base URL for links: armada.dashboardUrl, the connected Admiral's /dashboard, or the target's. */
+  /** The dashboard base URL for links: armada.dashboardUrl, Harbor's DashboardUrl, or the target's /dashboard. */
   public dashboardUrl(): string {
     const settings = this._GetSettings();
     if (settings.dashboardUrl) return settings.dashboardUrl;
-    const target = this._State.target ?? this.tryResolve()?.target;
+    if (this._Endpoint?.dashboardUrl) return this._Endpoint.dashboardUrl.replace(/\/+$/, '');
+    const target = this._State.target;
     return target ? `${target.baseUrl}/dashboard` : '';
   }
 
@@ -183,161 +208,140 @@ export class ConnectionManager implements vscode.Disposable {
   }
 
   /**
-   * Connects to the configured target. Concurrent callers share one attempt. Interactive attempts explain a failure
-   * with follow-up actions; others only log it. Never throws.
+   * Interactive: shows the endpoint picker and connects to the pick, asking for a key only when no stored credential
+   * works. Not interactive: connects to the endpoint last picked, else the first discovered endpoint that works.
+   * Concurrent callers share one attempt. Never throws.
    */
   public async connect(options: { interactive?: boolean } = {}): Promise<boolean> {
-    const interactive = options.interactive === true;
-    if (interactive) await this._Deps.globalState?.update(MANUAL_DISCONNECT_KEY, undefined);
-    return this.exclusive(async () => {
-      const resolved = await this.resolveTarget();
-      if ('failure' in resolved) {
-        await this.fail(resolved.target, resolved.failure.kind, resolved.failure.summary, resolved.failure.message);
-        if (interactive) this.explain();
-        return false;
-      }
-      const ok = await this.attempt(resolved);
-      if (!ok && interactive) this.explain();
-      return ok;
-    });
-  }
-
-  /** Reconnects to the configured target (same as Connect). */
-  public reconnect(): Promise<boolean> {
-    return this.connect({ interactive: true });
+    if (options.interactive !== true) return (await this.exclusive(() => this.autoConnect())) === undefined;
+    const endpoint = await this.pick();
+    if (!endpoint) return false;
+    return this.connectTo(endpoint);
   }
 
   /**
-   * Prompts for a remote Admiral URL and an API key or token, verifies them, then stores the key in SecretStorage and
-   * the URL in armada.url. Returns true on success. Never throws.
+   * Connects to one endpoint, asking for a key when no stored credential works; on success remembers it for startup.
+   * Never throws.
    */
-  public async connectRemote(): Promise<boolean> {
-    const settings = this._GetSettings();
-    const url = await vscode.window.showInputBox({
-      title: 'Armada: Connect to a Remote Admiral (1/2)',
-      prompt: 'Armada Admiral URL',
-      value: settings.url || 'http://localhost:7890',
-      ignoreFocusOut: true,
-      validateInput: (value) => (/^\s*(https?:\/\/)?[^\s/]+/i.test(value) ? undefined : 'Enter a URL such as https://armada.example.com or http://10.0.0.5:7890'),
-    });
-    if (url === undefined) return false;
-    const existing = await this._Deps.secrets.get(API_KEY_SECRET);
-    const key = await vscode.window.showInputBox({
-      title: 'Armada: Connect to a Remote Admiral (2/2)',
-      prompt: existing ? 'API key or bearer token (leave empty to keep the stored one)' : 'API key or bearer token',
-      password: true,
-      ignoreFocusOut: true,
-    });
-    if (key === undefined) return false;
-    const secret = key.trim() || existing || '';
-    if (!secret) {
-      void vscode.window.showErrorMessage('Armada: an API key or token is required.');
-      return false;
-    }
-    const baseUrl = normalizeBaseUrl(url);
+  public async connectTo(endpoint: AdmiralEndpoint): Promise<boolean> {
     await this._Deps.globalState?.update(MANUAL_DISCONNECT_KEY, undefined);
-    const ok = await this.exclusive(() => this.attempt({
-      target: { kind: 'remote', baseUrl, label: hostLabel(baseUrl), source: 'armada.url' },
-      credential: { secret, header: settings.authHeader },
-    }));
-    if (!ok) {
-      void vscode.window.showErrorMessage(`Armada: could not connect to ${baseUrl}. ${this._State.failure?.message ?? ''}`.trim());
-      return false;
+    const failure = await this.exclusive(() => this.tryEndpoint(endpoint));
+    if (!failure) {
+      await this._Deps.globalState?.update(ENDPOINT_KEY, endpoint.baseUrl);
+      void vscode.window.showInformationMessage(`Armada: connected to ${endpoint.baseUrl}.`);
+      return true;
     }
-    await this._Deps.secrets.store(API_KEY_SECRET, secret);
-    if (normalizeBaseUrl(settings.url || '') !== baseUrl || !settings.url) {
-      await vscode.workspace.getConfiguration('armada').update('url', baseUrl, vscode.ConfigurationTarget.Global);
-    }
-    void vscode.window.showInformationMessage(`Armada: connected to ${baseUrl}.`);
-    return true;
+    if (failure && (failure.kind === 'noCredential' || failure.kind === 'unauthorized')) return this.promptForKey(endpoint, failure);
+    this.explain();
+    return false;
   }
 
-  /** Clears armada.url so the local Admiral is used, and connects to it. */
-  public async useLocal(): Promise<boolean> {
-    if (this._GetSettings().url) await vscode.workspace.getConfiguration('armada').update('url', '', vscode.ConfigurationTarget.Global);
-    return this.connect({ interactive: true });
+  /** Reconnects to the current or last target without the picker; with none, shows the picker. Never throws. */
+  public async reconnect(): Promise<boolean> {
+    if (!this._Endpoint) return this.connect({ interactive: true });
+    const endpoint = this._Endpoint;
+    const failure = await this.exclusive(() => this.tryEndpoint(endpoint));
+    if (failure) this.explain();
+    return !failure;
   }
 
   /**
-   * Drops the connection, removes a stored remote key from SecretStorage, and remembers the choice so a restart does
-   * not reconnect until "Connect".
+   * Drops the connection, removes a key entered for this Admiral from SecretStorage, and remembers the choice so a
+   * restart does not reconnect until "Connect".
    */
   public async disconnect(): Promise<void> {
     await this._Deps.globalState?.update(MANUAL_DISCONNECT_KEY, true);
-    const hadKey = (await this._Deps.secrets.get(API_KEY_SECRET)) !== undefined;
-    if (hadKey) await this._Deps.secrets.delete(API_KEY_SECRET);
+    const baseUrl = this._State.target?.baseUrl;
+    const key = baseUrl ? credentialSecretKey(baseUrl) : undefined;
+    const hadKey = key !== undefined && (await this._Deps.secrets.get(key)) !== undefined;
+    if (hadKey && key) await this._Deps.secrets.delete(key);
     useAdmiral(undefined, undefined);
     await this.setState({ phase: 'disconnected' }, undefined);
     this._Deps.log.info('[connect] disconnected by the user');
     void vscode.window.showInformationMessage(hadKey
-      ? 'Armada: disconnected. The API key was removed from secret storage.'
+      ? 'Armada: disconnected. The key entered for this Admiral was removed from secret storage.'
       : 'Armada: disconnected. Run "Armada: Connect" to connect again.');
-  }
-
-  /** Reconnects when a connection setting changed (armada.url, armada.authHeader). Never throws. */
-  public async onSettingsChanged(): Promise<void> {
-    if (this._Deps.globalState?.get<boolean>(MANUAL_DISCONNECT_KEY) === true) return;
-    const wanted = this.tryResolve();
-    const current = this._State.target;
-    if (this.connected && wanted && current && wanted.target.baseUrl === current.baseUrl && wanted.target.kind === current.kind && wanted.credentialHeader === this._Credential?.header) return;
-    await this.connect({ interactive: false });
   }
 
   public dispose(): void {
     this._OnDidChange.dispose();
   }
 
-  private exclusive(run: () => Promise<boolean>): Promise<boolean> {
+  private exclusive(run: () => Promise<Failure | undefined>): Promise<Failure | undefined> {
     if (this._InFlight) {
       // Concurrent callers share the attempt already running.
       return this._InFlight;
     }
-    this._InFlight = run().catch((err) => {
+    this._InFlight = run().catch((err): Failure => {
       this._Deps.log.error(`[connect] unexpected failure: ${describeError(err)}`);
-      return false;
+      return { kind: 'error', summary: 'error', message: describeError(err) };
     }).finally(() => {
       this._InFlight = undefined;
     });
     return this._InFlight;
   }
 
-  /** Synchronous target resolution for comparisons (no SecretStorage read). */
-  private tryResolve(): { target: ConnectionTarget; credentialHeader: string | undefined } | undefined {
-    const settings = this._GetSettings();
-    if (!settings.url) {
-      const local = this._Discover();
-      if (!isLocalAdmiral(local)) return undefined;
-      return { target: localTarget(local), credentialHeader: 'X-Api-Key' };
+  private async autoConnect(): Promise<Failure | undefined> {
+    let endpoints: AdmiralEndpoint[];
+    try {
+      endpoints = await this._Discover();
+    } catch (err) {
+      this._Deps.log.error(`[connect] discovery failed: ${describeError(err)}`);
+      endpoints = [];
     }
-    const baseUrl = normalizeBaseUrl(settings.url);
-    return { target: { kind: 'remote', baseUrl, label: hostLabel(baseUrl), source: 'armada.url' }, credentialHeader: settings.authHeader };
+    const saved = this._Deps.globalState?.get<string>(ENDPOINT_KEY);
+    if (saved) {
+      const endpoint = findEndpoint(endpoints, saved) ?? enteredEndpoint(saved);
+      this._Deps.log.info(`[connect] reconnecting to ${endpoint.baseUrl}, picked with "Armada: Connect"`);
+      return this.tryEndpoint(endpoint);
+    }
+    if (!endpoints.length) {
+      return this.fail(undefined, {
+        kind: 'noAdmiral',
+        summary: 'no Admiral found',
+        message: 'No Armada Admiral was found on this machine (no ~/.armada/settings.json, Harbor settings or TUI profile). Run "Armada: Connect" and enter the Admiral URL.',
+      });
+    }
+    this._Deps.log.info(`[connect] found ${endpoints.map((e) => `${e.baseUrl} (${e.sources.join(', ')})`).join('; ')}`);
+    let first: { endpoint: AdmiralEndpoint; failure: Failure } | undefined;
+    for (const endpoint of endpoints) {
+      const failure = await this.tryEndpoint(endpoint);
+      if (!failure) return undefined;
+      first ??= { endpoint, failure };
+    }
+    if (!first) return undefined;
+    this._Endpoint = first.endpoint;
+    if (endpoints.length === 1) return first.failure;
+    // Report the first (highest priority) endpoint's failure, and say what else was tried.
+    return this.fail(toTarget(first.endpoint), {
+      ...first.failure,
+      message: `${first.failure.message} Also tried ${endpoints.slice(1).map((e) => e.baseUrl).join(', ')}.`,
+    });
   }
 
-  private async resolveTarget(): Promise<ResolvedTarget | { target?: ConnectionTarget; failure: { kind: FailureKind; summary: string; message: string } }> {
-    const settings = this._GetSettings();
-    if (!settings.url) {
-      const local = this._Discover();
-      if (!isLocalAdmiral(local)) return { failure: { kind: 'noLocalAdmiral', summary: 'no local Admiral', message: local.reason } };
-      this._Deps.log.info(`[connect] local Admiral from ${local.settingsPath}: ${local.baseUrl}${local.apiKey ? ', local API key found' : ', no local API key yet'}`);
-      return { target: localTarget(local), credential: local.apiKey ? { secret: local.apiKey, header: 'X-Api-Key' } : undefined };
-    }
-    const baseUrl = normalizeBaseUrl(settings.url);
-    const target: ConnectionTarget = { kind: 'remote', baseUrl, label: hostLabel(baseUrl), source: 'armada.url' };
-    const stored = await this._Deps.secrets.get(API_KEY_SECRET);
-    if (stored) return { target, credential: { secret: stored, header: settings.authHeader } };
-    const local = this._Discover();
-    if (isLocalAdmiral(local) && local.apiKey && isLoopbackUrl(baseUrl, local.port)) {
-      this._Deps.log.info(`[connect] ${baseUrl} is the local Admiral; using the local API key from ${local.settingsPath}`);
-      return { target: { ...target, kind: 'local', label: 'local' }, credential: { secret: local.apiKey, header: 'X-Api-Key' } };
-    }
-    return { target, credential: undefined };
+  /** One attempt against an endpoint with every credential it has. Undefined on success, else why it failed. */
+  private async tryEndpoint(endpoint: AdmiralEndpoint): Promise<Failure | undefined> {
+    const credentials = [...(await this.storedCredentials(endpoint.baseUrl)), ...endpoint.credentials];
+    this._Endpoint = endpoint;
+    return this.attempt(toTarget(endpoint), credentials);
   }
 
-  private async attempt(resolved: ResolvedTarget): Promise<boolean> {
-    const { target, credential } = resolved;
+  private async storedCredentials(baseUrl: string): Promise<EndpointCredential[]> {
+    const raw = await this._Deps.secrets.get(credentialSecretKey(baseUrl));
+    if (!raw) return [];
+    try {
+      const parsed = JSON.parse(raw) as { secret?: unknown; header?: unknown };
+      if (typeof parsed.secret !== 'string' || !parsed.secret) return [];
+      return [{ secret: parsed.secret, header: parsed.header === 'X-Api-Key' ? 'X-Api-Key' : 'Bearer', origin: 'key entered in VS Code' }];
+    } catch {
+      return [];
+    }
+  }
+
+  private async attempt(target: ConnectionTarget, credentials: EndpointCredential[]): Promise<Failure | undefined> {
     await this.setState({ phase: 'connecting', target }, undefined);
     this._Deps.log.info(`[connect] connecting to ${target.baseUrl} (${target.kind}, from ${target.source})`);
-    useAdmiral(target.baseUrl, credential);
+    useAdmiral(target.baseUrl, undefined);
 
     let serverVersion: string | null = null;
     let contractVersion: string | null = null;
@@ -345,47 +349,129 @@ export class ConnectionManager implements vscode.Disposable {
       const health = await readHealth();
       serverVersion = health.version;
       contractVersion = health.contractVersion;
-      this._Deps.log.info(`[connect] health ${health.status ?? 'unknown'}, Armada ${serverVersion ?? 'unknown'}, contract ${contractVersion ?? 'none'}`);
+      this._Deps.log.info(`[connect] health ${health.status ?? 'unknown'}, Armada ${serverVersion ?? 'unknown'}, contract ${contractVersion ?? 'not reported'}`);
     } catch (err) {
-      return this.fail(target, 'unreachable', 'unreachable', describeError(err));
+      return this.fail(target, { kind: 'unreachable', summary: 'unreachable', message: describeError(err) });
     }
+    const versions = { serverVersion, contractVersion };
 
     const contract = checkContract(contractVersion, serverVersion);
-    if (!contract.compatible) return this.fail(target, 'incompatible', contract.summary, contract.reason, { serverVersion, contractVersion });
+    if (!contract.compatible) return this.fail(target, { kind: 'incompatible', summary: contract.summary, message: contract.reason }, versions);
+    if (contract.reason) this._Deps.log.info(`[connect] ${contract.reason}`);
 
-    if (!credential) {
-      const message = target.kind === 'local'
-        ? 'The local Admiral has not written an API key to its settings.json yet. Start it once, then run "Armada: Connect".'
-        : `No API key is stored for ${target.baseUrl}. Run "Armada: Connect to a Remote Admiral" to enter one.`;
-      return this.fail(target, 'noCredential', 'no credential', message, { serverVersion, contractVersion });
+    if (!credentials.length) {
+      return this.fail(target, {
+        kind: 'noCredential',
+        summary: 'no credential',
+        message: target.kind === 'local'
+          ? 'The local Admiral has not written an API key to its settings.json yet. Start it once, then run "Armada: Connect".'
+          : `No credential is stored for ${target.baseUrl}. Run "Armada: Connect" to enter an API key or token.`,
+      }, versions);
     }
 
-    let who: WhoAmIResult;
-    try {
-      who = await whoami();
-    } catch (err) {
-      const unauthorized = err instanceof ApiError && err.status === 401;
-      return this.fail(target, unauthorized ? 'unauthorized' : 'error', unauthorized ? 'credential rejected' : 'error', describeError(err), { serverVersion, contractVersion });
+    for (const credential of credentials) {
+      useAdmiral(target.baseUrl, credential);
+      let who: WhoAmIResult;
+      try {
+        who = await whoami();
+      } catch (err) {
+        if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
+          this._Deps.log.info(`[connect] ${target.baseUrl} rejected the ${credential.origin} as ${credential.header}`);
+          continue;
+        }
+        return this.fail(target, { kind: 'error', summary: 'error', message: describeError(err) }, versions);
+      }
+      if (!who.user) continue;
+      const user = who.user;
+      const identity: ConnectionIdentity = {
+        email: user.email ?? null,
+        tenantId: who.tenant?.id ?? user.tenantId ?? null,
+        tenantName: who.tenant?.name ?? null,
+        globalAdmin: user.isAdmin === true,
+        tenantAdmin: user.isAdmin === true || user.isTenantAdmin === true,
+      };
+      await this.setState({ phase: 'connected', target, ...versions, identity, credentialOrigin: credential.origin }, credential);
+      this._Deps.log.info(`[connect] connected to ${target.baseUrl} with the ${credential.origin} as ${identity.email ?? 'unknown user'}${identity.tenantName ? ` (${identity.tenantName})` : ''}; global admin ${identity.globalAdmin}, tenant admin ${identity.tenantAdmin}`);
+      return undefined;
     }
+    return this.fail(target, {
+      kind: 'unauthorized',
+      summary: 'credential rejected',
+      message: `${target.baseUrl} rejected ${credentials.length === 1 ? 'the stored credential' : 'every stored credential'} (${unique(credentials.map((c) => c.origin)).join(', ')}).`,
+    }, versions);
+  }
 
-    const user = who.user;
-    const identity: ConnectionIdentity = {
-      email: user?.email ?? null,
-      tenantId: who.tenant?.id ?? user?.tenantId ?? null,
-      tenantName: who.tenant?.name ?? null,
-      globalAdmin: user?.isAdmin === true,
-      tenantAdmin: user?.isAdmin === true || user?.isTenantAdmin === true,
-    };
-    await this.setState({ phase: 'connected', target, serverVersion, contractVersion, identity }, credential);
-    this._Deps.log.info(`[connect] connected to ${target.baseUrl} as ${identity.email ?? 'unknown user'}${identity.tenantName ? ` (${identity.tenantName})` : ''}; global admin ${identity.globalAdmin}, tenant admin ${identity.tenantAdmin}`);
+  private async pick(): Promise<AdmiralEndpoint | undefined> {
+    const discovered = this._Discover().catch(() => [] as AdmiralEndpoint[]);
+    const items = discovered.then(async (endpoints) => {
+      const reachable = await Promise.all(endpoints.map((e) => this._Probe(e.baseUrl).catch(() => false)));
+      const current = this.connected ? this._State.target?.baseUrl : undefined;
+      const list: PickItem[] = endpoints.map((endpoint, i) => ({
+        label: `$(${endpoint.kind === 'local' ? 'home' : 'remote'}) ${endpoint.label}`,
+        description: `${endpoint.baseUrl}${current && canonicalBaseUrl(current) === canonicalBaseUrl(endpoint.baseUrl) ? '  (connected)' : ''}`,
+        detail: [endpoint.detail, reachable[i] ? 'responding' : 'not responding', endpoint.credentials.length ? 'credential found' : 'will ask for a key'].join('  ·  '),
+        endpoint,
+      }));
+      list.push({ label: '$(edit) Enter an Admiral URL...', detail: 'Any Armada Admiral, for example https://armada.example.com or http://10.0.0.5:7890', enterUrl: true });
+      return list;
+    });
+    const picked = await vscode.window.showQuickPick(items, {
+      title: 'Armada: Connect to an Admiral',
+      placeHolder: 'Pick an Admiral found on this machine, or enter a URL',
+      matchOnDescription: true,
+      matchOnDetail: true,
+      ignoreFocusOut: true,
+    });
+    if (!picked) return undefined;
+    if (picked.endpoint) return picked.endpoint;
+    const url = await vscode.window.showInputBox({
+      title: 'Armada: Connect to an Admiral',
+      prompt: 'Armada Admiral URL',
+      value: this._State.target?.baseUrl ?? '',
+      placeHolder: 'https://armada.example.com',
+      ignoreFocusOut: true,
+      validateInput: (value) => (/^\s*(https?:\/\/)?[^\s/]+/i.test(value) ? undefined : 'Enter a URL such as https://armada.example.com or http://10.0.0.5:7890'),
+    });
+    if (url === undefined || !url.trim()) return undefined;
+    return findEndpoint(await discovered, url) ?? enteredEndpoint(url);
+  }
+
+  private async promptForKey(endpoint: AdmiralEndpoint, failure: Failure): Promise<boolean> {
+    const key = await vscode.window.showInputBox({
+      title: `Armada: sign in to ${endpoint.baseUrl}`,
+      prompt: failure.kind === 'unauthorized' ? `${failure.message} Enter an API key or bearer token.` : 'API key or bearer token',
+      password: true,
+      ignoreFocusOut: true,
+    });
+    if (key === undefined) return false;
+    const secret = key.trim();
+    if (!secret) {
+      void vscode.window.showErrorMessage('Armada: an API key or token is required.');
+      return false;
+    }
+    const entered: EndpointCredential[] = [
+      { secret, header: 'Bearer', origin: 'key entered in VS Code' },
+      { secret, header: 'X-Api-Key', origin: 'key entered in VS Code' },
+    ];
+    const result = await this.exclusive(async () => {
+      this._Endpoint = endpoint;
+      return this.attempt(toTarget(endpoint), entered);
+    });
+    if (result) {
+      void vscode.window.showErrorMessage(`Armada: could not connect to ${endpoint.baseUrl}. ${result.message}`);
+      return false;
+    }
+    await this._Deps.secrets.store(credentialSecretKey(endpoint.baseUrl), JSON.stringify({ secret, header: this._Credential?.header ?? 'Bearer' }));
+    await this._Deps.globalState?.update(ENDPOINT_KEY, endpoint.baseUrl);
+    void vscode.window.showInformationMessage(`Armada: connected to ${endpoint.baseUrl}.`);
     return true;
   }
 
-  private async fail(target: ConnectionTarget | undefined, kind: FailureKind, summary: string, message: string, versions: { serverVersion?: string | null; contractVersion?: string | null } = {}): Promise<false> {
+  private async fail(target: ConnectionTarget | undefined, failure: Failure, versions: { serverVersion?: string | null; contractVersion?: string | null } = {}): Promise<Failure> {
     useAdmiral(undefined, undefined);
-    await this.setState({ phase: 'failed', target, failure: { kind, summary, message }, ...versions }, undefined);
-    this._Deps.log.warn(`[connect] ${target ? `${target.baseUrl}: ` : ''}${message}`);
-    return false;
+    await this.setState({ phase: 'failed', target, failure, ...versions }, undefined);
+    this._Deps.log.warn(`[connect] ${target ? `${target.baseUrl}: ` : ''}${failure.message}`);
+    return failure;
   }
 
   private explain(): void {
@@ -393,11 +479,10 @@ export class ConnectionManager implements vscode.Disposable {
     if (!failure) return;
     const actions: string[] = [];
     if (failure.kind === 'unreachable' || failure.kind === 'error') actions.push('Retry');
-    if (failure.kind === 'noLocalAdmiral' || failure.kind === 'unreachable' || failure.kind === 'noCredential' || failure.kind === 'unauthorized') actions.push('Connect to a Remote Admiral');
-    actions.push('Show Output');
+    actions.push('Connect...', 'Show Output');
     void vscode.window.showErrorMessage(`Armada: ${failure.message}`, ...actions).then((choice) => {
-      if (choice === 'Retry') void this.connect({ interactive: true });
-      else if (choice === 'Connect to a Remote Admiral') void this.connectRemote();
+      if (choice === 'Retry') void this.reconnect();
+      else if (choice === 'Connect...') void this.connect({ interactive: true });
       else if (choice === 'Show Output') void vscode.commands.executeCommand('armada.showOutput');
     });
   }
@@ -414,8 +499,43 @@ export class ConnectionManager implements vscode.Disposable {
   }
 }
 
-function localTarget(local: LocalAdmiral): ConnectionTarget {
-  return { kind: 'local', baseUrl: local.baseUrl, label: 'local', source: local.settingsPath };
+/** True when the Admiral answers GET /api/v1/status/health within 2.5 seconds. Never throws. */
+export async function probeHealth(baseUrl: string): Promise<boolean> {
+  try {
+    const response = await fetch(`${normalizeBaseUrl(baseUrl)}/api/v1/status/health`, { signal: AbortSignal.timeout(2500) });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+function toTarget(endpoint: AdmiralEndpoint): ConnectionTarget {
+  return {
+    kind: endpoint.kind,
+    baseUrl: endpoint.baseUrl,
+    label: endpoint.kind === 'local' ? 'local' : hostLabel(endpoint.baseUrl),
+    source: endpoint.detail,
+  };
+}
+
+function findEndpoint(endpoints: AdmiralEndpoint[], url: string): AdmiralEndpoint | undefined {
+  const key = canonicalBaseUrl(normalizeBaseUrl(url));
+  return endpoints.find((e) => canonicalBaseUrl(e.baseUrl) === key);
+}
+
+/** An endpoint for a URL that was typed in (or picked earlier and no longer discovered). */
+function enteredEndpoint(url: string): AdmiralEndpoint {
+  const baseUrl = normalizeBaseUrl(url);
+  const local = discoverLocalAdmiral();
+  const isLocal = isLocalAdmiral(local) && isLoopbackUrl(baseUrl, local.port);
+  return {
+    baseUrl,
+    kind: isLocal ? 'local' : 'remote',
+    label: isLocal ? 'Local Admiral' : hostLabel(baseUrl),
+    sources: ['saved'],
+    detail: isLocal ? local.settingsPath : 'entered in VS Code',
+    credentials: isLocal && local.apiKey ? [{ secret: local.apiKey, header: 'X-Api-Key', origin: 'local Admiral API key' }] : [],
+  };
 }
 
 function hostLabel(baseUrl: string): string {
@@ -424,4 +544,8 @@ function hostLabel(baseUrl: string): string {
   } catch {
     return baseUrl;
   }
+}
+
+function unique(values: string[]): string[] {
+  return values.filter((v, i) => values.indexOf(v) === i);
 }

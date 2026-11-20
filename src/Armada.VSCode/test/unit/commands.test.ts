@@ -12,9 +12,7 @@ import { makeStore } from '../fakes/storeHelpers';
 import { fake, Uri } from '../fakes/vscode';
 
 const SETTINGS: ArmadaSettings = {
-  url: '',
   tenant: '',
-  authHeader: 'Bearer',
   dashboardUrl: '',
   showFailuresInExplorer: false,
   filterToWorkspaceVessel: true,

@@ -13,6 +13,8 @@ export function describeStatus(state: ConnectionState, live: LiveMode): { text: 
     case 'connected': {
       const lines = [
         `Armada: connected to ${target?.baseUrl ?? ''} (${target?.kind === 'local' ? 'local Admiral' : 'remote Admiral'})`,
+        target?.source ? `Found in ${target.source}` : '',
+        state.credentialOrigin ? `Credential: ${state.credentialOrigin}` : '',
         state.serverVersion ? `Armada ${state.serverVersion}, contract ${state.contractVersion ?? 'unknown'}` : '',
         state.identity?.email ? `Signed in as ${state.identity.email}${state.identity.tenantName ? ` (${state.identity.tenantName})` : ''}${state.identity.globalAdmin ? ', global admin' : state.identity.tenantAdmin ? ', tenant admin' : ''}` : '',
         `Live updates: ${live === 'websocket' ? 'WebSocket' : live}`,
@@ -80,17 +82,17 @@ export interface ConnectionAction {
   command: string;
 }
 
-/** The actions offered for a state, in order; remoteConfigured is true when armada.url is set. Pure, for tests. */
-export function connectionActions(state: ConnectionState, remoteConfigured: boolean): ConnectionAction[] {
+/** The actions offered for a state, in order. Pure, for tests. */
+export function connectionActions(state: ConnectionState): ConnectionAction[] {
   const actions: ConnectionAction[] = [];
   if (state.phase === 'connected') {
     actions.push({ label: '$(link-external) Open Dashboard', description: state.target?.baseUrl, command: 'armada.openDashboard' });
+    actions.push({ label: '$(plug) Connect to Another Admiral...', command: 'armada.connect' });
     actions.push({ label: '$(refresh) Reconnect', command: 'armada.reconnect' });
   } else {
-    actions.push({ label: '$(plug) Connect', description: 'the configured Admiral (local by default)', command: 'armada.connect' });
+    actions.push({ label: '$(plug) Connect...', description: 'pick an Admiral found on this machine, or enter a URL', command: 'armada.connect' });
+    if (state.phase === 'failed' && state.target) actions.push({ label: '$(refresh) Retry', description: state.target.baseUrl, command: 'armada.reconnect' });
   }
-  actions.push({ label: '$(remote) Connect to a Remote Admiral...', command: 'armada.connectRemote' });
-  if (remoteConfigured) actions.push({ label: '$(home) Use the Local Admiral', description: '~/.armada/settings.json', command: 'armada.useLocalAdmiral' });
   if (state.phase === 'connected' || state.phase === 'failed') actions.push({ label: '$(debug-disconnect) Disconnect', command: 'armada.disconnect' });
   actions.push({ label: '$(output) Show Output', command: 'armada.showOutput' });
   actions.push({ label: '$(gear) Open Settings', command: 'armada.openSettings' });
@@ -98,12 +100,12 @@ export function connectionActions(state: ConnectionState, remoteConfigured: bool
 }
 
 /** Shows the connection actions and runs the one picked. */
-export async function showConnectionActions(connection: ConnectionManager, remoteConfigured: boolean): Promise<string | undefined> {
+export async function showConnectionActions(connection: ConnectionManager): Promise<string | undefined> {
   const state = connection.state;
   const title = state.phase === 'connected'
     ? `Armada: connected to ${state.target?.baseUrl ?? ''}`
     : state.phase === 'failed' ? `Armada: ${state.failure?.message ?? 'not connected'}` : 'Armada: not connected';
-  const picked = await vscode.window.showQuickPick(connectionActions(state, remoteConfigured), { title, placeHolder: 'Connection actions' });
+  const picked = await vscode.window.showQuickPick(connectionActions(state), { title, placeHolder: 'Connection actions' });
   if (!picked) return undefined;
   await vscode.commands.executeCommand(picked.command);
   return picked.command;

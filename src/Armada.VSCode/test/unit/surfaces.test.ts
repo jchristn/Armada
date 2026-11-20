@@ -116,10 +116,10 @@ describe('status bar', () => {
   });
 
   it('offers connection actions for the state', () => {
-    const commands = (state: ConnectionState, remote = false) => connectionActions(state, remote).map((a) => a.command);
-    assert.deepStrictEqual(commands(CONNECTED), ['armada.openDashboard', 'armada.reconnect', 'armada.connectRemote', 'armada.disconnect', 'armada.showOutput', 'armada.openSettings']);
-    assert.deepStrictEqual(commands({ phase: 'disconnected' }, true), ['armada.connect', 'armada.connectRemote', 'armada.useLocalAdmiral', 'armada.showOutput', 'armada.openSettings']);
-    assert.ok(commands({ phase: 'failed', failure: { kind: 'unreachable', summary: 'unreachable', message: 'x' } }).includes('armada.disconnect'));
+    const commands = (state: ConnectionState) => connectionActions(state).map((a) => a.command);
+    assert.deepStrictEqual(commands(CONNECTED), ['armada.openDashboard', 'armada.connect', 'armada.reconnect', 'armada.disconnect', 'armada.showOutput', 'armada.openSettings']);
+    assert.deepStrictEqual(commands({ phase: 'disconnected' }), ['armada.connect', 'armada.showOutput', 'armada.openSettings']);
+    assert.deepStrictEqual(commands({ phase: 'failed', target: CONNECTED.target, failure: { kind: 'unreachable', summary: 'unreachable', message: 'x' } }), ['armada.connect', 'armada.reconnect', 'armada.disconnect', 'armada.showOutput', 'armada.openSettings']);
   });
 });
 

@@ -91,7 +91,7 @@ export async function run(): Promise<void> {
     log(`whoami ${state.identity.email ?? ''}; events received ${api.events.received}; store ${api.store.status} with ${api.store.entries.length} entries`);
   } else {
     assert.strictEqual(state.phase, 'failed');
-    assert.strictEqual(state.failure?.kind, 'noLocalAdmiral', 'no local Admiral in the empty data directory');
+    assert.strictEqual(state.failure?.kind, 'noAdmiral', 'no Admiral, Harbor or TUI profile in the empty data directory');
     assert.strictEqual(api.store.status, 'disconnected');
     assert.strictEqual(api.liveMode(), 'stopped');
     assert.deepStrictEqual(api.navigation.getChildren(), [], 'the welcome view shows instead of the tree');

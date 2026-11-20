@@ -137,8 +137,11 @@ serialization (`WebviewPanelSerializer`) so open panels survive a reload.
 
 Modeled on Mux's `src/server/lifecycle.ts`:
 
-1. Read `~/.armada/settings.json` (`AdmiralPort`, key) for the local Admiral; settings `armada.url` and profiles
-   (shared with `~/.armada/tui.json` where possible) for others.
+1. Find the Admirals the machine already knows, with their stored credentials: a running Harbor's
+   (`~/.armada-harbor/settings.json`: `ServerLinkUrl`, `AccessKey` as a bearer token), the local Admiral
+   (`~/.armada/settings.json`: `AdmiralPort`, key) and the TUI's profiles (`~/.armada/tui.json`, tokens from the TUI's
+   credential store). Startup connects to the last one picked, else the first that works; **Armada: Connect** is a
+   picker of them plus a URL entry, and asks for a key only when none works. No connection setting lives in VS Code.
 2. Probe `GET /api/v1/status/health`, check the contract version (8.3), then prove the credential with
    `GET /api/v1/whoami`. Role context keys (`armada.role.globalAdmin`, `armada.role.tenantAdmin`) gate admin commands
    and menus, matching the server's tiers.

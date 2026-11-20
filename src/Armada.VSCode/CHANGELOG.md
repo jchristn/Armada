@@ -8,12 +8,17 @@
   Dashboard, Ask Armada, OPERATIONS, BUILD, CONFIGURATION, SYSTEM; pages open in the dashboard for now) and the
   **Failures** view, which moved here from the Explorer. `armada.failures.showInExplorer` (off by default) also shows
   it in the Explorer. Both views explain what to do while disconnected.
-- **Connection manager**: connects to the local Admiral from `~/.armada/settings.json` (or `$ARMADA_DATA_DIR`) with no
-  prompt; **Connect to a Remote Admiral...** keeps the URL and key flow, with the key in secret storage. Each
-  connection checks health, the Admiral's contract version ("server too old" or "extension too old") and whoami, and
-  sets `armada.role.globalAdmin` and `armada.role.tenantAdmin`. A status bar item shows the state and target and opens
-  the connection actions; the **Armada** output channel logs every attempt. `armada.url` now defaults to empty (the
-  local Admiral).
+- **Connection manager**: takes the Admiral and its credential from the Armada settings already on the machine, with
+  nothing in VS Code settings: a running Harbor's Admiral (`~/.armada-harbor/settings.json`, its access key as a
+  bearer token), the local Admiral (`~/.armada/settings.json`) and the TUI's profiles (`~/.armada/tui.json`, tokens
+  from the TUI's credential store). Startup connects with no prompt. **Armada: Connect** is the one connect command: a
+  picker of those Admirals (where each came from, whether it responds, whether a credential was found) plus **Enter
+  an Admiral URL...**; a key is asked for only when none works and is kept in secret storage for that Admiral. Each
+  connection checks health, the contract version ("server too old" or "extension too old"; an Admiral from before
+  contract versions counts as contract 1) and whoami, and sets `armada.role.globalAdmin` and `armada.role.tenantAdmin`.
+  A status bar item shows the state, target and credential and opens the connection actions; the **Armada** output
+  channel logs every attempt. **Armada: Open Settings** opens the Armada, Harbor or TUI settings file, or the
+  extension's preferences. There is no `armada.url` or `armada.authHeader` setting.
 - **Shared client**: the extension uses the dashboard's API client, types and helpers through the `@dashboard/*`
   alias instead of its own copies, and its lint checks the dashboard's shared modules against the sharing contract it
   now shares with the mobile app.
