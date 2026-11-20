@@ -698,6 +698,7 @@ Part of the bounded enumeration contract ([docs/ENUMERATION.md](docs/ENUMERATION
 - A tunnel request applies its deadline to the send and to the response wait. A sender that does not return times out. Caller cancellation stays a cancellation, and the pending response entry is removed when the call ends.
 - A voyage whose every mission is cancelled finishes as Cancelled. A settled voyage with a cancelled mission and no completed mission finishes as Failed. A voyage with a completed mission and no failed or landing-failed mission still finishes as Complete, and a voyage whose missions are only WorkProduced still finishes as Complete.
 - The dashboard websocket relay removes a receive-loop session by instance before it publishes an error or a close, and the loop's final removal matches that same instance. A frame sent from the error event finds no session. A new session that reuses the proxy socket id during close stays registered.
+- Check runs keep captured command output when a local or Harbor command times out.
 
 ### Handoff and landing integrity
 
