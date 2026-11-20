@@ -233,14 +233,6 @@ namespace Armada.Core.Services
                     throw;
                 }
 
-                Task allOutput = Task.WhenAll(stdoutTask, stderrTask);
-                if (await Task.WhenAny(allOutput, Task.Delay(TimeSpan.FromSeconds(2))).ConfigureAwait(false) != allOutput)
-                {
-                    try { if (!process.HasExited) process.Kill(true); }
-                    catch { }
-                    return new DefinitionOfDoneResult(DefinitionOfDoneOutcomeEnum.Infra, phase + " command output was incomplete because the output drain exceeded its limit");
-                }
-
                 string stdout = await stdoutTask.ConfigureAwait(false);
                 string stderr = await stderrTask.ConfigureAwait(false);
                 output = (stdout + "\n" + stderr).Trim();

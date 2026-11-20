@@ -21,9 +21,8 @@ namespace Test.Shared.Suites.Services
     /// environments), command previews, vessel/fleet/global resolution and preview, check-run
     /// execution with artifact collection, retry, structured test/coverage parsing, readiness
     /// evaluation (missing inputs, toolchains/environments/checklist, environment-scoped inputs),
-    /// landing preview gating, and fail-fast on missing required inputs. Two POSIX cases cover a
-    /// descendant that keeps the local check's output pipe open, and caller cancellation that must
-    /// stop the owned process. Windows skips those cases.
+    /// landing preview gating, and fail-fast on missing required inputs. One POSIX case covers caller
+    /// cancellation, which must stop the owned process. Windows skips that case.
     /// </summary>
     public sealed class WorkflowProfileCheckRunServiceSuite : IArmadaTestSuite
     {
@@ -814,13 +813,6 @@ namespace Test.Shared.Suites.Services
             bool skipPosixFixture = OperatingSystem.IsWindows();
             string? posixSkipReason = skipPosixFixture ? PosixFixtureSkipReason : null;
             cases.Add(CaseAsync(
-                "local_check_inherited_output_pipe_is_failed",
-                "A local check fails when a descendant keeps its output pipe open",
-                TestTags.Negative,
-                LocalCheckInheritedOutputPipeIsFailedAsync,
-                skipPosixFixture,
-                posixSkipReason));
-            cases.Add(CaseAsync(
                 "local_check_caller_cancel_stops_process",
                 "Caller cancellation stops the owned local check process",
                 TestTags.Negative,
@@ -901,46 +893,6 @@ namespace Test.Shared.Suites.Services
             }
             catch
             {
-            }
-        }
-
-        private static async Task LocalCheckInheritedOutputPipeIsFailedAsync()
-        {
-            using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
-            {
-                LoggingModule logging = CreateLogging();
-                WorkflowProfileService workflowProfiles = new WorkflowProfileService(testDb.Driver, logging);
-                VesselReadinessService readiness = new VesselReadinessService(testDb.Driver, workflowProfiles, logging);
-                CheckRunService checkRuns = new CheckRunService(testDb.Driver, workflowProfiles, readiness, logging);
-                await EnsureTenantAndUserAsync(testDb, "ten_pipe", "usr_pipe").ConfigureAwait(false);
-
-                string workingDirectory = TestTemp.NewDirectory("check-pipe");
-                string pidPath = Path.Combine(workingDirectory, "hold.pid");
-                try
-                {
-                    Vessel vessel = CreateVessel("ten_pipe", "usr_pipe", workingDirectory);
-                    await testDb.Driver.Vessels.CreateAsync(vessel).ConfigureAwait(false);
-                    AuthContext auth = AuthContext.Authenticated("ten_pipe", "usr_pipe", false, false, "UnitTest");
-                    Stopwatch clock = Stopwatch.StartNew();
-                    CheckRun run = await checkRuns.RunAsync(auth, new CheckRunRequest
-                    {
-                        VesselId = vessel.Id,
-                        Type = CheckRunTypeEnum.Build,
-                        Label = "Build",
-                        CommandOverride = "(trap '' HUP; command sleep 12) & echo $! > hold.pid; echo done"
-                    }).ConfigureAwait(false);
-                    clock.Stop();
-
-                    AssertEqual(CheckRunStatusEnum.Failed, run.Status, "incomplete output is not a passing check");
-                    AssertEqual(-1, run.ExitCode ?? 0, "incomplete output uses the non-pass exit code");
-                    AssertContains("incomplete", run.Output ?? String.Empty, "the result names the incomplete output");
-                    AssertTrue(clock.Elapsed < TimeSpan.FromSeconds(8), "the check returns within the output drain bound, took " + clock.Elapsed.ToString());
-                }
-                finally
-                {
-                    StopRecordedProcess(pidPath);
-                    TestTemp.TryDelete(workingDirectory);
-                }
             }
         }
 

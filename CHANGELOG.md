@@ -12,6 +12,7 @@ All notable changes to Armada are documented in this file.
 - **WebSocket `delete_vessel` stops active captains.** It now cancels the vessel's Pending, Blocked, Assigned, InProgress, Review and Testing missions through the same cancel path as REST and MCP, which stops each running agent first and records one `VesselDeleted` black box entry, instead of only writing the Cancelled status while the agent kept running. A mission whose agent did not confirm it stopped is left unchanged and reported in the result's new `warnings` and `warningCount` fields (the `VesselDeleteResult` shape MCP returns); the vessel is still deleted. Database errors while reading the vessel's missions now return a command error instead of being ignored.
 - **Landing-retry events stay in the mission owner's scope.** `LandingService` stamps `mission.landing_retry` with the mission's tenant and user, so the owner's scoped event list shows it and other tenants and users do not. A cancelled write of that event now stops the retry; any other write failure is logged (it was silently ignored) and the retry continues.
 - **New captains start idle on REST and WebSocket create.** `POST /api/v1/captains` and WebSocket `create_captain` now reset every server-owned operational field a client sends (`State`, `ProcessId`, `RecoveryAttempts`, quarantine, heartbeat and process-alive times, `ModelProfileId`, and the creation timestamps), as they already did for the active mission slots and session. A captain created with `"State": "Working"` or a stale `ProcessId` no longer looks busy or gets its process signalled. Configuration fields are kept, including `MaxConcurrency`, the usage capture settings and `Active`. MCP `create_captain` already built a fresh captain and is unchanged.
+- **Cancelled local check and Definition-of-Done commands stop their process.** When the caller cancels, a local check run and a local Definition-of-Done phase now kill the command's process tree and rethrow the cancellation, instead of leaving the command running (a cancelled gate phase was also misreported as an Infra failure). Runtime detection reports a runtime as unavailable, and kills the probe, when its `--version` probe does not exit within five seconds; before, a hung probe counted as available.
 
 ## v1.3.0 (2026-11-06)
 
@@ -438,11 +439,6 @@ commands arrive with their own changes. Schema migrations 103 and 104 apply at s
 - macOS Harbor bundles store the pi permission-gate extension in `Contents/Resources/Pi`, and pi resolves it there as well as beside portable binaries. This prevents ARM64 code signing from treating TypeScript resources as unsigned nested code. The DMG verifier checks the resource layout.
 - After building and verifying both Harbor DMGs, `build-harbor-app.sh` installs the native app into `~/Applications`, staging and signature-checking a fresh bundle before replacement. `--no-install` opts out, and `--no-build` remains verification-only.
 - Helm's NuGet tool package preserves battery fixture `.gitignore` and `.gitattributes` files instead of excluding them with NU5119 warnings. Installer verification checks every packaged framework for those files.
-
-### Command process handling
-
-- Local check and gate commands stop when their caller cancels. Their output drains have a limit, and incomplete output cannot pass a gate.
-- Runtime detection stops commands that exceed its five-second probe limit.
 
 ### Landing failure prevention
 

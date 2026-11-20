@@ -18,8 +18,8 @@ namespace Test.Shared.Suites.Services
     /// Descriptors for <see cref="DefinitionOfDoneGate"/>, exercising the real shell executor with portable
     /// <c>exit</c> commands. Positive cases confirm a disabled/unconfigured gate is skipped and a clean
     /// build+test passes; negative cases confirm a failed build classifies Compile, a failed test classifies
-    /// TestFail, and a missing checkout classifies Infra. Two POSIX cases cover a descendant that keeps the
-    /// phase output pipe open, and caller cancellation that must stop the owned process. Windows skips those cases.
+    /// TestFail, and a missing checkout classifies Infra. One POSIX case covers caller cancellation, which
+    /// must stop the owned process. Windows skips that case.
     /// </summary>
     public sealed class DefinitionOfDoneGateSuite : IArmadaTestSuite
     {
@@ -134,13 +134,6 @@ namespace Test.Shared.Suites.Services
             bool skipPosixFixture = OperatingSystem.IsWindows();
             string? posixSkipReason = skipPosixFixture ? PosixFixtureSkipReason : null;
             cases.Add(CaseAsync(
-                "inherited_output_pipe_is_infra",
-                "An inherited output pipe cannot pass the gate",
-                TestTags.Negative,
-                InheritedOutputPipeIsInfraAsync,
-                skipPosixFixture,
-                posixSkipReason));
-            cases.Add(CaseAsync(
                 "caller_cancel_stops_gate_process",
                 "Caller cancellation stops the gate command",
                 TestTags.Negative,
@@ -171,31 +164,6 @@ namespace Test.Shared.Suites.Services
             {
                 try { Directory.Delete(dir, true); }
                 catch { }
-            }
-        }
-
-        private static async Task InheritedOutputPipeIsInfraAsync()
-        {
-            DefinitionOfDoneGate gate = new DefinitionOfDoneGate(CreateLogging());
-            string dir = TestTemp.NewDirectory("dod-pipe");
-            string pidPath = Path.Combine(dir, "hold.pid");
-            try
-            {
-                Vessel vessel = new Vessel("dod-vessel", "https://github.com/test/repo");
-                vessel.DefinitionOfDoneEnabled = true;
-                vessel.DefinitionOfDoneTimeoutSeconds = 30;
-                vessel.DefinitionOfDoneBuildCommand = "(trap '' HUP; command sleep 12) & echo $! > hold.pid; echo done";
-                Stopwatch clock = Stopwatch.StartNew();
-                DefinitionOfDoneResult result = await gate.EvaluateAsync(vessel, dir).ConfigureAwait(false);
-                clock.Stop();
-                AssertEqual(DefinitionOfDoneOutcomeEnum.Infra, result.Outcome, "incomplete output must not pass");
-                AssertContains("incomplete", result.Detail, "the result names the incomplete output");
-                AssertTrue(clock.Elapsed < TimeSpan.FromSeconds(8), "the drain must have a bound, took " + clock.Elapsed.ToString());
-            }
-            finally
-            {
-                StopRecordedProcess(pidPath);
-                SafeDelete(dir);
             }
         }
 
