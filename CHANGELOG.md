@@ -456,6 +456,9 @@ commands arrive with their own changes. Schema migrations 103 and 104 apply at s
 ### OpenCode error events fail the turn
 
 - An OpenCode `type=error` event fails Ask, planning, and refinement even when earlier assistant text arrived and the process exits 0. The operator sees a short provider message and the HTTP status when one is present. The response body, headers, URL, and session id stay out of that text. The planning or refinement session stays active. A text event with no error is unchanged. Stderr provider parsing is unchanged.
+### API-endpoint replies drop a complete think block
+
+- **A complete think block in assistant text is removed before the reply is emitted or stored.** The tool loop and plain chat both keep the remaining text for the reply event, the final text, and the final message file. The opening tag must be `think` with a tag boundary, so a longer name such as `thinking` stays. An unmatched tag stays. Text with no complete block is unchanged. The Judge parser is unchanged: one distinct standalone verdict line is a verdict, and two different lines are not.
 
 ### Landing failure prevention
 

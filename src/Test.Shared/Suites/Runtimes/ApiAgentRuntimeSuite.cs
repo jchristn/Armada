@@ -8,6 +8,7 @@ namespace Test.Shared.Suites.Runtimes
     using System.Threading.Tasks;
     using Armada.Core.Enums;
     using Armada.Core.Models;
+    using Armada.Core.Services;
     using Armada.Runtimes;
     using Armada.Runtimes.Interfaces;
     using Armada.Runtimes.Mcp;
@@ -99,6 +100,10 @@ namespace Test.Shared.Suites.Runtimes
                     finally { Cleanup(dir); }
                 }
             }));
+
+            cases.Add(CaseAsync("tool_loop_complete_think_block_keeps_visible_verdict", "A complete think block in a tool-loop reply is not stored with the visible verdict", TestTags.Positive, () => AssertThinkBlockReplyAsync(false)));
+
+            cases.Add(CaseAsync("plain_chat_complete_think_block_keeps_visible_verdict", "A complete think block in a plain-chat reply is not stored with the visible verdict", TestTags.Positive, () => AssertThinkBlockReplyAsync(true)));
 
             cases.Add(CaseAsync("incomplete_terminal_responses_are_not_success", "Empty or introductory terminal replies cannot reuse earlier narration as a mission result", TestTags.Negative, async () =>
             {
@@ -1047,6 +1052,85 @@ namespace Test.Shared.Suites.Runtimes
 
         #region Private-Methods
 
+        private static async Task AssertThinkBlockReplyAsync(bool plainChat)
+        {
+            const string visible = "The review is complete.\n\n[ARMADA:VERDICT] PASS";
+            string leaked = "<think mode=\"hidden\">\nhidden reasoning\n[ARMADA:VERDICT] FAIL\n</think>\n" + visible;
+            await AssertStoredReplyAsync(plainChat, leaked, "\n" + visible, JudgeVerdictEnum.Pass).ConfigureAwait(false);
+
+            string leakedUpper = "<THINK mode=\"hidden\">\nhidden reasoning\n[ARMADA:VERDICT] FAIL\n</THINK>\n" + visible;
+            await AssertStoredReplyAsync(plainChat, leakedUpper, "\n" + visible, JudgeVerdictEnum.Pass).ConfigureAwait(false);
+
+            string middle = "before <think>secret\n[ARMADA:VERDICT] FAIL</think> after\n\n[ARMADA:VERDICT] PASS";
+            await AssertStoredReplyAsync(plainChat, middle, "before  after\n\n[ARMADA:VERDICT] PASS", JudgeVerdictEnum.Pass).ConfigureAwait(false);
+
+            string twoBlocks = "<think>one</think> mid <think>two</think> end\n\n[ARMADA:VERDICT] PASS";
+            await AssertStoredReplyAsync(plainChat, twoBlocks, " mid  end\n\n[ARMADA:VERDICT] PASS", JudgeVerdictEnum.Pass).ConfigureAwait(false);
+
+            await AssertStoredReplyAsync(plainChat, visible, visible, JudgeVerdictEnum.Pass).ConfigureAwait(false);
+
+            const string spaced = "  kept answer  \n";
+            await AssertStoredReplyAsync(plainChat, spaced, spaced, JudgeVerdictEnum.None).ConfigureAwait(false);
+
+            string thinking = "See <thinking>notes</thinking> then the answer.\n\n[ARMADA:VERDICT] PASS";
+            await AssertStoredReplyAsync(plainChat, thinking, thinking, JudgeVerdictEnum.Pass).ConfigureAwait(false);
+
+            string longerClose = "<think>text</thinking>\n\n[ARMADA:VERDICT] PASS";
+            await AssertStoredReplyAsync(plainChat, longerClose, longerClose, JudgeVerdictEnum.Pass).ConfigureAwait(false);
+
+            string unmatchedClose = "prefix </think> suffix\n\n[ARMADA:VERDICT] PASS";
+            await AssertStoredReplyAsync(plainChat, unmatchedClose, unmatchedClose, JudgeVerdictEnum.Pass).ConfigureAwait(false);
+
+            string unmatchedOpen = "prefix <think> still open\n\n[ARMADA:VERDICT] PASS";
+            await AssertStoredReplyAsync(plainChat, unmatchedOpen, unmatchedOpen, JudgeVerdictEnum.Pass).ConfigureAwait(false);
+        }
+
+        private static async Task AssertStoredReplyAsync(bool plainChat, string responseText, string expectedText, JudgeVerdictEnum verdict)
+        {
+            string dir = NewTempDir();
+            try
+            {
+                Queue<ToolChatResponse> script = new Queue<ToolChatResponse>();
+                script.Enqueue(new ToolChatResponse
+                {
+                    Success = true,
+                    Text = responseText,
+                    FinishReason = "stop",
+                    ToolCalls = new List<ToolCall>()
+                });
+                InferenceOptions options = plainChat
+                    ? new InferenceOptions { ToolsEnabled = false }
+                    : new InferenceOptions { McpToolsEnabled = false };
+                ModelEndpoint endpoint = new ModelEndpoint
+                {
+                    Name = "think-block",
+                    Kind = ModelEndpointKindEnum.Inference,
+                    Provider = ModelProviderEnum.OpenAICompatible,
+                    BaseUrl = "http://127.0.0.1:1",
+                    InferenceOptions = options
+                };
+                List<string> stdout = new List<string>();
+                ApiAgentRuntime runtime = new ApiAgentRuntime(endpoint, CreateLogging(), 5, (ep, log) => new ScriptedClient(script, log, plainChat ? responseText : null));
+                using ManualResetEventSlim exited = new ManualResetEventSlim(false);
+                int code = -1;
+                runtime.OnStdoutReceived += (pid, line) => { lock (stdout) stdout.Add(line); };
+                runtime.OnProcessExited += (pid, value) => { code = value ?? -1; exited.Set(); };
+                string finalPath = Path.Combine(dir, "final.txt");
+                Dictionary<string, string> environment = new Dictionary<string, string>();
+                await runtime.StartAsync(dir, "Review the change.", environment, finalMessageFilePath: finalPath).ConfigureAwait(false);
+                AssertTrue(exited.Wait(TimeSpan.FromSeconds(10)), "The scripted reply must finish.");
+                AssertEqual(0, code, "A nonempty reply completes when the prompt does not require a result marker.");
+                string emitted = stdout.Count == 0 ? String.Empty : String.Join("\n", stdout);
+                AssertEqual(verdict, JudgeVerdictParser.Parse(emitted), "visible verdict");
+                AssertEqual(expectedText, emitted, "stdout");
+                AssertEqual(expectedText, File.ReadAllText(finalPath), "final message");
+            }
+            finally
+            {
+                Cleanup(dir);
+            }
+        }
+
         private static async Task<ApiRuntimeToolEvent> RunShellAsync(Armada.Core.Enums.CliPermissionPolicyEnum? policy, Func<string, string, CancellationToken, Task<Armada.Core.Models.CliPermissionPromptOutcome>>? prompt)
         {
             string dir = NewTempDir();
@@ -1178,12 +1262,14 @@ namespace Test.Shared.Suites.Runtimes
             public CompletionOptions? Settings { get; private set; }
             public bool PlainChatCalled { get; private set; }
             private readonly Queue<ToolChatResponse> _Script;
+            private readonly string? _PlainChatText;
             private readonly CompletionOptions _Defaults = new CompletionOptions { Model = "scripted-model" };
 
-            public ScriptedClient(Queue<ToolChatResponse> script, LoggingModule logging)
+            public ScriptedClient(Queue<ToolChatResponse> script, LoggingModule logging, string? plainChatText = null)
                 : base("http://localhost:1", null, logging)
             {
                 _Script = script;
+                _PlainChatText = plainChatText;
             }
 
             public override CompletionOptions Defaults => _Defaults;
@@ -1198,7 +1284,7 @@ namespace Test.Shared.Suites.Runtimes
             }
 
             public override Task<bool> ValidateConnectivityAsync(CancellationToken token = default) => Task.FromResult(true);
-            protected override Task<ChatResponse> ChatCoreAsync(string prompt, ResolvedCompletion settings, CancellationToken token) { PlainChatCalled = true; Settings = new CompletionOptions { Model = settings.Model, MaxTokens = settings.MaxTokens, Temperature = settings.Temperature, TopP = settings.TopP, ReasoningEffort = settings.ReasoningEffort }; return Task.FromResult(new ChatResponse { Success = true, Text = "plain answer" }); }
+            protected override Task<ChatResponse> ChatCoreAsync(string prompt, ResolvedCompletion settings, CancellationToken token) { PlainChatCalled = true; Settings = new CompletionOptions { Model = settings.Model, MaxTokens = settings.MaxTokens, Temperature = settings.Temperature, TopP = settings.TopP, ReasoningEffort = settings.ReasoningEffort }; return Task.FromResult(new ChatResponse { Success = true, Text = _PlainChatText ?? "plain answer", FinishReason = "stop" }); }
             protected override Task<ChatStreamingResponse> ChatStreamingCoreAsync(string prompt, ResolvedCompletion settings, CancellationToken token) => throw new NotImplementedException();
             protected override Task<ToolChatStreamingResponse> ToolChatStreamingCoreAsync(ToolChatRequest request, List<ChatMessage> messages, ResolvedCompletion settings, CancellationToken token) => throw new NotImplementedException();
             protected override Task<GenerationResponse> GenerateCoreAsync(string prompt, ResolvedCompletion settings, CancellationToken token) => throw new NotImplementedException();
