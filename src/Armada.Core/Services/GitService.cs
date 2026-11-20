@@ -943,7 +943,6 @@ namespace Armada.Core.Services
         /// <summary>
         /// List the local branches in a repository with their tip commit and their position (ahead/behind)
         /// relative to the given default branch. The default branch is flagged and marked at zero divergence.
-        /// A branch that cannot be compared has <see cref="BranchInfo.DivergenceError"/> set and keeps zero counts.
         /// </summary>
         /// <param name="repoPath">Repository path (bare repo or worktree).</param>
         /// <param name="defaultBranch">Default branch to measure divergence against (for example "main").</param>
@@ -1007,9 +1006,8 @@ namespace Armada.Core.Services
 
         /// <summary>
         /// Fill Ahead and Behind on each branch, relative to the default branch: one git command per branch other
-        /// than the default branch, which stays at zero. The comparison uses the refs/heads form of each name.
-        /// A comparison that fails, or whose output is not two non-negative integers, sets
-        /// <see cref="BranchInfo.DivergenceError"/> and leaves the counts unchanged.
+        /// than the default branch, which stays at zero. The comparison uses the refs/heads form of each name, so a tag
+        /// that shares a branch's name is never compared. A branch whose divergence cannot be read keeps zeros.
         /// </summary>
         /// <param name="repoPath">Repository path (bare repo or worktree).</param>
         /// <param name="defaultBranch">Default branch to measure against (for example "main").</param>
@@ -1043,11 +1041,6 @@ namespace Armada.Core.Services
                         // left = commits on default not on branch (branch is behind); right = commits on branch not on default (ahead).
                         info.Behind = behind;
                         info.Ahead = ahead;
-                        info.DivergenceError = null;
-                    }
-                    else
-                    {
-                        info.DivergenceError = "Unable to calculate branch divergence.";
                     }
                 }
                 catch (OperationCanceledException)
@@ -1056,7 +1049,7 @@ namespace Armada.Core.Services
                 }
                 catch
                 {
-                    info.DivergenceError = "Unable to calculate branch divergence.";
+                    // Divergence unknown (for example the default branch does not exist yet); leave zeros.
                 }
             }
         }

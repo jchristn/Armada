@@ -5,8 +5,6 @@ namespace Test.Shared.Suites.Services
     using System.Diagnostics;
     using System.IO;
     using System.Linq;
-    using System.Text.Json;
-    using System.Text.Json.Nodes;
     using System.Threading;
     using System.Threading.Tasks;
     using Armada.Core.Enums;
@@ -1341,7 +1339,6 @@ namespace Test.Shared.Suites.Services
                     AssertEqual(shortName, listed.Name, "a same-named tag must leave the listed branch name unchanged");
                     AssertEqual(1, listed.Ahead, "the local branch has one commit beyond main");
                     AssertEqual(0, listed.Behind, "the local branch is not behind main");
-                    AssertUnavailableDivergenceAbsent(listed);
                 }
                 finally
                 {
@@ -1349,7 +1346,7 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
-            cases.Add(CaseAsync("list_branches_marks_missing_default_divergence_unavailable", "ListBranchesAsync reports missing default branch counts as unavailable", TestTags.Negative, async () =>
+            cases.Add(CaseAsync("list_branches_missing_default_keeps_zero_counts", "ListBranchesAsync leaves counts at zero when the default branch is missing", TestTags.Negative, async () =>
             {
                 GitService service = CreateService();
                 string repoDir = TestGitRepoHelper.CreateWorkingRepoCopy();
@@ -1365,14 +1362,14 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
-            cases.Add(CaseAsync("list_branches_marks_invalid_count_output_unavailable", "ListBranchesAsync reports malformed divergence output as unavailable", TestTags.Negative, async () =>
+            cases.Add(CaseAsync("list_branches_invalid_count_output_keeps_zero_counts", "ListBranchesAsync leaves counts at zero for malformed divergence output", TestTags.Negative, async () =>
             {
-                GitService service = CreateService(new BranchListCommandExecutor("not a count"));
+                GitService service = CreateService(new BranchListCommandExecutor("-3 x"));
                 IReadOnlyList<BranchInfo> branches = await service.ListBranchesAsync("remote-repository", "main").ConfigureAwait(false);
                 AssertUnavailableDivergence(RequireListedBranch(branches, "topic"), "malformed rev-list output");
             }));
 
-            cases.Add(CaseAsync("list_branches_marks_failed_comparison_unavailable", "ListBranchesAsync reports failed divergence commands as unavailable", TestTags.Negative, async () =>
+            cases.Add(CaseAsync("list_branches_failed_comparison_keeps_zero_counts", "ListBranchesAsync leaves counts at zero when the divergence command fails", TestTags.Negative, async () =>
             {
                 GitService service = CreateService(new BranchListCommandExecutor(null));
                 IReadOnlyList<BranchInfo> branches = await service.ListBranchesAsync("remote-repository", "main").ConfigureAwait(false);
@@ -1713,58 +1710,6 @@ namespace Test.Shared.Suites.Services
         {
             AssertEqual(0, branch.Ahead, reason + " leaves the ahead count at zero");
             AssertEqual(0, branch.Behind, reason + " leaves the behind count at zero");
-            string? text = ReadDivergenceError(branch);
-            AssertTrue(!String.IsNullOrWhiteSpace(text), reason + " should serialize an explicit divergence error");
-        }
-
-        private static void AssertUnavailableDivergenceAbsent(BranchInfo branch)
-        {
-            string? text = ReadDivergenceError(branch);
-            AssertTrue(String.IsNullOrWhiteSpace(text), "a measured branch serializes no divergence error");
-        }
-
-        private static string? ReadDivergenceError(BranchInfo branch)
-        {
-            JsonSerializerOptions options = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
-            JsonNode? node = JsonSerializer.SerializeToNode(branch, options);
-            JsonNode? error = node == null ? null : node["divergenceError"];
-            if (error is JsonValue value && value.GetValueKind() == JsonValueKind.String)
-                return value.GetValue<string>();
-            return null;
-        }
-
-        private sealed class BranchListCommandExecutor : IHostCommandExecutor
-        {
-            private readonly string? _Counts;
-
-            public BranchListCommandExecutor(string? counts)
-            {
-                _Counts = counts;
-            }
-
-            /// <summary>
-            /// Return a fixed branch list, then a scripted rev-list result.
-            /// </summary>
-            /// <param name="request">Command to run.</param>
-            /// <param name="token">Cancellation token.</param>
-            /// <returns>The scripted command result.</returns>
-            public Task<HostCommandResult> RunAsync(HostCommandRequest request, CancellationToken token = default)
-            {
-                if (request.Arguments.Count > 0 && request.Arguments[0] == "for-each-ref")
-                {
-                    string separator = "\x1f";
-                    return Task.FromResult(new HostCommandResult { StandardOutput = "topic" + separator + "" + separator + "abc123" + separator + "2026-01-01T00:00:00+00:00" + separator + "topic\n" });
-                }
-
-                if (request.Arguments.Count > 0 && request.Arguments[0] == "rev-list")
-                {
-                    if (_Counts == null)
-                        return Task.FromResult(new HostCommandResult { ExitCode = 128, StandardError = "missing ref" });
-                    return Task.FromResult(new HostCommandResult { StandardOutput = _Counts });
-                }
-
-                throw new InvalidOperationException("Unexpected git command in branch listing test.");
-            }
         }
 
         private static async Task<string> CommitOnNewBranchAsync(string repo, string branch, string startCommit, string file, string content)

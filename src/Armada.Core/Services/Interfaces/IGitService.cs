@@ -217,7 +217,6 @@ namespace Armada.Core.Services.Interfaces
 
         /// <summary>
         /// List local branches with their tip commit and ahead/behind position relative to the default branch.
-        /// A branch that cannot be compared has <see cref="BranchInfo.DivergenceError"/> set and keeps zero counts.
         /// </summary>
         /// <param name="repoPath">Repository path (bare repo or worktree).</param>
         /// <param name="defaultBranch">Default branch to measure divergence against.</param>
@@ -237,8 +236,7 @@ namespace Armada.Core.Services.Interfaces
 
         /// <summary>
         /// Fill Ahead and Behind on each branch relative to the default branch (one git command per non-default branch).
-        /// The comparison uses the refs/heads form of each name. A comparison that fails, or whose output is not two
-        /// non-negative integers, sets <see cref="BranchInfo.DivergenceError"/> and leaves the counts unchanged.
+        /// The comparison uses the refs/heads form of each name. A branch whose divergence cannot be read keeps zeros.
         /// </summary>
         /// <param name="repoPath">Repository path (bare repo or worktree).</param>
         /// <param name="defaultBranch">Default branch to measure against.</param>
