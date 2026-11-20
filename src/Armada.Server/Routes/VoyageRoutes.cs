@@ -192,6 +192,20 @@ namespace Armada.Server.Routes
                 if (validation.IsBareVoyage)
                 {
                     // Bare voyage creation (missions added separately)
+                    List<SelectedPlaybook> selectedPlaybooks = voyageReq.SelectedPlaybooks ?? new List<SelectedPlaybook>();
+                    if (selectedPlaybooks.Count > 0)
+                    {
+                        PlaybookService playbookService = new PlaybookService(_database, _logging);
+                        try
+                        {
+                            await playbookService.ResolveSelectionsAsync(ctx.TenantId!, selectedPlaybooks).ConfigureAwait(false);
+                        }
+                        catch (Exception ex) when (RouteErrorMapper.IsMapped(ex))
+                        {
+                            return RouteErrorMapper.ToResponse(req, ex);
+                        }
+                    }
+
                     voyage = new Voyage(voyageReq.Title, voyageReq.Description);
                     voyage.TenantId = ctx.TenantId;
                     voyage.UserId = ctx.UserId;
@@ -199,11 +213,9 @@ namespace Armada.Server.Routes
                     voyage.ApprovalOptions = voyageReq.ApprovalOptions?.Snapshot();
                     voyage.IsEvaluation = voyageReq.IsEvaluation;
                     voyage = await _database.Voyages.CreateAsync(voyage).ConfigureAwait(false);
-                    voyage.SelectedPlaybooks = voyageReq.SelectedPlaybooks ?? new List<SelectedPlaybook>();
+                    voyage.SelectedPlaybooks = selectedPlaybooks;
                     if (voyage.SelectedPlaybooks.Count > 0)
                     {
-                        PlaybookService playbookService = new PlaybookService(_database, _logging);
-                        await playbookService.ResolveSelectionsAsync(ctx.TenantId!, voyage.SelectedPlaybooks).ConfigureAwait(false);
                         await _database.Playbooks.SetVoyageSelectionsAsync(voyage.Id, voyage.SelectedPlaybooks).ConfigureAwait(false);
                     }
                     _logging.Info(_Header + "created bare voyage " + voyage.Id + ": " + voyageReq.Title);

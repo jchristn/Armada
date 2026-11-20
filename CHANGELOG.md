@@ -491,6 +491,9 @@ commands arrive with their own changes. Schema migrations 103 and 104 apply at s
 ### Landing preview check evidence
 
 - A landing preview counts only check runs with status `Passed` as passing evidence. A completed failed or canceled run with exit code zero no longer hides the required-check blocker. Imported check status remains authoritative, while a passed run still counts when its exit code is absent.
+### Validate playbooks before creating a bare voyage
+
+- REST and MCP resolve selected playbooks before they store a bare voyage. REST returns the mapped not-found or bad-request response for a missing or inactive playbook. A valid selection is stored after the voyage is created.
 
 ### Landing failure prevention
 
