@@ -143,9 +143,7 @@ namespace Armada.Core.Services
                 result.LatestCheckSummary = latest.Summary;
             }
 
-            result.HasPassingChecks = ordered.Any(run =>
-                run.Status == CheckRunStatusEnum.Passed
-                || (run.CompletedUtc.HasValue && run.ExitCode.HasValue && run.ExitCode.Value == 0));
+            result.HasPassingChecks = ordered.Any(run => run.Status == CheckRunStatusEnum.Passed);
         }
 
         private static void EvaluateCommonIssues(LandingPreviewResult result)

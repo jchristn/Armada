@@ -488,6 +488,9 @@ commands arrive with their own changes. Schema migrations 103 and 104 apply at s
 ### Merge queue purge follows BranchCleanupPolicy
 
 - A landed merge-queue entry keeps its mission branch when the policy is `None`, deletes only the local ref when the policy is `LocalOnly`, and deletes the local and origin refs when the policy is `LocalAndRemote`. The vessel policy overrides the global setting. A landed branch that git does not show as contained in the target stays. A cancelled entry loses both refs when git shows that the branch is merged. The queue removes the temporary integration worktree when it finishes an entry.
+### Landing preview check evidence
+
+- A landing preview counts only check runs with status `Passed` as passing evidence. A completed failed or canceled run with exit code zero no longer hides the required-check blocker. Imported check status remains authoritative, while a passed run still counts when its exit code is absent.
 
 ### Landing failure prevention
 
