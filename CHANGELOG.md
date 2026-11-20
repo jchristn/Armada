@@ -582,6 +582,10 @@ Events, Memories, Merge Queue, Missions, Request History, Signals, and Voyages a
 - Database reads now fail with the row ID and column name when stored JSON is invalid, so later updates
   cannot replace it with an empty value.
 
+### Mission push instructions follow the landing mode
+
+- Mission prompts instruct captains to push their branch only for PullRequest landing and for a landing mode the product does not define. Audit and Research prompts do not ask for commits or pushes. Other known landing modes ask for commits without a captain push. Seeding updates an untouched built-in mission rules template that still matches a previously shipped default, and leaves operator edits in place.
+
 ### Landing failure prevention
 
 - Every dashboard and TUI delete, bulk delete and purge now shows a progress modal (for example "Deleting vessel" or "Deleting 12 missions": "This may take some time while related records are cleaned up.") that stays up until the server answers, cannot be dismissed while pending, and offers Retry and Dismiss if the delete fails. Duplicate submissions are ignored. Ask Armada uses the same shared dialog.
