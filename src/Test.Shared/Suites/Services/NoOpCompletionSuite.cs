@@ -29,7 +29,6 @@ namespace Test.Shared.Suites.Services
 
         private const string SuiteId = "Services.NoOpCompletion";
         private const string StaleBranch = "feature/stale";
-        private const string CompletionOutput = NoOpCompletionDetector.CompletionMarker + "\nDone.";
         private const string SeededBranchDiff = "diff --git a/notes.txt b/notes.txt\n+prior\n";
 
         #endregion
@@ -82,7 +81,7 @@ namespace Test.Shared.Suites.Services
 
             cases.Add(CaseAsync("stale_branch_diff_without_dock_changes_is_noop", "A default-branch diff with no files changed since dock start is a no-op", TestTags.Negative, async () =>
             {
-                Mission stored = await CompleteStaleBranchAsync(new StaleBranchCase()).ConfigureAwait(false);
+                Mission stored = await CompleteStaleBranchAsync(new NoOpStaleBranchCase()).ConfigureAwait(false);
                 AssertContains("notes.txt", stored.DiffSnapshot ?? "");
                 AssertEqual(MissionStatusEnum.Failed, stored.Status);
                 AssertEqual(MissionFailureKindEnum.NoOp, stored.FailureKind);
@@ -91,7 +90,7 @@ namespace Test.Shared.Suites.Services
 
             cases.Add(CaseAsync("stale_branch_diff_without_marker_is_unfinished", "No files since dock start and no completion line is unfinished work", TestTags.Negative, async () =>
             {
-                Mission stored = await CompleteStaleBranchAsync(new StaleBranchCase
+                Mission stored = await CompleteStaleBranchAsync(new NoOpStaleBranchCase
                 {
                     AgentOutput = new string('x', 1000),
                     RuntimeMs = 120000
@@ -104,49 +103,62 @@ namespace Test.Shared.Suites.Services
 
             cases.Add(CaseAsync("new_commit_since_dock_start_is_not_noop", "A commit after dock start is not a no-op", TestTags.Positive, async () =>
             {
-                Mission stored = await CompleteStaleBranchAsync(new StaleBranchCase { CommitAfterStart = true }).ConfigureAwait(false);
+                Mission stored = await CompleteStaleBranchAsync(new NoOpStaleBranchCase { CommitAfterStart = true }).ConfigureAwait(false);
                 AssertAccepted(stored);
             }));
 
             cases.Add(CaseAsync("tracked_edit_since_dock_start_is_not_noop", "A tracked edit after dock start is not a no-op", TestTags.Positive, async () =>
             {
-                Mission stored = await CompleteStaleBranchAsync(new StaleBranchCase { EditAfterStart = true }).ConfigureAwait(false);
+                Mission stored = await CompleteStaleBranchAsync(new NoOpStaleBranchCase { EditAfterStart = true }).ConfigureAwait(false);
                 AssertAccepted(stored);
             }));
 
             cases.Add(CaseAsync("untracked_file_since_dock_start_is_not_noop", "An untracked file after dock start is not a no-op", TestTags.Positive, async () =>
             {
-                Mission stored = await CompleteStaleBranchAsync(new StaleBranchCase { UntrackedAfterStart = true }).ConfigureAwait(false);
+                Mission stored = await CompleteStaleBranchAsync(new NoOpStaleBranchCase { UntrackedAfterStart = true }).ConfigureAwait(false);
                 AssertAccepted(stored);
             }));
 
             cases.Add(CaseAsync("slow_completion_without_dock_changes_is_not_noop", "A slow completion with no new files keeps the runtime exemption", TestTags.Negative, async () =>
             {
-                Mission stored = await CompleteStaleBranchAsync(new StaleBranchCase { RuntimeMs = 120000 }).ConfigureAwait(false);
+                Mission stored = await CompleteStaleBranchAsync(new NoOpStaleBranchCase { RuntimeMs = 120000 }).ConfigureAwait(false);
                 AssertContains("notes.txt", stored.DiffSnapshot ?? "");
                 AssertAccepted(stored);
             }));
 
-            cases.Add(CaseAsync("missing_dock_start_with_branch_diff_is_not_rejected", "A missing dock start commit does not reject a branch diff", TestTags.Negative, async () =>
+            cases.Add(CaseAsync("missing_dock_start_with_branch_diff_is_not_rejected", "A missing dock start commit falls back to the stored branch diff", TestTags.Negative, async () =>
             {
-                Mission stored = await CompleteStaleBranchAsync(new StaleBranchCase { RecordStart = false }).ConfigureAwait(false);
+                Mission stored = await CompleteStaleBranchAsync(new NoOpStaleBranchCase { RecordStart = false }).ConfigureAwait(false);
                 AssertContains("notes.txt", stored.DiffSnapshot ?? "");
                 AssertAccepted(stored);
             }));
 
-            cases.Add(CaseAsync("missing_dock_start_without_diff_is_not_rejected", "A missing dock start commit does not reject an empty diff", TestTags.Negative, async () =>
+            cases.Add(CaseAsync("missing_dock_start_without_diff_falls_back_to_stored_diff", "A missing dock start commit judges the empty stored diff, so the check still runs", TestTags.Negative, async () =>
             {
-                Mission stored = await CompleteStaleBranchAsync(new StaleBranchCase
+                Mission stored = await CompleteStaleBranchAsync(new NoOpStaleBranchCase
                 {
                     RecordStart = false,
                     CaptureBranchDiff = false
                 }).ConfigureAwait(false);
+                AssertEqual(MissionStatusEnum.Failed, stored.Status);
+                AssertEqual(MissionFailureKindEnum.NoOp, stored.FailureKind);
+                AssertContains("No-op completion", stored.FailureReason ?? "");
+            }));
+
+            cases.Add(CaseAsync("missing_dock_start_with_new_files_falls_back_to_stored_diff", "A missing dock start commit still accepts a stored diff that holds new work", TestTags.Positive, async () =>
+            {
+                Mission stored = await CompleteStaleBranchAsync(new NoOpStaleBranchCase
+                {
+                    RecordStart = false,
+                    CommitAfterStart = true
+                }).ConfigureAwait(false);
+                AssertContains("added.txt", stored.DiffSnapshot ?? "");
                 AssertAccepted(stored);
             }));
 
-            cases.Add(CaseAsync("removed_worktree_with_branch_diff_is_not_rejected", "A Git error does not turn a branch diff into a no-op", TestTags.Negative, async () =>
+            cases.Add(CaseAsync("removed_worktree_with_branch_diff_is_not_rejected", "A Git error falls back to the stored branch diff", TestTags.Negative, async () =>
             {
-                Mission stored = await CompleteStaleBranchAsync(new StaleBranchCase
+                Mission stored = await CompleteStaleBranchAsync(new NoOpStaleBranchCase
                 {
                     RemoveWorktree = true,
                     CaptureBranchDiff = false,
@@ -156,19 +168,21 @@ namespace Test.Shared.Suites.Services
                 AssertAccepted(stored);
             }));
 
-            cases.Add(CaseAsync("removed_worktree_without_diff_is_not_rejected", "A Git error is not treated as an empty file list", TestTags.Negative, async () =>
+            cases.Add(CaseAsync("removed_worktree_without_diff_falls_back_to_stored_diff", "A Git error falls back to the empty stored diff instead of skipping the check", TestTags.Negative, async () =>
             {
-                Mission stored = await CompleteStaleBranchAsync(new StaleBranchCase
+                Mission stored = await CompleteStaleBranchAsync(new NoOpStaleBranchCase
                 {
                     RemoveWorktree = true,
                     CaptureBranchDiff = false
                 }).ConfigureAwait(false);
-                AssertAccepted(stored);
+                AssertEqual(MissionStatusEnum.Failed, stored.Status);
+                AssertEqual(MissionFailureKindEnum.NoOp, stored.FailureKind);
+                AssertContains("No-op completion", stored.FailureReason ?? "");
             }));
 
             cases.Add(CaseAsync("audit_without_dock_changes_completes", "An Audit mission with no new files still completes", TestTags.Positive, async () =>
             {
-                Mission stored = await CompleteStaleBranchAsync(new StaleBranchCase { Mode = MissionModeEnum.Audit }).ConfigureAwait(false);
+                Mission stored = await CompleteStaleBranchAsync(new NoOpStaleBranchCase { Mode = MissionModeEnum.Audit }).ConfigureAwait(false);
                 AssertContains("notes.txt", stored.DiffSnapshot ?? "");
                 AssertEqual(MissionStatusEnum.Complete, stored.Status);
                 AssertNull(stored.FailureKind);
@@ -192,7 +206,7 @@ namespace Test.Shared.Suites.Services
             AssertEqual(0, mission.NoOpRedispatchAttempts);
         }
 
-        private static async Task<Mission> CompleteStaleBranchAsync(StaleBranchCase scenario)
+        private static async Task<Mission> CompleteStaleBranchAsync(NoOpStaleBranchCase scenario)
         {
             string root = TestTemp.NewDirectory("noop-completion");
             string repo = TestGitRepoHelper.CreateWorkingRepoCopy();
@@ -292,9 +306,8 @@ namespace Test.Shared.Suites.Services
                     mission.AgentOutput = scenario.AgentOutput;
                     mission.DiffSnapshot = scenario.SeededDiff;
                     await db.Missions.CreateAsync(mission).ConfigureAwait(false);
-                    captain.CurrentMissionId = mission.Id;
-                    captain.CurrentDockId = dock.Id;
-                    await db.Captains.UpdateAsync(captain).ConfigureAwait(false);
+                    captain.Assignment = mission;
+                    await CaptainAssignmentFixture.UpdateAsync(db, captain).ConfigureAwait(false);
 
                     await missions.HandleCompletionAsync(captain, mission.Id).ConfigureAwait(false);
                     Mission? stored = await db.Missions.ReadAsync(mission.Id).ConfigureAwait(false);
@@ -366,33 +379,6 @@ namespace Test.Shared.Suites.Services
                 displayName: displayName,
                 executeAsync: (CancellationToken ct) => body(),
                 tags: new List<string> { tag });
-        }
-
-        #endregion
-
-        #region Private-Types
-
-        private sealed class StaleBranchCase
-        {
-            public bool RecordStart { get; set; } = true;
-
-            public bool RemoveWorktree { get; set; }
-
-            public bool CommitAfterStart { get; set; }
-
-            public bool EditAfterStart { get; set; }
-
-            public bool UntrackedAfterStart { get; set; }
-
-            public bool CaptureBranchDiff { get; set; } = true;
-
-            public string? SeededDiff { get; set; }
-
-            public string AgentOutput { get; set; } = CompletionOutput;
-
-            public long RuntimeMs { get; set; } = 1000;
-
-            public MissionModeEnum Mode { get; set; } = MissionModeEnum.Implementation;
         }
 
         #endregion

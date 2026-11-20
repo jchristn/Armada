@@ -4,6 +4,12 @@ All notable changes to Armada are documented in this file.
 
 ---
 
+## Unreleased
+
+### Fixes
+
+- The no-op completion check judges a dock's work from the files changed since the dock start commit (committed, tracked and untracked; scratch files such as backups do not count), so earlier commits on a reused branch no longer count as this dock's work. The diff stored for landing is still taken against the vessel default branch. When the start commit is unknown or Git cannot answer, the check falls back to the stored diff as before; it is never skipped. Audit and Research missions are still exempt.
+
 ## v1.3.0 (2026-11-06)
 
 v1.3.0 has two marquee features: **parallelization and concurrency**, and **out-of-the-box fleet actions for common repository tasks**. Concurrency improvements keep more independent work in flight with bounded capacity: vessels limit parallel voyages and missions per voyage, captains run several missions in slots, architects split work into a hierarchy of small missions with owned files, every wait is recorded with its reason, and usage-based captain selection routes work by account headroom. The release removes the single-mission captain and vessel fields with no deprecation period; read **Breaking changes** below and back up before upgrading. The default fleet action catalog provides ready-to-run performance reviews and fixes, code cleanliness and cleanup, security and vulnerability checks, and license compliance checks, alongside build, test, lint, dependency, and documentation tasks.
@@ -429,14 +435,6 @@ commands arrive with their own changes. Schema migrations 103 and 104 apply at s
 - macOS Harbor bundles store the pi permission-gate extension in `Contents/Resources/Pi`, and pi resolves it there as well as beside portable binaries. This prevents ARM64 code signing from treating TypeScript resources as unsigned nested code. The DMG verifier checks the resource layout.
 - After building and verifying both Harbor DMGs, `build-harbor-app.sh` installs the native app into `~/Applications`, staging and signature-checking a fresh bundle before replacement. `--no-install` opts out, and `--no-build` remains verification-only.
 - Helm's NuGet tool package preserves battery fixture `.gitignore` and `.gitattributes` files instead of excluding them with NU5119 warnings. Installer verification checks every packaged framework for those files.
-
-### No-op completion follows the dock start commit
-
-- A completion is judged from files changed since the dock start commit. The diff stored for landing is still taken
-  against the vessel default branch, so earlier commits on that branch do not count as work by this dock. A missing
-  start commit or a Git error is unknown and does not reject the mission. Audit and Research missions still skip the
-  check. Untracked files are part of the file query, so they are not treated as no change. Scratch files such as
-  backups do not count as work.
 
 ### Landing failure prevention
 

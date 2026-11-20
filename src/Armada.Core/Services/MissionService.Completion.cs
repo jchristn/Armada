@@ -16,6 +16,13 @@ namespace Armada.Core.Services
     /// </summary>
     public partial class MissionService
     {
+        #region Private-Members
+
+        // Stands in for a stored diff when Git reports files changed since the dock start commit but no diff was captured.
+        private const string _ChangedSinceDockStartEvidence = "changed since dock start";
+
+        #endregion
+
         #region Public-Methods
 
         /// <summary>
@@ -249,25 +256,30 @@ namespace Armada.Core.Services
             // repository decides, not the transcript: a missing or malformed completion line with nothing on the branch is
             // unfinished work, and one with work on the branch is repaired later (RecordWorkStageRepairsAsync). A Test
             // Engineer that reported a blocking defect ends with the blocked marker instead and is not unfinished.
-            // The stored diff is against the vessel default branch and can predate this dock. File changes since the
-            // dock start commit are the work signal. The stored diff is left unchanged for landing display.
+            // The stored diff is against the vessel default branch and can predate this dock, so when the dock start
+            // commit is known, the files changed since that commit are the work signal. When it is unknown, or Git cannot
+            // answer, the stored diff is the evidence as before; the check always runs. The stored diff itself is left
+            // unchanged for landing display.
             bool workStage = IsRepositoryWorkStage(mission.Persona)
                 && !(PersonaCatalog.Matches(mission.Persona, PersonaCatalog.TestEngineer) && VerifierContract.IsBlocked(mission.AgentOutput));
             string? startCommit = dock == null ? null : TryReadDockStartCommit(dock, mission);
             string? changeEvidence = mission.DiffSnapshot;
-            if (dock != null)
+            if (dock != null && !String.IsNullOrWhiteSpace(startCommit))
             {
                 bool? changedSinceStart = await TryReadFilesChangedSinceDockStartAsync(dock, startCommit, token).ConfigureAwait(false);
                 if (changedSinceStart == null)
                 {
-                    _Logging.Warn(_Header + "no-op check skipped for mission " + mission.Id +
-                        " because changes since dock " + dock.Id + " are unknown");
-                    return false;
+                    _Logging.Warn(_Header + "no-op check for mission " + mission.Id + " falls back to the stored diff because changes since dock " +
+                        dock.Id + " start commit " + startCommit + " are unknown");
                 }
-
-                changeEvidence = changedSinceStart.Value
-                    ? (String.IsNullOrWhiteSpace(changeEvidence) ? "changed" : changeEvidence)
-                    : null;
+                else if (changedSinceStart.Value)
+                {
+                    if (String.IsNullOrWhiteSpace(changeEvidence)) changeEvidence = _ChangedSinceDockStartEvidence;
+                }
+                else
+                {
+                    changeEvidence = null;
+                }
             }
 
             bool unfinished = workStage && dock != null
@@ -346,15 +358,8 @@ namespace Armada.Core.Services
             return true;
         }
 
-        /// <summary>
-        /// Whether any file other than a scratch file changed in the dock after <paramref name="startCommit"/>.
-        /// Null means the start commit is missing or Git could not answer. Callers must not treat that unknown as an empty change list, and
-        /// must not substitute the default-branch diff.
-        /// </summary>
-        /// <param name="dock">Dock whose worktree is compared.</param>
-        /// <param name="startCommit">Commit recorded when the dock was provisioned, or null.</param>
-        /// <param name="token">Cancellation token.</param>
-        /// <returns>True when at least one file changed, false when none changed, null when unknown.</returns>
+        // Whether any file other than a scratch file changed in the dock after startCommit. Null means the start commit or
+        // worktree is missing or Git could not answer; callers must not read that unknown as an empty change list.
         private async Task<bool?> TryReadFilesChangedSinceDockStartAsync(Dock dock, string? startCommit, CancellationToken token)
         {
             if (String.IsNullOrWhiteSpace(dock.WorktreePath) || String.IsNullOrWhiteSpace(startCommit))
