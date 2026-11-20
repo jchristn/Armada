@@ -556,6 +556,11 @@ commands arrive with their own changes. Schema migrations 103 and 104 apply at s
 
 - **A pipeline and its stages are stored in one transaction.** Create, update, and delete write the parent row and every stage row on the connection those methods already open. This is the same on SQLite, PostgreSQL, MySQL, and SQL Server. A failure rolls the transaction back. A failed update keeps the previous stages. A failed create leaves no pipeline row. A failed delete keeps the parent row and its stages.
 
+### Mission enumeration filters
+
+- Full mission lists and mission summaries apply the `MissionId` filter in global, tenant, and user scopes. Row
+  results and totals use the same filter on all four database providers.
+
 ### Landing failure prevention
 
 - Every dashboard and TUI delete, bulk delete and purge now shows a progress modal (for example "Deleting vessel" or "Deleting 12 missions": "This may take some time while related records are cleaned up.") that stays up until the server answers, cannot be dismissed while pending, and offers Retry and Dismiss if the delete fails. Duplicate submissions are ignored. Ask Armada uses the same shared dialog.

@@ -474,6 +474,11 @@ namespace Armada.Core.Database.Sqlite.Implementations
                     conditions.Add("status = 'Pending' AND id IN (SELECT mission_id FROM mission_wait_intervals WHERE ended_utc IS NULL AND gate = @waiting_gate)");
                     parameters.Add(new SqliteParameter("@waiting_gate", query.WaitingGate.Value.ToString()));
                 }
+                if (!string.IsNullOrEmpty(query.MissionId))
+                {
+                    conditions.Add("id = @mission_id");
+                    parameters.Add(new SqliteParameter("@mission_id", query.MissionId));
+                }
 
                 string whereClause = conditions.Count > 0 ? " WHERE " + string.Join(" AND ", conditions) : "";
                 string orderDirection = query.Order == EnumerationOrderEnum.CreatedAscending ? "ASC" : "DESC";
@@ -645,6 +650,11 @@ namespace Armada.Core.Database.Sqlite.Implementations
                 {
                     conditions.Add("status = 'Pending' AND id IN (SELECT mission_id FROM mission_wait_intervals WHERE ended_utc IS NULL AND gate = @waiting_gate)");
                     parameters.Add(new SqliteParameter("@waiting_gate", query.WaitingGate.Value.ToString()));
+                }
+                if (!string.IsNullOrEmpty(query.MissionId))
+                {
+                    conditions.Add("id = @mission_id");
+                    parameters.Add(new SqliteParameter("@mission_id", query.MissionId));
                 }
                 string whereClause = " WHERE " + string.Join(" AND ", conditions);
                 string orderDirection = query.Order == EnumerationOrderEnum.CreatedAscending ? "ASC" : "DESC";
@@ -912,6 +922,11 @@ namespace Armada.Core.Database.Sqlite.Implementations
                 {
                     conditions.Add("status = 'Pending' AND id IN (SELECT mission_id FROM mission_wait_intervals WHERE ended_utc IS NULL AND gate = @waiting_gate)");
                     parameters.Add(new SqliteParameter("@waiting_gate", query.WaitingGate.Value.ToString()));
+                }
+                if (!string.IsNullOrEmpty(query.MissionId))
+                {
+                    conditions.Add("id = @mission_id");
+                    parameters.Add(new SqliteParameter("@mission_id", query.MissionId));
                 }
                 string whereClause = " WHERE " + string.Join(" AND ", conditions);
                 string orderDirection = query.Order == EnumerationOrderEnum.CreatedAscending ? "ASC" : "DESC";
