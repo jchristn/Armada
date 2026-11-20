@@ -11,8 +11,10 @@ namespace Test.Shared.Suites.Services
 
     /// <summary>
     /// Descriptors for <see cref="NoOpCompletionDetector"/>. Positive cases confirm a fast, empty-diff,
-    /// trivial-output completion is flagged; negative cases confirm real work, slow runs, unknown
-    /// duration, and verbose output are NOT flagged (so a genuine "nothing to change" result survives).
+    /// trivial-output completion is flagged, and that a quoted, fenced, or extended completion marker
+    /// leaves an empty same-commit stage unfinished. Negative cases confirm a real diff, a slow run, an
+    /// unknown duration, verbose output, and a standalone completion line stay clear of the check that
+    /// case calls.
     /// </summary>
     public sealed class NoOpCompletionSuite : IArmadaTestSuite
     {
@@ -60,6 +62,42 @@ namespace Test.Shared.Suites.Services
                 // With a 10s cap, a 5s run is fast; with a 2s cap, the same run is not.
                 AssertTrue(NoOpCompletionDetector.IsNoOp("", "ok", 5000, maxRuntimeMs: 10000));
                 AssertFalse(NoOpCompletionDetector.IsNoOp("", "ok", 5000, maxRuntimeMs: 2000));
+            }));
+
+            cases.Add(Case("unfinished_quoted_marker_stays_unfinished", "A quoted completion marker with an empty diff and the same commit is unfinished", TestTags.Positive, () =>
+            {
+                string commit = "abc111";
+                string output = "The notes quote [ARMADA:RESULT] COMPLETE in the middle of a sentence.";
+                AssertTrue(
+                    NoOpCompletionDetector.IsUnfinishedWork("", output, commit, commit),
+                    "quoted marker stays unfinished");
+            }));
+
+            cases.Add(Case("unfinished_fenced_marker_stays_unfinished", "A completion marker inside a fence with an empty diff and the same commit is unfinished", TestTags.Positive, () =>
+            {
+                string commit = "abc111";
+                string output = "The reply is below.\n```\n[ARMADA:RESULT] COMPLETE\n```\n";
+                AssertTrue(
+                    NoOpCompletionDetector.IsUnfinishedWork("", output, commit, commit),
+                    "fenced marker stays unfinished");
+            }));
+
+            cases.Add(Case("unfinished_marker_with_extra_words_stays_unfinished", "A completion marker with more words on its line and an empty diff on the same commit is unfinished", TestTags.Positive, () =>
+            {
+                string commit = "abc111";
+                string output = "[ARMADA:RESULT] COMPLETE and a summary on the same line";
+                AssertTrue(
+                    NoOpCompletionDetector.IsUnfinishedWork("", output, commit, commit),
+                    "marker with extra words stays unfinished");
+            }));
+
+            cases.Add(Case("unfinished_standalone_completion_line_counts", "A standalone completion line with an empty diff and the same commit is finished", TestTags.Negative, () =>
+            {
+                string commit = "abc111";
+                string output = "\n  [ARMADA:RESULT] COMPLETE  \n";
+                AssertFalse(
+                    NoOpCompletionDetector.IsUnfinishedWork("", output, commit, commit),
+                    "standalone completion line counts as finished");
             }));
 
             return new TestSuiteDescriptor(

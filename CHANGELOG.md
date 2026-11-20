@@ -503,6 +503,9 @@ commands arrive with their own changes. Schema migrations 103 and 104 apply at s
 ### Runbook operations stay on runbook records
 
 - **Ordinary playbooks are not runbooks.** List, read, update, delete, and start-execution apply only when the playbook content starts with the runbook metadata marker `<!-- armada:runbook`. A plain playbook is absent from the runbook list. Read returns no runbook. Update, delete, and start-execution report `Runbook not found.` and leave the playbook row and its content in place. Leading whitespace before the marker does not qualify. A record that starts with the marker remains a runbook.
+### Unfinished work counts only a completion line
+
+- **A quoted completion marker does not finish a stage.** `IsUnfinishedWork` treats `[ARMADA:RESULT] COMPLETE` as present only when that text is its own line outside a fenced block, the same rule `ModelProbeScorer.HasWorkerResultLine` already uses. A marker inside a sentence, inside a fence, or with more words on the same line leaves an empty diff on the start commit unfinished. A standalone completion line still counts as finished. The fast no-op length and time limits are unchanged.
 
 ### Landing failure prevention
 
