@@ -95,6 +95,13 @@ All notable changes to Armada are documented in this file.
 - The Server page copies Codex MCP configuration as a TOML table for `~/.codex/config.toml`. The HTTP url ends in `/mcp`. The stdio block sets `command` and `args` for `armada mcp stdio`.
 
 ---
+### Fixes
+
+- The no-op completion check judges a dock's work from the files changed since the dock start commit (committed, tracked and untracked; scratch files such as backups do not count), so earlier commits on a reused branch no longer count as this dock's work. The diff stored for landing is still taken against the vessel default branch. When the start commit is unknown or Git cannot answer, the check falls back to the stored diff as before; it is never skipped. Audit and Research missions are still exempt.
+- Landing previews make every decision from the effective landing mode (the voyage mode for a mission, then the vessel mode, then the server setting, then MergeAndPush), so the expected action, the manual-landing warning and the protected, release and hotfix branch checks match what the landing handler will do. `LandingMode` still reports the mode stored on the vessel, so the dashboard and TUI keep showing Inherited; vessel previews now also return `EffectiveLandingMode`. The inherited-mode warning appears only when neither the vessel nor, for a mission, the voyage sets a mode.
+- A merge queue entry whose branch was deleted after its mission's recorded commit already reached the target is recorded as Landed and its mission is completed, the same way a normal landing reconciles them, instead of failing as a merge error and leaving the mission in LandingFailed. Entries without a recorded commit, with a commit that is not on the target, or whose branch still exists keep the normal merge.
+- Preparing a dock or merge worktree no longer force-resets an existing local branch to origin, which discarded local-only commits. The branch is fast-forwarded only when it is strictly behind origin; when it is ahead, has diverged or cannot be compared, it is kept as it is and a warning names the local and remote commits. An existing mission branch is now also fast-forwarded when origin has moved ahead of it. Branches checked out in another worktree are still left alone.
+- Vessel branch listings read each name from its `refs/heads` path and measure ahead and behind against exact `refs/heads` refs, so a tag with the same name as a branch no longer changes the listed name or the counts. Output that is not two counts leaves them at zero, as a failed comparison already did.
 
 ## v1.3.0 (2026-11-06)
 

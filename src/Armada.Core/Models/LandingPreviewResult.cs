@@ -51,7 +51,8 @@ namespace Armada.Core.Models
         public string? ProtectedBranchMatch { get; set; } = null;
 
         /// <summary>
-        /// Effective landing mode.
+        /// Landing mode stored on the vessel, or null when the vessel inherits it. Clients show null as Inherited. The
+        /// preview decisions use <see cref="EffectiveLandingMode"/>.
         /// </summary>
         public LandingModeEnum? LandingMode { get; set; } = null;
 
@@ -106,8 +107,8 @@ namespace Armada.Core.Models
         public bool IsReadyToLand { get; set; } = false;
 
         /// <summary>
-        /// Mission previews only: the landing mode that actually applies to the mission (voyage, then vessel, then the
-        /// Admiral default), or null when none is set anywhere.
+        /// The landing mode that actually applies and that every preview decision uses: the voyage mode (mission previews
+        /// only), then the vessel mode, then the Admiral default, then MergeAndPush. Set on vessel and mission previews.
         /// </summary>
         public LandingModeEnum? EffectiveLandingMode { get; set; } = null;
 
