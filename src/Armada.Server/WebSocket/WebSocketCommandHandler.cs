@@ -858,9 +858,7 @@ namespace Armada.Server.WebSocket
                     newCaptain.MaxConcurrency = newCaptain.MaxConcurrencySpecified
                         ? Armada.Core.Services.ConcurrencyClamp.CaptainLimit(newCaptain.MaxConcurrency, _Settings?.Concurrency.MaxCaptainConcurrency ?? 256)
                         : Armada.Core.Services.CaptainConcurrencyDefaults.For(newCaptain.Runtime, _Settings?.Concurrency);
-                    newCaptain.ActiveMissionCount = 0;
-                    newCaptain.ActiveMissionIds.Clear();
-                    newCaptain.CurrentSessionId = null;
+                    EntityUpdateMerger.ResetCaptainOperationalState(newCaptain);
                     await DuplicateEntityGuard.EnsureCaptainNameAvailableAsync(_Database, newCaptain).ConfigureAwait(false);
                     newCaptain = await _Database.Captains.CreateAsync(newCaptain).ConfigureAwait(false);
                     return new { type = "command.result", action = "create_captain", data = (object)newCaptain };

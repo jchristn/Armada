@@ -180,6 +180,35 @@ namespace Armada.Server
         }
 
         /// <summary>
+        /// Reset the server-owned operational state of a captain a client asked to create, so it starts idle: no
+        /// state, execution slots, session, process, recovery count, quarantine, heartbeat or model profile carried over
+        /// from the request, and server creation timestamps. Configuration fields (name, runtime, model, personas,
+        /// tier, runtime options, CLI permission policy, concurrency, usage capture, Active) and the optional id are kept.
+        /// </summary>
+        /// <param name="captain">Captain to reset in place.</param>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="captain"/> is null.</exception>
+        public static void ResetCaptainOperationalState(Captain captain)
+        {
+            if (captain == null) throw new ArgumentNullException(nameof(captain));
+
+            DateTime now = DateTime.UtcNow;
+            captain.State = CaptainStateEnum.Idle;
+            captain.ActiveMissionCount = 0;
+            captain.ActiveMissionIds.Clear();
+            captain.CurrentSessionId = null;
+            captain.Assignment = null;
+            captain.ProcessId = null;
+            captain.RecoveryAttempts = 0;
+            captain.QuarantineUntilUtc = null;
+            captain.QuarantineReason = null;
+            captain.LastHeartbeatUtc = null;
+            captain.LastProcessAliveUtc = null;
+            captain.ModelProfileId = null;
+            captain.CreatedUtc = now;
+            captain.LastUpdateUtc = now;
+        }
+
+        /// <summary>
         /// Normalize a captain's runtime options for its runtime. Non-Mux captains keep only the runtime-independent
         /// autoApprove switch (carried over from the stored record when the body omits options); Mux captains keep
         /// their stored options when the body omits them.

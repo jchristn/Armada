@@ -4101,6 +4101,8 @@ Register a new captain (AI agent).
 | `Model` | string | no | Optional model override for this captain. When omitted, the runtime selects its default model |
 | `CliPermissionPolicy` | string | no | CLI tool permission policy: `Refuse`, `ApproveInArmada`, `Bypass`, or null to inherit (see [CAPTAINS.md](CAPTAINS.md#cli-tool-permissions)) |
 
+Server-owned operational fields in the body are ignored: a new captain always starts `Idle` with no active missions, session, process, recovery attempts, quarantine, heartbeat or model profile, and with server creation timestamps. Configuration fields (including `MaxConcurrency`, the usage capture settings and `Active`) and an optional `Id` are kept. The tenant and owner come from the caller.
+
 **Response:** `201 Created` - [Captain](#captain)
 **Error:** `400 Bad Request` - Invalid or unavailable model. `Data` is a `CaptainModelValidationFailure`: `{"Reason": "...", "Message": "..."}` with `Reason` one of `EndpointRequired`, `EndpointNotFound`, `EndpointNotInference`, `EndpointDisabled`, `RuntimeUnavailable`, `ModelRejected`, `TimedOut`, `InvalidRuntimeOptions`, `NamedEndpointRequired`, `UnsupportedContractVersion`, `EndpointProbeFailed`, `EndpointNotToolEnabled` (the same on `PUT /api/v1/captains/{id}`; MCP `create_captain` / `update_captain` return `ErrorCode` `InvalidArgument` with `Code` = the reason).
 **Error:** `409 Conflict` - A captain with that name already exists (`Data`: [DuplicateEntityErrorDetail](#duplicateentityerrordetail) with `Code` `DuplicateEntity`, `EntityType` `Captain`, `Field` `Name`)

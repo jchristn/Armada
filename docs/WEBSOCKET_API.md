@@ -2526,6 +2526,8 @@ Create a new captain.
 | `action` | string | Yes | `"create_captain"` |
 | `data` | object | Yes | Captain creation data |
 
+Server-owned operational fields in the body are ignored: a new captain always starts `Idle` with no active missions, session, process, recovery attempts, quarantine, heartbeat or model profile, and with server creation timestamps. Configuration fields (including `MaxConcurrency`, the usage capture settings and `Active`) and an optional `Id` are kept.
+
 ---
 
 #### update_captain
