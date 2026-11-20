@@ -475,6 +475,10 @@ commands arrive with their own changes. Schema migrations 103 and 104 apply at s
 
 - Capture the cancellation token before starting the liveness task, and let an old loop remove only its own entry.
   This prevents a stop race from faulting the task on a disposed source or removing a replacement loop.
+### Merge queue cancellation preserves completed outcomes
+
+- Cancelling a merge entry that is already Landed, Failed or Cancelled keeps its stored status. Queued and other active entries still
+  become Cancelled.
 
 ### Landing failure prevention
 
