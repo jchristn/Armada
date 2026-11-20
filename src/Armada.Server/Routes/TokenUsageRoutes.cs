@@ -243,28 +243,28 @@ namespace Armada.Server.Routes
 
         private static TokenUsageQuery ApplyQuerystringOverrides(ApiRequest req, TokenUsageQuery query)
         {
-            if (int.TryParse(req.Query.GetValueOrDefault("pageNumber"), out int pageNumber))
+            if (int.TryParse(QueryValueReader.Read(req.Query, "pageNumber"), out int pageNumber))
                 query.PageNumber = Math.Max(1, pageNumber);
-            if (int.TryParse(req.Query.GetValueOrDefault("pageSize"), out int pageSize))
+            if (int.TryParse(QueryValueReader.Read(req.Query, "pageSize"), out int pageSize))
                 query.PageSize = Math.Clamp(pageSize, 1, 500);
-            if (double.TryParse(req.Query.GetValueOrDefault("bucketMinutes"), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double bucketMinutes) && bucketMinutes > 0)
+            if (double.TryParse(QueryValueReader.Read(req.Query, "bucketMinutes"), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double bucketMinutes) && bucketMinutes > 0)
                 query.BucketMinutes = bucketMinutes;
-            if (int.TryParse(req.Query.GetValueOrDefault("modelLimit"), out int modelLimit))
+            if (int.TryParse(QueryValueReader.Read(req.Query, "modelLimit"), out int modelLimit))
                 query.ModelLimit = modelLimit;
 
-            query.Model = NormalizeEmpty(req.Query.GetValueOrDefault("model")) ?? query.Model;
-            query.Runtime = NormalizeEmpty(req.Query.GetValueOrDefault("runtime")) ?? query.Runtime;
-            query.Source = NormalizeEmpty(req.Query.GetValueOrDefault("source")) ?? query.Source;
-            query.SourceId = NormalizeEmpty(req.Query.GetValueOrDefault("sourceId")) ?? query.SourceId;
-            query.VesselId = NormalizeEmpty(req.Query.GetValueOrDefault("vesselId")) ?? query.VesselId;
-            query.CaptainId = NormalizeEmpty(req.Query.GetValueOrDefault("captainId")) ?? query.CaptainId;
-            query.HarborId = NormalizeEmpty(req.Query.GetValueOrDefault("harborId")) ?? query.HarborId;
-            query.TenantId = NormalizeEmpty(req.Query.GetValueOrDefault("tenantId")) ?? query.TenantId;
-            query.UserId = NormalizeEmpty(req.Query.GetValueOrDefault("userId")) ?? query.UserId;
+            query.Model = NormalizeEmpty(QueryValueReader.Read(req.Query, "model")) ?? query.Model;
+            query.Runtime = NormalizeEmpty(QueryValueReader.Read(req.Query, "runtime")) ?? query.Runtime;
+            query.Source = NormalizeEmpty(QueryValueReader.Read(req.Query, "source")) ?? query.Source;
+            query.SourceId = NormalizeEmpty(QueryValueReader.Read(req.Query, "sourceId")) ?? query.SourceId;
+            query.VesselId = NormalizeEmpty(QueryValueReader.Read(req.Query, "vesselId")) ?? query.VesselId;
+            query.CaptainId = NormalizeEmpty(QueryValueReader.Read(req.Query, "captainId")) ?? query.CaptainId;
+            query.HarborId = NormalizeEmpty(QueryValueReader.Read(req.Query, "harborId")) ?? query.HarborId;
+            query.TenantId = NormalizeEmpty(QueryValueReader.Read(req.Query, "tenantId")) ?? query.TenantId;
+            query.UserId = NormalizeEmpty(QueryValueReader.Read(req.Query, "userId")) ?? query.UserId;
 
-            if (DateTime.TryParse(DecodeQuery(req.Query.GetValueOrDefault("fromUtc")), System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind, out DateTime fromUtc))
+            if (DateTime.TryParse(QueryValueReader.Read(req.Query, "fromUtc"), System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind, out DateTime fromUtc))
                 query.FromUtc = fromUtc.ToUniversalTime();
-            if (DateTime.TryParse(DecodeQuery(req.Query.GetValueOrDefault("toUtc")), System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind, out DateTime toUtc))
+            if (DateTime.TryParse(QueryValueReader.Read(req.Query, "toUtc"), System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind, out DateTime toUtc))
                 query.ToUtc = toUtc.ToUniversalTime();
 
             return query;
@@ -281,14 +281,9 @@ namespace Armada.Server.Routes
             }
         }
 
-        private static string? DecodeQuery(string? value)
-        {
-            return value == null ? null : Uri.UnescapeDataString(value);
-        }
-
         private static string? NormalizeEmpty(string? value)
         {
-            return String.IsNullOrWhiteSpace(value) ? null : DecodeQuery(value);
+            return String.IsNullOrWhiteSpace(value) ? null : value;
         }
     }
 }

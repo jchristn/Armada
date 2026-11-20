@@ -28,7 +28,7 @@ namespace Armada.Server.Routes
             EnumerationQuery query = String.IsNullOrWhiteSpace(body)
                 ? new EnumerationQuery()
                 : JsonSerializer.Deserialize<EnumerationQuery>(body, options) ?? new EnumerationQuery();
-            query.ApplyQuerystringOverrides(key => req.Query.GetValueOrDefault(key));
+            query.ApplyQuerystringOverrides(key => QueryValueReader.Read(req.Query, key));
             return query;
         }
 

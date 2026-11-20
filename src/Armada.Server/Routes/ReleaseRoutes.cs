@@ -260,23 +260,23 @@ namespace Armada.Server.Routes
 
         private static void ApplyQuerystringOverrides(ApiRequest req, ReleaseQuery query)
         {
-            if (Int32.TryParse(req.Query.GetValueOrDefault("pageNumber"), out int pageNumber))
+            if (Int32.TryParse(QueryValueReader.Read(req.Query, "pageNumber"), out int pageNumber))
                 query.PageNumber = Math.Max(1, pageNumber);
-            if (Int32.TryParse(req.Query.GetValueOrDefault("pageSize"), out int pageSize))
+            if (Int32.TryParse(QueryValueReader.Read(req.Query, "pageSize"), out int pageSize))
                 query.PageSize = Math.Clamp(pageSize, 1, 500);
-            if (DateTime.TryParse(req.Query.GetValueOrDefault("fromUtc"), out DateTime fromUtc))
+            if (DateTime.TryParse(QueryValueReader.Read(req.Query, "fromUtc"), out DateTime fromUtc))
                 query.FromUtc = fromUtc.ToUniversalTime();
-            if (DateTime.TryParse(req.Query.GetValueOrDefault("toUtc"), out DateTime toUtc))
+            if (DateTime.TryParse(QueryValueReader.Read(req.Query, "toUtc"), out DateTime toUtc))
                 query.ToUtc = toUtc.ToUniversalTime();
-            if (Enum.TryParse(req.Query.GetValueOrDefault("status"), true, out ReleaseStatusEnum status))
+            if (Enum.TryParse(QueryValueReader.Read(req.Query, "status"), true, out ReleaseStatusEnum status))
                 query.Status = status;
 
-            query.VesselId = NormalizeEmpty(req.Query.GetValueOrDefault("vesselId")) ?? query.VesselId;
-            query.WorkflowProfileId = NormalizeEmpty(req.Query.GetValueOrDefault("workflowProfileId")) ?? query.WorkflowProfileId;
-            query.VoyageId = NormalizeEmpty(req.Query.GetValueOrDefault("voyageId")) ?? query.VoyageId;
-            query.MissionId = NormalizeEmpty(req.Query.GetValueOrDefault("missionId")) ?? query.MissionId;
-            query.CheckRunId = NormalizeEmpty(req.Query.GetValueOrDefault("checkRunId")) ?? query.CheckRunId;
-            query.Search = NormalizeEmpty(req.Query.GetValueOrDefault("search")) ?? query.Search;
+            query.VesselId = NormalizeEmpty(QueryValueReader.Read(req.Query, "vesselId")) ?? query.VesselId;
+            query.WorkflowProfileId = NormalizeEmpty(QueryValueReader.Read(req.Query, "workflowProfileId")) ?? query.WorkflowProfileId;
+            query.VoyageId = NormalizeEmpty(QueryValueReader.Read(req.Query, "voyageId")) ?? query.VoyageId;
+            query.MissionId = NormalizeEmpty(QueryValueReader.Read(req.Query, "missionId")) ?? query.MissionId;
+            query.CheckRunId = NormalizeEmpty(QueryValueReader.Read(req.Query, "checkRunId")) ?? query.CheckRunId;
+            query.Search = NormalizeEmpty(QueryValueReader.Read(req.Query, "search")) ?? query.Search;
         }
 
         private static ApiErrorResponse BuildAuthError(ApiRequest req)

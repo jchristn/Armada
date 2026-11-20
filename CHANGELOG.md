@@ -569,6 +569,7 @@ commands arrive with their own changes. Schema migrations 103 and 104 apply at s
 
 Events, Memories, Merge Queue, Missions, Request History, Signals, and Voyages ask the server for one page. When rows expire, are deleted, or a filter leaves the requested page past the end, the list moves to the last page that still exists and loads that page. The empty page is discarded. Rows from the previous successful page stay until the valid page returns. A response for an older page leaves the newer page in place. An empty list stays on page 1.
 - Workspace context editors save project context, style guide, and model context through PATCH /api/v1/vessels/{id}/context. This keeps the vessel name, repository URL, landing settings, auto-land settings, and Definition-of-Done values. Full vessel form saves use PUT.
+- REST query values are decoded once before a route parses or filters them. A literal plus sign stays a plus sign. A malformed percent escape is kept, and the route still answers.
 
 ### Landing failure prevention
 

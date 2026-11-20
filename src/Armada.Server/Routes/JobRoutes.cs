@@ -69,7 +69,7 @@ namespace Armada.Server.Routes
                 }
 
                 // Always one page: without parameters, the first page of 100 (there is no unpaged form).
-                if (!JobQuery.TryFromQuerystring(key => req.Query.GetValueOrDefault(key), out JobQuery? query, out string? queryError))
+                if (!JobQuery.TryFromQuerystring(key => QueryValueReader.Read(req.Query, key), out JobQuery? query, out string? queryError))
                 {
                     req.Http.Response.StatusCode = 400;
                     return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = queryError ?? "Invalid job query" };
@@ -106,8 +106,8 @@ namespace Armada.Server.Routes
                     ? new JobQuery()
                     : JsonSerializer.Deserialize<JobQuery>(body, _BodyJsonOptions) ?? new JobQuery();
                 CollectionBounds.Validate(query);
-                if (Int32.TryParse(req.Query.GetValueOrDefault("pageNumber"), out int pageNumber)) query.PageNumber = pageNumber;
-                if (Int32.TryParse(req.Query.GetValueOrDefault("pageSize"), out int pageSize)) query.PageSize = pageSize;
+                if (Int32.TryParse(QueryValueReader.Read(req.Query, "pageNumber"), out int pageNumber)) query.PageNumber = pageNumber;
+                if (Int32.TryParse(QueryValueReader.Read(req.Query, "pageSize"), out int pageSize)) query.PageSize = pageSize;
                 ScopeJobQuery(ctx, query);
                 return (object)await _database.Jobs.EnumeratePageAsync(query).ConfigureAwait(false);
             },
