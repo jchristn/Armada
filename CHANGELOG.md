@@ -561,6 +561,10 @@ commands arrive with their own changes. Schema migrations 103 and 104 apply at s
 - Full mission lists and mission summaries apply the `MissionId` filter in global, tenant, and user scopes. Row
   results and totals use the same filter on all four database providers.
 
+### SQL Server dock enumeration
+
+- Tenant and user dock lists order by `created_utc` descending. Tenant deletion can now enumerate its docks before it removes them.
+
 ### Landing failure prevention
 
 - Every dashboard and TUI delete, bulk delete and purge now shows a progress modal (for example "Deleting vessel" or "Deleting 12 missions": "This may take some time while related records are cleaned up.") that stays up until the server answers, cannot be dismissed while pending, and offers Retry and Dismiss if the delete fails. Duplicate submissions are ignored. Ask Armada uses the same shared dialog.

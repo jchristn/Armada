@@ -3,12 +3,15 @@ namespace Test.Shared.Suites.Database
     using System;
     using System.Collections.Generic;
     using System.Linq;
+    using System.Net;
     using System.Threading;
     using System.Threading.Tasks;
+    using SyslogLogging;
     using Armada.Core.Database;
     using Armada.Core.Database.Sqlite;
     using Armada.Core.Enums;
     using Armada.Core.Models;
+    using Armada.Core.Settings;
     using Test.Shared.Infrastructure;
     using Touchstone.Core;
     using static Test.Shared.Infrastructure.Asserts;
@@ -17,6 +20,7 @@ namespace Test.Shared.Suites.Database
     /// CRUD and query descriptors for the dock database methods: create, read, update, existence,
     /// enumeration (all, paginated, by vessel), available-dock discovery (found and none), delete,
     /// and not-found paths. Each case builds a fresh SQLite store seeded with a fleet and vessel.
+    /// Tenant and user dock lists return newest created docks first. The tenant cascade case uses an isolated in-process server.
     /// </summary>
     public sealed class DockDatabaseSuite : IArmadaTestSuite
     {
@@ -175,6 +179,108 @@ namespace Test.Shared.Suites.Database
 
                     AssertNotNull(docks);
                     AssertEqual(3, docks.Count);
+                }
+            }));
+
+            cases.Add(CaseAsync("dock_enumerate_by_tenant_orders_created_descending", "Dock_EnumerateByTenant orders docks by newest creation time", TestTags.Positive, async () =>
+            {
+                TestDatabaseSetup setup = await SetupWithVesselAsync();
+                using (setup.Database)
+                {
+                    DatabaseDriver db = setup.Database.Driver;
+                    List<TenantMetadata> tenants = await db.Tenants.EnumerateAsync();
+                    AssertTrue(tenants.Count > 0, "seeded tenant exists");
+                    TenantMetadata tenant = tenants[0];
+
+                    Dock older = new Dock(setup.Vessel.Id);
+                    older.TenantId = tenant.Id;
+                    older.CreatedUtc = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+                    Dock newer = new Dock(setup.Vessel.Id);
+                    newer.TenantId = tenant.Id;
+                    newer.CreatedUtc = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+                    await db.Docks.CreateAsync(older);
+                    await db.Docks.CreateAsync(newer);
+
+                    List<Dock> docks = await db.Docks.EnumerateAsync(tenant.Id);
+
+                    AssertEqual(2, docks.Count);
+                    AssertEqual(newer.Id, docks[0].Id);
+                    AssertEqual(older.Id, docks[1].Id);
+                }
+            }));
+
+            cases.Add(CaseAsync("dock_enumerate_by_tenant_and_user_orders_created_descending", "Dock_EnumerateByTenantAndUser orders docks by newest creation time", TestTags.Positive, async () =>
+            {
+                TestDatabaseSetup setup = await SetupWithVesselAsync();
+                using (setup.Database)
+                {
+                    DatabaseDriver db = setup.Database.Driver;
+                    List<TenantMetadata> tenants = await db.Tenants.EnumerateAsync();
+                    AssertTrue(tenants.Count > 0, "seeded tenant exists");
+                    TenantMetadata tenant = tenants[0];
+                    List<UserMaster> users = await db.Users.EnumerateAsync(tenant.Id);
+                    AssertTrue(users.Count > 0, "seeded tenant user exists");
+                    UserMaster user = users[0];
+
+                    Dock older = new Dock(setup.Vessel.Id);
+                    older.TenantId = tenant.Id;
+                    older.UserId = user.Id;
+                    older.CreatedUtc = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+                    Dock newer = new Dock(setup.Vessel.Id);
+                    newer.TenantId = tenant.Id;
+                    newer.UserId = user.Id;
+                    newer.CreatedUtc = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+                    await db.Docks.CreateAsync(older);
+                    await db.Docks.CreateAsync(newer);
+
+                    List<Dock> docks = await db.Docks.EnumerateAsync(tenant.Id, user.Id);
+
+                    AssertEqual(2, docks.Count);
+                    AssertEqual(newer.Id, docks[0].Id);
+                    AssertEqual(older.Id, docks[1].Id);
+                }
+            }));
+
+            cases.Add(CaseAsync("tenant_delete_cascades_owned_docks", "Tenant delete removes its dock through the cascade route", TestTags.Positive, async () =>
+            {
+                string dataDirectory = TestTemp.NewDirectory("dock_tenant_delete");
+                using (IsolatedTestDatabase isolated = await IsolatedTestDatabase.CreateAsync("docktenant", dataDirectory).ConfigureAwait(false))
+                using (InProcessArmadaServer server = await InProcessArmadaServer.StartAsync(dataDirectory, isolated.Settings).ConfigureAwait(false))
+                {
+                    LoggingModule logging = new LoggingModule();
+                    logging.Settings.EnableConsole = false;
+                    using (DatabaseDriver db = DatabaseDriverFactory.Create(server.Settings.Database, logging))
+                    {
+                        await db.InitializeAsync().ConfigureAwait(false);
+                        TenantMetadata tenant = new TenantMetadata("Test tenant " + Guid.NewGuid().ToString("N"));
+                        await db.Tenants.CreateAsync(tenant).ConfigureAwait(false);
+
+                        UserMaster user = new UserMaster();
+                        user.TenantId = tenant.Id;
+                        user.Email = "dock-" + Guid.NewGuid().ToString("N") + "@example.test";
+                        user.PasswordSha256 = UserMaster.ComputePasswordHash("test-password");
+                        await db.Users.CreateAsync(user).ConfigureAwait(false);
+
+                        Fleet fleet = new Fleet("Test fleet " + Guid.NewGuid().ToString("N"));
+                        fleet.TenantId = tenant.Id;
+                        fleet.UserId = user.Id;
+                        await db.Fleets.CreateAsync(fleet).ConfigureAwait(false);
+
+                        Vessel vessel = new Vessel("Test vessel " + Guid.NewGuid().ToString("N"), "https://example.test/repository.git");
+                        vessel.TenantId = tenant.Id;
+                        vessel.UserId = user.Id;
+                        vessel.FleetId = fleet.Id;
+                        await db.Vessels.CreateAsync(vessel).ConfigureAwait(false);
+
+                        Dock dock = new Dock(vessel.Id);
+                        dock.TenantId = tenant.Id;
+                        dock.UserId = user.Id;
+                        await db.Docks.CreateAsync(dock).ConfigureAwait(false);
+
+                        HttpResponseMessage response = await server.Client.DeleteAsync("/api/v1/tenants/" + tenant.Id).ConfigureAwait(false);
+                        AssertEqual(HttpStatusCode.OK, response.StatusCode, "tenant delete response");
+                        AssertNull(await db.Docks.ReadAsync(dock.Id).ConfigureAwait(false), "cascade removes tenant dock");
+                    }
                 }
             }));
 
