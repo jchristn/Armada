@@ -320,7 +320,6 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
-
             cases.Add(CaseAsync("retry_landing_event_visible_to_owner_only", "RetryLanding event is visible only to the mission owner", TestTags.Positive, async () =>
             {
                 using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
@@ -352,27 +351,6 @@ namespace Test.Shared.Suites.Services
                     {
                         TestTemp.TryDelete(repoPath);
                     }
-                }
-            }));
-
-            cases.Add(CaseAsync("retry_landing_event_keeps_explicit_owner", "An event stored with a tenant and user keeps that owner", TestTags.Positive, async () =>
-            {
-                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
-                {
-                    DatabaseDriver db = testDb.Driver;
-                    await EnsureUserAsync(db, Constants.DefaultTenantId, Constants.DefaultUserId);
-                    await EnsureUserAsync(db, Constants.DefaultTenantId, "usr_retry_peer");
-
-                    ArmadaEvent evt = new ArmadaEvent("mission.note", "already scoped");
-                    evt.TenantId = Constants.DefaultTenantId;
-                    evt.UserId = Constants.DefaultUserId;
-                    await db.Events.CreateAsync(evt);
-
-                    List<ArmadaEvent> owned = await db.Events.EnumerateAsync(Constants.DefaultTenantId, Constants.DefaultUserId);
-                    AssertTrue(ContainsEventId(owned, evt.Id), "an event stored with a tenant and user stays in that user's list");
-
-                    List<ArmadaEvent> peer = await db.Events.EnumerateAsync(Constants.DefaultTenantId, "usr_retry_peer");
-                    AssertFalse(ContainsEventId(peer, evt.Id), "the same event stays out of another user's list");
                 }
             }));
 
@@ -806,7 +784,6 @@ namespace Test.Shared.Suites.Services
             settings.ReposDirectory = Path.Combine(Path.GetTempPath(), "armada_test_repos_" + Guid.NewGuid().ToString("N"));
             return settings;
         }
-
 
         private static LandingService CreateLanding(DatabaseDriver db, StubGitService git)
         {

@@ -164,18 +164,13 @@ namespace Armada.Core.Services
                 retryEvent.MissionId = mission.Id;
                 retryEvent.VesselId = mission.VesselId;
                 retryEvent.VoyageId = mission.VoyageId;
-                // The event is new, so both owner fields are empty. Copy them from the mission
-                // already in hand. Do not read the mission again.
-                if (String.IsNullOrEmpty(retryEvent.TenantId) || String.IsNullOrEmpty(retryEvent.UserId))
-                {
-                    retryEvent.TenantId = mission.TenantId;
-                    retryEvent.UserId = mission.UserId;
-                }
+                // Keep the event in the mission owner's scope, from the mission already in hand.
+                retryEvent.TenantId = mission.TenantId;
+                retryEvent.UserId = mission.UserId;
                 await _Database.Events.CreateAsync(retryEvent, token).ConfigureAwait(false);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (!(ex is OperationCanceledException && token.IsCancellationRequested))
             {
-                if (ex is OperationCanceledException && token.IsCancellationRequested) throw;
                 _Logging.Warn(_Header + "error emitting mission.landing_retry event for mission " + mission.Id + ": " + ex.Message);
             }
 

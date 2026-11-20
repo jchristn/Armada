@@ -10,6 +10,7 @@ All notable changes to Armada are documented in this file.
 
 - **Completed voyages record `voyage.completed`.** The shared settlement path (the background voyage check and mission completion) stores one event, in the voyage owner's tenant and user scope, when it changes a voyage to Complete. Failed and cancelled voyages do not emit it, and settling an already-complete voyage does not duplicate it. If the event cannot be stored, the voyage status stays saved and the failure is logged.
 - **WebSocket `delete_vessel` stops active captains.** It now cancels the vessel's Pending, Blocked, Assigned, InProgress, Review and Testing missions through the same cancel path as REST and MCP, which stops each running agent first and records one `VesselDeleted` black box entry, instead of only writing the Cancelled status while the agent kept running. A mission whose agent did not confirm it stopped is left unchanged and reported in the result's new `warnings` and `warningCount` fields (the `VesselDeleteResult` shape MCP returns); the vessel is still deleted. Database errors while reading the vessel's missions now return a command error instead of being ignored.
+- **Landing-retry events stay in the mission owner's scope.** `LandingService` stamps `mission.landing_retry` with the mission's tenant and user, so the owner's scoped event list shows it and other tenants and users do not. A cancelled write of that event now stops the retry; any other write failure is logged (it was silently ignored) and the retry continues.
 
 ## v1.3.0 (2026-11-06)
 
@@ -436,8 +437,6 @@ commands arrive with their own changes. Schema migrations 103 and 104 apply at s
 - macOS Harbor bundles store the pi permission-gate extension in `Contents/Resources/Pi`, and pi resolves it there as well as beside portable binaries. This prevents ARM64 code signing from treating TypeScript resources as unsigned nested code. The DMG verifier checks the resource layout.
 - After building and verifying both Harbor DMGs, `build-harbor-app.sh` installs the native app into `~/Applications`, staging and signature-checking a fresh bundle before replacement. `--no-install` opts out, and `--no-build` remains verification-only.
 - Helm's NuGet tool package preserves battery fixture `.gitignore` and `.gitattributes` files instead of excluding them with NU5119 warnings. Installer verification checks every packaged framework for those files.
-- A landing retry stores `mission.landing_retry` with the mission's tenant and user, so the owner's scoped event list includes that event and another tenant or user does not. A cancelled write of that event stops the retry. Any other failure of that write is logged and the retry continues.
-- When the admiral or server event helper writes an event that is missing a tenant or a user, it copies both fields from the first referenced mission, voyage, vessel, captain, fleet, dock, signal, merge entry, or planning session that has a tenant. An event that already has both fields is unchanged. A failed lookup is logged and the event is still written. An event with no owner record stays unscoped.
 
 ### Landing failure prevention
 
