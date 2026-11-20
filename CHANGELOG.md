@@ -443,6 +443,9 @@ commands arrive with their own changes. Schema migrations 103 and 104 apply at s
 
 - Captain processes and `run_process` commands do not inherit `ARMADA_INITIAL_ADMIN_PASSWORD`. Armada still reads this
   variable during server startup to set the initial admin password.
+### Captain deletion supports providers without planning sessions
+
+- Cascade cleanup treats `NotSupportedException` from planning-session enumeration as an empty list, so captain deletion can finish on providers that do not store planning sessions. Other enumeration failures still propagate.
 
 ### Landing failure prevention
 
