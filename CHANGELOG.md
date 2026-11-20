@@ -10,6 +10,7 @@ All notable changes to Armada are documented in this file.
 
 - Mission delete confirmations and success messages now explain that the action cancels the mission and keeps its record.
 - Merge queue delete confirmations predict whether the entry will be deleted or cancelled from its current status. Bulk results report expected outcomes and failed requests separately.
+- The Server page keeps a field you have edited when its timer reloads settings or when you save another section. A field you have not edited takes the new server value. The reload button still replaces unsaved edits.
 
 ## v1.3.0 (2026-11-06)
 
