@@ -3,6 +3,7 @@ namespace Armada.Server
     using System;
     using System.Collections.Generic;
     using System.IO;
+    using System.Runtime.InteropServices;
     using System.Runtime.Loader;
     using System.Threading;
     using SyslogLogging;
@@ -20,6 +21,7 @@ namespace Armada.Server
         private static LoggingModule _Logging = null!;
         private static ArmadaServer _Server = null!;
         private static bool _ShuttingDown = false;
+        private static readonly object _ShutdownGate = new object();
         private static CancellationTokenSource _TokenSource = new CancellationTokenSource();
         private static readonly EventWaitHandle _StopSignal = new EventWaitHandle(false, EventResetMode.ManualReset);
 
@@ -71,7 +73,11 @@ namespace Armada.Server
         /// </summary>
         internal static void RequestStop()
         {
-            _ShuttingDown = true;
+            lock (_ShutdownGate)
+            {
+                _ShuttingDown = true;
+            }
+
             _StopSignal.Set();
         }
 
@@ -152,44 +158,84 @@ namespace Armada.Server
                 return;
             }
 
-            if (!serviceMode)
+            // Register before the running banner so a SIGTERM that arrives once the process is
+            // serving still cancels the runtime default and wakes this wait. Stop stays on this thread.
+            PosixSignalRegistration? sigTerm = RegisterSigTerm();
+            try
             {
-                Console.WriteLine("Admiral running on port " + _Settings.AdmiralPort);
-                Console.WriteLine("MCP server on port " + _Settings.McpPort);
-                Console.WriteLine("WebSocket endpoint at /ws");
-                Console.WriteLine("Dashboard: http://localhost:" + _Settings.AdmiralPort + "/dashboard");
-            }
-
-            // Wait for shutdown signal (Ctrl+C, SIGTERM, API stop, service stop, or assembly unload)
-            AssemblyLoadContext.Default.Unloading += (ctx) => _StopSignal.Set();
-            Console.CancelKeyPress += (sender, e) =>
-            {
-                e.Cancel = true;
-
-                if (!_ShuttingDown)
+                if (!serviceMode)
                 {
-                    Console.WriteLine(
-                        Environment.NewLine +
-                        Environment.NewLine +
-                        "Shutdown requested" +
-                        Environment.NewLine +
-                        Environment.NewLine);
-                    _TokenSource.Cancel();
-                    _ShuttingDown = true;
-
-                    _StopSignal.Set();
+                    Console.WriteLine("Admiral running on port " + _Settings.AdmiralPort);
+                    Console.WriteLine("MCP server on port " + _Settings.McpPort);
+                    Console.WriteLine("WebSocket endpoint at /ws");
+                    Console.WriteLine("Dashboard: http://localhost:" + _Settings.AdmiralPort + "/dashboard");
                 }
-            };
 
-            bool waitHandleSignal = false;
-            do
-            {
-                waitHandleSignal = _StopSignal.WaitOne(1000);
+                // Wait for shutdown signal (Ctrl+C, SIGTERM, API stop, service stop, or assembly unload)
+                AssemblyLoadContext.Default.Unloading += (ctx) => _StopSignal.Set();
+                Console.CancelKeyPress += (sender, e) =>
+                {
+                    e.Cancel = true;
+                    BeginShutdown(true);
+                };
+
+                bool waitHandleSignal = false;
+                do
+                {
+                    waitHandleSignal = _StopSignal.WaitOne(1000);
+                }
+                while (!waitHandleSignal);
+
+                _Server.Stop();
+                _Logging.Info("[Program] stopped at " + DateTime.UtcNow.ToString("o"));
             }
-            while (!waitHandleSignal);
+            finally
+            {
+                if (sigTerm != null) sigTerm.Dispose();
+            }
+        }
 
-            _Server.Stop();
-            _Logging.Info("[Program] stopped at " + DateTime.UtcNow.ToString("o"));
+        private static PosixSignalRegistration? RegisterSigTerm()
+        {
+            try
+            {
+                return PosixSignalRegistration.Create(PosixSignal.SIGTERM, OnSigTerm);
+            }
+            catch (PlatformNotSupportedException)
+            {
+                return null;
+            }
+        }
+
+        private static void OnSigTerm(PosixSignalContext context)
+        {
+            context.Cancel = true;
+            BeginShutdown(false);
+        }
+
+        private static void BeginShutdown(bool announce)
+        {
+            bool first;
+            lock (_ShutdownGate)
+            {
+                first = !_ShuttingDown;
+                if (first) _ShuttingDown = true;
+            }
+
+            if (!first) return;
+
+            if (announce)
+            {
+                Console.WriteLine(
+                    Environment.NewLine +
+                    Environment.NewLine +
+                    "Shutdown requested" +
+                    Environment.NewLine +
+                    Environment.NewLine);
+            }
+
+            _TokenSource.Cancel();
+            _StopSignal.Set();
         }
 
         private static int RunRegistration(RegistrationCommandLine registration)
