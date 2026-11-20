@@ -1704,8 +1704,8 @@ namespace Test.Shared.Suites.Services
 
                     Mission mission = new Mission("Failed process output") { Status = MissionStatusEnum.InProgress, ProcessId = 4450 };
                     await db.Missions.CreateAsync(mission).ConfigureAwait(false);
-                    Captain captain = new Captain("failed-output-captain") { State = CaptainStateEnum.Working, CurrentMissionId = mission.Id, ProcessId = 4450 };
-                    await db.Captains.CreateAsync(captain).ConfigureAwait(false);
+                    Captain captain = new Captain("failed-output-captain") { State = CaptainStateEnum.Working, Assignment = mission, ProcessId = 4450 };
+                    await CaptainAssignmentFixture.CreateAsync(db, captain).ConfigureAwait(false);
 
                     await service.HandleProcessExitAsync(4450, 1, captain.Id, mission.Id).ConfigureAwait(false);
 
@@ -1731,8 +1731,8 @@ namespace Test.Shared.Suites.Services
 
                     Mission mission = new Mission("Stored process output") { Status = MissionStatusEnum.InProgress, ProcessId = 4451, AgentOutput = "stored output" };
                     await db.Missions.CreateAsync(mission).ConfigureAwait(false);
-                    Captain captain = new Captain("stored-output-captain") { State = CaptainStateEnum.Working, CurrentMissionId = mission.Id, ProcessId = 4451 };
-                    await db.Captains.CreateAsync(captain).ConfigureAwait(false);
+                    Captain captain = new Captain("stored-output-captain") { State = CaptainStateEnum.Working, Assignment = mission, ProcessId = 4451 };
+                    await CaptainAssignmentFixture.CreateAsync(db, captain).ConfigureAwait(false);
 
                     await service.HandleProcessExitAsync(4451, 1, captain.Id, mission.Id).ConfigureAwait(false);
 
@@ -1758,8 +1758,8 @@ namespace Test.Shared.Suites.Services
 
                     Mission mission = new Mission("Empty process output") { Status = MissionStatusEnum.InProgress, ProcessId = 4452 };
                     await db.Missions.CreateAsync(mission).ConfigureAwait(false);
-                    Captain captain = new Captain("empty-output-captain") { State = CaptainStateEnum.Working, CurrentMissionId = mission.Id, ProcessId = 4452 };
-                    await db.Captains.CreateAsync(captain).ConfigureAwait(false);
+                    Captain captain = new Captain("empty-output-captain") { State = CaptainStateEnum.Working, Assignment = mission, ProcessId = 4452 };
+                    await CaptainAssignmentFixture.CreateAsync(db, captain).ConfigureAwait(false);
 
                     await service.HandleProcessExitAsync(4452, 1, captain.Id, mission.Id).ConfigureAwait(false);
 
