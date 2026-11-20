@@ -676,6 +676,7 @@ Part of the bounded enumeration contract ([docs/ENUMERATION.md](docs/ENUMERATION
 - Helm `playbook show`, `playbook remove` and `voyage create --playbook` resolve playbooks across every page instead of the first page; TUI pipeline, playbook and workflow-profile pickers read every page.
 - WebSocket `get_mission_diff` reads a Harbor mission worktree through that Harbor's git service when no saved diff file or snapshot exists. A missing worktree or an unavailable Harbor still returns Unavailable. Saved diffs and snapshots keep their existing precedence. REST and MCP results are unchanged.
 - A tunnel request applies its deadline to the send and to the response wait. A sender that does not return times out. Caller cancellation stays a cancellation, and the pending response entry is removed when the call ends.
+- A voyage whose every mission is cancelled finishes as Cancelled. A settled voyage with a cancelled mission and no completed mission finishes as Failed. A voyage with a completed mission and no failed or landing-failed mission still finishes as Complete, and a voyage whose missions are only WorkProduced still finishes as Complete.
 
 ### Handoff and landing integrity
 
