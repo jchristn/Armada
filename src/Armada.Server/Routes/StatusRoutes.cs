@@ -36,6 +36,7 @@ namespace Armada.Server.Routes
         private readonly Func<Task>? _onRemoteControlSettingsChanged;
         private readonly Func<Task<bool>?>? _restartOverride;
         private const string _HeaderRestart = "[ArmadaServer] restart: ";
+        private const int DoctorDatabaseTimeoutSeconds = 5;
 
         /// <summary>
         /// The black box runtime (the doctor's storage check and black box settings changes), or null.
@@ -210,12 +211,15 @@ namespace Armada.Server.Routes
                     if (_settings.Database.Type != DatabaseTypeEnum.Sqlite)
                     {
                         DatabaseSettings database = _settings.Database;
-                        results.Add(new
-                        {
-                            Name = "Database",
-                            Status = DoctorCheckStatusEnum.Pass,
-                            Message = $"{database.Type} database configuration present at {database.Hostname}:{database.EffectivePort}/{database.DatabaseName}"
-                        });
+                        string target = $"{database.Type} database at {database.Hostname}:{database.EffectivePort}/{database.DatabaseName}";
+                        // Query through the Admiral's own driver so the check reflects the database it uses.
+                        string? failure = await DoctorDatabaseProbe.ProbeAsync(
+                            probeToken => _database.GetSchemaVersionAsync(probeToken),
+                            TimeSpan.FromSeconds(DoctorDatabaseTimeoutSeconds)).ConfigureAwait(false);
+                        if (failure == null)
+                            results.Add(new { Name = "Database", Status = DoctorCheckStatusEnum.Pass, Message = target + " answered a query" });
+                        else
+                            results.Add(new { Name = "Database", Status = DoctorCheckStatusEnum.Fail, Message = target + " did not answer: " + failure });
                     }
                     else
                     {

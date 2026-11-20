@@ -12,6 +12,7 @@ All notable changes to Armada are documented in this file.
 - `armada mcp install` and `armada mcp remove` back up a config file that has comments or trailing commas before rewriting it, to `<file>.armada-backup-<yyyyMMddHHmmss>` (UTC) next to the original, and say in the output that the comments were not preserved and where the backup is. An install whose Armada entry already matches leaves such a file untouched. A file whose top-level value is not a JSON object is refused and left unchanged instead of being replaced with a new object. (#57)
 - A deleted objective stays deleted when another user wrote a snapshot of it. Deleting an objective now removes every snapshot of it in the tenant, including snapshots the caller cannot see and tenant-less snapshots a system admin wrote, so the startup backfill and later reads no longer restore it. Who may delete is unchanged: the caller must still see the objective or one of its own snapshots. (#66)
 - Judge lens, Affected Case and Spec Conflict headings are recognized when Markdown emphasis wraps the heading marks or the whole name on its own line (`**## Correctness**`, `*Correctness*`, `**1. Correctness**`), and as a bold label with the colon inside (`**Correctness:** looks fine`). Every heading form accepted before is still accepted. A heading whose marks are wrapped in emphasis also ends the preceding section body. (#68)
+- The doctor Database check reports a PostgreSQL, MySQL or SQL Server database instead of "Database not found" for the unused SQLite path. It runs a query through the Admiral's database driver with a 5-second timeout and reports Pass or Fail with the provider, host, port and database name. `DatabaseSettings.EffectivePort` (the configured port or the provider default) is not written to settings.json. (#106)
 
 ## v1.3.0 (2026-11-06)
 
@@ -438,7 +439,6 @@ commands arrive with their own changes. Schema migrations 103 and 104 apply at s
 - macOS Harbor bundles store the pi permission-gate extension in `Contents/Resources/Pi`, and pi resolves it there as well as beside portable binaries. This prevents ARM64 code signing from treating TypeScript resources as unsigned nested code. The DMG verifier checks the resource layout.
 - After building and verifying both Harbor DMGs, `build-harbor-app.sh` installs the native app into `~/Applications`, staging and signature-checking a fresh bundle before replacement. `--no-install` opts out, and `--no-build` remains verification-only.
 - Helm's NuGet tool package preserves battery fixture `.gitignore` and `.gitattributes` files instead of excluding them with NU5119 warnings. Installer verification checks every packaged framework for those files.
-- Report the configured server database in the doctor check without probing an unused SQLite file.
 
 ### Landing failure prevention
 

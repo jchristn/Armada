@@ -1,6 +1,7 @@
 namespace Armada.Core.Settings
 {
     using System;
+    using System.Text.Json.Serialization;
     using Armada.Core.Enums;
 
     /// <summary>
@@ -56,8 +57,12 @@ namespace Armada.Core.Settings
         }
 
         /// <summary>
-        /// Effective server port. Returns zero for SQLite, which does not use a server port.
+        /// Effective server port: the configured port, or the provider default (PostgreSQL 5432, SQL Server 1433,
+        /// MySQL 3306) when none is set. Returns zero for SQLite, which does not use a server port. Derived, so it is
+        /// not written to the settings file.
         /// </summary>
+        /// <exception cref="ArgumentException">Thrown when the database type is unknown.</exception>
+        [JsonIgnore]
         public int EffectivePort
         {
             get
