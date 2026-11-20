@@ -482,6 +482,9 @@ commands arrive with their own changes. Schema migrations 103 and 104 apply at s
 ### Workflow readiness
 
 - Readiness checks split command chains only on separators outside double-quoted arguments. Escaped double quotes keep their quoted span open.
+### Readiness skips a path-valued shell assignment
+
+- A workflow command that starts with `NAME=value` was reported as `command_dependency_missing` for that assignment when the value contained `/` or `\`. Readiness now skips the assignment and checks the next command. A name that starts with a digit stays a command name.
 
 ### Landing failure prevention
 
