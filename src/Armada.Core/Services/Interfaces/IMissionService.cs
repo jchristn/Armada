@@ -127,6 +127,16 @@ namespace Armada.Core.Services.Interfaces
         bool IsCompletionInFlight(string missionId);
 
         /// <summary>
+        /// Stop the commands a mission's completion is running for it, such as its Definition-of-Done build and tests,
+        /// because the mission was cancelled. The completion then neither fails nor lands the mission. Does nothing
+        /// when no such command is running. Thread safe.
+        /// </summary>
+        /// <param name="missionId">Mission identifier; null or empty does nothing.</param>
+        void StopCompletionCommands(string missionId)
+        {
+        }
+
+        /// <summary>
         /// Record how a run against a captain's model endpoint ended, for the endpoint circuit breaker. A healthy run
         /// closes the breaker; consecutive endpoint-level failures open it for a short window, during which captains on
         /// that endpoint get no new missions. Captains without a model endpoint are ignored.

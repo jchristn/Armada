@@ -124,7 +124,8 @@ namespace Armada.Core.Services
         /// Run the vessel's in-dock Definition-of-Done gate for a mission about to land. On a classified
         /// failure (Compile/TestFail/Timeout/Infra), fail the mission with the classified reason, cancel
         /// dependent pipeline stages, and return true so the caller does not land. Returns false when the
-        /// gate is disabled/unconfigured or the change passed.
+        /// gate is disabled/unconfigured or the change passed. A mission cancelled while its gate runs stops the
+        /// gate's command (<see cref="StopCompletionCommands"/>) and returns true without recording a failure.
         /// </summary>
         private async Task<bool> TryFailForDefinitionOfDoneAsync(Mission mission, Dock? dock, CancellationToken token)
         {
@@ -136,9 +137,34 @@ namespace Armada.Core.Services
             if (vessel == null || !vessel.DefinitionOfDoneEnabled) return false;
 
             DockHost? harborHost = HarborHostFor(dock);
-            DefinitionOfDoneResult result = harborHost != null
-                ? await _DefinitionOfDone.EvaluateOnHostAsync(vessel, dock.WorktreePath!, harborHost.Commands, token).ConfigureAwait(false)
-                : await _DefinitionOfDone.EvaluateAsync(vessel, dock.WorktreePath!, token).ConfigureAwait(false);
+            DefinitionOfDoneResult result;
+            using (CancellationTokenSource missionRun = CancellationTokenSource.CreateLinkedTokenSource(token))
+            {
+                _CompletionCommandRuns[missionRun] = mission.Id;
+                try
+                {
+                    // A cancel that landed before the run was registered is read here; a later one cancels missionRun.
+                    Mission? current = await _Database.Missions.ReadAsync(mission.Id, token).ConfigureAwait(false);
+                    if (current == null || current.Status == MissionStatusEnum.Cancelled) return true;
+
+                    result = harborHost != null
+                        ? await _DefinitionOfDone.EvaluateOnHostAsync(vessel, dock.WorktreePath!, harborHost.Commands, missionRun.Token).ConfigureAwait(false)
+                        : await _DefinitionOfDone.EvaluateAsync(vessel, dock.WorktreePath!, missionRun.Token).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (missionRun.IsCancellationRequested && !token.IsCancellationRequested)
+                {
+                    _Logging.Info(_Header + "mission " + mission.Id + " was cancelled during its Definition-of-Done gate; the gate command was stopped");
+                    return true;
+                }
+                finally
+                {
+                    _CompletionCommandRuns.TryRemove(missionRun, out _);
+                }
+
+                // Cancelled after the gate finished: neither land nor fail the cancelled mission.
+                if (missionRun.IsCancellationRequested && !token.IsCancellationRequested) return true;
+            }
+
             if (result.Passed) return false;
 
             MissionStatusEnum dodStatusBefore = mission.Status;

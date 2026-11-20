@@ -5,7 +5,7 @@ namespace Armada.Core.Models
     using Armada.Core.Services;
 
     /// <summary>
-    /// Result of MCP delete_vessel: the vessel is deleted, and any cleanup step that could not complete (a mission that
+    /// Result of MCP and WebSocket delete_vessel: the vessel is deleted, and any cleanup step that could not complete (a mission that
     /// could not be stopped or deleted, a dock that could not be purged, a directory left in place) is reported. Warnings
     /// lists at most <see cref="MaxWarnings"/> of them; WarningCount is the full count.
     /// </summary>

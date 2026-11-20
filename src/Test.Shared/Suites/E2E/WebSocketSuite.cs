@@ -660,6 +660,52 @@ namespace Test.Shared.Suites.E2E
                 AssertEqual("deleted", data.Status);
             }));
 
+            cases.Add(CaseAsync("delete_vessel_stops_captain_and_cancels_review_missions", "DeleteVessel_StopsCaptainAndCancelsReviewMissions", TestTags.Positive, async () =>
+            {
+                E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this);
+                HttpClient authClient = fx.AuthClient;
+                int restPort = fx.RestPort;
+
+                string vesselId = await CreateVesselViaRestAsync(authClient, "ws-del-vessel-active").ConfigureAwait(false);
+                string captainId = await CreateCaptainViaRestAsync(authClient, "ws-del-vessel-captain").ConfigureAwait(false);
+                HttpResponseMessage activeResponse = await authClient.PostAsync("/api/v1/missions",
+                    JsonHelper.ToJsonContent(new Mission { Title = "ws-del-vessel-active", VesselId = vesselId, RequestedCaptainId = captainId })).ConfigureAwait(false);
+                activeResponse.EnsureSuccessStatusCode();
+                string activeBody = await activeResponse.Content.ReadAsStringAsync().ConfigureAwait(false);
+                MissionCreateResponse activeWrapper = JsonHelper.Deserialize<MissionCreateResponse>(activeBody);
+                Mission activeMission = activeWrapper.Mission ?? JsonHelper.Deserialize<Mission>(activeBody);
+                AssertTrue(activeMission.Status == MissionStatusEnum.Assigned || activeMission.Status == MissionStatusEnum.InProgress,
+                    "the requested captain takes the mission: " + activeMission.Status);
+                Captain holdingCaptain = await GetViaRestAsync<Captain>(authClient, "/api/v1/captains/" + captainId).ConfigureAwait(false);
+                AssertTrue(holdingCaptain.ActiveMissionIds.Contains(activeMission.Id), "the captain holds the mission before the vessel is deleted");
+
+                HttpResponseMessage reviewResponse = await authClient.PostAsync("/api/v1/missions",
+                    JsonHelper.ToJsonContent(new Mission { Title = "ws-del-vessel-review", VesselId = vesselId })).ConfigureAwait(false);
+                reviewResponse.EnsureSuccessStatusCode();
+                string reviewBody = await reviewResponse.Content.ReadAsStringAsync().ConfigureAwait(false);
+                MissionCreateResponse reviewWrapper = JsonHelper.Deserialize<MissionCreateResponse>(reviewBody);
+                Mission reviewMission = reviewWrapper.Mission ?? JsonHelper.Deserialize<Mission>(reviewBody);
+                string reviewMissionId = reviewMission.Id;
+                foreach (string status in new[] { "Assigned", "InProgress", "Review" })
+                {
+                    HttpResponseMessage statusResponse = await authClient.PutAsync("/api/v1/missions/" + reviewMissionId + "/status",
+                        JsonHelper.ToJsonContent(new { Status = status })).ConfigureAwait(false);
+                    statusResponse.EnsureSuccessStatusCode();
+                }
+
+                JsonElement deleteResponse = await WsCommandAsync(restPort, "delete_vessel", new { id = vesselId }).ConfigureAwait(false);
+                AssertEqual("command.result", deleteResponse.GetProperty("type").GetString());
+
+                Mission cancelledActive = await GetViaRestAsync<Mission>(authClient, "/api/v1/missions/" + activeMission.Id).ConfigureAwait(false);
+                Captain stoppedCaptain = await GetViaRestAsync<Captain>(authClient, "/api/v1/captains/" + captainId).ConfigureAwait(false);
+                Mission cancelledReview = await GetViaRestAsync<Mission>(authClient, "/api/v1/missions/" + reviewMissionId).ConfigureAwait(false);
+                AssertEqual(MissionStatusEnum.Cancelled, cancelledActive.Status);
+                AssertEqual(CaptainStateEnum.Idle, stoppedCaptain.State);
+                AssertEqual(0, stoppedCaptain.ActiveMissionCount);
+                AssertNull(stoppedCaptain.ProcessId);
+                AssertEqual(MissionStatusEnum.Cancelled, cancelledReview.Status);
+            }));
+
             // Voyage Tests
             cases.Add(CaseAsync("list_voyages_empty_returns_empty_list", "ListVoyages_Empty_ReturnsEmptyList", TestTags.Positive, async () =>
             {
@@ -1132,6 +1178,95 @@ namespace Test.Shared.Suites.E2E
                 JsonElement resp = await WsCommandAsync(restPort, "list_captains").ConfigureAwait(false);
                 AssertEqual("command.result", resp.GetProperty("type").GetString());
                 AssertEqual("list_captains", resp.GetProperty("action").GetString());
+            }));
+
+            cases.Add(CaseAsync("create_captain_discards_operational_fields", "CreateCaptain_DiscardsOperationalFields", TestTags.Positive, async () =>
+            {
+                E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this);
+                int restPort = fx.RestPort;
+                E2ETenantUser owner = await E2ETenantUser.CreateAsync(fx.AuthClient, "ws-captain-create-owner").ConfigureAwait(false);
+                string captainId = "cpt_test_" + Guid.NewGuid().ToString("N");
+                string captainName = "ws-create-operational-" + Guid.NewGuid().ToString("N").Substring(0, 8);
+                DateTime oldCreatedUtc = new DateTime(2000, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+                DateTime futureUtc = DateTime.UtcNow.AddDays(1);
+                // Above the operating-system process-id limit. Stop and the health check signal a stored
+                // process id, so the value must not be this test process.
+                int suppliedProcessId = 1900000001;
+                Captain request = new Captain(captainName, AgentRuntimeEnum.ClaudeCode)
+                {
+                    Id = captainId,
+                    TenantId = owner.TenantId,
+                    UserId = owner.UserId,
+                    SystemInstructions = "Keep changes small.",
+                    AllowedPersonas = "Worker,Judge",
+                    PreferredPersona = "Worker",
+                    ReasoningEffort = ReasoningEffortEnum.High,
+                    Tier = CaptainTierEnum.Premium,
+                    RuntimeOptionsJson = "{\"autoApprove\":true}",
+                    CliPermissionPolicy = CliPermissionPolicyEnum.ApproveInArmada,
+                    MaxConcurrency = 2,
+                    UsageCaptureEnabled = false,
+                    UsageCaptureIntervalSeconds = 600,
+                    Active = false,
+                    State = CaptainStateEnum.Working,
+                    ActiveMissionCount = 1,
+                    ActiveMissionIds = new List<string> { "msn_test_assignment" },
+                    CurrentSessionId = "pls_test_session",
+                    ModelProfileId = "mdl_test_profile",
+                    ProcessId = suppliedProcessId,
+                    RecoveryAttempts = 3,
+                    QuarantineUntilUtc = futureUtc,
+                    QuarantineReason = "test quarantine",
+                    LastHeartbeatUtc = oldCreatedUtc,
+                    LastProcessAliveUtc = oldCreatedUtc,
+                    CreatedUtc = oldCreatedUtc
+                };
+
+                try
+                {
+                    JsonElement createResponse = await WsCommandAsync(restPort, "create_captain", new { data = request }).ConfigureAwait(false);
+                    AssertEqual("command.result", createResponse.GetProperty("type").GetString());
+                    Captain created = DeserializeData<Captain>(createResponse);
+                    JsonElement readResponse = await WsCommandAsync(restPort, "get_captain", new { id = captainId }).ConfigureAwait(false);
+                    AssertEqual("command.result", readResponse.GetProperty("type").GetString());
+                    Captain stored = DeserializeData<Captain>(readResponse);
+
+                    AssertEqual(captainId, created.Id);
+                    AssertEqual(owner.TenantId, stored.TenantId);
+                    AssertEqual(owner.UserId, stored.UserId);
+                    AssertEqual(captainName, stored.Name);
+                    AssertEqual(AgentRuntimeEnum.ClaudeCode, stored.Runtime);
+                    AssertEqual("Keep changes small.", stored.SystemInstructions);
+                    AssertEqual("Worker,Judge", stored.AllowedPersonas);
+                    AssertEqual("Worker", stored.PreferredPersona);
+                    AssertEqual((ReasoningEffortEnum?)ReasoningEffortEnum.High, stored.ReasoningEffort);
+                    AssertEqual((CaptainTierEnum?)CaptainTierEnum.Premium, stored.Tier);
+                    AssertEqual("{\"autoApprove\":true}", stored.RuntimeOptionsJson);
+                    AssertEqual((CliPermissionPolicyEnum?)CliPermissionPolicyEnum.ApproveInArmada, stored.CliPermissionPolicy);
+                    AssertEqual(2, stored.MaxConcurrency, "the requested concurrency is kept");
+                    AssertEqual((bool?)false, stored.UsageCaptureEnabled, "the usage capture opt-out is kept");
+                    AssertEqual(600, stored.UsageCaptureIntervalSeconds);
+                    AssertFalse(stored.Active, "Active is configuration and is kept");
+                    AssertEqual(CaptainStateEnum.Idle, stored.State);
+                    AssertEqual(0, stored.ActiveMissionCount);
+                    AssertEqual(0, stored.ActiveMissionIds.Count);
+                    AssertNull(stored.CurrentSessionId, "CurrentSessionId should be empty on create");
+                    AssertNull(created.ModelProfileId, "ModelProfileId is server-owned");
+                    AssertNull(stored.ModelProfileId, "ModelProfileId is server-owned");
+                    AssertNull(created.ProcessId, "ProcessId should be empty on create");
+                    AssertNull(stored.ProcessId, "ProcessId should be empty on create");
+                    AssertEqual(0, stored.RecoveryAttempts);
+                    AssertNull(stored.QuarantineUntilUtc, "QuarantineUntilUtc should be empty on create");
+                    AssertNull(stored.QuarantineReason, "QuarantineReason should be empty on create");
+                    AssertNull(stored.LastHeartbeatUtc, "LastHeartbeatUtc should be empty on create");
+                    AssertNull(stored.LastProcessAliveUtc, "LastProcessAliveUtc should be empty on create");
+                    AssertTrue(stored.CreatedUtc > oldCreatedUtc, "CreatedUtc should be set by the server");
+                }
+                finally
+                {
+                    await WsCommandAsync(restPort, "stop_captain", new { captainId = captainId }).ConfigureAwait(false);
+                    await WsCommandAsync(restPort, "delete_captain", new { id = captainId }).ConfigureAwait(false);
+                }
             }));
 
             cases.Add(CaseAsync("create_captain_returns_created_captain", "CreateCaptain_ReturnsCreatedCaptain", TestTags.Positive, async () =>

@@ -1848,8 +1848,11 @@ Partial update of a vessel's project context and style guide fields only. Unlike
 
 #### delete_vessel
 
-Delete a vessel. Its `Pending`, `Assigned`, and `InProgress` missions are cancelled, its docks and their worktrees are
-removed, and its bare repository is deleted when it lives under the Admiral's repos directory.
+Delete a vessel. Its `Pending`, `Blocked`, `Assigned`, `InProgress`, `Review`, and `Testing` missions are cancelled
+through the same path as REST and MCP, which stops each running agent first and records one `VesselDeleted` black box
+entry. Its docks and their worktrees are removed, and its bare repository is deleted when it lives under the Admiral's
+repos directory. A mission whose agent did not confirm it stopped is left unchanged and listed in `warnings`; the vessel
+is still deleted.
 
 **Request:**
 
@@ -1866,7 +1869,11 @@ removed, and its bare repository is deleted when it lives under the Admiral's re
 | `action` | string | Yes | `"delete_vessel"` |
 | `id` | string | Yes | Vessel ID (prefix `vsl_`) |
 
-**Response:** `{ "type": "command.result", "action": "delete_vessel", "data": { "status": "deleted" } }`
+**Response:** `{ "type": "command.result", "action": "delete_vessel", "data": { "status": "deleted", "vesselId": "vsl_abc123", "warningCount": 0, "warnings": null } }`
+
+`warningCount` is the number of cleanup steps that could not complete; `warnings` lists the first 50 of them (for
+example `"Mission msn_abc: The mission was not cancelled because its agent process ... did not confirm it stopped."`),
+or is null when there are none.
 
 ---
 
@@ -2519,6 +2526,8 @@ Create a new captain.
 |---|---|---|---|
 | `action` | string | Yes | `"create_captain"` |
 | `data` | object | Yes | Captain creation data |
+
+Server-owned operational fields in the body are ignored: a new captain always starts `Idle` with no active missions, session, process, recovery attempts, quarantine, heartbeat or model profile, and with server creation timestamps. Configuration fields (including `MaxConcurrency`, the usage capture settings and `Active`) and an optional `Id` are kept.
 
 ---
 

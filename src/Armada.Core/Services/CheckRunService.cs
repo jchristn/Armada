@@ -550,6 +550,12 @@ namespace Armada.Core.Services
                         "Check command timed out after " + timeout.TotalMinutes.ToString("0") + " minutes.")
                 };
             }
+            catch (OperationCanceledException) when (token.IsCancellationRequested)
+            {
+                try { if (!process.HasExited) process.Kill(true); }
+                catch { }
+                throw;
+            }
 
             string stdout = await stdoutTask.ConfigureAwait(false);
             string stderr = await stderrTask.ConfigureAwait(false);

@@ -185,9 +185,7 @@ namespace Armada.Server.Routes
                 captain.MaxConcurrency = captain.MaxConcurrencySpecified
                     ? ConcurrencyClamp.CaptainLimit(captain.MaxConcurrency, _settings.Concurrency.MaxCaptainConcurrency)
                     : CaptainConcurrencyDefaults.For(captain.Runtime, _settings.Concurrency);
-                captain.ActiveMissionCount = 0;
-                captain.ActiveMissionIds.Clear();
-                captain.CurrentSessionId = null;
+                EntityUpdateMerger.ResetCaptainOperationalState(captain);
                 captain.TenantId = ctx.TenantId;
                 captain.UserId = ctx.UserId;
                 EntityUpdateMerger.NormalizeCaptainRuntimeOptions(captain);

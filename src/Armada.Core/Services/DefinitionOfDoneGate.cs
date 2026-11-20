@@ -226,11 +226,21 @@ namespace Armada.Core.Services
                     try { if (!process.HasExited) process.Kill(true); }
                     catch { }
                 }
+                catch (OperationCanceledException) when (token.IsCancellationRequested)
+                {
+                    try { if (!process.HasExited) process.Kill(true); }
+                    catch { }
+                    throw;
+                }
 
                 string stdout = await stdoutTask.ConfigureAwait(false);
                 string stderr = await stderrTask.ConfigureAwait(false);
                 output = (stdout + "\n" + stderr).Trim();
                 if (!timedOut) exitCode = process.ExitCode;
+            }
+            catch (OperationCanceledException) when (token.IsCancellationRequested)
+            {
+                throw;
             }
             catch (Exception ex)
             {

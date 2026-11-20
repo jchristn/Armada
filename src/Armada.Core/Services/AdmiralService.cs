@@ -723,6 +723,8 @@ namespace Armada.Core.Services
             if (options?.FailureKind != null) mission.FailureKind = options.FailureKind;
             if (options?.FailureReason != null) mission.FailureReason = options.FailureReason;
             Mission cancelled = await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
+            // A completion still running for the mission (its Definition-of-Done build and tests) is stopped as well.
+            _Missions.StopCompletionCommands(mission.Id);
             if (ownsCaptain) await _Database.Captains.TryReleaseFromMissionAsync(captain!.Id, mission.Id, token).ConfigureAwait(false);
             if (cancelStatusBefore != MissionStatusEnum.Cancelled)
             {
