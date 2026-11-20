@@ -164,7 +164,7 @@ namespace Armada.Core.Database.Postgresql
                             cmd.CommandText = "INSERT INTO schema_migrations (version, description, applied_utc) VALUES (@v, @d, @t);";
                             cmd.Parameters.AddWithValue("@v", migration.Version);
                             cmd.Parameters.AddWithValue("@d", migration.Description);
-                            cmd.Parameters.AddWithValue("@t", DateTime.UtcNow);
+                            PostgresqlCommandHelper.AddDate(cmd, "@t", DateTime.UtcNow);
                             await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
                         }
 

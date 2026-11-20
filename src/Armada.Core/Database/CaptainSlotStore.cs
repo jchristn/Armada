@@ -28,8 +28,17 @@ namespace Armada.Core.Database
             if (captainId != null) Add("@id", captainId);
             if (missionId != null) Add("@mission", missionId);
             Add("@value", value);
-            Add("@now", _Postgres || _Mysql ? DateTime.UtcNow : DateTime.UtcNow.ToString("o", CultureInfo.InvariantCulture));
+            Add("@now", Timestamp(DateTime.UtcNow));
             return cmd;
+        }
+
+        private object Timestamp(DateTime value)
+        {
+            // PostgreSQL TIMESTAMP columns keep clock digits; an unspecified kind binds as timestamp without time zone
+            // so a non-UTC session does not shift the value.
+            if (_Postgres) return DateTime.SpecifyKind(value.Kind == DateTimeKind.Local ? value.ToUniversalTime() : value, DateTimeKind.Unspecified);
+            if (_Mysql) return value;
+            return value.ToString("o", CultureInfo.InvariantCulture);
         }
 
         private static void ValidateExclusive(string captainId, string sessionId, CaptainStateEnum? state = null)
@@ -159,7 +168,7 @@ namespace Armada.Core.Database
             // Acquire mission ownership before captain/account locks. A second admission cannot launch
             // from the same Pending/Verifying version, even when it selected another captain.
             using DbCommand locked = Command(transaction, "UPDATE missions SET last_update_utc=last_update_utc WHERE id=@mission AND last_update_utc=@value AND status='" + status + "';", missionId: records.Decision.MissionId,
-                value: _Postgres || _Mysql ? records.AdmissionMissionVersionUtc.Value : records.AdmissionMissionVersionUtc.Value.ToString("o", CultureInfo.InvariantCulture));
+                value: Timestamp(records.AdmissionMissionVersionUtc.Value));
             await locked.ExecuteNonQueryAsync(token).ConfigureAwait(false);
             DbParameter tenant = locked.CreateParameter(); tenant.ParameterName = "@tenant"; tenant.Value = records.Decision.TenantId; locked.Parameters.Add(tenant);
             DbParameter owner = locked.CreateParameter(); owner.ParameterName = "@owner"; owner.Value = (object?)records.Decision.UserId ?? DBNull.Value; locked.Parameters.Add(owner);
@@ -210,7 +219,7 @@ namespace Armada.Core.Database
             using DbCommand row = Command(tx, "UPDATE captains SET active_mission_count=active_mission_count WHERE id=@id;", captainId);
             await row.ExecuteNonQueryAsync(token).ConfigureAwait(false);
             using DbCommand current = Command(tx, "SELECT COUNT(*) FROM missions WHERE id=@mission AND captain_id=@id AND status='Verifying' AND last_update_utc=@value;", captainId, missionId,
-                _Postgres || _Mysql ? version : version.ToString("o", CultureInfo.InvariantCulture));
+                Timestamp(version));
             if (Convert.ToInt32(await current.ExecuteScalarAsync(token).ConfigureAwait(false)) != 1) return false;
             using DbCommand insert = Command(tx, @"INSERT INTO captain_mission_slots(mission_id,captain_id,process_id,dock_id)
                 SELECT m.id,m.captain_id,@value,m.dock_id FROM missions m WHERE m.id=@mission AND m.captain_id=@id AND m.status='Verifying'
@@ -242,12 +251,12 @@ namespace Armada.Core.Database
                 AND EXISTS (SELECT 1 FROM captain_mission_slots s JOIN missions m ON m.id=s.mission_id
                     WHERE s.captain_id=@id AND s.mission_id=@mission AND m.captain_id=@id AND m.status='Verifying'
                     AND m.process_id IS NULL AND m.last_update_utc=@value);", captainId, missionId,
-                _Postgres || _Mysql ? version : version.ToString("o", CultureInfo.InvariantCulture));
+                Timestamp(version));
             DbParameter maximum = claim.CreateParameter(); maximum.ParameterName = "@ceiling"; maximum.Value = Math.Clamp(ceiling, 1, 256); claim.Parameters.Add(maximum);
             if (await claim.ExecuteNonQueryAsync(token).ConfigureAwait(false) != 1) return false;
             using DbCommand mission = Command(tx, @"UPDATE missions SET status='InProgress',last_update_utc=@now,selection_decision_id=NULL,usage_execution_key=@execution
                 WHERE id=@mission AND captain_id=@id AND status='Verifying' AND process_id IS NULL AND last_update_utc=@value;", captainId, missionId,
-                _Postgres || _Mysql ? version : version.ToString("o", CultureInfo.InvariantCulture));
+                Timestamp(version));
             DbParameter execution = mission.CreateParameter(); execution.ParameterName = "@execution"; execution.Value = selection?.Decision.ExecutionAttemptId ?? Constants.IdGenerator.GenerateKSortable("uex_", 24); mission.Parameters.Add(execution);
             if (await mission.ExecuteNonQueryAsync(token).ConfigureAwait(false) != 1) return false;
             using DbCommand refresh = Command(tx, Refresh + " WHERE id=@id;", captainId);

@@ -203,7 +203,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
             cmd.Parameters.AddWithValue("@cached_tokens", record.CachedTokens);
             cmd.Parameters.AddWithValue("@total_tokens", record.TotalTokens);
             cmd.Parameters.AddWithValue("@estimated", record.Estimated);
-            cmd.Parameters.AddWithValue("@created_utc", record.CreatedUtc);
+            PostgresqlCommandHelper.AddDate(cmd, "@created_utc", record.CreatedUtc);
             cmd.Parameters.AddWithValue("@provider", (object?)record.Provider ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@account_key", (object?)record.AccountKey ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@host_id", (object?)record.HostId ?? DBNull.Value);
@@ -309,12 +309,12 @@ namespace Armada.Core.Database.Postgresql.Implementations
             if (query.FromUtc.HasValue)
             {
                 conditions.Add("created_utc >= @from_utc");
-                parameters.Add(new NpgsqlParameter("@from_utc", query.FromUtc.Value));
+                parameters.Add(PostgresqlCommandHelper.DateParameter("@from_utc", query.FromUtc.Value));
             }
             if (query.ToUtc.HasValue)
             {
                 conditions.Add("created_utc <= @to_utc");
-                parameters.Add(new NpgsqlParameter("@to_utc", query.ToUtc.Value));
+                parameters.Add(PostgresqlCommandHelper.DateParameter("@to_utc", query.ToUtc.Value));
             }
         }
 

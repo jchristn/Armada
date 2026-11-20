@@ -388,10 +388,10 @@ namespace Armada.Core.Database.Postgresql.Implementations
             cmd.Parameters.AddWithValue("@protocol_version", (object?)harbor.ProtocolVersion ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@os_platform", (object?)harbor.OsPlatform ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@architecture", (object?)harbor.Architecture ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("@last_seen_utc", (object?)harbor.LastSeenUtc ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("@last_connected_utc", (object?)harbor.LastConnectedUtc ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("@created_utc", harbor.CreatedUtc);
-            cmd.Parameters.AddWithValue("@last_update_utc", harbor.LastUpdateUtc);
+            PostgresqlCommandHelper.AddDate(cmd, "@last_seen_utc", harbor.LastSeenUtc);
+            PostgresqlCommandHelper.AddDate(cmd, "@last_connected_utc", harbor.LastConnectedUtc);
+            PostgresqlCommandHelper.AddDate(cmd, "@created_utc", harbor.CreatedUtc);
+            PostgresqlCommandHelper.AddDate(cmd, "@last_update_utc", harbor.LastUpdateUtc);
         }
 
         private static Harbor HarborFromReader(NpgsqlDataReader reader)

@@ -576,6 +576,10 @@ Events, Memories, Merge Queue, Missions, Request History, Signals, and Voyages a
 
 - **A damaged objective field is no longer read as an empty list or a default enum.** Non-empty list or playbook JSON that cannot be decoded, and a non-empty objective enum name that is not a defined member, throw `StoredObjectiveDataException` with the objective id and the field name. A single-row read and an enumeration both fail. The stored text stays as it was, so a later update of another field cannot replace it. Empty or null text still reads as an empty list or the existing enum fallback. A numeric enum string that `Enum.TryParse` accepts is unchanged. Refinement-session enum reads keep their own fallback.
 
+### PostgreSQL UTC clocks
+
+- PostgreSQL `TIMESTAMP` parameters bind through `PostgresqlCommandHelper.AddDate` as `timestamp without time zone`. A UTC `DateTime` keeps its clock digits when the session time zone is not UTC, and range filters compare that column. Objective and model-endpoint reads label those clocks `DateTimeKind.Utc`. Text timestamp columns stay text.
+
 ### Landing failure prevention
 
 - Every dashboard and TUI delete, bulk delete and purge now shows a progress modal (for example "Deleting vessel" or "Deleting 12 missions": "This may take some time while related records are cleaned up.") that stays up until the server answers, cannot be dismissed while pending, and offers Retry and Dismiss if the delete fails. Duplicate submissions are ignored. Ask Armada uses the same shared dialog.

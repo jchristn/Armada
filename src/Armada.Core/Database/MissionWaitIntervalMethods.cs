@@ -13,7 +13,8 @@ namespace Armada.Core.Database
         private readonly SqliteWriteGate? _Gate;
         internal MissionWaitIntervalMethods(Func<DbConnection> factory, SqliteWriteGate? gate = null) { _Factory = factory; _Gate = gate; }
         private static object Date(DbConnection connection, DateTime value) => connection.GetType().Name.Contains("Sqlite") || connection.GetType().Name == "SqlConnection"
-            ? value.ToUniversalTime().ToString("o", CultureInfo.InvariantCulture) : value.ToUniversalTime();
+            ? value.ToUniversalTime().ToString("o", CultureInfo.InvariantCulture)
+            : connection.GetType().Name.Contains("Npgsql") ? DateTime.SpecifyKind(value.ToUniversalTime(), DateTimeKind.Unspecified) : value.ToUniversalTime();
         private static void Add(DbCommand cmd, string name, object? value) { DbParameter p = cmd.CreateParameter(); p.ParameterName = name; p.Value = value ?? DBNull.Value; cmd.Parameters.Add(p); }
         private async Task<T> Run<T>(Func<DbConnection, Task<T>> action, CancellationToken token)
         {
