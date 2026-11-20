@@ -468,6 +468,9 @@ commands arrive with their own changes. Schema migrations 103 and 104 apply at s
 ### Settled voyages announce their stored status
 
 - **A failed voyage is announced as failed.** When the health check settles a voyage, `voyage.changed` and the push title use the status already stored on the voyage. A voyage with a Failed or LandingFailed mission is stored as Failed and announced as Failed. A voyage whose missions finished without a failure is announced as Complete. Cancelling a voyage still announces Cancelled.
+### Mission success state
+
+- Clear an old failure reason and kind when completion, review approval, or merge reconciliation moves a mission to a success state. Keep new reasons written by later failures.
 
 ### Landing failure prevention
 
