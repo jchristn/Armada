@@ -545,6 +545,7 @@ commands arrive with their own changes. Schema migrations 103 and 104 apply at s
 - The backlog item editor keeps unsaved edits when a live update arrives. A reload action applies the newer server copy. A form with no unsaved edits still takes the update.
 - Dashboard planning and refinement transcripts keep the reader's position when new streamed text arrives.
 - An open check run reloads when that run changes, without replacing the page with a loading message. When the comparison page contains fewer runs than the total, the page says how many runs it searched.
+- Home reload follows the selected auto-refresh interval, so None stops the extra 30 second home reload. A refresh that arrives during a load runs once after that load, and the mission history chart reloads with it while keeping the history already on screen.
 
 ### Landing failure prevention
 
