@@ -285,8 +285,15 @@ namespace Armada.Core.Services
         }
 
         /// <summary>
-        /// Delete an objective and all of its snapshots.
+        /// Delete an objective and all of its snapshots. The caller must be able to see the objective (its row or one of
+        /// its own snapshots). Once the row is gone, every snapshot of the objective in the caller's tenant is deleted,
+        /// including snapshots other users wrote that the caller cannot see, so no surviving snapshot restores it.
         /// </summary>
+        /// <param name="auth">Caller.</param>
+        /// <param name="id">Objective identifier.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <exception cref="ArgumentNullException">Thrown when auth or id is null.</exception>
+        /// <exception cref="KeyNotFoundException">Thrown when the caller can see neither the objective nor a snapshot of it.</exception>
         public async Task DeleteAsync(AuthContext auth, string id, CancellationToken token = default)
         {
             if (auth == null) throw new ArgumentNullException(nameof(auth));
@@ -307,6 +314,14 @@ namespace Armada.Core.Services
             {
                 await DeleteEventAsync(auth, snapshot.Id, token).ConfigureAwait(false);
             }
+
+            // A caller who saw only its own snapshot while another user's row remains has not deleted the objective;
+            // leave that user's snapshots alone. Otherwise the objective is gone, so remove every snapshot that the
+            // startup backfill or a later read could restore it from.
+            if (existing == null && await TenantObjectiveRowExistsAsync(auth, id, token).ConfigureAwait(false))
+                return;
+
+            await DeleteAllTenantSnapshotsAsync(auth, id, token).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -930,6 +945,50 @@ namespace Armada.Core.Services
                 CreatedUtc = objective.LastUpdateUtc
             };
             await _Database.Events.CreateAsync(snapshot, token).ConfigureAwait(false);
+        }
+
+        private async Task<bool> TenantObjectiveRowExistsAsync(AuthContext auth, string id, CancellationToken token)
+        {
+            Objective? row = auth.IsAdmin
+                ? await _Database.Objectives.ReadAsync(id, token).ConfigureAwait(false)
+                : await _Database.Objectives.ReadAsync(auth.TenantId!, id, token).ConfigureAwait(false);
+            return row != null;
+        }
+
+        private async Task DeleteAllTenantSnapshotsAsync(AuthContext auth, string id, CancellationToken token)
+        {
+            const int batchSize = 500;
+            while (true)
+            {
+                token.ThrowIfCancellationRequested();
+
+                // Read unscoped: a system admin's snapshot carries no tenant id, and backfill reads every snapshot.
+                List<ArmadaEvent> events = await _Database.Events.EnumerateByEntityAsync("objective", id, batchSize, token).ConfigureAwait(false);
+                List<ArmadaEvent> doomed = events.Where(item => IsTenantSnapshot(auth, item)).ToList();
+                foreach (ArmadaEvent snapshot in doomed)
+                {
+                    await _Database.Events.DeleteAsync(snapshot.Id, token).ConfigureAwait(false);
+                }
+
+                if (doomed.Count == 0 || events.Count < batchSize)
+                    return;
+            }
+        }
+
+        private static bool IsTenantSnapshot(AuthContext auth, ArmadaEvent item)
+        {
+            if (!String.Equals(item.EventType, "objective.snapshot", StringComparison.OrdinalIgnoreCase))
+                return false;
+            if (auth.IsAdmin)
+                return true;
+            if (String.Equals(item.TenantId, auth.TenantId, StringComparison.Ordinal))
+                return true;
+            if (!String.IsNullOrEmpty(item.TenantId))
+                return false;
+
+            // A tenant-less snapshot was written by a system admin; it belongs to this tenant when its objective does.
+            Objective? objective = DeserializeObjective(item);
+            return objective != null && String.Equals(objective.TenantId, auth.TenantId, StringComparison.Ordinal);
         }
 
         private async Task DeleteEventAsync(AuthContext auth, string eventId, CancellationToken token)

@@ -3,6 +3,7 @@ namespace Test.Shared.Suites.Services
     using System;
     using System.Collections.Generic;
     using System.IO;
+    using System.Linq;
     using System.Text.Json;
     using System.Threading;
     using System.Threading.Tasks;
@@ -376,6 +377,93 @@ namespace Test.Shared.Suites.Services
                 await AssertThrowsAsync<ArgumentNullException>(() => objectives.CreateAsync(auth, null!));
             }));
 
+            cases.Add(CaseAsync("deleted_objective_is_not_restored_from_hidden_snapshots", "Deleting an objective removes snapshots other users wrote, so backfill does not restore it", TestTags.Positive, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                string tenantId = "ten_obj_hidden_snap";
+                string ownerUserId = "usr_obj_hidden_owner";
+                string adminUserId = "usr_obj_hidden_admin";
+                await EnsureTenantAndUserAsync(testDb, tenantId, adminUserId).ConfigureAwait(false);
+                await CreateRegularUserAsync(testDb, tenantId, ownerUserId).ConfigureAwait(false);
+
+                // The owner is a regular user and sees only its own snapshots; the tenant admin and a system admin
+                // each write a snapshot of the same objective.
+                AuthContext ownerAuth = AuthContext.Authenticated(tenantId, ownerUserId, false, false, "UnitTest");
+                AuthContext tenantAdminAuth = AuthContext.Authenticated(tenantId, adminUserId, false, true, "UnitTest");
+                AuthContext systemAdminAuth = AuthContext.Authenticated(tenantId, adminUserId, true, true, "UnitTest");
+                ObjectiveService service = new ObjectiveService(testDb.Driver);
+                Objective created = await service.CreateAsync(ownerAuth, new ObjectiveUpsertRequest { Title = "Owned objective" }).ConfigureAwait(false);
+                await service.UpdateAsync(tenantAdminAuth, created.Id, new ObjectiveUpsertRequest { Title = "Tenant admin snapshot" }).ConfigureAwait(false);
+                await service.UpdateAsync(systemAdminAuth, created.Id, new ObjectiveUpsertRequest { Title = "System admin snapshot" }).ConfigureAwait(false);
+                AssertTrue((await SnapshotsAsync(testDb, created.Id).ConfigureAwait(false)).Count >= 3, "three users wrote snapshots");
+
+                await service.DeleteAsync(ownerAuth, created.Id).ConfigureAwait(false);
+                AssertNull(await testDb.Driver.Objectives.ReadAsync(created.Id).ConfigureAwait(false), "the row is deleted");
+                AssertEqual(0, (await SnapshotsAsync(testDb, created.Id).ConfigureAwait(false)).Count, "every snapshot in the tenant is deleted");
+                AssertNull(await service.ReadAsync(tenantAdminAuth, created.Id).ConfigureAwait(false), "a tenant admin read does not rehydrate it");
+
+                ObjectiveService backfillService = new ObjectiveService(testDb.Driver);
+                await backfillService.EnumerateAsync(ownerAuth, new ObjectiveQuery()).ConfigureAwait(false);
+                AssertNull(await testDb.Driver.Objectives.ReadAsync(created.Id).ConfigureAwait(false), "startup backfill does not restore it");
+
+                // An explicit re-import of the same id is a deliberate create, not a resurrection.
+                Objective deliberate = new Objective
+                {
+                    Id = created.Id,
+                    TenantId = tenantId,
+                    UserId = ownerUserId,
+                    Title = "Deliberate objective",
+                    CreatedUtc = DateTime.UtcNow,
+                    LastUpdateUtc = DateTime.UtcNow
+                };
+                await backfillService.PersistImportedAsync(ownerAuth, deliberate).ConfigureAwait(false);
+                Objective restored = NotNull(await backfillService.ReadAsync(ownerAuth, created.Id).ConfigureAwait(false));
+                AssertEqual("Deliberate objective", restored.Title);
+            }));
+
+            cases.Add(CaseAsync("other_user_cannot_delete_or_purge_snapshots", "A regular user who cannot see an objective cannot delete it or its snapshots", TestTags.Negative, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                string tenantId = "ten_obj_other_user";
+                string ownerUserId = "usr_obj_other_owner";
+                string otherUserId = "usr_obj_other_peer";
+                await EnsureTenantAndUserAsync(testDb, tenantId, "usr_obj_other_admin").ConfigureAwait(false);
+                await CreateRegularUserAsync(testDb, tenantId, ownerUserId).ConfigureAwait(false);
+                await CreateRegularUserAsync(testDb, tenantId, otherUserId).ConfigureAwait(false);
+                AuthContext ownerAuth = AuthContext.Authenticated(tenantId, ownerUserId, false, false, "UnitTest");
+                AuthContext otherAuth = AuthContext.Authenticated(tenantId, otherUserId, false, false, "UnitTest");
+                ObjectiveService service = new ObjectiveService(testDb.Driver);
+                Objective created = await service.CreateAsync(ownerAuth, new ObjectiveUpsertRequest { Title = "Private objective" }).ConfigureAwait(false);
+                int before = (await SnapshotsAsync(testDb, created.Id).ConfigureAwait(false)).Count;
+
+                await AssertThrowsAsync<KeyNotFoundException>(() => service.DeleteAsync(otherAuth, created.Id)).ConfigureAwait(false);
+                AssertNotNull(await testDb.Driver.Objectives.ReadAsync(created.Id).ConfigureAwait(false), "the owner's row stays");
+                AssertEqual(before, (await SnapshotsAsync(testDb, created.Id).ConfigureAwait(false)).Count, "the owner's snapshots stay");
+                AssertEqual("Private objective", NotNull(await service.ReadAsync(ownerAuth, created.Id).ConfigureAwait(false)).Title);
+            }));
+
+            cases.Add(CaseAsync("tenant_admin_delete_does_not_restore_a_visible_snapshot", "Tenant admin delete keeps a visible snapshot from restoring the row and leaves other objectives", TestTags.Positive, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                string tenantId = "ten_obj_gap_control";
+                string adminUserId = "usr_obj_gap_control";
+                await EnsureTenantAndUserAsync(testDb, tenantId, adminUserId).ConfigureAwait(false);
+                AuthContext adminAuth = AuthContext.Authenticated(tenantId, adminUserId, false, true, "UnitTest");
+                ObjectiveService service = new ObjectiveService(testDb.Driver);
+                Objective kept = await service.CreateAsync(adminAuth, new ObjectiveUpsertRequest { Title = "Kept objective" }).ConfigureAwait(false);
+                Objective doomed = await service.CreateAsync(adminAuth, new ObjectiveUpsertRequest { Title = "Doomed objective" }).ConfigureAwait(false);
+                await service.UpdateAsync(adminAuth, doomed.Id, new ObjectiveUpsertRequest { Title = "Visible snapshot" }).ConfigureAwait(false);
+
+                await service.DeleteAsync(adminAuth, doomed.Id).ConfigureAwait(false);
+
+                ObjectiveService backfillService = new ObjectiveService(testDb.Driver);
+                await backfillService.EnumerateAsync(adminAuth, new ObjectiveQuery()).ConfigureAwait(false);
+                AssertNull(await testDb.Driver.Objectives.ReadAsync(doomed.Id).ConfigureAwait(false));
+                Objective stillKept = NotNull(await backfillService.ReadAsync(adminAuth, kept.Id).ConfigureAwait(false));
+                AssertEqual("Kept objective", stillKept.Title);
+                AssertTrue((await SnapshotsAsync(testDb, kept.Id).ConfigureAwait(false)).Count > 0, "the other objective keeps its snapshots");
+            }));
+
             return new TestSuiteDescriptor(
                 suiteId: "Services.ObjectiveService",
                 displayName: "Objective Service",
@@ -385,6 +473,25 @@ namespace Test.Shared.Suites.Services
         #endregion
 
         #region Private-Methods
+
+        private static async Task CreateRegularUserAsync(TestDatabase testDb, string tenantId, string userId)
+        {
+            await testDb.Driver.Users.CreateAsync(new UserMaster
+            {
+                Id = userId,
+                TenantId = tenantId,
+                Email = userId + "@armada.test",
+                PasswordSha256 = UserMaster.ComputePasswordHash("password"),
+                IsTenantAdmin = false
+            }).ConfigureAwait(false);
+        }
+
+        private static async Task<List<ArmadaEvent>> SnapshotsAsync(TestDatabase testDb, string objectiveId)
+        {
+            return (await testDb.Driver.Events.EnumerateByEntityAsync("objective", objectiveId, 1000).ConfigureAwait(false))
+                .Where(item => String.Equals(item.EventType, "objective.snapshot", StringComparison.OrdinalIgnoreCase))
+                .ToList();
+        }
 
         private static async Task EnsureTenantAndUserAsync(TestDatabase testDb, string tenantId, string userId)
         {
