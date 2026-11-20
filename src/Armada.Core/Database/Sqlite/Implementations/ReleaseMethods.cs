@@ -302,19 +302,23 @@ namespace Armada.Core.Database.Sqlite.Implementations
             if (Enum.TryParse(reader["status"].ToString(), true, out ReleaseStatusEnum status))
                 release.Status = status;
 
-            release.VoyageIds = Deserialize<List<string>>(SqliteDatabaseDriver.NullableString(reader["voyage_ids_json"])) ?? new List<string>();
-            release.MissionIds = Deserialize<List<string>>(SqliteDatabaseDriver.NullableString(reader["mission_ids_json"])) ?? new List<string>();
-            release.CheckRunIds = Deserialize<List<string>>(SqliteDatabaseDriver.NullableString(reader["check_run_ids_json"])) ?? new List<string>();
-            release.Artifacts = Deserialize<List<ReleaseArtifact>>(SqliteDatabaseDriver.NullableString(reader["artifacts_json"])) ?? new List<ReleaseArtifact>();
+            release.VoyageIds = Deserialize<List<string>>(SqliteDatabaseDriver.NullableString(reader["voyage_ids_json"]), release.Id, "voyage_ids_json") ?? new List<string>();
+            release.MissionIds = Deserialize<List<string>>(SqliteDatabaseDriver.NullableString(reader["mission_ids_json"]), release.Id, "mission_ids_json") ?? new List<string>();
+            release.CheckRunIds = Deserialize<List<string>>(SqliteDatabaseDriver.NullableString(reader["check_run_ids_json"]), release.Id, "check_run_ids_json") ?? new List<string>();
+            release.Artifacts = Deserialize<List<ReleaseArtifact>>(SqliteDatabaseDriver.NullableString(reader["artifacts_json"]), release.Id, "artifacts_json") ?? new List<ReleaseArtifact>();
             return release;
         }
 
-        private static T? Deserialize<T>(string? json)
+        private static T? Deserialize<T>(string? json, string entityId, string columnName)
         {
             if (String.IsNullOrWhiteSpace(json)) return default;
             try
             {
                 return JsonSerializer.Deserialize<T>(json, _Json);
+            }
+            catch (JsonException exception)
+            {
+                throw new InvalidOperationException("Invalid JSON in " + columnName + " for row " + entityId + ".", exception);
             }
             catch
             {

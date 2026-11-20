@@ -579,6 +579,8 @@ Events, Memories, Merge Queue, Missions, Request History, Signals, and Voyages a
 ### PostgreSQL UTC clocks
 
 - PostgreSQL `TIMESTAMP` parameters bind through `PostgresqlCommandHelper.AddDate` as `timestamp without time zone`. A UTC `DateTime` keeps its clock digits when the session time zone is not UTC, and range filters compare that column. Objective and model-endpoint reads label those clocks `DateTimeKind.Utc`. Text timestamp columns stay text.
+- Database reads now fail with the row ID and column name when stored JSON is invalid, so later updates
+  cannot replace it with an empty value.
 
 ### Landing failure prevention
 
