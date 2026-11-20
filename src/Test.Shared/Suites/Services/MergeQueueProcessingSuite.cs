@@ -140,31 +140,43 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
-            cases.Add(CaseAsync("missing_branch_with_landed_commit_cancels_entry", "Missing branch whose mission commit is on target is cancelled", TestTags.Positive, async () =>
+            foreach (MissionStatusEnum waitingStatus in new[] { MissionStatusEnum.WorkProduced, MissionStatusEnum.LandingFailed })
             {
-                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                MissionStatusEnum startStatus = waitingStatus;
+                cases.Add(CaseAsync("missing_branch_with_landed_commit_lands_entry_" + startStatus.ToString().ToLowerInvariant(),
+                    "Missing branch whose mission commit is on target lands the entry and completes a " + startStatus + " mission", TestTags.Positive, async () =>
                 {
-                    MergeQueueRepoSet repos = MergeQueueRepoSet.Create();
-                    const string branch = "feature/already-landed";
-                    repos.PushBranch(branch, "landed.txt", "landed change\n");
-                    VesselHealthGitHelper.RunGit(repos.Work, null, "push", "origin", branch + ":main");
-                    string commitHash = repos.OriginHead("main");
-                    VesselHealthGitHelper.RunGit(repos.VesselRepo, null, "update-ref", "-d", "refs/heads/" + branch);
+                    using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                    {
+                        MergeQueueRepoSet repos = MergeQueueRepoSet.Create();
+                        const string branch = "feature/already-landed";
+                        repos.PushBranch(branch, "landed.txt", "landed change\n");
+                        VesselHealthGitHelper.RunGit(repos.Work, null, "push", "origin", branch + ":main");
+                        string commitHash = repos.OriginHead("main");
 
-                    MergeQueueService queue = CreateQueue(testDb.Driver);
-                    Mission mission = await CreateMissionAsync(testDb.Driver, repos).ConfigureAwait(false);
-                    mission.CommitHash = commitHash;
-                    await testDb.Driver.Missions.UpdateAsync(mission).ConfigureAwait(false);
-                    MergeEntry entry = await EnqueueAsync(queue, testDb.Driver, repos, branch, mission.Id, null).ConfigureAwait(false);
+                        MergeQueueService queue = CreateQueue(testDb.Driver);
+                        Mission mission = await CreateMissionAsync(testDb.Driver, repos).ConfigureAwait(false);
+                        mission.CommitHash = commitHash;
+                        mission.Status = startStatus;
+                        await testDb.Driver.Missions.UpdateAsync(mission).ConfigureAwait(false);
+                        MergeEntry entry = await EnqueueAsync(queue, testDb.Driver, repos, branch, mission.Id, null).ConfigureAwait(false);
 
-                    MergeEntry? processed = await queue.ProcessSingleAsync(entry.Id).ConfigureAwait(false);
+                        // The branch is deleted after the entry was queued (its commit already landed on origin main).
+                        VesselHealthGitHelper.RunGit(repos.VesselRepo, null, "update-ref", "-d", "refs/heads/" + branch);
 
-                    AssertEqual(MergeStatusEnum.Cancelled, processed!.Status, "entry status; output: " + processed.TestOutput);
-                    AssertContains("already on", processed.TestOutput ?? "");
-                    Mission? updated = await testDb.Driver.Missions.ReadAsync(mission.Id).ConfigureAwait(false);
-                    AssertEqual(MissionStatusEnum.WorkProduced, updated!.Status, "an already-landed commit must not mark the mission LandingFailed");
-                }
-            }));
+                        MergeEntry? processed = await queue.ProcessSingleAsync(entry.Id).ConfigureAwait(false);
+
+                        AssertEqual(MergeStatusEnum.Landed, processed!.Status, "entry status; output: " + processed.TestOutput);
+                        AssertContains("already on main", processed.TestOutput ?? "");
+                        AssertNotNull(processed.CompletedUtc, "entry completion time");
+                        Mission? updated = await testDb.Driver.Missions.ReadAsync(mission.Id).ConfigureAwait(false);
+                        AssertEqual(MissionStatusEnum.Complete, updated!.Status, "the mission is reconciled as landed, not left waiting");
+                        AssertNull(updated.FailureKind, "no failure is recorded");
+                        AssertEqual(commitHash, updated.CommitHash, "the landed commit is kept");
+                        AssertEqual(commitHash, repos.OriginHead("main"), "nothing is pushed");
+                    }
+                }));
+            }
 
             cases.Add(CaseAsync("missing_branch_without_commit_hash_still_fails", "Missing branch without a recorded commit still fails", TestTags.Negative, async () =>
             {

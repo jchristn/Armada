@@ -10,6 +10,7 @@ All notable changes to Armada are documented in this file.
 
 - The no-op completion check judges a dock's work from the files changed since the dock start commit (committed, tracked and untracked; scratch files such as backups do not count), so earlier commits on a reused branch no longer count as this dock's work. The diff stored for landing is still taken against the vessel default branch. When the start commit is unknown or Git cannot answer, the check falls back to the stored diff as before; it is never skipped. Audit and Research missions are still exempt.
 - Landing previews make every decision from the effective landing mode (the voyage mode for a mission, then the vessel mode, then the server setting, then MergeAndPush), so the expected action, the manual-landing warning and the protected, release and hotfix branch checks match what the landing handler will do. `LandingMode` still reports the mode stored on the vessel, so the dashboard and TUI keep showing Inherited; vessel previews now also return `EffectiveLandingMode`. The inherited-mode warning appears only when neither the vessel nor, for a mission, the voyage sets a mode.
+- A merge queue entry whose branch was deleted after its mission's recorded commit already reached the target is recorded as Landed and its mission is completed, the same way a normal landing reconciles them, instead of failing as a merge error and leaving the mission in LandingFailed. Entries without a recorded commit, with a commit that is not on the target, or whose branch still exists keep the normal merge.
 
 ## v1.3.0 (2026-11-06)
 
@@ -436,10 +437,6 @@ commands arrive with their own changes. Schema migrations 103 and 104 apply at s
 - macOS Harbor bundles store the pi permission-gate extension in `Contents/Resources/Pi`, and pi resolves it there as well as beside portable binaries. This prevents ARM64 code signing from treating TypeScript resources as unsigned nested code. The DMG verifier checks the resource layout.
 - After building and verifying both Harbor DMGs, `build-harbor-app.sh` installs the native app into `~/Applications`, staging and signature-checking a fresh bundle before replacement. `--no-install` opts out, and `--no-build` remains verification-only.
 - Helm's NuGet tool package preserves battery fixture `.gitignore` and `.gitattributes` files instead of excluding them with NU5119 warnings. Installer verification checks every packaged framework for those files.
-
-### Merge queue
-
-- A queued merge is cancelled when its source branch is missing and the mission's recorded commit is already an ancestor of the target. Missing or unlanded commits and branches with newer work keep their existing merge behavior.
 
 ### Landing failure prevention
 

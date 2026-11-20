@@ -574,34 +574,18 @@ namespace Armada.Core.Services
                 // Record the target commit this entry integrates against, then merge the entry's branch.
                 targetCommit = await ResolveHeadAsync(host, integrationPath).ConfigureAwait(false);
                 step = MergeQueueFailureStepEnum.Merge;
-                MergeQueueMergeResult merge = await MergeBranchAsync(host, integrationPath, await LandingRefAsync(entry, token).ConfigureAwait(false), token).ConfigureAwait(false);
+                string landingRef = await LandingRefAsync(entry, token).ConfigureAwait(false);
+                string? landedCommit = await AlreadyLandedCommitAsync(entry, host, integrationPath, landingRef, token).ConfigureAwait(false);
+                if (landedCommit != null)
+                {
+                    await CompleteAlreadyLandedAsync(entry, landedCommit, token).ConfigureAwait(false);
+                    await CleanupWorktreeAsync(host, repoPath, integrationPath, integrationBranch, token).ConfigureAwait(false);
+                    return;
+                }
+
+                MergeQueueMergeResult merge = await MergeBranchAsync(host, integrationPath, landingRef, token).ConfigureAwait(false);
                 if (!merge.Merged)
                 {
-                    Mission? mission = await ReadMissionAsync(entry.MissionId, entry.TenantId, token).ConfigureAwait(false);
-                    string? commitHash = mission?.CommitHash;
-                    HostCommandResult localBranch = await RunGitCaptureAsync(host, repoPath, token,
-                        "show-ref", "--verify", "--quiet", "refs/heads/" + entry.BranchName).ConfigureAwait(false);
-                    HostCommandResult remoteBranch = await RunGitCaptureAsync(host, repoPath, token,
-                        "show-ref", "--verify", "--quiet", "refs/remotes/origin/" + entry.BranchName).ConfigureAwait(false);
-                    bool branchMissing = localBranch.ExitCode == 1 && remoteBranch.ExitCode == 1;
-                    if (branchMissing && !String.IsNullOrWhiteSpace(commitHash))
-                    {
-                        HostCommandResult alreadyLanded = await RunGitCaptureAsync(host, integrationPath, token,
-                            "merge-base", "--is-ancestor", commitHash, "HEAD").ConfigureAwait(false);
-                        if (alreadyLanded.ExitCode == 0)
-                        {
-                            _Logging.Info(_Header + "cancelling " + entryTag + ": branch is missing and mission commit is already on " + entry.TargetBranch);
-                            entry.Status = MergeStatusEnum.Cancelled;
-                            entry.TestOutput = "Branch " + entry.BranchName + " is missing, but mission commit " + commitHash
-                                + " is already on " + entry.TargetBranch + "; nothing to merge.";
-                            entry.CompletedUtc = DateTime.UtcNow;
-                            entry.LastUpdateUtc = DateTime.UtcNow;
-                            await _Database.MergeEntries.UpdateAsync(entry, token).ConfigureAwait(false);
-                            await CleanupWorktreeAsync(host, repoPath, integrationPath, integrationBranch, token).ConfigureAwait(false);
-                            return;
-                        }
-                    }
-
                     MissionFailureKindEnum mergeKind = MergeQueueFailureClassifier.ClassifyMerge(merge.ConflictedFiles.Count);
                     string files = merge.ConflictedFiles.Count > 0 ? " in: " + String.Join(", ", merge.ConflictedFiles) : "";
                     string mergeReason = mergeKind == MissionFailureKindEnum.LandingConflict
@@ -847,6 +831,41 @@ namespace Armada.Core.Services
             if (!shared) return entry.BranchName;
             _Logging.Info(_Header + "entry " + entry.Id + " lands mission commit " + mission.CommitHash + " instead of " + entry.BranchName + ", which a continuing child shares");
             return mission.CommitHash!;
+        }
+
+        // A branch deleted after its work landed leaves nothing to merge: when the entry lands its branch, the branch is in
+        // neither refs/heads nor refs/remotes/origin, and the mission's recorded commit is already in the target (the
+        // integration worktree HEAD), that commit is returned. Null in every other case, which keeps the normal merge.
+        private async Task<string?> AlreadyLandedCommitAsync(MergeEntry entry, MergeQueueHost host, string integrationPath, string landingRef, CancellationToken token)
+        {
+            if (String.IsNullOrEmpty(entry.BranchName) || !String.Equals(landingRef, entry.BranchName, StringComparison.Ordinal)) return null;
+            Mission? mission = await ReadMissionAsync(entry.MissionId, entry.TenantId, token).ConfigureAwait(false);
+            string? commit = mission?.CommitHash?.Trim();
+            if (String.IsNullOrEmpty(commit)) return null;
+
+            HostCommandResult local = await RunGitCaptureAsync(host, host.RepoPath, token, "show-ref", "--verify", "--quiet", "refs/heads/" + entry.BranchName).ConfigureAwait(false);
+            if (local.ExitCode != 1) return null;
+            HostCommandResult remote = await RunGitCaptureAsync(host, host.RepoPath, token, "show-ref", "--verify", "--quiet", "refs/remotes/origin/" + entry.BranchName).ConfigureAwait(false);
+            if (remote.ExitCode != 1) return null;
+
+            HostCommandResult ancestor = await RunGitCaptureAsync(host, integrationPath, token, "merge-base", "--is-ancestor", commit, "HEAD").ConfigureAwait(false);
+            return ancestor.ExitCode == 0 ? commit : null;
+        }
+
+        // Record an entry whose commit is already on the target as Landed and complete its mission, as a normal landing does.
+        private async Task CompleteAlreadyLandedAsync(MergeEntry entry, string landedCommit, CancellationToken token)
+        {
+            entry.Status = MergeStatusEnum.Landed;
+            entry.TestOutput = "Branch " + entry.BranchName + " no longer exists, but mission commit " + landedCommit
+                + " is already on " + entry.TargetBranch + "; nothing was left to merge.";
+            entry.CompletedUtc = DateTime.UtcNow;
+            if (!await _Database.MergeEntries.TryUpdateIfUnchangedAsync(entry, entry.LastUpdateUtc, token).ConfigureAwait(false)) return;
+            ArmadaMetrics.MergeEntriesProcessed.Add(1);
+            _Logging.Info(_Header + "entry " + entry.Id + " branch " + entry.BranchName + " is gone and commit " + landedCommit
+                + " is already on " + entry.TargetBranch + "; recorded as landed");
+
+            await ReconcileMissionStatusAsync(entry.MissionId, MissionStatusEnum.Complete,
+                "Commit " + landedCommit + " was already on " + entry.TargetBranch + " (merge queue entry " + entry.Id + ")", token, entry.TenantId).ConfigureAwait(false);
         }
 
         private async Task<string?> ParentLandingWaitAsync(Mission? mission, CancellationToken token)
