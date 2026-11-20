@@ -526,6 +526,67 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
+            cases.Add(CaseAsync("readiness_splits_command_separators_only_outside_double_quotes", "Readiness splits command separators only outside double quotes", TestTags.Positive, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                LoggingModule logging = CreateLogging();
+                WorkflowProfileService workflowProfiles = new WorkflowProfileService(testDb.Driver, logging);
+                VesselReadinessService readiness = new VesselReadinessService(testDb.Driver, workflowProfiles, logging);
+
+                await EnsureTenantAndUserAsync(testDb, "ten_quoted", "usr_quoted").ConfigureAwait(false);
+
+                string workingDirectory = Path.Combine(Path.GetTempPath(), "armada-readiness-quoted-" + Guid.NewGuid().ToString("N"));
+                Directory.CreateDirectory(workingDirectory);
+
+                string quotedAnd = "quoted-and-" + Guid.NewGuid().ToString("N");
+                string quotedOr = "quoted-or-" + Guid.NewGuid().ToString("N");
+                string quotedSemicolon = "quoted-semicolon-" + Guid.NewGuid().ToString("N");
+                string quotedNewline = "quoted-newline-" + Guid.NewGuid().ToString("N");
+                string escapedQuote = "escaped-quote-" + Guid.NewGuid().ToString("N");
+                string singleQuoted = "single-quoted-" + Guid.NewGuid().ToString("N");
+                string outsideQuotes = "outside-quotes-" + Guid.NewGuid().ToString("N");
+
+                try
+                {
+                    Vessel vessel = CreateVessel("ten_quoted", "usr_quoted", workingDirectory);
+                    await testDb.Driver.Vessels.CreateAsync(vessel).ConfigureAwait(false);
+
+                    WorkflowProfile profile = new WorkflowProfile
+                    {
+                        TenantId = "ten_quoted",
+                        UserId = "usr_quoted",
+                        Name = "Quoted Command Workflow",
+                        Scope = WorkflowProfileScopeEnum.Vessel,
+                        VesselId = vessel.Id,
+                        BuildCommand = "echo \"text && ./" + quotedAnd + "\"; echo \"text || ./" + quotedOr + "\"; echo \"text ; ./" + quotedSemicolon + "\"; echo \"text\n./" + quotedNewline + "\"; echo \"text \\\" && ./" + escapedQuote + "\"; echo 'text && ./" + singleQuoted + "'; echo ready && ./" + outsideQuotes
+                    };
+                    await testDb.Driver.WorkflowProfiles.CreateAsync(profile).ConfigureAwait(false);
+
+                    AuthContext auth = AuthContext.Authenticated("ten_quoted", "usr_quoted", false, false, "UnitTest");
+                    VesselReadinessResult result = await readiness.EvaluateAsync(
+                        auth,
+                        vessel,
+                        requestedCheckType: CheckRunTypeEnum.Build).ConfigureAwait(false);
+
+                    List<string> missingDependencies = result.Issues
+                        .Where(issue => issue.Code == "command_dependency_missing")
+                        .Select(issue => issue.Message)
+                        .ToList();
+
+                    AssertFalse(missingDependencies.Any(message => message.Contains(quotedAnd, StringComparison.Ordinal)));
+                    AssertFalse(missingDependencies.Any(message => message.Contains(quotedOr, StringComparison.Ordinal)));
+                    AssertFalse(missingDependencies.Any(message => message.Contains(quotedSemicolon, StringComparison.Ordinal)));
+                    AssertFalse(missingDependencies.Any(message => message.Contains(quotedNewline, StringComparison.Ordinal)));
+                    AssertFalse(missingDependencies.Any(message => message.Contains(escapedQuote, StringComparison.Ordinal)));
+                    AssertTrue(missingDependencies.Any(message => message.Contains(singleQuoted, StringComparison.Ordinal)), "Single-quoted separators remain eligible for splitting.");
+                    AssertTrue(missingDependencies.Any(message => message.Contains(outsideQuotes, StringComparison.Ordinal)), "Separators outside double quotes remain eligible for splitting.");
+                }
+                finally
+                {
+                    TryDeleteDirectory(workingDirectory);
+                }
+            }));
+
             cases.Add(CaseAsync("readiness_exposes_toolchains_environments_and_setup_checklist", "Readiness exposes toolchains, environments, and setup checklist", TestTags.Positive, async () =>
             {
                 using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);

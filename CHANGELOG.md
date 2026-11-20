@@ -479,6 +479,9 @@ commands arrive with their own changes. Schema migrations 103 and 104 apply at s
 
 - Cancelling a merge entry that is already Landed, Failed or Cancelled keeps its stored status. Queued and other active entries still
   become Cancelled.
+### Workflow readiness
+
+- Readiness checks split command chains only on separators outside double-quoted arguments. Escaped double quotes keep their quoted span open.
 
 ### Landing failure prevention
 
