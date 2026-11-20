@@ -402,8 +402,9 @@ namespace Test.Shared.Suites.E2E
                 await File.WriteAllTextAsync(
                     Path.Combine(_WorkingDirectory, "summary.txt"),
                     "Passed!  - Failed: 0, Passed: 5, Skipped: 0, Total: 5, Duration: 2 s").ConfigureAwait(false);
+                // The command writes the coverage report; only artifacts this run wrote are parsed.
                 await File.WriteAllTextAsync(
-                    Path.Combine(_WorkingDirectory, "coverage.cobertura.xml"),
+                    Path.Combine(_WorkingDirectory, "coverage-source.xml"),
                     """
                     <coverage line-rate="0.8" branch-rate="0.5" lines-covered="8" lines-valid="10" branches-covered="2" branches-valid="4"></coverage>
                     """).ConfigureAwait(false);
@@ -414,7 +415,9 @@ namespace Test.Shared.Suites.E2E
                         Name = "Structured Parse Profile",
                         Scope = WorkflowProfileScopeEnum.Vessel,
                         VesselId = _VesselId,
-                        UnitTestCommand = BuildEmitFileCommand("summary.txt"),
+                        UnitTestCommand = BuildEmitFileCommand("summary.txt") + (OperatingSystem.IsWindows()
+                            ? " & cmd /c copy /y coverage-source.xml coverage.cobertura.xml >nul"
+                            : " && cp coverage-source.xml coverage.cobertura.xml"),
                         ExpectedArtifacts = new[] { "coverage.cobertura.xml" }
                     })).ConfigureAwait(false);
                 AssertEqual(HttpStatusCode.Created, profileResponse.StatusCode);

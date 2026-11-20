@@ -141,6 +141,12 @@ namespace Armada.Core.Services
                 EntityId = run.Id
             }, _Logging, token).ConfigureAwait(false);
 
+            // Snapshot the expected artifacts on the host that runs the command, so only files this run wrote are
+            // parsed afterward. Results left in the checkout by an earlier run must not stand in for this one.
+            List<CheckRunArtifact> artifactsBefore = host.IsHarbor
+                ? await StatHarborArtifactsAsync(host, profile?.ExpectedArtifacts, token).ConfigureAwait(false)
+                : CollectArtifacts(run.WorkingDirectory!, profile?.ExpectedArtifacts);
+
             Stopwatch sw = Stopwatch.StartNew();
             CommandExecutionResult execution;
 
@@ -169,13 +175,14 @@ namespace Armada.Core.Services
             run.Status = execution.ExitCode == 0 ? CheckRunStatusEnum.Passed : CheckRunStatusEnum.Failed;
             if (host.IsHarbor)
             {
-                await ParseHarborResultsAsync(host, run, profile?.ExpectedArtifacts, token).ConfigureAwait(false);
+                await ParseHarborResultsAsync(host, run, profile?.ExpectedArtifacts, artifactsBefore, token).ConfigureAwait(false);
             }
             else
             {
                 run.Artifacts = CollectArtifacts(run.WorkingDirectory!, profile?.ExpectedArtifacts);
-                run.TestSummary = CheckRunParsingService.ParseTestSummary(run.Output, run.WorkingDirectory, run.Artifacts);
-                run.CoverageSummary = CheckRunParsingService.ParseCoverageSummary(run.WorkingDirectory, run.Artifacts);
+                List<CheckRunArtifact> written = CheckRunArtifactChanges.SelectWrittenDuringRun(artifactsBefore, run.Artifacts);
+                run.TestSummary = CheckRunParsingService.ParseTestSummary(run.Output, run.WorkingDirectory, written);
+                run.CoverageSummary = CheckRunParsingService.ParseCoverageSummary(run.WorkingDirectory, written);
             }
 
             run.Summary = BuildSummary(run, profile);
@@ -493,48 +500,72 @@ namespace Armada.Core.Services
         }
 
         /// <summary>
-        /// Collect the expected artifacts from the checkout on a Harbor and parse test and coverage results from them: the
-        /// artifacts are stat'ed on the Harbor, copied (up to 16 MB each) into a temporary folder here, and parsed exactly as
-        /// artifacts on the Admiral host are.
+        /// Stat the expected artifacts in the checkout on a Harbor. Sizes and write times are the Harbor's own; a write
+        /// time the Harbor does not report stays null.
         /// </summary>
-        private async Task ParseHarborResultsAsync(VesselHost host, CheckRun run, List<string>? expectedArtifacts, CancellationToken token)
+        private async Task<List<CheckRunArtifact>> StatHarborArtifactsAsync(VesselHost host, List<string>? expectedArtifacts, CancellationToken token)
         {
             List<CheckRunArtifact> artifacts = new List<CheckRunArtifact>();
+            foreach (string relativePath in (expectedArtifacts ?? new List<string>()).Where(path => !String.IsNullOrWhiteSpace(path)))
+            {
+                try
+                {
+                    VesselCheckoutFileInfo info = await host.Files.StatAsync(relativePath, token).ConfigureAwait(false);
+                    if (!info.Exists || info.IsDirectory) continue;
+                    artifacts.Add(new CheckRunArtifact
+                    {
+                        Path = relativePath.Replace('\\', '/'),
+                        SizeBytes = info.SizeBytes ?? 0,
+                        LastWriteUtc = info.LastWriteUtc
+                    });
+                }
+                catch (Exception ex) when (ex is UnauthorizedAccessException || ex is IOException || ex is InvalidOperationException)
+                {
+                    _Logging.Debug(_Header + "artifact " + relativePath + " on " + host.HostLabel + " skipped: " + ex.Message);
+                }
+            }
+
+            return artifacts;
+        }
+
+        /// <summary>
+        /// Collect the expected artifacts from the checkout on a Harbor and parse test and coverage results from the ones
+        /// this run wrote (new, or changed since <paramref name="artifactsBefore"/>): those are copied (up to 16 MB each)
+        /// into a temporary folder here and parsed exactly as artifacts on the Admiral host are.
+        /// </summary>
+        private async Task ParseHarborResultsAsync(
+            VesselHost host,
+            CheckRun run,
+            List<string>? expectedArtifacts,
+            List<CheckRunArtifact> artifactsBefore,
+            CancellationToken token)
+        {
             string copyRoot = Path.Combine(Path.GetTempPath(), "armada-check-" + Guid.NewGuid().ToString("N"));
             try
             {
-                foreach (string relativePath in (expectedArtifacts ?? new List<string>()).Where(path => !String.IsNullOrWhiteSpace(path)))
+                run.Artifacts = await StatHarborArtifactsAsync(host, expectedArtifacts, token).ConfigureAwait(false);
+                List<CheckRunArtifact> written = CheckRunArtifactChanges.SelectWrittenDuringRun(artifactsBefore, run.Artifacts);
+                foreach (CheckRunArtifact artifact in written)
                 {
                     try
                     {
-                        VesselCheckoutFileInfo info = await host.Files.StatAsync(relativePath, token).ConfigureAwait(false);
-                        if (!info.Exists || info.IsDirectory) continue;
-                        string normalized = relativePath.Replace('\\', '/');
-                        artifacts.Add(new CheckRunArtifact
-                        {
-                            Path = normalized,
-                            SizeBytes = info.SizeBytes ?? 0,
-                            LastWriteUtc = info.LastWriteUtc ?? DateTime.UtcNow
-                        });
-
-                        if ((info.SizeBytes ?? 0) > _MaxArtifactCopyBytes) continue;
-                        string? text = await host.Files.ReadTextAsync(normalized, _MaxArtifactCopyBytes, token).ConfigureAwait(false);
+                        if ((artifact.SizeBytes ?? 0) > _MaxArtifactCopyBytes) continue;
+                        string? text = await host.Files.ReadTextAsync(artifact.Path, _MaxArtifactCopyBytes, token).ConfigureAwait(false);
                         if (text == null) continue;
-                        string local = Path.GetFullPath(Path.Combine(copyRoot, normalized.Replace('/', Path.DirectorySeparatorChar)));
+                        string local = Path.GetFullPath(Path.Combine(copyRoot, artifact.Path.Replace('/', Path.DirectorySeparatorChar)));
                         if (!PathContainment.IsInside(copyRoot, local)) continue;
                         Directory.CreateDirectory(Path.GetDirectoryName(local)!);
                         await File.WriteAllTextAsync(local, text, token).ConfigureAwait(false);
                     }
                     catch (Exception ex) when (ex is UnauthorizedAccessException || ex is IOException || ex is InvalidOperationException)
                     {
-                        _Logging.Debug(_Header + "artifact " + relativePath + " on " + host.HostLabel + " skipped: " + ex.Message);
+                        _Logging.Debug(_Header + "artifact " + artifact.Path + " on " + host.HostLabel + " skipped: " + ex.Message);
                     }
                 }
 
-                run.Artifacts = artifacts;
                 string? parseRoot = Directory.Exists(copyRoot) ? copyRoot : null;
-                run.TestSummary = CheckRunParsingService.ParseTestSummary(run.Output, parseRoot, run.Artifacts);
-                run.CoverageSummary = CheckRunParsingService.ParseCoverageSummary(parseRoot, run.Artifacts);
+                run.TestSummary = CheckRunParsingService.ParseTestSummary(run.Output, parseRoot, written);
+                run.CoverageSummary = CheckRunParsingService.ParseCoverageSummary(parseRoot, written);
             }
             finally
             {

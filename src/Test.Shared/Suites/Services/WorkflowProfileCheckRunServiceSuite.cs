@@ -7,8 +7,11 @@ namespace Test.Shared.Suites.Services
     using System.Threading;
     using System.Threading.Tasks;
     using Armada.Core.Enums;
+    using Armada.Core.Harbor;
     using Armada.Core.Models;
     using Armada.Core.Services;
+    using Armada.Core.Settings;
+    using Armada.Runtimes;
     using SyslogLogging;
     using Test.Shared.Infrastructure;
     using Touchstone.Core;
@@ -27,6 +30,14 @@ namespace Test.Shared.Suites.Services
         #region Private-Members
 
         private const string SuiteId = "Services.WorkflowProfileCheckRunService";
+
+        private const string StaleTrx = "<TestRun><ResultSummary><Counters total=\"1\" passed=\"1\" failed=\"0\" notExecuted=\"0\" /></ResultSummary></TestRun>";
+
+        private const string FreshTrx = "<TestRun><ResultSummary><Counters total=\"11\" passed=\"8\" failed=\"3\" notExecuted=\"0\" /></ResultSummary></TestRun>";
+
+        private const string StaleCoverage = "<coverage line-rate=\"1\" branch-rate=\"1\" lines-covered=\"10\" lines-valid=\"10\" branches-covered=\"2\" branches-valid=\"2\" />";
+
+        private const string FreshCoverage = "<coverage line-rate=\"0.25\" branch-rate=\"0.5\" lines-covered=\"5\" lines-valid=\"20\" branches-covered=\"4\" branches-valid=\"8\" />";
 
         #endregion
 
@@ -422,8 +433,10 @@ namespace Test.Shared.Suites.Services
                     await File.WriteAllTextAsync(
                         Path.Combine(workingDirectory, "summary.txt"),
                         "Passed!  - Failed: 0, Passed: 3, Skipped: 1, Total: 4, Duration: 1.5 s").ConfigureAwait(false);
+                    // The command writes the coverage report, as a real test run does; only artifacts this run wrote
+                    // are parsed.
                     await File.WriteAllTextAsync(
-                        Path.Combine(workingDirectory, "coverage.cobertura.xml"),
+                        Path.Combine(workingDirectory, "coverage-source.xml"),
                         """
                         <coverage line-rate="0.75" branch-rate="0.5" lines-covered="15" lines-valid="20" branches-covered="4" branches-valid="8"></coverage>
                         """).ConfigureAwait(false);
@@ -438,7 +451,9 @@ namespace Test.Shared.Suites.Services
                         Name = "Parse Workflow",
                         Scope = WorkflowProfileScopeEnum.Vessel,
                         VesselId = vessel.Id,
-                        UnitTestCommand = BuildEmitFileCommand("summary.txt"),
+                        UnitTestCommand = BuildEmitFileCommand("summary.txt") + (OperatingSystem.IsWindows()
+                            ? " & cmd /c copy /y coverage-source.xml coverage.cobertura.xml >nul"
+                            : " && cp coverage-source.xml coverage.cobertura.xml"),
                         ExpectedArtifacts = new List<string> { "coverage.cobertura.xml" }
                     };
                     await testDb.Driver.WorkflowProfiles.CreateAsync(profile).ConfigureAwait(false);
@@ -471,6 +486,99 @@ namespace Test.Shared.Suites.Services
                 {
                     TryDeleteDirectory(workingDirectory);
                 }
+            }));
+
+            cases.Add(CaseAsync("run_async_ignores_old_artifacts_when_parsing_failed_check", "RunAsync ignores old artifacts when parsing a failed check", TestTags.Negative, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                {
+                    LoggingModule logging = CreateLogging();
+                    WorkflowProfileService workflowProfiles = new WorkflowProfileService(testDb.Driver, logging);
+                    VesselReadinessService readiness = new VesselReadinessService(testDb.Driver, workflowProfiles, logging);
+                    CheckRunService checkRuns = new CheckRunService(testDb.Driver, workflowProfiles, readiness, logging);
+                    await EnsureTenantAndUserAsync(testDb, "ten_stale_check", "usr_stale_check").ConfigureAwait(false);
+
+                    string workingDirectory = TestTemp.NewDirectory("stale_check");
+                    try
+                    {
+                        Vessel vessel = CreateVessel("ten_stale_check", "usr_stale_check", workingDirectory, "stale-check-app");
+                        await testDb.Driver.Vessels.CreateAsync(vessel).ConfigureAwait(false);
+                        AuthContext auth = AuthContext.Authenticated("ten_stale_check", "usr_stale_check", false, false, "UnitTest");
+                        await AssertStaleArtifactsDoNotSupplyTheSummaryAsync(testDb, checkRuns, auth, vessel, workingDirectory).ConfigureAwait(false);
+                    }
+                    finally
+                    {
+                        TestTemp.TryDelete(workingDirectory);
+                    }
+                }
+            }));
+
+            cases.Add(CaseAsync("run_async_ignores_old_harbor_artifacts_when_parsing_failed_check", "RunAsync ignores old Harbor artifacts when parsing a failed check", TestTags.Negative, async () =>
+            {
+                using (HarborDockGitFixture git = await HarborDockGitFixture.CreateAsync().ConfigureAwait(false))
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                {
+                    LoggingModule logging = CreateLogging();
+                    await EnsureTenantAndUserAsync(testDb, "ten_stale_harbor", "usr_stale_harbor").ConfigureAwait(false);
+                    ArmadaSettings settings = new ArmadaSettings
+                    {
+                        DocksDirectory = Path.Combine(git.AdmiralData, "docks"),
+                        ReposDirectory = Path.Combine(git.AdmiralData, "repos"),
+                        LogDirectory = Path.Combine(git.AdmiralData, "logs")
+                    };
+                    HarborConnectionManager manager = new HarborConnectionManager(new HarborService(testDb.Driver, logging), logging, null);
+                    VesselHostResolver hosts = new VesselHostResolver(testDb.Driver, settings, logging, manager);
+                    WorkflowProfileService workflowProfiles = new WorkflowProfileService(testDb.Driver, logging);
+                    VesselReadinessService readiness = new VesselReadinessService(testDb.Driver, workflowProfiles, logging) { Hosts = hosts };
+                    CheckRunService checkRuns = new CheckRunService(testDb.Driver, workflowProfiles, readiness, logging) { Hosts = hosts };
+
+                    HarborDockSettings harborSettings = git.Settings.Clone();
+                    harborSettings.Repositories.Add(new HarborRepositoryMapping("stale-check-app", git.Checkout));
+                    using (InProcessHarbor harbor = await InProcessHarbor.ConnectAsync(
+                        manager,
+                        "hbr_stale_check",
+                        "ten_stale_harbor",
+                        "usr_stale_harbor",
+                        new AgentRuntimeFactory(logging),
+                        new List<string> { "ClaudeCode", "git" },
+                        logging,
+                        docks: new HarborDockManager(() => harborSettings, logging)).ConfigureAwait(false))
+                    {
+                        Vessel vessel = CreateVessel("ten_stale_harbor", "usr_stale_harbor", null, "stale-check-app");
+                        await testDb.Driver.Vessels.CreateAsync(vessel).ConfigureAwait(false);
+                        AuthContext auth = AuthContext.Authenticated("ten_stale_harbor", "usr_stale_harbor", false, false, "UnitTest");
+                        await AssertStaleArtifactsDoNotSupplyTheSummaryAsync(testDb, checkRuns, auth, vessel, git.Checkout).ConfigureAwait(false);
+                    }
+                }
+            }));
+
+            cases.Add(Case("artifact_changes_compare_the_same_hosts_snapshot", "Only artifacts that are new or changed in size or write time since the pre-run snapshot are parsed", TestTags.Positive, () =>
+            {
+                DateTime hostTime = new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+                List<CheckRunArtifact> before = new List<CheckRunArtifact>
+                {
+                    new CheckRunArtifact { Path = "unchanged.trx", SizeBytes = 10, LastWriteUtc = hostTime },
+                    new CheckRunArtifact { Path = "touched.trx", SizeBytes = 10, LastWriteUtc = hostTime },
+                    new CheckRunArtifact { Path = "older.trx", SizeBytes = 10, LastWriteUtc = hostTime },
+                    new CheckRunArtifact { Path = "resized.trx", SizeBytes = 10, LastWriteUtc = hostTime },
+                    new CheckRunArtifact { Path = "untimed.trx", SizeBytes = 10, LastWriteUtc = null },
+                    new CheckRunArtifact { Path = "untimed-resized.trx", SizeBytes = 10, LastWriteUtc = null },
+                    new CheckRunArtifact { Path = "deleted.trx", SizeBytes = 10, LastWriteUtc = hostTime }
+                };
+                List<CheckRunArtifact> after = new List<CheckRunArtifact>
+                {
+                    new CheckRunArtifact { Path = "unchanged.trx", SizeBytes = 10, LastWriteUtc = hostTime },
+                    new CheckRunArtifact { Path = "touched.trx", SizeBytes = 10, LastWriteUtc = hostTime.AddMilliseconds(1) },
+                    new CheckRunArtifact { Path = "older.trx", SizeBytes = 10, LastWriteUtc = hostTime.AddYears(-5) },
+                    new CheckRunArtifact { Path = "resized.trx", SizeBytes = 11, LastWriteUtc = hostTime },
+                    new CheckRunArtifact { Path = "untimed.trx", SizeBytes = 10, LastWriteUtc = null },
+                    new CheckRunArtifact { Path = "untimed-resized.trx", SizeBytes = 12, LastWriteUtc = null },
+                    new CheckRunArtifact { Path = "new.trx", SizeBytes = 10, LastWriteUtc = hostTime.AddYears(-10) }
+                };
+
+                List<string> written = CheckRunArtifactChanges.SelectWrittenDuringRun(before, after).Select(artifact => artifact.Path).ToList();
+                AssertEqual("touched.trx,older.trx,resized.trx,untimed-resized.trx,new.trx", String.Join(",", written), "new or changed artifacts only, whatever their absolute time");
+                AssertThrows<ArgumentNullException>(() => CheckRunArtifactChanges.SelectWrittenDuringRun(null!, after));
             }));
 
             cases.Add(CaseAsync("readiness_blocks_specific_check_when_a_required_environment_variable_is_missing", "Readiness blocks specific check when a required environment variable is missing", TestTags.Negative, async () =>
@@ -850,18 +958,175 @@ namespace Test.Shared.Suites.Services
             }
         }
 
-        private static Vessel CreateVessel(string tenantId, string userId, string workingDirectory)
+        private static Vessel CreateVessel(string tenantId, string userId, string? workingDirectory, string name = "Workflow Vessel")
         {
             return new Vessel
             {
                 TenantId = tenantId,
                 UserId = userId,
-                Name = "Workflow Vessel",
+                Name = name,
                 RepoUrl = "file:///tmp/armada-tests.git",
                 LocalPath = workingDirectory,
                 WorkingDirectory = workingDirectory,
                 DefaultBranch = "main"
             };
+        }
+
+        /// <summary>
+        /// A failed command prints its own summary. Files already in the checkout must not replace that summary
+        /// or supply coverage. A later command that writes new result files must use those files.
+        /// </summary>
+        private static async Task AssertStaleArtifactsDoNotSupplyTheSummaryAsync(
+            TestDatabase testDb,
+            CheckRunService checkRuns,
+            AuthContext auth,
+            Vessel vessel,
+            string directory)
+        {
+            await WriteResultFileAsync(directory, "stale-results.trx", StaleTrx).ConfigureAwait(false);
+            await WriteResultFileAsync(directory, "stale-coverage.cobertura.xml", StaleCoverage).ConfigureAwait(false);
+            AgeResultFiles(directory, "stale-results.trx", "stale-coverage.cobertura.xml");
+
+            WorkflowProfile staleProfile = new WorkflowProfile
+            {
+                TenantId = vessel.TenantId,
+                UserId = vessel.UserId,
+                Name = "Stale Artifact Workflow",
+                Scope = WorkflowProfileScopeEnum.Vessel,
+                VesselId = vessel.Id,
+                UnitTestCommand = BuildFailingSummaryCommand(),
+                ExpectedArtifacts = new List<string> { "stale-results.trx", "stale-coverage.cobertura.xml" }
+            };
+            await testDb.Driver.WorkflowProfiles.CreateAsync(staleProfile).ConfigureAwait(false);
+
+            CheckRun staleRun = await checkRuns.RunAsync(auth, new CheckRunRequest
+            {
+                VesselId = vessel.Id,
+                WorkflowProfileId = staleProfile.Id,
+                Type = CheckRunTypeEnum.UnitTest,
+                Label = "Unit Tests"
+            }).ConfigureAwait(false);
+
+            AssertEqual(CheckRunStatusEnum.Failed, staleRun.Status, staleRun.Output);
+            AssertEqual(2, staleRun.Artifacts.Count);
+            AssertEqual("stale-results.trx", staleRun.Artifacts[0].Path);
+            AssertEqual("stale-coverage.cobertura.xml", staleRun.Artifacts[1].Path);
+            AssertNotNull(staleRun.TestSummary);
+            AssertEqual("dotnet", staleRun.TestSummary!.Format, staleRun.Output);
+            AssertEqual(2, staleRun.TestSummary.Passed ?? -1);
+            AssertEqual(1, staleRun.TestSummary.Failed ?? -1);
+            AssertNull(staleRun.CoverageSummary);
+
+            await WriteResultFileAsync(directory, "fresh-source.trx", FreshTrx).ConfigureAwait(false);
+            await WriteResultFileAsync(directory, "fresh-source.cobertura.xml", FreshCoverage).ConfigureAwait(false);
+            AgeResultFiles(directory, "fresh-source.trx", "fresh-source.cobertura.xml");
+
+            WorkflowProfile freshProfile = new WorkflowProfile
+            {
+                TenantId = vessel.TenantId,
+                UserId = vessel.UserId,
+                Name = "Fresh Artifact Workflow",
+                Scope = WorkflowProfileScopeEnum.Vessel,
+                VesselId = vessel.Id,
+                UnitTestCommand = BuildFreshArtifactCommand(),
+                ExpectedArtifacts = new List<string>
+                {
+                    "stale-results.trx",
+                    "stale-coverage.cobertura.xml",
+                    "fresh.trx",
+                    "fresh.cobertura.xml"
+                }
+            };
+            await testDb.Driver.WorkflowProfiles.CreateAsync(freshProfile).ConfigureAwait(false);
+
+            CheckRun freshRun = await checkRuns.RunAsync(auth, new CheckRunRequest
+            {
+                VesselId = vessel.Id,
+                WorkflowProfileId = freshProfile.Id,
+                Type = CheckRunTypeEnum.UnitTest,
+                Label = "Unit Tests"
+            }).ConfigureAwait(false);
+
+            AssertEqual(CheckRunStatusEnum.Passed, freshRun.Status, freshRun.Output);
+            AssertEqual(4, freshRun.Artifacts.Count);
+            AssertNotNull(freshRun.TestSummary);
+            AssertEqual("trx", freshRun.TestSummary!.Format, freshRun.Output);
+            AssertEqual(8, freshRun.TestSummary.Passed ?? -1);
+            AssertEqual(3, freshRun.TestSummary.Failed ?? -1);
+            AssertNotNull(freshRun.CoverageSummary);
+            AssertEqual(25d, freshRun.CoverageSummary!.Lines?.Percentage ?? -1d);
+
+            // The host's clock can disagree with the Admiral's. A run that overwrites an existing artifact with a file
+            // whose write time is days in the past (a copy that keeps the source's time, as on a host whose clock is
+            // behind) still wrote it during this run, so it is parsed.
+            File.SetLastWriteTimeUtc(Path.Combine(directory, "fresh-source.trx"), DateTime.UtcNow.AddDays(-3));
+            File.SetLastWriteTimeUtc(Path.Combine(directory, "fresh-source.cobertura.xml"), DateTime.UtcNow.AddDays(-3));
+            WorkflowProfile skewProfile = new WorkflowProfile
+            {
+                TenantId = vessel.TenantId,
+                UserId = vessel.UserId,
+                Name = "Skewed Clock Artifact Workflow",
+                Scope = WorkflowProfileScopeEnum.Vessel,
+                VesselId = vessel.Id,
+                UnitTestCommand = BuildPreservedTimeCopyCommand(),
+                ExpectedArtifacts = new List<string> { "stale-results.trx", "stale-coverage.cobertura.xml" }
+            };
+            await testDb.Driver.WorkflowProfiles.CreateAsync(skewProfile).ConfigureAwait(false);
+
+            CheckRun skewRun = await checkRuns.RunAsync(auth, new CheckRunRequest
+            {
+                VesselId = vessel.Id,
+                WorkflowProfileId = skewProfile.Id,
+                Type = CheckRunTypeEnum.UnitTest,
+                Label = "Unit Tests"
+            }).ConfigureAwait(false);
+
+            AssertEqual(CheckRunStatusEnum.Passed, skewRun.Status, skewRun.Output);
+            AssertTrue(skewRun.Artifacts.All(artifact => artifact.LastWriteUtc.HasValue && artifact.LastWriteUtc.Value < DateTime.UtcNow.AddDays(-2)), "the rewritten artifacts carry the old write time");
+            AssertNotNull(skewRun.TestSummary);
+            AssertEqual("trx", skewRun.TestSummary!.Format, skewRun.Output);
+            AssertEqual(8, skewRun.TestSummary.Passed ?? -1, "an artifact rewritten with an old write time is parsed");
+            AssertNotNull(skewRun.CoverageSummary);
+            AssertEqual(25d, skewRun.CoverageSummary!.Lines?.Percentage ?? -1d);
+        }
+
+        private static string BuildPreservedTimeCopyCommand()
+        {
+            // copy on Windows and cp -p elsewhere keep the source file's write time.
+            return OperatingSystem.IsWindows()
+                ? "cmd /c copy /y fresh-source.trx stale-results.trx >nul & cmd /c copy /y fresh-source.cobertura.xml stale-coverage.cobertura.xml >nul"
+                : "cp -p fresh-source.trx stale-results.trx && cp -p fresh-source.cobertura.xml stale-coverage.cobertura.xml";
+        }
+
+        private static async Task WriteResultFileAsync(string directory, string name, string content)
+        {
+            await File.WriteAllTextAsync(Path.Combine(directory, name), content).ConfigureAwait(false);
+        }
+
+        private static void AgeResultFiles(string directory, params string[] names)
+        {
+            DateTime staleUtc = DateTime.UtcNow.AddHours(-2);
+            foreach (string name in names)
+                File.SetLastWriteTimeUtc(Path.Combine(directory, name), staleUtc);
+        }
+
+        /// <summary>
+        /// Readiness takes the first token of each command segment as a program. <c>echo</c> and <c>false</c> are
+        /// accepted shell builtins. A segment that starts with <c>exit</c> is not, and the check stops before it runs.
+        /// </summary>
+        private static string BuildFailingSummaryCommand()
+        {
+            const string summary = "Failed!  - Failed: 1, Passed: 2, Skipped: 0, Total: 3, Duration: 1 s";
+            return OperatingSystem.IsWindows()
+                ? "echo " + summary + " & exit /b 1"
+                : "echo '" + summary + "' && false";
+        }
+
+        private static string BuildFreshArtifactCommand()
+        {
+            return OperatingSystem.IsWindows()
+                ? "cmd /c copy /y fresh-source.trx fresh.trx >nul & cmd /c copy /y fresh-source.cobertura.xml fresh.cobertura.xml >nul"
+                : "cp fresh-source.trx fresh.trx && cp fresh-source.cobertura.xml fresh.cobertura.xml";
         }
 
         private static string BuildEmitFileCommand(string relativePath)
@@ -881,6 +1146,20 @@ namespace Test.Shared.Suites.Services
             catch
             {
             }
+        }
+
+        private static TestCaseDescriptor Case(string caseId, string displayName, string tag, Action body)
+        {
+            return new TestCaseDescriptor(
+                suiteId: SuiteId,
+                caseId: caseId,
+                displayName: displayName,
+                executeAsync: (CancellationToken ct) =>
+                {
+                    body();
+                    return Task.CompletedTask;
+                },
+                tags: new List<string> { tag });
         }
 
         private static TestCaseDescriptor CaseAsync(string caseId, string displayName, string tag, Func<Task> body)
