@@ -367,6 +367,36 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
+            cases.Add(CaseAsync("long_task_integration_rescue_keeps_prior_stage_handoff", "An integration rescue brief keeps the first 3000 task characters and the complete prior-stage handoff", TestTags.Positive, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                {
+                    ArmadaSettings settings = new ArmadaSettings();
+                    settings.MaxMissionRecoveryAttempts = 2;
+                    MissionRecoveryCoordinator coordinator = new MissionRecoveryCoordinator(CreateLogging(), testDb.Driver, settings);
+                    IncidentService incidents = new IncidentService(testDb.Driver);
+                    Vessel vessel = await CreateVesselAsync(testDb).ConfigureAwait(false);
+
+                    Mission stage = new Mission("Prior stage", "Scoped acceptance criteria");
+                    stage.Persona = "Worker";
+                    stage.BranchName = "feature/prior-stage";
+                    stage.CommitHash = "0123456789abcdef0123456789abcdef01234567";
+                    string handoff = PipelineHandoffContext.Build(stage);
+                    string taskTail = "integration-task-tail-beyond-prefix";
+                    string task = "integration-task-head" + new string('i', 4000) + taskTail;
+
+                    string embedded = await RescueTaskTextAsync(testDb, coordinator, incidents, vessel.Id, task + handoff, withRecordedWork: true).ConfigureAwait(false);
+                    AssertEqual(task.Substring(0, 3000) + handoff, embedded, "the integration rescue keeps the task prefix and the handoff bytes");
+                    AssertFalse(embedded.Contains(taskTail, StringComparison.Ordinal), "task characters past the budget are omitted");
+
+                    Vessel plainVessel = new Vessel("integration-plain-vessel", "https://github.com/test/plain.git");
+                    plainVessel.DefaultBranch = "main";
+                    plainVessel = await testDb.Driver.Vessels.CreateAsync(plainVessel).ConfigureAwait(false);
+                    string plain = await RescueTaskTextAsync(testDb, coordinator, incidents, plainVessel.Id, task, withRecordedWork: true).ConfigureAwait(false);
+                    AssertEqual(task.Substring(0, 3000) + "...(truncated)", plain, "an integration brief without a handoff keeps the existing trim");
+                }
+            }));
+
             cases.Add(CaseAsync("long_description_without_handoff_keeps_trim", "A long description without a prior-stage handoff keeps the existing 3000-character trim", TestTags.Positive, async () =>
             {
                 using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
@@ -484,15 +514,23 @@ namespace Test.Shared.Suites.Services
             MissionRecoveryCoordinator coordinator,
             IncidentService incidents,
             string vesselId,
-            string description)
+            string description,
+            bool withRecordedWork = false)
         {
             Mission failed = await CreateFailedMissionAsync(
                 testDb,
                 vesselId,
-                MissionFailureKindEnum.Compile,
+                withRecordedWork ? MissionFailureKindEnum.LandingConflict : MissionFailureKindEnum.Compile,
                 "Definition-of-Done gate failed (Compile): build phase exited 1").ConfigureAwait(false);
             failed.Title = "Keep the prior stage";
             failed.Description = description;
+            if (withRecordedWork)
+            {
+                // A recorded commit on a branch selects the integration brief instead of the re-implementation brief.
+                failed.Status = MissionStatusEnum.LandingFailed;
+                failed.CommitHash = "6add5c4f0a1b2c3d4e5f60718293a4b5c6d7e8f9";
+                failed.BranchName = "armada/worker/" + failed.Id;
+            }
             await testDb.Driver.Missions.UpdateAsync(failed).ConfigureAwait(false);
 
             await coordinator.MaintainAsync().ConfigureAwait(false);
@@ -501,6 +539,10 @@ namespace Test.Shared.Suites.Services
             Incident incident = recovery.Single(item => item.MissionId == failed.Id);
             Mission rescue = (await testDb.Driver.Missions.ReadAsync(incident.RescueMissionIds[0]).ConfigureAwait(false))!;
             string brief = rescue.Description ?? String.Empty;
+            if (withRecordedWork)
+                AssertContains("Do NOT re-implement", brief, "the recorded commit selects the integration brief");
+            else
+                AssertContains("Re-implement the change correctly", brief, "no recorded commit selects the re-implementation brief");
             AssertContains("+broken", brief, "the prior diff excerpt remains");
             AssertContains("Definition-of-Done gate failed (Compile)", brief, "the failure reason remains");
             return EmbeddedOriginalDescription(brief, failed.Title);

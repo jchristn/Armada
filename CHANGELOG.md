@@ -4,6 +4,12 @@ All notable changes to Armada are documented in this file.
 
 ---
 
+## Unreleased
+
+### Fixes
+
+- Rescue briefs keep an appended prior-stage handoff. Both the re-implementation brief and the integration brief (for a failed mission that left a commit) keep the first 3000 characters of the task text and the complete prior-stage handoff block. A description without that block keeps the existing 3000-character trim. (#50)
+
 ## v1.3.0 (2026-11-06)
 
 v1.3.0 has two marquee features: **parallelization and concurrency**, and **out-of-the-box fleet actions for common repository tasks**. Concurrency improvements keep more independent work in flight with bounded capacity: vessels limit parallel voyages and missions per voyage, captains run several missions in slots, architects split work into a hierarchy of small missions with owned files, every wait is recorded with its reason, and usage-based captain selection routes work by account headroom. The release removes the single-mission captain and vessel fields with no deprecation period; read **Breaking changes** below and back up before upgrading. The default fleet action catalog provides ready-to-run performance reviews and fixes, code cleanliness and cleanup, security and vulnerability checks, and license compliance checks, alongside build, test, lint, dependency, and documentation tasks.
@@ -429,10 +435,6 @@ commands arrive with their own changes. Schema migrations 103 and 104 apply at s
 - macOS Harbor bundles store the pi permission-gate extension in `Contents/Resources/Pi`, and pi resolves it there as well as beside portable binaries. This prevents ARM64 code signing from treating TypeScript resources as unsigned nested code. The DMG verifier checks the resource layout.
 - After building and verifying both Harbor DMGs, `build-harbor-app.sh` installs the native app into `~/Applications`, staging and signature-checking a fresh bundle before replacement. `--no-install` opts out, and `--no-build` remains verification-only.
 - Helm's NuGet tool package preserves battery fixture `.gitignore` and `.gitattributes` files instead of excluding them with NU5119 warnings. Installer verification checks every packaged framework for those files.
-
-### Rescue briefs keep the prior-stage handoff
-
-- **A rescue brief keeps an appended prior-stage handoff.** The brief keeps the first 3000 characters of the task text and the complete prior-stage handoff block. A description without that block keeps the existing 3000-character trim.
 
 ### Landing failure prevention
 
