@@ -66,6 +66,65 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(0, missing.Count, "no lenses should be missing");
             }));
 
+            cases.Add(Case("decorated_lens_headings_validate_pass_and_keep_bodies", "Decorated lens headings validate a PASS and stop section bodies at the next heading", TestTags.Positive, () =>
+            {
+                string output =
+                    "**## Correctness**\n" +
+                    "The change validates each input before use and handles the empty case without changing stored state.\n\n" +
+                    "*## Blast Radius:*\n" +
+                    "Only the intended request path changes and its callers retain their existing authorization and response behavior.\n\n" +
+                    "## **Source Fidelity**\n" +
+                    "The implementation follows the requested contract and uses the existing owner without adding unrelated behavior.\n\n" +
+                    "**## Affected Case**\n" +
+                    "File: src/Core/RequestHandler.cs\n" +
+                    "The request with an empty value currently reaches the invalid branch.\n\n" +
+                    "**## Other Findings**\n" +
+                    "This text must not enter the affected-case body.\n\n" +
+                    "[ARMADA:VERDICT] PASS\n";
+
+                AssertTrue(JudgeContract.HasAllLenses(output, out List<string> missing),
+                    "wrapped heading marks must still identify all three required lenses; missing: " + String.Join(", ", missing));
+                AssertTrue(JudgeContract.ValidatePass(output, StripHeadings(output), out string? reason),
+                    "a sufficiently detailed PASS with decorated lens headings should validate; reason: " + (reason ?? "<none>"));
+                AssertTrue(JudgeContract.ExhibitsAffectedCase(output), "the decorated affected-case heading must expose its file field");
+
+                string conflictOutput =
+                    "**## Spec Conflict**\n" +
+                    "The stated requirement conflicts with the verified dependency behavior.\n\n" +
+                    "**## Other Findings**\n" +
+                    "This text must not enter the conflict body.\n\n" +
+                    "[ARMADA:VERDICT] SPEC_CONFLICT\n";
+                AssertEqual("The stated requirement conflicts with the verified dependency behavior.",
+                    JudgeContract.ExtractSpecConflict(conflictOutput),
+                    "the decorated conflict heading must retain its section body and stop at the next decorated heading");
+            }));
+
+            cases.Add(Case("section_heading_match_requires_complete_line", "A lens name in prose or an unrelated heading does not count, and a verdict line does not end a section", TestTags.Negative, () =>
+            {
+                string output =
+                    "The review covers Correctness and its edge cases.\n" +
+                    "**## Unrelated section**\n" +
+                    "This section does not name a required lens.\n\n" +
+                    "## Blast Radius\nThe change is narrow.\n\n" +
+                    "## Source Fidelity\nThe change follows the request.\n";
+
+                AssertFalse(JudgeContract.ContainsSection(output, JudgeContract.LensCorrectness),
+                    "a lens name inside prose must not count as a heading");
+                AssertFalse(JudgeContract.HasAllLenses(output, out List<string> missing),
+                    "an unrelated heading and prose must not replace the missing lens");
+                AssertEqual(1, missing.Count, "only the actual missing lens should be reported");
+                AssertEqual(JudgeContract.LensCorrectness, missing[0]);
+
+                string plainConflict =
+                    "## Spec Conflict\n" +
+                    "The stated requirement conflicts with the verified dependency behavior.\n\n" +
+                    "[ARMADA:VERDICT] SPEC_CONFLICT\n";
+                AssertEqual(
+                    "The stated requirement conflicts with the verified dependency behavior.\n\n[ARMADA:VERDICT] SPEC_CONFLICT",
+                    JudgeContract.ExtractSpecConflict(plainConflict),
+                    "a verdict line is not a heading and stays in the section body");
+            }));
+
             cases.Add(Case("output_contract_names_lenses_and_case", "The output contract names the three lenses and the affected-case rule", TestTags.Positive, () =>
             {
                 string contract = JudgeContract.OutputContract();
