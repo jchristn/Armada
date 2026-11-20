@@ -67,6 +67,21 @@ namespace Armada.Client
         }
 
         /// <summary>
+        /// Dashboard <c>updateVesselContext</c>: PATCH `/api/v1/vessels/${id}/context`.
+        /// Writes project context, style guide, and model context. A null property leaves the stored value in place.
+        /// Send an empty string to clear a text field.
+        /// </summary>
+        /// <param name="id">Vessel id.</param>
+        /// <param name="data">Context fields to write.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The updated vessel.</returns>
+        /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
+        public Task<Vessel?> UpdateVesselContextAsync(string id, Vessel data, CancellationToken token = default)
+        {
+            return PatchAsync<Vessel>($"/api/v1/vessels/{E(id)}/context", data, null, token);
+        }
+
+        /// <summary>
         /// Dashboard <c>deleteVessel</c>: DEL `/api/v1/vessels/${id}`.
         /// </summary>
         /// <param name="id">id.</param>

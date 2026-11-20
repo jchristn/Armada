@@ -165,17 +165,26 @@ namespace Armada.Core.Database.SqlServer
                     await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
                 }
 
-                // Get current schema version
+                // Read every applied version. The maximum remains the current schema version.
+                List<int> appliedVersions = new List<int>();
                 int currentVersion = 0;
                 using (SqlCommand cmd = conn.CreateCommand())
                 {
-                    cmd.CommandText = "SELECT COALESCE(MAX(version), 0) FROM schema_migrations;";
-                    object? result = await cmd.ExecuteScalarAsync(token).ConfigureAwait(false);
-                    if (result != null && result != DBNull.Value) currentVersion = Convert.ToInt32(result);
+                    cmd.CommandText = "SELECT version FROM schema_migrations;";
+                    using (SqlDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
+                    {
+                        while (await reader.ReadAsync(token).ConfigureAwait(false))
+                        {
+                            int version = Convert.ToInt32(reader.GetValue(0));
+                            appliedVersions.Add(version);
+                            if (version > currentVersion) currentVersion = version;
+                        }
+                    }
                 }
 
                 // Apply pending migrations
                 List<SchemaMigration> migrations = TableQueries.GetMigrations();
+                RecordMigrationLedger("SQL Server", migrations, appliedVersions, _Logging, _Header);
                 int applied = 0;
 
                 foreach (SchemaMigration migration in migrations)
@@ -356,13 +365,15 @@ namespace Armada.Core.Database.SqlServer
         }
 
         /// <summary>
-        /// Convert a DateTime to ISO 8601 format string.
+        /// Convert a DateTime to an ISO 8601 UTC string.
+        /// A value with no kind keeps its clock and is written as UTC.
+        /// A local value is converted to UTC. A UTC value is unchanged.
         /// </summary>
         /// <param name="dt">DateTime value.</param>
         /// <returns>ISO 8601 formatted string.</returns>
         internal static string ToIso8601(DateTime dt)
         {
-            return dt.ToUniversalTime().ToString(_Iso8601Format, CultureInfo.InvariantCulture);
+            return UtcClock.Format(dt, _Iso8601Format);
         }
 
         /// <summary>
@@ -372,7 +383,7 @@ namespace Armada.Core.Database.SqlServer
         /// <returns>DateTime value.</returns>
         internal static DateTime FromIso8601(string value)
         {
-            return DateTime.Parse(value, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind).ToUniversalTime();
+            return UtcClock.Parse(value);
         }
 
         /// <summary>
@@ -510,6 +521,7 @@ namespace Armada.Core.Database.SqlServer
                 if (!String.IsNullOrWhiteSpace(protectedPatternsJson))
                     vessel.ProtectedBranchPatterns = JsonSerializer.Deserialize<List<string>>(protectedPatternsJson) ?? new List<string>();
             }
+            catch (JsonException exception) { throw new InvalidOperationException("Invalid JSON in protected_branch_patterns_json for vessel " + vessel.Id + ".", exception); }
             catch { }
             try { vessel.SecretScanEnabled = Convert.ToBoolean(reader["secret_scan_enabled"]); }
             catch { vessel.SecretScanEnabled = false; }
@@ -519,6 +531,7 @@ namespace Armada.Core.Database.SqlServer
                 if (!String.IsNullOrWhiteSpace(protectedPathPatternsJson))
                     vessel.ProtectedPathPatterns = JsonSerializer.Deserialize<List<string>>(protectedPathPatternsJson) ?? new List<string>();
             }
+            catch (JsonException exception) { throw new InvalidOperationException("Invalid JSON in protected_path_patterns_json for vessel " + vessel.Id + ".", exception); }
             catch { }
             try
             {
@@ -526,6 +539,7 @@ namespace Armada.Core.Database.SqlServer
                 if (!String.IsNullOrWhiteSpace(privateIdentifierDenylistJson))
                     vessel.PrivateIdentifierDenylist = JsonSerializer.Deserialize<List<string>>(privateIdentifierDenylistJson) ?? new List<string>();
             }
+            catch (JsonException exception) { throw new InvalidOperationException("Invalid JSON in private_identifier_denylist_json for vessel " + vessel.Id + ".", exception); }
             catch { }
             try { vessel.ReleaseBranchPrefix = NullableString(reader["release_branch_prefix"]) ?? "release/"; } catch { vessel.ReleaseBranchPrefix = "release/"; }
             try { vessel.HotfixBranchPrefix = NullableString(reader["hotfix_branch_prefix"]) ?? "hotfix/"; } catch { vessel.HotfixBranchPrefix = "hotfix/"; }
@@ -545,6 +559,7 @@ namespace Armada.Core.Database.SqlServer
                 if (!String.IsNullOrWhiteSpace(autoLandPathAllowGlobsJson))
                     vessel.AutoLandPathAllowGlobs = JsonSerializer.Deserialize<List<string>>(autoLandPathAllowGlobsJson) ?? new List<string>();
             }
+            catch (JsonException exception) { throw new InvalidOperationException("Invalid JSON in auto_land_path_allow_globs_json for vessel " + vessel.Id + ".", exception); }
             catch { }
             try
             {
@@ -552,6 +567,7 @@ namespace Armada.Core.Database.SqlServer
                 if (!String.IsNullOrWhiteSpace(autoLandPathDenyGlobsJson))
                     vessel.AutoLandPathDenyGlobs = JsonSerializer.Deserialize<List<string>>(autoLandPathDenyGlobsJson) ?? new List<string>();
             }
+            catch (JsonException exception) { throw new InvalidOperationException("Invalid JSON in auto_land_path_deny_globs_json for vessel " + vessel.Id + ".", exception); }
             catch { }
             try { vessel.DefinitionOfDoneEnabled = Convert.ToBoolean(reader["definition_of_done_enabled"]); }
             catch { vessel.DefinitionOfDoneEnabled = false; }
@@ -661,6 +677,7 @@ namespace Armada.Core.Database.SqlServer
             Mission mission = new Mission();
             mission.Id = reader["id"].ToString()!;
             try { mission.UsageAdmissionExecutionKey = NullableString(reader["usage_execution_key"]); } catch (IndexOutOfRangeException) { }
+            Armada.Core.Database.ProcessLaunchSchema.Read(reader, mission);
             mission.TenantId = NullableString(reader["tenant_id"]);
             mission.UserId = NullableString(reader["user_id"]);
             mission.VoyageId = NullableString(reader["voyage_id"]);

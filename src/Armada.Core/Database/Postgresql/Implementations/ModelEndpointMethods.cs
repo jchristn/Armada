@@ -99,6 +99,37 @@ namespace Armada.Core.Database.Postgresql.Implementations
         }
 
         /// <inheritdoc />
+        public async Task<bool> UpdateHealthAsync(ModelEndpoint endpoint, DateTime expectedLastUpdateUtc, CancellationToken token = default)
+        {
+            if (endpoint == null) throw new ArgumentNullException(nameof(endpoint));
+            using (NpgsqlConnection conn = _Driver.CreateConnection())
+            {
+                await conn.OpenAsync(token).ConfigureAwait(false);
+                using (NpgsqlCommand cmd = conn.CreateCommand())
+                {
+                    cmd.CommandText = @"UPDATE model_endpoints SET
+                        health_status = @health_status,
+                        last_health_check_utc = @last_health_check_utc,
+                        last_health_error = @last_health_error,
+                        last_latency_ms = @last_latency_ms,
+                        health_history_json = @health_history_json,
+                        last_update_utc = @last_update_utc
+                        WHERE id = @id AND last_update_utc = @expected_last_update_utc;";
+                    cmd.Parameters.AddWithValue("@id", endpoint.Id);
+                    cmd.Parameters.AddWithValue("@health_status", endpoint.HealthStatus.ToString());
+                    PostgresqlCommandHelper.AddDate(cmd, "@last_health_check_utc", endpoint.LastHealthCheckUtc);
+                    cmd.Parameters.AddWithValue("@last_health_error", (object?)endpoint.LastHealthError ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@last_latency_ms", (object?)endpoint.LastLatencyMs ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@health_history_json", JsonSerializer.Serialize(endpoint.HealthHistory ?? new List<ModelEndpointHealthRecord>(), _Json));
+                    PostgresqlCommandHelper.AddDate(cmd, "@last_update_utc", endpoint.LastUpdateUtc);
+                    PostgresqlCommandHelper.AddDate(cmd, "@expected_last_update_utc", expectedLastUpdateUtc);
+                    int changed = await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
+                    return changed == 1;
+                }
+            }
+        }
+
+        /// <inheritdoc />
         public async Task<ModelEndpoint?> ReadAsync(string id, CancellationToken token = default)
         {
             if (String.IsNullOrWhiteSpace(id)) throw new ArgumentNullException(nameof(id));
@@ -329,12 +360,12 @@ namespace Armada.Core.Database.Postgresql.Implementations
             cmd.Parameters.AddWithValue("@timeout_ms", endpoint.TimeoutMs);
             cmd.Parameters.AddWithValue("@enabled", endpoint.Enabled);
             cmd.Parameters.AddWithValue("@health_status", endpoint.HealthStatus.ToString());
-            cmd.Parameters.AddWithValue("@last_health_check_utc", (object?)endpoint.LastHealthCheckUtc ?? DBNull.Value);
+            PostgresqlCommandHelper.AddDate(cmd, "@last_health_check_utc", endpoint.LastHealthCheckUtc);
             cmd.Parameters.AddWithValue("@last_health_error", (object?)endpoint.LastHealthError ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@last_latency_ms", (object?)endpoint.LastLatencyMs ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@health_history_json", JsonSerializer.Serialize(endpoint.HealthHistory ?? new List<ModelEndpointHealthRecord>(), _Json));
-            cmd.Parameters.AddWithValue("@created_utc", endpoint.CreatedUtc);
-            cmd.Parameters.AddWithValue("@last_update_utc", endpoint.LastUpdateUtc);
+            PostgresqlCommandHelper.AddDate(cmd, "@created_utc", endpoint.CreatedUtc);
+            PostgresqlCommandHelper.AddDate(cmd, "@last_update_utc", endpoint.LastUpdateUtc);
         }
 
         private static ModelEndpoint EndpointFromReader(NpgsqlDataReader reader)
@@ -361,8 +392,8 @@ namespace Armada.Core.Database.Postgresql.Implementations
                 LastHealthCheckUtc = NullableDateTime(reader["last_health_check_utc"]),
                 LastHealthError = NullableString(reader["last_health_error"]),
                 LastLatencyMs = NullableLong(reader["last_latency_ms"]),
-                CreatedUtc = (DateTime)reader["created_utc"],
-                LastUpdateUtc = (DateTime)reader["last_update_utc"]
+                CreatedUtc = DateTime.SpecifyKind((DateTime)reader["created_utc"], DateTimeKind.Utc),
+                LastUpdateUtc = DateTime.SpecifyKind((DateTime)reader["last_update_utc"], DateTimeKind.Utc)
             };
 
             endpoint.ApiKey = NullableString(reader["api_key"]);

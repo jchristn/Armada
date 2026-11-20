@@ -572,6 +572,7 @@ function isAbortError(err: unknown): boolean {
 function get<T>(path: string, opts?: RequestOptions) { return request<T>('GET', path, undefined, opts); }
 function post<T>(path: string, body?: unknown, opts?: RequestOptions) { return request<T>('POST', path, body, opts); }
 function put<T>(path: string, body?: unknown, opts?: RequestOptions) { return request<T>('PUT', path, body, opts); }
+function patch<T>(path: string, body?: unknown, opts?: RequestOptions) { return request<T>('PATCH', path, body, opts); }
 function del<T>(path: string, opts?: RequestOptions) { return request<T>('DELETE', path, undefined, opts); }
 
 async function proxyRequest<T>(method: string, path: string, body?: unknown): Promise<T> {
@@ -922,6 +923,8 @@ export const listVessels = (params?: { pageNumber?: number; pageSize?: number; f
 export const getVessel = (id: string) => get<Vessel>(`/api/v1/vessels/${id}`);
 export const createVessel = (data: Partial<Vessel>) => post<Vessel>('/api/v1/vessels', data);
 export const updateVessel = (id: string, data: Partial<Vessel>) => put<Vessel>(`/api/v1/vessels/${id}`, data);
+export const updateVesselContext = (id: string, data: Pick<Vessel, 'projectContext' | 'styleGuide' | 'modelContext'>) =>
+  patch<Vessel>(`/api/v1/vessels/${id}/context`, data);
 export const deleteVessel = (id: string) => del<void>(`/api/v1/vessels/${id}`);
 // Building a Model Context launches a captain to analyze the repository and can take minutes; allow a long
 // timeout so the request does not abort before the captain finishes.
@@ -1369,14 +1372,14 @@ export const getMissionHistory = (params?: { fromUtc?: string; toUtc?: string; b
     ),
   } : undefined)}`);
 /** Token-usage summary: at most 1000 buckets (a larger window is a 400); byModel lists the modelLimit top models and otherModels sums the rest. */
-export const getTokenUsage = (params?: { fromUtc?: string; toUtc?: string; bucketMinutes?: number; modelLimit?: number; model?: string; runtime?: string; source?: string; sourceId?: string; vesselId?: string; captainId?: string; harborId?: string }) =>
+export const getTokenUsage = (params?: { fromUtc?: string; toUtc?: string; bucketMinutes?: number; modelLimit?: number; model?: string; runtime?: string; source?: string; sourceId?: string; vesselId?: string; captainId?: string; harborId?: string }, opts?: RequestOptions) =>
   get<TokenUsageSummaryResult>(`/api/v1/token-usage/summary${buildQuery(params ? {
     filters: Object.fromEntries(
       Object.entries(params)
         .filter(([, value]) => value !== undefined && value !== null && value !== '')
         .map(([key, value]) => [key, String(value)]),
     ),
-  } : undefined)}`);
+  } : undefined)}`, opts);
 export const getMissionLandingPreview = (id: string) => get<LandingPreviewResult>(`/api/v1/missions/${encodeURIComponent(id)}/landing-preview`);
 export const getMissionGitHubPullRequest = (id: string) => get<GitHubPullRequestDetail>(`/api/v1/missions/${encodeURIComponent(id)}/github/pull-request`);
 /** One page (1 to 100, GitHub's largest page) of the mission pull request's reviews; newest first unless order is CreatedAscending. */

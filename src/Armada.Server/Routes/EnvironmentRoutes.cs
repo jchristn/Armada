@@ -192,19 +192,19 @@ namespace Armada.Server.Routes
 
         private static void ApplyQuerystringOverrides(ApiRequest req, DeploymentEnvironmentQuery query)
         {
-            if (Int32.TryParse(req.Query.GetValueOrDefault("pageNumber"), out int pageNumber))
+            if (Int32.TryParse(QueryValueReader.Read(req.Query, "pageNumber"), out int pageNumber))
                 query.PageNumber = Math.Max(1, pageNumber);
-            if (Int32.TryParse(req.Query.GetValueOrDefault("pageSize"), out int pageSize))
+            if (Int32.TryParse(QueryValueReader.Read(req.Query, "pageSize"), out int pageSize))
                 query.PageSize = Math.Clamp(pageSize, 1, 500);
-            if (Boolean.TryParse(req.Query.GetValueOrDefault("isDefault"), out bool isDefault))
+            if (Boolean.TryParse(QueryValueReader.Read(req.Query, "isDefault"), out bool isDefault))
                 query.IsDefault = isDefault;
-            if (Boolean.TryParse(req.Query.GetValueOrDefault("active"), out bool active))
+            if (Boolean.TryParse(QueryValueReader.Read(req.Query, "active"), out bool active))
                 query.Active = active;
-            if (Enum.TryParse(req.Query.GetValueOrDefault("kind"), true, out EnvironmentKindEnum kind))
+            if (Enum.TryParse(QueryValueReader.Read(req.Query, "kind"), true, out EnvironmentKindEnum kind))
                 query.Kind = kind;
 
-            query.VesselId = NormalizeEmpty(req.Query.GetValueOrDefault("vesselId")) ?? query.VesselId;
-            query.Search = NormalizeEmpty(req.Query.GetValueOrDefault("search")) ?? query.Search;
+            query.VesselId = NormalizeEmpty(QueryValueReader.Read(req.Query, "vesselId")) ?? query.VesselId;
+            query.Search = NormalizeEmpty(QueryValueReader.Read(req.Query, "search")) ?? query.Search;
         }
 
         private static ApiErrorResponse BuildAuthError(ApiRequest req)

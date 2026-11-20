@@ -73,6 +73,7 @@ namespace Armada.Core.Services
         /// Name of the durable lease that serializes queue processing across instances.
         /// </summary>
         private const string _ProcessLeaseName = "merge-queue:process";
+        private static readonly TimeSpan _ProcessLeaseDuration = TimeSpan.FromMinutes(15);
         private readonly object _ProcessLock = new object();
 
         /// <summary>
@@ -140,12 +141,29 @@ namespace Armada.Core.Services
                 // TTL guarantees a crashed holder does not block the queue forever, and takeover is
                 // automatic once it expires.
                 leaseAcquired = await _Database.CoordinationLeases
-                    .TryAcquireAsync(_ProcessLeaseName, _InstanceId, TimeSpan.FromMinutes(15), null, token)
+                    .TryAcquireAsync(_ProcessLeaseName, _InstanceId, _ProcessLeaseDuration, null, token)
                     .ConfigureAwait(false);
                 if (!leaseAcquired)
                 {
                     _Logging.Debug(_Header + "merge queue already being processed by another instance -- skipping");
                     return;
+                }
+
+                // Recover work left in Testing only after the processing lease expires. A null
+                // start time has no evidence of a live processor and is safe to resume. A newer
+                // status write keeps the entry.
+                DateTime staleBeforeUtc = DateTime.UtcNow - _ProcessLeaseDuration;
+                List<MergeEntry> testing = await _Database.MergeEntries.EnumerateByStatusAsync(MergeStatusEnum.Testing, token).ConfigureAwait(false);
+                foreach (MergeEntry entry in testing)
+                {
+                    if (!entry.TestStartedUtc.HasValue || entry.TestStartedUtc.Value <= staleBeforeUtc)
+                    {
+                        DateTime version = entry.LastUpdateUtc;
+                        entry.Status = MergeStatusEnum.Queued;
+                        entry.TestStartedUtc = null;
+                        entry.TestExitCode = null;
+                        if (!await _Database.MergeEntries.TryUpdateIfUnchangedAsync(entry, version, token).ConfigureAwait(false)) continue;
+                    }
                 }
 
                 // Get all queued entries ordered by priority then created_utc
@@ -200,6 +218,14 @@ namespace Armada.Core.Services
                 : await _Database.MergeEntries.ReadAsync(entryId, token).ConfigureAwait(false);
             if (entry != null)
             {
+                if (entry.Status == MergeStatusEnum.Landed ||
+                    entry.Status == MergeStatusEnum.Failed ||
+                    entry.Status == MergeStatusEnum.Cancelled)
+                {
+                    _Logging.Info(_Header + "keeping terminal status " + entry.Status + " for " + entryId);
+                    return;
+                }
+
                 entry.Status = MergeStatusEnum.Cancelled;
                 entry.LastUpdateUtc = DateTime.UtcNow;
                 entry.CompletedUtc = DateTime.UtcNow;
@@ -574,7 +600,16 @@ namespace Armada.Core.Services
                 // Record the target commit this entry integrates against, then merge the entry's branch.
                 targetCommit = await ResolveHeadAsync(host, integrationPath).ConfigureAwait(false);
                 step = MergeQueueFailureStepEnum.Merge;
-                MergeQueueMergeResult merge = await MergeBranchAsync(host, integrationPath, await LandingRefAsync(entry, token).ConfigureAwait(false), token).ConfigureAwait(false);
+                string landingRef = await LandingRefAsync(entry, token).ConfigureAwait(false);
+                string? landedCommit = await AlreadyLandedCommitAsync(entry, host, integrationPath, landingRef, token).ConfigureAwait(false);
+                if (landedCommit != null)
+                {
+                    await CompleteAlreadyLandedAsync(entry, landedCommit, token).ConfigureAwait(false);
+                    await CleanupWorktreeAsync(host, repoPath, integrationPath, integrationBranch, token).ConfigureAwait(false);
+                    return;
+                }
+
+                MergeQueueMergeResult merge = await MergeBranchAsync(host, integrationPath, landingRef, token).ConfigureAwait(false);
                 if (!merge.Merged)
                 {
                     MissionFailureKindEnum mergeKind = MergeQueueFailureClassifier.ClassifyMerge(merge.ConflictedFiles.Count);
@@ -822,6 +857,41 @@ namespace Armada.Core.Services
             if (!shared) return entry.BranchName;
             _Logging.Info(_Header + "entry " + entry.Id + " lands mission commit " + mission.CommitHash + " instead of " + entry.BranchName + ", which a continuing child shares");
             return mission.CommitHash!;
+        }
+
+        // A branch deleted after its work landed leaves nothing to merge: when the entry lands its branch, the branch is in
+        // neither refs/heads nor refs/remotes/origin, and the mission's recorded commit is already in the target (the
+        // integration worktree HEAD), that commit is returned. Null in every other case, which keeps the normal merge.
+        private async Task<string?> AlreadyLandedCommitAsync(MergeEntry entry, MergeQueueHost host, string integrationPath, string landingRef, CancellationToken token)
+        {
+            if (String.IsNullOrEmpty(entry.BranchName) || !String.Equals(landingRef, entry.BranchName, StringComparison.Ordinal)) return null;
+            Mission? mission = await ReadMissionAsync(entry.MissionId, entry.TenantId, token).ConfigureAwait(false);
+            string? commit = mission?.CommitHash?.Trim();
+            if (String.IsNullOrEmpty(commit)) return null;
+
+            HostCommandResult local = await RunGitCaptureAsync(host, host.RepoPath, token, "show-ref", "--verify", "--quiet", "refs/heads/" + entry.BranchName).ConfigureAwait(false);
+            if (local.ExitCode != 1) return null;
+            HostCommandResult remote = await RunGitCaptureAsync(host, host.RepoPath, token, "show-ref", "--verify", "--quiet", "refs/remotes/origin/" + entry.BranchName).ConfigureAwait(false);
+            if (remote.ExitCode != 1) return null;
+
+            HostCommandResult ancestor = await RunGitCaptureAsync(host, integrationPath, token, "merge-base", "--is-ancestor", commit, "HEAD").ConfigureAwait(false);
+            return ancestor.ExitCode == 0 ? commit : null;
+        }
+
+        // Record an entry whose commit is already on the target as Landed and complete its mission, as a normal landing does.
+        private async Task CompleteAlreadyLandedAsync(MergeEntry entry, string landedCommit, CancellationToken token)
+        {
+            entry.Status = MergeStatusEnum.Landed;
+            entry.TestOutput = "Branch " + entry.BranchName + " no longer exists, but mission commit " + landedCommit
+                + " is already on " + entry.TargetBranch + "; nothing was left to merge.";
+            entry.CompletedUtc = DateTime.UtcNow;
+            if (!await _Database.MergeEntries.TryUpdateIfUnchangedAsync(entry, entry.LastUpdateUtc, token).ConfigureAwait(false)) return;
+            ArmadaMetrics.MergeEntriesProcessed.Add(1);
+            _Logging.Info(_Header + "entry " + entry.Id + " branch " + entry.BranchName + " is gone and commit " + landedCommit
+                + " is already on " + entry.TargetBranch + "; recorded as landed");
+
+            await ReconcileMissionStatusAsync(entry.MissionId, MissionStatusEnum.Complete,
+                "Commit " + landedCommit + " was already on " + entry.TargetBranch + " (merge queue entry " + entry.Id + ")", token, entry.TenantId).ConfigureAwait(false);
         }
 
         private async Task<string?> ParentLandingWaitAsync(Mission? mission, CancellationToken token)
@@ -1196,9 +1266,11 @@ namespace Armada.Core.Services
         }
 
         /// <summary>
-        /// Delete the entry's branch (local and remote) when its work is in the target branch: always for a Landed entry
-        /// unless git shows the branch is not merged, and for a Cancelled entry only when git shows it is merged. Failed
-        /// entries keep their branch. Best effort: problems are logged and the entry is still deleted.
+        /// Delete the entry's mission branch when git shows that its work is in the target branch.
+        /// A landed entry follows the vessel branch cleanup policy, or the global policy when the vessel
+        /// does not set one. None keeps both refs. LocalOnly deletes the local ref. LocalAndRemote deletes
+        /// both refs. A cancelled entry deletes both refs when git shows that the branch is merged. A failed
+        /// entry keeps its branch. Best effort: git problems are logged and the entry is still deleted.
         /// </summary>
         private async Task CleanupEntryBranchAsync(MergeEntry entry, CancellationToken token)
         {
@@ -1249,14 +1321,31 @@ namespace Armada.Core.Services
                 return;
             }
 
-            try
+            bool deleteRemote = true;
+            if (entry.Status == MergeStatusEnum.Landed)
             {
-                await RunGitAsync(host, host.RepoPath, token, "push", "origin", "--delete", entry.BranchName).ConfigureAwait(false);
-                _Logging.Debug(_Header + "deleted remote branch " + entry.BranchName);
+                BranchCleanupPolicyEnum policy = await ResolveLandedBranchCleanupPolicyAsync(entry, token).ConfigureAwait(false);
+                if (policy == BranchCleanupPolicyEnum.None)
+                {
+                    _Logging.Info(_Header + "keeping branch " + entry.BranchName + " of landed entry " + entry.Id
+                        + ": branch cleanup policy is None");
+                    return;
+                }
+
+                deleteRemote = policy == BranchCleanupPolicyEnum.LocalAndRemote;
             }
-            catch (Exception ex) when (!(ex is OperationCanceledException))
+
+            if (deleteRemote)
             {
-                _Logging.Debug(_Header + "remote branch delete for " + entry.BranchName + " skipped: " + ex.Message);
+                try
+                {
+                    await RunGitAsync(host, host.RepoPath, token, "push", "origin", "--delete", entry.BranchName).ConfigureAwait(false);
+                    _Logging.Debug(_Header + "deleted remote branch " + entry.BranchName);
+                }
+                catch (Exception ex) when (!(ex is OperationCanceledException))
+                {
+                    _Logging.Debug(_Header + "remote branch delete for " + entry.BranchName + " skipped: " + ex.Message);
+                }
             }
 
             try
@@ -1268,6 +1357,26 @@ namespace Armada.Core.Services
             {
                 _Logging.Debug(_Header + "local branch delete for " + entry.BranchName + " skipped: " + ex.Message);
             }
+        }
+
+        /// <summary>
+        /// Vessel branch cleanup policy for a landed entry, or the global policy when the vessel does not set one.
+        /// </summary>
+        /// <param name="entry">Landed merge-queue entry.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The policy that applies to the entry.</returns>
+        private async Task<BranchCleanupPolicyEnum> ResolveLandedBranchCleanupPolicyAsync(MergeEntry entry, CancellationToken token)
+        {
+            if (!String.IsNullOrEmpty(entry.VesselId))
+            {
+                Vessel? vessel = !String.IsNullOrEmpty(entry.TenantId)
+                    ? await _Database.Vessels.ReadAsync(entry.TenantId, entry.VesselId, token).ConfigureAwait(false)
+                    : await _Database.Vessels.ReadAsync(entry.VesselId, token).ConfigureAwait(false);
+                if (vessel != null && vessel.BranchCleanupPolicy.HasValue)
+                    return vessel.BranchCleanupPolicy.Value;
+            }
+
+            return _Settings.BranchCleanupPolicy;
         }
 
         /// <summary>

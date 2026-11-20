@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import VesselDetail from './VesselDetail';
 import { getVessel, listFleets, listMissionSummaries, listPipelines, getVesselReadiness, getVesselLandingPreview, updateVessel } from '../api/client';
 import { translateTemplate } from '../i18n/runtime';
@@ -251,5 +251,112 @@ describe('VesselDetail completeness (lists are never silently capped)', () => {
     expect(listMissionSummaries).toHaveBeenCalledWith({ pageNumber: 1, pageSize: 25, filters: { vesselId: 'vsl_1' } });
     const wrap = document.querySelector('[data-table="vessel-detail-missions"]') as HTMLElement;
     expect(within(wrap).getByText(/1,500 records/)).toBeInTheDocument();
+  });
+});
+
+interface Deferred<T> { promise: Promise<T>; resolve: (value: T) => void }
+
+function deferred<T>(): Deferred<T> {
+  let resolve: (value: T) => void = () => {};
+  const promise = new Promise<T>((res) => { resolve = res; });
+  return { promise, resolve };
+}
+
+describe('VesselDetail route load order', () => {
+  const vessels = new Map<string, Deferred<Vessel>>();
+  const previews = new Map<string, Deferred<unknown>>();
+  const readiness = new Map<string, Deferred<unknown>>();
+
+  function gate<T>(store: Map<string, Deferred<T>>, id: string): Deferred<T> {
+    let entry = store.get(id);
+    if (!entry) {
+      entry = deferred<T>();
+      store.set(id, entry);
+    }
+    return entry;
+  }
+
+  beforeEach(() => {
+    vessels.clear();
+    previews.clear();
+    readiness.clear();
+    vi.mocked(listFleets).mockResolvedValue(page([{ id: 'flt_1', name: 'Main' }]) as never);
+    vi.mocked(listMissionSummaries).mockResolvedValue(page([]) as never);
+    vi.mocked(listPipelines).mockResolvedValue(page([]) as never);
+    vi.mocked(getVessel).mockImplementation((id: string) => gate(vessels, id).promise);
+    vi.mocked(getVesselLandingPreview).mockImplementation((id: string) => gate(previews, id).promise as never);
+    vi.mocked(getVesselReadiness).mockImplementation((id: string) => gate(readiness, id).promise as never);
+  });
+
+  it('keeps the newer vessel, readiness, and landing preview when the older request finishes last', async () => {
+    function Harness() {
+      const navigate = useNavigate();
+      return (
+        <>
+          <button type="button" onClick={() => navigate('/vessels/vsl_b')}>Open route B</button>
+          <Routes>
+            <Route path="/vessels/:id" element={<VesselDetail />} />
+          </Routes>
+        </>
+      );
+    }
+
+    render(
+      <MemoryRouter initialEntries={['/vessels/vsl_a']}>
+        <Harness />
+      </MemoryRouter>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Open route B' }));
+
+    await act(async () => {
+      gate(vessels, 'vsl_b').resolve({ ...vessel, id: 'vsl_b', name: 'Vessel Beta', defaultBranch: 'main' });
+    });
+    expect(await screen.findByRole('heading', { name: 'Vessel Beta' })).toBeInTheDocument();
+
+    await act(async () => {
+      gate(readiness, 'vsl_b').resolve({
+        workflowProfileName: 'Profile Beta', errorCount: 0, warningCount: 0,
+        hasWorkingDirectory: true, hasRepositoryContext: true, availableCheckTypes: [],
+        detectedToolchains: [], toolchainProbes: [], deploymentEnvironments: [],
+        setupChecklist: [], setupChecklistTotalCount: 0, setupChecklistSatisfiedCount: 0, issues: [],
+      });
+      gate(previews, 'vsl_b').resolve({
+        sourceBranch: 'feature-b', targetBranch: 'main', branchCategory: 'Feature', landingMode: 'LocalMerge',
+        isReadyToLand: true, issues: [], requirePassingChecksToLand: false, targetBranchProtected: false,
+      });
+    });
+    expect(await screen.findByText('Profile Beta')).toBeInTheDocument();
+    expect(screen.getByText('feature-b -> main')).toBeInTheDocument();
+
+    await act(async () => {
+      gate(vessels, 'vsl_a').resolve({ ...vessel, id: 'vsl_a', name: 'Vessel Alpha', defaultBranch: 'main' });
+    });
+    await act(async () => {
+      const lateReadiness = readiness.get('vsl_a');
+      if (lateReadiness) {
+        lateReadiness.resolve({
+          workflowProfileName: 'Profile Alpha', errorCount: 0, warningCount: 0,
+          hasWorkingDirectory: true, hasRepositoryContext: true, availableCheckTypes: [],
+          detectedToolchains: [], toolchainProbes: [], deploymentEnvironments: [],
+          setupChecklist: [], setupChecklistTotalCount: 0, setupChecklistSatisfiedCount: 0, issues: [],
+        });
+      }
+      const latePreview = previews.get('vsl_a');
+      if (latePreview) {
+        latePreview.resolve({
+          sourceBranch: 'feature-a', targetBranch: 'main', branchCategory: 'Feature', landingMode: 'None',
+          isReadyToLand: false, issues: [], requirePassingChecksToLand: false, targetBranchProtected: false,
+        });
+      }
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'Vessel Beta' })).toBeInTheDocument();
+      expect(screen.queryByRole('heading', { name: 'Vessel Alpha' })).not.toBeInTheDocument();
+      expect(screen.getByText('Profile Beta')).toBeInTheDocument();
+      expect(screen.queryByText('Profile Alpha')).not.toBeInTheDocument();
+      expect(screen.getByText('feature-b -> main')).toBeInTheDocument();
+      expect(screen.queryByText('feature-a -> main')).not.toBeInTheDocument();
+    });
   });
 });

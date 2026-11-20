@@ -90,8 +90,8 @@ namespace Armada.Core.Database
             if (query.Kind.HasValue) conditions.Add("kind = " + filter.Add("@kind", query.Kind.Value.ToString()));
             if (query.Priority.HasValue) conditions.Add("priority = " + filter.Add("@priority", query.Priority.Value.ToString()));
             if (query.Effort.HasValue) conditions.Add("effort = " + filter.Add("@effort", query.Effort.Value.ToString()));
-            if (query.FromUtc.HasValue) conditions.Add("created_utc >= " + filter.AddDate("@from_utc", query.FromUtc.Value.ToUniversalTime()));
-            if (query.ToUtc.HasValue) conditions.Add("created_utc <= " + filter.AddDate("@to_utc", query.ToUtc.Value.ToUniversalTime()));
+            if (query.FromUtc.HasValue) conditions.Add("created_utc >= " + filter.AddDate("@from_utc", UtcClock.ToUtc(query.FromUtc.Value)));
+            if (query.ToUtc.HasValue) conditions.Add("created_utc <= " + filter.AddDate("@to_utc", UtcClock.ToUtc(query.ToUtc.Value)));
 
             string? search = String.IsNullOrWhiteSpace(query.Search) ? null : query.Search!.Trim();
             if (search != null)

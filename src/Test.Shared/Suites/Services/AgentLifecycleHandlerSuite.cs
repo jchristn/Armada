@@ -781,6 +781,46 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
+            cases.Add(CaseAsync("stopping_old_liveness_loop_preserves_replacement", "Stopping an old liveness loop does not remove its replacement", TestTags.Negative, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                AgentLifecycleHandler handler = CreateHandler(testDb.Driver, out _);
+                using Process process = StartSilentProcess();
+                const string captainId = "heartbeat-owner";
+                const string missionId = "heartbeat-mission";
+                RegisterTrackedProcess(handler, process.Id, captainId, missionId);
+
+                System.Collections.Concurrent.ConcurrentDictionary<int, CancellationTokenSource> loops =
+                    GetProcessHeartbeatLoops(handler);
+                try
+                {
+                    for (int attempt = 0; attempt < 128; attempt++)
+                    {
+                        StartTrackedProcessHeartbeat(handler, process.Id, captainId, missionId);
+                        StopTrackedProcessHeartbeat(handler, process.Id);
+                        StartTrackedProcessHeartbeat(handler, process.Id, captainId, missionId);
+
+                        await Task.Yield();
+                        AssertTrue(loops.TryGetValue(process.Id, out CancellationTokenSource? current),
+                            "The replacement liveness loop must remain registered after the old loop stops (attempt " + attempt + ").");
+                        AssertFalse(current!.IsCancellationRequested,
+                            "The old loop must not cancel its replacement (attempt " + attempt + ").");
+
+                        StopTrackedProcessHeartbeat(handler, process.Id);
+                    }
+                }
+                finally
+                {
+                    StopTrackedProcessHeartbeat(handler, process.Id);
+                    try
+                    {
+                        process.Kill(entireProcessTree: true);
+                        process.WaitForExit(5000);
+                    }
+                    catch { }
+                }
+            }));
+
             cases.Add(CaseAsync("get_and_clear_mission_output_prefers_final_artifact", "GetAndClearMissionOutput prefers final message artifact over streamed output", TestTags.Positive, async () =>
             {
                 using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
@@ -1200,6 +1240,60 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
+            cases.Add(CaseAsync("local_stop_refuses_a_reused_process_id", "A local stop leaves running a process whose start time does not match the recorded launch", TestTags.Negative, async () =>
+            {
+                using TestDatabase db = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                AgentLifecycleHandler handler = CreateHandler(db.Driver, out _);
+                using Process bystander = StartSleeper();
+                try
+                {
+                    AssertTrue(ProcessSupervisor.TryReadStartTimeUtc(bystander.Id, out DateTime realStart), "start time readable");
+                    Captain captain = await LocalStopCaptainAsync(db.Driver, bystander.Id, realStart.AddMinutes(-30)).ConfigureAwait(false);
+                    await handler.HandleStopAgentAsync(captain).ConfigureAwait(false);
+                    await Task.Delay(500).ConfigureAwait(false);
+                    AssertFalse(bystander.HasExited, "a later process that reuses the agent's id is never signalled or killed");
+                }
+                finally
+                {
+                    try { if (!bystander.HasExited) bystander.Kill(true); } catch { }
+                }
+            }));
+
+            cases.Add(CaseAsync("local_stop_stops_the_recorded_process", "A local stop stops the process whose start time matches the recorded launch", TestTags.Positive, async () =>
+            {
+                using TestDatabase db = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                AgentLifecycleHandler handler = CreateHandler(db.Driver, out _);
+                using Process agent = StartSleeper();
+                try
+                {
+                    AssertTrue(ProcessSupervisor.TryReadStartTimeUtc(agent.Id, out DateTime realStart), "start time readable");
+                    Captain captain = await LocalStopCaptainAsync(db.Driver, agent.Id, realStart).ConfigureAwait(false);
+                    await handler.HandleStopAgentAsync(captain).ConfigureAwait(false);
+                    AssertTrue(agent.WaitForExit(15000), "the recorded agent process is stopped");
+                }
+                finally
+                {
+                    try { if (!agent.HasExited) agent.Kill(true); } catch { }
+                }
+            }));
+
+            cases.Add(CaseAsync("local_stop_without_record_still_stops", "A mission with no recorded start time (an upgraded install) is still stoppable through the launch-time check", TestTags.Positive, async () =>
+            {
+                using TestDatabase db = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                AgentLifecycleHandler handler = CreateHandler(db.Driver, out _);
+                using Process agent = StartSleeper();
+                try
+                {
+                    Captain captain = await LocalStopCaptainAsync(db.Driver, agent.Id, null).ConfigureAwait(false);
+                    await handler.HandleStopAgentAsync(captain).ConfigureAwait(false);
+                    AssertTrue(agent.WaitForExit(15000), "the agent process is stopped");
+                }
+                finally
+                {
+                    try { if (!agent.HasExited) agent.Kill(true); } catch { }
+                }
+            }));
+
             return new TestSuiteDescriptor(
                 suiteId: SuiteId,
                 displayName: "Agent Lifecycle Handler",
@@ -1434,6 +1528,21 @@ namespace Test.Shared.Suites.Services
             method.Invoke(handler, new object[] { processId, captainId, missionId });
         }
 
+        private static void StopTrackedProcessHeartbeat(AgentLifecycleHandler handler, int processId)
+        {
+            MethodInfo method = typeof(AgentLifecycleHandler).GetMethod("StopProcessLivenessHeartbeat", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("Could not find StopProcessLivenessHeartbeat method");
+            method.Invoke(handler, new object[] { processId });
+        }
+
+        private static System.Collections.Concurrent.ConcurrentDictionary<int, CancellationTokenSource> GetProcessHeartbeatLoops(AgentLifecycleHandler handler)
+        {
+            FieldInfo field = typeof(AgentLifecycleHandler).GetField("_ProcessHeartbeatLoops", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("Could not find _ProcessHeartbeatLoops field");
+            return (System.Collections.Concurrent.ConcurrentDictionary<int, CancellationTokenSource>)(field.GetValue(handler)
+                ?? throw new InvalidOperationException("Process heartbeat loop map was null"));
+        }
+
         private static Process StartSilentProcess()
         {
             ProcessStartInfo startInfo;
@@ -1520,6 +1629,28 @@ namespace Test.Shared.Suites.Services
             }
 
             throw new TimeoutException("Timed out waiting for asynchronous condition");
+        }
+
+        private static Process StartSleeper()
+        {
+            ProcessStartInfo psi = OperatingSystem.IsWindows()
+                ? new ProcessStartInfo("cmd.exe", "/c ping -n 120 127.0.0.1 > nul")
+                : new ProcessStartInfo("sleep", "120");
+            psi.UseShellExecute = false;
+            psi.CreateNoWindow = true;
+            return Process.Start(psi) ?? throw new InvalidOperationException("could not start the stand-in process");
+        }
+
+        private static async Task<Captain> LocalStopCaptainAsync(DatabaseDriver db, int processId, DateTime? recordedStartUtc)
+        {
+            Captain captain = await db.Captains.CreateAsync(new Captain("local-stop-" + processId, AgentRuntimeEnum.ClaudeCode)).ConfigureAwait(false);
+            Mission mission = new Mission("Local stop identity") { Status = MissionStatusEnum.InProgress, CaptainId = captain.Id, ProcessId = processId, StartedUtc = DateTime.UtcNow };
+            mission = await db.Missions.CreateAsync(mission).ConfigureAwait(false);
+            if (recordedStartUtc.HasValue)
+                AssertTrue(await db.Missions.SetProcessLaunchAsync(mission.Id, processId, recordedStartUtc.Value).ConfigureAwait(false), "launch recorded");
+            captain.ProcessId = processId;
+            captain.Assignment = mission;
+            return captain;
         }
 
         private static TestCaseDescriptor CaseAsync(string caseId, string displayName, string tag, Func<Task> body)

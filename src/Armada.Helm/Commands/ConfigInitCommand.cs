@@ -55,17 +55,26 @@ namespace Armada.Helm.Commands
                     // Stop embedded server if running (releases DB and file locks)
                     EmbeddedServer.Stop();
 
-                    // Try to stop a standalone server too
-                    try
+                    // Stop a standalone server too, and keep its files if shutdown cannot be proved.
+                    bool stopped = await StopLocalServerAndWaitAsync(async () =>
                     {
-                        using HttpClient client = new HttpClient { Timeout = TimeSpan.FromSeconds(3) };
                         ArmadaSettings tempSettings = await ArmadaSettings.LoadAsync().ConfigureAwait(false);
-                        if (!string.IsNullOrEmpty(tempSettings.ApiKey)) client.DefaultRequestHeaders.Add("X-Api-Key", tempSettings.ApiKey);
-                        await client.PostAsync("http://localhost:" + tempSettings.AdmiralPort + "/api/v1/server/stop", null).ConfigureAwait(false);
-                        AnsiConsole.MarkupLine("[dim]Stopped running Admiral server.[/]");
-                        await Task.Delay(1000).ConfigureAwait(false);
+                        using (HttpClient client = new HttpClient { Timeout = TimeSpan.FromSeconds(3) })
+                        {
+                            if (!string.IsNullOrEmpty(tempSettings.ApiKey)) client.DefaultRequestHeaders.Add("X-Api-Key", tempSettings.ApiKey);
+                            using (HttpResponseMessage response = await client.PostAsync(
+                                "http://localhost:" + tempSettings.AdmiralPort + "/api/v1/server/stop",
+                                null).ConfigureAwait(false))
+                            {
+                                response.EnsureSuccessStatusCode();
+                            }
+                        }
+                    }, cancellationToken).ConfigureAwait(false);
+                    if (!stopped)
+                    {
+                        AnsiConsole.MarkupLine("[red]Could not confirm that the Admiral server stopped. Existing configuration was kept.[/]");
+                        return 1;
                     }
-                    catch { }
 
                     if (existingConfig) File.Delete(ArmadaSettings.DefaultSettingsPath);
                     if (existingData)

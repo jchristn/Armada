@@ -210,8 +210,8 @@ namespace Armada.Core.Database.Postgresql.Implementations
             cmd.Parameters.AddWithValue("@sequence", message.Sequence);
             cmd.Parameters.AddWithValue("@content", message.Content);
             cmd.Parameters.AddWithValue("@is_selected", message.IsSelected);
-            cmd.Parameters.AddWithValue("@created_utc", message.CreatedUtc);
-            cmd.Parameters.AddWithValue("@last_update_utc", message.LastUpdateUtc);
+            PostgresqlCommandHelper.AddDate(cmd, "@created_utc", message.CreatedUtc);
+            PostgresqlCommandHelper.AddDate(cmd, "@last_update_utc", message.LastUpdateUtc);
         }
 
         private static ObjectiveRefinementMessage FromReader(NpgsqlDataReader reader)

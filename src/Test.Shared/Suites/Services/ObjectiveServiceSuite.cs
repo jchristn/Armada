@@ -2,10 +2,17 @@ namespace Test.Shared.Suites.Services
 {
     using System;
     using System.Collections.Generic;
+    using System.Data;
+    using System.Data.Common;
     using System.IO;
+    using System.Linq;
     using System.Text.Json;
     using System.Threading;
     using System.Threading.Tasks;
+    using Microsoft.Data.SqlClient;
+    using Microsoft.Data.Sqlite;
+    using MySqlConnector;
+    using Npgsql;
     using Armada.Core.Enums;
     using Armada.Core.Models;
     using Armada.Core.Services;
@@ -15,9 +22,10 @@ namespace Test.Shared.Suites.Services
 
     /// <summary>
     /// Descriptors for <see cref="ObjectiveService"/>: internal-first objective capture, linkage,
-    /// filtering, snapshot backfill, and deletion over a live SQLite store. Positive cases assert
-    /// the full scoped-objective lifecycle and latest-snapshot normalization; negative cases cover
-    /// the audited not-found read, not-found update, and null-request guards.
+    /// filtering, snapshot backfill, and deletion over the configured database provider. Positive cases assert
+    /// the full scoped-objective lifecycle, latest-snapshot normalization, and restore after a custom pipeline
+    /// delete; negative cases cover the audited not-found read, not-found update, null-request guards, and stored
+    /// fields that cannot be decoded.
     /// </summary>
     public sealed class ObjectiveServiceSuite : IArmadaTestSuite
     {
@@ -339,7 +347,222 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(latest.RefinementSummary, stored.RefinementSummary);
             }));
 
+            cases.Add(CaseAsync(
+                "enumerate_after_pipeline_delete_clears_suggested_pipeline",
+                "Enumerate after a pipeline delete clears the suggested pipeline",
+                TestTags.Positive,
+                async () =>
+                {
+                    using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                    {
+                        string tenantId = "ten_objective_pipeline";
+                        string userId = "usr_objective_pipeline";
+                        await EnsureTenantAndUserAsync(testDb, tenantId, userId).ConfigureAwait(false);
+
+                        Pipeline pipeline = new Pipeline("CustomObjectivePipeline");
+                        pipeline = await testDb.Driver.Pipelines.CreateAsync(pipeline).ConfigureAwait(false);
+
+                        AuthContext auth = AuthContext.Authenticated(tenantId, userId, false, true, "UnitTest");
+                        ObjectiveService objectives = new ObjectiveService(testDb.Driver);
+                        Objective created = await objectives.CreateAsync(auth, new ObjectiveUpsertRequest
+                        {
+                            Title = "Suggest a custom pipeline",
+                            SuggestedPipelineId = pipeline.Id
+                        }).ConfigureAwait(false);
+                        AssertEqual(pipeline.Id, created.SuggestedPipelineId);
+
+                        await testDb.Driver.Pipelines.DeleteAsync(pipeline.Id).ConfigureAwait(false);
+
+                        ObjectiveService restored = new ObjectiveService(testDb.Driver);
+                        EnumerationResult<Objective> result = await restored.EnumerateAsync(auth, new ObjectiveQuery
+                        {
+                            PageNumber = 1,
+                            PageSize = 25
+                        }).ConfigureAwait(false);
+
+                        AssertEqual(1, result.Objects.Count);
+                        AssertEqual(created.Id, result.Objects[0].Id);
+                        AssertNull(result.Objects[0].SuggestedPipelineId);
+
+                        Objective? stored = await testDb.Driver.Objectives.ReadAsync(created.Id).ConfigureAwait(false);
+                        stored = NotNull(stored);
+                        AssertNull(stored.SuggestedPipelineId);
+                    }
+                },
+                TestDatabaseConfig.Type == DatabaseTypeEnum.SqlServer,
+                "SQL Server rejects the pipeline delete while an objective still names that pipeline. SQLite, PostgreSQL, and MySQL clear suggested_pipeline_id and leave the snapshot id in place."));
+
+            cases.Add(CaseAsync(
+                "clear_suggested_pipeline_before_delete_writes_newer_snapshot",
+                "ClearSuggestedPipelineAsync writes a newer snapshot before delete",
+                TestTags.Positive,
+                async () =>
+                {
+                    using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                    {
+                        string tenantId = "ten_objective_clear_pipeline";
+                        string userId = "usr_objective_clear_pipeline";
+                        await EnsureTenantAndUserAsync(testDb, tenantId, userId).ConfigureAwait(false);
+
+                        Pipeline pipeline = new Pipeline("ClearObjectivePipeline");
+                        pipeline = await testDb.Driver.Pipelines.CreateAsync(pipeline).ConfigureAwait(false);
+
+                        AuthContext auth = AuthContext.Authenticated(tenantId, userId, false, true, "UnitTest");
+                        ObjectiveService objectives = new ObjectiveService(testDb.Driver);
+                        Objective created = await objectives.CreateAsync(auth, new ObjectiveUpsertRequest
+                        {
+                            Title = "Clear a custom pipeline",
+                            SuggestedPipelineId = pipeline.Id
+                        }).ConfigureAwait(false);
+                        AssertEqual(pipeline.Id, created.SuggestedPipelineId);
+
+                        await Task.Delay(TimeSpan.FromMilliseconds(20)).ConfigureAwait(false);
+                        await objectives.ClearSuggestedPipelineAsync(pipeline.Id).ConfigureAwait(false);
+
+                        Objective? cleared = await testDb.Driver.Objectives.ReadAsync(created.Id).ConfigureAwait(false);
+                        cleared = NotNull(cleared);
+                        AssertNull(cleared.SuggestedPipelineId);
+
+                        List<ArmadaEvent> events = await testDb.Driver.Events.EnumerateByEntityAsync("objective", created.Id, 50).ConfigureAwait(false);
+                        DateTime newestSnapshotUtc = DateTime.MinValue;
+                        DateTime previousSnapshotUtc = DateTime.MaxValue;
+                        int snapshotCount = 0;
+                        foreach (ArmadaEvent item in events)
+                        {
+                            if (!String.Equals(item.EventType, "objective.snapshot", StringComparison.OrdinalIgnoreCase))
+                                continue;
+
+                            snapshotCount++;
+                            if (item.CreatedUtc > newestSnapshotUtc)
+                                newestSnapshotUtc = item.CreatedUtc;
+                            if (item.CreatedUtc < previousSnapshotUtc)
+                                previousSnapshotUtc = item.CreatedUtc;
+                        }
+
+                        AssertTrue(snapshotCount >= 2, "Clear writes a second objective snapshot.");
+                        AssertTrue(newestSnapshotUtc > previousSnapshotUtc, "The new snapshot is later than the previous snapshot.");
+
+                        await testDb.Driver.Pipelines.DeleteAsync(pipeline.Id).ConfigureAwait(false);
+                        Pipeline? deletedPipeline = await testDb.Driver.Pipelines.ReadAsync(pipeline.Id).ConfigureAwait(false);
+                        AssertNull(deletedPipeline);
+
+                        ObjectiveService restored = new ObjectiveService(testDb.Driver);
+                        EnumerationResult<Objective> result = await restored.EnumerateAsync(auth, new ObjectiveQuery
+                        {
+                            PageNumber = 1,
+                            PageSize = 25
+                        }).ConfigureAwait(false);
+
+                        AssertEqual(1, result.Objects.Count);
+                        AssertEqual(created.Id, result.Objects[0].Id);
+                        AssertNull(result.Objects[0].SuggestedPipelineId);
+                    }
+                }));
+
             // Audit addition: reading an unknown objective returns null (confirmed against source).
+
+            cases.Add(CaseAsync("update_preserves_missing_incident_link", "UpdateAsync preserves an unresolved stored incident link", TestTags.Positive, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                string tenantId = "ten_objective_stale_update";
+                string userId = "usr_objective_stale_update";
+                await EnsureTenantAndUserAsync(testDb, tenantId, userId).ConfigureAwait(false);
+                AuthContext auth = AuthContext.Authenticated(tenantId, userId, false, true, "UnitTest");
+                ObjectiveService objectives = new ObjectiveService(testDb.Driver);
+                string incidentId = "missing-incident-update";
+                Objective objective = await CreateObjectiveWithMissingIncidentAsync(testDb, objectives, auth, "Before update", incidentId).ConfigureAwait(false);
+
+                Objective updated = await objectives.UpdateAsync(auth, objective.Id, new ObjectiveUpsertRequest
+                {
+                    Title = "After update"
+                }).ConfigureAwait(false);
+
+                AssertEqual("After update", updated.Title);
+                AssertTrue(updated.IncidentIds.Contains(incidentId), "Expected the unresolved incident link to remain.");
+            }));
+
+            cases.Add(CaseAsync("link_voyage_preserves_missing_incident_link", "LinkVoyageAsync preserves an unresolved stored incident link", TestTags.Positive, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                string tenantId = "ten_objective_stale_voyage";
+                string userId = "usr_objective_stale_voyage";
+                await EnsureTenantAndUserAsync(testDb, tenantId, userId).ConfigureAwait(false);
+                AuthContext auth = AuthContext.Authenticated(tenantId, userId, false, true, "UnitTest");
+                ObjectiveService objectives = new ObjectiveService(testDb.Driver);
+                string incidentId = "missing-incident-voyage";
+                Objective objective = await CreateObjectiveWithMissingIncidentAsync(testDb, objectives, auth, "Voyage objective", incidentId).ConfigureAwait(false);
+                Voyage voyage = await testDb.Driver.Voyages.CreateAsync(new Voyage("Linked voyage", "Objective link")
+                {
+                    TenantId = tenantId,
+                    UserId = userId
+                }).ConfigureAwait(false);
+
+                Objective linked = await objectives.LinkVoyageAsync(auth, objective.Id, voyage.Id).ConfigureAwait(false);
+
+                AssertTrue(linked.VoyageIds.Contains(voyage.Id), "Expected the voyage link to be stored.");
+                AssertTrue(linked.IncidentIds.Contains(incidentId), "Expected the unresolved incident link to remain.");
+            }));
+
+            cases.Add(CaseAsync("update_rejects_supplied_missing_incident_link", "UpdateAsync rejects a supplied unresolved incident link", TestTags.Negative, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                string tenantId = "ten_objective_bad_update";
+                string userId = "usr_objective_bad_update";
+                await EnsureTenantAndUserAsync(testDb, tenantId, userId).ConfigureAwait(false);
+                AuthContext auth = AuthContext.Authenticated(tenantId, userId, false, true, "UnitTest");
+                ObjectiveService objectives = new ObjectiveService(testDb.Driver);
+                Objective objective = await objectives.CreateAsync(auth, new ObjectiveUpsertRequest { Title = "Strict update" }).ConfigureAwait(false);
+
+                await AssertThrowsAsync<KeyNotFoundException>(() => objectives.UpdateAsync(auth, objective.Id, new ObjectiveUpsertRequest
+                {
+                    IncidentIds = new List<string> { "missing-incident-supplied" }
+                }));
+            }));
+
+            cases.Add(CaseAsync("create_rejects_missing_incident_link", "CreateAsync rejects an unresolved incident link", TestTags.Negative, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                string tenantId = "ten_objective_bad_create";
+                string userId = "usr_objective_bad_create";
+                await EnsureTenantAndUserAsync(testDb, tenantId, userId).ConfigureAwait(false);
+                AuthContext auth = AuthContext.Authenticated(tenantId, userId, false, true, "UnitTest");
+                ObjectiveService objectives = new ObjectiveService(testDb.Driver);
+
+                await AssertThrowsAsync<KeyNotFoundException>(() => objectives.CreateAsync(auth, new ObjectiveUpsertRequest
+                {
+                    Title = "Strict create",
+                    IncidentIds = new List<string> { "missing-incident-create" }
+                }));
+            }));
+
+            cases.Add(CaseAsync("reorder_preserves_missing_incident_link", "ReorderAsync preserves an unresolved stored incident link", TestTags.Positive, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                string tenantId = "ten_objective_stale_reorder";
+                string userId = "usr_objective_stale_reorder";
+                await EnsureTenantAndUserAsync(testDb, tenantId, userId).ConfigureAwait(false);
+                AuthContext auth = AuthContext.Authenticated(tenantId, userId, false, true, "UnitTest");
+                ObjectiveService objectives = new ObjectiveService(testDb.Driver);
+                string incidentId = "missing-incident-reorder";
+                Objective objective = await CreateObjectiveWithMissingIncidentAsync(testDb, objectives, auth, "Reorder objective", incidentId).ConfigureAwait(false);
+                int rank = objective.Rank + 1000;
+
+                ObjectiveReorderResult reordered = await objectives.ReorderAsync(auth, new ObjectiveReorderRequest
+                {
+                    Items = new List<ObjectiveReorderItem>
+                    {
+                        new ObjectiveReorderItem { ObjectiveId = objective.Id, Rank = rank }
+                    }
+                }).ConfigureAwait(false);
+
+                AssertEqual(1, reordered.Updated);
+                AssertEqual(objective.Id, reordered.Items[0].ObjectiveId);
+                AssertEqual(rank, reordered.Items[0].Rank);
+                Objective? stored = await objectives.ReadAsync(auth, objective.Id).ConfigureAwait(false);
+                AssertNotNull(stored, "Expected the reordered objective to remain.");
+                AssertEqual(rank, stored!.Rank);
+                AssertTrue(stored.IncidentIds.Contains(incidentId), "Expected the unresolved incident link to remain.");
+            }));
 
             cases.Add(CaseAsync("read_unknown_id_returns_null", "ReadAsync UnknownId ReturnsNull", TestTags.Negative, async () =>
             {
@@ -376,6 +599,193 @@ namespace Test.Shared.Suites.Services
                 await AssertThrowsAsync<ArgumentNullException>(() => objectives.CreateAsync(auth, null!));
             }));
 
+            cases.Add(CaseAsync("corrupt_blocker_json_update_keeps_stored_text", "A title update rejects malformed blocker JSON and leaves the stored text", TestTags.Negative, async () =>
+            {
+                await RejectStoredFieldOnOtherUpdateAsync(
+                    "ten_obj_blocker",
+                    "Blocker field",
+                    "blocked_by_objective_ids_json",
+                    "{not-json").ConfigureAwait(false);
+            }));
+
+            cases.Add(CaseAsync("corrupt_playbook_json_update_keeps_stored_text", "A title update rejects malformed playbook JSON and leaves the stored text", TestTags.Negative, async () =>
+            {
+                await RejectStoredFieldOnOtherUpdateAsync(
+                    "ten_obj_playbook",
+                    "Playbook field",
+                    "suggested_playbooks_json",
+                    "{not-json").ConfigureAwait(false);
+            }));
+
+            cases.Add(CaseAsync("unknown_status_update_keeps_stored_text", "A title update rejects an unknown status name and leaves the stored text", TestTags.Negative, async () =>
+            {
+                await RejectStoredFieldOnOtherUpdateAsync(
+                    "ten_obj_status",
+                    "Status field",
+                    "status",
+                    "NotAStatus").ConfigureAwait(false);
+            }));
+
+            cases.Add(CaseAsync("corrupt_blocker_json_enumerate_fails", "Enumeration rejects malformed blocker JSON and leaves the stored text", TestTags.Negative, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                {
+                    ObjectiveService objectives = new ObjectiveService(testDb.Driver);
+                    string tenantId = "ten_obj_enumerate";
+                    string userId = "usr_obj_stored";
+                    await EnsureTenantAndUserAsync(testDb, tenantId, userId).ConfigureAwait(false);
+                    AuthContext auth = AuthContext.Authenticated(tenantId, userId, false, true, "UnitTest");
+                    Objective created = await objectives.CreateAsync(auth, new ObjectiveUpsertRequest
+                    {
+                        Title = "Enumerate field"
+                    }).ConfigureAwait(false);
+                    string column = "blocked_by_objective_ids_json";
+                    string storedText = "{not-json";
+                    await SetObjectiveColumnAsync(testDb, created.Id, column, storedText).ConfigureAwait(false);
+
+                    Exception? thrown = null;
+                    try
+                    {
+                        await objectives.EnumerateAsync(auth, new ObjectiveQuery
+                        {
+                            PageNumber = 1,
+                            PageSize = 25
+                        }).ConfigureAwait(false);
+                    }
+                    catch (Exception exception)
+                    {
+                        thrown = exception;
+                    }
+
+                    string? stored = await ReadObjectiveColumnAsync(testDb, created.Id, column).ConfigureAwait(false);
+                    Assert(thrown != null, "enumerate accepted stored " + column + " and left '" + stored + "' for " + created.Id);
+                    Assert(thrown.Message.IndexOf(created.Id, StringComparison.Ordinal) >= 0, "error must name objective " + created.Id + " but was: " + thrown.Message);
+                    Assert(thrown.Message.IndexOf(column, StringComparison.Ordinal) >= 0, "error must name field " + column + " but was: " + thrown.Message);
+                    AssertEqual(storedText, stored, column);
+                }
+            }));
+
+            cases.Add(CaseAsync("empty_and_valid_blocker_json_reads", "Empty blocker text stays an empty list and valid JSON still reads", TestTags.Positive, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                {
+                    ObjectiveService objectives = new ObjectiveService(testDb.Driver);
+                    string tenantId = "ten_obj_empty";
+                    string userId = "usr_obj_stored";
+                    await EnsureTenantAndUserAsync(testDb, tenantId, userId).ConfigureAwait(false);
+                    AuthContext auth = AuthContext.Authenticated(tenantId, userId, false, true, "UnitTest");
+                    Objective created = await objectives.CreateAsync(auth, new ObjectiveUpsertRequest
+                    {
+                        Title = "Empty blocker field"
+                    }).ConfigureAwait(false);
+                    string column = "blocked_by_objective_ids_json";
+
+                    await SetObjectiveColumnAsync(testDb, created.Id, column, "").ConfigureAwait(false);
+                    Objective emptyText = NotNull(await objectives.ReadAsync(auth, created.Id).ConfigureAwait(false));
+                    AssertEqual(0, emptyText.BlockedByObjectiveIds.Count, "empty text");
+
+                    await SetObjectiveColumnAsync(testDb, created.Id, column, "   ").ConfigureAwait(false);
+                    Objective blankText = NotNull(await objectives.ReadAsync(auth, created.Id).ConfigureAwait(false));
+                    AssertEqual(0, blankText.BlockedByObjectiveIds.Count, "blank text");
+
+                    await SetObjectiveColumnAsync(testDb, created.Id, column, null).ConfigureAwait(false);
+                    Objective nullText = NotNull(await objectives.ReadAsync(auth, created.Id).ConfigureAwait(false));
+                    AssertEqual(0, nullText.BlockedByObjectiveIds.Count, "null text");
+
+                    await SetObjectiveColumnAsync(testDb, created.Id, column, "[\"obj_blocker\"]").ConfigureAwait(false);
+                    Objective valid = NotNull(await objectives.ReadAsync(auth, created.Id).ConfigureAwait(false));
+                    AssertEqual(1, valid.BlockedByObjectiveIds.Count, "valid json count");
+                    AssertEqual("obj_blocker", valid.BlockedByObjectiveIds[0], "valid json value");
+                }
+            }));
+
+            cases.Add(CaseAsync("deleted_objective_is_not_restored_from_hidden_snapshots", "Deleting an objective removes snapshots other users wrote, so backfill does not restore it", TestTags.Positive, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                string tenantId = "ten_obj_hidden_snap";
+                string ownerUserId = "usr_obj_hidden_owner";
+                string adminUserId = "usr_obj_hidden_admin";
+                await EnsureTenantAndUserAsync(testDb, tenantId, adminUserId).ConfigureAwait(false);
+                await CreateRegularUserAsync(testDb, tenantId, ownerUserId).ConfigureAwait(false);
+
+                // The owner is a regular user and sees only its own snapshots; the tenant admin and a system admin
+                // each write a snapshot of the same objective.
+                AuthContext ownerAuth = AuthContext.Authenticated(tenantId, ownerUserId, false, false, "UnitTest");
+                AuthContext tenantAdminAuth = AuthContext.Authenticated(tenantId, adminUserId, false, true, "UnitTest");
+                AuthContext systemAdminAuth = AuthContext.Authenticated(tenantId, adminUserId, true, true, "UnitTest");
+                ObjectiveService service = new ObjectiveService(testDb.Driver);
+                Objective created = await service.CreateAsync(ownerAuth, new ObjectiveUpsertRequest { Title = "Owned objective" }).ConfigureAwait(false);
+                await service.UpdateAsync(tenantAdminAuth, created.Id, new ObjectiveUpsertRequest { Title = "Tenant admin snapshot" }).ConfigureAwait(false);
+                await service.UpdateAsync(systemAdminAuth, created.Id, new ObjectiveUpsertRequest { Title = "System admin snapshot" }).ConfigureAwait(false);
+                AssertTrue((await SnapshotsAsync(testDb, created.Id).ConfigureAwait(false)).Count >= 3, "three users wrote snapshots");
+
+                await service.DeleteAsync(ownerAuth, created.Id).ConfigureAwait(false);
+                AssertNull(await testDb.Driver.Objectives.ReadAsync(created.Id).ConfigureAwait(false), "the row is deleted");
+                AssertEqual(0, (await SnapshotsAsync(testDb, created.Id).ConfigureAwait(false)).Count, "every snapshot in the tenant is deleted");
+                AssertNull(await service.ReadAsync(tenantAdminAuth, created.Id).ConfigureAwait(false), "a tenant admin read does not rehydrate it");
+
+                ObjectiveService backfillService = new ObjectiveService(testDb.Driver);
+                await backfillService.EnumerateAsync(ownerAuth, new ObjectiveQuery()).ConfigureAwait(false);
+                AssertNull(await testDb.Driver.Objectives.ReadAsync(created.Id).ConfigureAwait(false), "startup backfill does not restore it");
+
+                // An explicit re-import of the same id is a deliberate create, not a resurrection.
+                Objective deliberate = new Objective
+                {
+                    Id = created.Id,
+                    TenantId = tenantId,
+                    UserId = ownerUserId,
+                    Title = "Deliberate objective",
+                    CreatedUtc = DateTime.UtcNow,
+                    LastUpdateUtc = DateTime.UtcNow
+                };
+                await backfillService.PersistImportedAsync(ownerAuth, deliberate).ConfigureAwait(false);
+                Objective restored = NotNull(await backfillService.ReadAsync(ownerAuth, created.Id).ConfigureAwait(false));
+                AssertEqual("Deliberate objective", restored.Title);
+            }));
+
+            cases.Add(CaseAsync("other_user_cannot_delete_or_purge_snapshots", "A regular user who cannot see an objective cannot delete it or its snapshots", TestTags.Negative, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                string tenantId = "ten_obj_other_user";
+                string ownerUserId = "usr_obj_other_owner";
+                string otherUserId = "usr_obj_other_peer";
+                await EnsureTenantAndUserAsync(testDb, tenantId, "usr_obj_other_admin").ConfigureAwait(false);
+                await CreateRegularUserAsync(testDb, tenantId, ownerUserId).ConfigureAwait(false);
+                await CreateRegularUserAsync(testDb, tenantId, otherUserId).ConfigureAwait(false);
+                AuthContext ownerAuth = AuthContext.Authenticated(tenantId, ownerUserId, false, false, "UnitTest");
+                AuthContext otherAuth = AuthContext.Authenticated(tenantId, otherUserId, false, false, "UnitTest");
+                ObjectiveService service = new ObjectiveService(testDb.Driver);
+                Objective created = await service.CreateAsync(ownerAuth, new ObjectiveUpsertRequest { Title = "Private objective" }).ConfigureAwait(false);
+                int before = (await SnapshotsAsync(testDb, created.Id).ConfigureAwait(false)).Count;
+
+                await AssertThrowsAsync<KeyNotFoundException>(() => service.DeleteAsync(otherAuth, created.Id)).ConfigureAwait(false);
+                AssertNotNull(await testDb.Driver.Objectives.ReadAsync(created.Id).ConfigureAwait(false), "the owner's row stays");
+                AssertEqual(before, (await SnapshotsAsync(testDb, created.Id).ConfigureAwait(false)).Count, "the owner's snapshots stay");
+                AssertEqual("Private objective", NotNull(await service.ReadAsync(ownerAuth, created.Id).ConfigureAwait(false)).Title);
+            }));
+
+            cases.Add(CaseAsync("tenant_admin_delete_does_not_restore_a_visible_snapshot", "Tenant admin delete keeps a visible snapshot from restoring the row and leaves other objectives", TestTags.Positive, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                string tenantId = "ten_obj_gap_control";
+                string adminUserId = "usr_obj_gap_control";
+                await EnsureTenantAndUserAsync(testDb, tenantId, adminUserId).ConfigureAwait(false);
+                AuthContext adminAuth = AuthContext.Authenticated(tenantId, adminUserId, false, true, "UnitTest");
+                ObjectiveService service = new ObjectiveService(testDb.Driver);
+                Objective kept = await service.CreateAsync(adminAuth, new ObjectiveUpsertRequest { Title = "Kept objective" }).ConfigureAwait(false);
+                Objective doomed = await service.CreateAsync(adminAuth, new ObjectiveUpsertRequest { Title = "Doomed objective" }).ConfigureAwait(false);
+                await service.UpdateAsync(adminAuth, doomed.Id, new ObjectiveUpsertRequest { Title = "Visible snapshot" }).ConfigureAwait(false);
+
+                await service.DeleteAsync(adminAuth, doomed.Id).ConfigureAwait(false);
+
+                ObjectiveService backfillService = new ObjectiveService(testDb.Driver);
+                await backfillService.EnumerateAsync(adminAuth, new ObjectiveQuery()).ConfigureAwait(false);
+                AssertNull(await testDb.Driver.Objectives.ReadAsync(doomed.Id).ConfigureAwait(false));
+                Objective stillKept = NotNull(await backfillService.ReadAsync(adminAuth, kept.Id).ConfigureAwait(false));
+                AssertEqual("Kept objective", stillKept.Title);
+                AssertTrue((await SnapshotsAsync(testDb, kept.Id).ConfigureAwait(false)).Count > 0, "the other objective keeps its snapshots");
+            }));
+
             return new TestSuiteDescriptor(
                 suiteId: "Services.ObjectiveService",
                 displayName: "Objective Service",
@@ -385,6 +795,25 @@ namespace Test.Shared.Suites.Services
         #endregion
 
         #region Private-Methods
+
+        private static async Task CreateRegularUserAsync(TestDatabase testDb, string tenantId, string userId)
+        {
+            await testDb.Driver.Users.CreateAsync(new UserMaster
+            {
+                Id = userId,
+                TenantId = tenantId,
+                Email = userId + "@armada.test",
+                PasswordSha256 = UserMaster.ComputePasswordHash("password"),
+                IsTenantAdmin = false
+            }).ConfigureAwait(false);
+        }
+
+        private static async Task<List<ArmadaEvent>> SnapshotsAsync(TestDatabase testDb, string objectiveId)
+        {
+            return (await testDb.Driver.Events.EnumerateByEntityAsync("objective", objectiveId, 1000).ConfigureAwait(false))
+                .Where(item => String.Equals(item.EventType, "objective.snapshot", StringComparison.OrdinalIgnoreCase))
+                .ToList();
+        }
 
         private static async Task EnsureTenantAndUserAsync(TestDatabase testDb, string tenantId, string userId)
         {
@@ -412,6 +841,126 @@ namespace Test.Shared.Suites.Services
             }
         }
 
+        private static async Task<Objective> CreateObjectiveWithMissingIncidentAsync(
+            TestDatabase testDb,
+            ObjectiveService objectives,
+            AuthContext auth,
+            string title,
+            string incidentId)
+        {
+            Objective objective = await objectives.CreateAsync(auth, new ObjectiveUpsertRequest
+            {
+                Title = title
+            }).ConfigureAwait(false);
+            objective.IncidentIds.Add(incidentId);
+            return await testDb.Driver.Objectives.UpdateAsync(objective).ConfigureAwait(false);
+        }
+
+        private static async Task RejectStoredFieldOnOtherUpdateAsync(string tenantId, string title, string column, string storedText)
+        {
+            using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+            {
+                ObjectiveService objectives = new ObjectiveService(testDb.Driver);
+                string userId = "usr_obj_stored";
+                await EnsureTenantAndUserAsync(testDb, tenantId, userId).ConfigureAwait(false);
+                AuthContext auth = AuthContext.Authenticated(tenantId, userId, false, true, "UnitTest");
+                Objective created = await objectives.CreateAsync(auth, new ObjectiveUpsertRequest
+                {
+                    Title = title
+                }).ConfigureAwait(false);
+                await SetObjectiveColumnAsync(testDb, created.Id, column, storedText).ConfigureAwait(false);
+
+                Exception? thrown = null;
+                try
+                {
+                    await objectives.UpdateAsync(auth, created.Id, new ObjectiveUpsertRequest
+                    {
+                        Title = title + " renamed"
+                    }).ConfigureAwait(false);
+                }
+                catch (Exception exception)
+                {
+                    thrown = exception;
+                }
+
+                string? stored = await ReadObjectiveColumnAsync(testDb, created.Id, column).ConfigureAwait(false);
+                Assert(thrown != null, "update accepted stored " + column + " and left '" + stored + "' for " + created.Id);
+                Assert(thrown.Message.IndexOf(created.Id, StringComparison.Ordinal) >= 0, "error must name objective " + created.Id + " but was: " + thrown.Message);
+                Assert(thrown.Message.IndexOf(column, StringComparison.Ordinal) >= 0, "error must name field " + column + " but was: " + thrown.Message);
+                AssertEqual(storedText, stored, column);
+            }
+        }
+
+        private static async Task SetObjectiveColumnAsync(TestDatabase testDb, string objectiveId, string column, string? value)
+        {
+            RequireObjectiveColumn(column);
+            using (DbConnection connection = OpenConnection(testDb.ConnectionString))
+            {
+                await connection.OpenAsync().ConfigureAwait(false);
+                using (DbCommand command = connection.CreateCommand())
+                {
+                    command.CommandText = "UPDATE objectives SET " + column + " = @stored WHERE id = @id";
+                    AddParameter(command, "@stored", (object?)value ?? DBNull.Value);
+                    AddParameter(command, "@id", objectiveId);
+                    int rows = await command.ExecuteNonQueryAsync().ConfigureAwait(false);
+                    AssertEqual(1, rows, column);
+                }
+            }
+        }
+
+        private static async Task<string?> ReadObjectiveColumnAsync(TestDatabase testDb, string objectiveId, string column)
+        {
+            RequireObjectiveColumn(column);
+            using (DbConnection connection = OpenConnection(testDb.ConnectionString))
+            {
+                await connection.OpenAsync().ConfigureAwait(false);
+                using (DbCommand command = connection.CreateCommand())
+                {
+                    command.CommandText = "SELECT " + column + " FROM objectives WHERE id = @id";
+                    AddParameter(command, "@id", objectiveId);
+                    object? result = await command.ExecuteScalarAsync().ConfigureAwait(false);
+                    if (result == null || result == DBNull.Value)
+                        return null;
+                    return result.ToString();
+                }
+            }
+        }
+
+        private static void RequireObjectiveColumn(string column)
+        {
+            if (column == "blocked_by_objective_ids_json"
+                || column == "suggested_playbooks_json"
+                || column == "status")
+                return;
+
+            throw new InvalidOperationException("Column is not an objective stored field under test: " + column);
+        }
+
+        private static DbConnection OpenConnection(string connectionString)
+        {
+            switch (TestDatabaseConfig.Type)
+            {
+                case DatabaseTypeEnum.Sqlite:
+                    return new SqliteConnection(connectionString);
+                case DatabaseTypeEnum.Postgresql:
+                    return new NpgsqlConnection(connectionString);
+                case DatabaseTypeEnum.Mysql:
+                    return new MySqlConnection(connectionString);
+                case DatabaseTypeEnum.SqlServer:
+                    return new SqlConnection(connectionString);
+                default:
+                    throw new InvalidOperationException("Objective stored-field cases do not support database provider " + TestDatabaseConfig.Type + ".");
+            }
+        }
+
+        private static void AddParameter(DbCommand command, string name, object value)
+        {
+            DbParameter parameter = command.CreateParameter();
+            parameter.ParameterName = name;
+            parameter.Value = value;
+            command.Parameters.Add(parameter);
+        }
+
         private static Objective NotNull(Objective? objective)
         {
             if (objective == null) throw new InvalidOperationException("Expected objective to be present.");
@@ -430,14 +979,22 @@ namespace Test.Shared.Suites.Services
             }
         }
 
-        private static TestCaseDescriptor CaseAsync(string caseId, string displayName, string tag, Func<Task> body)
+        private static TestCaseDescriptor CaseAsync(
+            string caseId,
+            string displayName,
+            string tag,
+            Func<Task> body,
+            bool skip = false,
+            string? skipReason = null)
         {
             return new TestCaseDescriptor(
                 suiteId: "Services.ObjectiveService",
                 caseId: caseId,
                 displayName: displayName,
                 executeAsync: (CancellationToken ct) => body(),
-                tags: new List<string> { tag });
+                tags: new List<string> { tag },
+                skip: skip,
+                skipReason: skipReason);
         }
 
         #endregion

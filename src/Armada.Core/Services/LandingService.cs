@@ -164,9 +164,15 @@ namespace Armada.Core.Services
                 retryEvent.MissionId = mission.Id;
                 retryEvent.VesselId = mission.VesselId;
                 retryEvent.VoyageId = mission.VoyageId;
+                // Keep the event in the mission owner's scope, from the mission already in hand.
+                retryEvent.TenantId = mission.TenantId;
+                retryEvent.UserId = mission.UserId;
                 await _Database.Events.CreateAsync(retryEvent, token).ConfigureAwait(false);
             }
-            catch { }
+            catch (Exception ex) when (!(ex is OperationCanceledException && token.IsCancellationRequested))
+            {
+                _Logging.Warn(_Header + "error emitting mission.landing_retry event for mission " + mission.Id + ": " + ex.Message);
+            }
 
             // Attempt rebase of mission branch onto current target branch
             string repoPath = owningRepository;

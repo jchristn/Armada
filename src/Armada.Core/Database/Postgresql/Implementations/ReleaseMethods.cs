@@ -269,12 +269,12 @@ namespace Armada.Core.Database.Postgresql.Implementations
             if (query.FromUtc.HasValue)
             {
                 conditions.Add("created_utc >= @from_utc");
-                parameters.Add(new NpgsqlParameter("@from_utc", query.FromUtc.Value));
+                parameters.Add(PostgresqlCommandHelper.DateParameter("@from_utc", query.FromUtc.Value));
             }
             if (query.ToUtc.HasValue)
             {
                 conditions.Add("created_utc <= @to_utc");
-                parameters.Add(new NpgsqlParameter("@to_utc", query.ToUtc.Value));
+                parameters.Add(PostgresqlCommandHelper.DateParameter("@to_utc", query.ToUtc.Value));
             }
         }
 
@@ -295,9 +295,9 @@ namespace Armada.Core.Database.Postgresql.Implementations
             cmd.Parameters.AddWithValue("@mission_ids_json", JsonSerializer.Serialize(release.MissionIds ?? new List<string>(), _Json));
             cmd.Parameters.AddWithValue("@check_run_ids_json", JsonSerializer.Serialize(release.CheckRunIds ?? new List<string>(), _Json));
             cmd.Parameters.AddWithValue("@artifacts_json", JsonSerializer.Serialize(release.Artifacts ?? new List<ReleaseArtifact>(), _Json));
-            cmd.Parameters.AddWithValue("@created_utc", release.CreatedUtc);
-            cmd.Parameters.AddWithValue("@last_update_utc", release.LastUpdateUtc);
-            cmd.Parameters.AddWithValue("@published_utc", (object?)release.PublishedUtc ?? DBNull.Value);
+            PostgresqlCommandHelper.AddDate(cmd, "@created_utc", release.CreatedUtc);
+            PostgresqlCommandHelper.AddDate(cmd, "@last_update_utc", release.LastUpdateUtc);
+            PostgresqlCommandHelper.AddDate(cmd, "@published_utc", release.PublishedUtc);
         }
 
         private static Release FromReader(NpgsqlDataReader reader)
@@ -322,10 +322,10 @@ namespace Armada.Core.Database.Postgresql.Implementations
             if (Enum.TryParse(reader["status"].ToString(), true, out ReleaseStatusEnum status))
                 release.Status = status;
 
-            release.VoyageIds = Deserialize<List<string>>(NullableString(reader["voyage_ids_json"])) ?? new List<string>();
-            release.MissionIds = Deserialize<List<string>>(NullableString(reader["mission_ids_json"])) ?? new List<string>();
-            release.CheckRunIds = Deserialize<List<string>>(NullableString(reader["check_run_ids_json"])) ?? new List<string>();
-            release.Artifacts = Deserialize<List<ReleaseArtifact>>(NullableString(reader["artifacts_json"])) ?? new List<ReleaseArtifact>();
+            release.VoyageIds = Deserialize<List<string>>(NullableString(reader["voyage_ids_json"]), release.Id, "voyage_ids_json") ?? new List<string>();
+            release.MissionIds = Deserialize<List<string>>(NullableString(reader["mission_ids_json"]), release.Id, "mission_ids_json") ?? new List<string>();
+            release.CheckRunIds = Deserialize<List<string>>(NullableString(reader["check_run_ids_json"]), release.Id, "check_run_ids_json") ?? new List<string>();
+            release.Artifacts = Deserialize<List<ReleaseArtifact>>(NullableString(reader["artifacts_json"]), release.Id, "artifacts_json") ?? new List<ReleaseArtifact>();
             return release;
         }
 
@@ -336,12 +336,16 @@ namespace Armada.Core.Database.Postgresql.Implementations
             return String.IsNullOrEmpty(stringValue) ? null : stringValue;
         }
 
-        private static T? Deserialize<T>(string? json)
+        private static T? Deserialize<T>(string? json, string entityId, string columnName)
         {
             if (String.IsNullOrWhiteSpace(json)) return default;
             try
             {
                 return JsonSerializer.Deserialize<T>(json, _Json);
+            }
+            catch (JsonException exception)
+            {
+                throw new InvalidOperationException("Invalid JSON in " + columnName + " for row " + entityId + ".", exception);
             }
             catch
             {

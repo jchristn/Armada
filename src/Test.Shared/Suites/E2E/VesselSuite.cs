@@ -7,6 +7,7 @@ namespace Test.Shared.Suites.E2E
     using System.Text;
     using System.Threading;
     using System.Threading.Tasks;
+    using Armada.Core.Enums;
     using Armada.Core.Models;
     using Test.Shared.Infrastructure;
     using Touchstone.Core;
@@ -1194,6 +1195,60 @@ namespace Test.Shared.Suites.E2E
 
                 AssertEqual("Persisted context", vessel.ProjectContext);
                 AssertEqual("Persisted style", vessel.StyleGuide);
+            }));
+
+            cases.Add(CaseAsync("patch_vessel_context_preserves_other_vessel_settings", "Patch Vessel Context Preserves Other Vessel Settings", TestTags.Positive, async () =>
+            {
+                E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this);
+                HttpClient authClient = fx.AuthClient;
+                List<string> createdFleetIds = new List<string>();
+                List<string> createdVesselIds = new List<string>();
+
+                string fleetId = await CreateFleetAsync(authClient, createdFleetIds, "PatchContextFleet");
+                string vesselName = "PatchContextVessel-" + Guid.NewGuid().ToString("N").Substring(0, 8);
+                HttpResponseMessage createResponse = await authClient.PostAsync("/api/v1/vessels", JsonHelper.ToJsonContent(new
+                {
+                    Name = vesselName,
+                    FleetId = fleetId,
+                    RepoUrl = "https://example.test/patch-context",
+                    LandingMode = "MergeQueue",
+                    AutoLandEnabled = true,
+                    AutoLandMaxFiles = 7,
+                    DefinitionOfDoneEnabled = true,
+                    DefinitionOfDoneBuildCommand = "build-command",
+                    DefinitionOfDoneTestCommand = "test-command"
+                }));
+                AssertEqual(HttpStatusCode.Created, createResponse.StatusCode);
+                Vessel created = await JsonHelper.DeserializeAsync<Vessel>(createResponse);
+                createdVesselIds.Add(created.Id);
+                AssertEqual(vesselName, created.Name);
+                AssertEqual("https://example.test/patch-context", created.RepoUrl);
+                AssertEqual((LandingModeEnum?)LandingModeEnum.MergeQueue, created.LandingMode);
+                AssertTrue(created.AutoLandEnabled);
+                AssertEqual(7, created.AutoLandMaxFiles);
+                AssertTrue(created.DefinitionOfDoneEnabled);
+
+                HttpResponseMessage patchResponse = await authClient.PatchAsync("/api/v1/vessels/" + created.Id + "/context", JsonHelper.ToJsonContent(new
+                {
+                    ProjectContext = "Updated project context",
+                    StyleGuide = "Updated style guide",
+                    ModelContext = "Updated model context"
+                }));
+                AssertEqual(HttpStatusCode.OK, patchResponse.StatusCode);
+
+                HttpResponseMessage getResponse = await authClient.GetAsync("/api/v1/vessels/" + created.Id);
+                Vessel vessel = await JsonHelper.DeserializeAsync<Vessel>(getResponse);
+                AssertEqual("Updated project context", vessel.ProjectContext);
+                AssertEqual("Updated style guide", vessel.StyleGuide);
+                AssertEqual("Updated model context", vessel.ModelContext);
+                AssertEqual(vesselName, vessel.Name);
+                AssertEqual("https://example.test/patch-context", vessel.RepoUrl);
+                AssertEqual((LandingModeEnum?)LandingModeEnum.MergeQueue, vessel.LandingMode);
+                AssertTrue(vessel.AutoLandEnabled);
+                AssertEqual(7, vessel.AutoLandMaxFiles);
+                AssertTrue(vessel.DefinitionOfDoneEnabled);
+                AssertEqual("build-command", vessel.DefinitionOfDoneBuildCommand);
+                AssertEqual("test-command", vessel.DefinitionOfDoneTestCommand);
             }));
 
             cases.Add(CaseAsync("update_vessel_clear_project_context_and_style_guide_to_null", "Update Vessel Clear ProjectContext And StyleGuide To Null", TestTags.Positive, async () =>

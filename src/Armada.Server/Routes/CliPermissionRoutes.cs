@@ -63,8 +63,8 @@ namespace Armada.Server.Routes
                     CliPermissionRequestEnumerateRequest page = String.IsNullOrWhiteSpace(body)
                         ? new CliPermissionRequestEnumerateRequest()
                         : JsonSerializer.Deserialize<CliPermissionRequestEnumerateRequest>(body, _JsonOptions) ?? new CliPermissionRequestEnumerateRequest();
-                    page.ApplyQuerystringOverrides(key => req.Query.GetValueOrDefault(key));
-                    page.ThreadId = Blank(req.Query.GetValueOrDefault("threadId")) ?? page.ThreadId;
+                    page.ApplyQuerystringOverrides(key => QueryValueReader.Read(req.Query, key));
+                    page.ThreadId = Blank(QueryValueReader.Read(req.Query, "threadId")) ?? page.ThreadId;
                     return await _Service.EnumerateAsync(ctx, page.ToFilter(), page.PageNumber, page.PageSize).ConfigureAwait(false);
                 }
                 catch (JsonException ex)
@@ -144,7 +144,7 @@ namespace Armada.Server.Routes
                 {
                     EnumerationQuery page = EnumerationRequestReader.Read(req, _JsonOptions);
                     CliPermissionRuleQuery query = new CliPermissionRuleQuery { VesselId = Blank(page.VesselId), CaptainId = Blank(page.CaptainId) };
-                    string? scope = Blank(req.Query.GetValueOrDefault("scope"));
+                    string? scope = Blank(QueryValueReader.Read(req.Query, "scope"));
                     if (scope != null)
                     {
                         if (!EnumNames.TryParse(scope, true, out CliPermissionRuleScopeEnum parsed)) throw new ArgumentException("Invalid scope: " + scope);

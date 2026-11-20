@@ -226,6 +226,7 @@ namespace Armada.Core.Services.Interfaces
 
         /// <summary>
         /// List local branches with their tip commit, without measuring divergence (Ahead and Behind stay zero).
+        /// Each name is the path under refs/heads.
         /// </summary>
         /// <param name="repoPath">Repository path (bare repo or worktree).</param>
         /// <param name="defaultBranch">Default branch, flagged in the result.</param>
@@ -235,6 +236,7 @@ namespace Armada.Core.Services.Interfaces
 
         /// <summary>
         /// Fill Ahead and Behind on each branch relative to the default branch (one git command per non-default branch).
+        /// The comparison uses the refs/heads form of each name. A branch whose divergence cannot be read keeps zeros.
         /// </summary>
         /// <param name="repoPath">Repository path (bare repo or worktree).</param>
         /// <param name="defaultBranch">Default branch to measure against.</param>

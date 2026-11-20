@@ -74,6 +74,14 @@ namespace Armada.Core.Services
             @"^\s*(?:[-*]\s*)?(?:\*\*|__)?(?<label>File|Scenario)(?:\*\*|__)?\s*:\s*(?:\*\*|__)?\s*(?<value>.*?)\s*$",
             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
+        // Emphasis and code marks with spacing on one line, as an atomic group so a long run of asterisks cannot
+        // backtrack.
+        private const string DecorationPattern = @"(?>[*_` \t]*)";
+
+        private static readonly Regex _AnyHeadingLine = new Regex(
+            @"^\s*" + DecorationPattern + @"#{1,6}\s+\S",
+            RegexOptions.CultureInvariant | RegexOptions.Compiled);
+
         private static readonly Regex _FileReference = new Regex(
             @"^`?(?<path>[^\s`]*[/\\.][^\s`]*?)(?::\d+(?::\d+)?)?`?$",
             RegexOptions.CultureInvariant | RegexOptions.Compiled);
@@ -84,7 +92,11 @@ namespace Armada.Core.Services
 
         /// <summary>
         /// Whether the Judge output contains a section with the given heading (tolerating heading level,
-        /// list markers, numbering, and bold/italic/code wrapping).
+        /// list markers, numbering, and bold/italic/code wrapping). Two forms count: a line that starts with the
+        /// name after the usual heading marks (for example <c>## Correctness</c>, <c>Correctness: fine</c> or
+        /// <c>**Correctness:** looks fine</c>),
+        /// and a line that is only the name wrapped in Markdown decoration, including emphasis around the heading marks
+        /// (for example <c>**## Correctness**</c> or <c>*Correctness*</c>).
         /// </summary>
         /// <param name="output">Judge agent output.</param>
         /// <param name="sectionName">Section heading to look for.</param>
@@ -93,12 +105,14 @@ namespace Armada.Core.Services
         {
             if (String.IsNullOrWhiteSpace(output) || String.IsNullOrWhiteSpace(sectionName)) return false;
 
-            string pattern =
+            // The closing mark may also follow the colon, as in **Correctness:** followed by the review text.
+            string leading =
                 @"(?im)^\s*(?:#{1,6}\s*)?(?:[-*]\s*)?(?:\d+\.\s*)?(?:\*\*|__|`)?"
                 + Regex.Escape(sectionName)
-                + @"(?:\*\*|__|`)?\s*(?::|-)?(?:\s|$)";
+                + @"(?:\*\*|__|`)?\s*(?::|-)?(?:\*\*|__|`)?(?:\s|$)";
+            if (Regex.IsMatch(output, leading)) return true;
 
-            return Regex.IsMatch(output, pattern);
+            return Regex.IsMatch(output, "(?im)" + WrappedHeadingPattern(sectionName));
         }
 
         /// <summary>
@@ -295,12 +309,12 @@ namespace Armada.Core.Services
                 @"(?i)^\s*(?:#{1,6}\s*)?(?:[-*]\s*)?(?:\d+\.\s*)?(?:\*\*|__|`)?"
                 + Regex.Escape(sectionName)
                 + @"(?:\*\*|__|`)?\s*(?::|-)?\s*$";
-            string anyHeadingPattern = @"^\s*#{1,6}\s+\S";
+            string wrappedHeadingPattern = "(?i)" + WrappedHeadingPattern(sectionName);
 
             int start = -1;
             for (int i = 0; i < lines.Length; i++)
             {
-                if (Regex.IsMatch(lines[i], headingPattern))
+                if (Regex.IsMatch(lines[i], headingPattern) || Regex.IsMatch(lines[i], wrappedHeadingPattern))
                 {
                     start = i + 1;
                     break;
@@ -311,10 +325,21 @@ namespace Armada.Core.Services
             List<string> body = new List<string>();
             for (int i = start; i < lines.Length; i++)
             {
-                if (Regex.IsMatch(lines[i], anyHeadingPattern)) break;
+                if (_AnyHeadingLine.IsMatch(lines[i])) break;
                 body.Add(lines[i]);
             }
             return String.Join("\n", body).Trim();
+        }
+
+        private static string WrappedHeadingPattern(string sectionName)
+        {
+            // The whole line must be the name: decoration, heading marks, a list marker or number, more decoration,
+            // the name, an optional colon or dash, and closing decoration. Prose that merely starts with the name
+            // is left to the leading-name pattern.
+            return @"^" + DecorationPattern + @"(?:#{1,6}[ \t]*)?" + DecorationPattern + @"(?:-[ \t]+)?" + DecorationPattern
+                + @"(?:\d+\.[ \t]*)?" + DecorationPattern
+                + Regex.Escape(sectionName)
+                + @"[ \t]*(?::|-)?" + DecorationPattern + @"(?::|-)?[ \t\r]*$";
         }
 
         #endregion

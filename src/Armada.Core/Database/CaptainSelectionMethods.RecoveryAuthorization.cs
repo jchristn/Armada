@@ -58,7 +58,7 @@ namespace Armada.Core.Database
                 using DbTransaction transaction = await connection.BeginTransactionAsync(connection.GetType().Name == "SqliteConnection" ? IsolationLevel.Serializable : IsolationLevel.ReadCommitted, token).ConfigureAwait(false);
                 using DbCommand locked = Command(connection, transaction, "UPDATE missions SET last_update_utc=@at WHERE tenant_id=@tenant AND id=@mission AND status='Pending';");
                 DateTime now = DateTime.UtcNow;
-                Add(locked, "@at", connection.GetType().Name == "NpgsqlConnection" || connection.GetType().Name == "MySqlConnection" ? (object)now : Utc(now)); Add(locked, "@tenant", tenantId); Add(locked, "@mission", missionId);
+                Add(locked, "@at", connection.GetType().Name == "NpgsqlConnection" ? DateTime.SpecifyKind(now, DateTimeKind.Unspecified) : connection.GetType().Name == "MySqlConnection" ? (object)now : Utc(now)); Add(locked, "@tenant", tenantId); Add(locked, "@mission", missionId);
                 if (await locked.ExecuteNonQueryAsync(token).ConfigureAwait(false) != 1) return null;
                 UsageSelectionRecovery? previous = await ReadRecoveryAsync(connection, transaction, tenantId, missionId, token).ConfigureAwait(false);
                 if ((previous?.Revision ?? 0) != request.ExpectedRevision) return null;

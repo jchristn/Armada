@@ -109,8 +109,8 @@ namespace Armada.Core.Database.Postgresql.Implementations
                     cmd.Parameters.AddWithValue("@serialize_overlapping_missions", vessel.SerializeOverlappingMissions);
                     cmd.Parameters.AddWithValue("@definition_of_done_timeout_seconds", vessel.DefinitionOfDoneTimeoutSeconds);
                     cmd.Parameters.AddWithValue("@active", vessel.Active);
-                    cmd.Parameters.AddWithValue("@created_utc", vessel.CreatedUtc);
-                    cmd.Parameters.AddWithValue("@last_update_utc", vessel.LastUpdateUtc);
+                    PostgresqlCommandHelper.AddDate(cmd, "@created_utc", vessel.CreatedUtc);
+                    PostgresqlCommandHelper.AddDate(cmd, "@last_update_utc", vessel.LastUpdateUtc);
                     await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
                 }
             }
@@ -274,7 +274,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
                     cmd.Parameters.AddWithValue("@serialize_overlapping_missions", vessel.SerializeOverlappingMissions);
                     cmd.Parameters.AddWithValue("@definition_of_done_timeout_seconds", vessel.DefinitionOfDoneTimeoutSeconds);
                     cmd.Parameters.AddWithValue("@active", vessel.Active);
-                    cmd.Parameters.AddWithValue("@last_update_utc", vessel.LastUpdateUtc);
+                    PostgresqlCommandHelper.AddDate(cmd, "@last_update_utc", vessel.LastUpdateUtc);
                     await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
                 }
             }
@@ -338,12 +338,12 @@ namespace Armada.Core.Database.Postgresql.Implementations
                 if (query.CreatedAfter.HasValue)
                 {
                     conditions.Add("created_utc > @created_after");
-                    parameters.Add(new NpgsqlParameter("@created_after", query.CreatedAfter.Value));
+                    parameters.Add(PostgresqlCommandHelper.DateParameter("@created_after", query.CreatedAfter.Value));
                 }
                 if (query.CreatedBefore.HasValue)
                 {
                     conditions.Add("created_utc < @created_before");
-                    parameters.Add(new NpgsqlParameter("@created_before", query.CreatedBefore.Value));
+                    parameters.Add(PostgresqlCommandHelper.DateParameter("@created_before", query.CreatedBefore.Value));
                 }
                 if (!string.IsNullOrEmpty(query.FleetId))
                 {
@@ -505,12 +505,12 @@ namespace Armada.Core.Database.Postgresql.Implementations
                 if (query.CreatedAfter.HasValue)
                 {
                     conditions.Add("created_utc > @created_after");
-                    parameters.Add(new NpgsqlParameter("@created_after", query.CreatedAfter.Value));
+                    parameters.Add(PostgresqlCommandHelper.DateParameter("@created_after", query.CreatedAfter.Value));
                 }
                 if (query.CreatedBefore.HasValue)
                 {
                     conditions.Add("created_utc < @created_before");
-                    parameters.Add(new NpgsqlParameter("@created_before", query.CreatedBefore.Value));
+                    parameters.Add(PostgresqlCommandHelper.DateParameter("@created_before", query.CreatedBefore.Value));
                 }
                 if (!string.IsNullOrEmpty(query.FleetId))
                 {
@@ -698,12 +698,12 @@ namespace Armada.Core.Database.Postgresql.Implementations
                 if (query.CreatedAfter.HasValue)
                 {
                     conditions.Add("created_utc > @created_after");
-                    parameters.Add(new NpgsqlParameter("@created_after", query.CreatedAfter.Value));
+                    parameters.Add(PostgresqlCommandHelper.DateParameter("@created_after", query.CreatedAfter.Value));
                 }
                 if (query.CreatedBefore.HasValue)
                 {
                     conditions.Add("created_utc < @created_before");
-                    parameters.Add(new NpgsqlParameter("@created_before", query.CreatedBefore.Value));
+                    parameters.Add(PostgresqlCommandHelper.DateParameter("@created_before", query.CreatedBefore.Value));
                 }
                 if (!string.IsNullOrEmpty(query.FleetId))
                 {
@@ -782,6 +782,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
                 if (!String.IsNullOrWhiteSpace(protectedPatternsJson))
                     vessel.ProtectedBranchPatterns = JsonSerializer.Deserialize<List<string>>(protectedPatternsJson) ?? new List<string>();
             }
+            catch (JsonException exception) { throw new InvalidOperationException("Invalid JSON in protected_branch_patterns_json for vessel " + vessel.Id + ".", exception); }
             catch { }
             try { vessel.ReleaseBranchPrefix = NullableString(reader["release_branch_prefix"]) ?? "release/"; } catch { vessel.ReleaseBranchPrefix = "release/"; }
             try { vessel.HotfixBranchPrefix = NullableString(reader["hotfix_branch_prefix"]) ?? "hotfix/"; } catch { vessel.HotfixBranchPrefix = "hotfix/"; }
@@ -795,6 +796,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
                 if (!String.IsNullOrWhiteSpace(protectedPathPatternsJson))
                     vessel.ProtectedPathPatterns = JsonSerializer.Deserialize<List<string>>(protectedPathPatternsJson) ?? new List<string>();
             }
+            catch (JsonException exception) { throw new InvalidOperationException("Invalid JSON in protected_path_patterns_json for vessel " + vessel.Id + ".", exception); }
             catch { }
             try
             {
@@ -802,6 +804,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
                 if (!String.IsNullOrWhiteSpace(privateIdentifierDenylistJson))
                     vessel.PrivateIdentifierDenylist = JsonSerializer.Deserialize<List<string>>(privateIdentifierDenylistJson) ?? new List<string>();
             }
+            catch (JsonException exception) { throw new InvalidOperationException("Invalid JSON in private_identifier_denylist_json for vessel " + vessel.Id + ".", exception); }
             catch { }
             try { vessel.AutoLandEnabled = Convert.ToBoolean(reader["auto_land_enabled"]); }
             catch { vessel.AutoLandEnabled = false; }
@@ -813,6 +816,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
                 if (!String.IsNullOrWhiteSpace(autoLandPathAllowGlobsJson))
                     vessel.AutoLandPathAllowGlobs = JsonSerializer.Deserialize<List<string>>(autoLandPathAllowGlobsJson) ?? new List<string>();
             }
+            catch (JsonException exception) { throw new InvalidOperationException("Invalid JSON in auto_land_path_allow_globs_json for vessel " + vessel.Id + ".", exception); }
             catch { }
             try
             {
@@ -820,6 +824,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
                 if (!String.IsNullOrWhiteSpace(autoLandPathDenyGlobsJson))
                     vessel.AutoLandPathDenyGlobs = JsonSerializer.Deserialize<List<string>>(autoLandPathDenyGlobsJson) ?? new List<string>();
             }
+            catch (JsonException exception) { throw new InvalidOperationException("Invalid JSON in auto_land_path_deny_globs_json for vessel " + vessel.Id + ".", exception); }
             catch { }
             try { vessel.DefinitionOfDoneEnabled = Convert.ToBoolean(reader["definition_of_done_enabled"]); }
             catch { vessel.DefinitionOfDoneEnabled = false; }

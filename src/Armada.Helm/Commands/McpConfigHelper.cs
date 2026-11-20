@@ -559,7 +559,8 @@ namespace Armada.Helm.Commands
             if (target.ArmadaConfig == null)
                 throw new InvalidOperationException("Config target does not define ArmadaConfig for file-based installation.");
 
-            JsonObject root = await ReadOrCreateRootAsync(target.FilePath).ConfigureAwait(false);
+            McpConfigDocument document = await ReadConfigAsync(target.FilePath).ConfigureAwait(false);
+            JsonObject root = document.Root;
             if (root["mcpServers"] is not JsonObject)
             {
                 root["mcpServers"] = new JsonObject();
@@ -570,14 +571,13 @@ namespace Armada.Helm.Commands
             bool changed = existing == null || !JsonNode.DeepEquals(existing, target.ArmadaConfig);
             mcpServers["armada"] = target.ArmadaConfig.DeepClone();
 
-            Directory.CreateDirectory(Path.GetDirectoryName(target.FilePath)!);
-            await File.WriteAllTextAsync(target.FilePath, root.ToJsonString(JsonOptions)).ConfigureAwait(false);
+            string? backupPath = await WriteInstalledConfigAsync(target.FilePath, document, changed).ConfigureAwait(false);
 
             return new ApplyResult(
                 target.ClientName,
                 target.FilePath,
                 changed,
-                changed ? "Configured Armada MCP entry." : "Armada MCP entry already matched the expected configuration.",
+                WithBackupNote(changed ? "Configured Armada MCP entry." : "Armada MCP entry already matched the expected configuration.", backupPath),
                 target.IsProjectScoped);
         }
 
@@ -612,7 +612,8 @@ namespace Armada.Helm.Commands
                     target.IsProjectScoped);
             }
 
-            JsonObject root = await ReadOrCreateRootAsync(target.FilePath).ConfigureAwait(false);
+            McpConfigDocument document = await ReadConfigAsync(target.FilePath).ConfigureAwait(false);
+            JsonObject root = document.Root;
             JsonObject? mcpServers = root["mcpServers"] as JsonObject;
             if (mcpServers == null || !mcpServers.ContainsKey("armada"))
             {
@@ -630,13 +631,13 @@ namespace Armada.Helm.Commands
                 root.Remove("mcpServers");
             }
 
-            await File.WriteAllTextAsync(target.FilePath, root.ToJsonString(JsonOptions)).ConfigureAwait(false);
+            string? backupPath = await WriteConfigAsync(target.FilePath, document).ConfigureAwait(false);
 
             return new ApplyResult(
                 target.ClientName,
                 target.FilePath,
                 true,
-                "Removed Armada MCP entry.",
+                WithBackupNote("Removed Armada MCP entry.", backupPath),
                 target.IsProjectScoped);
         }
 
@@ -650,7 +651,8 @@ namespace Armada.Helm.Commands
             if (target.ArmadaConfig == null)
                 throw new InvalidOperationException("Mux config target does not define ArmadaConfig.");
 
-            JsonObject root = await ReadOrCreateRootAsync(target.FilePath).ConfigureAwait(false);
+            McpConfigDocument document = await ReadConfigAsync(target.FilePath).ConfigureAwait(false);
+            JsonObject root = document.Root;
             if (root["servers"] is not JsonArray)
                 root["servers"] = new JsonArray();
 
@@ -669,14 +671,13 @@ namespace Armada.Helm.Commands
                 changed = true;
             }
 
-            Directory.CreateDirectory(Path.GetDirectoryName(target.FilePath)!);
-            await File.WriteAllTextAsync(target.FilePath, root.ToJsonString(JsonOptions)).ConfigureAwait(false);
+            string? backupPath = await WriteInstalledConfigAsync(target.FilePath, document, changed).ConfigureAwait(false);
 
             return new ApplyResult(
                 target.ClientName,
                 target.FilePath,
                 changed,
-                changed ? "Configured Armada MCP server (HTTP)." : "Armada MCP server already matched the expected configuration.",
+                WithBackupNote(changed ? "Configured Armada MCP server (HTTP)." : "Armada MCP server already matched the expected configuration.", backupPath),
                 target.IsProjectScoped);
         }
 
@@ -695,7 +696,8 @@ namespace Armada.Helm.Commands
                     target.IsProjectScoped);
             }
 
-            JsonObject root = await ReadOrCreateRootAsync(target.FilePath).ConfigureAwait(false);
+            McpConfigDocument document = await ReadConfigAsync(target.FilePath).ConfigureAwait(false);
+            JsonObject root = document.Root;
             JsonArray? servers = root["servers"] as JsonArray;
             if (servers == null || servers.Count == 0)
             {
@@ -727,13 +729,13 @@ namespace Armada.Helm.Commands
                     target.IsProjectScoped);
             }
 
-            await File.WriteAllTextAsync(target.FilePath, root.ToJsonString(JsonOptions)).ConfigureAwait(false);
+            string? backupPath = await WriteConfigAsync(target.FilePath, document).ConfigureAwait(false);
 
             return new ApplyResult(
                 target.ClientName,
                 target.FilePath,
                 true,
-                "Removed Armada MCP server.",
+                WithBackupNote("Removed Armada MCP server.", backupPath),
                 target.IsProjectScoped);
         }
 
@@ -742,7 +744,8 @@ namespace Armada.Helm.Commands
             if (target.ArmadaConfig == null)
                 throw new InvalidOperationException("OpenCode config target does not define ArmadaConfig.");
 
-            JsonObject root = await ReadOrCreateRootAsync(target.FilePath).ConfigureAwait(false);
+            McpConfigDocument document = await ReadConfigAsync(target.FilePath).ConfigureAwait(false);
+            JsonObject root = document.Root;
             if (root["mcp"] is not JsonObject)
                 root["mcp"] = new JsonObject();
 
@@ -751,14 +754,13 @@ namespace Armada.Helm.Commands
             bool changed = existing == null || !JsonNode.DeepEquals(existing, target.ArmadaConfig);
             mcp["armada"] = target.ArmadaConfig.DeepClone();
 
-            Directory.CreateDirectory(Path.GetDirectoryName(target.FilePath)!);
-            await File.WriteAllTextAsync(target.FilePath, root.ToJsonString(JsonOptions)).ConfigureAwait(false);
+            string? backupPath = await WriteInstalledConfigAsync(target.FilePath, document, changed).ConfigureAwait(false);
 
             return new ApplyResult(
                 target.ClientName,
                 target.FilePath,
                 changed,
-                changed ? "Configured Armada MCP entry." : "Armada MCP entry already matched the expected configuration.",
+                WithBackupNote(changed ? "Configured Armada MCP entry." : "Armada MCP entry already matched the expected configuration.", backupPath),
                 target.IsProjectScoped);
         }
 
@@ -774,7 +776,8 @@ namespace Armada.Helm.Commands
                     target.IsProjectScoped);
             }
 
-            JsonObject root = await ReadOrCreateRootAsync(target.FilePath).ConfigureAwait(false);
+            McpConfigDocument document = await ReadConfigAsync(target.FilePath).ConfigureAwait(false);
+            JsonObject root = document.Root;
             JsonObject? mcp = root["mcp"] as JsonObject;
             if (mcp == null || !mcp.ContainsKey("armada"))
             {
@@ -787,13 +790,13 @@ namespace Armada.Helm.Commands
             }
 
             mcp.Remove("armada");
-            await File.WriteAllTextAsync(target.FilePath, root.ToJsonString(JsonOptions)).ConfigureAwait(false);
+            string? backupPath = await WriteConfigAsync(target.FilePath, document).ConfigureAwait(false);
 
             return new ApplyResult(
                 target.ClientName,
                 target.FilePath,
                 true,
-                "Removed Armada MCP entry.",
+                WithBackupNote("Removed Armada MCP entry.", backupPath),
                 target.IsProjectScoped);
         }
 
@@ -1037,26 +1040,103 @@ namespace Armada.Helm.Commands
             return $"{ManagedBlockStart}{Environment.NewLine}{content.Trim()}{Environment.NewLine}{ManagedBlockEnd}";
         }
 
-        private static async Task<JsonObject> ReadOrCreateRootAsync(string path)
+        /// <summary>
+        /// Read an MCP client config file. A missing or empty file reads as an empty object. JSONC (comments and
+        /// trailing commas) is accepted, and the document records that it used that syntax so a rewrite can back the
+        /// original up first.
+        /// </summary>
+        /// <param name="path">Config file path.</param>
+        /// <returns>The parsed document.</returns>
+        /// <exception cref="InvalidDataException">The file's root is not a JSON object, so Armada will not rewrite it.</exception>
+        internal static async Task<McpConfigDocument> ReadConfigAsync(string path)
         {
             if (!File.Exists(path))
             {
-                return new JsonObject();
+                return new McpConfigDocument(new JsonObject(), false);
             }
 
             string text = await File.ReadAllTextAsync(path).ConfigureAwait(false);
             if (string.IsNullOrWhiteSpace(text))
             {
-                return new JsonObject();
+                return new McpConfigDocument(new JsonObject(), false);
             }
 
-            // Tolerate JSONC (comments / trailing commas) so config files like opencode.jsonc parse cleanly.
-            JsonNode? node = JsonNode.Parse(text, null, new System.Text.Json.JsonDocumentOptions
+            // A strict parse that succeeds means plain JSON. Otherwise accept JSONC so files like opencode.jsonc parse,
+            // and remember that a rewrite would drop the comments and trailing commas.
+            bool hasJsoncSyntax = false;
+            JsonNode? node;
+            try
             {
-                CommentHandling = System.Text.Json.JsonCommentHandling.Skip,
-                AllowTrailingCommas = true,
-            });
-            return node as JsonObject ?? new JsonObject();
+                node = JsonNode.Parse(text);
+            }
+            catch (JsonException)
+            {
+                node = JsonNode.Parse(text, null, new JsonDocumentOptions
+                {
+                    CommentHandling = JsonCommentHandling.Skip,
+                    AllowTrailingCommas = true,
+                });
+                hasJsoncSyntax = true;
+            }
+
+            if (node is not JsonObject root)
+            {
+                string kind = node == null ? "null" : node.GetValueKind().ToString().ToLowerInvariant();
+                throw new InvalidDataException(
+                    "the file's top-level value is " + kind + ", not a JSON object, so Armada left it unchanged. " +
+                    "Fix or move the file, then run the command again.");
+            }
+
+            return new McpConfigDocument(root, hasJsoncSyntax);
+        }
+
+        /// <summary>
+        /// Build the backup path for a config file: the file name plus .armada-backup-yyyyMMddHHmmss (UTC), with a
+        /// numeric suffix when that name is already taken.
+        /// </summary>
+        /// <param name="path">Config file path.</param>
+        /// <param name="utcNow">Timestamp for the name.</param>
+        /// <returns>An unused backup path next to the file.</returns>
+        internal static string GetBackupPath(string path, DateTime utcNow)
+        {
+            string basePath = path + ".armada-backup-" + utcNow.ToString("yyyyMMddHHmmss", System.Globalization.CultureInfo.InvariantCulture);
+            string candidate = basePath;
+            int suffix = 1;
+            while (File.Exists(candidate))
+            {
+                candidate = basePath + "-" + suffix.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                suffix++;
+            }
+
+            return candidate;
+        }
+
+        private static async Task<string?> WriteInstalledConfigAsync(string path, McpConfigDocument document, bool changed)
+        {
+            // An entry that already matched needs no rewrite; skipping it keeps a JSONC file's comments.
+            if (!changed && document.HasJsoncSyntax) return null;
+            return await WriteConfigAsync(path, document).ConfigureAwait(false);
+        }
+
+        private static async Task<string?> WriteConfigAsync(string path, McpConfigDocument document)
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+
+            string? backupPath = null;
+            if (document.HasJsoncSyntax && File.Exists(path))
+            {
+                backupPath = GetBackupPath(path, DateTime.UtcNow);
+                File.Copy(path, backupPath, false);
+            }
+
+            await File.WriteAllTextAsync(path, document.Root.ToJsonString(JsonOptions)).ConfigureAwait(false);
+            return backupPath;
+        }
+
+        private static string WithBackupNote(string message, string? backupPath)
+        {
+            if (backupPath == null) return message;
+            return message + " The file had comments or trailing commas, which were not preserved. The original was backed up to " + backupPath + ".";
         }
 
         private static string ResolveCliCommand(string baseName)
@@ -1088,12 +1168,19 @@ namespace Armada.Helm.Commands
                 foreach (string arg in args)
                     startInfo.ArgumentList.Add(arg);
 
-                using Process? process = Process.Start(startInfo);
-                if (process == null)
-                    return false;
+                using (Process? process = Process.Start(startInfo))
+                {
+                    if (process == null)
+                        return false;
 
-                await process.WaitForExitAsync().ConfigureAwait(false);
-                return process.ExitCode == 0;
+                    // Read both streams while the client runs. Waiting first leaves a full pipe unread, and the
+                    // client blocks before it can exit.
+                    Task<string> outputTask = process.StandardOutput.ReadToEndAsync();
+                    Task<string> errorTask = process.StandardError.ReadToEndAsync();
+                    await Task.WhenAll(outputTask, errorTask).ConfigureAwait(false);
+                    await process.WaitForExitAsync().ConfigureAwait(false);
+                    return process.ExitCode == 0;
+                }
             }
             catch
             {

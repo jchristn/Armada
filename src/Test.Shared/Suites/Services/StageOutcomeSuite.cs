@@ -1090,7 +1090,7 @@ namespace Test.Shared.Suites.Services
                 foreach (Mission m in new[] { old, oldInVoyage, recent })
                     await db.StageOutcomes.CreateAsync(StoredOutcome(m.Id, null)).ConfigureAwait(false);
 
-                DataExpiryService expiry = new DataExpiryService(CreateLogging(), testDb.ConnectionString, 30);
+                DataExpiryService expiry = new DataExpiryService(CreateLogging(), TestDatabaseConfig.Type, testDb.ConnectionString, 30);
                 await expiry.PurgeExpiredDataAsync().ConfigureAwait(false);
 
                 AssertNull(await db.Missions.ReadAsync(old.Id).ConfigureAwait(false), "old mission purged");

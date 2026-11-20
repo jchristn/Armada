@@ -1,6 +1,7 @@
 namespace Armada.Core.Settings
 {
     using System;
+    using System.Text.Json.Serialization;
     using Armada.Core.Enums;
 
     /// <summary>
@@ -52,6 +53,29 @@ namespace Armada.Core.Settings
             {
                 if (value < 0 || value > 65535) throw new ArgumentOutOfRangeException(nameof(Port));
                 _Port = value;
+            }
+        }
+
+        /// <summary>
+        /// Effective server port: the configured port, or the provider default (PostgreSQL 5432, SQL Server 1433,
+        /// MySQL 3306) when none is set. Returns zero for SQLite, which does not use a server port. Derived, so it is
+        /// not written to the settings file.
+        /// </summary>
+        /// <exception cref="ArgumentException">Thrown when the database type is unknown.</exception>
+        [JsonIgnore]
+        public int EffectivePort
+        {
+            get
+            {
+                if (_Port > 0) return _Port;
+                switch (Type)
+                {
+                    case DatabaseTypeEnum.Sqlite: return 0;
+                    case DatabaseTypeEnum.Postgresql: return 5432;
+                    case DatabaseTypeEnum.SqlServer: return 1433;
+                    case DatabaseTypeEnum.Mysql: return 3306;
+                    default: throw new ArgumentException("Unknown database type: " + Type.ToString());
+                }
             }
         }
 
@@ -235,7 +259,7 @@ namespace Armada.Core.Settings
                     return "Data Source=" + _Filename;
 
                 case DatabaseTypeEnum.Postgresql:
-                    int pgPort = _Port > 0 ? _Port : 5432;
+                    int pgPort = EffectivePort;
                     return
                         "Host=" + _Hostname + ";" +
                         "Port=" + pgPort + ";" +
@@ -250,7 +274,7 @@ namespace Armada.Core.Settings
                         "Connection Lifetime=" + _ConnectionLifetimeSeconds;
 
                 case DatabaseTypeEnum.SqlServer:
-                    int sqlPort = _Port > 0 ? _Port : 1433;
+                    int sqlPort = EffectivePort;
                     return
                         "Server=" + _Hostname + "," + sqlPort + ";" +
                         "Database=" + _DatabaseName + ";" +
@@ -262,7 +286,7 @@ namespace Armada.Core.Settings
                         "Connection Lifetime=" + _ConnectionLifetimeSeconds;
 
                 case DatabaseTypeEnum.Mysql:
-                    int myPort = _Port > 0 ? _Port : 3306;
+                    int myPort = EffectivePort;
                     return
                         "Server=" + _Hostname + ";" +
                         "Port=" + myPort + ";" +

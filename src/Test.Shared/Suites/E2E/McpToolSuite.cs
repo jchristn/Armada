@@ -10,8 +10,10 @@ namespace Test.Shared.Suites.E2E
     using System.Text.Json;
     using System.Threading;
     using System.Threading.Tasks;
+    using Armada.Core.Database;
     using Armada.Core.Enums;
     using Armada.Core.Models;
+    using Armada.Core.Settings;
     using Test.Shared.Infrastructure;
     using Touchstone.Core;
     using static Test.Shared.Infrastructure.Asserts;
@@ -1306,6 +1308,86 @@ namespace Test.Shared.Suites.E2E
                 CancelVoyageResponse data = JsonHelper.Deserialize<CancelVoyageResponse>(text);
                 AssertEqual(voyageId, data.Voyage?.Id, "voyage id");
                 AssertTrue(data.CancelledMissions >= 0 && data.CancelledMissions <= 1, "CancelledMissions counts at most the voyage's one mission: " + data.CancelledMissions);
+            }));
+
+            cases.Add(CaseAsync("armada_cancel_voyage_broadcasts_changes_and_leaves_running_mission", "ArmadaCancelVoyage_BroadcastsChangesAndLeavesRunningMission", TestTags.Positive, async () =>
+            {
+                E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this);
+                // The voyage and missions are created through REST with the API key, so MCP uses the same credential to see them.
+                using HttpClient mcpClient = new HttpClient { BaseAddress = fx.McpClient.BaseAddress };
+                mcpClient.DefaultRequestHeaders.Add("X-Api-Key", fx.ApiKey);
+                string sessionId = await InitMcpSessionAsync(mcpClient).ConfigureAwait(false);
+
+                // Dispatch assigns only a Pending mission. A Blocked mission stays in the set cancel_voyage
+                // cancels, and an InProgress mission stays outside that set.
+                string suffix = Guid.NewGuid().ToString("N").Substring(0, 8);
+                string fleetId = await RestCreateFleetAsync(mcpClient, sessionId, "CancelBroadcastFleet").ConfigureAwait(false);
+                string vesselId = await RestCreateVesselAsync(mcpClient, sessionId, fleetId, "CancelBroadcastVessel").ConfigureAwait(false);
+
+                HttpResponseMessage voyageResponse = await fx.AuthClient.PostAsync("/api/v1/voyages",
+                    JsonHelper.ToJsonContent(new { Title = "CancelBroadcastVoyage-" + suffix, Description = "Voyage for cancellation broadcast" })).ConfigureAwait(false);
+                string voyageBody = await voyageResponse.Content.ReadAsStringAsync().ConfigureAwait(false);
+                AssertEqual(HttpStatusCode.Created, voyageResponse.StatusCode, "bare voyage is created: " + voyageBody);
+                Voyage voyage = JsonHelper.Deserialize<Voyage>(voyageBody);
+
+                HttpResponseMessage blockedResponse = await fx.AuthClient.PostAsync("/api/v1/missions",
+                    JsonHelper.ToJsonContent(new
+                    {
+                        Title = "CancelBroadcastBlocked-" + suffix,
+                        Description = "Mission cancelled with the voyage",
+                        VesselId = vesselId,
+                        VoyageId = voyage.Id,
+                        Status = "Blocked"
+                    })).ConfigureAwait(false);
+                string blockedBody = await blockedResponse.Content.ReadAsStringAsync().ConfigureAwait(false);
+                AssertEqual(HttpStatusCode.Created, blockedResponse.StatusCode, "blocked mission is created: " + blockedBody);
+                Mission blockedMission = ReadCreatedMission(blockedBody);
+                AssertEqual(voyage.Id, blockedMission.VoyageId, "the cancelled mission belongs to the voyage");
+                AssertEqual(vesselId, blockedMission.VesselId, "the cancelled mission belongs to the vessel");
+                AssertEqual(MissionStatusEnum.Blocked, blockedMission.Status, "the cancelled mission is Blocked");
+
+                HttpResponseMessage runningResponse = await fx.AuthClient.PostAsync("/api/v1/missions",
+                    JsonHelper.ToJsonContent(new
+                    {
+                        Title = "CancelBroadcastRunning-" + suffix,
+                        Description = "Mission left running during voyage cancellation",
+                        VesselId = vesselId,
+                        VoyageId = voyage.Id,
+                        Status = "InProgress"
+                    })).ConfigureAwait(false);
+                string runningBody = await runningResponse.Content.ReadAsStringAsync().ConfigureAwait(false);
+                AssertEqual(HttpStatusCode.Created, runningResponse.StatusCode, "running mission is created: " + runningBody);
+                Mission runningMission = ReadCreatedMission(runningBody);
+                AssertEqual(voyage.Id, runningMission.VoyageId, "the running mission belongs to the voyage");
+                AssertEqual(MissionStatusEnum.InProgress, runningMission.Status, "the running mission is InProgress");
+
+                using (WebSocketTestClient subscriber = await WebSocketTestClient.ConnectAsync(fx.RestPort, null,
+                    new Dictionary<string, string> { ["X-Api-Key"] = fx.ApiKey }).ConfigureAwait(false))
+                {
+                    await subscriber.SendAsync(new { Route = "subscribe" }).ConfigureAwait(false);
+                    string? snapshot = await subscriber.WaitForAsync(message => message.Contains("status.snapshot"), 10000).ConfigureAwait(false);
+                    AssertNotNull(snapshot, "WebSocket subscriber receives its status snapshot before cancellation");
+
+                    JsonElement cancelResult = await CallToolAsync(mcpClient, sessionId, "cancel_voyage", new { voyageId = voyage.Id }).ConfigureAwait(false);
+                    string cancelText = GetToolResultText(cancelResult);
+                    CancelVoyageResponse cancelled = JsonHelper.Deserialize<CancelVoyageResponse>(cancelText);
+                    AssertEqual(voyage.Id, cancelled.Voyage?.Id, "MCP cancellation returns the voyage: " + cancelText);
+                    AssertEqual(1, cancelled.CancelledMissions, "MCP cancellation cancels the blocked mission: " + cancelText);
+
+                    string? voyageEvent = await subscriber.WaitForAsync(message => message.Contains("voyage.changed") && message.Contains(voyage.Id) && message.Contains("Cancelled"), 10000).ConfigureAwait(false);
+                    AssertNotNull(voyageEvent, "MCP cancellation broadcasts the updated voyage");
+                    string? missionEvent = await subscriber.WaitForAsync(message => message.Contains("mission.changed") && message.Contains(blockedMission.Id) && message.Contains("Cancelled"), 10000).ConfigureAwait(false);
+                    AssertNotNull(missionEvent, "MCP cancellation broadcasts the cancelled mission");
+
+                    Mission runningAfter = JsonHelper.Deserialize<Mission>(GetToolResultText(
+                        await CallToolAsync(mcpClient, sessionId, "mission_status", new { missionId = runningMission.Id }).ConfigureAwait(false)));
+                    AssertEqual(MissionStatusEnum.InProgress, runningAfter.Status, "the running mission remains InProgress");
+                    Mission blockedAfter = JsonHelper.Deserialize<Mission>(GetToolResultText(
+                        await CallToolAsync(mcpClient, sessionId, "mission_status", new { missionId = blockedMission.Id }).ConfigureAwait(false)));
+                    AssertEqual(MissionStatusEnum.Cancelled, blockedAfter.Status, "the blocked mission is Cancelled");
+                    AssertTrue(!subscriber.Received().Exists(message => message.Contains("mission.changed") && message.Contains(runningMission.Id)),
+                        "an InProgress mission has no cancellation event");
+                }
             }));
 
             cases.Add(CaseAsync("armada_cancel_voyage_verify_status_via_rest", "ArmadaCancelVoyage_VerifyStatusViaRest", TestTags.Positive, async () =>
@@ -2954,6 +3036,68 @@ namespace Test.Shared.Suites.E2E
                 }
             }));
 
+            cases.Add(CaseAsync("delete_dock_records_one_dock_deleted_audit", "A successful MCP dock delete writes one dock.deleted audit record", TestTags.Positive, async () =>
+            {
+                E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this).ConfigureAwait(false);
+                string dockId = await SeedDockAsync(Path.Combine(fx.TempDir, "armada.db"), false, "delete-audit-dock-ok").ConfigureAwait(false);
+                string sessionId = await InitMcpSessionAsync(fx.McpClient).ConfigureAwait(false);
+
+                JsonElement deleted = await CallToolAsync(fx.McpClient, sessionId, "delete_dock", new { dockId = dockId }).ConfigureAwait(false);
+                McpToolResultProbe probe = McpToolResultProbe.FromText(GetToolResultText(deleted));
+                AssertEqual("deleted", probe.Status, "delete_dock status");
+                AssertTrue(probe.ErrorCode == null, "delete_dock error");
+
+                HttpResponseMessage gone = await fx.AuthClient.GetAsync("/api/v1/docks/" + dockId).ConfigureAwait(false);
+                AssertEqual(HttpStatusCode.NotFound, gone.StatusCode, "deleted dock");
+                AssertEqual(1, await CountMatchingEventsAsync(fx.AuthClient, "dock.deleted", "dock", dockId, "Dock " + dockId + " deleted").ConfigureAwait(false), "dock.deleted rows");
+            }));
+
+            cases.Add(CaseAsync("delete_event_records_one_event_deleted_audit", "A successful MCP event delete writes one event.deleted audit record", TestTags.Positive, async () =>
+            {
+                E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this).ConfigureAwait(false);
+                string eventId = await SeedEventAsync(Path.Combine(fx.TempDir, "armada.db"), "mission.note").ConfigureAwait(false);
+                string sessionId = await InitMcpSessionAsync(fx.McpClient).ConfigureAwait(false);
+
+                JsonElement deleted = await CallToolAsync(fx.McpClient, sessionId, "delete_event", new { eventId = eventId }).ConfigureAwait(false);
+                McpToolResultProbe probe = McpToolResultProbe.FromText(GetToolResultText(deleted));
+                AssertEqual("deleted", probe.Status, "delete_event status");
+                AssertTrue(probe.ErrorCode == null, "delete_event error");
+
+                HttpResponseMessage gone = await fx.AuthClient.GetAsync("/api/v1/events/" + eventId).ConfigureAwait(false);
+                AssertEqual(HttpStatusCode.NotFound, gone.StatusCode, "deleted event");
+                AssertEqual(1, await CountMatchingEventsAsync(fx.AuthClient, "event.deleted", "event", eventId, "Deleted event " + eventId).ConfigureAwait(false), "event.deleted rows");
+            }));
+
+            cases.Add(CaseAsync("delete_dock_in_use_records_no_audit", "An MCP dock delete that the service refuses writes no dock.deleted audit record", TestTags.Negative, async () =>
+            {
+                E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this).ConfigureAwait(false);
+                string dockId = await SeedDockAsync(Path.Combine(fx.TempDir, "armada.db"), true, "delete-audit-dock-held").ConfigureAwait(false);
+                string sessionId = await InitMcpSessionAsync(fx.McpClient).ConfigureAwait(false);
+
+                JsonElement refused = await CallToolAsync(fx.McpClient, sessionId, "delete_dock", new { dockId = dockId }).ConfigureAwait(false);
+                McpToolResultProbe probe = McpToolResultProbe.FromText(GetToolResultText(refused));
+                AssertEqual(McpToolErrorCodeEnum.Conflict, probe.ErrorCode, "in-use dock");
+
+                HttpResponseMessage stillThere = await fx.AuthClient.GetAsync("/api/v1/docks/" + dockId).ConfigureAwait(false);
+                AssertEqual(HttpStatusCode.OK, stillThere.StatusCode, "dock remains");
+                AssertEqual(0, await CountMatchingEventsAsync(fx.AuthClient, "dock.deleted", "dock", dockId, "Dock " + dockId + " deleted").ConfigureAwait(false), "dock.deleted rows");
+            }));
+
+            cases.Add(CaseAsync("delete_audit_event_without_global_admin_records_no_audit", "An MCP event delete refused for a non-admin writes no event.deleted audit record", TestTags.Negative, async () =>
+            {
+                E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this).ConfigureAwait(false);
+                string eventId = await SeedEventAsync(Path.Combine(fx.TempDir, "armada.db"), Armada.Core.Services.CommandAudit.EventType).ConfigureAwait(false);
+                string sessionId = await InitMcpSessionAsync(fx.McpClient).ConfigureAwait(false);
+
+                JsonElement refused = await CallToolAsync(fx.McpClient, sessionId, "delete_event", new { eventId = eventId }).ConfigureAwait(false);
+                McpToolResultProbe probe = McpToolResultProbe.FromText(GetToolResultText(refused));
+                AssertEqual(McpToolErrorCodeEnum.Forbidden, probe.ErrorCode, "audit event delete");
+
+                HttpResponseMessage stillThere = await fx.AuthClient.GetAsync("/api/v1/events/" + eventId).ConfigureAwait(false);
+                AssertEqual(HttpStatusCode.OK, stillThere.StatusCode, "audit event remains");
+                AssertEqual(0, await CountMatchingEventsAsync(fx.AuthClient, "event.deleted", "event", eventId, "Deleted event " + eventId).ConfigureAwait(false), "event.deleted rows");
+            }));
+
             return new TestSuiteDescriptor(
                 suiteId: SuiteId,
                 displayName: "MCP Tool Tests",
@@ -3301,6 +3445,70 @@ namespace Test.Shared.Suites.E2E
             MissionCreateResponse wrapped = JsonHelper.Deserialize<MissionCreateResponse>(text);
             if (wrapped.Mission != null) return wrapped.Mission;
             return JsonHelper.Deserialize<Mission>(text);
+        }
+
+        private static async Task<string> SeedDockAsync(string databasePath, bool held, string vesselName)
+        {
+            DatabaseSettings settings = new DatabaseSettings();
+            settings.Type = DatabaseTypeEnum.Sqlite;
+            settings.Filename = databasePath;
+            using (DatabaseDriver database = await DatabaseDriverFactory.CreateAndInitializeAsync(settings).ConfigureAwait(false))
+            {
+                Vessel vessel = new Vessel(vesselName, "https://example.invalid/" + vesselName + ".git");
+                vessel.TenantId = Armada.Core.Constants.DefaultTenantId;
+                vessel.UserId = Armada.Core.Constants.DefaultUserId;
+                vessel = await database.Vessels.CreateAsync(vessel).ConfigureAwait(false);
+
+                Dock dock = new Dock(vessel.Id);
+                dock.TenantId = Armada.Core.Constants.DefaultTenantId;
+                dock.UserId = Armada.Core.Constants.DefaultUserId;
+                dock.Active = true;
+                dock.WorktreePath = null;
+                if (held)
+                {
+                    Captain captain = new Captain(vesselName + "-captain");
+                    captain.TenantId = Armada.Core.Constants.DefaultTenantId;
+                    captain.UserId = Armada.Core.Constants.DefaultUserId;
+                    captain = await database.Captains.CreateAsync(captain).ConfigureAwait(false);
+                    dock.CaptainId = captain.Id;
+                }
+                dock = await database.Docks.CreateAsync(dock).ConfigureAwait(false);
+                return dock.Id;
+            }
+        }
+
+        private static async Task<string> SeedEventAsync(string databasePath, string eventType)
+        {
+            DatabaseSettings settings = new DatabaseSettings();
+            settings.Type = DatabaseTypeEnum.Sqlite;
+            settings.Filename = databasePath;
+            using (DatabaseDriver database = await DatabaseDriverFactory.CreateAndInitializeAsync(settings).ConfigureAwait(false))
+            {
+                ArmadaEvent evt = new ArmadaEvent(eventType, "delete audit fixture");
+                evt.TenantId = Armada.Core.Constants.DefaultTenantId;
+                evt.UserId = Armada.Core.Constants.DefaultUserId;
+                evt.EntityType = "mission";
+                evt.EntityId = "msn_fixture";
+                evt = await database.Events.CreateAsync(evt).ConfigureAwait(false);
+                return evt.Id;
+            }
+        }
+
+        private static async Task<int> CountMatchingEventsAsync(HttpClient authClient, string eventType, string entityType, string entityId, string message)
+        {
+            HttpResponseMessage response = await authClient.GetAsync("/api/v1/events?type=" + Uri.EscapeDataString(eventType) + "&limit=100").ConfigureAwait(false);
+            AssertEqual(HttpStatusCode.OK, response.StatusCode, "event list");
+            EnumerationResult<ArmadaEvent> result = await JsonHelper.DeserializeAsync<EnumerationResult<ArmadaEvent>>(response).ConfigureAwait(false);
+            AssertNotNull(result.Objects, "event page");
+            AssertEqual(result.TotalRecords, (long)result.Objects.Count, "event page holds every " + eventType + " row");
+
+            int matches = 0;
+            foreach (ArmadaEvent evt in result.Objects)
+            {
+                if (evt.EventType == eventType && evt.EntityType == entityType && evt.EntityId == entityId && evt.Message == message)
+                    matches++;
+            }
+            return matches;
         }
 
         private static TestCaseDescriptor CaseAsync(string caseId, string displayName, string tag, Func<Task> body)

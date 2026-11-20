@@ -45,7 +45,7 @@ namespace Test.Shared.Suites.E2E
         {
             ["GET /api/v1/ask/quick-actions"] = 10,
             ["MCP list_ask_quick_actions"] = 10,
-            ["GET /api/v1/doctor"] = 12,
+            ["GET /api/v1/doctor"] = 13,
         };
 
         // Models in Armada.Core.Models that no REST route, MCP tool or WebSocket command returns, with why. They are not

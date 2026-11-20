@@ -23,9 +23,11 @@ namespace Armada.Server.WebSocket
     /// <summary>
     /// WebSocket hub for real-time event delivery on the main Watson REST server at /ws. Every upgrade must be
     /// authenticated (see <see cref="AuthorizeUpgradeAsync"/>); each connected socket carries its identity and
-    /// receives only the events it is entitled to: entity changes of its own tenant (global admins may opt in to every
-    /// tenant with <c>{ "Route": "subscribe", "AllTenants": true }</c>) and user-scoped events (Ask Armada threads)
-    /// addressed to its own user. Commands are authorized by <see cref="WebSocketCommandHandler.IsAuthorized"/>.
+    /// receives only the events it is entitled to. Mission, voyage, captain, check-run, mission-activity,
+    /// captain-selection, and approval events go to sockets that can read that record. Other entity changes go to the entity's tenant
+    /// (global admins may opt in to every tenant with <c>{ "Route": "subscribe", "AllTenants": true }</c>).
+    /// User-scoped events (Ask Armada threads) go to that user. Commands are authorized by
+    /// <see cref="WebSocketCommandHandler.IsAuthorized"/>.
     /// </summary>
     /// <remarks>Thread safety: the session registry is a concurrent dictionary; broadcast methods may be called from any
     /// thread.</remarks>
@@ -61,7 +63,9 @@ namespace Armada.Server.WebSocket
         private Func<string?, string?, string?, Task<AuthContext>>? _Authenticate;
         private ArmadaSettings? _Settings;
         private PushNotificationService? _Push = null;
+        private const int _OutboundFrameCapacity = 64;
         private ConcurrentDictionary<Guid, WebSocketClientState> _Clients = new ConcurrentDictionary<Guid, WebSocketClientState>();
+        private ConcurrentDictionary<Guid, WebSocketClientOutputQueue> _OutputQueues = new ConcurrentDictionary<Guid, WebSocketClientOutputQueue>();
         private ConditionalWeakTable<HttpContextBase, AuthContext> _UpgradeIdentities = new ConditionalWeakTable<HttpContextBase, AuthContext>();
 
         private static readonly JsonSerializerOptions _JsonOptions = new JsonSerializerOptions
@@ -178,6 +182,7 @@ namespace Armada.Server.WebSocket
             _UpgradeIdentities.Remove(ctx);
             WebSocketClientState client = new WebSocketClientState(session, auth!);
             _Clients.TryAdd(session.Id, client);
+            OutputFor(client);
             _Logging.Debug(_Header + "client connected: " + session.RemoteIp + ":" + session.RemotePort + " tenant " + client.TenantId + " user " + client.UserId);
 
             try
@@ -199,6 +204,8 @@ namespace Armada.Server.WebSocket
             finally
             {
                 _Clients.TryRemove(session.Id, out _);
+                if (_OutputQueues.TryRemove(session.Id, out WebSocketClientOutputQueue? ended))
+                    ended.Dispose();
                 _Logging.Debug(_Header + "client disconnected: " + session.RemoteIp + ":" + session.RemotePort);
             }
         }
@@ -306,7 +313,7 @@ namespace Armada.Server.WebSocket
                     WebSocketClientState client = kvp.Value;
                     if (!client.Session.IsConnected)
                     {
-                        _Clients.TryRemove(kvp.Key, out _);
+                        DropClient(kvp.Key, client, "WebSocket session is closed");
                         continue;
                     }
 
@@ -316,14 +323,7 @@ namespace Armada.Server.WebSocket
                     copy.CanDecide = copy.Status == CliPermissionRequestStatusEnum.Pending && CliPermissionAccess.CanDecide(client.Auth, copy, permissions);
                     copy.CanRemember = copy.CanDecide && CliPermissionAccess.CanRemember(client.Auth, copy);
                     object payload = BuildPayload(eventType, null, new { requestId = copy.Id, status = copy.Status, request = copy });
-                    try
-                    {
-                        client.Session.SendTextAsync(JsonSerializer.Serialize(payload, _JsonOptions)).Wait();
-                    }
-                    catch
-                    {
-                        _Clients.TryRemove(kvp.Key, out _);
-                    }
+                    EnqueueFrame(client, JsonSerializer.Serialize(payload, _JsonOptions));
                 }
             }
             catch (Exception ex)
@@ -376,14 +376,35 @@ namespace Armada.Server.WebSocket
         }
 
         /// <summary>
-        /// Broadcast a mission state change to the mission's tenant.
+        /// Whether a socket may receive a record event for a mission, voyage, captain, or check run. A global
+        /// administrator receives it when <see cref="IsTenantRecipient"/> already admits that socket. A tenant
+        /// administrator of the record's tenant receives it, including when the user id is empty. The owning user
+        /// receives it when the tenant and user id match. An empty tenant reaches only those global administrators.
+        /// </summary>
+        /// <param name="client">Socket identity.</param>
+        /// <param name="tenantId">Tenant of the record, or empty when the record has none.</param>
+        /// <param name="userId">Owning user, or empty when the record has none.</param>
+        /// <returns>True when the event may be delivered.</returns>
+        public static bool IsRecordRecipient(WebSocketClientState client, string? tenantId, string? userId)
+        {
+            if (client == null) return false;
+            if (client.IsAdmin && IsTenantRecipient(client, tenantId)) return true;
+            if (String.IsNullOrEmpty(tenantId)) return false;
+            if (!String.Equals(client.TenantId, tenantId, StringComparison.Ordinal)) return false;
+            if (client.Auth.IsTenantAdmin) return true;
+            if (String.IsNullOrEmpty(userId)) return false;
+            return String.Equals(client.UserId, userId, StringComparison.Ordinal);
+        }
+
+        /// <summary>
+        /// Broadcast a mission state change to the sockets that can read the mission.
         /// </summary>
         /// <param name="mission">Changed mission.</param>
         /// <param name="statusOverride">Status to report instead of the mission's current status, or null.</param>
         public void BroadcastMissionChange(Mission mission, string? statusOverride = null)
         {
             if (mission == null) return;
-            BroadcastToTenant(mission.TenantId, "mission.changed", new
+            BroadcastToRecordReaders(mission.TenantId, mission.UserId, "mission.changed", new
             {
                 id = mission.Id,
                 title = mission.Title,
@@ -398,14 +419,15 @@ namespace Armada.Server.WebSocket
         }
 
         /// <summary>
-        /// Broadcast that a mission's captain-selection state changed, scoped like <c>mission.changed</c>. The payload
-        /// carries identifiers and the stable outcome only; clients re-fetch authorized detail through REST or MCP.
+        /// Broadcast that a mission's captain-selection state changed to the sockets that can read the mission, scoped
+        /// like <c>mission.changed</c>. The payload carries identifiers and the stable outcome only; clients re-fetch
+        /// authorized detail through REST or MCP.
         /// </summary>
         /// <param name="change">Committed selection change.</param>
         public void BroadcastCaptainSelectionChange(CaptainSelectionChange change)
         {
             if (change == null || String.IsNullOrEmpty(change.MissionId)) return;
-            BroadcastToTenant(change.TenantId, "captain-selection.changed", new
+            BroadcastToRecordReaders(change.TenantId, change.UserId, "captain-selection.changed", new
             {
                 missionId = change.MissionId,
                 voyageId = change.VoyageId,
@@ -416,16 +438,17 @@ namespace Armada.Server.WebSocket
 
         /// <summary>
         /// Broadcast a running mission's latest captain activity (a tool call, text, or reasoning from its runtime's
-        /// structured output) to the mission's tenant as <c>mission.activity</c>. The caller throttles it.
+        /// structured output) to the sockets that can read the mission, as <c>mission.activity</c>. The caller throttles it.
         /// </summary>
         /// <param name="tenantId">The mission's tenant.</param>
         /// <param name="missionId">Mission identifier.</param>
         /// <param name="voyageId">The mission's voyage, or null.</param>
         /// <param name="activity">The activity.</param>
-        public void BroadcastMissionActivity(string? tenantId, string missionId, string? voyageId, RuntimeActivity activity)
+        /// <param name="userId">The mission's owning user, or empty when the mission has none.</param>
+        public void BroadcastMissionActivity(string? tenantId, string missionId, string? voyageId, RuntimeActivity activity, string? userId)
         {
             if (String.IsNullOrEmpty(missionId) || activity == null) return;
-            BroadcastToTenant(tenantId, "mission.activity", new
+            BroadcastToRecordReaders(tenantId, userId, "mission.activity", new
             {
                 id = missionId,
                 voyageId = voyageId,
@@ -434,14 +457,14 @@ namespace Armada.Server.WebSocket
         }
 
         /// <summary>
-        /// Broadcast a voyage state change to the voyage's tenant.
+        /// Broadcast a voyage state change to the sockets that can read the voyage.
         /// </summary>
         /// <param name="voyage">Changed voyage.</param>
         /// <param name="statusOverride">Status to report instead of the voyage's current status, or null.</param>
         public void BroadcastVoyageChange(Voyage voyage, string? statusOverride = null)
         {
             if (voyage == null) return;
-            BroadcastToTenant(voyage.TenantId, "voyage.changed", new
+            BroadcastToRecordReaders(voyage.TenantId, voyage.UserId, "voyage.changed", new
             {
                 id = voyage.Id,
                 title = voyage.Title,
@@ -454,13 +477,13 @@ namespace Armada.Server.WebSocket
         }
 
         /// <summary>
-        /// Broadcast a captain state change to the captain's tenant.
+        /// Broadcast a captain state change to the sockets that can read the captain.
         /// </summary>
         /// <param name="captain">Changed captain.</param>
         public void BroadcastCaptainChange(Captain captain)
         {
             if (captain == null) return;
-            BroadcastToTenant(captain.TenantId, "captain.changed", new
+            BroadcastToRecordReaders(captain.TenantId, captain.UserId, "captain.changed", new
             {
                 id = captain.Id,
                 name = captain.Name,
@@ -471,13 +494,13 @@ namespace Armada.Server.WebSocket
         }
 
         /// <summary>
-        /// Broadcast a structured check-run change to the run's tenant.
+        /// Broadcast a structured check-run change to the sockets that can read the run.
         /// </summary>
         /// <param name="run">Changed check run.</param>
         public void BroadcastCheckRunChange(CheckRun run)
         {
             if (run == null) return;
-            BroadcastToTenant(run.TenantId, "check-run.changed", run);
+            BroadcastToRecordReaders(run.TenantId, run.UserId, "check-run.changed", run);
             RaiseEntityChanged("check-run", run.Id);
         }
 
@@ -553,13 +576,13 @@ namespace Armada.Server.WebSocket
         }
 
         /// <summary>
-        /// Broadcast an approval-needed notification to the mission's tenant when a mission enters review.
+        /// Broadcast an approval-needed notification to the sockets that can read the mission when a mission enters review.
         /// </summary>
         /// <param name="mission">Mission awaiting approval.</param>
         public void BroadcastApprovalNeeded(Mission mission)
         {
             if (mission == null) return;
-            BroadcastToTenant(mission.TenantId, "approval-needed", new
+            BroadcastToRecordReaders(mission.TenantId, mission.UserId, "approval-needed", new
             {
                 entityType = "mission",
                 entityId = mission.Id,
@@ -587,6 +610,13 @@ namespace Armada.Server.WebSocket
         #endregion
 
         #region Private-Methods
+
+        private void BroadcastToRecordReaders(string? tenantId, string? userId, string eventType, object? data)
+        {
+            if (String.IsNullOrEmpty(eventType)) throw new ArgumentNullException(nameof(eventType));
+            object payload = BuildPayload(eventType, null, data);
+            Deliver(payload, client => IsRecordRecipient(client, tenantId, userId));
+        }
 
         private void FeedPush(Action<PushNotificationService> feed)
         {
@@ -621,7 +651,6 @@ namespace Armada.Server.WebSocket
 
         private async Task HandleMessageAsync(WebSocketClientState client, string body)
         {
-            WebSocketSession session = client.Session;
             WebSocketRouteMessage? routeMessage = null;
             try
             {
@@ -647,7 +676,7 @@ namespace Armada.Server.WebSocket
                         allTenants = client.AllTenants,
                         timestamp = DateTime.UtcNow
                     };
-                    await session.SendTextAsync(JsonSerializer.Serialize(initial, _JsonOptions)).ConfigureAwait(false);
+                    EnqueueFrame(client, JsonSerializer.Serialize(initial, _JsonOptions));
                     return;
                 }
 
@@ -664,14 +693,14 @@ namespace Armada.Server.WebSocket
                         result = await _CommandHandler.HandleCommandAsync(command.Action, command, body, client.Auth).ConfigureAwait(false);
                     }
 
-                    await session.SendTextAsync(JsonSerializer.Serialize(result, _JsonOptions)).ConfigureAwait(false);
+                    EnqueueFrame(client, JsonSerializer.Serialize(result, _JsonOptions));
                     return;
                 }
 
                 string errorJson = JsonSerializer.Serialize(
                     new { type = "error", message = "Unknown route: " + (route ?? "null") + ". Send a message with route 'subscribe' or 'command'" },
                     _JsonOptions);
-                await session.SendTextAsync(errorJson).ConfigureAwait(false);
+                EnqueueFrame(client, errorJson);
             }
             catch (Exception ex)
             {
@@ -679,11 +708,11 @@ namespace Armada.Server.WebSocket
                 try
                 {
                     string errorJson = JsonSerializer.Serialize(WebSocketCommandError.FromException(null, ex), _JsonOptions);
-                    await session.SendTextAsync(errorJson).ConfigureAwait(false);
+                    EnqueueFrame(client, errorJson);
                 }
-                catch
+                catch (Exception replyEx)
                 {
-                    // Client may have disconnected before we could reply.
+                    _Logging.Warn(_Header + "error reply was not queued: " + replyEx.Message);
                 }
             }
         }
@@ -729,25 +758,53 @@ namespace Armada.Server.WebSocket
                     WebSocketSession session = client.Session;
                     if (!session.IsConnected)
                     {
-                        _Clients.TryRemove(kvp.Key, out _);
+                        DropClient(kvp.Key, client, "WebSocket session is closed");
                         continue;
                     }
 
                     if (!filter(client)) continue;
-
-                    try
-                    {
-                        session.SendTextAsync(json).Wait();
-                    }
-                    catch
-                    {
-                        _Clients.TryRemove(kvp.Key, out _);
-                    }
+                    EnqueueFrame(client, json);
                 }
             }
             catch (Exception ex)
             {
                 _Logging.Warn(_Header + "broadcast error: " + ex.ToString());
+            }
+        }
+
+        private WebSocketClientOutputQueue OutputFor(WebSocketClientState client)
+        {
+            return _OutputQueues.GetOrAdd(client.Session.Id, _ => new WebSocketClientOutputQueue(
+                frame => client.Session.SendTextAsync(frame),
+                error => DropClient(
+                    client.Session.Id,
+                    client,
+                    error == null
+                        ? "Outbound queue full; reconnect and refresh state"
+                        : "WebSocket send failed; reconnect and refresh state"),
+                _OutboundFrameCapacity));
+        }
+
+        private void EnqueueFrame(WebSocketClientState client, string frame)
+        {
+            WebSocketClientOutputQueue queue = OutputFor(client);
+            queue.TryEnqueue(frame);
+        }
+
+        private void DropClient(Guid clientId, WebSocketClientState client, string reason)
+        {
+            bool removedClient = _Clients.TryRemove(clientId, out _);
+            bool removedQueue = _OutputQueues.TryRemove(clientId, out WebSocketClientOutputQueue? outputQueue);
+            if (!removedClient && !removedQueue) return;
+            if (removedQueue && outputQueue != null) outputQueue.Dispose();
+            _Logging.Warn(_Header + "disconnected client: " + reason);
+            try
+            {
+                client.Session.Dispose();
+            }
+            catch (Exception ex)
+            {
+                _Logging.Warn(_Header + "client abort error: " + ex.Message);
             }
         }
 

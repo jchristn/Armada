@@ -4,10 +4,12 @@ namespace Test.Shared.Suites.Runtimes
     using System.Collections.Generic;
     using System.IO;
     using System.Runtime.InteropServices;
+    using System.Text;
     using System.Text.Json;
     using System.Text.Json.Serialization;
     using System.Threading;
     using System.Threading.Tasks;
+    using Armada.Core.Services;
     using Armada.Runtimes.Tools;
     using Armada.Runtimes.Tools.Arguments;
     using Armada.Runtimes.Tools.Tasks;
@@ -25,6 +27,8 @@ namespace Test.Shared.Suites.Runtimes
         #region Private-Members
 
         private const string _SuiteId = "Runtimes.BuiltInToolArguments";
+        private const string _OutputHeadMarker = "RUN_PROCESS_OUTPUT_HEAD";
+        private const string _OutputTailMarker = "RUN_PROCESS_OUTPUT_TAIL";
 
         #endregion
 
@@ -261,6 +265,87 @@ namespace Test.Shared.Suites.Runtimes
                 }
             }));
 
+            string shellSkip = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+                    || !File.Exists("/bin/bash")
+                    || !File.Exists("/usr/bin/env")
+                    || !File.Exists("/usr/bin/head")
+                    || !File.Exists("/usr/bin/tr")
+                ? "This case requires the pinned Unix Bash, env, head, and tr executables."
+                : null;
+
+            cases.Add(CaseAsync("run_process_stdout_keeps_head_and_tail", "Large stdout keeps its first and last bytes within the per-stream byte budget", TestTags.Reliability, async () =>
+            {
+                string dir = NewTempDir();
+                try
+                {
+                    BuiltInToolRegistry registry = new BuiltInToolRegistry(null);
+                    string command = "printf '" + _OutputHeadMarker + "\\n'; head -c 140000 /dev/zero | tr '\\0' M; printf '\\n" + _OutputTailMarker + "\\n'";
+                    ToolResult result = await RunIsolatedBash(registry, command, dir).ConfigureAwait(false);
+                    AssertTrue(result.Success, result.Content);
+                    RunProcessOutput output = JsonSerializer.Deserialize<RunProcessOutput>(result.Content)!;
+                    AssertFalse(output.TimedOut, "timed_out");
+                    AssertEqual(0, output.ExitCode, "exit_code");
+                    AssertContains(_OutputHeadMarker, output.Stdout);
+                    AssertContains(_OutputTailMarker, output.Stdout);
+                    AssertOmissionCount(output.Stdout, Encoding.UTF8.GetByteCount(_OutputHeadMarker + "\n") + 140000 + Encoding.UTF8.GetByteCount("\n" + _OutputTailMarker + "\n"));
+                }
+                finally { Cleanup(dir); }
+            }, shellSkip));
+
+            cases.Add(CaseAsync("run_process_stderr_keeps_head_and_tail", "Large stderr keeps its first and last bytes within the per-stream byte budget", TestTags.Reliability, async () =>
+            {
+                string dir = NewTempDir();
+                try
+                {
+                    BuiltInToolRegistry registry = new BuiltInToolRegistry(null);
+                    string command = "printf '" + _OutputHeadMarker + "\\n' >&2; head -c 140000 /dev/zero | tr '\\0' M >&2; printf '\\n" + _OutputTailMarker + "\\n' >&2";
+                    ToolResult result = await RunIsolatedBash(registry, command, dir).ConfigureAwait(false);
+                    AssertTrue(result.Success, result.Content);
+                    RunProcessOutput output = JsonSerializer.Deserialize<RunProcessOutput>(result.Content)!;
+                    AssertFalse(output.TimedOut, "timed_out");
+                    AssertEqual(0, output.ExitCode, "exit_code");
+                    AssertEqual(String.Empty, output.Stdout, "stdout remains separate");
+                    AssertContains(_OutputHeadMarker, output.Stderr);
+                    AssertContains(_OutputTailMarker, output.Stderr);
+                    AssertOmissionCount(output.Stderr, Encoding.UTF8.GetByteCount(_OutputHeadMarker + "\n") + 140000 + Encoding.UTF8.GetByteCount("\n" + _OutputTailMarker + "\n"));
+                }
+                finally { Cleanup(dir); }
+            }, shellSkip));
+
+            cases.Add(CaseAsync("run_process_large_single_line_is_bounded", "A single oversized output line keeps its tail and stays within the per-stream byte budget", TestTags.Reliability, async () =>
+            {
+                string dir = NewTempDir();
+                try
+                {
+                    BuiltInToolRegistry registry = new BuiltInToolRegistry(null);
+                    string command = "printf '" + _OutputHeadMarker + "'; head -c 140000 /dev/zero | tr '\\0' M; printf '" + _OutputTailMarker + "'";
+                    ToolResult result = await RunIsolatedBash(registry, command, dir).ConfigureAwait(false);
+                    AssertTrue(result.Success, result.Content);
+                    RunProcessOutput output = JsonSerializer.Deserialize<RunProcessOutput>(result.Content)!;
+                    AssertContains(_OutputHeadMarker, output.Stdout);
+                    AssertContains(_OutputTailMarker, output.Stdout);
+                    AssertOmissionCount(output.Stdout, Encoding.UTF8.GetByteCount(_OutputHeadMarker) + 140000 + Encoding.UTF8.GetByteCount(_OutputTailMarker));
+                }
+                finally { Cleanup(dir); }
+            }, shellSkip));
+
+            cases.Add(CaseAsync("run_process_utf8_budget_counts_bytes", "Multibyte output and its omission note stay within the UTF-8 byte budget", TestTags.Reliability, async () =>
+            {
+                string dir = NewTempDir();
+                try
+                {
+                    BuiltInToolRegistry registry = new BuiltInToolRegistry(null);
+                    string command = "printf '" + _OutputHeadMarker + "\\n'; for ((i=0; i<70000; i++)); do printf 'é'; done; printf '\\n" + _OutputTailMarker + "\\n'";
+                    ToolResult result = await RunIsolatedBash(registry, command, dir).ConfigureAwait(false);
+                    AssertTrue(result.Success, result.Content);
+                    RunProcessOutput output = JsonSerializer.Deserialize<RunProcessOutput>(result.Content)!;
+                    AssertContains(_OutputHeadMarker, output.Stdout);
+                    AssertContains(_OutputTailMarker, output.Stdout);
+                    AssertOmissionCount(output.Stdout, Encoding.UTF8.GetByteCount(_OutputHeadMarker + "\n") + 70000 * 2 + Encoding.UTF8.GetByteCount("\n" + _OutputTailMarker + "\n"));
+                }
+                finally { Cleanup(dir); }
+            }, shellSkip));
+
             cases.Add(CaseAsync("run_process_is_noninteractive", "Commands needing stdin receive EOF, while explicit heredoc input still works", TestTags.Reliability, async () =>
             {
                 if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) return;
@@ -281,6 +366,31 @@ namespace Test.Shared.Suites.Runtimes
                 finally { Cleanup(dir); }
             }));
 
+            cases.Add(CaseAsync("run_process_does_not_pass_initial_admin_password", "run_process does not pass the initial admin password to the child process", TestTags.Positive, async () =>
+            {
+                string variableName = DefaultCredentialService.InitialAdminPasswordEnvironmentVariable;
+                string? previousValue = Environment.GetEnvironmentVariable(variableName);
+                string dir = NewTempDir();
+                try
+                {
+                    Environment.SetEnvironmentVariable(variableName, "test-only-initial-password");
+                    BuiltInToolRegistry registry = new BuiltInToolRegistry(null);
+                    string command = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+                        ? "powershell -NoProfile -Command \"if (Test-Path Env:ARMADA_INITIAL_ADMIN_PASSWORD) { 'present' } else { 'absent' }\""
+                        : "if printenv ARMADA_INITIAL_ADMIN_PASSWORD >/dev/null; then printf present; else printf absent; fi";
+                    ToolResult result = await Run(registry, "run_process", JsonSerializer.Serialize(new { command }), dir).ConfigureAwait(false);
+                    AssertTrue(result.Success, "run_process: " + result.Content);
+                    RunProcessOutput? output = JsonSerializer.Deserialize<RunProcessOutput>(result.Content);
+                    AssertNotNull(output, "run_process output");
+                    AssertEqual("absent", (output!.Stdout ?? String.Empty).TrimEnd(), "the child process must not receive the initial admin password");
+                }
+                finally
+                {
+                    Environment.SetEnvironmentVariable(variableName, previousValue);
+                    Cleanup(dir);
+                }
+            }));
+
             return new TestSuiteDescriptor(
                 suiteId: _SuiteId,
                 displayName: "Built-in Tool Arguments",
@@ -294,6 +404,16 @@ namespace Test.Shared.Suites.Runtimes
         private static async Task<ToolResult> Run(BuiltInToolRegistry registry, string toolName, string argumentsJson, string dir)
         {
             return await registry.ExecuteAsync("t-" + toolName, toolName, ParseArgs(argumentsJson), dir, CancellationToken.None).ConfigureAwait(false);
+        }
+
+        private static async Task<ToolResult> RunIsolatedBash(BuiltInToolRegistry registry, string command, string dir)
+        {
+            RunProcessToolArguments arguments = new RunProcessToolArguments
+            {
+                Command = "/usr/bin/env",
+                Args = new List<string?> { "-i", "PATH=/usr/bin:/bin", "/bin/bash", "--noprofile", "--norc", "-c", command }
+            };
+            return await registry.ExecuteAsync("t-run_process", "run_process", JsonSerializer.SerializeToElement(arguments), dir, CancellationToken.None).ConfigureAwait(false);
         }
 
         private static void AssertInvalidParameter(ToolResult result, string label)
@@ -329,14 +449,34 @@ namespace Test.Shared.Suites.Runtimes
             try { Directory.Delete(dir, true); } catch { }
         }
 
-        private static TestCaseDescriptor CaseAsync(string caseId, string displayName, string tag, Func<Task> body)
+        private static TestCaseDescriptor CaseAsync(string caseId, string displayName, string tag, Func<Task> body, string skipReason = null)
         {
             return new TestCaseDescriptor(
                 suiteId: _SuiteId,
                 caseId: caseId,
                 displayName: displayName,
                 executeAsync: (CancellationToken ct) => body(),
-                tags: new List<string> { tag });
+                tags: new List<string> { tag },
+                skipReason: skipReason);
+        }
+
+        private static void AssertOmissionCount(string output, int totalInputBytes)
+        {
+            int budget = ToolSafetyLimits.MaxProcessOutputBytes;
+            AssertTrue(Encoding.UTF8.GetByteCount(output) <= budget, "Rendered stream must fit its UTF-8 byte budget.");
+            int markerStart = output.IndexOf("\n[truncated - output exceeded ", StringComparison.Ordinal);
+            AssertTrue(markerStart >= 0, "Expected a truncation note with an omitted-byte count.");
+            int markerEnd = output.IndexOf(']', markerStart);
+            AssertTrue(markerEnd >= 0, "Truncation note must be complete.");
+            string note = output.Substring(markerStart, markerEnd - markerStart + 1);
+            const string omittedLabel = "; omitted ";
+            int omittedStart = note.IndexOf(omittedLabel, StringComparison.Ordinal);
+            AssertTrue(omittedStart >= 0, "Truncation note must report omitted bytes.");
+            int omittedEnd = note.IndexOf(" bytes]", omittedStart, StringComparison.Ordinal);
+            AssertTrue(omittedEnd > omittedStart, "Truncation note must contain a numeric omitted-byte count.");
+            int omittedBytes = Int32.Parse(note.Substring(omittedStart + omittedLabel.Length, omittedEnd - omittedStart - omittedLabel.Length), System.Globalization.CultureInfo.InvariantCulture);
+            string retained = output.Substring(0, markerStart) + output.Substring(markerEnd + 2);
+            AssertEqual(totalInputBytes, omittedBytes + Encoding.UTF8.GetByteCount(retained), "omitted byte count");
         }
 
         #endregion

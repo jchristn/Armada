@@ -234,13 +234,13 @@ namespace Armada.Server.Routes
 
         private static void ApplyQuerystringOverrides(ApiRequest req, SkillQuery query)
         {
-            if (int.TryParse(req.Query.GetValueOrDefault("pageNumber"), out int pageNumber))
+            if (int.TryParse(QueryValueReader.Read(req.Query, "pageNumber"), out int pageNumber))
                 query.PageNumber = Math.Max(1, pageNumber);
-            if (int.TryParse(req.Query.GetValueOrDefault("pageSize"), out int pageSize))
+            if (int.TryParse(QueryValueReader.Read(req.Query, "pageSize"), out int pageSize))
                 query.PageSize = pageSize;
-            query.Category = NormalizeEmpty(req.Query.GetValueOrDefault("category")) ?? query.Category;
-            query.Search = NormalizeEmpty(req.Query.GetValueOrDefault("search")) ?? query.Search;
-            if (TryParseNullableBool(req.Query.GetValueOrDefault("active"), out bool? active))
+            query.Category = NormalizeEmpty(QueryValueReader.Read(req.Query, "category")) ?? query.Category;
+            query.Search = NormalizeEmpty(QueryValueReader.Read(req.Query, "search")) ?? query.Search;
+            if (TryParseNullableBool(QueryValueReader.Read(req.Query, "active"), out bool? active))
                 query.Active = active;
         }
 

@@ -983,6 +983,12 @@ namespace Armada.Core.Services
             ObjectiveStatusEnum currentStatus,
             ObjectiveStatusEnum importedStatus)
         {
+            if (currentStatus == ObjectiveStatusEnum.Completed
+                || currentStatus == ObjectiveStatusEnum.Cancelled)
+            {
+                return currentStatus;
+            }
+
             if (importedStatus == ObjectiveStatusEnum.Completed
                 || importedStatus == ObjectiveStatusEnum.Cancelled
                 || importedStatus == ObjectiveStatusEnum.Released)

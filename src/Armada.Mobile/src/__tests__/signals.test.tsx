@@ -50,7 +50,7 @@ describe('signals', () => {
     await fireEvent.press(await screen.findByTestId('signal-filter-type'));
     await fireEvent.press(await screen.findByTestId('signal-filter-type-option-Mail'));
     await fireEvent(screen.getByTestId('signal-filter-unread'), 'valueChange', true);
-    await waitFor(() => expect(api.listSignals).toHaveBeenLastCalledWith({ pageNumber: 1, pageSize: 25, filters: { type: 'Mail', unreadOnly: 'true' } }));
+    await waitFor(() => expect(api.listSignals).toHaveBeenLastCalledWith({ pageNumber: 1, pageSize: 25, filters: { signalType: 'Mail', unreadOnly: 'true' } }));
   });
 
   it('marks read, sends, and bulk deletes', async () => {

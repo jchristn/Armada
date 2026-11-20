@@ -340,26 +340,25 @@ namespace Armada.Server.WebSocket
                     if (delVessel == null)
                         return WebSocketCommandError.Create("delete_vessel", WebSocketCommandErrorCodeEnum.NotFound, "Vessel not found");
 
-                    // Cancel active missions on this vessel
-                    try
+                    // Cancel active missions on this vessel through the shared cancel path, as REST and MCP do: it stops the
+                    // agent first and records the single VesselDeleted entry. A stop that is not confirmed leaves that
+                    // mission as it was and is reported in the result's warnings; the vessel is still deleted.
+                    List<string> delVesselWarnings = new List<string>();
+                    List<Mission> delVesselMissions = await _Database.Missions.EnumerateByVesselAsync(delVesselId).ConfigureAwait(false);
+                    foreach (Mission dvm in delVesselMissions)
                     {
-                        List<Mission> delVesselMissions = await _Database.Missions.EnumerateByVesselAsync(delVesselId).ConfigureAwait(false);
-                        foreach (Mission dvm in delVesselMissions)
+                        if (dvm.Status == MissionStatusEnum.Pending
+                            || dvm.Status == MissionStatusEnum.Blocked
+                            || dvm.Status == MissionStatusEnum.Assigned
+                            || dvm.Status == MissionStatusEnum.InProgress
+                            || dvm.Status == MissionStatusEnum.Review
+                            || dvm.Status == MissionStatusEnum.Testing)
                         {
-                            if (dvm.Status == MissionStatusEnum.Pending || dvm.Status == MissionStatusEnum.Blocked || dvm.Status == MissionStatusEnum.Assigned || dvm.Status == MissionStatusEnum.InProgress)
-                            {
-                                MissionStatusEnum dvmBefore = dvm.Status;
-                                dvm.Status = MissionStatusEnum.Cancelled;
-                                dvm.FailureKind = MissionFailureKindEnum.OperatorAction;
-                                dvm.FailureReason = "Vessel deleted";
-                                dvm.CompletedUtc = DateTime.UtcNow;
-                                dvm.LastUpdateUtc = DateTime.UtcNow;
-                                await _Database.Missions.UpdateAsync(dvm).ConfigureAwait(false);
-                                await BlackBoxOperatorCapture.RecordVesselDeletedAsync(BlackBoxCapture, dvm, dvmBefore, delVessel, "WebSocket").ConfigureAwait(false);
-                            }
+                            MissionStatusEnum dvmBefore = dvm.Status;
+                            try { await _Admiral.CancelMissionAsync(dvm, BlackBoxOperatorCapture.VesselDeletedCancel(dvmBefore, delVessel, dvm.VesselId, "WebSocket")).ConfigureAwait(false); }
+                            catch (InvalidOperationException ex) { delVesselWarnings.Add("Mission " + dvm.Id + ": " + ex.Message); }
                         }
                     }
-                    catch { }
 
                     // Clean up docks/worktrees for this vessel
                     try
@@ -386,7 +385,7 @@ namespace Armada.Server.WebSocket
                     }
 
                     await _Database.Vessels.DeleteAsync(delVesselId).ConfigureAwait(false);
-                    return new { type = "command.result", action = "delete_vessel", data = (object)new { status = "deleted" } };
+                    return new { type = "command.result", action = "delete_vessel", data = (object)VesselDeleteResult.Create(delVesselId, delVesselWarnings) };
                 }
 
                 // ── Voyage actions ─────────────────────────────────────────
@@ -762,20 +761,55 @@ namespace Armada.Server.WebSocket
                         else
                         {
                             Dock? mdDock = await MissionDockResolver.ReadAsync(_Database, mdMission).ConfigureAwait(false);
-                            if (mdDock == null || String.IsNullOrEmpty(mdDock.WorktreePath) || !System.IO.Directory.Exists(mdDock.WorktreePath))
+                            if (mdDock == null || String.IsNullOrEmpty(mdDock.WorktreePath))
                                 return WebSocketCommandError.Create("get_mission_diff", WebSocketCommandErrorCodeEnum.Unavailable, "No diff available - worktree was already reclaimed and no saved diff exists");
-                            else if (_Git == null)
-                                return WebSocketCommandError.Create("get_mission_diff", WebSocketCommandErrorCodeEnum.Unavailable, "Git service not available");
-                            else
+
+                            DockHost? mdHost = null;
+                            bool mdRemote = DockHostResolver.IsHarborDock(mdDock);
+                            try
                             {
-                                string baseBranch = "main";
-                                if (!String.IsNullOrEmpty(mdMission.VesselId))
+                                if (mdRemote)
                                 {
-                                    Vessel? mdVessel = await _Database.Vessels.ReadAsync(mdMission.VesselId).ConfigureAwait(false);
-                                    if (mdVessel != null) baseBranch = mdVessel.DefaultBranch;
+                                    DockHostResolver? mdHosts = (Missions as MissionService)?.DockHosts;
+                                    if (mdHosts == null) throw new InvalidOperationException("Harbor delegation is not available.");
+                                    mdHost = mdHosts.ForDock(mdDock);
                                 }
-                                string diff = await _Git.DiffAsync(mdDock.WorktreePath, baseBranch).ConfigureAwait(false);
+
+                                bool mdExists = mdHost != null
+                                    ? await mdHost.Files.DirectoryExistsAsync(mdDock.WorktreePath).ConfigureAwait(false)
+                                    : System.IO.Directory.Exists(mdDock.WorktreePath);
+                                if (!mdExists)
+                                {
+                                    string mdMissing = mdRemote
+                                        ? "No diff available: the worktree is not accessible on its owning host and no saved diff exists"
+                                        : "No diff available - worktree was already reclaimed and no saved diff exists";
+                                    return WebSocketCommandError.Create("get_mission_diff", WebSocketCommandErrorCodeEnum.Unavailable, mdMissing);
+                                }
+                            }
+                            catch (Exception ex) when (mdRemote && (ex is InvalidOperationException || ex is TimeoutException || ex is System.IO.IOException))
+                            {
+                                return WebSocketCommandError.Create("get_mission_diff", WebSocketCommandErrorCodeEnum.Unavailable, "The mission worktree is on Harbor " + mdDock.HarborId + ". Connect that Harbor, ensure it supports mission docks, and try again; its diff is currently unavailable.");
+                            }
+
+                            IGitService? mdGit = mdHost != null ? mdHost.Git : _Git;
+                            if (mdGit == null)
+                                return WebSocketCommandError.Create("get_mission_diff", WebSocketCommandErrorCodeEnum.Unavailable, "Git service not available");
+
+                            string baseBranch = "main";
+                            if (!String.IsNullOrEmpty(mdMission.VesselId))
+                            {
+                                Vessel? mdVessel = await _Database.Vessels.ReadAsync(mdMission.VesselId).ConfigureAwait(false);
+                                if (mdVessel != null) baseBranch = mdVessel.DefaultBranch;
+                            }
+
+                            try
+                            {
+                                string diff = await mdGit.DiffAsync(mdDock.WorktreePath, baseBranch).ConfigureAwait(false);
                                 return new { type = "command.result", action = "get_mission_diff", data = (object)new { MissionId = mdId, Branch = mdDock.BranchName ?? "", Diff = diff } };
+                            }
+                            catch (Exception ex) when (mdRemote && (ex is InvalidOperationException || ex is TimeoutException || ex is System.IO.IOException))
+                            {
+                                return WebSocketCommandError.Create("get_mission_diff", WebSocketCommandErrorCodeEnum.Unavailable, "The mission diff could not be read on Harbor " + mdDock.HarborId + ". Check its connection and mission log, then try again.");
                             }
                         }
                     }
@@ -859,9 +893,7 @@ namespace Armada.Server.WebSocket
                     newCaptain.MaxConcurrency = newCaptain.MaxConcurrencySpecified
                         ? Armada.Core.Services.ConcurrencyClamp.CaptainLimit(newCaptain.MaxConcurrency, _Settings?.Concurrency.MaxCaptainConcurrency ?? 256)
                         : Armada.Core.Services.CaptainConcurrencyDefaults.For(newCaptain.Runtime, _Settings?.Concurrency);
-                    newCaptain.ActiveMissionCount = 0;
-                    newCaptain.ActiveMissionIds.Clear();
-                    newCaptain.CurrentSessionId = null;
+                    EntityUpdateMerger.ResetCaptainOperationalState(newCaptain);
                     await DuplicateEntityGuard.EnsureCaptainNameAvailableAsync(_Database, newCaptain).ConfigureAwait(false);
                     newCaptain = await _Database.Captains.CreateAsync(newCaptain).ConfigureAwait(false);
                     return new { type = "command.result", action = "create_captain", data = (object)newCaptain };
@@ -1213,6 +1245,8 @@ namespace Armada.Server.WebSocket
                         return WebSocketCommandError.Create("delete_pipeline", WebSocketCommandErrorCodeEnum.NotFound, "Pipeline not found");
                     if (delPipeline.IsBuiltIn)
                         return WebSocketCommandError.Create("delete_pipeline", WebSocketCommandErrorCodeEnum.Conflict, "Cannot delete built-in pipeline");
+                    ObjectiveService objectives = new ObjectiveService(_Database);
+                    await objectives.ClearSuggestedPipelineAsync(delPipeline.Id).ConfigureAwait(false);
                     await _Database.Pipelines.DeleteAsync(delPipeline.Id).ConfigureAwait(false);
                     return new { type = "command.result", action = "delete_pipeline", data = (object)new { Status = "deleted", Name = delPipelineName } };
 

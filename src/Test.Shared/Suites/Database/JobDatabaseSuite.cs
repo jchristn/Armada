@@ -109,20 +109,24 @@ namespace Test.Shared.Suites.Database
                 return Task.CompletedTask;
             }));
 
-            cases.Add(Case("querystring_percent_encoded", "JobQuery.TryFromQuerystring decodes percent-encoded values (the dashboard sends status=Queued%2CRunning)", TestTags.Positive, () =>
+            cases.Add(Case("querystring_percent_encoded", "JobQuery.TryFromQuerystring parses a decoded status list and turns a plus into a space", TestTags.Positive, () =>
             {
-                Dictionary<string, string> encoded = new Dictionary<string, string> { { "status", "Queued%2CRunning" }, { "pageSize", "100" }, { "kind", "Report" } };
-                AssertTrue(JobQuery.TryFromQuerystring(k => encoded.GetValueOrDefault(k), out JobQuery? parsed, out string? error), "encoded status accepted: " + error);
+                Dictionary<string, string> encoded = new Dictionary<string, string> { { "status", "Queued,Running" }, { "pageSize", "100" }, { "kind", "Report" } };
+                AssertTrue(JobQuery.TryFromQuerystring(k => encoded.GetValueOrDefault(k), out JobQuery? parsed, out string? error), "decoded status accepted: " + error);
                 AssertNull(error);
                 AssertEqual(2, parsed!.Statuses.Count);
                 AssertTrue(parsed.Statuses.Contains(JobStatusEnum.Queued), "Queued");
                 AssertTrue(parsed.Statuses.Contains(JobStatusEnum.Running), "Running");
 
-                Dictionary<string, string> spaced = new Dictionary<string, string> { { "status", "Queued%2C%20Running" } };
-                AssertTrue(JobQuery.TryFromQuerystring(k => spaced.GetValueOrDefault(k), out JobQuery? spacedQuery, out string? _), "encoded space");
+                Dictionary<string, string> spaced = new Dictionary<string, string> { { "status", "Queued,+Running" } };
+                AssertTrue(JobQuery.TryFromQuerystring(k => spaced.GetValueOrDefault(k), out JobQuery? spacedQuery, out string? _), "literal plus is a space");
                 AssertEqual(2, spacedQuery!.Statuses.Count);
 
-                Dictionary<string, string> badEncoded = new Dictionary<string, string> { { "status", "Running%2CBogus" } };
+                Dictionary<string, string> stillEncoded = new Dictionary<string, string> { { "status", "Queued%2CRunning" } };
+                AssertFalse(JobQuery.TryFromQuerystring(k => stillEncoded.GetValueOrDefault(k), out JobQuery? _, out string? stillEncodedError), "percent escapes are not decoded again");
+                AssertNotNull(stillEncodedError);
+
+                Dictionary<string, string> badEncoded = new Dictionary<string, string> { { "status", "Running,Bogus" } };
                 AssertFalse(JobQuery.TryFromQuerystring(k => badEncoded.GetValueOrDefault(k), out JobQuery? _, out string? badError), "unknown status still rejected");
                 AssertContains("Bogus", badError ?? "");
                 return Task.CompletedTask;

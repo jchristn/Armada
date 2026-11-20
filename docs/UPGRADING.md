@@ -175,6 +175,8 @@ Every migration on every provider is held to two rules, and `Database.MigrationH
 
 Migration version numbers increase but are not contiguous, and they differ per provider; each provider's `schema_migrations` table is the source of truth for that database.
 
+Startup applies only the migrations above the highest recorded version. If a migration this build declares below that maximum has no row (for example a row was deleted by hand, or a development database ran a branch with different numbering), it is never run. The Admiral does not refuse to start: it logs a warning that names the provider and every missing version, and the "Migration Ledger" check in `GET /api/v1/doctor` warns with the same list. Compare the schema with a freshly created database, or restore a backup taken before the gap. A version number the build does not declare (a retired number, or a row above every declared migration) is not a gap.
+
 ## Data retention
 
 Long-running installs accumulate conversations, job records, and import history. Retention runs in the background on the health-check loop's slow cadence (every 100 health-check cycles, about every 17 minutes with the default 10-second `heartbeatIntervalSeconds`), works on every provider, and applies setting changes immediately. Set any value to 0 to keep that data forever.
@@ -186,7 +188,7 @@ Long-running installs accumulate conversations, job records, and import history.
 | `jobRetentionDays` | 30 | 0 to 3650 | Delete finished background jobs (Succeeded, Failed, Cancelled) older than this. The newest finished job of each kind and name per tenant is kept, because schedules such as vessel health measure from it. Harbor metrics (Harbor job records, link samples, and link events) follow the same retention. |
 | `importBatchRetentionDays` | 90 | 0 to 3650 | Delete finished vessel import batches (Completed, CompletedWithFailures, Failed) with their items and fleet recommendations. Imported vessels are not affected; batches still categorizing are kept. |
 
-Other data has its own controls. Fleet action runs (and their captured output) follow `fleetActions.runRetentionDays` (default 30). Request history follows `requestHistoryRetentionDays` (default 30). Completed voyages and missions, old signals, and old events follow `dataRetentionDays` (default 30), which currently applies to SQLite only. Vessel health findings need no retention: each evaluation replaces the previous findings for a vessel instead of adding history. Black box entries are not touched by any of these; they follow `blackBox.retention` and their own garbage collector (see [Black box retention and storage](OPERATIONS.md#black-box-retention-and-storage)).
+Other data has its own controls. Fleet action runs (and their captured output) follow `fleetActions.runRetentionDays` (default 30). Request history follows `requestHistoryRetentionDays` (default 30). Completed voyages and missions, old signals, and old events follow `dataRetentionDays` (default 30) on every database provider; expiry keeps anything a remaining record points at (see [Retention](OPERATIONS.md#retention)). Vessel health findings need no retention: each evaluation replaces the previous findings for a vessel instead of adding history. Black box entries are not touched by any of these; they follow `blackBox.retention` and their own garbage collector (see [Black box retention and storage](OPERATIONS.md#black-box-retention-and-storage)).
 
 ## Testing an upgrade
 

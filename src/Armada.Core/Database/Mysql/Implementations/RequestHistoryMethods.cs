@@ -255,7 +255,7 @@ namespace Armada.Core.Database.Mysql.Implementations
             cmd.Parameters.AddWithValue("@is_success", entry.IsSuccess ? 1 : 0);
             cmd.Parameters.AddWithValue("@client_ip", (object?)entry.ClientIp ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@correlation_id", (object?)entry.CorrelationId ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("@created_utc", entry.CreatedUtc);
+            cmd.Parameters.AddWithValue("@created_utc", UtcClock.ToUtc(entry.CreatedUtc));
         }
 
         private static void BindDetail(MySqlCommand cmd, RequestHistoryDetail detail)
@@ -366,12 +366,12 @@ namespace Armada.Core.Database.Mysql.Implementations
             if (query.FromUtc.HasValue)
             {
                 conditions.Add("created_utc >= @from_utc");
-                parameters.Add(new MySqlParameter("@from_utc", query.FromUtc.Value));
+                parameters.Add(new MySqlParameter("@from_utc", UtcClock.ToUtc(query.FromUtc.Value)));
             }
             if (query.ToUtc.HasValue)
             {
                 conditions.Add("created_utc <= @to_utc");
-                parameters.Add(new MySqlParameter("@to_utc", query.ToUtc.Value));
+                parameters.Add(new MySqlParameter("@to_utc", UtcClock.ToUtc(query.ToUtc.Value)));
             }
         }
     }

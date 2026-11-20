@@ -377,11 +377,6 @@ export default function Planning() {
   }, [id, loadingCatalog, location.state]);
 
   useEffect(() => {
-    if (!transcriptRef.current) return;
-    transcriptRef.current.scrollTop = transcriptRef.current.scrollHeight;
-  }, [detail?.messages]);
-
-  useEffect(() => {
     if (!fleetId || !vesselId || loadingCatalog) return;
 
     const selectedVessel = vessels.find((vessel) => vessel.id === vesselId);

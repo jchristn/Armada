@@ -3,6 +3,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { createPortal } from 'react-dom';
 import { useSearchParams } from 'react-router-dom';
 import { getTokenUsage, listCaptains } from '../api/client';
+import { ErrorState } from '../components/shared/StateBlocks';
 import type { Captain, TokenUsageSummaryResult } from '../types/models';
 import { useLocale } from '../context/LocaleContext';
 import { copyOrDownloadSvgImage } from '../lib/chartImage';
@@ -65,11 +66,13 @@ export default function TokenUsage() {
   const [shape, setShape] = useState<Shape>('bars');
   const [data, setData] = useState<TokenUsageSummaryResult | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [tooltip, setTooltip] = useState<TooltipData | null>(null);
   const [copiedTime, setCopiedTime] = useState<CopyState>('idle');
   const [copiedModel, setCopiedModel] = useState<CopyState>('idle');
 
   const requestVersion = useRef(0);
+  const abortRef = useRef<AbortController | null>(null);
   const captainRequestVersion = useRef(0);
   const heatmapRef = useRef<TokenActivityHeatmapHandle>(null);
   const timeChartRef = useRef<SVGSVGElement | null>(null);
@@ -106,23 +109,34 @@ export default function TokenUsage() {
 
   const load = useCallback(async () => {
     const version = ++requestVersion.current;
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
     const end = new Date();
     const start = new Date(end.getTime() - range.hours * 3600000);
     setLoading(true);
     try {
-      const result = await getTokenUsage({ fromUtc: start.toISOString(), toUtc: end.toISOString(), bucketMinutes: range.stepMinutes, modelLimit: MODEL_LIMIT, harborId: harborId || undefined, captainId: captainId || undefined, model: modelFilter || undefined });
+      const result = await getTokenUsage({ fromUtc: start.toISOString(), toUtc: end.toISOString(), bucketMinutes: range.stepMinutes, modelLimit: MODEL_LIMIT, harborId: harborId || undefined, captainId: captainId || undefined, model: modelFilter || undefined }, { signal: controller.signal });
       if (version !== requestVersion.current) return;
       setData(result);
+      setLoadFailed(false);
+      // Remember every model seen, so the picker still lists the others while one model is selected.
       const seen = (result?.byModel ?? []).map(m => m.model).filter(m => Boolean(m) && m !== OTHER_MODELS_KEY);
       setKnownModels(prev => (seen.every(m => prev.includes(m)) ? prev : [...new Set([...prev, ...seen])].sort()));
     } catch (error: unknown) {
-      if (version === requestVersion.current) setData(null);
+      if (version === requestVersion.current) {
+        setData(null);
+        setLoadFailed(true);
+      }
       throw error;
     } finally { if (version === requestVersion.current) setLoading(false); }
   }, [range.hours, range.stepMinutes, harborId, captainId, modelFilter]);
   useEffect(() => {
     void load().catch(() => {});
-    return () => { requestVersion.current++; };
+    return () => {
+      requestVersion.current++;
+      abortRef.current?.abort();
+    };
   }, [load]);
   const refresh = async () => { await Promise.all([load(), loadCaptains(), heatmapRef.current?.refresh()]); };
 
@@ -280,6 +294,10 @@ export default function TokenUsage() {
 
       <TokenActivityHeatmap ref={heatmapRef} harborId={harborId} captainId={captainId} model={modelFilter} spec={heatmapSpec} />
 
+      {loadFailed && (
+        <ErrorState message={t('Could not load token usage.')} onRetry={() => { void load().catch(() => {}); }} />
+      )}
+
       {/* Chart 1 -- Usage over time. Title + axis labels live inside the SVG so the copied image includes them. */}
       <div className="token-usage-chart-card">
         <div className="token-usage-chart-header">
@@ -287,7 +305,7 @@ export default function TokenUsage() {
         </div>
         {loading ? (
           <div className="mission-history-empty">{t('Loading token usage...')}</div>
-        ) : !hasTimeData ? (
+        ) : loadFailed ? null : !hasTimeData ? (
           <div className="mission-history-empty">{t('No token usage for this time range')}</div>
         ) : (
           <>
@@ -358,7 +376,7 @@ export default function TokenUsage() {
         </div>
         {loading ? (
           <div className="mission-history-empty">{t('Loading token usage...')}</div>
-        ) : !hasModelData ? (
+        ) : loadFailed ? null : !hasModelData ? (
           <div className="mission-history-empty">{t('No token usage for this time range')}</div>
         ) : (
           <>

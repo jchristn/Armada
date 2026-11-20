@@ -2,13 +2,17 @@ namespace Test.Shared.Suites.Services
 {
     using System;
     using System.Collections.Generic;
+    using System.Diagnostics;
     using System.IO;
     using System.Linq;
     using System.Threading;
     using System.Threading.Tasks;
     using Armada.Core.Enums;
+    using Armada.Core.Harbor;
     using Armada.Core.Models;
     using Armada.Core.Services;
+    using Armada.Core.Settings;
+    using Armada.Runtimes;
     using SyslogLogging;
     using Test.Shared.Infrastructure;
     using Touchstone.Core;
@@ -19,14 +23,24 @@ namespace Test.Shared.Suites.Services
     /// validation rejections (no commands, cross-tenant vessel scope, inputs scoped to unknown
     /// environments), command previews, vessel/fleet/global resolution and preview, check-run
     /// execution with artifact collection, retry, structured test/coverage parsing, readiness
-    /// evaluation (missing inputs, toolchains/environments/checklist, environment-scoped inputs),
-    /// landing preview gating, and fail-fast on missing required inputs.
+    /// evaluation (missing inputs, toolchains/environments/checklist, environment-scoped inputs,
+    /// path-valued shell assignments), landing preview gating, and fail-fast on missing required inputs.
+    /// One POSIX case covers caller cancellation, which must stop the owned process. Windows skips that case.
     /// </summary>
     public sealed class WorkflowProfileCheckRunServiceSuite : IArmadaTestSuite
     {
         #region Private-Members
 
         private const string SuiteId = "Services.WorkflowProfileCheckRunService";
+        private const string PosixFixtureSkipReason = "This case uses a POSIX shell process fixture, so it does not run on Windows.";
+
+        private const string StaleTrx = "<TestRun><ResultSummary><Counters total=\"1\" passed=\"1\" failed=\"0\" notExecuted=\"0\" /></ResultSummary></TestRun>";
+
+        private const string FreshTrx = "<TestRun><ResultSummary><Counters total=\"11\" passed=\"8\" failed=\"3\" notExecuted=\"0\" /></ResultSummary></TestRun>";
+
+        private const string StaleCoverage = "<coverage line-rate=\"1\" branch-rate=\"1\" lines-covered=\"10\" lines-valid=\"10\" branches-covered=\"2\" branches-valid=\"2\" />";
+
+        private const string FreshCoverage = "<coverage line-rate=\"0.25\" branch-rate=\"0.5\" lines-covered=\"5\" lines-valid=\"20\" branches-covered=\"4\" branches-valid=\"8\" />";
 
         #endregion
 
@@ -422,8 +436,10 @@ namespace Test.Shared.Suites.Services
                     await File.WriteAllTextAsync(
                         Path.Combine(workingDirectory, "summary.txt"),
                         "Passed!  - Failed: 0, Passed: 3, Skipped: 1, Total: 4, Duration: 1.5 s").ConfigureAwait(false);
+                    // The command writes the coverage report, as a real test run does; only artifacts this run wrote
+                    // are parsed.
                     await File.WriteAllTextAsync(
-                        Path.Combine(workingDirectory, "coverage.cobertura.xml"),
+                        Path.Combine(workingDirectory, "coverage-source.xml"),
                         """
                         <coverage line-rate="0.75" branch-rate="0.5" lines-covered="15" lines-valid="20" branches-covered="4" branches-valid="8"></coverage>
                         """).ConfigureAwait(false);
@@ -438,7 +454,9 @@ namespace Test.Shared.Suites.Services
                         Name = "Parse Workflow",
                         Scope = WorkflowProfileScopeEnum.Vessel,
                         VesselId = vessel.Id,
-                        UnitTestCommand = BuildEmitFileCommand("summary.txt"),
+                        UnitTestCommand = BuildEmitFileCommand("summary.txt") + (OperatingSystem.IsWindows()
+                            ? " & cmd /c copy /y coverage-source.xml coverage.cobertura.xml >nul"
+                            : " && cp coverage-source.xml coverage.cobertura.xml"),
                         ExpectedArtifacts = new List<string> { "coverage.cobertura.xml" }
                     };
                     await testDb.Driver.WorkflowProfiles.CreateAsync(profile).ConfigureAwait(false);
@@ -471,6 +489,99 @@ namespace Test.Shared.Suites.Services
                 {
                     TryDeleteDirectory(workingDirectory);
                 }
+            }));
+
+            cases.Add(CaseAsync("run_async_ignores_old_artifacts_when_parsing_failed_check", "RunAsync ignores old artifacts when parsing a failed check", TestTags.Negative, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                {
+                    LoggingModule logging = CreateLogging();
+                    WorkflowProfileService workflowProfiles = new WorkflowProfileService(testDb.Driver, logging);
+                    VesselReadinessService readiness = new VesselReadinessService(testDb.Driver, workflowProfiles, logging);
+                    CheckRunService checkRuns = new CheckRunService(testDb.Driver, workflowProfiles, readiness, logging);
+                    await EnsureTenantAndUserAsync(testDb, "ten_stale_check", "usr_stale_check").ConfigureAwait(false);
+
+                    string workingDirectory = TestTemp.NewDirectory("stale_check");
+                    try
+                    {
+                        Vessel vessel = CreateVessel("ten_stale_check", "usr_stale_check", workingDirectory, "stale-check-app");
+                        await testDb.Driver.Vessels.CreateAsync(vessel).ConfigureAwait(false);
+                        AuthContext auth = AuthContext.Authenticated("ten_stale_check", "usr_stale_check", false, false, "UnitTest");
+                        await AssertStaleArtifactsDoNotSupplyTheSummaryAsync(testDb, checkRuns, auth, vessel, workingDirectory).ConfigureAwait(false);
+                    }
+                    finally
+                    {
+                        TestTemp.TryDelete(workingDirectory);
+                    }
+                }
+            }));
+
+            cases.Add(CaseAsync("run_async_ignores_old_harbor_artifacts_when_parsing_failed_check", "RunAsync ignores old Harbor artifacts when parsing a failed check", TestTags.Negative, async () =>
+            {
+                using (HarborDockGitFixture git = await HarborDockGitFixture.CreateAsync().ConfigureAwait(false))
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                {
+                    LoggingModule logging = CreateLogging();
+                    await EnsureTenantAndUserAsync(testDb, "ten_stale_harbor", "usr_stale_harbor").ConfigureAwait(false);
+                    ArmadaSettings settings = new ArmadaSettings
+                    {
+                        DocksDirectory = Path.Combine(git.AdmiralData, "docks"),
+                        ReposDirectory = Path.Combine(git.AdmiralData, "repos"),
+                        LogDirectory = Path.Combine(git.AdmiralData, "logs")
+                    };
+                    HarborConnectionManager manager = new HarborConnectionManager(new HarborService(testDb.Driver, logging), logging, null);
+                    VesselHostResolver hosts = new VesselHostResolver(testDb.Driver, settings, logging, manager);
+                    WorkflowProfileService workflowProfiles = new WorkflowProfileService(testDb.Driver, logging);
+                    VesselReadinessService readiness = new VesselReadinessService(testDb.Driver, workflowProfiles, logging) { Hosts = hosts };
+                    CheckRunService checkRuns = new CheckRunService(testDb.Driver, workflowProfiles, readiness, logging) { Hosts = hosts };
+
+                    HarborDockSettings harborSettings = git.Settings.Clone();
+                    harborSettings.Repositories.Add(new HarborRepositoryMapping("stale-check-app", git.Checkout));
+                    using (InProcessHarbor harbor = await InProcessHarbor.ConnectAsync(
+                        manager,
+                        "hbr_stale_check",
+                        "ten_stale_harbor",
+                        "usr_stale_harbor",
+                        new AgentRuntimeFactory(logging),
+                        new List<string> { "ClaudeCode", "git" },
+                        logging,
+                        docks: new HarborDockManager(() => harborSettings, logging)).ConfigureAwait(false))
+                    {
+                        Vessel vessel = CreateVessel("ten_stale_harbor", "usr_stale_harbor", null, "stale-check-app");
+                        await testDb.Driver.Vessels.CreateAsync(vessel).ConfigureAwait(false);
+                        AuthContext auth = AuthContext.Authenticated("ten_stale_harbor", "usr_stale_harbor", false, false, "UnitTest");
+                        await AssertStaleArtifactsDoNotSupplyTheSummaryAsync(testDb, checkRuns, auth, vessel, git.Checkout).ConfigureAwait(false);
+                    }
+                }
+            }));
+
+            cases.Add(Case("artifact_changes_compare_the_same_hosts_snapshot", "Only artifacts that are new or changed in size or write time since the pre-run snapshot are parsed", TestTags.Positive, () =>
+            {
+                DateTime hostTime = new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+                List<CheckRunArtifact> before = new List<CheckRunArtifact>
+                {
+                    new CheckRunArtifact { Path = "unchanged.trx", SizeBytes = 10, LastWriteUtc = hostTime },
+                    new CheckRunArtifact { Path = "touched.trx", SizeBytes = 10, LastWriteUtc = hostTime },
+                    new CheckRunArtifact { Path = "older.trx", SizeBytes = 10, LastWriteUtc = hostTime },
+                    new CheckRunArtifact { Path = "resized.trx", SizeBytes = 10, LastWriteUtc = hostTime },
+                    new CheckRunArtifact { Path = "untimed.trx", SizeBytes = 10, LastWriteUtc = null },
+                    new CheckRunArtifact { Path = "untimed-resized.trx", SizeBytes = 10, LastWriteUtc = null },
+                    new CheckRunArtifact { Path = "deleted.trx", SizeBytes = 10, LastWriteUtc = hostTime }
+                };
+                List<CheckRunArtifact> after = new List<CheckRunArtifact>
+                {
+                    new CheckRunArtifact { Path = "unchanged.trx", SizeBytes = 10, LastWriteUtc = hostTime },
+                    new CheckRunArtifact { Path = "touched.trx", SizeBytes = 10, LastWriteUtc = hostTime.AddMilliseconds(1) },
+                    new CheckRunArtifact { Path = "older.trx", SizeBytes = 10, LastWriteUtc = hostTime.AddYears(-5) },
+                    new CheckRunArtifact { Path = "resized.trx", SizeBytes = 11, LastWriteUtc = hostTime },
+                    new CheckRunArtifact { Path = "untimed.trx", SizeBytes = 10, LastWriteUtc = null },
+                    new CheckRunArtifact { Path = "untimed-resized.trx", SizeBytes = 12, LastWriteUtc = null },
+                    new CheckRunArtifact { Path = "new.trx", SizeBytes = 10, LastWriteUtc = hostTime.AddYears(-10) }
+                };
+
+                List<string> written = CheckRunArtifactChanges.SelectWrittenDuringRun(before, after).Select(artifact => artifact.Path).ToList();
+                AssertEqual("touched.trx,older.trx,resized.trx,untimed-resized.trx,new.trx", String.Join(",", written), "new or changed artifacts only, whatever their absolute time");
+                AssertThrows<ArgumentNullException>(() => CheckRunArtifactChanges.SelectWrittenDuringRun(null!, after));
             }));
 
             cases.Add(CaseAsync("readiness_blocks_specific_check_when_a_required_environment_variable_is_missing", "Readiness blocks specific check when a required environment variable is missing", TestTags.Negative, async () =>
@@ -519,6 +630,67 @@ namespace Test.Shared.Suites.Services
                     AssertFalse(result.IsReady);
                     AssertTrue(result.ErrorCount >= 1, "Expected at least one blocking readiness error");
                     AssertContains(missingVariable, String.Join(" ", result.Issues.Select(issue => issue.Message)));
+                }
+                finally
+                {
+                    TryDeleteDirectory(workingDirectory);
+                }
+            }));
+
+            cases.Add(CaseAsync("readiness_splits_command_separators_only_outside_double_quotes", "Readiness splits command separators only outside double quotes", TestTags.Positive, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                LoggingModule logging = CreateLogging();
+                WorkflowProfileService workflowProfiles = new WorkflowProfileService(testDb.Driver, logging);
+                VesselReadinessService readiness = new VesselReadinessService(testDb.Driver, workflowProfiles, logging);
+
+                await EnsureTenantAndUserAsync(testDb, "ten_quoted", "usr_quoted").ConfigureAwait(false);
+
+                string workingDirectory = Path.Combine(Path.GetTempPath(), "armada-readiness-quoted-" + Guid.NewGuid().ToString("N"));
+                Directory.CreateDirectory(workingDirectory);
+
+                string quotedAnd = "quoted-and-" + Guid.NewGuid().ToString("N");
+                string quotedOr = "quoted-or-" + Guid.NewGuid().ToString("N");
+                string quotedSemicolon = "quoted-semicolon-" + Guid.NewGuid().ToString("N");
+                string quotedNewline = "quoted-newline-" + Guid.NewGuid().ToString("N");
+                string escapedQuote = "escaped-quote-" + Guid.NewGuid().ToString("N");
+                string singleQuoted = "single-quoted-" + Guid.NewGuid().ToString("N");
+                string outsideQuotes = "outside-quotes-" + Guid.NewGuid().ToString("N");
+
+                try
+                {
+                    Vessel vessel = CreateVessel("ten_quoted", "usr_quoted", workingDirectory);
+                    await testDb.Driver.Vessels.CreateAsync(vessel).ConfigureAwait(false);
+
+                    WorkflowProfile profile = new WorkflowProfile
+                    {
+                        TenantId = "ten_quoted",
+                        UserId = "usr_quoted",
+                        Name = "Quoted Command Workflow",
+                        Scope = WorkflowProfileScopeEnum.Vessel,
+                        VesselId = vessel.Id,
+                        BuildCommand = "echo \"text && ./" + quotedAnd + "\"; echo \"text || ./" + quotedOr + "\"; echo \"text ; ./" + quotedSemicolon + "\"; echo \"text\n./" + quotedNewline + "\"; echo \"text \\\" && ./" + escapedQuote + "\"; echo 'text && ./" + singleQuoted + "'; echo ready && ./" + outsideQuotes
+                    };
+                    await testDb.Driver.WorkflowProfiles.CreateAsync(profile).ConfigureAwait(false);
+
+                    AuthContext auth = AuthContext.Authenticated("ten_quoted", "usr_quoted", false, false, "UnitTest");
+                    VesselReadinessResult result = await readiness.EvaluateAsync(
+                        auth,
+                        vessel,
+                        requestedCheckType: CheckRunTypeEnum.Build).ConfigureAwait(false);
+
+                    List<string> missingDependencies = result.Issues
+                        .Where(issue => issue.Code == "command_dependency_missing")
+                        .Select(issue => issue.Message)
+                        .ToList();
+
+                    AssertFalse(missingDependencies.Any(message => message.Contains(quotedAnd, StringComparison.Ordinal)));
+                    AssertFalse(missingDependencies.Any(message => message.Contains(quotedOr, StringComparison.Ordinal)));
+                    AssertFalse(missingDependencies.Any(message => message.Contains(quotedSemicolon, StringComparison.Ordinal)));
+                    AssertFalse(missingDependencies.Any(message => message.Contains(quotedNewline, StringComparison.Ordinal)));
+                    AssertFalse(missingDependencies.Any(message => message.Contains(escapedQuote, StringComparison.Ordinal)));
+                    AssertTrue(missingDependencies.Any(message => message.Contains(singleQuoted, StringComparison.Ordinal)), "Single-quoted separators remain eligible for splitting.");
+                    AssertTrue(missingDependencies.Any(message => message.Contains(outsideQuotes, StringComparison.Ordinal)), "Separators outside double quotes remain eligible for splitting.");
                 }
                 finally
                 {
@@ -722,6 +894,95 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
+            cases.Add(CaseAsync("landing_preview_does_not_count_failed_import_with_zero_exit_code_as_passing", "Landing preview does not count a failed imported check with exit code zero as passing", TestTags.Negative, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                LoggingModule logging = CreateLogging();
+                WorkflowProfileService workflowProfiles = new WorkflowProfileService(testDb.Driver, logging);
+                VesselReadinessService readiness = new VesselReadinessService(testDb.Driver, workflowProfiles, logging);
+                CheckRunService checkRuns = new CheckRunService(testDb.Driver, workflowProfiles, readiness, logging);
+                LandingPreviewService landingPreview = new LandingPreviewService(testDb.Driver, logging);
+
+                await EnsureTenantAndUserAsync(testDb, "ten_failed_check", "usr_failed_check").ConfigureAwait(false);
+
+                string workingDirectory = Path.Combine(Path.GetTempPath(), "armada-landing-failed-check-" + Guid.NewGuid().ToString("N"));
+                Directory.CreateDirectory(workingDirectory);
+
+                try
+                {
+                    Vessel vessel = CreateVessel("ten_failed_check", "usr_failed_check", workingDirectory);
+                    vessel.RequirePassingChecksToLand = true;
+                    await testDb.Driver.Vessels.CreateAsync(vessel).ConfigureAwait(false);
+
+                    AuthContext auth = AuthContext.Authenticated("ten_failed_check", "usr_failed_check", false, false, "UnitTest");
+                    DateTime completedUtc = DateTime.UtcNow;
+                    CheckRun imported = await checkRuns.ImportAsync(auth, new CheckRunImportRequest
+                    {
+                        VesselId = vessel.Id,
+                        Status = CheckRunStatusEnum.Failed,
+                        BranchName = "feature/work",
+                        ExitCode = 0,
+                        CompletedUtc = completedUtc
+                    }).ConfigureAwait(false);
+
+                    AssertEqual(CheckRunStatusEnum.Failed, imported.Status, "Imported status");
+                    AssertEqual(0, imported.ExitCode ?? -1, "Imported exit code");
+                    AssertNotNull(imported.CompletedUtc, "Imported completion time");
+
+                    LandingPreviewResult preview = await landingPreview.PreviewForVesselAsync(auth, vessel, "feature/work").ConfigureAwait(false);
+
+                    AssertFalse(preview.HasPassingChecks, "A failed imported run must not count as passing evidence because its exit code is zero.");
+                    AssertTrue(preview.Issues.Exists(issue => issue.Code == "passing_checks_required"), "Expected passing_checks_required issue.");
+                    AssertFalse(preview.IsReadyToLand, "Expected landing preview to block landing without a passed check.");
+                    AssertEqual(CheckRunStatusEnum.Failed, preview.LatestCheckStatus!.Value, "Latest check status");
+                }
+                finally
+                {
+                    TryDeleteDirectory(workingDirectory);
+                }
+            }));
+
+            cases.Add(CaseAsync("landing_preview_counts_passed_import_without_zero_exit_code_as_passing", "Landing preview counts a passed imported check without exit code zero as passing", TestTags.Positive, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                LoggingModule logging = CreateLogging();
+                WorkflowProfileService workflowProfiles = new WorkflowProfileService(testDb.Driver, logging);
+                VesselReadinessService readiness = new VesselReadinessService(testDb.Driver, workflowProfiles, logging);
+                CheckRunService checkRuns = new CheckRunService(testDb.Driver, workflowProfiles, readiness, logging);
+                LandingPreviewService landingPreview = new LandingPreviewService(testDb.Driver, logging);
+
+                await EnsureTenantAndUserAsync(testDb, "ten_passed_check", "usr_passed_check").ConfigureAwait(false);
+
+                string workingDirectory = Path.Combine(Path.GetTempPath(), "armada-landing-passed-check-" + Guid.NewGuid().ToString("N"));
+                Directory.CreateDirectory(workingDirectory);
+
+                try
+                {
+                    Vessel vessel = CreateVessel("ten_passed_check", "usr_passed_check", workingDirectory);
+                    vessel.RequirePassingChecksToLand = true;
+                    await testDb.Driver.Vessels.CreateAsync(vessel).ConfigureAwait(false);
+
+                    AuthContext auth = AuthContext.Authenticated("ten_passed_check", "usr_passed_check", false, false, "UnitTest");
+                    await checkRuns.ImportAsync(auth, new CheckRunImportRequest
+                    {
+                        VesselId = vessel.Id,
+                        Status = CheckRunStatusEnum.Passed,
+                        BranchName = "feature/work",
+                        ExitCode = null,
+                        CompletedUtc = DateTime.UtcNow
+                    }).ConfigureAwait(false);
+
+                    LandingPreviewResult preview = await landingPreview.PreviewForVesselAsync(auth, vessel, "feature/work").ConfigureAwait(false);
+
+                    AssertTrue(preview.HasPassingChecks, "A passed imported run must count as passing evidence when its exit code is absent.");
+                    AssertFalse(preview.Issues.Exists(issue => issue.Code == "passing_checks_required"), "Did not expect passing_checks_required after a passed check.");
+                }
+                finally
+                {
+                    TryDeleteDirectory(workingDirectory);
+                }
+            }));
+
             cases.Add(CaseAsync("run_async_fails_fast_when_required_workflow_input_is_missing", "RunAsync fails fast when required workflow input is missing", TestTags.Negative, async () =>
             {
                 using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
@@ -776,6 +1037,218 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
+            cases.Add(CaseAsync("readiness_exit_and_return_are_not_missing_commands", "Readiness does not report exit or return as a missing command", TestTags.Positive, async () =>
+            {
+                await AssertNoMissingCommandAsync("echo failed; exit 1").ConfigureAwait(false);
+                await AssertNoMissingCommandAsync("return 1").ConfigureAwait(false);
+            }));
+
+            cases.Add(CaseAsync("readiness_colon_keeps_the_following_command", "Readiness still probes the program after a colon builtin", TestTags.Negative, async () =>
+            {
+                string missing = NewMissingCommandName();
+                await AssertOnlyMissingCommandAsync(": " + missing, missing).ConfigureAwait(false);
+            }));
+
+            cases.Add(CaseAsync("readiness_source_keeps_the_next_segment_command", "Readiness probes the program in the segment after source", TestTags.Negative, async () =>
+            {
+                string missing = NewMissingCommandName();
+                await AssertOnlyMissingCommandAsync("source env.sh && " + missing, missing).ConfigureAwait(false);
+            }));
+
+            cases.Add(CaseAsync("readiness_for_header_is_not_a_missing_command", "Readiness does not probe a for-loop header as a command", TestTags.Positive, async () =>
+            {
+                await AssertNoMissingCommandAsync("for item in a b; do true; done").ConfigureAwait(false);
+            }));
+
+            cases.Add(CaseAsync("readiness_select_header_is_not_a_missing_command", "Readiness does not probe a select header as a command", TestTags.Positive, async () =>
+            {
+                await AssertNoMissingCommandAsync("select choice in a b; do true; done").ConfigureAwait(false);
+            }));
+
+            cases.Add(CaseAsync("readiness_case_header_is_not_a_missing_command", "Readiness does not probe a case header or esac as a command", TestTags.Positive, async () =>
+            {
+                await AssertNoMissingCommandAsync("case $choice in a) true;; esac").ConfigureAwait(false);
+            }));
+
+            cases.Add(CaseAsync("readiness_missing_command_in_case_arm_is_reported", "Readiness still reports a missing program in a case arm", TestTags.Negative, async () =>
+            {
+                string missing = NewMissingCommandName();
+                await AssertOnlyMissingCommandAsync("case x in y) " + missing + ";; esac", missing).ConfigureAwait(false);
+            }));
+
+            cases.Add(CaseAsync("readiness_while_keeps_the_condition_command", "Readiness probes the condition of a while loop", TestTags.Negative, async () =>
+            {
+                string missing = NewMissingCommandName();
+                await AssertOnlyMissingCommandAsync("while " + missing + "; do true; done", missing).ConfigureAwait(false);
+            }));
+
+            cases.Add(CaseAsync("readiness_until_keeps_the_condition_command", "Readiness probes the condition of an until loop", TestTags.Negative, async () =>
+            {
+                string missing = NewMissingCommandName();
+                await AssertOnlyMissingCommandAsync("until " + missing + "; do true; done", missing).ConfigureAwait(false);
+            }));
+
+            cases.Add(CaseAsync("readiness_elif_keeps_the_condition_command", "Readiness probes the condition of an elif branch", TestTags.Negative, async () =>
+            {
+                string missing = NewMissingCommandName();
+                await AssertOnlyMissingCommandAsync("if false; then true; elif " + missing + "; then true; fi", missing).ConfigureAwait(false);
+            }));
+
+            cases.Add(CaseAsync("readiness_else_keeps_the_branch_command", "Readiness probes the program in an else branch", TestTags.Negative, async () =>
+            {
+                string missing = NewMissingCommandName();
+                await AssertOnlyMissingCommandAsync("if false; then true; else " + missing + "; fi", missing).ConfigureAwait(false);
+            }));
+
+            cases.Add(CaseAsync("readiness_negation_keeps_the_command", "Readiness probes the program after a shell negation", TestTags.Negative, async () =>
+            {
+                string missing = NewMissingCommandName();
+                await AssertOnlyMissingCommandAsync("! " + missing, missing).ConfigureAwait(false);
+            }));
+
+            cases.Add(CaseAsync("readiness_brace_group_keeps_the_command", "Readiness probes the program inside a brace group", TestTags.Negative, async () =>
+            {
+                string missing = NewMissingCommandName();
+                await AssertOnlyMissingCommandAsync("{ " + missing + "; }", missing).ConfigureAwait(false);
+            }));
+
+            cases.Add(CaseAsync("readiness_variable_command_is_not_probed", "Readiness does not probe a command named by a shell variable", TestTags.Positive, async () =>
+            {
+                await AssertNoMissingCommandAsync("$runner --version").ConfigureAwait(false);
+            }));
+
+            cases.Add(CaseAsync("readiness_missing_command_in_loop_body_is_reported", "Readiness still reports a missing program in a loop body", TestTags.Negative, async () =>
+            {
+                string missing = NewMissingCommandName();
+                await AssertOnlyMissingCommandAsync("for item in a b; do " + missing + " --version; done", missing).ConfigureAwait(false);
+            }));
+
+            cases.Add(CaseAsync("readiness_plain_missing_command_is_reported", "Readiness still reports a plain missing program", TestTags.Negative, async () =>
+            {
+                string missing = NewMissingCommandName();
+                await AssertOnlyMissingCommandAsync(missing + " build", missing).ConfigureAwait(false);
+            }));
+
+            cases.Add(CaseAsync("readiness_trap_is_not_a_missing_command", "Readiness does not report trap as a missing command", TestTags.Positive, async () =>
+            {
+                await AssertNoMissingCommandAsync("trap 'echo hi' EXIT").ConfigureAwait(false);
+            }));
+
+            cases.Add(CaseAsync("readiness_trap_keeps_the_next_segment_command", "Readiness probes the program in the segment after trap", TestTags.Negative, async () =>
+            {
+                string missing = NewMissingCommandName();
+                await AssertOnlyMissingCommandAsync("trap 'echo hi' EXIT && " + missing, missing).ConfigureAwait(false);
+            }));
+
+            cases.Add(CaseAsync("readiness_esac_is_not_a_missing_command", "Readiness does not report a lone esac as a missing command", TestTags.Positive, async () =>
+            {
+                await AssertNoMissingCommandAsync("esac").ConfigureAwait(false);
+            }));
+
+            cases.Add(CaseAsync("readiness_esac_keeps_a_following_command", "Readiness still probes a program written after esac in the same segment", TestTags.Negative, async () =>
+            {
+                string missing = NewMissingCommandName();
+                await AssertOnlyMissingCommandAsync("esac " + missing, missing).ConfigureAwait(false);
+            }));
+
+            cases.Add(CaseAsync("readiness_eval_keeps_the_following_command", "Readiness probes the program after eval", TestTags.Negative, async () =>
+            {
+                string missing = NewMissingCommandName();
+                await AssertOnlyMissingCommandAsync("eval " + missing, missing).ConfigureAwait(false);
+            }));
+
+            cases.Add(CaseAsync("readiness_exec_keeps_the_following_command", "Readiness probes the program after exec", TestTags.Negative, async () =>
+            {
+                string missing = NewMissingCommandName();
+                await AssertOnlyMissingCommandAsync("exec " + missing, missing).ConfigureAwait(false);
+            }));
+
+            cases.Add(CaseAsync("readiness_unset_does_not_probe_the_name", "Readiness does not probe an unset name and still probes the next segment", TestTags.Negative, async () =>
+            {
+                string missing = NewMissingCommandName();
+                await AssertOnlyMissingCommandAsync("unset NAME && " + missing, missing).ConfigureAwait(false);
+            }));
+
+            cases.Add(CaseAsync("readiness_shift_does_not_probe_the_count", "Readiness does not probe a shift count and still probes the next segment", TestTags.Negative, async () =>
+            {
+                string missing = NewMissingCommandName();
+                await AssertOnlyMissingCommandAsync("shift 2 && " + missing, missing).ConfigureAwait(false);
+            }));
+
+            cases.Add(CaseAsync("readiness_argument_builtins_are_not_missing_commands", "Readiness does not probe argument-only shell builtins", TestTags.Positive, async () =>
+            {
+                List<string> commands = new List<string>
+                {
+                    "wait",
+                    "local name",
+                    "readonly name",
+                    "declare name",
+                    "ulimit -n",
+                    "umask 022",
+                    "shopt -s nocaseglob"
+                };
+                foreach (string command in commands)
+                    await AssertNoMissingCommandAsync(command).ConfigureAwait(false);
+            }));
+
+            cases.Add(CaseAsync("run_async_timeout_keeps_host_output", "A timed out host check keeps captured output", TestTags.Negative, async () =>
+            {
+                using (HarborDockGitFixture git = await HarborDockGitFixture.CreateAsync().ConfigureAwait(false))
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                {
+                    LoggingModule logging = CreateLogging();
+                    ArmadaSettings settings = new ArmadaSettings
+                    {
+                        LogDirectory = Path.Combine(git.AdmiralData, "logs"),
+                        DocksDirectory = Path.Combine(git.AdmiralData, "docks"),
+                        ReposDirectory = Path.Combine(git.AdmiralData, "repos")
+                    };
+                    HarborConnectionManager manager = new HarborConnectionManager(new HarborService(testDb.Driver, logging), logging, null);
+                    HarborDockSettings harborSettings = git.Settings.Clone();
+                    harborSettings.Repositories.Add(new HarborRepositoryMapping("Workflow Vessel", git.Checkout));
+                    HarborDockManager docks = new HarborDockManager(() => harborSettings, logging);
+                    await EnsureTenantAndUserAsync(testDb, "ten_check_timeout", "usr_check_timeout").ConfigureAwait(false);
+                    using (InProcessHarbor harbor = await InProcessHarbor.ConnectAsync(
+                        manager,
+                        "hbr_check_timeout",
+                        "ten_check_timeout",
+                        "usr_check_timeout",
+                        new AgentRuntimeFactory(logging),
+                        new List<string> { "ClaudeCode", "git" },
+                        logging,
+                        new CheckTimeoutExecutor(),
+                        null,
+                        docks).ConfigureAwait(false))
+                    {
+                        Vessel vessel = CreateVessel("ten_check_timeout", "usr_check_timeout", null);
+                        vessel.RepoUrl = git.Origin;
+                        await testDb.Driver.Vessels.CreateAsync(vessel).ConfigureAwait(false);
+                        WorkflowProfileService workflowProfiles = new WorkflowProfileService(testDb.Driver, logging);
+                        VesselHostResolver hosts = new VesselHostResolver(testDb.Driver, settings, logging, manager);
+                        VesselReadinessService readiness = new VesselReadinessService(testDb.Driver, workflowProfiles, logging) { Hosts = hosts };
+                        CheckRunService checkRuns = new CheckRunService(testDb.Driver, workflowProfiles, readiness, logging) { Hosts = hosts };
+
+                        CheckRun result = await checkRuns.RunAsync(
+                            AuthContext.Authenticated("ten_check_timeout", "usr_check_timeout", false, false, "UnitTest"),
+                            new CheckRunRequest { VesselId = vessel.Id, CommandOverride = "check timeout" }).ConfigureAwait(false);
+
+                        AssertEqual(CheckRunStatusEnum.Failed, result.Status);
+                        AssertTrue(result.ExitCode.HasValue && result.ExitCode.Value != 0, "A timeout must fail the check.");
+                        AssertContains("check stdout marker", result.Output);
+                        AssertContains("check stderr marker", result.Output);
+                        AssertEqual(1, result.Output.Split("timed out", StringSplitOptions.None).Length - 1, "one timeout message");
+
+                        CheckRun cancelled = await checkRuns.RunAsync(
+                            AuthContext.Authenticated("ten_check_timeout", "usr_check_timeout", false, false, "UnitTest"),
+                            new CheckRunRequest { VesselId = vessel.Id, CommandOverride = "check cancel" }).ConfigureAwait(false);
+
+                        AssertEqual(CheckRunStatusEnum.Failed, cancelled.Status);
+                        AssertContains("caller cancelled", cancelled.Output);
+                        AssertFalse(cancelled.Output.Contains("timed out", StringComparison.OrdinalIgnoreCase), "Cancellation must not become a timeout.");
+                    }
+                }
+            }));
+
             cases.Add(CaseAsync("missing_profile_is_actionable", "With no workflow profile, readiness says dispatch still works and links to creating one for the vessel", TestTags.Positive, async () =>
             {
                 using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
@@ -806,6 +1279,204 @@ namespace Test.Shared.Suites.Services
                     try { Directory.Delete(workingDirectory, true); } catch { }
                 }
             }));
+
+            cases.Add(CaseAsync("cancel_interrupted_runs_cancels_only_older_armada_rows", "CancelInterruptedRunsAsync cancels only older Armada Running rows", TestTags.Positive, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                {
+                    LoggingModule logging = CreateLogging();
+                    WorkflowProfileService workflowProfiles = new WorkflowProfileService(testDb.Driver, logging);
+                    VesselReadinessService readiness = new VesselReadinessService(testDb.Driver, workflowProfiles, logging);
+                    CheckRunService checkRuns = new CheckRunService(testDb.Driver, workflowProfiles, readiness, logging);
+                    List<string> changedIds = new List<string>();
+                    checkRuns.OnCheckRunChanged = changed => changedIds.Add(changed.Id);
+
+                    DateTime baseUtc = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+                    DateTime insertedEqual = baseUtc.AddDays(2);
+                    List<string> oldIds = new List<string>();
+                    for (int index = 0; index < 201; index++)
+                    {
+                        bool specimen = index == 0;
+                        CheckRun old = await testDb.Driver.CheckRuns.CreateAsync(new CheckRun
+                        {
+                            Source = CheckRunSourceEnum.Armada,
+                            Status = CheckRunStatusEnum.Running,
+                            Command = "echo interrupted",
+                            StartedUtc = baseUtc,
+                            Output = specimen ? null : "filler",
+                            DurationMs = specimen ? 88001L : 3L,
+                            CreatedUtc = baseUtc.AddSeconds(index),
+                            Type = CheckRunTypeEnum.Build
+                        }).ConfigureAwait(false);
+                        oldIds.Add(old.Id);
+                    }
+
+                    CheckRun nullStart = await testDb.Driver.CheckRuns.CreateAsync(new CheckRun
+                    {
+                        Source = CheckRunSourceEnum.Armada,
+                        Status = CheckRunStatusEnum.Running,
+                        Command = "echo interrupted",
+                        StartedUtc = null,
+                        Output = "kept output",
+                        DurationMs = 42L,
+                        CreatedUtc = baseUtc.AddSeconds(201),
+                        Type = CheckRunTypeEnum.Build
+                    }).ConfigureAwait(false);
+                    CheckRun equal = await testDb.Driver.CheckRuns.CreateAsync(new CheckRun
+                    {
+                        Source = CheckRunSourceEnum.Armada,
+                        Status = CheckRunStatusEnum.Running,
+                        Command = "echo interrupted",
+                        StartedUtc = insertedEqual,
+                        Output = "equal output",
+                        DurationMs = 5L,
+                        CreatedUtc = baseUtc.AddSeconds(202),
+                        Type = CheckRunTypeEnum.Build
+                    }).ConfigureAwait(false);
+                    CheckRun future = await testDb.Driver.CheckRuns.CreateAsync(new CheckRun
+                    {
+                        Source = CheckRunSourceEnum.Armada,
+                        Status = CheckRunStatusEnum.Running,
+                        Command = "echo interrupted",
+                        StartedUtc = insertedEqual.AddDays(1),
+                        Output = "future output",
+                        DurationMs = 6L,
+                        CreatedUtc = baseUtc.AddSeconds(203),
+                        Type = CheckRunTypeEnum.Build
+                    }).ConfigureAwait(false);
+                    CheckRun external = await testDb.Driver.CheckRuns.CreateAsync(new CheckRun
+                    {
+                        Source = CheckRunSourceEnum.External,
+                        Status = CheckRunStatusEnum.Running,
+                        Command = "echo interrupted",
+                        StartedUtc = baseUtc,
+                        Output = "external output",
+                        Summary = "imported run",
+                        DurationMs = 9L,
+                        CreatedUtc = baseUtc.AddSeconds(204),
+                        Type = CheckRunTypeEnum.Build
+                    }).ConfigureAwait(false);
+
+                    CheckRun storedEqual = (await testDb.Driver.CheckRuns.ReadAsync(equal.Id).ConfigureAwait(false))!;
+                    AssertTrue(storedEqual.StartedUtc.HasValue, "the equal start is stored");
+                    DateTime processStart = storedEqual.StartedUtc!.Value;
+
+                    int cancelled = await checkRuns.CancelInterruptedRunsAsync(processStart).ConfigureAwait(false);
+                    AssertEqual(202, cancelled, "older Armada rows and the null start");
+                    AssertEqual(202, changedIds.Count, "each cancel notifies");
+
+                    CheckRun storedSpecimen = (await testDb.Driver.CheckRuns.ReadAsync(oldIds[0]).ConfigureAwait(false))!;
+                    AssertEqual(CheckRunStatusEnum.Canceled, storedSpecimen.Status, "old Armada run on the later page");
+                    AssertEqual("The command died with the process and this record has no verdict.", storedSpecimen.Summary, "dead-command summary");
+                    AssertEqual("The command died with the process and this record has no verdict.", storedSpecimen.Output, "empty output receives the summary");
+                    AssertTrue(storedSpecimen.CompletedUtc.HasValue, "old Armada run has a completion time");
+                    AssertEqual(88001L, storedSpecimen.DurationMs ?? -1L, "old Armada duration is unchanged");
+
+                    CheckRun storedNull = (await testDb.Driver.CheckRuns.ReadAsync(nullStart.Id).ConfigureAwait(false))!;
+                    AssertEqual(CheckRunStatusEnum.Canceled, storedNull.Status, "null start is eligible");
+                    AssertEqual("kept output", storedNull.Output, "stored output is kept");
+                    AssertFalse(storedNull.StartedUtc.HasValue, "null start stays null");
+                    AssertEqual(42L, storedNull.DurationMs ?? -1L, "null-start duration is unchanged");
+
+                    foreach (string oldId in oldIds)
+                    {
+                        CheckRun storedOld = (await testDb.Driver.CheckRuns.ReadAsync(oldId).ConfigureAwait(false))!;
+                        AssertEqual(CheckRunStatusEnum.Canceled, storedOld.Status, "every older Armada row");
+                    }
+
+                    CheckRun storedEqualAfter = (await testDb.Driver.CheckRuns.ReadAsync(equal.Id).ConfigureAwait(false))!;
+                    AssertEqual(CheckRunStatusEnum.Running, storedEqualAfter.Status, "a start equal to the process start stays Running");
+                    AssertEqual("equal output", storedEqualAfter.Output, "equal-start output stays");
+                    AssertFalse(storedEqualAfter.CompletedUtc.HasValue, "equal-start run has no completion time");
+
+                    CheckRun storedFuture = (await testDb.Driver.CheckRuns.ReadAsync(future.Id).ConfigureAwait(false))!;
+                    AssertEqual(CheckRunStatusEnum.Running, storedFuture.Status, "a later start stays Running");
+                    AssertEqual("future output", storedFuture.Output, "later output stays");
+
+                    CheckRun storedExternal = (await testDb.Driver.CheckRuns.ReadAsync(external.Id).ConfigureAwait(false))!;
+                    AssertEqual(CheckRunStatusEnum.Running, storedExternal.Status, "an imported run stays Running");
+                    AssertEqual("imported run", storedExternal.Summary, "imported summary stays");
+                    AssertEqual("external output", storedExternal.Output, "imported output stays");
+                    AssertFalse(changedIds.Contains(equal.Id), "a current run does not notify");
+                    AssertFalse(changedIds.Contains(external.Id), "an imported run does not notify");
+
+                    int second = await checkRuns.CancelInterruptedRunsAsync(processStart).ConfigureAwait(false);
+                    AssertEqual(0, second, "a second call finds nothing still eligible");
+                    AssertEqual(202, changedIds.Count, "the second call does not notify");
+                }
+            }));
+
+            cases.Add(CaseAsync("readiness_skips_a_path_valued_shell_assignment", "Readiness skips a path-valued shell assignment and reports a digit-leading name as missing", TestTags.Negative, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                {
+                    LoggingModule logging = CreateLogging();
+                    WorkflowProfileService workflowProfiles = new WorkflowProfileService(testDb.Driver, logging);
+                    VesselReadinessService readiness = new VesselReadinessService(testDb.Driver, workflowProfiles, logging);
+
+                    await EnsureTenantAndUserAsync(testDb, "ten_assign", "usr_assign").ConfigureAwait(false);
+
+                    string workingDirectory = Path.Combine(Path.GetTempPath(), "armada-readiness-assignment-" + Guid.NewGuid().ToString("N"));
+                    Directory.CreateDirectory(workingDirectory);
+                    try
+                    {
+                        await File.WriteAllTextAsync(Path.Combine(workingDirectory, "gradlew"), String.Empty).ConfigureAwait(false);
+
+                        Vessel vessel = CreateVessel("ten_assign", "usr_assign", workingDirectory);
+                        await testDb.Driver.Vessels.CreateAsync(vessel).ConfigureAwait(false);
+
+                        WorkflowProfile profile = new WorkflowProfile
+                        {
+                            TenantId = "ten_assign",
+                            UserId = "usr_assign",
+                            Name = "Assignment Workflow",
+                            Scope = WorkflowProfileScopeEnum.Vessel,
+                            VesselId = vessel.Id,
+                            BuildCommand = "JAVA_HOME=/usr/lib/jvm/example ./gradlew build"
+                        };
+                        profile = await testDb.Driver.WorkflowProfiles.CreateAsync(profile).ConfigureAwait(false);
+
+                        AuthContext auth = AuthContext.Authenticated("ten_assign", "usr_assign", false, false, "UnitTest");
+
+                        async Task<VesselReadinessResult> EvaluateBuildAsync(string command)
+                        {
+                            profile.BuildCommand = command;
+                            await testDb.Driver.WorkflowProfiles.UpdateAsync(profile).ConfigureAwait(false);
+                            return await readiness.EvaluateAsync(
+                                auth,
+                                vessel,
+                                requestedCheckType: CheckRunTypeEnum.Build).ConfigureAwait(false);
+                        }
+
+                        VesselReadinessResult pathResult = await EvaluateBuildAsync("JAVA_HOME=/usr/lib/jvm/example ./gradlew build").ConfigureAwait(false);
+                        VesselReadinessResult controlResult = await EvaluateBuildAsync("FOO=bar ./gradlew build").ConfigureAwait(false);
+                        VesselReadinessResult digitResult = await EvaluateBuildAsync("1FOO=bar").ConfigureAwait(false);
+
+                        bool pathClean = !HasAnyMissingCommand(pathResult);
+                        bool controlClean = !HasAnyMissingCommand(controlResult);
+                        bool digitMissing = HasMissingCommand(digitResult, "1FOO=bar");
+                        AssertTrue(
+                            pathClean && controlClean && digitMissing,
+                            "path=" + MissingCommandText(pathResult)
+                                + "; control=" + MissingCommandText(controlResult)
+                                + "; digit=" + MissingCommandText(digitResult));
+                    }
+                    finally
+                    {
+                        TryDeleteDirectory(workingDirectory);
+                    }
+                }
+            }));
+
+            bool skipPosixFixture = OperatingSystem.IsWindows();
+            string? posixSkipReason = skipPosixFixture ? PosixFixtureSkipReason : null;
+            cases.Add(CaseAsync(
+                "local_check_caller_cancel_stops_process",
+                "Caller cancellation stops the owned local check process",
+                TestTags.Negative,
+                LocalCheckCallerCancelStopsProcessAsync,
+                skipPosixFixture,
+                posixSkipReason));
 
             return new TestSuiteDescriptor(
                 suiteId: SuiteId,
@@ -850,13 +1521,13 @@ namespace Test.Shared.Suites.Services
             }
         }
 
-        private static Vessel CreateVessel(string tenantId, string userId, string workingDirectory)
+        private static Vessel CreateVessel(string tenantId, string userId, string? workingDirectory, string name = "Workflow Vessel")
         {
             return new Vessel
             {
                 TenantId = tenantId,
                 UserId = userId,
-                Name = "Workflow Vessel",
+                Name = name,
                 RepoUrl = "file:///tmp/armada-tests.git",
                 LocalPath = workingDirectory,
                 WorkingDirectory = workingDirectory,
@@ -864,11 +1535,235 @@ namespace Test.Shared.Suites.Services
             };
         }
 
+        /// <summary>
+        /// A failed command prints its own summary. Files already in the checkout must not replace that summary
+        /// or supply coverage. A later command that writes new result files must use those files.
+        /// </summary>
+        private static async Task AssertStaleArtifactsDoNotSupplyTheSummaryAsync(
+            TestDatabase testDb,
+            CheckRunService checkRuns,
+            AuthContext auth,
+            Vessel vessel,
+            string directory)
+        {
+            await WriteResultFileAsync(directory, "stale-results.trx", StaleTrx).ConfigureAwait(false);
+            await WriteResultFileAsync(directory, "stale-coverage.cobertura.xml", StaleCoverage).ConfigureAwait(false);
+            AgeResultFiles(directory, "stale-results.trx", "stale-coverage.cobertura.xml");
+
+            WorkflowProfile staleProfile = new WorkflowProfile
+            {
+                TenantId = vessel.TenantId,
+                UserId = vessel.UserId,
+                Name = "Stale Artifact Workflow",
+                Scope = WorkflowProfileScopeEnum.Vessel,
+                VesselId = vessel.Id,
+                UnitTestCommand = BuildFailingSummaryCommand(),
+                ExpectedArtifacts = new List<string> { "stale-results.trx", "stale-coverage.cobertura.xml" }
+            };
+            await testDb.Driver.WorkflowProfiles.CreateAsync(staleProfile).ConfigureAwait(false);
+
+            CheckRun staleRun = await checkRuns.RunAsync(auth, new CheckRunRequest
+            {
+                VesselId = vessel.Id,
+                WorkflowProfileId = staleProfile.Id,
+                Type = CheckRunTypeEnum.UnitTest,
+                Label = "Unit Tests"
+            }).ConfigureAwait(false);
+
+            AssertEqual(CheckRunStatusEnum.Failed, staleRun.Status, staleRun.Output);
+            AssertEqual(2, staleRun.Artifacts.Count);
+            AssertEqual("stale-results.trx", staleRun.Artifacts[0].Path);
+            AssertEqual("stale-coverage.cobertura.xml", staleRun.Artifacts[1].Path);
+            AssertNotNull(staleRun.TestSummary);
+            AssertEqual("dotnet", staleRun.TestSummary!.Format, staleRun.Output);
+            AssertEqual(2, staleRun.TestSummary.Passed ?? -1);
+            AssertEqual(1, staleRun.TestSummary.Failed ?? -1);
+            AssertNull(staleRun.CoverageSummary);
+
+            await WriteResultFileAsync(directory, "fresh-source.trx", FreshTrx).ConfigureAwait(false);
+            await WriteResultFileAsync(directory, "fresh-source.cobertura.xml", FreshCoverage).ConfigureAwait(false);
+            AgeResultFiles(directory, "fresh-source.trx", "fresh-source.cobertura.xml");
+
+            WorkflowProfile freshProfile = new WorkflowProfile
+            {
+                TenantId = vessel.TenantId,
+                UserId = vessel.UserId,
+                Name = "Fresh Artifact Workflow",
+                Scope = WorkflowProfileScopeEnum.Vessel,
+                VesselId = vessel.Id,
+                UnitTestCommand = BuildFreshArtifactCommand(),
+                ExpectedArtifacts = new List<string>
+                {
+                    "stale-results.trx",
+                    "stale-coverage.cobertura.xml",
+                    "fresh.trx",
+                    "fresh.cobertura.xml"
+                }
+            };
+            await testDb.Driver.WorkflowProfiles.CreateAsync(freshProfile).ConfigureAwait(false);
+
+            CheckRun freshRun = await checkRuns.RunAsync(auth, new CheckRunRequest
+            {
+                VesselId = vessel.Id,
+                WorkflowProfileId = freshProfile.Id,
+                Type = CheckRunTypeEnum.UnitTest,
+                Label = "Unit Tests"
+            }).ConfigureAwait(false);
+
+            AssertEqual(CheckRunStatusEnum.Passed, freshRun.Status, freshRun.Output);
+            AssertEqual(4, freshRun.Artifacts.Count);
+            AssertNotNull(freshRun.TestSummary);
+            AssertEqual("trx", freshRun.TestSummary!.Format, freshRun.Output);
+            AssertEqual(8, freshRun.TestSummary.Passed ?? -1);
+            AssertEqual(3, freshRun.TestSummary.Failed ?? -1);
+            AssertNotNull(freshRun.CoverageSummary);
+            AssertEqual(25d, freshRun.CoverageSummary!.Lines?.Percentage ?? -1d);
+
+            // The host's clock can disagree with the Admiral's. A run that overwrites an existing artifact with a file
+            // whose write time is days in the past (a copy that keeps the source's time, as on a host whose clock is
+            // behind) still wrote it during this run, so it is parsed.
+            File.SetLastWriteTimeUtc(Path.Combine(directory, "fresh-source.trx"), DateTime.UtcNow.AddDays(-3));
+            File.SetLastWriteTimeUtc(Path.Combine(directory, "fresh-source.cobertura.xml"), DateTime.UtcNow.AddDays(-3));
+            WorkflowProfile skewProfile = new WorkflowProfile
+            {
+                TenantId = vessel.TenantId,
+                UserId = vessel.UserId,
+                Name = "Skewed Clock Artifact Workflow",
+                Scope = WorkflowProfileScopeEnum.Vessel,
+                VesselId = vessel.Id,
+                UnitTestCommand = BuildPreservedTimeCopyCommand(),
+                ExpectedArtifacts = new List<string> { "stale-results.trx", "stale-coverage.cobertura.xml" }
+            };
+            await testDb.Driver.WorkflowProfiles.CreateAsync(skewProfile).ConfigureAwait(false);
+
+            CheckRun skewRun = await checkRuns.RunAsync(auth, new CheckRunRequest
+            {
+                VesselId = vessel.Id,
+                WorkflowProfileId = skewProfile.Id,
+                Type = CheckRunTypeEnum.UnitTest,
+                Label = "Unit Tests"
+            }).ConfigureAwait(false);
+
+            AssertEqual(CheckRunStatusEnum.Passed, skewRun.Status, skewRun.Output);
+            AssertTrue(skewRun.Artifacts.All(artifact => artifact.LastWriteUtc.HasValue && artifact.LastWriteUtc.Value < DateTime.UtcNow.AddDays(-2)), "the rewritten artifacts carry the old write time");
+            AssertNotNull(skewRun.TestSummary);
+            AssertEqual("trx", skewRun.TestSummary!.Format, skewRun.Output);
+            AssertEqual(8, skewRun.TestSummary.Passed ?? -1, "an artifact rewritten with an old write time is parsed");
+            AssertNotNull(skewRun.CoverageSummary);
+            AssertEqual(25d, skewRun.CoverageSummary!.Lines?.Percentage ?? -1d);
+        }
+
+        private static string BuildPreservedTimeCopyCommand()
+        {
+            // copy on Windows and cp -p elsewhere keep the source file's write time.
+            return OperatingSystem.IsWindows()
+                ? "cmd /c copy /y fresh-source.trx stale-results.trx >nul & cmd /c copy /y fresh-source.cobertura.xml stale-coverage.cobertura.xml >nul"
+                : "cp -p fresh-source.trx stale-results.trx && cp -p fresh-source.cobertura.xml stale-coverage.cobertura.xml";
+        }
+
+        private static async Task WriteResultFileAsync(string directory, string name, string content)
+        {
+            await File.WriteAllTextAsync(Path.Combine(directory, name), content).ConfigureAwait(false);
+        }
+
+        private static void AgeResultFiles(string directory, params string[] names)
+        {
+            DateTime staleUtc = DateTime.UtcNow.AddHours(-2);
+            foreach (string name in names)
+                File.SetLastWriteTimeUtc(Path.Combine(directory, name), staleUtc);
+        }
+
+        /// <summary>
+        /// Readiness takes the first token of each command segment as a program. <c>echo</c> and <c>false</c> are
+        /// accepted shell builtins. A segment that starts with <c>exit</c> is not, and the check stops before it runs.
+        /// </summary>
+        private static string BuildFailingSummaryCommand()
+        {
+            const string summary = "Failed!  - Failed: 1, Passed: 2, Skipped: 0, Total: 3, Duration: 1 s";
+            return OperatingSystem.IsWindows()
+                ? "echo " + summary + " & exit /b 1"
+                : "echo '" + summary + "' && false";
+        }
+
+        private static string BuildFreshArtifactCommand()
+        {
+            return OperatingSystem.IsWindows()
+                ? "cmd /c copy /y fresh-source.trx fresh.trx >nul & cmd /c copy /y fresh-source.cobertura.xml fresh.cobertura.xml >nul"
+                : "cp fresh-source.trx fresh.trx && cp fresh-source.cobertura.xml fresh.cobertura.xml";
+        }
+
         private static string BuildEmitFileCommand(string relativePath)
         {
             return OperatingSystem.IsWindows()
                 ? "type .\\" + relativePath.Replace('/', '\\')
                 : "cat \"" + relativePath + "\"";
+        }
+
+        private static string NewMissingCommandName()
+        {
+            return "armada-missing-command-" + Guid.NewGuid().ToString("N");
+        }
+
+        private static async Task AssertNoMissingCommandAsync(string command)
+        {
+            VesselReadinessResult result = await EvaluateRequestedUnitTestAsync(command).ConfigureAwait(false);
+            List<string> messages = MissingCommandMessages(result);
+            AssertEqual(0, messages.Count, command + " => " + String.Join(" | ", messages));
+            AssertTrue(result.IsReady, command + " blocked readiness: " + String.Join(" | ", result.Issues.Select(issue => issue.Code + " " + issue.Message)));
+        }
+
+        private static async Task AssertOnlyMissingCommandAsync(string command, string missing)
+        {
+            VesselReadinessResult result = await EvaluateRequestedUnitTestAsync(command).ConfigureAwait(false);
+            List<string> messages = MissingCommandMessages(result);
+            AssertEqual(1, messages.Count, command + " => " + String.Join(" | ", messages));
+            AssertContains("'" + missing + "'", messages[0]);
+            AssertFalse(result.IsReady, command + " did not block readiness.");
+        }
+
+        private static List<string> MissingCommandMessages(VesselReadinessResult result)
+        {
+            return result.Issues
+                .Where(issue => String.Equals(issue.Code, "command_dependency_missing", StringComparison.Ordinal))
+                .Select(issue => issue.Message)
+                .ToList();
+        }
+
+        private static async Task<VesselReadinessResult> EvaluateRequestedUnitTestAsync(string command)
+        {
+            using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+            LoggingModule logging = CreateLogging();
+            WorkflowProfileService workflowProfiles = new WorkflowProfileService(testDb.Driver, logging);
+            VesselReadinessService readiness = new VesselReadinessService(testDb.Driver, workflowProfiles, logging);
+
+            await EnsureTenantAndUserAsync(testDb, "ten_shell", "usr_shell").ConfigureAwait(false);
+            string workingDirectory = TestTemp.NewDirectory("readiness-shell");
+            try
+            {
+                Vessel vessel = CreateVessel("ten_shell", "usr_shell", workingDirectory);
+                await testDb.Driver.Vessels.CreateAsync(vessel).ConfigureAwait(false);
+
+                WorkflowProfile profile = new WorkflowProfile
+                {
+                    TenantId = "ten_shell",
+                    UserId = "usr_shell",
+                    Name = "Shell Readiness",
+                    Scope = WorkflowProfileScopeEnum.Vessel,
+                    VesselId = vessel.Id,
+                    UnitTestCommand = command
+                };
+                await testDb.Driver.WorkflowProfiles.CreateAsync(profile).ConfigureAwait(false);
+
+                AuthContext auth = AuthContext.Authenticated("ten_shell", "usr_shell", false, false, "UnitTest");
+                return await readiness.EvaluateAsync(
+                    auth,
+                    vessel,
+                    requestedCheckType: CheckRunTypeEnum.UnitTest).ConfigureAwait(false);
+            }
+            finally
+            {
+                TestTemp.TryDelete(workingDirectory);
+            }
         }
 
         private static void TryDeleteDirectory(string path)
@@ -883,14 +1778,230 @@ namespace Test.Shared.Suites.Services
             }
         }
 
-        private static TestCaseDescriptor CaseAsync(string caseId, string displayName, string tag, Func<Task> body)
+        private static bool HasMissingCommand(VesselReadinessResult result, string dependency)
+        {
+            return result.Issues.Exists(issue =>
+                issue.Code == "command_dependency_missing"
+                && issue.Message.Contains("'" + dependency + "'", StringComparison.Ordinal));
+        }
+
+        private static bool HasAnyMissingCommand(VesselReadinessResult result)
+        {
+            return result.Issues.Exists(issue => issue.Code == "command_dependency_missing");
+        }
+
+        private static string MissingCommandText(VesselReadinessResult result)
+        {
+            List<string> messages = new List<string>();
+            foreach (VesselReadinessIssue issue in result.Issues)
+            {
+                if (issue.Code == "command_dependency_missing")
+                    messages.Add(issue.Message);
+            }
+
+            if (messages.Count == 0)
+                return "none";
+
+            return String.Join(" | ", messages);
+        }
+
+        private static async Task LocalCheckCallerCancelStopsProcessAsync()
+        {
+            using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+            {
+                LoggingModule logging = CreateLogging();
+                WorkflowProfileService workflowProfiles = new WorkflowProfileService(testDb.Driver, logging);
+                VesselReadinessService readiness = new VesselReadinessService(testDb.Driver, workflowProfiles, logging);
+                CheckRunService checkRuns = new CheckRunService(testDb.Driver, workflowProfiles, readiness, logging);
+                await EnsureTenantAndUserAsync(testDb, "ten_cancel", "usr_cancel").ConfigureAwait(false);
+
+                string workingDirectory = TestTemp.NewDirectory("check-cancel");
+                string pidPath = Path.Combine(workingDirectory, "shell.pid");
+                int processId = 0;
+                try
+                {
+                    Vessel vessel = CreateVessel("ten_cancel", "usr_cancel", workingDirectory);
+                    await testDb.Driver.Vessels.CreateAsync(vessel).ConfigureAwait(false);
+                    AuthContext auth = AuthContext.Authenticated("ten_cancel", "usr_cancel", false, false, "UnitTest");
+                    using (CancellationTokenSource cancel = new CancellationTokenSource())
+                    {
+                        Task<CheckRun> running = checkRuns.RunAsync(auth, new CheckRunRequest
+                        {
+                            VesselId = vessel.Id,
+                            Type = CheckRunTypeEnum.Build,
+                            Label = "Build",
+                            CommandOverride = "echo $$ > shell.pid; command sleep 90"
+                        }, cancel.Token);
+
+                        bool started = await WaitUntilAsync(() => TryReadProcessId(pidPath, out processId), TimeSpan.FromSeconds(40)).ConfigureAwait(false);
+                        AssertTrue(started, "the local check process started");
+                        cancel.Cancel();
+                        Task finished = await Task.WhenAny(running, Task.Delay(TimeSpan.FromSeconds(5))).ConfigureAwait(false);
+                        bool stopped = await WaitUntilAsync(() => !ProcessIsRunning(processId), TimeSpan.FromSeconds(2)).ConfigureAwait(false);
+                        AssertTrue(finished == running, "the cancelled check returns");
+                        AssertTrue(stopped, "the owned check process is stopped after cancellation");
+                        try
+                        {
+                            await running.ConfigureAwait(false);
+                        }
+                        catch (OperationCanceledException)
+                        {
+                            // RunAsync may surface the caller token after it stops the process.
+                        }
+                    }
+                }
+                finally
+                {
+                    if (processId > 0) StopProcessTree(processId);
+                    StopRecordedProcess(pidPath);
+                    TestTemp.TryDelete(workingDirectory);
+                }
+            }
+        }
+
+        private static async Task<bool> WaitUntilAsync(Func<bool> condition, TimeSpan timeout)
+        {
+            MonotonicDeadline deadline = MonotonicDeadline.After(timeout);
+            while (!deadline.Passed)
+            {
+                if (condition()) return true;
+                await Task.Delay(50).ConfigureAwait(false);
+            }
+
+            return condition();
+        }
+
+        private static bool TryReadProcessId(string path, out int processId)
+        {
+            processId = 0;
+            try
+            {
+                if (!File.Exists(path)) return false;
+                return Int32.TryParse(File.ReadAllText(path).Trim(), out processId) && processId > 0;
+            }
+            catch (IOException)
+            {
+                return false;
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return false;
+            }
+        }
+
+        private static void StopRecordedProcess(string path)
+        {
+            if (TryReadProcessId(path, out int processId))
+                StopProcessTree(processId);
+        }
+
+        private static bool ProcessIsRunning(int processId)
+        {
+            try
+            {
+                using (Process process = Process.GetProcessById(processId))
+                {
+                    return !process.HasExited;
+                }
+            }
+            catch (ArgumentException)
+            {
+                return false;
+            }
+            catch (InvalidOperationException)
+            {
+                return false;
+            }
+        }
+
+        private static void StopProcessTree(int processId)
+        {
+            if (processId <= 0) return;
+            try
+            {
+                using (Process process = Process.GetProcessById(processId))
+                {
+                    if (!process.HasExited)
+                        process.Kill(true);
+                }
+            }
+            catch (ArgumentException)
+            {
+                // The process has already exited.
+            }
+            catch (InvalidOperationException)
+            {
+                // The process has already exited.
+            }
+            catch (System.ComponentModel.Win32Exception)
+            {
+                // The process has already exited.
+            }
+        }
+
+        private static TestCaseDescriptor Case(string caseId, string displayName, string tag, Action body)
+        {
+            return new TestCaseDescriptor(
+                suiteId: SuiteId,
+                caseId: caseId,
+                displayName: displayName,
+                executeAsync: (CancellationToken ct) =>
+                {
+                    body();
+                    return Task.CompletedTask;
+                },
+                tags: new List<string> { tag });
+        }
+
+        private static TestCaseDescriptor CaseAsync(string caseId, string displayName, string tag, Func<Task> body, bool skip = false, string? skipReason = null)
         {
             return new TestCaseDescriptor(
                 suiteId: SuiteId,
                 caseId: caseId,
                 displayName: displayName,
                 executeAsync: (CancellationToken ct) => body(),
-                tags: new List<string> { tag });
+                tags: new List<string> { tag },
+                skip: skip,
+                skipReason: skipReason);
+        }
+
+        private sealed class CheckTimeoutExecutor : IHostCommandExecutor
+        {
+            /// <inheritdoc />
+            public Task<HostCommandResult> RunAsync(HostCommandRequest request, CancellationToken token = default)
+            {
+                if (request == null) throw new ArgumentNullException(nameof(request));
+
+                // The Harbor link rebuilds the host request from the executable and arguments. Kind and Label do not
+                // arrive here, so the shell command text identifies the check.
+                if (HasArgument(request, "check timeout"))
+                {
+                    return Task.FromResult(new HostCommandResult
+                    {
+                        ExitCode = 0,
+                        StandardOutput = "check stdout marker",
+                        StandardError = "check stderr marker",
+                        TimedOut = true
+                    });
+                }
+
+                if (HasArgument(request, "check cancel"))
+                    return Task.FromException<HostCommandResult>(new InvalidOperationException("caller cancelled"));
+
+                return Task.FromResult(new HostCommandResult { ExitCode = 0 });
+            }
+
+            private static bool HasArgument(HostCommandRequest request, string text)
+            {
+                if (request.Arguments == null) return false;
+                foreach (string argument in request.Arguments)
+                {
+                    if (String.Equals(argument, text, StringComparison.Ordinal))
+                        return true;
+                }
+
+                return false;
+            }
         }
 
         #endregion

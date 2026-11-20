@@ -86,6 +86,8 @@ namespace Armada.Core.Services
         private static readonly TimeSpan _EndpointBreakerOpenFor = TimeSpan.FromMinutes(2);
         private static readonly TimeSpan _UnhealthyEndpointWindow = TimeSpan.FromMinutes(15);
         private readonly System.Collections.Concurrent.ConcurrentDictionary<string, int> _CompletionsInFlight = new System.Collections.Concurrent.ConcurrentDictionary<string, int>(StringComparer.Ordinal);
+        // Running Definition-of-Done gates, each mapped to its mission, so cancelling the mission stops the gate's command.
+        private readonly System.Collections.Concurrent.ConcurrentDictionary<CancellationTokenSource, string> _CompletionCommandRuns = new System.Collections.Concurrent.ConcurrentDictionary<CancellationTokenSource, string>();
         private readonly SemaphoreSlim _ReviewDecisionGate = new SemaphoreSlim(1, 1);
 
         private const int _MaxLaunchFailuresBeforeFail = 6;
@@ -1123,6 +1125,18 @@ namespace Armada.Core.Services
         {
             if (String.IsNullOrEmpty(missionId)) return false;
             return _CompletionsInFlight.TryGetValue(missionId, out int count) && count > 0;
+        }
+
+        /// <inheritdoc />
+        public void StopCompletionCommands(string missionId)
+        {
+            if (String.IsNullOrEmpty(missionId)) return;
+            foreach (KeyValuePair<CancellationTokenSource, string> run in _CompletionCommandRuns)
+            {
+                if (!String.Equals(run.Value, missionId, StringComparison.Ordinal)) continue;
+                try { run.Key.Cancel(); }
+                catch (ObjectDisposedException) { } // The run finished between the lookup and the cancel.
+            }
         }
 
         /// <inheritdoc />

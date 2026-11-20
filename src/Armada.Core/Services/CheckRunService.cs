@@ -35,6 +35,8 @@ namespace Armada.Core.Services
         private readonly LoggingModule _Logging;
         private readonly TimeSpan _DefaultTimeout = TimeSpan.FromMinutes(30);
         private const long _MaxArtifactCopyBytes = 16L * 1024L * 1024L;
+        private const string _InterruptedRunSummary = "The command died with the process and this record has no verdict.";
+        private static readonly TimeSpan _TimeoutOutputDrainLimit = TimeSpan.FromSeconds(1);
 
         /// <summary>
         /// Instantiate.
@@ -49,6 +51,74 @@ namespace Armada.Core.Services
             _WorkflowProfiles = workflowProfiles ?? throw new ArgumentNullException(nameof(workflowProfiles));
             _Readiness = readiness ?? throw new ArgumentNullException(nameof(readiness));
             _Logging = logging ?? throw new ArgumentNullException(nameof(logging));
+        }
+
+        /// <summary>
+        /// Cancel Armada check runs left <see cref="CheckRunStatusEnum.Running"/> by an earlier process.
+        /// A run executes in this process. A Running Armada row whose start is before
+        /// <paramref name="processStartUtc"/>, or whose start is absent, has no command left and cannot
+        /// reach a verdict. A row started at or after <paramref name="processStartUtc"/> stays Running.
+        /// An imported row stays Running.
+        /// </summary>
+        /// <param name="processStartUtc">The moment this process started. Compared with each row's stored start.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The number of rows cancelled.</returns>
+        public async Task<int> CancelInterruptedRunsAsync(DateTime processStartUtc, CancellationToken token = default)
+        {
+            List<CheckRun> interrupted = new List<CheckRun>();
+            CheckRunQuery query = new CheckRunQuery
+            {
+                Status = CheckRunStatusEnum.Running,
+                Source = CheckRunSourceEnum.Armada,
+                PageNumber = 1,
+                PageSize = 200
+            };
+
+            while (true)
+            {
+                EnumerationResult<CheckRun> page = await _Database.CheckRuns.EnumerateAsync(query, token).ConfigureAwait(false);
+                foreach (CheckRun run in page.Objects)
+                {
+                    // A start at or after this process belongs to the running process. RunAsync sets the
+                    // start before insert, so a null start was not written by this process and is eligible.
+                    if (run.StartedUtc.HasValue && run.StartedUtc.Value >= processStartUtc) continue;
+                    interrupted.Add(run);
+                }
+
+                if (page.Objects.Count < query.PageSize || query.PageNumber >= page.TotalPages) break;
+                query.PageNumber++;
+            }
+
+            int cancelled = 0;
+            foreach (CheckRun run in interrupted)
+            {
+                // Read again so a row that finished, or that started at or after this process, is not overwritten.
+                CheckRun? current = await _Database.CheckRuns.ReadAsync(run.Id, null, token).ConfigureAwait(false);
+                if (current == null) continue;
+                if (current.Status != CheckRunStatusEnum.Running) continue;
+                if (current.StartedUtc.HasValue && current.StartedUtc.Value >= processStartUtc) continue;
+
+                current.Status = CheckRunStatusEnum.Canceled;
+                current.Summary = _InterruptedRunSummary;
+                if (String.IsNullOrEmpty(current.Output))
+                {
+                    current.Output = _InterruptedRunSummary;
+                }
+
+                current.CompletedUtc = DateTime.UtcNow;
+                current.LastUpdateUtc = DateTime.UtcNow;
+
+                CheckRun updated = await _Database.CheckRuns.UpdateAsync(current, token).ConfigureAwait(false);
+                OnCheckRunChanged?.Invoke(updated);
+                cancelled++;
+            }
+
+            if (cancelled > 0)
+            {
+                _Logging.Warn(_Header + "cancelled " + cancelled + " check run" + (cancelled == 1 ? "" : "s") + " left Running by a stopped process");
+            }
+
+            return cancelled;
         }
 
         /// <summary>
@@ -141,6 +211,12 @@ namespace Armada.Core.Services
                 EntityId = run.Id
             }, _Logging, token).ConfigureAwait(false);
 
+            // Snapshot the expected artifacts on the host that runs the command, so only files this run wrote are
+            // parsed afterward. Results left in the checkout by an earlier run must not stand in for this one.
+            List<CheckRunArtifact> artifactsBefore = host.IsHarbor
+                ? await StatHarborArtifactsAsync(host, profile?.ExpectedArtifacts, token).ConfigureAwait(false)
+                : CollectArtifacts(run.WorkingDirectory!, profile?.ExpectedArtifacts);
+
             Stopwatch sw = Stopwatch.StartNew();
             CommandExecutionResult execution;
 
@@ -169,13 +245,14 @@ namespace Armada.Core.Services
             run.Status = execution.ExitCode == 0 ? CheckRunStatusEnum.Passed : CheckRunStatusEnum.Failed;
             if (host.IsHarbor)
             {
-                await ParseHarborResultsAsync(host, run, profile?.ExpectedArtifacts, token).ConfigureAwait(false);
+                await ParseHarborResultsAsync(host, run, profile?.ExpectedArtifacts, artifactsBefore, token).ConfigureAwait(false);
             }
             else
             {
                 run.Artifacts = CollectArtifacts(run.WorkingDirectory!, profile?.ExpectedArtifacts);
-                run.TestSummary = CheckRunParsingService.ParseTestSummary(run.Output, run.WorkingDirectory, run.Artifacts);
-                run.CoverageSummary = CheckRunParsingService.ParseCoverageSummary(run.WorkingDirectory, run.Artifacts);
+                List<CheckRunArtifact> written = CheckRunArtifactChanges.SelectWrittenDuringRun(artifactsBefore, run.Artifacts);
+                run.TestSummary = CheckRunParsingService.ParseTestSummary(run.Output, run.WorkingDirectory, written);
+                run.CoverageSummary = CheckRunParsingService.ParseCoverageSummary(run.WorkingDirectory, written);
             }
 
             run.Summary = BuildSummary(run, profile);
@@ -451,11 +528,40 @@ namespace Armada.Core.Services
                     if (!process.HasExited)
                         process.Kill(true);
                 }
-                catch
+                catch (Exception ex)
                 {
+                    _Logging.Debug(_Header + "could not stop timed out check command: " + ex.Message);
                 }
 
-                throw new TimeoutException("Check command timed out after " + timeout.TotalMinutes.ToString("0") + " minutes.");
+                Task outputDrain = Task.WhenAll(stdoutTask, stderrTask);
+                try
+                {
+                    await outputDrain.WaitAsync(_TimeoutOutputDrainLimit).ConfigureAwait(false);
+                }
+                catch (TimeoutException ex)
+                {
+                    _Logging.Debug(_Header + "timed out check command output drain stopped: " + ex.Message);
+                }
+                catch (Exception ex)
+                {
+                    _Logging.Debug(_Header + "could not drain timed out check command output: " + ex.Message);
+                }
+
+                string capturedStdout = stdoutTask.IsCompletedSuccessfully ? stdoutTask.Result : String.Empty;
+                string capturedStderr = stderrTask.IsCompletedSuccessfully ? stderrTask.Result : String.Empty;
+                return new CommandExecutionResult
+                {
+                    ExitCode = -1,
+                    Output = AppendTimeoutMessage(
+                        CombineOutput(capturedStdout, capturedStderr),
+                        "Check command timed out after " + timeout.TotalMinutes.ToString("0") + " minutes.")
+                };
+            }
+            catch (OperationCanceledException) when (token.IsCancellationRequested)
+            {
+                try { if (!process.HasExited) process.Kill(true); }
+                catch { }
+                throw;
             }
 
             string stdout = await stdoutTask.ConfigureAwait(false);
@@ -482,7 +588,15 @@ namespace Armada.Core.Services
             request.Label = label;
             HostCommandResult result = await host.Commands.RunAsync(request, token).ConfigureAwait(false);
             if (result.TimedOut)
-                throw new TimeoutException("Check command timed out after " + timeout.TotalMinutes.ToString("0") + " minutes on " + host.HostLabel + ".");
+            {
+                return new CommandExecutionResult
+                {
+                    ExitCode = result.ExitCode == 0 ? -1 : result.ExitCode,
+                    Output = AppendTimeoutMessage(
+                        CombineOutput(result.StandardOutput, result.StandardError),
+                        "Check command timed out after " + timeout.TotalMinutes.ToString("0") + " minutes on " + host.HostLabel + ".")
+                };
+            }
 
             _Logging.Debug(_Header + "command on " + host.HostLabel + " exited with code " + result.ExitCode + ": " + FirstNonEmptyLine(result.StandardError, result.StandardOutput));
             return new CommandExecutionResult
@@ -493,48 +607,72 @@ namespace Armada.Core.Services
         }
 
         /// <summary>
-        /// Collect the expected artifacts from the checkout on a Harbor and parse test and coverage results from them: the
-        /// artifacts are stat'ed on the Harbor, copied (up to 16 MB each) into a temporary folder here, and parsed exactly as
-        /// artifacts on the Admiral host are.
+        /// Stat the expected artifacts in the checkout on a Harbor. Sizes and write times are the Harbor's own; a write
+        /// time the Harbor does not report stays null.
         /// </summary>
-        private async Task ParseHarborResultsAsync(VesselHost host, CheckRun run, List<string>? expectedArtifacts, CancellationToken token)
+        private async Task<List<CheckRunArtifact>> StatHarborArtifactsAsync(VesselHost host, List<string>? expectedArtifacts, CancellationToken token)
         {
             List<CheckRunArtifact> artifacts = new List<CheckRunArtifact>();
+            foreach (string relativePath in (expectedArtifacts ?? new List<string>()).Where(path => !String.IsNullOrWhiteSpace(path)))
+            {
+                try
+                {
+                    VesselCheckoutFileInfo info = await host.Files.StatAsync(relativePath, token).ConfigureAwait(false);
+                    if (!info.Exists || info.IsDirectory) continue;
+                    artifacts.Add(new CheckRunArtifact
+                    {
+                        Path = relativePath.Replace('\\', '/'),
+                        SizeBytes = info.SizeBytes ?? 0,
+                        LastWriteUtc = info.LastWriteUtc
+                    });
+                }
+                catch (Exception ex) when (ex is UnauthorizedAccessException || ex is IOException || ex is InvalidOperationException)
+                {
+                    _Logging.Debug(_Header + "artifact " + relativePath + " on " + host.HostLabel + " skipped: " + ex.Message);
+                }
+            }
+
+            return artifacts;
+        }
+
+        /// <summary>
+        /// Collect the expected artifacts from the checkout on a Harbor and parse test and coverage results from the ones
+        /// this run wrote (new, or changed since <paramref name="artifactsBefore"/>): those are copied (up to 16 MB each)
+        /// into a temporary folder here and parsed exactly as artifacts on the Admiral host are.
+        /// </summary>
+        private async Task ParseHarborResultsAsync(
+            VesselHost host,
+            CheckRun run,
+            List<string>? expectedArtifacts,
+            List<CheckRunArtifact> artifactsBefore,
+            CancellationToken token)
+        {
             string copyRoot = Path.Combine(Path.GetTempPath(), "armada-check-" + Guid.NewGuid().ToString("N"));
             try
             {
-                foreach (string relativePath in (expectedArtifacts ?? new List<string>()).Where(path => !String.IsNullOrWhiteSpace(path)))
+                run.Artifacts = await StatHarborArtifactsAsync(host, expectedArtifacts, token).ConfigureAwait(false);
+                List<CheckRunArtifact> written = CheckRunArtifactChanges.SelectWrittenDuringRun(artifactsBefore, run.Artifacts);
+                foreach (CheckRunArtifact artifact in written)
                 {
                     try
                     {
-                        VesselCheckoutFileInfo info = await host.Files.StatAsync(relativePath, token).ConfigureAwait(false);
-                        if (!info.Exists || info.IsDirectory) continue;
-                        string normalized = relativePath.Replace('\\', '/');
-                        artifacts.Add(new CheckRunArtifact
-                        {
-                            Path = normalized,
-                            SizeBytes = info.SizeBytes ?? 0,
-                            LastWriteUtc = info.LastWriteUtc ?? DateTime.UtcNow
-                        });
-
-                        if ((info.SizeBytes ?? 0) > _MaxArtifactCopyBytes) continue;
-                        string? text = await host.Files.ReadTextAsync(normalized, _MaxArtifactCopyBytes, token).ConfigureAwait(false);
+                        if ((artifact.SizeBytes ?? 0) > _MaxArtifactCopyBytes) continue;
+                        string? text = await host.Files.ReadTextAsync(artifact.Path, _MaxArtifactCopyBytes, token).ConfigureAwait(false);
                         if (text == null) continue;
-                        string local = Path.GetFullPath(Path.Combine(copyRoot, normalized.Replace('/', Path.DirectorySeparatorChar)));
+                        string local = Path.GetFullPath(Path.Combine(copyRoot, artifact.Path.Replace('/', Path.DirectorySeparatorChar)));
                         if (!PathContainment.IsInside(copyRoot, local)) continue;
                         Directory.CreateDirectory(Path.GetDirectoryName(local)!);
                         await File.WriteAllTextAsync(local, text, token).ConfigureAwait(false);
                     }
                     catch (Exception ex) when (ex is UnauthorizedAccessException || ex is IOException || ex is InvalidOperationException)
                     {
-                        _Logging.Debug(_Header + "artifact " + relativePath + " on " + host.HostLabel + " skipped: " + ex.Message);
+                        _Logging.Debug(_Header + "artifact " + artifact.Path + " on " + host.HostLabel + " skipped: " + ex.Message);
                     }
                 }
 
-                run.Artifacts = artifacts;
                 string? parseRoot = Directory.Exists(copyRoot) ? copyRoot : null;
-                run.TestSummary = CheckRunParsingService.ParseTestSummary(run.Output, parseRoot, run.Artifacts);
-                run.CoverageSummary = CheckRunParsingService.ParseCoverageSummary(parseRoot, run.Artifacts);
+                run.TestSummary = CheckRunParsingService.ParseTestSummary(run.Output, parseRoot, written);
+                run.CoverageSummary = CheckRunParsingService.ParseCoverageSummary(parseRoot, written);
             }
             finally
             {
@@ -557,6 +695,13 @@ namespace Armada.Core.Services
             if (String.IsNullOrWhiteSpace(trimmedStderr)) return trimmedStdout;
             if (String.IsNullOrWhiteSpace(trimmedStdout)) return trimmedStderr;
             return trimmedStdout + Environment.NewLine + Environment.NewLine + "--- STDERR ---" + Environment.NewLine + trimmedStderr;
+        }
+
+        private static string AppendTimeoutMessage(string output, string timeoutMessage)
+        {
+            return String.IsNullOrWhiteSpace(output)
+                ? timeoutMessage
+                : output + Environment.NewLine + Environment.NewLine + timeoutMessage;
         }
 
         private static string FirstNonEmptyLine(string? primary, string? secondary)

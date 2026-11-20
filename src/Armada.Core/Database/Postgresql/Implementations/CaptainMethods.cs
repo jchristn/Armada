@@ -82,14 +82,14 @@ namespace Armada.Core.Database.Postgresql.Implementations
                     cmd.Parameters.AddWithValue("@state", captain.State.ToString());
                     cmd.Parameters.AddWithValue("@process_id", captain.CurrentSessionId != null && captain.ProcessId.HasValue ? (object)captain.ProcessId.Value : DBNull.Value);
                     cmd.Parameters.AddWithValue("@recovery_attempts", captain.RecoveryAttempts);
-                    cmd.Parameters.AddWithValue("@last_heartbeat_utc", captain.LastHeartbeatUtc.HasValue ? (object)captain.LastHeartbeatUtc.Value : DBNull.Value);
-                    cmd.Parameters.AddWithValue("@last_process_alive_utc", captain.LastProcessAliveUtc.HasValue ? (object)captain.LastProcessAliveUtc.Value : DBNull.Value);
+                    PostgresqlCommandHelper.AddDate(cmd, "@last_heartbeat_utc", captain.LastHeartbeatUtc);
+                    PostgresqlCommandHelper.AddDate(cmd, "@last_process_alive_utc", captain.LastProcessAliveUtc);
                     cmd.Parameters.AddWithValue("@reasoning_effort", (object?)captain.ReasoningEffort?.ToString() ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@tier", (object?)captain.Tier?.ToString() ?? DBNull.Value);
-                    cmd.Parameters.AddWithValue("@quarantine_until_utc", captain.QuarantineUntilUtc.HasValue ? (object)captain.QuarantineUntilUtc.Value : DBNull.Value);
+                    PostgresqlCommandHelper.AddDate(cmd, "@quarantine_until_utc", captain.QuarantineUntilUtc);
                     cmd.Parameters.AddWithValue("@quarantine_reason", (object?)captain.QuarantineReason ?? DBNull.Value);
-                    cmd.Parameters.AddWithValue("@created_utc", captain.CreatedUtc);
-                    cmd.Parameters.AddWithValue("@last_update_utc", captain.LastUpdateUtc);
+                    PostgresqlCommandHelper.AddDate(cmd, "@created_utc", captain.CreatedUtc);
+                    PostgresqlCommandHelper.AddDate(cmd, "@last_update_utc", captain.LastUpdateUtc);
                     cmd.Parameters.AddWithValue("@usage_capture_enabled", (object?)captain.UsageCaptureEnabled ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@usage_capture_interval_seconds", captain.UsageCaptureIntervalSeconds);
                     cmd.Parameters.AddWithValue("@usage_capture_mode", captain.UsageCaptureMode.ToString());
@@ -226,11 +226,11 @@ namespace Armada.Core.Database.Postgresql.Implementations
                     cmd.Parameters.AddWithValue("@state", captain.State.ToString());
                     cmd.Parameters.AddWithValue("@process_id", captain.ProcessId.HasValue ? (object)captain.ProcessId.Value : DBNull.Value);
                     cmd.Parameters.AddWithValue("@recovery_attempts", captain.RecoveryAttempts);
-                    cmd.Parameters.AddWithValue("@last_heartbeat_utc", captain.LastHeartbeatUtc.HasValue ? (object)captain.LastHeartbeatUtc.Value : DBNull.Value);
-                    cmd.Parameters.AddWithValue("@last_process_alive_utc", captain.LastProcessAliveUtc.HasValue ? (object)captain.LastProcessAliveUtc.Value : DBNull.Value);
+                    PostgresqlCommandHelper.AddDate(cmd, "@last_heartbeat_utc", captain.LastHeartbeatUtc);
+                    PostgresqlCommandHelper.AddDate(cmd, "@last_process_alive_utc", captain.LastProcessAliveUtc);
                     cmd.Parameters.AddWithValue("@reasoning_effort", (object?)captain.ReasoningEffort?.ToString() ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@tier", (object?)captain.Tier?.ToString() ?? DBNull.Value);
-                    cmd.Parameters.AddWithValue("@quarantine_until_utc", captain.QuarantineUntilUtc.HasValue ? (object)captain.QuarantineUntilUtc.Value : DBNull.Value);
+                    PostgresqlCommandHelper.AddDate(cmd, "@quarantine_until_utc", captain.QuarantineUntilUtc);
                     cmd.Parameters.AddWithValue("@quarantine_reason", (object?)captain.QuarantineReason ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@usage_capture_enabled", (object?)captain.UsageCaptureEnabled ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@usage_capture_interval_seconds", captain.UsageCaptureIntervalSeconds);
@@ -240,7 +240,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
                     cmd.Parameters.AddWithValue("@active", captain.Active);
                     cmd.Parameters.AddWithValue("@update_active", updateActive);
                     cmd.Parameters.AddWithValue("@update_concurrency", updateConcurrency);
-                    cmd.Parameters.AddWithValue("@last_update_utc", captain.LastUpdateUtc);
+                    PostgresqlCommandHelper.AddDate(cmd, "@last_update_utc", captain.LastUpdateUtc);
                     await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
                 }
             }
@@ -261,7 +261,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
                     cmd.Connection = conn;
                     cmd.CommandText = "UPDATE captains SET cli_permission_policy = @policy, last_update_utc = @now WHERE id = @id;";
                     cmd.Parameters.AddWithValue("@policy", (object?)policy?.ToString() ?? DBNull.Value);
-                    cmd.Parameters.AddWithValue("@now", DateTime.UtcNow);
+                    PostgresqlCommandHelper.AddDate(cmd, "@now", DateTime.UtcNow);
                     cmd.Parameters.AddWithValue("@id", id);
                     return await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false) > 0;
                 }
@@ -281,7 +281,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
                     cmd.Connection = conn;
                     cmd.CommandText = "UPDATE captains SET usage_capture_harbor_id = @policy, last_update_utc = @now WHERE id = @id AND tenant_id = @tenant;";
                     cmd.Parameters.AddWithValue("@policy", (object?)harborId ?? DBNull.Value);
-                    cmd.Parameters.AddWithValue("@now", DateTime.UtcNow);
+                    PostgresqlCommandHelper.AddDate(cmd, "@now", DateTime.UtcNow);
                     cmd.Parameters.AddWithValue("@id", id);
                     cmd.Parameters.AddWithValue("@tenant", tenantId);
                     return await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false) > 0;
@@ -358,12 +358,12 @@ namespace Armada.Core.Database.Postgresql.Implementations
                 if (query.CreatedAfter.HasValue)
                 {
                     conditions.Add("created_utc > @created_after");
-                    parameters.Add(new NpgsqlParameter("@created_after", query.CreatedAfter.Value));
+                    parameters.Add(PostgresqlCommandHelper.DateParameter("@created_after", query.CreatedAfter.Value));
                 }
                 if (query.CreatedBefore.HasValue)
                 {
                     conditions.Add("created_utc < @created_before");
-                    parameters.Add(new NpgsqlParameter("@created_before", query.CreatedBefore.Value));
+                    parameters.Add(PostgresqlCommandHelper.DateParameter("@created_before", query.CreatedBefore.Value));
                 }
                 if (!string.IsNullOrEmpty(query.Status))
                 {
@@ -457,7 +457,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
                     cmd.CommandText = @"UPDATE captains SET state = CASE WHEN current_session_id IS NOT NULL AND @state IN ('Idle','Working','Stalled') THEN state WHEN @state='Idle' AND active_mission_count>0 THEN 'Working' ELSE @state END, last_update_utc = @last_update_utc WHERE id = @id;";
                     cmd.Parameters.AddWithValue("@id", id);
                     cmd.Parameters.AddWithValue("@state", state.ToString());
-                    cmd.Parameters.AddWithValue("@last_update_utc", DateTime.UtcNow);
+                    PostgresqlCommandHelper.AddDate(cmd, "@last_update_utc", DateTime.UtcNow);
                     await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
                 }
             }
@@ -482,8 +482,8 @@ namespace Armada.Core.Database.Postgresql.Implementations
                     cmd.Connection = conn;
                     cmd.CommandText = @"UPDATE captains SET last_heartbeat_utc = @last_heartbeat_utc, last_update_utc = @last_update_utc WHERE id = @id;";
                     cmd.Parameters.AddWithValue("@id", id);
-                    cmd.Parameters.AddWithValue("@last_heartbeat_utc", now);
-                    cmd.Parameters.AddWithValue("@last_update_utc", now);
+                    PostgresqlCommandHelper.AddDate(cmd, "@last_heartbeat_utc", now);
+                    PostgresqlCommandHelper.AddDate(cmd, "@last_update_utc", now);
                     await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
                 }
             }
@@ -504,8 +504,8 @@ namespace Armada.Core.Database.Postgresql.Implementations
                     cmd.Connection = conn;
                     cmd.CommandText = @"UPDATE captains SET last_process_alive_utc = @last_process_alive_utc, last_update_utc = @last_update_utc WHERE id = @id;";
                     cmd.Parameters.AddWithValue("@id", id);
-                    cmd.Parameters.AddWithValue("@last_process_alive_utc", now);
-                    cmd.Parameters.AddWithValue("@last_update_utc", now);
+                    PostgresqlCommandHelper.AddDate(cmd, "@last_process_alive_utc", now);
+                    PostgresqlCommandHelper.AddDate(cmd, "@last_update_utc", now);
                     await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
                 }
             }
@@ -648,12 +648,12 @@ namespace Armada.Core.Database.Postgresql.Implementations
                 if (query.CreatedAfter.HasValue)
                 {
                     conditions.Add("created_utc > @created_after");
-                    parameters.Add(new NpgsqlParameter("@created_after", query.CreatedAfter.Value));
+                    parameters.Add(PostgresqlCommandHelper.DateParameter("@created_after", query.CreatedAfter.Value));
                 }
                 if (query.CreatedBefore.HasValue)
                 {
                     conditions.Add("created_utc < @created_before");
-                    parameters.Add(new NpgsqlParameter("@created_before", query.CreatedBefore.Value));
+                    parameters.Add(PostgresqlCommandHelper.DateParameter("@created_before", query.CreatedBefore.Value));
                 }
                 if (!string.IsNullOrEmpty(query.Status))
                 {
@@ -754,7 +754,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
                     cmd.Parameters.AddWithValue("@tenantId", tenantId);
                     cmd.Parameters.AddWithValue("@id", id);
                     cmd.Parameters.AddWithValue("@state", state.ToString());
-                    cmd.Parameters.AddWithValue("@last_update_utc", DateTime.UtcNow);
+                    PostgresqlCommandHelper.AddDate(cmd, "@last_update_utc", DateTime.UtcNow);
                     await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
                 }
             }
@@ -775,8 +775,8 @@ namespace Armada.Core.Database.Postgresql.Implementations
                     cmd.CommandText = @"UPDATE captains SET last_heartbeat_utc = @last_heartbeat_utc, last_update_utc = @last_update_utc WHERE tenant_id = @tenantId AND id = @id;";
                     cmd.Parameters.AddWithValue("@tenantId", tenantId);
                     cmd.Parameters.AddWithValue("@id", id);
-                    cmd.Parameters.AddWithValue("@last_heartbeat_utc", now);
-                    cmd.Parameters.AddWithValue("@last_update_utc", now);
+                    PostgresqlCommandHelper.AddDate(cmd, "@last_heartbeat_utc", now);
+                    PostgresqlCommandHelper.AddDate(cmd, "@last_update_utc", now);
                     await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
                 }
             }
@@ -829,7 +829,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
                     cmd.Parameters.AddWithValue("@tenantId", tenantId);
                     cmd.Parameters.AddWithValue("@id", captainId);
                     cmd.Parameters.AddWithValue("@state", state.ToString());
-                    cmd.Parameters.AddWithValue("@last_update_utc", now);
+                    PostgresqlCommandHelper.AddDate(cmd, "@last_update_utc", now);
                     int rowsAffected = await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
                     return rowsAffected > 0;
                 }
@@ -856,7 +856,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
                     cmd.Parameters.AddWithValue("@tenantId", tenantId);
                     cmd.Parameters.AddWithValue("@id", captainId);
                     cmd.Parameters.AddWithValue("@state", state.ToString());
-                    cmd.Parameters.AddWithValue("@last_update_utc", now);
+                    PostgresqlCommandHelper.AddDate(cmd, "@last_update_utc", now);
                     int rowsAffected = await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
                     return rowsAffected > 0;
                 }
@@ -949,12 +949,12 @@ namespace Armada.Core.Database.Postgresql.Implementations
                 if (query.CreatedAfter.HasValue)
                 {
                     conditions.Add("created_utc > @created_after");
-                    parameters.Add(new NpgsqlParameter("@created_after", query.CreatedAfter.Value));
+                    parameters.Add(PostgresqlCommandHelper.DateParameter("@created_after", query.CreatedAfter.Value));
                 }
                 if (query.CreatedBefore.HasValue)
                 {
                     conditions.Add("created_utc < @created_before");
-                    parameters.Add(new NpgsqlParameter("@created_before", query.CreatedBefore.Value));
+                    parameters.Add(PostgresqlCommandHelper.DateParameter("@created_before", query.CreatedBefore.Value));
                 }
                 if (!string.IsNullOrEmpty(query.Status))
                 {

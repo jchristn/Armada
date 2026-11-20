@@ -83,7 +83,7 @@ namespace Armada.Server.Routes
                     return new ApiErrorResponse { Error = ctx.IsAuthenticated ? ApiResultEnum.Forbidden : ApiResultEnum.NotAuthorized, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
                 }
                 EnumerationQuery query = new EnumerationQuery();
-                query.ApplyQuerystringOverrides(key => req.Query.GetValueOrDefault(key));
+                query.ApplyQuerystringOverrides(key => QueryValueReader.Read(req.Query, key));
                 Stopwatch sw = Stopwatch.StartNew();
                 EnumerationResult<Voyage> result = await Armada.Core.Models.EnumerationScope.EnumerateScopedAsync(ctx, query, q => _database.Voyages.EnumerateAsync(q), (t, q) => _database.Voyages.EnumerateAsync(t, q), (t, u, q) => _database.Voyages.EnumerateAsync(t, u, q)).ConfigureAwait(false);
                 result.TotalMs = Math.Round(sw.Elapsed.TotalMilliseconds, 2);
@@ -106,7 +106,7 @@ namespace Armada.Server.Routes
                     return new ApiErrorResponse { Error = ctx.IsAuthenticated ? ApiResultEnum.Forbidden : ApiResultEnum.NotAuthorized, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
                 }
                 EnumerationQuery query = JsonSerializer.Deserialize<EnumerationQuery>(req.Http.Request.DataAsString, _jsonOptions) ?? new EnumerationQuery();
-                query.ApplyQuerystringOverrides(key => req.Query.GetValueOrDefault(key));
+                query.ApplyQuerystringOverrides(key => QueryValueReader.Read(req.Query, key));
                 Stopwatch sw = Stopwatch.StartNew();
                 EnumerationResult<Voyage> result = await Armada.Core.Models.EnumerationScope.EnumerateScopedAsync(ctx, query, q => _database.Voyages.EnumerateAsync(q), (t, q) => _database.Voyages.EnumerateAsync(t, q), (t, u, q) => _database.Voyages.EnumerateAsync(t, u, q)).ConfigureAwait(false);
                 result.TotalMs = Math.Round(sw.Elapsed.TotalMilliseconds, 2);
@@ -192,6 +192,20 @@ namespace Armada.Server.Routes
                 if (validation.IsBareVoyage)
                 {
                     // Bare voyage creation (missions added separately)
+                    List<SelectedPlaybook> selectedPlaybooks = voyageReq.SelectedPlaybooks ?? new List<SelectedPlaybook>();
+                    if (selectedPlaybooks.Count > 0)
+                    {
+                        PlaybookService playbookService = new PlaybookService(_database, _logging);
+                        try
+                        {
+                            await playbookService.ResolveSelectionsAsync(ctx.TenantId!, selectedPlaybooks).ConfigureAwait(false);
+                        }
+                        catch (Exception ex) when (RouteErrorMapper.IsMapped(ex))
+                        {
+                            return RouteErrorMapper.ToResponse(req, ex);
+                        }
+                    }
+
                     voyage = new Voyage(voyageReq.Title, voyageReq.Description);
                     voyage.TenantId = ctx.TenantId;
                     voyage.UserId = ctx.UserId;
@@ -199,11 +213,9 @@ namespace Armada.Server.Routes
                     voyage.ApprovalOptions = voyageReq.ApprovalOptions?.Snapshot();
                     voyage.IsEvaluation = voyageReq.IsEvaluation;
                     voyage = await _database.Voyages.CreateAsync(voyage).ConfigureAwait(false);
-                    voyage.SelectedPlaybooks = voyageReq.SelectedPlaybooks ?? new List<SelectedPlaybook>();
+                    voyage.SelectedPlaybooks = selectedPlaybooks;
                     if (voyage.SelectedPlaybooks.Count > 0)
                     {
-                        PlaybookService playbookService = new PlaybookService(_database, _logging);
-                        await playbookService.ResolveSelectionsAsync(ctx.TenantId!, voyage.SelectedPlaybooks).ConfigureAwait(false);
                         await _database.Playbooks.SetVoyageSelectionsAsync(voyage.Id, voyage.SelectedPlaybooks).ConfigureAwait(false);
                     }
                     _logging.Info(_Header + "created bare voyage " + voyage.Id + ": " + voyageReq.Title);

@@ -372,7 +372,7 @@ namespace Armada.Server
                 Armada.Core.Services.Health.VesselHealthEvaluator.CreateDefaultCriteria(_Database, _VesselReadinessService, healthDependencyScanner),
                 _Logging);
             _VesselHealthService = new Armada.Core.Services.Health.VesselHealthService(_Database, _Settings, healthEvaluator, _JobService, _Logging);
-            _ObjectiveService = new ObjectiveService(_Database);
+            _ObjectiveService = new ObjectiveService(_Database, _Logging);
             _ReleaseService = new ReleaseService(_Database, _WorkflowProfileService, _Logging);
             _DeploymentService = new DeploymentService(_Database, _WorkflowProfileService, _EnvironmentService, _CheckRunService, _Logging);
             _IncidentService = new IncidentService(_Database);
@@ -528,11 +528,8 @@ namespace Armada.Server
 
             // Initialize log rotation and data expiry
             _LogRotation = new LogRotationService(_Logging, _Settings.MaxLogFileSizeBytes, _Settings.MaxLogFileCount);
-            // DataExpiryService talks to SQLite directly (its write gate parses a SQLite connection string), so it exists
-            // only for SQLite; constructing it with a server provider's connection string threw and stopped startup.
-            _DataExpiry = _Settings.Database.Type == DatabaseTypeEnum.Sqlite
-                ? new DataExpiryService(_Logging, _Settings.Database.GetConnectionString(), _Settings.DataRetentionDays)
-                : null;
+            // Data expiry runs on every provider through the active database connection; SQLite writes enter the write gate.
+            _DataExpiry = new DataExpiryService(_Logging, _Settings.Database, _Settings.DataRetentionDays);
             _Retention = new RetentionService(_Database, _Settings, _Logging);
 
             // Initialize handler classes (WebSocketHub is created later, so pass null initially)
@@ -2257,7 +2254,9 @@ namespace Armada.Server
                 _ModelProfileAccess,
                 _ModelAlertAccess,
                 _UsageAccess,
-                _UsageSelectionConfiguration);
+                _UsageSelectionConfiguration,
+                EmitEventAsync,
+                _WebSocketHub);
         }
 
         /// <summary>
@@ -2477,6 +2476,16 @@ namespace Armada.Server
                 _Logging.Warn(_Header + "startup stale captain cleanup error: " + ex.ToString());
             }
 
+            // Cancel Armada checks left Running by the previous process. Their command died with that process.
+            try
+            {
+                await _CheckRunService.CancelInterruptedRunsAsync(_StartUtc, token).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _Logging.Warn(_Header + "startup interrupted-check cancellation error: " + ex.Message);
+            }
+
             // Run an immediate health check on startup to dispatch any pending missions
             try
             {
@@ -2541,8 +2550,7 @@ namespace Armada.Server
                     // Run data expiry every 100 health check cycles (100 x HeartbeatIntervalSeconds plus loop time; about 17 minutes at the default 10 s)
                     if (_HealthCheckCycles % 100 == 0)
                     {
-                        // DataExpiryService talks to SQLite directly; on server providers it would throw and skip the
-                        // rest of this block, so it only runs for SQLite and each step is isolated.
+                        // A data-expiry failure is logged and does not stop the later retention steps.
                         if (_DataExpiry != null)
                         {
                             try { _DataExpiry.RetentionDays = _Settings.DataRetentionDays; await _DataExpiry.PurgeExpiredDataAsync(token).ConfigureAwait(false); }

@@ -112,7 +112,7 @@ export interface McpClientReference {
 
 export const MCP_CLIENTS: McpClientReference[] = [
   { key: 'claude', title: 'Claude Code', location: '~/.claude.json -> mcpServers.armada' },
-  { key: 'codex', title: 'Codex', location: '~/.codex/config.json -> mcpServers.armada' },
+  { key: 'codex', title: 'Codex', location: '~/.codex/config.toml -> [mcp_servers.armada]' },
   { key: 'gemini', title: 'Gemini', location: '~/.gemini/settings.json -> mcpServers.armada' },
   { key: 'cursor', title: 'Cursor', location: '.cursor/mcp.json -> mcpServers.armada' },
 ];
@@ -193,17 +193,25 @@ export function getMcpRpcUrl(healthMcpPort: number | null | undefined, settingsM
   return `http://localhost:${port}/rpc`;
 }
 
-/** HTTP MCP client configuration for one client. */
+/** HTTP MCP client configuration for one client. Codex is a TOML table; the other clients stay JSON. */
 export function getMcpConfigHttp(client: McpClientKey, rpcUrl: string): string {
   switch (client) {
-    case 'claude':
     case 'codex':
+      return '[mcp_servers.armada]\nurl = "' + codexMcpHttpUrl(rpcUrl) + '"\n';
+    case 'claude':
       return JSON.stringify({ mcpServers: { armada: { type: 'http', url: rpcUrl } } }, null, 2);
     case 'gemini':
       return JSON.stringify({ mcpServers: { armada: { httpUrl: rpcUrl } } }, null, 2);
     case 'cursor':
       return JSON.stringify({ mcpServers: { armada: { url: rpcUrl } } }, null, 2);
   }
+}
+
+/** Codex HTTP url: the port already chosen for the JSON-RPC url, on localhost, with path /mcp. */
+function codexMcpHttpUrl(rpcUrl: string): string {
+  const parsed = new URL(rpcUrl);
+  const port = parsed.port.length > 0 ? parsed.port : '7891';
+  return 'http://localhost:' + port + '/mcp';
 }
 
 /** STDIO MCP client configuration (or command) for one client. */
@@ -214,6 +222,7 @@ export function getMcpConfigStdio(client: McpClientKey): string {
     case 'cursor':
       return JSON.stringify({ mcpServers: { armada: { command: 'armada', args: ['mcp', 'stdio'] } } }, null, 2);
     case 'codex':
+      return '[mcp_servers.armada]\ncommand = "armada"\nargs = ["mcp", "stdio"]\n';
     case 'gemini':
       return JSON.stringify({ mcpServers: { armada: { type: 'stdio', command: 'armada', args: ['mcp', 'stdio'] } } }, null, 2);
   }

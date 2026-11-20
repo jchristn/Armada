@@ -72,9 +72,9 @@ namespace Armada.Core.Database.Postgresql.Implementations
                     cmd.Parameters.AddWithValue("@name", name);
                     cmd.Parameters.AddWithValue("@holder", holder);
                     cmd.Parameters.AddWithValue("@tenant_id", (object?)tenantId ?? DBNull.Value);
-                    cmd.Parameters.AddWithValue("@acquired_utc", now);
-                    cmd.Parameters.AddWithValue("@expires_utc", expires);
-                    cmd.Parameters.AddWithValue("@now", now);
+                    PostgresqlCommandHelper.AddDate(cmd, "@acquired_utc", now);
+                    PostgresqlCommandHelper.AddDate(cmd, "@expires_utc", expires);
+                    PostgresqlCommandHelper.AddDate(cmd, "@now", now);
                     await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
                 }
 
@@ -107,10 +107,10 @@ namespace Armada.Core.Database.Postgresql.Implementations
                     cmd.Connection = conn;
                     cmd.CommandText = @"UPDATE coordination_leases SET expires_utc = @new_expires
                         WHERE name = @name AND holder = @holder AND expires_utc > @now;";
-                    cmd.Parameters.AddWithValue("@new_expires", newExpires);
+                    PostgresqlCommandHelper.AddDate(cmd, "@new_expires", newExpires);
                     cmd.Parameters.AddWithValue("@name", name);
                     cmd.Parameters.AddWithValue("@holder", holder);
-                    cmd.Parameters.AddWithValue("@now", now);
+                    PostgresqlCommandHelper.AddDate(cmd, "@now", now);
                     int rowsAffected = await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
                     return rowsAffected > 0;
                 }
@@ -173,7 +173,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
                 {
                     cmd.Connection = conn;
                     cmd.CommandText = "DELETE FROM coordination_leases WHERE expires_utc <= @now;";
-                    cmd.Parameters.AddWithValue("@now", now);
+                    PostgresqlCommandHelper.AddDate(cmd, "@now", now);
                     int rowsAffected = await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
                     return rowsAffected;
                 }

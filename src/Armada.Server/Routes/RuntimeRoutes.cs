@@ -56,7 +56,7 @@ namespace Armada.Server.Routes
             app.Get("/api/v1/runtimes/mux/endpoints", async (ApiRequest req) =>
             {
                 EnumerationQuery query = new EnumerationQuery();
-                query.ApplyQuerystringOverrides(key => req.Query.GetValueOrDefault(key));
+                query.ApplyQuerystringOverrides(key => QueryValueReader.Read(req.Query, key));
                 return await EnumerateMuxEndpointsAsync(req, authenticate, authz, query).ConfigureAwait(false);
             },
             api => api
@@ -113,8 +113,8 @@ namespace Armada.Server.Routes
                 try
                 {
                     string endpointName = RouteParameters.Get(req, "name");
-                    string? configDirectory = RouteParameters.Decode(req.Query.GetValueOrDefault("configDirectory"));
-                    MuxHost host = await _MuxHosts.ResolveAsync(ctx.TenantId, ctx.UserId, req.Query.GetValueOrDefault("harborId"), null).ConfigureAwait(false);
+                    string? configDirectory = QueryValueReader.Read(req.Query, "configDirectory");
+                    MuxHost host = await _MuxHosts.ResolveAsync(ctx.TenantId, ctx.UserId, QueryValueReader.Read(req.Query, "harborId"), null).ConfigureAwait(false);
                     if (host.Executor == null)
                     {
                         req.Http.Response.StatusCode = 503;
@@ -176,8 +176,8 @@ namespace Armada.Server.Routes
 
             try
             {
-                string? configDirectory = RouteParameters.Decode(req.Query.GetValueOrDefault("configDirectory"));
-                MuxHost host = await _MuxHosts.ResolveAsync(ctx.TenantId, ctx.UserId, req.Query.GetValueOrDefault("harborId"), null).ConfigureAwait(false);
+                string? configDirectory = QueryValueReader.Read(req.Query, "configDirectory");
+                MuxHost host = await _MuxHosts.ResolveAsync(ctx.TenantId, ctx.UserId, QueryValueReader.Read(req.Query, "harborId"), null).ConfigureAwait(false);
                 if (host.Executor == null)
                 {
                     req.Http.Response.StatusCode = 503;

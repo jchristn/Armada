@@ -9,6 +9,7 @@ namespace Armada.Core.Services
     using Armada.Core.Database;
     using Armada.Core.Enums;
     using Armada.Core.Models;
+    using SyslogLogging;
 
     /// <summary>
     /// The one rule for when a voyage is finished, shared by the background voyage check and the completion path so the
@@ -20,8 +21,10 @@ namespace Armada.Core.Services
         /// Decide whether a voyage's missions have settled and, if so, its terminal status. A voyage is still running
         /// while any mission is Pending, Blocked, Assigned, InProgress, Testing, Review or PullRequestOpen, while a WorkProduced
         /// mission is still being completed (its handoff, rework or landing is being decided), or while a WorkProduced
-        /// mission still has an unsettled merge-queue entry. A settled voyage is Failed when any mission Failed or
-        /// LandingFailed, otherwise Complete.
+        /// mission still has an unsettled merge-queue entry. A settled voyage is Failed when any mission is Failed or
+        /// LandingFailed. It is Cancelled when every mission is Cancelled. It is Failed when any mission is Cancelled
+        /// and no mission is Complete. It is Complete when at least one mission is Complete, and when the settled
+        /// missions are only WorkProduced.
         /// </summary>
         /// <param name="missions">The voyage's missions.</param>
         /// <param name="isCompletionInFlight">Whether a WorkProduced mission's completion is still running, or null.</param>
@@ -65,11 +68,23 @@ namespace Armada.Core.Services
             }
 
             bool anyFailed = missions.Any(m => m.Status == MissionStatusEnum.Failed || m.Status == MissionStatusEnum.LandingFailed);
-            return anyFailed ? VoyageStatusEnum.Failed : VoyageStatusEnum.Complete;
+            if (anyFailed) return VoyageStatusEnum.Failed;
+
+            if (missions.All(m => m.Status == MissionStatusEnum.Cancelled)) return VoyageStatusEnum.Cancelled;
+
+            if (missions.Any(m => m.Status == MissionStatusEnum.Cancelled) &&
+                !missions.Any(m => m.Status == MissionStatusEnum.Complete))
+            {
+                return VoyageStatusEnum.Failed;
+            }
+
+            return VoyageStatusEnum.Complete;
         }
 
         /// <summary>
-        /// Record a voyage's terminal status and, for a completed voyage, settle its intermediate pipeline stages.
+        /// Record a voyage's terminal status and, for a completed voyage, settle its intermediate pipeline stages. A
+        /// voyage that changes to Complete also records one <c>voyage.completed</c> event in the voyage owner's scope;
+        /// settling a voyage that is already Complete does not record it again.
         /// </summary>
         /// <param name="database">Database driver.</param>
         /// <param name="voyage">The voyage.</param>
@@ -78,9 +93,11 @@ namespace Armada.Core.Services
         /// <param name="token">Cancellation token.</param>
         /// <param name="blackBox">Black box capture, or null. A Failed voyage is recorded with its roll-up and the mission
         /// at the root of the cascade (the earliest failed mission).</param>
+        /// <param name="logging">Logging module, or null. A <c>voyage.completed</c> event that cannot be stored is logged
+        /// here as a warning; the voyage's status stays saved either way.</param>
         /// <returns>A task.</returns>
         /// <exception cref="ArgumentNullException">Thrown when database, voyage or missions is null.</exception>
-        public static async Task ApplyAsync(DatabaseDriver database, Voyage voyage, VoyageStatusEnum status, List<Mission> missions, CancellationToken token = default, IBlackBoxCapture? blackBox = null)
+        public static async Task ApplyAsync(DatabaseDriver database, Voyage voyage, VoyageStatusEnum status, List<Mission> missions, CancellationToken token = default, IBlackBoxCapture? blackBox = null, LoggingModule? logging = null)
         {
             if (database == null) throw new ArgumentNullException(nameof(database));
             if (voyage == null) throw new ArgumentNullException(nameof(voyage));
@@ -91,6 +108,8 @@ namespace Armada.Core.Services
             voyage.CompletedUtc = DateTime.UtcNow;
             voyage.LastUpdateUtc = DateTime.UtcNow;
             await database.Voyages.UpdateAsync(voyage, token).ConfigureAwait(false);
+            if (status == VoyageStatusEnum.Complete && statusBefore != VoyageStatusEnum.Complete)
+                await RecordCompletedEventAsync(database, voyage, logging, token).ConfigureAwait(false);
             if (status == VoyageStatusEnum.Complete) await PipelineStageSettler.SettleAsync(database, missions, token).ConfigureAwait(false);
 
             if (status == VoyageStatusEnum.Failed && blackBox != null)
@@ -109,6 +128,27 @@ namespace Armada.Core.Services
                     context.RootMissionId = root?.Id;
                     context.SettlementRule = "No mission is active and at least one mission ended Failed or LandingFailed.";
                 }, token).ConfigureAwait(false);
+            }
+        }
+
+        private static async Task RecordCompletedEventAsync(DatabaseDriver database, Voyage voyage, LoggingModule? logging, CancellationToken token)
+        {
+            ArmadaEvent evt = new ArmadaEvent("voyage.completed", "Voyage " + voyage.Id + " completed")
+            {
+                TenantId = voyage.TenantId,
+                UserId = voyage.UserId,
+                EntityType = "voyage",
+                EntityId = voyage.Id,
+                VoyageId = voyage.Id
+            };
+
+            try
+            {
+                await database.Events.CreateAsync(evt, token).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (!token.IsCancellationRequested)
+            {
+                logging?.Warn("[VoyageSettlement] could not record voyage.completed for voyage " + voyage.Id + ": " + ex.Message);
             }
         }
     }

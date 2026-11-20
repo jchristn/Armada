@@ -83,6 +83,150 @@ namespace Test.Shared.Infrastructure
         }
 
         /// <summary>
+        /// Head of the provider message in <see cref="OpenCodeTextThenErrorLines"/>.
+        /// </summary>
+        public const string OpenCodeProviderHead = "Provider rejected the request ";
+
+        /// <summary>
+        /// Characters after the 240-character provider message. A bounded failure must omit them.
+        /// </summary>
+        public const string OpenCodeErrorTail = "TAILMARKER";
+
+        /// <summary>
+        /// Top-level error message. The visible failure uses the nested data message instead.
+        /// </summary>
+        public const string OpenCodeTopLevelMessage = "TOPLEVELMARKER";
+
+        /// <summary>
+        /// Distinctive response-body field. It must not appear in operator text.
+        /// </summary>
+        public const string OpenCodeBodyMarker = "BODYMARKER";
+
+        /// <summary>
+        /// Distinctive response-header field. It must not appear in operator text.
+        /// </summary>
+        public const string OpenCodeHeaderMarker = "HEADERMARKER";
+
+        /// <summary>
+        /// Distinctive URL field. It must not appear in operator text.
+        /// </summary>
+        public const string OpenCodeUrlMarker = "URLMARKER";
+
+        /// <summary>
+        /// Distinctive session id. It must not appear in operator text.
+        /// </summary>
+        public const string OpenCodeSessionMarker = "SESSIONMARKER";
+
+        /// <summary>
+        /// Assistant text written before the error event.
+        /// </summary>
+        public const string OpenCodePartialText = "partial answer";
+
+        /// <summary>
+        /// Assistant text of a turn that has no error event.
+        /// </summary>
+        public const string OpenCodeCompleteText = "complete answer";
+
+        /// <summary>
+        /// HTTP status nested under data. This is the status the operator sees.
+        /// </summary>
+        public const int OpenCodeStatus = 400;
+
+        /// <summary>
+        /// Top-level status. The nested data status wins, so this value stays out of operator text.
+        /// </summary>
+        public const int OpenCodeIgnoredStatus = 500;
+
+        /// <summary>
+        /// A text event followed by a type=error event. The error carries a nested message, a status, and
+        /// distinctive body, header, URL, and session fields.
+        /// </summary>
+        /// <returns>Stdout lines for an OpenCode JSON stream.</returns>
+        public static List<string> OpenCodeTextThenErrorLines()
+        {
+            string message = OpenCodeProviderMessage();
+            string text = "{\"type\":\"text\",\"timestamp\":1,\"sessionID\":\"" + OpenCodeSessionMarker + "\",\"part\":{\"type\":\"text\",\"text\":\"" + OpenCodePartialText + "\"}}";
+            string error = "{\"type\":\"error\",\"timestamp\":2,\"sessionID\":\"" + OpenCodeSessionMarker + "\",\"error\":{\"message\":\"" + OpenCodeTopLevelMessage + "\",\"statusCode\":" + OpenCodeIgnoredStatus.ToString() + ",\"data\":{\"message\":\"" + message + "\",\"statusCode\":" + OpenCodeStatus.ToString() + ",\"responseBody\":\"" + OpenCodeBodyMarker + "\",\"responseHeaders\":{\"authorization\":\"" + OpenCodeHeaderMarker + "\"},\"url\":\"" + OpenCodeUrlMarker + "\"}}}";
+            return new List<string> { text, error };
+        }
+
+        /// <summary>
+        /// One text event and no error event.
+        /// </summary>
+        /// <returns>Stdout lines for an OpenCode JSON stream.</returns>
+        public static List<string> OpenCodeTextOnlyLines()
+        {
+            string text = "{\"type\":\"text\",\"timestamp\":3,\"sessionID\":\"ses_ok\",\"part\":{\"type\":\"text\",\"text\":\"" + OpenCodeCompleteText + "\"}}";
+            return new List<string> { text };
+        }
+
+        /// <summary>
+        /// One plain JSON summary line. It is not an OpenCode protocol event.
+        /// </summary>
+        /// <returns>Stdout lines for a planning summary.</returns>
+        public static List<string> OpenCodePlanningSummaryLines()
+        {
+            return new List<string> { "{\"title\":\"Ship the fix\",\"description\":\"Do the work\"}" };
+        }
+
+        /// <summary>
+        /// One plain JSON summary line. It is not an OpenCode protocol event.
+        /// </summary>
+        /// <returns>Stdout lines for a refinement summary.</returns>
+        public static List<string> OpenCodeRefinementSummaryLines()
+        {
+            return new List<string> { "{\"summary\":\"Keep the contract\",\"acceptanceCriteria\":[\"The turn fails\"]}" };
+        }
+
+        /// <summary>
+        /// Write an OpenCode stand-in that drains stdin, prints the lines, and exits 0.
+        /// </summary>
+        /// <param name="directory">Directory to write the shim into.</param>
+        /// <param name="stdoutLines">Lines to print. None may contain a single quote.</param>
+        /// <returns>Path of the shim executable.</returns>
+        public static string WriteOpenCodeShim(string directory, List<string> stdoutLines)
+        {
+            if (stdoutLines == null) throw new ArgumentNullException(nameof(stdoutLines));
+            foreach (string line in stdoutLines)
+            {
+                if (line != null && line.Contains('\'')) throw new ArgumentException("An OpenCode shim line cannot contain a single quote.");
+            }
+
+            string record = Path.Combine(directory, "shim-record");
+            return WriteShim(directory, "opencode", record, stdoutLines, null, null, false);
+        }
+
+        /// <summary>
+        /// Point OpenCode host-config lookups at an empty directory for the life of the returned scope,
+        /// then restore the previous values.
+        /// </summary>
+        /// <returns>A scope that restores the process environment.</returns>
+        public static IDisposable IsolateOpenCodeHostConfig()
+        {
+            return new OpenCodeHostConfigScope();
+        }
+
+        /// <summary>
+        /// The visible failure has the nested provider message and status, and none of the secret-bearing fields.
+        /// </summary>
+        /// <param name="text">Operator-visible text.</param>
+        /// <param name="label">Assertion label.</param>
+        public static void AssertBoundedProviderFailure(string? text, string label)
+        {
+            string value = text ?? String.Empty;
+            Asserts.AssertContains(OpenCodeProviderHead, value, label);
+            Asserts.AssertContains("(status " + OpenCodeStatus.ToString() + ")", value, label);
+            Asserts.AssertFalse(value.Contains(OpenCodeErrorTail), label + " includes the message tail");
+            Asserts.AssertFalse(value.Contains(OpenCodeTopLevelMessage), label + " includes the top-level message");
+            Asserts.AssertFalse(value.Contains(OpenCodeBodyMarker), label + " includes the response body");
+            Asserts.AssertFalse(value.Contains(OpenCodeHeaderMarker), label + " includes a response header");
+            Asserts.AssertFalse(value.Contains(OpenCodeUrlMarker), label + " includes the URL");
+            Asserts.AssertFalse(value.Contains(OpenCodeSessionMarker), label + " includes the session id");
+            Asserts.AssertFalse(value.Contains(OpenCodePartialText), label + " keeps earlier assistant text");
+            Asserts.AssertFalse(value.Contains(OpenCodeIgnoredStatus.ToString()), label + " includes the unused status");
+        }
+
+        /// <summary>
         /// Read a file the shim recorded, or an empty string when it does not exist yet.
         /// </summary>
         /// <param name="recordDirectory">Record directory.</param>
@@ -98,6 +242,50 @@ namespace Test.Shared.Infrastructure
         #endregion
 
         #region Private-Methods
+
+        private static string OpenCodeProviderMessage()
+        {
+            int pad = 240 - OpenCodeProviderHead.Length;
+            if (pad < 1) pad = 1;
+            return OpenCodeProviderHead + new string('m', pad) + OpenCodeErrorTail;
+        }
+
+        private sealed class OpenCodeHostConfigScope : IDisposable
+        {
+            private readonly string? _Xdg;
+            private readonly string? _Config;
+            private readonly string? _Content;
+            private readonly string _Temp;
+            private bool _Disposed;
+
+            public OpenCodeHostConfigScope()
+            {
+                _Xdg = Environment.GetEnvironmentVariable("XDG_CONFIG_HOME");
+                _Config = Environment.GetEnvironmentVariable("OPENCODE_CONFIG");
+                _Content = Environment.GetEnvironmentVariable("OPENCODE_CONFIG_CONTENT");
+                _Temp = Path.Combine(Path.GetTempPath(), "armada-oc-config-" + Guid.NewGuid().ToString("N"));
+                Directory.CreateDirectory(_Temp);
+                Environment.SetEnvironmentVariable("XDG_CONFIG_HOME", _Temp);
+                Environment.SetEnvironmentVariable("OPENCODE_CONFIG", null);
+                Environment.SetEnvironmentVariable("OPENCODE_CONFIG_CONTENT", null);
+            }
+
+            public void Dispose()
+            {
+                if (_Disposed) return;
+                _Disposed = true;
+                Environment.SetEnvironmentVariable("XDG_CONFIG_HOME", _Xdg);
+                Environment.SetEnvironmentVariable("OPENCODE_CONFIG", _Config);
+                Environment.SetEnvironmentVariable("OPENCODE_CONFIG_CONTENT", _Content);
+                try
+                {
+                    if (Directory.Exists(_Temp)) Directory.Delete(_Temp, true);
+                }
+                catch
+                {
+                }
+            }
+        }
 
         private static string WriteShim(string directory, string name, string recordDirectory, List<string> stdoutLines, string? stderrLine, string? finalMessage, bool sleep)
         {

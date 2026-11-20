@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useNavigate } from 'react-router-dom';
 import MissionDetail from './MissionDetail';
-import { getHarbor, getMissionDiff, getMission, getMissionBlackBox, getMissionLandingPreview, listCaptains, listCheckRuns, listDeployments, listVessels, purgeMission, retryMissionLanding } from '../api/client';
+import { deleteMission, getHarbor, getMissionDiff, getMission, getMissionBlackBox, getMissionLandingPreview, listCaptains, listCheckRuns, listDeployments, listVessels, purgeMission, retryMissionLanding } from '../api/client';
 import { translateTemplate } from '../i18n/runtime';
 import type { Captain, Harbor, LandingPreviewResult, Mission } from '../types/models';
 import { blackBoxEntryFixture } from '../test/fixtures/blackbox';
@@ -44,7 +44,8 @@ const localeValue = {
   formatRelativeTime: (v: string | null | undefined) => v ?? '',
 };
 vi.mock('../context/LocaleContext', () => ({ useLocale: () => localeValue }));
-vi.mock('../context/NotificationContext', () => ({ useNotifications: () => ({ pushToast: vi.fn() }) }));
+const pushToast = vi.fn();
+vi.mock('../context/NotificationContext', () => ({ useNotifications: () => ({ pushToast }) }));
 vi.mock('../context/AuthContext', () => ({ useAuth: () => ({ isAdmin: true, isTenantAdmin: true }) }));
 vi.mock('../context/WebSocketContext', () => ({
   useWebSocket: () => ({ connected: true, reconnectCount: 0, send: vi.fn(), subscribe: () => () => {} }),
@@ -217,6 +218,35 @@ describe('MissionDetail waiting and landing', () => {
   });
 });
 
+describe('MissionDetail cancellation wording', () => {
+  beforeEach(() => {
+    vi.mocked(getMission).mockResolvedValue(mission({ status: 'InProgress' }));
+    vi.mocked(getMissionLandingPreview).mockResolvedValue(preview({ missionStatus: 'InProgress' }));
+    vi.mocked(listVessels).mockResolvedValue(emptyPage as never);
+    vi.mocked(listCaptains).mockResolvedValue(emptyPage as never);
+    vi.mocked(listCheckRuns).mockResolvedValue(emptyPage as never);
+    vi.mocked(listDeployments).mockResolvedValue(emptyPage as never);
+    vi.mocked(deleteMission).mockResolvedValue(undefined as never);
+    pushToast.mockClear();
+  });
+
+  it('explains that Delete cancels and keeps the mission, then reports cancellation', async () => {
+    renderPage();
+    await screen.findByRole('heading', { name: 'Add request logging' });
+    fireEvent.click(screen.getByRole('button', { name: 'Actions' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Delete' }));
+
+    const dialog = screen.getByRole('alertdialog');
+    expect(within(dialog).getByText(/status will become Cancelled and the mission record will be kept/i)).toBeInTheDocument();
+    expect(within(dialog).queryByText(/permanently delete|cannot be undone/i)).not.toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Yes' }));
+
+    await waitFor(() => expect(deleteMission).toHaveBeenCalledWith('msn_1'));
+    expect(purgeMission).not.toHaveBeenCalled();
+    expect(pushToast).toHaveBeenCalledWith('warning', 'Mission "Add request logging" cancelled. The record remains with Cancelled status.');
+  });
+});
+
 describe('MissionDetail Harbor and captain runtime', () => {
   beforeEach(() => {
     vi.mocked(listVessels).mockResolvedValue(emptyPage as never);
@@ -292,6 +322,94 @@ describe('MissionDetail Harbor and captain runtime', () => {
     await act(async () => { finish(); });
     await waitFor(() => expect(screen.queryByRole('alertdialog', { name: 'Purging mission' })).not.toBeInTheDocument());
     expect(purgeMission).toHaveBeenCalledTimes(1);
+  });
+});
+
+interface Deferred<T> { promise: Promise<T>; resolve: (value: T) => void }
+
+function deferred<T>(): Deferred<T> {
+  let resolve: (value: T) => void = () => {};
+  const promise = new Promise<T>((res) => { resolve = res; });
+  return { promise, resolve };
+}
+
+describe('MissionDetail route load order', () => {
+  const missions = new Map<string, Deferred<Mission>>();
+  const previews = new Map<string, Deferred<LandingPreviewResult>>();
+
+  function gate<T>(store: Map<string, Deferred<T>>, id: string): Deferred<T> {
+    let entry = store.get(id);
+    if (!entry) {
+      entry = deferred<T>();
+      store.set(id, entry);
+    }
+    return entry;
+  }
+
+  beforeEach(() => {
+    missions.clear();
+    previews.clear();
+    vi.mocked(listVessels).mockResolvedValue(emptyPage as never);
+    vi.mocked(listCaptains).mockResolvedValue(emptyPage as never);
+    vi.mocked(listCheckRuns).mockResolvedValue(emptyPage as never);
+    vi.mocked(listDeployments).mockResolvedValue(emptyPage as never);
+    vi.mocked(getMission).mockImplementation((id: string) => gate(missions, id).promise);
+    vi.mocked(getMissionLandingPreview).mockImplementation((id: string) => gate(previews, id).promise);
+  });
+
+  it('keeps the newer mission and its landing preview when the older request finishes last', async () => {
+    function Harness() {
+      const navigate = useNavigate();
+      return (
+        <>
+          <button type="button" onClick={() => navigate('/missions/msn_b')}>Open route B</button>
+          <Routes>
+            <Route path="/missions/:id" element={<MissionDetail />} />
+          </Routes>
+        </>
+      );
+    }
+
+    render(
+      <MemoryRouter initialEntries={['/missions/msn_a']}>
+        <Harness />
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open route B' }));
+
+    await act(async () => {
+      gate(missions, 'msn_b').resolve(mission({ id: 'msn_b', title: 'Mission Beta', status: 'WorkProduced', branchName: 'feature-b' }));
+    });
+    expect(await screen.findByRole('heading', { name: 'Mission Beta' })).toBeInTheDocument();
+
+    await act(async () => {
+      gate(previews, 'msn_b').resolve(preview({
+        missionId: 'msn_b', sourceBranch: 'feature-b', targetBranch: 'main',
+        isReadyToLand: true, effectiveLandingMode: 'LocalMerge', manualLandingOnly: false, missionStatus: 'WorkProduced',
+      }));
+    });
+    expect(await screen.findByText('feature-b -> main')).toBeInTheDocument();
+
+    await act(async () => {
+      gate(missions, 'msn_a').resolve(mission({ id: 'msn_a', title: 'Mission Alpha', status: 'WorkProduced', branchName: 'feature-a' }));
+    });
+    await act(async () => {
+      const latePreview = previews.get('msn_a');
+      if (latePreview) {
+        latePreview.resolve(preview({
+          missionId: 'msn_a', sourceBranch: 'feature-a', targetBranch: 'main',
+          isReadyToLand: false, effectiveLandingMode: 'None', manualLandingOnly: true, missionStatus: 'WorkProduced',
+        }));
+      }
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'Mission Beta' })).toBeInTheDocument();
+      expect(screen.queryByRole('heading', { name: 'Mission Alpha' })).not.toBeInTheDocument();
+      expect(screen.getByText('feature-b -> main')).toBeInTheDocument();
+      expect(screen.queryByText('feature-a -> main')).not.toBeInTheDocument();
+    });
   });
 });
 

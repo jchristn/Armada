@@ -6,6 +6,8 @@ namespace Armada.Core.Services
     using System.Threading;
     using System.Text.Json;
     using System.Text.Json.Serialization;
+    using SyslogLogging;
+    using Armada.Core;
     using Armada.Core.Database;
     using Armada.Core.Enums;
     using Armada.Core.Models;
@@ -21,6 +23,7 @@ namespace Armada.Core.Services
         public Action<Objective>? OnObjectiveChanged { get; set; }
 
         private readonly DatabaseDriver _Database;
+        private readonly LoggingModule? _Logging;
         private readonly SemaphoreSlim _BackfillLock = new SemaphoreSlim(1, 1);
         private bool _BackfillCompleted = false;
         private static readonly JsonSerializerOptions _JsonOptions = new JsonSerializerOptions
@@ -32,9 +35,10 @@ namespace Armada.Core.Services
         /// <summary>
         /// Instantiate.
         /// </summary>
-        public ObjectiveService(DatabaseDriver database)
+        public ObjectiveService(DatabaseDriver database, LoggingModule? logging = null)
         {
             _Database = database ?? throw new ArgumentNullException(nameof(database));
+            _Logging = logging;
         }
 
         /// <summary>
@@ -192,7 +196,7 @@ namespace Armada.Core.Services
 
             SanitizeObjective(objective);
             CollectionBounds.Validate(objective);
-            await ValidateLinksAsync(auth, objective, token).ConfigureAwait(false);
+            await ValidateLinksAsync(auth, objective, token, request.IncidentIds == null).ConfigureAwait(false);
             ApplyLifecycleTimestamps(objective);
             await PersistObjectiveAsync(auth, objective, token).ConfigureAwait(false);
             OnObjectiveChanged?.Invoke(objective);
@@ -248,7 +252,7 @@ namespace Armada.Core.Services
 
                 SanitizeObjective(objective);
                 CollectionBounds.Validate(objective);
-                await ValidateLinksAsync(auth, objective, token).ConfigureAwait(false);
+                await ValidateLinksAsync(auth, objective, token, tolerateDanglingIncidents: true).ConfigureAwait(false);
                 ApplyLifecycleTimestamps(objective);
                 await PersistObjectiveAsync(auth, objective, token).ConfigureAwait(false);
                 OnObjectiveChanged?.Invoke(objective);
@@ -285,8 +289,15 @@ namespace Armada.Core.Services
         }
 
         /// <summary>
-        /// Delete an objective and all of its snapshots.
+        /// Delete an objective and all of its snapshots. The caller must be able to see the objective (its row or one of
+        /// its own snapshots). Once the row is gone, every snapshot of the objective in the caller's tenant is deleted,
+        /// including snapshots other users wrote that the caller cannot see, so no surviving snapshot restores it.
         /// </summary>
+        /// <param name="auth">Caller.</param>
+        /// <param name="id">Objective identifier.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <exception cref="ArgumentNullException">Thrown when auth or id is null.</exception>
+        /// <exception cref="KeyNotFoundException">Thrown when the caller can see neither the objective nor a snapshot of it.</exception>
         public async Task DeleteAsync(AuthContext auth, string id, CancellationToken token = default)
         {
             if (auth == null) throw new ArgumentNullException(nameof(auth));
@@ -307,6 +318,14 @@ namespace Armada.Core.Services
             {
                 await DeleteEventAsync(auth, snapshot.Id, token).ConfigureAwait(false);
             }
+
+            // A caller who saw only its own snapshot while another user's row remains has not deleted the objective;
+            // leave that user's snapshots alone. Otherwise the objective is gone, so remove every snapshot that the
+            // startup backfill or a later read could restore it from.
+            if (existing == null && await TenantObjectiveRowExistsAsync(auth, id, token).ConfigureAwait(false))
+                return;
+
+            await DeleteAllTenantSnapshotsAsync(auth, id, token).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -582,6 +601,57 @@ namespace Armada.Core.Services
             return await PersistLinkedObjectiveAsync(auth, objective, token).ConfigureAwait(false);
         }
 
+        /// <summary>
+        /// Remove a pipeline from every objective that suggests it, and store a newer snapshot.
+        /// </summary>
+        /// <param name="pipelineId">Pipeline identifier to remove from objective suggestions.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="pipelineId"/> is blank.</exception>
+        public async Task ClearSuggestedPipelineAsync(string pipelineId, CancellationToken token = default)
+        {
+            if (String.IsNullOrWhiteSpace(pipelineId)) throw new ArgumentNullException(nameof(pipelineId));
+
+            await EnsureBackfilledAsync(token).ConfigureAwait(false);
+            // Read every page before any write. A write changes update time, and the page order is by update time.
+            List<Objective> matches = new List<Objective>();
+            int pageNumber = 1;
+            while (true)
+            {
+                token.ThrowIfCancellationRequested();
+                EnumerationResult<Objective> page = await _Database.Objectives.EnumeratePageAsync(
+                    null,
+                    null,
+                    new ObjectiveQuery
+                    {
+                        PageNumber = pageNumber,
+                        PageSize = CollectionLimits.MaxPageSize
+                    },
+                    token).ConfigureAwait(false);
+
+                foreach (Objective objective in page.Objects)
+                {
+                    if (String.Equals(objective.SuggestedPipelineId, pipelineId, StringComparison.Ordinal))
+                        matches.Add(objective);
+                }
+
+                if (page.Objects.Count == 0 || pageNumber >= page.TotalPages)
+                    break;
+
+                pageNumber++;
+            }
+
+            foreach (Objective objective in matches)
+            {
+                string tenantId = objective.TenantId ?? Constants.DefaultTenantId;
+                string userId = objective.UserId ?? Constants.DefaultUserId;
+                bool isAdmin = objective.TenantId == null;
+                AuthContext auth = AuthContext.Authenticated(tenantId, userId, isAdmin, true, "PipelineDelete");
+                objective.SuggestedPipelineId = null;
+                objective.LastUpdateUtc = DateTime.UtcNow;
+                await PersistObjectiveAsync(auth, objective, token).ConfigureAwait(false);
+            }
+        }
+
         private async Task<Objective?> ReadObjectiveRowAsync(AuthContext auth, string id, CancellationToken token)
         {
             if (auth.IsAdmin)
@@ -663,6 +733,13 @@ namespace Armada.Core.Services
                     continue;
 
                 SanitizeObjective(objective);
+                if (!String.IsNullOrWhiteSpace(objective.SuggestedPipelineId))
+                {
+                    Pipeline? pipeline = await _Database.Pipelines.ReadAsync(objective.SuggestedPipelineId, token).ConfigureAwait(false);
+                    if (pipeline == null)
+                        objective.SuggestedPipelineId = null;
+                }
+
                 await UpsertObjectiveRowAsync(objective, token, skipIfExistingNewer: true).ConfigureAwait(false);
             }
         }
@@ -735,7 +812,11 @@ namespace Armada.Core.Services
                 .ToList();
         }
 
-        private async Task ValidateLinksAsync(AuthContext auth, Objective objective, CancellationToken token)
+        private async Task ValidateLinksAsync(
+            AuthContext auth,
+            Objective objective,
+            CancellationToken token,
+            bool tolerateDanglingIncidents = false)
         {
             if (!String.IsNullOrWhiteSpace(objective.ParentObjectiveId)
                 && !await ReadObjectiveExistsAsync(auth, objective.ParentObjectiveId, token).ConfigureAwait(false))
@@ -753,7 +834,19 @@ namespace Armada.Core.Services
             await ValidateIdsAsync(objective.CheckRunIds, async id => await ReadCheckRunAsync(auth, id, token).ConfigureAwait(false), "Check run").ConfigureAwait(false);
             await ValidateIdsAsync(objective.ReleaseIds, async id => await ReadReleaseAsync(auth, id, token).ConfigureAwait(false), "Release").ConfigureAwait(false);
             await ValidateIdsAsync(objective.DeploymentIds, async id => await ReadDeploymentAsync(auth, id, token).ConfigureAwait(false), "Deployment").ConfigureAwait(false);
-            await ValidateIdsAsync(objective.IncidentIds, async id => await ReadIncidentAsync(auth, id, token).ConfigureAwait(false), "Incident").ConfigureAwait(false);
+            if (tolerateDanglingIncidents)
+            {
+                foreach (string incidentId in objective.IncidentIds)
+                {
+                    bool exists = await ReadIncidentAsync(auth, incidentId, token).ConfigureAwait(false);
+                    if (!exists)
+                        _Logging?.Warn("[ObjectiveService] Objective " + objective.Id + " retains unresolved incident link " + incidentId + ".");
+                }
+            }
+            else
+            {
+                await ValidateIdsAsync(objective.IncidentIds, async id => await ReadIncidentAsync(auth, id, token).ConfigureAwait(false), "Incident").ConfigureAwait(false);
+            }
 
             if (!String.IsNullOrWhiteSpace(objective.SuggestedPipelineId)
                 && !await ReadPipelineAsync(objective.SuggestedPipelineId, token).ConfigureAwait(false))
@@ -932,6 +1025,50 @@ namespace Armada.Core.Services
             await _Database.Events.CreateAsync(snapshot, token).ConfigureAwait(false);
         }
 
+        private async Task<bool> TenantObjectiveRowExistsAsync(AuthContext auth, string id, CancellationToken token)
+        {
+            Objective? row = auth.IsAdmin
+                ? await _Database.Objectives.ReadAsync(id, token).ConfigureAwait(false)
+                : await _Database.Objectives.ReadAsync(auth.TenantId!, id, token).ConfigureAwait(false);
+            return row != null;
+        }
+
+        private async Task DeleteAllTenantSnapshotsAsync(AuthContext auth, string id, CancellationToken token)
+        {
+            const int batchSize = 500;
+            while (true)
+            {
+                token.ThrowIfCancellationRequested();
+
+                // Read unscoped: a system admin's snapshot carries no tenant id, and backfill reads every snapshot.
+                List<ArmadaEvent> events = await _Database.Events.EnumerateByEntityAsync("objective", id, batchSize, token).ConfigureAwait(false);
+                List<ArmadaEvent> doomed = events.Where(item => IsTenantSnapshot(auth, item)).ToList();
+                foreach (ArmadaEvent snapshot in doomed)
+                {
+                    await _Database.Events.DeleteAsync(snapshot.Id, token).ConfigureAwait(false);
+                }
+
+                if (doomed.Count == 0 || events.Count < batchSize)
+                    return;
+            }
+        }
+
+        private static bool IsTenantSnapshot(AuthContext auth, ArmadaEvent item)
+        {
+            if (!String.Equals(item.EventType, "objective.snapshot", StringComparison.OrdinalIgnoreCase))
+                return false;
+            if (auth.IsAdmin)
+                return true;
+            if (String.Equals(item.TenantId, auth.TenantId, StringComparison.Ordinal))
+                return true;
+            if (!String.IsNullOrEmpty(item.TenantId))
+                return false;
+
+            // A tenant-less snapshot was written by a system admin; it belongs to this tenant when its objective does.
+            Objective? objective = DeserializeObjective(item);
+            return objective != null && String.Equals(objective.TenantId, auth.TenantId, StringComparison.Ordinal);
+        }
+
         private async Task DeleteEventAsync(AuthContext auth, string eventId, CancellationToken token)
         {
             if (auth.IsAdmin)
@@ -948,7 +1085,7 @@ namespace Armada.Core.Services
             objective.LastUpdateUtc = DateTime.UtcNow;
             SanitizeObjective(objective);
             CollectionBounds.Validate(objective);
-            await ValidateLinksAsync(auth, objective, token).ConfigureAwait(false);
+            await ValidateLinksAsync(auth, objective, token, tolerateDanglingIncidents: true).ConfigureAwait(false);
             ApplyLifecycleTimestamps(objective);
             await PersistObjectiveAsync(auth, objective, token).ConfigureAwait(false);
             OnObjectiveChanged?.Invoke(objective);

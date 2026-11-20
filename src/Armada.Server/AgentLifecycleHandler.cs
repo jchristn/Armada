@@ -114,6 +114,8 @@ namespace Armada.Server
         /// run_completed) and model are known when the mission completes. Taken by <see cref="TakeMissionTelemetry"/>.
         /// </summary>
         private readonly System.Collections.Concurrent.ConcurrentDictionary<int, byte> _StoppingProcesses = new System.Collections.Concurrent.ConcurrentDictionary<int, byte>();
+        // Exact start times of local agent processes launched by this Admiral, by process id (also persisted on the mission).
+        private readonly System.Collections.Concurrent.ConcurrentDictionary<int, DateTime> _LocalLaunchStarts = new System.Collections.Concurrent.ConcurrentDictionary<int, DateTime>();
         private readonly System.Collections.Concurrent.ConcurrentDictionary<string, RemoteAgentRuntime> _RemoteMissionRuntimes = new System.Collections.Concurrent.ConcurrentDictionary<string, RemoteAgentRuntime>(StringComparer.Ordinal);
 
         private System.Collections.Concurrent.ConcurrentDictionary<string, ChatTurnTelemetryRecorder> _MissionTelemetry = new System.Collections.Concurrent.ConcurrentDictionary<string, ChatTurnTelemetryRecorder>(StringComparer.Ordinal);
@@ -607,6 +609,25 @@ namespace Armada.Server
         public void SetWebSocketHub(ArmadaWebSocketHub? hub)
         {
             _WebSocketHub = hub;
+        }
+
+        /// <summary>
+        /// Whether a merged captain update changes the model binding.
+        /// The binding is <see cref="Captain.Model"/>, <see cref="Captain.Runtime"/>, and
+        /// <see cref="Captain.ModelEndpointId"/>.
+        /// </summary>
+        /// <param name="stored">Captain currently stored.</param>
+        /// <param name="updated">Captain after the update is merged.</param>
+        /// <returns>True when any of the three fields differ.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="stored"/> or <paramref name="updated"/> is null.</exception>
+        public static bool ModelBindingChanged(Captain stored, Captain updated)
+        {
+            if (stored == null) throw new ArgumentNullException(nameof(stored));
+            if (updated == null) throw new ArgumentNullException(nameof(updated));
+            if (stored.Runtime != updated.Runtime) return true;
+            if (!String.Equals(stored.Model, updated.Model, StringComparison.Ordinal)) return true;
+            if (!String.Equals(stored.ModelEndpointId, updated.ModelEndpointId, StringComparison.Ordinal)) return true;
+            return false;
         }
 
         /// <summary>
@@ -1195,6 +1216,10 @@ namespace Armada.Server
                 throw;
             }
 
+            // Record the exact start time of a local agent process, so a local stop and liveness checks can tell it from a
+            // later process that reuses its id. A Harbor or in-process launch clears any earlier local record.
+            await RecordProcessLaunchAsync(runtime, mission.Id, processId).ConfigureAwait(false);
+
             lock (_ProcessToCaptain)
             {
                 _ProcessToCaptain[processId] = captain.Id;
@@ -1252,9 +1277,10 @@ namespace Armada.Server
             MissionActivity.Clear(mission.Id);
             string missionId = mission.Id;
             string? tenantId = mission.TenantId;
+            string? userId = mission.UserId;
             string? voyageId = mission.VoyageId;
             LatestValueThrottle<RuntimeActivity> broadcast = new LatestValueThrottle<RuntimeActivity>(_ActivityBroadcastInterval, _Time,
-                activity => _WebSocketHub?.BroadcastMissionActivity(tenantId, missionId, voyageId, activity));
+                activity => _WebSocketHub?.BroadcastMissionActivity(tenantId, missionId, voyageId, activity, userId));
             _ActivityBroadcasts[missionId] = broadcast;
             return broadcast;
         }
@@ -1319,6 +1345,7 @@ namespace Armada.Server
         private void StartProcessLivenessHeartbeat(int processId, string captainId, string missionId)
         {
             CancellationTokenSource cts = new CancellationTokenSource();
+            CancellationToken token = cts.Token;
             if (!_ProcessHeartbeatLoops.TryAdd(processId, cts))
             {
                 cts.Dispose();
@@ -1330,10 +1357,10 @@ namespace Armada.Server
             {
                 try
                 {
-                    while (!cts.Token.IsCancellationRequested)
+                    while (!token.IsCancellationRequested)
                     {
-                        await Task.Delay(interval, cts.Token).ConfigureAwait(false);
-                        if (cts.Token.IsCancellationRequested) break;
+                        await Task.Delay(interval, token).ConfigureAwait(false);
+                        if (token.IsCancellationRequested) break;
                         if (!IsTrackedProcessAlive(processId)) break;
 
                         string? mappedCaptainId = null;
@@ -1364,9 +1391,9 @@ namespace Armada.Server
                 }
                 finally
                 {
-                    if (_ProcessHeartbeatLoops.TryRemove(processId, out CancellationTokenSource? removed))
+                    if (_ProcessHeartbeatLoops.TryRemove(new KeyValuePair<int, CancellationTokenSource>(processId, cts)))
                     {
-                        removed.Dispose();
+                        cts.Dispose();
                     }
                 }
             });
@@ -1388,8 +1415,12 @@ namespace Armada.Server
         /// <summary>
         /// Determine whether the tracked wrapper process is still alive.
         /// </summary>
-        private static bool IsTrackedProcessAlive(int processId)
+        private bool IsTrackedProcessAlive(int processId)
         {
+            // A process launched here has its exact start time on record: a later process that reuses the id is not alive.
+            if (_LocalLaunchStarts.TryGetValue(processId, out DateTime startedUtc))
+                return ProcessSupervisor.IsTrackedProcessAlive(processId, null, processId, startedUtc);
+
             try
             {
                 using Process process = Process.GetProcessById(processId);
@@ -1814,7 +1845,17 @@ namespace Armada.Server
                     {
                         IHostProcessExecutor stopExecutor = ResolveStopExecutor(processId);
                         Armada.Runtimes.Interfaces.IAgentRuntime runtime = stopExecutor.CreateRuntime(captain.Runtime);
-                        await runtime.StopAsync(processId).ConfigureAwait(false);
+                        if (runtime is BaseAgentRuntime && IsReusedLocalProcess(processId, assignment))
+                        {
+                            // The id now belongs to a later process: the agent already exited. Never signal or kill it.
+                            _Logging.Warn(_Header + "process " + processId + " for captain " + captain.Id + " is not the launched agent (its start time does not match the launch); leaving it running");
+                        }
+                        else
+                        {
+                            await runtime.StopAsync(processId).ConfigureAwait(false);
+                        }
+
+                        _LocalLaunchStarts.TryRemove(processId, out _);
                     }
                 }
                 lock (_ProcessToCaptain)
@@ -1834,6 +1875,7 @@ namespace Armada.Server
 
         private void CompleteProcessExit(int processId, int? exitCode, string captainId, string missionId)
         {
+            _LocalLaunchStarts.TryRemove(processId, out _);
             _Logging.Info(_Header + "process " + processId + " exited (code " + (exitCode?.ToString() ?? "unknown") + ") for captain " + captainId + " mission " + missionId);
 
             lock (_ProcessToCaptain)
@@ -2092,6 +2134,42 @@ namespace Armada.Server
         /// Resolve the process executor for a stop. When the process id maps to a delegated Harbor job, stop
         /// on that Harbor; otherwise stop the local process.
         /// </summary>
+        private async Task RecordProcessLaunchAsync(Armada.Runtimes.Interfaces.IAgentRuntime runtime, string missionId, int processId)
+        {
+            DateTime? startedUtc = null;
+            if (runtime is BaseAgentRuntime && ProcessSupervisor.TryReadStartTimeUtc(processId, out DateTime started)) startedUtc = started;
+            if (startedUtc.HasValue) _LocalLaunchStarts[processId] = startedUtc.Value;
+            else _LocalLaunchStarts.TryRemove(processId, out _);
+
+            try
+            {
+                await _Database.Missions.SetProcessLaunchAsync(missionId, startedUtc.HasValue ? processId : null, startedUtc).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                // The in-memory record still guards stops by this Admiral; after a restart the launch-time check applies.
+                _Logging.Warn(_Header + "could not record the start time of process " + processId + " for mission " + missionId + ": " + ex.Message);
+            }
+        }
+
+        private bool IsReusedLocalProcess(int processId, Mission? assignment)
+        {
+            int? recordedPid = null;
+            DateTime? recordedStart = null;
+            if (_LocalLaunchStarts.TryGetValue(processId, out DateTime memoryStart))
+            {
+                recordedPid = processId;
+                recordedStart = memoryStart;
+            }
+            else if (assignment != null)
+            {
+                recordedPid = assignment.ProcessStartedPid;
+                recordedStart = assignment.ProcessStartedUtc;
+            }
+
+            return ProcessSupervisor.CheckIdentity(processId, assignment?.StartedUtc, recordedPid, recordedStart) == ProcessIdentityEnum.Reused;
+        }
+
         private IHostProcessExecutor ResolveStopExecutor(int processId)
         {
             if (_HarborConnections != null && _HarborConnections.TryGetHarborForProcess(processId, out string? harborId) && !String.IsNullOrWhiteSpace(harborId))

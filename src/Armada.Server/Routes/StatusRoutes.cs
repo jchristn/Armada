@@ -36,6 +36,7 @@ namespace Armada.Server.Routes
         private readonly Func<Task>? _onRemoteControlSettingsChanged;
         private readonly Func<Task<bool>?>? _restartOverride;
         private const string _HeaderRestart = "[ArmadaServer] restart: ";
+        private const int DoctorDatabaseTimeoutSeconds = 5;
 
         /// <summary>
         /// The black box runtime (the doctor's storage check and black box settings changes), or null.
@@ -208,15 +209,31 @@ namespace Armada.Server.Routes
                 // 3. Database
                 try
                 {
-                    string dbPath = _settings.DatabasePath;
-                    if (File.Exists(dbPath))
+                    if (_settings.Database.Type != DatabaseTypeEnum.Sqlite)
                     {
-                        FileInfo fi = new FileInfo(dbPath);
-                        results.Add(new { Name = "Database", Status = DoctorCheckStatusEnum.Pass, Message = $"Database exists ({fi.Length / 1024} KB) at {dbPath}" });
+                        DatabaseSettings database = _settings.Database;
+                        string target = $"{database.Type} database at {database.Hostname}:{database.EffectivePort}/{database.DatabaseName}";
+                        // Query through the Admiral's own driver so the check reflects the database it uses.
+                        string? failure = await DoctorDatabaseProbe.ProbeAsync(
+                            probeToken => _database.GetSchemaVersionAsync(probeToken),
+                            TimeSpan.FromSeconds(DoctorDatabaseTimeoutSeconds)).ConfigureAwait(false);
+                        if (failure == null)
+                            results.Add(new { Name = "Database", Status = DoctorCheckStatusEnum.Pass, Message = target + " answered a query" });
+                        else
+                            results.Add(new { Name = "Database", Status = DoctorCheckStatusEnum.Fail, Message = target + " did not answer: " + failure });
                     }
                     else
                     {
-                        results.Add(new { Name = "Database", Status = DoctorCheckStatusEnum.Warn, Message = "Database not found at " + dbPath });
+                        string dbPath = _settings.DatabasePath;
+                        if (File.Exists(dbPath))
+                        {
+                            FileInfo fi = new FileInfo(dbPath);
+                            results.Add(new { Name = "Database", Status = DoctorCheckStatusEnum.Pass, Message = $"Database exists ({fi.Length / 1024} KB) at {dbPath}" });
+                        }
+                        else
+                        {
+                            results.Add(new { Name = "Database", Status = DoctorCheckStatusEnum.Warn, Message = "Database not found at " + dbPath });
+                        }
                     }
                 }
                 catch (Exception ex)
@@ -319,12 +336,19 @@ namespace Armada.Server.Routes
                 Armada.Core.BlackBox.Storage.BlackBoxStorageDoctorResult blackBoxStorage = await Armada.Core.BlackBox.Storage.BlackBoxStorageDoctor.CheckAsync(_settings.BlackBox, BlackBox?.Stores).ConfigureAwait(false);
                 results.Add(new { Name = Armada.Core.BlackBox.Storage.BlackBoxStorageDoctorResult.CheckName, Status = blackBoxStorage.Status, Message = blackBoxStorage.Message });
 
+                // 13. Migration ledger: declared migrations below the applied maximum with no schema_migrations row.
+                MigrationLedgerReport? ledger = _database.MigrationLedger;
+                if (ledger == null)
+                    results.Add(new { Name = MigrationLedgerReport.CheckName, Status = DoctorCheckStatusEnum.Warn, Message = "The database has not been initialized, so the migration ledger was not read." });
+                else
+                    results.Add(new { Name = MigrationLedgerReport.CheckName, Status = ledger.DoctorStatus, Message = ledger.Message });
+
                 return results;
             },
             api => api
                 .WithTag("Status")
                 .WithSummary("Run system health diagnostics")
-                .WithDescription("Runs 12 system health checks (settings, git, database, server, stalled captains, failed missions, the five agent runtimes and black box storage) and returns results as a JSON array.")
+                .WithDescription("Runs 13 system health checks (settings, git, database, server, stalled captains, failed missions, the five agent runtimes, black box storage and the migration ledger) and returns results as a JSON array.")
                 .WithSecurity("ApiKey"));
 
             app.Post("/api/v1/server/stop", async (ApiRequest req) =>

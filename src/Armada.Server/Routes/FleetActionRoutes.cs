@@ -66,7 +66,7 @@ namespace Armada.Server.Routes
                 return await HandleAsync(req, authenticate, authz, async ctx =>
                 {
                     FleetActionEnumerateRequest query = Deserialize<FleetActionEnumerateRequest>(req) ?? new FleetActionEnumerateRequest();
-                    query.ApplyQuerystringOverrides(key => req.Query.GetValueOrDefault(key));
+                    query.ApplyQuerystringOverrides(key => QueryValueReader.Read(req.Query, key));
                     Stopwatch sw = Stopwatch.StartNew();
                     EnumerationResult<FleetAction> result = await _Service.EnumerateActionsAsync(ctx, query).ConfigureAwait(false);
                     result.TotalMs = Math.Round(sw.Elapsed.TotalMilliseconds, 2);
@@ -193,7 +193,7 @@ namespace Armada.Server.Routes
                 return await HandleAsync(req, authenticate, authz, async ctx =>
                 {
                     EnumerationQuery query = Deserialize<EnumerationQuery>(req) ?? new EnumerationQuery();
-                    query.ApplyQuerystringOverrides(key => req.Query.GetValueOrDefault(key));
+                    query.ApplyQuerystringOverrides(key => QueryValueReader.Read(req.Query, key));
                     Stopwatch sw = Stopwatch.StartNew();
                     EnumerationResult<FleetActionRun> result = await _Service.EnumerateRunsAsync(ctx, query).ConfigureAwait(false);
                     result.TotalMs = Math.Round(sw.Elapsed.TotalMilliseconds, 2);

@@ -1,22 +1,31 @@
 namespace Test.Shared.Suites.E2E
 {
     using System;
+    using System.Collections.Concurrent;
     using System.Collections.Generic;
+    using System.Collections.Specialized;
     using System.IO;
     using System.Linq;
     using System.Net.Http;
     using System.Net.WebSockets;
+    using System.Reflection;
     using System.Text;
     using System.Text.Json;
+    using System.Text.Json.Serialization;
     using System.Threading;
     using System.Threading.Tasks;
     using Armada.Core.Database;
     using Armada.Core.Enums;
+    using Armada.Core.Harbor;
     using Armada.Core.Models;
+    using Armada.Core.Services;
+    using Armada.Core.Services.Interfaces;
     using Armada.Core.Settings;
+    using Armada.Server.WebSocket;
     using SyslogLogging;
     using Test.Shared.Infrastructure;
     using Touchstone.Core;
+    using WatsonWebserver.Core.WebSockets;
     using static Test.Shared.Infrastructure.Asserts;
 
     /// <summary>
@@ -37,6 +46,45 @@ namespace Test.Shared.Suites.E2E
         public TestSuiteDescriptor Build()
         {
             List<TestCaseDescriptor> cases = new List<TestCaseDescriptor>();
+
+            cases.Add(CaseAsync("slow_client_does_not_block_tenant_broadcast", "SlowClient_DoesNotBlockTenantBroadcast", TestTags.Positive, () =>
+                AssertSlowClientDoesNotBlockAsync(
+                    "tenant-a",
+                    "user-a",
+                    "tenant-b",
+                    "user-b",
+                    "wave-",
+                    (ArmadaWebSocketHub hub, string marker) => hub.BroadcastToTenant("tenant-a", "mission.changed", new { marker }),
+                    true)));
+
+            cases.Add(CaseAsync("slow_client_does_not_block_cli_permission_broadcast", "SlowClient_DoesNotBlockCliPermissionBroadcast", TestTags.Positive, () =>
+                AssertSlowClientDoesNotBlockAsync(
+                    "tenant-a",
+                    "user-owner",
+                    "tenant-a",
+                    "user-other",
+                    "perm-",
+                    (ArmadaWebSocketHub hub, string marker) =>
+                    {
+                        CliPermissionRequest request = new CliPermissionRequest();
+                        request.Id = marker;
+                        request.TenantId = "tenant-a";
+                        request.UserId = "user-owner";
+                        request.ToolName = "Bash";
+                        hub.BroadcastCliPermission("cli_permission.requested", request);
+                    },
+                    false)));
+
+            cases.Add(CaseAsync("slow_client_does_not_block_command_reply", "SlowClient_DoesNotBlockCommandReply", TestTags.Positive, () =>
+                AssertSlowCommandSendDoesNotBlockAsync("{\"route\":\"command\",\"action\":\"list_fleets\"}", "Forbidden", false)));
+
+            cases.Add(CaseAsync("slow_client_does_not_block_unknown_route_error", "SlowClient_DoesNotBlockUnknownRouteError", TestTags.Positive, () =>
+                AssertSlowCommandSendDoesNotBlockAsync("{\"route\":\"other\"}", "Unknown route", false)));
+
+            cases.Add(CaseAsync("slow_client_does_not_block_handler_error", "SlowClient_DoesNotBlockHandlerError", TestTags.Positive, () =>
+                AssertSlowCommandSendDoesNotBlockAsync("{\"route\":\"subscribe\"}", "status unavailable", true)));
+
+            cases.Add(CaseAsync("outbound_queue_keeps_order_and_rejects_overflow_without_waiting", "OutboundQueue_KeepsOrderAndRejectsOverflowWithoutWaiting", TestTags.Positive, AssertOutputQueueIsolatesAHeldSendAsync));
 
             // Subscribe Tests
             cases.Add(CaseAsync("subscribe_returns_status_snapshot", "Subscribe_ReturnsStatusSnapshot", TestTags.Positive, async () =>
@@ -612,6 +660,52 @@ namespace Test.Shared.Suites.E2E
                 AssertEqual("deleted", data.Status);
             }));
 
+            cases.Add(CaseAsync("delete_vessel_stops_captain_and_cancels_review_missions", "DeleteVessel_StopsCaptainAndCancelsReviewMissions", TestTags.Positive, async () =>
+            {
+                E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this);
+                HttpClient authClient = fx.AuthClient;
+                int restPort = fx.RestPort;
+
+                string vesselId = await CreateVesselViaRestAsync(authClient, "ws-del-vessel-active").ConfigureAwait(false);
+                string captainId = await CreateCaptainViaRestAsync(authClient, "ws-del-vessel-captain").ConfigureAwait(false);
+                HttpResponseMessage activeResponse = await authClient.PostAsync("/api/v1/missions",
+                    JsonHelper.ToJsonContent(new Mission { Title = "ws-del-vessel-active", VesselId = vesselId, RequestedCaptainId = captainId })).ConfigureAwait(false);
+                activeResponse.EnsureSuccessStatusCode();
+                string activeBody = await activeResponse.Content.ReadAsStringAsync().ConfigureAwait(false);
+                MissionCreateResponse activeWrapper = JsonHelper.Deserialize<MissionCreateResponse>(activeBody);
+                Mission activeMission = activeWrapper.Mission ?? JsonHelper.Deserialize<Mission>(activeBody);
+                AssertTrue(activeMission.Status == MissionStatusEnum.Assigned || activeMission.Status == MissionStatusEnum.InProgress,
+                    "the requested captain takes the mission: " + activeMission.Status);
+                Captain holdingCaptain = await GetViaRestAsync<Captain>(authClient, "/api/v1/captains/" + captainId).ConfigureAwait(false);
+                AssertTrue(holdingCaptain.ActiveMissionIds.Contains(activeMission.Id), "the captain holds the mission before the vessel is deleted");
+
+                HttpResponseMessage reviewResponse = await authClient.PostAsync("/api/v1/missions",
+                    JsonHelper.ToJsonContent(new Mission { Title = "ws-del-vessel-review", VesselId = vesselId })).ConfigureAwait(false);
+                reviewResponse.EnsureSuccessStatusCode();
+                string reviewBody = await reviewResponse.Content.ReadAsStringAsync().ConfigureAwait(false);
+                MissionCreateResponse reviewWrapper = JsonHelper.Deserialize<MissionCreateResponse>(reviewBody);
+                Mission reviewMission = reviewWrapper.Mission ?? JsonHelper.Deserialize<Mission>(reviewBody);
+                string reviewMissionId = reviewMission.Id;
+                foreach (string status in new[] { "Assigned", "InProgress", "Review" })
+                {
+                    HttpResponseMessage statusResponse = await authClient.PutAsync("/api/v1/missions/" + reviewMissionId + "/status",
+                        JsonHelper.ToJsonContent(new { Status = status })).ConfigureAwait(false);
+                    statusResponse.EnsureSuccessStatusCode();
+                }
+
+                JsonElement deleteResponse = await WsCommandAsync(restPort, "delete_vessel", new { id = vesselId }).ConfigureAwait(false);
+                AssertEqual("command.result", deleteResponse.GetProperty("type").GetString());
+
+                Mission cancelledActive = await GetViaRestAsync<Mission>(authClient, "/api/v1/missions/" + activeMission.Id).ConfigureAwait(false);
+                Captain stoppedCaptain = await GetViaRestAsync<Captain>(authClient, "/api/v1/captains/" + captainId).ConfigureAwait(false);
+                Mission cancelledReview = await GetViaRestAsync<Mission>(authClient, "/api/v1/missions/" + reviewMissionId).ConfigureAwait(false);
+                AssertEqual(MissionStatusEnum.Cancelled, cancelledActive.Status);
+                AssertEqual(CaptainStateEnum.Idle, stoppedCaptain.State);
+                AssertEqual(0, stoppedCaptain.ActiveMissionCount);
+                AssertNull(stoppedCaptain.ProcessId);
+                AssertEqual(MissionStatusEnum.Cancelled, cancelledReview.Status);
+            }));
+
             // Voyage Tests
             cases.Add(CaseAsync("list_voyages_empty_returns_empty_list", "ListVoyages_Empty_ReturnsEmptyList", TestTags.Positive, async () =>
             {
@@ -1086,6 +1180,95 @@ namespace Test.Shared.Suites.E2E
                 AssertEqual("list_captains", resp.GetProperty("action").GetString());
             }));
 
+            cases.Add(CaseAsync("create_captain_discards_operational_fields", "CreateCaptain_DiscardsOperationalFields", TestTags.Positive, async () =>
+            {
+                E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this);
+                int restPort = fx.RestPort;
+                E2ETenantUser owner = await E2ETenantUser.CreateAsync(fx.AuthClient, "ws-captain-create-owner").ConfigureAwait(false);
+                string captainId = "cpt_test_" + Guid.NewGuid().ToString("N");
+                string captainName = "ws-create-operational-" + Guid.NewGuid().ToString("N").Substring(0, 8);
+                DateTime oldCreatedUtc = new DateTime(2000, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+                DateTime futureUtc = DateTime.UtcNow.AddDays(1);
+                // Above the operating-system process-id limit. Stop and the health check signal a stored
+                // process id, so the value must not be this test process.
+                int suppliedProcessId = 1900000001;
+                Captain request = new Captain(captainName, AgentRuntimeEnum.ClaudeCode)
+                {
+                    Id = captainId,
+                    TenantId = owner.TenantId,
+                    UserId = owner.UserId,
+                    SystemInstructions = "Keep changes small.",
+                    AllowedPersonas = "Worker,Judge",
+                    PreferredPersona = "Worker",
+                    ReasoningEffort = ReasoningEffortEnum.High,
+                    Tier = CaptainTierEnum.Premium,
+                    RuntimeOptionsJson = "{\"autoApprove\":true}",
+                    CliPermissionPolicy = CliPermissionPolicyEnum.ApproveInArmada,
+                    MaxConcurrency = 2,
+                    UsageCaptureEnabled = false,
+                    UsageCaptureIntervalSeconds = 600,
+                    Active = false,
+                    State = CaptainStateEnum.Working,
+                    ActiveMissionCount = 1,
+                    ActiveMissionIds = new List<string> { "msn_test_assignment" },
+                    CurrentSessionId = "pls_test_session",
+                    ModelProfileId = "mdl_test_profile",
+                    ProcessId = suppliedProcessId,
+                    RecoveryAttempts = 3,
+                    QuarantineUntilUtc = futureUtc,
+                    QuarantineReason = "test quarantine",
+                    LastHeartbeatUtc = oldCreatedUtc,
+                    LastProcessAliveUtc = oldCreatedUtc,
+                    CreatedUtc = oldCreatedUtc
+                };
+
+                try
+                {
+                    JsonElement createResponse = await WsCommandAsync(restPort, "create_captain", new { data = request }).ConfigureAwait(false);
+                    AssertEqual("command.result", createResponse.GetProperty("type").GetString());
+                    Captain created = DeserializeData<Captain>(createResponse);
+                    JsonElement readResponse = await WsCommandAsync(restPort, "get_captain", new { id = captainId }).ConfigureAwait(false);
+                    AssertEqual("command.result", readResponse.GetProperty("type").GetString());
+                    Captain stored = DeserializeData<Captain>(readResponse);
+
+                    AssertEqual(captainId, created.Id);
+                    AssertEqual(owner.TenantId, stored.TenantId);
+                    AssertEqual(owner.UserId, stored.UserId);
+                    AssertEqual(captainName, stored.Name);
+                    AssertEqual(AgentRuntimeEnum.ClaudeCode, stored.Runtime);
+                    AssertEqual("Keep changes small.", stored.SystemInstructions);
+                    AssertEqual("Worker,Judge", stored.AllowedPersonas);
+                    AssertEqual("Worker", stored.PreferredPersona);
+                    AssertEqual((ReasoningEffortEnum?)ReasoningEffortEnum.High, stored.ReasoningEffort);
+                    AssertEqual((CaptainTierEnum?)CaptainTierEnum.Premium, stored.Tier);
+                    AssertEqual("{\"autoApprove\":true}", stored.RuntimeOptionsJson);
+                    AssertEqual((CliPermissionPolicyEnum?)CliPermissionPolicyEnum.ApproveInArmada, stored.CliPermissionPolicy);
+                    AssertEqual(2, stored.MaxConcurrency, "the requested concurrency is kept");
+                    AssertEqual((bool?)false, stored.UsageCaptureEnabled, "the usage capture opt-out is kept");
+                    AssertEqual(600, stored.UsageCaptureIntervalSeconds);
+                    AssertFalse(stored.Active, "Active is configuration and is kept");
+                    AssertEqual(CaptainStateEnum.Idle, stored.State);
+                    AssertEqual(0, stored.ActiveMissionCount);
+                    AssertEqual(0, stored.ActiveMissionIds.Count);
+                    AssertNull(stored.CurrentSessionId, "CurrentSessionId should be empty on create");
+                    AssertNull(created.ModelProfileId, "ModelProfileId is server-owned");
+                    AssertNull(stored.ModelProfileId, "ModelProfileId is server-owned");
+                    AssertNull(created.ProcessId, "ProcessId should be empty on create");
+                    AssertNull(stored.ProcessId, "ProcessId should be empty on create");
+                    AssertEqual(0, stored.RecoveryAttempts);
+                    AssertNull(stored.QuarantineUntilUtc, "QuarantineUntilUtc should be empty on create");
+                    AssertNull(stored.QuarantineReason, "QuarantineReason should be empty on create");
+                    AssertNull(stored.LastHeartbeatUtc, "LastHeartbeatUtc should be empty on create");
+                    AssertNull(stored.LastProcessAliveUtc, "LastProcessAliveUtc should be empty on create");
+                    AssertTrue(stored.CreatedUtc > oldCreatedUtc, "CreatedUtc should be set by the server");
+                }
+                finally
+                {
+                    await WsCommandAsync(restPort, "stop_captain", new { captainId = captainId }).ConfigureAwait(false);
+                    await WsCommandAsync(restPort, "delete_captain", new { id = captainId }).ConfigureAwait(false);
+                }
+            }));
+
             cases.Add(CaseAsync("create_captain_returns_created_captain", "CreateCaptain_ReturnsCreatedCaptain", TestTags.Positive, async () =>
             {
                 E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this);
@@ -1385,6 +1568,36 @@ namespace Test.Shared.Suites.E2E
                 // May return error (no worktree/settings) or result — just verify action is correct
                 string action = resp.GetProperty("action").GetString()!;
                 AssertEqual("get_mission_diff", action);
+            }));
+
+            cases.Add(CaseAsync("get_mission_diff_harbor_worktree_returns_harbor_diff", "GetMissionDiff_HarborWorktree_ReturnsHarborDiff", TestTags.Positive, async () =>
+            {
+                await AssertHarborMissionDiffAsync(HarborDiffProbe.LiveHarbor).ConfigureAwait(false);
+            }));
+
+            cases.Add(CaseAsync("get_mission_diff_saved_file_precedes_harbor_worktree", "GetMissionDiff_SavedFile_PrecedesHarborWorktree", TestTags.Positive, async () =>
+            {
+                await AssertHarborMissionDiffAsync(HarborDiffProbe.SavedFile).ConfigureAwait(false);
+            }));
+
+            cases.Add(CaseAsync("get_mission_diff_snapshot_precedes_harbor_worktree", "GetMissionDiff_Snapshot_PrecedesHarborWorktree", TestTags.Positive, async () =>
+            {
+                await AssertHarborMissionDiffAsync(HarborDiffProbe.Snapshot).ConfigureAwait(false);
+            }));
+
+            cases.Add(CaseAsync("get_mission_diff_local_worktree_returns_local_diff", "GetMissionDiff_LocalWorktree_ReturnsLocalDiff", TestTags.Positive, async () =>
+            {
+                await AssertHarborMissionDiffAsync(HarborDiffProbe.LocalDock).ConfigureAwait(false);
+            }));
+
+            cases.Add(CaseAsync("get_mission_diff_missing_harbor_worktree_returns_unavailable", "GetMissionDiff_MissingHarborWorktree_ReturnsUnavailable", TestTags.Negative, async () =>
+            {
+                await AssertHarborMissionDiffAsync(HarborDiffProbe.MissingHarborWorktree).ConfigureAwait(false);
+            }));
+
+            cases.Add(CaseAsync("get_mission_diff_disconnected_harbor_returns_unavailable", "GetMissionDiff_DisconnectedHarbor_ReturnsUnavailable", TestTags.Negative, async () =>
+            {
+                await AssertHarborMissionDiffAsync(HarborDiffProbe.DisconnectedHarbor).ConfigureAwait(false);
             }));
 
             cases.Add(CaseAsync("get_mission_log_non_existent_returns_error", "GetMissionLog_NonExistent_ReturnsError", TestTags.Negative, async () =>
@@ -1963,6 +2176,875 @@ namespace Test.Shared.Suites.E2E
                 displayName: displayName,
                 executeAsync: (CancellationToken ct) => body(),
                 tags: new List<string> { tag });
+        }
+
+        private enum HarborDiffProbe
+        {
+            LiveHarbor,
+            SavedFile,
+            Snapshot,
+            LocalDock,
+            MissingHarborWorktree,
+            DisconnectedHarbor
+        }
+
+        /// <summary>
+        /// A mission diff read through the WebSocket command handler.
+        /// </summary>
+        private sealed class MissionDiffReply
+        {
+            /// <summary>
+            /// Reply type.
+            /// </summary>
+            public string Type { get; set; } = "";
+
+            /// <summary>
+            /// Error text, or empty.
+            /// </summary>
+            public string Error { get; set; } = "";
+
+            /// <summary>
+            /// Error code, or empty.
+            /// </summary>
+            public string Code { get; set; } = "";
+
+            /// <summary>
+            /// Diff text, or empty.
+            /// </summary>
+            public string Diff { get; set; } = "";
+        }
+
+        /// <summary>
+        /// Presents one Harbor path that is absent on this machine and runs git in the real repository.
+        /// </summary>
+        private sealed class HarborPathLoopback
+        {
+            private readonly HarborConnectionManager _Manager;
+            private readonly string _HarborId;
+            private readonly string _HarborPath;
+            private readonly string _RealPath;
+            private readonly LocalHostCommandExecutor _Host = new LocalHostCommandExecutor();
+
+            /// <summary>
+            /// Instantiate.
+            /// </summary>
+            /// <param name="manager">Admiral-side connection manager.</param>
+            /// <param name="harborId">Harbor identifier.</param>
+            /// <param name="harborPath">Worktree path stored on the dock. This directory is not created here.</param>
+            /// <param name="realPath">Repository the Harbor git commands run in.</param>
+            public HarborPathLoopback(HarborConnectionManager manager, string harborId, string harborPath, string realPath)
+            {
+                _Manager = manager;
+                _HarborId = harborId;
+                _HarborPath = harborPath;
+                _RealPath = realPath;
+            }
+
+            /// <summary>
+            /// Send channel for the Harbor handshake.
+            /// </summary>
+            public HarborSendDelegate Send
+            {
+                get { return SendAsync; }
+            }
+
+            private Task SendAsync(HarborMessage message, CancellationToken token)
+            {
+                if (message is HarborGitRequest git)
+                {
+                    _ = Task.Run(async () =>
+                    {
+                        await ReplyGitAsync(git, token).ConfigureAwait(false);
+                    }, token);
+                }
+                else if (message is HarborFileRequest file)
+                {
+                    _ = Task.Run(async () =>
+                    {
+                        await ReplyFileAsync(file, token).ConfigureAwait(false);
+                    }, token);
+                }
+
+                return Task.CompletedTask;
+            }
+
+            private async Task ReplyGitAsync(HarborGitRequest git, CancellationToken token)
+            {
+                HarborGitResult reply = new HarborGitResult
+                {
+                    RequestId = git.RequestId,
+                    CorrelationId = git.CorrelationId
+                };
+                try
+                {
+                    List<string> arguments = new List<string>();
+                    foreach (string argument in git.Arguments)
+                        arguments.Add(Map(argument));
+
+                    HostCommandResult result = await _Host.RunAsync(new HostCommandRequest
+                    {
+                        Executable = git.Executable,
+                        WorkingDirectory = Map(git.WorkingDirectory),
+                        Arguments = arguments,
+                        TimeoutMs = git.TimeoutMs > 0 ? git.TimeoutMs : 120000,
+                        ExpectedExitCodes = git.ExpectedExitCodes != null ? new List<int>(git.ExpectedExitCodes) : new List<int>()
+                    }, token).ConfigureAwait(false);
+
+                    reply.ExitCode = result.ExitCode;
+                    reply.StandardOutput = result.StandardOutput;
+                    reply.StandardError = result.StandardError;
+                    reply.TimedOut = result.TimedOut;
+                }
+                catch (Exception ex)
+                {
+                    reply.ExitCode = 1;
+                    reply.StandardError = ex.Message;
+                }
+
+                await _Manager.OnMessageAsync(_HarborId, reply, token).ConfigureAwait(false);
+            }
+
+            private async Task ReplyFileAsync(HarborFileRequest file, CancellationToken token)
+            {
+                HarborFileResult reply = new HarborFileResult
+                {
+                    RequestId = file.RequestId,
+                    CorrelationId = file.CorrelationId,
+                    Success = true
+                };
+                try
+                {
+                    if (file.Operation == HarborFileOperationEnum.Stat)
+                    {
+                        string mapped = Map(file.Path);
+                        bool isDirectory = Directory.Exists(mapped);
+                        reply.IsDirectory = isDirectory;
+                        reply.Exists = isDirectory || File.Exists(mapped);
+                    }
+                    else
+                    {
+                        reply.Success = false;
+                        reply.Message = "unsupported file operation " + file.Operation;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    reply.Success = false;
+                    reply.Message = ex.Message;
+                }
+
+                await _Manager.OnMessageAsync(_HarborId, reply, token).ConfigureAwait(false);
+            }
+
+            private string Map(string path)
+            {
+                if (String.IsNullOrEmpty(path)) return path;
+                if (String.Equals(path, _HarborPath, StringComparison.OrdinalIgnoreCase)) return _RealPath;
+                string prefix = _HarborPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+                if (path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                    return Path.Combine(_RealPath, path.Substring(prefix.Length));
+                return path;
+            }
+        }
+
+        private static async Task AssertHarborMissionDiffAsync(HarborDiffProbe probe)
+        {
+            const string HarborId = "hbr_ws_diff";
+            const string Marker = "harbor-diff-marker";
+            const string SavedText = "saved-diff-text\n";
+            const string SnapshotText = "snapshot-diff-text";
+            string root = TestTemp.NewDirectory("ws_harbor_diff");
+            string repo = Path.Combine(root, "harbor-repo");
+            string absent = Path.Combine(root, "not-on-admiral");
+            string missing = Path.Combine(root, "missing-on-harbor");
+            using (TestDatabase database = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+            {
+                await CreateFeatureRepositoryAsync(repo, Marker).ConfigureAwait(false);
+                AssertFalse(Directory.Exists(absent), "the Harbor worktree path is absent on the Admiral machine");
+
+                LoggingModule logging = new LoggingModule();
+                logging.Settings.EnableConsole = false;
+                ArmadaSettings settings = new ArmadaSettings();
+                settings.LogDirectory = Path.Combine(root, "logs");
+                Directory.CreateDirectory(settings.LogDirectory);
+
+                GitService localGit = new GitService(logging);
+                HarborConnectionManager manager = new HarborConnectionManager(new HarborService(database.Driver, logging), logging, null);
+                DockHostResolver hosts = new DockHostResolver(localGit, logging, manager);
+                if (probe != HarborDiffProbe.DisconnectedHarbor)
+                {
+                    HarborPathLoopback loopback = new HarborPathLoopback(manager, HarborId, absent, repo);
+                    HarborHandshake handshake = new HarborHandshake
+                    {
+                        HarborId = HarborId,
+                        Name = "Rig",
+                        ProtocolVersion = HarborProtocol.Version,
+                        Capabilities = new List<HarborCapability>
+                        {
+                            new HarborCapability { Name = HarborProtocol.DockCapability, Available = true }
+                        }
+                    };
+                    await manager.OnHandshakeAsync(handshake, null, null, loopback.Send).ConfigureAwait(false);
+                }
+
+                DockService docks = new DockService(logging, database.Driver, settings, localGit);
+                CaptainService captains = new CaptainService(logging, database.Driver, settings, localGit, docks);
+                MissionService missions = new MissionService(logging, database.Driver, settings, docks, captains, git: localGit);
+                missions.DockHosts = hosts;
+
+                Vessel vessel = new Vessel("app", repo);
+                vessel.DefaultBranch = "main";
+                vessel = await database.Driver.Vessels.CreateAsync(vessel).ConfigureAwait(false);
+
+                bool local = probe == HarborDiffProbe.LocalDock;
+                string worktree = local ? repo : (probe == HarborDiffProbe.MissingHarborWorktree ? missing : absent);
+                Dock dock = new Dock(vessel.Id);
+                dock.WorktreePath = worktree;
+                dock.BranchName = "feature";
+                dock.Active = true;
+                if (!local)
+                {
+                    dock.HarborId = HarborId;
+                    dock.RepositoryPath = repo;
+                }
+                dock = await database.Driver.Docks.CreateAsync(dock).ConfigureAwait(false);
+
+                Mission mission = new Mission("Harbor diff", "Read the mission diff");
+                mission.VesselId = vessel.Id;
+                mission.DockId = dock.Id;
+                mission.BranchName = "feature";
+                if (probe == HarborDiffProbe.Snapshot) mission.DiffSnapshot = SnapshotText;
+                mission = await database.Driver.Missions.CreateAsync(mission).ConfigureAwait(false);
+
+                if (probe == HarborDiffProbe.SavedFile)
+                {
+                    string savedDirectory = Path.Combine(settings.LogDirectory, "diffs");
+                    Directory.CreateDirectory(savedDirectory);
+                    await File.WriteAllTextAsync(Path.Combine(savedDirectory, mission.Id + ".diff"), SavedText).ConfigureAwait(false);
+                }
+
+                WebSocketCommandHandler handler = new WebSocketCommandHandler(
+                    null!,
+                    database.Driver,
+                    null!,
+                    settings,
+                    localGit,
+                    null,
+                    new JsonSerializerOptions(),
+                    (_, _) => { },
+                    (_, _) => { });
+                handler.Missions = missions;
+
+                WebSocketCommand command = new WebSocketCommand();
+                command.Action = "get_mission_diff";
+                command.Id = mission.Id;
+                object result = await handler.HandleCommandAsync("get_mission_diff", command, "{}").ConfigureAwait(false);
+                MissionDiffReply reply = ReadMissionDiffReply(result);
+
+                if (probe == HarborDiffProbe.LiveHarbor || probe == HarborDiffProbe.LocalDock)
+                {
+                    AssertEqual("command.result", reply.Type, "diff result");
+                    AssertContains(Marker, reply.Diff, "diff text from git");
+                }
+                else if (probe == HarborDiffProbe.SavedFile)
+                {
+                    AssertEqual("command.result", reply.Type, "saved diff result");
+                    AssertEqual(SavedText, reply.Diff, "saved diff text");
+                }
+                else if (probe == HarborDiffProbe.Snapshot)
+                {
+                    AssertEqual("command.result", reply.Type, "snapshot result");
+                    AssertEqual(SnapshotText, reply.Diff, "snapshot text");
+                }
+                else if (probe == HarborDiffProbe.MissingHarborWorktree)
+                {
+                    AssertEqual("command.error", reply.Type, "missing Harbor worktree");
+                    AssertEqual("Unavailable", reply.Code, "missing Harbor worktree code");
+                    AssertEqual("No diff available: the worktree is not accessible on its owning host and no saved diff exists", reply.Error, "missing Harbor worktree message");
+                }
+                else
+                {
+                    AssertEqual("command.error", reply.Type, "disconnected Harbor");
+                    AssertEqual("Unavailable", reply.Code, "disconnected Harbor code");
+                    AssertEqual("The mission worktree is on Harbor " + HarborId + ". Connect that Harbor, ensure it supports mission docks, and try again; its diff is currently unavailable.", reply.Error, "disconnected Harbor message");
+                }
+            }
+
+            TestTemp.TryDelete(root);
+        }
+
+        private static async Task CreateFeatureRepositoryAsync(string repo, string marker)
+        {
+            Directory.CreateDirectory(repo);
+            await HarborDockGitFixture.GitAsync(repo, "init", "--initial-branch=main").ConfigureAwait(false);
+            await HarborDockGitFixture.GitAsync(repo, "config", "user.email", "armada@example.com").ConfigureAwait(false);
+            await HarborDockGitFixture.GitAsync(repo, "config", "user.name", "Armada Test").ConfigureAwait(false);
+            await File.WriteAllTextAsync(Path.Combine(repo, "README.md"), "# app\n").ConfigureAwait(false);
+            await HarborDockGitFixture.GitAsync(repo, "add", "README.md").ConfigureAwait(false);
+            await HarborDockGitFixture.GitAsync(repo, "commit", "-m", "Initial commit").ConfigureAwait(false);
+            await HarborDockGitFixture.GitAsync(repo, "checkout", "-b", "feature").ConfigureAwait(false);
+            await HarborDockGitFixture.CommitFileAsync(repo, "note.txt", marker + "\n", "Feature work").ConfigureAwait(false);
+        }
+
+        private static MissionDiffReply ReadMissionDiffReply(object result)
+        {
+            JsonSerializerOptions options = new JsonSerializerOptions
+            {
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+                Converters = { new JsonStringEnumConverter() }
+            };
+            string json = JsonSerializer.Serialize(result, options);
+            using (JsonDocument document = JsonDocument.Parse(json))
+            {
+                JsonElement root = document.RootElement;
+                MissionDiffReply reply = new MissionDiffReply();
+                reply.Type = root.GetProperty("type").GetString() ?? "";
+                if (root.TryGetProperty("error", out JsonElement error)) reply.Error = error.GetString() ?? "";
+                if (root.TryGetProperty("code", out JsonElement code)) reply.Code = code.ValueKind == JsonValueKind.String ? (code.GetString() ?? "") : code.GetRawText();
+                if (root.TryGetProperty("data", out JsonElement data) && data.ValueKind == JsonValueKind.Object && data.TryGetProperty("diff", out JsonElement diff))
+                    reply.Diff = diff.GetString() ?? "";
+                return reply;
+            }
+        }
+
+        private static async Task AssertSlowClientDoesNotBlockAsync(
+            string recipientTenantId,
+            string recipientUserId,
+            string otherTenantId,
+            string otherUserId,
+            string markerPrefix,
+            Action<ArmadaWebSocketHub, string> broadcast,
+            bool floodUntilDisconnected)
+        {
+            using (DeliveryHarness harness = DeliveryHarness.Create(false))
+            {
+                ScriptedSocket slow = harness.AddClient(recipientTenantId, recipientUserId, true);
+                ScriptedSocket fast = harness.AddClient(recipientTenantId, recipientUserId, false);
+                ScriptedSocket other = harness.AddClient(otherTenantId, otherUserId, false);
+                try
+                {
+                    await harness.BroadcastWhileHeldAsync(slow, fast, other, markerPrefix + "000", marker => broadcast(harness.Hub, marker)).ConfigureAwait(false);
+                    if (!floodUntilDisconnected) return;
+
+                    bool disconnected = false;
+                    for (int i = 1; i <= 128 && !disconnected; i++)
+                    {
+                        string marker = markerPrefix + i.ToString("D3");
+                        await harness.BroadcastWhileHeldAsync(slow, fast, other, marker, markerValue => broadcast(harness.Hub, markerValue)).ConfigureAwait(false);
+                        disconnected = slow.DisposeCount > 0;
+                    }
+
+                    Assert(slow.DisposeCount > 0, "A full outbound backlog must abort only the slow client while its send is still held.");
+                    await harness.BroadcastWhileHeldAsync(slow, fast, other, markerPrefix + "999", marker => broadcast(harness.Hub, marker)).ConfigureAwait(false);
+                    Assert(slow.ReleaseCompleted == false, "The held send must still be outstanding when the slow client is aborted.");
+                    AssertEqual(1, slow.SendCount, "Only the first frame may enter the held send.");
+                    AssertEqual(2, harness.Hub.ConnectionCount, "The fast client and the filtered client stay connected.");
+                    Assert(other.Contains(markerPrefix) == false, "A client outside the recipient filter must not receive the event.");
+                }
+                finally
+                {
+                    slow.Release();
+                    await harness.DrainAsync().ConfigureAwait(false);
+                }
+            }
+        }
+
+        private static async Task AssertSlowCommandSendDoesNotBlockAsync(string body, string replyMarker, bool failStatus)
+        {
+            using (DeliveryHarness harness = DeliveryHarness.Create(failStatus))
+            {
+                ScriptedSocket slow = harness.AddClient("tenant-a", "user-a", true);
+                ScriptedSocket fast = harness.AddClient("tenant-a", "user-a", false);
+                ScriptedSocket other = harness.AddClient("tenant-b", "user-b", false);
+                Task? handler = null;
+                try
+                {
+                    handler = Task.Run(() => harness.HandleAsync(slow, body));
+                    await slow.WaitUntilSendStartedAsync().ConfigureAwait(false);
+                    await harness.BroadcastWhileHeldAsync(
+                        slow,
+                        fast,
+                        other,
+                        "delivery-marker",
+                        marker => harness.Hub.BroadcastToTenant("tenant-a", "mission.changed", new { marker })).ConfigureAwait(false);
+                    await harness.WaitForCompletionAsync(handler, "The command handler must return while its send is still held.").ConfigureAwait(false);
+                    await slow.WaitForTextAsync(replyMarker).ConfigureAwait(false);
+                }
+                finally
+                {
+                    slow.Release();
+                    if (handler != null)
+                    {
+                        try { await handler.WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false); }
+                        catch (Exception ex) { _ = ex.Message; }
+                    }
+
+                    await harness.DrainAsync().ConfigureAwait(false);
+                }
+            }
+        }
+
+        private static async Task AssertOutputQueueIsolatesAHeldSendAsync()
+        {
+            TaskCompletionSource<bool> release = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            TaskCompletionSource<bool> started = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            TaskCompletionSource<bool> drained = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            TaskCompletionSource<bool> disconnected = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            TaskCompletionSource<bool> fastSent = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            List<string> heldFrames = new List<string>();
+            int disconnects = 0;
+
+            using (WebSocketClientOutputQueue held = new WebSocketClientOutputQueue(
+                async frame =>
+                {
+                    lock (heldFrames)
+                    {
+                        heldFrames.Add(frame);
+                        if (heldFrames.Count >= 2) drained.TrySetResult(true);
+                    }
+
+                    started.TrySetResult(true);
+                    await release.Task.ConfigureAwait(false);
+                },
+                error =>
+                {
+                    Interlocked.Increment(ref disconnects);
+                    disconnected.TrySetResult(true);
+                },
+                1))
+            using (WebSocketClientOutputQueue fast = new WebSocketClientOutputQueue(
+                frame =>
+                {
+                    fastSent.TrySetResult(frame == "event");
+                    return Task.CompletedTask;
+                },
+                error => throw new InvalidOperationException("The other queue must stay open."),
+                1))
+            {
+                try
+                {
+                    Assert(held.TryEnqueue("first"), "The first frame must be accepted.");
+                    using (CancellationTokenSource startedTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(5)))
+                    {
+                        await started.Task.WaitAsync(startedTimeout.Token).ConfigureAwait(false);
+                    }
+
+                    Assert(held.TryEnqueue("second"), "One waiting frame must fit behind the held send.");
+                    Assert(held.TryEnqueue("third") == false, "A full queue must reject the next frame without waiting.");
+                    using (CancellationTokenSource disconnectTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(1)))
+                    {
+                        await disconnected.Task.WaitAsync(disconnectTimeout.Token).ConfigureAwait(false);
+                    }
+
+                    AssertEqual(1, Volatile.Read(ref disconnects));
+                    Assert(release.Task.IsCompleted == false, "Queue overflow must be reported while the send is still held.");
+                    Assert(fast.TryEnqueue("event"), "The other client must accept a frame while the first send is held.");
+                    using (CancellationTokenSource fastTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(1)))
+                    {
+                        bool sent = await fastSent.Task.WaitAsync(fastTimeout.Token).ConfigureAwait(false);
+                        Assert(sent, "The other client must receive its frame while the first send is held.");
+                    }
+
+                    lock (heldFrames) AssertEqual("first", heldFrames[0]);
+                }
+                finally
+                {
+                    release.TrySetResult(true);
+                }
+
+                using (CancellationTokenSource orderTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(2)))
+                {
+                    await drained.Task.WaitAsync(orderTimeout.Token).ConfigureAwait(false);
+                }
+
+                lock (heldFrames)
+                {
+                    AssertEqual(2, heldFrames.Count);
+                    AssertEqual("first", heldFrames[0]);
+                    AssertEqual("second", heldFrames[1]);
+                }
+            }
+        }
+
+        #endregion
+
+        #region Private-Types
+
+        private sealed class DeliveryHarness : IDisposable
+        {
+            private readonly ConcurrentDictionary<Guid, WebSocketClientState> _Clients;
+            private readonly List<ScriptedSocket> _Sockets = new List<ScriptedSocket>();
+            private readonly List<Task> _Operations = new List<Task>();
+
+            private DeliveryHarness(ArmadaWebSocketHub hub, ConcurrentDictionary<Guid, WebSocketClientState> clients)
+            {
+                Hub = hub;
+                _Clients = clients;
+            }
+
+            public ArmadaWebSocketHub Hub { get; }
+
+            public static DeliveryHarness Create(bool failStatus)
+            {
+                LoggingModule logging = new LoggingModule();
+                logging.Settings.EnableConsole = false;
+                IdleDatabaseDriver database = new IdleDatabaseDriver();
+                ArmadaWebSocketHub hub = new ArmadaWebSocketHub(
+                    logging,
+                    SlowClientAdmiralProxy.Create(failStatus),
+                    database,
+                    new RecordingMergeQueueService());
+                FieldInfo? clientsField = typeof(ArmadaWebSocketHub).GetField("_Clients", BindingFlags.Instance | BindingFlags.NonPublic);
+                Assert(clientsField != null, "The hub client map must be present.");
+                ConcurrentDictionary<Guid, WebSocketClientState> clients = (ConcurrentDictionary<Guid, WebSocketClientState>)clientsField.GetValue(hub)!;
+                return new DeliveryHarness(hub, clients);
+            }
+
+            public ScriptedSocket AddClient(string tenantId, string userId, bool holdSend)
+            {
+                ScriptedSocket socket = new ScriptedSocket(holdSend);
+                WebSocketRequestDescriptor descriptor = new WebSocketRequestDescriptor(
+                    "/ws",
+                    new NameValueCollection(),
+                    new Dictionary<string, string>(),
+                    "13",
+                    new List<string>(),
+                    "127.0.0.1",
+                    9);
+                WebSocketSession session = new WebSocketSession(socket, descriptor, Guid.NewGuid(), 8192, 1048576, 1000);
+                socket.Session = session;
+                AuthContext auth = AuthContext.Authenticated(tenantId, userId, false, false, "Bearer");
+                _Clients[session.Id] = new WebSocketClientState(session, auth);
+                _Sockets.Add(socket);
+                return socket;
+            }
+
+            public Task HandleAsync(ScriptedSocket socket, string body)
+            {
+                WebSocketClientState? client = null;
+                foreach (WebSocketClientState candidate in _Clients.Values)
+                {
+                    if (ReferenceEquals(candidate.Session, socket.Session))
+                    {
+                        client = candidate;
+                        break;
+                    }
+                }
+
+                Assert(client != null, "The command client must be registered.");
+                MethodInfo? method = typeof(ArmadaWebSocketHub).GetMethod(
+                    "HandleMessageAsync",
+                    BindingFlags.Instance | BindingFlags.NonPublic,
+                    null,
+                    new Type[] { typeof(WebSocketClientState), typeof(string) },
+                    null);
+                Assert(method != null, "HandleMessageAsync must be present.");
+                object? result = method.Invoke(Hub, new object[] { client, body });
+                Task handler = (Task)result!;
+                _Operations.Add(handler);
+                return handler;
+            }
+
+            public async Task BroadcastWhileHeldAsync(ScriptedSocket slow, ScriptedSocket fast, ScriptedSocket other, string marker, Action<string> broadcast)
+            {
+                Task operation = Task.Run(() => broadcast(marker));
+                _Operations.Add(operation);
+                await slow.WaitUntilSendStartedAsync().ConfigureAwait(false);
+                await WaitForCompletionAsync(operation, "The broadcast must return while a client send is still held.").ConfigureAwait(false);
+                await fast.WaitForTextAsync(marker).ConfigureAwait(false);
+                Assert(other.Contains(marker) == false, "A filtered client must not receive the frame.");
+                Assert(slow.ReleaseCompleted == false, "The assertion must run before the held send is released.");
+            }
+
+            public async Task WaitForCompletionAsync(Task operation, string message)
+            {
+                using (CancellationTokenSource timeout = new CancellationTokenSource(TimeSpan.FromSeconds(1)))
+                {
+                    try
+                    {
+                        await operation.WaitAsync(timeout.Token).ConfigureAwait(false);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        Assert(false, message);
+                    }
+                }
+            }
+
+            public async Task DrainAsync()
+            {
+                foreach (ScriptedSocket socket in _Sockets) socket.Release();
+                foreach (Task operation in _Operations)
+                {
+                    try { await operation.WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false); }
+                    catch (Exception ex) { _ = ex.Message; }
+                }
+
+                FieldInfo? queuesField = typeof(ArmadaWebSocketHub).GetField("_OutputQueues", BindingFlags.Instance | BindingFlags.NonPublic);
+                if (queuesField != null)
+                {
+                    object? value = queuesField.GetValue(Hub);
+                    if (value is System.Collections.IEnumerable queues)
+                    {
+                        foreach (object entry in queues)
+                        {
+                            PropertyInfo? valueProperty = entry.GetType().GetProperty("Value");
+                            if (valueProperty == null) continue;
+                            IDisposable? queue = valueProperty.GetValue(entry) as IDisposable;
+                            if (queue != null) queue.Dispose();
+                        }
+                    }
+                }
+            }
+
+            public void Dispose()
+            {
+                foreach (ScriptedSocket socket in _Sockets) socket.Shutdown();
+            }
+        }
+
+        private sealed class ScriptedSocket : WebSocket
+        {
+            private readonly bool _Hold;
+            private readonly object _Gate = new object();
+            private readonly List<string> _Frames = new List<string>();
+            private readonly List<FrameWait> _Waiters = new List<FrameWait>();
+            private readonly TaskCompletionSource<bool> _SendStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            private readonly TaskCompletionSource<bool> _Release = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            private readonly SemaphoreSlim _Transport = new SemaphoreSlim(1, 1);
+            private volatile WebSocketState _State = WebSocketState.Open;
+            private int _SendCount;
+            private int _DisposeCount;
+
+            public ScriptedSocket(bool holdSend)
+            {
+                _Hold = holdSend;
+            }
+
+            public WebSocketSession? Session { get; set; }
+
+            public int SendCount => Volatile.Read(ref _SendCount);
+
+            public int DisposeCount => Volatile.Read(ref _DisposeCount);
+
+            public bool ReleaseCompleted => _Release.Task.IsCompleted;
+
+            public async Task WaitUntilSendStartedAsync()
+            {
+                using (CancellationTokenSource timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5)))
+                {
+                    await _SendStarted.Task.WaitAsync(timeout.Token).ConfigureAwait(false);
+                }
+            }
+
+            public Task WaitForTextAsync(string marker)
+            {
+                TaskCompletionSource<bool> waiter = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                lock (_Gate)
+                {
+                    if (HasMarker(marker)) return Task.CompletedTask;
+                    _Waiters.Add(new FrameWait(marker, waiter));
+                }
+
+                return WaitForMarkerAsync(waiter);
+            }
+
+            public bool Contains(string marker)
+            {
+                lock (_Gate) return HasMarker(marker);
+            }
+
+            public void Release()
+            {
+                _Release.TrySetResult(true);
+            }
+
+            public void Shutdown()
+            {
+                Release();
+                _Transport.Dispose();
+            }
+
+            public override void Abort()
+            {
+                _State = WebSocketState.Aborted;
+            }
+
+            public override Task CloseAsync(WebSocketCloseStatus closeStatus, string? statusDescription, CancellationToken cancellationToken)
+            {
+                return CloseAfterTransportAsync(cancellationToken);
+            }
+
+            public override Task CloseOutputAsync(WebSocketCloseStatus closeStatus, string? statusDescription, CancellationToken cancellationToken)
+            {
+                return Task.CompletedTask;
+            }
+
+            public override void Dispose()
+            {
+                Interlocked.Increment(ref _DisposeCount);
+                _State = WebSocketState.Aborted;
+            }
+
+            public override Task<WebSocketReceiveResult> ReceiveAsync(ArraySegment<byte> buffer, CancellationToken cancellationToken)
+            {
+                return Task.FromResult(new WebSocketReceiveResult(0, WebSocketMessageType.Close, true));
+            }
+
+            public override async Task SendAsync(ArraySegment<byte> buffer, WebSocketMessageType messageType, bool endOfMessage, CancellationToken cancellationToken)
+            {
+                string text = Encoding.UTF8.GetString(buffer.Array ?? Array.Empty<byte>(), buffer.Array == null ? 0 : buffer.Offset, buffer.Array == null ? 0 : buffer.Count);
+                AddFrame(text);
+                if (!_Hold)
+                {
+                    Interlocked.Increment(ref _SendCount);
+                    return;
+                }
+
+                await _Transport.WaitAsync(cancellationToken).ConfigureAwait(false);
+                try
+                {
+                    Interlocked.Increment(ref _SendCount);
+                    _SendStarted.TrySetResult(true);
+                    await _Release.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+                }
+                finally
+                {
+                    _Transport.Release();
+                }
+            }
+
+            public override WebSocketCloseStatus? CloseStatus => null;
+
+            public override string? CloseStatusDescription => null;
+
+            public override WebSocketState State => _State;
+
+            public override string? SubProtocol => null;
+
+            private async Task WaitForMarkerAsync(TaskCompletionSource<bool> waiter)
+            {
+                using (CancellationTokenSource timeout = new CancellationTokenSource(TimeSpan.FromSeconds(2)))
+                {
+                    await waiter.Task.WaitAsync(timeout.Token).ConfigureAwait(false);
+                }
+            }
+
+            private async Task CloseAfterTransportAsync(CancellationToken cancellationToken)
+            {
+                await _Transport.WaitAsync(cancellationToken).ConfigureAwait(false);
+                try
+                {
+                    _State = WebSocketState.Closed;
+                }
+                finally
+                {
+                    _Transport.Release();
+                }
+            }
+
+            private void AddFrame(string text)
+            {
+                List<FrameWait> ready = new List<FrameWait>();
+                lock (_Gate)
+                {
+                    _Frames.Add(text);
+                    for (int i = 0; i < _Waiters.Count; i++)
+                    {
+                        if (text.Contains(_Waiters[i].Marker, StringComparison.Ordinal)) ready.Add(_Waiters[i]);
+                    }
+
+                    for (int i = 0; i < ready.Count; i++) _Waiters.Remove(ready[i]);
+                }
+
+                for (int i = 0; i < ready.Count; i++) ready[i].Done.TrySetResult(true);
+            }
+
+            private bool HasMarker(string marker)
+            {
+                for (int i = 0; i < _Frames.Count; i++)
+                {
+                    if (_Frames[i].Contains(marker, StringComparison.Ordinal)) return true;
+                }
+
+                return false;
+            }
+        }
+
+        private sealed class FrameWait
+        {
+            public FrameWait(string marker, TaskCompletionSource<bool> done)
+            {
+                Marker = marker;
+                Done = done;
+            }
+
+            public string Marker { get; }
+
+            public TaskCompletionSource<bool> Done { get; }
+        }
+
+        private sealed class IdleDatabaseDriver : DatabaseDriver
+        {
+            public override Task InitializeAsync(CancellationToken token = default) => Task.CompletedTask;
+
+            public override Task<int> GetSchemaVersionAsync(CancellationToken token = default) => Task.FromResult(0);
+
+            public override int GetLatestSchemaVersion() => 0;
+
+            public override void Dispose()
+            {
+            }
+
+            internal override IReadOnlyList<SchemaMigration> GetMigrationsForVerification() => new List<SchemaMigration>();
+
+            internal override Task ReplayMigrationsAsync(CancellationToken token = default) => Task.CompletedTask;
+        }
+
+        /// <summary>
+        /// Admiral stand-in for the slow-client WebSocket cases. Status reads can fail on request.
+        /// Every other call returns a completed task.
+        /// </summary>
+        public class SlowClientAdmiralProxy : DispatchProxy
+        {
+            /// <summary>
+            /// When true, GetStatusAsync throws.
+            /// </summary>
+            public bool FailStatus { get; set; }
+
+            /// <summary>
+            /// Create the proxy.
+            /// </summary>
+            /// <param name="failStatus">Whether status reads throw.</param>
+            /// <returns>The admiral proxy.</returns>
+            public static IAdmiralService Create(bool failStatus)
+            {
+                IAdmiralService proxy = DispatchProxy.Create<IAdmiralService, SlowClientAdmiralProxy>();
+                ((SlowClientAdmiralProxy)(object)proxy).FailStatus = failStatus;
+                return proxy;
+            }
+
+            /// <inheritdoc />
+            protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
+            {
+                if (targetMethod == null) throw new ArgumentNullException(nameof(targetMethod));
+                if (FailStatus && targetMethod.Name == "GetStatusAsync")
+                    throw new InvalidOperationException("status unavailable");
+
+                Type returnType = targetMethod.ReturnType;
+                if (returnType == typeof(Task)) return Task.CompletedTask;
+                if (returnType.IsGenericType && returnType.GetGenericTypeDefinition() == typeof(Task<>))
+                {
+                    Type resultType = returnType.GetGenericArguments()[0];
+                    object? result = resultType.IsValueType ? Activator.CreateInstance(resultType) : null;
+                    MethodInfo fromResult = typeof(Task).GetMethod(nameof(Task.FromResult), BindingFlags.Public | BindingFlags.Static)!;
+                    return fromResult.MakeGenericMethod(resultType).Invoke(null, new object?[] { result });
+                }
+
+                if (returnType == typeof(void)) return null;
+                if (returnType.IsValueType) return Activator.CreateInstance(returnType);
+                return null;
+            }
         }
 
         #endregion

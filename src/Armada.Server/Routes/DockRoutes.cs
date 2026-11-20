@@ -62,7 +62,7 @@ namespace Armada.Server.Routes
                     return new ApiErrorResponse { Error = ctx.IsAuthenticated ? ApiResultEnum.Forbidden : ApiResultEnum.NotAuthorized, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
                 }
                 EnumerationQuery query = new EnumerationQuery();
-                query.ApplyQuerystringOverrides(key => req.Query.GetValueOrDefault(key));
+                query.ApplyQuerystringOverrides(key => QueryValueReader.Read(req.Query, key));
                 Stopwatch sw = Stopwatch.StartNew();
                 EnumerationResult<Dock> result = await Armada.Core.Models.EnumerationScope.EnumerateScopedAsync(ctx, query, q => _database.Docks.EnumerateAsync(q), (t, q) => _database.Docks.EnumerateAsync(t, q), (t, u, q) => _database.Docks.EnumerateAsync(t, u, q)).ConfigureAwait(false);
                 result.TotalMs = Math.Round(sw.Elapsed.TotalMilliseconds, 2);
@@ -88,7 +88,7 @@ namespace Armada.Server.Routes
                 EnumerationQuery query = String.IsNullOrWhiteSpace(requestBody)
                     ? new EnumerationQuery()
                     : JsonSerializer.Deserialize<EnumerationQuery>(requestBody, _jsonOptions) ?? new EnumerationQuery();
-                query.ApplyQuerystringOverrides(key => req.Query.GetValueOrDefault(key));
+                query.ApplyQuerystringOverrides(key => QueryValueReader.Read(req.Query, key));
                 Stopwatch sw = Stopwatch.StartNew();
                 EnumerationResult<Dock> result = await Armada.Core.Models.EnumerationScope.EnumerateScopedAsync(ctx, query, q => _database.Docks.EnumerateAsync(q), (t, q) => _database.Docks.EnumerateAsync(t, q), (t, u, q) => _database.Docks.EnumerateAsync(t, u, q)).ConfigureAwait(false);
                 result.TotalMs = Math.Round(sw.Elapsed.TotalMilliseconds, 2);

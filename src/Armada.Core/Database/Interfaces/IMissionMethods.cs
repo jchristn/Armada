@@ -70,6 +70,19 @@ namespace Armada.Core.Database.Interfaces
         Task<bool> TryClaimProcessExitAsync(string missionId, int processId, CancellationToken token = default);
 
         /// <summary>
+        /// Record (or clear) the exact start time of the local agent process launched for a mission, together with the
+        /// process id it belongs to. Only this method writes the pair; full mission updates leave it unchanged. Clear it
+        /// (both null) for a launch that is not a local process, so an earlier local record can never vouch for it.
+        /// </summary>
+        /// <param name="missionId">Mission identifier.</param>
+        /// <param name="processId">Process id the start time belongs to, or null to clear.</param>
+        /// <param name="startedUtc">Exact UTC process start time, or null to clear.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>True when the mission row was updated.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when missionId is null or empty.</exception>
+        Task<bool> SetProcessLaunchAsync(string missionId, int? processId, DateTime? startedUtc, CancellationToken token = default);
+
+        /// <summary>
         /// Update the mission heartbeat timestamp without rewriting the full record.
         /// Implementations should also advance the parent voyage LastUpdateUtc when applicable.
         /// </summary>

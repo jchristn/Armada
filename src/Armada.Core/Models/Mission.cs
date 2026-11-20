@@ -214,6 +214,23 @@ namespace Armada.Core.Models
         /// </summary>
         public int? ProcessId { get; set; } = null;
 
+        /// <summary>
+        /// Process id that <see cref="ProcessStartedUtc"/> was recorded for at a local launch, or null. The start time
+        /// applies to <see cref="ProcessId"/> only while the two ids are equal. Written only by
+        /// <c>IMissionMethods.SetProcessLaunchAsync</c>; not serialized.
+        /// </summary>
+        [JsonIgnore]
+        public int? ProcessStartedPid { get; set; } = null;
+
+        /// <summary>
+        /// Exact UTC start time of the local agent process launched for this mission, read from the operating system right
+        /// after launch and checked before a local stop and in liveness decisions, so a reused process id is never
+        /// mistaken for the agent. Null for Harbor and in-process launches and for missions launched before it was
+        /// recorded (those fall back to the approximate launch-time check). Not serialized.
+        /// </summary>
+        [JsonIgnore]
+        public DateTime? ProcessStartedUtc { get; set; } = null;
+
         /// <summary>Last actual output heartbeat of this mission, independent of sibling output.</summary>
         public DateTime? LastHeartbeatUtc { get; set; } = null;
 

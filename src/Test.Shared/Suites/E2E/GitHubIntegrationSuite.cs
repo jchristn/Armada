@@ -106,6 +106,111 @@ namespace Test.Shared.Suites.E2E
                 }
             }));
 
+            cases.Add(CaseAsync("github_objective_import_preserves_terminal_status_when_merged_pull_request_is_reimported", "GitHubObjectiveImport_PreservesTerminalStatusWhenMergedPullRequestIsReimported", TestTags.Positive, async () =>
+            {
+                E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this);
+                HttpClient authClient = fx.AuthClient;
+
+                using (FakeGitHubServer fakeGitHub = new FakeGitHubServer("ghp_" + "vessel_token"))
+                {
+                    string vesselId = String.Empty;
+                    string objectiveId = String.Empty;
+                    string workingDirectory = TestTemp.NewDirectory("github-objective-terminal-status");
+
+                    try
+                    {
+                        vesselId = await CreateVesselAsync(authClient, "GitHub Objective Vessel", fakeGitHub.RepositoryUrl, workingDirectory, fakeGitHub.ExpectedToken).ConfigureAwait(false);
+
+                        HttpResponseMessage importResponse = await authClient.PostAsync("/api/v1/objectives/import/github",
+                            JsonHelper.ToJsonContent(new
+                            {
+                                VesselId = vesselId,
+                                SourceType = GitHubObjectiveSourceTypeEnum.PullRequest,
+                                Number = 45
+                            })).ConfigureAwait(false);
+                        AssertEqual(HttpStatusCode.Created, importResponse.StatusCode);
+                        Objective imported = await JsonHelper.DeserializeAsync<Objective>(importResponse).ConfigureAwait(false);
+                        objectiveId = imported.Id;
+                        AssertEqual(ObjectiveStatusEnum.InProgress, imported.Status);
+
+                        fakeGitHub.PullRequestMerged = true;
+
+                        HttpResponseMessage completedResponse = await authClient.PutAsync("/api/v1/objectives/" + objectiveId,
+                            JsonHelper.ToJsonContent(new { Status = ObjectiveStatusEnum.Completed })).ConfigureAwait(false);
+                        AssertEqual(HttpStatusCode.OK, completedResponse.StatusCode);
+
+                        HttpResponseMessage completedRefreshResponse = await authClient.PostAsync("/api/v1/objectives/import/github",
+                            JsonHelper.ToJsonContent(new
+                            {
+                                VesselId = vesselId,
+                                ObjectiveId = objectiveId,
+                                SourceType = GitHubObjectiveSourceTypeEnum.PullRequest,
+                                Number = 45
+                            })).ConfigureAwait(false);
+                        AssertEqual(HttpStatusCode.OK, completedRefreshResponse.StatusCode);
+                        Objective completedRefresh = await JsonHelper.DeserializeAsync<Objective>(completedRefreshResponse).ConfigureAwait(false);
+                        AssertEqual(ObjectiveStatusEnum.Completed, completedRefresh.Status);
+
+                        HttpResponseMessage cancelledResponse = await authClient.PutAsync("/api/v1/objectives/" + objectiveId,
+                            JsonHelper.ToJsonContent(new { Status = ObjectiveStatusEnum.Cancelled })).ConfigureAwait(false);
+                        AssertEqual(HttpStatusCode.OK, cancelledResponse.StatusCode);
+
+                        HttpResponseMessage cancelledRefreshResponse = await authClient.PostAsync("/api/v1/objectives/import/github",
+                            JsonHelper.ToJsonContent(new
+                            {
+                                VesselId = vesselId,
+                                ObjectiveId = objectiveId,
+                                SourceType = GitHubObjectiveSourceTypeEnum.PullRequest,
+                                Number = 45
+                            })).ConfigureAwait(false);
+                        AssertEqual(HttpStatusCode.OK, cancelledRefreshResponse.StatusCode);
+                        Objective cancelledRefresh = await JsonHelper.DeserializeAsync<Objective>(cancelledRefreshResponse).ConfigureAwait(false);
+                        AssertEqual(ObjectiveStatusEnum.Cancelled, cancelledRefresh.Status);
+
+                        HttpResponseMessage scopedResponse = await authClient.PutAsync("/api/v1/objectives/" + objectiveId,
+                            JsonHelper.ToJsonContent(new { Status = ObjectiveStatusEnum.Scoped })).ConfigureAwait(false);
+                        AssertEqual(HttpStatusCode.OK, scopedResponse.StatusCode);
+
+                        HttpResponseMessage scopedRefreshResponse = await authClient.PostAsync("/api/v1/objectives/import/github",
+                            JsonHelper.ToJsonContent(new
+                            {
+                                VesselId = vesselId,
+                                ObjectiveId = objectiveId,
+                                SourceType = GitHubObjectiveSourceTypeEnum.PullRequest,
+                                Number = 45
+                            })).ConfigureAwait(false);
+                        AssertEqual(HttpStatusCode.OK, scopedRefreshResponse.StatusCode);
+                        Objective releasedRefresh = await JsonHelper.DeserializeAsync<Objective>(scopedRefreshResponse).ConfigureAwait(false);
+                        AssertEqual(ObjectiveStatusEnum.Released, releasedRefresh.Status);
+
+                        HttpResponseMessage overrideResponse = await authClient.PostAsync("/api/v1/objectives/import/github",
+                            JsonHelper.ToJsonContent(new
+                            {
+                                VesselId = vesselId,
+                                ObjectiveId = objectiveId,
+                                SourceType = GitHubObjectiveSourceTypeEnum.PullRequest,
+                                Number = 45,
+                                StatusOverride = ObjectiveStatusEnum.Completed
+                            })).ConfigureAwait(false);
+                        AssertEqual(HttpStatusCode.OK, overrideResponse.StatusCode);
+                        Objective overridden = await JsonHelper.DeserializeAsync<Objective>(overrideResponse).ConfigureAwait(false);
+                        AssertEqual(ObjectiveStatusEnum.Completed, overridden.Status);
+                    }
+                    finally
+                    {
+                        if (!String.IsNullOrWhiteSpace(objectiveId))
+                        {
+                            try { await authClient.DeleteAsync("/api/v1/objectives/" + objectiveId).ConfigureAwait(false); } catch { }
+                        }
+                        if (!String.IsNullOrWhiteSpace(vesselId))
+                        {
+                            try { await authClient.DeleteAsync("/api/v1/vessels/" + vesselId).ConfigureAwait(false); } catch { }
+                        }
+                        TestTemp.TryDelete(workingDirectory);
+                    }
+                }
+            }));
+
             cases.Add(CaseAsync("github_actions_sync_creates_and_updates_deployment_linked_checks", "GitHubActions_SyncCreatesAndUpdatesDeploymentLinkedChecks", TestTags.Positive, async () =>
             {
                 E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this);
@@ -538,6 +643,8 @@ namespace Test.Shared.Suites.E2E
 
             public string Issue123State { get; set; } = "open";
 
+            public bool PullRequestMerged { get; set; } = false;
+
             public int ExtraReviewCount { get; set; } = 0;
 
             public int ExtraCheckCount { get; set; } = 0;
@@ -630,7 +737,8 @@ namespace Test.Shared.Suites.E2E
 
                     if (String.Equals(path, "/api/v3/repos/octo/armada-test/pulls/45", StringComparison.OrdinalIgnoreCase))
                     {
-                        string body = "{\"number\":45,\"title\":\"Armada Integration PR\",\"body\":\"Implements GitHub-backed delivery visibility.\",\"state\":\"open\",\"html_url\":\"" + PullRequestUrl + "\",\"draft\":false,\"merged\":false,\"mergeable_state\":\"clean\",\"additions\":12,\"deletions\":3,\"changed_files\":4,\"commits\":2,\"created_at\":\"2026-05-06T10:00:00Z\",\"updated_at\":\"2026-05-06T11:00:00Z\",\"merged_at\":null,\"user\":{\"login\":\"captain-armada\"},\"merged_by\":null,\"base\":{\"ref\":\"main\",\"sha\":\"base123\"},\"head\":{\"ref\":\"feature/github\",\"sha\":\"abc123\"},\"requested_reviewers\":[{\"login\":\"reviewer1\"}],\"labels\":[{\"name\":\"automation\"}]}";
+                        string merged = PullRequestMerged ? "true" : "false";
+                        string body = "{\"number\":45,\"title\":\"Armada Integration PR\",\"body\":\"Implements GitHub-backed delivery visibility.\",\"state\":\"open\",\"html_url\":\"" + PullRequestUrl + "\",\"draft\":false,\"merged\":" + merged + ",\"mergeable_state\":\"clean\",\"additions\":12,\"deletions\":3,\"changed_files\":4,\"commits\":2,\"created_at\":\"2026-05-06T10:00:00Z\",\"updated_at\":\"2026-05-06T11:00:00Z\",\"merged_at\":null,\"user\":{\"login\":\"captain-armada\"},\"merged_by\":null,\"base\":{\"ref\":\"main\",\"sha\":\"base123\"},\"head\":{\"ref\":\"feature/github\",\"sha\":\"abc123\"},\"requested_reviewers\":[{\"login\":\"reviewer1\"}],\"labels\":[{\"name\":\"automation\"}]}";
                         await WriteJsonAsync(context.Response, body).ConfigureAwait(false);
                         return;
                     }

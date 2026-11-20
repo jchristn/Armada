@@ -2300,6 +2300,10 @@ Predict how Armada would land a branch for this vessel, including branch policy,
 **Response:** `200 OK` - `LandingPreviewResult`
 **Error:** `404` - Vessel not found
 
+`LandingMode` is the mode stored on the vessel (null when it inherits one). `EffectiveLandingMode` is the mode that applies
+(the vessel mode, then the Admiral default, then `MergeAndPush`), and `ExpectedLandingAction` and the branch-policy issues
+are computed from it.
+
 ---
 
 #### POST /api/v1/vessels/{id}/build-context
@@ -3572,8 +3576,9 @@ Predict how Armada would land this mission, including branch policy, check requi
 **Error:** `404` - Mission not found, or mission vessel not found
 
 For a mission, `IsReadyToLand` is true only while the mission is waiting to land (`WorkProduced`, `PullRequestOpen`, or
-`LandingFailed`) and an automatic landing mode applies. The mission preview also returns `EffectiveLandingMode` (voyage,
-then vessel, then the Admiral default), `ManualLandingOnly` (true when that mode is `None`: Land is refused, so merge the
+`LandingFailed`) and an automatic landing mode applies. `LandingMode` is the mode stored on the vessel (null when it
+inherits one). The mission preview also returns `EffectiveLandingMode` (voyage, then vessel, then the Admiral default, then
+`MergeAndPush`; `ExpectedLandingAction` and the branch-policy issues are computed from it), `ManualLandingOnly` (true when that mode is `None`: Land is refused, so merge the
 branch yourself, for example from Manage Branches), and `MissionStatus`. A `Complete` mission reports the
 `mission_already_landed` issue.
 
@@ -4103,6 +4108,8 @@ Register a new captain (AI agent).
 | `Runtime` | string | no | Agent runtime type (default: `ClaudeCode`) |
 | `Model` | string | no | Optional model override for this captain. When omitted, the runtime selects its default model |
 | `CliPermissionPolicy` | string | no | CLI tool permission policy: `Refuse`, `ApproveInArmada`, `Bypass`, or null to inherit (see [CAPTAINS.md](CAPTAINS.md#cli-tool-permissions)) |
+
+Server-owned operational fields in the body are ignored: a new captain always starts `Idle` with no active missions, session, process, recovery attempts, quarantine, heartbeat or model profile, and with server creation timestamps. Configuration fields (including `MaxConcurrency`, the usage capture settings and `Active`) and an optional `Id` are kept. The tenant and owner come from the caller.
 
 **Response:** `201 Created` - [Captain](#captain)
 **Error:** `400 Bad Request` - Invalid or unavailable model. `Data` is a `CaptainModelValidationFailure`: `{"Reason": "...", "Message": "..."}` with `Reason` one of `EndpointRequired`, `EndpointNotFound`, `EndpointNotInference`, `EndpointDisabled`, `RuntimeUnavailable`, `ModelRejected`, `TimedOut`, `InvalidRuntimeOptions`, `NamedEndpointRequired`, `UnsupportedContractVersion`, `EndpointProbeFailed`, `EndpointNotToolEnabled` (the same on `PUT /api/v1/captains/{id}`; MCP `create_captain` / `update_captain` return `ErrorCode` `InvalidArgument` with `Code` = the reason).

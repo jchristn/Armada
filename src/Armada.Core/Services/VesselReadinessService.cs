@@ -24,15 +24,23 @@ namespace Armada.Core.Services
         /// </summary>
         public VesselHostResolver? Hosts { get; set; } = null;
 
-        private static readonly Regex _CommandSegmentSplit = new Regex(@"\s*(?:&&|\|\||;|\r?\n)\s*", RegexOptions.Compiled);
         private static readonly Regex _TokenRegex = new Regex("^\\s*(?:\"([^\"]+)\"|'([^']+)'|([^\\s]+))", RegexOptions.Compiled);
+        // Shell syntax is not a program on PATH. A terminal word ends its segment: the remaining words are
+        // arguments or a compound header, not another program. A non-terminal word stays in the segment so a
+        // later program is still probed. ":" and "eval" are non-terminal. "source", "unset", and "shift" are
+        // terminal because their operands are a file, a name, and a count. "for" and "select" are terminal
+        // because the rest of that segment is the header; the body is a later segment.
         private static readonly HashSet<string> _ShellBuiltins = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
-            "cd", "echo", "set", "export", "if", "then", "fi", "for", "do", "done", "call", "rem", "@echo", "true", "false", "type"
+            "cd", "echo", "set", "export", "unset", "shift", "eval", "exec", "source",
+            "if", "elif", "then", "else", "fi", "for", "select", "while", "until", "do", "done",
+            "call", "rem", "@echo", "true", "false", "type", "exit", "return", ":", "!", "{", "}",
+            "esac", "trap", "wait", "local", "readonly", "declare", "ulimit", "umask", "shopt"
         };
         private static readonly HashSet<string> _TerminalShellBuiltins = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
-            "echo", "@echo", "rem", "true", "false", "type"
+            "echo", "@echo", "rem", "true", "false", "type", "exit", "return", "for", "select",
+            "unset", "shift", "source", "trap", "wait", "local", "readonly", "declare", "ulimit", "umask", "shopt"
         };
         private static readonly Dictionary<string, string[]> _VersionProbeArgs = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase)
         {
@@ -874,8 +882,46 @@ namespace Armada.Core.Services
                 yield break;
 
             HashSet<string> seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            List<string> segments = new List<string>();
+            int segmentStart = 0;
+            bool insideDoubleQuotes = false;
 
-            foreach (string segment in _CommandSegmentSplit.Split(command))
+            for (int index = 0; index < command.Length; index++)
+            {
+                char current = command[index];
+                if (insideDoubleQuotes && current == '\\' && index + 1 < command.Length)
+                {
+                    index++;
+                    continue;
+                }
+
+                if (current == '"')
+                {
+                    insideDoubleQuotes = !insideDoubleQuotes;
+                    continue;
+                }
+
+                if (insideDoubleQuotes)
+                    continue;
+
+                int separatorLength = 0;
+                if (current == '&' && index + 1 < command.Length && command[index + 1] == '&')
+                    separatorLength = 2;
+                else if (current == '|' && index + 1 < command.Length && command[index + 1] == '|')
+                    separatorLength = 2;
+                else if (current == ';' || current == '\n')
+                    separatorLength = 1;
+
+                if (separatorLength == 0)
+                    continue;
+
+                segments.Add(command.Substring(segmentStart, index - segmentStart));
+                index += separatorLength - 1;
+                segmentStart = index + 1;
+            }
+
+            segments.Add(command.Substring(segmentStart));
+            foreach (string segment in segments)
             {
                 string? dependency = ExtractDependencyFromSegment(segment);
                 if (String.IsNullOrWhiteSpace(dependency)) continue;
@@ -891,6 +937,7 @@ namespace Armada.Core.Services
                 return null;
 
             int safetyCounter = 0;
+            bool skippingCaseHeader = false;
             while (!String.IsNullOrWhiteSpace(remaining) && safetyCounter < 8)
             {
                 safetyCounter++;
@@ -912,6 +959,26 @@ namespace Armada.Core.Services
                     continue;
                 }
 
+                // The subject, "in", and the pattern are not programs. The arm command follows the pattern.
+                if (skippingCaseHeader)
+                {
+                    bool patternClosed = token.EndsWith(")", StringComparison.Ordinal);
+                    remaining = remaining.Substring(tokenMatch.Length).TrimStart();
+                    if (patternClosed)
+                        skippingCaseHeader = false;
+                    continue;
+                }
+
+                if (String.Equals(token, "case", StringComparison.OrdinalIgnoreCase))
+                {
+                    skippingCaseHeader = true;
+                    remaining = remaining.Substring(tokenMatch.Length).TrimStart();
+                    continue;
+                }
+
+                if (token.StartsWith("$", StringComparison.Ordinal))
+                    return null;
+
                 if (_ShellBuiltins.Contains(token))
                 {
                     if (_TerminalShellBuiltins.Contains(token))
@@ -931,9 +998,9 @@ namespace Armada.Core.Services
         {
             int separatorIndex = token.IndexOf('=');
             if (separatorIndex <= 0) return false;
-            if (token.Contains(Path.DirectorySeparatorChar) || token.Contains(Path.AltDirectorySeparatorChar)) return false;
 
             string variableName = token.Substring(0, separatorIndex);
+            if (Char.IsDigit(variableName[0])) return false;
             return variableName.All(ch => Char.IsLetterOrDigit(ch) || ch == '_');
         }
 

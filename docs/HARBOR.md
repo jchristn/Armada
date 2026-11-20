@@ -506,7 +506,10 @@ the vessel's checkout. Armada finds it the same way for all of them:
 On a Harbor, commands run there in the checkout (a check runs through `/bin/sh -lc`, so the user's login PATH applies,
 and Workspace exec through `/bin/sh -c`; `cmd.exe /c` on a Windows Harbor) and their output and exit code come back over
 the link. A check run's expected artifacts are read from the Harbor and parsed for test and coverage results as on the
-Admiral. Every file operation goes through the Harbor's file protocol, and the Harbor confines it: it accepts a root
+Admiral. On either host, only artifacts the run wrote are parsed: the expected files are stat'ed on the host before the
+command runs, and afterward only files that are new or whose size or write time changed (as that host reports them, so
+clock differences between the Harbor and the Admiral do not matter) supply results. Older files are still listed in the
+run's artifacts. Every file operation goes through the Harbor's file protocol, and the Harbor confines it: it accepts a root
 only when it is the checkout it maps that vessel to (or inside its docks folder), and refuses absolute paths, paths that
 leave the root, symbolic links, and `.git` (see [HARBOR_PROTOCOL.md](HARBOR_PROTOCOL.md)). Workspace exec keeps its
 tenant-administrator rule, and every command still writes an `audit.command` event, whose `host` names the Harbor.

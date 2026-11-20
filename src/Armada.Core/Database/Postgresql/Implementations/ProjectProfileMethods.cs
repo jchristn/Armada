@@ -266,12 +266,12 @@ namespace Armada.Core.Database.Postgresql.Implementations
             if (query.FromUtc.HasValue)
             {
                 conditions.Add("created_utc >= @from_utc");
-                parameters.Add(new NpgsqlParameter("@from_utc", query.FromUtc.Value));
+                parameters.Add(PostgresqlCommandHelper.DateParameter("@from_utc", query.FromUtc.Value));
             }
             if (query.ToUtc.HasValue)
             {
                 conditions.Add("created_utc <= @to_utc");
-                parameters.Add(new NpgsqlParameter("@to_utc", query.ToUtc.Value));
+                parameters.Add(PostgresqlCommandHelper.DateParameter("@to_utc", query.ToUtc.Value));
             }
         }
 
@@ -292,8 +292,8 @@ namespace Armada.Core.Database.Postgresql.Implementations
             cmd.Parameters.AddWithValue("@workflow_profile_id", (object?)profile.WorkflowProfileId ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@persona_overrides_json", Serialize(profile.PersonaOverrides));
             cmd.Parameters.AddWithValue("@skills_json", Serialize(profile.Skills));
-            cmd.Parameters.AddWithValue("@created_utc", profile.CreatedUtc);
-            cmd.Parameters.AddWithValue("@last_update_utc", profile.LastUpdateUtc);
+            PostgresqlCommandHelper.AddDate(cmd, "@created_utc", profile.CreatedUtc);
+            PostgresqlCommandHelper.AddDate(cmd, "@last_update_utc", profile.LastUpdateUtc);
         }
 
         private static ProjectProfile FromReader(NpgsqlDataReader reader)
@@ -319,8 +319,8 @@ namespace Armada.Core.Database.Postgresql.Implementations
                 profile.Scope = scope;
                 profile.OwnershipScope = System.Enum.TryParse<Armada.Core.Enums.ScopeEnum>(reader["ownership_scope"]?.ToString(), true, out Armada.Core.Enums.ScopeEnum __os) ? __os : Armada.Core.Enums.ScopeEnum.TenantWide;
 
-            profile.PersonaOverrides = Deserialize<List<PersonaOverride>>(NullableString(reader["persona_overrides_json"])) ?? new List<PersonaOverride>();
-            profile.Skills = Deserialize<List<string>>(NullableString(reader["skills_json"])) ?? new List<string>();
+            profile.PersonaOverrides = Deserialize<List<PersonaOverride>>(NullableString(reader["persona_overrides_json"]), profile.Id, "persona_overrides_json") ?? new List<PersonaOverride>();
+            profile.Skills = Deserialize<List<string>>(NullableString(reader["skills_json"]), profile.Id, "skills_json") ?? new List<string>();
             return profile;
         }
 
@@ -329,12 +329,16 @@ namespace Armada.Core.Database.Postgresql.Implementations
             return JsonSerializer.Serialize(value ?? Activator.CreateInstance<T>(), _Json);
         }
 
-        private static T? Deserialize<T>(string? json)
+        private static T? Deserialize<T>(string? json, string entityId, string columnName)
         {
             if (String.IsNullOrWhiteSpace(json)) return default;
             try
             {
                 return JsonSerializer.Deserialize<T>(json, _Json);
+            }
+            catch (JsonException exception)
+            {
+                throw new InvalidOperationException("Invalid JSON in " + columnName + " for row " + entityId + ".", exception);
             }
             catch
             {

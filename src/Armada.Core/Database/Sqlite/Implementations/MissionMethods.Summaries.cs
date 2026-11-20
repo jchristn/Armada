@@ -565,6 +565,11 @@ LENGTH(COALESCE(agent_output, '')) AS agent_output_length";
                 conditions.Add("status = 'Pending' AND id IN (SELECT mission_id FROM mission_wait_intervals WHERE ended_utc IS NULL AND gate = @waiting_gate)");
                 cmd.Parameters.AddWithValue("@waiting_gate", query.WaitingGate.Value.ToString());
             }
+            if (!String.IsNullOrEmpty(query.MissionId))
+            {
+                conditions.Add("id = @mission_id");
+                cmd.Parameters.AddWithValue("@mission_id", query.MissionId);
+            }
         }
 
         private static void AddParameters(SqliteCommand cmd, IEnumerable<KeyValuePair<string, object?>> parameters)

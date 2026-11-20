@@ -47,6 +47,8 @@ namespace Test.Shared.Suites.Services
                     repos.PushBranch("feature/clean", "clean.txt", "clean change\n");
                     MergeQueueService queue = CreateQueue(testDb.Driver);
                     Mission mission = await CreateMissionAsync(testDb.Driver, repos).ConfigureAwait(false);
+                    mission.FailureReason = "stale failure";
+                    await testDb.Driver.Missions.UpdateAsync(mission).ConfigureAwait(false);
                     MergeEntry entry = await EnqueueAsync(queue, testDb.Driver, repos, "feature/clean", mission.Id, null).ConfigureAwait(false);
 
                     MergeEntry? processed = await queue.ProcessSingleAsync(entry.Id).ConfigureAwait(false);
@@ -55,6 +57,7 @@ namespace Test.Shared.Suites.Services
                     AssertTrue(repos.OriginHasFile("main", "clean.txt"), "origin main contains the landed change");
                     Mission? updated = await testDb.Driver.Missions.ReadAsync(mission.Id).ConfigureAwait(false);
                     AssertEqual(MissionStatusEnum.Complete, updated!.Status);
+                    AssertNull(updated.FailureReason, "successful landing clears the prior failure reason");
                 }
             }));
 
@@ -137,6 +140,111 @@ namespace Test.Shared.Suites.Services
                     AssertEqual("README.md", String.Join(",", failure.ConflictedFiles));
                     AssertEqual(entry.Id, failure.MergeEntryId);
                     AssertEqual(mainBefore, failure.TargetCommit, "the target commit the entry integrated against");
+                }
+            }));
+
+            foreach (MissionStatusEnum waitingStatus in new[] { MissionStatusEnum.WorkProduced, MissionStatusEnum.LandingFailed })
+            {
+                MissionStatusEnum startStatus = waitingStatus;
+                cases.Add(CaseAsync("missing_branch_with_landed_commit_lands_entry_" + startStatus.ToString().ToLowerInvariant(),
+                    "Missing branch whose mission commit is on target lands the entry and completes a " + startStatus + " mission", TestTags.Positive, async () =>
+                {
+                    using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                    {
+                        MergeQueueRepoSet repos = MergeQueueRepoSet.Create();
+                        const string branch = "feature/already-landed";
+                        repos.PushBranch(branch, "landed.txt", "landed change\n");
+                        VesselHealthGitHelper.RunGit(repos.Work, null, "push", "origin", branch + ":main");
+                        string commitHash = repos.OriginHead("main");
+
+                        MergeQueueService queue = CreateQueue(testDb.Driver);
+                        Mission mission = await CreateMissionAsync(testDb.Driver, repos).ConfigureAwait(false);
+                        mission.CommitHash = commitHash;
+                        mission.Status = startStatus;
+                        await testDb.Driver.Missions.UpdateAsync(mission).ConfigureAwait(false);
+                        MergeEntry entry = await EnqueueAsync(queue, testDb.Driver, repos, branch, mission.Id, null).ConfigureAwait(false);
+
+                        // The branch is deleted after the entry was queued (its commit already landed on origin main).
+                        VesselHealthGitHelper.RunGit(repos.VesselRepo, null, "update-ref", "-d", "refs/heads/" + branch);
+
+                        MergeEntry? processed = await queue.ProcessSingleAsync(entry.Id).ConfigureAwait(false);
+
+                        AssertEqual(MergeStatusEnum.Landed, processed!.Status, "entry status; output: " + processed.TestOutput);
+                        AssertContains("already on main", processed.TestOutput ?? "");
+                        AssertNotNull(processed.CompletedUtc, "entry completion time");
+                        Mission? updated = await testDb.Driver.Missions.ReadAsync(mission.Id).ConfigureAwait(false);
+                        AssertEqual(MissionStatusEnum.Complete, updated!.Status, "the mission is reconciled as landed, not left waiting");
+                        AssertNull(updated.FailureKind, "no failure is recorded");
+                        AssertEqual(commitHash, updated.CommitHash, "the landed commit is kept");
+                        AssertEqual(commitHash, repos.OriginHead("main"), "nothing is pushed");
+                    }
+                }));
+            }
+
+            cases.Add(CaseAsync("missing_branch_without_commit_hash_still_fails", "Missing branch without a recorded commit still fails", TestTags.Negative, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                {
+                    MergeQueueRepoSet repos = MergeQueueRepoSet.Create();
+                    const string branch = "feature/missing-hash";
+                    repos.PushBranch(branch, "missing-hash.txt", "branch change\n");
+                    VesselHealthGitHelper.RunGit(repos.VesselRepo, null, "update-ref", "-d", "refs/heads/" + branch);
+
+                    MergeQueueService queue = CreateQueue(testDb.Driver);
+                    Mission mission = await CreateMissionAsync(testDb.Driver, repos).ConfigureAwait(false);
+                    MergeEntry entry = await EnqueueAsync(queue, testDb.Driver, repos, branch, mission.Id, null).ConfigureAwait(false);
+
+                    MergeEntry? processed = await queue.ProcessSingleAsync(entry.Id).ConfigureAwait(false);
+
+                    AssertEqual(MergeStatusEnum.Failed, processed!.Status);
+                    Mission? updated = await testDb.Driver.Missions.ReadAsync(mission.Id).ConfigureAwait(false);
+                    AssertEqual(MissionStatusEnum.LandingFailed, updated!.Status);
+                }
+            }));
+
+            cases.Add(CaseAsync("missing_branch_with_unlanded_commit_still_fails", "Missing branch whose recorded commit is outside target still fails", TestTags.Negative, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                {
+                    MergeQueueRepoSet repos = MergeQueueRepoSet.Create();
+                    const string branch = "feature/unlanded";
+                    repos.PushBranch(branch, "unlanded.txt", "branch change\n");
+                    string commitHash = VesselHealthGitHelper.RunGit(repos.VesselRepo, null, "rev-parse", "refs/heads/" + branch).Trim();
+                    VesselHealthGitHelper.RunGit(repos.VesselRepo, null, "update-ref", "-d", "refs/heads/" + branch);
+
+                    MergeQueueService queue = CreateQueue(testDb.Driver);
+                    Mission mission = await CreateMissionAsync(testDb.Driver, repos).ConfigureAwait(false);
+                    mission.CommitHash = commitHash;
+                    await testDb.Driver.Missions.UpdateAsync(mission).ConfigureAwait(false);
+                    MergeEntry entry = await EnqueueAsync(queue, testDb.Driver, repos, branch, mission.Id, null).ConfigureAwait(false);
+
+                    MergeEntry? processed = await queue.ProcessSingleAsync(entry.Id).ConfigureAwait(false);
+
+                    AssertEqual(MergeStatusEnum.Failed, processed!.Status);
+                    Mission? updated = await testDb.Driver.Missions.ReadAsync(mission.Id).ConfigureAwait(false);
+                    AssertEqual(MissionStatusEnum.LandingFailed, updated!.Status);
+                }
+            }));
+
+            cases.Add(CaseAsync("present_branch_with_newer_work_is_not_cancelled", "Present branch with work newer than the mission commit is still merged", TestTags.Positive, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                {
+                    MergeQueueRepoSet repos = MergeQueueRepoSet.Create();
+                    const string branch = "feature/newer-work";
+                    string targetCommit = repos.OriginHead("main");
+                    repos.PushBranch(branch, "newer.txt", "newer branch change\n");
+
+                    MergeQueueService queue = CreateQueue(testDb.Driver);
+                    Mission mission = await CreateMissionAsync(testDb.Driver, repos).ConfigureAwait(false);
+                    mission.CommitHash = targetCommit;
+                    await testDb.Driver.Missions.UpdateAsync(mission).ConfigureAwait(false);
+                    MergeEntry entry = await EnqueueAsync(queue, testDb.Driver, repos, branch, mission.Id, null).ConfigureAwait(false);
+
+                    MergeEntry? processed = await queue.ProcessSingleAsync(entry.Id).ConfigureAwait(false);
+
+                    AssertEqual(MergeStatusEnum.Landed, processed!.Status, "a present branch contains work after the recorded commit");
+                    AssertTrue(repos.OriginHasFile("main", "newer.txt"), "the newer branch work lands");
                 }
             }));
 
@@ -273,6 +381,67 @@ namespace Test.Shared.Suites.Services
                     AssertEqual(MergeStatusEnum.Failed, (await queue.GetAsync(broken.Id).ConfigureAwait(false))!.Status);
                     AssertEqual(MergeStatusEnum.Landed, (await queue.GetAsync(second.Id).ConfigureAwait(false))!.Status);
                     AssertTrue(repos.OriginHasFile("main", "first.txt") && repos.OriginHasFile("main", "second.txt"), "both good branches landed");
+                }
+            }));
+
+            cases.Add(CaseAsync("stale_testing_entry_is_reprocessed", "Queue resumes a Testing entry after its processing lease expires", TestTags.Positive, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                {
+                    MergeQueueRepoSet repos = MergeQueueRepoSet.Create();
+                    repos.PushBranch("feature/recovery", "recovered.txt", "recovered\n");
+                    MergeQueueService queue = CreateQueue(testDb.Driver);
+                    MergeEntry entry = await EnqueueAsync(queue, testDb.Driver, repos, "feature/recovery", null, null).ConfigureAwait(false);
+                    entry.Status = MergeStatusEnum.Testing;
+                    entry.TestStartedUtc = DateTime.UtcNow.AddMinutes(-16);
+                    entry.TestExitCode = 7;
+                    await testDb.Driver.MergeEntries.UpdateAsync(entry).ConfigureAwait(false);
+
+                    await queue.ProcessQueueAsync().ConfigureAwait(false);
+
+                    MergeEntry? processed = await queue.GetAsync(entry.Id).ConfigureAwait(false);
+                    AssertEqual(MergeStatusEnum.Landed, processed!.Status, "stale entry is resumed and landed");
+                    AssertTrue(repos.OriginHasFile("main", "recovered.txt"), "recovered change reaches origin main");
+                }
+            }));
+
+            cases.Add(CaseAsync("testing_entry_without_start_time_is_reprocessed", "Queue resumes a Testing entry without a start time", TestTags.Positive, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                {
+                    MergeQueueRepoSet repos = MergeQueueRepoSet.Create();
+                    repos.PushBranch("feature/missing-start", "missing-start.txt", "recovered\n");
+                    MergeQueueService queue = CreateQueue(testDb.Driver);
+                    MergeEntry entry = await EnqueueAsync(queue, testDb.Driver, repos, "feature/missing-start", null, null).ConfigureAwait(false);
+                    entry.Status = MergeStatusEnum.Testing;
+                    entry.TestStartedUtc = null;
+                    await testDb.Driver.MergeEntries.UpdateAsync(entry).ConfigureAwait(false);
+
+                    await queue.ProcessQueueAsync().ConfigureAwait(false);
+
+                    MergeEntry? processed = await queue.GetAsync(entry.Id).ConfigureAwait(false);
+                    AssertEqual(MergeStatusEnum.Landed, processed!.Status, "entry without a start time is resumed and landed");
+                    AssertTrue(repos.OriginHasFile("main", "missing-start.txt"), "recovered change reaches origin main");
+                }
+            }));
+
+            cases.Add(CaseAsync("fresh_testing_entry_is_not_reprocessed", "Queue leaves a fresh Testing entry alone", TestTags.Positive, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                {
+                    MergeQueueRepoSet repos = MergeQueueRepoSet.Create();
+                    repos.PushBranch("feature/fresh", "fresh.txt", "pending\n");
+                    MergeQueueService queue = CreateQueue(testDb.Driver);
+                    MergeEntry entry = await EnqueueAsync(queue, testDb.Driver, repos, "feature/fresh", null, null).ConfigureAwait(false);
+                    entry.Status = MergeStatusEnum.Testing;
+                    entry.TestStartedUtc = DateTime.UtcNow;
+                    await testDb.Driver.MergeEntries.UpdateAsync(entry).ConfigureAwait(false);
+
+                    await queue.ProcessQueueAsync().ConfigureAwait(false);
+
+                    MergeEntry? unchanged = await queue.GetAsync(entry.Id).ConfigureAwait(false);
+                    AssertEqual(MergeStatusEnum.Testing, unchanged!.Status, "fresh entry remains owned by its current processor");
+                    AssertTrue(!repos.OriginHasFile("main", "fresh.txt"), "fresh entry is not landed by another pass");
                 }
             }));
 

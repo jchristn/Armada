@@ -788,7 +788,8 @@ Each garbage collection run (every `gcIntervalMinutes`, or `POST /api/v1/blackbo
 
 Deletes are two-phase: the entry is marked Deleting (hidden), its objects are deleted from the store, then its rows. If
 the store delete fails, the entry stays Deleting and the next run retries it. `RetentionService` and
-`DataExpiryService` do not touch black box tables.
+`DataExpiryService` do not touch black box tables; data expiry keeps a mission, voyage, dock, or merge entry while a
+black box entry or success that has not expired (or is pinned) references it.
 
 Manual controls:
 

@@ -35,6 +35,7 @@ namespace Armada.Core.Services
         private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, long> _FetchStarted =
             new System.Collections.Concurrent.ConcurrentDictionary<string, long>(StringComparer.OrdinalIgnoreCase);
 
+        private const string _HeadsRefPrefix = "refs/heads/";
         private string _Header = "[GitService] ";
         private LoggingModule _Logging;
         private IHostCommandExecutor? _Commands = null;
@@ -166,7 +167,11 @@ namespace Armada.Core.Services
                 }
 
                 bool branchExists = await BranchExistsAsync(repoPath, branchName, token).ConfigureAwait(false);
-                if (!branchExists)
+                if (branchExists)
+                {
+                    await SyncLocalBranchFromRemoteAsync(repoPath, branchName).ConfigureAwait(false);
+                }
+                else
                 {
                     branchExists = await SyncLocalBranchFromRemoteAsync(repoPath, branchName).ConfigureAwait(false);
                 }
@@ -955,7 +960,7 @@ namespace Armada.Core.Services
         /// <summary>
         /// List the local branches in a repository with their tip commit, without measuring divergence (one git
         /// command). Ahead and behind are left at zero; fill them for the branches shown with
-        /// <see cref="MeasureBranchDivergenceAsync"/>.
+        /// <see cref="MeasureBranchDivergenceAsync"/>. Each name is the path under refs/heads.
         /// </summary>
         /// <param name="repoPath">Repository path (bare repo or worktree).</param>
         /// <param name="defaultBranch">Default branch, flagged in the result (for example "main").</param>
@@ -966,8 +971,9 @@ namespace Armada.Core.Services
         {
             if (String.IsNullOrEmpty(repoPath)) throw new ArgumentNullException(nameof(repoPath));
 
-            // Field-separated, one line per branch. Unit separator (\x1f) avoids collisions with commit text.
-            string format = "%(refname:short)\x1f%(HEAD)\x1f%(objectname:short)\x1f%(committerdate:iso-strict)\x1f%(contents:subject)";
+            // %(refname) stays refs/heads/<name> when a tag uses the same short name. The listed name is that path.
+            // Field separator is the unit separator (\x1f) so commit text cannot split a record.
+            string format = "%(refname)\x1f%(HEAD)\x1f%(objectname:short)\x1f%(committerdate:iso-strict)\x1f%(contents:subject)";
             string raw = await RunGitAsync(repoPath, token, "for-each-ref", "--format=" + format, "refs/heads/").ConfigureAwait(false);
 
             List<BranchInfo> branches = new List<BranchInfo>();
@@ -978,7 +984,7 @@ namespace Armada.Core.Services
                 if (parts.Length < 3) continue;
 
                 BranchInfo info = new BranchInfo();
-                info.Name = parts[0].Trim();
+                info.Name = LocalBranchName(parts[0].Trim());
                 info.IsCurrent = parts.Length > 1 && parts[1].Trim() == "*";
                 info.CommitHash = parts.Length > 2 ? parts[2].Trim() : null;
                 if (parts.Length > 3 && DateTimeOffset.TryParse(parts[3].Trim(), System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out DateTimeOffset parsedDate))
@@ -1000,7 +1006,8 @@ namespace Armada.Core.Services
 
         /// <summary>
         /// Fill Ahead and Behind on each branch, relative to the default branch: one git command per branch other
-        /// than the default branch, which stays at zero. A branch whose divergence cannot be read keeps zeros.
+        /// than the default branch, which stays at zero. The comparison uses the refs/heads form of each name, so a tag
+        /// that shares a branch's name is never compared. A branch whose divergence cannot be read keeps zeros.
         /// </summary>
         /// <param name="repoPath">Repository path (bare repo or worktree).</param>
         /// <param name="defaultBranch">Default branch to measure against (for example "main").</param>
@@ -1017,13 +1024,21 @@ namespace Armada.Core.Services
                 if (info.IsDefault || String.Equals(info.Name, defaultBranch, StringComparison.Ordinal)) continue;
                 try
                 {
-                    string counts = await RunGitAsync(repoPath, token, "rev-list", "--left-right", "--count", defaultBranch + "..." + info.Name).ConfigureAwait(false);
+                    string counts = await RunGitAsync(
+                        repoPath,
+                        token,
+                        "rev-list",
+                        "--left-right",
+                        "--count",
+                        _HeadsRefPrefix + defaultBranch + "..." + _HeadsRefPrefix + info.Name).ConfigureAwait(false);
                     string[] countParts = counts.Trim().Split(new char[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
-                    if (countParts.Length == 2)
+                    int behind;
+                    int ahead;
+                    if (countParts.Length == 2
+                        && Int32.TryParse(countParts[0], NumberStyles.None, CultureInfo.InvariantCulture, out behind)
+                        && Int32.TryParse(countParts[1], NumberStyles.None, CultureInfo.InvariantCulture, out ahead))
                     {
                         // left = commits on default not on branch (branch is behind); right = commits on branch not on default (ahead).
-                        Int32.TryParse(countParts[0], out int behind);
-                        Int32.TryParse(countParts[1], out int ahead);
                         info.Behind = behind;
                         info.Ahead = ahead;
                     }
@@ -1666,6 +1681,13 @@ namespace Armada.Core.Services
 
         #region Private-Methods
 
+        private static string LocalBranchName(string refName)
+        {
+            if (refName.StartsWith(_HeadsRefPrefix, StringComparison.Ordinal))
+                return refName.Substring(_HeadsRefPrefix.Length);
+            return refName;
+        }
+
         private async Task FetchCoreAsync(string repoPath)
         {
             // Ensure the fetch refspec is configured (bare repos cloned before the fix may lack it)
@@ -1916,7 +1938,7 @@ namespace Armada.Core.Services
 
             if (await BranchExistsAsync(repoPath, branchName).ConfigureAwait(false))
             {
-                await RunGitAsync(repoPath, "branch", "-f", branchName, "refs/remotes/origin/" + branchName).ConfigureAwait(false);
+                await FastForwardLocalBranchAsync(repoPath, branchName).ConfigureAwait(false);
             }
             else
             {
@@ -1924,6 +1946,35 @@ namespace Armada.Core.Services
             }
 
             return true;
+        }
+
+        // Move an existing local branch to origin's tip only when that is a fast-forward (the local tip is a strict ancestor
+        // of the remote tip). A branch that is ahead of origin, has diverged from it, or cannot be compared keeps its tip, so
+        // no local commit is ever discarded; the branch is left as it is and a warning names both commits.
+        private async Task FastForwardLocalBranchAsync(string repoPath, string branchName)
+        {
+            string localRef = "refs/heads/" + branchName;
+            string remoteRef = "refs/remotes/origin/" + branchName;
+            string localCommit = await ResolveCommitAsync(repoPath, localRef).ConfigureAwait(false);
+            string remoteCommit = await ResolveCommitAsync(repoPath, remoteRef).ConfigureAwait(false);
+            if (String.Equals(localCommit, remoteCommit, StringComparison.OrdinalIgnoreCase)) return;
+
+            // Ahead counts commits only on the remote ref, Behind commits only on the local ref.
+            GitDivergenceCounts? divergence = await GetDivergenceAsync(repoPath, localRef, remoteRef, CancellationToken.None).ConfigureAwait(false);
+            if (divergence != null && divergence.Behind == 0 && divergence.Ahead > 0)
+            {
+                // update-ref with the expected old value refuses the move if the branch changed since it was read.
+                await RunGitAsync(repoPath, "update-ref", "-m", "armada: fast-forward to origin/" + branchName, localRef, remoteCommit, localCommit).ConfigureAwait(false);
+                _Logging.Debug(_Header + "fast-forwarded " + branchName + " from " + localCommit + " to origin " + remoteCommit);
+                return;
+            }
+
+            string state = divergence == null
+                ? "could not be compared with"
+                : divergence.Ahead == 0 ? "is ahead of" : "has diverged from";
+            _Logging.Warn(_Header + "keeping local branch " + branchName + " at " + localCommit + ": it " + state + " origin/" + branchName + " at " + remoteCommit
+                + (divergence == null ? "" : " (" + divergence.Behind + " local-only, " + divergence.Ahead + " remote-only commits)")
+                + "; it was not reset, so its local commits are kept");
         }
 
         private async Task<bool> IsBranchCheckedOutInWorktreeAsync(string repoPath, string branchName)

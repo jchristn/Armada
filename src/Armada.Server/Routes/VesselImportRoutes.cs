@@ -75,11 +75,11 @@ namespace Armada.Server.Routes
                 ApiErrorResponse? denied = Authorize(req, ctx, authz);
                 if (denied != null) return denied;
 
-                string? path = DecodeBrowsePath(req.Query.GetValueOrDefault("path"));
+                string? path = DecodeBrowsePath(QueryValueReader.Read(req.Query, "path"));
                 try
                 {
                     EnumerationQuery page = new EnumerationQuery();
-                    page.ApplyQuerystringOverrides(key => req.Query.GetValueOrDefault(key));
+                    page.ApplyQuerystringOverrides(key => QueryValueReader.Read(req.Query, key));
                     VesselBrowseResult result = await _Import.BrowseAsync(path, page).ConfigureAwait(false);
                     return (object)result;
                 }
@@ -200,7 +200,7 @@ namespace Armada.Server.Routes
                 if (denied != null) return denied;
 
                 EnumerationQuery query = DeserializeBody<EnumerationQuery>(req) ?? new EnumerationQuery();
-                query.ApplyQuerystringOverrides(key => req.Query.GetValueOrDefault(key));
+                query.ApplyQuerystringOverrides(key => QueryValueReader.Read(req.Query, key));
                 System.Diagnostics.Stopwatch sw = System.Diagnostics.Stopwatch.StartNew();
                 EnumerationResult<VesselImportBatch> result = await _Import.EnumerateBatchesAsync(ResolveTenant(ctx), query).ConfigureAwait(false);
                 result.TotalMs = Math.Round(sw.Elapsed.TotalMilliseconds, 2);
@@ -342,7 +342,8 @@ namespace Armada.Server.Routes
 
         /// <summary>
         /// Decode the browse path query value: base64url (UTF-8) when it decodes to an absolute or ~-relative path,
-        /// otherwise the value URL-decoded as plain text. Returns null for an empty value.
+        /// otherwise the value as given. Percent-decoding is done once by the query reader before this method runs.
+        /// Returns null for an empty value.
         /// </summary>
         /// <param name="raw">Raw query value.</param>
         /// <returns>The decoded path, or null.</returns>
@@ -376,14 +377,7 @@ namespace Armada.Server.Routes
                 }
             }
 
-            try
-            {
-                return Uri.UnescapeDataString(value);
-            }
-            catch (UriFormatException)
-            {
-                return value;
-            }
+            return value;
         }
 
         #endregion

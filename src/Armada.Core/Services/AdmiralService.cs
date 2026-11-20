@@ -723,6 +723,8 @@ namespace Armada.Core.Services
             if (options?.FailureKind != null) mission.FailureKind = options.FailureKind;
             if (options?.FailureReason != null) mission.FailureReason = options.FailureReason;
             Mission cancelled = await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
+            // A completion still running for the mission (its Definition-of-Done build and tests) is stopped as well.
+            _Missions.StopCompletionCommands(mission.Id);
             if (ownsCaptain) await _Database.Captains.TryReleaseFromMissionAsync(captain!.Id, mission.Id, token).ConfigureAwait(false);
             if (cancelStatusBefore != MissionStatusEnum.Cancelled)
             {
@@ -995,7 +997,8 @@ namespace Armada.Core.Services
                 bool processAlive = captain.ProcessId.HasValue &&
                     (OnIsProcessTracked?.Invoke(captain.ProcessId.Value) == true ||
                      OnIsProcessExitHandled?.Invoke(captain.ProcessId.Value) == true ||
-                     ProcessSupervisor.IsTrackedProcessAlive(captain.ProcessId.Value, currentMission?.StartedUtc));
+                     ProcessSupervisor.IsTrackedProcessAlive(captain.ProcessId.Value, currentMission?.StartedUtc,
+                         currentMission?.ProcessStartedPid, currentMission?.ProcessStartedUtc));
 
                 if (processAlive) continue;
 
@@ -1509,6 +1512,14 @@ namespace Armada.Core.Services
 
         #region Private-Methods
 
+        private static bool IsReusedRecordedProcess(int processId, Mission? mission)
+        {
+            // Only an exact start time recorded for this very process id can prove reuse here; without one these checks
+            // keep their existing plain liveness behavior.
+            if (mission?.ProcessStartedPid != processId || !mission.ProcessStartedUtc.HasValue) return false;
+            return ProcessSupervisor.CheckIdentity(processId, null, mission.ProcessStartedPid, mission.ProcessStartedUtc) == ProcessIdentityEnum.Reused;
+        }
+
         /// <summary>
         /// Build the status summary across every tenant (null) or for one tenant.
         /// </summary>
@@ -1727,6 +1738,12 @@ namespace Armada.Core.Services
                         isAlive = false;
                         try { exitCode = process.ExitCode; }
                         catch { }
+                    }
+                    else if (IsReusedRecordedProcess(processId.Value, mission))
+                    {
+                        // The id belongs to a later process than the recorded local launch: the agent is gone.
+                        _Logging.Warn(_Header + "captain " + captain.Id + " process " + processId + " is a later process reusing the agent's id; treating the agent as exited");
+                        isAlive = false;
                     }
                     else
                     {
@@ -2395,7 +2412,7 @@ namespace Armada.Core.Services
                         try
                         {
                             System.Diagnostics.Process process = System.Diagnostics.Process.GetProcessById(mission.ProcessId.Value);
-                            processAlive = !process.HasExited;
+                            processAlive = !process.HasExited && !IsReusedRecordedProcess(mission.ProcessId.Value, mission);
                         }
                         catch (ArgumentException)
                         {
@@ -2982,6 +2999,12 @@ namespace Armada.Core.Services
             MissionStatusEnum terminalStatusBefore = mission?.Status ?? MissionStatusEnum.InProgress;
             if (mission != null)
             {
+                if (String.IsNullOrEmpty(mission.AgentOutput) && _Missions.OnGetMissionOutput != null)
+                {
+                    string? agentOutput = _Missions.OnGetMissionOutput(mission.Id);
+                    if (!String.IsNullOrEmpty(agentOutput)) mission.AgentOutput = agentOutput;
+                }
+
                 MissionStatusEnum observedStatus = mission.Status;
                 DateTime observedVersion = mission.LastUpdateUtc;
                 mission.Status = MissionStatusEnum.Failed;

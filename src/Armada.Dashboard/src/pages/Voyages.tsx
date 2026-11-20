@@ -18,6 +18,7 @@ import { useLocale } from '../context/LocaleContext';
 import { useNotifications } from '../context/NotificationContext';
 import { useResourceTable } from '../lib/useResourceTable';
 import { findLandingMode, getVoyageLandingModes } from '../lib/vesselForm';
+import { reconcileServerPage, useListRequestGuard } from '../lib/serverPage';
 import { usePersistedPageSize } from '../lib/usePersistedPageSize';
 import { useDeleteProgress } from '../lib/useDeleteProgress';
 
@@ -61,20 +62,29 @@ export default function Voyages() {
     initialPageSize: 25,
   });
 
+  const beginListRequest = useListRequestGuard();
+
   const load = useCallback(async () => {
+    const request = beginListRequest();
     try {
       setLoading(true);
       const result = await listVoyages({ pageNumber, pageSize, filters: userScope ? { userId: userScope } : undefined });
+      if (!request.isCurrent()) return;
+      const decision = reconcileServerPage(pageNumber, result.totalPages);
+      if (!decision.accept) {
+        setPageNumber(decision.pageNumber);
+        return;
+      }
       setVoyages(result.objects || []);
-      setTotalPages(result.totalPages || 1);
+      setTotalPages(decision.totalPages);
       setTotalRecords(result.totalRecords || 0);
       setError('');
     } catch {
-      setError(t('Failed to load voyages.'));
+      if (request.isCurrent()) setError(t('Failed to load voyages.'));
     } finally {
-      setLoading(false);
+      if (request.isCurrent()) setLoading(false);
     }
-  }, [pageNumber, pageSize, userScope, t]);
+  }, [beginListRequest, pageNumber, pageSize, userScope, t]);
 
   useEffect(() => { load(); }, [load]);
 

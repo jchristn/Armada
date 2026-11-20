@@ -70,8 +70,8 @@ namespace Armada.Core.Database.Postgresql.Implementations
                     cmd.Parameters.AddWithValue("@content", template.Content);
                     cmd.Parameters.AddWithValue("@is_built_in", template.IsBuiltIn);
                     cmd.Parameters.AddWithValue("@active", template.Active);
-                    cmd.Parameters.AddWithValue("@created_utc", template.CreatedUtc);
-                    cmd.Parameters.AddWithValue("@last_update_utc", template.LastUpdateUtc);
+                    PostgresqlCommandHelper.AddDate(cmd, "@created_utc", template.CreatedUtc);
+                    PostgresqlCommandHelper.AddDate(cmd, "@last_update_utc", template.LastUpdateUtc);
                     await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
                 }
             }
@@ -187,7 +187,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
                     cmd.Parameters.AddWithValue("@content", template.Content);
                     cmd.Parameters.AddWithValue("@is_built_in", template.IsBuiltIn);
                     cmd.Parameters.AddWithValue("@active", template.Active);
-                    cmd.Parameters.AddWithValue("@last_update_utc", template.LastUpdateUtc);
+                    PostgresqlCommandHelper.AddDate(cmd, "@last_update_utc", template.LastUpdateUtc);
                     await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
                 }
             }
@@ -281,12 +281,12 @@ namespace Armada.Core.Database.Postgresql.Implementations
                 if (query.CreatedAfter.HasValue)
                 {
                     conditions.Add("created_utc > @created_after");
-                    parameters.Add(new NpgsqlParameter("@created_after", query.CreatedAfter.Value));
+                    parameters.Add(PostgresqlCommandHelper.DateParameter("@created_after", query.CreatedAfter.Value));
                 }
                 if (query.CreatedBefore.HasValue)
                 {
                     conditions.Add("created_utc < @created_before");
-                    parameters.Add(new NpgsqlParameter("@created_before", query.CreatedBefore.Value));
+                    parameters.Add(PostgresqlCommandHelper.DateParameter("@created_before", query.CreatedBefore.Value));
                 }
 
                 string whereClause = conditions.Count > 0 ? " WHERE " + string.Join(" AND ", conditions) : "";

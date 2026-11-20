@@ -223,8 +223,8 @@ namespace Armada.Server.Routes
                     return (object)new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Email is required" };
                 }
 
-                if (int.TryParse(req.Query.GetValueOrDefault("pageNumber"), out int lookupPageNumber)) lookupReq.PageNumber = lookupPageNumber;
-                if (int.TryParse(req.Query.GetValueOrDefault("pageSize"), out int lookupPageSize)) lookupReq.PageSize = lookupPageSize;
+                if (int.TryParse(QueryValueReader.Read(req.Query, "pageNumber"), out int lookupPageNumber)) lookupReq.PageNumber = lookupPageNumber;
+                if (int.TryParse(QueryValueReader.Read(req.Query, "pageSize"), out int lookupPageSize)) lookupReq.PageSize = lookupPageSize;
 
                 // Paged and counted in the database: one page of the active tenants where the email exists.
                 EnumerationQuery page = new EnumerationQuery { PageNumber = lookupReq.PageNumber, PageSize = lookupReq.PageSize };

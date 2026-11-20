@@ -116,6 +116,32 @@ describe('Planning send ordering (F16)', () => {
     expect(screen.getByRole('button', { name: 'Send' })).toBeInTheDocument();
   });
 
+  it('keeps the planning transcript position when streamed assistant text changes', async () => {
+    vi.mocked(getPlanningSession).mockResolvedValue({ session: session('Responding', '2026-10-05T00:00:00Z'), messageCount: 1, captain: null, vessel: null });
+    vi.mocked(listPlanningSessionMessages).mockResolvedValue({
+      success: true, pageNumber: 1, pageSize: 100, totalPages: 1, totalRecords: 1, totalMs: 1,
+      objects: [message('psm_a', 'Assistant', 1, 'First part', '2026-10-05T00:00:00Z')],
+    });
+
+    const { container } = render(
+      <MemoryRouter initialEntries={['/dispatch?tab=planning&session=psn_1']}>
+        <Routes>
+          <Route path="/dispatch" element={<Planning />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    const transcript = await screen.findByText('First part').then((node) => node.closest('.ask-chat-window') as HTMLDivElement);
+    Object.defineProperty(transcript, 'scrollHeight', { configurable: true, value: 900 });
+    Object.defineProperty(transcript, 'clientHeight', { configurable: true, value: 300 });
+    transcript.scrollTop = 120;
+
+    emit({ type: 'planning-session.message.updated', data: { sessionId: 'psn_1', message: message('psm_a', 'Assistant', 1, 'First part with more text', '2026-10-05T00:00:01Z') } });
+
+    expect(transcript.scrollTop).toBe(120);
+    expect(container.querySelector('.ask-chat-window')).toBe(transcript);
+  });
+
   it('loads the transcript one page at a time: the newest page first, older pages on request, with the total', async () => {
     const all = Array.from({ length: 150 }, (_, i) => message(`psm_${i + 1}`, i % 2 === 0 ? 'User' : 'Assistant', i + 1, `line ${i + 1}`, '2026-10-05T00:00:01Z'));
     vi.mocked(getPlanningSession).mockResolvedValue({ session: session('Active', '2026-10-05T00:00:00Z'), messageCount: 150, captain: null, vessel: null });

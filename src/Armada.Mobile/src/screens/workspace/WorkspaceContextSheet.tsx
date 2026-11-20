@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { updateVessel } from '@dashboard/api/client';
+import { updateVesselContext } from '@dashboard/api/client';
 import type { Vessel } from '@dashboard/types/models';
 import { ActionRow } from '../../build/fields';
 import { errorMessage } from '../../build/useLiveResource';
@@ -49,7 +49,7 @@ export function WorkspaceContextSheet({ vessel, canAppend, buildSnippet, onSaved
   async function save() {
     setSaving(true);
     try {
-      const updated = await updateVessel(vessel.id, { projectContext: drafts.projectContext, styleGuide: drafts.styleGuide, modelContext: drafts.modelContext });
+      const updated = await updateVesselContext(vessel.id, { projectContext: drafts.projectContext, styleGuide: drafts.styleGuide, modelContext: drafts.modelContext });
       pushToast('success', t('Saved vessel context.'));
       onSaved(updated);
     } catch (e) {
