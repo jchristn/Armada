@@ -510,6 +510,10 @@ commands arrive with their own changes. Schema migrations 103 and 104 apply at s
 - Preserve existing incident links when an objective update, voyage link, or reorder cannot resolve the linked incident. New incident links remain validated.
 - GitHub objective re-import keeps `Completed` and `Cancelled` when a merged pull request maps to `Released`. An explicit `StatusOverride` still applies.
 
+### Failed process exits keep captured output
+
+- When a process exits with a failure, Armada stores captured output on the failed mission if the mission has no output yet. Existing output stays in place, and an empty capture stays empty.
+
 ### Landing failure prevention
 
 - Every dashboard and TUI delete, bulk delete and purge now shows a progress modal (for example "Deleting vessel" or "Deleting 12 missions": "This may take some time while related records are cleaned up.") that stays up until the server answers, cannot be dismissed while pending, and offers Retry and Dismiss if the delete fails. Duplicate submissions are ignored. Ask Armada uses the same shared dialog.
