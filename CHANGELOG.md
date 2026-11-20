@@ -714,6 +714,7 @@ Part of the bounded enumeration contract ([docs/ENUMERATION.md](docs/ENUMERATION
 - Check runs keep captured command output when a local or Harbor command times out.
 - A slow WebSocket client no longer blocks event delivery to other clients. Each authenticated connection has a bounded outbound queue and one sender. Broadcasts, CLI permission events, subscribe snapshots, command replies, and errors are queued without waiting for the network. A full queue or a failed send aborts only that connection, so the client must reconnect and refresh its state. Tenant and user filters are unchanged.
 - A dashboard notification for a deployment, an objective, or an incident opens that record. The notification stores the event time when the event time is usable. It stores the browser time when the event has no usable time.
+- The check run page clears the previous run when you open a different run, and shows the error when that run cannot be loaded. A reload of the same run keeps the run on screen.
 
 ### Handoff and landing integrity
 
