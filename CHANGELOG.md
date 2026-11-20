@@ -572,6 +572,10 @@ Events, Memories, Merge Queue, Missions, Request History, Signals, and Voyages a
 - REST query values are decoded once before a route parses or filters them. A literal plus sign stays a plus sign. A malformed percent escape is kept, and the route still answers.
 - Deleting a custom pipeline clears that pipeline from objective suggestions and from snapshot restore. The next objective read does not write the deleted pipeline id.
 
+### Stored objective fields that cannot be decoded fail the read
+
+- **A damaged objective field is no longer read as an empty list or a default enum.** Non-empty list or playbook JSON that cannot be decoded, and a non-empty objective enum name that is not a defined member, throw `StoredObjectiveDataException` with the objective id and the field name. A single-row read and an enumeration both fail. The stored text stays as it was, so a later update of another field cannot replace it. Empty or null text still reads as an empty list or the existing enum fallback. A numeric enum string that `Enum.TryParse` accepts is unchanged. Refinement-session enum reads keep their own fallback.
+
 ### Landing failure prevention
 
 - Every dashboard and TUI delete, bulk delete and purge now shows a progress modal (for example "Deleting vessel" or "Deleting 12 missions": "This may take some time while related records are cleaned up.") that stays up until the server answers, cannot be dismissed while pending, and offers Retry and Dismiss if the delete fails. Duplicate submissions are ignored. Ask Armada uses the same shared dialog.
