@@ -13,7 +13,7 @@ import {
   openWorkspaceTerminal,
   renameWorkspaceEntry,
   saveWorkspaceFile,
-  updateVessel,
+  updateVesselContext,
   isApiStatus,
 } from '../api/client';
 import { listAll } from '../api/paging';
@@ -687,7 +687,7 @@ export default function Workspace() {
 
     try {
       setSavingContext(true);
-      const updated = await updateVessel(currentVessel.id, {
+      const updated = await updateVesselContext(currentVessel.id, {
         projectContext: contextDrafts.projectContext,
         styleGuide: contextDrafts.styleGuide,
         modelContext: contextDrafts.modelContext,
