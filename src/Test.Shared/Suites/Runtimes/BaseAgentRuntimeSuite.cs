@@ -5,6 +5,7 @@ namespace Test.Shared.Suites.Runtimes
     using System.IO;
     using System.Threading;
     using System.Threading.Tasks;
+    using Armada.Core.Services;
     using SyslogLogging;
     using Test.Shared.Infrastructure;
     using Touchstone.Core;
@@ -102,6 +103,50 @@ namespace Test.Shared.Suites.Runtimes
 
                 // Let the process finish (dotnet --version exits in well under a second).
                 await WaitForConditionAsync(() => exited, 2000);
+            }));
+
+            cases.Add(CaseAsync("start_async_does_not_pass_initial_admin_password", "StartAsync does not pass the initial admin password to the child process", TestTags.Positive, async () =>
+            {
+                string variableName = DefaultCredentialService.InitialAdminPasswordEnvironmentVariable;
+                string? previousValue = Environment.GetEnvironmentVariable(variableName);
+                List<string> outputLines = new List<string>();
+                TaskCompletionSource<int?> exited = new TaskCompletionSource<int?>(TaskCreationOptions.RunContinuationsAsynchronously);
+                try
+                {
+                    Environment.SetEnvironmentVariable(variableName, "test-only-initial-password");
+                    TestAgentRuntime runtime = new TestAgentRuntime(CreateLogging());
+                    if (OperatingSystem.IsWindows())
+                    {
+                        runtime.CommandOverride = "powershell";
+                        runtime.ArgsOverride = new List<string> { "-NoProfile", "-Command", "if (Test-Path Env:ARMADA_INITIAL_ADMIN_PASSWORD) { 'present' } else { 'absent' }" };
+                    }
+                    else
+                    {
+                        runtime.CommandOverride = "sh";
+                        runtime.ArgsOverride = new List<string> { "-c", "if printenv ARMADA_INITIAL_ADMIN_PASSWORD >/dev/null; then printf present; else printf absent; fi" };
+                    }
+
+                    runtime.OnOutputReceived += (_, line) =>
+                    {
+                        lock (outputLines)
+                        {
+                            outputLines.Add(line);
+                        }
+                    };
+                    runtime.OnProcessExited += (_, exitCode) => exited.TrySetResult(exitCode);
+
+                    await runtime.StartAsync(Path.GetTempPath(), "test prompt").ConfigureAwait(false);
+                    int? exitCode = await exited.Task.WaitAsync(TimeSpan.FromSeconds(30)).ConfigureAwait(false);
+                    AssertEqual(0, exitCode ?? -1, "the child process exits cleanly");
+                    lock (outputLines)
+                    {
+                        AssertTrue(outputLines.Contains("absent"), "the child process must not receive the initial admin password");
+                    }
+                }
+                finally
+                {
+                    Environment.SetEnvironmentVariable(variableName, previousValue);
+                }
             }));
 
             cases.Add(CaseAsync("start_async_invalid_command_throws", "StartAsync Invalid Command Throws", TestTags.Negative, async () =>

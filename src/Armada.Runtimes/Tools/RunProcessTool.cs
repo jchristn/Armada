@@ -9,6 +9,7 @@ namespace Armada.Runtimes.Tools
     using System.Text.Json;
     using System.Threading;
     using System.Threading.Tasks;
+    using Armada.Core.Services;
     using Armada.Runtimes.Tools.Arguments;
 
     /// <summary>
@@ -236,6 +237,7 @@ namespace Armada.Runtimes.Tools
             startInfo.RedirectStandardError = true;
             startInfo.UseShellExecute = false;
             startInfo.CreateNoWindow = true;
+            startInfo.Environment.Remove(DefaultCredentialService.InitialAdminPasswordEnvironmentVariable);
 
             if (argv != null && argv.Count > 0)
             {

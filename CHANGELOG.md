@@ -439,6 +439,10 @@ commands arrive with their own changes. Schema migrations 103 and 104 apply at s
 ### Record WebSocket events follow the record read
 
 - **Mission, voyage, captain, and check-run events reach the sockets that can read the record.** `mission.changed`, `mission.activity`, `approval-needed`, `voyage.changed`, `captain.changed`, and `check-run.changed` go to the owning user, a tenant administrator of that tenant, and a global administrator who already receives that tenant. A record with no user id still reaches that tenant's tenant administrators and those global administrators. A record with no tenant id reaches global administrators only. Objective, incident, deployment, runbook, and environment events stay on the tenant broadcast. Ask events stay with that user. CLI permission events stay with the viewers `CliPermissionAccess.CanView` admits.
+### Keep the initial admin password out of child processes
+
+- Captain processes and `run_process` commands do not inherit `ARMADA_INITIAL_ADMIN_PASSWORD`. Armada still reads this
+  variable during server startup to set the initial admin password.
 
 ### Landing failure prevention
 
