@@ -528,8 +528,8 @@ namespace Armada.Server
 
             // Initialize log rotation and data expiry
             _LogRotation = new LogRotationService(_Logging, _Settings.MaxLogFileSizeBytes, _Settings.MaxLogFileCount);
-            // Data expiry uses the active database connection. SQLite writes still enter the shared write gate.
-            _DataExpiry = new DataExpiryService(_Logging, _Settings.Database.GetConnectionString(), _Settings.DataRetentionDays);
+            // Data expiry runs on every provider through the active database connection; SQLite writes enter the write gate.
+            _DataExpiry = new DataExpiryService(_Logging, _Settings.Database, _Settings.DataRetentionDays);
             _Retention = new RetentionService(_Database, _Settings, _Logging);
 
             // Initialize handler classes (WebSocketHub is created later, so pass null initially)

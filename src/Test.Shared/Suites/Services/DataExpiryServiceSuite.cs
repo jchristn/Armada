@@ -2,6 +2,7 @@ namespace Test.Shared.Suites.Services
 {
     using System;
     using System.Collections.Generic;
+    using System.Linq;
     using System.Text.Json;
     using System.Threading;
     using System.Threading.Tasks;
@@ -19,7 +20,8 @@ namespace Test.Shared.Suites.Services
     /// Descriptors for <see cref="DataExpiryService"/>: retention-driven purge of old completed
     /// voyages, missions, read signals, and events on the configured database provider. The
     /// disabled-retention case asserts the no-op guard. Positive cases assert removal of aged
-    /// records, and the snapshot case asserts that the newest objective snapshot survives.
+    /// records, the snapshot case asserts that the newest objective snapshot survives, and the
+    /// hierarchy and rescue cases assert that a live mission keeps the old missions it points at.
     /// </summary>
     public sealed class DataExpiryServiceSuite : IArmadaTestSuite
     {
@@ -33,21 +35,33 @@ namespace Test.Shared.Suites.Services
         {
             List<TestCaseDescriptor> cases = new List<TestCaseDescriptor>();
 
-            cases.Add(CaseAsync("wait_retention_and_rescue_provenance", "Data expiry clears rescue provenance; independent wait retention preserves open intervals", TestTags.Positive, async () =>
+            cases.Add(CaseAsync("wait_retention_and_rescue_provenance", "Data expiry keeps an old original while its rescue is live, then expires both; independent wait retention preserves open intervals", TestTags.Positive, async () =>
             {
                 using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync();
-                var db = testDb.Driver;
-                Mission original = await db.Missions.CreateAsync(new Mission("old original") { Status=MissionStatusEnum.Failed, CompletedUtc=DateTime.UtcNow.AddDays(-45) });
-                Mission rescue = await db.Missions.CreateAsync(new Mission("rescue") { RescueOfMissionId=original.Id, IsRescue=true });
-                await db.MissionWaitIntervals.CreateAsync(new MissionWaitInterval { MissionId=rescue.Id, StartedUtc=DateTime.UtcNow.AddDays(-50), EndedUtc=DateTime.UtcNow.AddDays(-45) });
-                MissionWaitInterval open = await db.MissionWaitIntervals.CreateAsync(new MissionWaitInterval { MissionId=rescue.Id, StartedUtc=DateTime.UtcNow.AddDays(-50) });
-                LoggingModule logging = new(); logging.Settings.EnableConsole=false;
-                await new DataExpiryService(logging, testDb.ConnectionString, 30).PurgeExpiredDataAsync();
+                DatabaseDriver db = testDb.Driver;
+                Mission original = await db.Missions.CreateAsync(new Mission("old original") { Status = MissionStatusEnum.Failed, CompletedUtc = DateTime.UtcNow.AddDays(-45) });
+                Mission rescue = await db.Missions.CreateAsync(new Mission("rescue") { RescueOfMissionId = original.Id, IsRescue = true });
+                await db.MissionWaitIntervals.CreateAsync(new MissionWaitInterval { MissionId = rescue.Id, StartedUtc = DateTime.UtcNow.AddDays(-50), EndedUtc = DateTime.UtcNow.AddDays(-45) });
+                MissionWaitInterval open = await db.MissionWaitIntervals.CreateAsync(new MissionWaitInterval { MissionId = rescue.Id, StartedUtc = DateTime.UtcNow.AddDays(-50) });
+                DataExpiryService expiry = new DataExpiryService(QuietLogging(), TestDatabaseConfig.Type, testDb.ConnectionString, 30);
+                await expiry.PurgeExpiredDataAsync();
                 await db.MissionWaitIntervals.DeleteExpiredAsync(DateTime.UtcNow.AddDays(-30));
-                AssertNull(await db.Missions.ReadAsync(original.Id));
+
+                AssertNotNull(await db.Missions.ReadAsync(original.Id), "a live rescue keeps its original");
                 Mission retained = (await db.Missions.ReadAsync(rescue.Id))!;
-                AssertTrue(retained.IsRescue); AssertNull(retained.RescueOfMissionId);
-                AssertEqual(open.Id, (await db.MissionWaitIntervals.EnumerateByMissionAsync(rescue.Id)).Single().Id);
+                AssertTrue(retained.IsRescue, "rescue kept");
+                AssertEqual(original.Id, retained.RescueOfMissionId, "rescue link intact");
+                AssertEqual(open.Id, (await db.MissionWaitIntervals.EnumerateByMissionAsync(rescue.Id)).Single().Id, "open interval kept");
+
+                // Once the rescue itself is finished and old, the original expires with it and nothing dangles.
+                await db.MissionWaitIntervals.CloseOpenAsync(rescue.Id, DateTime.UtcNow.AddDays(-40));
+                retained.Status = MissionStatusEnum.Complete;
+                retained.CompletedUtc = DateTime.UtcNow.AddDays(-40);
+                await db.Missions.UpdateAsync(retained);
+                await expiry.PurgeExpiredDataAsync();
+                AssertNull(await db.Missions.ReadAsync(original.Id), "original expired with its rescue");
+                AssertNull(await db.Missions.ReadAsync(rescue.Id), "rescue expired");
+                AssertEqual(0, (await db.MissionWaitIntervals.EnumerateByMissionAsync(rescue.Id)).Count, "intervals removed with the mission");
             }));
 
             cases.Add(CaseAsync("purge_disabled_when_retention_zero", "PurgeExpiredDataAsync DisabledWhenRetentionZero", TestTags.Negative, async () =>
@@ -71,7 +85,7 @@ namespace Test.Shared.Suites.Services
                     await testDb.Driver.Missions.CreateAsync(mission);
                     LoggingModule logging = new LoggingModule();
                     logging.Settings.EnableConsole = false;
-                    DataExpiryService service = new DataExpiryService(logging, testDb.ConnectionString, 30);
+                    DataExpiryService service = new DataExpiryService(logging, TestDatabaseConfig.Type, testDb.ConnectionString, 30);
                     service.RetentionDays = 60;
                     await service.PurgeExpiredDataAsync();
                     AssertNotNull(await testDb.Driver.Missions.ReadAsync(mission.Id));
@@ -108,7 +122,7 @@ namespace Test.Shared.Suites.Services
                     recentVoyage.CompletedUtc = DateTime.UtcNow.AddDays(-5);
                     await db.Voyages.CreateAsync(recentVoyage);
 
-                    DataExpiryService service = new DataExpiryService(logging, testDb.ConnectionString, 30);
+                    DataExpiryService service = new DataExpiryService(logging, TestDatabaseConfig.Type, testDb.ConnectionString, 30);
                     int deleted = await service.PurgeExpiredDataAsync();
 
                     AssertTrue(deleted > 0);
@@ -136,7 +150,7 @@ namespace Test.Shared.Suites.Services
                     Signal recentSignal = new Signal(SignalTypeEnum.Nudge, "recent");
                     await db.Signals.CreateAsync(recentSignal);
 
-                    DataExpiryService service = new DataExpiryService(logging, testDb.ConnectionString, 30);
+                    DataExpiryService service = new DataExpiryService(logging, TestDatabaseConfig.Type, testDb.ConnectionString, 30);
                     await service.PurgeExpiredDataAsync();
 
                     AssertNotNull(await db.Signals.ReadAsync(recentSignal.Id));
@@ -158,7 +172,7 @@ namespace Test.Shared.Suites.Services
                     ArmadaEvent recentEvent = new ArmadaEvent("test.event", "Recent event");
                     await db.Events.CreateAsync(recentEvent);
 
-                    DataExpiryService service = new DataExpiryService(logging, testDb.ConnectionString, 30);
+                    DataExpiryService service = new DataExpiryService(logging, TestDatabaseConfig.Type, testDb.ConnectionString, 30);
                     await service.PurgeExpiredDataAsync();
 
                     List<ArmadaEvent> remaining = await db.Events.EnumerateRecentAsync();
@@ -170,10 +184,9 @@ namespace Test.Shared.Suites.Services
 
             cases.Add(CaseAsync("purge_keeps_latest_objective_snapshot", "Purge keeps the newest objective snapshot and still deletes a normal old event", TestTags.Positive, AssertLatestObjectiveSnapshotSurvivesAsync));
 
-            cases.Add(CaseAsync("purge_old_completed_voyage_postgresql", "Positive retention deletes an old completed voyage on PostgreSQL", TestTags.Positive, AssertOldVoyagePurgedAsync, DatabaseTypeEnum.Postgresql));
-            cases.Add(CaseAsync("purge_old_completed_voyage_mysql", "Positive retention deletes an old completed voyage on MySQL", TestTags.Positive, AssertOldVoyagePurgedAsync, DatabaseTypeEnum.Mysql));
-            cases.Add(CaseAsync("purge_old_completed_voyage_sqlserver", "Positive retention deletes an old completed voyage on SQL Server", TestTags.Positive, AssertOldVoyagePurgedAsync, DatabaseTypeEnum.SqlServer));
-            cases.Add(CaseAsync("sqlserver_clears_parent_before_mission_delete", "SQL Server clears parent_mission_id before deleting an expired parent mission", TestTags.Positive, AssertSqlServerParentClearedAsync, DatabaseTypeEnum.SqlServer));
+            cases.Add(CaseAsync("purge_old_completed_voyage_on_active_provider", "Positive retention deletes an old completed voyage on the active provider", TestTags.Positive, AssertOldVoyagePurgedAsync));
+            cases.Add(CaseAsync("expired_parent_with_live_child_is_kept", "An expired parent mission is kept while a child is live, with the child's parent link intact", TestTags.Negative, AssertLiveChildKeepsParentAsync));
+            cases.Add(CaseAsync("expired_parent_and_child_expire_together", "An expired parent and its expired descendants are deleted together (SQL Server has no ON DELETE action on the parent link)", TestTags.Positive, AssertParentAndChildExpireTogetherAsync));
 
             return new TestSuiteDescriptor(
                 suiteId: "Services.DataExpiryService",
@@ -185,34 +198,14 @@ namespace Test.Shared.Suites.Services
 
         #region Private-Methods
 
-        private static TestCaseDescriptor CaseAsync(string caseId, string displayName, string tag, Func<Task> body, DatabaseTypeEnum? requiredProvider = null)
+        private static TestCaseDescriptor CaseAsync(string caseId, string displayName, string tag, Func<Task> body)
         {
-            bool skip = requiredProvider.HasValue && TestDatabaseConfig.Type != requiredProvider.Value;
-            string? skipReason = null;
-            if (skip)
-            {
-                skipReason = "Runs only when ARMADA_TEST_DB_TYPE is " + ProviderToken(requiredProvider!.Value) + ". A skip is not proof for that provider.";
-            }
-
             return new TestCaseDescriptor(
                 suiteId: "Services.DataExpiryService",
                 caseId: caseId,
                 displayName: displayName,
                 executeAsync: (CancellationToken ct) => body(),
-                tags: new List<string> { tag },
-                skip: skip,
-                skipReason: skipReason);
-        }
-
-        private static string ProviderToken(DatabaseTypeEnum provider)
-        {
-            switch (provider)
-            {
-                case DatabaseTypeEnum.Postgresql: return "postgresql";
-                case DatabaseTypeEnum.Mysql: return "mysql";
-                case DatabaseTypeEnum.SqlServer: return "sqlserver";
-                default: return "sqlite";
-            }
+                tags: new List<string> { tag });
         }
 
         private static LoggingModule QuietLogging()
@@ -231,7 +224,7 @@ namespace Test.Shared.Suites.Services
                 oldVoyage.CompletedUtc = DateTime.UtcNow.AddDays(-60);
                 await testDb.Driver.Voyages.CreateAsync(oldVoyage);
 
-                DataExpiryService service = new DataExpiryService(QuietLogging(), testDb.ConnectionString, 0);
+                DataExpiryService service = new DataExpiryService(QuietLogging(), TestDatabaseConfig.Type, testDb.ConnectionString, 0);
                 int deleted = await service.PurgeExpiredDataAsync();
 
                 AssertEqual(0, deleted, "zero retention");
@@ -260,7 +253,7 @@ namespace Test.Shared.Suites.Services
                 recentVoyage.CompletedUtc = DateTime.UtcNow.AddDays(-5);
                 await db.Voyages.CreateAsync(recentVoyage);
 
-                DataExpiryService service = new DataExpiryService(QuietLogging(), testDb.ConnectionString, 30);
+                DataExpiryService service = new DataExpiryService(QuietLogging(), TestDatabaseConfig.Type, testDb.ConnectionString, 30);
                 await service.PurgeExpiredDataAsync();
 
                 AssertNull(await db.Voyages.ReadAsync(oldVoyage.Id), "old voyage purged");
@@ -298,7 +291,7 @@ namespace Test.Shared.Suites.Services
                 });
                 ArmadaEvent recentEvent = await db.Events.CreateAsync(new ArmadaEvent("test.event", "Recent normal event"));
 
-                DataExpiryService service = new DataExpiryService(QuietLogging(), testDb.ConnectionString, 30);
+                DataExpiryService service = new DataExpiryService(QuietLogging(), TestDatabaseConfig.Type, testDb.ConnectionString, 30);
                 await service.PurgeExpiredDataAsync();
 
                 AssertNotNull(await db.Events.ReadAsync(quietSnapshot.Id), "only snapshot of a quiet objective remains");
@@ -331,7 +324,7 @@ namespace Test.Shared.Suites.Services
             };
         }
 
-        private static async Task AssertSqlServerParentClearedAsync()
+        private static async Task AssertLiveChildKeepsParentAsync()
         {
             using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
             {
@@ -347,13 +340,45 @@ namespace Test.Shared.Suites.Services
                 child.Status = MissionStatusEnum.Pending;
                 await db.Missions.CreateAsync(child);
 
-                DataExpiryService service = new DataExpiryService(QuietLogging(), testDb.ConnectionString, 30);
+                DataExpiryService service = new DataExpiryService(QuietLogging(), TestDatabaseConfig.Type, testDb.ConnectionString, 30);
                 await service.PurgeExpiredDataAsync();
 
-                AssertNull(await db.Missions.ReadAsync(parent.Id), "expired parent purged");
+                AssertNotNull(await db.Missions.ReadAsync(parent.Id), "a live child keeps its expired parent");
                 Mission? kept = await db.Missions.ReadAsync(child.Id);
                 AssertNotNull(kept, "child mission remains");
-                AssertNull(kept.ParentMissionId, "parent reference cleared");
+                AssertEqual(parent.Id, kept!.ParentMissionId, "parent link intact");
+            }
+        }
+
+        private static async Task AssertParentAndChildExpireTogetherAsync()
+        {
+            using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+            {
+                DatabaseDriver db = testDb.Driver;
+                Mission parent = new Mission("Expired parent mission");
+                parent.Status = MissionStatusEnum.Complete;
+                parent.CompletedUtc = DateTime.UtcNow.AddDays(-60);
+                await db.Missions.CreateAsync(parent);
+
+                Mission child = new Mission("Expired child mission");
+                child.ParentMissionId = parent.Id;
+                child.Status = MissionStatusEnum.Failed;
+                child.CompletedUtc = DateTime.UtcNow.AddDays(-59);
+                await db.Missions.CreateAsync(child);
+
+                Mission grandchild = new Mission("Expired grandchild mission");
+                grandchild.ParentMissionId = child.Id;
+                grandchild.Status = MissionStatusEnum.Cancelled;
+                grandchild.CompletedUtc = DateTime.UtcNow.AddDays(-58);
+                await db.Missions.CreateAsync(grandchild);
+
+                DataExpiryService service = new DataExpiryService(QuietLogging(), TestDatabaseConfig.Type, testDb.ConnectionString, 30);
+                int deleted = await service.PurgeExpiredDataAsync();
+
+                AssertTrue(deleted >= 3, "three missions deleted");
+                AssertNull(await db.Missions.ReadAsync(parent.Id), "parent expired");
+                AssertNull(await db.Missions.ReadAsync(child.Id), "child expired");
+                AssertNull(await db.Missions.ReadAsync(grandchild.Id), "grandchild expired");
             }
         }
 
