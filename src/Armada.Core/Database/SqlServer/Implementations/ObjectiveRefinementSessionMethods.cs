@@ -223,8 +223,8 @@ namespace Armada.Core.Database.SqlServer.Implementations
                         if (!String.IsNullOrEmpty(query.Status)) SqlServerCommandHelper.Add(cmd, "@status", query.Status);
                         if (!String.IsNullOrEmpty(query.CaptainId)) SqlServerCommandHelper.Add(cmd, "@captain_id", query.CaptainId);
                         if (!String.IsNullOrEmpty(query.VesselId)) SqlServerCommandHelper.Add(cmd, "@vessel_id", query.VesselId);
-                        if (query.CreatedAfter.HasValue) cmd.Parameters.AddWithValue("@created_after", SqlServerDatabaseDriver.ToIso8601(query.CreatedAfter.Value.ToUniversalTime()));
-                        if (query.CreatedBefore.HasValue) cmd.Parameters.AddWithValue("@created_before", SqlServerDatabaseDriver.ToIso8601(query.CreatedBefore.Value.ToUniversalTime()));
+                        if (query.CreatedAfter.HasValue) cmd.Parameters.AddWithValue("@created_after", SqlServerDatabaseDriver.ToIso8601(query.CreatedAfter.Value));
+                        if (query.CreatedBefore.HasValue) cmd.Parameters.AddWithValue("@created_before", SqlServerDatabaseDriver.ToIso8601(query.CreatedBefore.Value));
                     }, FromReader, query, token).ConfigureAwait(false);
             }
         }

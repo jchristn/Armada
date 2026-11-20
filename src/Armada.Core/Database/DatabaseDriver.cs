@@ -27,6 +27,13 @@ namespace Armada.Core.Database
 
         #region Public-Members
 
+        /// <summary>
+        /// What the last <see cref="InitializeAsync"/> found in the schema_migrations ledger, or null before
+        /// initialization. <see cref="MigrationLedgerReport.HasGaps"/> is true when a declared migration below the
+        /// applied maximum has no ledger row; startup warns and continues, and the doctor reports it.
+        /// </summary>
+        public MigrationLedgerReport? MigrationLedger { get; protected set; } = null;
+
         /// <summary>Read-only storage and record statistics.</summary>
         public IStorageMethods Storage { get; protected set; } = null!;
 
@@ -884,6 +891,36 @@ namespace Armada.Core.Database
         /// Dispose.
         /// </summary>
         public abstract void Dispose();
+
+        #endregion
+
+        #region Protected-Methods
+
+        /// <summary>
+        /// Compare the declared migrations with the ledger before migrations run, keep the result in
+        /// <see cref="MigrationLedger"/>, and log a warning that lists every declared version missing below the
+        /// applied maximum. A gap never stops startup.
+        /// </summary>
+        /// <param name="providerName">Provider label included in the warning.</param>
+        /// <param name="declaredMigrations">Migrations this build applies.</param>
+        /// <param name="appliedVersions">Versions present in schema_migrations.</param>
+        /// <param name="logging">Logging module that receives the warning.</param>
+        /// <param name="header">Log header of the calling driver.</param>
+        /// <returns>The ledger report.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when a required argument is null or the provider name is empty.</exception>
+        protected MigrationLedgerReport RecordMigrationLedger(
+            string providerName,
+            IReadOnlyList<SchemaMigration> declaredMigrations,
+            IReadOnlyList<int> appliedVersions,
+            SyslogLogging.LoggingModule logging,
+            string header)
+        {
+            ArgumentNullException.ThrowIfNull(logging);
+            MigrationLedgerReport report = MigrationLedgerReport.Build(providerName, declaredMigrations, appliedVersions);
+            MigrationLedger = report;
+            if (report.HasGaps) logging.Warn((header ?? String.Empty) + report.Message);
+            return report;
+        }
 
         #endregion
 

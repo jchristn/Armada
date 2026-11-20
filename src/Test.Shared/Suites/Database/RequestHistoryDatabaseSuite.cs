@@ -6,6 +6,7 @@ namespace Test.Shared.Suites.Database
     using System.Threading.Tasks;
     using Armada.Core.Database;
     using Armada.Core.Database.Sqlite;
+    using Armada.Core.Enums;
     using Armada.Core.Models;
     using Test.Shared.Infrastructure;
     using Touchstone.Core;
@@ -16,7 +17,8 @@ namespace Test.Shared.Suites.Database
     /// together with its detail row, filtered enumeration by route and success state, and retention
     /// pruning via DeleteByFilterAsync using a date cutoff. Positive cases cover persistence and the
     /// query/prune happy paths; negative audit cases cover a not-found read returning null and a
-    /// filter that matches nothing deleting zero rows.
+    /// filter that matches nothing deleting zero rows. One case checks that a created time with no
+    /// kind keeps its UTC clock on every provider.
     /// </summary>
     public sealed class RequestHistoryDatabaseSuite : IArmadaTestSuite
     {
@@ -140,6 +142,15 @@ namespace Test.Shared.Suites.Database
                 }
             }));
 
+            cases.Add(new TestCaseDescriptor(
+                suiteId: SuiteId,
+                caseId: "unspecified_created_utc_keeps_utc_clock",
+                displayName: "A created time with no kind keeps its UTC clock",
+                executeAsync: (CancellationToken ct) => UnspecifiedCreatedUtcKeepsUtcClockAsync(),
+                tags: new List<string> { TestTags.Positive },
+                skip: OperatingSystem.IsWindows(),
+                skipReason: OperatingSystem.IsWindows() ? "The TZ variable does not change the .NET local zone on Windows." : null));
+
             return new TestSuiteDescriptor(
                 suiteId: SuiteId,
                 displayName: "RequestHistory Database",
@@ -183,6 +194,44 @@ namespace Test.Shared.Suites.Database
                 RequestBodyText = requestBody,
                 ResponseBodyText = "{\"status\":\"ok\"}"
             };
+        }
+
+        private static async Task UnspecifiedCreatedUtcKeepsUtcClockAsync()
+        {
+            using (LocalTimeZoneScope zone = await LocalTimeZoneScope.EnterAsync().ConfigureAwait(false))
+            {
+                DateTime wall = new DateTime(2020, 6, 15, 15, 0, 0);
+                DateTime unspecified = DateTime.SpecifyKind(wall, DateTimeKind.Unspecified);
+                DateTime utc = DateTime.SpecifyKind(wall, DateTimeKind.Utc);
+                DateTime local = new DateTime(2020, 6, 15, 15, 0, 0, DateTimeKind.Local);
+                DateTime localUtc = local.ToUniversalTime();
+
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                {
+                    DatabaseDriver db = testDb.Driver;
+                    DateTime utcRead = await ReadCreatedUtcAsync(db, utc, "usr_clock_utc").ConfigureAwait(false);
+                    AssertEqual(DateTimeKind.Utc, utcRead.Kind, "utc kind");
+                    AssertEqual(utc.Ticks, utcRead.Ticks, "utc ticks");
+
+                    DateTime localRead = await ReadCreatedUtcAsync(db, local, "usr_clock_local").ConfigureAwait(false);
+                    AssertEqual(DateTimeKind.Utc, localRead.Kind, "local kind");
+                    AssertEqual(localUtc.Ticks, localRead.Ticks, "local ticks");
+
+                    DateTime unspecifiedRead = await ReadCreatedUtcAsync(db, unspecified, "usr_clock_unspecified").ConfigureAwait(false);
+                    AssertEqual(DateTimeKind.Utc, unspecifiedRead.Kind, "unspecified kind");
+                    AssertEqual(utc.Ticks, unspecifiedRead.Ticks, "unspecified ticks");
+                }
+            }
+        }
+
+        private static async Task<DateTime> ReadCreatedUtcAsync(DatabaseDriver db, DateTime createdUtc, string userId)
+        {
+            RequestHistoryEntry entry = BuildEntry("GET", "/api/v1/history-clock", 200, userId);
+            entry.CreatedUtc = createdUtc;
+            await db.RequestHistory.CreateAsync(entry, BuildDetail(entry.Id, "{\"clock\":true}")).ConfigureAwait(false);
+            RequestHistoryRecord? result = await db.RequestHistory.ReadAsync(entry.Id).ConfigureAwait(false);
+            AssertNotNull(result);
+            return result!.Entry.CreatedUtc;
         }
 
         private static TestCaseDescriptor CaseAsync(string caseId, string displayName, string tag, Func<Task> body)

@@ -14,6 +14,10 @@ namespace Test.Shared.Suites.Database
     using Armada.Core.Enums;
     using Armada.Core.Models;
     using Armada.Core.Settings;
+    using Microsoft.Data.SqlClient;
+    using Microsoft.Data.Sqlite;
+    using MySqlConnector;
+    using Npgsql;
     using SyslogLogging;
     using Test.Shared.Infrastructure;
     using Touchstone.Core;
@@ -65,8 +69,8 @@ namespace Test.Shared.Suites.Database
                     AssertEqual(1, migrations[0].Version, provider.Key + " first migration");
                     for (int i = 1; i < migrations.Count; i++)
                     {
-                        // Gaps are harmless (startup applies every version above the recorded maximum); a duplicate
-                        // or out-of-order version would be silently skipped on upgraded databases.
+                        // A number this build does not declare is a retired version. The list must stay strictly increasing.
+                        // A duplicate or a decreasing version is rejected.
                         AssertTrue(migrations[i].Version > migrations[i - 1].Version,
                             provider.Key + " migration v" + migrations[i].Version + " follows v" + migrations[i - 1].Version);
                     }
@@ -193,6 +197,8 @@ namespace Test.Shared.Suites.Database
                     }
                 }
             }));
+
+            AddMigrationLedgerCases(cases);
 
             return new TestSuiteDescriptor(
                 suiteId: SuiteId,
@@ -331,6 +337,316 @@ namespace Test.Shared.Suites.Database
                 displayName: displayName,
                 executeAsync: body,
                 tags: new List<string> { tag, TestTags.Database });
+        }
+
+        private static void AddMigrationLedgerCases(List<TestCaseDescriptor> cases)
+        {
+            cases.Add(Case("ledger_report_lists_declared_gaps_only", "The ledger report lists declared versions missing below the applied maximum, and nothing else", TestTags.Positive, ct =>
+            {
+                List<SchemaMigration> declared = new List<SchemaMigration>
+                {
+                    new SchemaMigration(1, "one", "SELECT 1;"),
+                    new SchemaMigration(2, "two", "SELECT 1;"),
+                    new SchemaMigration(4, "four", "SELECT 1;"),
+                    new SchemaMigration(5, "five", "SELECT 1;"),
+                    new SchemaMigration(6, "six", "SELECT 1;"),
+                    new SchemaMigration(9, "nine", "SELECT 1;")
+                };
+
+                MigrationLedgerReport empty = MigrationLedgerReport.Build("SQLite", declared, new List<int>());
+                AssertFalse(empty.HasGaps, "an empty ledger is a fresh database, not a gap");
+                AssertEqual(0, empty.AppliedMaximum, "empty maximum");
+
+                MigrationLedgerReport complete = MigrationLedgerReport.Build("SQLite", declared, new List<int> { 1, 2, 4, 5, 6 });
+                AssertFalse(complete.HasGaps, "declared 9 above the maximum is pending, retired 3 is absent: no gap");
+                AssertEqual(DoctorCheckStatusEnum.Pass, complete.DoctorStatus, "complete passes");
+
+                MigrationLedgerReport gaps = MigrationLedgerReport.Build("MySQL", declared, new List<int> { 1, 5, 6, 42 });
+                AssertTrue(gaps.HasGaps, "gaps found");
+                AssertEqual("2,4,9", String.Join(",", gaps.MissingVersions), "declared versions below 42 without a row, ascending; 3 is retired");
+                AssertEqual(42, gaps.AppliedMaximum, "maximum includes an unknown higher row");
+                AssertEqual(DoctorCheckStatusEnum.Warn, gaps.DoctorStatus, "gaps warn, never fail");
+                AssertContains("MySQL schema_migrations has no row for declared migration versions 2, 4, 9 below the applied maximum 42", gaps.Message, "message lists the versions");
+
+                AssertThrows<ArgumentNullException>(() => MigrationLedgerReport.Build("", declared, new List<int>()), "empty provider");
+                return Task.CompletedTask;
+            }));
+
+            AddProviderLedgerCases(cases, DatabaseTypeEnum.Sqlite, "sqlite", "SQLite");
+            AddProviderLedgerCases(cases, DatabaseTypeEnum.Postgresql, "postgresql", "PostgreSQL");
+            AddProviderLedgerCases(cases, DatabaseTypeEnum.Mysql, "mysql", "MySQL");
+            AddProviderLedgerCases(cases, DatabaseTypeEnum.SqlServer, "sqlserver", "SQL Server");
+        }
+
+        private static void AddProviderLedgerCases(List<TestCaseDescriptor> cases, DatabaseTypeEnum provider, string dbType, string label)
+        {
+            cases.Add(ProviderCase(provider, dbType, dbType + "_missing_known_version_warns_and_starts",
+                label + " startup reports a declared migration below the applied maximum with no ledger row, and keeps running",
+                TestTags.Negative, ct => AssertMissingKnownVersionReportedAsync(provider, label, ct)));
+            cases.Add(ProviderCase(provider, dbType, dbType + "_complete_ledger_starts",
+                label + " startup succeeds when every declared migration has a ledger row",
+                TestTags.Positive, ct => AssertCompleteLedgerStartsAsync(provider, ct)));
+            cases.Add(ProviderCase(provider, dbType, dbType + "_retired_version_gap_starts",
+                label + " startup succeeds when a version number this build does not declare is absent",
+                TestTags.Positive, ct => AssertRetiredVersionGapStartsAsync(provider, ct)));
+            cases.Add(ProviderCase(provider, dbType, dbType + "_unknown_higher_version_starts",
+                label + " startup succeeds when the ledger has a version this build does not declare above the applied migrations",
+                TestTags.Positive, ct => AssertUnknownHigherVersionStartsAsync(provider, ct)));
+        }
+
+        private static TestCaseDescriptor ProviderCase(DatabaseTypeEnum provider, string dbType, string caseId, string displayName, string tag, Func<CancellationToken, Task> body)
+        {
+            bool skip = TestDatabaseConfig.Type != provider;
+            string? reason = null;
+            if (skip)
+            {
+                reason = "Requires the " + ProviderLabel(provider) + " provider. The selected provider is "
+                    + ProviderLabel(TestDatabaseConfig.Type) + ". This case does not run until --db-type " + dbType + " is selected.";
+            }
+
+            return new TestCaseDescriptor(
+                suiteId: SuiteId,
+                caseId: caseId,
+                displayName: displayName,
+                executeAsync: body,
+                tags: new List<string> { tag, TestTags.Database },
+                skip: skip,
+                skipReason: reason);
+        }
+
+        private static async Task AssertMissingKnownVersionReportedAsync(DatabaseTypeEnum provider, string label, CancellationToken token)
+        {
+            AssertEqual(provider, TestDatabaseConfig.Type, "selected provider");
+            using (IsolatedTestDatabase isolated = await IsolatedTestDatabase.CreateAsync("ledger-missing", null, token).ConfigureAwait(false))
+            using (DatabaseDriver driver = DatabaseDriverFactory.Create(isolated.Settings, QuietLogging()))
+            {
+                await driver.InitializeAsync(token).ConfigureAwait(false);
+                AssertNotNull(driver.MigrationLedger, "ledger read on first start");
+                AssertFalse(driver.MigrationLedger!.HasGaps, "a fresh database has no gap");
+                IReadOnlyList<SchemaMigration> migrations = driver.GetMigrationsForVerification();
+                int missing = LowestDeclaredVersion(migrations);
+                int maximum = HighestDeclaredVersion(migrations);
+                AssertTrue(missing < maximum, label + " declares a version below its maximum");
+
+                await ExecuteAsync(isolated, "DELETE FROM schema_migrations WHERE version = " + missing + ";", token).ConfigureAwait(false);
+                AssertEqual(0L, await MigrationCountAsync(isolated, missing, token).ConfigureAwait(false), "declared row removed");
+                AssertEqual(1L, await MigrationCountAsync(isolated, maximum, token).ConfigureAwait(false), "applied maximum remains");
+                List<string> schemaBefore = await isolated.SnapshotSchemaAsync(token).ConfigureAwait(false);
+
+                // A gap must not stop startup (refusing could brick an existing or development database).
+                await driver.InitializeAsync(token).ConfigureAwait(false);
+
+                MigrationLedgerReport? ledger = driver.MigrationLedger;
+                AssertNotNull(ledger, "ledger read on restart");
+                AssertTrue(ledger!.HasGaps, label + " reports declared version " + missing + " missing below the applied maximum");
+                AssertEqual(1, ledger.MissingVersions.Count, "exactly one missing version");
+                AssertEqual(missing, ledger.MissingVersions[0], "the missing version");
+                AssertEqual(maximum, ledger.AppliedMaximum, "applied maximum");
+                AssertEqual(DoctorCheckStatusEnum.Warn, ledger.DoctorStatus, "doctor warns");
+                AssertContains(label, ledger.Message, "provider");
+                AssertContains("version " + missing + " below the applied maximum " + maximum, ledger.Message, "missing version");
+                AssertEqual(maximum, await driver.GetSchemaVersionAsync(token).ConfigureAwait(false), "schema version unchanged");
+                AssertEqual(0L, await MigrationCountAsync(isolated, missing, token).ConfigureAwait(false), "missing migration was not recorded");
+                AssertEqual(1L, await MigrationCountAsync(isolated, maximum, token).ConfigureAwait(false), "applied maximum was not rewritten");
+                AssertSameSchema(schemaBefore, await isolated.SnapshotSchemaAsync(token).ConfigureAwait(false), label + " missing migration was not applied");
+            }
+        }
+
+        private static async Task AssertCompleteLedgerStartsAsync(DatabaseTypeEnum provider, CancellationToken token)
+        {
+            AssertEqual(provider, TestDatabaseConfig.Type, "selected provider");
+            using (IsolatedTestDatabase isolated = await IsolatedTestDatabase.CreateAsync("ledger-complete", null, token).ConfigureAwait(false))
+            using (DatabaseDriver driver = DatabaseDriverFactory.Create(isolated.Settings, QuietLogging()))
+            {
+                await driver.InitializeAsync(token).ConfigureAwait(false);
+                IReadOnlyList<SchemaMigration> migrations = driver.GetMigrationsForVerification();
+                int maximum = HighestDeclaredVersion(migrations);
+                await AssertDeclaredRowsAsync(isolated, migrations, token).ConfigureAwait(false);
+                AssertEqual(maximum, await driver.GetSchemaVersionAsync(token).ConfigureAwait(false), "schema at the highest declared version");
+
+                await driver.InitializeAsync(token).ConfigureAwait(false);
+
+                await AssertDeclaredRowsAsync(isolated, migrations, token).ConfigureAwait(false);
+                AssertEqual(maximum, await driver.GetSchemaVersionAsync(token).ConfigureAwait(false), "complete ledger stays at the highest declared version");
+                AssertFalse(driver.MigrationLedger!.HasGaps, "complete ledger reports no gap");
+                AssertEqual(DoctorCheckStatusEnum.Pass, driver.MigrationLedger.DoctorStatus, "complete ledger passes the doctor");
+            }
+        }
+
+        private static async Task AssertRetiredVersionGapStartsAsync(DatabaseTypeEnum provider, CancellationToken token)
+        {
+            AssertEqual(provider, TestDatabaseConfig.Type, "selected provider");
+            using (IsolatedTestDatabase isolated = await IsolatedTestDatabase.CreateAsync("ledger-retired", null, token).ConfigureAwait(false))
+            using (DatabaseDriver driver = DatabaseDriverFactory.Create(isolated.Settings, QuietLogging()))
+            {
+                await driver.InitializeAsync(token).ConfigureAwait(false);
+                IReadOnlyList<SchemaMigration> migrations = driver.GetMigrationsForVerification();
+                int retired = FirstRetiredVersion(migrations);
+                int maximum = HighestDeclaredVersion(migrations);
+                AssertTrue(retired > 0, ProviderLabel(provider) + " declares a retired version number below its maximum");
+                AssertEqual(0L, await MigrationCountAsync(isolated, retired, token).ConfigureAwait(false), "retired version has no ledger row");
+
+                await driver.InitializeAsync(token).ConfigureAwait(false);
+
+                AssertEqual(0L, await MigrationCountAsync(isolated, retired, token).ConfigureAwait(false), "retired version stays absent");
+                await AssertDeclaredRowsAsync(isolated, migrations, token).ConfigureAwait(false);
+                AssertEqual(maximum, await driver.GetSchemaVersionAsync(token).ConfigureAwait(false), "retired gap does not change the applied maximum");
+                AssertFalse(driver.MigrationLedger!.HasGaps, "a retired version number is not a gap");
+            }
+        }
+
+        private static async Task AssertUnknownHigherVersionStartsAsync(DatabaseTypeEnum provider, CancellationToken token)
+        {
+            AssertEqual(provider, TestDatabaseConfig.Type, "selected provider");
+            using (IsolatedTestDatabase isolated = await IsolatedTestDatabase.CreateAsync("ledger-unknown", null, token).ConfigureAwait(false))
+            using (DatabaseDriver driver = DatabaseDriverFactory.Create(isolated.Settings, QuietLogging()))
+            {
+                await driver.InitializeAsync(token).ConfigureAwait(false);
+                IReadOnlyList<SchemaMigration> migrations = driver.GetMigrationsForVerification();
+                int maximum = HighestDeclaredVersion(migrations);
+                int unknown = maximum + 1000;
+                List<string> schemaBefore = await isolated.SnapshotSchemaAsync(token).ConfigureAwait(false);
+                await ExecuteAsync(isolated,
+                    "INSERT INTO schema_migrations (version, description, applied_utc) VALUES (" + unknown + ", 'unknown ledger version', '2020-01-01 00:00:00');",
+                    token).ConfigureAwait(false);
+
+                await driver.InitializeAsync(token).ConfigureAwait(false);
+
+                AssertEqual(1L, await MigrationCountAsync(isolated, unknown, token).ConfigureAwait(false), "unknown higher version remains");
+                await AssertDeclaredRowsAsync(isolated, migrations, token).ConfigureAwait(false);
+                AssertEqual(unknown, await driver.GetSchemaVersionAsync(token).ConfigureAwait(false), "schema version stays at the unknown higher row");
+                AssertEqual(0, await driver.GetPendingMigrationCountAsync(token).ConfigureAwait(false), "no declared migration is pending above an unknown higher row");
+                AssertSameSchema(schemaBefore, await isolated.SnapshotSchemaAsync(token).ConfigureAwait(false), "unknown higher version");
+                AssertFalse(driver.MigrationLedger!.HasGaps, "an unknown higher version is not a gap");
+            }
+        }
+
+        private static async Task AssertDeclaredRowsAsync(IsolatedTestDatabase isolated, IReadOnlyList<SchemaMigration> migrations, CancellationToken token)
+        {
+            foreach (SchemaMigration migration in migrations)
+            {
+                AssertEqual(1L, await MigrationCountAsync(isolated, migration.Version, token).ConfigureAwait(false), "ledger row for declared version " + migration.Version);
+            }
+        }
+
+        private static int LowestDeclaredVersion(IReadOnlyList<SchemaMigration> migrations)
+        {
+            int lowest = Int32.MaxValue;
+            foreach (SchemaMigration migration in migrations)
+            {
+                if (migration.Version < lowest) lowest = migration.Version;
+            }
+
+            return lowest;
+        }
+
+        private static int HighestDeclaredVersion(IReadOnlyList<SchemaMigration> migrations)
+        {
+            int highest = 0;
+            foreach (SchemaMigration migration in migrations)
+            {
+                if (migration.Version > highest) highest = migration.Version;
+            }
+
+            return highest;
+        }
+
+        private static int FirstRetiredVersion(IReadOnlyList<SchemaMigration> migrations)
+        {
+            HashSet<int> declared = new HashSet<int>();
+            int highest = 0;
+            foreach (SchemaMigration migration in migrations)
+            {
+                declared.Add(migration.Version);
+                if (migration.Version > highest) highest = migration.Version;
+            }
+
+            for (int version = 1; version < highest; version++)
+            {
+                if (!declared.Contains(version)) return version;
+            }
+
+            return 0;
+        }
+
+        private static async Task<long> MigrationCountAsync(IsolatedTestDatabase isolated, int version, CancellationToken token)
+        {
+            List<string> values = await isolated.QueryStringsAsync(
+                "SELECT COUNT(*) FROM schema_migrations WHERE version = " + version + ";",
+                token).ConfigureAwait(false);
+            return values.Count == 0 ? 0L : Int64.Parse(values[0]);
+        }
+
+        private static void AssertSameSchema(List<string> before, List<string> after, string label)
+        {
+            List<string> removed = before.Except(after, StringComparer.Ordinal).ToList();
+            List<string> added = after.Except(before, StringComparer.Ordinal).ToList();
+            AssertTrue(removed.Count == 0 && added.Count == 0,
+                label + " schema unchanged; removed: [" + String.Join(", ", removed) + "] added: [" + String.Join(", ", added) + "]");
+        }
+
+        private static async Task ExecuteAsync(IsolatedTestDatabase isolated, string sql, CancellationToken token)
+        {
+            if (String.IsNullOrEmpty(sql)) throw new ArgumentNullException(nameof(sql));
+            switch (isolated.Type)
+            {
+                case DatabaseTypeEnum.Postgresql:
+                    using (NpgsqlConnection pg = new NpgsqlConnection(isolated.ConnectionString))
+                    {
+                        await pg.OpenAsync(token).ConfigureAwait(false);
+                        using (NpgsqlCommand cmd = pg.CreateCommand())
+                        {
+                            cmd.CommandText = sql;
+                            await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
+                        }
+                    }
+                    break;
+                case DatabaseTypeEnum.Mysql:
+                    using (MySqlConnection my = new MySqlConnection(isolated.ConnectionString))
+                    {
+                        await my.OpenAsync(token).ConfigureAwait(false);
+                        using (MySqlCommand cmd = my.CreateCommand())
+                        {
+                            cmd.CommandText = sql;
+                            await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
+                        }
+                    }
+                    break;
+                case DatabaseTypeEnum.SqlServer:
+                    using (SqlConnection ss = new SqlConnection(isolated.ConnectionString))
+                    {
+                        await ss.OpenAsync(token).ConfigureAwait(false);
+                        using (SqlCommand cmd = ss.CreateCommand())
+                        {
+                            cmd.CommandText = sql;
+                            await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
+                        }
+                    }
+                    break;
+                default:
+                    using (SqliteConnection lite = new SqliteConnection("Data Source=" + isolated.SqlitePath + ";Pooling=False"))
+                    {
+                        await lite.OpenAsync(token).ConfigureAwait(false);
+                        using (SqliteCommand cmd = lite.CreateCommand())
+                        {
+                            cmd.CommandText = sql;
+                            await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
+                        }
+                    }
+                    break;
+            }
+        }
+
+        private static string ProviderLabel(DatabaseTypeEnum provider)
+        {
+            switch (provider)
+            {
+                case DatabaseTypeEnum.Sqlite: return "SQLite";
+                case DatabaseTypeEnum.Postgresql: return "PostgreSQL";
+                case DatabaseTypeEnum.Mysql: return "MySQL";
+                case DatabaseTypeEnum.SqlServer: return "SQL Server";
+                default: return provider.ToString();
+            }
         }
 
         #endregion

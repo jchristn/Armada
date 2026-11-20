@@ -997,7 +997,8 @@ namespace Armada.Core.Services
                 bool processAlive = captain.ProcessId.HasValue &&
                     (OnIsProcessTracked?.Invoke(captain.ProcessId.Value) == true ||
                      OnIsProcessExitHandled?.Invoke(captain.ProcessId.Value) == true ||
-                     ProcessSupervisor.IsTrackedProcessAlive(captain.ProcessId.Value, currentMission?.StartedUtc));
+                     ProcessSupervisor.IsTrackedProcessAlive(captain.ProcessId.Value, currentMission?.StartedUtc,
+                         currentMission?.ProcessStartedPid, currentMission?.ProcessStartedUtc));
 
                 if (processAlive) continue;
 
@@ -1511,6 +1512,14 @@ namespace Armada.Core.Services
 
         #region Private-Methods
 
+        private static bool IsReusedRecordedProcess(int processId, Mission? mission)
+        {
+            // Only an exact start time recorded for this very process id can prove reuse here; without one these checks
+            // keep their existing plain liveness behavior.
+            if (mission?.ProcessStartedPid != processId || !mission.ProcessStartedUtc.HasValue) return false;
+            return ProcessSupervisor.CheckIdentity(processId, null, mission.ProcessStartedPid, mission.ProcessStartedUtc) == ProcessIdentityEnum.Reused;
+        }
+
         /// <summary>
         /// Build the status summary across every tenant (null) or for one tenant.
         /// </summary>
@@ -1729,6 +1738,12 @@ namespace Armada.Core.Services
                         isAlive = false;
                         try { exitCode = process.ExitCode; }
                         catch { }
+                    }
+                    else if (IsReusedRecordedProcess(processId.Value, mission))
+                    {
+                        // The id belongs to a later process than the recorded local launch: the agent is gone.
+                        _Logging.Warn(_Header + "captain " + captain.Id + " process " + processId + " is a later process reusing the agent's id; treating the agent as exited");
+                        isAlive = false;
                     }
                     else
                     {
@@ -2397,7 +2412,7 @@ namespace Armada.Core.Services
                         try
                         {
                             System.Diagnostics.Process process = System.Diagnostics.Process.GetProcessById(mission.ProcessId.Value);
-                            processAlive = !process.HasExited;
+                            processAlive = !process.HasExited && !IsReusedRecordedProcess(mission.ProcessId.Value, mission);
                         }
                         catch (ArgumentException)
                         {

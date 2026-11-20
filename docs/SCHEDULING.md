@@ -136,7 +136,7 @@ The Admiral runs a health-check loop on a configurable interval controlled by th
 3. **Reconciles landings** -- open pull requests that have merged, and Landing Mode `None` missions whose branch was merged by hand.
 4. **Runs recovery and background work** -- deployment rollout windows, the merge queue, background job maintenance, the vessel health schedule, mission failure recovery, and fleet action runs.
 
-Every 10 cycles (about every 100 seconds at the default interval) it also rotates logs, maintains planning and backlog refinement sessions, and sweeps model endpoint health. Every 100 cycles (about every 17 minutes at the default interval) it runs data expiry (SQLite only) and retention pruning (request history, Ask threads, finished jobs, import batches, and fleet action runs).
+Every 10 cycles (about every 100 seconds at the default interval) it also rotates logs, maintains planning and backlog refinement sessions, and sweeps model endpoint health. Every 100 cycles (about every 17 minutes at the default interval) it runs data expiry (every database provider) and retention pruning (request history, Ask threads, finished jobs, import batches, and fleet action runs).
 
 ## Manual Priority Override
 

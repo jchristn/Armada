@@ -158,6 +158,26 @@ namespace Armada.Core.Database.SqlServer.Implementations
         }
 
         /// <inheritdoc />
+        public async Task<bool> SetProcessLaunchAsync(string missionId, int? processId, DateTime? startedUtc, CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(missionId)) throw new ArgumentNullException(nameof(missionId));
+            bool record = processId.HasValue && startedUtc.HasValue;
+
+            using (SqlConnection conn = new SqlConnection(_Driver.ConnectionString))
+            {
+                await conn.OpenAsync(token).ConfigureAwait(false);
+                using (SqlCommand cmd = conn.CreateCommand())
+                {
+                    cmd.CommandText = "UPDATE missions SET process_started_pid = @pid, process_started_utc = @started WHERE id = @id;";
+                    cmd.Parameters.AddWithValue("@id", missionId);
+                    cmd.Parameters.Add(new SqlParameter("@pid", System.Data.SqlDbType.Int) { Value = record ? processId!.Value : DBNull.Value });
+                    cmd.Parameters.Add(new SqlParameter("@started", System.Data.SqlDbType.NVarChar, 40) { Value = record ? ProcessLaunchSchema.ToText(startedUtc)! : DBNull.Value });
+                    return await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false) > 0;
+                }
+            }
+        }
+
+        /// <inheritdoc />
         public async Task<bool> TryClaimProcessExitAsync(string missionId, int processId, CancellationToken token = default)
         {
             if (String.IsNullOrEmpty(missionId)) throw new ArgumentNullException(nameof(missionId));

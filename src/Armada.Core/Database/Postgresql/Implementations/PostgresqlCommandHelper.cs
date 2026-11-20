@@ -146,7 +146,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
         internal static NpgsqlParameter DateParameter(string name, DateTime value)
         {
             NpgsqlParameter parameter = new NpgsqlParameter(name, NpgsqlTypes.NpgsqlDbType.Timestamp);
-            parameter.Value = DateTime.SpecifyKind(NormalizeUtc(value), DateTimeKind.Unspecified);
+            parameter.Value = DateTime.SpecifyKind(UtcClock.ToUtc(value), DateTimeKind.Unspecified);
             return parameter;
         }
 
@@ -269,17 +269,6 @@ namespace Armada.Core.Database.Postgresql.Implementations
         internal static string Page(int offset, int limit)
         {
             return " LIMIT " + limit + " OFFSET " + offset;
-        }
-
-        #endregion
-
-        #region Private-Methods
-
-        private static DateTime NormalizeUtc(DateTime value)
-        {
-            if (value.Kind == DateTimeKind.Local) return value.ToUniversalTime();
-            if (value.Kind == DateTimeKind.Unspecified) return DateTime.SpecifyKind(value, DateTimeKind.Utc);
-            return value;
         }
 
         #endregion

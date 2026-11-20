@@ -36,9 +36,11 @@ namespace Test.Shared.Suites.E2E
                 BlackBoxSettings live = server.Settings.BlackBox;
 
                 List<DoctorRow> doctor = await DoctorAsync(admin).ConfigureAwait(false);
-                AssertEqual(12, doctor.Count, "twelve checks");
+                AssertEqual(13, doctor.Count, "thirteen checks");
                 DoctorRow storage = doctor.Single(d => d.Name == BlackBoxStorageDoctorResult.CheckName);
                 AssertEqual("Pass", storage.Status, "database target passes: " + storage.Message);
+                DoctorRow ledger = doctor.Single(d => d.Name == Armada.Core.Database.MigrationLedgerReport.CheckName);
+                AssertEqual("Pass", ledger.Status, "a fresh database has a complete migration ledger: " + ledger.Message);
 
                 HttpResponseMessage refused = await admin.PutAsync("/api/v1/settings", JsonHelper.ToJsonContent(new
                 {

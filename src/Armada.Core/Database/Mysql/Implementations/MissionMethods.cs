@@ -164,6 +164,26 @@ namespace Armada.Core.Database.Mysql.Implementations
         }
 
         /// <inheritdoc />
+        public async Task<bool> SetProcessLaunchAsync(string missionId, int? processId, DateTime? startedUtc, CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(missionId)) throw new ArgumentNullException(nameof(missionId));
+            bool record = processId.HasValue && startedUtc.HasValue;
+
+            using (MySqlConnection conn = new MySqlConnection(_ConnectionString))
+            {
+                await conn.OpenAsync(token).ConfigureAwait(false);
+                using (MySqlCommand cmd = conn.CreateCommand())
+                {
+                    cmd.CommandText = "UPDATE missions SET process_started_pid = @pid, process_started_utc = @started WHERE id = @id;";
+                    cmd.Parameters.AddWithValue("@id", missionId);
+                    cmd.Parameters.AddWithValue("@pid", record ? processId!.Value : DBNull.Value);
+                    cmd.Parameters.AddWithValue("@started", record ? ProcessLaunchSchema.ToText(startedUtc)! : DBNull.Value);
+                    return await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false) > 0;
+                }
+            }
+        }
+
+        /// <inheritdoc />
         public async Task<bool> TryClaimProcessExitAsync(string missionId, int processId, CancellationToken token = default)
         {
             if (String.IsNullOrEmpty(missionId)) throw new ArgumentNullException(nameof(missionId));
@@ -1239,7 +1259,7 @@ namespace Armada.Core.Database.Mysql.Implementations
 
         private static string ToIso8601(DateTime dt)
         {
-            return dt.ToUniversalTime().ToString(_Iso8601Format, CultureInfo.InvariantCulture);
+            return UtcClock.Format(dt, _Iso8601Format);
         }
 
         private static DateTime FromIso8601(string value)
@@ -1293,6 +1313,7 @@ namespace Armada.Core.Database.Mysql.Implementations
             Mission mission = new Mission();
             mission.Id = reader["id"].ToString()!;
             try { mission.UsageAdmissionExecutionKey = NullableString(reader["usage_execution_key"]); } catch (IndexOutOfRangeException) { }
+            Armada.Core.Database.ProcessLaunchSchema.Read(reader, mission);
             mission.TenantId = NullableString(reader["tenant_id"]);
             mission.UserId = NullableString(reader["user_id"]);
             mission.VoyageId = NullableString(reader["voyage_id"]);

@@ -196,8 +196,14 @@ fills a disk.
 | Black box entries (pinned entries are kept; see [Black box retention and storage](#black-box-retention-and-storage)) | `blackBox.retention.*` | 180 days; 30 days after resolution; 1000 per vessel; 1 GB in total |
 
 Vessel health findings history is not pruned today and grows with the evaluation schedule. Completed voyages,
-missions, signals, and events expire on SQLite only (`dataRetentionDays`); on PostgreSQL, MySQL, and SQL Server prune
-them with your own database jobs. On a busy install, check the size of the database and of `~/.armada/logs` monthly.
+missions, merge entries, read signals, events, and inactive docks expire on every database provider (`dataRetentionDays`).
+Expiry never removes an active or recent mission, or anything a remaining record points at: a mission stays while a
+remaining mission names it as parent, rescue original or dependency, while it holds a captain slot or session, has an
+open wait interval or an unfinished merge entry, or is referenced by a deployment, an incident, or a black box entry or
+success that has not expired (so a failure with black box evidence stays until that evidence expires). A voyage stays
+while any of its missions or such a record remains, and a dock while a mission, slot, or unexpired black box entry uses
+it. The newest objective snapshot of each objective is always kept. On a busy install, check the size of the database
+and of `~/.armada/logs` monthly.
 Request history capture can be turned off entirely
 with `requestHistoryEnabled: false`.
 

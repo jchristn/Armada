@@ -254,7 +254,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
         {
             foreach (SqlFilterParameter parameter in filter.Parameters)
             {
-                if (parameter.IsDate) cmd.Parameters.AddWithValue(parameter.Name, SqliteDatabaseDriver.ToIso8601(((DateTime)parameter.Value).ToUniversalTime()));
+                if (parameter.IsDate) cmd.Parameters.AddWithValue(parameter.Name, SqliteDatabaseDriver.ToIso8601((DateTime)parameter.Value));
                 else SqliteCommandHelper.Add(cmd, parameter.Name, parameter.Value);
             }
         }

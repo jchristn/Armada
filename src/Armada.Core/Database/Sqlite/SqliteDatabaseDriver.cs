@@ -317,17 +317,26 @@ namespace Armada.Core.Database.Sqlite
                     await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
                 }
 
-                // Get current schema version
+                // Read every applied version. The maximum remains the current schema version.
+                List<int> appliedVersions = new List<int>();
                 int currentVersion = 0;
                 using (SqliteCommand cmd = conn.CreateCommand())
                 {
-                    cmd.CommandText = "SELECT COALESCE(MAX(version), 0) FROM schema_migrations;";
-                    object? result = await cmd.ExecuteScalarAsync(token).ConfigureAwait(false);
-                    if (result != null && result != DBNull.Value) currentVersion = Convert.ToInt32(result);
+                    cmd.CommandText = "SELECT version FROM schema_migrations;";
+                    using (SqliteDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
+                    {
+                        while (await reader.ReadAsync(token).ConfigureAwait(false))
+                        {
+                            int version = Convert.ToInt32(reader.GetValue(0));
+                            appliedVersions.Add(version);
+                            if (version > currentVersion) currentVersion = version;
+                        }
+                    }
                 }
 
                 // Apply pending migrations
                 List<SchemaMigration> migrations = TableQueries.GetMigrations();
+                RecordMigrationLedger("SQLite", migrations, appliedVersions, _Logging, _Header);
                 int applied = 0;
 
                 foreach (SchemaMigration migration in migrations)
@@ -484,13 +493,15 @@ namespace Armada.Core.Database.Sqlite
         }
 
         /// <summary>
-        /// Convert a DateTime to ISO 8601 format string.
+        /// Convert a DateTime to an ISO 8601 UTC string.
+        /// A value with no kind keeps its clock and is written as UTC.
+        /// A local value is converted to UTC. A UTC value is unchanged.
         /// </summary>
         /// <param name="dt">DateTime value.</param>
         /// <returns>ISO 8601 formatted string.</returns>
         internal static string ToIso8601(DateTime dt)
         {
-            return dt.ToUniversalTime().ToString(_Iso8601Format, CultureInfo.InvariantCulture);
+            return UtcClock.Format(dt, _Iso8601Format);
         }
 
         /// <summary>
@@ -780,6 +791,7 @@ namespace Armada.Core.Database.Sqlite
             Mission mission = new Mission();
             mission.Id = reader["id"].ToString()!;
             try { mission.UsageAdmissionExecutionKey = NullableString(reader["usage_execution_key"]); } catch (IndexOutOfRangeException) { }
+            Armada.Core.Database.ProcessLaunchSchema.Read(reader, mission);
             mission.TenantId = NullableString(reader["tenant_id"]);
             mission.UserId = NullableString(reader["user_id"]);
             mission.VoyageId = NullableString(reader["voyage_id"]);
