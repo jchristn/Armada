@@ -526,6 +526,10 @@ commands arrive with their own changes. Schema migrations 103 and 104 apply at s
   repeated signal does not run `Stop` again.
 - MCP `delete_dock` and `delete_event` record `dock.deleted` and `event.deleted` after a successful delete, with the same event name, entity, and message as the REST delete routes. A refused delete records nothing.
 
+### Helm child processes
+
+- **A full pipe no longer blocks Helm.** MCP client install and remove read standard output and standard error while the client runs. On Unix, `armada server start` sends the Admiral's standard streams to `/dev/null` and releases the process handle without stopping a healthy server. The server build, TypeScript, and Vite steps read both streams while the child runs, then report the child's exit status and standard error.
+
 ### Landing failure prevention
 
 - Every dashboard and TUI delete, bulk delete and purge now shows a progress modal (for example "Deleting vessel" or "Deleting 12 missions": "This may take some time while related records are cleaned up.") that stays up until the server answers, cannot be dismissed while pending, and offers Retry and Dismiss if the delete fails. Duplicate submissions are ignored. Ask Armada uses the same shared dialog.
