@@ -15,6 +15,9 @@ import { EntryViewManager } from './surfaces/blackbox/entryView';
 import { FAILURES_EXPLORER_VIEW_ID, FAILURES_VIEW_ID, FailuresTreeProvider } from './surfaces/blackbox/failuresTreeProvider';
 import { InsightCommands } from './surfaces/blackbox/insightCommands';
 import { ASK_VIEW_ID, AskViewProvider } from './surfaces/ask/askView';
+import { resourceCatalog } from './surfaces/resources/resourceCatalog';
+import { ResourceSpec } from './surfaces/resources/resourceSpec';
+import { ResourceController, ResourceStore, ResourceTreeProvider, resourceViewOrder } from './surfaces/resources/resourceViews';
 import { DetailPanelManager } from './surfaces/ops/detailPanels';
 import { ARMADA_DOCUMENT_SCHEME, ArmadaDocumentProvider } from './surfaces/ops/opsDocuments';
 import { registerOpsCommands } from './surfaces/ops/opsCommands';
@@ -33,6 +36,7 @@ export interface ArmadaExtensionApi {
   ops: OpsStore;
   details: DetailPanelManager;
   ask: AskViewProvider;
+  resources: { specs: ResourceSpec[]; store: ResourceStore };
   liveMode(): LiveMode;
 }
 
@@ -80,6 +84,27 @@ export async function activate(context: vscode.ExtensionContext): Promise<Armada
   context.subscriptions.push(details, documents, vscode.workspace.registerTextDocumentContentProvider(ARMADA_DOCUMENT_SCHEME, documents), new OpsStatusBar(ops));
   context.subscriptions.push(...registerOpsCommands({ store: ops, details, connection }));
   context.subscriptions.push(bus.subscribe((event) => ops.onEvent(event.type)), bus.onPoll(() => void ops.refreshAll()));
+
+  // Backlog, Fleet Actions, Delivery, Configuration, Activity and System: every other kind of record, natively.
+  const specs = resourceCatalog({
+    pickVessels: async (title) => {
+      if (ops.state('fleet') !== 'ready') await ops.refresh('fleet');
+      const picked = await vscode.window.showQuickPick(ops.vessels.map((v) => ({ label: v.name, description: v.repoUrl ?? undefined, id: v.id })), { title, canPickMany: true, matchOnDescription: true });
+      return picked?.map((p) => p.id);
+    },
+  });
+  const resources = new ResourceStore(() => connection.connected);
+  const resourceTrees: ResourceTreeProvider[] = [];
+  for (const [key, viewId] of resourceViewOrder()) {
+    const provider = new ResourceTreeProvider(specs.filter((s) => s.view === key && !s.hidden), resources, () => connection.connected);
+    resourceTrees.push(provider);
+    context.subscriptions.push(provider, vscode.window.createTreeView(viewId, { treeDataProvider: provider, showCollapseAll: true }));
+  }
+  const resourceController = new ResourceController(specs, resources, async () => connection.connected || connection.connect({ interactive: true }), (key) => {
+    if (key === 'vessel' || key === 'fleet') void ops.refresh('fleet');
+    if (key === 'captain') void ops.refresh('captains');
+  });
+  context.subscriptions.push(resourceController, bus.onPoll(() => void resourceController.refreshAll()));
 
   // Ask Armada: the chat view at the top of the Armada sidebar.
   const askView = new AskViewProvider({ extensionUri: context.extensionUri, connection, bus, globalState: context.globalState });
@@ -152,6 +177,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<Armada
   };
 
   context.subscriptions.push(connection.onDidChange((state) => {
+    for (const tree of resourceTrees) tree.refresh();
     if (state.phase === 'connected') {
       store.invalidateVessels();
       void store.refresh();
@@ -163,6 +189,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<Armada
     if (state.phase !== 'connecting') {
       void store.refresh();
       void ops.refreshAll();
+      resources.clear();
     }
   }));
 
@@ -217,7 +244,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<Armada
   const startup = setTimeout(() => void connection.restore(), 0);
   context.subscriptions.push({ dispose: () => clearTimeout(startup) });
 
-  return { connection, events: bus, store, commands, ops, details, ask: askView, liveMode: () => bus.mode };
+  return { connection, events: bus, store, commands, ops, details, ask: askView, resources: { specs, store: resources }, liveMode: () => bus.mode };
 }
 
 /** Extension shutdown. */

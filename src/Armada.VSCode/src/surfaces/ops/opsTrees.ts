@@ -104,7 +104,7 @@ export abstract class OpsTreeProvider implements vscode.TreeDataProvider<OpsNode
         item.iconPath = new vscode.ThemeIcon('folder-library');
         item.description = `${node.vessels.length} ${node.vessels.length === 1 ? 'vessel' : 'vessels'}`;
         item.tooltip = node.fleet?.description ?? undefined;
-        item.contextValue = 'armadaFleet';
+        item.contextValue = node.fleet ? 'armadaFleet armadaFleet.real' : 'armadaFleet';
         return item;
       }
       case 'vessel': return vesselItem(node.vessel, this.idPrefix(), this.store);
@@ -387,6 +387,7 @@ function vesselItem(vessel: Vessel, idPrefix: string, store: OpsStore): vscode.T
     `Default branch: ${code(vessel.defaultBranch)}`,
   ]);
   item.contextValue = `armadaVessel${vessel.localPath ? ' armadaVessel.local' : ''}`;
+  item.command = { command: 'armada.resource.open', title: 'Open Vessel', arguments: ['vessel', vessel.id] };
   return item;
 }
 

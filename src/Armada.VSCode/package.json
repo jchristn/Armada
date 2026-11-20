@@ -170,6 +170,48 @@
           "name": "Failures",
           "contextualTitle": "Armada",
           "icon": "media/icon.png"
+        },
+        {
+          "id": "armadaBacklog",
+          "name": "Backlog",
+          "contextualTitle": "Armada",
+          "icon": "media/icon.png",
+          "visibility": "collapsed"
+        },
+        {
+          "id": "armadaFleetActions",
+          "name": "Fleet Actions",
+          "contextualTitle": "Armada",
+          "icon": "media/icon.png",
+          "visibility": "collapsed"
+        },
+        {
+          "id": "armadaDelivery",
+          "name": "Delivery",
+          "contextualTitle": "Armada",
+          "icon": "media/icon.png",
+          "visibility": "collapsed"
+        },
+        {
+          "id": "armadaConfiguration",
+          "name": "Configuration",
+          "contextualTitle": "Armada",
+          "icon": "media/icon.png",
+          "visibility": "collapsed"
+        },
+        {
+          "id": "armadaActivity",
+          "name": "Activity",
+          "contextualTitle": "Armada",
+          "icon": "media/icon.png",
+          "visibility": "collapsed"
+        },
+        {
+          "id": "armadaSystem",
+          "name": "System",
+          "contextualTitle": "Armada",
+          "icon": "media/icon.png",
+          "visibility": "collapsed"
         }
       ],
       "explorer": [
@@ -541,6 +583,77 @@
         "title": "Ask Armada: Earlier Conversations",
         "category": "Armada",
         "icon": "$(history)"
+      },
+      {
+        "command": "armada.resource.open",
+        "title": "Open",
+        "category": "Armada"
+      },
+      {
+        "command": "armada.resource.refresh",
+        "title": "Refresh",
+        "category": "Armada",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "armada.resource.create",
+        "title": "New...",
+        "category": "Armada",
+        "icon": "$(add)"
+      },
+      {
+        "command": "armada.resource.edit",
+        "title": "Edit...",
+        "category": "Armada",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "armada.resource.delete",
+        "title": "Delete...",
+        "category": "Armada",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "armada.resource.action",
+        "title": "Actions...",
+        "category": "Armada",
+        "icon": "$(gear)"
+      },
+      {
+        "command": "armada.vessel.create",
+        "title": "New Vessel...",
+        "category": "Armada",
+        "icon": "$(repo-create)"
+      },
+      {
+        "command": "armada.fleet.create",
+        "title": "New Fleet...",
+        "category": "Armada",
+        "icon": "$(new-folder)"
+      },
+      {
+        "command": "armada.captain.create",
+        "title": "New Captain...",
+        "category": "Armada",
+        "icon": "$(person-add)"
+      },
+      {
+        "command": "armada.captain.edit",
+        "title": "Edit Captain...",
+        "category": "Armada",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "armada.vessel.edit",
+        "title": "Edit Vessel...",
+        "category": "Armada",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "armada.fleet.edit",
+        "title": "Edit Fleet...",
+        "category": "Armada",
+        "icon": "$(edit)"
       }
     ],
     "menus": {
@@ -731,6 +844,54 @@
         {
           "command": "armada.ask.history",
           "when": "armada.connected"
+        },
+        {
+          "command": "armada.resource.open",
+          "when": "false"
+        },
+        {
+          "command": "armada.resource.create",
+          "when": "false"
+        },
+        {
+          "command": "armada.resource.edit",
+          "when": "false"
+        },
+        {
+          "command": "armada.resource.delete",
+          "when": "false"
+        },
+        {
+          "command": "armada.resource.action",
+          "when": "false"
+        },
+        {
+          "command": "armada.resource.refresh",
+          "when": "false"
+        },
+        {
+          "command": "armada.vessel.edit",
+          "when": "false"
+        },
+        {
+          "command": "armada.fleet.edit",
+          "when": "false"
+        },
+        {
+          "command": "armada.captain.edit",
+          "when": "false"
+        },
+        {
+          "command": "armada.vessel.create",
+          "when": "armada.connected"
+        },
+        {
+          "command": "armada.fleet.create",
+          "when": "armada.connected"
+        },
+        {
+          "command": "armada.captain.create",
+          "when": "armada.connected"
         }
       ],
       "view/title": [
@@ -808,6 +969,26 @@
           "command": "armada.disconnect",
           "when": "view =~ /^armadaFailures/ && armada.connected",
           "group": "connection@2"
+        },
+        {
+          "command": "armada.resource.refresh",
+          "when": "view =~ /^armada(Backlog|FleetActions|Delivery|Configuration|Activity|System)$/ && armada.connected",
+          "group": "navigation@9"
+        },
+        {
+          "command": "armada.vessel.create",
+          "when": "view == armadaFleet && armada.connected",
+          "group": "navigation@1"
+        },
+        {
+          "command": "armada.fleet.create",
+          "when": "view == armadaFleet && armada.connected",
+          "group": "navigation@2"
+        },
+        {
+          "command": "armada.captain.create",
+          "when": "view == armadaCaptains && armada.connected",
+          "group": "navigation@1"
         }
       ],
       "view/item/context": [
@@ -1000,6 +1181,61 @@
           "command": "armada.mission.viewLog",
           "when": "viewItem =~ /armadaInbox\\.entity\\.(mission|Mission)\\b/",
           "group": "1_view@1"
+        },
+        {
+          "command": "armada.resource.create",
+          "when": "viewItem =~ /armadaResourceType\\.creatable/",
+          "group": "inline@1"
+        },
+        {
+          "command": "armada.resource.refresh",
+          "when": "viewItem =~ /^armadaResourceType/",
+          "group": "inline@2"
+        },
+        {
+          "command": "armada.resource.create",
+          "when": "viewItem =~ /armadaResourceType\\.creatable/",
+          "group": "1_act@1"
+        },
+        {
+          "command": "armada.resource.refresh",
+          "when": "viewItem =~ /^armadaResourceType/",
+          "group": "1_act@2"
+        },
+        {
+          "command": "armada.resource.action",
+          "when": "viewItem =~ /armadaResource\\.actionable/",
+          "group": "inline@1"
+        },
+        {
+          "command": "armada.resource.edit",
+          "when": "viewItem =~ /armadaResource\\.editable/",
+          "group": "1_act@1"
+        },
+        {
+          "command": "armada.resource.action",
+          "when": "viewItem =~ /armadaResource\\.actionable/",
+          "group": "1_act@2"
+        },
+        {
+          "command": "armada.resource.delete",
+          "when": "viewItem =~ /armadaResource\\.deletable/",
+          "group": "9_delete@1"
+        },
+        {
+          "command": "armada.vessel.edit",
+          "when": "viewItem =~ /armadaVessel\\b/",
+          "group": "2_edit@1"
+        },
+        {
+          "command": "armada.fleet.edit",
+          "when": "viewItem =~ /armadaFleet\\.real/",
+          "group": "2_edit@1"
+        },
+        {
+          "command": "armada.captain.edit",
+          "when": "viewItem =~ /armadaCaptain\\b/",
+          "group": "2_edit@1"
         }
       ]
     }

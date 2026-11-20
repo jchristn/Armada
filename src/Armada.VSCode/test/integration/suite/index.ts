@@ -105,6 +105,22 @@ export async function run(): Promise<void> {
     }
     log(`ops: ${api.ops.missions.length} missions, ${api.ops.voyages.length} voyages, ${api.ops.captains.length} captains, ${api.ops.vessels.length} vessels, ${api.ops.mergeQueue.length} merge entries, ${api.ops.inbox.length} need you`);
     for (const view of MANIFEST.contributes.views.armada) await vscode.commands.executeCommand(`${view.id}.focus`);
+    // Every resource kind loads from the Admiral, and a record opens as a page.
+    const failed: string[] = [];
+    for (const spec of api.resources.specs) {
+      await api.resources.store.load(spec);
+      const loaded = api.resources.store.get(spec);
+      if (loaded?.state !== 'ready') failed.push(`${spec.key}: ${loaded?.error ?? loaded?.state}`);
+    }
+    log(`resources: ${api.resources.specs.map((s) => `${s.key} ${api.resources.store.get(s)?.records.length ?? '?'}`).join(', ')}`);
+    assert.deepStrictEqual(failed, [], 'every resource kind loads');
+    const withRecords = api.resources.specs.find((s) => (api.resources.store.get(s)?.records.length ?? 0) > 0 && s.get);
+    if (withRecords) {
+      const record = api.resources.store.get(withRecords)?.records[0] ?? {};
+      await vscode.commands.executeCommand('armada.resource.open', withRecords.key, String(record[withRecords.idKey ?? 'id'] ?? ''));
+      log(`resource page: ${withRecords.label} opened`);
+    }
+
     // Ask Armada: the chat view opens and shows an earlier conversation from the Admiral.
     const latest = await api.ask.latestConversationId();
     if (latest) {

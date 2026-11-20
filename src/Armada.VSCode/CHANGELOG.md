@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- **Ask Armada** chat view at the top of the Armada sidebar: the dashboard's own conversation state, streaming
+  replies, tool calls, approve and reject cards for proposed actions and CLI tool requests, stop, new conversation
+  and history. Ask Armada About This Failure asks here instead of opening the browser.
+- **Backlog, Fleet Actions, Delivery, Configuration, Activity and System** views: 26 kinds of record (releases,
+  deployments, environments, incidents, runbooks, checks, personas, pipelines, playbooks, prompt templates, workflow
+  and project profiles, skills, model endpoints, events, signals, Harbors, docks, CLI permission rules, tenants, users,
+  credentials, battery packs, backlog items, fleet actions and runs) with record pages, create, edit and delete
+  through native forms, and each kind's own actions. Vessels, fleets and captains are created and edited from the
+  Fleet and Captains views.
 - **Native Armada views** replace the Navigation link list: Needs You, Missions, Voyages, Captains, Fleet and Merge
   Queue are VS Code trees with live updates from the Admiral's event stream, status icons, rich tooltips, inline
   actions and context menus (view log and changes, approve and deny reviews, cancel, restart, stop and restart

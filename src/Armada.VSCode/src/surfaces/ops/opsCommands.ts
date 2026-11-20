@@ -217,6 +217,23 @@ export function registerOpsCommands(deps: OpsCommandDeps): vscode.Disposable[] {
     if (vessel?.localPath) await vscode.commands.executeCommand('vscode.openFolder', vscode.Uri.file(vessel.localPath), { forceNewWindow: true });
   });
 
+  // Create and edit vessels, fleets and captains (the resource forms)
+  register('armada.vessel.create', () => vscode.commands.executeCommand('armada.resource.create', 'vessel'));
+  register('armada.fleet.create', () => vscode.commands.executeCommand('armada.resource.create', 'fleet'));
+  register('armada.captain.create', () => vscode.commands.executeCommand('armada.resource.create', 'captain'));
+  register('armada.vessel.edit', async (arg) => {
+    const vessel = arg && typeof arg === 'object' && (arg as OpsNode).kind === 'vessel' ? (arg as Extract<OpsNode, { kind: 'vessel' }>).vessel.id : typeof arg === 'string' ? arg : undefined;
+    if (vessel) await vscode.commands.executeCommand('armada.resource.edit', 'vessel', vessel);
+  });
+  register('armada.fleet.edit', async (arg) => {
+    const fleet = arg && typeof arg === 'object' && (arg as OpsNode).kind === 'fleet' ? (arg as Extract<OpsNode, { kind: 'fleet' }>).fleet?.id : typeof arg === 'string' ? arg : undefined;
+    if (fleet) await vscode.commands.executeCommand('armada.resource.edit', 'fleet', fleet);
+  });
+  register('armada.captain.edit', async (arg) => {
+    const id = captainId(arg);
+    if (id) await vscode.commands.executeCommand('armada.resource.edit', 'captain', id);
+  });
+
   // Shared
   register('armada.copyText', async (text) => {
     if (typeof text === 'string') await vscode.env.clipboard.writeText(text);

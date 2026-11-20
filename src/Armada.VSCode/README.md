@@ -7,11 +7,10 @@ voyage fails, the Admiral records where it failed, how, why, which files and mis
 recovery paths. The extension lists those entries for the repository you have open, hands the **FIX THIS** brief to
 your coding agent, and runs recovery paths with a dry run and a confirmation.
 
-Everything is native VS Code: trees with live updates, context menus and inline actions, detail pages drawn with the
-editor's own theme, logs and changes as read-only documents, and forms for dispatch. The extension is being built out
-to full parity with the dashboard, the TUI, Harbor and the CLI ([VSCODE_EXTENSION_PLAN.md](../../VSCODE_EXTENSION_PLAN.md));
-areas without a native view yet (configuration pages such as personas, pipelines and prompt templates) are reachable
-only through **Armada: Open Dashboard in Browser**.
+Everything is native VS Code: trees with live updates, context menus and inline actions, pages drawn with the editor's
+own theme, logs and changes as read-only documents, forms for dispatch, create and edit, and Ask Armada as a sidebar
+chat. The extension is being built out to full parity with the dashboard, the TUI, Harbor and the CLI
+([VSCODE_EXTENSION_PLAN.md](../../VSCODE_EXTENSION_PLAN.md)); the areas without a native view yet are listed there.
 
 ## The Armada view container
 
@@ -28,6 +27,17 @@ The Armada icon in the activity bar opens:
 - **Fleet**: fleets and their vessels; dispatch to a vessel, or open a vessel's local folder.
 - **Merge Queue**: queued and recent landings; process or remove an entry, or process the whole queue.
 - **Failures**: the black box tree (below).
+- **Backlog**, **Fleet Actions** (actions, with Run on Vessels, and runs), **Delivery** (releases, deployments with
+  approve, deny, verify and roll back, environments, incidents, runbooks with Start Execution, checks with Retry),
+  **Configuration** (personas, pipelines, playbooks, prompt templates with Reset to Default, workflow and project
+  profiles, skills, model endpoints), **Activity** (events, signals) and **System** (Harbors with enable and disable,
+  docks, CLI permission rules, tenants, users, credentials, battery packs): expand a kind to list its records. A record
+  opens as a page with its fields and actions; **+** creates one, and Edit and Delete work from the page or the
+  context menu, through native forms with confirmations. Vessels, fleets and captains are created and edited the
+  same way from the Fleet and Captains views.
+- **Ask Armada** (at the top): a chat with the Ask captain, as on the dashboard's Ask page, with streaming replies,
+  tool calls, and cards to approve or reject the actions it proposes and the CLI tools it asks to run. Earlier
+  conversations reopen from its history button. **Ask Armada About This Failure** asks here.
 
 All of them update live from the Admiral's event stream. A status bar item shows the active mission count and what
 needs you.

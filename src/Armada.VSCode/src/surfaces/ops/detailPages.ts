@@ -47,7 +47,7 @@ export function missionPage(mission: Mission, store: OpsStore, logTail: string |
     {
       kind: 'fields',
       rows: [
-        { label: 'Vessel', value: store.vesselName(mission.vesselId) },
+        { label: 'Vessel', value: store.vesselName(mission.vesselId), link: mission.vesselId ? { command: 'armada.resource.open', args: ['vessel', mission.vesselId] } : undefined },
         { label: 'Captain', value: store.captainName(mission.captainId), link: mission.captainId ? { command: 'armada.captain.open', args: [mission.captainId] } : undefined },
         { label: 'Voyage', value: mission.voyageId ? store.voyages.find((v) => v.voyage.id === mission.voyageId)?.voyage.title ?? mission.voyageId : '', link: mission.voyageId ? { command: 'armada.voyage.open', args: [mission.voyageId] } : undefined },
         { label: 'Parent', value: mission.parentMissionId ?? '', code: true, link: mission.parentMissionId ? { command: 'armada.mission.open', args: [mission.parentMissionId] } : undefined },
@@ -116,6 +116,7 @@ export function captainPage(captain: Captain, missions: MissionSummary[], store:
   const actions: DetailAction[] = [{ label: 'View Log', command: 'armada.captain.viewLog', args: [captain.id], primary: true }];
   if (captain.state !== 'Idle') actions.push({ label: 'Stop Captain', command: 'armada.captain.stop', args: [captain.id] });
   actions.push({ label: 'Restart Captain', command: 'armada.captain.restart', args: [captain.id] });
+  actions.push({ label: 'Edit', command: 'armada.resource.edit', args: ['captain', captain.id] });
   actions.push({ label: 'Open in Browser', command: 'armada.openInBrowser', args: [`/captains/${captain.id}`] });
   const active = missions.filter((m) => ACTIVE_MISSION_STATUSES.includes(m.status));
   const recent = missions.filter((m) => !ACTIVE_MISSION_STATUSES.includes(m.status)).slice(0, 15);

@@ -120,9 +120,13 @@ one live store (`src/surfaces/ops/opsStore.ts`, reloaded by `mission.*`, `voyage
 the poll tick); mission, voyage, captain and merge entry pages rendered from data with the `--vscode-*` tokens
 (`detailHtml.ts`, `detailPages.ts`); mission and captain logs and mission changes as `armada:` documents; dispatch
 forms (`formPanel.ts`, modeled on Mux's FormPanel); an ops status bar item. The owner rejected embedding the
-dashboard in a webview: every surface is native, as in Mux. Next: Ask Armada as a sidebar chat view (Mux's
-ChatViewProvider pattern), then the configuration domains (personas, pipelines, prompt templates, workflow profiles)
-as trees with forms.
+dashboard in a webview: every surface is native, as in Mux. Also built: Ask Armada as a sidebar chat view (Mux's
+ChatViewProvider pattern, running the dashboard's conversation reducer), and a resource layer
+(`src/surfaces/resources/`) that gives 29 kinds of record (Backlog, Fleet Actions, Delivery, Configuration, Activity,
+System, plus vessels, fleets and captains) a tree, a page and create and edit forms from one description each.
+Not native yet: the dashboard home overview, planning sessions and backlog refinement (chat with a captain), vessel
+import and health, evaluations and battery runs, usage and token charts, request history, the API explorer, and the
+server settings, storage and diagnostics tabs.
 
 ### 4.3 Webview panels
 

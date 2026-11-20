@@ -10,6 +10,7 @@ import { activate, ArmadaExtensionApi } from '../../src/extension';
 import { FAILURES_EXPLORER_VIEW_ID, FAILURES_VIEW_ID } from '../../src/surfaces/blackbox/failuresTreeProvider';
 import { ASK_VIEW_ID } from '../../src/surfaces/ask/askView';
 import { OPS_VIEW_IDS } from '../../src/surfaces/ops/opsTrees';
+import { RESOURCE_VIEW_IDS } from '../../src/surfaces/resources/resourceSpec';
 import { fake, FakeMemento, FakeSecretStorage, Uri } from '../fakes/vscode';
 
 /** The extension manifest; the extension ID is read from it, never written in a test. */
@@ -91,7 +92,7 @@ describe('extension manifest and activation', () => {
     const container = MANIFEST.contributes.viewsContainers.activitybar.find((c) => c.id === 'armada');
     assert.ok(container);
     assert.ok(fs.existsSync(path.join(ROOT, container.icon)), 'container icon exists');
-    assert.deepStrictEqual(MANIFEST.contributes.views.armada.map((v) => v.id), [ASK_VIEW_ID, ...Object.values(OPS_VIEW_IDS), FAILURES_VIEW_ID]);
+    assert.deepStrictEqual(MANIFEST.contributes.views.armada.map((v) => v.id), [ASK_VIEW_ID, ...Object.values(OPS_VIEW_IDS), FAILURES_VIEW_ID, ...Object.values(RESOURCE_VIEW_IDS)]);
     const explorer = MANIFEST.contributes.views.explorer.find((v) => v.id === FAILURES_EXPLORER_VIEW_ID);
     assert.strictEqual(explorer?.when, 'config.armada.failures.showInExplorer');
     assert.strictEqual(MANIFEST.contributes.configuration.properties['armada.failures.showInExplorer'].default, false);
@@ -115,7 +116,7 @@ describe('extension manifest and activation', () => {
       for (const welcome of MANIFEST.contributes.viewsWelcome) {
         for (const match of welcome.contents.matchAll(/command:([A-Za-z.]+)/g)) assert.ok(contributed.includes(match[1]), `welcome link ${match[1]}`);
       }
-      assert.deepStrictEqual(fake.treeViews, [...Object.values(OPS_VIEW_IDS), FAILURES_VIEW_ID, FAILURES_EXPLORER_VIEW_ID]);
+      assert.deepStrictEqual(fake.treeViews, [...Object.values(OPS_VIEW_IDS), ...Object.values(RESOURCE_VIEW_IDS), FAILURES_VIEW_ID, FAILURES_EXPLORER_VIEW_ID]);
       assert.deepStrictEqual(fake.statusBarItems.map((i) => i.command), [`${OPS_VIEW_IDS.missions}.focus`, 'armada.showConnectionActions']);
       assert.strictEqual(api.connection.state.phase, 'disconnected', 'no network work during activate');
       assert.strictEqual(api.liveMode(), 'stopped');
