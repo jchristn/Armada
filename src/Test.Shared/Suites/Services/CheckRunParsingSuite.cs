@@ -36,8 +36,10 @@ namespace Test.Shared.Suites.Services
                     File.WriteAllText(Path.Combine(root, "results.trx"),
                         "<?xml version=\"1.0\"?><TestRun xmlns=\"http://microsoft.com/schemas/VisualStudio/TeamTest/2010\">" +
                         "<ResultSummary outcome=\"Failed\"><Counters total=\"12\" passed=\"10\" failed=\"2\" notExecuted=\"0\" /></ResultSummary></TestRun>");
-                    // Console text from a different (for example earlier or partial) run disagrees with the artifact.
-                    string output = "Passed!  - Failed:     0, Passed:     3, Skipped:     0, Total:     3, Duration: 1 s";
+                    // Console text from a different run disagrees with the artifact, including a later project line.
+                    string output =
+                        "Passed!  - Failed:     0, Passed:     3, Skipped:     0, Total:     3, Duration: 1 s\r\n" +
+                        "Failed!  - Failed:     4, Passed:     1, Skipped:     0, Total:     5, Duration: 9 s\r\n";
 
                     CheckRunTestSummary? summary = CheckRunParsingService.ParseTestSummary(output, root, Artifacts("results.trx"));
                     AssertNotNull(summary, "summary expected");
@@ -65,7 +67,9 @@ namespace Test.Shared.Suites.Services
                 CheckRunTestSummary? dotnet = CheckRunParsingService.ParseTestSummary("Build succeeded.\r\nPassed!  - Failed:     0, Passed:     3, Skipped:     1, Total:     4, Duration: 1.5 s\r\nDone.\r\n");
                 AssertNotNull(dotnet, "dotnet summary with CRLF");
                 AssertEqual("dotnet", dotnet!.Format);
+                AssertEqual(0, dotnet.Failed);
                 AssertEqual(3, dotnet.Passed);
+                AssertEqual(1, dotnet.Skipped);
                 AssertEqual(4, dotnet.Total);
 
                 CheckRunTestSummary? pytest = CheckRunParsingService.ParseTestSummary("collected 5 items\r\n===== 4 passed, 1 failed in 0.52s =====\r\n");
@@ -85,6 +89,30 @@ namespace Test.Shared.Suites.Services
                     AssertEqual(lf?.Total, crlf?.Total, "total for " + text.Trim());
                     AssertEqual(lf?.DurationMs, crlf?.DurationMs, "duration for " + text.Trim());
                 }
+            }));
+
+            cases.Add(Case("dotnet_multi_project_summaries_sum_later_failure", "Two dotnet project summaries add the later failure and keep the longer duration", TestTags.Negative, () =>
+            {
+                string output =
+                    "Passed!  - Failed:     0, Passed:     2, Skipped:     0, Total:     2, Duration: 1 s\r\n" +
+                    "Failed!  - Failed:     1, Passed:     3, Skipped:     1, Total:     5, Duration: 4 s\r\n";
+
+                CheckRunTestSummary? summary = CheckRunParsingService.ParseTestSummary(output, null, null);
+                AssertNotNull(summary, "dotnet summary expected");
+                AssertEqual("dotnet", summary!.Format);
+                AssertEqual(1, summary.Failed, "failed");
+                AssertEqual(5, summary.Passed, "passed");
+                AssertEqual(1, summary.Skipped, "skipped");
+                AssertEqual(7, summary.Total, "total");
+                AssertEqual(4000L, summary.DurationMs, "duration");
+
+                CheckRunTestSummary? lf = CheckRunParsingService.ParseTestSummary(output.Replace("\r\n", "\n"), null, null);
+                AssertNotNull(lf, "dotnet summary with LF");
+                AssertEqual(summary.Failed, lf!.Failed, "failed line endings");
+                AssertEqual(summary.Passed, lf.Passed, "passed line endings");
+                AssertEqual(summary.Skipped, lf.Skipped, "skipped line endings");
+                AssertEqual(summary.Total, lf.Total, "total line endings");
+                AssertEqual(summary.DurationMs, lf.DurationMs, "duration line endings");
             }));
 
             cases.Add(Case("jest_console_summary_parsed", "Jest's console summary (Tests: with a colon) parses and wins over the Test Suites line", TestTags.Positive, () =>

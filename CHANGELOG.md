@@ -494,6 +494,9 @@ commands arrive with their own changes. Schema migrations 103 and 104 apply at s
 ### Validate playbooks before creating a bare voyage
 
 - REST and MCP resolve selected playbooks before they store a bare voyage. REST returns the mapped not-found or bad-request response for a missing or inactive playbook. A valid selection is stored after the voyage is created.
+### Check results sum every .NET project summary
+
+- **A `dotnet test` run with several projects reports the combined counts.** Each project prints its own Passed or Failed summary line, and the command prints no combined line. The check summary adds failed, passed, skipped, and total across those lines. Duration is the longest project duration. A TRX, JUnit, NUnit, or Jest artifact still replaces the console summary.
 
 ### Landing failure prevention
 
