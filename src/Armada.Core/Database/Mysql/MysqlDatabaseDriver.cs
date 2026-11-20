@@ -1555,7 +1555,8 @@ namespace Armada.Core.Database.Mysql
                 Armada.Core.Database.UsageSelectionSchema.RecoveryMigration(Armada.Core.Enums.DatabaseTypeEnum.Mysql),
                 Armada.Core.Database.UsageSelectionSchema.AssignmentTimingMigration(Armada.Core.Enums.DatabaseTypeEnum.Mysql),
                 Armada.Core.Database.UsageSelectionSchema.OmittedCandidatesMigration(Armada.Core.Enums.DatabaseTypeEnum.Mysql),
-                Armada.Core.Database.UsageSelectionSchema.TenantTimestampMigration(Armada.Core.Enums.DatabaseTypeEnum.Mysql)
+                Armada.Core.Database.UsageSelectionSchema.TenantTimestampMigration(Armada.Core.Enums.DatabaseTypeEnum.Mysql),
+                Armada.Core.Database.ProcessLaunchSchema.Migration(Armada.Core.Enums.DatabaseTypeEnum.Mysql)
 
             };
         }
