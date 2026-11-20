@@ -287,6 +287,7 @@ export const workspace = {
   onDidChangeWorkspaceFolders: () => new Disposable(() => undefined),
   onDidChangeConfiguration: () => new Disposable(() => undefined),
   registerTextDocumentContentProvider: () => new Disposable(() => undefined),
+  registerFileSystemProvider: () => new Disposable(() => undefined),
   textDocuments: [] as unknown[],
 };
 

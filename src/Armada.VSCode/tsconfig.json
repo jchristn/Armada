@@ -10,6 +10,7 @@
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,
+    "resolveJsonModule": true,
     "noEmit": true,
     "paths": {
       "@dashboard/*": ["../Armada.Dashboard/src/*"],

@@ -64,3 +64,26 @@ describe('resource records', () => {
     assert.deepStrictEqual(resourcePage(spec, { ...persona, isBuiltIn: false }).actions.map((a) => a.label), ['Edit', 'Delete', 'Open in Browser']);
   });
 });
+
+describe('display language', () => {
+  it('translates labels through the Admiral catalog and stays English without one', async () => {
+    const { t, useCatalog, activeLocale } = await import('../../src/i18n');
+    const { humanize } = await import('../../src/surfaces/ops/presentation');
+    assert.strictEqual(t('Missions'), 'Missions');
+    assert.strictEqual(activeLocale(), 'en');
+    const catalog = {
+      defaultLocale: 'en',
+      supportedLocales: [{ code: 'en', label: 'English', nativeLabel: 'English', dir: 'ltr' }, { code: 'de', label: 'German', nativeLabel: 'Deutsch', dir: 'ltr' }],
+      locales: { de: { terms: { Missions: 'Missionen' }, phrases: { 'In Progress': 'In Bearbeitung' } } },
+    };
+    useCatalog(catalog as never, 'de');
+    try {
+      assert.strictEqual(activeLocale(), 'de');
+      assert.strictEqual(t('Missions'), 'Missionen');
+      assert.strictEqual(humanize('InProgress'), 'In Bearbeitung');
+      assert.strictEqual(t('Something new'), 'Something new');
+    } finally {
+      useCatalog(null, 'en');
+    }
+  });
+});

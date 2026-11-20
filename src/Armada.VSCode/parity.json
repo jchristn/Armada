@@ -10,8 +10,8 @@
     {
       "kind": "route",
       "key": "/",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "command:armada.home",
       "milestone": "V1",
       "notes": ""
     },
@@ -26,1096 +26,1096 @@
     {
       "kind": "route",
       "key": "/activity",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaActivity",
       "milestone": "V5",
       "notes": ""
     },
     {
       "kind": "route",
       "key": "/admin/credentials",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V6",
       "notes": "redirect to /server?tab=credentials"
     },
     {
       "kind": "route",
       "key": "/admin/tenants",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V6",
       "notes": "redirect to /server?tab=tenants"
     },
     {
       "kind": "route",
       "key": "/admin/users",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V6",
       "notes": "redirect to /server?tab=users"
     },
     {
       "kind": "route",
       "key": "/api-explorer",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "command:armada.api.call",
       "milestone": "V5",
       "notes": ""
     },
     {
       "kind": "route",
       "key": "/api-explorer/:operationId",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "command:armada.api.call",
       "milestone": "V5",
       "notes": ""
     },
     {
       "kind": "route",
       "key": "/ask/:threadId?",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaAsk",
       "milestone": "V2",
       "notes": ""
     },
     {
       "kind": "route",
       "key": "/backlog",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaBacklog",
       "milestone": "V2",
       "notes": "redirect to /dispatch?tab=backlog"
     },
     {
       "kind": "route",
       "key": "/backlog/:id",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaBacklog",
       "milestone": "V2",
       "notes": ""
     },
     {
       "kind": "route",
       "key": "/battery",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V1",
       "notes": "redirect to /captains?tab=battery"
     },
     {
       "kind": "route",
       "key": "/blackbox",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaFailures",
       "milestone": "V4",
       "notes": ""
     },
     {
       "kind": "route",
       "key": "/blackbox/:id",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaFailures",
       "milestone": "V4",
       "notes": "Partial today: the entry webview (armada.openBlackBox) has FIX THIS, recovery, resolve, notes, Ask, timeline and attempt diff, but not pin, download or Copy JSON"
     },
     {
       "kind": "route",
       "key": "/captains",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaCaptains",
       "milestone": "V1",
       "notes": ""
     },
     {
       "kind": "route",
       "key": "/captains/:id",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaCaptains",
       "milestone": "V1",
       "notes": ""
     },
     {
       "kind": "route",
       "key": "/checks",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaDelivery",
       "milestone": "V4",
       "notes": "redirect to /delivery?tab=checks"
     },
     {
       "kind": "route",
       "key": "/checks/:id",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaDelivery",
       "milestone": "V4",
       "notes": ""
     },
     {
       "kind": "route",
       "key": "/cli-permissions",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V6",
       "notes": ""
     },
     {
       "kind": "route",
       "key": "/configuration",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaConfiguration",
       "milestone": "V5",
       "notes": ""
     },
     {
       "kind": "route",
       "key": "/dashboard",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "command:armada.home",
       "milestone": "V1",
       "notes": "redirect to /"
     },
     {
       "kind": "route",
       "key": "/delivery",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaDelivery",
       "milestone": "V4",
       "notes": ""
     },
     {
       "kind": "route",
       "key": "/deployments",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaDelivery",
       "milestone": "V4",
       "notes": "redirect to /delivery?tab=deployments"
     },
     {
       "kind": "route",
       "key": "/deployments/:id",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaDelivery",
       "milestone": "V4",
       "notes": ""
     },
     {
       "kind": "route",
       "key": "/dispatch",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "command:armada.dispatch",
       "milestone": "V1",
       "notes": ""
     },
     {
       "kind": "route",
       "key": "/docks",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V1",
       "notes": "redirect to /captains?tab=docks"
     },
     {
       "kind": "route",
       "key": "/docks/:id",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V1",
       "notes": ""
     },
     {
       "kind": "route",
       "key": "/doctor",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V6",
       "notes": "redirect to /server?tab=diagnostics"
     },
     {
       "kind": "route",
       "key": "/environments",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaDelivery",
       "milestone": "V4",
       "notes": "redirect to /delivery?tab=environments"
     },
     {
       "kind": "route",
       "key": "/environments/:id",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaDelivery",
       "milestone": "V4",
       "notes": ""
     },
     {
       "kind": "route",
       "key": "/evaluations",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaActivity",
       "milestone": "V1",
       "notes": ""
     },
     {
       "kind": "route",
       "key": "/evaluations/:id",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaActivity",
       "milestone": "V1",
       "notes": ""
     },
     {
       "kind": "route",
       "key": "/events",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaActivity",
       "milestone": "V5",
       "notes": "redirect to /activity?source=events"
     },
     {
       "kind": "route",
       "key": "/events/:id",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaActivity",
       "milestone": "V5",
       "notes": ""
     },
     {
       "kind": "route",
       "key": "/fleet-actions",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaFleetActions",
       "milestone": "V4",
       "notes": ""
     },
     {
       "kind": "route",
       "key": "/fleet-actions/runs/:id",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaFleetActions",
       "milestone": "V4",
       "notes": ""
     },
     {
       "kind": "route",
       "key": "/fleets",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaFleet",
       "milestone": "V3",
       "notes": "redirect to /vessels?tab=fleets"
     },
     {
       "kind": "route",
       "key": "/fleets/:id",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaFleet",
       "milestone": "V3",
       "notes": ""
     },
     {
       "kind": "route",
       "key": "/history",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaActivity",
       "milestone": "V5",
       "notes": "redirect to /activity?source=history"
     },
     {
       "kind": "route",
       "key": "/inbox",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaNeedsYou",
       "milestone": "V1",
       "notes": ""
     },
     {
       "kind": "route",
       "key": "/incidents",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaDelivery",
       "milestone": "V4",
       "notes": "redirect to /delivery?tab=incidents"
     },
     {
       "kind": "route",
       "key": "/incidents/:id",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaDelivery",
       "milestone": "V4",
       "notes": ""
     },
     {
       "kind": "route",
       "key": "/jobs",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaActivity",
       "milestone": "V1",
       "notes": "redirect to /activity?source=events"
     },
     {
       "kind": "route",
       "key": "/merge-queue",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaMergeQueue",
       "milestone": "V1",
       "notes": "redirect to /missions?tab=merge-queue"
     },
     {
       "kind": "route",
       "key": "/merge-queue/:id",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaMergeQueue",
       "milestone": "V1",
       "notes": ""
     },
     {
       "kind": "route",
       "key": "/missions",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaMissions",
       "milestone": "V1",
       "notes": ""
     },
     {
       "kind": "route",
       "key": "/missions/:id",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaMissions",
       "milestone": "V1",
       "notes": ""
     },
     {
       "kind": "route",
       "key": "/notifications",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "setting:armada.notifications.needsYou",
       "milestone": "V1",
       "notes": "redirect to /inbox"
     },
     {
       "kind": "route",
       "key": "/objectives",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaBacklog",
       "milestone": "V2",
       "notes": "redirect to /dispatch?tab=backlog"
     },
     {
       "kind": "route",
       "key": "/objectives/:id",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaBacklog",
       "milestone": "V2",
       "notes": ""
     },
     {
       "kind": "route",
       "key": "/personas",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaConfiguration",
       "milestone": "V5",
       "notes": "redirect to /configuration?tab=personas"
     },
     {
       "kind": "route",
       "key": "/personas/:name",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaConfiguration",
       "milestone": "V5",
       "notes": ""
     },
     {
       "kind": "route",
       "key": "/pipelines",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaConfiguration",
       "milestone": "V5",
       "notes": "redirect to /configuration?tab=pipelines"
     },
     {
       "kind": "route",
       "key": "/pipelines/:name",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaConfiguration",
       "milestone": "V5",
       "notes": ""
     },
     {
       "kind": "route",
       "key": "/planning",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "command:armada.planning.new",
       "milestone": "V2",
       "notes": ""
     },
     {
       "kind": "route",
       "key": "/planning/:id",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "command:armada.planning.new",
       "milestone": "V2",
       "notes": ""
     },
     {
       "kind": "route",
       "key": "/playbooks",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaConfiguration",
       "milestone": "V5",
       "notes": "redirect to /configuration?tab=playbooks"
     },
     {
       "kind": "route",
       "key": "/playbooks/:id",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaConfiguration",
       "milestone": "V5",
       "notes": ""
     },
     {
       "kind": "route",
       "key": "/project-profiles",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaConfiguration",
       "milestone": "V5",
       "notes": "redirect to /configuration?tab=project-profiles"
     },
     {
       "kind": "route",
       "key": "/project-profiles/:id",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaConfiguration",
       "milestone": "V5",
       "notes": ""
     },
     {
       "kind": "route",
       "key": "/prompt-templates",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaConfiguration",
       "milestone": "V5",
       "notes": "redirect to /configuration?tab=prompts"
     },
     {
       "kind": "route",
       "key": "/prompt-templates/:name",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaConfiguration",
       "milestone": "V5",
       "notes": ""
     },
     {
       "kind": "route",
       "key": "/prompt-templates/create",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaConfiguration",
       "milestone": "V5",
       "notes": ""
     },
     {
       "kind": "route",
       "key": "/releases",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaDelivery",
       "milestone": "V4",
       "notes": "redirect to /delivery?tab=releases"
     },
     {
       "kind": "route",
       "key": "/releases/:id",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaDelivery",
       "milestone": "V4",
       "notes": ""
     },
     {
       "kind": "route",
       "key": "/releases/new",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaDelivery",
       "milestone": "V4",
       "notes": ""
     },
     {
       "kind": "route",
       "key": "/requests",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaActivity",
       "milestone": "V5",
       "notes": "redirect to /activity?source=requests"
     },
     {
       "kind": "route",
       "key": "/requests/:id",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaActivity",
       "milestone": "V5",
       "notes": ""
     },
     {
       "kind": "route",
       "key": "/runbooks",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaDelivery",
       "milestone": "V4",
       "notes": "redirect to /delivery?tab=runbooks"
     },
     {
       "kind": "route",
       "key": "/runbooks/:id",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaDelivery",
       "milestone": "V4",
       "notes": ""
     },
     {
       "kind": "route",
       "key": "/server",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V6",
       "notes": ""
     },
     {
       "kind": "route",
       "key": "/settings",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V6",
       "notes": "redirect to /server"
     },
     {
       "kind": "route",
       "key": "/signals",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaActivity",
       "milestone": "V5",
       "notes": "redirect to /activity?source=signals"
     },
     {
       "kind": "route",
       "key": "/signals/:id",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaActivity",
       "milestone": "V5",
       "notes": ""
     },
     {
       "kind": "route",
       "key": "/skills",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaConfiguration",
       "milestone": "V5",
       "notes": "redirect to /configuration?tab=skills"
     },
     {
       "kind": "route",
       "key": "/skills/:id",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaConfiguration",
       "milestone": "V5",
       "notes": ""
     },
     {
       "kind": "route",
       "key": "/storage",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V6",
       "notes": "redirect to /server?tab=storage"
     },
     {
       "kind": "route",
       "key": "/vessels",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaFleet",
       "milestone": "V3",
       "notes": ""
     },
     {
       "kind": "route",
       "key": "/vessels/:id",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaFleet",
       "milestone": "V3",
       "notes": ""
     },
     {
       "kind": "route",
       "key": "/vessels/:id/history",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaFleet",
       "milestone": "V3",
       "notes": ""
     },
     {
       "kind": "route",
       "key": "/vessels/:id/onboarding",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaFleet",
       "milestone": "V3",
       "notes": ""
     },
     {
       "kind": "route",
       "key": "/vessels/health",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaActivity",
       "milestone": "V3",
       "notes": ""
     },
     {
       "kind": "route",
       "key": "/vessels/import",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "command:armada.vessel.import",
       "milestone": "V3",
       "notes": ""
     },
     {
       "kind": "route",
       "key": "/voyages",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaVoyages",
       "milestone": "V1",
       "notes": "redirect to /missions?tab=voyages"
     },
     {
       "kind": "route",
       "key": "/voyages/:id",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaVoyages",
       "milestone": "V1",
       "notes": ""
     },
     {
       "kind": "route",
       "key": "/voyages/create",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "command:armada.dispatchVoyage",
       "milestone": "V1",
       "notes": ""
     },
     {
       "kind": "route",
       "key": "/workflow-profiles",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaConfiguration",
       "milestone": "V5",
       "notes": "redirect to /configuration?tab=workflow-profiles"
     },
     {
       "kind": "route",
       "key": "/workflow-profiles/:id",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaConfiguration",
       "milestone": "V5",
       "notes": ""
     },
     {
       "kind": "route",
       "key": "/workspace",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "command:armada.vessel.openWorkspace",
       "milestone": "V3",
       "notes": "redirect to /vessels?tab=workspace"
     },
     {
       "kind": "route",
       "key": "/workspace/:vesselId",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "command:armada.vessel.openWorkspace",
       "milestone": "V3",
       "notes": ""
     },
     {
       "kind": "route",
       "key": "/workspace/:vesselId/:panel",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "command:armada.vessel.openWorkspace",
       "milestone": "V3",
       "notes": ""
     },
     {
       "kind": "tab",
       "key": "Activity:concurrency",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaFleet",
       "milestone": "V5",
       "notes": "Concurrency"
     },
     {
       "kind": "tab",
       "key": "Activity:events",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaActivity",
       "milestone": "V5",
       "notes": "Events"
     },
     {
       "kind": "tab",
       "key": "Activity:history",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaActivity",
       "milestone": "V5",
       "notes": "All Activity"
     },
     {
       "kind": "tab",
       "key": "Activity:requests",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaActivity",
       "milestone": "V5",
       "notes": "API Requests"
     },
     {
       "kind": "tab",
       "key": "Activity:signals",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaActivity",
       "milestone": "V5",
       "notes": "Signals"
     },
     {
       "kind": "tab",
       "key": "Activity:tokens",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaActivity",
       "milestone": "V5",
       "notes": "Token Usage"
     },
     {
       "kind": "tab",
       "key": "Activity:usage-overview",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaActivity",
       "milestone": "V5",
       "notes": "Captain Usage"
     },
     {
       "kind": "tab",
       "key": "CaptainsHub:battery",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V1",
       "notes": "Battery Packs"
     },
     {
       "kind": "tab",
       "key": "CaptainsHub:captains",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaCaptains",
       "milestone": "V1",
       "notes": "Captains"
     },
     {
       "kind": "tab",
       "key": "CaptainsHub:docks",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V1",
       "notes": "Docks"
     },
     {
       "kind": "tab",
       "key": "CliPermissions:requests",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaNeedsYou",
       "milestone": "V5",
       "notes": "Requests"
     },
     {
       "kind": "tab",
       "key": "CliPermissions:rules",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V6",
       "notes": "Rules"
     },
     {
       "kind": "tab",
       "key": "Configuration:endpoints",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaConfiguration",
       "milestone": "V5",
       "notes": "Endpoints"
     },
     {
       "kind": "tab",
       "key": "Configuration:harbors",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V5",
       "notes": "Harbors"
     },
     {
       "kind": "tab",
       "key": "Configuration:memory",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaConfiguration",
       "milestone": "V5",
       "notes": "Memory"
     },
     {
       "kind": "tab",
       "key": "Configuration:personas",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaConfiguration",
       "milestone": "V5",
       "notes": "Personas"
     },
     {
       "kind": "tab",
       "key": "Configuration:pipelines",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaConfiguration",
       "milestone": "V5",
       "notes": "Pipelines"
     },
     {
       "kind": "tab",
       "key": "Configuration:playbooks",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaConfiguration",
       "milestone": "V5",
       "notes": "Playbooks"
     },
     {
       "kind": "tab",
       "key": "Configuration:project-profiles",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaConfiguration",
       "milestone": "V5",
       "notes": "Project Profiles"
     },
     {
       "kind": "tab",
       "key": "Configuration:prompts",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaConfiguration",
       "milestone": "V5",
       "notes": "Prompts"
     },
     {
       "kind": "tab",
       "key": "Configuration:skills",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaConfiguration",
       "milestone": "V5",
       "notes": "Skills"
     },
     {
       "kind": "tab",
       "key": "Configuration:workflow-profiles",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaConfiguration",
       "milestone": "V5",
       "notes": "Workflow Profiles"
     },
     {
       "kind": "tab",
       "key": "DeliveryHub:checks",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaDelivery",
       "milestone": "V4",
       "notes": "Checks"
     },
     {
       "kind": "tab",
       "key": "DeliveryHub:deployments",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaDelivery",
       "milestone": "V4",
       "notes": "Deployments"
     },
     {
       "kind": "tab",
       "key": "DeliveryHub:environments",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaDelivery",
       "milestone": "V4",
       "notes": "Environments"
     },
     {
       "kind": "tab",
       "key": "DeliveryHub:incidents",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaDelivery",
       "milestone": "V4",
       "notes": "Incidents"
     },
     {
       "kind": "tab",
       "key": "DeliveryHub:releases",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaDelivery",
       "milestone": "V4",
       "notes": "Releases"
     },
     {
       "kind": "tab",
       "key": "DeliveryHub:runbooks",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaDelivery",
       "milestone": "V4",
       "notes": "Runbooks"
     },
     {
       "kind": "tab",
       "key": "DispatchHub:backlog",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaBacklog",
       "milestone": "V2",
       "notes": "Backlog"
     },
     {
       "kind": "tab",
       "key": "DispatchHub:dispatch",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "command:armada.dispatch",
       "milestone": "V1",
       "notes": "Dispatch"
     },
     {
       "kind": "tab",
       "key": "DispatchHub:planning",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "command:armada.planning.new",
       "milestone": "V2",
       "notes": "Planning"
     },
     {
       "kind": "tab",
       "key": "FleetActions:actions",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaFleetActions",
       "milestone": "V4",
       "notes": "Actions"
     },
     {
       "kind": "tab",
       "key": "FleetActions:runs",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaFleetActions",
       "milestone": "V4",
       "notes": "Runs"
     },
     {
       "kind": "tab",
       "key": "MissionsHub:blackbox",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaFailures",
       "milestone": "V4",
       "notes": "Black Box; partial today: the Failures view lists open entries, without the fingerprint, hotspot, retention and storage sub-tabs"
     },
     {
       "kind": "tab",
       "key": "MissionsHub:merge-queue",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaMergeQueue",
       "milestone": "V1",
       "notes": "Merge Queue"
     },
     {
       "kind": "tab",
       "key": "MissionsHub:missions",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaMissions",
       "milestone": "V1",
       "notes": "Missions"
     },
     {
       "kind": "tab",
       "key": "MissionsHub:voyages",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaVoyages",
       "milestone": "V1",
       "notes": "Voyages"
     },
     {
       "kind": "tab",
       "key": "ServerHub:cli-permissions",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V6",
       "notes": "CLI Tool Permissions"
     },
     {
       "kind": "tab",
       "key": "ServerHub:credentials",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V6",
       "notes": "Credentials"
     },
     {
       "kind": "tab",
       "key": "ServerHub:diagnostics",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V6",
       "notes": "Diagnostics"
     },
     {
       "kind": "tab",
       "key": "ServerHub:server",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V6",
       "notes": "Server"
     },
     {
       "kind": "tab",
       "key": "ServerHub:storage",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V6",
       "notes": "Storage"
     },
     {
       "kind": "tab",
       "key": "ServerHub:tenants",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V6",
       "notes": "Tenants"
     },
     {
       "kind": "tab",
       "key": "ServerHub:users",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V6",
       "notes": "Users"
     },
     {
       "kind": "tab",
       "key": "VesselsHub:fleets",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaFleet",
       "milestone": "V3",
       "notes": "Fleets"
     },
     {
       "kind": "tab",
       "key": "VesselsHub:health",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaActivity",
       "milestone": "V3",
       "notes": "Health"
     },
     {
       "kind": "tab",
       "key": "VesselsHub:vessels",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaFleet",
       "milestone": "V3",
       "notes": "Vessels"
     },
     {
       "kind": "tab",
       "key": "VesselsHub:workspace",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "command:armada.vessel.openWorkspace",
       "milestone": "V3",
       "notes": "Workspace"
     },
@@ -1130,872 +1130,872 @@
     {
       "kind": "api",
       "key": "applyBlackBoxRecommendation",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaMissions",
       "milestone": "",
       "notes": "Missions"
     },
     {
       "kind": "api",
       "key": "applyFleetRecommendations",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "command:armada.vessel.import",
       "milestone": "",
       "notes": "Vessel Import"
     },
     {
       "kind": "api",
       "key": "applyModelAlertAction",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaActivity",
       "milestone": "",
       "notes": "Model Probes"
     },
     {
       "kind": "api",
       "key": "applyObjectiveRefinementSummary",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaBacklog",
       "milestone": "",
       "notes": "Objectives"
     },
     {
       "kind": "api",
       "key": "approveAskProposal",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaAsk",
       "milestone": "",
       "notes": "Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md)"
     },
     {
       "kind": "api",
       "key": "approveDeployment",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaDelivery",
       "milestone": "",
       "notes": "Deployments"
     },
     {
       "kind": "api",
       "key": "approveMissionReview",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaMissions",
       "milestone": "",
       "notes": "Missions"
     },
     {
       "kind": "api",
       "key": "authenticate",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "command:armada.connect",
       "milestone": "",
       "notes": "Auth"
     },
     {
       "kind": "api",
       "key": "authorizeCaptainSelectionRecovery",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "",
       "notes": "Battery packs"
     },
     {
       "kind": "api",
       "key": "backfillBlackBox",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaMissions",
       "milestone": "",
       "notes": "Missions"
     },
     {
       "kind": "api",
       "key": "browseAllVesselImport",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "command:armada.vessel.import",
       "milestone": "",
       "notes": "Vessel Import"
     },
     {
       "kind": "api",
       "key": "browseVesselImport",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "command:armada.vessel.import",
       "milestone": "",
-      "notes": "Vessel Import"
+      "notes": "Vessel Import; browseAllVesselImport pages through it (browseAllVesselImport)"
     },
     {
       "kind": "api",
       "key": "buildVesselContext",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaFleet",
       "milestone": "",
       "notes": "Vessels"
     },
     {
       "kind": "api",
       "key": "cancelAskTurn",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaAsk",
       "milestone": "",
       "notes": "Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md)"
     },
     {
       "kind": "api",
       "key": "cancelFleetActionRun",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaFleetActions",
       "milestone": "",
       "notes": "Fleet Actions"
     },
     {
       "kind": "api",
       "key": "cancelJob",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaActivity",
       "milestone": "",
       "notes": "Background jobs"
     },
     {
       "kind": "api",
       "key": "cancelMergeEntry",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaMergeQueue",
       "milestone": "",
       "notes": "Merge Queue"
     },
     {
       "kind": "api",
       "key": "cancelModelProbeRun",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaActivity",
       "milestone": "",
       "notes": "Model Probes"
     },
     {
       "kind": "api",
       "key": "cancelVoyage",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaVoyages",
       "milestone": "",
       "notes": "Voyages"
     },
     {
       "kind": "api",
       "key": "captureCaptainUsage",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaActivity",
       "milestone": "",
       "notes": "Usage"
     },
     {
       "kind": "api",
       "key": "categorizeVesselImport",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "command:armada.vessel.import",
       "milestone": "",
       "notes": "Vessel Import"
     },
     {
       "kind": "api",
       "key": "changePassword",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "command:armada.connect",
       "milestone": "",
       "notes": "Auth"
     },
     {
       "kind": "api",
       "key": "chatWithCaptain",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaAsk",
       "milestone": "",
       "notes": "Ask Armada"
     },
     {
       "kind": "api",
       "key": "classifyStageOutcome",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaActivity",
       "milestone": "",
       "notes": "Stage outcomes and failure-cause rules"
     },
     {
       "kind": "api",
       "key": "clearProxySessionInstance",
-      "status": "planned",
+      "status": "not-applicable",
       "surface": "",
       "milestone": "",
-      "notes": "Auth"
+      "notes": "Armada.Proxy portal sessions; the extension connects to the Admiral directly, not through the proxy portal"
     },
     {
       "kind": "api",
       "key": "createAskThread",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaAsk",
       "milestone": "",
       "notes": "Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md)"
     },
     {
       "kind": "api",
       "key": "createBacklogItem",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaBacklog",
       "milestone": "",
       "notes": "Objectives"
     },
     {
       "kind": "api",
       "key": "createBacklogRefinementSession",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaBacklog",
       "milestone": "",
-      "notes": "Objectives"
+      "notes": "Objectives; the same refinement sessions (createObjectiveRefinementSession)"
     },
     {
       "kind": "api",
       "key": "createBatteryPack",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "",
       "notes": "Battery packs"
     },
     {
       "kind": "api",
       "key": "createCaptain",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaCaptains",
       "milestone": "",
       "notes": "Captains"
     },
     {
       "kind": "api",
       "key": "createCliPermissionRule",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaNeedsYou",
       "milestone": "",
       "notes": "CLI tool permissions"
     },
     {
       "kind": "api",
       "key": "createCredential",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "",
       "notes": "Credentials (admin)"
     },
     {
       "kind": "api",
       "key": "createDeployment",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaDelivery",
       "milestone": "",
       "notes": "Deployments"
     },
     {
       "kind": "api",
       "key": "createEnvironment",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaDelivery",
       "milestone": "",
       "notes": "Environments"
     },
     {
       "kind": "api",
       "key": "createFailureCauseRule",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaActivity",
       "milestone": "",
       "notes": "Stage outcomes and failure-cause rules"
     },
     {
       "kind": "api",
       "key": "createFleet",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaFleet",
       "milestone": "",
       "notes": "Fleets"
     },
     {
       "kind": "api",
       "key": "createFleetAction",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaFleetActions",
       "milestone": "",
       "notes": "Fleet Actions"
     },
     {
       "kind": "api",
       "key": "createHarbor",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "",
       "notes": "Harbors (host runners)"
     },
     {
       "kind": "api",
       "key": "createIncident",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaDelivery",
       "milestone": "",
       "notes": "Incidents"
     },
     {
       "kind": "api",
       "key": "createMemory",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaConfiguration",
       "milestone": "",
       "notes": "Memories"
     },
     {
       "kind": "api",
       "key": "createMission",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaMissions",
       "milestone": "",
-      "notes": "Missions"
+      "notes": "Missions; the same POST /api/v1/missions (dispatchMission)"
     },
     {
       "kind": "api",
       "key": "createModelEndpoint",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaConfiguration",
       "milestone": "",
       "notes": "Model endpoints (embedding/inference)"
     },
     {
       "kind": "api",
       "key": "createObjective",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaBacklog",
       "milestone": "",
-      "notes": "Objectives"
+      "notes": "Objectives; objectives and backlog items are the same records (createBacklogItem)"
     },
     {
       "kind": "api",
       "key": "createObjectiveRefinementSession",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaBacklog",
       "milestone": "",
       "notes": "Objectives"
     },
     {
       "kind": "api",
       "key": "createPersona",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaConfiguration",
       "milestone": "",
       "notes": "Personas"
     },
     {
       "kind": "api",
       "key": "createPipeline",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaConfiguration",
       "milestone": "",
       "notes": "Pipelines"
     },
     {
       "kind": "api",
       "key": "createPlanningSession",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "command:armada.planning.new",
       "milestone": "",
       "notes": "Planning Sessions"
     },
     {
       "kind": "api",
       "key": "createPlaybook",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaConfiguration",
       "milestone": "",
       "notes": "Playbooks"
     },
     {
       "kind": "api",
       "key": "createProjectProfile",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaConfiguration",
       "milestone": "",
       "notes": "Project profiles"
     },
     {
       "kind": "api",
       "key": "createPromptTemplate",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaConfiguration",
       "milestone": "",
       "notes": "Prompt Templates"
     },
     {
       "kind": "api",
       "key": "createRelease",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaDelivery",
       "milestone": "",
       "notes": "Releases"
     },
     {
       "kind": "api",
       "key": "createRunbook",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaDelivery",
       "milestone": "",
       "notes": "Runbooks"
     },
     {
       "kind": "api",
       "key": "createSkill",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaConfiguration",
       "milestone": "",
       "notes": "Skills directory"
     },
     {
       "kind": "api",
       "key": "createTenant",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "",
       "notes": "Tenants (admin)"
     },
     {
       "kind": "api",
       "key": "createUser",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "",
       "notes": "Users (admin)"
     },
     {
       "kind": "api",
       "key": "createVessel",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaFleet",
       "milestone": "",
       "notes": "Vessels"
     },
     {
       "kind": "api",
       "key": "createVoyage",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaVoyages",
       "milestone": "",
       "notes": "Voyages"
     },
     {
       "kind": "api",
       "key": "createWorkflowProfile",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaConfiguration",
       "milestone": "",
       "notes": "Workflow Profiles"
     },
     {
       "kind": "api",
       "key": "createWorkspaceDirectory",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "command:armada.vessel.openWorkspace",
       "milestone": "",
       "notes": "Workspace"
     },
     {
       "kind": "api",
       "key": "decideCliPermissionRequest",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaNeedsYou",
       "milestone": "",
       "notes": "CLI tool permissions"
     },
     {
       "kind": "api",
       "key": "deleteAskThread",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaAsk",
       "milestone": "",
       "notes": "Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md)"
     },
     {
       "kind": "api",
       "key": "deleteAskThreads",
-      "status": "planned",
+      "status": "not-applicable",
       "surface": "",
       "milestone": "",
-      "notes": "Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md)"
+      "notes": "Bulk delete: the tree views allow selecting several records and delete each through the single delete"
     },
     {
       "kind": "api",
       "key": "deleteBacklogItem",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaBacklog",
       "milestone": "",
       "notes": "Objectives"
     },
     {
       "kind": "api",
       "key": "deleteBatteryPack",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "",
       "notes": "Battery packs"
     },
     {
       "kind": "api",
       "key": "deleteBatteryPackFile",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "",
       "notes": "Battery packs"
     },
     {
       "kind": "api",
       "key": "deleteBlackBox",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaMissions",
       "milestone": "",
       "notes": "Missions"
     },
     {
       "kind": "api",
       "key": "deleteBlackBoxEntries",
-      "status": "planned",
+      "status": "not-applicable",
       "surface": "",
       "milestone": "",
-      "notes": "Missions"
+      "notes": "Bulk delete: the tree views allow selecting several records and delete each through the single delete"
     },
     {
       "kind": "api",
       "key": "deleteCaptain",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaCaptains",
       "milestone": "",
       "notes": "Captains"
     },
     {
       "kind": "api",
       "key": "deleteCheckRun",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaDelivery",
       "milestone": "",
       "notes": "Check Runs"
     },
     {
       "kind": "api",
       "key": "deleteCliPermissionRule",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaNeedsYou",
       "milestone": "",
       "notes": "CLI tool permissions"
     },
     {
       "kind": "api",
       "key": "deleteCredential",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "",
       "notes": "Credentials (admin)"
     },
     {
       "kind": "api",
       "key": "deleteDeployment",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaDelivery",
       "milestone": "",
       "notes": "Deployments"
     },
     {
       "kind": "api",
       "key": "deleteDock",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "",
       "notes": "Docks"
     },
     {
       "kind": "api",
       "key": "deleteEnvironment",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaDelivery",
       "milestone": "",
       "notes": "Environments"
     },
     {
       "kind": "api",
       "key": "deleteEventsBatch",
-      "status": "planned",
+      "status": "not-applicable",
       "surface": "",
       "milestone": "",
-      "notes": "Events"
+      "notes": "Bulk delete: the tree views allow selecting several records and delete each through the single delete"
     },
     {
       "kind": "api",
       "key": "deleteFailureCauseRule",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaActivity",
       "milestone": "",
       "notes": "Stage outcomes and failure-cause rules"
     },
     {
       "kind": "api",
       "key": "deleteFleet",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaFleet",
       "milestone": "",
       "notes": "Fleets"
     },
     {
       "kind": "api",
       "key": "deleteFleetAction",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaFleetActions",
       "milestone": "",
       "notes": "Fleet Actions"
     },
     {
       "kind": "api",
       "key": "deleteFleetsBatch",
-      "status": "planned",
+      "status": "not-applicable",
       "surface": "",
       "milestone": "",
-      "notes": "Fleets"
+      "notes": "Bulk delete: the tree views allow selecting several records and delete each through the single delete"
     },
     {
       "kind": "api",
       "key": "deleteHarbor",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "",
       "notes": "Harbors (host runners)"
     },
     {
       "kind": "api",
       "key": "deleteIncident",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaDelivery",
       "milestone": "",
       "notes": "Incidents"
     },
     {
       "kind": "api",
       "key": "deleteMemory",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaConfiguration",
       "milestone": "",
       "notes": "Memories"
     },
     {
       "kind": "api",
       "key": "deleteMergeEntry",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaMergeQueue",
       "milestone": "",
       "notes": "Merge Queue"
     },
     {
       "kind": "api",
       "key": "deleteMission",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaMissions",
       "milestone": "",
       "notes": "Missions"
     },
     {
       "kind": "api",
       "key": "deleteModelEndpoint",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaConfiguration",
       "milestone": "",
       "notes": "Model endpoints (embedding/inference)"
     },
     {
       "kind": "api",
       "key": "deleteObjective",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaBacklog",
       "milestone": "",
-      "notes": "Objectives"
+      "notes": "Objectives; objectives and backlog items are the same records (deleteBacklogItem)"
     },
     {
       "kind": "api",
       "key": "deleteObjectiveRefinementSession",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaBacklog",
       "milestone": "",
       "notes": "Objectives"
     },
     {
       "kind": "api",
       "key": "deletePersona",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaConfiguration",
       "milestone": "",
       "notes": "Personas"
     },
     {
       "kind": "api",
       "key": "deletePipeline",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaConfiguration",
       "milestone": "",
       "notes": "Pipelines"
     },
     {
       "kind": "api",
       "key": "deletePlanningSession",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "command:armada.planning.new",
       "milestone": "",
       "notes": "Planning Sessions"
     },
     {
       "kind": "api",
       "key": "deletePlaybook",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaConfiguration",
       "milestone": "",
       "notes": "Playbooks"
     },
     {
       "kind": "api",
       "key": "deleteProjectProfile",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaConfiguration",
       "milestone": "",
       "notes": "Project profiles"
     },
     {
       "kind": "api",
       "key": "deleteRelease",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaDelivery",
       "milestone": "",
       "notes": "Releases"
     },
     {
       "kind": "api",
       "key": "deleteRequestHistoryByFilter",
-      "status": "planned",
+      "status": "not-applicable",
       "surface": "",
       "milestone": "",
-      "notes": "Request History"
+      "notes": "Bulk delete: the tree views allow selecting several records and delete each through the single delete"
     },
     {
       "kind": "api",
       "key": "deleteRequestHistoryEntries",
-      "status": "planned",
+      "status": "not-applicable",
       "surface": "",
       "milestone": "",
-      "notes": "Request History"
+      "notes": "Bulk delete: the tree views allow selecting several records and delete each through the single delete"
     },
     {
       "kind": "api",
       "key": "deleteRequestHistoryEntry",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaActivity",
       "milestone": "",
       "notes": "Request History"
     },
     {
       "kind": "api",
       "key": "deleteRunbook",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaDelivery",
       "milestone": "",
       "notes": "Runbooks"
     },
     {
       "kind": "api",
       "key": "deleteRunbookExecution",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaDelivery",
       "milestone": "",
       "notes": "Runbooks"
     },
     {
       "kind": "api",
       "key": "deleteSignalsBatch",
-      "status": "planned",
+      "status": "not-applicable",
       "surface": "",
       "milestone": "",
-      "notes": "Signals"
+      "notes": "Bulk delete: the tree views allow selecting several records and delete each through the single delete"
     },
     {
       "kind": "api",
       "key": "deleteSkill",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaConfiguration",
       "milestone": "",
       "notes": "Skills directory"
     },
     {
       "kind": "api",
       "key": "deleteTenant",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "",
       "notes": "Tenants (admin)"
     },
     {
       "kind": "api",
       "key": "deleteUser",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "",
       "notes": "Users (admin)"
     },
     {
       "kind": "api",
       "key": "deleteVessel",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaFleet",
       "milestone": "",
       "notes": "Vessels"
     },
     {
       "kind": "api",
       "key": "deleteVesselHealthOverride",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaActivity",
       "milestone": "",
       "notes": "Vessel Health"
     },
     {
       "kind": "api",
       "key": "deleteWorkflowProfile",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaConfiguration",
       "milestone": "",
       "notes": "Workflow Profiles"
     },
     {
       "kind": "api",
       "key": "deleteWorkflowProfilesBatch",
-      "status": "planned",
+      "status": "not-applicable",
       "surface": "",
       "milestone": "",
-      "notes": "Workflow Profiles"
+      "notes": "Bulk delete: the tree views allow selecting several records and delete each through the single delete"
     },
     {
       "kind": "api",
       "key": "deleteWorkspaceEntry",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "command:armada.vessel.openWorkspace",
       "milestone": "",
       "notes": "Workspace"
     },
     {
       "kind": "api",
       "key": "denyDeployment",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaDelivery",
       "milestone": "",
       "notes": "Deployments"
     },
     {
       "kind": "api",
       "key": "denyMissionReview",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaMissions",
       "milestone": "",
       "notes": "Missions"
     },
@@ -2010,154 +2010,154 @@
     {
       "kind": "api",
       "key": "disableHarbor",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "",
       "notes": "Harbors (host runners)"
     },
     {
       "kind": "api",
       "key": "discoverVesselImport",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "command:armada.vessel.import",
       "milestone": "",
       "notes": "Vessel Import"
     },
     {
       "kind": "api",
       "key": "dispatchMission",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaMissions",
       "milestone": "",
       "notes": "Missions"
     },
     {
       "kind": "api",
       "key": "dispatchPlanningSession",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "command:armada.planning.new",
       "milestone": "",
       "notes": "Planning Sessions"
     },
     {
       "kind": "api",
       "key": "downloadBackup",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "command:armada.backup.download",
       "milestone": "",
       "notes": "Backup / Restore"
     },
     {
       "kind": "api",
       "key": "downloadBlackBox",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaMissions",
       "milestone": "",
       "notes": "Missions"
     },
     {
       "kind": "api",
       "key": "draftFailureCauseRule",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaActivity",
       "milestone": "",
       "notes": "Stage outcomes and failure-cause rules"
     },
     {
       "kind": "api",
       "key": "duplicateModelEndpoint",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaConfiguration",
       "milestone": "",
       "notes": "Model endpoints (embedding/inference)"
     },
     {
       "kind": "api",
       "key": "enableHarbor",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "",
       "notes": "Harbors (host runners)"
     },
     {
       "kind": "api",
       "key": "enqueueMerge",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaMergeQueue",
       "milestone": "",
       "notes": "Merge Queue"
     },
     {
       "kind": "api",
       "key": "enumerateAskMessages",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaAsk",
       "milestone": "",
       "notes": "Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md)"
     },
     {
       "kind": "api",
       "key": "enumerateAskProposals",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaAsk",
       "milestone": "",
       "notes": "Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md)"
     },
     {
       "kind": "api",
       "key": "enumerateAskThreads",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaAsk",
       "milestone": "",
       "notes": "Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md)"
     },
     {
       "kind": "api",
       "key": "enumerateAskToolCalls",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaAsk",
       "milestone": "",
       "notes": "Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md)"
     },
     {
       "kind": "api",
       "key": "enumerateAskTurnToolCalls",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaAsk",
       "milestone": "",
       "notes": "Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md)"
     },
     {
       "kind": "api",
       "key": "enumerateAskWork",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaAsk",
       "milestone": "",
       "notes": "Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md)"
     },
     {
       "kind": "api",
       "key": "enumerateAskWorkMissions",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaAsk",
       "milestone": "",
       "notes": "Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md)"
     },
     {
       "kind": "api",
       "key": "enumerateAskWorkTargets",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaAsk",
       "milestone": "",
       "notes": "Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md)"
     },
     {
       "kind": "api",
       "key": "enumerateBacklog",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaBacklog",
       "milestone": "",
-      "notes": "Objectives"
+      "notes": "Objectives; the same records through listBacklog"
     },
     {
       "kind": "api",
@@ -2170,8 +2170,8 @@
     {
       "kind": "api",
       "key": "enumerateBlackBoxFingerprints",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaMissions",
       "milestone": "",
       "notes": "Missions"
     },
@@ -2186,18 +2186,18 @@
     {
       "kind": "api",
       "key": "enumerateBlackBoxNotes",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaMissions",
       "milestone": "",
-      "notes": "Missions"
+      "notes": "Missions; the same records through listBlackBoxNotes"
     },
     {
       "kind": "api",
       "key": "enumerateBlackBoxObjects",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaMissions",
       "milestone": "",
-      "notes": "Missions"
+      "notes": "Missions; the same records through listBlackBoxObjects"
     },
     {
       "kind": "api",
@@ -2210,272 +2210,272 @@
     {
       "kind": "api",
       "key": "enumerateCliPermissionRules",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaNeedsYou",
       "milestone": "",
-      "notes": "CLI tool permissions"
+      "notes": "CLI tool permissions; the same records through listCliPermissionRules"
     },
     {
       "kind": "api",
       "key": "enumerateDeployments",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaDelivery",
       "milestone": "",
-      "notes": "Deployments"
+      "notes": "Deployments; the same records through listDeployments"
     },
     {
       "kind": "api",
       "key": "enumerateEnvironments",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaDelivery",
       "milestone": "",
-      "notes": "Environments"
+      "notes": "Environments; the same records through listEnvironments"
     },
     {
       "kind": "api",
       "key": "enumerateFleetActionRunTargets",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaFleetActions",
       "milestone": "",
       "notes": "Fleet Actions"
     },
     {
       "kind": "api",
       "key": "enumerateFleetActionRuns",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaFleetActions",
       "milestone": "",
       "notes": "Fleet Actions"
     },
     {
       "kind": "api",
       "key": "enumerateFleetActions",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaFleetActions",
       "milestone": "",
       "notes": "Fleet Actions"
     },
     {
       "kind": "api",
       "key": "enumerateHarbors",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "",
-      "notes": "Harbors (host runners)"
+      "notes": "Harbors (host runners); the same records through listHarbors"
     },
     {
       "kind": "api",
       "key": "enumerateHistoryTimeline",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaActivity",
       "milestone": "",
-      "notes": "History"
+      "notes": "History; the same records through listHistoryTimeline"
     },
     {
       "kind": "api",
       "key": "enumerateIncidents",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaDelivery",
       "milestone": "",
-      "notes": "Incidents"
+      "notes": "Incidents; the same records through listIncidents"
     },
     {
       "kind": "api",
       "key": "enumerateMemories",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaConfiguration",
       "milestone": "",
-      "notes": "Memories"
+      "notes": "Memories; the same records through listMemories"
     },
     {
       "kind": "api",
       "key": "enumerateMissionBlackBoxEntries",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaMissions",
       "milestone": "",
-      "notes": "Missions"
+      "notes": "Missions; the same records through listMissionBlackBoxEntries"
     },
     {
       "kind": "api",
       "key": "enumerateMissionPullRequestChecks",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaMissions",
       "milestone": "",
       "notes": "Missions"
     },
     {
       "kind": "api",
       "key": "enumerateMissionPullRequestComments",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaMissions",
       "milestone": "",
       "notes": "Missions"
     },
     {
       "kind": "api",
       "key": "enumerateMissionPullRequestReviews",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaMissions",
       "milestone": "",
       "notes": "Missions"
     },
     {
       "kind": "api",
       "key": "enumerateModelEndpoints",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaConfiguration",
       "milestone": "",
-      "notes": "Model endpoints (embedding/inference)"
+      "notes": "Model endpoints (embedding/inference); the same records through listModelEndpoints"
     },
     {
       "kind": "api",
       "key": "enumerateMuxEndpoints",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaActivity",
       "milestone": "",
       "notes": "Vessel Health"
     },
     {
       "kind": "api",
       "key": "enumerateObjectives",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaBacklog",
       "milestone": "",
-      "notes": "Objectives"
+      "notes": "Objectives; objectives and backlog items are the same records (listBacklog)"
     },
     {
       "kind": "api",
       "key": "enumerateReleases",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaDelivery",
       "milestone": "",
-      "notes": "Releases"
+      "notes": "Releases; the same records through listReleases"
     },
     {
       "kind": "api",
       "key": "enumerateRunbookExecutions",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaDelivery",
       "milestone": "",
-      "notes": "Runbooks"
+      "notes": "Runbooks; the same records through listRunbookExecutions"
     },
     {
       "kind": "api",
       "key": "enumerateRunbooks",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaDelivery",
       "milestone": "",
-      "notes": "Runbooks"
+      "notes": "Runbooks; the same records through listRunbooks"
     },
     {
       "kind": "api",
       "key": "enumerateVesselHealth",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaActivity",
       "milestone": "",
       "notes": "Vessel Health"
     },
     {
       "kind": "api",
       "key": "enumerateVesselImportBatches",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "command:armada.vessel.import",
       "milestone": "",
       "notes": "Vessel Import"
     },
     {
       "kind": "api",
       "key": "enumerateVoyageProgress",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaVoyages",
       "milestone": "",
       "notes": "Voyages"
     },
     {
       "kind": "api",
       "key": "enumerateWorkflowProfiles",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaConfiguration",
       "milestone": "",
-      "notes": "Workflow Profiles"
+      "notes": "Workflow Profiles; the same records through listWorkflowProfiles"
     },
     {
       "kind": "api",
       "key": "evaluateCaptain",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaActivity",
       "milestone": "",
       "notes": "Model Probes"
     },
     {
       "kind": "api",
       "key": "evaluateModelEndpoint",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaActivity",
       "milestone": "",
       "notes": "Model Probes"
     },
     {
       "kind": "api",
       "key": "evaluateVesselHealth",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaActivity",
       "milestone": "",
       "notes": "Vessel Health"
     },
     {
       "kind": "api",
       "key": "execWorkspaceCommand",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "command:armada.vessel.exec",
       "milestone": "",
       "notes": "Workspace terminal"
     },
     {
       "kind": "api",
       "key": "exportBlackBoxFixture",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaMissions",
       "milestone": "",
       "notes": "Missions"
     },
     {
       "kind": "api",
       "key": "getAskQuickActions",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaAsk",
       "milestone": "",
       "notes": "Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md)"
     },
     {
       "kind": "api",
       "key": "getAskThread",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaAsk",
       "milestone": "",
       "notes": "Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md)"
     },
     {
       "kind": "api",
       "key": "getAskWorkSnapshot",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaAsk",
       "milestone": "",
       "notes": "Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md)"
     },
     {
       "kind": "api",
       "key": "getBacklogItem",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaBacklog",
       "milestone": "",
       "notes": "Objectives"
     },
     {
       "kind": "api",
       "key": "getBatteryPack",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "",
       "notes": "Battery packs"
     },
@@ -2498,32 +2498,32 @@
     {
       "kind": "api",
       "key": "getBlackBoxBundle",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaMissions",
       "milestone": "",
-      "notes": "Missions"
+      "notes": "Missions; Download Bundle saves it (downloadBlackBox)"
     },
     {
       "kind": "api",
       "key": "getBlackBoxFingerprintTrend",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaMissions",
       "milestone": "",
       "notes": "Missions"
     },
     {
       "kind": "api",
       "key": "getBlackBoxRecoveryStats",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaMissions",
       "milestone": "",
       "notes": "Missions"
     },
     {
       "kind": "api",
       "key": "getBlackBoxRetention",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaMissions",
       "milestone": "",
       "notes": "Missions"
     },
@@ -2538,16 +2538,16 @@
     {
       "kind": "api",
       "key": "getBlackBoxStorage",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaMissions",
       "milestone": "",
       "notes": "Missions"
     },
     {
       "kind": "api",
       "key": "getBlackBoxStorageMigration",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaMissions",
       "milestone": "",
       "notes": "Missions"
     },
@@ -2562,264 +2562,264 @@
     {
       "kind": "api",
       "key": "getCaptain",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaCaptains",
       "milestone": "",
       "notes": "Captains"
     },
     {
       "kind": "api",
       "key": "getCaptainLog",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaCaptains",
       "milestone": "",
       "notes": "Captains"
     },
     {
       "kind": "api",
       "key": "getCaptainSelection",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "",
       "notes": "Battery packs"
     },
     {
       "kind": "api",
       "key": "getCaptainSelectionCandidates",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "",
       "notes": "Battery packs"
     },
     {
       "kind": "api",
       "key": "getCaptainSelectionDecision",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "",
       "notes": "Battery packs"
     },
     {
       "kind": "api",
       "key": "getCaptainSelectionHistory",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "",
       "notes": "Battery packs"
     },
     {
       "kind": "api",
       "key": "getCaptainTools",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaCaptains",
       "milestone": "",
       "notes": "Captains"
     },
     {
       "kind": "api",
       "key": "getCheckRun",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaDelivery",
       "milestone": "",
       "notes": "Check Runs"
     },
     {
       "kind": "api",
       "key": "getCliPermissionRequest",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaNeedsYou",
       "milestone": "",
-      "notes": "CLI tool permissions"
+      "notes": "CLI tool permissions; the Needs You item carries the request (decideCliPermissionRequest)"
     },
     {
       "kind": "api",
       "key": "getCliPermissionRule",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaNeedsYou",
       "milestone": "",
       "notes": "CLI tool permissions"
     },
     {
       "kind": "api",
       "key": "getConcurrencyMetrics",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaVoyages",
       "milestone": "",
       "notes": "Voyages"
     },
     {
       "kind": "api",
       "key": "getDeployment",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaDelivery",
       "milestone": "",
       "notes": "Deployments"
     },
     {
       "kind": "api",
       "key": "getDock",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "",
       "notes": "Docks"
     },
     {
       "kind": "api",
       "key": "getDoctor",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "command:armada.home",
       "milestone": "",
       "notes": "Status / Health"
     },
     {
       "kind": "api",
       "key": "getEntity",
-      "status": "planned",
+      "status": "not-applicable",
       "surface": "",
       "milestone": "",
-      "notes": "Generic entity lookup"
+      "notes": "Generic id lookup used by the dashboard search box; VS Code reaches each kind through its view, page and the command palette"
     },
     {
       "kind": "api",
       "key": "getEnvironment",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaDelivery",
       "milestone": "",
       "notes": "Environments"
     },
     {
       "kind": "api",
       "key": "getEvent",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaActivity",
       "milestone": "",
       "notes": "Events"
     },
     {
       "kind": "api",
       "key": "getFailureCauseRule",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaActivity",
       "milestone": "",
       "notes": "Stage outcomes and failure-cause rules"
     },
     {
       "kind": "api",
       "key": "getFleet",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaFleet",
       "milestone": "",
       "notes": "Fleets"
     },
     {
       "kind": "api",
       "key": "getFleetAction",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaFleetActions",
       "milestone": "",
       "notes": "Fleet Actions"
     },
     {
       "kind": "api",
       "key": "getFleetActionRun",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaFleetActions",
       "milestone": "",
       "notes": "Fleet Actions"
     },
     {
       "kind": "api",
       "key": "getFleetActionRunTarget",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaFleetActions",
       "milestone": "",
       "notes": "Fleet Actions"
     },
     {
       "kind": "api",
       "key": "getFleetCategorizationDefaultPrompt",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "command:armada.vessel.import",
       "milestone": "",
       "notes": "Vessel Import"
     },
     {
       "kind": "api",
       "key": "getFleetDetail",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaFleet",
       "milestone": "",
-      "notes": "Fleets"
+      "notes": "Fleets; getFleet reads it (getFleet)"
     },
     {
       "kind": "api",
       "key": "getHarbor",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "",
       "notes": "Harbors (host runners)"
     },
     {
       "kind": "api",
       "key": "getHarborMetrics",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "",
       "notes": "Harbors (host runners)"
     },
     {
       "kind": "api",
       "key": "getHealth",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "command:armada.home",
       "milestone": "",
       "notes": "Status / Health"
     },
     {
       "kind": "api",
       "key": "getInbox",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaNeedsYou",
       "milestone": "",
       "notes": "Needs-you inbox"
     },
     {
       "kind": "api",
       "key": "getIncident",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaDelivery",
       "milestone": "",
       "notes": "Incidents"
     },
     {
       "kind": "api",
       "key": "getJob",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaActivity",
       "milestone": "",
       "notes": "Background jobs"
     },
     {
       "kind": "api",
       "key": "getMemory",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaConfiguration",
       "milestone": "",
       "notes": "Memories"
     },
     {
       "kind": "api",
       "key": "getMergeEntry",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaMergeQueue",
       "milestone": "",
       "notes": "Merge Queue"
     },
     {
       "kind": "api",
       "key": "getMission",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaMissions",
       "milestone": "",
       "notes": "Missions"
     },
@@ -2834,312 +2834,312 @@
     {
       "kind": "api",
       "key": "getMissionBlackBoxBrief",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaMissions",
       "milestone": "",
       "notes": "Missions"
     },
     {
       "kind": "api",
       "key": "getMissionDiff",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaMissions",
       "milestone": "",
       "notes": "Missions"
     },
     {
       "kind": "api",
       "key": "getMissionGitHubPullRequest",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaMissions",
       "milestone": "",
       "notes": "Missions"
     },
     {
       "kind": "api",
       "key": "getMissionHistory",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaMissions",
       "milestone": "",
       "notes": "Missions"
     },
     {
       "kind": "api",
       "key": "getMissionInstructions",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaMissions",
       "milestone": "",
       "notes": "Missions"
     },
     {
       "kind": "api",
       "key": "getMissionLandingPreview",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaMissions",
       "milestone": "",
       "notes": "Missions"
     },
     {
       "kind": "api",
       "key": "getMissionLog",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaMissions",
       "milestone": "",
       "notes": "Missions"
     },
     {
       "kind": "api",
       "key": "getMissionWaits",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaVoyages",
       "milestone": "",
       "notes": "Voyages"
     },
     {
       "kind": "api",
       "key": "getModelEndpoint",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaConfiguration",
       "milestone": "",
       "notes": "Model endpoints (embedding/inference)"
     },
     {
       "kind": "api",
       "key": "getModelProbeRun",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaActivity",
       "milestone": "",
       "notes": "Model Probes"
     },
     {
       "kind": "api",
       "key": "getMuxEndpoint",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaActivity",
       "milestone": "",
       "notes": "Vessel Health"
     },
     {
       "kind": "api",
       "key": "getObjective",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaBacklog",
       "milestone": "",
-      "notes": "Objectives"
+      "notes": "Objectives; objectives and backlog items are the same records (getBacklogItem)"
     },
     {
       "kind": "api",
       "key": "getObjectiveRefinementSession",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaBacklog",
       "milestone": "",
       "notes": "Objectives"
     },
     {
       "kind": "api",
       "key": "getPersona",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaConfiguration",
       "milestone": "",
       "notes": "Personas"
     },
     {
       "kind": "api",
       "key": "getPipeline",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaConfiguration",
       "milestone": "",
       "notes": "Pipelines"
     },
     {
       "kind": "api",
       "key": "getPlanningSession",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "command:armada.planning.new",
       "milestone": "",
       "notes": "Planning Sessions"
     },
     {
       "kind": "api",
       "key": "getPlaybook",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaConfiguration",
       "milestone": "",
       "notes": "Playbooks"
     },
     {
       "kind": "api",
       "key": "getProjectProfile",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaConfiguration",
       "milestone": "",
       "notes": "Project profiles"
     },
     {
       "kind": "api",
       "key": "getPromptTemplate",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaConfiguration",
       "milestone": "",
       "notes": "Prompt Templates"
     },
     {
       "kind": "api",
       "key": "getProxySessionContext",
-      "status": "planned",
+      "status": "not-applicable",
       "surface": "",
       "milestone": "",
-      "notes": "Auth"
+      "notes": "Armada.Proxy portal sessions; the extension connects to the Admiral directly, not through the proxy portal"
     },
     {
       "kind": "api",
       "key": "getRebuildStatus",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "",
       "notes": "Server"
     },
     {
       "kind": "api",
       "key": "getRelease",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaDelivery",
       "milestone": "",
       "notes": "Releases"
     },
     {
       "kind": "api",
       "key": "getReleaseGitHubPullRequests",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaDelivery",
       "milestone": "",
       "notes": "Releases"
     },
     {
       "kind": "api",
       "key": "getRequestHistoryEntry",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaActivity",
       "milestone": "",
       "notes": "Request History"
     },
     {
       "kind": "api",
       "key": "getRequestHistorySummary",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaActivity",
       "milestone": "",
       "notes": "Request History"
     },
     {
       "kind": "api",
       "key": "getRunbook",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaDelivery",
       "milestone": "",
       "notes": "Runbooks"
     },
     {
       "kind": "api",
       "key": "getRunbookExecution",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaDelivery",
       "milestone": "",
       "notes": "Runbooks"
     },
     {
       "kind": "api",
       "key": "getSettings",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "",
       "notes": "Settings"
     },
     {
       "kind": "api",
       "key": "getSignal",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaActivity",
       "milestone": "",
       "notes": "Signals"
     },
     {
       "kind": "api",
       "key": "getSkill",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaConfiguration",
       "milestone": "",
       "notes": "Skills directory"
     },
     {
       "kind": "api",
       "key": "getStageOutcome",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaActivity",
       "milestone": "",
       "notes": "Stage outcomes and failure-cause rules"
     },
     {
       "kind": "api",
       "key": "getStatus",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "command:armada.home",
       "milestone": "",
       "notes": "Status / Health"
     },
     {
       "kind": "api",
       "key": "getStorage",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaFleetActions",
       "milestone": "",
       "notes": "Fleet Actions"
     },
     {
       "kind": "api",
       "key": "getTokenUsage",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaMissions",
       "milestone": "",
       "notes": "Missions"
     },
     {
       "kind": "api",
       "key": "getUsageLatest",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaActivity",
       "milestone": "",
       "notes": "Usage"
     },
     {
       "kind": "api",
       "key": "getUsageMissions",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaActivity",
       "milestone": "",
       "notes": "Usage"
     },
     {
       "kind": "api",
       "key": "getUsageSeries",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaActivity",
       "milestone": "",
       "notes": "Usage"
     },
     {
       "kind": "api",
       "key": "getUsageSnapshots",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaActivity",
       "milestone": "",
       "notes": "Usage"
     },
     {
       "kind": "api",
       "key": "getVessel",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaFleet",
       "milestone": "",
       "notes": "Vessels"
     },
@@ -3154,104 +3154,104 @@
     {
       "kind": "api",
       "key": "getVesselBranchCount",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaFleet",
       "milestone": "",
-      "notes": "Vessels"
+      "notes": "Vessels; the branch list carries the count (getVesselBranches)"
     },
     {
       "kind": "api",
       "key": "getVesselBranches",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaFleet",
       "milestone": "",
       "notes": "Vessels"
     },
     {
       "kind": "api",
       "key": "getVesselCleanupInventory",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaFleet",
       "milestone": "",
       "notes": "Vessels"
     },
     {
       "kind": "api",
       "key": "getVesselCommitActivity",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaFleet",
       "milestone": "",
       "notes": "Vessel History"
     },
     {
       "kind": "api",
       "key": "getVesselCommits",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaFleet",
       "milestone": "",
       "notes": "Vessel History"
     },
     {
       "kind": "api",
       "key": "getVesselConcurrency",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaVoyages",
       "milestone": "",
       "notes": "Voyages"
     },
     {
       "kind": "api",
       "key": "getVesselGitStatus",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaFleet",
       "milestone": "",
       "notes": "Vessels"
     },
     {
       "kind": "api",
       "key": "getVesselHealth",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaActivity",
       "milestone": "",
       "notes": "Vessel Health"
     },
     {
       "kind": "api",
       "key": "getVesselHealthSummary",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaActivity",
       "milestone": "",
       "notes": "Vessel Health"
     },
     {
       "kind": "api",
       "key": "getVesselImportBatch",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "command:armada.vessel.import",
       "milestone": "",
       "notes": "Vessel Import"
     },
     {
       "kind": "api",
       "key": "getVesselLandingPreview",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaFleet",
       "milestone": "",
       "notes": "Vessels"
     },
     {
       "kind": "api",
       "key": "getVesselReadiness",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaFleet",
       "milestone": "",
       "notes": "Vessels"
     },
     {
       "kind": "api",
       "key": "getVoyage",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaVoyages",
       "milestone": "",
       "notes": "Voyages"
     },
@@ -3266,208 +3266,208 @@
     {
       "kind": "api",
       "key": "getVoyageBlackBoxBrief",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaMissions",
       "milestone": "",
       "notes": "Missions"
     },
     {
       "kind": "api",
       "key": "getVoyageBlackBoxCascade",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaMissions",
       "milestone": "",
       "notes": "Missions"
     },
     {
       "kind": "api",
       "key": "getVoyageStatus",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaVoyages",
       "milestone": "",
       "notes": "Voyages"
     },
     {
       "kind": "api",
       "key": "getVoyageTree",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaVoyages",
       "milestone": "",
       "notes": "Voyages"
     },
     {
       "kind": "api",
       "key": "getWorkflowProfile",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaConfiguration",
       "milestone": "",
       "notes": "Workflow Profiles"
     },
     {
       "kind": "api",
       "key": "getWorkspaceChanges",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "command:armada.vessel.openWorkspace",
       "milestone": "",
-      "notes": "Workspace"
+      "notes": "Workspace; listAllWorkspaceChanges pages through it (listAllWorkspaceChanges)"
     },
     {
       "kind": "api",
       "key": "getWorkspaceDiff",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "command:armada.vessel.changes",
       "milestone": "",
       "notes": "Workspace diff (review)"
     },
     {
       "kind": "api",
       "key": "getWorkspaceFile",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "command:armada.vessel.openWorkspace",
       "milestone": "",
       "notes": "Workspace"
     },
     {
       "kind": "api",
       "key": "getWorkspaceStatus",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "command:armada.vessel.openWorkspace",
       "milestone": "",
       "notes": "Workspace"
     },
     {
       "kind": "api",
       "key": "getWorkspaceTree",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "command:armada.vessel.openWorkspace",
       "milestone": "",
-      "notes": "Workspace"
+      "notes": "Workspace; listWorkspaceDirectory pages through it (listWorkspaceDirectory)"
     },
     {
       "kind": "api",
       "key": "healthCheckModelEndpoints",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaConfiguration",
       "milestone": "",
       "notes": "Model endpoints (embedding/inference)"
     },
     {
       "kind": "api",
       "key": "ignoreModelAlert",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaActivity",
       "milestone": "",
       "notes": "Model Probes"
     },
     {
       "kind": "api",
       "key": "importCheckRun",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaDelivery",
       "milestone": "",
       "notes": "Check Runs"
     },
     {
       "kind": "api",
       "key": "importObjectiveFromGitHub",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaBacklog",
       "milestone": "",
       "notes": "Objectives"
     },
     {
       "kind": "api",
       "key": "importSyntheticTokenUsage",
-      "status": "planned",
+      "status": "not-applicable",
       "surface": "",
       "milestone": "",
-      "notes": "Fleet Actions"
+      "notes": "Test fixture importer for token usage charts; not a user feature"
     },
     {
       "kind": "api",
       "key": "importVessels",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "command:armada.vessel.import",
       "milestone": "",
       "notes": "Vessel Import"
     },
     {
       "kind": "api",
       "key": "lintMissionBrief",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaMissions",
       "milestone": "",
       "notes": "Missions"
     },
     {
       "kind": "api",
       "key": "listAllMuxEndpoints",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaActivity",
       "milestone": "",
-      "notes": "Vessel Health"
+      "notes": "Vessel Health; the same records through enumerateMuxEndpoints"
     },
     {
       "kind": "api",
       "key": "listAllStorageHosts",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaFleetActions",
       "milestone": "",
-      "notes": "Fleet Actions"
+      "notes": "Fleet Actions; the same records through listStorageHosts"
     },
     {
       "kind": "api",
       "key": "listAllWorkspaceActiveMissions",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "command:armada.vessel.openWorkspace",
       "milestone": "",
       "notes": "Workspace"
     },
     {
       "kind": "api",
       "key": "listAllWorkspaceChanges",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "command:armada.vessel.openWorkspace",
       "milestone": "",
       "notes": "Workspace"
     },
     {
       "kind": "api",
       "key": "listBacklog",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaBacklog",
       "milestone": "",
       "notes": "Objectives"
     },
     {
       "kind": "api",
       "key": "listBacklogRefinementSessions",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaBacklog",
       "milestone": "",
-      "notes": "Objectives"
+      "notes": "Objectives; the same refinement sessions (listObjectiveRefinementSessions)"
     },
     {
       "kind": "api",
       "key": "listBatteryPacks",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaActivity",
       "milestone": "",
       "notes": "Model Probes"
     },
     {
       "kind": "api",
       "key": "listBlackBox",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaMissions",
       "milestone": "",
-      "notes": "Missions"
+      "notes": "Missions; the same records through enumerateBlackBox"
     },
     {
       "kind": "api",
       "key": "listBlackBoxNearbySuccesses",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaMissions",
       "milestone": "",
       "notes": "Missions"
     },
@@ -3482,152 +3482,152 @@
     {
       "kind": "api",
       "key": "listBlackBoxObjects",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaMissions",
       "milestone": "",
       "notes": "Missions"
     },
     {
       "kind": "api",
       "key": "listCaptains",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaCaptains",
       "milestone": "",
       "notes": "Captains"
     },
     {
       "kind": "api",
       "key": "listCheckRuns",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaDelivery",
       "milestone": "",
       "notes": "Check Runs"
     },
     {
       "kind": "api",
       "key": "listCliPermissionRequests",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaNeedsYou",
       "milestone": "",
       "notes": "CLI tool permissions"
     },
     {
       "kind": "api",
       "key": "listCliPermissionRules",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaNeedsYou",
       "milestone": "",
       "notes": "CLI tool permissions"
     },
     {
       "kind": "api",
       "key": "listCredentials",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "",
       "notes": "Credentials (admin)"
     },
     {
       "kind": "api",
       "key": "listDeployments",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaDelivery",
       "milestone": "",
       "notes": "Deployments"
     },
     {
       "kind": "api",
       "key": "listDocks",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "",
       "notes": "Docks"
     },
     {
       "kind": "api",
       "key": "listEnvironments",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaDelivery",
       "milestone": "",
       "notes": "Environments"
     },
     {
       "kind": "api",
       "key": "listEvents",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaActivity",
       "milestone": "",
       "notes": "Events"
     },
     {
       "kind": "api",
       "key": "listFailureCauseRules",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaActivity",
       "milestone": "",
       "notes": "Stage outcomes and failure-cause rules"
     },
     {
       "kind": "api",
       "key": "listFleets",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaFleet",
       "milestone": "",
       "notes": "Fleets"
     },
     {
       "kind": "api",
       "key": "listHarborJobs",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "",
       "notes": "Harbors (host runners)"
     },
     {
       "kind": "api",
       "key": "listHarbors",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "",
       "notes": "Harbors (host runners)"
     },
     {
       "kind": "api",
       "key": "listHistoryTimeline",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaActivity",
       "milestone": "",
       "notes": "History"
     },
     {
       "kind": "api",
       "key": "listIncidents",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaDelivery",
       "milestone": "",
       "notes": "Incidents"
     },
     {
       "kind": "api",
       "key": "listJobs",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaActivity",
       "milestone": "",
       "notes": "Background jobs"
     },
     {
       "kind": "api",
       "key": "listMemories",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaConfiguration",
       "milestone": "",
       "notes": "Memories"
     },
     {
       "kind": "api",
       "key": "listMergeQueue",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaMergeQueue",
       "milestone": "",
       "notes": "Merge Queue"
     },
@@ -3642,344 +3642,344 @@
     {
       "kind": "api",
       "key": "listMissionSummaries",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaMissions",
       "milestone": "",
       "notes": "Missions"
     },
     {
       "kind": "api",
       "key": "listMissions",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaMissions",
       "milestone": "",
       "notes": "Missions"
     },
     {
       "kind": "api",
       "key": "listModelEndpoints",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaConfiguration",
       "milestone": "",
       "notes": "Model endpoints (embedding/inference)"
     },
     {
       "kind": "api",
       "key": "listModelProbeRuns",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaActivity",
       "milestone": "",
       "notes": "Model Probes"
     },
     {
       "kind": "api",
       "key": "listMuxEndpoints",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaActivity",
       "milestone": "",
-      "notes": "Vessel Health"
+      "notes": "Vessel Health; the same records through enumerateMuxEndpoints"
     },
     {
       "kind": "api",
       "key": "listObjectiveRefinementMessages",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaBacklog",
       "milestone": "",
       "notes": "Objectives"
     },
     {
       "kind": "api",
       "key": "listObjectiveRefinementSessions",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaBacklog",
       "milestone": "",
       "notes": "Objectives"
     },
     {
       "kind": "api",
       "key": "listObjectives",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaBacklog",
       "milestone": "",
-      "notes": "Objectives"
+      "notes": "Objectives; objectives and backlog items are the same records (listBacklog)"
     },
     {
       "kind": "api",
       "key": "listPersonas",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaConfiguration",
       "milestone": "",
       "notes": "Personas"
     },
     {
       "kind": "api",
       "key": "listPipelines",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaConfiguration",
       "milestone": "",
       "notes": "Pipelines"
     },
     {
       "kind": "api",
       "key": "listPlanningSessionMessages",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "command:armada.planning.new",
       "milestone": "",
       "notes": "Planning Sessions"
     },
     {
       "kind": "api",
       "key": "listPlanningSessions",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "command:armada.planning.new",
       "milestone": "",
       "notes": "Planning Sessions"
     },
     {
       "kind": "api",
       "key": "listPlaybooks",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaConfiguration",
       "milestone": "",
       "notes": "Playbooks"
     },
     {
       "kind": "api",
       "key": "listProjectProfiles",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaConfiguration",
       "milestone": "",
       "notes": "Project profiles"
     },
     {
       "kind": "api",
       "key": "listPromptTemplates",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaConfiguration",
       "milestone": "",
       "notes": "Prompt Templates"
     },
     {
       "kind": "api",
       "key": "listReleases",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaDelivery",
       "milestone": "",
       "notes": "Releases"
     },
     {
       "kind": "api",
       "key": "listRequestHistory",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaActivity",
       "milestone": "",
       "notes": "Request History"
     },
     {
       "kind": "api",
       "key": "listRunbookExecutions",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaDelivery",
       "milestone": "",
       "notes": "Runbooks"
     },
     {
       "kind": "api",
       "key": "listRunbooks",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaDelivery",
       "milestone": "",
       "notes": "Runbooks"
     },
     {
       "kind": "api",
       "key": "listSignals",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaActivity",
       "milestone": "",
       "notes": "Signals"
     },
     {
       "kind": "api",
       "key": "listSkills",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaConfiguration",
       "milestone": "",
       "notes": "Skills directory"
     },
     {
       "kind": "api",
       "key": "listStageOutcomes",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaActivity",
       "milestone": "",
       "notes": "Stage outcomes and failure-cause rules"
     },
     {
       "kind": "api",
       "key": "listStorageHosts",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaFleetActions",
       "milestone": "",
       "notes": "Fleet Actions"
     },
     {
       "kind": "api",
       "key": "listTenants",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "",
       "notes": "Tenants (admin)"
     },
     {
       "kind": "api",
       "key": "listUsers",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "",
       "notes": "Users (admin)"
     },
     {
       "kind": "api",
       "key": "listVesselCleanupResources",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaFleet",
       "milestone": "",
       "notes": "Vessels"
     },
     {
       "kind": "api",
       "key": "listVesselDependencies",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaActivity",
       "milestone": "",
       "notes": "Vessel Health"
     },
     {
       "kind": "api",
       "key": "listVesselReservations",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaMissions",
       "milestone": "",
       "notes": "Missions"
     },
     {
       "kind": "api",
       "key": "listVessels",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaFleet",
       "milestone": "",
       "notes": "Vessels"
     },
     {
       "kind": "api",
       "key": "listVoyages",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaVoyages",
       "milestone": "",
       "notes": "Voyages"
     },
     {
       "kind": "api",
       "key": "listWorkflowProfiles",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaConfiguration",
       "milestone": "",
       "notes": "Workflow Profiles"
     },
     {
       "kind": "api",
       "key": "listWorkspaceActiveMissions",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "command:armada.vessel.openWorkspace",
       "milestone": "",
-      "notes": "Workspace"
+      "notes": "Workspace; the same records through listAllWorkspaceActiveMissions"
     },
     {
       "kind": "api",
       "key": "listWorkspaceDirectory",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "command:armada.vessel.openWorkspace",
       "milestone": "",
       "notes": "Workspace"
     },
     {
       "kind": "api",
       "key": "logoutProxy",
-      "status": "planned",
+      "status": "not-applicable",
       "surface": "",
       "milestone": "",
-      "notes": "Auth"
+      "notes": "Armada.Proxy portal sessions; the extension connects to the Admiral directly, not through the proxy portal"
     },
     {
       "kind": "api",
       "key": "lookupTenants",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "command:armada.connect",
       "milestone": "",
       "notes": "Auth"
     },
     {
       "kind": "api",
       "key": "markAskThreadRead",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaAsk",
       "milestone": "",
       "notes": "Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md)"
     },
     {
       "kind": "api",
       "key": "markAskThreadUnread",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaAsk",
       "milestone": "",
       "notes": "Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md)"
     },
     {
       "kind": "api",
       "key": "markSignalRead",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaActivity",
       "milestone": "",
       "notes": "Signals"
     },
     {
       "kind": "api",
       "key": "mergeVesselBranch",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaFleet",
       "milestone": "",
       "notes": "Vessels"
     },
     {
       "kind": "api",
       "key": "migrateBlackBoxStorage",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaMissions",
       "milestone": "",
       "notes": "Missions"
     },
     {
       "kind": "api",
       "key": "openWorkspaceTerminal",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "command:armada.vessel.openWorkspace",
       "milestone": "",
       "notes": "Workspace"
     },
     {
       "kind": "api",
       "key": "pinBlackBox",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaMissions",
       "milestone": "",
       "notes": "Missions"
     },
     {
       "kind": "api",
       "key": "previewCaptainSelection",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "",
       "notes": "Battery packs"
     },
@@ -3994,176 +3994,176 @@
     {
       "kind": "api",
       "key": "previewPersonaPrompt",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaConfiguration",
       "milestone": "",
       "notes": "Project profiles"
     },
     {
       "kind": "api",
       "key": "previewWorkflowProfileForVessel",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaConfiguration",
       "milestone": "",
       "notes": "Workflow Profiles"
     },
     {
       "kind": "api",
       "key": "processAllMergeQueue",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaMergeQueue",
       "milestone": "",
       "notes": "Merge Queue"
     },
     {
       "kind": "api",
       "key": "processMergeEntry",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaMergeQueue",
       "milestone": "",
       "notes": "Merge Queue"
     },
     {
       "kind": "api",
       "key": "purgeBlackBox",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaMissions",
       "milestone": "",
       "notes": "Missions"
     },
     {
       "kind": "api",
       "key": "purgeMission",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaMissions",
       "milestone": "",
       "notes": "Missions"
     },
     {
       "kind": "api",
       "key": "purgeVoyage",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaVoyages",
       "milestone": "",
       "notes": "Voyages"
     },
     {
       "kind": "api",
       "key": "pushVesselBranch",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaFleet",
       "milestone": "",
       "notes": "Vessels"
     },
     {
       "kind": "api",
       "key": "readBatteryPackFile",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "",
       "notes": "Battery packs"
     },
     {
       "kind": "api",
       "key": "readBlackBoxObject",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaMissions",
       "milestone": "",
       "notes": "Missions"
     },
     {
       "kind": "api",
       "key": "reanalyzeBlackBox",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaMissions",
       "milestone": "",
       "notes": "Missions"
     },
     {
       "kind": "api",
       "key": "rebuildServer",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "",
       "notes": "Server"
     },
     {
       "kind": "api",
       "key": "recallCaptain",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaCaptains",
       "milestone": "",
       "notes": "Captains"
     },
     {
       "kind": "api",
       "key": "reclassifyStageOutcomes",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaActivity",
       "milestone": "",
       "notes": "Stage outcomes and failure-cause rules"
     },
     {
       "kind": "api",
       "key": "refreshRelease",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaDelivery",
       "milestone": "",
       "notes": "Releases"
     },
     {
       "kind": "api",
       "key": "refreshStorage",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaFleetActions",
       "milestone": "",
       "notes": "Fleet Actions"
     },
     {
       "kind": "api",
       "key": "rejectAskProposal",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaAsk",
       "milestone": "",
       "notes": "Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md)"
     },
     {
       "kind": "api",
       "key": "renameWorkspaceEntry",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "command:armada.vessel.openWorkspace",
       "milestone": "",
       "notes": "Workspace"
     },
     {
       "kind": "api",
       "key": "reorderBacklog",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaBacklog",
       "milestone": "",
       "notes": "Objectives"
     },
     {
       "kind": "api",
       "key": "reorderObjectives",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaBacklog",
       "milestone": "",
-      "notes": "Objectives"
+      "notes": "Objectives; objectives and backlog items are the same records (reorderBacklog)"
     },
     {
       "kind": "api",
       "key": "resetPromptTemplate",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaConfiguration",
       "milestone": "",
       "notes": "Prompt Templates"
     },
     {
       "kind": "api",
       "key": "resetServer",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "",
       "notes": "Server"
     },
@@ -4178,104 +4178,104 @@
     {
       "kind": "api",
       "key": "resolveProjectProfileForVessel",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaConfiguration",
       "milestone": "",
       "notes": "Project profiles"
     },
     {
       "kind": "api",
       "key": "resolveWorkflowProfile",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaConfiguration",
       "milestone": "",
       "notes": "Workflow Profiles"
     },
     {
       "kind": "api",
       "key": "restartCaptain",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaActivity",
       "milestone": "",
       "notes": "Vessel Health"
     },
     {
       "kind": "api",
       "key": "restartMission",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaMissions",
       "milestone": "",
       "notes": "Missions"
     },
     {
       "kind": "api",
       "key": "restartServer",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "",
       "notes": "Server"
     },
     {
       "kind": "api",
       "key": "restoreBackup",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "command:armada.backup.download",
       "milestone": "",
       "notes": "Backup / Restore"
     },
     {
       "kind": "api",
       "key": "retryCheckRun",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaDelivery",
       "milestone": "",
       "notes": "Check Runs"
     },
     {
       "kind": "api",
       "key": "retryMissionLanding",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaMissions",
       "milestone": "",
       "notes": "Missions"
     },
     {
       "kind": "api",
       "key": "rollbackDeployment",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaDelivery",
       "milestone": "",
       "notes": "Deployments"
     },
     {
       "kind": "api",
       "key": "rollbackServer",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "",
       "notes": "Server"
     },
     {
       "kind": "api",
       "key": "runAdHocFleetAction",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaFleetActions",
       "milestone": "",
       "notes": "Fleet Actions"
     },
     {
       "kind": "api",
       "key": "runAskQuickAction",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaAsk",
       "milestone": "",
       "notes": "Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md)"
     },
     {
       "kind": "api",
       "key": "runBlackBoxGc",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaMissions",
       "milestone": "",
       "notes": "Missions"
     },
@@ -4290,1416 +4290,1416 @@
     {
       "kind": "api",
       "key": "runCheck",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaDelivery",
       "milestone": "",
       "notes": "Check Runs"
     },
     {
       "kind": "api",
       "key": "runFleetAction",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaFleetActions",
       "milestone": "",
       "notes": "Fleet Actions"
     },
     {
       "kind": "api",
       "key": "runVesselCleanup",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaFleet",
       "milestone": "",
       "notes": "Vessels"
     },
     {
       "kind": "api",
       "key": "saveWorkspaceFile",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "command:armada.vessel.openWorkspace",
       "milestone": "",
       "notes": "Workspace"
     },
     {
       "kind": "api",
       "key": "searchBlackBox",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaMissions",
       "milestone": "",
       "notes": "Missions"
     },
     {
       "kind": "api",
       "key": "searchWorkspace",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "command:armada.vessel.openWorkspace",
       "milestone": "",
       "notes": "Workspace"
     },
     {
       "kind": "api",
       "key": "sendAskMessage",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaAsk",
       "milestone": "",
       "notes": "Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md)"
     },
     {
       "kind": "api",
       "key": "sendObjectiveRefinementMessage",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaBacklog",
       "milestone": "",
       "notes": "Objectives"
     },
     {
       "kind": "api",
       "key": "sendPlanningSessionMessage",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "command:armada.planning.new",
       "milestone": "",
       "notes": "Planning Sessions"
     },
     {
       "kind": "api",
       "key": "sendSignal",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaActivity",
       "milestone": "",
       "notes": "Signals"
     },
     {
       "kind": "api",
       "key": "setAskThreadCliPermissionPolicy",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaNeedsYou",
       "milestone": "",
       "notes": "CLI tool permissions"
     },
     {
       "kind": "api",
       "key": "setCaptainCliPermissionPolicy",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaNeedsYou",
       "milestone": "",
       "notes": "CLI tool permissions"
     },
     {
       "kind": "api",
       "key": "setVesselHealthOverride",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaActivity",
       "milestone": "",
       "notes": "Vessel Health"
     },
     {
       "kind": "api",
       "key": "startRunbookExecution",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaDelivery",
       "milestone": "",
       "notes": "Runbooks"
     },
     {
       "kind": "api",
       "key": "stopAllCaptains",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaCaptains",
       "milestone": "",
       "notes": "Captains"
     },
     {
       "kind": "api",
       "key": "stopCaptain",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaCaptains",
       "milestone": "",
       "notes": "Captains"
     },
     {
       "kind": "api",
       "key": "stopHarborJob",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "",
       "notes": "Harbors (host runners)"
     },
     {
       "kind": "api",
       "key": "stopObjectiveRefinementSession",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaBacklog",
       "milestone": "",
       "notes": "Objectives"
     },
     {
       "kind": "api",
       "key": "stopPlanningSession",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "command:armada.planning.new",
       "milestone": "",
       "notes": "Planning Sessions"
     },
     {
       "kind": "api",
       "key": "stopPlanningTurn",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "command:armada.planning.new",
       "milestone": "",
       "notes": "Planning Sessions"
     },
     {
       "kind": "api",
       "key": "stopServer",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "",
       "notes": "Server"
     },
     {
       "kind": "api",
       "key": "summarizeAskThread",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaAsk",
       "milestone": "",
       "notes": "Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md)"
     },
     {
       "kind": "api",
       "key": "summarizeObjectiveRefinementSession",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaBacklog",
       "milestone": "",
       "notes": "Objectives"
     },
     {
       "kind": "api",
       "key": "summarizePlanningSession",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "command:armada.planning.new",
       "milestone": "",
       "notes": "Planning Sessions"
     },
     {
       "kind": "api",
       "key": "syncGitHubActions",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaDelivery",
       "milestone": "",
       "notes": "Deployments"
     },
     {
       "kind": "api",
       "key": "transitionMission",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaMissions",
       "milestone": "",
       "notes": "Missions"
     },
     {
       "kind": "api",
       "key": "unpinBlackBox",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaMissions",
       "milestone": "",
       "notes": "Missions"
     },
     {
       "kind": "api",
       "key": "unquarantineCaptain",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaCaptains",
       "milestone": "",
       "notes": "Captains"
     },
     {
       "kind": "api",
       "key": "updateAskThread",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaAsk",
       "milestone": "",
       "notes": "Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md)"
     },
     {
       "kind": "api",
       "key": "updateBacklogItem",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaBacklog",
       "milestone": "",
       "notes": "Objectives"
     },
     {
       "kind": "api",
       "key": "updateBatteryPackManifest",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "",
       "notes": "Battery packs"
     },
     {
       "kind": "api",
       "key": "updateCaptain",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaCaptains",
       "milestone": "",
       "notes": "Captains"
     },
     {
       "kind": "api",
       "key": "updateCliPermissionRule",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaNeedsYou",
       "milestone": "",
       "notes": "CLI tool permissions"
     },
     {
       "kind": "api",
       "key": "updateCredential",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "",
       "notes": "Credentials (admin)"
     },
     {
       "kind": "api",
       "key": "updateDeployment",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaDelivery",
       "milestone": "",
       "notes": "Deployments"
     },
     {
       "kind": "api",
       "key": "updateEnvironment",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaDelivery",
       "milestone": "",
       "notes": "Environments"
     },
     {
       "kind": "api",
       "key": "updateFailureCauseRule",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaActivity",
       "milestone": "",
       "notes": "Stage outcomes and failure-cause rules"
     },
     {
       "kind": "api",
       "key": "updateFleet",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaFleet",
       "milestone": "",
       "notes": "Fleets"
     },
     {
       "kind": "api",
       "key": "updateFleetAction",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaFleetActions",
       "milestone": "",
       "notes": "Fleet Actions"
     },
     {
       "kind": "api",
       "key": "updateHarbor",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "",
       "notes": "Harbors (host runners)"
     },
     {
       "kind": "api",
       "key": "updateIncident",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaDelivery",
       "milestone": "",
       "notes": "Incidents"
     },
     {
       "kind": "api",
       "key": "updateMemory",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaConfiguration",
       "milestone": "",
       "notes": "Memories"
     },
     {
       "kind": "api",
       "key": "updateMission",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaMissions",
       "milestone": "",
       "notes": "Missions"
     },
     {
       "kind": "api",
       "key": "updateModelEndpoint",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaConfiguration",
       "milestone": "",
       "notes": "Model endpoints (embedding/inference)"
     },
     {
       "kind": "api",
       "key": "updateObjective",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaBacklog",
       "milestone": "",
-      "notes": "Objectives"
+      "notes": "Objectives; objectives and backlog items are the same records (updateBacklogItem)"
     },
     {
       "kind": "api",
       "key": "updatePersona",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaConfiguration",
       "milestone": "",
       "notes": "Personas"
     },
     {
       "kind": "api",
       "key": "updatePipeline",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaConfiguration",
       "milestone": "",
       "notes": "Pipelines"
     },
     {
       "kind": "api",
       "key": "updatePlaybook",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaConfiguration",
       "milestone": "",
       "notes": "Playbooks"
     },
     {
       "kind": "api",
       "key": "updateProjectProfile",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaConfiguration",
       "milestone": "",
       "notes": "Project profiles"
     },
     {
       "kind": "api",
       "key": "updatePromptTemplate",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaConfiguration",
       "milestone": "",
       "notes": "Prompt Templates"
     },
     {
       "kind": "api",
       "key": "updateRelease",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaDelivery",
       "milestone": "",
       "notes": "Releases"
     },
     {
       "kind": "api",
       "key": "updateRunbook",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaDelivery",
       "milestone": "",
       "notes": "Runbooks"
     },
     {
       "kind": "api",
       "key": "updateRunbookExecution",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaDelivery",
       "milestone": "",
       "notes": "Runbooks"
     },
     {
       "kind": "api",
       "key": "updateSettings",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "",
       "notes": "Settings"
     },
     {
       "kind": "api",
       "key": "updateSkill",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaConfiguration",
       "milestone": "",
       "notes": "Skills directory"
     },
     {
       "kind": "api",
       "key": "updateTenant",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "",
       "notes": "Tenants (admin)"
     },
     {
       "kind": "api",
       "key": "updateUser",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "",
       "notes": "Users (admin)"
     },
     {
       "kind": "api",
       "key": "updateVessel",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaFleet",
       "milestone": "",
       "notes": "Vessels"
     },
     {
       "kind": "api",
       "key": "updateVesselContext",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaFleet",
       "milestone": "",
       "notes": "Vessels"
     },
     {
       "kind": "api",
       "key": "updateWorkflowProfile",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaConfiguration",
       "milestone": "",
       "notes": "Workflow Profiles"
     },
     {
       "kind": "api",
       "key": "validateBatteryPack",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "",
       "notes": "Battery packs"
     },
     {
       "kind": "api",
       "key": "validateModelEndpoint",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaConfiguration",
       "milestone": "",
       "notes": "Model endpoints (embedding/inference)"
     },
     {
       "kind": "api",
       "key": "validateProjectProfile",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaConfiguration",
       "milestone": "",
       "notes": "Project profiles"
     },
     {
       "kind": "api",
       "key": "validateWorkflowProfile",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaConfiguration",
       "milestone": "",
       "notes": "Workflow Profiles"
     },
     {
       "kind": "api",
       "key": "verifyDeployment",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaDelivery",
       "milestone": "",
       "notes": "Deployments"
     },
     {
       "kind": "api",
       "key": "whoami",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "command:armada.connect",
       "milestone": "",
       "notes": "Auth"
     },
     {
       "kind": "api",
       "key": "writeBatteryPackFile",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "",
       "notes": "Battery packs"
     },
     {
       "kind": "event",
       "key": "ask.chunk",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaAsk",
       "milestone": "V2",
       "notes": ""
     },
     {
       "kind": "event",
       "key": "ask.message",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaAsk",
       "milestone": "V2",
       "notes": ""
     },
     {
       "kind": "event",
       "key": "ask.proposal",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaAsk",
       "milestone": "V2",
       "notes": ""
     },
     {
       "kind": "event",
       "key": "ask.thinking",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaAsk",
       "milestone": "V2",
       "notes": ""
     },
     {
       "kind": "event",
       "key": "ask.thread",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaAsk",
       "milestone": "V2",
       "notes": ""
     },
     {
       "kind": "event",
       "key": "ask.tool",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaAsk",
       "milestone": "V2",
       "notes": ""
     },
     {
       "kind": "event",
       "key": "ask.turn",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaAsk",
       "milestone": "V2",
       "notes": ""
     },
     {
       "kind": "event",
       "key": "ask.work",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaAsk",
       "milestone": "V2",
       "notes": ""
     },
     {
       "kind": "event",
       "key": "captain-selection.changed",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaCaptains",
       "milestone": "V1",
       "notes": ""
     },
     {
       "kind": "event",
       "key": "captain.changed",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaCaptains",
       "milestone": "V1",
       "notes": ""
     },
     {
       "kind": "event",
       "key": "deployment.changed",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaDelivery",
       "milestone": "V1",
       "notes": ""
     },
     {
       "kind": "event",
       "key": "incident.changed",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaDelivery",
       "milestone": "V1",
       "notes": ""
     },
     {
       "kind": "event",
       "key": "mission.changed",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaMissions",
       "milestone": "V1",
       "notes": ""
     },
     {
       "kind": "event",
       "key": "objective-refinement-session.applied",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaBacklog",
       "milestone": "V2",
       "notes": ""
     },
     {
       "kind": "event",
       "key": "objective-refinement-session.changed",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaBacklog",
       "milestone": "V2",
       "notes": ""
     },
     {
       "kind": "event",
       "key": "objective-refinement-session.deleted",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaBacklog",
       "milestone": "V2",
       "notes": ""
     },
     {
       "kind": "event",
       "key": "objective-refinement-session.message.created",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaBacklog",
       "milestone": "V2",
       "notes": ""
     },
     {
       "kind": "event",
       "key": "objective-refinement-session.message.updated",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaBacklog",
       "milestone": "V2",
       "notes": ""
     },
     {
       "kind": "event",
       "key": "objective-refinement-session.summary.created",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaBacklog",
       "milestone": "V2",
       "notes": ""
     },
     {
       "kind": "event",
       "key": "objective.changed",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaBacklog",
       "milestone": "V2",
       "notes": ""
     },
     {
       "kind": "event",
       "key": "planning-session.changed",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "command:armada.planning.new",
       "milestone": "V2",
       "notes": ""
     },
     {
       "kind": "event",
       "key": "planning-session.deleted",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "command:armada.planning.new",
       "milestone": "V2",
       "notes": ""
     },
     {
       "kind": "event",
       "key": "planning-session.dispatch.created",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "command:armada.planning.new",
       "milestone": "V2",
       "notes": ""
     },
     {
       "kind": "event",
       "key": "planning-session.message.created",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "command:armada.planning.new",
       "milestone": "V2",
       "notes": ""
     },
     {
       "kind": "event",
       "key": "planning-session.message.updated",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "command:armada.planning.new",
       "milestone": "V2",
       "notes": ""
     },
     {
       "kind": "event",
       "key": "planning-session.summary.created",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "command:armada.planning.new",
       "milestone": "V2",
       "notes": ""
     },
     {
       "kind": "event",
       "key": "planning-session.thinking",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "command:armada.planning.new",
       "milestone": "V2",
       "notes": ""
     },
     {
       "kind": "event",
       "key": "planning-session.tool",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "command:armada.planning.new",
       "milestone": "V2",
       "notes": ""
     },
     {
       "kind": "event",
       "key": "voyage.changed",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaVoyages",
       "milestone": "V1",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.admiralPort",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V6",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.ask",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V6",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.ask.historyTurns",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V6",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.ask.narrateMilestones",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V6",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.ask.narrationTimeoutSeconds",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V6",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.ask.proposalExpiryMinutes",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V6",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.ask.reportResultsOnCompletion",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V6",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.ask.trackerIntervalSeconds",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V6",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.ask.turnTimeoutMinutes",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V6",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.blackBox",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V6",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.blockDependentsOfFailedStages",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V6",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.dataDirectory",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V6",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.databasePath",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V6",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.docksDirectory",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V6",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.fleetActions.defaultTimeoutSeconds",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V6",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.fleetActions.maxConcurrency",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V6",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.fleetActions.maxOutputBytes",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V6",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.fleetActions.runRetentionDays",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V6",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.heartbeatIntervalSeconds",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V6",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.idleCaptainTimeoutSeconds",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V6",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.import.allowedRoots",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V6",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.import.categorizationTimeoutMinutes",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V6",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.import.excludedDirectoryNames",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V6",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.import.inlineBatchLimit",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V6",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.import.maxDepth",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V6",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.landingMode",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V6",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.logDirectory",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V6",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.maxCaptains",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V6",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.mcpPort",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V6",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.permissions",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V6",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.permissions.allowOwnerApproval",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V6",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.permissions.askDefaultPolicy",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V6",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.permissions.missionDefaultPolicy",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V6",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.permissions.promptTimeoutSeconds",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V6",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.permissions.timeoutDecision",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V6",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.planningSessionAbandonmentTimeoutMinutes",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V6",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.planningSessionInactivityTimeoutMinutes",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V6",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.planningSessionRetentionDays",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V6",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.rebuildSlotRetentionCount",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V6",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.remoteControl.allowInvalidCertificates",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V6",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.remoteControl.connectTimeoutSeconds",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V6",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.remoteControl.enabled",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V6",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.remoteControl.enrollmentToken",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V6",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.remoteControl.heartbeatIntervalSeconds",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V6",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.remoteControl.instanceId",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V6",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.remoteControl.password",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V6",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.remoteControl.reconnectBaseDelaySeconds",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V6",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.remoteControl.reconnectMaxDelaySeconds",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V6",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.remoteControl.tunnelUrl",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V6",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.reposDirectory",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V6",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.repositoryHealth.dependencyCommandTimeoutSeconds",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V6",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.repositoryHealth.dependencyMaxAgeHours",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V6",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.repositoryHealth.fetchBeforeEvaluate",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V6",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.repositoryHealth.intervalMinutes",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V6",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.repositoryHealth.maxConcurrency",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V6",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.repositoryHealth.missionWindowDays",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V6",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.repositoryHealth.scoredCriteria",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V6",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.repositoryHealth.staleBranchDays",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V6",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.repositoryHealth.thresholds.behindFail",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V6",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.repositoryHealth.thresholds.behindWarn",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V6",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.repositoryHealth.thresholds.missionFailureFail",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V6",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.repositoryHealth.thresholds.missionFailureWarn",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V6",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.repositoryHealth.thresholds.staleBranchFail",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V6",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.repositoryHealth.thresholds.staleBranchWarn",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V6",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.requireHarborForLaunch",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V6",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.retention",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V6",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.retention.askThreadArchiveAfterDays",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V6",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.retention.askThreadDeleteAfterDays",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V6",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.retention.cliPermissionRequestRetentionDays",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V6",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.retention.importBatchRetentionDays",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V6",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.retention.jobRetentionDays",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V6",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.selfVesselId",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V6",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.stageCheckTimeoutMinutes",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V6",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.stallThresholdMinutes",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V6",
       "notes": ""
     },
     {
       "kind": "tui",
       "key": "api:tui:GetI18nCatalogAsync",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "setting:armada.language",
       "milestone": "",
       "notes": "TUI-only api: TUI-only client call"
     },
     {
       "kind": "tui",
       "key": "api:tui:GetOpenApiDocumentAsync",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "command:armada.api.call",
       "milestone": "",
       "notes": "TUI-only api: TUI-only client call"
     },
     {
       "kind": "tui",
       "key": "api:tui:SendRawAsync",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "command:armada.api.call",
       "milestone": "",
       "notes": "TUI-only api: TUI-only client call"
     },
     {
       "kind": "tui",
       "key": "route:/approvals",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaNeedsYou",
       "milestone": "V1",
       "notes": "TUI-only route: TUI-only route: Approvals center (Ask proposals, reviews, deployments, landings, stalled captains)"
     },
     {
       "kind": "tui",
       "key": "route:/setup",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "command:armada.connect",
       "milestone": "V6",
       "notes": "TUI-only route: TUI-only route"
     },
     {
       "kind": "harbor",
       "key": "menu:About",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "command:armada.about",
       "milestone": "V7",
       "notes": ""
     },
     {
       "kind": "harbor",
       "key": "menu:Activity",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V7",
       "notes": ""
     },
@@ -5746,8 +5746,8 @@
     {
       "kind": "harbor",
       "key": "menu:Connect",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "command:armada.harbor.start",
       "milestone": "V7",
       "notes": ""
     },
@@ -5762,24 +5762,24 @@
     {
       "kind": "harbor",
       "key": "menu:CopyDiagnostics",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "command:armada.copyDiagnostics",
       "milestone": "V7",
       "notes": ""
     },
     {
       "kind": "harbor",
       "key": "menu:CopyHarborId",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "command:armada.harbor.copyId",
       "milestone": "V7",
       "notes": ""
     },
     {
       "kind": "harbor",
       "key": "menu:CopyMcpUrl",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "command:armada.copyMcpUrl",
       "milestone": "V7",
       "notes": ""
     },
@@ -5794,24 +5794,24 @@
     {
       "kind": "harbor",
       "key": "menu:Disconnect",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "command:armada.harbor.stop",
       "milestone": "V7",
       "notes": ""
     },
     {
       "kind": "harbor",
       "key": "menu:Documentation",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "command:armada.docs",
       "milestone": "V7",
       "notes": ""
     },
     {
       "kind": "harbor",
       "key": "menu:Logs",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "command:armada.harbor.openLogs",
       "milestone": "V7",
       "notes": ""
     },
@@ -5826,16 +5826,16 @@
     {
       "kind": "harbor",
       "key": "menu:OpenDashboard",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "command:armada.openDashboard",
       "milestone": "V7",
       "notes": ""
     },
     {
       "kind": "harbor",
       "key": "menu:OpenHarborFolder",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "command:armada.harbor.openFolder",
       "milestone": "V7",
       "notes": ""
     },
@@ -5858,8 +5858,8 @@
     {
       "kind": "harbor",
       "key": "menu:Reconnect",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "command:armada.harbor.restart",
       "milestone": "V7",
       "notes": ""
     },
@@ -5874,8 +5874,8 @@
     {
       "kind": "harbor",
       "key": "menu:ReportIssue",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "command:armada.reportIssue",
       "milestone": "V7",
       "notes": ""
     },
@@ -5890,24 +5890,24 @@
     {
       "kind": "harbor",
       "key": "menu:Settings",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "command:armada.openSettings",
       "milestone": "V7",
       "notes": ""
     },
     {
       "kind": "harbor",
       "key": "menu:ShowWindow",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "command:armada.harbor.show",
       "milestone": "V7",
       "notes": ""
     },
     {
       "kind": "harbor",
       "key": "menu:Status",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V7",
       "notes": ""
     },
@@ -5930,8 +5930,8 @@
     {
       "kind": "harbor",
       "key": "window:AboutWindow",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "command:armada.about",
       "milestone": "V7",
       "notes": ""
     },
@@ -5946,104 +5946,104 @@
     {
       "kind": "harbor",
       "key": "window:MainWindow",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "command:armada.harbor.show",
       "milestone": "V7",
       "notes": ""
     },
     {
       "kind": "harbor",
       "key": "window:RestoreVersionDialog",
-      "status": "planned",
+      "status": "not-applicable",
       "surface": "",
       "milestone": "V7",
-      "notes": ""
+      "notes": "Harbor's own updater rollback; VS Code restores an earlier extension through Install Another Version, and Harbor's versions are restored in Harbor"
     },
     {
       "kind": "harbor",
       "key": "window:SettingsWindow",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "command:armada.openSettings",
       "milestone": "V7",
       "notes": ""
     },
     {
       "kind": "harbor",
       "key": "window:StatusWindow",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V7",
       "notes": ""
     },
     {
       "kind": "harbor",
       "key": "window:UrlProbeDialog",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "command:armada.connect",
       "milestone": "V7",
       "notes": ""
     },
     {
       "kind": "cli",
       "key": "config init",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "command:armada.openSettings",
       "milestone": "V6",
       "notes": ""
     },
     {
       "kind": "cli",
       "key": "doctor",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V6",
       "notes": ""
     },
     {
       "kind": "cli",
       "key": "go",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "command:armada.dispatch",
       "milestone": "V1",
       "notes": ""
     },
     {
       "kind": "cli",
       "key": "mcp install",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "command:armada.mcp.install",
       "milestone": "V6",
       "notes": ""
     },
     {
       "kind": "cli",
       "key": "profile",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "command:armada.connect",
       "milestone": "V6",
       "notes": ""
     },
     {
       "kind": "cli",
       "key": "reset",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V6",
-      "notes": ""
+      "notes": "Reset Admiral on the Admiral record (System view), behind a typed confirmation"
     },
     {
       "kind": "cli",
       "key": "server",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaSystem",
       "milestone": "V6",
       "notes": ""
     },
     {
       "kind": "cli",
       "key": "watch",
-      "status": "planned",
-      "surface": "",
+      "status": "implemented",
+      "surface": "view:armadaMissions",
       "milestone": "V1",
       "notes": ""
     },

@@ -14,41 +14,62 @@ chat. The extension is being built out to full parity with the dashboard, the TU
 
 ## The Armada view container
 
-The Armada icon in the activity bar opens:
+The Armada icon in the activity bar opens these views. They update live from the Admiral's event stream, and a status
+bar item shows the active mission count and what needs you.
 
-- **Needs You**: reviews waiting for approval, failed work, stalled captains, CLI permission requests and alerts. A
-  review has Approve and Deny inline; a permission request is answered from a quick pick; the rest open their page.
-- **Missions**: Needs Review, Active, Queued and Recent, with status icons, the vessel and the running time. Click a
-  mission for its page; right-click to view the log or changes, approve or deny a review, cancel, restart, open the
-  black box or copy the id. **+** dispatches a mission.
-- **Voyages**: active voyages with their progress and missions, and recent ones. A rocket button dispatches a voyage.
-- **Captains**: each captain's state, runtime and model, with the missions it is working; view the log, stop or
-  restart it.
-- **Fleet**: fleets and their vessels; dispatch to a vessel, or open a vessel's local folder.
-- **Merge Queue**: queued and recent landings; process or remove an entry, or process the whole queue.
-- **Failures**: the black box tree (below).
-- **Backlog**, **Fleet Actions** (actions, with Run on Vessels, and runs), **Delivery** (releases, deployments with
-  approve, deny, verify and roll back, environments, incidents, runbooks with Start Execution, checks with Retry),
-  **Configuration** (personas, pipelines, playbooks, prompt templates with Reset to Default, workflow and project
-  profiles, skills, model endpoints), **Activity** (events, signals) and **System** (Harbors with enable and disable,
-  docks, CLI permission rules, tenants, users, credentials, battery packs): expand a kind to list its records. A record
-  opens as a page with its fields and actions; **+** creates one, and Edit and Delete work from the page or the
-  context menu, through native forms with confirmations. Vessels, fleets and captains are created and edited the
-  same way from the Fleet and Captains views.
-- **Ask Armada** (at the top): a chat with the Ask captain, as on the dashboard's Ask page, with streaming replies,
-  tool calls, and cards to approve or reject the actions it proposes and the CLI tools it asks to run. Earlier
-  conversations reopen from its history button. **Ask Armada About This Failure** asks here.
+- **Ask Armada**: a chat with the Ask captain, as on the dashboard's Ask page: streaming replies, tool calls, and cards
+  to approve or reject the actions it proposes and the CLI tools it asks to run. Its buttons start a new
+  conversation, reopen or delete an earlier one, and run quick actions (summarize, rename, mark unread, set the CLI
+  tool policy, show the work the conversation tracks, and the Admiral's own quick actions).
+- **Needs You**: reviews waiting for approval, failures, stalled captains, CLI permission requests and model alerts.
+  Reviews have Approve and Deny inline; permission requests and model alerts are answered from a quick pick. New items
+  also pop up as notifications (`armada.notifications.needsYou`). The home button opens the **Armada Overview**.
+- **Missions**: Needs Review, Active, Queued and Recent. A mission opens as a page (fields, brief or failure, the live
+  end of its log, its actions); right-click to view the log or changes, approve or deny, cancel, restart, open the
+  black box, or **More...** (instructions, landing preview, pull request with its reviews, comments and checks, what it
+  waits on, captain selection and its decision, recovery, brief lint, retry landing, queue for landing, edit, purge).
+  **+** dispatches a mission.
+- **Voyages**: active and recent voyages with their missions; a voyage page has its progress and **More...** (mission
+  tree, status, failure cascade, black box brief, purge). The rocket dispatches a voyage.
+- **Captains**: state, runtime and model, with the missions each works; log, stop, restart, recall, release from
+  quarantine, send a signal, set the CLI tool policy, evaluate, show tools, capture usage, chat with the captain,
+  create and edit. **Stop All Captains** is in the view's menu.
+- **Fleet**: fleets and vessels. A vessel opens as a page with its settings to edit, project context, branches, git
+  status, commits, readiness, health, concurrency, reservations, cleanup, push and merge a branch, run a check, sync
+  GitHub Actions runs and the effective workflow and project profiles. **Open Vessel Workspace** adds the vessel's
+  checkout to the Explorer as a VS Code file system (browse, open, edit and save, create, rename and delete files, even
+  on a remote Admiral or Harbor); search its files, run a command in it, see its uncommitted changes, or open a
+  terminal on its host. **Import Vessels...** finds repositories in a folder (on the Admiral's machine for a remote
+  Admiral) and imports them.
+- **Merge Queue**: process, remove or delete entries, or process the whole queue.
+- **Failures**: the black box tree (below), with search and **More...** on each entry (download the bundle, nearby
+  successes, captured objects, export a test fixture, apply a recommendation, pin, analyze again, delete).
+- **Backlog & Planning**: backlog items (create, edit, refine with a captain, plan with a captain, reorder, import from
+  GitHub) and planning sessions. A planning or refinement session is a chat with a captain in an editor tab that ends
+  in **Dispatch Plan...** (a voyage) or **Apply Refinement...** (the backlog item).
+- **Fleet Actions**: actions (create, edit, run on vessels, run an ad-hoc command) and runs (cancel, targets and their
+  output).
+- **Delivery**: releases, deployments (approve, deny, verify, roll back), environments, incidents, runbooks (start) and
+  their executions, and checks (retry, import).
+- **Configuration**: personas, pipelines, playbooks, prompt templates (reset to default), workflow and project profiles
+  (validate), skills, model endpoints (validate, evaluate, duplicate, health), memories, failure cause rules and Mux
+  endpoints.
+- **Activity**: all activity, events, signals, background jobs, request history, evaluations, vessel health (with
+  overrides), stage outcomes, failure fingerprints and their trends, recovery statistics, token and captain usage, and
+  vessel import batches. **Show Activity Charts** draws missions per day, tokens per day and API requests per hour.
+- **System**: the Admiral (restart, rebuild, roll back, stop, reset), server settings, diagnostics, storage and storage
+  hosts, black box retention (garbage collection, purge, backfill, storage migration), Harbors (enable, disable, jobs,
+  metrics), docks, CLI permission rules, tenants, users, credentials and battery packs. Its menu also has backup and
+  restore, change password, the API explorer (**Call the Armada API...**), the local Harbor (start, stop, restart,
+  show, log, folder, id), copy the MCP URL or diagnostics, **Install Armada MCP for Agents...**, documentation and
+  **About Armada**.
 
-All of them update live from the Admiral's event stream. A status bar item shows the active mission count and what
-needs you.
+Every record opens as a page drawn with the VS Code theme; **+** creates one and Edit and Delete work from the page or
+the context menu (several at once when you select several), through native forms with confirmations. Logs and changes
+open as read-only documents with search and diff highlighting. Labels follow VS Code's display language through the
+Admiral's translation catalog (`armada.language`).
 
-**Pages and documents.** A mission, voyage, captain or merge entry opens as a page in an editor tab, drawn with the VS
-Code theme: its status, fields, brief or failure, the live end of the log while it runs, and buttons for its actions.
-Logs (mission and captain) and a mission's changes open as read-only documents (`.log`, `.diff`) with search, folding
-and diff highlighting; an open log follows a running mission. **Dispatch Mission** and **Dispatch Voyage** are forms
-with the open repository's vessel preselected.
-
-While the extension is not connected, both views show what to do: connect, or open the output.
+While the extension is not connected, the views show what to do: connect, or open the output.
 
 ## Connecting
 
@@ -64,7 +85,8 @@ VS Code settings. It looks, in this order, at:
 3. **The TUI's server profiles**: `~/.armada/tui.json`, with each profile's session token from the TUI's credential
    store (the macOS Keychain or libsecret, else `tui-credentials.json`).
 
-Entries for the same Admiral are merged, and every credential found for it is tried in turn. At startup the extension
+Entries for the same Admiral are merged, and every credential found for it is tried in turn. When none works, Connect
+offers to sign in with email and password (the session token is kept in secret storage) or to enter a key. At startup the extension
 connects to the Admiral last picked with **Armada: Connect**, else to the first one that answers and accepts a
 credential.
 

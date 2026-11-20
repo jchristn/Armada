@@ -2,6 +2,8 @@
  * How Armada entities look in VS Code: codicons and theme colors per status, short descriptions. Pure, for tests.
  */
 
+import { t } from '../../i18n';
+
 /** A codicon and an optional theme color id. */
 export interface StatusLook {
   icon: string;
@@ -78,10 +80,10 @@ export function inboxLook(severity: string): StatusLook {
   }
 }
 
-/** "In Progress" for "InProgress", "Pull Request Open" for "PullRequestOpen". */
+/** "In Progress" for "InProgress", "Pull Request Open" for "PullRequestOpen", in the display language. */
 export function humanize(value: string | null | undefined): string {
   if (!value) return '';
-  return value.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/_/g, ' ');
+  return t(value.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/_/g, ' '));
 }
 
 /** Short elapsed time ("12s", "4m", "3h 5m", "2d") between two ISO timestamps (end defaults to now). */

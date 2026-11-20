@@ -15,6 +15,14 @@ import { ResourceRecord, ResourceSpec, rowsOf } from './resourceSpec';
 export interface CatalogDeps {
   /** Multi-select vessel picker; undefined when cancelled. */
   pickVessels(title: string): Promise<string[] | undefined>;
+  /** Single captain picker; undefined when cancelled. */
+  pickCaptain(title: string): Promise<string | undefined>;
+  /** Single vessel picker; undefined when cancelled. */
+  pickVessel(title: string): Promise<string | undefined>;
+  /** Opens a planning session's chat. */
+  openPlanning(sessionId: string): Promise<void>;
+  /** Opens a refinement session's chat. */
+  openRefinement(sessionId: string): Promise<void>;
 }
 
 const page = { pageNumber: 1, pageSize: 1000 };
@@ -46,6 +54,14 @@ export function resourceCatalog(deps: CatalogDeps): ResourceSpec[] {
         { key: 'defaultBranch', label: 'Default branch', type: 'text', value: 'main', required: true },
         { key: 'localPath', label: 'Local path', type: 'text', hint: 'Optional: an existing clone on the Admiral host.' },
       ],
+      actions: [
+        { label: 'Show Git Status', showResult: 'Git status', run: (r) => api.getVesselGitStatus(id(r)) },
+        { label: 'Show Recent Commits', showResult: 'Recent commits', run: (r) => api.getVesselCommits(id(r), { pageSize: 50 } as never) },
+        { label: 'Show Readiness', showResult: 'Readiness', run: (r) => api.getVesselReadiness(id(r)) },
+        { label: 'Show Health', showResult: 'Health', run: (r) => api.getVesselHealth(id(r)) },
+        { label: 'Show Concurrency', showResult: 'Concurrency', run: (r) => api.getVesselConcurrency(id(r)) },
+        { label: 'Show Reservations', showResult: 'Reservations', run: (r) => api.listVesselReservations(id(r), { pageNumber: 1, pageSize: 200 }) },
+      ],
       route: (r) => `/vessels/${id(r)}`,
     },
     {
@@ -75,6 +91,15 @@ export function resourceCatalog(deps: CatalogDeps): ResourceSpec[] {
         { key: 'model', label: 'Model', type: 'text', hint: 'Optional; the runtime default when empty.' },
         { key: 'systemInstructions', label: 'System instructions', type: 'textarea' },
       ],
+      actions: [{
+        label: 'Evaluate (Quick)',
+        confirm: (r) => `Run a quick evaluation of "${str(r, 'name')}"? It sends a few probe prompts to the model.`,
+        run: async (r) => {
+          const run = await api.evaluateCaptain(id(r), 'Quick');
+          void vscode.window.showInformationMessage(`Armada: evaluation of "${str(r, 'name')}" started (see Activity, Evaluations).`);
+          return run;
+        },
+      }],
       route: (r) => `/captains/${id(r)}`,
     },
 
@@ -92,7 +117,40 @@ export function resourceCatalog(deps: CatalogDeps): ResourceSpec[] {
         { key: 'description', label: 'Description', type: 'textarea' },
         { key: 'acceptanceCriteria', label: 'Acceptance criteria', type: 'textarea', kind: 'lines', hint: 'One per line.' },
       ],
+      actions: [
+        {
+          label: 'Refine with a Captain...',
+          run: async (r) => {
+            const captainId = await deps.pickCaptain(`Refine "${str(r, 'title')}" with`);
+            if (!captainId) return undefined;
+            const session = await api.createObjectiveRefinementSession(id(r), { captainId, title: str(r, 'title') });
+            await deps.openRefinement(session.session.id);
+            return session;
+          },
+        },
+        {
+          label: 'Plan with a Captain...',
+          run: async (r) => {
+            const captainId = await deps.pickCaptain(`Plan "${str(r, 'title')}" with`);
+            if (!captainId) return undefined;
+            const vesselId = await deps.pickVessel('Plan on vessel');
+            if (!vesselId) return undefined;
+            const session = await api.createPlanningSession({ captainId, vesselId, title: str(r, 'title'), objectiveId: id(r) });
+            await deps.openPlanning(session.session.id);
+            return session;
+          },
+        },
+      ],
       route: (r) => `/backlog/${id(r)}`,
+    },
+    {
+      key: 'planningSession', label: 'Planning Session', plural: 'Planning Sessions', icon: 'comment-discussion', view: 'backlog',
+      list: async () => rowsOf(await api.listPlanningSessions({ pageNumber: 1, pageSize: 200 } as never)),
+      remove: (i) => api.deletePlanningSession(i),
+      describe: (r) => join(str(r, 'status'), str(r, 'createdUtc').slice(0, 10)),
+      open: (r) => deps.openPlanning(id(r)),
+      createCommand: 'armada.planning.new',
+      route: (r) => `/dispatch?tab=planning&session=${id(r)}`,
     },
 
     // Fleet Actions
@@ -339,7 +397,63 @@ export function resourceCatalog(deps: CatalogDeps): ResourceSpec[] {
       route: (r) => `/model-endpoints/${id(r)}`,
     },
 
+    {
+      key: 'memory', label: 'Memory', plural: 'Memories', icon: 'database', view: 'configuration',
+      list: async () => rowsOf(await api.listMemories({ pageNumber: 1, pageSize: 500 })),
+      get: async (i) => asRecord(await api.getMemory(i)),
+      create: (d) => api.createMemory(d as never),
+      update: (i, d) => api.updateMemory(i, d as never),
+      remove: (i) => api.deleteMemory(i),
+      describe: (r) => join(str(r, 'scope'), str(r, 'category')),
+      createFields: [
+        { key: 'title', label: 'Title', type: 'text', required: true },
+        { key: 'content', label: 'Content', type: 'textarea', required: true },
+      ],
+      route: () => '/configuration?tab=memory',
+    },
+
+    {
+      key: 'failureCauseRule', label: 'Failure Cause Rule', plural: 'Failure Cause Rules', icon: 'law', view: 'configuration',
+      list: async () => rowsOf(await api.listFailureCauseRules(page)),
+      get: async (i) => asRecord(await api.getFailureCauseRule(i)),
+      create: (d) => api.createFailureCauseRule(d as never),
+      update: (i, d) => api.updateFailureCauseRule(i, d as never),
+      remove: (i) => api.deleteFailureCauseRule(i),
+      readOnly: ['isBuiltIn'],
+      describe: (r) => join(`priority ${String(r.priority ?? '')}`, r.enabled === false ? 'disabled' : '', r.isBuiltIn ? 'built in' : ''),
+      createFields: [
+        { key: 'name', label: 'Name', type: 'text', required: true },
+        { key: 'description', label: 'Description', type: 'text' },
+        { key: 'priority', label: 'Priority', type: 'number', value: '100', kind: 'number' },
+        { key: 'match', label: 'Match', type: 'textarea', kind: 'json', value: '{\n  "messageContains": ""\n}', hint: 'JSON: what a failure must look like for the rule to apply.' },
+        { key: 'cause', label: 'Cause', type: 'textarea', kind: 'json', value: '{\n  "category": "Environment",\n  "summary": ""\n}', hint: 'JSON: the cause the rule assigns.' },
+      ],
+      route: () => '/configuration',
+    },
+
     // Activity
+    {
+      key: 'history', label: 'Activity', plural: 'All Activity', icon: 'timeline-open', view: 'activity',
+      list: async () => rowsOf(await api.listHistoryTimeline({ pageNumber: 1, pageSize: 200 } as never)),
+      describe: (r) => join(str(r, 'entityType') || str(r, 'sourceType'), str(r, 'occurredUtc').replace('T', ' ').slice(0, 19)),
+      route: () => '/activity?source=history',
+    },
+    {
+      key: 'stageOutcome', label: 'Stage Outcome', plural: 'Stage Outcomes', icon: 'milestone', view: 'activity',
+      list: async () => rowsOf(await api.listStageOutcomes({ pageNumber: 1, pageSize: 200 } as never)),
+      get: async (i) => asRecord(await api.getStageOutcome(i)),
+      describe: (r) => join(str(r, 'outcome'), str(r, 'causeCategory') || str(r, 'category'), str(r, 'missionId')),
+      actions: [{ label: 'Reclassify All Outcomes', confirm: () => 'Reclassify every stage outcome with the current failure cause rules?', showResult: 'Reclassification', run: () => api.reclassifyStageOutcomes({}) }],
+      route: () => '/activity',
+    },
+    {
+      key: 'job', label: 'Background Job', plural: 'Background Jobs', icon: 'gear', view: 'activity',
+      list: async () => rowsOf(await api.listJobs({ pageNumber: 1, pageSize: 200 })),
+      get: async (i) => asRecord(await api.getJob(i)),
+      describe: (r) => join(str(r, 'status'), str(r, 'kind')),
+      actions: [{ label: 'Cancel Job', when: (r) => ['Queued', 'Running', 'Pending'].includes(str(r, 'status')), confirm: () => 'Cancel this background job?', run: (r) => api.cancelJob(id(r)) }],
+      route: () => '/activity?source=events',
+    },
     {
       key: 'event', label: 'Event', plural: 'Events', icon: 'pulse', view: 'activity',
       list: async () => rowsOf(await api.listEvents({ pageNumber: 1, pageSize: 200 })),
@@ -356,7 +470,78 @@ export function resourceCatalog(deps: CatalogDeps): ResourceSpec[] {
       route: (r) => `/signals/${id(r)}`,
     },
 
+    {
+      key: 'requestHistory', label: 'Request', plural: 'Request History', icon: 'history', view: 'activity',
+      list: async () => rowsOf(await api.listRequestHistory({ pageNumber: 1, pageSize: 200 })),
+      get: async (i) => asRecord(await api.getRequestHistoryEntry(i)),
+      describe: (r) => join(`${String(r.statusCode ?? '')}`, `${String(r.durationMs ?? '')} ms`, str(r, 'principalDisplay')),
+      route: () => '/activity?source=requests',
+    },
+    {
+      key: 'evaluation', label: 'Evaluation', plural: 'Evaluations', icon: 'beaker', view: 'activity',
+      list: async () => rowsOf(await api.listModelProbeRuns({ pageNumber: 1, pageSize: 100 })),
+      get: async (i) => asRecord(await api.getModelProbeRun(i, true)),
+      describe: (r) => join(str(r, 'status'), str(r, 'captainName') || str(r, 'model'), str(r, 'depth')),
+      actions: [{ label: 'Cancel Evaluation', when: (r) => ['Queued', 'Running'].includes(str(r, 'status')), confirm: () => 'Cancel this evaluation?', run: (r) => api.cancelModelProbeRun(id(r)) }],
+      route: (r) => `/evaluations/${id(r)}`,
+    },
+    {
+      key: 'vesselHealth', label: 'Vessel Health', plural: 'Vessel Health', icon: 'heart', view: 'activity', idKey: 'vesselId',
+      list: async () => rowsOf(await api.enumerateVesselHealth({ PageNumber: 1, PageSize: 1000 })).map((r) => ({ name: r.vesselName ?? r.vesselId, ...r })),
+      get: async (i) => asRecord(await api.getVesselHealth(i)),
+      describe: (r) => join(str(r, 'overallStatus'), str(r, 'currentBranch'), r.isDirty ? 'dirty' : ''),
+      actions: [{ label: 'Evaluate All Vessels', run: () => api.evaluateVesselHealth({}) }],
+      route: (r) => `/vessels/${str(r, 'vesselId')}`,
+    },
+    {
+      key: 'tokenUsage', label: 'Model Usage', plural: 'Token Usage (7 days)', icon: 'graph', view: 'activity', idKey: 'model',
+      list: async () => {
+        const usage = await api.getTokenUsage({ fromUtc: new Date(Date.now() - 7 * 86400000).toISOString(), modelLimit: 50 });
+        return (usage.byModel ?? []).map((m) => ({ ...m, name: m.model }));
+      },
+      describe: (r) => `${Number(r.totalTokens ?? 0).toLocaleString()} tokens`,
+      route: () => '/activity?source=tokens',
+    },
+    {
+      key: 'captainUsage', label: 'Captain Usage', plural: 'Captain Usage', icon: 'dashboard', view: 'activity',
+      list: async () => rowsOf(await api.getUsageLatest({})).map((r, i) => ({ ...r, id: r.id ?? `usage-${i}`, name: [r.runtime, r.provider, r.accountKey].filter(Boolean).join(' · ') })),
+      describe: (r) => join(str(r, 'status'), r.stale ? 'stale' : '', str(r, 'capturedUtc').replace('T', ' ').slice(0, 16)),
+      route: () => '/activity?source=usage',
+    },
+
     // System
+    {
+      key: 'server', label: 'Admiral', plural: 'Admiral', icon: 'server', view: 'system',
+      list: async () => {
+        const [health, status] = await Promise.all([api.getHealth(), api.getStatus().catch(() => ({}))]);
+        return [{ id: 'admiral', name: 'Admiral', ...asRecord(health), ...asRecord(status) }];
+      },
+      actions: [{ label: 'Restart Admiral', confirm: () => 'Restart the Armada Admiral? Running work pauses while it restarts.', run: () => api.restartServer() }],
+      route: () => '/server',
+    },
+    {
+      key: 'settings', label: 'Server Settings', plural: 'Server Settings', icon: 'settings-gear', view: 'system',
+      list: async () => [{ id: 'settings', name: 'Server Settings', ...asRecord(await api.getSettings()) }],
+      update: async (_i, d) => {
+        const data: ResourceRecord = { ...d };
+        delete data.id;
+        delete data.name;
+        return api.updateSettings(data as never);
+      },
+      readOnly: ['usageSelectionCapabilities', 'usageSelectionRevision', 'name'],
+      route: () => '/server',
+    },
+    {
+      key: 'diagnostics', label: 'Diagnostic Check', plural: 'Diagnostics', icon: 'checklist', view: 'system', idKey: 'name',
+      list: async () => rowsOf(await api.getDoctor()),
+      describe: (r) => join(str(r, 'status'), str(r, 'message')),
+      route: () => '/server?tab=diagnostics',
+    },
+    {
+      key: 'storage', label: 'Black Box Storage', plural: 'Storage', icon: 'database', view: 'system',
+      list: async () => [{ id: 'blackbox-storage', name: 'Black Box Storage', ...asRecord(await api.getBlackBoxStorage()) }],
+      route: () => '/server?tab=storage',
+    },
     {
       key: 'harbor', label: 'Harbor', plural: 'Harbors', icon: 'vm-connect', view: 'system',
       list: async () => rowsOf(await api.listHarbors()),
@@ -368,6 +553,8 @@ export function resourceCatalog(deps: CatalogDeps): ResourceSpec[] {
       actions: [
         { label: 'Enable', when: (r) => (r as unknown as Harbor).enabled === false, run: (r) => api.enableHarbor(id(r)) },
         { label: 'Disable', when: (r) => (r as unknown as Harbor).enabled !== false, confirm: (r) => `Disable the Harbor "${str(r, 'name')}"? It stops taking jobs.`, run: (r) => api.disableHarbor(id(r)) },
+        { label: 'Show Jobs', showResult: 'Harbor jobs', run: (r) => api.listHarborJobs(id(r), { pageNumber: 1, pageSize: 200 }) },
+        { label: 'Show Metrics (24 hours)', showResult: 'Harbor metrics', run: (r) => api.getHarborMetrics(id(r), '24h') },
       ],
       route: (r) => `/harbors/${id(r)}`,
     },

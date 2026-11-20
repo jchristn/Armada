@@ -6,6 +6,7 @@
 
 import * as vscode from 'vscode';
 import type { Captain, Fleet, InboxItem, MergeEntry, MissionSummary, Vessel, VoyageProgress } from '@dashboard/types/models';
+import { t } from '../../i18n';
 import { formatAge } from '../../util/format';
 import { ACTIVE_MISSION_STATUSES, FINISHED_MISSION_STATUSES, OpsDomain, OpsStore, QUEUED_MISSION_STATUSES, REVIEW_MISSION_STATUSES } from './opsStore';
 import { captainLook, elapsed, humanize, inboxLook, mergeLook, missionLook, StatusLook, voyageLook } from './presentation';
@@ -111,7 +112,7 @@ export abstract class OpsTreeProvider implements vscode.TreeDataProvider<OpsNode
       case 'merge': return mergeItem(node.entry, this.idPrefix(), this.store, this.now());
       case 'inbox': return inboxItem(node.item, node.index, this.idPrefix(), this.now());
       case 'message': {
-        const item = new vscode.TreeItem(node.label, vscode.TreeItemCollapsibleState.None);
+        const item = new vscode.TreeItem(t(node.label), vscode.TreeItemCollapsibleState.None);
         item.id = `${this.idPrefix()}:message:${node.key}`;
         item.iconPath = new vscode.ThemeIcon(node.icon);
         item.tooltip = node.tooltip;
@@ -176,7 +177,7 @@ export class MissionsTreeProvider extends OpsTreeProvider {
 
   protected roots(): OpsNode[] {
     const group = (key: string, label: string, icon: string, missions: MissionSummary[], expanded: boolean): OpsNode | undefined =>
-      missions.length ? { kind: 'group', key, label: `${label} (${missions.length})`, icon, expanded, children: missions.map((mission) => ({ kind: 'mission', mission, parentKey: key })) } : undefined;
+      missions.length ? { kind: 'group', key, label: `${t(label)} (${missions.length})`, icon, expanded, children: missions.map((mission) => ({ kind: 'mission', mission, parentKey: key })) } : undefined;
     return [
       group('review', 'Needs Review', 'eye', this.store.missionsIn(REVIEW_MISSION_STATUSES), true),
       group('active', 'Active', 'pulse', this.store.missionsIn(ACTIVE_MISSION_STATUSES), true),

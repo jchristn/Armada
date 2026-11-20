@@ -12,13 +12,14 @@ import type { BlackBoxEntry } from '@dashboard/types/blackbox';
 import type { Vessel } from '@dashboard/types/models';
 
 /** How a credential is presented to the Admiral. */
-export type AuthHeaderMode = 'Bearer' | 'X-Api-Key';
+export type AuthHeaderMode = 'Bearer' | 'X-Api-Key' | 'X-Token';
 
 /** A credential the host sends with every request. */
 export interface HostCredential {
   /** The API key or bearer token. Never logged. */
   secret: string;
-  /** Header that carries it: Authorization: Bearer (credential tokens) or X-Api-Key (the settings API key). */
+  /** Header that carries it: Authorization: Bearer (credential tokens), X-Api-Key (the settings API key) or X-Token
+   * (a session token from signing in with email and password). */
   header: AuthHeaderMode;
 }
 
@@ -35,6 +36,7 @@ export interface AdmiralHealth {
 export function credentialHeaders(credential: HostCredential | undefined): Record<string, string> {
   if (!credential || !credential.secret) return {};
   if (credential.header === 'X-Api-Key') return { 'X-Api-Key': credential.secret };
+  if (credential.header === 'X-Token') return { 'X-Token': credential.secret };
   return { Authorization: `Bearer ${credential.secret}` };
 }
 
@@ -43,7 +45,7 @@ export function credentialHeaders(credential: HostCredential | undefined): Recor
  * per process, so the extension talks to one Admiral at a time.
  */
 export function useAdmiral(baseUrl: string | undefined, credential: HostCredential | undefined): void {
-  configureClient({ baseUrl: baseUrl ? normalizeBaseUrl(baseUrl) : '', headers: credentialHeaders(credential), platform: null });
+  configureClient({ baseUrl: baseUrl ? normalizeBaseUrl(baseUrl) : '', headers: credentialHeaders(credential) });
   setAuthToken(null);
 }
 

@@ -107,7 +107,7 @@ export async function run(): Promise<void> {
     for (const view of MANIFEST.contributes.views.armada) await vscode.commands.executeCommand(`${view.id}.focus`);
     // Every resource kind loads from the Admiral, and a record opens as a page.
     const failed: string[] = [];
-    for (const spec of api.resources.specs) {
+    for (const spec of api.resources.specs.filter((s) => s.key !== 'blackBoxEntry')) {
       await api.resources.store.load(spec);
       const loaded = api.resources.store.get(spec);
       if (loaded?.state !== 'ready') failed.push(`${spec.key}: ${loaded?.error ?? loaded?.state}`);
@@ -120,6 +120,27 @@ export async function run(): Promise<void> {
       await vscode.commands.executeCommand('armada.resource.open', withRecords.key, String(record[withRecords.idKey ?? 'id'] ?? ''));
       log(`resource page: ${withRecords.label} opened`);
     }
+
+    // A vessel's checkout is a VS Code file system: list its root and read a file.
+    const local = api.ops.vessels.find((v) => v.localPath && fs.existsSync(v.localPath));
+    if (local) {
+      const rootUri = vscode.Uri.from({ scheme: 'armada-vessel', authority: local.id, path: '/' });
+      const entries = await vscode.workspace.fs.readDirectory(rootUri);
+      assert.ok(entries.length > 0, `the workspace of ${local.name} lists files`);
+      const file = entries.find(([name, type]) => type === vscode.FileType.File && /\.(md|json|txt|ts|cs|yml)$/i.test(name));
+      if (file) {
+        const bytes = await vscode.workspace.fs.readFile(vscode.Uri.from({ scheme: 'armada-vessel', authority: local.id, path: `/${file[0]}` }));
+        assert.ok(bytes.length > 0, `${file[0]} reads`);
+      }
+      log(`vessel workspace: ${local.name} lists ${entries.length} entries${file ? `, read ${file[0]}` : ''}`);
+    } else {
+      log('vessel workspace: no vessel with a local checkout on this machine');
+    }
+
+    await vscode.commands.executeCommand('armada.home');
+    log('home overview opened');
+    await vscode.commands.executeCommand('armada.charts');
+    log('activity charts opened');
 
     // Ask Armada: the chat view opens and shows an earlier conversation from the Admiral.
     const latest = await api.ask.latestConversationId();

@@ -13,17 +13,25 @@ import {
   cancelAskTurn,
   createAskThread,
   decideCliPermissionRequest,
+  deleteAskThread,
+  getAskQuickActions,
+  getAskWorkSnapshot,
+  markAskThreadUnread,
+  runAskQuickAction,
   enumerateAskMessages,
   enumerateAskThreads,
   markAskThreadRead,
   rejectAskProposal,
   sendAskMessage,
+  setAskThreadCliPermissionPolicy,
+  summarizeAskThread,
+  updateAskThread,
 } from '@dashboard/api/client';
 import { ConversationAction, conversationReducer, ConversationState, initialConversation } from '@dashboard/lib/askConversation';
 import { parseAskEvent } from '@dashboard/lib/askEvents';
 import { loadAskThreadView, withToolCalls } from '@dashboard/lib/askPaging';
 import { parseCliPermissionEvent } from '@dashboard/lib/cliPermissions';
-import type { AskMessage, WebSocketMessage } from '@dashboard/types/models';
+import type { AskMessage, AskQuickAction, WebSocketMessage } from '@dashboard/types/models';
 import { ConnectionManager } from '../../connection/connectionManager';
 import { describeError } from '../../transport/errors';
 import { ArmadaEventBus } from '../../transport/eventBus';
@@ -46,6 +54,7 @@ type ChatInbound =
   | { type: 'stop' }
   | { type: 'new' }
   | { type: 'history' }
+  | { type: 'quick' }
   | { type: 'older' }
   | { type: 'decide'; kind: 'proposal' | 'cli'; id: string; approve: boolean }
   | { type: 'link'; href: string };
@@ -130,7 +139,7 @@ export class AskViewProvider implements vscode.WebviewViewProvider, vscode.Dispo
     return { threadId: this._State.threadId, messages: this._State.messages.length };
   }
 
-  /** Picks an earlier conversation to reopen. */
+  /** Picks an earlier conversation to reopen; each row has a delete button. */
   public async pickConversation(): Promise<void> {
     if (!(await this.ensureConnected())) return;
     const threads = (await enumerateAskThreads({ pageNumber: 1, pageSize: 100 })).objects ?? [];
@@ -138,15 +147,101 @@ export class AskViewProvider implements vscode.WebviewViewProvider, vscode.Dispo
       void vscode.window.showInformationMessage('Armada: no earlier conversations.');
       return;
     }
-    const picked = await vscode.window.showQuickPick(threads.map((t) => ({
+    const remove: vscode.QuickInputButton = { iconPath: new vscode.ThemeIcon('trash'), tooltip: 'Delete conversation' };
+    const quickPick = vscode.window.createQuickPick<vscode.QuickPickItem & { id: string }>();
+    quickPick.title = 'Ask Armada: Conversations';
+    quickPick.placeholder = 'Reopen a conversation';
+    quickPick.matchOnDetail = true;
+    quickPick.items = threads.map((t) => ({
       label: `${t.pinned ? '$(pinned) ' : ''}${t.title || 'Conversation'}`,
       description: [t.unreadCount ? `${t.unreadCount} unread` : '', formatAge(t.lastMessageUtc ?? t.createdUtc)].filter(Boolean).join(' · '),
       detail: t.summaryText ?? undefined,
       id: t.id,
-    })), { title: 'Ask Armada: Conversations', placeHolder: 'Reopen a conversation', matchOnDetail: true });
+      buttons: [remove],
+    }));
+    const picked = await new Promise<string | undefined>((resolve) => {
+      quickPick.onDidAccept(() => resolve(quickPick.selectedItems[0]?.id));
+      quickPick.onDidHide(() => resolve(undefined));
+      quickPick.onDidTriggerItemButton(async (event) => {
+        if ((await vscode.window.showWarningMessage(`Delete the conversation "${event.item.label}"?`, { modal: true }, 'Delete')) !== 'Delete') return;
+        await deleteAskThread(event.item.id);
+        quickPick.items = quickPick.items.filter((i) => i.id !== event.item.id);
+        if (this._State.threadId === event.item.id) await this.newConversation();
+      });
+      quickPick.show();
+    });
+    quickPick.dispose();
     if (!picked) return;
     await vscode.commands.executeCommand(`${ASK_VIEW_ID}.focus`);
-    await this.load(picked.id);
+    await this.load(picked);
+  }
+
+  /** Runs one of the Admiral's Ask quick actions (as a proposal to approve, or as a message). */
+  private async quickAction(): Promise<void> {
+    if (!(await this.ensureConnected())) return;
+    const actions = await getAskQuickActions();
+    const threadId = this._State.threadId;
+    const builtIn = threadId ? [
+      { label: '$(note) Summarize this conversation', description: '', detail: 'The captain writes a summary shown in the conversation list', action: { name: '__summarize' } as AskQuickAction },
+      { label: '$(mail) Mark this conversation unread', description: '', detail: 'It shows as unread in the conversation list', action: { name: '__unread' } as AskQuickAction },
+      { label: '$(edit) Rename this conversation', description: '', detail: '', action: { name: '__rename' } as AskQuickAction },
+      { label: '$(pulse) Show the work this conversation tracks', description: '', detail: 'Voyages, missions and runs Armada started for you here', action: { name: '__work' } as AskQuickAction },
+      { label: '$(shield) CLI tool permissions for this conversation', description: '', detail: 'Whether the captain asks, refuses or runs tools without asking', action: { name: '__policy' } as AskQuickAction },
+    ] : [];
+    const picked = await vscode.window.showQuickPick([...builtIn, ...actions.map((a) => ({ label: a.title ?? a.name, description: a.command ?? '', detail: a.description, action: a }))], { title: 'Ask Armada: Quick Actions', matchOnDetail: true });
+    if (!picked) return;
+    if (threadId && picked.action.name === '__summarize') {
+      await summarizeAskThread(threadId);
+      void vscode.window.showInformationMessage('Armada: summarizing the conversation.');
+      return;
+    }
+    if (threadId && picked.action.name === '__work') {
+      const tracked = this._State.trackedWork;
+      if (!tracked.length) {
+        void vscode.window.showInformationMessage('Armada: this conversation tracks no work yet.');
+        return;
+      }
+      const snapshots = await Promise.all(tracked.map((w) => getAskWorkSnapshot(threadId, w.id).catch(() => w)));
+      await vscode.commands.executeCommand('armada.showResult', 'Tracked work', snapshots);
+      return;
+    }
+    if (threadId && picked.action.name === '__rename') {
+      const title = await vscode.window.showInputBox({ title: 'Rename conversation', value: this._State.thread?.title ?? '', ignoreFocusOut: true });
+      if (!title?.trim()) return;
+      const thread = await updateAskThread(threadId, { title: title.trim() });
+      this.dispatch({ type: 'thread', thread });
+      return;
+    }
+    if (threadId && picked.action.name === '__policy') {
+      const policy = await vscode.window.showQuickPick([
+        { label: 'Ask in Armada', value: 'ApproveInArmada' as const },
+        { label: 'Refuse', value: 'Refuse' as const },
+        { label: 'Bypass (run without asking)', value: 'Bypass' as const },
+        { label: 'Use the default', value: null },
+      ], { title: 'CLI tool permissions for this conversation' });
+      if (!policy) return;
+      const thread = await setAskThreadCliPermissionPolicy(threadId, policy.value);
+      this.dispatch({ type: 'thread', thread });
+      return;
+    }
+    if (threadId && picked.action.name === '__unread') {
+      await markAskThreadUnread(threadId);
+      return;
+    }
+    if (picked.action.toolName) {
+      let threadId = this._State.threadId;
+      if (!threadId) {
+        const created = await createAskThread({});
+        threadId = created.id;
+        this.dispatch({ type: 'reset', threadId });
+        this.dispatch({ type: 'thread', thread: created });
+      }
+      const proposal = await runAskQuickAction(threadId, picked.action.toolName, {}, { propose: true });
+      this.dispatch({ type: 'proposal', proposal });
+      void this.refreshLatest(threadId);
+      return;
+    }
+    await this.send(picked.action.command ?? picked.action.title ?? picked.action.name);
   }
 
   public dispose(): void {
@@ -179,6 +274,9 @@ export class AskViewProvider implements vscode.WebviewViewProvider, vscode.Dispo
           return;
         case 'history':
           await this.pickConversation();
+          return;
+        case 'quick':
+          await this.quickAction();
           return;
         case 'older':
           await this.loadOlder();
@@ -383,6 +481,7 @@ textarea { resize: none; border: none; background: transparent; color: var(--vsc
 <body>
 <header>
   <span class="title" id="title">Ask Armada</span>
+  <button class="icon" id="quick" title="Quick actions" aria-label="Quick actions">⚡</button>
   <button class="icon" id="history" title="Earlier conversations" aria-label="Earlier conversations">⟲</button>
   <button class="icon" id="new" title="New conversation" aria-label="New conversation">＋</button>
 </header>
@@ -455,6 +554,7 @@ $('send').addEventListener('click', send);
 $('stop').addEventListener('click', () => vscode.postMessage({ type: 'stop' }));
 $('new').addEventListener('click', () => vscode.postMessage({ type: 'new' }));
 $('history').addEventListener('click', () => vscode.postMessage({ type: 'history' }));
+$('quick').addEventListener('click', () => vscode.postMessage({ type: 'quick' }));
 document.addEventListener('click', (e) => {
   const el = e.target instanceof Element ? e.target : null;
   if (!el) return;

@@ -6,8 +6,11 @@
 
 import * as vscode from 'vscode';
 import {
+  applyModelAlertAction,
+  ignoreModelAlert,
   approveMissionReview,
   cancelMergeEntry,
+  deleteMergeEntry,
   cancelVoyage,
   createVoyage,
   decideCliPermissionRequest,
@@ -17,6 +20,7 @@ import {
   processMergeEntry,
   restartCaptain,
   restartMission,
+  stopAllCaptains,
   stopCaptain,
   transitionMission,
 } from '@dashboard/api/client';
@@ -111,6 +115,14 @@ export function registerOpsCommands(deps: OpsCommandDeps): vscode.Disposable[] {
     void vscode.window.showInformationMessage(`Armada: denied "${missionTitle(store, id)}".`);
     after('mission', id, ['missions', 'inbox']);
   });
+  register('armada.mission.more', async (arg) => {
+    const id = missionId(arg);
+    if (id) await vscode.commands.executeCommand('armada.resource.action', 'mission', id);
+  });
+  register('armada.blackbox.more', async (arg) => {
+    const entry = arg && typeof arg === 'object' && 'entry' in arg ? (arg as { entry: { id?: string } }).entry : undefined;
+    if (entry?.id) await vscode.commands.executeCommand('armada.resource.action', 'blackBoxEntry', entry.id);
+  });
   register('armada.mission.copyId', async (arg) => {
     const id = missionId(arg);
     if (id) await vscode.env.clipboard.writeText(id);
@@ -154,6 +166,13 @@ export function registerOpsCommands(deps: OpsCommandDeps): vscode.Disposable[] {
     after('captain', id, ['captains']);
   });
 
+  register('armada.captain.stopAll', async () => {
+    if (!(await confirm('Stop every captain? Their missions stop with them.', 'Stop All'))) return;
+    await stopAllCaptains();
+    void vscode.window.showInformationMessage('Armada: stopping every captain.');
+    void store.refresh('captains');
+  });
+
   // Merge queue
   register('armada.merge.open', async (arg) => {
     const id = mergeId(arg);
@@ -172,6 +191,12 @@ export function registerOpsCommands(deps: OpsCommandDeps): vscode.Disposable[] {
     await cancelMergeEntry(id);
     after('merge', id, ['merge']);
   });
+  register('armada.merge.delete', async (arg) => {
+    const id = mergeId(arg);
+    if (!id || !(await confirm('Delete this merge queue entry for good?', 'Delete'))) return;
+    await deleteMergeEntry(id);
+    void store.refresh('merge');
+  });
   register('armada.merge.processAll', async () => {
     if (!(await confirm('Process the whole merge queue now?', 'Process Queue'))) return;
     await processAllMergeQueue();
@@ -185,6 +210,22 @@ export function registerOpsCommands(deps: OpsCommandDeps): vscode.Disposable[] {
     if (!item) return;
     if (item.kind === 'cli_permission' && item.cliPermission) {
       await decideCliPermission(item);
+      void store.refresh('inbox');
+      return;
+    }
+    if (item.kind === 'model_alert' && item.modelAlert) {
+      const alert = item.modelAlert;
+      const action = await vscode.window.showQuickPick([
+        { label: '$(arrow-down) Move the model down the persona\'s priorities', value: 'MoveDown' as const },
+        { label: '$(remove) Remove the model from the persona', value: 'RemoveFromPersona' as const },
+        { label: '$(fold) Use the compact prompt template', value: 'CompactTemplate' as const },
+        { label: '$(beaker) Evaluate the model again', value: 'Reevaluate' as const },
+        { label: '$(eye-closed) Ignore for 7 days', value: 'Ignore' as const },
+      ], { title: alert.title, placeHolder: alert.detail });
+      if (!action) return;
+      if (action.value === 'Ignore') await ignoreModelAlert(alert.id, 7);
+      else await applyModelAlertAction(alert.id, action.value);
+      void vscode.window.showInformationMessage('Armada: done.');
       void store.refresh('inbox');
       return;
     }

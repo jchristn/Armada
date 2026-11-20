@@ -15,7 +15,7 @@
  */
 
 import * as vscode from 'vscode';
-import { ApiError, whoami } from '@dashboard/api/client';
+import { ApiError, authenticate, lookupTenants, whoami } from '@dashboard/api/client';
 import type { WhoAmIResult } from '@dashboard/types/models';
 import { ArmadaSettings, readSettings } from '../config';
 import { describeError, NotConnectedError } from '../transport/errors';
@@ -94,6 +94,8 @@ export interface ActiveConnection {
   dashboardUrl: string;
   /** The credential for the WebSocket `token` query parameter. */
   socketToken: string | undefined;
+  /** The credential in use, for requests the extension sends itself (the API explorer). Never logged. */
+  credential: HostCredential | undefined;
 }
 
 /** Diagnostics sink (the "Armada" log output channel). Never given a secret. */
@@ -175,6 +177,7 @@ export class ConnectionManager implements vscode.Disposable {
       tenant: settings.tenant || undefined,
       dashboardUrl: this.dashboardUrl(),
       socketToken: this._Credential?.secret,
+      credential: this._Credential,
     };
   }
 
@@ -332,7 +335,8 @@ export class ConnectionManager implements vscode.Disposable {
     try {
       const parsed = JSON.parse(raw) as { secret?: unknown; header?: unknown };
       if (typeof parsed.secret !== 'string' || !parsed.secret) return [];
-      return [{ secret: parsed.secret, header: parsed.header === 'X-Api-Key' ? 'X-Api-Key' : 'Bearer', origin: 'key entered in VS Code' }];
+      const header = parsed.header === 'X-Api-Key' || parsed.header === 'X-Token' ? parsed.header : 'Bearer';
+      return [{ secret: parsed.secret, header, origin: header === 'X-Token' ? 'session from signing in' : 'key entered in VS Code' }];
     } catch {
       return [];
     }
@@ -437,6 +441,12 @@ export class ConnectionManager implements vscode.Disposable {
   }
 
   private async promptForKey(endpoint: AdmiralEndpoint, failure: Failure): Promise<boolean> {
+    const how = await vscode.window.showQuickPick([
+      { label: '$(account) Sign in with email and password', value: 'password' as const },
+      { label: '$(key) Enter an API key or bearer token', value: 'key' as const },
+    ], { title: `Armada: sign in to ${endpoint.baseUrl}`, placeHolder: failure.kind === 'unauthorized' ? failure.message : 'No stored credential works for this Admiral' });
+    if (!how) return false;
+    if (how.value === 'password') return this.signInWithPassword(endpoint);
     const key = await vscode.window.showInputBox({
       title: `Armada: sign in to ${endpoint.baseUrl}`,
       prompt: failure.kind === 'unauthorized' ? `${failure.message} Enter an API key or bearer token.` : 'API key or bearer token',
@@ -464,6 +474,51 @@ export class ConnectionManager implements vscode.Disposable {
     await this._Deps.secrets.store(credentialSecretKey(endpoint.baseUrl), JSON.stringify({ secret, header: this._Credential?.header ?? 'Bearer' }));
     await this._Deps.globalState?.update(ENDPOINT_KEY, endpoint.baseUrl);
     void vscode.window.showInformationMessage(`Armada: connected to ${endpoint.baseUrl}.`);
+    return true;
+  }
+
+  /** Signs in with email and password (picking the tenant when the email has several) and keeps the session token. */
+  private async signInWithPassword(endpoint: AdmiralEndpoint): Promise<boolean> {
+    const email = await vscode.window.showInputBox({ title: `Armada: sign in to ${endpoint.baseUrl} (1/2)`, prompt: 'Email', placeHolder: 'admin@armada', ignoreFocusOut: true });
+    if (!email?.trim()) return false;
+    useAdmiral(endpoint.baseUrl, undefined);
+    const tenants = (await lookupTenants(email.trim()).catch(() => undefined))?.tenants ?? [];
+    let tenantId: string | undefined = tenants[0]?.id;
+    if (tenants.length > 1) {
+      tenantId = (await vscode.window.showQuickPick(tenants.map((t) => ({ label: t.name, description: t.id, id: t.id })), { title: 'Armada: tenant', placeHolder: 'Which tenant?' }))?.id;
+      if (!tenantId) return false;
+    }
+    if (!tenantId) {
+      void vscode.window.showErrorMessage(`Armada: no tenant has the user ${email.trim()}.`);
+      return false;
+    }
+    const password = await vscode.window.showInputBox({ title: `Armada: sign in to ${endpoint.baseUrl} (2/2)`, prompt: `Password for ${email.trim()}`, password: true, ignoreFocusOut: true });
+    if (password === undefined) return false;
+    let token: string | null = null;
+    try {
+      const result = await authenticate({ email: email.trim(), password, tenantId });
+      token = result.success ? result.token : null;
+      if (result.passwordChangeRequired) void vscode.window.showWarningMessage('Armada: this account still uses its default password. Change it with "Armada: Change Password".');
+    } catch (err) {
+      void vscode.window.showErrorMessage(`Armada: sign-in failed. ${describeError(err)}`);
+      return false;
+    }
+    if (!token) {
+      void vscode.window.showErrorMessage('Armada: the email or password is not right.');
+      return false;
+    }
+    const credential: EndpointCredential = { secret: token, header: 'X-Token', origin: `session for ${email.trim()}` };
+    const result = await this.exclusive(async () => {
+      this._Endpoint = endpoint;
+      return this.attempt(toTarget(endpoint), [credential]);
+    });
+    if (result) {
+      void vscode.window.showErrorMessage(`Armada: could not connect to ${endpoint.baseUrl}. ${result.message}`);
+      return false;
+    }
+    await this._Deps.secrets.store(credentialSecretKey(endpoint.baseUrl), JSON.stringify({ secret: token, header: 'X-Token' }));
+    await this._Deps.globalState?.update(ENDPOINT_KEY, endpoint.baseUrl);
+    void vscode.window.showInformationMessage(`Armada: signed in to ${endpoint.baseUrl} as ${email.trim()}.`);
     return true;
   }
 

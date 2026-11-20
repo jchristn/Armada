@@ -124,9 +124,11 @@ dashboard in a webview: every surface is native, as in Mux. Also built: Ask Arma
 ChatViewProvider pattern, running the dashboard's conversation reducer), and a resource layer
 (`src/surfaces/resources/`) that gives 29 kinds of record (Backlog, Fleet Actions, Delivery, Configuration, Activity,
 System, plus vessels, fleets and captains) a tree, a page and create and edit forms from one description each.
-Not native yet: the dashboard home overview, planning sessions and backlog refinement (chat with a captain), vessel
-import and health, evaluations and battery runs, usage and token charts, request history, the API explorer, and the
-server settings, storage and diagnostics tabs.
+Since then the rest landed natively too: the overview, planning and refinement chats, the vessel workspace as a VS
+Code file system, vessel import, activity charts, the API explorer, email sign-in, notifications, server
+administration, local Harbor control, MCP install and display languages. The parity manifest has no planned entries
+left (725 implemented, 30 not applicable, 4 VS Code-only). Still open from the plan: the platform-specific VSIX with
+bundled binaries (4.7) and an extension-run headless Harbor (V7), and Marketplace releases from CI.
 
 ### 4.3 Webview panels
 

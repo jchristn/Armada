@@ -18,6 +18,8 @@ export interface ResourceAction {
   /** A confirmation question; the action runs only after the user agrees. */
   confirm?(record: ResourceRecord): string;
   run(record: ResourceRecord): Promise<unknown>;
+  /** When set, the action's result opens as a page with this title (a status, a history, metrics). */
+  showResult?: string;
 }
 
 /** A field of the create form, with how its text is converted. */
@@ -49,12 +51,18 @@ export interface ResourceSpec {
   createFields?: CreateField[];
   /** Fields never offered in the edit form beyond the common read-only ones. */
   readOnly?: string[];
+  /** When set, the only fields the edit form offers. */
+  editable?: string[];
   /** Extra one-line text for the tree item. */
   describe?(record: ResourceRecord): string;
   /** Record actions. */
   actions?: ResourceAction[];
   /** The dashboard route of a record, for "Open in Browser". */
   route?(record: ResourceRecord): string;
+  /** Opens a record its own way (a chat for planning sessions) instead of the record page. */
+  open?(record: ResourceRecord): Promise<void>;
+  /** A command that creates a record its own way (instead of the create form). */
+  createCommand?: string;
 }
 
 /** The sidebar views resources appear in. */
@@ -137,6 +145,7 @@ export function editFields(spec: ResourceSpec, record: ResourceRecord): Array<Fo
   const fields: Array<FormField & { fieldKind: FieldKind }> = [];
   for (const [key, value] of Object.entries(record)) {
     if (COMMON_READ_ONLY.test(key) || (spec.readOnly ?? []).includes(key) || key === (spec.idKey ?? 'id')) continue;
+    if (spec.editable && !spec.editable.includes(key)) continue;
     const kind = fieldKind(key, value);
     if (!kind) continue;
     const base = { key, label: fieldLabel(key), fieldKind: kind };

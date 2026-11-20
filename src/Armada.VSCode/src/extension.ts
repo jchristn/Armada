@@ -3,6 +3,7 @@ import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { readSettings } from './config';
+import { loadCatalog } from './i18n';
 import { ConnectionManager } from './connection/connectionManager';
 import { harborDirectory, tuiPreferencesPath } from './connection/endpoints';
 import { discoverLocalAdmiral } from './connection/localDiscovery';
@@ -16,9 +17,14 @@ import { FAILURES_EXPLORER_VIEW_ID, FAILURES_VIEW_ID, FailuresTreeProvider } fro
 import { InsightCommands } from './surfaces/blackbox/insightCommands';
 import { ASK_VIEW_ID, AskViewProvider } from './surfaces/ask/askView';
 import { resourceCatalog } from './surfaces/resources/resourceCatalog';
+import { extendCatalog, resourceCatalogExtras } from './surfaces/resources/resourceCatalogExtras';
 import { ResourceSpec } from './surfaces/resources/resourceSpec';
 import { ResourceController, ResourceStore, ResourceTreeProvider, resourceViewOrder } from './surfaces/resources/resourceViews';
 import { DetailPanelManager } from './surfaces/ops/detailPanels';
+import { registerExtraCommands } from './surfaces/ops/extraCommands';
+import { registerLocalCommands, watchNeedsYou } from './surfaces/ops/localCommands';
+import { PLANNING, REFINEMENT, SessionChatManager } from './surfaces/sessions/sessionChat';
+import { registerVesselWorkspace } from './surfaces/workspace/vesselFileSystem';
 import { ARMADA_DOCUMENT_SCHEME, ArmadaDocumentProvider } from './surfaces/ops/opsDocuments';
 import { registerOpsCommands } from './surfaces/ops/opsCommands';
 import { OpsStatusBar } from './surfaces/ops/opsStatusBar';
@@ -86,25 +92,58 @@ export async function activate(context: vscode.ExtensionContext): Promise<Armada
   context.subscriptions.push(bus.subscribe((event) => ops.onEvent(event.type)), bus.onPoll(() => void ops.refreshAll()));
 
   // Backlog, Fleet Actions, Delivery, Configuration, Activity and System: every other kind of record, natively.
+  const sessions = new SessionChatManager(bus);
+  context.subscriptions.push(sessions);
+  const pickOne = async (title: string, items: Array<{ label: string; description?: string; id: string }>): Promise<string | undefined> => (await vscode.window.showQuickPick(items, { title, matchOnDescription: true }))?.id;
   const specs = resourceCatalog({
+    pickCaptain: async (title) => {
+      if (ops.state('captains') !== 'ready') await ops.refresh('captains');
+      return pickOne(title, ops.captains.map((c) => ({ label: c.name, description: `${c.runtime}${c.model ? ` · ${c.model}` : ''} · ${c.state}`, id: c.id })));
+    },
+    pickVessel: async (title) => {
+      if (ops.state('fleet') !== 'ready') await ops.refresh('fleet');
+      return pickOne(title, ops.vessels.map((v) => ({ label: v.name, description: v.repoUrl ?? undefined, id: v.id })));
+    },
+    openPlanning: (id) => sessions.open(PLANNING, id),
+    openRefinement: (id) => sessions.open(REFINEMENT, id),
     pickVessels: async (title) => {
       if (ops.state('fleet') !== 'ready') await ops.refresh('fleet');
       const picked = await vscode.window.showQuickPick(ops.vessels.map((v) => ({ label: v.name, description: v.repoUrl ?? undefined, id: v.id })), { title, canPickMany: true, matchOnDescription: true });
       return picked?.map((p) => p.id);
     },
   });
+  context.subscriptions.push(vscode.commands.registerCommand('armada.pickVessels', async (title?: string) => {
+    if (ops.state('fleet') !== 'ready') await ops.refresh('fleet');
+    const picked = await vscode.window.showQuickPick(ops.vessels.map((v) => ({ label: v.name, description: v.repoUrl ?? undefined, id: v.id })), { title: title ?? 'Vessels', canPickMany: true, matchOnDescription: true });
+    return picked?.map((p) => p.id);
+  }));
+  specs.push(...resourceCatalogExtras());
+  extendCatalog(specs);
   const resources = new ResourceStore(() => connection.connected);
   const resourceTrees: ResourceTreeProvider[] = [];
   for (const [key, viewId] of resourceViewOrder()) {
     const provider = new ResourceTreeProvider(specs.filter((s) => s.view === key && !s.hidden), resources, () => connection.connected);
     resourceTrees.push(provider);
-    context.subscriptions.push(provider, vscode.window.createTreeView(viewId, { treeDataProvider: provider, showCollapseAll: true }));
+    context.subscriptions.push(provider, vscode.window.createTreeView(viewId, { treeDataProvider: provider, showCollapseAll: true, canSelectMany: true }));
   }
   const resourceController = new ResourceController(specs, resources, async () => connection.connected || connection.connect({ interactive: true }), (key) => {
     if (key === 'vessel' || key === 'fleet') void ops.refresh('fleet');
     if (key === 'captain') void ops.refresh('captains');
   });
   context.subscriptions.push(resourceController, bus.onPoll(() => void resourceController.refreshAll()));
+  // Kinds whose records change through live events reload when they arrive (others on the poll tick).
+  const liveKinds: Record<string, string> = { 'deployment.': 'deployment', 'incident.': 'incident', 'objective.': 'backlog', 'planning-session.': 'planningSession', 'captain-selection.': 'captain' };
+  context.subscriptions.push(bus.subscribe((event) => {
+    for (const [prefix, key] of Object.entries(liveKinds)) {
+      const spec = specs.find((s) => s.key === key);
+      if (spec && event.type.startsWith(prefix) && resources.get(spec)) void resources.load(spec);
+    }
+  }));
+
+  context.subscriptions.push(...registerExtraCommands({ store: ops, connection, openPlanning: (id) => sessions.open(PLANNING, id) }));
+  context.subscriptions.push(...registerLocalCommands(connection, String((context.extension.packageJSON as { version?: string } | undefined)?.version ?? '')));
+  context.subscriptions.push(...registerVesselWorkspace((vesselId) => ops.vesselName(vesselId)));
+  context.subscriptions.push(watchNeedsYou(ops, () => vscode.workspace.getConfiguration('armada').get<boolean>('notifications.needsYou', true) !== false));
 
   // Ask Armada: the chat view at the top of the Armada sidebar.
   const askView = new AskViewProvider({ extensionUri: context.extensionUri, connection, bus, globalState: context.globalState });
@@ -179,6 +218,15 @@ export async function activate(context: vscode.ExtensionContext): Promise<Armada
   context.subscriptions.push(connection.onDidChange((state) => {
     for (const tree of resourceTrees) tree.refresh();
     if (state.phase === 'connected') {
+      // Display strings in VS Code's language, from the Admiral's catalog (skipped in English).
+      const baseUrl = connection.active?.baseUrl;
+      if (baseUrl) {
+        void loadCatalog(baseUrl, displayLanguage()).then((translated) => {
+          if (!translated) return;
+          void ops.refreshAll();
+          for (const tree of resourceTrees) tree.refresh();
+        });
+      }
       store.invalidateVessels();
       void store.refresh();
       void ops.refreshAll();
@@ -233,6 +281,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<Armada
   context.subscriptions.push(vscode.workspace.onDidChangeWorkspaceFolders(() => void store.refresh()));
   context.subscriptions.push(vscode.workspace.onDidChangeConfiguration((e) => {
     if (!e.affectsConfiguration('armada')) return;
+    if (e.affectsConfiguration('armada.language') && connection.active) {
+      void loadCatalog(connection.active.baseUrl, displayLanguage()).then(() => {
+        void ops.refreshAll();
+        for (const tree of resourceTrees) tree.refresh();
+      });
+    }
     if (e.affectsConfiguration('armada.tenant')) store.invalidateVessels();
     if (e.affectsConfiguration('armada.liveUpdates')) restartBus();
     void store.refresh();
@@ -245,6 +299,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<Armada
   context.subscriptions.push({ dispose: () => clearTimeout(startup) });
 
   return { connection, events: bus, store, commands, ops, details, ask: askView, resources: { specs, store: resources }, liveMode: () => bus.mode };
+}
+
+/** The language for Armada's labels: armada.language, or VS Code's display language when it is "auto". */
+function displayLanguage(): string {
+  const configured = String(vscode.workspace.getConfiguration('armada').get<string>('language', 'auto') ?? 'auto').trim();
+  return !configured || configured === 'auto' ? vscode.env.language : configured;
 }
 
 /** Extension shutdown. */

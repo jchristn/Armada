@@ -129,8 +129,8 @@ describe('ops detail pages and documents', () => {
   it('offers the actions that fit the mission status', () => {
     const store = new OpsStore({ isConnected: () => false });
     const commands = (status: string) => missionPage(mission(status), store, undefined, NOW).actions.map((a) => a.command);
-    assert.deepStrictEqual(commands('Review'), ['armada.mission.viewLog', 'armada.mission.viewDiff', 'armada.mission.approve', 'armada.mission.deny', 'armada.mission.cancel', 'armada.openInBrowser']);
-    assert.deepStrictEqual(commands('Failed'), ['armada.mission.viewLog', 'armada.mission.viewDiff', 'armada.mission.restart', 'armada.openBlackBox', 'armada.openInBrowser']);
+    assert.deepStrictEqual(commands('Review'), ['armada.mission.viewLog', 'armada.mission.viewDiff', 'armada.mission.approve', 'armada.mission.deny', 'armada.mission.cancel', 'armada.resource.action', 'armada.openInBrowser']);
+    assert.deepStrictEqual(commands('Failed'), ['armada.mission.viewLog', 'armada.mission.viewDiff', 'armada.mission.restart', 'armada.openBlackBox', 'armada.resource.action', 'armada.openInBrowser']);
     const live = missionPage(mission('InProgress'), store, 'line 1\nline 2', NOW);
     assert.ok(live.sections.some((s) => s.kind === 'pre' && s.text === 'line 1\nline 2'), 'a running mission shows its live log');
     assert.strictEqual(statusTone('Failed'), 'error');
@@ -147,7 +147,7 @@ describe('ops detail pages and documents', () => {
     assert.ok(!isDetailMessage({ command: 'workbench.action.terminal.sendSequence', args: [] }));
     assert.ok(!isDetailMessage({ command: 'armada.mission.cancel' }));
     const voyage = voyagePage({ voyage: { id: 'vyg_1', title: 'V', status: 'InProgress', createdUtc: '2026-11-20T11:00:00Z' } as never, totalMissions: 3, completedMissions: 1, failedMissions: 1, inProgressMissions: 1, missionCountsByStatus: {}, vesselId: 'vsl_1', vesselCount: 1 }, [], store, NOW);
-    assert.deepStrictEqual(voyage.actions.map((a) => a.command), ['armada.voyage.cancel', 'armada.openInBrowser']);
+    assert.deepStrictEqual(voyage.actions.map((a) => a.command), ['armada.voyage.cancel', 'armada.resource.action', 'armada.openInBrowser']);
   });
 
   it('parses document URIs and routes dashboard links to native views', () => {
@@ -171,5 +171,34 @@ describe('ops detail pages and documents', () => {
     assert.strictEqual(humanize('PullRequestOpen'), 'Pull Request Open');
     assert.strictEqual(elapsed('2026-11-20T09:55:00Z', null, NOW), '2h 5m');
     assert.strictEqual(missionLook('Review').icon, 'eye');
+  });
+});
+
+describe('home overview', () => {
+  it('summarizes live work with links into the native pages', async () => {
+    admiral();
+    const { homePage } = await import('../../src/surfaces/ops/extraCommands');
+    const store = new OpsStore({ isConnected: () => true });
+    await Promise.all([store.refresh('missions'), store.refresh('inbox'), store.refresh('fleet'), store.refresh('captains')]);
+    const page = homePage(store, { baseUrl: 'http://127.0.0.1:7890', version: '1.3.0', email: 'dev@example.com' }, NOW);
+    assert.strictEqual(page.title, 'Armada');
+    const fields = page.sections[0];
+    assert.ok(fields.kind === 'fields' && fields.rows.some((r) => r.label === 'Active missions' && r.value === '1'));
+    assert.ok(fields.kind === 'fields' && fields.rows.some((r) => r.label === 'Captains' && r.value === '1 working, 0 not working, 1 total'));
+    const needs = page.sections.find((s) => s.kind === 'list' && s.title.startsWith('Needs you'));
+    assert.ok(needs && needs.kind === 'list' && needs.items[0].link?.command === 'armada.inbox.open');
+    const failures = page.sections.find((s) => s.kind === 'list' && s.title === 'Recent failures');
+    assert.ok(failures && failures.kind === 'list' && failures.items[0].link?.command === 'armada.mission.open');
+    assert.deepStrictEqual(page.actions.map((a) => a.command), ['armada.dispatch', 'armada.dispatchVoyage', 'armada.planning.new', 'armada.ask.open']);
+  });
+});
+
+describe('needs you notifications', () => {
+  it('reports only items that were not there before, and nothing on the first load', async () => {
+    const { inboxKey, newInboxItems } = await import('../../src/surfaces/ops/localCommands');
+    const a = { kind: 'review', severity: 'Warning', title: 'A', detail: '', entityType: 'mission', entityId: 'msn_a', href: '' } as never;
+    const b = { kind: 'failed', severity: 'Error', title: 'B', detail: '', entityType: 'mission', entityId: 'msn_b', href: '' } as never;
+    assert.deepStrictEqual(newInboxItems(undefined, [a, b]), []);
+    assert.deepStrictEqual(newInboxItems(new Set([inboxKey(a)]), [a, b]), [b]);
   });
 });

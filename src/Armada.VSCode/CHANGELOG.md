@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- **Full dashboard parity, natively**: every entry of the parity manifest (`parity.json`, 759 entries) is implemented
+  or not applicable. Added since the first native views: planning and backlog refinement chats that dispatch a plan or
+  apply a refinement; the vessel workspace as a VS Code file system (`armada-vessel:`) with search, run a command,
+  changes and a host terminal; vessel import with a folder browser for remote Admirals and fleet categorization; the
+  Armada Overview; Activity Charts; the API explorer; sign in with email and password; notifications for new Needs You
+  items; model alert actions; backup and restore; change password; server administration (restart, rebuild, roll
+  back, stop, reset); local Harbor start, stop, restart and show; Install Armada MCP for Agents; About; multi-select
+  delete; **More...** on missions, voyages, vessels and black box entries; labels in VS Code's language from the
+  Admiral's catalog (`armada.language`).
 - **Ask Armada** chat view at the top of the Armada sidebar: the dashboard's own conversation state, streaming
   replies, tool calls, approve and reject cards for proposed actions and CLI tool requests, stop, new conversation
   and history. Ask Armada About This Failure asks here instead of opening the browser.

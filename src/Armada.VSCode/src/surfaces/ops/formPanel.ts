@@ -6,6 +6,7 @@
 
 import * as crypto from 'crypto';
 import * as vscode from 'vscode';
+import { t } from '../../i18n';
 import { escapeHtml } from './detailHtml';
 
 /** One form field. */
@@ -42,7 +43,7 @@ export function renderFormHtml(spec: FormSpec, nonce: string): string {
     } else {
       control = `<input id="${id}" name="${escapeHtml(f.key)}" type="${f.type}" value="${escapeHtml(f.value ?? '')}"${required}${placeholder}>`;
     }
-    return `<div class="field"><label for="${id}">${escapeHtml(f.label)}${f.required ? ' <span class="req">*</span>' : ''}</label>${control}${f.hint ? `<div class="hint">${escapeHtml(f.hint)}</div>` : ''}</div>`;
+    return `<div class="field"><label for="${id}">${escapeHtml(t(f.label))}${f.required ? ' <span class="req">*</span>' : ''}</label>${control}${f.hint ? `<div class="hint">${escapeHtml(t(f.hint))}</div>` : ''}</div>`;
   }).join('\n');
   return `<!DOCTYPE html>
 <html lang="en">
@@ -72,12 +73,12 @@ button:disabled { opacity: 0.6; cursor: default; }
 </style>
 </head>
 <body>
-<h1>${escapeHtml(spec.title)}</h1>
-${spec.intro ? `<div class="intro">${escapeHtml(spec.intro)}</div>` : ''}
+<h1>${escapeHtml(t(spec.title))}</h1>
+${spec.intro ? `<div class="intro">${escapeHtml(t(spec.intro))}</div>` : ''}
 <form id="form" novalidate>
 ${controls}
 <div class="error" id="error" role="alert"></div>
-<div class="actions"><button type="submit" id="submit">${escapeHtml(spec.submitLabel)}</button><button type="button" class="secondary" id="cancel">Cancel</button></div>
+<div class="actions"><button type="submit" id="submit">${escapeHtml(t(spec.submitLabel))}</button><button type="button" class="secondary" id="cancel">${escapeHtml(t('Cancel'))}</button></div>
 </form>
 <script nonce="${nonce}">
 const vscode = acquireVsCodeApi();

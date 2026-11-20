@@ -4,6 +4,8 @@
  * and links run extension commands through the host, which accepts only armada.* commands. Pure, for tests.
  */
 
+import { t } from '../../i18n';
+
 /** Tone of a status pill. */
 export type Tone = 'info' | 'ok' | 'warn' | 'error' | 'muted';
 
@@ -41,7 +43,8 @@ export type DetailSection =
   | { kind: 'text'; title: string; text: string; tone?: Tone }
   | { kind: 'pre'; title: string; text: string; note?: string }
   | { kind: 'list'; title: string; items: DetailListItem[]; empty?: string }
-  | { kind: 'progress'; title?: string; done: number; failed: number; running: number; total: number };
+  | { kind: 'progress'; title?: string; done: number; failed: number; running: number; total: number }
+  | { kind: 'bars'; title: string; note?: string; bars: Array<{ label: string; parts: Array<{ value: number; tone: Tone; name: string }> }> };
 
 /** A detail page. */
 export interface DetailPage {
@@ -75,7 +78,7 @@ function linkAttrs(link: DetailLink): string {
 }
 
 function pill(status: { label: string; tone: Tone }): string {
-  return `<span class="pill ${status.tone}">${escapeHtml(status.label)}</span>`;
+  return `<span class="pill ${status.tone}">${escapeHtml(t(status.label))}</span>`;
 }
 
 function renderSection(section: DetailSection): string {
@@ -83,21 +86,31 @@ function renderSection(section: DetailSection): string {
     case 'fields': {
       const rows = section.rows.filter((r) => r.value).map((r) => {
         const value = r.code ? `<code>${escapeHtml(r.value)}</code>` : escapeHtml(r.value);
-        return `<tr><th scope="row">${escapeHtml(r.label)}</th><td>${r.link ? `<a href="#" ${linkAttrs(r.link)}>${value}</a>` : value}</td></tr>`;
+        return `<tr><th scope="row">${escapeHtml(t(r.label))}</th><td>${r.link ? `<a href="#" ${linkAttrs(r.link)}>${value}</a>` : value}</td></tr>`;
       }).join('');
       return `<section>${section.title ? `<h2>${escapeHtml(section.title)}</h2>` : ''}<table class="fields">${rows}</table></section>`;
     }
     case 'text':
-      return `<section><h2>${escapeHtml(section.title)}</h2><div class="text ${section.tone ?? ''}">${escapeHtml(section.text)}</div></section>`;
+      return `<section><h2>${escapeHtml(t(section.title))}</h2><div class="text ${section.tone ?? ''}">${escapeHtml(section.text)}</div></section>`;
     case 'pre':
-      return `<section><h2>${escapeHtml(section.title)}${section.note ? ` <span class="muted">${escapeHtml(section.note)}</span>` : ''}</h2><pre class="pre">${escapeHtml(section.text)}</pre></section>`;
+      return `<section><h2>${escapeHtml(t(section.title))}${section.note ? ` <span class="muted">${escapeHtml(t(section.note))}</span>` : ''}</h2><pre class="pre">${escapeHtml(section.text)}</pre></section>`;
     case 'list': {
-      if (!section.items.length) return `<section><h2>${escapeHtml(section.title)}</h2><p class="muted">${escapeHtml(section.empty ?? 'None.')}</p></section>`;
+      if (!section.items.length) return `<section><h2>${escapeHtml(t(section.title))}</h2><p class="muted">${escapeHtml(t(section.empty ?? 'None.'))}</p></section>`;
       const items = section.items.map((item) => {
         const label = item.link ? `<a href="#" ${linkAttrs(item.link)}>${escapeHtml(item.label)}</a>` : escapeHtml(item.label);
         return `<li>${item.status ? `${pill(item.status)} ` : ''}${label}${item.description ? ` <span class="muted">${escapeHtml(item.description)}</span>` : ''}</li>`;
       }).join('');
-      return `<section><h2>${escapeHtml(section.title)}</h2><ul class="list">${items}</ul></section>`;
+      return `<section><h2>${escapeHtml(t(section.title))}</h2><ul class="list">${items}</ul></section>`;
+    }
+    case 'bars': {
+      const max = Math.max(1, ...section.bars.map((b) => b.parts.reduce((sum, p) => sum + p.value, 0)));
+      const rows = section.bars.map((b) => {
+        const total = b.parts.reduce((sum, p) => sum + p.value, 0);
+        const parts = b.parts.filter((p) => p.value > 0).map((p) => `<span class="${p.tone}" style="width:${(p.value / max) * 100}%" title="${escapeHtml(`${p.name}: ${p.value.toLocaleString()}`)}"></span>`).join('');
+        return `<div class="bar-row"><span class="bar-label">${escapeHtml(b.label)}</span><span class="bar-track">${parts}</span><span class="bar-value">${total.toLocaleString()}</span></div>`;
+      }).join('');
+      const legend = Array.from(new Map(section.bars.flatMap((b) => b.parts).map((p) => [p.name, p.tone])).entries()).map(([name, tone]) => `<span class="legend"><span class="swatch ${tone}"></span>${escapeHtml(name)}</span>`).join('');
+      return `<section><h2>${escapeHtml(t(section.title))}${section.note ? ` <span class="muted">${escapeHtml(t(section.note))}</span>` : ''}</h2><div class="legends">${legend}</div><div class="bars">${rows || '<p class="muted">No data.</p>'}</div></section>`;
     }
     case 'progress': {
       const total = Math.max(section.total, 1);
@@ -109,8 +122,8 @@ function renderSection(section: DetailSection): string {
 
 /** The page body (everything that live updates replace). */
 export function renderDetailContent(page: DetailPage): string {
-  const actions = page.actions.map((a) => `<button class="${a.primary ? '' : 'secondary'}" ${linkAttrs(a)}>${escapeHtml(a.label)}</button>`).join('');
-  return `<header><h1>${escapeHtml(page.title)} ${page.status ? pill(page.status) : ''}</h1>${page.subtitle ? `<div class="subtitle"><code>${escapeHtml(page.subtitle)}</code> <a href="#" ${linkAttrs({ command: 'armada.copyText', args: [page.subtitle] })} title="Copy">Copy</a></div>` : ''}</header>
+  const actions = page.actions.map((a) => `<button class="${a.primary ? '' : 'secondary'}" ${linkAttrs(a)}>${escapeHtml(t(a.label))}</button>`).join('');
+  return `<header><h1>${escapeHtml(page.title)} ${page.status ? pill(page.status) : ''}</h1>${page.subtitle ? `<div class="subtitle"><code>${escapeHtml(page.subtitle)}</code> <a href="#" ${linkAttrs({ command: 'armada.copyText', args: [page.subtitle] })} title="${escapeHtml(t('Copy'))}">${escapeHtml(t('Copy'))}</a></div>` : ''}</header>
 <div class="toolbar" role="toolbar">${actions}</div>
 ${page.sections.map(renderSection).join('\n')}`;
 }
@@ -154,6 +167,16 @@ ul.list li { padding: 4px 0; border-bottom: 1px solid var(--vscode-widget-border
 .pill.error { color: var(--vscode-errorForeground); border-color: var(--vscode-errorForeground); }
 .pill.muted { color: var(--vscode-descriptionForeground); border-color: var(--vscode-descriptionForeground); }
 .progress { display: flex; height: 8px; border-radius: 4px; overflow: hidden; background: var(--vscode-progressBar-background, var(--vscode-panel-border)); opacity: 0.9; max-width: 560px; }
+.bars { max-width: 760px; }
+.bar-row { display: grid; grid-template-columns: 110px 1fr 80px; align-items: center; gap: 8px; margin: 2px 0; font-size: 0.9em; }
+.bar-label { color: var(--vscode-descriptionForeground); white-space: nowrap; }
+.bar-value { text-align: right; font-variant-numeric: tabular-nums; }
+.bar-track { display: flex; height: 12px; background: var(--vscode-editorWidget-background); border-radius: 2px; overflow: hidden; }
+.bar-track span.ok, .swatch.ok { background: var(--vscode-testing-iconPassed); } .bar-track span.error, .swatch.error { background: var(--vscode-errorForeground); }
+.bar-track span.info, .swatch.info { background: var(--vscode-charts-blue); } .bar-track span.warn, .swatch.warn { background: var(--vscode-charts-yellow); }
+.bar-track span.muted, .swatch.muted { background: var(--vscode-descriptionForeground); }
+.legends { display: flex; gap: 14px; margin-bottom: 6px; font-size: 0.85em; color: var(--vscode-descriptionForeground); }
+.swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: middle; }
 .progress span.ok { background: var(--vscode-testing-iconPassed); } .progress span.error { background: var(--vscode-errorForeground); } .progress span.info { background: var(--vscode-charts-blue); }
 </style>
 </head>

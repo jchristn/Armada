@@ -7,12 +7,13 @@
 
 import * as crypto from 'crypto';
 import * as vscode from 'vscode';
+import { t } from '../../i18n';
 import { describeError } from '../../transport/errors';
 import { DetailAction, DetailPage, DetailSection, escapeHtml, isDetailMessage, renderDetailContent, renderDetailHtml } from '../ops/detailHtml';
 import { statusTone } from '../ops/detailPages';
 import { showForm } from '../ops/formPanel';
 import { humanize } from '../ops/presentation';
-import { applyEdits, createValues, editFields, fieldLabel, isLongText, recordId, recordStatus, recordTitle, ResourceRecord, ResourceSpec, ResourceViewKey, RESOURCE_VIEW_IDS } from './resourceSpec';
+import { applyEdits, createValues, editFields, fieldLabel, isLongText, recordId, recordStatus, recordTitle, ResourceRecord, ResourceSpec, ResourceViewKey, RESOURCE_VIEW_IDS, rowsOf } from './resourceSpec';
 
 /** A node in a resource tree. */
 export type ResourceNode =
@@ -136,11 +137,11 @@ export class ResourceTreeProvider implements vscode.TreeDataProvider<ResourceNod
   public getTreeItem(node: ResourceNode): vscode.TreeItem {
     if (node.kind === 'type') {
       const loaded = this._Store.get(node.spec);
-      const item = new vscode.TreeItem(node.spec.plural, vscode.TreeItemCollapsibleState.Collapsed);
+      const item = new vscode.TreeItem(t(node.spec.plural), vscode.TreeItemCollapsibleState.Collapsed);
       item.id = `resource:type:${node.spec.key}`;
       item.iconPath = new vscode.ThemeIcon(node.spec.icon);
       item.description = loaded?.state === 'ready' ? String(loaded.records.length) : undefined;
-      item.contextValue = `armadaResourceType${node.spec.create && node.spec.createFields ? ' armadaResourceType.creatable' : ''}`;
+      item.contextValue = `armadaResourceType${(node.spec.create && node.spec.createFields) || node.spec.createCommand ? ' armadaResourceType.creatable' : ''}`;
       return item;
     }
     if (node.kind === 'message') {
@@ -237,6 +238,9 @@ export class ResourceController implements vscode.Disposable {
       const target = this.target(a, b);
       if (target && (await requireConnected())) await this.open(target.spec, target.id);
     });
+    register('armada.showResult', async (title, data) => {
+      if (typeof title === 'string') await this.showResult(title, data);
+    });
     register('armada.resource.refresh', async (a) => {
       const spec = this.specOf(a);
       if (spec) await store.load(spec);
@@ -251,6 +255,24 @@ export class ResourceController implements vscode.Disposable {
       if (target) await this.edit(target.spec, target.id);
     });
     register('armada.resource.delete', async (a, b) => {
+      // From a tree with several records selected, VS Code passes the clicked node and the whole selection.
+      if (Array.isArray(b) && b.length > 1) {
+        const nodes = (b as ResourceNode[]).filter((n): n is Extract<ResourceNode, { kind: 'record' }> => n?.kind === 'record' && !!n.spec.remove);
+        if (!nodes.length) return;
+        if ((await vscode.window.showWarningMessage(`Delete ${nodes.length} records? This cannot be undone.`, { modal: true }, 'Delete')) !== 'Delete') return;
+        const failures: string[] = [];
+        for (const node of nodes) {
+          try {
+            await node.spec.remove?.(recordId(node.spec, node.record));
+          } catch (err) {
+            failures.push(`${recordTitle(node.record)}: ${describeError(err)}`);
+          }
+        }
+        for (const spec of new Set(nodes.map((n) => n.spec))) await this._Store.load(spec);
+        if (failures.length) void vscode.window.showErrorMessage(`Armada: ${failures.length} could not be deleted. ${failures.slice(0, 3).join('; ')}`);
+        else void vscode.window.showInformationMessage(`Armada: deleted ${nodes.length} records.`);
+        return;
+      }
       const target = this.target(a, b);
       if (target) await this.remove(target.spec, target.id);
     });
@@ -268,7 +290,11 @@ export class ResourceController implements vscode.Disposable {
       const action = target.spec.actions?.[index];
       if (!action) return;
       if (action.confirm && (await vscode.window.showWarningMessage(action.confirm(record), { modal: true }, action.label)) !== action.label) return;
-      await action.run(record);
+      const result = await action.run(record);
+      if (action.showResult && result !== undefined) {
+        await this.showResult(`${action.showResult}: ${recordTitle(record)}`, result);
+        return;
+      }
       await this.afterChange(target.spec, target.id);
     });
   }
@@ -316,6 +342,10 @@ export class ResourceController implements vscode.Disposable {
   }
 
   private async open(spec: ResourceSpec, id: string): Promise<void> {
+    if (spec.open) {
+      await spec.open(await this.read(spec, id));
+      return;
+    }
     const key = `${spec.key}:${id}`;
     let entry = this._Pages.get(key);
     if (entry) entry.panel.reveal(undefined, false);
@@ -346,6 +376,21 @@ export class ResourceController implements vscode.Disposable {
     }
   }
 
+  /** Opens an action's result (an object, or a list of records) as a read-only page. */
+  private async showResult(title: string, result: unknown): Promise<void> {
+    const rows = Array.isArray(result) ? result : rowsOf(result).length ? rowsOf(result) : undefined;
+    const record: ResourceRecord = rows ? { title, count: rows.length, items: rows } : { title, ...(result && typeof result === 'object' ? (result as ResourceRecord) : { value: String(result) }) };
+    const page = resourcePage({ key: 'result', label: title, plural: title, icon: 'info', view: 'system', list: async () => [] }, record);
+    page.title = title;
+    page.subtitle = undefined;
+    page.actions = [];
+    const panel = vscode.window.createWebviewPanel('armada.result', title.length > 40 ? `${title.slice(0, 39)}…` : title, vscode.ViewColumn.Active, { enableScripts: true, enableFindWidget: true });
+    panel.webview.onDidReceiveMessage((message: unknown) => {
+      if (isDetailMessage(message)) void vscode.commands.executeCommand(message.command, ...message.args);
+    });
+    panel.webview.html = renderDetailHtml(page, crypto.randomBytes(16).toString('base64'));
+  }
+
   private async afterChange(spec: ResourceSpec, id: string | undefined): Promise<void> {
     this._OnChanged?.(spec.key);
     await this._Store.load(spec);
@@ -353,6 +398,11 @@ export class ResourceController implements vscode.Disposable {
   }
 
   private async create(spec: ResourceSpec): Promise<void> {
+    if (spec.createCommand) {
+      await vscode.commands.executeCommand(spec.createCommand);
+      await this._Store.load(spec);
+      return;
+    }
     if (!spec.create || !spec.createFields) return;
     const created = await showForm<unknown>({ title: `New ${spec.label}`, submitLabel: 'Create', fields: spec.createFields }, async (values) => {
       try {

@@ -376,7 +376,7 @@ describe('ConnectionManager', () => {
   it('asks for a key only when no stored credential works, tries it as Bearer then X-Api-Key, and stores what worked', async () => {
     const mock = admiral();
     const { conn, secrets, memento } = manager([]);
-    fake.quickPick.push(pickLabel('Enter an Admiral URL'));
+    fake.quickPick.push(pickLabel('Enter an Admiral URL'), pickLabel('API key'));
     fake.inputBox.push('https://armada.example.com/dashboard', 'ak_settings');
     assert.strictEqual(await conn.connect({ interactive: true }), true);
     assert.deepStrictEqual(mock.calls('GET', '/api/v1/whoami').map((r) => [r.headers.Authorization, r.headers['X-Api-Key']]), [['Bearer ak_settings', undefined], [undefined, 'ak_settings']]);
@@ -389,10 +389,23 @@ describe('ConnectionManager', () => {
     assert.strictEqual(again.calls('GET', '/api/v1/whoami')[0].headers['X-Api-Key'], 'ak_settings');
   });
 
+  it('signs in with email and password and keeps the session token for that Admiral', async () => {
+    const mock = admiral();
+    mock.on('POST', '/api/v1/tenants/lookup', { json: { Tenants: [{ Id: 'ten_1', Name: 'Default' }], PageNumber: 1, PageSize: 10, TotalPages: 1, TotalRecords: 1 } })
+      .on('POST', '/api/v1/authenticate', (req) => ({ json: (req.body?.Password ?? req.body?.password) === 'pw' ? { Success: true, Token: 'sess-1', ExpiresUtc: null } : { Success: false, Token: null } }))
+      .on('GET', '/api/v1/whoami', (req) => (req.headers['X-Token'] === 'sess-1' ? { json: { User: { Id: 'usr_1', Email: 'a@b.c', IsAdmin: false, IsTenantAdmin: true } } } : { status: 401, json: { Error: 'NotAuthorized' } }));
+    const { conn, secrets } = manager([{ ...HARBOR, credentials: [] }]);
+    fake.quickPick.push(pickLabel("Harbor's Admiral"), pickLabel('email and password'));
+    fake.inputBox.push('a@b.c', 'pw');
+    assert.strictEqual(await conn.connect({ interactive: true }), true);
+    assert.strictEqual(conn.state.credentialOrigin, 'session for a@b.c');
+    assert.deepStrictEqual(JSON.parse(secrets.values.get(credentialSecretKey(HARBOR.baseUrl)) ?? '{}'), { secret: 'sess-1', header: 'X-Token' });
+  });
+
   it('does not store a key the Admiral rejects, and stops when the picker or a prompt is cancelled', async () => {
     admiral();
     const { conn, secrets, memento } = manager([{ ...HARBOR, credentials: [] }]);
-    fake.quickPick.push(pickLabel("Harbor's Admiral"));
+    fake.quickPick.push(pickLabel("Harbor's Admiral"), pickLabel('API key'));
     fake.inputBox.push('bad');
     assert.strictEqual(await conn.connect({ interactive: true }), false);
     assert.strictEqual(secrets.values.size, 0);
@@ -401,7 +414,7 @@ describe('ConnectionManager', () => {
     fake.reset();
     fake.quickPick.push(undefined);
     assert.strictEqual(await conn.connect({ interactive: true }), false);
-    fake.quickPick.push(pickLabel("Harbor's Admiral"));
+    fake.quickPick.push(pickLabel("Harbor's Admiral"), pickLabel('API key'));
     fake.inputBox.push('');
     assert.strictEqual(await conn.connect({ interactive: true }), false);
     assert.ok(fake.messages.some((m) => /is required/.test(m.text)));

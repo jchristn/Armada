@@ -40,6 +40,7 @@ export function missionPage(mission: Mission, store: OpsStore, logTail: string |
   if (mission.status === 'Failed' || mission.status === 'LandingFailed' || mission.status === 'Cancelled') actions.push({ label: 'Restart', command: 'armada.mission.restart', args: [mission.id] });
   if (mission.status === 'Failed' || mission.status === 'LandingFailed' || mission.lastBlackBoxEntryId) actions.push({ label: 'Black Box', command: 'armada.openBlackBox', args: [mission.id] });
   if (mission.prUrl) actions.push({ label: 'Open Pull Request', command: 'armada.openUrl', args: [mission.prUrl] });
+  actions.push({ label: 'More...', command: 'armada.resource.action', args: ['mission', mission.id] });
   actions.push({ label: 'Open in Browser', command: 'armada.openInBrowser', args: [`/missions/${mission.id}`] });
 
   const runtime = mission.startedUtc ? elapsed(mission.startedUtc, mission.completedUtc, now) : '';
@@ -86,6 +87,7 @@ export function voyagePage(progress: VoyageProgress, missions: MissionSummary[],
   const live = voyage.status === 'Open' || voyage.status === 'InProgress';
   const actions: DetailAction[] = [];
   if (live) actions.push({ label: 'Cancel Voyage', command: 'armada.voyage.cancel', args: [voyage.id] });
+  actions.push({ label: 'More...', command: 'armada.resource.action', args: ['voyage', voyage.id] });
   actions.push({ label: 'Open in Browser', command: 'armada.openInBrowser', args: [`/voyages/${voyage.id}`] });
   const order = (m: MissionSummary): number => (ACTIVE_MISSION_STATUSES.includes(m.status) ? 0 : m.status === 'Review' ? 1 : QUEUED_MISSION_STATUSES.includes(m.status) ? 2 : 3);
   const sorted = [...missions].sort((a, b) => order(a) - order(b));
@@ -147,6 +149,7 @@ export function mergePage(entry: MergeEntry, store: OpsStore, now: Date = new Da
   if (entry.status === 'Queued' || entry.status === 'Passed' || entry.status === 'Failed') actions.push({ label: 'Process Now', command: 'armada.merge.process', args: [entry.id], primary: true });
   if (entry.status === 'Queued' || entry.status === 'Testing' || entry.status === 'Failed') actions.push({ label: 'Remove from Queue', command: 'armada.merge.cancel', args: [entry.id] });
   if (entry.missionId) actions.push({ label: 'Open Mission', command: 'armada.mission.open', args: [entry.missionId] });
+  if (entry.status === 'Landed' || entry.status === 'Failed' || entry.status === 'Cancelled') actions.push({ label: 'Delete Entry', command: 'armada.merge.delete', args: [entry.id] });
   const sections: DetailSection[] = [
     {
       kind: 'fields',

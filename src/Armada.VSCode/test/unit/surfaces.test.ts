@@ -85,7 +85,7 @@ describe('extension manifest and activation', () => {
     // Marketplace publisher ids keep their case (LatticeAI); extension names are lowercase.
     assert.match(EXTENSION_ID, /^[A-Za-z0-9][A-Za-z0-9-]*\.[a-z0-9-]+$/);
     assert.match(MANIFEST.version, /^\d+\.\d+\.\d+$/);
-    assert.deepStrictEqual(MANIFEST.activationEvents, ['onStartupFinished']);
+    assert.deepStrictEqual(MANIFEST.activationEvents, ['onStartupFinished', 'onFileSystem:armada-vessel']);
   });
 
   it('contributes the Armada container with the native views and the failures view, and the Explorer copy behind its setting', () => {
