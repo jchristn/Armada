@@ -465,6 +465,9 @@ commands arrive with their own changes. Schema migrations 103 and 104 apply at s
 ### Readiness
 
 - Command-dependency probes treat shell syntax as syntax. A requested check recognizes `exit`, `return`, `:`, `source`, `unset`, `shift`, `eval`, `exec`, `trap`, `wait`, `local`, `readonly`, `declare`, `ulimit`, `umask`, `shopt`, `esac`, conditional and loop keywords, and `for`/`select`/`case` headers. A command name that is a shell variable is not probed. A program later in the same segment, and a program in a later `&&`, `||`, or `;` segment, is still probed. A missing program remains a blocking `command_dependency_missing` error.
+### Settled voyages announce their stored status
+
+- **A failed voyage is announced as failed.** When the health check settles a voyage, `voyage.changed` and the push title use the status already stored on the voyage. A voyage with a Failed or LandingFailed mission is stored as Failed and announced as Failed. A voyage whose missions finished without a failure is announced as Complete. Cancelling a voyage still announces Cancelled.
 
 ### Landing failure prevention
 
