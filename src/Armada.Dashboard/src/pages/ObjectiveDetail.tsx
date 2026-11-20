@@ -278,6 +278,8 @@ export default function ObjectiveDetail() {
   const loadedEditorSnapshotRef = useRef<ObjectiveEditorSnapshot | null>(null);
   const editorSnapshotRef = useRef<ObjectiveEditorSnapshot | null>(null);
   const acceptLiveObjectiveRef = useRef<(next: Objective) => void>(() => {});
+  const refinementStickToBottomRef = useRef(true);
+  const refinementTranscriptLoadedRef = useRef(false);
 
   const fleetMap = useMemo(() => new Map(fleets.map((fleet) => [fleet.id, fleet.name])), [fleets]);
   const vesselMap = useMemo(() => new Map(vessels.map((vessel) => [vessel.id, vessel.name])), [vessels]);
@@ -619,7 +621,10 @@ export default function ObjectiveDetail() {
 
   useEffect(() => {
     if (!refinementTranscriptRef.current) return;
-    refinementTranscriptRef.current.scrollTop = refinementTranscriptRef.current.scrollHeight;
+    if (!refinementTranscriptLoadedRef.current || refinementStickToBottomRef.current) {
+      refinementTranscriptRef.current.scrollTop = refinementTranscriptRef.current.scrollHeight;
+      refinementTranscriptLoadedRef.current = true;
+    }
   }, [refinementDetail?.messages]);
 
   useEffect(() => {
@@ -1642,7 +1647,15 @@ export default function ObjectiveDetail() {
                           {loadingOlderRefinement ? t('Loading earlier messages...') : t('Load earlier messages ({{shown}} of {{total}})', { shown: refinementDetail.messages.length, total: refinementDetail.messageCount })}
                         </button>
                       )}
-                      <div ref={refinementTranscriptRef} className="backlog-refinement-transcript">
+                      <div
+                        ref={refinementTranscriptRef}
+                        className="backlog-refinement-transcript"
+                        onScroll={() => {
+                          const transcript = refinementTranscriptRef.current;
+                          if (!transcript) return;
+                          refinementStickToBottomRef.current = transcript.scrollHeight - transcript.scrollTop - transcript.clientHeight < 140;
+                        }}
+                      >
                         {refinementDetail.messages.map((message) => (
                           <button
                             key={message.id}
