@@ -1,0 +1,4277 @@
+{
+ "contractVersion": "1.0",
+ "routes": [
+  {
+   "method": "get",
+   "path": "/api/v1/ask/quick-actions",
+   "summary": "List quick actions",
+   "tag": "Ask",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/ask/threads",
+   "summary": "Create an Ask Armada thread",
+   "tag": "Ask",
+   "requestType": "AskThreadCreateRequest",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/ask/threads/delete/multiple",
+   "summary": "Delete multiple Ask Armada threads",
+   "tag": "Ask",
+   "requestType": "DeleteMultipleRequest",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/ask/threads/enumerate",
+   "summary": "Enumerate my Ask Armada threads",
+   "tag": "Ask",
+   "requestType": "AskThreadEnumerateRequest",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "delete",
+   "path": "/api/v1/ask/threads/{id}",
+   "summary": "Delete an Ask Armada thread",
+   "tag": "Ask",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/ask/threads/{id}",
+   "summary": "Read an Ask Armada thread",
+   "tag": "Ask",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "put",
+   "path": "/api/v1/ask/threads/{id}",
+   "summary": "Update an Ask Armada thread",
+   "tag": "Ask",
+   "requestType": "AskThreadUpdateRequest",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/ask/threads/{id}/actions",
+   "summary": "Run a quick action",
+   "tag": "Ask",
+   "requestType": "AskActionRequest",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/ask/threads/{id}/cancel",
+   "summary": "Stop the running turn",
+   "tag": "Ask",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "put",
+   "path": "/api/v1/ask/threads/{id}/cli-permission-policy",
+   "summary": "Set a thread's CLI tool permission policy",
+   "tag": "Ask",
+   "requestType": "CliPermissionPolicyUpdateRequest",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/ask/threads/{id}/messages",
+   "summary": "Send a message",
+   "tag": "Ask",
+   "requestType": "AskMessageSendRequest",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/ask/threads/{id}/messages/enumerate",
+   "summary": "Enumerate thread messages",
+   "tag": "Ask",
+   "requestType": "AskMessageEnumerateRequest",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/ask/threads/{id}/messages/{messageId}/tool-calls/enumerate",
+   "summary": "Enumerate a message's tool calls",
+   "tag": "Ask",
+   "requestType": "EnumerationQuery",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/ask/threads/{id}/proposals/enumerate",
+   "summary": "Enumerate a thread's proposals",
+   "tag": "Ask",
+   "requestType": "EnumerationQuery",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/ask/threads/{id}/proposals/{pid}/approve",
+   "summary": "Approve a proposal",
+   "tag": "Ask",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/ask/threads/{id}/proposals/{pid}/reject",
+   "summary": "Reject a proposal",
+   "tag": "Ask",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/ask/threads/{id}/read",
+   "summary": "Mark a thread read",
+   "tag": "Ask",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/ask/threads/{id}/summarize",
+   "summary": "Summarize a thread",
+   "tag": "Ask",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/ask/threads/{id}/turn/tool-calls/enumerate",
+   "summary": "Enumerate the running turn's tool calls",
+   "tag": "Ask",
+   "requestType": "EnumerationQuery",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/ask/threads/{id}/unread",
+   "summary": "Mark a thread unread",
+   "tag": "Ask",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/ask/threads/{id}/work/enumerate",
+   "summary": "Enumerate a thread's tracked work",
+   "tag": "Ask",
+   "requestType": "EnumerationQuery",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/ask/threads/{id}/work/{workId}",
+   "summary": "Read a work snapshot",
+   "tag": "Ask",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/ask/threads/{id}/work/{workId}/missions/enumerate",
+   "summary": "Enumerate a tracked work item's missions",
+   "tag": "Ask",
+   "requestType": "EnumerationQuery",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/ask/threads/{id}/work/{workId}/targets/enumerate",
+   "summary": "Enumerate a tracked fleet action run's targets",
+   "tag": "Ask",
+   "requestType": "EnumerationQuery",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/captains/{id}/chat",
+   "summary": "Chat with a captain",
+   "tag": "Ask",
+   "requestType": "CaptainChatRequest",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "put",
+   "path": "/api/v1/account/password",
+   "summary": "Change the caller's password",
+   "tag": "Authentication",
+   "requestType": "PasswordChangeRequest",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/authenticate",
+   "summary": "Authenticate and get session token",
+   "tag": "Authentication",
+   "requestType": "",
+   "auth": "NoAuthRequired"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/onboarding",
+   "summary": "Self-register a new user",
+   "tag": "Authentication",
+   "requestType": "",
+   "auth": "NoAuthRequired"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/tenants/lookup",
+   "summary": "Look up tenants by email",
+   "tag": "Authentication",
+   "requestType": "TenantLookupRequest",
+   "auth": "NoAuthRequired"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/whoami",
+   "summary": "Get current identity",
+   "tag": "Authentication",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/backlog/{id}/refinement-sessions/enumerate",
+   "summary": "Enumerate refinement sessions for a backlog item",
+   "tag": "Backlog",
+   "requestType": "EnumerationQuery",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/backup",
+   "summary": "Download backup",
+   "tag": "Backup",
+   "requestType": "",
+   "auth": "AdminOnly"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/restore",
+   "summary": "Restore from backup",
+   "tag": "Backup",
+   "requestType": "",
+   "auth": "AdminOnly"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/battery/packs",
+   "summary": "List battery packs",
+   "tag": "Battery",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/battery/packs",
+   "summary": "Create battery pack",
+   "tag": "Battery",
+   "requestType": "BatteryPackEditRequest",
+   "auth": "AdminOnly"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/battery/packs/enumerate",
+   "summary": "Enumerate fixture battery packs",
+   "tag": "Battery",
+   "requestType": "EnumerationQuery",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "delete",
+   "path": "/api/v1/battery/packs/{packId}",
+   "summary": "Delete battery pack",
+   "tag": "Battery",
+   "requestType": "",
+   "auth": "AdminOnly"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/battery/packs/{packId}",
+   "summary": "Get battery pack",
+   "tag": "Battery",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "delete",
+   "path": "/api/v1/battery/packs/{packId}/files",
+   "summary": "Delete battery pack file",
+   "tag": "Battery",
+   "requestType": "",
+   "auth": "AdminOnly"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/battery/packs/{packId}/files",
+   "summary": "Read battery pack file",
+   "tag": "Battery",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "put",
+   "path": "/api/v1/battery/packs/{packId}/files",
+   "summary": "Write battery pack file",
+   "tag": "Battery",
+   "requestType": "BatteryPackTextFile",
+   "auth": "AdminOnly"
+  },
+  {
+   "method": "put",
+   "path": "/api/v1/battery/packs/{packId}/manifest",
+   "summary": "Update battery pack manifest",
+   "tag": "Battery",
+   "requestType": "BatteryPackEditRequest",
+   "auth": "AdminOnly"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/battery/packs/{packId}/validate",
+   "summary": "Validate battery pack",
+   "tag": "Battery",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/battery/runs",
+   "summary": "Run the fixture battery",
+   "tag": "Battery",
+   "requestType": "BatteryRunRequest",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/battery/runs/{id}",
+   "summary": "Get a battery run",
+   "tag": "Battery",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/battery/runs/{id}/results",
+   "summary": "List a battery run's results",
+   "tag": "Battery",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/battery/runs/{id}/results/enumerate",
+   "summary": "Enumerate a battery run's results",
+   "tag": "Battery",
+   "requestType": "EnumerationQuery",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/blackbox",
+   "summary": "List black box entries",
+   "tag": "BlackBox",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/blackbox/backfill",
+   "summary": "Backfill black box entries",
+   "tag": "BlackBox",
+   "requestType": "BlackBoxBackfillRequest",
+   "auth": "AdminOnly"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/blackbox/bundle",
+   "summary": "Build a maintainer bundle",
+   "tag": "BlackBox",
+   "requestType": "BlackBoxBundleRequest",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/blackbox/delete",
+   "summary": "Delete black box entries",
+   "tag": "BlackBox",
+   "requestType": "BlackBoxDeleteManyRequest",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/blackbox/enumerate",
+   "summary": "Enumerate black box entries",
+   "tag": "BlackBox",
+   "requestType": "BlackBoxEnumerateRequest",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/blackbox/fingerprints/enumerate",
+   "summary": "Enumerate black box fingerprints",
+   "tag": "BlackBox",
+   "requestType": "BlackBoxFingerprintEnumerateRequest",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/blackbox/fingerprints/{fingerprint}/trend",
+   "summary": "Get the trend of a black box failure mode",
+   "tag": "BlackBox",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/blackbox/gc",
+   "summary": "Run black box garbage collection now",
+   "tag": "BlackBox",
+   "requestType": "BlackBoxGcRunRequest",
+   "auth": "AdminOnly"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/blackbox/hotspots/enumerate",
+   "summary": "Enumerate black box hotspots",
+   "tag": "BlackBox",
+   "requestType": "BlackBoxHotspotEnumerateRequest",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/blackbox/purge",
+   "summary": "Purge black box entries by filter",
+   "tag": "BlackBox",
+   "requestType": "BlackBoxPurgeRequest",
+   "auth": "AdminOnly"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/blackbox/recovery-stats",
+   "summary": "Get black box recovery statistics",
+   "tag": "BlackBox",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/blackbox/recovery-stats/enumerate",
+   "summary": "Enumerate black box recovery statistics",
+   "tag": "BlackBox",
+   "requestType": "BlackBoxRecoveryStatsRequest",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/blackbox/resilience-gaps/enumerate",
+   "summary": "Enumerate Armada resilience gaps",
+   "tag": "BlackBox",
+   "requestType": "BlackBoxResilienceGapRequest",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/blackbox/retention",
+   "summary": "Get black box retention status",
+   "tag": "BlackBox",
+   "requestType": "",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/blackbox/search",
+   "summary": "Search black box entries",
+   "tag": "BlackBox",
+   "requestType": "BlackBoxSearchRequest",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/blackbox/storage",
+   "summary": "Get black box storage status",
+   "tag": "BlackBox",
+   "requestType": "",
+   "auth": "AdminOnly"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/blackbox/storage/migrate",
+   "summary": "Start a black box storage migration",
+   "tag": "BlackBox",
+   "requestType": "BlackBoxStorageMigrationRequest",
+   "auth": "AdminOnly"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/blackbox/storage/migrations/{id}",
+   "summary": "Get a black box storage migration job",
+   "tag": "BlackBox",
+   "requestType": "",
+   "auth": "AdminOnly"
+  },
+  {
+   "method": "delete",
+   "path": "/api/v1/blackbox/{id}",
+   "summary": "Delete a black box entry",
+   "tag": "BlackBox",
+   "requestType": "",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/blackbox/{id}",
+   "summary": "Get a black box entry",
+   "tag": "BlackBox",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/blackbox/{id}/brief",
+   "summary": "Get the FIX THIS brief of a black box entry",
+   "tag": "BlackBox",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/blackbox/{id}/diff/{otherId}",
+   "summary": "Diff two black box entries",
+   "tag": "BlackBox",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/blackbox/{id}/download",
+   "summary": "Download a black box entry",
+   "tag": "BlackBox",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/blackbox/{id}/export-fixture",
+   "summary": "Export a black box entry as a regression fixture",
+   "tag": "BlackBox",
+   "requestType": "BlackBoxFixtureExportRequest",
+   "auth": "AdminOnly"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/blackbox/{id}/nearby-successes",
+   "summary": "List an entry's nearby successes",
+   "tag": "BlackBox",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/blackbox/{id}/nearby-successes/enumerate",
+   "summary": "Enumerate an entry's nearby successes",
+   "tag": "BlackBox",
+   "requestType": "EnumerationQuery",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/blackbox/{id}/notes",
+   "summary": "List the notes on a black box entry",
+   "tag": "BlackBox",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/blackbox/{id}/notes",
+   "summary": "Add a note to a black box entry",
+   "tag": "BlackBox",
+   "requestType": "BlackBoxNoteAddRequest",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/blackbox/{id}/notes/enumerate",
+   "summary": "Enumerate the notes on a black box entry",
+   "tag": "BlackBox",
+   "requestType": "EnumerationQuery",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/blackbox/{id}/objects",
+   "summary": "List the objects of a black box entry",
+   "tag": "BlackBox",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/blackbox/{id}/objects/enumerate",
+   "summary": "Enumerate the objects of a black box entry",
+   "tag": "BlackBox",
+   "requestType": "EnumerationQuery",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/blackbox/{id}/objects/{name}",
+   "summary": "Read a black box object",
+   "tag": "BlackBox",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/blackbox/{id}/pin",
+   "summary": "Pin a black box entry",
+   "tag": "BlackBox",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/blackbox/{id}/reanalyze",
+   "summary": "Re-run enrichment and analysis of a black box entry",
+   "tag": "BlackBox",
+   "requestType": "",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/blackbox/{id}/recommendations/{recommendationId}/apply",
+   "summary": "Apply a configuration recommendation of a black box entry",
+   "tag": "BlackBox",
+   "requestType": "BlackBoxRecommendationApplyRequest",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/blackbox/{id}/recovery/{pathId}",
+   "summary": "Run a recovery path of a black box entry",
+   "tag": "BlackBox",
+   "requestType": "BlackBoxRecoveryRunRequest",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/blackbox/{id}/resolve",
+   "summary": "Resolve a black box entry",
+   "tag": "BlackBox",
+   "requestType": "BlackBoxResolveRequest",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/blackbox/{id}/sections/{section}",
+   "summary": "Get one section of a black box record",
+   "tag": "BlackBox",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/blackbox/{id}/timeline",
+   "summary": "Get an entry's combined timeline",
+   "tag": "BlackBox",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/blackbox/{id}/timeline/enumerate",
+   "summary": "Enumerate an entry's combined timeline",
+   "tag": "BlackBox",
+   "requestType": "EnumerationQuery",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/blackbox/{id}/unpin",
+   "summary": "Unpin a black box entry",
+   "tag": "BlackBox",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/missions/lint-brief",
+   "summary": "Lint a mission brief",
+   "tag": "BlackBox",
+   "requestType": "BriefLintRequest",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/missions/{id}/blackbox",
+   "summary": "Get a mission's current black box entry",
+   "tag": "BlackBox",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/missions/{id}/blackbox/brief",
+   "summary": "Get the FIX THIS brief of a mission's current black box entry",
+   "tag": "BlackBox",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/missions/{id}/blackbox/entries",
+   "summary": "List a mission's black box entries",
+   "tag": "BlackBox",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/missions/{id}/blackbox/entries/enumerate",
+   "summary": "Enumerate a mission's black box entries",
+   "tag": "BlackBox",
+   "requestType": "EnumerationQuery",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/vessels/{id}/blackbox-doctor",
+   "summary": "Get the vessel's black box configuration doctor",
+   "tag": "BlackBox",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/vessels/{id}/blackbox-doctor/enumerate",
+   "summary": "Enumerate the vessel's black box configuration doctor",
+   "tag": "BlackBox",
+   "requestType": "BlackBoxDoctorRequest",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/vessels/{id}/overlap-preview",
+   "summary": "Preview a mission's overlaps",
+   "tag": "BlackBox",
+   "requestType": "MissionOverlapPreviewRequest",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/vessels/{id}/reservations",
+   "summary": "List vessel reservations",
+   "tag": "BlackBox",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/vessels/{id}/reservations/enumerate",
+   "summary": "Enumerate vessel reservations",
+   "tag": "BlackBox",
+   "requestType": "EnumerationQuery",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/voyages/{id}/blackbox",
+   "summary": "Get a voyage's current black box entry",
+   "tag": "BlackBox",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/voyages/{id}/blackbox/brief",
+   "summary": "Get the FIX THIS brief of a voyage's current black box entry",
+   "tag": "BlackBox",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/voyages/{id}/blackbox/cascade",
+   "summary": "Get a voyage's black box cascade graph",
+   "tag": "BlackBox",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/captain-selection-decisions/{id}",
+   "summary": "Read captain selection detail",
+   "tag": "Captain selection",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/captain-selection-decisions/{id}/candidates",
+   "summary": "Read captain selection candidates",
+   "tag": "Captain selection",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/captain-selection-decisions/{id}/candidates/enumerate",
+   "summary": "Read captain selection candidates",
+   "tag": "Captain selection",
+   "requestType": "CaptainSelectionHistoryQuery",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/missions/{id}/captain-selection",
+   "summary": "Read captain selection summary",
+   "tag": "Captain selection",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/missions/{id}/captain-selection/history",
+   "summary": "Read captain selection history",
+   "tag": "Captain selection",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/missions/{id}/captain-selection/history/enumerate",
+   "summary": "Read captain selection history",
+   "tag": "Captain selection",
+   "requestType": "CaptainSelectionHistoryQuery",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/missions/{id}/captain-selection/preview",
+   "summary": "Read captain selection preview",
+   "tag": "Captain selection",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/missions/{id}/captain-selection/recovery",
+   "summary": "Authorize captain selection recovery",
+   "tag": "Captain selection",
+   "requestType": "UsageSelectionRecoveryRequest",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/captains",
+   "summary": "List all captains",
+   "tag": "Captains",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/captains",
+   "summary": "Create a captain",
+   "tag": "Captains",
+   "requestType": "Captain",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/captains/delete/multiple",
+   "summary": "Batch delete multiple captains",
+   "tag": "Captains",
+   "requestType": "DeleteMultipleRequest",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/captains/enumerate",
+   "summary": "Enumerate captains",
+   "tag": "Captains",
+   "requestType": "EnumerationQuery",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/captains/stop-all",
+   "summary": "Stop all captains",
+   "tag": "Captains",
+   "requestType": "",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "delete",
+   "path": "/api/v1/captains/{id}",
+   "summary": "Delete a captain",
+   "tag": "Captains",
+   "requestType": "",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/captains/{id}",
+   "summary": "Get a captain",
+   "tag": "Captains",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "put",
+   "path": "/api/v1/captains/{id}",
+   "summary": "Update a captain",
+   "tag": "Captains",
+   "requestType": "Captain",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "put",
+   "path": "/api/v1/captains/{id}/cli-permission-policy",
+   "summary": "Set a captain's CLI tool permission policy",
+   "tag": "Captains",
+   "requestType": "CliPermissionPolicyUpdateRequest",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/captains/{id}/log",
+   "summary": "Get current log for a captain",
+   "tag": "Captains",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/captains/{id}/stop",
+   "summary": "Stop a captain",
+   "tag": "Captains",
+   "requestType": "",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/captains/{id}/tools",
+   "summary": "Describe captain tools",
+   "tag": "Captains",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/captains/{id}/tools/enumerate",
+   "summary": "Enumerate captain tools",
+   "tag": "Captains",
+   "requestType": "CaptainToolsQuery",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/captains/{id}/unquarantine",
+   "summary": "Lift a captain's quarantine",
+   "tag": "Captains",
+   "requestType": "",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/check-runs",
+   "summary": "List check runs",
+   "tag": "CheckRuns",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/check-runs",
+   "summary": "Run a check",
+   "tag": "CheckRuns",
+   "requestType": "CheckRunRequest",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/check-runs/enumerate",
+   "summary": "Enumerate check runs",
+   "tag": "CheckRuns",
+   "requestType": "CheckRunQuery",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/check-runs/import",
+   "summary": "Import an external check",
+   "tag": "CheckRuns",
+   "requestType": "CheckRunImportRequest",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/check-runs/sync/github-actions",
+   "summary": "Sync GitHub Actions runs",
+   "tag": "CheckRuns",
+   "requestType": "GitHubActionsSyncRequest",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "delete",
+   "path": "/api/v1/check-runs/{id}",
+   "summary": "Delete a check run",
+   "tag": "CheckRuns",
+   "requestType": "",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/check-runs/{id}",
+   "summary": "Get a check run",
+   "tag": "CheckRuns",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/check-runs/{id}/retry",
+   "summary": "Retry a check run",
+   "tag": "CheckRuns",
+   "requestType": "",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/cli-permissions/requests/enumerate",
+   "summary": "Enumerate CLI permission requests",
+   "tag": "CliPermissions",
+   "requestType": "CliPermissionRequestEnumerateRequest",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/cli-permissions/requests/{id}",
+   "summary": "Get a CLI permission request",
+   "tag": "CliPermissions",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/cli-permissions/requests/{id}/decide",
+   "summary": "Decide a CLI permission request",
+   "tag": "CliPermissions",
+   "requestType": "CliPermissionDecisionRequest",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/cli-permissions/rules",
+   "summary": "Create a CLI permission rule",
+   "tag": "CliPermissions",
+   "requestType": "CliPermissionRule",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/cli-permissions/rules/enumerate",
+   "summary": "Enumerate CLI permission rules",
+   "tag": "CliPermissions",
+   "requestType": "EnumerationQuery",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "delete",
+   "path": "/api/v1/cli-permissions/rules/{id}",
+   "summary": "Delete a CLI permission rule",
+   "tag": "CliPermissions",
+   "requestType": "",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/cli-permissions/rules/{id}",
+   "summary": "Get a CLI permission rule",
+   "tag": "CliPermissions",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "put",
+   "path": "/api/v1/cli-permissions/rules/{id}",
+   "summary": "Update a CLI permission rule",
+   "tag": "CliPermissions",
+   "requestType": "CliPermissionRule",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/credentials",
+   "summary": "List credentials",
+   "tag": "Credentials",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/credentials",
+   "summary": "Create credential",
+   "tag": "Credentials",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/credentials/enumerate",
+   "summary": "Enumerate credentials",
+   "tag": "Credentials",
+   "requestType": "EnumerationQuery",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "delete",
+   "path": "/api/v1/credentials/{id}",
+   "summary": "Delete credential",
+   "tag": "Credentials",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/credentials/{id}",
+   "summary": "Get credential by ID",
+   "tag": "Credentials",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "put",
+   "path": "/api/v1/credentials/{id}",
+   "summary": "Update credential (admin only)",
+   "tag": "Credentials",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/deployments",
+   "summary": "List deployments",
+   "tag": "Deployments",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/deployments",
+   "summary": "Create a deployment",
+   "tag": "Deployments",
+   "requestType": "DeploymentUpsertRequest",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/deployments/enumerate",
+   "summary": "Enumerate deployments",
+   "tag": "Deployments",
+   "requestType": "DeploymentQuery",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "delete",
+   "path": "/api/v1/deployments/{id}",
+   "summary": "Delete a deployment",
+   "tag": "Deployments",
+   "requestType": "",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/deployments/{id}",
+   "summary": "Get a deployment",
+   "tag": "Deployments",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "put",
+   "path": "/api/v1/deployments/{id}",
+   "summary": "Update a deployment",
+   "tag": "Deployments",
+   "requestType": "DeploymentUpsertRequest",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/deployments/{id}/approve",
+   "summary": "Approve a deployment",
+   "tag": "Deployments",
+   "requestType": "DeploymentApprovalBody",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/deployments/{id}/deny",
+   "summary": "Deny a deployment",
+   "tag": "Deployments",
+   "requestType": "DeploymentApprovalBody",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/deployments/{id}/rollback",
+   "summary": "Rollback a deployment",
+   "tag": "Deployments",
+   "requestType": "",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/deployments/{id}/verify",
+   "summary": "Run post-deploy verification",
+   "tag": "Deployments",
+   "requestType": "",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/docks",
+   "summary": "List docks",
+   "tag": "Docks",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/docks/delete/multiple",
+   "summary": "Batch delete multiple docks",
+   "tag": "Docks",
+   "requestType": "DeleteMultipleRequest",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/docks/enumerate",
+   "summary": "Enumerate docks",
+   "tag": "Docks",
+   "requestType": "EnumerationQuery",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "delete",
+   "path": "/api/v1/docks/{id}",
+   "summary": "Delete a dock",
+   "tag": "Docks",
+   "requestType": "",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/docks/{id}",
+   "summary": "Get a dock",
+   "tag": "Docks",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "delete",
+   "path": "/api/v1/docks/{id}/purge",
+   "summary": "Force purge a dock",
+   "tag": "Docks",
+   "requestType": "",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/docks/{id}/repair",
+   "summary": "Repair a dock worktree",
+   "tag": "Docks",
+   "requestType": "",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/docks/{id}/unstick",
+   "summary": "Unstick a wedged dock",
+   "tag": "Docks",
+   "requestType": "",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/environments",
+   "summary": "List environments",
+   "tag": "Environments",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/environments",
+   "summary": "Create an environment",
+   "tag": "Environments",
+   "requestType": "DeploymentEnvironmentUpsertRequest",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/environments/enumerate",
+   "summary": "Enumerate environments",
+   "tag": "Environments",
+   "requestType": "DeploymentEnvironmentQuery",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "delete",
+   "path": "/api/v1/environments/{id}",
+   "summary": "Delete an environment",
+   "tag": "Environments",
+   "requestType": "",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/environments/{id}",
+   "summary": "Get an environment",
+   "tag": "Environments",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "put",
+   "path": "/api/v1/environments/{id}",
+   "summary": "Update an environment",
+   "tag": "Environments",
+   "requestType": "DeploymentEnvironmentUpsertRequest",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/events",
+   "summary": "List events",
+   "tag": "Events",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/events/delete/multiple",
+   "summary": "Batch delete multiple events",
+   "tag": "Events",
+   "requestType": "DeleteMultipleRequest",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/events/enumerate",
+   "summary": "Enumerate events",
+   "tag": "Events",
+   "requestType": "EnumerationQuery",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "delete",
+   "path": "/api/v1/events/{id}",
+   "summary": "Delete an event",
+   "tag": "Events",
+   "requestType": "",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/events/{id}",
+   "summary": "Get an event",
+   "tag": "Events",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/harbors",
+   "summary": "[Experimental] Register a Harbor",
+   "tag": "Experimental",
+   "requestType": "Harbor",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/harbors/enumerate",
+   "summary": "[Experimental] Enumerate Harbors",
+   "tag": "Experimental",
+   "requestType": "EnumerationQuery",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "delete",
+   "path": "/api/v1/harbors/{id}",
+   "summary": "[Experimental] Delete a Harbor",
+   "tag": "Experimental",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/harbors/{id}",
+   "summary": "[Experimental] Get a Harbor",
+   "tag": "Experimental",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "put",
+   "path": "/api/v1/harbors/{id}",
+   "summary": "[Experimental] Update a Harbor",
+   "tag": "Experimental",
+   "requestType": "Harbor",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/harbors/{id}/disable",
+   "summary": "[Experimental] Disable a Harbor",
+   "tag": "Experimental",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/harbors/{id}/enable",
+   "summary": "[Experimental] Enable a Harbor",
+   "tag": "Experimental",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/harbors/{id}/jobs",
+   "summary": "[Experimental] List a Harbor's jobs",
+   "tag": "Experimental",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/harbors/{id}/jobs/enumerate",
+   "summary": "[Experimental] Enumerate a Harbor's jobs",
+   "tag": "Experimental",
+   "requestType": "EnumerationQuery",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/harbors/{id}/jobs/{jobId}/stop",
+   "summary": "[Experimental] Stop a Harbor job",
+   "tag": "Experimental",
+   "requestType": "",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/harbors/{id}/metrics",
+   "summary": "[Experimental] Get a Harbor's metrics",
+   "tag": "Experimental",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/harbors/{id}/probe",
+   "summary": "[Experimental] Probe a Harbor",
+   "tag": "Experimental",
+   "requestType": "HarborProbeRequest",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/server/rebuild",
+   "summary": "[Experimental] Rebuild the Admiral server",
+   "tag": "Experimental",
+   "requestType": "",
+   "auth": "AdminOnly"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/server/rebuild/status",
+   "summary": "[Experimental] Get the latest rebuild status",
+   "tag": "Experimental",
+   "requestType": "",
+   "auth": "AdminOnly"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/server/rollback",
+   "summary": "[Experimental] Roll back the last rebuild",
+   "tag": "Experimental",
+   "requestType": "",
+   "auth": "AdminOnly"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/failure-cause-rules",
+   "summary": "List failure-cause rules",
+   "tag": "FailureCauseRules",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/failure-cause-rules",
+   "summary": "Create a failure-cause rule",
+   "tag": "FailureCauseRules",
+   "requestType": "FailureCauseRule",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/failure-cause-rules/enumerate",
+   "summary": "Enumerate failure-cause rules",
+   "tag": "FailureCauseRules",
+   "requestType": "EnumerationQuery",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "delete",
+   "path": "/api/v1/failure-cause-rules/{id}",
+   "summary": "Delete a failure-cause rule",
+   "tag": "FailureCauseRules",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/failure-cause-rules/{id}",
+   "summary": "Get a failure-cause rule",
+   "tag": "FailureCauseRules",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "put",
+   "path": "/api/v1/failure-cause-rules/{id}",
+   "summary": "Update a failure-cause rule",
+   "tag": "FailureCauseRules",
+   "requestType": "FailureCauseRule",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/fleet-action-runs/enumerate",
+   "summary": "Enumerate fleet action runs",
+   "tag": "FleetActions",
+   "requestType": "EnumerationQuery",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/fleet-action-runs/{id}",
+   "summary": "Get a fleet action run",
+   "tag": "FleetActions",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/fleet-action-runs/{id}/cancel",
+   "summary": "Cancel a fleet action run",
+   "tag": "FleetActions",
+   "requestType": "",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/fleet-action-runs/{id}/targets/enumerate",
+   "summary": "Enumerate fleet action run targets",
+   "tag": "FleetActions",
+   "requestType": "FleetActionTargetEnumerateRequest",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/fleet-action-runs/{id}/targets/{targetId}",
+   "summary": "Get a fleet action run target",
+   "tag": "FleetActions",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/fleet-actions",
+   "summary": "Create a fleet action",
+   "tag": "FleetActions",
+   "requestType": "FleetActionUpsertRequest",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/fleet-actions/enumerate",
+   "summary": "Enumerate fleet actions",
+   "tag": "FleetActions",
+   "requestType": "FleetActionEnumerateRequest",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/fleet-actions/run",
+   "summary": "Start an ad hoc fleet action run",
+   "tag": "FleetActions",
+   "requestType": "FleetActionRunRequest",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "delete",
+   "path": "/api/v1/fleet-actions/{id}",
+   "summary": "Delete a fleet action",
+   "tag": "FleetActions",
+   "requestType": "",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/fleet-actions/{id}",
+   "summary": "Get a fleet action",
+   "tag": "FleetActions",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "put",
+   "path": "/api/v1/fleet-actions/{id}",
+   "summary": "Update a fleet action",
+   "tag": "FleetActions",
+   "requestType": "FleetActionUpsertRequest",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/fleet-actions/{id}/run",
+   "summary": "Run a fleet action",
+   "tag": "FleetActions",
+   "requestType": "FleetActionRunRequest",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/fleets",
+   "summary": "List all fleets",
+   "tag": "Fleets",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/fleets",
+   "summary": "Create a fleet",
+   "tag": "Fleets",
+   "requestType": "Fleet",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/fleets/delete/multiple",
+   "summary": "Batch delete multiple fleets",
+   "tag": "Fleets",
+   "requestType": "DeleteMultipleRequest",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/fleets/enumerate",
+   "summary": "Enumerate fleets",
+   "tag": "Fleets",
+   "requestType": "EnumerationQuery",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "delete",
+   "path": "/api/v1/fleets/{id}",
+   "summary": "Delete a fleet",
+   "tag": "Fleets",
+   "requestType": "",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/fleets/{id}",
+   "summary": "Get a fleet",
+   "tag": "Fleets",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "put",
+   "path": "/api/v1/fleets/{id}",
+   "summary": "Update a fleet",
+   "tag": "Fleets",
+   "requestType": "Fleet",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "get",
+   "path": "/openapi.json",
+   "summary": "",
+   "tag": "General",
+   "requestType": "",
+   "auth": "NoAuthRequired"
+  },
+  {
+   "method": "get",
+   "path": "/swagger",
+   "summary": "",
+   "tag": "General",
+   "requestType": "",
+   "auth": "NoAuthRequired"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/handoff-artifacts/{id}",
+   "summary": "Get a handoff artifact",
+   "tag": "HandoffArtifacts",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/missions/{id}/handoff-artifacts",
+   "summary": "List a mission's handoff artifacts",
+   "tag": "HandoffArtifacts",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/missions/{id}/handoff-artifacts/enumerate",
+   "summary": "Enumerate a mission's handoff artifacts",
+   "tag": "HandoffArtifacts",
+   "requestType": "EnumerationQuery",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/history",
+   "summary": "List historical timeline entries",
+   "tag": "History",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/history/enumerate",
+   "summary": "Enumerate historical timeline entries",
+   "tag": "History",
+   "requestType": "HistoricalTimelineQuery",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/inbox/enumerate",
+   "summary": "Enumerate the needs-you inbox",
+   "tag": "Inbox",
+   "requestType": "EnumerationQuery",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/incidents",
+   "summary": "List incidents",
+   "tag": "Incidents",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/incidents",
+   "summary": "Create an incident",
+   "tag": "Incidents",
+   "requestType": "IncidentUpsertRequest",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/incidents/enumerate",
+   "summary": "Enumerate incidents",
+   "tag": "Incidents",
+   "requestType": "IncidentQuery",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "delete",
+   "path": "/api/v1/incidents/{id}",
+   "summary": "Delete an incident",
+   "tag": "Incidents",
+   "requestType": "",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/incidents/{id}",
+   "summary": "Get an incident",
+   "tag": "Incidents",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "put",
+   "path": "/api/v1/incidents/{id}",
+   "summary": "Update an incident",
+   "tag": "Incidents",
+   "requestType": "IncidentUpsertRequest",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/jobs",
+   "summary": "List one page of background jobs",
+   "tag": "Jobs",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/jobs/enumerate",
+   "summary": "Enumerate background jobs",
+   "tag": "Jobs",
+   "requestType": "JobQuery",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/jobs/{id}",
+   "summary": "Get a background job",
+   "tag": "Jobs",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/jobs/{id}/cancel",
+   "summary": "Cancel a background job",
+   "tag": "Jobs",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/memories",
+   "summary": "List/search memories",
+   "tag": "Memories",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/memories",
+   "summary": "Create or upsert a memory",
+   "tag": "Memories",
+   "requestType": "Memory",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/memories/enumerate",
+   "summary": "Enumerate memories",
+   "tag": "Memories",
+   "requestType": "MemoryEnumerateRequest",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "delete",
+   "path": "/api/v1/memories/{id}",
+   "summary": "Delete a memory",
+   "tag": "Memories",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/memories/{id}",
+   "summary": "Get a memory",
+   "tag": "Memories",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "put",
+   "path": "/api/v1/memories/{id}",
+   "summary": "Update a memory",
+   "tag": "Memories",
+   "requestType": "Memory",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/merge-queue",
+   "summary": "List merge queue entries",
+   "tag": "MergeQueue",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/merge-queue",
+   "summary": "Enqueue a branch for merge",
+   "tag": "MergeQueue",
+   "requestType": "MergeEntry",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/merge-queue/enumerate",
+   "summary": "Enumerate merge queue entries",
+   "tag": "MergeQueue",
+   "requestType": "EnumerationQuery",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/merge-queue/process",
+   "summary": "Process the merge queue",
+   "tag": "MergeQueue",
+   "requestType": "",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/merge-queue/purge",
+   "summary": "Batch purge merge queue entries",
+   "tag": "MergeQueue",
+   "requestType": "PurgeMergeEntriesRequest",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "delete",
+   "path": "/api/v1/merge-queue/{id}",
+   "summary": "Delete or cancel a merge queue entry",
+   "tag": "MergeQueue",
+   "requestType": "",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/merge-queue/{id}",
+   "summary": "Get a merge queue entry",
+   "tag": "MergeQueue",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/merge-queue/{id}/process",
+   "summary": "Process a single merge queue entry",
+   "tag": "MergeQueue",
+   "requestType": "",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "delete",
+   "path": "/api/v1/merge-queue/{id}/purge",
+   "summary": "Purge a single merge queue entry",
+   "tag": "MergeQueue",
+   "requestType": "",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/metrics/concurrency",
+   "summary": "Get concurrency wait aggregates",
+   "tag": "Missions",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/missions",
+   "summary": "List all missions",
+   "tag": "Missions",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/missions",
+   "summary": "Create a mission",
+   "tag": "Missions",
+   "requestType": "Mission",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/missions/delete/multiple",
+   "summary": "Batch delete multiple missions",
+   "tag": "Missions",
+   "requestType": "DeleteMultipleRequest",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/missions/enumerate",
+   "summary": "Enumerate missions",
+   "tag": "Missions",
+   "requestType": "EnumerationQuery",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/missions/history",
+   "summary": "Get aggregated mission history",
+   "tag": "Missions",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/missions/summaries",
+   "summary": "List lightweight mission summaries",
+   "tag": "Missions",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/missions/summaries/enumerate",
+   "summary": "Enumerate lightweight mission summaries",
+   "tag": "Missions",
+   "requestType": "EnumerationQuery",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "delete",
+   "path": "/api/v1/missions/{id}",
+   "summary": "Cancel a mission",
+   "tag": "Missions",
+   "requestType": "",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/missions/{id}",
+   "summary": "Get a mission",
+   "tag": "Missions",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "put",
+   "path": "/api/v1/missions/{id}",
+   "summary": "Update a mission",
+   "tag": "Missions",
+   "requestType": "Mission",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/missions/{id}/diff",
+   "summary": "Get diff for a mission",
+   "tag": "Missions",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/missions/{id}/evaluate-autoland",
+   "summary": "Dry-run the auto-land predicate for a mission",
+   "tag": "Missions",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/missions/{id}/github/pull-request",
+   "summary": "Get GitHub pull-request evidence for a mission",
+   "tag": "Missions",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/missions/{id}/github/pull-request/checks/enumerate",
+   "summary": "Enumerate the checks of a mission's GitHub pull request",
+   "tag": "Missions",
+   "requestType": "EnumerationQuery",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/missions/{id}/github/pull-request/comments/enumerate",
+   "summary": "Enumerate the comments of a mission's GitHub pull request",
+   "tag": "Missions",
+   "requestType": "EnumerationQuery",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/missions/{id}/github/pull-request/reviews/enumerate",
+   "summary": "Enumerate the reviews of a mission's GitHub pull request",
+   "tag": "Missions",
+   "requestType": "EnumerationQuery",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/missions/{id}/instructions",
+   "summary": "Get mission instructions",
+   "tag": "Missions",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/missions/{id}/landing-preview",
+   "summary": "Preview mission landing readiness",
+   "tag": "Missions",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/missions/{id}/log",
+   "summary": "Get log for a mission",
+   "tag": "Missions",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "delete",
+   "path": "/api/v1/missions/{id}/purge",
+   "summary": "Permanently delete a mission",
+   "tag": "Missions",
+   "requestType": "",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/missions/{id}/restart",
+   "summary": "Restart a failed or cancelled mission, or start a pending one",
+   "tag": "Missions",
+   "requestType": "MissionRestartRequest",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/missions/{id}/retry-landing",
+   "summary": "Retry landing for a mission",
+   "tag": "Missions",
+   "requestType": "",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/missions/{id}/review/approve",
+   "summary": "Approve a mission review gate",
+   "tag": "Missions",
+   "requestType": "MissionReviewDecisionRequest",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/missions/{id}/review/deny",
+   "summary": "Deny a mission review gate",
+   "tag": "Missions",
+   "requestType": "MissionReviewDecisionRequest",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "put",
+   "path": "/api/v1/missions/{id}/status",
+   "summary": "Transition mission status",
+   "tag": "Missions",
+   "requestType": "StatusTransitionRequest",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/missions/{id}/waits",
+   "summary": "Get a mission's wait intervals",
+   "tag": "Missions",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/missions/{id}/waits/enumerate",
+   "summary": "Enumerate a mission's wait intervals",
+   "tag": "Missions",
+   "requestType": "EnumerationQuery",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/model-endpoints",
+   "summary": "Create a model endpoint",
+   "tag": "Model Endpoints",
+   "requestType": "ModelEndpoint",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/model-endpoints/enumerate",
+   "summary": "Enumerate model endpoints",
+   "tag": "Model Endpoints",
+   "requestType": "EnumerationQuery",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/model-endpoints/health-check",
+   "summary": "Run a health sweep",
+   "tag": "Model Endpoints",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "delete",
+   "path": "/api/v1/model-endpoints/{id}",
+   "summary": "Delete a model endpoint",
+   "tag": "Model Endpoints",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/model-endpoints/{id}",
+   "summary": "Get a model endpoint",
+   "tag": "Model Endpoints",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "put",
+   "path": "/api/v1/model-endpoints/{id}",
+   "summary": "Update a model endpoint",
+   "tag": "Model Endpoints",
+   "requestType": "ModelEndpoint",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/model-endpoints/{id}/duplicate",
+   "summary": "Duplicate a model endpoint",
+   "tag": "Model Endpoints",
+   "requestType": "ModelEndpoint",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/model-endpoints/{id}/validate",
+   "summary": "Validate a model endpoint",
+   "tag": "Model Endpoints",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/model-alerts",
+   "summary": "List model alerts",
+   "tag": "ModelAlerts",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/model-alerts/enumerate",
+   "summary": "Enumerate model alerts",
+   "tag": "ModelAlerts",
+   "requestType": "ModelAlertQuery",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/model-alerts/evaluate",
+   "summary": "Evaluate model alerts now",
+   "tag": "ModelAlerts",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/model-alerts/thresholds",
+   "summary": "Get model alert thresholds",
+   "tag": "ModelAlerts",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "put",
+   "path": "/api/v1/model-alerts/thresholds",
+   "summary": "Update model alert thresholds",
+   "tag": "ModelAlerts",
+   "requestType": "ModelAlertThresholds",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/model-alerts/{id}",
+   "summary": "Get a model alert",
+   "tag": "ModelAlerts",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/model-alerts/{id}/apply",
+   "summary": "Apply a model alert suggested action",
+   "tag": "ModelAlerts",
+   "requestType": "ModelAlertApplyRequest",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/model-alerts/{id}/ignore",
+   "summary": "Ignore a model alert",
+   "tag": "ModelAlerts",
+   "requestType": "ModelAlertIgnoreRequest",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/captains/{id}/evaluate",
+   "summary": "Evaluate a captain",
+   "tag": "ModelProbes",
+   "requestType": "EvaluateCaptainRequest",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/model-endpoints/{id}/evaluate",
+   "summary": "Evaluate a model endpoint",
+   "tag": "ModelProbes",
+   "requestType": "EvaluateCaptainRequest",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/model-probe-runs",
+   "summary": "List Evaluate runs",
+   "tag": "ModelProbes",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/model-probe-runs/enumerate",
+   "summary": "Enumerate model probe runs",
+   "tag": "ModelProbes",
+   "requestType": "ModelProbeRunQuery",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/model-probe-runs/{id}",
+   "summary": "Get an Evaluate run",
+   "tag": "ModelProbes",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/model-probe-runs/{id}/cancel",
+   "summary": "Cancel an Evaluate run",
+   "tag": "ModelProbes",
+   "requestType": "",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/model-profiles",
+   "summary": "List model profiles",
+   "tag": "ModelProfiles",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/model-profiles/enumerate",
+   "summary": "Enumerate model profiles",
+   "tag": "ModelProfiles",
+   "requestType": "ModelProfileQuery",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/model-profiles/{id}",
+   "summary": "Get a model profile",
+   "tag": "ModelProfiles",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "put",
+   "path": "/api/v1/model-profiles/{id}",
+   "summary": "Update a model profile",
+   "tag": "ModelProfiles",
+   "requestType": "ModelProfileUpdateRequest",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "put",
+   "path": "/api/v1/model-profiles/{id}/revisions/{revisionId}/compatible-with",
+   "summary": "Mark model profile revisions compatible",
+   "tag": "ModelProfiles",
+   "requestType": "ModelProfileCompatibilityRequest",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/model-profiles/{id}/scorecard",
+   "summary": "Get a model scorecard",
+   "tag": "ModelProfiles",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/backlog",
+   "summary": "List backlog items",
+   "tag": "Objectives",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/backlog",
+   "summary": "Create a backlog item",
+   "tag": "Objectives",
+   "requestType": "ObjectiveUpsertRequest",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/backlog/enumerate",
+   "summary": "Enumerate backlog items",
+   "tag": "Objectives",
+   "requestType": "ObjectiveQuery",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/backlog/reorder",
+   "summary": "Reorder backlog items",
+   "tag": "Objectives",
+   "requestType": "ObjectiveReorderRequest",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "delete",
+   "path": "/api/v1/backlog/{id}",
+   "summary": "Delete a backlog item",
+   "tag": "Objectives",
+   "requestType": "",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/backlog/{id}",
+   "summary": "Get a backlog item",
+   "tag": "Objectives",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "put",
+   "path": "/api/v1/backlog/{id}",
+   "summary": "Update a backlog item",
+   "tag": "Objectives",
+   "requestType": "ObjectiveUpsertRequest",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/backlog/{id}/refinement-sessions",
+   "summary": "Create a backlog refinement session",
+   "tag": "Objectives",
+   "requestType": "ObjectiveRefinementSessionCreateRequest",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "delete",
+   "path": "/api/v1/objective-refinement-sessions/{id}",
+   "summary": "Delete an objective refinement session",
+   "tag": "Objectives",
+   "requestType": "",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/objective-refinement-sessions/{id}",
+   "summary": "Get an objective refinement session",
+   "tag": "Objectives",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/objective-refinement-sessions/{id}/apply",
+   "summary": "Apply an objective refinement summary",
+   "tag": "Objectives",
+   "requestType": "ObjectiveRefinementApplyRequest",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/objective-refinement-sessions/{id}/messages",
+   "summary": "Send an objective refinement message",
+   "tag": "Objectives",
+   "requestType": "ObjectiveRefinementMessageRequest",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/objective-refinement-sessions/{id}/messages/enumerate",
+   "summary": "Enumerate an objective refinement session's transcript",
+   "tag": "Objectives",
+   "requestType": "EnumerationQuery",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/objective-refinement-sessions/{id}/stop",
+   "summary": "Stop an objective refinement session",
+   "tag": "Objectives",
+   "requestType": "",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/objective-refinement-sessions/{id}/summarize",
+   "summary": "Summarize an objective refinement session",
+   "tag": "Objectives",
+   "requestType": "ObjectiveRefinementSummaryRequest",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/objectives",
+   "summary": "List objectives",
+   "tag": "Objectives",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/objectives",
+   "summary": "Create an objective",
+   "tag": "Objectives",
+   "requestType": "ObjectiveUpsertRequest",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/objectives/enumerate",
+   "summary": "Enumerate objectives",
+   "tag": "Objectives",
+   "requestType": "ObjectiveQuery",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/objectives/import/github",
+   "summary": "Import an objective from GitHub",
+   "tag": "Objectives",
+   "requestType": "GitHubObjectiveImportRequest",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/objectives/reorder",
+   "summary": "Reorder objectives",
+   "tag": "Objectives",
+   "requestType": "ObjectiveReorderRequest",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "delete",
+   "path": "/api/v1/objectives/{id}",
+   "summary": "Delete an objective",
+   "tag": "Objectives",
+   "requestType": "",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/objectives/{id}",
+   "summary": "Get an objective",
+   "tag": "Objectives",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "put",
+   "path": "/api/v1/objectives/{id}",
+   "summary": "Update an objective",
+   "tag": "Objectives",
+   "requestType": "ObjectiveUpsertRequest",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/objectives/{id}/refinement-sessions",
+   "summary": "Create an objective refinement session",
+   "tag": "Objectives",
+   "requestType": "ObjectiveRefinementSessionCreateRequest",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/objectives/{id}/refinement-sessions/enumerate",
+   "summary": "Enumerate refinement sessions for a objective",
+   "tag": "Objectives",
+   "requestType": "EnumerationQuery",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/personas",
+   "summary": "List personas",
+   "tag": "Personas",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/personas",
+   "summary": "Create a persona",
+   "tag": "Personas",
+   "requestType": "Persona",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/personas/enumerate",
+   "summary": "Enumerate personas",
+   "tag": "Personas",
+   "requestType": "EnumerationQuery",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "delete",
+   "path": "/api/v1/personas/{name}",
+   "summary": "Delete a persona",
+   "tag": "Personas",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/personas/{name}",
+   "summary": "Get a persona by name",
+   "tag": "Personas",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "put",
+   "path": "/api/v1/personas/{name}",
+   "summary": "Update a persona",
+   "tag": "Personas",
+   "requestType": "PersonaUpdateRequest",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/pipelines",
+   "summary": "List all pipelines",
+   "tag": "Pipelines",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/pipelines",
+   "summary": "Create a pipeline",
+   "tag": "Pipelines",
+   "requestType": "Pipeline",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/pipelines/enumerate",
+   "summary": "Enumerate pipelines",
+   "tag": "Pipelines",
+   "requestType": "EnumerationQuery",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "delete",
+   "path": "/api/v1/pipelines/{name}",
+   "summary": "Delete a pipeline",
+   "tag": "Pipelines",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/pipelines/{name}",
+   "summary": "Get a pipeline by name",
+   "tag": "Pipelines",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "put",
+   "path": "/api/v1/pipelines/{name}",
+   "summary": "Update a pipeline",
+   "tag": "Pipelines",
+   "requestType": "Pipeline",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/planning-sessions",
+   "summary": "Create a planning session",
+   "tag": "Planning",
+   "requestType": "PlanningSessionCreateRequest",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "delete",
+   "path": "/api/v1/planning-sessions/{id}",
+   "summary": "Delete a planning session",
+   "tag": "Planning",
+   "requestType": "",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/planning-sessions/{id}",
+   "summary": "Get a planning session",
+   "tag": "Planning",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/planning-sessions/{id}/dispatch",
+   "summary": "Dispatch from a planning session",
+   "tag": "Planning",
+   "requestType": "PlanningSessionDispatchRequest",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/planning-sessions/{id}/messages",
+   "summary": "Send a planning message",
+   "tag": "Planning",
+   "requestType": "PlanningSessionMessageRequest",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/planning-sessions/{id}/messages/enumerate",
+   "summary": "Enumerate a planning session's transcript",
+   "tag": "Planning",
+   "requestType": "EnumerationQuery",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/planning-sessions/{id}/stop",
+   "summary": "Stop a planning session",
+   "tag": "Planning",
+   "requestType": "",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/planning-sessions/{id}/stop-turn",
+   "summary": "Stop the current planning turn",
+   "tag": "Planning",
+   "requestType": "",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/planning-sessions/{id}/summarize",
+   "summary": "Summarize planning output into a dispatch draft",
+   "tag": "Planning",
+   "requestType": "PlanningSessionSummaryRequest",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/planning-sessions/enumerate",
+   "summary": "Enumerate planning sessions",
+   "tag": "Planning Sessions",
+   "requestType": "EnumerationQuery",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/playbooks",
+   "summary": "List playbooks",
+   "tag": "Playbooks",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/playbooks",
+   "summary": "Create a playbook",
+   "tag": "Playbooks",
+   "requestType": "Playbook",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/playbooks/enumerate",
+   "summary": "Enumerate playbooks",
+   "tag": "Playbooks",
+   "requestType": "EnumerationQuery",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "delete",
+   "path": "/api/v1/playbooks/{id}",
+   "summary": "Delete a playbook",
+   "tag": "Playbooks",
+   "requestType": "",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/playbooks/{id}",
+   "summary": "Get a playbook",
+   "tag": "Playbooks",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "put",
+   "path": "/api/v1/playbooks/{id}",
+   "summary": "Update a playbook",
+   "tag": "Playbooks",
+   "requestType": "Playbook",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/project-profiles",
+   "summary": "List project profiles",
+   "tag": "ProjectProfiles",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/project-profiles",
+   "summary": "Create a project profile",
+   "tag": "ProjectProfiles",
+   "requestType": "ProjectProfile",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/project-profiles/enumerate",
+   "summary": "Enumerate project profiles",
+   "tag": "ProjectProfiles",
+   "requestType": "ProjectProfileQuery",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/project-profiles/resolve/vessels/{vesselId}",
+   "summary": "Resolve the active project profile for a vessel",
+   "tag": "ProjectProfiles",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/project-profiles/validate",
+   "summary": "Validate a project profile",
+   "tag": "ProjectProfiles",
+   "requestType": "ProjectProfile",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "delete",
+   "path": "/api/v1/project-profiles/{id}",
+   "summary": "Delete a project profile",
+   "tag": "ProjectProfiles",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/project-profiles/{id}",
+   "summary": "Get a project profile",
+   "tag": "ProjectProfiles",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "put",
+   "path": "/api/v1/project-profiles/{id}",
+   "summary": "Update a project profile",
+   "tag": "ProjectProfiles",
+   "requestType": "ProjectProfile",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/project-profiles/{id}/persona-preview/{persona}",
+   "summary": "Preview a persona prompt for a project profile",
+   "tag": "ProjectProfiles",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/prompt-templates",
+   "summary": "List all prompt templates",
+   "tag": "Prompt Templates",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/prompt-templates",
+   "summary": "Create a prompt template",
+   "tag": "Prompt Templates",
+   "requestType": "PromptTemplate",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/prompt-templates/enumerate",
+   "summary": "Enumerate prompt templates",
+   "tag": "Prompt Templates",
+   "requestType": "EnumerationQuery",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/prompt-templates/{name}",
+   "summary": "Get a prompt template by name",
+   "tag": "Prompt Templates",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "put",
+   "path": "/api/v1/prompt-templates/{name}",
+   "summary": "Update a prompt template",
+   "tag": "Prompt Templates",
+   "requestType": "PromptTemplate",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/prompt-templates/{name}/reset",
+   "summary": "Reset a prompt template to default",
+   "tag": "Prompt Templates",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/push/devices",
+   "summary": "Register or refresh a push device",
+   "tag": "Push",
+   "requestType": "PushDeviceRegisterRequest",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/push/devices/enumerate",
+   "summary": "Enumerate push devices",
+   "tag": "Push",
+   "requestType": "EnumerationQuery",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "delete",
+   "path": "/api/v1/push/devices/{id}",
+   "summary": "Delete a push device",
+   "tag": "Push",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "put",
+   "path": "/api/v1/push/devices/{id}",
+   "summary": "Update a push device",
+   "tag": "Push",
+   "requestType": "PushDeviceUpdateRequest",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/push/devices/{id}/test",
+   "summary": "Send a test push",
+   "tag": "Push",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/releases",
+   "summary": "List releases",
+   "tag": "Releases",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/releases",
+   "summary": "Create a release",
+   "tag": "Releases",
+   "requestType": "ReleaseUpsertRequest",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/releases/enumerate",
+   "summary": "Enumerate releases",
+   "tag": "Releases",
+   "requestType": "ReleaseQuery",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "delete",
+   "path": "/api/v1/releases/{id}",
+   "summary": "Delete a release",
+   "tag": "Releases",
+   "requestType": "",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/releases/{id}",
+   "summary": "Get a release",
+   "tag": "Releases",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "put",
+   "path": "/api/v1/releases/{id}",
+   "summary": "Update a release",
+   "tag": "Releases",
+   "requestType": "ReleaseUpsertRequest",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/releases/{id}/github/pull-requests/enumerate",
+   "summary": "Enumerate a release's GitHub pull requests",
+   "tag": "Releases",
+   "requestType": "EnumerationQuery",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/releases/{id}/refresh",
+   "summary": "Refresh a release",
+   "tag": "Releases",
+   "requestType": "",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/request-history",
+   "summary": "List request-history entries",
+   "tag": "RequestHistory",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/request-history/delete/by-filter",
+   "summary": "Delete filtered request-history entries",
+   "tag": "RequestHistory",
+   "requestType": "RequestHistoryQuery",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/request-history/delete/multiple",
+   "summary": "Delete multiple request-history entries",
+   "tag": "RequestHistory",
+   "requestType": "DeleteMultipleRequest",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/request-history/enumerate",
+   "summary": "Enumerate request-history entries",
+   "tag": "RequestHistory",
+   "requestType": "RequestHistoryQuery",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/request-history/summary",
+   "summary": "Summarize request history",
+   "tag": "RequestHistory",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "delete",
+   "path": "/api/v1/request-history/{id}",
+   "summary": "Delete one request-history entry",
+   "tag": "RequestHistory",
+   "requestType": "",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/request-history/{id}",
+   "summary": "Get one request-history entry",
+   "tag": "RequestHistory",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/runbook-executions",
+   "summary": "List runbook executions",
+   "tag": "Runbooks",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/runbook-executions/enumerate",
+   "summary": "Enumerate runbook executions",
+   "tag": "Runbooks",
+   "requestType": "RunbookExecutionQuery",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "delete",
+   "path": "/api/v1/runbook-executions/{id}",
+   "summary": "Delete a runbook execution",
+   "tag": "Runbooks",
+   "requestType": "",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/runbook-executions/{id}",
+   "summary": "Get a runbook execution",
+   "tag": "Runbooks",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "put",
+   "path": "/api/v1/runbook-executions/{id}",
+   "summary": "Update a runbook execution",
+   "tag": "Runbooks",
+   "requestType": "RunbookExecutionUpdateRequest",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/runbooks",
+   "summary": "List runbooks",
+   "tag": "Runbooks",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/runbooks",
+   "summary": "Create a runbook",
+   "tag": "Runbooks",
+   "requestType": "RunbookUpsertRequest",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/runbooks/enumerate",
+   "summary": "Enumerate runbooks",
+   "tag": "Runbooks",
+   "requestType": "RunbookQuery",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "delete",
+   "path": "/api/v1/runbooks/{id}",
+   "summary": "Delete a runbook",
+   "tag": "Runbooks",
+   "requestType": "",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/runbooks/{id}",
+   "summary": "Get a runbook",
+   "tag": "Runbooks",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "put",
+   "path": "/api/v1/runbooks/{id}",
+   "summary": "Update a runbook",
+   "tag": "Runbooks",
+   "requestType": "RunbookUpsertRequest",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/runbooks/{id}/executions",
+   "summary": "Start a runbook execution",
+   "tag": "Runbooks",
+   "requestType": "RunbookExecutionStartRequest",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/runtimes/mux/endpoints",
+   "summary": "Enumerate saved Mux endpoints",
+   "tag": "Runtimes",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/runtimes/mux/endpoints/enumerate",
+   "summary": "Enumerate saved Mux endpoints (body query)",
+   "tag": "Runtimes",
+   "requestType": "EnumerationQuery",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/runtimes/mux/endpoints/{name}",
+   "summary": "Inspect a saved Mux endpoint",
+   "tag": "Runtimes",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/server/reset",
+   "summary": "Factory reset",
+   "tag": "Settings",
+   "requestType": "",
+   "auth": "AdminOnly"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/settings",
+   "summary": "Get server settings",
+   "tag": "Settings",
+   "requestType": "",
+   "auth": "AdminOnly"
+  },
+  {
+   "method": "put",
+   "path": "/api/v1/settings",
+   "summary": "Update server settings",
+   "tag": "Settings",
+   "requestType": "",
+   "auth": "AdminOnly"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/signals",
+   "summary": "List recent signals",
+   "tag": "Signals",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/signals",
+   "summary": "Send a signal",
+   "tag": "Signals",
+   "requestType": "Signal",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/signals/delete/multiple",
+   "summary": "Batch delete multiple signals",
+   "tag": "Signals",
+   "requestType": "DeleteMultipleRequest",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/signals/enumerate",
+   "summary": "Enumerate signals",
+   "tag": "Signals",
+   "requestType": "EnumerationQuery",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "delete",
+   "path": "/api/v1/signals/{id}",
+   "summary": "Delete a signal",
+   "tag": "Signals",
+   "requestType": "",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/signals/{id}",
+   "summary": "Get a signal",
+   "tag": "Signals",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "put",
+   "path": "/api/v1/signals/{id}/read",
+   "summary": "Mark a signal as read",
+   "tag": "Signals",
+   "requestType": "",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/skills",
+   "summary": "List skills",
+   "tag": "Skills",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/skills",
+   "summary": "Create a skill",
+   "tag": "Skills",
+   "requestType": "Skill",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/skills/enumerate",
+   "summary": "Enumerate skills",
+   "tag": "Skills",
+   "requestType": "SkillQuery",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "delete",
+   "path": "/api/v1/skills/{id}",
+   "summary": "Delete a skill",
+   "tag": "Skills",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/skills/{id}",
+   "summary": "Get a skill",
+   "tag": "Skills",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "put",
+   "path": "/api/v1/skills/{id}",
+   "summary": "Update a skill",
+   "tag": "Skills",
+   "requestType": "Skill",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/stage-outcomes",
+   "summary": "List stage outcomes",
+   "tag": "StageOutcomes",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/stage-outcomes/enumerate",
+   "summary": "Enumerate stage outcomes",
+   "tag": "StageOutcomes",
+   "requestType": "StageOutcomeQuery",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/stage-outcomes/reclassify",
+   "summary": "Re-apply the failure-cause rules",
+   "tag": "StageOutcomes",
+   "requestType": "StageOutcomeQuery",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/stage-outcomes/{id}",
+   "summary": "Get a stage outcome",
+   "tag": "StageOutcomes",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "put",
+   "path": "/api/v1/stage-outcomes/{id}/cause",
+   "summary": "Classify a stage outcome by hand",
+   "tag": "StageOutcomes",
+   "requestType": "StageOutcomeClassifyRequest",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/stage-outcomes/{id}/rule",
+   "summary": "Draft a failure-cause rule from a stage outcome",
+   "tag": "StageOutcomes",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/doctor",
+   "summary": "Run system health diagnostics",
+   "tag": "Status",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/server/restart",
+   "summary": "Restart the Admiral server",
+   "tag": "Status",
+   "requestType": "",
+   "auth": "AdminOnly"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/server/stop",
+   "summary": "Stop the Admiral server",
+   "tag": "Status",
+   "requestType": "",
+   "auth": "AdminOnly"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/status",
+   "summary": "Get Armada status",
+   "tag": "Status",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/status/health",
+   "summary": "Health check",
+   "tag": "Status",
+   "requestType": "",
+   "auth": "NoAuthRequired"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/storage",
+   "summary": "Read cached storage inventory",
+   "tag": "Storage",
+   "requestType": "",
+   "auth": "AdminOnly"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/storage/hosts",
+   "summary": "List cached storage host reports",
+   "tag": "Storage",
+   "requestType": "",
+   "auth": "AdminOnly"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/storage/hosts/enumerate",
+   "summary": "Enumerate cached storage host reports",
+   "tag": "Storage",
+   "requestType": "EnumerationQuery",
+   "auth": "AdminOnly"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/storage/refresh",
+   "summary": "Request background storage collection",
+   "tag": "Storage",
+   "requestType": "StorageRefreshRequest",
+   "auth": "AdminOnly"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/activity/synthetic",
+   "summary": "Generate historical synthetic activity for screenshots",
+   "tag": "SyntheticActivity",
+   "requestType": "SyntheticActivityRequest",
+   "auth": "AdminOnly"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/tenants",
+   "summary": "List tenants (admin only)",
+   "tag": "Tenants",
+   "requestType": "",
+   "auth": "AdminOnly"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/tenants",
+   "summary": "Create tenant (admin only)",
+   "tag": "Tenants",
+   "requestType": "",
+   "auth": "AdminOnly"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/tenants/enumerate",
+   "summary": "Enumerate tenants (admin only)",
+   "tag": "Tenants",
+   "requestType": "EnumerationQuery",
+   "auth": "AdminOnly"
+  },
+  {
+   "method": "delete",
+   "path": "/api/v1/tenants/{id}",
+   "summary": "Delete tenant (admin only)",
+   "tag": "Tenants",
+   "requestType": "",
+   "auth": "AdminOnly"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/tenants/{id}",
+   "summary": "Get tenant by ID",
+   "tag": "Tenants",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "put",
+   "path": "/api/v1/tenants/{id}",
+   "summary": "Update tenant (admin only)",
+   "tag": "Tenants",
+   "requestType": "",
+   "auth": "AdminOnly"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/token-usage",
+   "summary": "List token-usage records",
+   "tag": "TokenUsage",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/token-usage/delete/by-filter",
+   "summary": "Delete filtered token-usage records",
+   "tag": "TokenUsage",
+   "requestType": "TokenUsageQuery",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/token-usage/enumerate",
+   "summary": "Enumerate token-usage records",
+   "tag": "TokenUsage",
+   "requestType": "TokenUsageQuery",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/token-usage/summary",
+   "summary": "Summarize token usage",
+   "tag": "TokenUsage",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/token-usage/synthetic",
+   "summary": "Import explicitly synthetic usage for screenshots",
+   "tag": "TokenUsage",
+   "requestType": "TokenUsageSyntheticRequest",
+   "auth": "AdminOnly"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/captains/{id}/usage/capture",
+   "summary": "Capture captain account usage",
+   "tag": "Usage",
+   "requestType": "UsageCaptureArgs",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/usage/latest",
+   "summary": "Read latest account usage",
+   "tag": "Usage",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/usage/latest/enumerate",
+   "summary": "Enumerate usage latest",
+   "tag": "Usage",
+   "requestType": "UsageQuery",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/usage/missions",
+   "summary": "Read usage attributed to completed missions",
+   "tag": "Usage",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/usage/missions/enumerate",
+   "summary": "Enumerate usage missions",
+   "tag": "Usage",
+   "requestType": "UsageQuery",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/usage/series",
+   "summary": "Read bounded usage series",
+   "tag": "Usage",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/usage/snapshots",
+   "summary": "Read sanitized usage snapshots",
+   "tag": "Usage",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/usage/snapshots/enumerate",
+   "summary": "Enumerate usage snapshots",
+   "tag": "Usage",
+   "requestType": "UsageQuery",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/users",
+   "summary": "List users",
+   "tag": "Users",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/users",
+   "summary": "Create user (admin only)",
+   "tag": "Users",
+   "requestType": "",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/users/enumerate",
+   "summary": "Enumerate users",
+   "tag": "Users",
+   "requestType": "EnumerationQuery",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "delete",
+   "path": "/api/v1/users/{id}",
+   "summary": "Delete user (admin only)",
+   "tag": "Users",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/users/{id}",
+   "summary": "Get user by ID",
+   "tag": "Users",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "put",
+   "path": "/api/v1/users/{id}",
+   "summary": "Update user (admin only)",
+   "tag": "Users",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/vessels/import",
+   "summary": "Import discovered vessels",
+   "tag": "Vessel Import",
+   "requestType": "VesselImportRequest",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/vessels/import/batches/enumerate",
+   "summary": "Enumerate import batches",
+   "tag": "Vessel Import",
+   "requestType": "EnumerationQuery",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/vessels/import/batches/{id}",
+   "summary": "Get an import batch",
+   "tag": "Vessel Import",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/vessels/import/batches/{id}/categorize",
+   "summary": "Run or retry fleet categorization",
+   "tag": "Vessel Import",
+   "requestType": "VesselImportCategorizationRequest",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/vessels/import/batches/{id}/fleet-recommendations/apply",
+   "summary": "Apply fleet recommendations",
+   "tag": "Vessel Import",
+   "requestType": "FleetRecommendationApplyRequest",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/vessels/import/browse",
+   "summary": "Browse directories for import",
+   "tag": "Vessel Import",
+   "requestType": "",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/vessels/import/categorization/default-prompt",
+   "summary": "Get the default fleet categorization prompt",
+   "tag": "Vessel Import",
+   "requestType": "",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/vessels/import/discover",
+   "summary": "Discover vessel import candidates",
+   "tag": "Vessel Import",
+   "requestType": "VesselDiscoveryRequest",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/vessel-health/enumerate",
+   "summary": "Enumerate vessel health",
+   "tag": "Vessels",
+   "requestType": "VesselHealthEnumerateRequest",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/vessel-health/evaluate",
+   "summary": "Evaluate vessel health",
+   "tag": "Vessels",
+   "requestType": "VesselHealthEvaluateRequest",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/vessel-health/summary",
+   "summary": "Vessel health summary",
+   "tag": "Vessels",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/vessels",
+   "summary": "List all vessels",
+   "tag": "Vessels",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/vessels",
+   "summary": "Create a vessel",
+   "tag": "Vessels",
+   "requestType": "Vessel",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/vessels/delete/multiple",
+   "summary": "Batch delete multiple vessels",
+   "tag": "Vessels",
+   "requestType": "DeleteMultipleRequest",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/vessels/enumerate",
+   "summary": "Enumerate vessels",
+   "tag": "Vessels",
+   "requestType": "EnumerationQuery",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "delete",
+   "path": "/api/v1/vessels/{id}",
+   "summary": "Delete a vessel",
+   "tag": "Vessels",
+   "requestType": "",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/vessels/{id}",
+   "summary": "Get a vessel",
+   "tag": "Vessels",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "put",
+   "path": "/api/v1/vessels/{id}",
+   "summary": "Update a vessel",
+   "tag": "Vessels",
+   "requestType": "Vessel",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/vessels/{id}/branches/enumerate",
+   "summary": "Enumerate vessel branches",
+   "tag": "Vessels",
+   "requestType": "EnumerationQuery",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/vessels/{id}/branches/merge",
+   "summary": "Merge a vessel branch into another",
+   "tag": "Vessels",
+   "requestType": "",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/vessels/{id}/branches/push",
+   "summary": "Push a vessel branch",
+   "tag": "Vessels",
+   "requestType": "",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/vessels/{id}/build-context",
+   "summary": "Build or refine the vessel Model Context",
+   "tag": "Vessels",
+   "requestType": "VesselBuildContextRequest",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/vessels/{id}/cleanup",
+   "summary": "Vessel cleanup inventory",
+   "tag": "Vessels",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/vessels/{id}/cleanup",
+   "summary": "Clean up vessel resources",
+   "tag": "Vessels",
+   "requestType": "VesselCleanupRequest",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/vessels/{id}/cleanup/resources",
+   "summary": "List vessel cleanup resources",
+   "tag": "Vessels",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/vessels/{id}/cleanup/resources/enumerate",
+   "summary": "Enumerate vessel cleanup resources",
+   "tag": "Vessels",
+   "requestType": "EnumerationQuery",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/vessels/{id}/concurrency",
+   "summary": "Get a vessel's concurrency",
+   "tag": "Vessels",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "patch",
+   "path": "/api/v1/vessels/{id}/context",
+   "summary": "Update vessel context",
+   "tag": "Vessels",
+   "requestType": "Vessel",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/vessels/{id}/git-status",
+   "summary": "Get vessel git status",
+   "tag": "Vessels",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/vessels/{id}/health",
+   "summary": "Get vessel health",
+   "tag": "Vessels",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/vessels/{id}/health/dependencies",
+   "summary": "List vessel dependencies",
+   "tag": "Vessels",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/vessels/{id}/health/dependencies/enumerate",
+   "summary": "Enumerate vessel dependencies",
+   "tag": "Vessels",
+   "requestType": "EnumerationQuery",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "delete",
+   "path": "/api/v1/vessels/{id}/health/overrides/{criterion}",
+   "summary": "Remove a vessel health override",
+   "tag": "Vessels",
+   "requestType": "",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "put",
+   "path": "/api/v1/vessels/{id}/health/overrides/{criterion}",
+   "summary": "Set a vessel health override",
+   "tag": "Vessels",
+   "requestType": "VesselHealthOverrideRequest",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/vessels/{id}/history/activity",
+   "summary": "Get vessel commit activity",
+   "tag": "Vessels",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/vessels/{id}/history/commits",
+   "summary": "List vessel commits",
+   "tag": "Vessels",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/vessels/{id}/landing-preview",
+   "summary": "Preview landing readiness",
+   "tag": "Vessels",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/vessels/{id}/readiness",
+   "summary": "Get vessel readiness",
+   "tag": "Vessels",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/voyages",
+   "summary": "List all voyages",
+   "tag": "Voyages",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/voyages",
+   "summary": "Create a voyage",
+   "tag": "Voyages",
+   "requestType": "VoyageRequest",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/voyages/delete/multiple",
+   "summary": "Batch delete multiple voyages",
+   "tag": "Voyages",
+   "requestType": "DeleteMultipleRequest",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/voyages/enumerate",
+   "summary": "Enumerate voyages",
+   "tag": "Voyages",
+   "requestType": "EnumerationQuery",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/voyages/progress/enumerate",
+   "summary": "Enumerate voyage progress",
+   "tag": "Voyages",
+   "requestType": "EnumerationQuery",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "delete",
+   "path": "/api/v1/voyages/{id}",
+   "summary": "Cancel a voyage",
+   "tag": "Voyages",
+   "requestType": "",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/voyages/{id}",
+   "summary": "Get a voyage",
+   "tag": "Voyages",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "delete",
+   "path": "/api/v1/voyages/{id}/purge",
+   "summary": "Permanently delete a voyage",
+   "tag": "Voyages",
+   "requestType": "",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/voyages/{id}/tree",
+   "summary": "Get a voyage's mission tree",
+   "tag": "Voyages",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/workflow-profiles",
+   "summary": "List workflow profiles",
+   "tag": "WorkflowProfiles",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/workflow-profiles",
+   "summary": "Create a workflow profile",
+   "tag": "WorkflowProfiles",
+   "requestType": "WorkflowProfile",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/workflow-profiles/delete/multiple",
+   "summary": "Batch delete multiple workflow profiles",
+   "tag": "WorkflowProfiles",
+   "requestType": "DeleteMultipleRequest",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/workflow-profiles/enumerate",
+   "summary": "Enumerate workflow profiles",
+   "tag": "WorkflowProfiles",
+   "requestType": "WorkflowProfileQuery",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/workflow-profiles/preview/vessels/{vesselId}",
+   "summary": "Preview resolved workflow commands for a vessel",
+   "tag": "WorkflowProfiles",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/workflow-profiles/resolve/vessels/{vesselId}",
+   "summary": "Resolve the active workflow profile for a vessel",
+   "tag": "WorkflowProfiles",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/workflow-profiles/validate",
+   "summary": "Validate a workflow profile",
+   "tag": "WorkflowProfiles",
+   "requestType": "WorkflowProfile",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "delete",
+   "path": "/api/v1/workflow-profiles/{id}",
+   "summary": "Delete a workflow profile",
+   "tag": "WorkflowProfiles",
+   "requestType": "",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/workflow-profiles/{id}",
+   "summary": "Get a workflow profile",
+   "tag": "WorkflowProfiles",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "put",
+   "path": "/api/v1/workflow-profiles/{id}",
+   "summary": "Update a workflow profile",
+   "tag": "WorkflowProfiles",
+   "requestType": "WorkflowProfile",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/workspace/vessels/{vesselId}/active-missions",
+   "summary": "List workspace active missions",
+   "tag": "Workspace",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/workspace/vessels/{vesselId}/active-missions/enumerate",
+   "summary": "Enumerate workspace active missions",
+   "tag": "Workspace",
+   "requestType": "EnumerationQuery",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/workspace/vessels/{vesselId}/changes",
+   "summary": "Get workspace changes",
+   "tag": "Workspace",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/workspace/vessels/{vesselId}/diff",
+   "summary": "Get a working-tree diff",
+   "tag": "Workspace",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/workspace/vessels/{vesselId}/directory",
+   "summary": "Create one workspace directory",
+   "tag": "Workspace",
+   "requestType": "WorkspaceCreateDirectoryRequest",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "delete",
+   "path": "/api/v1/workspace/vessels/{vesselId}/entry",
+   "summary": "Delete one workspace entry",
+   "tag": "Workspace",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/workspace/vessels/{vesselId}/exec",
+   "summary": "Run a command in the vessel workspace",
+   "tag": "Workspace",
+   "requestType": "WorkspaceExecRequest",
+   "auth": "TenantAdmin"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/workspace/vessels/{vesselId}/file",
+   "summary": "Read one workspace file",
+   "tag": "Workspace",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "put",
+   "path": "/api/v1/workspace/vessels/{vesselId}/file",
+   "summary": "Save one workspace file",
+   "tag": "Workspace",
+   "requestType": "WorkspaceSaveRequest",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/workspace/vessels/{vesselId}/open-terminal",
+   "summary": "Open a terminal at the vessel checkout",
+   "tag": "Workspace",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "post",
+   "path": "/api/v1/workspace/vessels/{vesselId}/rename",
+   "summary": "Rename or move one workspace entry",
+   "tag": "Workspace",
+   "requestType": "WorkspaceRenameRequest",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/workspace/vessels/{vesselId}/search",
+   "summary": "Search one workspace",
+   "tag": "Workspace",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/workspace/vessels/{vesselId}/status",
+   "summary": "Get workspace status",
+   "tag": "Workspace",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
+   "path": "/api/v1/workspace/vessels/{vesselId}/tree",
+   "summary": "List one workspace directory",
+   "tag": "Workspace",
+   "requestType": "",
+   "auth": "Authenticated"
+  }
+ ]
+}

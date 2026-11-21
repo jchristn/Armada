@@ -13,6 +13,8 @@ import { DetailAction, DetailPage, DetailSection, escapeHtml, isDetailMessage, r
 import { statusTone } from '../ops/detailPages';
 import { showForm } from '../ops/formPanel';
 import { humanize } from '../ops/presentation';
+import { openAsPage } from '../dashboard/pageRouting';
+import { createRoute, KIND_ROUTES, recordRoute } from '../dashboard/routes';
 import { applyEdits, createValues, editFields, fieldLabel, isLongText, recordId, recordStatus, recordTitle, ResourceRecord, ResourceSpec, rowsOf } from './resourceSpec';
 
 /** A node in a resource tree. */
@@ -141,6 +143,7 @@ export class ResourceTreeProvider implements vscode.TreeDataProvider<ResourceNod
       item.id = `resource:type:${node.spec.key}`;
       item.iconPath = new vscode.ThemeIcon(node.spec.icon);
       item.description = loaded?.state === 'ready' ? String(loaded.records.length) : undefined;
+      item.command = KIND_ROUTES[node.spec.key] ? { command: 'armada.page.openList', title: 'Open', arguments: [node.spec.key] } : undefined;
       item.contextValue = `armadaResourceType${(node.spec.create && node.spec.createFields) || node.spec.createCommand ? ' armadaResourceType.creatable' : ''}`;
       return item;
     }
@@ -248,10 +251,13 @@ export class ResourceController implements vscode.Disposable {
     });
     register('armada.resource.create', async (a) => {
       const spec = this.specOf(a);
+      // The dashboard's create form (with its vessel, fleet and captain pickers) when pages are preferred.
+      if (spec && openAsPage(createRoute(spec.key))) return;
       if (spec) await this.create(spec);
     });
     register('armada.resource.edit', async (a, b) => {
       const target = this.target(a, b);
+      if (target && openAsPage(this.routeOf(target.spec, target.id))) return;
       if (target) await this.edit(target.spec, target.id);
     });
     register('armada.resource.delete', async (a, b) => {
@@ -341,7 +347,16 @@ export class ResourceController implements vscode.Disposable {
     return found;
   }
 
+  /** The dashboard page of a record: its detail page, or its kind's list when the dashboard has none. */
+  private routeOf(spec: ResourceSpec, id: string): string {
+    const cached = this._Store.get(spec)?.records.find((r) => recordId(spec, r) === id);
+    const record: ResourceRecord = cached ?? { [spec.idKey ?? 'id']: id };
+    return recordRoute(spec.key, spec.route?.(record));
+  }
+
   private async open(spec: ResourceSpec, id: string): Promise<void> {
+    // The dashboard's page for the record (its detail page, or its kind's list when it has none).
+    if (openAsPage(this.routeOf(spec, id))) return;
     if (spec.open) {
       await spec.open(await this.read(spec, id));
       return;

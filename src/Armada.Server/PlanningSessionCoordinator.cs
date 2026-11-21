@@ -172,7 +172,8 @@ namespace Armada.Server
                         Purpose = "planning session " + session.Id,
                         TenantId = tenantId,
                         UserId = userId,
-                        BranchName = branchName
+                        BranchName = branchName,
+                        RequestedHarborId = String.IsNullOrWhiteSpace(request.HarborId) ? null : request.HarborId.Trim()
                     }).ConfigureAwait(false)
                     : DockPlacement.OnAdmiral("no dock placement is configured");
                 if (placement.Wait)

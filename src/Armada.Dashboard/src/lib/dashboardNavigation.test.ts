@@ -4,7 +4,7 @@ import { flattenNavCommands } from './navModel';
 
 const raw = import.meta.glob<string>('/src/**/*.{ts,tsx}', { eager: true, query: '?raw', import: 'default' });
 const sources = Object.fromEntries(Object.entries(raw).filter(([file]) => !file.includes('.test.') && !file.includes('/test/')));
-const app = sources['/src/App.tsx'];
+const app = sources['/src/AppRoutes.tsx'];
 const routes = [...app.matchAll(/<Route path="([^"]+)" element=\{<(\w+)/g)].map(match => ({ path: `/${match[1]}`, component: match[2] }));
 const explicitRoutes = ['/', ...routes.filter(route => route.path !== '/*').map(route => route.path)];
 const matches = (to: string) => explicitRoutes.some(path => matchPath({ path, end: true }, to.split(/[?#]/)[0]));

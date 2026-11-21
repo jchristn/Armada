@@ -59,6 +59,18 @@ namespace Armada.Core.Models
         public DateTime? CreatedBefore { get; set; }
 
         /// <summary>
+        /// Filter to entities last updated at or after this timestamp. Applied by mission summary enumeration (the
+        /// history timeline reads a time range's missions with it); other enumerations ignore it.
+        /// </summary>
+        public DateTime? UpdatedAfter { get; set; }
+
+        /// <summary>
+        /// Filter to entities last updated at or before this timestamp. Applied by mission summary enumeration; other
+        /// enumerations ignore it.
+        /// </summary>
+        public DateTime? UpdatedBefore { get; set; }
+
+        /// <summary>
         /// Filter by status (entity-specific: MissionStatusEnum, VoyageStatusEnum, CaptainStateEnum, MergeStatusEnum).
         /// </summary>
         public string? Status { get; set; }

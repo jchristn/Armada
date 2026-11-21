@@ -53,3 +53,8 @@ mkdir -p "$OUT_DIR"
 OUT_DIR="$(cd "$OUT_DIR" && pwd)"
 
 dotnet run --project "$REPO_ROOT/src/Test.Automated" $ARMADA_DOTNET_FRAMEWORK_ARGS -- --generate-api-surface "$OUT_DIR"
+
+# The dashboard's built-in REST catalog (the API Explorer's list before /openapi.json loads) follows the surface.
+if [ "$OUT_DIR" = "$REPO_ROOT/docs" ]; then
+    python3 "$REPO_ROOT/scripts/dashboard/generate-api-catalog.py"
+fi

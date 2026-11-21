@@ -53,6 +53,12 @@ namespace Armada.Core.Services
         /// </summary>
         public bool BranchOnAdmiral { get; set; } = false;
 
+        /// <summary>
+        /// The Harbor the user chose for this work (a planning session started on a chosen Harbor), or null to let the
+        /// normal routing choose. The dock goes there or the work waits; it never falls back to another host.
+        /// </summary>
+        public string? RequestedHarborId { get; set; } = null;
+
         /// <summary>Credential host whose verified usage authorized this admission. Null keeps existing placement.</summary>
         public string? RequiredCredentialHostId { get; set; }
 

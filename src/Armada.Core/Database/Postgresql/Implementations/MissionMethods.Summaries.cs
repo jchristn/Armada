@@ -541,6 +541,16 @@ LENGTH(COALESCE(agent_output, '')) AS agent_output_length";
                 conditions.Add("created_utc < @created_before");
                 PostgresqlCommandHelper.AddDate(cmd, "@created_before", query.CreatedBefore.Value);
             }
+            if (query.UpdatedAfter.HasValue)
+            {
+                conditions.Add("last_update_utc >= @updated_after");
+                PostgresqlCommandHelper.AddDate(cmd, "@updated_after", query.UpdatedAfter.Value);
+            }
+            if (query.UpdatedBefore.HasValue)
+            {
+                conditions.Add("last_update_utc <= @updated_before");
+                PostgresqlCommandHelper.AddDate(cmd, "@updated_before", query.UpdatedBefore.Value);
+            }
             if (!String.IsNullOrEmpty(query.Status))
             {
                 conditions.Add("status = @status");

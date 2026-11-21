@@ -10,15 +10,17 @@ namespace Armada.Core.Database.Sqlite.Implementations
 
     public partial class MissionMethods
     {
+        // The length hints are byte lengths (octet_length): SQLite reads them from the record header, while LENGTH() of
+        // TEXT reads and decodes the whole value, and a diff or agent output can be megabytes per mission.
         private const string MissionSummarySelectColumns = @"
 id, tenant_id, user_id, voyage_id, vessel_id, captain_id, title, status, priority,
 parent_mission_id, branch_strategy, depth, ready_utc, assigned_utc, wait_for_voyage_workers, branch_name, dock_id, process_id, pr_url, commit_hash,
 persona, depends_on_mission_id, failure_reason, failure_kind, is_evaluation, requires_review, review_deny_action,
 review_comment, reviewed_by_user_id, review_requested_utc, review_deadline_utc, reviewed_utc,
 created_utc, started_utc, completed_utc, total_runtime_ms, last_update_utc,
-LENGTH(COALESCE(description, '')) AS description_length,
-LENGTH(COALESCE(diff_snapshot, '')) AS diff_snapshot_length,
-LENGTH(COALESCE(agent_output, '')) AS agent_output_length";
+COALESCE(octet_length(description), 0) AS description_length,
+COALESCE(octet_length(diff_snapshot), 0) AS diff_snapshot_length,
+COALESCE(octet_length(agent_output), 0) AS agent_output_length";
 
         /// <inheritdoc />
         public async Task<MissionSummary?> ReadSummaryAsync(string id, CancellationToken token = default)
@@ -313,11 +315,15 @@ LENGTH(COALESCE(agent_output, '')) AS agent_output_length";
                         ApplyEnumerationFilters(query, selectConditions, selectCmd);
                         string selectWhereClause = selectConditions.Count > 0 ? " WHERE " + String.Join(" AND ", selectConditions) : String.Empty;
                         string orderDirection = query.Order == EnumerationOrderEnum.CreatedAscending ? "ASC" : "DESC";
+                        // Pick the page by id first, then read the summary columns of those rows only. Columns stored after
+                        // a mission's large text (diff, agent output) cost a walk through that text's overflow pages, so
+                        // reading them for every row before sorting made a 10-row page read every mission in full.
                         selectCmd.CommandText =
                             "SELECT " + MissionSummarySelectColumns +
-                            " FROM missions" + selectWhereClause +
+                            " FROM missions WHERE id IN (SELECT id FROM missions" + selectWhereClause +
                             " ORDER BY created_utc " + orderDirection + ", id " + orderDirection +
-                            " LIMIT " + query.PageSize + " OFFSET " + query.Offset + ";";
+                            " LIMIT " + query.PageSize + " OFFSET " + query.Offset + ")" +
+                            " ORDER BY created_utc " + orderDirection + ", id " + orderDirection + ";";
                         List<MissionSummary> results = new List<MissionSummary>();
                         using (SqliteDataReader reader = await selectCmd.ExecuteReaderAsync(token).ConfigureAwait(false))
                         {
@@ -533,6 +539,16 @@ LENGTH(COALESCE(agent_output, '')) AS agent_output_length";
             {
                 conditions.Add("created_utc < @created_before");
                 cmd.Parameters.AddWithValue("@created_before", SqliteDatabaseDriver.ToIso8601(query.CreatedBefore.Value));
+            }
+            if (query.UpdatedAfter.HasValue)
+            {
+                conditions.Add("last_update_utc >= @updated_after");
+                cmd.Parameters.AddWithValue("@updated_after", SqliteDatabaseDriver.ToIso8601(query.UpdatedAfter.Value));
+            }
+            if (query.UpdatedBefore.HasValue)
+            {
+                conditions.Add("last_update_utc <= @updated_before");
+                cmd.Parameters.AddWithValue("@updated_before", SqliteDatabaseDriver.ToIso8601(query.UpdatedBefore.Value));
             }
             if (!String.IsNullOrEmpty(query.Status))
             {

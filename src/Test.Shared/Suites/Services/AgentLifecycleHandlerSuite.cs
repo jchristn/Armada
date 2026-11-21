@@ -92,6 +92,25 @@ namespace Test.Shared.Suites.Services
                 request.BranchOnAdmiral = false; request.BranchHarborId = "hbr_other";
                 AssertTrue((await handler.ResolveDockPlacementAsync(request).ConfigureAwait(false)).Wait);
             }));
+            cases.Add(CaseAsync("requested_harbor_placement_never_falls_back", "A chosen Harbor (a planning session's Run on) pins the dock there, and an offline or conflicting choice waits instead of using another host", TestTags.Negative, async () =>
+            {
+                using TestDatabase db = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                AgentLifecycleHandler handler = CreateRoutedValidationHandler(db.Driver, out ArmadaSettings settings, out _);
+                settings.RequireHarborForLaunch = false;
+                Captain captain = new Captain("chosen harbor", AgentRuntimeEnum.ClaudeCode) { TenantId = Constants.DefaultTenantId, UserId = "owner" };
+                Vessel vessel = new Vessel("chosen vessel", "https://example.invalid/repo.git");
+                DockPlacementRequest automatic = new DockPlacementRequest(captain, vessel);
+                DockPlacement placement = await handler.ResolveDockPlacementAsync(automatic).ConfigureAwait(false);
+                AssertFalse(placement.Wait, "without a choice and with no Harbor, the dock goes on the Admiral host");
+                DockPlacementRequest chosen = new DockPlacementRequest(captain, vessel) { RequestedHarborId = "hbr_offline" };
+                placement = await handler.ResolveDockPlacementAsync(chosen).ConfigureAwait(false);
+                AssertTrue(placement.Wait, "an offline chosen Harbor must not fall back to the Admiral host");
+                AssertContains("hbr_offline", placement.Reason);
+                chosen.BranchHarborId = "hbr_other";
+                placement = await handler.ResolveDockPlacementAsync(chosen).ConfigureAwait(false);
+                AssertTrue(placement.Wait, "a chosen Harbor that differs from the branch's Harbor waits");
+                AssertContains("hbr_other", placement.Reason);
+            }));
             foreach (bool otherTenant in new[] { false, true })
             {
                 bool crossTenant = otherTenant;

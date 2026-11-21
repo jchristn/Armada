@@ -27,6 +27,8 @@ import {
   type ReplayRequest,
   type ResponseTab,
 } from '../lib/apiExplorer';
+import { buildCatalogOperations, type ApiCatalog } from '../lib/apiExplorer';
+import apiCatalog from '../lib/apiCatalog.generated.json';
 
 function buildApiBaseForDisplay() {
   return getClientBaseUrl() || window.location.origin;
@@ -163,7 +165,11 @@ export default function ApiExplorer() {
   const [pendingReplay, setPendingReplay] = useState<ReplayRequest | null>(null);
   const skipDefaultInitializationForOperationId = useRef<string | null>(null);
 
-  const operations = useMemo<ExplorerOperation[]>(() => buildExplorerOperations(spec), [spec]);
+  // The built-in catalog lists every route at once; the server's OpenAPI document, when it loads, adds schemas and
+  // parameters. The explorer never waits on (or depends on) that document.
+  const catalogOperations = useMemo<ExplorerOperation[]>(() => buildCatalogOperations(apiCatalog as ApiCatalog), []);
+  const operations = useMemo<ExplorerOperation[]>(() => (spec ? buildExplorerOperations(spec) : catalogOperations), [spec, catalogOperations]);
+  const [specNote, setSpecNote] = useState('');
 
   const tags = useMemo(() => explorerTags(operations), [operations]);
 
@@ -242,10 +248,14 @@ export default function ApiExplorer() {
         const result = await fetch(buildRequestUrl('/openapi.json'), { headers, signal: controller.signal });
         if (!result.ok) throw new Error(`Failed to load OpenAPI document (${result.status})`);
         const data = (await result.json()) as OpenApiSpec;
-        if (!cancelled) setSpec(data);
+        if (!cancelled) {
+          setSpec(data);
+          setSpecNote('');
+        }
       } catch (err) {
         if (!cancelled && !(err instanceof DOMException && err.name === 'AbortError')) {
-          setError(err instanceof Error ? err.message : t('Failed to load OpenAPI document.'));
+          // Keep working from the built-in catalog; say why the request schemas are missing.
+          setSpecNote(t('Showing the built-in route catalog: the server\'s OpenAPI document could not be loaded ({{reason}}), so request bodies start empty.', { reason: err instanceof Error ? err.message : String(err) }));
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -266,7 +276,8 @@ export default function ApiExplorer() {
   }, [filteredOperations, operationId, selectedOperation]);
 
   useEffect(() => {
-    if (!pendingReplay || !operations.length || pendingReplay.operationId) return;
+    // A replay waits for the OpenAPI document (or its failure), so it matches the operation with its parameters.
+    if (!pendingReplay || loading || !operations.length || pendingReplay.operationId) return;
     const match = findOperationForReplay(operations, pendingReplay);
     if (!match) {
       setError(t('No matching OpenAPI operation was found for the replay request.'));
@@ -280,7 +291,7 @@ export default function ApiExplorer() {
       pathValues: { ...pendingReplay.pathValues, ...match.pathValues },
     });
     setSelectedOperationId(match.operationId);
-  }, [operations, pendingReplay, t]);
+  }, [loading, operations, pendingReplay, t]);
 
   useEffect(() => {
     if (!selectedOperation) return;
@@ -432,8 +443,13 @@ export default function ApiExplorer() {
               </div>
             </div>
             <div className="request-card-body api-card-body">
-              {loading ? (
-                <div className="request-history-empty">{t('Loading OpenAPI document...')}</div>
+              {(loading || specNote) && (
+                <div className="text-dim" style={{ fontSize: '0.8rem', marginBottom: '0.5rem' }}>
+                  {specNote || t('Loading request schemas from the server; every route is listed already.')}
+                </div>
+              )}
+              {operations.length === 0 ? (
+                <div className="request-history-empty">{t('No operations.')}</div>
               ) : (
                 <div className="api-operation-picker">
                   <label className="api-operation-picker-field">

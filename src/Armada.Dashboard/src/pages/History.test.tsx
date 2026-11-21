@@ -364,4 +364,21 @@ describe('History', () => {
     expect(exportCalls).toHaveLength(10);
     expect(exportCalls.map(([query]) => query?.pageNumber)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
   });
+
+  it('loads the last day by default and another range from its tab', async () => {
+    render(
+      <MemoryRouter initialEntries={['/history']}>
+        <Routes>
+          <Route path="/history" element={<History />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    expect(await screen.findByText('Deploy finished')).toBeInTheDocument();
+    const first = vi.mocked(enumerateHistoryTimeline).mock.calls[0][0];
+    expect(Date.now() - Date.parse(String(first?.fromUtc))).toBeGreaterThan(23 * 3600 * 1000);
+    expect(Date.now() - Date.parse(String(first?.fromUtc))).toBeLessThan(25 * 3600 * 1000);
+    fireEvent.click(screen.getByRole('button', { name: 'All Time' }));
+    await waitFor(() => expect(enumerateHistoryTimeline).toHaveBeenCalledTimes(2));
+    expect(vi.mocked(enumerateHistoryTimeline).mock.calls[1][0]?.fromUtc).toBeUndefined();
+  });
 });

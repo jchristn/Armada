@@ -47,6 +47,7 @@ async function activateWithFakes(): Promise<{ api: ArmadaExtensionApi; context: 
     secrets: new FakeSecretStorage(),
     globalState: new FakeMemento(),
     globalStorageUri: Uri.file(path.join(os.tmpdir(), 'armada-vscode-test-storage')),
+    extensionUri: Uri.file(ROOT),
     extension: { id: EXTENSION_ID },
   };
   const api = await activate(context as unknown as vscode.ExtensionContext);
@@ -85,7 +86,7 @@ describe('extension manifest and activation', () => {
     // Marketplace publisher ids keep their case (LatticeAI); extension names are lowercase.
     assert.match(EXTENSION_ID, /^[A-Za-z0-9][A-Za-z0-9-]*\.[a-z0-9-]+$/);
     assert.match(MANIFEST.version, /^\d+\.\d+\.\d+$/);
-    assert.deepStrictEqual(MANIFEST.activationEvents, ['onStartupFinished', 'onFileSystem:armada-vessel']);
+    assert.deepStrictEqual(MANIFEST.activationEvents, ['onStartupFinished', 'onFileSystem:armada-vessel', 'onWebviewPanel:armada.dashboardPage']);
   });
 
   it('contributes the Armada container with the chat, its conversations and the Armada tree, and the Explorer Black Box behind its setting', () => {

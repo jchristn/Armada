@@ -8,11 +8,8 @@ on:
   push:
     paths:
       - 'src/Armada.VSCode/**'
-      - 'src/Armada.Dashboard/src/api/**'
-      - 'src/Armada.Dashboard/src/types/**'
-      - 'src/Armada.Dashboard/src/lib/**'
-      - 'src/Armada.Dashboard/src/App.tsx'
-      - 'src/Armada.Dashboard/src/pages/**'
+      - 'src/Armada.Dashboard/src/**'
+      - 'src/Armada.Dashboard/package-lock.json'
       - 'src/Armada.Dashboard/src/components/settings/**'
       - 'src/Armada.Mobile/sharing.config.js'
       - 'src/Armada.Mobile/eslint.shared.js'
@@ -26,11 +23,8 @@ on:
   pull_request:
     paths:
       - 'src/Armada.VSCode/**'
-      - 'src/Armada.Dashboard/src/api/**'
-      - 'src/Armada.Dashboard/src/types/**'
-      - 'src/Armada.Dashboard/src/lib/**'
-      - 'src/Armada.Dashboard/src/App.tsx'
-      - 'src/Armada.Dashboard/src/pages/**'
+      - 'src/Armada.Dashboard/src/**'
+      - 'src/Armada.Dashboard/package-lock.json'
       - 'src/Armada.Dashboard/src/components/settings/**'
       - 'src/Armada.Mobile/sharing.config.js'
       - 'src/Armada.Mobile/eslint.shared.js'
@@ -56,19 +50,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # The @dashboard/* alias compiles the dashboard's shared TypeScript modules straight from source; they import no
-      # packages, so the dashboard's own node_modules are not needed.
+      # The @dashboard/* alias compiles the dashboard's shared TypeScript modules straight from source, and the
+      # dashboard page tabs (webview/dashboard) bundle the dashboard's pages, so its node_modules (React) are needed too.
       - uses: actions/setup-node@v4
         with:
           node-version-file: src/Armada.VSCode/.nvmrc
           cache: npm
-          cache-dependency-path: src/Armada.VSCode/package-lock.json
+          cache-dependency-path: |
+            src/Armada.VSCode/package-lock.json
+            src/Armada.Dashboard/package-lock.json
 
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
 
       - name: Install dependencies
+        run: npm ci
+
+      - name: Install the dashboard's dependencies (bundled into the page tabs)
+        working-directory: src/Armada.Dashboard
         run: npm ci
 
       - name: Build (typecheck and bundle)

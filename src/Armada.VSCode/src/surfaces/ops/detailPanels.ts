@@ -9,6 +9,8 @@ import * as vscode from 'vscode';
 import { getCaptain, getCaptainLog, getMergeEntry, getMission, getMissionLog, getVoyage, listMissionSummaries } from '@dashboard/api/client';
 import type { MissionSummary } from '@dashboard/types/models';
 import { describeError } from '../../transport/errors';
+import { openAsPage } from '../dashboard/pageRouting';
+import { entityRoute } from '../dashboard/routes';
 import { DetailPage, escapeHtml, isDetailMessage, renderDetailContent, renderDetailHtml } from './detailHtml';
 import { captainPage, mergePage, missionPage, voyagePage } from './detailPages';
 import { ACTIVE_MISSION_STATUSES, OpsDomain, OpsStore } from './opsStore';
@@ -61,6 +63,7 @@ export class DetailPanelManager implements vscode.Disposable {
 
   /** Opens (or reveals) the page for an entity. */
   public async open(kind: DetailKind, id: string): Promise<void> {
+    if (openAsPage(entityRoute(kind, id))) return;
     const key = `${kind}:${id}`;
     const existing = this._Pages.get(key);
     if (existing) {

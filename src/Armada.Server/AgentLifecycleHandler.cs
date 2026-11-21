@@ -333,6 +333,15 @@ namespace Armada.Server
                     return DockPlacement.WaitFor("the captured credential host differs from the host that must retain the existing branch");
                 branchHarborId = request.RequiredCredentialHostId;
             }
+            string? requestedHarborId = String.IsNullOrWhiteSpace(request.RequestedHarborId) ? null : request.RequestedHarborId.Trim();
+            if (requestedHarborId != null)
+            {
+                if (branchHarborId != null && branchHarborId != requestedHarborId)
+                    return DockPlacement.WaitFor("Harbor " + requestedHarborId + " was chosen, but its branch " + request.BranchName + " is in the repository on Harbor " + branchHarborId);
+                if (harbors == null || !harbors.IsConnected(requestedHarborId))
+                    return DockPlacement.WaitFor("the chosen Harbor " + requestedHarborId + " is not connected");
+                branchHarborId = requestedHarborId;
+            }
             if (harbors == null || !harbors.HasConnectedHarbor())
             {
                 if (request.RequiredCredentialHostId != null)
@@ -411,6 +420,8 @@ namespace Armada.Server
             string why = refusals.Count > 0 ? String.Join("; ", refusals) : decision.Reason;
             if (request.RequiredCredentialHostId != null)
                 return DockPlacement.WaitFor("the captured credential Harbor cannot serve this mission under the existing routing and repository rules (" + why + ")");
+            if (requestedHarborId != null)
+                return DockPlacement.WaitFor("the chosen Harbor " + harbors.Describe(requestedHarborId) + " cannot take it now (" + why + ")");
             if (branchHarborId != null)
                 return DockPlacement.WaitFor("its branch " + request.BranchName + " is in the repository on Harbor " + harbors.Describe(branchHarborId) + ", which cannot take it now (" + why + ")");
 

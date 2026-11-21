@@ -801,6 +801,14 @@
     },
     {
       "kind": "tab",
+      "key": "Activity:concurrency",
+      "status": "planned",
+      "mobile": "/activity?source=concurrency",
+      "workstream": "W4.3",
+      "notes": "Concurrency"
+    },
+    {
+      "kind": "tab",
       "key": "Activity:events",
       "status": "implemented",
       "mobile": "/activity?source=events",
@@ -2697,6 +2705,14 @@
     },
     {
       "kind": "api",
+      "key": "getConcurrencyMetrics",
+      "status": "planned",
+      "mobile": "",
+      "workstream": "W2.3",
+      "notes": "Voyages"
+    },
+    {
+      "kind": "api",
       "key": "getDeployment",
       "status": "implemented",
       "mobile": "src/screens/delivery/DeploymentsTab.tsx, DeploymentDetail.tsx",
@@ -2934,6 +2950,14 @@
       "mobile": "MissionDetail",
       "workstream": "W2.2",
       "notes": "Missions"
+    },
+    {
+      "kind": "api",
+      "key": "getMissionWaits",
+      "status": "planned",
+      "mobile": "",
+      "workstream": "W2.3",
+      "notes": "Voyages"
     },
     {
       "kind": "api",
@@ -3233,6 +3257,14 @@
     },
     {
       "kind": "api",
+      "key": "getVesselConcurrency",
+      "status": "planned",
+      "mobile": "",
+      "workstream": "W2.3",
+      "notes": "Voyages"
+    },
+    {
+      "kind": "api",
       "key": "getVesselGitStatus",
       "status": "implemented",
       "mobile": "src/screens/vessels",
@@ -3316,6 +3348,14 @@
       "key": "getVoyageStatus",
       "status": "implemented",
       "mobile": "VoyagesList",
+      "workstream": "W2.3",
+      "notes": "Voyages"
+    },
+    {
+      "kind": "api",
+      "key": "getVoyageTree",
+      "status": "planned",
+      "mobile": "",
       "workstream": "W2.3",
       "notes": "Voyages"
     },

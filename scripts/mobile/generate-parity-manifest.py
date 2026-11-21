@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generate src/Armada.Mobile/parity.json from the dashboard source (archive/MOBILE_APP_PLAN.md, "Parity enforcement").
 
-The manifest maps every dashboard surface to its mobile equivalent: routes (App.tsx), hub tabs, server-calling API
+The manifest maps every dashboard surface to its mobile equivalent: routes (AppRoutes.tsx), hub tabs, server-calling API
 functions (api/client.ts), WebSocket event types, and Server-page settings fields, parsed by the same code as the
 TUI manifest (scripts/tui/dashboard_surfaces.py and client_exports.py). Each entry has a status (implemented,
 planned, not-applicable, extension), the mobile screen or service, and the workstream that delivers it. Existing

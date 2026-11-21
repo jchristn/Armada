@@ -66,7 +66,7 @@ namespace Armada.Core.Services
             List<HistoricalTimelineEntry> entries = new List<HistoricalTimelineEntry>();
             entries.AddRange(await BuildObjectiveEntriesAsync(auth, token).ConfigureAwait(false));
             entries.AddRange(await BuildObjectiveRefinementEntriesAsync(auth, token).ConfigureAwait(false));
-            entries.AddRange(await BuildMissionEntriesAsync(auth, token).ConfigureAwait(false));
+            entries.AddRange(await BuildMissionEntriesAsync(auth, query, token).ConfigureAwait(false));
             entries.AddRange(await BuildVoyageEntriesAsync(auth, token).ConfigureAwait(false));
             entries.AddRange(await BuildPlanningEntriesAsync(auth, token).ConfigureAwait(false));
             entries.AddRange(await BuildMergeEntriesAsync(auth, token).ConfigureAwait(false));
@@ -281,9 +281,9 @@ namespace Armada.Core.Services
             }).ToList();
         }
 
-        private async Task<List<HistoricalTimelineEntry>> BuildMissionEntriesAsync(AuthContext auth, CancellationToken token)
+        private async Task<List<HistoricalTimelineEntry>> BuildMissionEntriesAsync(AuthContext auth, HistoricalTimelineQuery timelineQuery, CancellationToken token)
         {
-            List<Mission> missions = await ReadMissionsAsync(auth, token).ConfigureAwait(false);
+            List<MissionSummary> missions = await ReadMissionSummariesAsync(auth, timelineQuery, token).ConfigureAwait(false);
             return missions.Select(mission => new HistoricalTimelineEntry
             {
                 Id = "timeline-mission-" + mission.Id,
@@ -297,9 +297,11 @@ namespace Armada.Core.Services
                 ActorId = mission.CaptainId,
                 ActorDisplay = mission.Persona ?? mission.CaptainId,
                 Title = mission.Title,
-                Description = mission.Description,
+                // Summaries leave out the mission brief (and the diff and agent output), so a timeline over many
+                // missions does not read every mission's large text; the failure reason describes a failed one.
+                Description = mission.FailureReason,
                 Status = mission.Status.ToString(),
-                Severity = MissionSeverity(mission),
+                Severity = MissionSeverity(mission.Status),
                 Route = "/missions/" + mission.Id,
                 OccurredUtc = mission.LastUpdateUtc,
                 MetadataJson = JsonSerializer.Serialize(new
@@ -625,7 +627,8 @@ namespace Armada.Core.Services
                 UserId = auth.IsAdmin || auth.IsTenantAdmin ? timelineQuery.UserId : auth.UserId,
                 Route = null,
                 FromUtc = timelineQuery.FromUtc,
-                ToUtc = timelineQuery.ToUtc
+                ToUtc = timelineQuery.ToUtc,
+                ExcludeReadMethods = timelineQuery.ExcludeReadRequests
             };
 
             List<RequestHistoryEntry> entries = await _Database.RequestHistory.EnumerateForSummaryAsync(requestQuery, token).ConfigureAwait(false);
@@ -662,13 +665,30 @@ namespace Armada.Core.Services
             }).ToList();
         }
 
-        private async Task<List<Mission>> ReadMissionsAsync(AuthContext auth, CancellationToken token)
+        private async Task<List<MissionSummary>> ReadMissionSummariesAsync(AuthContext auth, HistoricalTimelineQuery timelineQuery, CancellationToken token)
         {
-            if (auth.IsAdmin)
-                return await _Database.Missions.EnumerateAsync(token).ConfigureAwait(false);
-            if (auth.IsTenantAdmin)
-                return await _Database.Missions.EnumerateAsync(auth.TenantId!, token).ConfigureAwait(false);
-            return await _Database.Missions.EnumerateAsync(auth.TenantId!, auth.UserId!, token).ConfigureAwait(false);
+            // The time range is applied in the query (a mission's timeline time is its last update), page by page.
+            List<MissionSummary> missions = new List<MissionSummary>();
+            int pageNumber = 1;
+            while (true)
+            {
+                EnumerationQuery query = new EnumerationQuery
+                {
+                    PageNumber = pageNumber,
+                    PageSize = CollectionLimits.MaxPageSize,
+                    UpdatedAfter = timelineQuery.FromUtc?.ToUniversalTime(),
+                    UpdatedBefore = timelineQuery.ToUtc?.ToUniversalTime()
+                };
+                EnumerationResult<MissionSummary> page = auth.IsAdmin
+                    ? await _Database.Missions.EnumerateSummariesAsync(query, token).ConfigureAwait(false)
+                    : auth.IsTenantAdmin
+                        ? await _Database.Missions.EnumerateSummariesAsync(auth.TenantId!, query, token).ConfigureAwait(false)
+                        : await _Database.Missions.EnumerateSummariesAsync(auth.TenantId!, auth.UserId!, query, token).ConfigureAwait(false);
+                missions.AddRange(page.Objects);
+                if (page.Objects.Count < query.PageSize || pageNumber >= page.TotalPages) break;
+                pageNumber++;
+            }
+            return missions;
         }
 
         private async Task<List<Voyage>> ReadVoyagesAsync(AuthContext auth, CancellationToken token)
@@ -971,11 +991,11 @@ namespace Armada.Core.Services
             return "info";
         }
 
-        private static string MissionSeverity(Mission mission)
+        private static string MissionSeverity(MissionStatusEnum status)
         {
-            if (mission.Status == MissionStatusEnum.Failed || mission.Status == MissionStatusEnum.LandingFailed)
+            if (status == MissionStatusEnum.Failed || status == MissionStatusEnum.LandingFailed)
                 return "error";
-            if (mission.Status == MissionStatusEnum.Cancelled || mission.Status == MissionStatusEnum.Review)
+            if (status == MissionStatusEnum.Cancelled || status == MissionStatusEnum.Review)
                 return "warning";
             return "info";
         }

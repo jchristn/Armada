@@ -1,12 +1,13 @@
 import Breadcrumbs from '../components/shared/Breadcrumbs';
 import RunApprovalFields, { DEFAULT_RUN_APPROVALS } from '../components/shared/RunApprovalFields';
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { listVessels, listPipelines, createVoyage } from '../api/client';
+import { Link, useNavigate } from 'react-router-dom';
+import { listVessels, listPipelines, listCaptains, createVoyage } from '../api/client';
+import { ALL_STEPS_PERSONA } from '../lib/dispatchRequest';
 import DispatchPreview from '../components/blackbox/DispatchWarnings';
 import { dispatchWarningsFrom } from '../lib/dispatchPreview';
 import { listAll } from '../api/paging';
-import type { Vessel, Pipeline, SelectedPlaybook } from '../types/models';
+import type { Captain, Vessel, Pipeline, SelectedPlaybook } from '../types/models';
 import ErrorModal from '../components/shared/ErrorModal';
 import { useLocale } from '../context/LocaleContext';
 import { useNotifications } from '../context/NotificationContext';
@@ -23,6 +24,8 @@ export default function VoyageCreate() {
   const [vessels, setVessels] = useState<Vessel[]>([]);
   const [pipelines, setPipelines] = useState<Pipeline[]>([]);
   const [selectedPipeline, setSelectedPipeline] = useState('');
+  const [captains, setCaptains] = useState<Captain[]>([]);
+  const [captainId, setCaptainId] = useState('');
 
   // Form state
   const [title, setTitle] = useState('');
@@ -41,6 +44,7 @@ export default function VoyageCreate() {
   useEffect(() => {
     listAll(listVessels).then(r => setVessels(sortByName(r.objects))).catch(() => {});
     listAll(listPipelines).then(r => setPipelines(r.objects || [])).catch(() => {});
+    listAll(listCaptains).then(r => setCaptains(sortByName(r.objects))).catch(() => {});
   }, []);
 
   function addMission() {
@@ -68,7 +72,9 @@ export default function VoyageCreate() {
 
     setSubmitting(true);
     try {
-      const voyage = await createVoyage({ ...buildVoyageCreateRequest(form), approvalOptions });
+      // A captain chosen here runs every step of every mission (the Dispatch page's "all steps" assignment).
+      const captainAssignments = captainId ? [{ persona: ALL_STEPS_PERSONA, captainId }] : undefined;
+      const voyage = await createVoyage({ ...buildVoyageCreateRequest(form), approvalOptions, ...(captainAssignments ? { captainAssignments } : {}) });
 
       pushToast('success', t('Voyage "{{title}}" created.', { title: title.trim() }));
       navigate(`/voyages/${voyage.id}`, { state: { dispatchWarnings: dispatchWarningsFrom(voyage) } });
@@ -109,7 +115,10 @@ export default function VoyageCreate() {
           </label>
 
           <label style={{ display: 'block', marginBottom: 14 }}>
-            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-dim)' }} title={t('Repository every mission in this voyage works in. Each mission gets its own branch and worktree there. Required.')}>{t('Vessel')}</span>
+            <span style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-dim)' }} title={t('Repository every mission in this voyage works in. Each mission gets its own branch and worktree there. Required.')}>{t('Vessel')}</span>
+              <Link to="/vessels" className="form-label-link" title={t('Open Vessels to add, import or configure the repositories offered here.')}>{t('Manage vessels')}</Link>
+            </span>
             <select value={vesselId} onChange={e => setVesselId(e.target.value)} required title={t('Repository every mission in this voyage works in. Each mission gets its own branch and worktree there. Required.')} style={{ marginTop: 4 }}>
               <option value="">{t('Select a vessel...')}</option>
               {vessels.map(v => <option key={v.id} value={v.id}>{v.name} ({v.id})</option>)}
@@ -117,7 +126,10 @@ export default function VoyageCreate() {
           </label>
 
           <label style={{ display: 'block', marginBottom: 14 }}>
-            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-dim)' }} title={t('Sequence of persona stages each mission runs through, such as Architect then Worker then Judge. Inherit uses the vessel\'s pipeline, then the fleet\'s, then Worker only.')}>{t('Pipeline')}</span>
+            <span style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-dim)' }} title={t('Sequence of persona stages each mission runs through, such as Architect then Worker then Judge. Inherit uses the vessel\'s pipeline, then the fleet\'s, then Worker only.')}>{t('Pipeline')}</span>
+              <Link to="/pipelines" className="form-label-link" title={t('Open Pipelines to create or edit the stage sequences offered here.')}>{t('Manage pipelines')}</Link>
+            </span>
             <select value={selectedPipeline} onChange={e => setSelectedPipeline(e.target.value)} title={t('Sequence of persona stages each mission runs through, such as Architect then Worker then Judge. Inherit uses the vessel\'s pipeline, then the fleet\'s, then Worker only.')} style={{ marginTop: 4 }}>
               <option value="">{t('Inherit (vessel, then fleet, then WorkerOnly)')}</option>
               {pipelines.map(p => (
@@ -125,6 +137,17 @@ export default function VoyageCreate() {
                   {p.name} ({p.stages.map(s => s.personaName).join(' -> ')})
                 </option>
               ))}
+            </select>
+          </label>
+
+          <label style={{ display: 'block', marginBottom: 14 }}>
+            <span style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-dim)' }} title={t('Captain that runs every step of every mission in this voyage; it overrides the personas\' captain priorities. Automatic leaves the choice to normal routing by persona and tier.')}>{t('Captain')}</span>
+              <Link to="/captains" className="form-label-link" title={t('Open Captains to add captains or change their runtime, model and limits.')}>{t('Manage captains')}</Link>
+            </span>
+            <select value={captainId} onChange={e => setCaptainId(e.target.value)} title={t('Captain that runs every step of every mission in this voyage; it overrides the personas\' captain priorities. Automatic leaves the choice to normal routing by persona and tier.')} style={{ marginTop: 4 }}>
+              <option value="">{t('Automatic (normal routing)')}</option>
+              {captains.map(c => <option key={c.id} value={c.id}>{c.name} ({c.runtime}{c.model ? ` · ${c.model}` : ''})</option>)}
             </select>
           </label>
 

@@ -220,6 +220,8 @@ export interface Vessel {
   /** Per-vessel auto-approve override for missions; null or absent uses the captain setting. */
   autoApprove?: boolean | null;
   defaultPipelineId: string | null;
+  /** The Harbor this vessel's work prefers (routing tries it first), or null. */
+  preferredHarborId?: string | null;
   active: boolean;
   createdUtc: string;
   lastUpdateUtc: string;
@@ -2889,6 +2891,8 @@ export interface PlanningSessionCreateRequest {
   pipelineId?: string;
   selectedPlaybooks?: SelectedPlaybook[];
   objectiveId?: string;
+  /** Run the session on this Harbor (its dock and every turn); omitted lets routing choose. */
+  harborId?: string;
 }
 
 export interface PlanningSessionMessageRequest {

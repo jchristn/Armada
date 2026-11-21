@@ -207,7 +207,10 @@ export default function Dispatch() {
           {/* Row 1: Vessel + Pipeline + Priority + Optional Voyage Title */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0 1.5rem' }}>
             <div className="form-group">
-              <label title={t('Repository the work runs in. The request becomes a voyage on this vessel, and its missions get their own branches there. Required.')}>{t('Vessel')}</label>
+              <div className="form-label-row">
+                <label title={t('Repository the work runs in. The request becomes a voyage on this vessel, and its missions get their own branches there. Required.')}>{t('Vessel')}</label>
+                <Link to="/vessels" className="form-label-link" title={t('Open Vessels to add, import or configure the repositories offered here.')}>{t('Manage vessels')}</Link>
+              </div>
               <select aria-label={t('Vessel')}
                 title={t('Repository the work runs in. The request becomes a voyage on this vessel, and its missions get their own branches there. Required.')}
                 value={vesselId}
@@ -284,7 +287,10 @@ Armada will dispatch this request as a voyage on the selected vessel.`)}
             <div className="form-group">
               <div className="form-label-row">
                 <label title={t('Optional: pick which captain should run each pipeline step. Blank leaves the choice to normal routing by persona and tier.')}>{t('Captain Assignments')}</label>
-                <Link to="/personas" className="form-label-link" title={t('Open Personas to change the default captain and fallback tier each persona uses.')}>{t('Manage persona defaults')}</Link>
+                <span style={{ display: 'inline-flex', gap: '0.75rem' }}>
+                  <Link to="/captains" className="form-label-link" title={t('Open Captains to add captains or change their runtime, model and limits.')}>{t('Manage captains')}</Link>
+                  <Link to="/personas" className="form-label-link" title={t('Open Personas to change the default captain and fallback tier each persona uses.')}>{t('Manage persona defaults')}</Link>
+                </span>
               </div>
               <p className="text-dim" style={{ fontSize: '0.8rem', margin: '0 0 0.5rem' }}>
                 {stepPersonas.length > 0

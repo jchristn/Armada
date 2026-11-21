@@ -3,7 +3,6 @@ import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { readSettings } from './config';
-import { DetailAction } from './surfaces/ops/detailHtml';
 import { loadCatalog } from './i18n';
 import { ConnectionManager } from './connection/connectionManager';
 import { harborDirectory, tuiPreferencesPath } from './connection/endpoints';
@@ -14,14 +13,13 @@ import { BlackBoxDecorationProvider } from './surfaces/blackbox/blackBoxDecorati
 import { BlackBoxLive } from './surfaces/blackbox/blackBoxLive';
 import { BlackBoxStore } from './surfaces/blackbox/blackBoxStore';
 import { EntryViewManager } from './surfaces/blackbox/entryView';
-import { FAILURES_EXPLORER_VIEW_ID, FAILURES_VIEW_ID, FailuresTreeProvider } from './surfaces/blackbox/failuresTreeProvider';
+import { FAILURES_EXPLORER_VIEW_ID, FailuresTreeProvider } from './surfaces/blackbox/failuresTreeProvider';
 import { InsightCommands } from './surfaces/blackbox/insightCommands';
 import { ASK_VIEW_ID, AskViewProvider } from './surfaces/ask/askView';
 import { resourceCatalog } from './surfaces/resources/resourceCatalog';
 import { extendCatalog, resourceCatalogExtras } from './surfaces/resources/resourceCatalogExtras';
 import { ResourceSpec } from './surfaces/resources/resourceSpec';
-import { ResourceController, ResourceStore, ResourceTreeProvider } from './surfaces/resources/resourceViews';
-import { TreeTabManager } from './surfaces/tabs/treeTab';
+import { ResourceController, ResourceStore } from './surfaces/resources/resourceViews';
 import { DetailPanelManager } from './surfaces/ops/detailPanels';
 import { registerExtraCommands } from './surfaces/ops/extraCommands';
 import { registerLocalCommands, watchNeedsYou } from './surfaces/ops/localCommands';
@@ -31,14 +29,17 @@ import { ARMADA_DOCUMENT_SCHEME, ArmadaDocumentProvider } from './surfaces/ops/o
 import { registerOpsCommands } from './surfaces/ops/opsCommands';
 import { OpsStatusBar } from './surfaces/ops/opsStatusBar';
 import { OpsStore } from './surfaces/ops/opsStore';
-import { CaptainsTreeProvider, FleetTreeProvider, MergeQueueTreeProvider, MissionsTreeProvider, NeedsYouTreeProvider, OPS_VIEW_IDS, VoyagesTreeProvider } from './surfaces/ops/opsTrees';
-import { dashboardHubs, HUB_RESOURCES, LEGACY_TAB_TARGETS } from './surfaces/nav/navLayout';
-import { hubTabId, isNavNode, NAV_REVEAL_COMMAND, NAV_VIEW_ID, NavHubProvider, NavTreeProvider } from './surfaces/nav/navTree';
+import { CaptainsTreeProvider, FleetTreeProvider, MergeQueueTreeProvider, MissionsTreeProvider, NeedsYouTreeProvider, VoyagesTreeProvider } from './surfaces/ops/opsTrees';
+import { dashboardHubs, LEGACY_TAB_TARGETS } from './surfaces/nav/navLayout';
+import { isNavNode, NAV_REVEAL_COMMAND, NAV_VIEW_ID, navPages, NavTreeProvider } from './surfaces/nav/navTree';
 import { registerConversations } from './surfaces/ask/conversationsTree';
 import { parseAskEvent } from '@dashboard/lib/askEvents';
 import type { WebSocketMessage } from '@dashboard/types/models';
 import { ArmadaEventBus, LiveMode } from './transport/eventBus';
 import { dashboardPageUrl } from './transport/hostClient';
+import { DashboardPages, OPEN_PAGE_COMMAND } from './surfaces/dashboard/dashboardPages';
+import { setPageOpener } from './surfaces/dashboard/pageRouting';
+import { KIND_ROUTES } from './surfaces/dashboard/routes';
 
 /** Objects created on activation, returned for the integration tests. */
 export interface ArmadaExtensionApi {
@@ -52,6 +53,8 @@ export interface ArmadaExtensionApi {
   resources: { specs: ResourceSpec[]; store: ResourceStore };
   /** The Armada tree (the dashboard's navigation). */
   nav: NavTreeProvider;
+  /** The dashboard page tabs. */
+  pages: DashboardPages;
   liveMode(): LiveMode;
 }
 
@@ -71,6 +74,28 @@ export async function activate(context: vscode.ExtensionContext): Promise<Armada
   _Bus = bus;
   context.subscriptions.push({ dispose: () => bus.dispose() });
 
+  // The dashboard's own pages (Overview, Needs You, Dispatch, Activity, every hub and detail page) in editor tabs.
+  const pages = new DashboardPages(context.extensionUri, connection, bus, (line) => output.warn(line));
+  context.subscriptions.push(pages, { dispose: () => setPageOpener(undefined) });
+  setPageOpener((route, options) => pages.open(route, options));
+  context.subscriptions.push(
+    vscode.commands.registerCommand(OPEN_PAGE_COMMAND, (route?: unknown, options?: unknown) => {
+      if (!connection.connected) {
+        void vscode.window.showWarningMessage('Armada: connect to an Admiral first.', 'Connect').then((choice) => { if (choice) void vscode.commands.executeCommand('armada.connect'); });
+        return;
+      }
+      const opts = options && typeof options === 'object' ? (options as { newTab?: boolean; state?: unknown }) : {};
+      pages.open(typeof route === 'string' && route ? route : '/', opts);
+    }),
+    vscode.commands.registerCommand('armada.page.openList', (kind?: unknown) => {
+      if (typeof kind === 'string' && KIND_ROUTES[kind]) void vscode.commands.executeCommand(OPEN_PAGE_COMMAND, KIND_ROUTES[kind]);
+    }),
+    vscode.commands.registerCommand('armada.page.pick', async () => {
+      const picked = await vscode.window.showQuickPick(navPages(dashboardHubs()).map((p) => ({ label: p.label, description: p.route, route: p.route })), { title: 'Armada: Open Page', matchOnDescription: true });
+      if (picked) void vscode.commands.executeCommand(OPEN_PAGE_COMMAND, picked.route);
+    }),
+  );
+
   const store = new BlackBoxStore({
     getConnection: () => connection.active,
     getWorkspaceFolderPaths: () => (vscode.workspace.workspaceFolders ?? []).filter((f) => f.uri.scheme === 'file').map((f) => f.uri.fsPath),
@@ -80,9 +105,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<Armada
   // The native operational views (Needs You, Missions, Voyages, Captains, Fleet, Merge Queue) over one live store.
   const ops = new OpsStore({ isConnected: () => connection.connected, log: (line) => output.warn(line) });
   context.subscriptions.push({ dispose: () => ops.dispose() });
-  // Every sidebar view can also open as an editor tab (more room than the sidebar).
-  const tabs = new TreeTabManager();
-  context.subscriptions.push(tabs);
   const opsTrees = {
     needsYou: new NeedsYouTreeProvider(ops),
     missions: new MissionsTreeProvider(ops),
@@ -127,50 +149,28 @@ export async function activate(context: vscode.ExtensionContext): Promise<Armada
   specs.push(...resourceCatalogExtras());
   extendCatalog(specs);
   const resources = new ResourceStore(() => connection.connected);
-  // Each record kind sits under the dashboard hub whose tab shows it (HUB_RESOURCES).
-  const resourceTrees = new Map<string, ResourceTreeProvider>();
-  for (const [hubKey, keys] of Object.entries(HUB_RESOURCES)) {
-    const hubSpecs = keys.map((key) => specs.find((s) => s.key === key && !s.hidden)).filter((s): s is ResourceSpec => !!s);
-    if (!hubSpecs.length) continue;
-    const provider = new ResourceTreeProvider(hubSpecs, resources, () => connection.connected);
-    resourceTrees.set(hubKey, provider);
-    context.subscriptions.push(provider);
-  }
   const resourceController = new ResourceController(specs, resources, async () => connection.connected || connection.connect({ interactive: true }), (key) => {
     if (key === 'vessel' || key === 'fleet') void ops.refresh('fleet');
     if (key === 'captain') void ops.refresh('captains');
   });
   context.subscriptions.push(resourceController, bus.onPoll(() => void resourceController.refreshAll()));
 
-  // The Armada tree: the dashboard's navigation (Overview, then its hubs), each hub holding the trees it shows.
+  // The Black Box tree (the Explorer's Armada Failures view).
   const tree = new FailuresTreeProvider(store);
   context.subscriptions.push(tree);
+  // The Manage view: the dashboard's navigation as a table of contents; every entry opens its page in a tab.
   const badgeCount = (badge: vscode.ViewBadge | undefined): number | undefined => badge?.value || undefined;
-  const nav = new NavTreeProvider(dashboardHubs({
-    needsYou: { id: OPS_VIEW_IDS.needsYou, provider: opsTrees.needsYou, count: () => badgeCount(opsTrees.needsYou.badge()) },
-    missions: { id: OPS_VIEW_IDS.missions, provider: opsTrees.missions, count: () => badgeCount(opsTrees.missions.badge()) },
-    voyages: { id: OPS_VIEW_IDS.voyages, provider: opsTrees.voyages, count: () => badgeCount(opsTrees.voyages.badge()) },
-    merge: { id: OPS_VIEW_IDS.merge, provider: opsTrees.merge, count: () => badgeCount(opsTrees.merge.badge()) },
-    failures: { id: FAILURES_VIEW_ID, provider: tree, count: () => badgeCount(tree.badge()) },
-    fleet: { id: OPS_VIEW_IDS.fleet, provider: opsTrees.fleet },
-    captains: { id: OPS_VIEW_IDS.captains, provider: opsTrees.captains, count: () => badgeCount(opsTrees.captains.badge()) },
-    resources: (key) => {
-      const provider = resourceTrees.get(key);
-      return provider ? { id: `armadaResources.${key}`, provider } : undefined;
-    },
-  }), () => connection.connected);
-  const navView = vscode.window.createTreeView(NAV_VIEW_ID, { treeDataProvider: nav, showCollapseAll: true, canSelectMany: true });
+  const nav = new NavTreeProvider(dashboardHubs(), () => connection.connected, { counts: { needsYou: () => badgeCount(opsTrees.needsYou.badge()) } });
+  const navView = vscode.window.createTreeView(NAV_VIEW_ID, { treeDataProvider: nav, showCollapseAll: true });
+  let navCount = 0;
   context.subscriptions.push(nav, navView, connection.onDidChange(() => nav.refresh()), ops.onDidChange(() => {
     navView.badge = opsTrees.needsYou.badge();
+    const count = badgeCount(navView.badge) ?? 0;
+    if (count !== navCount) {
+      navCount = count;
+      nav.refresh();
+    }
   }));
-  // Every hub opens as an editor tab, and so do the trees inside Missions (Missions, Voyages, Merge Queue, Black Box).
-  for (const hub of nav.hubs) {
-    if (hub.children.length) tabs.register({ viewId: hubTabId(hub), title: hub.label, provider: new NavHubProvider(nav, hub.key), actions: HUB_ACTIONS[hub.key] });
-  }
-  tabs.register({ viewId: OPS_VIEW_IDS.missions, title: 'Missions', provider: opsTrees.missions, actions: [{ label: 'Dispatch Mission', command: 'armada.dispatch', primary: true }] });
-  tabs.register({ viewId: OPS_VIEW_IDS.voyages, title: 'Voyages', provider: opsTrees.voyages, actions: [{ label: 'Dispatch Voyage', command: 'armada.dispatchVoyage', primary: true }] });
-  tabs.register({ viewId: OPS_VIEW_IDS.merge, title: 'Merge Queue', provider: opsTrees.merge, actions: [{ label: 'Process Queue', command: 'armada.merge.processAll', primary: true }] });
-  tabs.register({ viewId: FAILURES_VIEW_ID, title: 'Black Box', provider: tree, actions: [{ label: 'Search the Black Box...', command: 'armada.blackbox.search', primary: true }] });
   context.subscriptions.push(vscode.commands.registerCommand(NAV_REVEAL_COMMAND, async (key?: unknown) => {
     await vscode.commands.executeCommand(`${NAV_VIEW_ID}.focus`);
     const node = typeof key === 'string' ? nav.hubNode(key) : undefined;
@@ -266,7 +266,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<Armada
   };
 
   context.subscriptions.push(connection.onDidChange((state) => {
-    for (const provider of resourceTrees.values()) provider.refresh();
     if (state.phase === 'connected') {
       // Display strings in VS Code's language, from the Admiral's catalog (skipped in English).
       const baseUrl = connection.active?.baseUrl;
@@ -274,8 +273,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<Armada
         void loadCatalog(baseUrl, displayLanguage()).then((translated) => {
           if (!translated) return;
           void ops.refreshAll();
-          for (const provider of resourceTrees.values()) provider.refresh();
-        });
+              });
       }
       store.invalidateVessels();
       void store.refresh();
@@ -304,37 +302,26 @@ export async function activate(context: vscode.ExtensionContext): Promise<Armada
   register('armada.ask.open', () => vscode.commands.executeCommand(`${ASK_VIEW_ID}.focus`));
   register('armada.ask.openInEditor', () => askView.openInEditor());
   register('armada.tab.open', async (viewId) => {
-    let id = typeof viewId === 'string' ? LEGACY_TAB_TARGETS[viewId] ?? viewId : undefined;
-    if (!id) {
-      const items = [{ label: 'Ask Armada', id: ASK_VIEW_ID }];
-      for (const hub of nav.hubs) {
-        if (!hub.children.length) continue;
-        items.push({ label: hub.label, id: hubTabId(hub) });
-        for (const child of hub.children) if (child.kind === 'source' && child.label) items.push({ label: `${hub.label}: ${child.label}`, id: child.source.id });
-      }
-      id = (await vscode.window.showQuickPick(items, { title: 'Armada: open in an editor tab' }))?.id;
-    }
-    if (!id) return;
-    if (id === ASK_VIEW_ID) askView.openInEditor();
-    else await tabs.open(id);
+    const route = typeof viewId === 'string' ? LEGACY_TAB_TARGETS[viewId] : undefined;
+    if (viewId === ASK_VIEW_ID) askView.openInEditor();
+    else if (route) await vscode.commands.executeCommand(OPEN_PAGE_COMMAND, route);
+    else await vscode.commands.executeCommand('armada.page.pick');
   });
   register('armada.nav.openTab', async (node) => {
-    if (!isNavNode(node)) return vscode.commands.executeCommand('armada.tab.open');
-    if (node.navKind === 'tab') return tabs.open(node.child.source.id);
-    return tabs.open(hubTabId(node.hub));
+    if (!isNavNode(node)) return vscode.commands.executeCommand('armada.page.pick');
+    return vscode.commands.executeCommand(OPEN_PAGE_COMMAND, node.navKind === 'page' ? node.page.route : node.hub.route, { newTab: true });
   });
   register('armada.nav.refresh', async () => {
     void ops.refreshAll();
     void store.refresh();
-    await resourceController.refreshAll();
     nav.refresh();
+    pages.reload();
   });
-  register('armada.tab.refresh', async (viewId) => {
+  register('armada.tab.refresh', async () => {
     void ops.refreshAll();
-    await resourceController.refreshAll();
-    if (typeof viewId === 'string') await tabs.render(viewId);
+    pages.reload();
   });
-  for (const [viewId, target] of Object.entries(LEGACY_TAB_TARGETS)) register(`armada.tab.${viewId}`, () => tabs.open(target));
+  for (const [viewId, route] of Object.entries(LEGACY_TAB_TARGETS)) register(`armada.tab.${viewId}`, () => vscode.commands.executeCommand(OPEN_PAGE_COMMAND, route));
   register('armada.ask.new', () => askView.newConversation());
   register('armada.ask.history', () => askView.pickConversation());
   register('armada.refreshFailures', () => {
@@ -367,8 +354,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<Armada
     if (e.affectsConfiguration('armada.language') && connection.active) {
       void loadCatalog(connection.active.baseUrl, displayLanguage()).then(() => {
         void ops.refreshAll();
-        for (const provider of resourceTrees.values()) provider.refresh();
-      });
+          });
     }
     if (e.affectsConfiguration('armada.tenant')) store.invalidateVessels();
     if (e.affectsConfiguration('armada.liveUpdates')) restartBus();
@@ -381,19 +367,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<Armada
   const startup = setTimeout(() => void connection.restore(), 0);
   context.subscriptions.push({ dispose: () => clearTimeout(startup) });
 
-  return { connection, events: bus, store, commands, ops, details, ask: askView, resources: { specs, store: resources }, nav, liveMode: () => bus.mode };
+  return { connection, events: bus, store, commands, ops, details, ask: askView, resources: { specs, store: resources }, nav, pages, liveMode: () => bus.mode };
 }
-
-/** The main actions of each hub's editor tab. */
-const HUB_ACTIONS: Record<string, DetailAction[]> = {
-  needsYou: [{ label: 'Armada Overview', command: 'armada.home', primary: true }],
-  dispatch: [{ label: 'Dispatch Mission', command: 'armada.dispatch', primary: true }, { label: 'Dispatch Voyage', command: 'armada.dispatchVoyage' }, { label: 'New Planning Session', command: 'armada.planning.new' }],
-  missions: [{ label: 'Dispatch Mission', command: 'armada.dispatch', primary: true }],
-  captains: [{ label: 'New Captain', command: 'armada.captain.create', primary: true }],
-  vessels: [{ label: 'New Vessel', command: 'armada.vessel.create', primary: true }, { label: 'Import Vessels', command: 'armada.vessel.import' }],
-  activity: [{ label: 'Activity Charts', command: 'armada.charts', primary: true }],
-  settings: [{ label: 'Call the Armada API', command: 'armada.api.call', primary: true }],
-};
 
 /** The language for Armada's labels: armada.language, or VS Code's display language when it is "auto". */
 function displayLanguage(): string {

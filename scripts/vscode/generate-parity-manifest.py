@@ -3,7 +3,7 @@
 
 The manifest maps every surface the VS Code extension has to reach to its VS Code implementation:
 
-- dashboard routes (App.tsx), hub tabs, server-calling API functions (api/client.ts), WebSocket event types and
+- dashboard routes (AppRoutes.tsx), hub tabs, server-calling API functions (api/client.ts), WebSocket event types and
   Server-page settings fields, parsed by the TUI's parsers (scripts/tui/dashboard_surfaces.py, client_exports.py);
 - the TUI's own extension entries (kind "tui", from src/Armada.Tui/parity.json);
 - Harbor's tray menu commands and windows (kind "harbor", from HarborMenuCommandEnum.cs and the Window classes);

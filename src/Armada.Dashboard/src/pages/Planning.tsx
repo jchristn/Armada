@@ -11,6 +11,7 @@ import {
   listCaptains,
   listFleets,
   listPipelines,
+  listHarbors,
   listPlanningSessionMessages,
   listPlanningSessions,
   listVessels,
@@ -24,6 +25,7 @@ import { listAll } from '../api/paging';
 import type {
   Captain,
   Fleet,
+  Harbor,
   Pipeline,
   PlanningSession,
   PlanningSessionMessage,
@@ -118,6 +120,8 @@ export default function Planning() {
   const [fleetId, setFleetId] = useState('');
   const [vesselId, setVesselId] = useState('');
   const [pipelineId, setPipelineId] = useState('');
+  const [harbors, setHarbors] = useState<Harbor[]>([]);
+  const [harborId, setHarborId] = useState('');
   const [objectiveId, setObjectiveId] = useState('');
   const [selectedPlaybooks, setSelectedPlaybooks] = useState<SelectedPlaybook[]>([]);
   const [composer, setComposer] = useState('');
@@ -151,12 +155,13 @@ export default function Planning() {
     try {
       setLoadingCatalog(true);
       setError('');
-      const [sessionItems, captainResult, fleetResult, vesselResult, pipelineResult] = await Promise.all([
+      const [sessionItems, captainResult, fleetResult, vesselResult, pipelineResult, harborResult] = await Promise.all([
         listPlanningSessions({ pageNumber: 1, pageSize: SESSION_PAGE_SIZE }).catch(() => null),
         listAll(listCaptains).catch(() => null),
         listAll(listFleets).catch(() => null),
         listAll(listVessels).catch(() => null),
         listAll(listPipelines).catch(() => null),
+        listHarbors().catch(() => null),
       ]);
 
       setSessions(sessionItems?.objects ?? []);
@@ -165,6 +170,7 @@ export default function Planning() {
       setFleets(fleetResult?.objects || []);
       setVessels(sortByName(vesselResult?.objects));
       setPipelines(pipelineResult?.objects || []);
+      setHarbors(harborResult || []);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : t('Failed to load planning data.'));
     } finally {
@@ -532,6 +538,7 @@ export default function Planning() {
         pipelineId: pipelineId || undefined,
         selectedPlaybooks,
         objectiveId: objectiveId || undefined,
+        harborId: harborId || undefined,
       });
 
       setSessions((current) => upsertSession(current, result.session));
@@ -877,6 +884,9 @@ export default function Planning() {
         onPipelineChange={setPipelineId}
         onSelectedPlaybooksChange={setSelectedPlaybooks}
         onStart={handleCreateSession}
+        harbors={harbors}
+        harborId={harborId}
+        onHarborChange={setHarborId}
       />
 
       {vesselId && (

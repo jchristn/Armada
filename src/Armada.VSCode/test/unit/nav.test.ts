@@ -1,142 +1,100 @@
 import * as assert from 'assert';
 import * as fs from 'fs';
 import * as path from 'path';
-import { describe, it } from 'node:test';
+import { beforeEach, describe, it } from 'node:test';
 import { navModelSections } from '@dashboard/lib/navModel';
 import type { AskThread } from '@dashboard/types/models';
 import { conversationItem } from '../../src/surfaces/ask/conversationsTree';
-import { dashboardHubs, HUB_RESOURCES, LEGACY_TAB_TARGETS, NavSources } from '../../src/surfaces/nav/navLayout';
-import { NavHubProvider, NavSource, NavTreeProvider } from '../../src/surfaces/nav/navTree';
+import { dashboardHubs, LEGACY_TAB_TARGETS } from '../../src/surfaces/nav/navLayout';
+import { NavNode, navPages, NavTreeProvider } from '../../src/surfaces/nav/navTree';
 import { resourceCatalog } from '../../src/surfaces/resources/resourceCatalog';
 import { extendCatalog, resourceCatalogExtras } from '../../src/surfaces/resources/resourceCatalogExtras';
-import { EventEmitter, ThemeIcon, TreeItem, TreeItemCollapsibleState } from '../fakes/vscode';
+import { createRoute, entityRoute, HUB_ROUTES, isDashboardRoute, KIND_ROUTES, recordRoute, routeArea, routeForId, SOURCE_ROUTES } from '../../src/surfaces/dashboard/routes';
+import { hostHandledRoute } from '../../src/surfaces/dashboard/protocol';
+import { fake, ThemeIcon, TreeItem, TreeItemCollapsibleState } from '../fakes/vscode';
 
-/** A fake source tree: roots, children per root, change events. */
-function source(id: string, roots: string[], children: Record<string, string[]> = {}, count?: number): FakeSource {
-  const changed = new EventEmitter<unknown>();
-  const nodes = new Map<string, { id: string }>();
-  const node = (key: string) => {
-    if (!nodes.has(key)) nodes.set(key, { id: key });
-    return nodes.get(key) as { id: string };
-  };
-  return {
-    id,
-    count: () => count,
-    fire: () => changed.fire(undefined),
-    provider: {
-      onDidChangeTreeData: changed.event as never,
-      getChildren: (el?: unknown) => (el ? (children[(el as { id: string }).id] ?? []).map(node) : roots.map(node)),
-      getTreeItem: (el: unknown) => {
-        const key = (el as { id: string }).id;
-        const item = new TreeItem(key, children[key] ? TreeItemCollapsibleState.Collapsed : TreeItemCollapsibleState.None);
-        item.id = key;
-        item.contextValue = 'armadaThing';
-        return item as never;
-      },
-    },
-  };
+function items(nav: NavTreeProvider, parent?: NavNode): Array<{ el: NavNode; item: TreeItem }> {
+  return nav.getChildren(parent).map((el) => ({ el, item: nav.getTreeItem(el) as unknown as TreeItem }));
 }
 
-type FakeSource = NavSource & { fire(): void };
-
-function sources(): NavSources & { missions: FakeSource; delivery: FakeSource } {
-  const s = {
-    needsYou: source('armadaNeedsYou', ['review-1', 'stall-1'], {}, 2),
-    missions: source('armadaMissions', ['active'], { active: ['msn_1'] }),
-    voyages: source('armadaVoyages', ['vyg_1']),
-    merge: source('armadaMergeQueue', ['mrg_1']),
-    failures: source('armadaFailures', ['bbx_1'], {}, 1),
-    fleet: source('armadaFleet', ['fleet-a'], { 'fleet-a': ['vsl_1'] }),
-    captains: source('armadaCaptains', ['cpt_1']),
-    delivery: source('armadaResources.delivery', ['deployments']),
-  };
-  return { ...s, resources: (key: string) => (key === 'delivery' ? s.delivery : undefined) } as never;
+/** The dashboard's hub registry (lib/dashboardNavigation.ts dashboardHubs), read from its source: path, param, tab keys. */
+function dashboardRegistry(): Array<{ path: string; param: string; tabs: string[] }> {
+  const src = fs.readFileSync(path.join(__dirname, '..', '..', '..', '..', 'Armada.Dashboard', 'src', 'lib', 'dashboardNavigation.ts'), 'utf8');
+  const block = src.slice(src.indexOf('export const dashboardHubs'), src.indexOf('export const dashboardCollections'));
+  return [...block.matchAll(/path: '([^']+)', label: '[^']+', param: '(\w+)'[\s\S]*?tabs: \[([\s\S]*?)\]/g)].map((m) => ({
+    path: m[1], param: m[2], tabs: [...m[3].matchAll(/key: '([^']+)'/g)].map((k) => k[1]),
+  }));
 }
 
-async function items(nav: NavTreeProvider, parent?: unknown): Promise<Array<{ el: unknown; item: TreeItem }>> {
-  const children = await nav.getChildren(parent);
-  return Promise.all(children.map(async (el) => ({ el, item: (await nav.getTreeItem(el)) as unknown as TreeItem })));
-}
+describe('the Manage tree', () => {
+  beforeEach(() => fake.reset());
 
-describe('the Armada tree', () => {
   it('lists the dashboard navigation in its order: Overview, then the Operations, Build, Configuration and System hubs', () => {
-    const hubs = dashboardHubs(sources());
-    const dashboard = navModelSections.flatMap((section) => section.items.map((item) => item.label)).map((label) => (label === 'Settings' ? 'Settings' : label));
+    const hubs = dashboardHubs();
+    const dashboard = navModelSections.flatMap((section) => section.items.map((item) => item.label));
     assert.deepStrictEqual(hubs.slice(1).map((h) => h.label), dashboard);
     assert.strictEqual(hubs[0].label, 'Armada Overview');
-    assert.deepStrictEqual(hubs.find((h) => h.key === 'missions')?.children.filter((c) => c.kind === 'source' && c.label).map((c) => (c as { label: string }).label), ['Missions', 'Voyages', 'Merge Queue', 'Black Box']);
   });
 
-  it('puts every record kind under exactly one hub, and every hub key exists', () => {
-    const noop = async () => undefined;
-    const specs = resourceCatalog({ pickCaptain: noop, pickVessel: noop, openPlanning: noop, openRefinement: noop, pickVessels: noop } as never);
-    specs.push(...resourceCatalogExtras());
-    extendCatalog(specs);
-    const placed = Object.values(HUB_RESOURCES).flat();
-    assert.deepStrictEqual(placed.length, new Set(placed).size, 'no kind is placed twice');
-    assert.deepStrictEqual(specs.filter((s) => !s.hidden).map((s) => s.key).sort(), [...placed].sort(), 'every shown kind is placed, and only those');
-    const keys = dashboardHubs(sources()).map((h) => h.key);
-    for (const hub of Object.keys(HUB_RESOURCES)) assert.ok(keys.includes(hub), hub);
+  it('lists each hub\'s tabs exactly as the dashboard\'s hub registry does, in its order', () => {
+    const hubs = dashboardHubs();
+    for (const entry of dashboardRegistry()) {
+      const hub = hubs.find((h) => h.route === entry.path);
+      assert.ok(hub, `a hub for ${entry.path}`);
+      const tabRoutes = hub.pages.map((p) => p.route).filter((r) => r.startsWith(`${entry.path}?${entry.param}=`));
+      assert.deepStrictEqual(tabRoutes, entry.tabs.map((k) => `${entry.path}?${entry.param}=${k}`), entry.path);
+    }
+    assert.ok(dashboardRegistry().length >= 9, 'the registry was read');
   });
 
-  it('shows one-source hubs inline, Missions as tabs, and passes rows, ids and menus through', async () => {
-    const s = sources();
-    const nav = new NavTreeProvider(dashboardHubs(s), () => true);
-    const roots = await items(nav);
+  it('gives every entry an icon and a page the dashboard has', () => {
+    for (const hub of dashboardHubs()) {
+      assert.ok(hub.icon && isDashboardRoute(hub.route), hub.key);
+      for (const page of hub.pages) assert.ok(page.icon && isDashboardRoute(page.route), `${hub.key}: ${page.label} ${page.route}`);
+    }
+  });
+
+  it('opens a hub\'s page on click and lists its tabs, which open theirs; nothing expands into records', () => {
+    const nav = new NavTreeProvider(dashboardHubs(), () => true, { counts: { needsYou: () => 3 } });
+    const roots = items(nav);
     assert.deepStrictEqual(roots.map((r) => r.item.label), ['Armada Overview', 'Needs You', 'Dispatch', 'Fleet Actions', 'Missions', 'Activity', 'Vessels', 'Captains', 'Delivery', 'Configuration', 'API Explorer', 'Settings']);
-    const overview = roots[0].item;
-    assert.strictEqual(overview.collapsibleState, TreeItemCollapsibleState.None);
-    assert.strictEqual(overview.command?.command, 'armada.home');
-    const needsYou = roots[1];
-    assert.strictEqual(needsYou.item.description, '2', 'the count of the inline source');
-    assert.match(String(needsYou.item.contextValue), /armadaNav\.hub\.needsYou\b/);
-    assert.match(String(needsYou.item.contextValue), /armadaSource\.armadaNeedsYou\b/);
-    assert.deepStrictEqual((await items(nav, needsYou.el)).map((r) => r.item.label), ['review-1', 'stall-1']);
-    const dispatch = await items(nav, roots[2].el);
-    assert.deepStrictEqual(dispatch.map((r) => r.item.command?.command), ['armada.dispatch', 'armada.dispatchVoyage'], 'commands, and no record kinds without a source');
-    const missions = await items(nav, roots[4].el);
-    assert.deepStrictEqual(missions.map((r) => r.item.label), ['Missions', 'Voyages', 'Merge Queue', 'Black Box']);
-    assert.strictEqual(missions[3].item.description, '1');
-    assert.match(String(missions[3].item.contextValue), /armadaSource\.armadaFailures\b/);
-    assert.match(String(missions[0].item.contextValue), /armadaNav\.tabbable/);
-    const active = await items(nav, missions[0].el);
-    assert.deepStrictEqual(active.map((r) => [r.item.label, r.item.id, r.item.contextValue]), [['active', 'armadaMissions:active', 'armadaThing']]);
-    assert.deepStrictEqual((await items(nav, active[0].el)).map((r) => r.item.label), ['msn_1'], 'deeper rows come from their own tree');
-    const vessels = await items(nav, roots[6].el);
-    assert.deepStrictEqual(vessels.map((r) => r.item.label), ['fleet-a']);
-    assert.deepStrictEqual((await items(nav, roots[8].el)).map((r) => r.item.label), ['deployments']);
-    assert.ok(roots[0].item.iconPath instanceof ThemeIcon);
-    assert.strictEqual(nav.getParent(missions[0].el), roots[4].el, 'tabs reveal under their hub');
+    assert.deepStrictEqual(roots.map((r) => r.item.command?.arguments?.[0]), ['/', '/inbox', '/dispatch', '/fleet-actions', '/missions', '/activity', '/vessels', '/captains', '/delivery', '/configuration', '/api-explorer', '/server']);
+    assert.ok(roots.every((r) => r.item.command?.command === 'armada.page.open'));
+    const needsYou = roots[1].item;
+    assert.strictEqual(needsYou.collapsibleState, TreeItemCollapsibleState.None, 'Needs You opens its page; it does not expand');
+    assert.strictEqual(needsYou.description, '3');
+    assert.match(String(needsYou.contextValue), /armadaNav\.hub\.needsYou\b/);
+    const activity = items(nav, roots[5].el);
+    assert.deepStrictEqual(activity.map((r) => r.item.label), ['All Activity', 'API Requests', 'Events', 'Signals', 'Token Usage', 'Captain Usage', 'Concurrency']);
+    assert.deepStrictEqual(activity.map((r) => r.item.command?.arguments?.[0]), ['/activity?source=history', '/activity?source=requests', '/activity?source=events', '/activity?source=signals', '/activity?source=tokens', '/activity?source=usage-overview', '/activity?source=concurrency']);
+    for (const row of activity) {
+      assert.strictEqual(row.item.collapsibleState, TreeItemCollapsibleState.None, 'a tab is a leaf');
+      assert.ok(row.item.iconPath instanceof ThemeIcon);
+      assert.deepStrictEqual(items(nav, row.el), []);
+    }
+    const configuration = items(nav, roots[9].el);
+    assert.strictEqual(configuration[0].item.label, 'Workflow Profiles');
+    assert.ok(configuration.every((r) => r.item.iconPath instanceof ThemeIcon), 'every Configuration entry has an icon');
+    assert.strictEqual(nav.getParent(activity[0].el), roots[5].el, 'tabs reveal under their hub');
   });
 
-  it('is empty while disconnected (the welcome shows), follows source changes, and builds a hub tab', async () => {
+  it('is empty while disconnected (the welcome shows) and lists every page for Open Page', () => {
     let connected = false;
-    const s = sources();
-    const nav = new NavTreeProvider(dashboardHubs(s), () => connected);
-    assert.deepStrictEqual(await nav.getChildren(), []);
+    const nav = new NavTreeProvider(dashboardHubs(), () => connected);
+    assert.deepStrictEqual(nav.getChildren(), []);
     connected = true;
     let fired = 0;
     nav.onDidChangeTreeData(() => fired++);
-    s.missions.fire();
+    nav.refresh();
     assert.strictEqual(fired, 1);
-    const hub = new NavHubProvider(nav, 'missions');
-    assert.deepStrictEqual((await Promise.all((await hub.getChildren()).map(async (el) => ((await hub.getTreeItem(el)) as unknown as TreeItem).label))), ['Missions', 'Voyages', 'Merge Queue', 'Black Box']);
+    const pages = navPages(dashboardHubs());
+    assert.ok(pages.some((p) => p.label === 'Activity: Token Usage' && p.route === '/activity?source=tokens'));
+    assert.ok(pages.some((p) => p.label === 'Dispatch: Create Voyage'));
+    assert.ok(!pages.some((p) => p.label === 'Missions: Missions'), 'a tab named like its hub is listed once');
   });
 
-  it('maps every old view tab command to a hub or tab that opens', () => {
-    const hubs = dashboardHubs({ ...sources(), resources: (key: string) => source(`armadaResources.${key}`, ['kind']) });
-    const ids = new Set([...hubs.filter((h) => h.children.length).map((h) => `armadaHub.${h.key}`), 'armadaMissions', 'armadaVoyages', 'armadaMergeQueue', 'armadaFailures']);
-    for (const [view, target] of Object.entries(LEGACY_TAB_TARGETS)) assert.ok(ids.has(target), `${view} -> ${target}`);
-  });
-
-  it('has a menu for every source the menus name', () => {
-    const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', '..', 'package.json'), 'utf8')) as { contributes: { menus: Record<string, Array<{ when?: string }>> } };
-    const named = new Set<string>();
-    for (const entries of Object.values(manifest.contributes.menus)) {
-      for (const e of entries) for (const m of (e.when ?? '').matchAll(/armadaSource\\?\.(\w+)/g)) named.add(m[1]);
-    }
-    const known = new Set(['armadaNeedsYou', 'armadaMissions', 'armadaVoyages', 'armadaMergeQueue', 'armadaFailures', 'armadaFleet', 'armadaCaptains']);
-    for (const id of named) assert.ok(known.has(id), id);
+  it('maps every old view tab command to a page the dashboard has', () => {
+    for (const [view, route] of Object.entries(LEGACY_TAB_TARGETS)) assert.ok(isDashboardRoute(route), `${view} -> ${route}`);
   });
 });
 
@@ -163,3 +121,44 @@ describe('conversations', () => {
     assert.match(String(archived.contextValue), /armadaConversation\.archived/);
   });
 });
+
+describe('dashboard page routes', () => {
+  beforeEach(() => fake.reset());
+
+  it('opens every hub, tab and record kind on a page the dashboard has', () => {
+    for (const [key, route] of Object.entries({ ...HUB_ROUTES, ...SOURCE_ROUTES, ...KIND_ROUTES })) assert.ok(isDashboardRoute(route), `${key} -> ${route}`);
+    for (const hub of dashboardHubs()) assert.strictEqual(HUB_ROUTES[hub.key], hub.route, `hub ${hub.key}`);
+    const specs = resourceCatalog({} as never);
+    specs.push(...resourceCatalogExtras());
+    extendCatalog(specs);
+    for (const spec of specs.filter((s) => !s.hidden)) assert.ok(KIND_ROUTES[spec.key], `kind ${spec.key} has a list page`);
+  });
+
+  it('opens each record on its own page when the dashboard has one, else on its kind\'s list', () => {
+    const specs = resourceCatalog({} as never);
+    specs.push(...resourceCatalogExtras());
+    extendCatalog(specs);
+    for (const spec of specs) {
+      const route = recordRoute(spec.key, spec.route?.({ id: 'x_1', name: 'n', runbookId: 'rbk_1', vesselId: 'vsl_1' }));
+      assert.ok(isDashboardRoute(route), `${spec.key} -> ${route}`);
+    }
+    assert.strictEqual(recordRoute('modelEndpoint', '/model-endpoints/mep_1'), '/configuration?tab=endpoints', 'no detail page: the list');
+    assert.strictEqual(recordRoute('pipeline', '/pipelines/ppl_1'), '/pipelines/ppl_1');
+    assert.strictEqual(createRoute('backlog'), '/backlog/new');
+    assert.strictEqual(createRoute('persona'), '/configuration?tab=personas');
+  });
+
+  it('maps entity ids and routes to pages, areas and host-handled views', () => {
+    assert.strictEqual(entityRoute('mission', 'msn_1'), '/missions/msn_1');
+    assert.strictEqual(entityRoute('merge', 'mrg_1'), '/merge-queue/mrg_1');
+    assert.strictEqual(routeForId('vyg_9'), '/voyages/vyg_9');
+    assert.strictEqual(routeForId('xyz'), undefined);
+    assert.strictEqual(routeArea('/activity?source=tokens'), 'activity');
+    assert.strictEqual(routeArea('/'), 'overview');
+    assert.strictEqual(hostHandledRoute('/ask/ath_1'), 'armada.ask.open');
+    assert.strictEqual(hostHandledRoute('/askew'), undefined);
+    assert.ok(!isDashboardRoute('/nowhere'));
+    assert.ok(isDashboardRoute('/missions/msn_1?x=1'));
+  });
+});
+

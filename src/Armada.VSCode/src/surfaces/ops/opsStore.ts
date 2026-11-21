@@ -179,7 +179,8 @@ export class OpsStore {
     try {
       switch (domain) {
         case 'missions': {
-          const page = await listMissionSummaries({ pageNumber: 1, pageSize: 250 });
+          // The newest 50 are enough for the status bar, notifications and titles; the dashboard pages list the rest.
+          const page = await listMissionSummaries({ pageNumber: 1, pageSize: 50 });
           this.missions = sortNewest(page.objects ?? [], (m) => m.lastUpdateUtc ?? m.createdUtc);
           this.missionTotal = page.totalRecords ?? this.missions.length;
           break;

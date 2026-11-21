@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Map every dashboard route (src/Armada.Dashboard/src/App.tsx) to its mobile screen.
+"""Map every dashboard route (src/Armada.Dashboard/src/AppRoutes.tsx) to its mobile screen.
 
 Shared by generate-parity-manifest.py (the parity manifest) and generate-route-screens.py (the Expo Router screen
 files and src/navigation/dashboardRoutes.generated.ts). Each dashboard route becomes one or more mobile routes:

@@ -15,7 +15,7 @@ chat. The extension is being built out to full parity with the dashboard, the TU
 ## The Armada view container
 
 The Armada icon in the activity bar opens three views, as in Mux: **Ask Armada** (the chat), **Conversations** (its
-conversation list) and **Armada** (everything else, in one tree laid out like the dashboard's navigation). They update
+conversation list) and **Manage** (everything else, in one tree laid out like the dashboard's navigation). They update
 live from the Admiral's event stream, and a status bar item shows the active mission count and what needs you.
 
 - **Ask Armada**: a chat with a captain, as on the dashboard's Ask page: your messages on the right, Armada's replies
@@ -36,66 +36,44 @@ live from the Admiral's event stream, and a status bar item shows the active mis
   right-click to rename, summarize, mark read or unread, archive or unarchive, or delete (select several to act on
   them together). The title bar starts a new conversation, searches titles, summaries and messages, shows or hides
   archived conversations, and refreshes.
-- **Armada**: Armada Overview, then the dashboard's hubs in its order (Operations: Needs You, Dispatch, Fleet Actions,
-  Missions, Activity; Build: Vessels, Captains, Delivery; Configuration; System: API Explorer, Settings). Each hub
-  expands to what its dashboard page shows, and its buttons create or run what the page does; the arrow on a hub opens
-  it as an editor tab. The title bar has the Overview, Dispatch Mission, Refresh and the connection; its **...** menu
-  has backup and restore, the local Harbor (start, stop, restart, show, log, folder, id), **Install Armada MCP for
-  Agents...**, copy the MCP URL or diagnostics, change password, documentation and **About Armada**.
+- **Manage**: the dashboard's navigation as a table of contents. Armada Overview, then the dashboard's hubs in its
+  order (Operations: Needs You, Dispatch, Fleet Actions, Missions, Activity; Build: Vessels, Captains, Delivery;
+  Configuration; System: API Explorer, Settings), each listing its tabs as the dashboard does (Activity: All Activity,
+  API Requests, Events, Signals, Token Usage, Captain Usage, Concurrency; Configuration: Workflow Profiles through
+  Memory; and so on). Click any entry to open its dashboard page in an editor tab (see **Dashboard pages** below); the
+  arrow on a hub lists its tabs. The tree never loads records itself, so it opens instantly, and Needs You shows how
+  many items wait for you. The title bar has **Open Page...**, the Overview, Dispatch Mission, Refresh and the
+  connection; its **...** menu has backup and restore, the local Harbor (start, stop, restart, show, log, folder, id),
+  **Install Armada MCP for Agents...**, copy the MCP URL or diagnostics, change password, documentation and **About
+  Armada**.
 
-The hubs:
+### Dashboard pages
 
-- **Needs You**: reviews waiting for approval, failures, stalled captains, CLI permission requests and model alerts.
-  Reviews have Approve and Deny inline; permission requests and model alerts are answered from a quick pick. New items
-  also pop up as notifications (`armada.notifications.needsYou`), and the count shows on the hub and the view.
-- **Dispatch**: dispatch a mission or a voyage, planning sessions and backlog items (create, edit, refine with a
-  captain, plan with a captain, reorder, import from GitHub). A planning or refinement session is a chat with a captain
-  in an editor tab that ends in **Dispatch Plan...** (a voyage) or **Apply Refinement...** (the backlog item).
-- **Fleet Actions**: actions (create, edit, run on vessels, run an ad-hoc command) and runs (cancel, targets and their
-  output).
-- **Missions**, with Missions, Voyages, Merge Queue and Black Box inside, plus stage outcomes, failure fingerprints and
-  their trends, and recovery statistics:
-  - **Missions**: Needs Review, Active, Queued and Recent. A mission opens as a page (fields, brief or failure, the live
-    end of its log, its actions); right-click to view the log or changes, approve or deny, cancel, restart, open the
-    black box, or **More...** (instructions, landing preview, pull request with its reviews, comments and checks, what
-    it waits on, captain selection and its decision, recovery, brief lint, retry landing, queue for landing, edit,
-    purge). **+** dispatches a mission.
-  - **Voyages**: active and recent voyages with their missions; a voyage page has its progress and **More...**
-    (mission tree, status, failure cascade, black box brief, purge). The rocket dispatches a voyage.
-  - **Merge Queue**: process, remove or delete entries, or process the whole queue.
-  - **Black Box**: the failures tree (below), with search and **More...** on each entry (download the bundle, nearby
-    successes, captured objects, export a test fixture, apply a recommendation, pin, analyze again, delete).
-- **Activity**: all activity, API requests, events, signals, token and captain usage, background jobs and vessel import
-  batches. **Show Activity Charts** draws missions per day, tokens per day and API requests per hour.
-- **Vessels**: fleets and vessels, and vessel health (with overrides). A vessel opens as a page with its settings to
-  edit, project context, branches, git status, commits, readiness, health, concurrency, reservations, cleanup, push
-  and merge a branch, run a check, sync GitHub Actions runs and the effective workflow and project profiles. **Open
-  Vessel Workspace** adds the vessel's checkout to the Explorer as a VS Code file system (browse, open, edit and save,
-  create, rename and delete files, even on a remote Admiral or Harbor); search its files, run a command in it, see its
-  uncommitted changes, or open a terminal on its host. **Import Vessels...** finds repositories in a folder (on the
-  Admiral's machine for a remote Admiral) and imports them.
-- **Captains**: state, runtime and model, with the missions each works; log, stop, restart, recall, release from
-  quarantine, send a signal, set the CLI tool policy, evaluate, show tools, capture usage, chat with the captain,
-  create and edit; also docks, battery packs and evaluations. **Stop All Captains** is in the hub's menu.
-- **Delivery**: deployments (approve, deny, verify, roll back), environments, releases, incidents, checks (retry,
-  import), and runbooks (start) and their executions.
-- **Configuration**: workflow and project profiles (validate), skills, personas, pipelines, prompt templates (reset to
-  default), playbooks, model endpoints (validate, evaluate, duplicate, health), Mux endpoints, Harbors (enable,
-  disable, jobs, metrics), memories and failure cause rules.
-- **API Explorer**: call any Armada REST endpoint and see the response.
-- **Settings**: the Admiral (restart, rebuild, roll back, stop, reset), server settings, black box storage and storage
-  hosts, black box retention (garbage collection, purge, backfill, storage migration), CLI permission rules,
-  diagnostics, tenants, users and credentials.
+What you open from **Manage** is the dashboard's own page, in an editor tab: the same charts, tables, forms, pickers
+and actions as the browser, following the VS Code theme.
 
-**Editor tabs.** The sidebar is narrow, so every hub (and Missions, Voyages, Merge Queue and Black Box) also opens as
-an editor tab: the arrow on its row (or **Armada: Open a View in an Editor Tab...**) shows its groups and records as a
-full-width page that stays live, with the hub's main actions on top; Ask Armada opens as a tab with **Ask Armada in an Editor Tab** (the sidebar and
-the tab show the same conversation).
+- **Armada Overview**: status, mission history, API requests over time and the token usage heatmap; it shows as soon as
+  the status arrives and fills in Recent Missions when its rows do.
+- **Needs You**: every item waiting for you, each with the button that acts on it (approve or deny a review, answer a
+  CLI permission request, act on a model alert, open the failure).
+- **Dispatch**, **Create Voyage** and **Planning**: vessel, pipeline, captain and Harbor pickers, each with a link to
+  manage what it offers; the backlog form picks its vessel.
+- **Activity**: All Activity over the last hour, day, week or month (or all time), API Requests with its chart,
+  Events, Signals, the Token Usage heatmap, Captain Usage and Concurrency.
+- **API Explorer**: every route at once from the built-in catalog, upgraded with the server's request schemas when its
+  OpenAPI document loads.
 
-Every record opens as a page drawn with the VS Code theme; **+** creates one and Edit and Delete work from the page or
-the context menu (several at once when you select several), through native forms with confirmations. Logs and changes
-open as read-only documents with search and diff highlighting. Labels follow VS Code's display language through the
-Admiral's translation catalog (`armada.language`).
+Requests go through the extension's connection and the page updates live from its event stream, so there is nothing
+to sign in to. Each tab has back, forward and reload, the page's breadcrumbs, live status, **Open in another tab** and
+**Open in browser**. Links move within the tab; Cmd/Ctrl+click opens a link in its own tab. One tab per area is reused
+(`armada.pages.tabReuse`), and open tabs come back after a reload. **Armada: Open Page...** lists every page.
+
+Commands, notifications and the status bar open missions, voyages, captains and records as dashboard pages too; set
+`armada.pages.openRecords` to `details` for the extension's compact detail views. Logs and changes open as read-only
+documents with search and diff highlighting, and **Open Vessel Workspace** adds a vessel's checkout to the Explorer as a
+VS Code file system (browse, edit and save, search, run a command, see changes, open a terminal on its host, even on a
+remote Admiral or Harbor). Labels follow VS Code's display language through the Admiral's translation catalog
+(`armada.language`).
 
 While the extension is not connected, the views show what to do: connect, or open the output.
 
@@ -149,7 +127,7 @@ off it only polls.
 
 ## Black box
 
-- **Black Box** under Missions in the Armada tree (and, with `armada.failures.showInExplorer`, as **Armada Failures** in the
+- **Black Box** under Missions in the Manage tree (and, with `armada.failures.showInExplorer`, as **Armada Failures** in the
   Explorer): recent black box entries grouped by vessel, with kind, step and age. By default it shows only the vessel
   whose repository is open (matched by git remote URL against the vessel's `RepoUrl`). The view badge counts open
   entries.
@@ -203,6 +181,8 @@ From source: `./build-vscode.sh --install` (or `build-vscode.bat --install`) at 
 |---|---|---|
 | `armada.tenant` | empty | Optional tenant id; admin credentials use it to narrow lists to one tenant |
 | `armada.dashboardUrl` | empty | Dashboard URL for links and Ask Armada; empty means Harbor's `DashboardUrl` for Harbor's Admiral, else the connected Admiral plus `/dashboard` |
+| `armada.pages.openRecords` | `dashboardPage` | `dashboardPage` opens hubs, records and Needs You items as the dashboard's pages in editor tabs; `details` uses the compact detail views and only expands hubs |
+| `armada.pages.tabReuse` | `area` | `area`: one page tab per area (opening another Activity page navigates the Activity tab); `single`: one tab for all pages; `never`: a new tab each time |
 | `armada.fixThis.openPreview` | `true` | Open a Markdown preview beside the FIX THIS editor |
 | `armada.failures.showInExplorer` | `false` | Also show the black box tree in the Explorer, as **Armada Failures** |
 | `armada.failures.filterToWorkspaceVessel` | `true` | Show only the open repository's vessel (falls back to all vessels when none matches) |
@@ -218,6 +198,7 @@ From source: `./build-vscode.sh --install` (or `build-vscode.bat --install`) at 
 
 | Command | What it does |
 |---|---|
+| Armada: Open Page... | Open any dashboard page (Overview, Needs You, Dispatch, Activity tabs, hubs, Settings) in an editor tab |
 | Armada: Connect | Pick an Admiral found on this machine or enter a URL, and connect (asks for a key only when none works) |
 | Armada: Reconnect | Connect again to the current Admiral |
 | Armada: Disconnect | Drop the connection and remove a key entered for that Admiral |
@@ -272,6 +253,12 @@ or expired confirm token (409), a missing black box object (410), and an unavail
   an Admiral with the extension's credential, a typed reading of the health response (the shared `getHealth` returns a
   plain record), the mission/voyage/entry id dispatch for black box lookups, and dashboard URL builders.
   `src/transport/errors.ts` turns the shared client's errors into messages.
+- **Dashboard page tabs.** `webview/dashboard/` renders the dashboard's routes (`Armada.Dashboard/src/AppRoutes.tsx`)
+  under a MemoryRouter and a slim shell in a webview, bundled by `esbuild.mjs` into `dist/webview/` from the dashboard's
+  sources and its `node_modules` (run `npm ci` in `src/Armada.Dashboard` first; the build scripts and CI do). The page's
+  `fetch` and `WebSocket` are bridged to the extension host (`src/surfaces/dashboard/`), which sends each request to
+  the connected Admiral with the extension's credential and forwards its event stream. The theme variables map to VS
+  Code's (`embed.css`).
 - **Layout.** `src/connection/` (discovery, contract check, connection manager, status bar), `src/transport/`
   (shared client host side, the `/ws` event bus), `src/surfaces/nav/` and `src/surfaces/blackbox/`.
 - **Parity.** `parity.json` tracks every dashboard route, tab, client call, event and settings field, the TUI-only

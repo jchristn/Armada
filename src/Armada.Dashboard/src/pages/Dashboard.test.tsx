@@ -62,6 +62,8 @@ vi.mock('../api/client', () => ({
   getVesselHealthSummary: vi.fn(),
 }));
 
+// The Overview's activity charts have their own tests (OverviewActivityCharts.test.tsx).
+vi.mock('../components/activity/OverviewActivityCharts', () => ({ default: () => null }));
 vi.mock('../context/WebSocketContext', () => ({
   useWebSocket: () => socketValue,
 }));

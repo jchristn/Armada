@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generate src/Armada.Tui/parity.json from the dashboard source.
 
-The manifest maps every dashboard surface to its TUI implementation: routes (App.tsx), hub tabs (pages with Tabs),
+The manifest maps every dashboard surface to its TUI implementation: routes (AppRoutes.tsx), hub tabs (pages with Tabs),
 server-calling API functions (api/client.ts), WebSocket event types, and Server-page settings fields. Existing entries
 keep their status and notes; new surfaces are added as "planned". Run after dashboard changes:
 

@@ -29,6 +29,7 @@ import { ConnectionManager } from '../../connection/connectionManager';
 import { describeError } from '../../transport/errors';
 import { dashboardPageUrl } from '../../transport/hostClient';
 import { readGitRemoteUrls, sameRepository } from '../../util/repoUrl';
+import { openAsPage } from '../dashboard/pageRouting';
 import { DetailKind, DetailPanelManager } from './detailPanels';
 import { showForm } from './formPanel';
 import { openArmadaDocument } from './opsDocuments';
@@ -208,6 +209,8 @@ export function registerOpsCommands(deps: OpsCommandDeps): vscode.Disposable[] {
   register('armada.inbox.open', async (arg) => {
     const item = inboxItemFrom(arg);
     if (!item) return;
+    // The page where the item is acted on (a mission's review, a CLI permission request, a model alert, ...).
+    if (item.href && openAsPage(item.href)) return;
     if (item.kind === 'cli_permission' && item.cliPermission) {
       await decideCliPermission(item);
       void store.refresh('inbox');
@@ -244,10 +247,13 @@ export function registerOpsCommands(deps: OpsCommandDeps): vscode.Disposable[] {
     if (!(await requireConnected())) return;
     if (store.state('fleet') !== 'ready') await store.refresh('fleet');
     const vesselId = arg && typeof arg === 'object' && (arg as OpsNode).kind === 'vessel' ? (arg as Extract<OpsNode, { kind: 'vessel' }>).vessel.id : undefined;
+    // The dashboard's Dispatch page: vessel, pipeline, captain per step, playbooks, priority and readiness.
+    if (openAsPage('/dispatch?tab=dispatch', vesselId ? { state: { fromVessel: true, vesselId } } : undefined)) return;
     await dispatchForm(store, details, vesselId);
   });
   register('armada.dispatchVoyage', async () => {
     if (!(await requireConnected())) return;
+    if (openAsPage('/voyages/create')) return;
     if (store.state('fleet') !== 'ready') await store.refresh('fleet');
     await voyageForm(store, details);
   });

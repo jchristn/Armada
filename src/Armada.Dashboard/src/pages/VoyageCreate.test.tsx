@@ -3,13 +3,14 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import VoyageCreate from './VoyageCreate';
-import { createVoyage, listPipelines, listVessels } from '../api/client';
+import { createVoyage, listPipelines, listCaptains, listVessels } from '../api/client';
 import { translateTemplate } from '../i18n/runtime';
 import { onlyCallArgs } from '../test/mockCalls';
 
 vi.mock('../api/client', () => ({
   listVessels: vi.fn(),
   listPipelines: vi.fn(),
+  listCaptains: vi.fn(),
   createVoyage: vi.fn(),
 }));
 
@@ -28,7 +29,7 @@ function page<T>(objects: T[]) {
 }
 
 function selectFor(label: string): HTMLSelectElement {
-  const select = screen.getByText(label, { selector: 'span' }).parentElement?.querySelector('select');
+  const select = screen.getByText(label, { selector: 'span' }).closest('label')?.querySelector('select');
   if (!select) throw new Error(`no select for ${label}`);
   return select;
 }
@@ -45,6 +46,7 @@ describe('VoyageCreate landing mode', () => {
   beforeEach(() => {
     vi.mocked(listVessels).mockResolvedValue(page([{ id: 'vsl_1', name: 'gateway' }]) as never);
     vi.mocked(listPipelines).mockResolvedValue(page([]) as never);
+    vi.mocked(listCaptains).mockResolvedValue(page([]) as never);
     vi.mocked(createVoyage).mockReset();
     vi.mocked(createVoyage).mockResolvedValue({ id: 'vyg_1' } as never);
   });
@@ -83,5 +85,24 @@ describe('VoyageCreate landing mode', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Create Voyage' }));
     await waitFor(() => expect(createVoyage).toHaveBeenCalledTimes(1));
     expect(onlyCallArgs(vi.mocked(createVoyage))[0].landingMode).toBe('MergeAndPush');
+  });
+
+  it('runs every step on the chosen captain', async () => {
+    vi.mocked(listCaptains).mockResolvedValue(page([{ id: 'cpt_1', name: 'Opus', runtime: 'ClaudeCode', model: null }]) as never);
+    await fillForm();
+    await screen.findByRole('option', { name: 'Opus (ClaudeCode)' });
+    expect(screen.getByRole('link', { name: 'Manage captains' })).toHaveAttribute('href', '/captains');
+    expect(screen.getByRole('link', { name: 'Manage vessels' })).toHaveAttribute('href', '/vessels');
+    fireEvent.change(selectFor('Captain'), { target: { value: 'cpt_1' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create Voyage' }));
+    await waitFor(() => expect(createVoyage).toHaveBeenCalledTimes(1));
+    expect(onlyCallArgs(vi.mocked(createVoyage))[0].captainAssignments).toEqual([{ persona: '*', captainId: 'cpt_1' }]);
+  });
+
+  it('sends no captain assignment when routing is automatic', async () => {
+    await fillForm();
+    fireEvent.click(screen.getByRole('button', { name: 'Create Voyage' }));
+    await waitFor(() => expect(createVoyage).toHaveBeenCalledTimes(1));
+    expect(onlyCallArgs(vi.mocked(createVoyage))[0]).not.toHaveProperty('captainAssignments');
   });
 });

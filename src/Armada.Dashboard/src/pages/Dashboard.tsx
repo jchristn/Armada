@@ -30,6 +30,7 @@ import JsonViewer from '../components/shared/JsonViewer';
 import DataTable from '../components/shared/DataTable';
 import FilterBar from '../components/shared/FilterBar';
 import MissionHistoryChart from '../components/MissionHistoryChart';
+import OverviewActivityCharts from '../components/activity/OverviewActivityCharts';
 import UsageObservabilityCard from '../components/usage/UsageObservabilityCard';
 import HealthKpiCards from '../components/vessels/health/HealthKpiCards';
 import { useLocale } from '../context/LocaleContext';
@@ -60,6 +61,7 @@ export default function Dashboard() {
   // One page of the active voyages (InProgress, then Open) with progress, and the total across every page.
   const [activeVoyages, setActiveVoyages] = useState<{ rows: VoyageProgress[]; total: number }>({ rows: [], total: 0 });
   const [recentMissions, setRecentMissions] = useState<MissionSummary[]>([]);
+  const [missionsLoading, setMissionsLoading] = useState(true);
   const [vessels, setVessels] = useState<Vessel[]>([]);
   const [fleets, setFleets] = useState<Fleet[]>([]);
   const [captains, setCaptains] = useState<Captain[]>([]);
@@ -118,9 +120,17 @@ export default function Dashboard() {
     try {
       // The Recent Missions filters go to the server, so a vessel or captain filter finds that vessel's or
       // captain's ten most recent missions instead of filtering only the ten most recent overall.
-      const [statusRes, missionRes, pendingRuns, runningRuns, voyageRes] = await Promise.all([
+      // Recent missions load on their own: the page shows as soon as status, runs and voyages arrive, and the table
+      // fills in when its rows do (a large mission table can take much longer than the rest).
+      const missionLoad = listMissionSummaries({ pageSize: 10, filters: { status: statusFilter, vesselId: vesselFilter, captainId: captainFilter } })
+        .catch(() => null)
+        .then((missionRes) => {
+          if (missionRes) setRecentMissions(missionRes.objects || []);
+          setMissionsLoading(false);
+          return missionRes;
+        });
+      const [statusRes, pendingRuns, runningRuns, voyageRes] = await Promise.all([
         getStatus().catch(() => null),
-        listMissionSummaries({ pageSize: 10, filters: { status: statusFilter, vesselId: vesselFilter, captainId: captainFilter } }).catch(() => null),
         enumerateFleetActionRuns({ status: 'Pending', pageSize: 1 }).catch(() => null),
         enumerateFleetActionRuns({ status: 'Running', pageSize: 1 }).catch(() => null),
         enumerateVoyageProgress({ pageSize: HOME_VOYAGE_PAGE_SIZE }).catch(() => null),
@@ -128,9 +138,8 @@ export default function Dashboard() {
       if (voyageRes) setActiveVoyages({ rows: (voyageRes.objects || []) as unknown as VoyageProgress[], total: voyageRes.totalRecords });
       setActiveRuns(pendingRuns && runningRuns ? { pending: pendingRuns.totalRecords, running: runningRuns.totalRecords } : null);
       if (statusRes) setStatus(statusRes as unknown as DashboardStatusData);
-      if (missionRes) {
-        setRecentMissions(missionRes.objects || []);
-      }
+      setLoading(false);
+      const missionRes = await missionLoad;
       if (!statusRes && !missionRes) setError(t('Failed to load dashboard data.'));
     } catch {
       setError(t('Failed to load dashboard data.'));
@@ -423,6 +432,9 @@ export default function Dashboard() {
       {/* Mission History Chart */}
       <MissionHistoryChart vessels={vessels} fleets={fleets} onRefresh={refreshHome} refreshSignal={historyRefresh} />
 
+      {/* Usage and activity over time: API requests and the token usage heatmap */}
+      <OverviewActivityCharts />
+
       {/* Voyage Progress */}
       {activeVoyages.rows.length > 0 && (
         <div style={{ marginTop: '1.5rem' }}>
@@ -550,6 +562,7 @@ export default function Dashboard() {
             rows={filteredRecentMissions}
             rowKey={(m) => m.id}
             recordCount={null}
+            emptyMessage={missionsLoading && recentMissions.length === 0 ? t('Loading missions...') : undefined}
             onRowClick={(m) => navigate(`/missions/${m.id}`)}
             columns={[
               {

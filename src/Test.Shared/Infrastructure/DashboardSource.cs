@@ -56,11 +56,11 @@ namespace Test.Shared.Infrastructure
         }
 
         /// <summary>
-        /// Route paths in App.tsx (index route as "/").
+        /// Route paths in AppRoutes.tsx (index route as "/").
         /// </summary>
         public static List<string> Routes()
         {
-            string src = File.ReadAllText(Path.Combine(Src(), "App.tsx"));
+            string src = File.ReadAllText(Path.Combine(Src(), "AppRoutes.tsx"));
             List<string> routes = new List<string>();
             foreach (Match m in Regex.Matches(src, "<Route\\s+(index\\s+)?(?:path=\"([^\"]+)\")?"))
             {

@@ -21,6 +21,13 @@ call npm ci
 set "EXIT_CODE=%ERRORLEVEL%"
 if not "%EXIT_CODE%"=="0" goto :done
 
+echo Installing dashboard dependencies (the page tabs bundle the dashboard pages)...
+pushd "%~dp0src\Armada.Dashboard"
+call npm ci
+set "EXIT_CODE=%ERRORLEVEL%"
+popd
+if not "%EXIT_CODE%"=="0" goto :done
+
 echo Building the extension...
 call npm run build
 set "EXIT_CODE=%ERRORLEVEL%"

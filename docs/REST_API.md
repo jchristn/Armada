@@ -9127,11 +9127,14 @@ Create a planning session, reserve the selected captain, and provision a plannin
   "VesselId": "vsl_def456",
   "FleetId": "flt_xyz789",
   "PipelineId": "pln_fullpipeline",
-  "SelectedPlaybooks": []
+  "SelectedPlaybooks": [],
+  "HarborId": "hbr_laptop"
 }
 ```
 
 `SelectedPlaybooks` holds at most 256 entries (`400` `CollectionLimitExceeded` otherwise).
+
+`HarborId` (optional) runs the session on that Harbor: its dock is created there and every turn runs there. When the Harbor is not connected or cannot serve the vessel, the session is not created and the error says why. Leave it out to let routing choose as for a mission: the vessel's preferred Harbor, then any connected Harbor that can serve the vessel, then the Admiral host.
 
 - Response: `201 Created`
 - Response shape (`PlanningSessionDetail`):

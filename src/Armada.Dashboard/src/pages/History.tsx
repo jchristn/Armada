@@ -10,6 +10,7 @@ import ErrorModal from '../components/shared/ErrorModal';
 import JsonViewer from '../components/shared/JsonViewer';
 import DataTable, { type DataTableColumn } from '../components/shared/DataTable';
 import PageHeader from '../components/shared/PageHeader';
+import { HISTORY_RANGE_OPTIONS, historyRangeStart, parseHistoryRange, type HistoryRangeId } from '../lib/historyRange';
 import { fetchAllPages, MAX_PAGE_SIZE } from '../api/paging';
 import { useAutoRefresh } from '../lib/useAutoRefresh';
 import { usePersistedPageSize } from '../lib/usePersistedPageSize';
@@ -103,6 +104,8 @@ export default function History() {
   const [postmortemOnly, setPostmortemOnly] = useState(initialQuery.get('postmortemOnly') === 'true');
   // GET/HEAD/OPTIONS request entries are mostly the dashboard's own polling; hidden unless asked for.
   const [showReadRequests, setShowReadRequests] = useState(initialQuery.get('showReadRequests') === 'true');
+  // The time range, as on API Requests; a long history over every source is slow to assemble, so a day is the default.
+  const [range, setRange] = useState<HistoryRangeId>(() => parseHistoryRange(initialQuery.get('range')));
   const showReadRequestsInitialized = useRef(false);
   const [savedViews, setSavedViews] = useState<SavedHistoryView[]>(() => loadSavedViews());
   const [saveViewOpen, setSaveViewOpen] = useState(false);
@@ -114,7 +117,7 @@ export default function History() {
     data: null,
   });
 
-  function buildQuery(size = pageSize, page = 1, dir = sortDir): HistoricalTimelineQuery {
+  function buildQuery(size = pageSize, page = 1, dir = sortDir, rangeId: HistoryRangeId = range): HistoricalTimelineQuery {
     const filters = buildHistoryTimelineQuery({
       objectiveId: objectiveFilter,
       text: textFilter,
@@ -124,19 +127,19 @@ export default function History() {
       postmortemOnly,
       showReadRequests,
     }, size, page);
-    return { ...filters, order: dir === 'asc' ? 'CreatedAscending' : 'CreatedDescending' };
+    return { ...filters, fromUtc: historyRangeStart(rangeId), order: dir === 'asc' ? 'CreatedAscending' : 'CreatedDescending' };
   }
 
-  async function load(page = pageNumber, size = pageSize, dir = sortDir) {
+  async function load(page = pageNumber, size = pageSize, dir = sortDir, rangeId: HistoryRangeId = range) {
     try {
       setLoading(true);
-      const historyResult = await enumerateHistoryTimeline(buildQuery(size, page, dir));
+      const historyResult = await enumerateHistoryTimeline(buildQuery(size, page, dir, rangeId));
       const objects = historyResult.objects || [];
       const lastPage = Math.max(1, historyResult.totalPages || 1);
       // The page asked for is past the end (entries were deleted or filters narrowed): show the last page instead.
       if (objects.length === 0 && page > lastPage) {
         setPageNumber(lastPage);
-        await load(lastPage, size, dir);
+        await load(lastPage, size, dir, rangeId);
         return;
       }
       setEntries(objects);
@@ -187,6 +190,12 @@ export default function History() {
     }).catch(() => { /* non-fatal: the filters fall back to "All" */ });
     return () => { cancelled = true; };
   }, []);
+
+  function changeRange(next: HistoryRangeId) {
+    setRange(next);
+    setPageNumber(1);
+    void load(1, pageSize, sortDir, next);
+  }
 
   function applyFilters() {
     setPageNumber(1);
@@ -405,6 +414,21 @@ export default function History() {
           </>
         )}
       />
+
+      <div className="request-range-tabs history-range-tabs" role="group" aria-label={t('Activity range')} style={{ marginBottom: '1rem' }}>
+        {HISTORY_RANGE_OPTIONS.map((option) => (
+          <button
+            key={option.id}
+            type="button"
+            className={`request-range-tab${range === option.id ? ' active' : ''}`}
+            aria-pressed={range === option.id}
+            onClick={() => changeRange(option.id)}
+            title={option.id === 'all' ? t('Every entry ever recorded. Assembling a long history can take a while.') : t('Entries from this time range, newest first.')}
+          >
+            {t(option.label)}
+          </button>
+        ))}
+      </div>
 
       <ErrorModal error={error} onClose={() => setError('')} />
       <JsonViewer open={metadataViewer.open} title={metadataViewer.title} data={metadataViewer.data} onClose={() => setMetadataViewer({ open: false, title: '', data: null })} />

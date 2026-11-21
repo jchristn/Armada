@@ -13,6 +13,7 @@ vi.mock('../api/client', () => ({
   getPlanningSession: vi.fn(),
   listCaptains: vi.fn(),
   listFleets: vi.fn(),
+  listHarbors: vi.fn().mockResolvedValue([]),
   listPipelines: vi.fn(),
   listPlanningSessions: vi.fn(),
   listPlanningSessionMessages: vi.fn().mockResolvedValue({ success: true, pageNumber: 1, pageSize: 100, totalPages: 0, totalRecords: 0, objects: [], totalMs: 0 }),

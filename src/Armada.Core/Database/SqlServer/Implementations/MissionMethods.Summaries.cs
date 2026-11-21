@@ -513,6 +513,16 @@ LEN(COALESCE(agent_output, '')) AS agent_output_length";
                 conditions.Add("created_utc < @created_before");
                 cmd.Parameters.AddWithValue("@created_before", SqlServerDatabaseDriver.ToIso8601(query.CreatedBefore.Value));
             }
+            if (query.UpdatedAfter.HasValue)
+            {
+                conditions.Add("last_update_utc >= @updated_after");
+                cmd.Parameters.AddWithValue("@updated_after", SqlServerDatabaseDriver.ToIso8601(query.UpdatedAfter.Value));
+            }
+            if (query.UpdatedBefore.HasValue)
+            {
+                conditions.Add("last_update_utc <= @updated_before");
+                cmd.Parameters.AddWithValue("@updated_before", SqlServerDatabaseDriver.ToIso8601(query.UpdatedBefore.Value));
+            }
             if (!String.IsNullOrEmpty(query.Status))
             {
                 conditions.Add("status = @status");

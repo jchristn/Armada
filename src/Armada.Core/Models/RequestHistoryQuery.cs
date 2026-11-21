@@ -35,6 +35,12 @@ namespace Armada.Core.Models
         public string? Method { get; set; } = null;
 
         /// <summary>
+        /// True to leave out read requests (GET, HEAD and OPTIONS), as the history timeline does unless asked for them.
+        /// Applied in the query, so a large request history is not read only to be dropped.
+        /// </summary>
+        public bool ExcludeReadMethods { get; set; } = false;
+
+        /// <summary>
         /// Route filter.
         /// </summary>
         public string? Route { get; set; } = null;

@@ -22,6 +22,9 @@ cd "${REPO_ROOT}/src/Armada.VSCode"
 echo "Installing extension dependencies..."
 npm ci
 
+echo "Installing dashboard dependencies (the page tabs bundle the dashboard's pages)..."
+(cd "${REPO_ROOT}/src/Armada.Dashboard" && npm ci)
+
 echo "Building the extension..."
 npm run build
 

@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import type { Captain, Fleet, Pipeline, SelectedPlaybook, Vessel } from '../../types/models';
+import type { Captain, Fleet, Harbor, Pipeline, SelectedPlaybook, Vessel } from '../../types/models';
 import { canCaptainStartPlanning } from '../../lib/captains';
 import PlaybookSelector from '../shared/PlaybookSelector';
 
@@ -28,6 +28,11 @@ interface PlanningStartCardProps {
   onPipelineChange: (value: string) => void;
   onSelectedPlaybooksChange: (value: SelectedPlaybook[]) => void;
   onStart: () => void;
+  /** Harbors the session can run on; the picker is shown when there is at least one. */
+  harbors?: Harbor[];
+  /** The chosen Harbor ('' lets routing choose). */
+  harborId?: string;
+  onHarborChange?: (value: string) => void;
 }
 
 export default function PlanningStartCard(props: PlanningStartCardProps) {
@@ -56,7 +61,12 @@ export default function PlanningStartCard(props: PlanningStartCardProps) {
     onPipelineChange,
     onSelectedPlaybooksChange,
     onStart,
+    harbors,
+    harborId,
+    onHarborChange,
   } = props;
+  const selectedVessel = vessels.find((vessel) => vessel.id === vesselId) ?? null;
+  const preferredHarbor = selectedVessel?.preferredHarborId ? (harbors ?? []).find((harbor) => harbor.id === selectedVessel.preferredHarborId) ?? null : null;
 
   return (
     <div className="card" style={{ padding: '1rem', marginBottom: '1rem' }}>
@@ -113,7 +123,10 @@ export default function PlanningStartCard(props: PlanningStartCardProps) {
             </div>
 
             <div className="form-group">
-              <label title={t('Repository the captain plans against. Armada gives the captain its own dock (worktree) on this vessel for the session. Required.')}>{t('Vessel')}</label>
+              <div className="form-label-row">
+                <label title={t('Repository the captain plans against. Armada gives the captain its own dock (worktree) on this vessel for the session. Required.')}>{t('Vessel')}</label>
+                <Link to="/vessels" className="form-label-link" title={t('Open Vessels to add, import or configure the repositories offered here.')}>{t('Manage vessels')}</Link>
+              </div>
               <select aria-label={t('Vessel')} title={t('Repository the captain plans against. Armada gives the captain its own dock (worktree) on this vessel for the session. Required.')} value={vesselId} disabled={creating} onChange={(event) => onVesselChange(event.target.value)}>
                 <option value="">{t('Select a vessel...')}</option>
                 {availableVessels.map((vessel) => (
@@ -123,6 +136,26 @@ export default function PlanningStartCard(props: PlanningStartCardProps) {
                 ))}
               </select>
             </div>
+
+            {onHarborChange && (harbors ?? []).length > 0 && (
+              <div className="form-group">
+                <div className="form-label-row">
+                  <label title={t('Where the captain runs: a Harbor runs the session on that machine (its dock and every turn), so it sees that machine\'s checkout and tools. Automatic uses the vessel\'s preferred Harbor, then any connected Harbor that can serve the vessel, then the Armada server.')}>{t('Run on')}</label>
+                  <Link to="/configuration?tab=harbors" className="form-label-link" title={t('Open Harbors to see which machines are connected and what they can run.')}>{t('Manage Harbors')}</Link>
+                </div>
+                <select aria-label={t('Run on')} value={harborId ?? ''} disabled={creating} onChange={(event) => onHarborChange(event.target.value)}>
+                  <option value="">{preferredHarbor ? t('Automatic (preferred: {{name}})', { name: preferredHarbor.name }) : t('Automatic')}</option>
+                  {(harbors ?? []).map((harbor) => {
+                    const connected = String(harbor.connectionStatus) === 'Connected';
+                    return (
+                      <option key={harbor.id} value={harbor.id} disabled={!connected}>
+                        {t('Harbor')}: {harbor.name}{connected ? '' : ` (${String(harbor.connectionStatus ?? 'offline').toLowerCase()})`}
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+            )}
 
             <div className="form-group">
               <div className="form-label-row">

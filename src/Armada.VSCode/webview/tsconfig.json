@@ -1,0 +1,20 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "strict": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "resolveJsonModule": true,
+    "typeRoots": ["../../Armada.Dashboard/node_modules/@types"],
+    "types": [],
+    "paths": {
+      "@dashboard/*": ["../../Armada.Dashboard/src/*"],
+      "*": ["../../Armada.Dashboard/node_modules/@types/*", "../../Armada.Dashboard/node_modules/*"]
+    }
+  },
+  "include": ["dashboard/**/*.ts", "dashboard/**/*.tsx", "../../Armada.Dashboard/src/globals.d.ts", "../../Armada.Dashboard/src/vite-env.d.ts"]
+}

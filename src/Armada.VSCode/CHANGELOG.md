@@ -2,8 +2,32 @@
 
 ## 1.4.0 (unreleased)
 
+- **Manage is a table of contents**: each hub lists its dashboard tabs (Activity: All Activity, API Requests, Events,
+  Signals, Token Usage, Captain Usage, Concurrency; Configuration: Workflow Profiles through Memory; and so on), every
+  entry has an icon and opens its page, and nothing expands into lists of raw records (no more rows named by
+  `req_...` ids). The tree loads nothing from the Admiral, so it opens instantly; Needs You opens its page and shows its
+  count.
+- **Lighter on the Admiral**: the background refresh reads the newest 50 missions instead of 250, and record lists are
+  no longer loaded for the tree.
+- **The dashboard's own pages in editor tabs**: clicking a hub, a Missions tab, a record kind or a record in
+  **Manage** opens the dashboard's page for it in an editor tab, with the same charts, forms, pickers and actions as the
+  browser. That includes the Overview's mission history, API request chart and token usage heatmap, Activity's All
+  Activity, API Requests, Token Usage heatmap, Captain Usage and Concurrency charts, Dispatch and Create Voyage (vessel,
+  pipeline and captain pickers, each with a Manage link), Planning (with **Run on** to pick the Harbor), and the backlog
+  form with its vessel picker. Every request goes through the extension's connection and live events come from its
+  event stream, so no browser sign-in is needed. Each tab has back, forward, reload, breadcrumbs, live status, **Open
+  in another tab** and **Open in browser**. Cmd/Ctrl+click a link to open it in its own tab. Open tabs come back after a
+  reload. **Armada: Open Page...** lists every page.
+- **Needs You opens the item's page**: a review, failure, stall, CLI permission request or model alert opens the page
+  where you act on it, instead of a pop-up in the command bar.
+- **Create and edit open the dashboard's forms** (backlog item with its vessel, planning session with its Harbor,
+  release, prompt template, ...); other kinds open their list page, which has the create button.
+- **New settings**: `armada.pages.openRecords` (`dashboardPage` by default, or `details` for the compact detail views
+  and expand-only hubs) and `armada.pages.tabReuse` (`area`: one tab per area, `single`, or `never`).
+- **All Activity loads again**: the native list asks for what the dashboard's History tab asks for (newest 100, without
+  read requests) instead of a query a large timeline could not answer in time.
 - **A simpler sidebar, laid out like the dashboard**: three views instead of fourteen, as in Mux. **Ask Armada** (the
-  chat), **Conversations** and **Armada**: one tree with Armada Overview and the dashboard's hubs in its order (Needs
+  chat), **Conversations** and **Manage**: one tree with Armada Overview and the dashboard's hubs in its order (Needs
   You, Dispatch, Fleet Actions, Missions, Activity, Vessels, Captains, Delivery, Configuration, API Explorer,
   Settings), each record kind under the hub whose dashboard page shows it. Hubs carry their create and run buttons and
   open as editor tabs; the view's menu holds backup, Harbor, MCP, help and account actions.

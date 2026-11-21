@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Shared parser for the dashboard surfaces the parity manifests track (src/Armada.Dashboard/src).
 
-Routes (App.tsx), hub tabs (pages with Tabs), WebSocket event types, and Server-page settings fields. Used by
+Routes (AppRoutes.tsx), hub tabs (pages with Tabs), WebSocket event types, and Server-page settings fields. Used by
 scripts/tui/generate-parity-manifest.py and scripts/mobile/generate-parity-manifest.py; the server-calling API
 functions come from client_exports.py. Test.Shared/Infrastructure/DashboardSource.cs mirrors these rules in C#.
 """
@@ -28,7 +28,7 @@ def read(path):
 
 
 def routes():
-    src = read(os.path.join(DASH, "App.tsx"))
+    src = read(os.path.join(DASH, "AppRoutes.tsx"))
     out = []
     for m in re.finditer(r'<Route\s+(index\s+)?(?:path="([^"]+)")?', src):
         if m.group(1):

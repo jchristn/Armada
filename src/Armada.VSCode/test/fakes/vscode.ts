@@ -230,6 +230,7 @@ export const window = {
   createWebviewPanel: () => {
     throw new Error('webviews are not faked');
   },
+  registerWebviewPanelSerializer: () => new Disposable(() => undefined),
 };
 
 export const commands = {

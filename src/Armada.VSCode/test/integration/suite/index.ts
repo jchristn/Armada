@@ -137,25 +137,42 @@ export async function run(): Promise<void> {
       log('vessel workspace: no vessel with a local checkout on this machine');
     }
 
-    // The Armada tree: the dashboard's hubs, with live rows under them.
-    const label = async (el: unknown): Promise<string> => {
-      const item = await api.nav.getTreeItem(el);
+    // The Manage tree: the dashboard's hubs, each listing its tabs; every entry opens a page.
+    const label = (el: Parameters<typeof api.nav.getTreeItem>[0]): string => {
+      const item = api.nav.getTreeItem(el);
       return typeof item.label === 'string' ? item.label : item.label?.label ?? '';
     };
-    const hubs = await api.nav.getChildren();
-    const hubLabels = await Promise.all(hubs.map(label));
+    const hubs = api.nav.getChildren();
+    const hubLabels = hubs.map(label);
     assert.deepStrictEqual(hubLabels, ['Armada Overview', 'Needs You', 'Dispatch', 'Fleet Actions', 'Missions', 'Activity', 'Vessels', 'Captains', 'Delivery', 'Configuration', 'API Explorer', 'Settings']);
-    const missionTabs = await Promise.all((await api.nav.getChildren(hubs[hubLabels.indexOf('Missions')])).map(label));
-    assert.deepStrictEqual(missionTabs.slice(0, 4), ['Missions', 'Voyages', 'Merge Queue', 'Black Box']);
-    const missionGroups = await Promise.all((await api.nav.getChildren((await api.nav.getChildren(hubs[hubLabels.indexOf('Missions')]))[0])).map(label));
-    assert.ok(missionGroups.length > 0, 'the Missions tab lists its groups');
-    const configuration = await Promise.all((await api.nav.getChildren(hubs[hubLabels.indexOf('Configuration')])).map(label));
-    assert.ok(configuration.includes('Personas') && configuration.includes('Harbors'), `Configuration kinds: ${configuration.join(', ')}`);
-    const vessels = await api.nav.getChildren(hubs[hubLabels.indexOf('Vessels')]);
-    assert.ok(vessels.length > 0, 'the Vessels hub lists fleets');
-    log(`armada tree: ${hubLabels.length} hubs; Missions groups ${missionGroups.join(', ')}; Configuration ${configuration.length} kinds; Vessels ${vessels.length} rows`);
+    const missionTabs = api.nav.getChildren(hubs[hubLabels.indexOf('Missions')]).map(label);
+    assert.deepStrictEqual(missionTabs, ['Missions', 'Voyages', 'Merge Queue', 'Black Box']);
+    const configuration = api.nav.getChildren(hubs[hubLabels.indexOf('Configuration')]).map(label);
+    assert.ok(configuration.includes('Personas') && configuration.includes('Harbors'), `Configuration tabs: ${configuration.join(', ')}`);
+    log(`manage tree: ${hubLabels.length} hubs; Configuration ${configuration.length} tabs`);
     await vscode.commands.executeCommand('armadaNav.focus');
     await vscode.commands.executeCommand('armadaConversations.focus');
+
+    // Dashboard page tabs: the dashboard's own pages and charts, served through the extension's connection.
+    const pageRoutes = ['/', '/inbox', '/dispatch', '/dispatch?tab=planning', '/dispatch?tab=backlog', '/backlog/new', '/voyages/create', '/fleet-actions',
+      '/missions', '/missions?tab=voyages', '/activity?source=history', '/activity?source=requests', '/activity?source=events',
+      '/activity?source=tokens', '/activity?source=usage-overview', '/activity?source=concurrency', '/vessels', '/vessels?tab=health',
+      '/captains', '/delivery', '/configuration', '/configuration?tab=harbors', '/api-explorer', '/server', '/server?tab=diagnostics'];
+    for (const route of pageRoutes) {
+      // A hub can rewrite its URL as it loads (/vessels?tab=health becomes /vessels/health), so the next snapshot counts.
+      const before = api.pages.stats.snapshots.length;
+      await vscode.commands.executeCommand('armada.page.open', route, { newTab: true });
+      await waitFor(() => api.pages.stats.snapshots.length > before, 45000, `the page ${route} to render`);
+      const snap = api.pages.stats.snapshots[api.pages.stats.snapshots.length - 1];
+      log(`page ${route} (${snap?.path}): ${snap?.charts} charts, ${snap?.tables} tables, ${snap?.cards} cards, ${snap?.text} chars${snap?.message ? `; message: ${snap.message}` : ''}`);
+      assert.ok((snap?.text ?? 0) > 50, `the page ${route} rendered content`);
+    }
+    const pageStats = api.pages.stats;
+    log(`page requests by status: ${JSON.stringify(pageStats.statuses)}; not ok: ${pageStats.failures.join(', ') || 'none'}; titles: ${[...new Set(pageStats.locations.map((l) => l.title).filter(Boolean))].slice(0, 30).join(' | ')}`);
+    assert.deepStrictEqual(pageStats.errors, [], 'no page reported an error');
+    assert.ok(!Object.keys(pageStats.statuses).some((s) => s === '0' || Number(s) >= 500), `no page request failed: ${JSON.stringify(pageStats.statuses)}`);
+    assert.ok((pageStats.statuses['200'] ?? 0) > 20, 'the pages loaded their data through the bridge');
+    await vscode.commands.executeCommand('workbench.action.closeAllEditors');
 
     await vscode.commands.executeCommand('armada.home');
     log('home overview opened');
@@ -181,7 +198,10 @@ export async function run(): Promise<void> {
     const mission = api.ops.missions[0];
     if (mission) {
       await vscode.commands.executeCommand('armada.mission.open', mission.id);
-      await waitFor(() => api.details.openCount === 1, 10000, 'the mission page');
+      await waitFor(() => api.pages.stats.locations.some((l) => l.path === `/missions/${mission.id}`), 20000, 'the mission page').catch((err) => {
+        log(`mission page: ${api.pages.count} tabs; recent locations ${JSON.stringify(api.pages.stats.locations.slice(-6))}`);
+        throw err;
+      });
       await vscode.commands.executeCommand('armada.mission.viewLog', mission.id);
       await waitFor(() => vscode.window.activeTextEditor?.document.uri.scheme === 'armada', 10000, 'the mission log document');
       log(`mission ${mission.id}: page open, log document ${vscode.window.activeTextEditor?.document.uri.path} (${vscode.window.activeTextEditor?.document.lineCount} lines)`);

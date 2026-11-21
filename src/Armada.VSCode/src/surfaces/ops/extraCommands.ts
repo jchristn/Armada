@@ -10,6 +10,7 @@ import * as api from '@dashboard/api/client';
 import { buildExplorerOperations, ExplorerOperation, OpenApiSpec, schemaExample } from '@dashboard/lib/apiExplorer';
 import { ConnectionManager } from '../../connection/connectionManager';
 import { describeError } from '../../transport/errors';
+import { openAsPage } from '../dashboard/pageRouting';
 import { credentialHeaders } from '../../transport/hostClient';
 import { formatAge } from '../../util/format';
 import { DetailListItem, DetailPage, isDetailMessage, renderDetailContent, renderDetailHtml } from './detailHtml';
@@ -103,6 +104,8 @@ export function registerExtraCommands(deps: ExtraCommandDeps): vscode.Disposable
   disposables.push({ dispose: () => home?.panel.dispose() }, store.onDidChange(() => renderHome()) as vscode.Disposable);
   register('armada.home', async () => {
     if (!(await requireConnected())) return;
+    // The dashboard's Overview: status cards, mission history, usage and activity charts.
+    if (openAsPage('/')) return;
     if (home) {
       home.panel.reveal(undefined, false);
       return;
@@ -122,6 +125,8 @@ export function registerExtraCommands(deps: ExtraCommandDeps): vscode.Disposable
   // Activity charts
   register('armada.charts', async () => {
     if (!(await requireConnected())) return;
+    // The dashboard's Activity charts: the token heatmap, request history and captain usage, as the dashboard draws them.
+    if (openAsPage('/activity?source=tokens')) return;
     const day = 86400000;
     const from14 = new Date(Date.now() - 14 * day).toISOString();
     const [history, tokens, requests] = await Promise.all([

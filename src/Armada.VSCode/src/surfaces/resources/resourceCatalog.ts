@@ -10,6 +10,7 @@ import * as vscode from 'vscode';
 import * as api from '@dashboard/api/client';
 import type { Credential, Harbor } from '@dashboard/types/models';
 import { ResourceRecord, ResourceSpec, rowsOf } from './resourceSpec';
+import { buildHistoryTimelineQuery } from '@dashboard/lib/historyExport';
 
 /** Interactive helpers the catalog's actions need. */
 export interface CatalogDeps {
@@ -434,7 +435,9 @@ export function resourceCatalog(deps: CatalogDeps): ResourceSpec[] {
     // Activity
     {
       key: 'history', label: 'Activity', plural: 'All Activity', icon: 'timeline-open', view: 'activity',
-      list: async () => rowsOf(await api.listHistoryTimeline({ pageNumber: 1, pageSize: 200 } as never)),
+      // The dashboard History tab's default query: newest first, without GET/HEAD/OPTIONS request rows (a large
+      // timeline with every read request does not answer in time).
+      list: async () => rowsOf(await api.enumerateHistoryTimeline({ ...buildHistoryTimelineQuery({ objectiveId: '', text: '', actor: '', vesselId: '', sourceType: 'all', postmortemOnly: false, showReadRequests: false }, 100, 1), order: 'CreatedDescending' })),
       describe: (r) => join(str(r, 'entityType') || str(r, 'sourceType'), str(r, 'occurredUtc').replace('T', ' ').slice(0, 19)),
       route: () => '/activity?source=history',
     },

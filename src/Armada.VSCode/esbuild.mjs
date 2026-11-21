@@ -70,10 +70,40 @@ if (tests) {
     sourcemap: !production,
     minify: production,
   };
+  const dashboardRoot = path.resolve(root, '..', 'Armada.Dashboard');
+  const dashboardPackage = JSON.parse(fs.readFileSync(path.join(dashboardRoot, 'package.json'), 'utf8'));
+  if (!fs.existsSync(path.join(dashboardRoot, 'node_modules', 'react'))) {
+    throw new Error('The dashboard page tabs bundle the dashboard: run `npm ci` in src/Armada.Dashboard first.');
+  }
+  // Dashboard page tabs: the dashboard's own pages in a webview (webview/dashboard), with React and the other
+  // dashboard dependencies taken from the dashboard's node_modules (never the extension's react shim).
+  const webview = {
+    bundle: true,
+    format: 'esm',
+    platform: 'browser',
+    target: 'es2022',
+    entryPoints: { dashboard: path.join(root, 'webview', 'dashboard', 'main.tsx') },
+    outdir: path.join(root, 'dist', 'webview'),
+    tsconfig: path.join(root, 'webview', 'tsconfig.json'),
+    alias: { '@dashboard': path.join(dashboardRoot, 'src') },
+    nodePaths: [path.join(dashboardRoot, 'node_modules')],
+    jsx: 'automatic',
+    loader: { '.png': 'dataurl', '.svg': 'dataurl', '.woff2': 'dataurl', '.woff': 'dataurl' },
+    define: {
+      __APP_VERSION__: JSON.stringify(dashboardPackage.version),
+      'import.meta.env': '{}',
+      'process.env.NODE_ENV': JSON.stringify(production ? 'production' : 'development'),
+    },
+    sourcemap: !production,
+    minify: production,
+    logLevel: 'info',
+  };
   if (watch) {
     const context = await esbuild.context(options);
     await context.watch();
+    const webviewContext = await esbuild.context(webview);
+    await webviewContext.watch();
   } else {
-    await esbuild.build(options);
+    await Promise.all([esbuild.build(options), esbuild.build(webview)]);
   }
 }

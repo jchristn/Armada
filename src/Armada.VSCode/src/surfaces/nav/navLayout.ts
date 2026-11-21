@@ -1,88 +1,124 @@
 /*
- * The dashboard's navigation (Armada.Dashboard src/lib/navModel.ts and dashboardNavigation.ts) as the Armada tree's
- * hubs: the same sections, hubs and tab order, with each record kind under the hub whose tab shows it on the
- * dashboard. Pure, for tests.
+ * The Manage view: the dashboard's navigation as a table of contents. Armada Overview, then the hubs of its
+ * Operations, Build, Configuration and System sections in the dashboard's order, each hub listing its tabs in the
+ * dashboard's order (Armada.Dashboard src/lib/navModel.ts and the hub registry in lib/dashboardNavigation.ts, which a
+ * unit test compares this with). Every entry opens its dashboard page in an editor tab; nothing expands into records.
+ * Pure, for tests.
  */
 
-import { NavHub, NavSource } from './navTree';
+/** One page under a hub (a dashboard hub tab, or a page the hub links to). */
+export interface NavPage {
+  label: string;
+  /** Codicon. */
+  icon: string;
+  /** The dashboard route it opens ("/activity?source=tokens"). */
+  route: string;
+  tooltip?: string;
+}
 
-/** Record kinds (ResourceSpec keys) per hub, in the dashboard's tab order. */
-export const HUB_RESOURCES: Record<string, string[]> = {
-  dispatch: ['planningSession', 'backlog'],
-  fleetActions: ['fleetAction', 'fleetActionRun'],
-  missions: ['stageOutcome', 'fingerprint', 'recoveryStats'],
-  activity: ['history', 'requestHistory', 'event', 'signal', 'tokenUsage', 'captainUsage', 'job', 'importBatch'],
-  vessels: ['vesselHealth'],
-  captains: ['dock', 'batteryPack', 'evaluation'],
-  delivery: ['deployment', 'environment', 'release', 'incident', 'checkRun', 'runbook', 'runbookExecution'],
-  configuration: ['workflowProfile', 'projectProfile', 'skill', 'persona', 'pipeline', 'promptTemplate', 'playbook', 'modelEndpoint', 'muxEndpoint', 'harbor', 'memory', 'failureCauseRule'],
-  settings: ['server', 'settings', 'storage', 'storageHost', 'retention', 'cliPermissionRule', 'diagnostics', 'tenant', 'user', 'credential'],
-};
+/** A dashboard hub, or a leaf (Armada Overview, Needs You, API Explorer) when it has no pages. */
+export interface NavHub {
+  key: string;
+  label: string;
+  icon: string;
+  tooltip: string;
+  /** The dashboard section the hub belongs to (shown in its tooltip). */
+  section?: string;
+  /** The page the hub itself opens. */
+  route: string;
+  pages: NavPage[];
+}
 
-/** The trees the hubs show. */
-export interface NavSources {
-  needsYou: NavSource;
-  missions: NavSource;
-  voyages: NavSource;
-  merge: NavSource;
-  failures: NavSource;
-  fleet: NavSource;
-  captains: NavSource;
-  /** The record kinds of a hub (HUB_RESOURCES), or undefined when it has none. */
-  resources(hubKey: string): NavSource | undefined;
+function tabs(path: string, param: string, entries: Array<[key: string, label: string, icon: string, tooltip?: string]>): NavPage[] {
+  return entries.map(([key, label, icon, tooltip]) => ({ label, icon, route: `${path}?${param}=${key}`, tooltip }));
 }
 
 /** The hubs, in the dashboard's order. */
-export function dashboardHubs(s: NavSources): NavHub[] {
-  const records = (key: string): NavHub['children'] => {
-    const source = s.resources(key);
-    return source ? [{ kind: 'source', source }] : [];
-  };
+export function dashboardHubs(): NavHub[] {
   return [
-    { key: 'overview', label: 'Armada Overview', icon: 'home', tooltip: 'Fleet status at a glance: what needs you, what is running, and recent activity', children: [], command: { command: 'armada.home' } },
-    { key: 'needsYou', label: 'Needs You', icon: 'bell', section: 'Operations', tooltip: 'Reviews, failures, and stalls awaiting your attention', children: [{ kind: 'source', source: s.needsYou }] },
+    { key: 'overview', label: 'Armada Overview', icon: 'home', route: '/', pages: [], tooltip: 'Fleet status at a glance: what needs you, mission history, API requests and token usage over time' },
+    { key: 'needsYou', label: 'Needs You', icon: 'bell', section: 'Operations', route: '/inbox', pages: [], tooltip: 'Reviews, failures, stalls, CLI permission requests and model alerts awaiting your attention' },
     {
-      key: 'dispatch', label: 'Dispatch', icon: 'send', section: 'Operations', tooltip: 'Send work to vessels, plan with a captain, and capture and refine backlog',
-      children: [
-        { kind: 'command', label: 'Dispatch a Mission...', icon: 'add', command: 'armada.dispatch' },
-        { kind: 'command', label: 'Dispatch a Voyage...', icon: 'rocket', command: 'armada.dispatchVoyage' },
-        ...records('dispatch'),
+      key: 'dispatch', label: 'Dispatch', icon: 'send', section: 'Operations', route: '/dispatch', tooltip: 'Send work to vessels, plan with a captain, and capture and refine backlog',
+      pages: [
+        ...tabs('/dispatch', 'tab', [['dispatch', 'Dispatch', 'send', 'Dispatch a mission: vessel, pipeline, captain per step, playbooks'], ['planning', 'Planning', 'comment-discussion', 'Plan with a captain on a vessel or Harbor, then dispatch from the transcript'], ['backlog', 'Backlog', 'lightbulb', 'Backlog items: capture, refine with a captain, plan and dispatch']]),
+        { label: 'Create Voyage', icon: 'rocket', route: '/voyages/create', tooltip: 'Several missions on one vessel as a voyage' },
       ],
     },
-    { key: 'fleetActions', label: 'Fleet Actions', icon: 'run-all', section: 'Operations', tooltip: 'Run a command or mission across many vessels and watch each run', children: records('fleetActions') },
     {
-      key: 'missions', label: 'Missions', icon: 'tasklist', section: 'Operations', tooltip: 'Work units, plus Voyages, the Merge Queue, and the Black Box of failures',
-      children: [
-        { kind: 'source', source: s.missions, label: 'Missions', icon: 'tasklist' },
-        { kind: 'source', source: s.voyages, label: 'Voyages', icon: 'rocket' },
-        { kind: 'source', source: s.merge, label: 'Merge Queue', icon: 'git-merge' },
-        { kind: 'source', source: s.failures, label: 'Black Box', icon: 'error', tooltip: 'Failure records for missions and voyages: where, how and why each failed, and how to recover' },
-        ...records('missions'),
+      key: 'fleetActions', label: 'Fleet Actions', icon: 'run-all', section: 'Operations', route: '/fleet-actions', tooltip: 'Run a command or mission across many vessels and watch each run',
+      pages: tabs('/fleet-actions', 'tab', [['actions', 'Actions', 'run-all'], ['runs', 'Runs', 'play-circle']]),
+    },
+    {
+      key: 'missions', label: 'Missions', icon: 'tasklist', section: 'Operations', route: '/missions', tooltip: 'Work units, plus Voyages, the Merge Queue, and the Black Box of failures',
+      pages: tabs('/missions', 'tab', [['missions', 'Missions', 'tasklist'], ['voyages', 'Voyages', 'rocket'], ['merge-queue', 'Merge Queue', 'git-merge'], ['blackbox', 'Black Box', 'debug-alt', 'Failure records: where, how and why each mission or voyage failed, and how to recover']]),
+    },
+    {
+      key: 'activity', label: 'Activity', icon: 'pulse', section: 'Operations', route: '/activity', tooltip: 'Everything that happened, API requests, events, signals, token and captain usage, concurrency',
+      pages: tabs('/activity', 'source', [
+        ['history', 'All Activity', 'timeline-open', 'Everything that happened, newest first, over a time range'],
+        ['requests', 'API Requests', 'history', 'Requests over time (chart) and every request with its status, timing and caller'],
+        ['events', 'Events', 'zap'],
+        ['signals', 'Signals', 'mail'],
+        ['tokens', 'Token Usage', 'graph', 'Token usage heatmap and charts by captain, model and Harbor'],
+        ['usage-overview', 'Captain Usage', 'dashboard', 'Captain usage windows, allowances and charts'],
+        ['concurrency', 'Concurrency', 'layers', 'Wait time by cause, slot usage and percentiles'],
+      ]),
+    },
+    {
+      key: 'vessels', label: 'Vessels', icon: 'repo', section: 'Build', route: '/vessels', tooltip: 'Repositories grouped by fleet, their health, and the vessel workspace',
+      pages: [
+        ...tabs('/vessels', 'tab', [['vessels', 'Vessels', 'repo'], ['health', 'Health', 'heart'], ['fleets', 'Fleets', 'folder-library'], ['workspace', 'Workspace', 'files']]),
+        { label: 'Import Vessels', icon: 'cloud-download', route: '/vessels/import', tooltip: 'Import repositories from GitHub or a folder and group them into fleets' },
       ],
     },
-    { key: 'activity', label: 'Activity', icon: 'pulse', section: 'Operations', tooltip: 'Requests, events, signals, history, token usage and captain usage', children: records('activity') },
-    { key: 'vessels', label: 'Vessels', icon: 'repo', section: 'Build', tooltip: 'Repositories grouped by fleet, and their health', children: [{ kind: 'source', source: s.fleet }, ...records('vessels')] },
-    { key: 'captains', label: 'Captains', icon: 'person', section: 'Build', tooltip: 'AI coding agents that execute missions, their docks, battery packs and evaluations', children: [{ kind: 'source', source: s.captains }, ...records('captains')] },
-    { key: 'delivery', label: 'Delivery', icon: 'package', section: 'Build', tooltip: 'Deployments, Environments, Releases, Incidents, Checks, and Runbooks', children: records('delivery') },
-    { key: 'configuration', label: 'Configuration', icon: 'settings', section: 'Configuration', tooltip: 'Workflow Profiles, Project Profiles, Skills, Personas, Pipelines, Prompts, Playbooks, Endpoints, Harbors and Memory', children: records('configuration') },
-    { key: 'apiExplorer', label: 'API Explorer', icon: 'symbol-interface', section: 'System', tooltip: 'Call any Armada REST endpoint and see the response', children: [], command: { command: 'armada.api.call' } },
-    { key: 'settings', label: 'Settings', icon: 'gear', section: 'System', tooltip: 'Server settings, Storage, CLI Tool Permissions, Diagnostics, and tenant, user and credential administration', children: records('settings') },
+    {
+      key: 'captains', label: 'Captains', icon: 'person', section: 'Build', route: '/captains', tooltip: 'AI coding agents that execute missions, their docks, battery packs and evaluations',
+      pages: [
+        ...tabs('/captains', 'tab', [['captains', 'Captains', 'person'], ['docks', 'Docks', 'git-branch'], ['battery', 'Battery Packs', 'beaker']]),
+        { label: 'Evaluations', icon: 'checklist', route: '/evaluations', tooltip: 'Model evaluations and their scorecards' },
+      ],
+    },
+    {
+      key: 'delivery', label: 'Delivery', icon: 'package', section: 'Build', route: '/delivery', tooltip: 'Deployments, Environments, Releases, Incidents, Checks, and Runbooks',
+      pages: tabs('/delivery', 'tab', [['deployments', 'Deployments', 'cloud-upload'], ['environments', 'Environments', 'server-environment'], ['releases', 'Releases', 'tag'], ['incidents', 'Incidents', 'flame'], ['checks', 'Checks', 'pass'], ['runbooks', 'Runbooks', 'notebook']]),
+    },
+    {
+      key: 'configuration', label: 'Configuration', icon: 'settings', section: 'Configuration', route: '/configuration', tooltip: 'Workflow Profiles, Project Profiles, Skills, Personas, Pipelines, Prompts, Playbooks, Endpoints, Harbors and Memory',
+      pages: tabs('/configuration', 'tab', [
+        ['workflow-profiles', 'Workflow Profiles', 'workflow'],
+        ['project-profiles', 'Project Profiles', 'project'],
+        ['skills', 'Skills', 'tools'],
+        ['personas', 'Personas', 'account'],
+        ['pipelines', 'Pipelines', 'type-hierarchy'],
+        ['prompts', 'Prompts', 'symbol-text'],
+        ['playbooks', 'Playbooks', 'book'],
+        ['endpoints', 'Endpoints', 'plug'],
+        ['harbors', 'Harbors', 'vm'],
+        ['memory', 'Memory', 'database'],
+      ]),
+    },
+    { key: 'apiExplorer', label: 'API Explorer', icon: 'symbol-interface', section: 'System', route: '/api-explorer', pages: [], tooltip: 'Call any Armada REST endpoint and see the response' },
+    {
+      key: 'settings', label: 'Settings', icon: 'gear', section: 'System', route: '/server', tooltip: 'Server settings, Storage, CLI Tool Permissions, Diagnostics, and tenant, user and credential administration',
+      pages: tabs('/server', 'tab', [['server', 'Server', 'server'], ['storage', 'Storage', 'database'], ['cli-permissions', 'CLI Tool Permissions', 'shield'], ['diagnostics', 'Diagnostics', 'pulse'], ['tenants', 'Tenants', 'organization'], ['users', 'Users', 'account'], ['credentials', 'Credentials', 'key']]),
+    },
   ];
 }
 
-/** The old per-view tab commands (armada.tab.<viewId>) and the hub or tab each now opens. */
+/** The old per-view tab commands (armada.tab.<viewId>) and the page each now opens. */
 export const LEGACY_TAB_TARGETS: Record<string, string> = {
-  armadaNeedsYou: 'armadaHub.needsYou',
-  armadaMissions: 'armadaMissions',
-  armadaVoyages: 'armadaVoyages',
-  armadaCaptains: 'armadaHub.captains',
-  armadaFleet: 'armadaHub.vessels',
-  armadaMergeQueue: 'armadaMergeQueue',
-  armadaFailures: 'armadaFailures',
-  armadaBacklog: 'armadaHub.dispatch',
-  armadaFleetActions: 'armadaHub.fleetActions',
-  armadaDelivery: 'armadaHub.delivery',
-  armadaConfiguration: 'armadaHub.configuration',
-  armadaActivity: 'armadaHub.activity',
-  armadaSystem: 'armadaHub.settings',
+  armadaNeedsYou: '/inbox',
+  armadaMissions: '/missions',
+  armadaVoyages: '/missions?tab=voyages',
+  armadaCaptains: '/captains',
+  armadaFleet: '/vessels',
+  armadaMergeQueue: '/missions?tab=merge-queue',
+  armadaFailures: '/missions?tab=blackbox',
+  armadaBacklog: '/dispatch?tab=backlog',
+  armadaFleetActions: '/fleet-actions',
+  armadaDelivery: '/delivery',
+  armadaConfiguration: '/configuration',
+  armadaActivity: '/activity',
+  armadaSystem: '/server',
 };

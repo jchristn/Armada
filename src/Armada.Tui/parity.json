@@ -751,6 +751,14 @@
     },
     {
       "kind": "tab",
+      "key": "Activity:concurrency",
+      "status": "not-applicable",
+      "tui": "",
+      "workstream": "M9",
+      "notes": "Dashboard Concurrency charts wait time by cause over a window. Per archive/CONCURRENCY_IMPROVEMENTS.md 8.5 the TUI shows the per-mission wait line and history (MissionScreen), the vessel slot usage and slot wait percentiles (VesselScreen) and captain slot usage (CaptainScreen) instead of charts."
+    },
+    {
+      "kind": "tab",
       "key": "Activity:events",
       "status": "implemented",
       "tui": "EventsScreen",
@@ -796,14 +804,6 @@
       "tui": "",
       "workstream": "AC7",
       "notes": "Dashboard Captain Usage combines historical quota charts and latest account limits. Native clients open their existing Account Limits surface for this source; historical quota charts remain browser-only as scoped in docs/captain-usage-plan/DASHBOARD_PARITY.md."
-    },
-    {
-      "kind": "tab",
-      "key": "Activity:concurrency",
-      "status": "not-applicable",
-      "tui": "",
-      "workstream": "M9",
-      "notes": "Dashboard Concurrency charts wait time by cause over a window. Per archive/CONCURRENCY_IMPROVEMENTS.md 8.5 the TUI shows the per-mission wait line and history (MissionScreen), the vessel slot usage and slot wait percentiles (VesselScreen) and captain slot usage (CaptainScreen) instead of charts."
     },
     {
       "kind": "tab",
@@ -2655,6 +2655,14 @@
     },
     {
       "kind": "api",
+      "key": "getConcurrencyMetrics",
+      "status": "implemented",
+      "tui": "ArmadaClient.GetConcurrencyMetricsAsync",
+      "workstream": "W0.2",
+      "notes": "Concurrency wait aggregates"
+    },
+    {
+      "kind": "api",
       "key": "getDeployment",
       "status": "implemented",
       "tui": "ArmadaClient.GetDeploymentAsync",
@@ -2892,6 +2900,14 @@
       "tui": "ArmadaClient.GetMissionLogAsync",
       "workstream": "W0.2",
       "notes": "Missions"
+    },
+    {
+      "kind": "api",
+      "key": "getMissionWaits",
+      "status": "implemented",
+      "tui": "ArmadaClient.GetMissionWaitsAsync",
+      "workstream": "W0.2",
+      "notes": "Missions: wait intervals"
     },
     {
       "kind": "api",
@@ -3191,6 +3207,14 @@
     },
     {
       "kind": "api",
+      "key": "getVesselConcurrency",
+      "status": "implemented",
+      "tui": "ArmadaClient.GetVesselConcurrencyAsync",
+      "workstream": "W0.2",
+      "notes": "Vessels: concurrency"
+    },
+    {
+      "kind": "api",
       "key": "getVesselGitStatus",
       "status": "implemented",
       "tui": "ArmadaClient.GetVesselGitStatusAsync",
@@ -3247,38 +3271,6 @@
     },
     {
       "kind": "api",
-      "key": "getVoyageTree",
-      "status": "implemented",
-      "tui": "ArmadaClient.GetVoyageTreeAsync",
-      "workstream": "W0.2",
-      "notes": "Voyages: mission tree"
-    },
-    {
-      "kind": "api",
-      "key": "getMissionWaits",
-      "status": "implemented",
-      "tui": "ArmadaClient.GetMissionWaitsAsync",
-      "workstream": "W0.2",
-      "notes": "Missions: wait intervals"
-    },
-    {
-      "kind": "api",
-      "key": "getVesselConcurrency",
-      "status": "implemented",
-      "tui": "ArmadaClient.GetVesselConcurrencyAsync",
-      "workstream": "W0.2",
-      "notes": "Vessels: concurrency"
-    },
-    {
-      "kind": "api",
-      "key": "getConcurrencyMetrics",
-      "status": "implemented",
-      "tui": "ArmadaClient.GetConcurrencyMetricsAsync",
-      "workstream": "W0.2",
-      "notes": "Concurrency wait aggregates"
-    },
-    {
-      "kind": "api",
       "key": "getVoyageBlackBox",
       "status": "implemented",
       "tui": "ArmadaClient.GetVoyageBlackBoxAsync",
@@ -3308,6 +3300,14 @@
       "tui": "ArmadaClient.GetVoyageStatusAsync",
       "workstream": "W0.2",
       "notes": "Voyages"
+    },
+    {
+      "kind": "api",
+      "key": "getVoyageTree",
+      "status": "implemented",
+      "tui": "ArmadaClient.GetVoyageTreeAsync",
+      "workstream": "W0.2",
+      "notes": "Voyages: mission tree"
     },
     {
       "kind": "api",

@@ -34,7 +34,8 @@
   "main": "./dist/extension.js",
   "activationEvents": [
     "onStartupFinished",
-    "onFileSystem:armada-vessel"
+    "onFileSystem:armada-vessel",
+    "onWebviewPanel:armada.dashboardPage"
   ],
   "contributes": {
     "viewsContainers": {
@@ -149,6 +150,36 @@
             "粵語"
           ],
           "description": "Language of Armada's labels in the views, pages and forms, from the Admiral's translation catalog. \"auto\" follows VS Code's display language."
+        },
+        "armada.pages.openRecords": {
+          "type": "string",
+          "enum": [
+            "dashboardPage",
+            "details"
+          ],
+          "enumDescriptions": [
+            "The dashboard's own page in an editor tab: the same charts, forms, pickers and actions as the browser dashboard.",
+            "The extension's compact detail views."
+          ],
+          "default": "dashboardPage",
+          "description": "How missions, voyages, captains, records and Needs You items open from commands, notifications and the status bar. The Manage view always opens dashboard pages.",
+          "order": 2
+        },
+        "armada.pages.tabReuse": {
+          "type": "string",
+          "enum": [
+            "area",
+            "single",
+            "never"
+          ],
+          "enumDescriptions": [
+            "One tab per area (Missions, Activity, Dispatch, ...): opening another page in the same area navigates that tab.",
+            "One tab for every page.",
+            "A new tab for every page."
+          ],
+          "default": "area",
+          "description": "How dashboard page tabs are reused. Cmd/Ctrl+click a link inside a page, or use its Open in Another Tab button, to open a second tab either way.",
+          "order": 3
         }
       }
     },
@@ -169,9 +200,9 @@
         },
         {
           "id": "armadaNav",
-          "name": "Armada",
+          "name": "Manage",
           "icon": "media/icon.png",
-          "contextualTitle": "Armada"
+          "contextualTitle": "Armada: Manage"
         }
       ],
       "explorer": [
@@ -900,7 +931,7 @@
       },
       {
         "command": "armada.nav.reveal",
-        "title": "Show in the Armada View",
+        "title": "Show in Manage",
         "category": "Armada"
       },
       {
@@ -998,6 +1029,22 @@
         "title": "Delete...",
         "category": "Armada",
         "icon": "$(trash)"
+      },
+      {
+        "command": "armada.page.pick",
+        "title": "Open Page...",
+        "category": "Armada",
+        "icon": "$(browser)"
+      },
+      {
+        "command": "armada.page.open",
+        "title": "Open Dashboard Page",
+        "category": "Armada"
+      },
+      {
+        "command": "armada.page.openList",
+        "title": "Open List Page",
+        "category": "Armada"
       }
     ],
     "menus": {
@@ -1470,9 +1517,22 @@
         {
           "command": "armada.conversations.clearSearch",
           "when": "false"
+        },
+        {
+          "command": "armada.page.open",
+          "when": "false"
+        },
+        {
+          "command": "armada.page.openList",
+          "when": "false"
         }
       ],
       "view/title": [
+        {
+          "command": "armada.page.pick",
+          "when": "view == armadaNav && armada.connected",
+          "group": "navigation@1"
+        },
         {
           "command": "armada.ask.new",
           "when": "view == armadaAsk",
@@ -2119,7 +2179,7 @@
     }
   },
   "scripts": {
-    "typecheck": "tsc -p ./ && tsc -p ./tsconfig.test.json",
+    "typecheck": "tsc -p ./ && tsc -p ./tsconfig.test.json && node ../Armada.Dashboard/node_modules/typescript/bin/tsc -p ./webview/tsconfig.json",
     "bundle": "node esbuild.mjs --production",
     "build": "npm run typecheck && npm run bundle",
     "lint": "eslint . --max-warnings 0 && npm run lint:shared",

@@ -348,6 +348,8 @@ namespace Armada.Core.Database.Mysql.Implementations
                 conditions.Add("UPPER(method) = @method");
                 parameters.Add(new MySqlParameter("@method", query.Method.ToUpperInvariant()));
             }
+            if (query.ExcludeReadMethods)
+                conditions.Add("UPPER(method) NOT IN ('GET', 'HEAD', 'OPTIONS')");
             if (!string.IsNullOrWhiteSpace(query.Route))
             {
                 conditions.Add("route LIKE @route");

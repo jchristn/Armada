@@ -322,3 +322,33 @@ export function filterExplorerOperations(operations: ExplorerOperation[], select
 export function editableHeaderParameter(parameter: OpenApiParameter): boolean {
   return parameter.in === 'header' && !['x-token', 'authorization', 'content-type'].includes(parameter.name.toLowerCase());
 }
+
+/** The built-in REST catalog (lib/apiCatalog.generated.json, generated from docs/api-surface-1.0.json). */
+export interface ApiCatalog {
+  contractVersion: string;
+  routes: Array<{ method: string; path: string; summary: string; tag: string; requestType: string; auth: string }>;
+}
+
+/**
+ * Operations from the built-in catalog, for when the server's OpenAPI document has not loaded (or cannot): every route
+ * with its summary and category, path parameters from the route's {placeholders}, and a JSON body for methods that take
+ * one. Ids match the OpenAPI document's fallback ids (method:path), so a selection survives the switch to it.
+ */
+export function buildCatalogOperations(catalog: ApiCatalog): ExplorerOperation[] {
+  return catalog.routes.map((route) => {
+    const pathParameters = [...route.path.matchAll(/\{([^}]+)\}/g)].map((match) => ({ name: match[1], in: 'path', required: true, schema: { type: 'string' } }) as OpenApiParameter);
+    const takesBody = !!route.requestType && ['post', 'put', 'patch'].includes(route.method);
+    return {
+      id: `${route.method}:${route.path}`,
+      method: route.method,
+      path: route.path,
+      summary: route.summary || `${route.method.toUpperCase()} ${route.path}`,
+      description: route.requestType ? `Request body: ${route.requestType}.` : '',
+      tag: route.tag || 'General',
+      parameters: pathParameters,
+      requestBody: takesBody ? { schema: { type: 'object' } } : null,
+      requestBodyContentType: takesBody ? 'application/json' : '',
+    };
+  });
+}
+

@@ -920,7 +920,8 @@ namespace Armada.Server.Mcp.Tools
                     FleetId = FleetId,
                     PipelineId = PipelineId,
                     SelectedPlaybooks = SelectedPlaybooks ?? new List<SelectedPlaybook>(),
-                    ObjectiveId = ObjectiveId
+                    ObjectiveId = ObjectiveId,
+                    HarborId = HarborId
                 };
             }
         }

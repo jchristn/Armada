@@ -1,0 +1,99 @@
+/* A dashboard page in a VS Code tab: the dashboard's theme variables follow the VS Code theme, and the shell is one
+   toolbar line above the page. Status colors (tags, chart series) keep the dashboard's own values. */
+
+[data-embed="vscode"],
+[data-embed="vscode"][data-theme="light"],
+[data-embed="vscode"][data-theme="dark"] {
+  --bg: var(--vscode-editor-background);
+  --bg-card: var(--vscode-editor-background);
+  --bg-hover: var(--vscode-list-hoverBackground);
+  --border: var(--vscode-panel-border, var(--vscode-widget-border, rgba(128, 128, 128, 0.35)));
+  --text: var(--vscode-foreground);
+  --text-dim: var(--vscode-descriptionForeground);
+  --accent: var(--vscode-textLink-foreground);
+  --accent-hover: var(--vscode-textLink-activeForeground);
+  --accent-solid: var(--vscode-button-background);
+  --accent-solid-hover: var(--vscode-button-hoverBackground);
+  --input-bg: var(--vscode-input-background);
+  --input-border: var(--vscode-input-border, var(--vscode-panel-border, rgba(128, 128, 128, 0.35)));
+  --font: var(--vscode-font-family);
+  --mono: var(--vscode-editor-font-family);
+  --modal-overlay: rgba(0, 0, 0, 0.45);
+}
+
+[data-embed="vscode"] body {
+  background: var(--vscode-editor-background);
+  color: var(--vscode-foreground);
+  font-size: var(--vscode-font-size, 13px);
+  padding: 0;
+}
+
+.vscode-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  min-height: 0;
+}
+
+.vscode-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--vscode-editorGroupHeader-tabsBackground, var(--bg));
+  flex: 0 0 auto;
+  min-height: 32px;
+}
+
+.vscode-toolbar-crumbs {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  margin-left: 6px;
+}
+
+.vscode-toolbar-crumbs nav,
+.vscode-toolbar-crumbs ol {
+  margin: 0;
+}
+
+.vscode-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--vscode-icon-foreground, var(--text));
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.vscode-icon-btn:hover {
+  background: var(--vscode-toolbar-hoverBackground, var(--bg-hover));
+  text-decoration: none;
+}
+
+.vscode-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 6px;
+  font-size: 12px;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.vscode-main.main {
+  padding: 12px 20px 24px;
+}
+
+.vscode-page {
+  min-width: 0;
+}

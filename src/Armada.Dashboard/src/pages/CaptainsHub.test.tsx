@@ -10,7 +10,7 @@ vi.mock('./Captains', () => ({ default: () => <div>Captains panel</div> }));
 vi.mock('./Docks', () => ({ default: () => <div>Docks panel</div> }));
 vi.mock('./BatteryPacks', () => ({ default: () => <div>Battery packs panel</div> }));
 
-/** Mirrors the App.tsx routes for /captains and the legacy /battery redirect. */
+/** Mirrors the AppRoutes.tsx routes for /captains and the legacy /battery redirect. */
 function renderAt(entry: string) {
   const router = createMemoryRouter([
     { path: '/captains', element: <CaptainsHub /> },
