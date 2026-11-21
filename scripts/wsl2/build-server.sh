@@ -63,7 +63,9 @@ else
     echo "Building ${IMAGE}:latest and ${IMAGE}:${TAG}"
     TAGS+=(-t "${IMAGE}:${TAG}")
 fi
+# Build on the cloud builder for both architectures and push the multi-arch manifest to Docker Hub.
 docker buildx build \
+    --builder cloud-jchristn77-jchristn77 \
     --platform linux/amd64,linux/arm64/v8 \
     -f src/Armada.Server/Dockerfile \
     "${TAGS[@]}" \
