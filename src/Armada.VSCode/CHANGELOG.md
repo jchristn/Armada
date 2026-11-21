@@ -2,6 +2,14 @@
 
 ## 1.4.0 (unreleased)
 
+- **A simpler sidebar, laid out like the dashboard**: three views instead of fourteen, as in Mux. **Ask Armada** (the
+  chat), **Conversations** and **Armada**: one tree with Armada Overview and the dashboard's hubs in its order (Needs
+  You, Dispatch, Fleet Actions, Missions, Activity, Vessels, Captains, Delivery, Configuration, API Explorer,
+  Settings), each record kind under the hub whose dashboard page shows it. Hubs carry their create and run buttons and
+  open as editor tabs; the view's menu holds backup, Harbor, MCP, help and account actions.
+- **Conversations**: Ask Armada's conversation list, pinned first, with unread counts, age, the summary on hover and
+  the open conversation marked. Open, rename, pin, summarize, mark read or unread, archive and delete (several at
+  once), search, and show archived conversations.
 - **Ask Armada chat layout and telemetry**: your messages on the right, Armada's on the left; each reply shows its
   telemetry (TTFT, first text, streaming and total time, prompt, completion and cached tokens, tokens per second,
   cost, tool calls and their time) with detail on hover, the conversation's totals, and a running timer while a reply

@@ -137,6 +137,26 @@ export async function run(): Promise<void> {
       log('vessel workspace: no vessel with a local checkout on this machine');
     }
 
+    // The Armada tree: the dashboard's hubs, with live rows under them.
+    const label = async (el: unknown): Promise<string> => {
+      const item = await api.nav.getTreeItem(el);
+      return typeof item.label === 'string' ? item.label : item.label?.label ?? '';
+    };
+    const hubs = await api.nav.getChildren();
+    const hubLabels = await Promise.all(hubs.map(label));
+    assert.deepStrictEqual(hubLabels, ['Armada Overview', 'Needs You', 'Dispatch', 'Fleet Actions', 'Missions', 'Activity', 'Vessels', 'Captains', 'Delivery', 'Configuration', 'API Explorer', 'Settings']);
+    const missionTabs = await Promise.all((await api.nav.getChildren(hubs[hubLabels.indexOf('Missions')])).map(label));
+    assert.deepStrictEqual(missionTabs.slice(0, 4), ['Missions', 'Voyages', 'Merge Queue', 'Black Box']);
+    const missionGroups = await Promise.all((await api.nav.getChildren((await api.nav.getChildren(hubs[hubLabels.indexOf('Missions')]))[0])).map(label));
+    assert.ok(missionGroups.length > 0, 'the Missions tab lists its groups');
+    const configuration = await Promise.all((await api.nav.getChildren(hubs[hubLabels.indexOf('Configuration')])).map(label));
+    assert.ok(configuration.includes('Personas') && configuration.includes('Harbors'), `Configuration kinds: ${configuration.join(', ')}`);
+    const vessels = await api.nav.getChildren(hubs[hubLabels.indexOf('Vessels')]);
+    assert.ok(vessels.length > 0, 'the Vessels hub lists fleets');
+    log(`armada tree: ${hubLabels.length} hubs; Missions groups ${missionGroups.join(', ')}; Configuration ${configuration.length} kinds; Vessels ${vessels.length} rows`);
+    await vscode.commands.executeCommand('armadaNav.focus');
+    await vscode.commands.executeCommand('armadaConversations.focus');
+
     await vscode.commands.executeCommand('armada.home');
     log('home overview opened');
     await vscode.commands.executeCommand('armada.charts');

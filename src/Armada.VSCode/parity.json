@@ -27,7 +27,7 @@
       "kind": "route",
       "key": "/activity",
       "status": "implemented",
-      "surface": "view:armadaActivity",
+      "surface": "view:armadaNav",
       "milestone": "V5",
       "notes": ""
     },
@@ -35,7 +35,7 @@
       "kind": "route",
       "key": "/admin/credentials",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V6",
       "notes": "redirect to /server?tab=credentials"
     },
@@ -43,7 +43,7 @@
       "kind": "route",
       "key": "/admin/tenants",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V6",
       "notes": "redirect to /server?tab=tenants"
     },
@@ -51,7 +51,7 @@
       "kind": "route",
       "key": "/admin/users",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V6",
       "notes": "redirect to /server?tab=users"
     },
@@ -75,7 +75,7 @@
       "kind": "route",
       "key": "/ask/:threadId?",
       "status": "implemented",
-      "surface": "view:armadaAsk",
+      "surface": "view:armadaConversations",
       "milestone": "V2",
       "notes": ""
     },
@@ -83,7 +83,7 @@
       "kind": "route",
       "key": "/backlog",
       "status": "implemented",
-      "surface": "view:armadaBacklog",
+      "surface": "view:armadaNav",
       "milestone": "V2",
       "notes": "redirect to /dispatch?tab=backlog"
     },
@@ -91,7 +91,7 @@
       "kind": "route",
       "key": "/backlog/:id",
       "status": "implemented",
-      "surface": "view:armadaBacklog",
+      "surface": "view:armadaNav",
       "milestone": "V2",
       "notes": ""
     },
@@ -99,7 +99,7 @@
       "kind": "route",
       "key": "/battery",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V1",
       "notes": "redirect to /captains?tab=battery"
     },
@@ -107,7 +107,7 @@
       "kind": "route",
       "key": "/blackbox",
       "status": "implemented",
-      "surface": "view:armadaFailures",
+      "surface": "view:armadaNav",
       "milestone": "V4",
       "notes": ""
     },
@@ -115,7 +115,7 @@
       "kind": "route",
       "key": "/blackbox/:id",
       "status": "implemented",
-      "surface": "view:armadaFailures",
+      "surface": "view:armadaNav",
       "milestone": "V4",
       "notes": "Partial today: the entry webview (armada.openBlackBox) has FIX THIS, recovery, resolve, notes, Ask, timeline and attempt diff, but not pin, download or Copy JSON"
     },
@@ -123,7 +123,7 @@
       "kind": "route",
       "key": "/captains",
       "status": "implemented",
-      "surface": "view:armadaCaptains",
+      "surface": "view:armadaNav",
       "milestone": "V1",
       "notes": ""
     },
@@ -131,7 +131,7 @@
       "kind": "route",
       "key": "/captains/:id",
       "status": "implemented",
-      "surface": "view:armadaCaptains",
+      "surface": "view:armadaNav",
       "milestone": "V1",
       "notes": ""
     },
@@ -139,7 +139,7 @@
       "kind": "route",
       "key": "/checks",
       "status": "implemented",
-      "surface": "view:armadaDelivery",
+      "surface": "view:armadaNav",
       "milestone": "V4",
       "notes": "redirect to /delivery?tab=checks"
     },
@@ -147,7 +147,7 @@
       "kind": "route",
       "key": "/checks/:id",
       "status": "implemented",
-      "surface": "view:armadaDelivery",
+      "surface": "view:armadaNav",
       "milestone": "V4",
       "notes": ""
     },
@@ -155,7 +155,7 @@
       "kind": "route",
       "key": "/cli-permissions",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V6",
       "notes": ""
     },
@@ -163,7 +163,7 @@
       "kind": "route",
       "key": "/configuration",
       "status": "implemented",
-      "surface": "view:armadaConfiguration",
+      "surface": "view:armadaNav",
       "milestone": "V5",
       "notes": ""
     },
@@ -179,7 +179,7 @@
       "kind": "route",
       "key": "/delivery",
       "status": "implemented",
-      "surface": "view:armadaDelivery",
+      "surface": "view:armadaNav",
       "milestone": "V4",
       "notes": ""
     },
@@ -187,7 +187,7 @@
       "kind": "route",
       "key": "/deployments",
       "status": "implemented",
-      "surface": "view:armadaDelivery",
+      "surface": "view:armadaNav",
       "milestone": "V4",
       "notes": "redirect to /delivery?tab=deployments"
     },
@@ -195,7 +195,7 @@
       "kind": "route",
       "key": "/deployments/:id",
       "status": "implemented",
-      "surface": "view:armadaDelivery",
+      "surface": "view:armadaNav",
       "milestone": "V4",
       "notes": ""
     },
@@ -211,7 +211,7 @@
       "kind": "route",
       "key": "/docks",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V1",
       "notes": "redirect to /captains?tab=docks"
     },
@@ -219,7 +219,7 @@
       "kind": "route",
       "key": "/docks/:id",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V1",
       "notes": ""
     },
@@ -227,7 +227,7 @@
       "kind": "route",
       "key": "/doctor",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V6",
       "notes": "redirect to /server?tab=diagnostics"
     },
@@ -235,7 +235,7 @@
       "kind": "route",
       "key": "/environments",
       "status": "implemented",
-      "surface": "view:armadaDelivery",
+      "surface": "view:armadaNav",
       "milestone": "V4",
       "notes": "redirect to /delivery?tab=environments"
     },
@@ -243,7 +243,7 @@
       "kind": "route",
       "key": "/environments/:id",
       "status": "implemented",
-      "surface": "view:armadaDelivery",
+      "surface": "view:armadaNav",
       "milestone": "V4",
       "notes": ""
     },
@@ -251,7 +251,7 @@
       "kind": "route",
       "key": "/evaluations",
       "status": "implemented",
-      "surface": "view:armadaActivity",
+      "surface": "view:armadaNav",
       "milestone": "V1",
       "notes": ""
     },
@@ -259,7 +259,7 @@
       "kind": "route",
       "key": "/evaluations/:id",
       "status": "implemented",
-      "surface": "view:armadaActivity",
+      "surface": "view:armadaNav",
       "milestone": "V1",
       "notes": ""
     },
@@ -267,7 +267,7 @@
       "kind": "route",
       "key": "/events",
       "status": "implemented",
-      "surface": "view:armadaActivity",
+      "surface": "view:armadaNav",
       "milestone": "V5",
       "notes": "redirect to /activity?source=events"
     },
@@ -275,7 +275,7 @@
       "kind": "route",
       "key": "/events/:id",
       "status": "implemented",
-      "surface": "view:armadaActivity",
+      "surface": "view:armadaNav",
       "milestone": "V5",
       "notes": ""
     },
@@ -283,7 +283,7 @@
       "kind": "route",
       "key": "/fleet-actions",
       "status": "implemented",
-      "surface": "view:armadaFleetActions",
+      "surface": "view:armadaNav",
       "milestone": "V4",
       "notes": ""
     },
@@ -291,7 +291,7 @@
       "kind": "route",
       "key": "/fleet-actions/runs/:id",
       "status": "implemented",
-      "surface": "view:armadaFleetActions",
+      "surface": "view:armadaNav",
       "milestone": "V4",
       "notes": ""
     },
@@ -299,7 +299,7 @@
       "kind": "route",
       "key": "/fleets",
       "status": "implemented",
-      "surface": "view:armadaFleet",
+      "surface": "view:armadaNav",
       "milestone": "V3",
       "notes": "redirect to /vessels?tab=fleets"
     },
@@ -307,7 +307,7 @@
       "kind": "route",
       "key": "/fleets/:id",
       "status": "implemented",
-      "surface": "view:armadaFleet",
+      "surface": "view:armadaNav",
       "milestone": "V3",
       "notes": ""
     },
@@ -315,7 +315,7 @@
       "kind": "route",
       "key": "/history",
       "status": "implemented",
-      "surface": "view:armadaActivity",
+      "surface": "view:armadaNav",
       "milestone": "V5",
       "notes": "redirect to /activity?source=history"
     },
@@ -323,7 +323,7 @@
       "kind": "route",
       "key": "/inbox",
       "status": "implemented",
-      "surface": "view:armadaNeedsYou",
+      "surface": "view:armadaNav",
       "milestone": "V1",
       "notes": ""
     },
@@ -331,7 +331,7 @@
       "kind": "route",
       "key": "/incidents",
       "status": "implemented",
-      "surface": "view:armadaDelivery",
+      "surface": "view:armadaNav",
       "milestone": "V4",
       "notes": "redirect to /delivery?tab=incidents"
     },
@@ -339,7 +339,7 @@
       "kind": "route",
       "key": "/incidents/:id",
       "status": "implemented",
-      "surface": "view:armadaDelivery",
+      "surface": "view:armadaNav",
       "milestone": "V4",
       "notes": ""
     },
@@ -347,7 +347,7 @@
       "kind": "route",
       "key": "/jobs",
       "status": "implemented",
-      "surface": "view:armadaActivity",
+      "surface": "view:armadaNav",
       "milestone": "V1",
       "notes": "redirect to /activity?source=events"
     },
@@ -355,7 +355,7 @@
       "kind": "route",
       "key": "/merge-queue",
       "status": "implemented",
-      "surface": "view:armadaMergeQueue",
+      "surface": "view:armadaNav",
       "milestone": "V1",
       "notes": "redirect to /missions?tab=merge-queue"
     },
@@ -363,7 +363,7 @@
       "kind": "route",
       "key": "/merge-queue/:id",
       "status": "implemented",
-      "surface": "view:armadaMergeQueue",
+      "surface": "view:armadaNav",
       "milestone": "V1",
       "notes": ""
     },
@@ -371,7 +371,7 @@
       "kind": "route",
       "key": "/missions",
       "status": "implemented",
-      "surface": "view:armadaMissions",
+      "surface": "view:armadaNav",
       "milestone": "V1",
       "notes": ""
     },
@@ -379,7 +379,7 @@
       "kind": "route",
       "key": "/missions/:id",
       "status": "implemented",
-      "surface": "view:armadaMissions",
+      "surface": "view:armadaNav",
       "milestone": "V1",
       "notes": ""
     },
@@ -395,7 +395,7 @@
       "kind": "route",
       "key": "/objectives",
       "status": "implemented",
-      "surface": "view:armadaBacklog",
+      "surface": "view:armadaNav",
       "milestone": "V2",
       "notes": "redirect to /dispatch?tab=backlog"
     },
@@ -403,7 +403,7 @@
       "kind": "route",
       "key": "/objectives/:id",
       "status": "implemented",
-      "surface": "view:armadaBacklog",
+      "surface": "view:armadaNav",
       "milestone": "V2",
       "notes": ""
     },
@@ -411,7 +411,7 @@
       "kind": "route",
       "key": "/personas",
       "status": "implemented",
-      "surface": "view:armadaConfiguration",
+      "surface": "view:armadaNav",
       "milestone": "V5",
       "notes": "redirect to /configuration?tab=personas"
     },
@@ -419,7 +419,7 @@
       "kind": "route",
       "key": "/personas/:name",
       "status": "implemented",
-      "surface": "view:armadaConfiguration",
+      "surface": "view:armadaNav",
       "milestone": "V5",
       "notes": ""
     },
@@ -427,7 +427,7 @@
       "kind": "route",
       "key": "/pipelines",
       "status": "implemented",
-      "surface": "view:armadaConfiguration",
+      "surface": "view:armadaNav",
       "milestone": "V5",
       "notes": "redirect to /configuration?tab=pipelines"
     },
@@ -435,7 +435,7 @@
       "kind": "route",
       "key": "/pipelines/:name",
       "status": "implemented",
-      "surface": "view:armadaConfiguration",
+      "surface": "view:armadaNav",
       "milestone": "V5",
       "notes": ""
     },
@@ -459,7 +459,7 @@
       "kind": "route",
       "key": "/playbooks",
       "status": "implemented",
-      "surface": "view:armadaConfiguration",
+      "surface": "view:armadaNav",
       "milestone": "V5",
       "notes": "redirect to /configuration?tab=playbooks"
     },
@@ -467,7 +467,7 @@
       "kind": "route",
       "key": "/playbooks/:id",
       "status": "implemented",
-      "surface": "view:armadaConfiguration",
+      "surface": "view:armadaNav",
       "milestone": "V5",
       "notes": ""
     },
@@ -475,7 +475,7 @@
       "kind": "route",
       "key": "/project-profiles",
       "status": "implemented",
-      "surface": "view:armadaConfiguration",
+      "surface": "view:armadaNav",
       "milestone": "V5",
       "notes": "redirect to /configuration?tab=project-profiles"
     },
@@ -483,7 +483,7 @@
       "kind": "route",
       "key": "/project-profiles/:id",
       "status": "implemented",
-      "surface": "view:armadaConfiguration",
+      "surface": "view:armadaNav",
       "milestone": "V5",
       "notes": ""
     },
@@ -491,7 +491,7 @@
       "kind": "route",
       "key": "/prompt-templates",
       "status": "implemented",
-      "surface": "view:armadaConfiguration",
+      "surface": "view:armadaNav",
       "milestone": "V5",
       "notes": "redirect to /configuration?tab=prompts"
     },
@@ -499,7 +499,7 @@
       "kind": "route",
       "key": "/prompt-templates/:name",
       "status": "implemented",
-      "surface": "view:armadaConfiguration",
+      "surface": "view:armadaNav",
       "milestone": "V5",
       "notes": ""
     },
@@ -507,7 +507,7 @@
       "kind": "route",
       "key": "/prompt-templates/create",
       "status": "implemented",
-      "surface": "view:armadaConfiguration",
+      "surface": "view:armadaNav",
       "milestone": "V5",
       "notes": ""
     },
@@ -515,7 +515,7 @@
       "kind": "route",
       "key": "/releases",
       "status": "implemented",
-      "surface": "view:armadaDelivery",
+      "surface": "view:armadaNav",
       "milestone": "V4",
       "notes": "redirect to /delivery?tab=releases"
     },
@@ -523,7 +523,7 @@
       "kind": "route",
       "key": "/releases/:id",
       "status": "implemented",
-      "surface": "view:armadaDelivery",
+      "surface": "view:armadaNav",
       "milestone": "V4",
       "notes": ""
     },
@@ -531,7 +531,7 @@
       "kind": "route",
       "key": "/releases/new",
       "status": "implemented",
-      "surface": "view:armadaDelivery",
+      "surface": "view:armadaNav",
       "milestone": "V4",
       "notes": ""
     },
@@ -539,7 +539,7 @@
       "kind": "route",
       "key": "/requests",
       "status": "implemented",
-      "surface": "view:armadaActivity",
+      "surface": "view:armadaNav",
       "milestone": "V5",
       "notes": "redirect to /activity?source=requests"
     },
@@ -547,7 +547,7 @@
       "kind": "route",
       "key": "/requests/:id",
       "status": "implemented",
-      "surface": "view:armadaActivity",
+      "surface": "view:armadaNav",
       "milestone": "V5",
       "notes": ""
     },
@@ -555,7 +555,7 @@
       "kind": "route",
       "key": "/runbooks",
       "status": "implemented",
-      "surface": "view:armadaDelivery",
+      "surface": "view:armadaNav",
       "milestone": "V4",
       "notes": "redirect to /delivery?tab=runbooks"
     },
@@ -563,7 +563,7 @@
       "kind": "route",
       "key": "/runbooks/:id",
       "status": "implemented",
-      "surface": "view:armadaDelivery",
+      "surface": "view:armadaNav",
       "milestone": "V4",
       "notes": ""
     },
@@ -571,7 +571,7 @@
       "kind": "route",
       "key": "/server",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V6",
       "notes": ""
     },
@@ -579,7 +579,7 @@
       "kind": "route",
       "key": "/settings",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V6",
       "notes": "redirect to /server"
     },
@@ -587,7 +587,7 @@
       "kind": "route",
       "key": "/signals",
       "status": "implemented",
-      "surface": "view:armadaActivity",
+      "surface": "view:armadaNav",
       "milestone": "V5",
       "notes": "redirect to /activity?source=signals"
     },
@@ -595,7 +595,7 @@
       "kind": "route",
       "key": "/signals/:id",
       "status": "implemented",
-      "surface": "view:armadaActivity",
+      "surface": "view:armadaNav",
       "milestone": "V5",
       "notes": ""
     },
@@ -603,7 +603,7 @@
       "kind": "route",
       "key": "/skills",
       "status": "implemented",
-      "surface": "view:armadaConfiguration",
+      "surface": "view:armadaNav",
       "milestone": "V5",
       "notes": "redirect to /configuration?tab=skills"
     },
@@ -611,7 +611,7 @@
       "kind": "route",
       "key": "/skills/:id",
       "status": "implemented",
-      "surface": "view:armadaConfiguration",
+      "surface": "view:armadaNav",
       "milestone": "V5",
       "notes": ""
     },
@@ -619,7 +619,7 @@
       "kind": "route",
       "key": "/storage",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V6",
       "notes": "redirect to /server?tab=storage"
     },
@@ -627,7 +627,7 @@
       "kind": "route",
       "key": "/vessels",
       "status": "implemented",
-      "surface": "view:armadaFleet",
+      "surface": "view:armadaNav",
       "milestone": "V3",
       "notes": ""
     },
@@ -635,7 +635,7 @@
       "kind": "route",
       "key": "/vessels/:id",
       "status": "implemented",
-      "surface": "view:armadaFleet",
+      "surface": "view:armadaNav",
       "milestone": "V3",
       "notes": ""
     },
@@ -643,7 +643,7 @@
       "kind": "route",
       "key": "/vessels/:id/history",
       "status": "implemented",
-      "surface": "view:armadaFleet",
+      "surface": "view:armadaNav",
       "milestone": "V3",
       "notes": ""
     },
@@ -651,7 +651,7 @@
       "kind": "route",
       "key": "/vessels/:id/onboarding",
       "status": "implemented",
-      "surface": "view:armadaFleet",
+      "surface": "view:armadaNav",
       "milestone": "V3",
       "notes": ""
     },
@@ -659,7 +659,7 @@
       "kind": "route",
       "key": "/vessels/health",
       "status": "implemented",
-      "surface": "view:armadaActivity",
+      "surface": "view:armadaNav",
       "milestone": "V3",
       "notes": ""
     },
@@ -675,7 +675,7 @@
       "kind": "route",
       "key": "/voyages",
       "status": "implemented",
-      "surface": "view:armadaVoyages",
+      "surface": "view:armadaNav",
       "milestone": "V1",
       "notes": "redirect to /missions?tab=voyages"
     },
@@ -683,7 +683,7 @@
       "kind": "route",
       "key": "/voyages/:id",
       "status": "implemented",
-      "surface": "view:armadaVoyages",
+      "surface": "view:armadaNav",
       "milestone": "V1",
       "notes": ""
     },
@@ -699,7 +699,7 @@
       "kind": "route",
       "key": "/workflow-profiles",
       "status": "implemented",
-      "surface": "view:armadaConfiguration",
+      "surface": "view:armadaNav",
       "milestone": "V5",
       "notes": "redirect to /configuration?tab=workflow-profiles"
     },
@@ -707,7 +707,7 @@
       "kind": "route",
       "key": "/workflow-profiles/:id",
       "status": "implemented",
-      "surface": "view:armadaConfiguration",
+      "surface": "view:armadaNav",
       "milestone": "V5",
       "notes": ""
     },
@@ -739,7 +739,7 @@
       "kind": "tab",
       "key": "Activity:concurrency",
       "status": "implemented",
-      "surface": "view:armadaFleet",
+      "surface": "view:armadaNav",
       "milestone": "V5",
       "notes": "Concurrency"
     },
@@ -747,7 +747,7 @@
       "kind": "tab",
       "key": "Activity:events",
       "status": "implemented",
-      "surface": "view:armadaActivity",
+      "surface": "view:armadaNav",
       "milestone": "V5",
       "notes": "Events"
     },
@@ -755,7 +755,7 @@
       "kind": "tab",
       "key": "Activity:history",
       "status": "implemented",
-      "surface": "view:armadaActivity",
+      "surface": "view:armadaNav",
       "milestone": "V5",
       "notes": "All Activity"
     },
@@ -763,7 +763,7 @@
       "kind": "tab",
       "key": "Activity:requests",
       "status": "implemented",
-      "surface": "view:armadaActivity",
+      "surface": "view:armadaNav",
       "milestone": "V5",
       "notes": "API Requests"
     },
@@ -771,7 +771,7 @@
       "kind": "tab",
       "key": "Activity:signals",
       "status": "implemented",
-      "surface": "view:armadaActivity",
+      "surface": "view:armadaNav",
       "milestone": "V5",
       "notes": "Signals"
     },
@@ -779,7 +779,7 @@
       "kind": "tab",
       "key": "Activity:tokens",
       "status": "implemented",
-      "surface": "view:armadaActivity",
+      "surface": "view:armadaNav",
       "milestone": "V5",
       "notes": "Token Usage"
     },
@@ -787,7 +787,7 @@
       "kind": "tab",
       "key": "Activity:usage-overview",
       "status": "implemented",
-      "surface": "view:armadaActivity",
+      "surface": "view:armadaNav",
       "milestone": "V5",
       "notes": "Captain Usage"
     },
@@ -795,7 +795,7 @@
       "kind": "tab",
       "key": "CaptainsHub:battery",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V1",
       "notes": "Battery Packs"
     },
@@ -803,7 +803,7 @@
       "kind": "tab",
       "key": "CaptainsHub:captains",
       "status": "implemented",
-      "surface": "view:armadaCaptains",
+      "surface": "view:armadaNav",
       "milestone": "V1",
       "notes": "Captains"
     },
@@ -811,7 +811,7 @@
       "kind": "tab",
       "key": "CaptainsHub:docks",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V1",
       "notes": "Docks"
     },
@@ -819,7 +819,7 @@
       "kind": "tab",
       "key": "CliPermissions:requests",
       "status": "implemented",
-      "surface": "view:armadaNeedsYou",
+      "surface": "view:armadaNav",
       "milestone": "V5",
       "notes": "Requests"
     },
@@ -827,7 +827,7 @@
       "kind": "tab",
       "key": "CliPermissions:rules",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V6",
       "notes": "Rules"
     },
@@ -835,7 +835,7 @@
       "kind": "tab",
       "key": "Configuration:endpoints",
       "status": "implemented",
-      "surface": "view:armadaConfiguration",
+      "surface": "view:armadaNav",
       "milestone": "V5",
       "notes": "Endpoints"
     },
@@ -843,7 +843,7 @@
       "kind": "tab",
       "key": "Configuration:harbors",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V5",
       "notes": "Harbors"
     },
@@ -851,7 +851,7 @@
       "kind": "tab",
       "key": "Configuration:memory",
       "status": "implemented",
-      "surface": "view:armadaConfiguration",
+      "surface": "view:armadaNav",
       "milestone": "V5",
       "notes": "Memory"
     },
@@ -859,7 +859,7 @@
       "kind": "tab",
       "key": "Configuration:personas",
       "status": "implemented",
-      "surface": "view:armadaConfiguration",
+      "surface": "view:armadaNav",
       "milestone": "V5",
       "notes": "Personas"
     },
@@ -867,7 +867,7 @@
       "kind": "tab",
       "key": "Configuration:pipelines",
       "status": "implemented",
-      "surface": "view:armadaConfiguration",
+      "surface": "view:armadaNav",
       "milestone": "V5",
       "notes": "Pipelines"
     },
@@ -875,7 +875,7 @@
       "kind": "tab",
       "key": "Configuration:playbooks",
       "status": "implemented",
-      "surface": "view:armadaConfiguration",
+      "surface": "view:armadaNav",
       "milestone": "V5",
       "notes": "Playbooks"
     },
@@ -883,7 +883,7 @@
       "kind": "tab",
       "key": "Configuration:project-profiles",
       "status": "implemented",
-      "surface": "view:armadaConfiguration",
+      "surface": "view:armadaNav",
       "milestone": "V5",
       "notes": "Project Profiles"
     },
@@ -891,7 +891,7 @@
       "kind": "tab",
       "key": "Configuration:prompts",
       "status": "implemented",
-      "surface": "view:armadaConfiguration",
+      "surface": "view:armadaNav",
       "milestone": "V5",
       "notes": "Prompts"
     },
@@ -899,7 +899,7 @@
       "kind": "tab",
       "key": "Configuration:skills",
       "status": "implemented",
-      "surface": "view:armadaConfiguration",
+      "surface": "view:armadaNav",
       "milestone": "V5",
       "notes": "Skills"
     },
@@ -907,7 +907,7 @@
       "kind": "tab",
       "key": "Configuration:workflow-profiles",
       "status": "implemented",
-      "surface": "view:armadaConfiguration",
+      "surface": "view:armadaNav",
       "milestone": "V5",
       "notes": "Workflow Profiles"
     },
@@ -915,7 +915,7 @@
       "kind": "tab",
       "key": "DeliveryHub:checks",
       "status": "implemented",
-      "surface": "view:armadaDelivery",
+      "surface": "view:armadaNav",
       "milestone": "V4",
       "notes": "Checks"
     },
@@ -923,7 +923,7 @@
       "kind": "tab",
       "key": "DeliveryHub:deployments",
       "status": "implemented",
-      "surface": "view:armadaDelivery",
+      "surface": "view:armadaNav",
       "milestone": "V4",
       "notes": "Deployments"
     },
@@ -931,7 +931,7 @@
       "kind": "tab",
       "key": "DeliveryHub:environments",
       "status": "implemented",
-      "surface": "view:armadaDelivery",
+      "surface": "view:armadaNav",
       "milestone": "V4",
       "notes": "Environments"
     },
@@ -939,7 +939,7 @@
       "kind": "tab",
       "key": "DeliveryHub:incidents",
       "status": "implemented",
-      "surface": "view:armadaDelivery",
+      "surface": "view:armadaNav",
       "milestone": "V4",
       "notes": "Incidents"
     },
@@ -947,7 +947,7 @@
       "kind": "tab",
       "key": "DeliveryHub:releases",
       "status": "implemented",
-      "surface": "view:armadaDelivery",
+      "surface": "view:armadaNav",
       "milestone": "V4",
       "notes": "Releases"
     },
@@ -955,7 +955,7 @@
       "kind": "tab",
       "key": "DeliveryHub:runbooks",
       "status": "implemented",
-      "surface": "view:armadaDelivery",
+      "surface": "view:armadaNav",
       "milestone": "V4",
       "notes": "Runbooks"
     },
@@ -963,7 +963,7 @@
       "kind": "tab",
       "key": "DispatchHub:backlog",
       "status": "implemented",
-      "surface": "view:armadaBacklog",
+      "surface": "view:armadaNav",
       "milestone": "V2",
       "notes": "Backlog"
     },
@@ -987,7 +987,7 @@
       "kind": "tab",
       "key": "FleetActions:actions",
       "status": "implemented",
-      "surface": "view:armadaFleetActions",
+      "surface": "view:armadaNav",
       "milestone": "V4",
       "notes": "Actions"
     },
@@ -995,7 +995,7 @@
       "kind": "tab",
       "key": "FleetActions:runs",
       "status": "implemented",
-      "surface": "view:armadaFleetActions",
+      "surface": "view:armadaNav",
       "milestone": "V4",
       "notes": "Runs"
     },
@@ -1003,7 +1003,7 @@
       "kind": "tab",
       "key": "MissionsHub:blackbox",
       "status": "implemented",
-      "surface": "view:armadaFailures",
+      "surface": "view:armadaNav",
       "milestone": "V4",
       "notes": "Black Box; partial today: the Failures view lists open entries, without the fingerprint, hotspot, retention and storage sub-tabs"
     },
@@ -1011,7 +1011,7 @@
       "kind": "tab",
       "key": "MissionsHub:merge-queue",
       "status": "implemented",
-      "surface": "view:armadaMergeQueue",
+      "surface": "view:armadaNav",
       "milestone": "V1",
       "notes": "Merge Queue"
     },
@@ -1019,7 +1019,7 @@
       "kind": "tab",
       "key": "MissionsHub:missions",
       "status": "implemented",
-      "surface": "view:armadaMissions",
+      "surface": "view:armadaNav",
       "milestone": "V1",
       "notes": "Missions"
     },
@@ -1027,7 +1027,7 @@
       "kind": "tab",
       "key": "MissionsHub:voyages",
       "status": "implemented",
-      "surface": "view:armadaVoyages",
+      "surface": "view:armadaNav",
       "milestone": "V1",
       "notes": "Voyages"
     },
@@ -1035,7 +1035,7 @@
       "kind": "tab",
       "key": "ServerHub:cli-permissions",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V6",
       "notes": "CLI Tool Permissions"
     },
@@ -1043,7 +1043,7 @@
       "kind": "tab",
       "key": "ServerHub:credentials",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V6",
       "notes": "Credentials"
     },
@@ -1051,7 +1051,7 @@
       "kind": "tab",
       "key": "ServerHub:diagnostics",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V6",
       "notes": "Diagnostics"
     },
@@ -1059,7 +1059,7 @@
       "kind": "tab",
       "key": "ServerHub:server",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V6",
       "notes": "Server"
     },
@@ -1067,7 +1067,7 @@
       "kind": "tab",
       "key": "ServerHub:storage",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V6",
       "notes": "Storage"
     },
@@ -1075,7 +1075,7 @@
       "kind": "tab",
       "key": "ServerHub:tenants",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V6",
       "notes": "Tenants"
     },
@@ -1083,7 +1083,7 @@
       "kind": "tab",
       "key": "ServerHub:users",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V6",
       "notes": "Users"
     },
@@ -1091,7 +1091,7 @@
       "kind": "tab",
       "key": "VesselsHub:fleets",
       "status": "implemented",
-      "surface": "view:armadaFleet",
+      "surface": "view:armadaNav",
       "milestone": "V3",
       "notes": "Fleets"
     },
@@ -1099,7 +1099,7 @@
       "kind": "tab",
       "key": "VesselsHub:health",
       "status": "implemented",
-      "surface": "view:armadaActivity",
+      "surface": "view:armadaNav",
       "milestone": "V3",
       "notes": "Health"
     },
@@ -1107,7 +1107,7 @@
       "kind": "tab",
       "key": "VesselsHub:vessels",
       "status": "implemented",
-      "surface": "view:armadaFleet",
+      "surface": "view:armadaNav",
       "milestone": "V3",
       "notes": "Vessels"
     },
@@ -1131,7 +1131,7 @@
       "kind": "api",
       "key": "applyBlackBoxRecommendation",
       "status": "implemented",
-      "surface": "view:armadaMissions",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Missions"
     },
@@ -1147,7 +1147,7 @@
       "kind": "api",
       "key": "applyModelAlertAction",
       "status": "implemented",
-      "surface": "view:armadaActivity",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Model Probes"
     },
@@ -1155,7 +1155,7 @@
       "kind": "api",
       "key": "applyObjectiveRefinementSummary",
       "status": "implemented",
-      "surface": "view:armadaBacklog",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Objectives"
     },
@@ -1163,7 +1163,7 @@
       "kind": "api",
       "key": "approveAskProposal",
       "status": "implemented",
-      "surface": "view:armadaAsk",
+      "surface": "view:armadaConversations",
       "milestone": "",
       "notes": "Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md)"
     },
@@ -1171,7 +1171,7 @@
       "kind": "api",
       "key": "approveDeployment",
       "status": "implemented",
-      "surface": "view:armadaDelivery",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Deployments"
     },
@@ -1179,7 +1179,7 @@
       "kind": "api",
       "key": "approveMissionReview",
       "status": "implemented",
-      "surface": "view:armadaMissions",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Missions"
     },
@@ -1195,7 +1195,7 @@
       "kind": "api",
       "key": "authorizeCaptainSelectionRecovery",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Battery packs"
     },
@@ -1203,7 +1203,7 @@
       "kind": "api",
       "key": "backfillBlackBox",
       "status": "implemented",
-      "surface": "view:armadaMissions",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Missions"
     },
@@ -1227,7 +1227,7 @@
       "kind": "api",
       "key": "buildVesselContext",
       "status": "implemented",
-      "surface": "view:armadaFleet",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Vessels"
     },
@@ -1235,7 +1235,7 @@
       "kind": "api",
       "key": "cancelAskTurn",
       "status": "implemented",
-      "surface": "view:armadaAsk",
+      "surface": "view:armadaConversations",
       "milestone": "",
       "notes": "Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md)"
     },
@@ -1243,7 +1243,7 @@
       "kind": "api",
       "key": "cancelFleetActionRun",
       "status": "implemented",
-      "surface": "view:armadaFleetActions",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Fleet Actions"
     },
@@ -1251,7 +1251,7 @@
       "kind": "api",
       "key": "cancelJob",
       "status": "implemented",
-      "surface": "view:armadaActivity",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Background jobs"
     },
@@ -1259,7 +1259,7 @@
       "kind": "api",
       "key": "cancelMergeEntry",
       "status": "implemented",
-      "surface": "view:armadaMergeQueue",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Merge Queue"
     },
@@ -1267,7 +1267,7 @@
       "kind": "api",
       "key": "cancelModelProbeRun",
       "status": "implemented",
-      "surface": "view:armadaActivity",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Model Probes"
     },
@@ -1275,7 +1275,7 @@
       "kind": "api",
       "key": "cancelVoyage",
       "status": "implemented",
-      "surface": "view:armadaVoyages",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Voyages"
     },
@@ -1283,7 +1283,7 @@
       "kind": "api",
       "key": "captureCaptainUsage",
       "status": "implemented",
-      "surface": "view:armadaActivity",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Usage"
     },
@@ -1315,7 +1315,7 @@
       "kind": "api",
       "key": "classifyStageOutcome",
       "status": "implemented",
-      "surface": "view:armadaActivity",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Stage outcomes and failure-cause rules"
     },
@@ -1331,7 +1331,7 @@
       "kind": "api",
       "key": "createAskThread",
       "status": "implemented",
-      "surface": "view:armadaAsk",
+      "surface": "view:armadaConversations",
       "milestone": "",
       "notes": "Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md)"
     },
@@ -1339,7 +1339,7 @@
       "kind": "api",
       "key": "createBacklogItem",
       "status": "implemented",
-      "surface": "view:armadaBacklog",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Objectives"
     },
@@ -1347,7 +1347,7 @@
       "kind": "api",
       "key": "createBacklogRefinementSession",
       "status": "implemented",
-      "surface": "view:armadaBacklog",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Objectives; the same refinement sessions (createObjectiveRefinementSession)"
     },
@@ -1355,7 +1355,7 @@
       "kind": "api",
       "key": "createBatteryPack",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Battery packs"
     },
@@ -1363,7 +1363,7 @@
       "kind": "api",
       "key": "createCaptain",
       "status": "implemented",
-      "surface": "view:armadaCaptains",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Captains"
     },
@@ -1371,7 +1371,7 @@
       "kind": "api",
       "key": "createCliPermissionRule",
       "status": "implemented",
-      "surface": "view:armadaNeedsYou",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "CLI tool permissions"
     },
@@ -1379,7 +1379,7 @@
       "kind": "api",
       "key": "createCredential",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Credentials (admin)"
     },
@@ -1387,7 +1387,7 @@
       "kind": "api",
       "key": "createDeployment",
       "status": "implemented",
-      "surface": "view:armadaDelivery",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Deployments"
     },
@@ -1395,7 +1395,7 @@
       "kind": "api",
       "key": "createEnvironment",
       "status": "implemented",
-      "surface": "view:armadaDelivery",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Environments"
     },
@@ -1403,7 +1403,7 @@
       "kind": "api",
       "key": "createFailureCauseRule",
       "status": "implemented",
-      "surface": "view:armadaActivity",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Stage outcomes and failure-cause rules"
     },
@@ -1411,7 +1411,7 @@
       "kind": "api",
       "key": "createFleet",
       "status": "implemented",
-      "surface": "view:armadaFleet",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Fleets"
     },
@@ -1419,7 +1419,7 @@
       "kind": "api",
       "key": "createFleetAction",
       "status": "implemented",
-      "surface": "view:armadaFleetActions",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Fleet Actions"
     },
@@ -1427,7 +1427,7 @@
       "kind": "api",
       "key": "createHarbor",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Harbors (host runners)"
     },
@@ -1435,7 +1435,7 @@
       "kind": "api",
       "key": "createIncident",
       "status": "implemented",
-      "surface": "view:armadaDelivery",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Incidents"
     },
@@ -1443,7 +1443,7 @@
       "kind": "api",
       "key": "createMemory",
       "status": "implemented",
-      "surface": "view:armadaConfiguration",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Memories"
     },
@@ -1451,7 +1451,7 @@
       "kind": "api",
       "key": "createMission",
       "status": "implemented",
-      "surface": "view:armadaMissions",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Missions; the same POST /api/v1/missions (dispatchMission)"
     },
@@ -1459,7 +1459,7 @@
       "kind": "api",
       "key": "createModelEndpoint",
       "status": "implemented",
-      "surface": "view:armadaConfiguration",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Model endpoints (embedding/inference)"
     },
@@ -1467,7 +1467,7 @@
       "kind": "api",
       "key": "createObjective",
       "status": "implemented",
-      "surface": "view:armadaBacklog",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Objectives; objectives and backlog items are the same records (createBacklogItem)"
     },
@@ -1475,7 +1475,7 @@
       "kind": "api",
       "key": "createObjectiveRefinementSession",
       "status": "implemented",
-      "surface": "view:armadaBacklog",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Objectives"
     },
@@ -1483,7 +1483,7 @@
       "kind": "api",
       "key": "createPersona",
       "status": "implemented",
-      "surface": "view:armadaConfiguration",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Personas"
     },
@@ -1491,7 +1491,7 @@
       "kind": "api",
       "key": "createPipeline",
       "status": "implemented",
-      "surface": "view:armadaConfiguration",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Pipelines"
     },
@@ -1507,7 +1507,7 @@
       "kind": "api",
       "key": "createPlaybook",
       "status": "implemented",
-      "surface": "view:armadaConfiguration",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Playbooks"
     },
@@ -1515,7 +1515,7 @@
       "kind": "api",
       "key": "createProjectProfile",
       "status": "implemented",
-      "surface": "view:armadaConfiguration",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Project profiles"
     },
@@ -1523,7 +1523,7 @@
       "kind": "api",
       "key": "createPromptTemplate",
       "status": "implemented",
-      "surface": "view:armadaConfiguration",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Prompt Templates"
     },
@@ -1531,7 +1531,7 @@
       "kind": "api",
       "key": "createRelease",
       "status": "implemented",
-      "surface": "view:armadaDelivery",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Releases"
     },
@@ -1539,7 +1539,7 @@
       "kind": "api",
       "key": "createRunbook",
       "status": "implemented",
-      "surface": "view:armadaDelivery",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Runbooks"
     },
@@ -1547,7 +1547,7 @@
       "kind": "api",
       "key": "createSkill",
       "status": "implemented",
-      "surface": "view:armadaConfiguration",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Skills directory"
     },
@@ -1555,7 +1555,7 @@
       "kind": "api",
       "key": "createTenant",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Tenants (admin)"
     },
@@ -1563,7 +1563,7 @@
       "kind": "api",
       "key": "createUser",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Users (admin)"
     },
@@ -1571,7 +1571,7 @@
       "kind": "api",
       "key": "createVessel",
       "status": "implemented",
-      "surface": "view:armadaFleet",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Vessels"
     },
@@ -1579,7 +1579,7 @@
       "kind": "api",
       "key": "createVoyage",
       "status": "implemented",
-      "surface": "view:armadaVoyages",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Voyages"
     },
@@ -1587,7 +1587,7 @@
       "kind": "api",
       "key": "createWorkflowProfile",
       "status": "implemented",
-      "surface": "view:armadaConfiguration",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Workflow Profiles"
     },
@@ -1603,7 +1603,7 @@
       "kind": "api",
       "key": "decideCliPermissionRequest",
       "status": "implemented",
-      "surface": "view:armadaNeedsYou",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "CLI tool permissions"
     },
@@ -1611,7 +1611,7 @@
       "kind": "api",
       "key": "deleteAskThread",
       "status": "implemented",
-      "surface": "view:armadaAsk",
+      "surface": "view:armadaConversations",
       "milestone": "",
       "notes": "Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md)"
     },
@@ -1627,7 +1627,7 @@
       "kind": "api",
       "key": "deleteBacklogItem",
       "status": "implemented",
-      "surface": "view:armadaBacklog",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Objectives"
     },
@@ -1635,7 +1635,7 @@
       "kind": "api",
       "key": "deleteBatteryPack",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Battery packs"
     },
@@ -1643,7 +1643,7 @@
       "kind": "api",
       "key": "deleteBatteryPackFile",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Battery packs"
     },
@@ -1651,7 +1651,7 @@
       "kind": "api",
       "key": "deleteBlackBox",
       "status": "implemented",
-      "surface": "view:armadaMissions",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Missions"
     },
@@ -1667,7 +1667,7 @@
       "kind": "api",
       "key": "deleteCaptain",
       "status": "implemented",
-      "surface": "view:armadaCaptains",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Captains"
     },
@@ -1675,7 +1675,7 @@
       "kind": "api",
       "key": "deleteCheckRun",
       "status": "implemented",
-      "surface": "view:armadaDelivery",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Check Runs"
     },
@@ -1683,7 +1683,7 @@
       "kind": "api",
       "key": "deleteCliPermissionRule",
       "status": "implemented",
-      "surface": "view:armadaNeedsYou",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "CLI tool permissions"
     },
@@ -1691,7 +1691,7 @@
       "kind": "api",
       "key": "deleteCredential",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Credentials (admin)"
     },
@@ -1699,7 +1699,7 @@
       "kind": "api",
       "key": "deleteDeployment",
       "status": "implemented",
-      "surface": "view:armadaDelivery",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Deployments"
     },
@@ -1707,7 +1707,7 @@
       "kind": "api",
       "key": "deleteDock",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Docks"
     },
@@ -1715,7 +1715,7 @@
       "kind": "api",
       "key": "deleteEnvironment",
       "status": "implemented",
-      "surface": "view:armadaDelivery",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Environments"
     },
@@ -1731,7 +1731,7 @@
       "kind": "api",
       "key": "deleteFailureCauseRule",
       "status": "implemented",
-      "surface": "view:armadaActivity",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Stage outcomes and failure-cause rules"
     },
@@ -1739,7 +1739,7 @@
       "kind": "api",
       "key": "deleteFleet",
       "status": "implemented",
-      "surface": "view:armadaFleet",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Fleets"
     },
@@ -1747,7 +1747,7 @@
       "kind": "api",
       "key": "deleteFleetAction",
       "status": "implemented",
-      "surface": "view:armadaFleetActions",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Fleet Actions"
     },
@@ -1763,7 +1763,7 @@
       "kind": "api",
       "key": "deleteHarbor",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Harbors (host runners)"
     },
@@ -1771,7 +1771,7 @@
       "kind": "api",
       "key": "deleteIncident",
       "status": "implemented",
-      "surface": "view:armadaDelivery",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Incidents"
     },
@@ -1779,7 +1779,7 @@
       "kind": "api",
       "key": "deleteMemory",
       "status": "implemented",
-      "surface": "view:armadaConfiguration",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Memories"
     },
@@ -1787,7 +1787,7 @@
       "kind": "api",
       "key": "deleteMergeEntry",
       "status": "implemented",
-      "surface": "view:armadaMergeQueue",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Merge Queue"
     },
@@ -1795,7 +1795,7 @@
       "kind": "api",
       "key": "deleteMission",
       "status": "implemented",
-      "surface": "view:armadaMissions",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Missions"
     },
@@ -1803,7 +1803,7 @@
       "kind": "api",
       "key": "deleteModelEndpoint",
       "status": "implemented",
-      "surface": "view:armadaConfiguration",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Model endpoints (embedding/inference)"
     },
@@ -1811,7 +1811,7 @@
       "kind": "api",
       "key": "deleteObjective",
       "status": "implemented",
-      "surface": "view:armadaBacklog",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Objectives; objectives and backlog items are the same records (deleteBacklogItem)"
     },
@@ -1819,7 +1819,7 @@
       "kind": "api",
       "key": "deleteObjectiveRefinementSession",
       "status": "implemented",
-      "surface": "view:armadaBacklog",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Objectives"
     },
@@ -1827,7 +1827,7 @@
       "kind": "api",
       "key": "deletePersona",
       "status": "implemented",
-      "surface": "view:armadaConfiguration",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Personas"
     },
@@ -1835,7 +1835,7 @@
       "kind": "api",
       "key": "deletePipeline",
       "status": "implemented",
-      "surface": "view:armadaConfiguration",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Pipelines"
     },
@@ -1851,7 +1851,7 @@
       "kind": "api",
       "key": "deletePlaybook",
       "status": "implemented",
-      "surface": "view:armadaConfiguration",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Playbooks"
     },
@@ -1859,7 +1859,7 @@
       "kind": "api",
       "key": "deleteProjectProfile",
       "status": "implemented",
-      "surface": "view:armadaConfiguration",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Project profiles"
     },
@@ -1867,7 +1867,7 @@
       "kind": "api",
       "key": "deleteRelease",
       "status": "implemented",
-      "surface": "view:armadaDelivery",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Releases"
     },
@@ -1891,7 +1891,7 @@
       "kind": "api",
       "key": "deleteRequestHistoryEntry",
       "status": "implemented",
-      "surface": "view:armadaActivity",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Request History"
     },
@@ -1899,7 +1899,7 @@
       "kind": "api",
       "key": "deleteRunbook",
       "status": "implemented",
-      "surface": "view:armadaDelivery",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Runbooks"
     },
@@ -1907,7 +1907,7 @@
       "kind": "api",
       "key": "deleteRunbookExecution",
       "status": "implemented",
-      "surface": "view:armadaDelivery",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Runbooks"
     },
@@ -1923,7 +1923,7 @@
       "kind": "api",
       "key": "deleteSkill",
       "status": "implemented",
-      "surface": "view:armadaConfiguration",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Skills directory"
     },
@@ -1931,7 +1931,7 @@
       "kind": "api",
       "key": "deleteTenant",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Tenants (admin)"
     },
@@ -1939,7 +1939,7 @@
       "kind": "api",
       "key": "deleteUser",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Users (admin)"
     },
@@ -1947,7 +1947,7 @@
       "kind": "api",
       "key": "deleteVessel",
       "status": "implemented",
-      "surface": "view:armadaFleet",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Vessels"
     },
@@ -1955,7 +1955,7 @@
       "kind": "api",
       "key": "deleteVesselHealthOverride",
       "status": "implemented",
-      "surface": "view:armadaActivity",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Vessel Health"
     },
@@ -1963,7 +1963,7 @@
       "kind": "api",
       "key": "deleteWorkflowProfile",
       "status": "implemented",
-      "surface": "view:armadaConfiguration",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Workflow Profiles"
     },
@@ -1987,7 +1987,7 @@
       "kind": "api",
       "key": "denyDeployment",
       "status": "implemented",
-      "surface": "view:armadaDelivery",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Deployments"
     },
@@ -1995,7 +1995,7 @@
       "kind": "api",
       "key": "denyMissionReview",
       "status": "implemented",
-      "surface": "view:armadaMissions",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Missions"
     },
@@ -2011,7 +2011,7 @@
       "kind": "api",
       "key": "disableHarbor",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Harbors (host runners)"
     },
@@ -2027,7 +2027,7 @@
       "kind": "api",
       "key": "dispatchMission",
       "status": "implemented",
-      "surface": "view:armadaMissions",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Missions"
     },
@@ -2051,7 +2051,7 @@
       "kind": "api",
       "key": "downloadBlackBox",
       "status": "implemented",
-      "surface": "view:armadaMissions",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Missions"
     },
@@ -2059,7 +2059,7 @@
       "kind": "api",
       "key": "draftFailureCauseRule",
       "status": "implemented",
-      "surface": "view:armadaActivity",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Stage outcomes and failure-cause rules"
     },
@@ -2067,7 +2067,7 @@
       "kind": "api",
       "key": "duplicateModelEndpoint",
       "status": "implemented",
-      "surface": "view:armadaConfiguration",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Model endpoints (embedding/inference)"
     },
@@ -2075,7 +2075,7 @@
       "kind": "api",
       "key": "enableHarbor",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Harbors (host runners)"
     },
@@ -2083,7 +2083,7 @@
       "kind": "api",
       "key": "enqueueMerge",
       "status": "implemented",
-      "surface": "view:armadaMergeQueue",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Merge Queue"
     },
@@ -2091,7 +2091,7 @@
       "kind": "api",
       "key": "enumerateAskMessages",
       "status": "implemented",
-      "surface": "view:armadaAsk",
+      "surface": "view:armadaConversations",
       "milestone": "",
       "notes": "Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md)"
     },
@@ -2099,7 +2099,7 @@
       "kind": "api",
       "key": "enumerateAskProposals",
       "status": "implemented",
-      "surface": "view:armadaAsk",
+      "surface": "view:armadaConversations",
       "milestone": "",
       "notes": "Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md)"
     },
@@ -2107,7 +2107,7 @@
       "kind": "api",
       "key": "enumerateAskThreads",
       "status": "implemented",
-      "surface": "view:armadaAsk",
+      "surface": "view:armadaConversations",
       "milestone": "",
       "notes": "Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md)"
     },
@@ -2115,7 +2115,7 @@
       "kind": "api",
       "key": "enumerateAskToolCalls",
       "status": "implemented",
-      "surface": "view:armadaAsk",
+      "surface": "view:armadaConversations",
       "milestone": "",
       "notes": "Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md)"
     },
@@ -2123,7 +2123,7 @@
       "kind": "api",
       "key": "enumerateAskTurnToolCalls",
       "status": "implemented",
-      "surface": "view:armadaAsk",
+      "surface": "view:armadaConversations",
       "milestone": "",
       "notes": "Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md)"
     },
@@ -2131,7 +2131,7 @@
       "kind": "api",
       "key": "enumerateAskWork",
       "status": "implemented",
-      "surface": "view:armadaAsk",
+      "surface": "view:armadaConversations",
       "milestone": "",
       "notes": "Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md)"
     },
@@ -2139,7 +2139,7 @@
       "kind": "api",
       "key": "enumerateAskWorkMissions",
       "status": "implemented",
-      "surface": "view:armadaAsk",
+      "surface": "view:armadaConversations",
       "milestone": "",
       "notes": "Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md)"
     },
@@ -2147,7 +2147,7 @@
       "kind": "api",
       "key": "enumerateAskWorkTargets",
       "status": "implemented",
-      "surface": "view:armadaAsk",
+      "surface": "view:armadaConversations",
       "milestone": "",
       "notes": "Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md)"
     },
@@ -2155,7 +2155,7 @@
       "kind": "api",
       "key": "enumerateBacklog",
       "status": "implemented",
-      "surface": "view:armadaBacklog",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Objectives; the same records through listBacklog"
     },
@@ -2163,7 +2163,7 @@
       "kind": "api",
       "key": "enumerateBlackBox",
       "status": "implemented",
-      "surface": "view:armadaFailures",
+      "surface": "view:armadaNav",
       "milestone": "V0",
       "notes": "Missions"
     },
@@ -2171,7 +2171,7 @@
       "kind": "api",
       "key": "enumerateBlackBoxFingerprints",
       "status": "implemented",
-      "surface": "view:armadaMissions",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Missions"
     },
@@ -2187,7 +2187,7 @@
       "kind": "api",
       "key": "enumerateBlackBoxNotes",
       "status": "implemented",
-      "surface": "view:armadaMissions",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Missions; the same records through listBlackBoxNotes"
     },
@@ -2195,7 +2195,7 @@
       "kind": "api",
       "key": "enumerateBlackBoxObjects",
       "status": "implemented",
-      "surface": "view:armadaMissions",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Missions; the same records through listBlackBoxObjects"
     },
@@ -2211,7 +2211,7 @@
       "kind": "api",
       "key": "enumerateCliPermissionRules",
       "status": "implemented",
-      "surface": "view:armadaNeedsYou",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "CLI tool permissions; the same records through listCliPermissionRules"
     },
@@ -2219,7 +2219,7 @@
       "kind": "api",
       "key": "enumerateDeployments",
       "status": "implemented",
-      "surface": "view:armadaDelivery",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Deployments; the same records through listDeployments"
     },
@@ -2227,7 +2227,7 @@
       "kind": "api",
       "key": "enumerateEnvironments",
       "status": "implemented",
-      "surface": "view:armadaDelivery",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Environments; the same records through listEnvironments"
     },
@@ -2235,7 +2235,7 @@
       "kind": "api",
       "key": "enumerateFleetActionRunTargets",
       "status": "implemented",
-      "surface": "view:armadaFleetActions",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Fleet Actions"
     },
@@ -2243,7 +2243,7 @@
       "kind": "api",
       "key": "enumerateFleetActionRuns",
       "status": "implemented",
-      "surface": "view:armadaFleetActions",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Fleet Actions"
     },
@@ -2251,7 +2251,7 @@
       "kind": "api",
       "key": "enumerateFleetActions",
       "status": "implemented",
-      "surface": "view:armadaFleetActions",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Fleet Actions"
     },
@@ -2259,7 +2259,7 @@
       "kind": "api",
       "key": "enumerateHarbors",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Harbors (host runners); the same records through listHarbors"
     },
@@ -2267,7 +2267,7 @@
       "kind": "api",
       "key": "enumerateHistoryTimeline",
       "status": "implemented",
-      "surface": "view:armadaActivity",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "History; the same records through listHistoryTimeline"
     },
@@ -2275,7 +2275,7 @@
       "kind": "api",
       "key": "enumerateIncidents",
       "status": "implemented",
-      "surface": "view:armadaDelivery",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Incidents; the same records through listIncidents"
     },
@@ -2283,7 +2283,7 @@
       "kind": "api",
       "key": "enumerateMemories",
       "status": "implemented",
-      "surface": "view:armadaConfiguration",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Memories; the same records through listMemories"
     },
@@ -2291,7 +2291,7 @@
       "kind": "api",
       "key": "enumerateMissionBlackBoxEntries",
       "status": "implemented",
-      "surface": "view:armadaMissions",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Missions; the same records through listMissionBlackBoxEntries"
     },
@@ -2299,7 +2299,7 @@
       "kind": "api",
       "key": "enumerateMissionPullRequestChecks",
       "status": "implemented",
-      "surface": "view:armadaMissions",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Missions"
     },
@@ -2307,7 +2307,7 @@
       "kind": "api",
       "key": "enumerateMissionPullRequestComments",
       "status": "implemented",
-      "surface": "view:armadaMissions",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Missions"
     },
@@ -2315,7 +2315,7 @@
       "kind": "api",
       "key": "enumerateMissionPullRequestReviews",
       "status": "implemented",
-      "surface": "view:armadaMissions",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Missions"
     },
@@ -2323,7 +2323,7 @@
       "kind": "api",
       "key": "enumerateModelEndpoints",
       "status": "implemented",
-      "surface": "view:armadaConfiguration",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Model endpoints (embedding/inference); the same records through listModelEndpoints"
     },
@@ -2331,7 +2331,7 @@
       "kind": "api",
       "key": "enumerateMuxEndpoints",
       "status": "implemented",
-      "surface": "view:armadaActivity",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Vessel Health"
     },
@@ -2339,7 +2339,7 @@
       "kind": "api",
       "key": "enumerateObjectives",
       "status": "implemented",
-      "surface": "view:armadaBacklog",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Objectives; objectives and backlog items are the same records (listBacklog)"
     },
@@ -2347,7 +2347,7 @@
       "kind": "api",
       "key": "enumerateReleases",
       "status": "implemented",
-      "surface": "view:armadaDelivery",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Releases; the same records through listReleases"
     },
@@ -2355,7 +2355,7 @@
       "kind": "api",
       "key": "enumerateRunbookExecutions",
       "status": "implemented",
-      "surface": "view:armadaDelivery",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Runbooks; the same records through listRunbookExecutions"
     },
@@ -2363,7 +2363,7 @@
       "kind": "api",
       "key": "enumerateRunbooks",
       "status": "implemented",
-      "surface": "view:armadaDelivery",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Runbooks; the same records through listRunbooks"
     },
@@ -2371,7 +2371,7 @@
       "kind": "api",
       "key": "enumerateVesselHealth",
       "status": "implemented",
-      "surface": "view:armadaActivity",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Vessel Health"
     },
@@ -2387,7 +2387,7 @@
       "kind": "api",
       "key": "enumerateVoyageProgress",
       "status": "implemented",
-      "surface": "view:armadaVoyages",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Voyages"
     },
@@ -2395,7 +2395,7 @@
       "kind": "api",
       "key": "enumerateWorkflowProfiles",
       "status": "implemented",
-      "surface": "view:armadaConfiguration",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Workflow Profiles; the same records through listWorkflowProfiles"
     },
@@ -2403,7 +2403,7 @@
       "kind": "api",
       "key": "evaluateCaptain",
       "status": "implemented",
-      "surface": "view:armadaActivity",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Model Probes"
     },
@@ -2411,7 +2411,7 @@
       "kind": "api",
       "key": "evaluateModelEndpoint",
       "status": "implemented",
-      "surface": "view:armadaActivity",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Model Probes"
     },
@@ -2419,7 +2419,7 @@
       "kind": "api",
       "key": "evaluateVesselHealth",
       "status": "implemented",
-      "surface": "view:armadaActivity",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Vessel Health"
     },
@@ -2435,7 +2435,7 @@
       "kind": "api",
       "key": "exportBlackBoxFixture",
       "status": "implemented",
-      "surface": "view:armadaMissions",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Missions"
     },
@@ -2443,7 +2443,7 @@
       "kind": "api",
       "key": "getAskQuickActions",
       "status": "implemented",
-      "surface": "view:armadaAsk",
+      "surface": "view:armadaConversations",
       "milestone": "",
       "notes": "Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md)"
     },
@@ -2451,7 +2451,7 @@
       "kind": "api",
       "key": "getAskThread",
       "status": "implemented",
-      "surface": "view:armadaAsk",
+      "surface": "view:armadaConversations",
       "milestone": "",
       "notes": "Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md)"
     },
@@ -2459,7 +2459,7 @@
       "kind": "api",
       "key": "getAskWorkSnapshot",
       "status": "implemented",
-      "surface": "view:armadaAsk",
+      "surface": "view:armadaConversations",
       "milestone": "",
       "notes": "Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md)"
     },
@@ -2467,7 +2467,7 @@
       "kind": "api",
       "key": "getBacklogItem",
       "status": "implemented",
-      "surface": "view:armadaBacklog",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Objectives"
     },
@@ -2475,7 +2475,7 @@
       "kind": "api",
       "key": "getBatteryPack",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Battery packs"
     },
@@ -2499,7 +2499,7 @@
       "kind": "api",
       "key": "getBlackBoxBundle",
       "status": "implemented",
-      "surface": "view:armadaMissions",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Missions; Download Bundle saves it (downloadBlackBox)"
     },
@@ -2507,7 +2507,7 @@
       "kind": "api",
       "key": "getBlackBoxFingerprintTrend",
       "status": "implemented",
-      "surface": "view:armadaMissions",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Missions"
     },
@@ -2515,7 +2515,7 @@
       "kind": "api",
       "key": "getBlackBoxRecoveryStats",
       "status": "implemented",
-      "surface": "view:armadaMissions",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Missions"
     },
@@ -2523,7 +2523,7 @@
       "kind": "api",
       "key": "getBlackBoxRetention",
       "status": "implemented",
-      "surface": "view:armadaMissions",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Missions"
     },
@@ -2539,7 +2539,7 @@
       "kind": "api",
       "key": "getBlackBoxStorage",
       "status": "implemented",
-      "surface": "view:armadaMissions",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Missions"
     },
@@ -2547,7 +2547,7 @@
       "kind": "api",
       "key": "getBlackBoxStorageMigration",
       "status": "implemented",
-      "surface": "view:armadaMissions",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Missions"
     },
@@ -2563,7 +2563,7 @@
       "kind": "api",
       "key": "getCaptain",
       "status": "implemented",
-      "surface": "view:armadaCaptains",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Captains"
     },
@@ -2571,7 +2571,7 @@
       "kind": "api",
       "key": "getCaptainLog",
       "status": "implemented",
-      "surface": "view:armadaCaptains",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Captains"
     },
@@ -2579,7 +2579,7 @@
       "kind": "api",
       "key": "getCaptainSelection",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Battery packs"
     },
@@ -2587,7 +2587,7 @@
       "kind": "api",
       "key": "getCaptainSelectionCandidates",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Battery packs"
     },
@@ -2595,7 +2595,7 @@
       "kind": "api",
       "key": "getCaptainSelectionDecision",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Battery packs"
     },
@@ -2603,7 +2603,7 @@
       "kind": "api",
       "key": "getCaptainSelectionHistory",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Battery packs"
     },
@@ -2611,7 +2611,7 @@
       "kind": "api",
       "key": "getCaptainTools",
       "status": "implemented",
-      "surface": "view:armadaCaptains",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Captains"
     },
@@ -2619,7 +2619,7 @@
       "kind": "api",
       "key": "getCheckRun",
       "status": "implemented",
-      "surface": "view:armadaDelivery",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Check Runs"
     },
@@ -2627,7 +2627,7 @@
       "kind": "api",
       "key": "getCliPermissionRequest",
       "status": "implemented",
-      "surface": "view:armadaNeedsYou",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "CLI tool permissions; the Needs You item carries the request (decideCliPermissionRequest)"
     },
@@ -2635,7 +2635,7 @@
       "kind": "api",
       "key": "getCliPermissionRule",
       "status": "implemented",
-      "surface": "view:armadaNeedsYou",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "CLI tool permissions"
     },
@@ -2643,7 +2643,7 @@
       "kind": "api",
       "key": "getConcurrencyMetrics",
       "status": "implemented",
-      "surface": "view:armadaVoyages",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Voyages"
     },
@@ -2651,7 +2651,7 @@
       "kind": "api",
       "key": "getDeployment",
       "status": "implemented",
-      "surface": "view:armadaDelivery",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Deployments"
     },
@@ -2659,7 +2659,7 @@
       "kind": "api",
       "key": "getDock",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Docks"
     },
@@ -2683,7 +2683,7 @@
       "kind": "api",
       "key": "getEnvironment",
       "status": "implemented",
-      "surface": "view:armadaDelivery",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Environments"
     },
@@ -2691,7 +2691,7 @@
       "kind": "api",
       "key": "getEvent",
       "status": "implemented",
-      "surface": "view:armadaActivity",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Events"
     },
@@ -2699,7 +2699,7 @@
       "kind": "api",
       "key": "getFailureCauseRule",
       "status": "implemented",
-      "surface": "view:armadaActivity",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Stage outcomes and failure-cause rules"
     },
@@ -2707,7 +2707,7 @@
       "kind": "api",
       "key": "getFleet",
       "status": "implemented",
-      "surface": "view:armadaFleet",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Fleets"
     },
@@ -2715,7 +2715,7 @@
       "kind": "api",
       "key": "getFleetAction",
       "status": "implemented",
-      "surface": "view:armadaFleetActions",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Fleet Actions"
     },
@@ -2723,7 +2723,7 @@
       "kind": "api",
       "key": "getFleetActionRun",
       "status": "implemented",
-      "surface": "view:armadaFleetActions",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Fleet Actions"
     },
@@ -2731,7 +2731,7 @@
       "kind": "api",
       "key": "getFleetActionRunTarget",
       "status": "implemented",
-      "surface": "view:armadaFleetActions",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Fleet Actions"
     },
@@ -2747,7 +2747,7 @@
       "kind": "api",
       "key": "getFleetDetail",
       "status": "implemented",
-      "surface": "view:armadaFleet",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Fleets; getFleet reads it (getFleet)"
     },
@@ -2755,7 +2755,7 @@
       "kind": "api",
       "key": "getHarbor",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Harbors (host runners)"
     },
@@ -2763,7 +2763,7 @@
       "kind": "api",
       "key": "getHarborMetrics",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Harbors (host runners)"
     },
@@ -2779,7 +2779,7 @@
       "kind": "api",
       "key": "getInbox",
       "status": "implemented",
-      "surface": "view:armadaNeedsYou",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Needs-you inbox"
     },
@@ -2787,7 +2787,7 @@
       "kind": "api",
       "key": "getIncident",
       "status": "implemented",
-      "surface": "view:armadaDelivery",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Incidents"
     },
@@ -2795,7 +2795,7 @@
       "kind": "api",
       "key": "getJob",
       "status": "implemented",
-      "surface": "view:armadaActivity",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Background jobs"
     },
@@ -2803,7 +2803,7 @@
       "kind": "api",
       "key": "getMemory",
       "status": "implemented",
-      "surface": "view:armadaConfiguration",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Memories"
     },
@@ -2811,7 +2811,7 @@
       "kind": "api",
       "key": "getMergeEntry",
       "status": "implemented",
-      "surface": "view:armadaMergeQueue",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Merge Queue"
     },
@@ -2819,7 +2819,7 @@
       "kind": "api",
       "key": "getMission",
       "status": "implemented",
-      "surface": "view:armadaMissions",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Missions"
     },
@@ -2835,7 +2835,7 @@
       "kind": "api",
       "key": "getMissionBlackBoxBrief",
       "status": "implemented",
-      "surface": "view:armadaMissions",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Missions"
     },
@@ -2843,7 +2843,7 @@
       "kind": "api",
       "key": "getMissionDiff",
       "status": "implemented",
-      "surface": "view:armadaMissions",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Missions"
     },
@@ -2851,7 +2851,7 @@
       "kind": "api",
       "key": "getMissionGitHubPullRequest",
       "status": "implemented",
-      "surface": "view:armadaMissions",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Missions"
     },
@@ -2859,7 +2859,7 @@
       "kind": "api",
       "key": "getMissionHistory",
       "status": "implemented",
-      "surface": "view:armadaMissions",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Missions"
     },
@@ -2867,7 +2867,7 @@
       "kind": "api",
       "key": "getMissionInstructions",
       "status": "implemented",
-      "surface": "view:armadaMissions",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Missions"
     },
@@ -2875,7 +2875,7 @@
       "kind": "api",
       "key": "getMissionLandingPreview",
       "status": "implemented",
-      "surface": "view:armadaMissions",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Missions"
     },
@@ -2883,7 +2883,7 @@
       "kind": "api",
       "key": "getMissionLog",
       "status": "implemented",
-      "surface": "view:armadaMissions",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Missions"
     },
@@ -2891,7 +2891,7 @@
       "kind": "api",
       "key": "getMissionWaits",
       "status": "implemented",
-      "surface": "view:armadaVoyages",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Voyages"
     },
@@ -2899,7 +2899,7 @@
       "kind": "api",
       "key": "getModelEndpoint",
       "status": "implemented",
-      "surface": "view:armadaConfiguration",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Model endpoints (embedding/inference)"
     },
@@ -2907,7 +2907,7 @@
       "kind": "api",
       "key": "getModelProbeRun",
       "status": "implemented",
-      "surface": "view:armadaActivity",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Model Probes"
     },
@@ -2915,7 +2915,7 @@
       "kind": "api",
       "key": "getMuxEndpoint",
       "status": "implemented",
-      "surface": "view:armadaActivity",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Vessel Health"
     },
@@ -2923,7 +2923,7 @@
       "kind": "api",
       "key": "getObjective",
       "status": "implemented",
-      "surface": "view:armadaBacklog",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Objectives; objectives and backlog items are the same records (getBacklogItem)"
     },
@@ -2931,7 +2931,7 @@
       "kind": "api",
       "key": "getObjectiveRefinementSession",
       "status": "implemented",
-      "surface": "view:armadaBacklog",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Objectives"
     },
@@ -2939,7 +2939,7 @@
       "kind": "api",
       "key": "getPersona",
       "status": "implemented",
-      "surface": "view:armadaConfiguration",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Personas"
     },
@@ -2947,7 +2947,7 @@
       "kind": "api",
       "key": "getPipeline",
       "status": "implemented",
-      "surface": "view:armadaConfiguration",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Pipelines"
     },
@@ -2963,7 +2963,7 @@
       "kind": "api",
       "key": "getPlaybook",
       "status": "implemented",
-      "surface": "view:armadaConfiguration",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Playbooks"
     },
@@ -2971,7 +2971,7 @@
       "kind": "api",
       "key": "getProjectProfile",
       "status": "implemented",
-      "surface": "view:armadaConfiguration",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Project profiles"
     },
@@ -2979,7 +2979,7 @@
       "kind": "api",
       "key": "getPromptTemplate",
       "status": "implemented",
-      "surface": "view:armadaConfiguration",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Prompt Templates"
     },
@@ -2995,7 +2995,7 @@
       "kind": "api",
       "key": "getRebuildStatus",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Server"
     },
@@ -3003,7 +3003,7 @@
       "kind": "api",
       "key": "getRelease",
       "status": "implemented",
-      "surface": "view:armadaDelivery",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Releases"
     },
@@ -3011,7 +3011,7 @@
       "kind": "api",
       "key": "getReleaseGitHubPullRequests",
       "status": "implemented",
-      "surface": "view:armadaDelivery",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Releases"
     },
@@ -3019,7 +3019,7 @@
       "kind": "api",
       "key": "getRequestHistoryEntry",
       "status": "implemented",
-      "surface": "view:armadaActivity",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Request History"
     },
@@ -3027,7 +3027,7 @@
       "kind": "api",
       "key": "getRequestHistorySummary",
       "status": "implemented",
-      "surface": "view:armadaActivity",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Request History"
     },
@@ -3035,7 +3035,7 @@
       "kind": "api",
       "key": "getRunbook",
       "status": "implemented",
-      "surface": "view:armadaDelivery",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Runbooks"
     },
@@ -3043,7 +3043,7 @@
       "kind": "api",
       "key": "getRunbookExecution",
       "status": "implemented",
-      "surface": "view:armadaDelivery",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Runbooks"
     },
@@ -3051,7 +3051,7 @@
       "kind": "api",
       "key": "getSettings",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Settings"
     },
@@ -3059,7 +3059,7 @@
       "kind": "api",
       "key": "getSignal",
       "status": "implemented",
-      "surface": "view:armadaActivity",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Signals"
     },
@@ -3067,7 +3067,7 @@
       "kind": "api",
       "key": "getSkill",
       "status": "implemented",
-      "surface": "view:armadaConfiguration",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Skills directory"
     },
@@ -3075,7 +3075,7 @@
       "kind": "api",
       "key": "getStageOutcome",
       "status": "implemented",
-      "surface": "view:armadaActivity",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Stage outcomes and failure-cause rules"
     },
@@ -3091,7 +3091,7 @@
       "kind": "api",
       "key": "getStorage",
       "status": "implemented",
-      "surface": "view:armadaFleetActions",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Fleet Actions"
     },
@@ -3099,7 +3099,7 @@
       "kind": "api",
       "key": "getTokenUsage",
       "status": "implemented",
-      "surface": "view:armadaMissions",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Missions"
     },
@@ -3107,7 +3107,7 @@
       "kind": "api",
       "key": "getUsageLatest",
       "status": "implemented",
-      "surface": "view:armadaActivity",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Usage"
     },
@@ -3115,7 +3115,7 @@
       "kind": "api",
       "key": "getUsageMissions",
       "status": "implemented",
-      "surface": "view:armadaActivity",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Usage"
     },
@@ -3123,7 +3123,7 @@
       "kind": "api",
       "key": "getUsageSeries",
       "status": "implemented",
-      "surface": "view:armadaActivity",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Usage"
     },
@@ -3131,7 +3131,7 @@
       "kind": "api",
       "key": "getUsageSnapshots",
       "status": "implemented",
-      "surface": "view:armadaActivity",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Usage"
     },
@@ -3139,7 +3139,7 @@
       "kind": "api",
       "key": "getVessel",
       "status": "implemented",
-      "surface": "view:armadaFleet",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Vessels"
     },
@@ -3155,7 +3155,7 @@
       "kind": "api",
       "key": "getVesselBranchCount",
       "status": "implemented",
-      "surface": "view:armadaFleet",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Vessels; the branch list carries the count (getVesselBranches)"
     },
@@ -3163,7 +3163,7 @@
       "kind": "api",
       "key": "getVesselBranches",
       "status": "implemented",
-      "surface": "view:armadaFleet",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Vessels"
     },
@@ -3171,7 +3171,7 @@
       "kind": "api",
       "key": "getVesselCleanupInventory",
       "status": "implemented",
-      "surface": "view:armadaFleet",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Vessels"
     },
@@ -3179,7 +3179,7 @@
       "kind": "api",
       "key": "getVesselCommitActivity",
       "status": "implemented",
-      "surface": "view:armadaFleet",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Vessel History"
     },
@@ -3187,7 +3187,7 @@
       "kind": "api",
       "key": "getVesselCommits",
       "status": "implemented",
-      "surface": "view:armadaFleet",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Vessel History"
     },
@@ -3195,7 +3195,7 @@
       "kind": "api",
       "key": "getVesselConcurrency",
       "status": "implemented",
-      "surface": "view:armadaVoyages",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Voyages"
     },
@@ -3203,7 +3203,7 @@
       "kind": "api",
       "key": "getVesselGitStatus",
       "status": "implemented",
-      "surface": "view:armadaFleet",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Vessels"
     },
@@ -3211,7 +3211,7 @@
       "kind": "api",
       "key": "getVesselHealth",
       "status": "implemented",
-      "surface": "view:armadaActivity",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Vessel Health"
     },
@@ -3219,7 +3219,7 @@
       "kind": "api",
       "key": "getVesselHealthSummary",
       "status": "implemented",
-      "surface": "view:armadaActivity",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Vessel Health"
     },
@@ -3235,7 +3235,7 @@
       "kind": "api",
       "key": "getVesselLandingPreview",
       "status": "implemented",
-      "surface": "view:armadaFleet",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Vessels"
     },
@@ -3243,7 +3243,7 @@
       "kind": "api",
       "key": "getVesselReadiness",
       "status": "implemented",
-      "surface": "view:armadaFleet",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Vessels"
     },
@@ -3251,7 +3251,7 @@
       "kind": "api",
       "key": "getVoyage",
       "status": "implemented",
-      "surface": "view:armadaVoyages",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Voyages"
     },
@@ -3267,7 +3267,7 @@
       "kind": "api",
       "key": "getVoyageBlackBoxBrief",
       "status": "implemented",
-      "surface": "view:armadaMissions",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Missions"
     },
@@ -3275,7 +3275,7 @@
       "kind": "api",
       "key": "getVoyageBlackBoxCascade",
       "status": "implemented",
-      "surface": "view:armadaMissions",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Missions"
     },
@@ -3283,7 +3283,7 @@
       "kind": "api",
       "key": "getVoyageStatus",
       "status": "implemented",
-      "surface": "view:armadaVoyages",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Voyages"
     },
@@ -3291,7 +3291,7 @@
       "kind": "api",
       "key": "getVoyageTree",
       "status": "implemented",
-      "surface": "view:armadaVoyages",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Voyages"
     },
@@ -3299,7 +3299,7 @@
       "kind": "api",
       "key": "getWorkflowProfile",
       "status": "implemented",
-      "surface": "view:armadaConfiguration",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Workflow Profiles"
     },
@@ -3347,7 +3347,7 @@
       "kind": "api",
       "key": "healthCheckModelEndpoints",
       "status": "implemented",
-      "surface": "view:armadaConfiguration",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Model endpoints (embedding/inference)"
     },
@@ -3355,7 +3355,7 @@
       "kind": "api",
       "key": "ignoreModelAlert",
       "status": "implemented",
-      "surface": "view:armadaActivity",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Model Probes"
     },
@@ -3363,7 +3363,7 @@
       "kind": "api",
       "key": "importCheckRun",
       "status": "implemented",
-      "surface": "view:armadaDelivery",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Check Runs"
     },
@@ -3371,7 +3371,7 @@
       "kind": "api",
       "key": "importObjectiveFromGitHub",
       "status": "implemented",
-      "surface": "view:armadaBacklog",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Objectives"
     },
@@ -3395,7 +3395,7 @@
       "kind": "api",
       "key": "lintMissionBrief",
       "status": "implemented",
-      "surface": "view:armadaMissions",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Missions"
     },
@@ -3403,7 +3403,7 @@
       "kind": "api",
       "key": "listAllMuxEndpoints",
       "status": "implemented",
-      "surface": "view:armadaActivity",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Vessel Health; the same records through enumerateMuxEndpoints"
     },
@@ -3411,7 +3411,7 @@
       "kind": "api",
       "key": "listAllStorageHosts",
       "status": "implemented",
-      "surface": "view:armadaFleetActions",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Fleet Actions; the same records through listStorageHosts"
     },
@@ -3435,7 +3435,7 @@
       "kind": "api",
       "key": "listBacklog",
       "status": "implemented",
-      "surface": "view:armadaBacklog",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Objectives"
     },
@@ -3443,7 +3443,7 @@
       "kind": "api",
       "key": "listBacklogRefinementSessions",
       "status": "implemented",
-      "surface": "view:armadaBacklog",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Objectives; the same refinement sessions (listObjectiveRefinementSessions)"
     },
@@ -3451,7 +3451,7 @@
       "kind": "api",
       "key": "listBatteryPacks",
       "status": "implemented",
-      "surface": "view:armadaActivity",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Model Probes"
     },
@@ -3459,7 +3459,7 @@
       "kind": "api",
       "key": "listBlackBox",
       "status": "implemented",
-      "surface": "view:armadaMissions",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Missions; the same records through enumerateBlackBox"
     },
@@ -3467,7 +3467,7 @@
       "kind": "api",
       "key": "listBlackBoxNearbySuccesses",
       "status": "implemented",
-      "surface": "view:armadaMissions",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Missions"
     },
@@ -3483,7 +3483,7 @@
       "kind": "api",
       "key": "listBlackBoxObjects",
       "status": "implemented",
-      "surface": "view:armadaMissions",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Missions"
     },
@@ -3491,7 +3491,7 @@
       "kind": "api",
       "key": "listCaptains",
       "status": "implemented",
-      "surface": "view:armadaCaptains",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Captains"
     },
@@ -3499,7 +3499,7 @@
       "kind": "api",
       "key": "listCheckRuns",
       "status": "implemented",
-      "surface": "view:armadaDelivery",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Check Runs"
     },
@@ -3507,7 +3507,7 @@
       "kind": "api",
       "key": "listCliPermissionRequests",
       "status": "implemented",
-      "surface": "view:armadaNeedsYou",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "CLI tool permissions"
     },
@@ -3515,7 +3515,7 @@
       "kind": "api",
       "key": "listCliPermissionRules",
       "status": "implemented",
-      "surface": "view:armadaNeedsYou",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "CLI tool permissions"
     },
@@ -3523,7 +3523,7 @@
       "kind": "api",
       "key": "listCredentials",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Credentials (admin)"
     },
@@ -3531,7 +3531,7 @@
       "kind": "api",
       "key": "listDeployments",
       "status": "implemented",
-      "surface": "view:armadaDelivery",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Deployments"
     },
@@ -3539,7 +3539,7 @@
       "kind": "api",
       "key": "listDocks",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Docks"
     },
@@ -3547,7 +3547,7 @@
       "kind": "api",
       "key": "listEnvironments",
       "status": "implemented",
-      "surface": "view:armadaDelivery",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Environments"
     },
@@ -3555,7 +3555,7 @@
       "kind": "api",
       "key": "listEvents",
       "status": "implemented",
-      "surface": "view:armadaActivity",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Events"
     },
@@ -3563,7 +3563,7 @@
       "kind": "api",
       "key": "listFailureCauseRules",
       "status": "implemented",
-      "surface": "view:armadaActivity",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Stage outcomes and failure-cause rules"
     },
@@ -3571,7 +3571,7 @@
       "kind": "api",
       "key": "listFleets",
       "status": "implemented",
-      "surface": "view:armadaFleet",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Fleets"
     },
@@ -3579,7 +3579,7 @@
       "kind": "api",
       "key": "listHarborJobs",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Harbors (host runners)"
     },
@@ -3587,7 +3587,7 @@
       "kind": "api",
       "key": "listHarbors",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Harbors (host runners)"
     },
@@ -3595,7 +3595,7 @@
       "kind": "api",
       "key": "listHistoryTimeline",
       "status": "implemented",
-      "surface": "view:armadaActivity",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "History"
     },
@@ -3603,7 +3603,7 @@
       "kind": "api",
       "key": "listIncidents",
       "status": "implemented",
-      "surface": "view:armadaDelivery",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Incidents"
     },
@@ -3611,7 +3611,7 @@
       "kind": "api",
       "key": "listJobs",
       "status": "implemented",
-      "surface": "view:armadaActivity",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Background jobs"
     },
@@ -3619,7 +3619,7 @@
       "kind": "api",
       "key": "listMemories",
       "status": "implemented",
-      "surface": "view:armadaConfiguration",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Memories"
     },
@@ -3627,7 +3627,7 @@
       "kind": "api",
       "key": "listMergeQueue",
       "status": "implemented",
-      "surface": "view:armadaMergeQueue",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Merge Queue"
     },
@@ -3643,7 +3643,7 @@
       "kind": "api",
       "key": "listMissionSummaries",
       "status": "implemented",
-      "surface": "view:armadaMissions",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Missions"
     },
@@ -3651,7 +3651,7 @@
       "kind": "api",
       "key": "listMissions",
       "status": "implemented",
-      "surface": "view:armadaMissions",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Missions"
     },
@@ -3659,7 +3659,7 @@
       "kind": "api",
       "key": "listModelEndpoints",
       "status": "implemented",
-      "surface": "view:armadaConfiguration",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Model endpoints (embedding/inference)"
     },
@@ -3667,7 +3667,7 @@
       "kind": "api",
       "key": "listModelProbeRuns",
       "status": "implemented",
-      "surface": "view:armadaActivity",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Model Probes"
     },
@@ -3675,7 +3675,7 @@
       "kind": "api",
       "key": "listMuxEndpoints",
       "status": "implemented",
-      "surface": "view:armadaActivity",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Vessel Health; the same records through enumerateMuxEndpoints"
     },
@@ -3683,7 +3683,7 @@
       "kind": "api",
       "key": "listObjectiveRefinementMessages",
       "status": "implemented",
-      "surface": "view:armadaBacklog",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Objectives"
     },
@@ -3691,7 +3691,7 @@
       "kind": "api",
       "key": "listObjectiveRefinementSessions",
       "status": "implemented",
-      "surface": "view:armadaBacklog",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Objectives"
     },
@@ -3699,7 +3699,7 @@
       "kind": "api",
       "key": "listObjectives",
       "status": "implemented",
-      "surface": "view:armadaBacklog",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Objectives; objectives and backlog items are the same records (listBacklog)"
     },
@@ -3707,7 +3707,7 @@
       "kind": "api",
       "key": "listPersonas",
       "status": "implemented",
-      "surface": "view:armadaConfiguration",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Personas"
     },
@@ -3715,7 +3715,7 @@
       "kind": "api",
       "key": "listPipelines",
       "status": "implemented",
-      "surface": "view:armadaConfiguration",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Pipelines"
     },
@@ -3739,7 +3739,7 @@
       "kind": "api",
       "key": "listPlaybooks",
       "status": "implemented",
-      "surface": "view:armadaConfiguration",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Playbooks"
     },
@@ -3747,7 +3747,7 @@
       "kind": "api",
       "key": "listProjectProfiles",
       "status": "implemented",
-      "surface": "view:armadaConfiguration",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Project profiles"
     },
@@ -3755,7 +3755,7 @@
       "kind": "api",
       "key": "listPromptTemplates",
       "status": "implemented",
-      "surface": "view:armadaConfiguration",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Prompt Templates"
     },
@@ -3763,7 +3763,7 @@
       "kind": "api",
       "key": "listReleases",
       "status": "implemented",
-      "surface": "view:armadaDelivery",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Releases"
     },
@@ -3771,7 +3771,7 @@
       "kind": "api",
       "key": "listRequestHistory",
       "status": "implemented",
-      "surface": "view:armadaActivity",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Request History"
     },
@@ -3779,7 +3779,7 @@
       "kind": "api",
       "key": "listRunbookExecutions",
       "status": "implemented",
-      "surface": "view:armadaDelivery",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Runbooks"
     },
@@ -3787,7 +3787,7 @@
       "kind": "api",
       "key": "listRunbooks",
       "status": "implemented",
-      "surface": "view:armadaDelivery",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Runbooks"
     },
@@ -3795,7 +3795,7 @@
       "kind": "api",
       "key": "listSignals",
       "status": "implemented",
-      "surface": "view:armadaActivity",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Signals"
     },
@@ -3803,7 +3803,7 @@
       "kind": "api",
       "key": "listSkills",
       "status": "implemented",
-      "surface": "view:armadaConfiguration",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Skills directory"
     },
@@ -3811,7 +3811,7 @@
       "kind": "api",
       "key": "listStageOutcomes",
       "status": "implemented",
-      "surface": "view:armadaActivity",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Stage outcomes and failure-cause rules"
     },
@@ -3819,7 +3819,7 @@
       "kind": "api",
       "key": "listStorageHosts",
       "status": "implemented",
-      "surface": "view:armadaFleetActions",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Fleet Actions"
     },
@@ -3827,7 +3827,7 @@
       "kind": "api",
       "key": "listTenants",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Tenants (admin)"
     },
@@ -3835,7 +3835,7 @@
       "kind": "api",
       "key": "listUsers",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Users (admin)"
     },
@@ -3843,7 +3843,7 @@
       "kind": "api",
       "key": "listVesselCleanupResources",
       "status": "implemented",
-      "surface": "view:armadaFleet",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Vessels"
     },
@@ -3851,7 +3851,7 @@
       "kind": "api",
       "key": "listVesselDependencies",
       "status": "implemented",
-      "surface": "view:armadaActivity",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Vessel Health"
     },
@@ -3859,7 +3859,7 @@
       "kind": "api",
       "key": "listVesselReservations",
       "status": "implemented",
-      "surface": "view:armadaMissions",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Missions"
     },
@@ -3867,7 +3867,7 @@
       "kind": "api",
       "key": "listVessels",
       "status": "implemented",
-      "surface": "view:armadaFleet",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Vessels"
     },
@@ -3875,7 +3875,7 @@
       "kind": "api",
       "key": "listVoyages",
       "status": "implemented",
-      "surface": "view:armadaVoyages",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Voyages"
     },
@@ -3883,7 +3883,7 @@
       "kind": "api",
       "key": "listWorkflowProfiles",
       "status": "implemented",
-      "surface": "view:armadaConfiguration",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Workflow Profiles"
     },
@@ -3923,7 +3923,7 @@
       "kind": "api",
       "key": "markAskThreadRead",
       "status": "implemented",
-      "surface": "view:armadaAsk",
+      "surface": "view:armadaConversations",
       "milestone": "",
       "notes": "Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md)"
     },
@@ -3931,7 +3931,7 @@
       "kind": "api",
       "key": "markAskThreadUnread",
       "status": "implemented",
-      "surface": "view:armadaAsk",
+      "surface": "view:armadaConversations",
       "milestone": "",
       "notes": "Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md)"
     },
@@ -3939,7 +3939,7 @@
       "kind": "api",
       "key": "markSignalRead",
       "status": "implemented",
-      "surface": "view:armadaActivity",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Signals"
     },
@@ -3947,7 +3947,7 @@
       "kind": "api",
       "key": "mergeVesselBranch",
       "status": "implemented",
-      "surface": "view:armadaFleet",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Vessels"
     },
@@ -3955,7 +3955,7 @@
       "kind": "api",
       "key": "migrateBlackBoxStorage",
       "status": "implemented",
-      "surface": "view:armadaMissions",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Missions"
     },
@@ -3971,7 +3971,7 @@
       "kind": "api",
       "key": "pinBlackBox",
       "status": "implemented",
-      "surface": "view:armadaMissions",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Missions"
     },
@@ -3979,7 +3979,7 @@
       "kind": "api",
       "key": "previewCaptainSelection",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Battery packs"
     },
@@ -3995,7 +3995,7 @@
       "kind": "api",
       "key": "previewPersonaPrompt",
       "status": "implemented",
-      "surface": "view:armadaConfiguration",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Project profiles"
     },
@@ -4003,7 +4003,7 @@
       "kind": "api",
       "key": "previewWorkflowProfileForVessel",
       "status": "implemented",
-      "surface": "view:armadaConfiguration",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Workflow Profiles"
     },
@@ -4011,7 +4011,7 @@
       "kind": "api",
       "key": "processAllMergeQueue",
       "status": "implemented",
-      "surface": "view:armadaMergeQueue",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Merge Queue"
     },
@@ -4019,7 +4019,7 @@
       "kind": "api",
       "key": "processMergeEntry",
       "status": "implemented",
-      "surface": "view:armadaMergeQueue",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Merge Queue"
     },
@@ -4027,7 +4027,7 @@
       "kind": "api",
       "key": "purgeBlackBox",
       "status": "implemented",
-      "surface": "view:armadaMissions",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Missions"
     },
@@ -4035,7 +4035,7 @@
       "kind": "api",
       "key": "purgeMission",
       "status": "implemented",
-      "surface": "view:armadaMissions",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Missions"
     },
@@ -4043,7 +4043,7 @@
       "kind": "api",
       "key": "purgeVoyage",
       "status": "implemented",
-      "surface": "view:armadaVoyages",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Voyages"
     },
@@ -4051,7 +4051,7 @@
       "kind": "api",
       "key": "pushVesselBranch",
       "status": "implemented",
-      "surface": "view:armadaFleet",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Vessels"
     },
@@ -4059,7 +4059,7 @@
       "kind": "api",
       "key": "readBatteryPackFile",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Battery packs"
     },
@@ -4067,7 +4067,7 @@
       "kind": "api",
       "key": "readBlackBoxObject",
       "status": "implemented",
-      "surface": "view:armadaMissions",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Missions"
     },
@@ -4075,7 +4075,7 @@
       "kind": "api",
       "key": "reanalyzeBlackBox",
       "status": "implemented",
-      "surface": "view:armadaMissions",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Missions"
     },
@@ -4083,7 +4083,7 @@
       "kind": "api",
       "key": "rebuildServer",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Server"
     },
@@ -4091,7 +4091,7 @@
       "kind": "api",
       "key": "recallCaptain",
       "status": "implemented",
-      "surface": "view:armadaCaptains",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Captains"
     },
@@ -4099,7 +4099,7 @@
       "kind": "api",
       "key": "reclassifyStageOutcomes",
       "status": "implemented",
-      "surface": "view:armadaActivity",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Stage outcomes and failure-cause rules"
     },
@@ -4107,7 +4107,7 @@
       "kind": "api",
       "key": "refreshRelease",
       "status": "implemented",
-      "surface": "view:armadaDelivery",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Releases"
     },
@@ -4115,7 +4115,7 @@
       "kind": "api",
       "key": "refreshStorage",
       "status": "implemented",
-      "surface": "view:armadaFleetActions",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Fleet Actions"
     },
@@ -4123,7 +4123,7 @@
       "kind": "api",
       "key": "rejectAskProposal",
       "status": "implemented",
-      "surface": "view:armadaAsk",
+      "surface": "view:armadaConversations",
       "milestone": "",
       "notes": "Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md)"
     },
@@ -4139,7 +4139,7 @@
       "kind": "api",
       "key": "reorderBacklog",
       "status": "implemented",
-      "surface": "view:armadaBacklog",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Objectives"
     },
@@ -4147,7 +4147,7 @@
       "kind": "api",
       "key": "reorderObjectives",
       "status": "implemented",
-      "surface": "view:armadaBacklog",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Objectives; objectives and backlog items are the same records (reorderBacklog)"
     },
@@ -4155,7 +4155,7 @@
       "kind": "api",
       "key": "resetPromptTemplate",
       "status": "implemented",
-      "surface": "view:armadaConfiguration",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Prompt Templates"
     },
@@ -4163,7 +4163,7 @@
       "kind": "api",
       "key": "resetServer",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Server"
     },
@@ -4179,7 +4179,7 @@
       "kind": "api",
       "key": "resolveProjectProfileForVessel",
       "status": "implemented",
-      "surface": "view:armadaConfiguration",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Project profiles"
     },
@@ -4187,7 +4187,7 @@
       "kind": "api",
       "key": "resolveWorkflowProfile",
       "status": "implemented",
-      "surface": "view:armadaConfiguration",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Workflow Profiles"
     },
@@ -4195,7 +4195,7 @@
       "kind": "api",
       "key": "restartCaptain",
       "status": "implemented",
-      "surface": "view:armadaActivity",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Vessel Health"
     },
@@ -4203,7 +4203,7 @@
       "kind": "api",
       "key": "restartMission",
       "status": "implemented",
-      "surface": "view:armadaMissions",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Missions"
     },
@@ -4211,7 +4211,7 @@
       "kind": "api",
       "key": "restartServer",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Server"
     },
@@ -4227,7 +4227,7 @@
       "kind": "api",
       "key": "retryCheckRun",
       "status": "implemented",
-      "surface": "view:armadaDelivery",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Check Runs"
     },
@@ -4235,7 +4235,7 @@
       "kind": "api",
       "key": "retryMissionLanding",
       "status": "implemented",
-      "surface": "view:armadaMissions",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Missions"
     },
@@ -4243,7 +4243,7 @@
       "kind": "api",
       "key": "rollbackDeployment",
       "status": "implemented",
-      "surface": "view:armadaDelivery",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Deployments"
     },
@@ -4251,7 +4251,7 @@
       "kind": "api",
       "key": "rollbackServer",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Server"
     },
@@ -4259,7 +4259,7 @@
       "kind": "api",
       "key": "runAdHocFleetAction",
       "status": "implemented",
-      "surface": "view:armadaFleetActions",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Fleet Actions"
     },
@@ -4267,7 +4267,7 @@
       "kind": "api",
       "key": "runAskQuickAction",
       "status": "implemented",
-      "surface": "view:armadaAsk",
+      "surface": "view:armadaConversations",
       "milestone": "",
       "notes": "Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md)"
     },
@@ -4275,7 +4275,7 @@
       "kind": "api",
       "key": "runBlackBoxGc",
       "status": "implemented",
-      "surface": "view:armadaMissions",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Missions"
     },
@@ -4291,7 +4291,7 @@
       "kind": "api",
       "key": "runCheck",
       "status": "implemented",
-      "surface": "view:armadaDelivery",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Check Runs"
     },
@@ -4299,7 +4299,7 @@
       "kind": "api",
       "key": "runFleetAction",
       "status": "implemented",
-      "surface": "view:armadaFleetActions",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Fleet Actions"
     },
@@ -4307,7 +4307,7 @@
       "kind": "api",
       "key": "runVesselCleanup",
       "status": "implemented",
-      "surface": "view:armadaFleet",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Vessels"
     },
@@ -4323,7 +4323,7 @@
       "kind": "api",
       "key": "searchBlackBox",
       "status": "implemented",
-      "surface": "view:armadaMissions",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Missions"
     },
@@ -4339,7 +4339,7 @@
       "kind": "api",
       "key": "sendAskMessage",
       "status": "implemented",
-      "surface": "view:armadaAsk",
+      "surface": "view:armadaConversations",
       "milestone": "",
       "notes": "Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md)"
     },
@@ -4347,7 +4347,7 @@
       "kind": "api",
       "key": "sendObjectiveRefinementMessage",
       "status": "implemented",
-      "surface": "view:armadaBacklog",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Objectives"
     },
@@ -4363,7 +4363,7 @@
       "kind": "api",
       "key": "sendSignal",
       "status": "implemented",
-      "surface": "view:armadaActivity",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Signals"
     },
@@ -4371,7 +4371,7 @@
       "kind": "api",
       "key": "setAskThreadCliPermissionPolicy",
       "status": "implemented",
-      "surface": "view:armadaNeedsYou",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "CLI tool permissions"
     },
@@ -4379,7 +4379,7 @@
       "kind": "api",
       "key": "setCaptainCliPermissionPolicy",
       "status": "implemented",
-      "surface": "view:armadaNeedsYou",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "CLI tool permissions"
     },
@@ -4387,7 +4387,7 @@
       "kind": "api",
       "key": "setVesselHealthOverride",
       "status": "implemented",
-      "surface": "view:armadaActivity",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Vessel Health"
     },
@@ -4395,7 +4395,7 @@
       "kind": "api",
       "key": "startRunbookExecution",
       "status": "implemented",
-      "surface": "view:armadaDelivery",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Runbooks"
     },
@@ -4403,7 +4403,7 @@
       "kind": "api",
       "key": "stopAllCaptains",
       "status": "implemented",
-      "surface": "view:armadaCaptains",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Captains"
     },
@@ -4411,7 +4411,7 @@
       "kind": "api",
       "key": "stopCaptain",
       "status": "implemented",
-      "surface": "view:armadaCaptains",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Captains"
     },
@@ -4419,7 +4419,7 @@
       "kind": "api",
       "key": "stopHarborJob",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Harbors (host runners)"
     },
@@ -4427,7 +4427,7 @@
       "kind": "api",
       "key": "stopObjectiveRefinementSession",
       "status": "implemented",
-      "surface": "view:armadaBacklog",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Objectives"
     },
@@ -4451,7 +4451,7 @@
       "kind": "api",
       "key": "stopServer",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Server"
     },
@@ -4459,7 +4459,7 @@
       "kind": "api",
       "key": "summarizeAskThread",
       "status": "implemented",
-      "surface": "view:armadaAsk",
+      "surface": "view:armadaConversations",
       "milestone": "",
       "notes": "Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md)"
     },
@@ -4467,7 +4467,7 @@
       "kind": "api",
       "key": "summarizeObjectiveRefinementSession",
       "status": "implemented",
-      "surface": "view:armadaBacklog",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Objectives"
     },
@@ -4483,7 +4483,7 @@
       "kind": "api",
       "key": "syncGitHubActions",
       "status": "implemented",
-      "surface": "view:armadaDelivery",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Deployments"
     },
@@ -4491,7 +4491,7 @@
       "kind": "api",
       "key": "transitionMission",
       "status": "implemented",
-      "surface": "view:armadaMissions",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Missions"
     },
@@ -4499,7 +4499,7 @@
       "kind": "api",
       "key": "unpinBlackBox",
       "status": "implemented",
-      "surface": "view:armadaMissions",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Missions"
     },
@@ -4507,7 +4507,7 @@
       "kind": "api",
       "key": "unquarantineCaptain",
       "status": "implemented",
-      "surface": "view:armadaCaptains",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Captains"
     },
@@ -4515,7 +4515,7 @@
       "kind": "api",
       "key": "updateAskThread",
       "status": "implemented",
-      "surface": "view:armadaAsk",
+      "surface": "view:armadaConversations",
       "milestone": "",
       "notes": "Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md)"
     },
@@ -4523,7 +4523,7 @@
       "kind": "api",
       "key": "updateBacklogItem",
       "status": "implemented",
-      "surface": "view:armadaBacklog",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Objectives"
     },
@@ -4531,7 +4531,7 @@
       "kind": "api",
       "key": "updateBatteryPackManifest",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Battery packs"
     },
@@ -4539,7 +4539,7 @@
       "kind": "api",
       "key": "updateCaptain",
       "status": "implemented",
-      "surface": "view:armadaCaptains",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Captains"
     },
@@ -4547,7 +4547,7 @@
       "kind": "api",
       "key": "updateCliPermissionRule",
       "status": "implemented",
-      "surface": "view:armadaNeedsYou",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "CLI tool permissions"
     },
@@ -4555,7 +4555,7 @@
       "kind": "api",
       "key": "updateCredential",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Credentials (admin)"
     },
@@ -4563,7 +4563,7 @@
       "kind": "api",
       "key": "updateDeployment",
       "status": "implemented",
-      "surface": "view:armadaDelivery",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Deployments"
     },
@@ -4571,7 +4571,7 @@
       "kind": "api",
       "key": "updateEnvironment",
       "status": "implemented",
-      "surface": "view:armadaDelivery",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Environments"
     },
@@ -4579,7 +4579,7 @@
       "kind": "api",
       "key": "updateFailureCauseRule",
       "status": "implemented",
-      "surface": "view:armadaActivity",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Stage outcomes and failure-cause rules"
     },
@@ -4587,7 +4587,7 @@
       "kind": "api",
       "key": "updateFleet",
       "status": "implemented",
-      "surface": "view:armadaFleet",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Fleets"
     },
@@ -4595,7 +4595,7 @@
       "kind": "api",
       "key": "updateFleetAction",
       "status": "implemented",
-      "surface": "view:armadaFleetActions",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Fleet Actions"
     },
@@ -4603,7 +4603,7 @@
       "kind": "api",
       "key": "updateHarbor",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Harbors (host runners)"
     },
@@ -4611,7 +4611,7 @@
       "kind": "api",
       "key": "updateIncident",
       "status": "implemented",
-      "surface": "view:armadaDelivery",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Incidents"
     },
@@ -4619,7 +4619,7 @@
       "kind": "api",
       "key": "updateMemory",
       "status": "implemented",
-      "surface": "view:armadaConfiguration",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Memories"
     },
@@ -4627,7 +4627,7 @@
       "kind": "api",
       "key": "updateMission",
       "status": "implemented",
-      "surface": "view:armadaMissions",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Missions"
     },
@@ -4635,7 +4635,7 @@
       "kind": "api",
       "key": "updateModelEndpoint",
       "status": "implemented",
-      "surface": "view:armadaConfiguration",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Model endpoints (embedding/inference)"
     },
@@ -4643,7 +4643,7 @@
       "kind": "api",
       "key": "updateObjective",
       "status": "implemented",
-      "surface": "view:armadaBacklog",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Objectives; objectives and backlog items are the same records (updateBacklogItem)"
     },
@@ -4651,7 +4651,7 @@
       "kind": "api",
       "key": "updatePersona",
       "status": "implemented",
-      "surface": "view:armadaConfiguration",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Personas"
     },
@@ -4659,7 +4659,7 @@
       "kind": "api",
       "key": "updatePipeline",
       "status": "implemented",
-      "surface": "view:armadaConfiguration",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Pipelines"
     },
@@ -4667,7 +4667,7 @@
       "kind": "api",
       "key": "updatePlaybook",
       "status": "implemented",
-      "surface": "view:armadaConfiguration",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Playbooks"
     },
@@ -4675,7 +4675,7 @@
       "kind": "api",
       "key": "updateProjectProfile",
       "status": "implemented",
-      "surface": "view:armadaConfiguration",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Project profiles"
     },
@@ -4683,7 +4683,7 @@
       "kind": "api",
       "key": "updatePromptTemplate",
       "status": "implemented",
-      "surface": "view:armadaConfiguration",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Prompt Templates"
     },
@@ -4691,7 +4691,7 @@
       "kind": "api",
       "key": "updateRelease",
       "status": "implemented",
-      "surface": "view:armadaDelivery",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Releases"
     },
@@ -4699,7 +4699,7 @@
       "kind": "api",
       "key": "updateRunbook",
       "status": "implemented",
-      "surface": "view:armadaDelivery",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Runbooks"
     },
@@ -4707,7 +4707,7 @@
       "kind": "api",
       "key": "updateRunbookExecution",
       "status": "implemented",
-      "surface": "view:armadaDelivery",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Runbooks"
     },
@@ -4715,7 +4715,7 @@
       "kind": "api",
       "key": "updateSettings",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Settings"
     },
@@ -4723,7 +4723,7 @@
       "kind": "api",
       "key": "updateSkill",
       "status": "implemented",
-      "surface": "view:armadaConfiguration",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Skills directory"
     },
@@ -4731,7 +4731,7 @@
       "kind": "api",
       "key": "updateTenant",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Tenants (admin)"
     },
@@ -4739,7 +4739,7 @@
       "kind": "api",
       "key": "updateUser",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Users (admin)"
     },
@@ -4747,7 +4747,7 @@
       "kind": "api",
       "key": "updateVessel",
       "status": "implemented",
-      "surface": "view:armadaFleet",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Vessels"
     },
@@ -4755,7 +4755,7 @@
       "kind": "api",
       "key": "updateVesselContext",
       "status": "implemented",
-      "surface": "view:armadaFleet",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Vessels"
     },
@@ -4763,7 +4763,7 @@
       "kind": "api",
       "key": "updateWorkflowProfile",
       "status": "implemented",
-      "surface": "view:armadaConfiguration",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Workflow Profiles"
     },
@@ -4771,7 +4771,7 @@
       "kind": "api",
       "key": "validateBatteryPack",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Battery packs"
     },
@@ -4779,7 +4779,7 @@
       "kind": "api",
       "key": "validateModelEndpoint",
       "status": "implemented",
-      "surface": "view:armadaConfiguration",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Model endpoints (embedding/inference)"
     },
@@ -4787,7 +4787,7 @@
       "kind": "api",
       "key": "validateProjectProfile",
       "status": "implemented",
-      "surface": "view:armadaConfiguration",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Project profiles"
     },
@@ -4795,7 +4795,7 @@
       "kind": "api",
       "key": "validateWorkflowProfile",
       "status": "implemented",
-      "surface": "view:armadaConfiguration",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Workflow Profiles"
     },
@@ -4803,7 +4803,7 @@
       "kind": "api",
       "key": "verifyDeployment",
       "status": "implemented",
-      "surface": "view:armadaDelivery",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Deployments"
     },
@@ -4819,7 +4819,7 @@
       "kind": "api",
       "key": "writeBatteryPackFile",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Battery packs"
     },
@@ -4859,7 +4859,7 @@
       "kind": "event",
       "key": "ask.thread",
       "status": "implemented",
-      "surface": "view:armadaAsk",
+      "surface": "view:armadaConversations",
       "milestone": "V2",
       "notes": ""
     },
@@ -4891,7 +4891,7 @@
       "kind": "event",
       "key": "captain-selection.changed",
       "status": "implemented",
-      "surface": "view:armadaCaptains",
+      "surface": "view:armadaNav",
       "milestone": "V1",
       "notes": ""
     },
@@ -4899,7 +4899,7 @@
       "kind": "event",
       "key": "captain.changed",
       "status": "implemented",
-      "surface": "view:armadaCaptains",
+      "surface": "view:armadaNav",
       "milestone": "V1",
       "notes": ""
     },
@@ -4907,7 +4907,7 @@
       "kind": "event",
       "key": "deployment.changed",
       "status": "implemented",
-      "surface": "view:armadaDelivery",
+      "surface": "view:armadaNav",
       "milestone": "V1",
       "notes": ""
     },
@@ -4915,7 +4915,7 @@
       "kind": "event",
       "key": "incident.changed",
       "status": "implemented",
-      "surface": "view:armadaDelivery",
+      "surface": "view:armadaNav",
       "milestone": "V1",
       "notes": ""
     },
@@ -4923,7 +4923,7 @@
       "kind": "event",
       "key": "mission.changed",
       "status": "implemented",
-      "surface": "view:armadaMissions",
+      "surface": "view:armadaNav",
       "milestone": "V1",
       "notes": ""
     },
@@ -4931,7 +4931,7 @@
       "kind": "event",
       "key": "objective-refinement-session.applied",
       "status": "implemented",
-      "surface": "view:armadaBacklog",
+      "surface": "view:armadaNav",
       "milestone": "V2",
       "notes": ""
     },
@@ -4939,7 +4939,7 @@
       "kind": "event",
       "key": "objective-refinement-session.changed",
       "status": "implemented",
-      "surface": "view:armadaBacklog",
+      "surface": "view:armadaNav",
       "milestone": "V2",
       "notes": ""
     },
@@ -4947,7 +4947,7 @@
       "kind": "event",
       "key": "objective-refinement-session.deleted",
       "status": "implemented",
-      "surface": "view:armadaBacklog",
+      "surface": "view:armadaNav",
       "milestone": "V2",
       "notes": ""
     },
@@ -4955,7 +4955,7 @@
       "kind": "event",
       "key": "objective-refinement-session.message.created",
       "status": "implemented",
-      "surface": "view:armadaBacklog",
+      "surface": "view:armadaNav",
       "milestone": "V2",
       "notes": ""
     },
@@ -4963,7 +4963,7 @@
       "kind": "event",
       "key": "objective-refinement-session.message.updated",
       "status": "implemented",
-      "surface": "view:armadaBacklog",
+      "surface": "view:armadaNav",
       "milestone": "V2",
       "notes": ""
     },
@@ -4971,7 +4971,7 @@
       "kind": "event",
       "key": "objective-refinement-session.summary.created",
       "status": "implemented",
-      "surface": "view:armadaBacklog",
+      "surface": "view:armadaNav",
       "milestone": "V2",
       "notes": ""
     },
@@ -4979,7 +4979,7 @@
       "kind": "event",
       "key": "objective.changed",
       "status": "implemented",
-      "surface": "view:armadaBacklog",
+      "surface": "view:armadaNav",
       "milestone": "V2",
       "notes": ""
     },
@@ -5051,7 +5051,7 @@
       "kind": "event",
       "key": "voyage.changed",
       "status": "implemented",
-      "surface": "view:armadaVoyages",
+      "surface": "view:armadaNav",
       "milestone": "V1",
       "notes": ""
     },
@@ -5059,7 +5059,7 @@
       "kind": "setting",
       "key": "settings.admiralPort",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V6",
       "notes": ""
     },
@@ -5067,7 +5067,7 @@
       "kind": "setting",
       "key": "settings.ask",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V6",
       "notes": ""
     },
@@ -5075,7 +5075,7 @@
       "kind": "setting",
       "key": "settings.ask.historyTurns",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V6",
       "notes": ""
     },
@@ -5083,7 +5083,7 @@
       "kind": "setting",
       "key": "settings.ask.narrateMilestones",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V6",
       "notes": ""
     },
@@ -5091,7 +5091,7 @@
       "kind": "setting",
       "key": "settings.ask.narrationTimeoutSeconds",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V6",
       "notes": ""
     },
@@ -5099,7 +5099,7 @@
       "kind": "setting",
       "key": "settings.ask.proposalExpiryMinutes",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V6",
       "notes": ""
     },
@@ -5107,7 +5107,7 @@
       "kind": "setting",
       "key": "settings.ask.reportResultsOnCompletion",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V6",
       "notes": ""
     },
@@ -5115,7 +5115,7 @@
       "kind": "setting",
       "key": "settings.ask.trackerIntervalSeconds",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V6",
       "notes": ""
     },
@@ -5123,7 +5123,7 @@
       "kind": "setting",
       "key": "settings.ask.turnTimeoutMinutes",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V6",
       "notes": ""
     },
@@ -5131,7 +5131,7 @@
       "kind": "setting",
       "key": "settings.blackBox",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V6",
       "notes": ""
     },
@@ -5139,7 +5139,7 @@
       "kind": "setting",
       "key": "settings.blockDependentsOfFailedStages",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V6",
       "notes": ""
     },
@@ -5147,7 +5147,7 @@
       "kind": "setting",
       "key": "settings.dataDirectory",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V6",
       "notes": ""
     },
@@ -5155,7 +5155,7 @@
       "kind": "setting",
       "key": "settings.databasePath",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V6",
       "notes": ""
     },
@@ -5163,7 +5163,7 @@
       "kind": "setting",
       "key": "settings.docksDirectory",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V6",
       "notes": ""
     },
@@ -5171,7 +5171,7 @@
       "kind": "setting",
       "key": "settings.fleetActions.defaultTimeoutSeconds",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V6",
       "notes": ""
     },
@@ -5179,7 +5179,7 @@
       "kind": "setting",
       "key": "settings.fleetActions.maxConcurrency",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V6",
       "notes": ""
     },
@@ -5187,7 +5187,7 @@
       "kind": "setting",
       "key": "settings.fleetActions.maxOutputBytes",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V6",
       "notes": ""
     },
@@ -5195,7 +5195,7 @@
       "kind": "setting",
       "key": "settings.fleetActions.runRetentionDays",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V6",
       "notes": ""
     },
@@ -5203,7 +5203,7 @@
       "kind": "setting",
       "key": "settings.heartbeatIntervalSeconds",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V6",
       "notes": ""
     },
@@ -5211,7 +5211,7 @@
       "kind": "setting",
       "key": "settings.idleCaptainTimeoutSeconds",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V6",
       "notes": ""
     },
@@ -5219,7 +5219,7 @@
       "kind": "setting",
       "key": "settings.import.allowedRoots",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V6",
       "notes": ""
     },
@@ -5227,7 +5227,7 @@
       "kind": "setting",
       "key": "settings.import.categorizationTimeoutMinutes",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V6",
       "notes": ""
     },
@@ -5235,7 +5235,7 @@
       "kind": "setting",
       "key": "settings.import.excludedDirectoryNames",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V6",
       "notes": ""
     },
@@ -5243,7 +5243,7 @@
       "kind": "setting",
       "key": "settings.import.inlineBatchLimit",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V6",
       "notes": ""
     },
@@ -5251,7 +5251,7 @@
       "kind": "setting",
       "key": "settings.import.maxDepth",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V6",
       "notes": ""
     },
@@ -5259,7 +5259,7 @@
       "kind": "setting",
       "key": "settings.landingMode",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V6",
       "notes": ""
     },
@@ -5267,7 +5267,7 @@
       "kind": "setting",
       "key": "settings.logDirectory",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V6",
       "notes": ""
     },
@@ -5275,7 +5275,7 @@
       "kind": "setting",
       "key": "settings.maxCaptains",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V6",
       "notes": ""
     },
@@ -5283,7 +5283,7 @@
       "kind": "setting",
       "key": "settings.mcpPort",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V6",
       "notes": ""
     },
@@ -5291,7 +5291,7 @@
       "kind": "setting",
       "key": "settings.permissions",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V6",
       "notes": ""
     },
@@ -5299,7 +5299,7 @@
       "kind": "setting",
       "key": "settings.permissions.allowOwnerApproval",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V6",
       "notes": ""
     },
@@ -5307,7 +5307,7 @@
       "kind": "setting",
       "key": "settings.permissions.askDefaultPolicy",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V6",
       "notes": ""
     },
@@ -5315,7 +5315,7 @@
       "kind": "setting",
       "key": "settings.permissions.missionDefaultPolicy",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V6",
       "notes": ""
     },
@@ -5323,7 +5323,7 @@
       "kind": "setting",
       "key": "settings.permissions.promptTimeoutSeconds",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V6",
       "notes": ""
     },
@@ -5331,7 +5331,7 @@
       "kind": "setting",
       "key": "settings.permissions.timeoutDecision",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V6",
       "notes": ""
     },
@@ -5339,7 +5339,7 @@
       "kind": "setting",
       "key": "settings.planningSessionAbandonmentTimeoutMinutes",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V6",
       "notes": ""
     },
@@ -5347,7 +5347,7 @@
       "kind": "setting",
       "key": "settings.planningSessionInactivityTimeoutMinutes",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V6",
       "notes": ""
     },
@@ -5355,7 +5355,7 @@
       "kind": "setting",
       "key": "settings.planningSessionRetentionDays",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V6",
       "notes": ""
     },
@@ -5363,7 +5363,7 @@
       "kind": "setting",
       "key": "settings.rebuildSlotRetentionCount",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V6",
       "notes": ""
     },
@@ -5371,7 +5371,7 @@
       "kind": "setting",
       "key": "settings.remoteControl.allowInvalidCertificates",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V6",
       "notes": ""
     },
@@ -5379,7 +5379,7 @@
       "kind": "setting",
       "key": "settings.remoteControl.connectTimeoutSeconds",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V6",
       "notes": ""
     },
@@ -5387,7 +5387,7 @@
       "kind": "setting",
       "key": "settings.remoteControl.enabled",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V6",
       "notes": ""
     },
@@ -5395,7 +5395,7 @@
       "kind": "setting",
       "key": "settings.remoteControl.enrollmentToken",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V6",
       "notes": ""
     },
@@ -5403,7 +5403,7 @@
       "kind": "setting",
       "key": "settings.remoteControl.heartbeatIntervalSeconds",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V6",
       "notes": ""
     },
@@ -5411,7 +5411,7 @@
       "kind": "setting",
       "key": "settings.remoteControl.instanceId",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V6",
       "notes": ""
     },
@@ -5419,7 +5419,7 @@
       "kind": "setting",
       "key": "settings.remoteControl.password",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V6",
       "notes": ""
     },
@@ -5427,7 +5427,7 @@
       "kind": "setting",
       "key": "settings.remoteControl.reconnectBaseDelaySeconds",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V6",
       "notes": ""
     },
@@ -5435,7 +5435,7 @@
       "kind": "setting",
       "key": "settings.remoteControl.reconnectMaxDelaySeconds",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V6",
       "notes": ""
     },
@@ -5443,7 +5443,7 @@
       "kind": "setting",
       "key": "settings.remoteControl.tunnelUrl",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V6",
       "notes": ""
     },
@@ -5451,7 +5451,7 @@
       "kind": "setting",
       "key": "settings.reposDirectory",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V6",
       "notes": ""
     },
@@ -5459,7 +5459,7 @@
       "kind": "setting",
       "key": "settings.repositoryHealth.dependencyCommandTimeoutSeconds",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V6",
       "notes": ""
     },
@@ -5467,7 +5467,7 @@
       "kind": "setting",
       "key": "settings.repositoryHealth.dependencyMaxAgeHours",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V6",
       "notes": ""
     },
@@ -5475,7 +5475,7 @@
       "kind": "setting",
       "key": "settings.repositoryHealth.fetchBeforeEvaluate",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V6",
       "notes": ""
     },
@@ -5483,7 +5483,7 @@
       "kind": "setting",
       "key": "settings.repositoryHealth.intervalMinutes",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V6",
       "notes": ""
     },
@@ -5491,7 +5491,7 @@
       "kind": "setting",
       "key": "settings.repositoryHealth.maxConcurrency",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V6",
       "notes": ""
     },
@@ -5499,7 +5499,7 @@
       "kind": "setting",
       "key": "settings.repositoryHealth.missionWindowDays",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V6",
       "notes": ""
     },
@@ -5507,7 +5507,7 @@
       "kind": "setting",
       "key": "settings.repositoryHealth.scoredCriteria",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V6",
       "notes": ""
     },
@@ -5515,7 +5515,7 @@
       "kind": "setting",
       "key": "settings.repositoryHealth.staleBranchDays",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V6",
       "notes": ""
     },
@@ -5523,7 +5523,7 @@
       "kind": "setting",
       "key": "settings.repositoryHealth.thresholds.behindFail",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V6",
       "notes": ""
     },
@@ -5531,7 +5531,7 @@
       "kind": "setting",
       "key": "settings.repositoryHealth.thresholds.behindWarn",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V6",
       "notes": ""
     },
@@ -5539,7 +5539,7 @@
       "kind": "setting",
       "key": "settings.repositoryHealth.thresholds.missionFailureFail",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V6",
       "notes": ""
     },
@@ -5547,7 +5547,7 @@
       "kind": "setting",
       "key": "settings.repositoryHealth.thresholds.missionFailureWarn",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V6",
       "notes": ""
     },
@@ -5555,7 +5555,7 @@
       "kind": "setting",
       "key": "settings.repositoryHealth.thresholds.staleBranchFail",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V6",
       "notes": ""
     },
@@ -5563,7 +5563,7 @@
       "kind": "setting",
       "key": "settings.repositoryHealth.thresholds.staleBranchWarn",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V6",
       "notes": ""
     },
@@ -5571,7 +5571,7 @@
       "kind": "setting",
       "key": "settings.requireHarborForLaunch",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V6",
       "notes": ""
     },
@@ -5579,7 +5579,7 @@
       "kind": "setting",
       "key": "settings.retention",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V6",
       "notes": ""
     },
@@ -5587,7 +5587,7 @@
       "kind": "setting",
       "key": "settings.retention.askThreadArchiveAfterDays",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V6",
       "notes": ""
     },
@@ -5595,7 +5595,7 @@
       "kind": "setting",
       "key": "settings.retention.askThreadDeleteAfterDays",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V6",
       "notes": ""
     },
@@ -5603,7 +5603,7 @@
       "kind": "setting",
       "key": "settings.retention.cliPermissionRequestRetentionDays",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V6",
       "notes": ""
     },
@@ -5611,7 +5611,7 @@
       "kind": "setting",
       "key": "settings.retention.importBatchRetentionDays",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V6",
       "notes": ""
     },
@@ -5619,7 +5619,7 @@
       "kind": "setting",
       "key": "settings.retention.jobRetentionDays",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V6",
       "notes": ""
     },
@@ -5627,7 +5627,7 @@
       "kind": "setting",
       "key": "settings.selfVesselId",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V6",
       "notes": ""
     },
@@ -5635,7 +5635,7 @@
       "kind": "setting",
       "key": "settings.stageCheckTimeoutMinutes",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V6",
       "notes": ""
     },
@@ -5643,7 +5643,7 @@
       "kind": "setting",
       "key": "settings.stallThresholdMinutes",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V6",
       "notes": ""
     },
@@ -5675,7 +5675,7 @@
       "kind": "tui",
       "key": "route:/approvals",
       "status": "implemented",
-      "surface": "view:armadaNeedsYou",
+      "surface": "view:armadaNav",
       "milestone": "V1",
       "notes": "TUI-only route: TUI-only route: Approvals center (Ask proposals, reviews, deployments, landings, stalled captains)"
     },
@@ -5699,7 +5699,7 @@
       "kind": "harbor",
       "key": "menu:Activity",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V7",
       "notes": ""
     },
@@ -5907,7 +5907,7 @@
       "kind": "harbor",
       "key": "menu:Status",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V7",
       "notes": ""
     },
@@ -5971,7 +5971,7 @@
       "kind": "harbor",
       "key": "window:StatusWindow",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V7",
       "notes": ""
     },
@@ -5995,7 +5995,7 @@
       "kind": "cli",
       "key": "doctor",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V6",
       "notes": ""
     },
@@ -6027,7 +6027,7 @@
       "kind": "cli",
       "key": "reset",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V6",
       "notes": "Reset Admiral on the Admiral record (System view), behind a typed confirmation"
     },
@@ -6035,7 +6035,7 @@
       "kind": "cli",
       "key": "server",
       "status": "implemented",
-      "surface": "view:armadaSystem",
+      "surface": "view:armadaNav",
       "milestone": "V6",
       "notes": ""
     },
@@ -6043,7 +6043,7 @@
       "kind": "cli",
       "key": "watch",
       "status": "implemented",
-      "surface": "view:armadaMissions",
+      "surface": "view:armadaNav",
       "milestone": "V1",
       "notes": ""
     },

@@ -65,18 +65,8 @@ export interface ResourceSpec {
   createCommand?: string;
 }
 
-/** The sidebar views resources appear in. */
+/** The group a record kind belonged to before the Armada tree (kept as metadata; placement is HUB_RESOURCES). */
 export type ResourceViewKey = 'backlog' | 'fleetActions' | 'delivery' | 'configuration' | 'activity' | 'system';
-
-/** View ids per key (package.json contributes.views.armada). */
-export const RESOURCE_VIEW_IDS: Record<ResourceViewKey, string> = {
-  backlog: 'armadaBacklog',
-  fleetActions: 'armadaFleetActions',
-  delivery: 'armadaDelivery',
-  configuration: 'armadaConfiguration',
-  activity: 'armadaActivity',
-  system: 'armadaSystem',
-};
 
 /** Fields no edit form offers (identity, ownership and timestamps). */
 const COMMON_READ_ONLY = /^(id|tenantId|userId|ownerUserId|createdUtc|lastUpdateUtc|updatedUtc|createdByUserId|.*Count|.*Utc)$/;

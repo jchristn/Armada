@@ -15,7 +15,7 @@ import { ConnectionManager } from '../../connection/connectionManager';
 import { harborDirectory, isHarborRunning } from '../../connection/endpoints';
 import { describeError } from '../../transport/errors';
 import { readHealth } from '../../transport/hostClient';
-import { OPS_VIEW_IDS } from './opsTrees';
+import { NAV_REVEAL_COMMAND } from '../nav/navTree';
 import { OpsStore } from './opsStore';
 
 /** The project's home page and issue tracker. */
@@ -46,7 +46,7 @@ export function watchNeedsYou(store: OpsStore, enabled: () => boolean): vscode.D
     if (!fresh.length || !enabled()) return;
     if (fresh.length > 3) {
       void vscode.window.showWarningMessage(`Armada: ${fresh.length} new items need you.`, 'Show').then((choice) => {
-        if (choice === 'Show') void vscode.commands.executeCommand(`${OPS_VIEW_IDS.needsYou}.focus`);
+        if (choice === 'Show') void vscode.commands.executeCommand(NAV_REVEAL_COMMAND, 'needsYou');
       });
       return;
     }

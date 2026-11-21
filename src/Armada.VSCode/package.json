@@ -162,91 +162,16 @@
           "icon": "media/icon.png"
         },
         {
-          "id": "armadaNeedsYou",
-          "name": "Needs You",
-          "contextualTitle": "Armada",
-          "icon": "media/icon.png"
-        },
-        {
-          "id": "armadaMissions",
-          "name": "Missions",
-          "contextualTitle": "Armada",
-          "icon": "media/icon.png"
-        },
-        {
-          "id": "armadaVoyages",
-          "name": "Voyages",
-          "contextualTitle": "Armada",
-          "icon": "media/icon.png"
-        },
-        {
-          "id": "armadaCaptains",
-          "name": "Captains",
-          "contextualTitle": "Armada",
+          "id": "armadaConversations",
+          "name": "Conversations",
           "icon": "media/icon.png",
-          "visibility": "collapsed"
+          "contextualTitle": "Ask Armada"
         },
         {
-          "id": "armadaFleet",
-          "name": "Fleet",
-          "contextualTitle": "Armada",
+          "id": "armadaNav",
+          "name": "Armada",
           "icon": "media/icon.png",
-          "visibility": "collapsed"
-        },
-        {
-          "id": "armadaMergeQueue",
-          "name": "Merge Queue",
-          "contextualTitle": "Armada",
-          "icon": "media/icon.png",
-          "visibility": "collapsed"
-        },
-        {
-          "id": "armadaFailures",
-          "name": "Failures",
-          "contextualTitle": "Armada",
-          "icon": "media/icon.png"
-        },
-        {
-          "id": "armadaBacklog",
-          "name": "Backlog & Planning",
-          "contextualTitle": "Armada",
-          "icon": "media/icon.png",
-          "visibility": "collapsed"
-        },
-        {
-          "id": "armadaFleetActions",
-          "name": "Fleet Actions",
-          "contextualTitle": "Armada",
-          "icon": "media/icon.png",
-          "visibility": "collapsed"
-        },
-        {
-          "id": "armadaDelivery",
-          "name": "Delivery",
-          "contextualTitle": "Armada",
-          "icon": "media/icon.png",
-          "visibility": "collapsed"
-        },
-        {
-          "id": "armadaConfiguration",
-          "name": "Configuration",
-          "contextualTitle": "Armada",
-          "icon": "media/icon.png",
-          "visibility": "collapsed"
-        },
-        {
-          "id": "armadaActivity",
-          "name": "Activity",
-          "contextualTitle": "Armada",
-          "icon": "media/icon.png",
-          "visibility": "collapsed"
-        },
-        {
-          "id": "armadaSystem",
-          "name": "System",
-          "contextualTitle": "Armada",
-          "icon": "media/icon.png",
-          "visibility": "collapsed"
+          "contextualTitle": "Armada"
         }
       ],
       "explorer": [
@@ -260,16 +185,6 @@
     },
     "viewsWelcome": [
       {
-        "view": "armadaFailures",
-        "contents": "Connecting to the Armada Admiral...",
-        "when": "armada.connectionState == connecting"
-      },
-      {
-        "view": "armadaFailures",
-        "contents": "Not connected to an Armada Admiral. The extension uses the Admiral of a running Harbor, the local Admiral (~/.armada/settings.json) or a TUI profile, with the credentials already on this machine.\n[Connect](command:armada.connect)\n[Show Output](command:armada.showOutput)",
-        "when": "!armada.connected && armada.connectionState != connecting"
-      },
-      {
         "view": "armadaFailuresExplorer",
         "contents": "Connecting to the Armada Admiral...",
         "when": "armada.connectionState == connecting"
@@ -280,39 +195,29 @@
         "when": "!armada.connected && armada.connectionState != connecting"
       },
       {
-        "view": "armadaNeedsYou",
+        "view": "armadaNav",
         "contents": "Connecting to the Armada Admiral...",
         "when": "armada.connectionState == connecting"
       },
       {
-        "view": "armadaMissions",
-        "contents": "Connecting to the Armada Admiral...",
-        "when": "armada.connectionState == connecting"
-      },
-      {
-        "view": "armadaVoyages",
-        "contents": "Connecting to the Armada Admiral...",
-        "when": "armada.connectionState == connecting"
-      },
-      {
-        "view": "armadaCaptains",
-        "contents": "Connecting to the Armada Admiral...",
-        "when": "armada.connectionState == connecting"
-      },
-      {
-        "view": "armadaFleet",
-        "contents": "Connecting to the Armada Admiral...",
-        "when": "armada.connectionState == connecting"
-      },
-      {
-        "view": "armadaMergeQueue",
-        "contents": "Connecting to the Armada Admiral...",
-        "when": "armada.connectionState == connecting"
-      },
-      {
-        "view": "armadaNeedsYou",
+        "view": "armadaNav",
         "contents": "Not connected to an Armada Admiral. The extension uses the Admiral of a running Harbor, the local Admiral (~/.armada/settings.json) or a TUI profile, with the credentials already on this machine.\n[Connect](command:armada.connect)\n[Show Output](command:armada.showOutput)",
         "when": "!armada.connected && armada.connectionState != connecting"
+      },
+      {
+        "view": "armadaConversations",
+        "contents": "Connecting to the Armada Admiral...",
+        "when": "armada.connectionState == connecting"
+      },
+      {
+        "view": "armadaConversations",
+        "when": "!armada.connected && armada.connectionState != connecting",
+        "contents": "Connect to an Armada Admiral to see your Ask Armada conversations.\n[Connect](command:armada.connect)"
+      },
+      {
+        "view": "armadaConversations",
+        "when": "armada.connected && !armada.conversations.filtered",
+        "contents": "No conversations yet. Ask Armada anything in the chat above.\n[New Conversation](command:armada.conversations.new)"
       }
     ],
     "commands": [
@@ -980,6 +885,119 @@
         "title": "Open in Editor Tab",
         "category": "Armada",
         "icon": "$(link-external)"
+      },
+      {
+        "command": "armada.nav.openTab",
+        "title": "Open in Editor Tab",
+        "category": "Armada",
+        "icon": "$(link-external)"
+      },
+      {
+        "command": "armada.nav.refresh",
+        "title": "Refresh",
+        "category": "Armada",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "armada.nav.reveal",
+        "title": "Show in the Armada View",
+        "category": "Armada"
+      },
+      {
+        "command": "armada.conversations.open",
+        "title": "Open Conversation",
+        "category": "Armada",
+        "icon": "$(comment-discussion)"
+      },
+      {
+        "command": "armada.conversations.new",
+        "title": "New Conversation",
+        "category": "Armada",
+        "icon": "$(add)"
+      },
+      {
+        "command": "armada.conversations.refresh",
+        "title": "Refresh Conversations",
+        "category": "Armada",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "armada.conversations.search",
+        "title": "Search Conversations...",
+        "category": "Armada",
+        "icon": "$(search)"
+      },
+      {
+        "command": "armada.conversations.clearSearch",
+        "title": "Clear Conversation Search",
+        "category": "Armada",
+        "icon": "$(clear-all)"
+      },
+      {
+        "command": "armada.conversations.showArchived",
+        "title": "Show Archived Conversations",
+        "category": "Armada",
+        "icon": "$(archive)"
+      },
+      {
+        "command": "armada.conversations.hideArchived",
+        "title": "Hide Archived Conversations",
+        "category": "Armada",
+        "icon": "$(eye-closed)"
+      },
+      {
+        "command": "armada.conversations.rename",
+        "title": "Rename...",
+        "category": "Armada",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "armada.conversations.pin",
+        "title": "Pin",
+        "category": "Armada",
+        "icon": "$(pin)"
+      },
+      {
+        "command": "armada.conversations.unpin",
+        "title": "Unpin",
+        "category": "Armada",
+        "icon": "$(pinned)"
+      },
+      {
+        "command": "armada.conversations.archive",
+        "title": "Archive",
+        "category": "Armada",
+        "icon": "$(archive)"
+      },
+      {
+        "command": "armada.conversations.unarchive",
+        "title": "Unarchive",
+        "category": "Armada",
+        "icon": "$(inbox)"
+      },
+      {
+        "command": "armada.conversations.markRead",
+        "title": "Mark as Read",
+        "category": "Armada",
+        "icon": "$(check)"
+      },
+      {
+        "command": "armada.conversations.markUnread",
+        "title": "Mark as Unread",
+        "category": "Armada",
+        "icon": "$(circle-filled)"
+      },
+      {
+        "command": "armada.conversations.summarize",
+        "title": "Summarize",
+        "category": "Armada",
+        "icon": "$(note)"
+      },
+      {
+        "command": "armada.conversations.delete",
+        "title": "Delete...",
+        "category": "Armada",
+        "icon": "$(trash)"
       }
     ],
     "menus": {
@@ -1400,6 +1418,58 @@
         {
           "command": "armada.tab.refresh",
           "when": "false"
+        },
+        {
+          "command": "armada.nav.openTab",
+          "when": "false"
+        },
+        {
+          "command": "armada.nav.reveal",
+          "when": "false"
+        },
+        {
+          "command": "armada.conversations.open",
+          "when": "false"
+        },
+        {
+          "command": "armada.conversations.rename",
+          "when": "false"
+        },
+        {
+          "command": "armada.conversations.pin",
+          "when": "false"
+        },
+        {
+          "command": "armada.conversations.unpin",
+          "when": "false"
+        },
+        {
+          "command": "armada.conversations.archive",
+          "when": "false"
+        },
+        {
+          "command": "armada.conversations.unarchive",
+          "when": "false"
+        },
+        {
+          "command": "armada.conversations.markRead",
+          "when": "false"
+        },
+        {
+          "command": "armada.conversations.markUnread",
+          "when": "false"
+        },
+        {
+          "command": "armada.conversations.summarize",
+          "when": "false"
+        },
+        {
+          "command": "armada.conversations.delete",
+          "when": "false"
+        },
+        {
+          "command": "armada.conversations.clearSearch",
+          "when": "false"
         }
       ],
       "view/title": [
@@ -1407,41 +1477,6 @@
           "command": "armada.ask.new",
           "when": "view == armadaAsk",
           "group": "navigation@1"
-        },
-        {
-          "command": "armada.ask.history",
-          "when": "view == armadaAsk",
-          "group": "navigation@2"
-        },
-        {
-          "command": "armada.dispatch",
-          "when": "view == armadaMissions && armada.connected",
-          "group": "navigation@1"
-        },
-        {
-          "command": "armada.dispatchVoyage",
-          "when": "view == armadaVoyages && armada.connected",
-          "group": "navigation@1"
-        },
-        {
-          "command": "armada.merge.processAll",
-          "when": "view == armadaMergeQueue && armada.connected",
-          "group": "navigation@1"
-        },
-        {
-          "command": "armada.ops.refresh",
-          "when": "view =~ /^armada(NeedsYou|Missions|Voyages|Captains|Fleet|MergeQueue)$/ && armada.connected",
-          "group": "navigation@9"
-        },
-        {
-          "command": "armada.showConnectionActions",
-          "when": "view == armadaNeedsYou",
-          "group": "navigation@10"
-        },
-        {
-          "command": "armada.openDashboard",
-          "when": "view == armadaNeedsYou && armada.connected",
-          "group": "z_browser@1"
         },
         {
           "command": "armada.refreshFailures",
@@ -1479,275 +1514,230 @@
           "group": "connection@2"
         },
         {
-          "command": "armada.resource.refresh",
-          "when": "view =~ /^armada(Backlog|FleetActions|Delivery|Configuration|Activity|System)$/ && armada.connected",
-          "group": "navigation@9"
-        },
-        {
-          "command": "armada.vessel.create",
-          "when": "view == armadaFleet && armada.connected",
-          "group": "navigation@1"
-        },
-        {
-          "command": "armada.fleet.create",
-          "when": "view == armadaFleet && armada.connected",
-          "group": "navigation@2"
-        },
-        {
-          "command": "armada.captain.create",
-          "when": "view == armadaCaptains && armada.connected",
-          "group": "navigation@1"
-        },
-        {
-          "command": "armada.home",
-          "when": "view == armadaNeedsYou && armada.connected",
-          "group": "navigation@1"
-        },
-        {
-          "command": "armada.planning.new",
-          "when": "view == armadaBacklog && armada.connected",
-          "group": "navigation@1"
-        },
-        {
-          "command": "armada.vessel.import",
-          "when": "view == armadaFleet && armada.connected",
-          "group": "navigation@3"
-        },
-        {
-          "command": "armada.api.call",
-          "when": "view == armadaSystem && armada.connected",
-          "group": "navigation@1"
-        },
-        {
-          "command": "armada.harbor.openLogs",
-          "when": "view == armadaSystem",
-          "group": "5_harbor@1"
-        },
-        {
-          "command": "armada.harbor.openFolder",
-          "when": "view == armadaSystem",
-          "group": "5_harbor@2"
-        },
-        {
-          "command": "armada.harbor.copyId",
-          "when": "view == armadaSystem",
-          "group": "5_harbor@3"
-        },
-        {
-          "command": "armada.copyMcpUrl",
-          "when": "view == armadaSystem",
-          "group": "6_copy@1"
-        },
-        {
-          "command": "armada.copyDiagnostics",
-          "when": "view == armadaSystem",
-          "group": "6_copy@2"
-        },
-        {
-          "command": "armada.docs",
-          "when": "view == armadaSystem",
-          "group": "7_help@1"
-        },
-        {
-          "command": "armada.reportIssue",
-          "when": "view == armadaSystem",
-          "group": "7_help@2"
-        },
-        {
-          "command": "armada.backup.download",
-          "when": "view == armadaSystem && armada.connected",
-          "group": "4_backup@1"
-        },
-        {
-          "command": "armada.backup.restore",
-          "when": "view == armadaSystem && armada.connected",
-          "group": "4_backup@2"
-        },
-        {
-          "command": "armada.account.changePassword",
-          "when": "view == armadaSystem && armada.connected",
-          "group": "8_account@1"
-        },
-        {
-          "command": "armada.charts",
-          "when": "view == armadaActivity && armada.connected",
-          "group": "navigation@1"
-        },
-        {
-          "command": "armada.captain.stopAll",
-          "when": "view == armadaCaptains && armada.connected",
-          "group": "9_danger@1"
-        },
-        {
           "command": "armada.blackbox.search",
           "when": "view =~ /^armadaFailures/ && armada.connected",
           "group": "navigation@0"
         },
         {
+          "command": "armada.ask.openInEditor",
+          "when": "view == armadaAsk",
+          "group": "navigation@0"
+        },
+        {
+          "command": "armada.home",
+          "when": "view == armadaNav && armada.connected",
+          "group": "navigation@1"
+        },
+        {
+          "command": "armada.dispatch",
+          "when": "view == armadaNav && armada.connected",
+          "group": "navigation@2"
+        },
+        {
+          "command": "armada.nav.refresh",
+          "when": "view == armadaNav && armada.connected",
+          "group": "navigation@8"
+        },
+        {
+          "command": "armada.showConnectionActions",
+          "when": "view == armadaNav",
+          "group": "navigation@9"
+        },
+        {
+          "command": "armada.tab.open",
+          "when": "view == armadaNav",
+          "group": "1_open@1"
+        },
+        {
+          "command": "armada.openDashboard",
+          "when": "view == armadaNav && armada.connected",
+          "group": "1_open@2"
+        },
+        {
+          "command": "armada.backup.download",
+          "when": "view == armadaNav && armada.connected",
+          "group": "4_backup@1"
+        },
+        {
+          "command": "armada.backup.restore",
+          "when": "view == armadaNav && armada.connected",
+          "group": "4_backup@2"
+        },
+        {
           "command": "armada.harbor.start",
-          "when": "view == armadaSystem",
+          "when": "view == armadaNav",
           "group": "5_harbor@0"
         },
         {
           "command": "armada.harbor.stop",
-          "when": "view == armadaSystem",
-          "group": "5_harbor@01"
+          "when": "view == armadaNav",
+          "group": "5_harbor@1"
         },
         {
           "command": "armada.harbor.restart",
-          "when": "view == armadaSystem",
-          "group": "5_harbor@02"
+          "when": "view == armadaNav",
+          "group": "5_harbor@2"
         },
         {
           "command": "armada.harbor.show",
-          "when": "view == armadaSystem",
-          "group": "5_harbor@03"
+          "when": "view == armadaNav",
+          "group": "5_harbor@3"
+        },
+        {
+          "command": "armada.harbor.openLogs",
+          "when": "view == armadaNav",
+          "group": "5_harbor@4"
+        },
+        {
+          "command": "armada.harbor.openFolder",
+          "when": "view == armadaNav",
+          "group": "5_harbor@5"
+        },
+        {
+          "command": "armada.harbor.copyId",
+          "when": "view == armadaNav",
+          "group": "5_harbor@6"
         },
         {
           "command": "armada.mcp.install",
-          "when": "view == armadaSystem",
+          "when": "view == armadaNav",
           "group": "6_copy@0"
         },
         {
+          "command": "armada.copyMcpUrl",
+          "when": "view == armadaNav",
+          "group": "6_copy@1"
+        },
+        {
+          "command": "armada.copyDiagnostics",
+          "when": "view == armadaNav",
+          "group": "6_copy@2"
+        },
+        {
           "command": "armada.about",
-          "when": "view == armadaSystem",
+          "when": "view == armadaNav",
           "group": "7_help@0"
         },
         {
-          "command": "armada.tab.armadaNeedsYou",
-          "when": "view == armadaNeedsYou",
-          "group": "navigation@98"
+          "command": "armada.docs",
+          "when": "view == armadaNav",
+          "group": "7_help@1"
         },
         {
-          "command": "armada.tab.armadaMissions",
-          "when": "view == armadaMissions",
-          "group": "navigation@98"
+          "command": "armada.reportIssue",
+          "when": "view == armadaNav",
+          "group": "7_help@2"
         },
         {
-          "command": "armada.tab.armadaVoyages",
-          "when": "view == armadaVoyages",
-          "group": "navigation@98"
+          "command": "armada.account.changePassword",
+          "when": "view == armadaNav && armada.connected",
+          "group": "8_account@1"
         },
         {
-          "command": "armada.tab.armadaCaptains",
-          "when": "view == armadaCaptains",
-          "group": "navigation@98"
+          "command": "armada.connect",
+          "when": "view == armadaNav && !armada.connected",
+          "group": "connection@1"
         },
         {
-          "command": "armada.tab.armadaFleet",
-          "when": "view == armadaFleet",
-          "group": "navigation@98"
+          "command": "armada.disconnect",
+          "when": "view == armadaNav && armada.connected",
+          "group": "connection@2"
         },
         {
-          "command": "armada.tab.armadaMergeQueue",
-          "when": "view == armadaMergeQueue",
-          "group": "navigation@98"
+          "command": "armada.conversations.new",
+          "when": "view == armadaConversations && armada.connected",
+          "group": "navigation@1"
         },
         {
-          "command": "armada.tab.armadaFailures",
-          "when": "view == armadaFailures",
-          "group": "navigation@98"
+          "command": "armada.conversations.search",
+          "when": "view == armadaConversations && armada.connected",
+          "group": "navigation@2"
         },
         {
-          "command": "armada.tab.armadaBacklog",
-          "when": "view == armadaBacklog",
-          "group": "navigation@98"
+          "command": "armada.conversations.clearSearch",
+          "when": "view == armadaConversations && armada.conversations.filtered",
+          "group": "navigation@3"
         },
         {
-          "command": "armada.tab.armadaFleetActions",
-          "when": "view == armadaFleetActions",
-          "group": "navigation@98"
+          "command": "armada.conversations.showArchived",
+          "when": "view == armadaConversations && armada.connected && !armada.conversations.archived",
+          "group": "navigation@4"
         },
         {
-          "command": "armada.tab.armadaDelivery",
-          "when": "view == armadaDelivery",
-          "group": "navigation@98"
+          "command": "armada.conversations.hideArchived",
+          "when": "view == armadaConversations && armada.connected && armada.conversations.archived",
+          "group": "navigation@4"
         },
         {
-          "command": "armada.tab.armadaConfiguration",
-          "when": "view == armadaConfiguration",
-          "group": "navigation@98"
-        },
-        {
-          "command": "armada.tab.armadaActivity",
-          "when": "view == armadaActivity",
-          "group": "navigation@98"
-        },
-        {
-          "command": "armada.tab.armadaSystem",
-          "when": "view == armadaSystem",
-          "group": "navigation@98"
-        },
-        {
-          "command": "armada.ask.openInEditor",
-          "when": "view == armadaAsk",
-          "group": "navigation@0"
+          "command": "armada.conversations.refresh",
+          "when": "view == armadaConversations && armada.connected",
+          "group": "navigation@5"
         }
       ],
       "view/item/context": [
         {
           "command": "armada.copyFixThis",
-          "when": "view =~ /^armadaFailures/ && viewItem =~ /^armadaEntry/",
+          "when": "view =~ /^armada(Nav|Failures)/ && viewItem =~ /^armadaEntry/",
           "group": "inline@1"
         },
         {
           "command": "armada.runRecoveryPath",
-          "when": "view =~ /^armadaFailures/ && viewItem == armadaEntryOpen",
+          "when": "view =~ /^armada(Nav|Failures)/ && viewItem == armadaEntryOpen",
           "group": "inline@2"
         },
         {
           "command": "armada.openBlackBox",
-          "when": "view =~ /^armadaFailures/ && viewItem =~ /^armadaEntry/",
+          "when": "view =~ /^armada(Nav|Failures)/ && viewItem =~ /^armadaEntry/",
           "group": "1_open@1"
         },
         {
           "command": "armada.copyFixThis",
-          "when": "view =~ /^armadaFailures/ && viewItem =~ /^armadaEntry/",
+          "when": "view =~ /^armada(Nav|Failures)/ && viewItem =~ /^armadaEntry/",
           "group": "2_fixthis@1"
         },
         {
           "command": "armada.openFixThisInEditor",
-          "when": "view =~ /^armadaFailures/ && viewItem =~ /^armadaEntry/",
+          "when": "view =~ /^armada(Nav|Failures)/ && viewItem =~ /^armadaEntry/",
           "group": "2_fixthis@2"
         },
         {
           "command": "armada.sendFixThisToChat",
-          "when": "view =~ /^armadaFailures/ && viewItem =~ /^armadaEntry/",
+          "when": "view =~ /^armada(Nav|Failures)/ && viewItem =~ /^armadaEntry/",
           "group": "2_fixthis@3"
         },
         {
           "command": "armada.askArmada",
-          "when": "view =~ /^armadaFailures/ && viewItem =~ /^armadaEntry/",
+          "when": "view =~ /^armada(Nav|Failures)/ && viewItem =~ /^armadaEntry/",
           "group": "2_fixthis@4"
         },
         {
           "command": "armada.draftArmadaFixMission",
-          "when": "view =~ /^armadaFailures/ && viewItem =~ /^armadaEntry/",
+          "when": "view =~ /^armada(Nav|Failures)/ && viewItem =~ /^armadaEntry/",
           "group": "2_fixthis@5"
         },
         {
           "command": "armada.runRecoveryPath",
-          "when": "view =~ /^armadaFailures/ && viewItem == armadaEntryOpen",
+          "when": "view =~ /^armada(Nav|Failures)/ && viewItem == armadaEntryOpen",
           "group": "3_act@1"
         },
         {
           "command": "armada.resolveEntry",
-          "when": "view =~ /^armadaFailures/ && viewItem == armadaEntryOpen",
+          "when": "view =~ /^armada(Nav|Failures)/ && viewItem == armadaEntryOpen",
           "group": "3_act@2"
         },
         {
           "command": "armada.addNote",
-          "when": "view =~ /^armadaFailures/ && viewItem =~ /^armadaEntry/",
+          "when": "view =~ /^armada(Nav|Failures)/ && viewItem =~ /^armadaEntry/",
           "group": "3_act@3"
         },
         {
           "command": "armada.showBlackBoxTimeline",
-          "when": "view =~ /^armadaFailures/ && viewItem =~ /^armadaEntry/",
+          "when": "view =~ /^armada(Nav|Failures)/ && viewItem =~ /^armadaEntry/",
           "group": "4_forensics@1"
         },
         {
           "command": "armada.compareBlackBoxAttempts",
-          "when": "view =~ /^armadaFailures/ && viewItem =~ /^armadaEntry/",
+          "when": "view =~ /^armada(Nav|Failures)/ && viewItem =~ /^armadaEntry/",
           "group": "4_forensics@2"
         },
         {
@@ -1967,12 +1957,162 @@
         },
         {
           "command": "armada.blackbox.more",
-          "when": "view =~ /^armadaFailures/ && viewItem =~ /^armadaEntry/",
+          "when": "view =~ /^armada(Nav|Failures)/ && viewItem =~ /^armadaEntry/",
           "group": "5_more@1"
         },
         {
           "command": "armada.merge.delete",
           "when": "viewItem =~ /armadaMerge\\.(Landed|Failed|Cancelled)\\b/",
+          "group": "9_delete@1"
+        },
+        {
+          "command": "armada.dispatch",
+          "when": "view == armadaNav && viewItem =~ /armadaNav\\.hub\\.(missions|dispatch)\\b|armadaSource\\.armadaMissions\\b/",
+          "group": "inline@1"
+        },
+        {
+          "command": "armada.dispatchVoyage",
+          "when": "view == armadaNav && viewItem =~ /armadaSource\\.armadaVoyages\\b/",
+          "group": "inline@1"
+        },
+        {
+          "command": "armada.merge.processAll",
+          "when": "view == armadaNav && viewItem =~ /armadaSource\\.armadaMergeQueue\\b/",
+          "group": "inline@1"
+        },
+        {
+          "command": "armada.blackbox.search",
+          "when": "view == armadaNav && viewItem =~ /armadaSource\\.armadaFailures\\b/",
+          "group": "inline@1"
+        },
+        {
+          "command": "armada.refreshFailures",
+          "when": "view == armadaNav && viewItem =~ /armadaSource\\.armadaFailures\\b/",
+          "group": "inline@2"
+        },
+        {
+          "command": "armada.toggleWorkspaceFilter",
+          "when": "view == armadaNav && viewItem =~ /armadaSource\\.armadaFailures\\b/",
+          "group": "1_blackbox@1"
+        },
+        {
+          "command": "armada.openBlackBox",
+          "when": "view == armadaNav && viewItem =~ /armadaSource\\.armadaFailures\\b/",
+          "group": "1_blackbox@2"
+        },
+        {
+          "command": "armada.previewMissionOverlap",
+          "when": "view == armadaNav && viewItem =~ /armadaSource\\.armadaFailures\\b/",
+          "group": "1_blackbox@3"
+        },
+        {
+          "command": "armada.showResilienceGaps",
+          "when": "view == armadaNav && viewItem =~ /armadaSource\\.armadaFailures\\b/",
+          "group": "1_blackbox@4"
+        },
+        {
+          "command": "armada.planning.new",
+          "when": "view == armadaNav && viewItem =~ /armadaNav\\.hub\\.dispatch\\b/",
+          "group": "inline@2"
+        },
+        {
+          "command": "armada.vessel.create",
+          "when": "view == armadaNav && viewItem =~ /armadaNav\\.hub\\.vessels\\b/",
+          "group": "inline@1"
+        },
+        {
+          "command": "armada.fleet.create",
+          "when": "view == armadaNav && viewItem =~ /armadaNav\\.hub\\.vessels\\b/",
+          "group": "1_act@2"
+        },
+        {
+          "command": "armada.vessel.import",
+          "when": "view == armadaNav && viewItem =~ /armadaNav\\.hub\\.vessels\\b/",
+          "group": "1_act@3"
+        },
+        {
+          "command": "armada.captain.create",
+          "when": "view == armadaNav && viewItem =~ /armadaNav\\.hub\\.captains\\b/",
+          "group": "inline@1"
+        },
+        {
+          "command": "armada.captain.stopAll",
+          "when": "view == armadaNav && viewItem =~ /armadaNav\\.hub\\.captains\\b/",
+          "group": "9_danger@1"
+        },
+        {
+          "command": "armada.charts",
+          "when": "view == armadaNav && viewItem =~ /armadaNav\\.hub\\.activity\\b/",
+          "group": "inline@1"
+        },
+        {
+          "command": "armada.nav.openTab",
+          "when": "view == armadaNav && viewItem =~ /armadaNav\\.tabbable/",
+          "group": "inline@99"
+        },
+        {
+          "command": "armada.nav.openTab",
+          "when": "view == armadaNav && viewItem =~ /armadaNav\\.tabbable/",
+          "group": "0_open@1"
+        },
+        {
+          "command": "armada.conversations.pin",
+          "when": "view == armadaConversations && viewItem =~ /armadaConversation\\.unpinned/",
+          "group": "inline@1"
+        },
+        {
+          "command": "armada.conversations.unpin",
+          "when": "view == armadaConversations && viewItem =~ /armadaConversation\\.pinned/",
+          "group": "inline@1"
+        },
+        {
+          "command": "armada.conversations.open",
+          "when": "view == armadaConversations && viewItem =~ /armadaConversation\\b/",
+          "group": "1_open@1"
+        },
+        {
+          "command": "armada.conversations.rename",
+          "when": "view == armadaConversations && viewItem =~ /armadaConversation\\b/",
+          "group": "2_edit@1"
+        },
+        {
+          "command": "armada.conversations.summarize",
+          "when": "view == armadaConversations && viewItem =~ /armadaConversation\\b/",
+          "group": "2_edit@2"
+        },
+        {
+          "command": "armada.conversations.pin",
+          "when": "view == armadaConversations && viewItem =~ /armadaConversation\\.unpinned/",
+          "group": "3_state@1"
+        },
+        {
+          "command": "armada.conversations.unpin",
+          "when": "view == armadaConversations && viewItem =~ /armadaConversation\\.pinned/",
+          "group": "3_state@1"
+        },
+        {
+          "command": "armada.conversations.markUnread",
+          "when": "view == armadaConversations && viewItem =~ /armadaConversation\\.read/",
+          "group": "3_state@2"
+        },
+        {
+          "command": "armada.conversations.markRead",
+          "when": "view == armadaConversations && viewItem =~ /armadaConversation\\.unread/",
+          "group": "3_state@2"
+        },
+        {
+          "command": "armada.conversations.archive",
+          "when": "view == armadaConversations && viewItem =~ /armadaConversation\\.active/",
+          "group": "3_state@3"
+        },
+        {
+          "command": "armada.conversations.unarchive",
+          "when": "view == armadaConversations && viewItem =~ /armadaConversation\\.archived/",
+          "group": "3_state@3"
+        },
+        {
+          "command": "armada.conversations.delete",
+          "when": "view == armadaConversations && viewItem =~ /armadaConversation\\b/",
           "group": "9_delete@1"
         }
       ]

@@ -89,7 +89,7 @@ export class FailuresTreeProvider implements vscode.TreeDataProvider<FailureNode
       item.iconPath = new vscode.ThemeIcon('repo');
       item.description = `${open} open`;
       item.tooltip = `${element.vesselName} (${element.vesselId}): ${element.entries.length} ${element.entries.length === 1 ? 'entry' : 'entries'}, ${open} open`;
-      item.contextValue = 'armadaVessel';
+      item.contextValue = 'armadaFailuresVessel';
       return item;
     }
     const entry = element.entry;

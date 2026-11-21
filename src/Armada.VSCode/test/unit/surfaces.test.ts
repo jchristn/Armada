@@ -7,10 +7,10 @@ import * as vscode from 'vscode';
 import { ConnectionState } from '../../src/connection/connectionManager';
 import { connectionActions, describeStatus } from '../../src/connection/statusBar';
 import { activate, ArmadaExtensionApi } from '../../src/extension';
-import { FAILURES_EXPLORER_VIEW_ID, FAILURES_VIEW_ID } from '../../src/surfaces/blackbox/failuresTreeProvider';
+import { FAILURES_EXPLORER_VIEW_ID } from '../../src/surfaces/blackbox/failuresTreeProvider';
 import { ASK_VIEW_ID } from '../../src/surfaces/ask/askView';
-import { OPS_VIEW_IDS } from '../../src/surfaces/ops/opsTrees';
-import { RESOURCE_VIEW_IDS } from '../../src/surfaces/resources/resourceSpec';
+import { NAV_REVEAL_COMMAND, NAV_VIEW_ID } from '../../src/surfaces/nav/navTree';
+import { CONVERSATIONS_VIEW_ID } from '../../src/surfaces/ask/conversationsTree';
 import { fake, FakeMemento, FakeSecretStorage, Uri } from '../fakes/vscode';
 
 /** The extension manifest; the extension ID is read from it, never written in a test. */
@@ -88,15 +88,15 @@ describe('extension manifest and activation', () => {
     assert.deepStrictEqual(MANIFEST.activationEvents, ['onStartupFinished', 'onFileSystem:armada-vessel']);
   });
 
-  it('contributes the Armada container with the native views and the failures view, and the Explorer copy behind its setting', () => {
+  it('contributes the Armada container with the chat, its conversations and the Armada tree, and the Explorer Black Box behind its setting', () => {
     const container = MANIFEST.contributes.viewsContainers.activitybar.find((c) => c.id === 'armada');
     assert.ok(container);
     assert.ok(fs.existsSync(path.join(ROOT, container.icon)), 'container icon exists');
-    assert.deepStrictEqual(MANIFEST.contributes.views.armada.map((v) => v.id), [ASK_VIEW_ID, ...Object.values(OPS_VIEW_IDS), FAILURES_VIEW_ID, ...Object.values(RESOURCE_VIEW_IDS)]);
+    assert.deepStrictEqual(MANIFEST.contributes.views.armada.map((v) => v.id), [ASK_VIEW_ID, CONVERSATIONS_VIEW_ID, NAV_VIEW_ID]);
     const explorer = MANIFEST.contributes.views.explorer.find((v) => v.id === FAILURES_EXPLORER_VIEW_ID);
     assert.strictEqual(explorer?.when, 'config.armada.failures.showInExplorer');
     assert.strictEqual(MANIFEST.contributes.configuration.properties['armada.failures.showInExplorer'].default, false);
-    for (const view of [OPS_VIEW_IDS.needsYou, FAILURES_VIEW_ID, FAILURES_EXPLORER_VIEW_ID]) {
+    for (const view of [NAV_VIEW_ID, CONVERSATIONS_VIEW_ID, FAILURES_EXPLORER_VIEW_ID]) {
       const welcome = MANIFEST.contributes.viewsWelcome.filter((w) => w.view === view);
       assert.ok(welcome.some((w) => w.when.includes('!armada.connected') && w.contents.includes('command:armada.connect')), `disconnected welcome for ${view}`);
     }
@@ -116,8 +116,8 @@ describe('extension manifest and activation', () => {
       for (const welcome of MANIFEST.contributes.viewsWelcome) {
         for (const match of welcome.contents.matchAll(/command:([A-Za-z.]+)/g)) assert.ok(contributed.includes(match[1]), `welcome link ${match[1]}`);
       }
-      assert.deepStrictEqual(fake.treeViews, [...Object.values(OPS_VIEW_IDS), ...Object.values(RESOURCE_VIEW_IDS), FAILURES_VIEW_ID, FAILURES_EXPLORER_VIEW_ID]);
-      assert.deepStrictEqual(fake.statusBarItems.map((i) => i.command), [`${OPS_VIEW_IDS.missions}.focus`, 'armada.showConnectionActions']);
+      assert.deepStrictEqual(fake.treeViews, [NAV_VIEW_ID, CONVERSATIONS_VIEW_ID, FAILURES_EXPLORER_VIEW_ID]);
+      assert.deepStrictEqual(fake.statusBarItems.map((i) => (typeof i.command === 'string' ? i.command : (i.command as { command: string } | undefined)?.command)), [NAV_REVEAL_COMMAND, 'armada.showConnectionActions']);
       assert.strictEqual(api.connection.state.phase, 'disconnected', 'no network work during activate');
       assert.strictEqual(api.liveMode(), 'stopped');
       for (const s of context.subscriptions) s.dispose();

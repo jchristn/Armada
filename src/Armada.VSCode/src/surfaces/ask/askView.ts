@@ -100,6 +100,8 @@ export class AskViewProvider implements vscode.WebviewViewProvider, vscode.Dispo
   private _DraftHarborId: string | undefined;
   private _DraftFolder: string | undefined;
   private _ServerSupportsLocation = true;
+  private _ShownThreadId: string | null = null;
+  private readonly _OnDidChangeThread = new vscode.EventEmitter<string | null>();
   private _State: ConversationState = initialConversation();
   private _Error: string | null = null;
   private _RenderTimer: ReturnType<typeof setTimeout> | undefined;
@@ -187,6 +189,27 @@ export class AskViewProvider implements vscode.WebviewViewProvider, vscode.Dispo
   /** The most recent conversation's id, if any. */
   public async latestConversationId(): Promise<string | undefined> {
     return (await enumerateAskThreads({ pageNumber: 1, pageSize: 1 })).objects?.[0]?.id;
+  }
+
+  /** Fires with the id of the conversation the chat shows (null for a new one) when it changes. */
+  public readonly onDidChangeThread: vscode.Event<string | null> = this._OnDidChangeThread.event;
+
+  /** The id of the conversation the chat shows, or null. */
+  public get threadId(): string | null {
+    return this._State.threadId;
+  }
+
+  /** Shows a conversation's new title, pin or archive state when it is the one open (the Conversations list). */
+  public threadUpdated(thread: AskThread): void {
+    if (thread.id === this._State.threadId) this.dispatch({ type: 'thread', thread });
+  }
+
+  /** Starts a new conversation when the open one was deleted (the Conversations list). */
+  public async threadsDeleted(ids: string[]): Promise<void> {
+    if (this._State.threadId && ids.includes(this._State.threadId)) {
+      this.dispatch({ type: 'reset', threadId: null });
+      await this._Deps.globalState.update(LAST_THREAD_KEY, undefined);
+    }
   }
 
   /** The conversation shown and its message count (for the integration tests). */
@@ -289,6 +312,7 @@ export class AskViewProvider implements vscode.WebviewViewProvider, vscode.Dispo
   public dispose(): void {
     if (this._RenderTimer) clearTimeout(this._RenderTimer);
     for (const s of this._Subscriptions) s.dispose();
+    this._OnDidChangeThread.dispose();
   }
 
   private async onMessage(message: ChatInbound): Promise<void> {
@@ -468,6 +492,10 @@ export class AskViewProvider implements vscode.WebviewViewProvider, vscode.Dispo
 
   private dispatch(action: ConversationAction): void {
     this._State = conversationReducer(this._State, action);
+    if (this._State.threadId !== this._ShownThreadId) {
+      this._ShownThreadId = this._State.threadId;
+      this._OnDidChangeThread.fire(this._ShownThreadId);
+    }
     this.scheduleRender();
   }
 

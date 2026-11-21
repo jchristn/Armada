@@ -13,7 +13,7 @@ import { DetailAction, DetailPage, DetailSection, escapeHtml, isDetailMessage, r
 import { statusTone } from '../ops/detailPages';
 import { showForm } from '../ops/formPanel';
 import { humanize } from '../ops/presentation';
-import { applyEdits, createValues, editFields, fieldLabel, isLongText, recordId, recordStatus, recordTitle, ResourceRecord, ResourceSpec, ResourceViewKey, RESOURCE_VIEW_IDS, rowsOf } from './resourceSpec';
+import { applyEdits, createValues, editFields, fieldLabel, isLongText, recordId, recordStatus, recordTitle, ResourceRecord, ResourceSpec, rowsOf } from './resourceSpec';
 
 /** A node in a resource tree. */
 export type ResourceNode =
@@ -449,7 +449,3 @@ export class ResourceController implements vscode.Disposable {
   }
 }
 
-/** The view ids in sidebar order. */
-export function resourceViewOrder(): Array<[ResourceViewKey, string]> {
-  return (Object.keys(RESOURCE_VIEW_IDS) as ResourceViewKey[]).map((key) => [key, RESOURCE_VIEW_IDS[key]]);
-}

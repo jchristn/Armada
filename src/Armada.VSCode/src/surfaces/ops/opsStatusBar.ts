@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { ACTIVE_MISSION_STATUSES, OpsStore } from './opsStore';
-import { OPS_VIEW_IDS } from './opsTrees';
+import { NAV_REVEAL_COMMAND } from '../nav/navTree';
 
 /** Status bar summary of live work: active missions and what needs you. Clicking it shows the Missions view. */
 export class OpsStatusBar implements vscode.Disposable {
@@ -16,7 +16,7 @@ export class OpsStatusBar implements vscode.Disposable {
     this._Store = store;
     this._Item = vscode.window.createStatusBarItem('armada.ops', vscode.StatusBarAlignment.Left, 49);
     this._Item.name = 'Armada Work';
-    this._Item.command = `${OPS_VIEW_IDS.missions}.focus`;
+    this._Item.command = { command: NAV_REVEAL_COMMAND, title: 'Show Missions', arguments: ['missions'] };
     this._Subscription = store.onDidChange(() => this.update());
     this.update();
   }
