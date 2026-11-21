@@ -2,7 +2,7 @@
   "name": "armada-ai",
   "displayName": "Armada AI",
   "description": "Armada in VS Code: connect to your Armada Admiral, navigate every Armada area, and work the mission and voyage black box (failures, FIX THIS briefs, recovery, timelines, attempt diffs, overlap previews, conflict decorations) with live updates.",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "publisher": "LatticeAI",
   "license": "MIT",
   "icon": "media/icon.png",

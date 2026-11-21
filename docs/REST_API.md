@@ -20,7 +20,7 @@ This is an owner-approved compatibility exception for v1.3.0; see [compatibility
 
 Captain create/update accepts `MaxConcurrency` (JSON `maxConcurrency`), clamped to 1..`Concurrency.MaxCaptainConcurrency` (hard ceiling 256). Creation defaults to 1 for CLI runtimes and 4 for ApiEndpoint/Mux, or configured server defaults. Updates that omit it preserve the current value. Lowering it does not stop running work. REST, MCP and WebSocket return server-owned `ActiveMissionCount`, `ActiveMissionIds` and `CurrentSessionId`; client writes cannot replace these ownership fields. Planning/refinement/analysis are exclusive, and a quarantined captain accepts no new missions while existing work continues. The singular `CurrentMissionId` and `CurrentDockId` fields were removed in migration 121; use active mission IDs to find each mission’s dock and process. Admission serializes vessel checks separately from shared capacity claims, with bounded lock waits. A lock timeout leaves the mission Pending for retry; no new endpoint or request field is needed. Equivalent captains with fewer occupied slots are preferred after explicit/persona/tier routing. See [testing](CONCURRENCY_TESTING.md).
 
-**Version:** 1.3.0
+**Version:** 1.4.0
 **Base URL:** `http://localhost:7890`
 **Content-Type:** `application/json`
 
@@ -1219,7 +1219,7 @@ voyages, and signals. The same scoping applies to the MCP `status` tool and the 
     "LatencyMs": null,
     "CapabilityManifest": {
       "ProtocolVersion": "2026-04-03",
-      "ArmadaVersion": "1.3.0",
+      "ArmadaVersion": "1.4.0",
       "Features": [
         "remoteControl.handshake",
         "remoteControl.heartbeat",
@@ -1251,9 +1251,9 @@ Health check endpoint. **Does not require authentication.** `BuildVersion` and `
   "Timestamp": "2026-03-07T12:00:00Z",
   "StartUtc": "2026-03-07T08:00:00Z",
   "Uptime": "0.04:00:00",
-  "Version": "1.3.0",
+  "Version": "1.4.0",
   "ContractVersion": "1.0",
-  "BuildVersion": "1.3.0+<source-revision>",
+  "BuildVersion": "1.4.0+<source-revision>",
   "CommitHash": "<source-revision>",
   "Ports": {
     "Admiral": 7890,
@@ -4953,7 +4953,7 @@ The mission's current black box entry with its versioned record.
   "ObjectCount": 5,
   "SchemaVersion": 1,
   "RulesVersion": 1,
-  "ArmadaVersion": "1.3.0+5de469cff2709733b1ffb68fbc45d1303e9e41be",
+  "ArmadaVersion": "1.4.0+5de469cff2709733b1ffb68fbc45d1303e9e41be",
   "ArmadaCommit": "5de469cff2709733b1ffb68fbc45d1303e9e41be",
   "ReasonExcerpt": "Captain process exited with code 134 after 4m12s while running dotnet test (Test.Automated aborted: Fatal error. System.AccessViolationException in SQLitePCL.raw.sqlite3_step). Retry once the test host is stable.",
   "Summary": "Mission \"Retry landings deferred on a dirty checkout\" (msn_mvu1fjp0_9Wd6Uuyp262) failed during Execution at step ProcessCrash (kind Crash). The captain's process exited with code unknown before finishing. Triage: Transient (low confidence). Suggested next step: restart the mission (bbx-exec-006.restart).",
@@ -5331,7 +5331,7 @@ last seen). Body (`BlackBoxResilienceGapRequest`): `VesselId`, `Resolution`, `Ph
       "LatestMissionId": "msn_mvu1fjp0_9Wd6Uuyp262",
       "LatestMissionTitle": "Retry landings deferred on a dirty checkout",
       "VesselName": "demo-api",
-      "ArmadaVersions": [ "1.3.0" ],
+      "ArmadaVersions": [ "1.4.0" ],
       "Severity": "High",
       "SelfHealable": "Yes",
       "Suspected": false,
@@ -5419,7 +5419,7 @@ versions (`Truncated` true when cut).
   "Truncated": false,
   "Versions": [
     {
-      "ArmadaVersion": "1.3.0+5de469cff2709733b1ffb68fbc45d1303e9e41be",
+      "ArmadaVersion": "1.4.0+5de469cff2709733b1ffb68fbc45d1303e9e41be",
       "Count": 1,
       "OpenCount": 1,
       "ArmadaFixedCount": 0,
@@ -9294,7 +9294,7 @@ Create one scoped objective or backlog item.
   "BacklogState": "ReadyForPlanning",
   "Effort": "M",
   "Owner": "Delivery",
-  "TargetVersion": "1.3.0",
+  "TargetVersion": "1.4.0",
   "AcceptanceCriteria": ["Deployment verified in staging", "Incident rollback documented"],
   "NonGoals": ["Do not change release cadence"],
   "RolloutConstraints": ["Keep existing rollback path intact"],
@@ -11403,7 +11403,7 @@ Aggregate status summary returned by the status endpoint.
     "LatencyMs": null,
     "CapabilityManifest": {
       "ProtocolVersion": "2026-04-03",
-      "ArmadaVersion": "1.3.0",
+      "ArmadaVersion": "1.4.0",
       "Features": [
         "remoteControl.handshake",
         "remoteControl.heartbeat",
@@ -11745,7 +11745,7 @@ A mobile app installation registered for push notifications (see [Push Notificat
   "Platform": "Ios",
   "ExpoPushToken": "ExponentPushToken[****wxyz]",
   "DeviceName": "My iPhone",
-  "AppVersion": "1.3.0",
+  "AppVersion": "1.4.0",
   "Locale": "en-US",
   "Categories": ["AskProposal", "CliPermission"],
   "Active": true,

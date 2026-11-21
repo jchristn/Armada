@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.4.0 (unreleased)
 
 - **Ask Armada chat layout and telemetry**: your messages on the right, Armada's on the left; each reply shows its
   telemetry (TTFT, first text, streaming and total time, prompt, completion and cached tokens, tokens per second,

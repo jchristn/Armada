@@ -486,6 +486,12 @@ v1.0.0 is the first stable release: security hardening, a frozen and documented 
 
 **New settings worth reviewing:** `TransientOutageGraceMinutes` (default 10) and `BlockDependentsOfFailedStages` (default false; when true, the stages waiting on a failed stage show Blocked until it is restarted instead of being cancelled). Personas gain ordered captain priorities; an empty list keeps the 1.0 default-captain behavior. See [PIPELINES.md](PIPELINES.md) and [CAPTAIN_ROUTING.md](CAPTAIN_ROUTING.md).
 
+### v1.3.0 to v1.4.0
+
+Schema migrations 131 and 132 run automatically at startup on SQLite, PostgreSQL, MySQL and SQL Server through the normal [upgrade procedure](#how-an-upgrade-runs); SQLite is backed up first. Migration 131 records the start time of each local agent process with its mission (`missions.process_started_pid`, `missions.process_started_utc`). Migration 132 adds `ask_threads.harbor_id` and `ask_threads.working_directory`, so an Ask Armada conversation can run on a Harbor in a chosen folder. Existing conversations keep running on the Admiral host in a scratch folder until you set either one.
+
+Update each Harbor along with the Admiral: a Harbor older than 1.4.0 runs an Ask conversation's folder as given and does not expand a leading `~`. No settings change is required.
+
 ### v1.2.0 to v1.3.0
 
 v1.3.0 adds concurrency limits and the mission hierarchy, usage-based captain selection, and fleet action modes. Schema migrations 117 through 130 run automatically at startup on SQLite, PostgreSQL, MySQL and SQL Server through the normal [upgrade procedure](#how-an-upgrade-runs). Fresh installs and populated v1.2 upgrades run the same ordered migrations.
