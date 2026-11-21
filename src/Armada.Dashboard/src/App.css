@@ -8737,8 +8737,8 @@ tr.row-muted td { opacity: 0.72; }
 .ask-conv-title-btn:hover .ask-conv-title-edit, .ask-conv-title-btn:focus-visible .ask-conv-title-edit { opacity: 1; }
 .ask-conv-title-form input { font-size: 1.05rem; font-weight: 600; padding: 0.3rem 0.5rem; }
 .ask-conv-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 0.5rem 0.65rem; }
-.ask-captain-field { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.8rem; }
-.ask-captain-field select { width: auto; max-width: 240px; padding: 0.35rem 0.5rem; font-size: 0.82rem; }
+.ask-captain-field, .ask-run-on-field, .ask-folder-field { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.8rem; }
+.ask-captain-field select, .ask-run-on-field select, .ask-folder-field select { width: auto; max-width: 240px; padding: 0.35rem 0.5rem; font-size: 0.82rem; }
 .ask-auto-approve {
     display: inline-flex;
     align-items: center;
@@ -9220,7 +9220,7 @@ tr.row-muted td { opacity: 0.72; }
     .ask-open-list span { display: none; }
     .ask-conv-title-wrap { flex-basis: 140px; }
     .ask-conv-controls { width: 100%; }
-    .ask-captain-field select { max-width: 150px; }
+    .ask-captain-field select, .ask-run-on-field select, .ask-folder-field select { max-width: 150px; }
     .ask-msg { max-width: 100%; }
     .ask-form-grid { grid-template-columns: minmax(0, 1fr); }
     .ask-quick-option { grid-template-columns: auto minmax(0, 1fr); }
@@ -10027,3 +10027,5 @@ a.btn:hover { text-decoration: none; }
 .voyage-mission-hierarchy label { display: block; }
 .voyage-mission-hierarchy label > span { font-size: 12px; font-weight: 600; color: var(--text-dim); }
 .voyage-mission-hierarchy select, .voyage-mission-hierarchy input { margin-top: 2px; font-size: 13px; }
+
+.ask-folder-field input { min-width: 12rem; padding: 0.35rem 0.5rem; font-size: 0.82rem; font-family: var(--font-mono, monospace); }

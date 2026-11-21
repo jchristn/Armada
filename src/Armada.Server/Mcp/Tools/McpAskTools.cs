@@ -103,7 +103,7 @@ namespace Armada.Server.Mcp.Tools
 
             register(
                 "create_ask_thread",
-                "Start a new Ask Armada conversation. Optionally give it a title, choose the captain that answers, and set whether its proposed actions run without asking (autoApprove).",
+                "Start a new Ask Armada conversation. Optionally give it a title, choose the captain that answers, set whether its proposed actions run without asking (autoApprove), and choose where its turns run (harborId, workingDirectory).",
                 new
                 {
                     type = "object",
@@ -111,7 +111,9 @@ namespace Armada.Server.Mcp.Tools
                     {
                         title = new { type = "string", description = "Conversation title (optional; Armada names it from the first message otherwise)" },
                         captainId = new { type = "string", description = "Captain that answers (optional; the server's Ask captain otherwise)" },
-                        autoApprove = new { type = "boolean", description = "Run proposed actions without asking (optional)" }
+                        autoApprove = new { type = "boolean", description = "Run proposed actions without asking (optional)" },
+                        harborId = new { type = "string", description = "Harbor (hbr_ prefix) in your tenant that runs every turn, so the captain works on that Harbor's machine (optional; turns run on the Armada server otherwise, and fail while the Harbor is not connected)" },
+                        workingDirectory = new { type = "string", description = "Folder the captain runs in, on the machine that runs the turn; a leading ~ is that machine's home directory, at most 1024 characters (optional; a temporary scratch folder otherwise)" }
                     }
                 },
                 async (args) =>
@@ -119,7 +121,7 @@ namespace Armada.Server.Mcp.Tools
                     AskToolArgs a = Parse(args);
                     try
                     {
-                        AskThreadCreateRequest request = new AskThreadCreateRequest { Title = a.Title, CaptainId = a.CaptainId, AutoApprove = a.AutoApprove };
+                        AskThreadCreateRequest request = new AskThreadCreateRequest { Title = a.Title, CaptainId = a.CaptainId, AutoApprove = a.AutoApprove, HarborId = a.HarborId, WorkingDirectory = a.WorkingDirectory };
                         return (object)await threads.CreateThreadAsync(McpToolHelpers.ResolveCallerContext(), request).ConfigureAwait(false);
                     }
                     catch (ArgumentException ex)
@@ -130,7 +132,7 @@ namespace Armada.Server.Mcp.Tools
 
             register(
                 "update_ask_thread",
-                "Rename, pin or unpin, archive or unarchive an Ask Armada conversation, change its captain (or clearCaptain to use the default), or change autoApprove. Only supplied fields change.",
+                "Rename, pin or unpin, archive or unarchive an Ask Armada conversation, change its captain (or clearCaptain to use the default), change autoApprove, or change where its turns run (harborId, workingDirectory; an empty string clears either). Only supplied fields change.",
                 new
                 {
                     type = "object",
@@ -142,7 +144,9 @@ namespace Armada.Server.Mcp.Tools
                         clearCaptain = new { type = "boolean", description = "True to use the server's default Ask captain" },
                         autoApprove = new { type = "boolean", description = "Run proposed actions without asking" },
                         pinned = new { type = "boolean", description = "Pin or unpin" },
-                        archived = new { type = "boolean", description = "Archive or unarchive" }
+                        archived = new { type = "boolean", description = "Archive or unarchive" },
+                        harborId = new { type = "string", description = "Harbor (hbr_ prefix) in your tenant that runs every turn from now on; an empty string clears it (turns run on the Armada server)" },
+                        workingDirectory = new { type = "string", description = "Folder the captain runs in, on the machine that runs the turn (~ is that machine's home directory, at most 1024 characters); an empty string clears it (a temporary scratch folder)" }
                     },
                     required = new[] { "threadId" }
                 },
@@ -155,7 +159,9 @@ namespace Armada.Server.Mcp.Tools
                         Title = a.Title,
                         AutoApprove = a.AutoApprove,
                         Pinned = a.Pinned,
-                        Archived = a.Archived
+                        Archived = a.Archived,
+                        HarborId = a.HarborId,
+                        WorkingDirectory = a.WorkingDirectory
                     };
                     if (a.ClearCaptain == true)
                     {

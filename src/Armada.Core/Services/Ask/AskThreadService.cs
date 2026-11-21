@@ -136,10 +136,11 @@ namespace Armada.Core.Services.Ask
         /// Create a thread owned by the caller.
         /// </summary>
         /// <param name="auth">Caller.</param>
-        /// <param name="request">Optional title, captain, and auto-approve flag.</param>
+        /// <param name="request">Optional title, captain, auto-approve flag, Harbor, and working directory.</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>The created thread.</returns>
-        /// <exception cref="ArgumentException">Thrown when the captain is not visible to the caller.</exception>
+        /// <exception cref="ArgumentException">Thrown when the captain or Harbor is not visible to the caller, or the
+        /// working directory is longer than <see cref="AskThread.MaxWorkingDirectoryLength"/> characters.</exception>
         /// <exception cref="UnauthorizedAccessException">Thrown when the caller has no tenant or user.</exception>
         public async Task<AskThread> CreateThreadAsync(AuthContext auth, AskThreadCreateRequest? request, CancellationToken token = default)
         {
@@ -158,6 +159,10 @@ namespace Armada.Core.Services.Ask
                 CaptainEligibility.RequireActive(captain);
                 thread.CaptainId = captain.Id;
             }
+
+            if (!String.IsNullOrWhiteSpace(request.HarborId))
+                thread.HarborId = await RequireVisibleHarborIdAsync(auth, request.HarborId!, token).ConfigureAwait(false);
+            thread.WorkingDirectory = ValidateWorkingDirectory(request.WorkingDirectory);
 
             thread = await _Database.AskThreads.CreateAsync(thread, token).ConfigureAwait(false);
             await DecorateAsync(thread, token).ConfigureAwait(false);
@@ -338,13 +343,15 @@ namespace Armada.Core.Services.Ask
 
         /// <summary>
         /// Update one of the caller's threads. Absent fields are unchanged; CaptainId present with null or empty clears it.
+        /// HarborId and WorkingDirectory are unchanged when null and cleared when empty or whitespace.
         /// </summary>
         /// <param name="auth">Caller.</param>
         /// <param name="threadId">Thread identifier.</param>
         /// <param name="request">Fields to change.</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>The updated thread, or null when not found or not owned.</returns>
-        /// <exception cref="ArgumentException">Thrown when the captain is not visible to the caller.</exception>
+        /// <exception cref="ArgumentException">Thrown when the captain or Harbor is not visible to the caller, or the
+        /// working directory is longer than <see cref="AskThread.MaxWorkingDirectoryLength"/> characters.</exception>
         public async Task<AskThread?> UpdateThreadAsync(AuthContext auth, string threadId, AskThreadUpdateRequest? request, CancellationToken token = default)
         {
             AskThread? thread = await ReadOwnedAsync(auth, threadId, token).ConfigureAwait(false);
@@ -369,6 +376,15 @@ namespace Armada.Core.Services.Ask
                     thread.CaptainId = captain.Id;
                 }
             }
+
+            if (request.HarborId != null)
+            {
+                thread.HarborId = String.IsNullOrWhiteSpace(request.HarborId)
+                    ? null
+                    : await RequireVisibleHarborIdAsync(auth, request.HarborId, token).ConfigureAwait(false);
+            }
+
+            if (request.WorkingDirectory != null) thread.WorkingDirectory = ValidateWorkingDirectory(request.WorkingDirectory);
 
             thread = await _Database.AskThreads.UpdateAsync(thread, token).ConfigureAwait(false);
             await DecorateAsync(thread, token).ConfigureAwait(false);
@@ -896,6 +912,28 @@ namespace Armada.Core.Services.Ask
             AskTrackedWork? work = await _Database.AskTrackedWork.ReadAsync(thread.TenantId!, workId, token).ConfigureAwait(false);
             if (work == null || !String.Equals(work.ThreadId, thread.Id, StringComparison.Ordinal)) return null;
             return work;
+        }
+
+        private async Task<string> RequireVisibleHarborIdAsync(AuthContext auth, string harborId, CancellationToken token)
+        {
+            // The Harbors a turn of this tenant can be routed to: the tenant's own, or a shared Harbor registered
+            // without a tenant (the same candidates launch routing considers).
+            string id = harborId.Trim();
+            Armada.Core.Models.Harbor? harbor = await _Database.Harbors.ReadAsync(id, token).ConfigureAwait(false);
+            bool visible = harbor != null
+                && (String.IsNullOrEmpty(harbor.TenantId) || String.Equals(harbor.TenantId, auth.TenantId, StringComparison.Ordinal));
+            if (!visible)
+                throw new ArgumentException("Harbor not found: " + id + ". HarborId must name a Harbor registered in your tenant.");
+            return harbor!.Id;
+        }
+
+        private static string? ValidateWorkingDirectory(string? workingDirectory)
+        {
+            if (String.IsNullOrWhiteSpace(workingDirectory)) return null;
+            string trimmed = workingDirectory.Trim();
+            if (trimmed.Length > AskThread.MaxWorkingDirectoryLength)
+                throw new ArgumentException("WorkingDirectory must be at most " + AskThread.MaxWorkingDirectoryLength + " characters.");
+            return trimmed;
         }
 
         private async Task<Captain?> ReadVisibleCaptainAsync(AuthContext auth, string captainId, CancellationToken token)

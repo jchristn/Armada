@@ -379,7 +379,7 @@ namespace Armada.Runtimes
             if (request == null) throw new ArgumentNullException(nameof(request));
             if (UsesScratchDirectory(request)) return Path.Combine(_ScratchRoot, "scratch", SafeName(request.JobId));
             if (String.IsNullOrWhiteSpace(request.WorkingDirectory)) return null;
-            return request.WorkingDirectory;
+            return RequestedDirectory(request);
         }
 
         #endregion
@@ -393,7 +393,14 @@ namespace Armada.Runtimes
         private static bool UsesScratchDirectory(HarborLaunchRequest request)
         {
             return request.ScratchWorkingDirectory
-                && (String.IsNullOrWhiteSpace(request.WorkingDirectory) || !Directory.Exists(request.WorkingDirectory));
+                && (String.IsNullOrWhiteSpace(request.WorkingDirectory) || !Directory.Exists(RequestedDirectory(request)));
+        }
+
+        // The requested working directory with a leading ~ expanded to this host's home directory (an Ask conversation
+        // can name a folder such as ~/Code, meaning the Harbor machine's home).
+        private static string? RequestedDirectory(HarborLaunchRequest request)
+        {
+            return Armada.Core.Hosting.HomePath.Expand(request.WorkingDirectory);
         }
 
         private void SendFinalMessage(string? finalMessageFilePath, Action<HarborOutputStreamEnum, string> onOutput)

@@ -7589,7 +7589,12 @@
         "usageSelection.missionWaiting": "Misión creada pero aún sin capitán asignado. Armada reintenta automáticamente; la sección Selección de capitanes de la misión explica cualquier espera.",
         "usageSelection.omitted": "Otros capitanes evaluados pero no listados: {{count}}",
         "usageSelection.omittedHint": "El historial lista los capitanes que explican una decisión y cuenta el resto por motivo. La vista previa muestra ahora todos los capitanes.",
-        "When automatic capture cannot read usage, Armada may open the CLI briefly and read its usage screen.": "Cuando la captura automática no puede leer el uso, Armada puede abrir brevemente la CLI y leer su pantalla de uso."
+        "When automatic capture cannot read usage, Armada may open the CLI briefly and read its usage screen.": "Cuando la captura automática no puede leer el uso, Armada puede abrir brevemente la CLI y leer su pantalla de uso.",
+        "Run on": "Ejecutar en",
+        "Armada server": "Servidor de Armada",
+        "temporary folder": "carpeta temporal",
+        "Where the captain runs: a Harbor runs it on that machine, so it sees that machine's files; the Armada server runs it on the server.": "Dónde se ejecuta el capitán: un Harbor lo ejecuta en esa máquina, así que ve los archivos de esa máquina; el servidor de Armada lo ejecuta en el servidor.",
+        "The folder the captain works in on the machine that runs the turn (~ is that machine's home). Empty uses a temporary folder.": "La carpeta en la que trabaja el capitán en la máquina que ejecuta el turno (~ es la carpeta personal de esa máquina). Vacía usa una carpeta temporal."
       },
       "sections": {
         "OPERATIONS": "OPERACIONES",
@@ -14126,7 +14131,12 @@
         "usageSelection.missionWaiting": "任务已创建，但尚未分配舰长。Armada 会自动重试；任务的“舰长选择”部分会说明任何选择等待的原因。",
         "usageSelection.omitted": "已评估但未列出的其他舰长：{{count}}",
         "usageSelection.omittedHint": "历史记录列出说明此决策的舰长，其余按原因计数。预览会显示当前所有舰长。",
-        "When automatic capture cannot read usage, Armada may open the CLI briefly and read its usage screen.": "当自动采集无法读取用量时，Armada 可以短暂打开 CLI 并读取其用量界面。"
+        "When automatic capture cannot read usage, Armada may open the CLI briefly and read its usage screen.": "当自动采集无法读取用量时，Armada 可以短暂打开 CLI 并读取其用量界面。",
+        "Run on": "运行于",
+        "Armada server": "Armada 服务器",
+        "temporary folder": "临时文件夹",
+        "Where the captain runs: a Harbor runs it on that machine, so it sees that machine's files; the Armada server runs it on the server.": "船长的运行位置：Harbor 在那台机器上运行它，因此它能看到那台机器的文件；Armada 服务器则在服务器上运行它。",
+        "The folder the captain works in on the machine that runs the turn (~ is that machine's home). Empty uses a temporary folder.": "船长在运行本轮的机器上的工作文件夹（~ 是那台机器的主目录）。留空则使用临时文件夹。"
       },
       "sections": {
         "OPERATIONS": "操作",
@@ -20626,7 +20636,12 @@
         "usageSelection.missionWaiting": "任務已建立，但尚未指派艦長。Armada 會自動重試；任務的「艦長選擇」區段會說明任何選擇等待的原因。",
         "usageSelection.omitted": "已評估但未列出的其他艦長：{{count}}",
         "usageSelection.omittedHint": "歷史記錄列出說明此決策的艦長，其餘依原因計數。預覽會顯示目前所有艦長。",
-        "When automatic capture cannot read usage, Armada may open the CLI briefly and read its usage screen.": "當自動擷取無法讀取用量時，Armada 可以短暫開啟 CLI 並讀取其用量畫面。"
+        "When automatic capture cannot read usage, Armada may open the CLI briefly and read its usage screen.": "當自動擷取無法讀取用量時，Armada 可以短暫開啟 CLI 並讀取其用量畫面。",
+        "Run on": "執行於",
+        "Armada server": "Armada 伺服器",
+        "temporary folder": "暫存資料夾",
+        "Where the captain runs: a Harbor runs it on that machine, so it sees that machine's files; the Armada server runs it on the server.": "船長的執行位置：Harbor 在那台機器上執行它，因此它能看到那台機器的檔案；Armada 伺服器則在伺服器上執行它。",
+        "The folder the captain works in on the machine that runs the turn (~ is that machine's home). Empty uses a temporary folder.": "船長在執行本輪的機器上的工作資料夾（~ 是那台機器的主目錄）。留空則使用暫存資料夾。"
       },
       "sections": {}
     },
@@ -27086,7 +27101,12 @@
         "usageSelection.missionWaiting": "任務已建立，但仲未指派艦長。Armada 會自動重試；任務嘅「艦長選擇」部分會解釋任何選擇等候嘅原因。",
         "usageSelection.omitted": "已評估但冇列出嘅其他艦長：{{count}}",
         "usageSelection.omittedHint": "歷史記錄列出解釋呢個決定嘅艦長，其餘按原因計數。預覽會顯示而家所有艦長。",
-        "When automatic capture cannot read usage, Armada may open the CLI briefly and read its usage screen.": "自動擷取讀唔到用量嘅時候，Armada 可以短暫打開 CLI 並讀取佢嘅用量畫面。"
+        "When automatic capture cannot read usage, Armada may open the CLI briefly and read its usage screen.": "自動擷取讀唔到用量嘅時候，Armada 可以短暫打開 CLI 並讀取佢嘅用量畫面。",
+        "Run on": "喺邊度執行",
+        "Armada server": "Armada 伺服器",
+        "temporary folder": "臨時資料夾",
+        "Where the captain runs: a Harbor runs it on that machine, so it sees that machine's files; the Armada server runs it on the server.": "船長喺邊度執行：Harbor 會喺嗰部機執行佢，所以佢睇到嗰部機嘅檔案；Armada 伺服器就喺伺服器度執行佢。",
+        "The folder the captain works in on the machine that runs the turn (~ is that machine's home). Empty uses a temporary folder.": "船長喺執行呢輪嘅機度用嘅工作資料夾（~ 係嗰部機嘅主目錄）。留空就用臨時資料夾。"
       },
       "sections": {}
     },
@@ -33562,7 +33582,12 @@
         "usageSelection.missionWaiting": "ミッションは作成されましたが、まだキャプテンが割り当てられていません。Armada が自動的に再試行します。選択の待機理由はミッションのキャプテン選択セクションで確認できます。",
         "usageSelection.omitted": "評価済みで一覧にないその他のキャプテン: {{count}}",
         "usageSelection.omittedHint": "履歴には判断の根拠となるキャプテンを表示し、残りは理由ごとに件数で示します。プレビューでは現在のすべてのキャプテンを表示します。",
-        "When automatic capture cannot read usage, Armada may open the CLI briefly and read its usage screen.": "自動取得で使用量を読み取れない場合、Armada は CLI を短時間開いて使用量画面を読み取ることがあります。"
+        "When automatic capture cannot read usage, Armada may open the CLI briefly and read its usage screen.": "自動取得で使用量を読み取れない場合、Armada は CLI を短時間開いて使用量画面を読み取ることがあります。",
+        "Run on": "実行先",
+        "Armada server": "Armada サーバー",
+        "temporary folder": "一時フォルダー",
+        "Where the captain runs: a Harbor runs it on that machine, so it sees that machine's files; the Armada server runs it on the server.": "キャプテンの実行場所：Harbor はそのマシンで実行するため、そのマシンのファイルが見えます。Armada サーバーはサーバー上で実行します。",
+        "The folder the captain works in on the machine that runs the turn (~ is that machine's home). Empty uses a temporary folder.": "ターンを実行するマシン上でキャプテンが作業するフォルダー（~ はそのマシンのホーム）。空の場合は一時フォルダーを使います。"
       },
       "sections": {}
     },
@@ -40029,7 +40054,12 @@
         "usageSelection.missionWaiting": "Mission erstellt, aber noch keinem Kapitän zugewiesen. Armada versucht es automatisch erneut; der Abschnitt Kapitänsauswahl der Mission erklärt jede Auswahlwartezeit.",
         "usageSelection.omitted": "Weitere geprüfte, nicht aufgeführte Kapitäne: {{count}}",
         "usageSelection.omittedHint": "Der Verlauf listet die Kapitäne, die eine Entscheidung erklären, und zählt die übrigen nach Grund. Die Vorschau zeigt jetzt alle Kapitäne.",
-        "When automatic capture cannot read usage, Armada may open the CLI briefly and read its usage screen.": "Wenn die automatische Erfassung die Nutzung nicht lesen kann, kann Armada die CLI kurz öffnen und ihre Nutzungsanzeige lesen."
+        "When automatic capture cannot read usage, Armada may open the CLI briefly and read its usage screen.": "Wenn die automatische Erfassung die Nutzung nicht lesen kann, kann Armada die CLI kurz öffnen und ihre Nutzungsanzeige lesen.",
+        "Run on": "Ausführen auf",
+        "Armada server": "Armada-Server",
+        "temporary folder": "temporärer Ordner",
+        "Where the captain runs: a Harbor runs it on that machine, so it sees that machine's files; the Armada server runs it on the server.": "Wo der Captain läuft: Ein Harbor führt ihn auf diesem Rechner aus, sodass er dessen Dateien sieht; der Armada-Server führt ihn auf dem Server aus.",
+        "The folder the captain works in on the machine that runs the turn (~ is that machine's home). Empty uses a temporary folder.": "Der Ordner, in dem der Captain auf dem Rechner arbeitet, der den Durchgang ausführt (~ ist das Home-Verzeichnis dieses Rechners). Leer verwendet einen temporären Ordner."
       },
       "sections": {}
     },
@@ -46496,7 +46526,12 @@
         "usageSelection.missionWaiting": "Mission créée mais pas encore attribuée à un capitaine. Armada réessaie automatiquement ; la section Sélection du capitaine de la mission explique toute attente.",
         "usageSelection.omitted": "Autres capitaines évalués mais non listés : {{count}}",
         "usageSelection.omittedHint": "L'historique liste les capitaines qui expliquent une décision et compte les autres par motif. L'aperçu montre tous les capitaines actuels.",
-        "When automatic capture cannot read usage, Armada may open the CLI briefly and read its usage screen.": "Lorsque la capture automatique ne peut pas lire l'utilisation, Armada peut ouvrir brièvement la CLI et lire son écran d'utilisation."
+        "When automatic capture cannot read usage, Armada may open the CLI briefly and read its usage screen.": "Lorsque la capture automatique ne peut pas lire l'utilisation, Armada peut ouvrir brièvement la CLI et lire son écran d'utilisation.",
+        "Run on": "Exécuter sur",
+        "Armada server": "Serveur Armada",
+        "temporary folder": "dossier temporaire",
+        "Where the captain runs: a Harbor runs it on that machine, so it sees that machine's files; the Armada server runs it on the server.": "Où le capitaine s'exécute : un Harbor l'exécute sur cette machine, il voit donc ses fichiers ; le serveur Armada l'exécute sur le serveur.",
+        "The folder the captain works in on the machine that runs the turn (~ is that machine's home). Empty uses a temporary folder.": "Le dossier dans lequel le capitaine travaille sur la machine qui exécute le tour (~ est le dossier personnel de cette machine). Vide utilise un dossier temporaire."
       },
       "sections": {}
     },
@@ -52963,7 +52998,12 @@
         "usageSelection.missionWaiting": "Missione creata ma non ancora assegnata a un capitano. Armada riprova automaticamente; la sezione Selezione del capitano della missione spiega ogni attesa.",
         "usageSelection.omitted": "Altri capitani valutati ma non elencati: {{count}}",
         "usageSelection.omittedHint": "La cronologia elenca i capitani che spiegano una decisione e conta gli altri per motivo. L'anteprima mostra ora tutti i capitani.",
-        "When automatic capture cannot read usage, Armada may open the CLI briefly and read its usage screen.": "Quando l'acquisizione automatica non riesce a leggere l'utilizzo, Armada può aprire brevemente la CLI e leggerne la schermata di utilizzo."
+        "When automatic capture cannot read usage, Armada may open the CLI briefly and read its usage screen.": "Quando l'acquisizione automatica non riesce a leggere l'utilizzo, Armada può aprire brevemente la CLI e leggerne la schermata di utilizzo.",
+        "Run on": "Esegui su",
+        "Armada server": "Server Armada",
+        "temporary folder": "cartella temporanea",
+        "Where the captain runs: a Harbor runs it on that machine, so it sees that machine's files; the Armada server runs it on the server.": "Dove viene eseguito il capitano: un Harbor lo esegue su quella macchina, quindi ne vede i file; il server Armada lo esegue sul server.",
+        "The folder the captain works in on the machine that runs the turn (~ is that machine's home). Empty uses a temporary folder.": "La cartella in cui il capitano lavora sulla macchina che esegue il turno (~ è la home di quella macchina). Vuota usa una cartella temporanea."
       },
       "sections": {}
     }

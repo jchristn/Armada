@@ -21,12 +21,13 @@ namespace Armada.Core.Database.Sqlite.Implementations
         #region Private-Members
 
         private static readonly string _Insert = @"INSERT INTO ask_threads
-            (id, tenant_id, user_id, title, captain_id, auto_approve, cli_permission_policy, summary_text, summary_utc, pinned, archived, last_message_utc, message_count, unread_count, created_utc, last_update_utc)
+            (id, tenant_id, user_id, title, captain_id, auto_approve, cli_permission_policy, harbor_id, working_directory, summary_text, summary_utc, pinned, archived, last_message_utc, message_count, unread_count, created_utc, last_update_utc)
             VALUES
-            (@id, @tenant_id, @user_id, @title, @captain_id, @auto_approve, @cli_permission_policy, @summary_text, @summary_utc, @pinned, @archived, @last_message_utc, @message_count, @unread_count, @created_utc, @last_update_utc);";
+            (@id, @tenant_id, @user_id, @title, @captain_id, @auto_approve, @cli_permission_policy, @harbor_id, @working_directory, @summary_text, @summary_utc, @pinned, @archived, @last_message_utc, @message_count, @unread_count, @created_utc, @last_update_utc);";
 
         private static readonly string _Update = @"UPDATE ask_threads SET
-            title = @title, captain_id = @captain_id, auto_approve = @auto_approve, summary_text = @summary_text, summary_utc = @summary_utc,
+            title = @title, captain_id = @captain_id, auto_approve = @auto_approve, harbor_id = @harbor_id, working_directory = @working_directory,
+            summary_text = @summary_text, summary_utc = @summary_utc,
             pinned = @pinned, archived = @archived, last_update_utc = @last_update_utc
             WHERE tenant_id = @tenant_id AND id = @id;";
 
@@ -153,6 +154,8 @@ namespace Armada.Core.Database.Sqlite.Implementations
                     SqliteCommandHelper.Add(cmd, "@title", thread.Title);
                     SqliteCommandHelper.Add(cmd, "@captain_id", thread.CaptainId);
                     SqliteCommandHelper.Add(cmd, "@auto_approve", thread.AutoApprove);
+                    SqliteCommandHelper.Add(cmd, "@harbor_id", thread.HarborId);
+                    SqliteCommandHelper.Add(cmd, "@working_directory", thread.WorkingDirectory);
                     SqliteCommandHelper.Add(cmd, "@summary_text", thread.SummaryText);
                     SqliteCommandHelper.AddDate(cmd, "@summary_utc", thread.SummaryUtc);
                     SqliteCommandHelper.Add(cmd, "@pinned", thread.Pinned);
@@ -321,6 +324,8 @@ namespace Armada.Core.Database.Sqlite.Implementations
             SqliteCommandHelper.Add(cmd, "@captain_id", thread.CaptainId);
             SqliteCommandHelper.Add(cmd, "@auto_approve", thread.AutoApprove);
             SqliteCommandHelper.Add(cmd, "@cli_permission_policy", thread.CliPermissionPolicy?.ToString());
+            SqliteCommandHelper.Add(cmd, "@harbor_id", thread.HarborId);
+            SqliteCommandHelper.Add(cmd, "@working_directory", thread.WorkingDirectory);
             SqliteCommandHelper.Add(cmd, "@summary_text", thread.SummaryText);
             SqliteCommandHelper.AddDate(cmd, "@summary_utc", thread.SummaryUtc);
             SqliteCommandHelper.Add(cmd, "@pinned", thread.Pinned);
@@ -343,6 +348,8 @@ namespace Armada.Core.Database.Sqlite.Implementations
             thread.AutoApprove = SqliteCommandHelper.ReadBool(reader["auto_approve"], false);
             string? cliPolicy = SqliteCommandHelper.ReadString(reader["cli_permission_policy"]);
             thread.CliPermissionPolicy = cliPolicy != null && Enum.TryParse<CliPermissionPolicyEnum>(cliPolicy, true, out CliPermissionPolicyEnum parsedPolicy) ? parsedPolicy : (CliPermissionPolicyEnum?)null;
+            thread.HarborId = SqliteCommandHelper.ReadString(reader["harbor_id"]);
+            thread.WorkingDirectory = SqliteCommandHelper.ReadString(reader["working_directory"]);
             thread.SummaryText = SqliteCommandHelper.ReadString(reader["summary_text"]);
             thread.SummaryUtc = SqliteCommandHelper.ReadNullableDate(reader["summary_utc"]);
             thread.Pinned = SqliteCommandHelper.ReadBool(reader["pinned"], false);

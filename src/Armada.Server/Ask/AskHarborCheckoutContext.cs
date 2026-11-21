@@ -84,7 +84,7 @@ namespace Armada.Server.Ask
             if (checkouts == null || checkouts.Count == 0) return null;
             StringBuilder text = new StringBuilder();
             text.AppendLine("## Repository checkouts on this machine");
-            text.AppendLine("This turn runs on the Harbor " + harborName + " in a temporary folder, not inside a repository. "
+            text.AppendLine("This turn runs on the Harbor " + harborName + " (see Where you are running for its working directory). "
                 + "These vessels are checked out on this machine; read their files at these absolute paths. "
                 + "A vessel's LocalPath and WorkingDirectory describe the Armada server's machine, not this one.");
             foreach (HarborVesselCheckout checkout in checkouts.OrderBy(c => c.VesselName, StringComparer.OrdinalIgnoreCase))

@@ -17,13 +17,19 @@ chat. The extension is being built out to full parity with the dashboard, the TU
 The Armada icon in the activity bar opens these views. They update live from the Admiral's event stream, and a status
 bar item shows the active mission count and what needs you.
 
-- **Ask Armada**: a chat with a captain, as on the dashboard's Ask page: streaming replies, tool calls, and cards to
-  approve or reject the actions it proposes and the CLI tools it asks to run. Its header picks the **Captain** that
-  answers (or none, for quick actions only), turns **Auto-approve** on or off (proposed actions run without a confirm
-  card; it asks before turning on), and sets **CLI tools** (inherit, ask in Armada, refuse, or bypass for global
-  admins), showing the policy in force. Its buttons open it in an editor tab, start a new conversation, reopen or
-  delete an earlier one, and run quick actions (summarize, rename, mark unread, show the work the conversation
-  tracks, and the Admiral's own quick actions).
+- **Ask Armada**: a chat with a captain, as on the dashboard's Ask page: your messages on the right, Armada's replies
+  on the left, streaming replies with a running timer, tool calls, and cards to approve or reject the actions it
+  proposes and the CLI tools it asks to run. Each reply shows its telemetry (time to first token, streaming and total
+  time, prompt, completion and cached tokens, tokens per second, cost, tool calls; hover for detail), and the
+  conversation's totals show at the end. The header picks the **Captain** that answers (or none, for quick actions
+  only), turns **Auto-approve** on or off (proposed actions run without a confirm card; it asks before turning on),
+  sets **CLI tools** (inherit, ask in Armada, refuse, or bypass for tenant and global admins, with the policy in
+  force), and chooses where the captain runs: **Run on** a Harbor (this computer's Harbor by default, so the captain
+  runs on your machine and answers "what files do you see?" from it) or the Armada server, in a **Folder** (the open
+  workspace folder by default on this computer; `~` is your home directory). Its buttons open it in an editor tab,
+  start a new conversation, reopen or delete an earlier one, and run quick actions (summarize, rename, mark unread,
+  show the work the conversation tracks, and the Admiral's own quick actions). Run on and Folder need an Admiral
+  newer than 1.3.0.
 - **Needs You**: reviews waiting for approval, failures, stalled captains, CLI permission requests and model alerts.
   Reviews have Approve and Deny inline; permission requests and model alerts are answered from a quick pick. New items
   also pop up as notifications (`armada.notifications.needsYou`). The home button opens the **Armada Overview**.

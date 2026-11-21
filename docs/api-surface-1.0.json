@@ -9794,12 +9794,22 @@
           "required": false
         },
         {
+          "name": "harborId",
+          "type": "string",
+          "required": false
+        },
+        {
           "name": "title",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "workingDirectory",
           "type": "string",
           "required": false
         }
       ],
-      "description": "Start a new Ask Armada conversation. Optionally give it a title, choose the captain that answers, and set whether its proposed actions run without asking (autoApprove).",
+      "description": "Start a new Ask Armada conversation. Optionally give it a title, choose the captain that answers, set whether its proposed actions run without asking (autoApprove), and choose where its turns run (harborId, workingDirectory).",
       "experimental": false
     },
     {
@@ -16358,6 +16368,11 @@
           "required": false
         },
         {
+          "name": "harborId",
+          "type": "string",
+          "required": false
+        },
+        {
           "name": "pinned",
           "type": "boolean",
           "required": false
@@ -16371,9 +16386,14 @@
           "name": "title",
           "type": "string",
           "required": false
+        },
+        {
+          "name": "workingDirectory",
+          "type": "string",
+          "required": false
         }
       ],
-      "description": "Rename, pin or unpin, archive or unarchive an Ask Armada conversation, change its captain (or clearCaptain to use the default), or change autoApprove. Only supplied fields change.",
+      "description": "Rename, pin or unpin, archive or unarchive an Ask Armada conversation, change its captain (or clearCaptain to use the default), change autoApprove, or change where its turns run (harborId, workingDirectory; an empty string clears either). Only supplied fields change.",
       "experimental": false
     },
     {

@@ -200,6 +200,16 @@ namespace Armada.Server
         }
 
         /// <summary>
+        /// Whether a Harbor is linked to this Admiral right now.
+        /// </summary>
+        /// <param name="harborId">Harbor identifier.</param>
+        /// <returns>True when the Harbor is connected; false when it is not, or Harbor delegation is not wired.</returns>
+        public bool IsHarborConnected(string? harborId)
+        {
+            return _Harbors != null && !String.IsNullOrWhiteSpace(harborId) && _Harbors.IsConnected(harborId!);
+        }
+
+        /// <summary>
         /// Whether a process id belongs to a captain this Admiral is running on a Harbor.
         /// </summary>
         /// <param name="processId">Process id.</param>

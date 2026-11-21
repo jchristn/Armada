@@ -1938,11 +1938,13 @@ export const enumerateAskThreads = (query?: AskThreadEnumerateQuery) =>
     IncludeArchived: query?.includeArchived ?? false,
   });
 
-export const createAskThread = (data?: { title?: string; captainId?: string | null; autoApprove?: boolean }) =>
+export const createAskThread = (data?: { title?: string; captainId?: string | null; autoApprove?: boolean; harborId?: string | null; workingDirectory?: string | null }) =>
   post<AskThread>(`${ASK}/threads`, {
     ...(data?.title ? { Title: data.title } : {}),
     ...(data?.captainId ? { CaptainId: data.captainId } : {}),
     ...(data?.autoApprove !== undefined ? { AutoApprove: data.autoApprove } : {}),
+    ...(data?.harborId ? { HarborId: data.harborId } : {}),
+    ...(data?.workingDirectory ? { WorkingDirectory: data.workingDirectory } : {}),
   });
 
 export const getAskThread = (id: string) => get<AskThreadDetail>(askThreadPath(id));
@@ -1954,6 +1956,8 @@ export const updateAskThread = (id: string, data: AskThreadUpdateRequest) => {
   if (data.autoApprove !== undefined) body.AutoApprove = data.autoApprove;
   if (data.pinned !== undefined) body.Pinned = data.pinned;
   if (data.archived !== undefined) body.Archived = data.archived;
+  if (data.harborId !== undefined) body.HarborId = data.harborId;
+  if (data.workingDirectory !== undefined) body.WorkingDirectory = data.workingDirectory;
   return put<AskThread>(askThreadPath(id), body);
 };
 

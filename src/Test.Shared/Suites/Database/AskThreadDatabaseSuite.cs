@@ -87,6 +87,43 @@ namespace Test.Shared.Suites.Database
                 AssertNull(updated.CaptainId, "captain cleared");
             }));
 
+            cases.Add(CaseAsync("thread_harbor_and_working_directory_roundtrip", "Thread HarborId and WorkingDirectory (migration 132) round-trip on create and update and clear to null", TestTags.Positive, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                DatabaseDriver db = testDb.Driver;
+
+                AskThread fresh = await db.AskThreads.CreateAsync(NewThread("usr_loc")).ConfigureAwait(false);
+                AskThread? plain = await db.AskThreads.ReadByIdAsync(fresh.Id).ConfigureAwait(false);
+                AssertNull(plain!.HarborId, "no Harbor by default");
+                AssertNull(plain.WorkingDirectory, "no working directory by default");
+
+                string longPath = "/Users/someone/" + new string('d', 900) + "/project";
+                AskThread thread = NewThread("usr_loc");
+                thread.HarborId = "hbr_laptop";
+                thread.WorkingDirectory = "~/Code/Armada";
+                await db.AskThreads.CreateAsync(thread).ConfigureAwait(false);
+
+                AskThread? read = await db.AskThreads.ReadAsync(Constants.DefaultTenantId, "usr_loc", thread.Id).ConfigureAwait(false);
+                AssertNotNull(read, "owner read");
+                AssertEqual("hbr_laptop", read!.HarborId);
+                AssertEqual("~/Code/Armada", read.WorkingDirectory);
+
+                read.HarborId = "hbr_desktop";
+                read.WorkingDirectory = longPath;
+                AskThread updated = await db.AskThreads.UpdateAsync(read).ConfigureAwait(false);
+                AssertEqual("hbr_desktop", updated.HarborId);
+                AssertEqual(longPath, updated.WorkingDirectory, "a long path is stored in full");
+
+                updated.HarborId = null;
+                updated.WorkingDirectory = null;
+                AskThread cleared = await db.AskThreads.UpdateAsync(updated).ConfigureAwait(false);
+                AssertNull(cleared.HarborId, "Harbor cleared");
+                AssertNull(cleared.WorkingDirectory, "working directory cleared");
+
+                EnumerationResult<AskThread> listed = await db.AskThreads.EnumerateAsync(Constants.DefaultTenantId, "usr_loc", new AskThreadEnumerateRequest()).ConfigureAwait(false);
+                AssertEqual(2L, listed.TotalRecords, "both threads listed");
+            }));
+
             cases.Add(CaseAsync("thread_enumerate_order_search_archive_paging", "Enumeration orders pinned first then recent, filters, and pages", TestTags.Positive, async () =>
             {
                 using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);

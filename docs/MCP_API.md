@@ -2769,6 +2769,8 @@ collections: read them with [list_ask_work](#list_ask_work), [list_ask_proposals
 | `title` | string | No | Title; Armada names the conversation from its first message otherwise |
 | `captainId` | string | No | Captain that answers; the server's Ask captain otherwise. A captain the caller cannot see is `NotFound` |
 | `autoApprove` | boolean | No | Run proposed actions without asking |
+| `harborId` | string | No | Harbor (hbr_) in your tenant that runs every turn, so the captain works on that Harbor's machine; turns fail while it is not connected. A Harbor outside your tenant is `NotFound` |
+| `workingDirectory` | string | No | Folder the captain runs in, on the machine that runs the turn; a leading `~` is that machine's home directory. At most 1024 characters; a temporary scratch folder otherwise |
 
 **Response:** the new `AskThread`.
 
@@ -2785,6 +2787,8 @@ Only the fields supplied change.
 | `autoApprove` | boolean | No | Run proposed actions without asking |
 | `pinned` | boolean | No | Pin or unpin |
 | `archived` | boolean | No | Archive or unarchive |
+| `harborId` | string | No | Harbor (hbr_) that runs every turn from now on; an empty string clears it |
+| `workingDirectory` | string | No | Folder the captain runs in on the machine that runs the turn; an empty string clears it |
 
 **Response:** the updated `AskThread`.
 

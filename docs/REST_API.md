@@ -4494,9 +4494,9 @@ WEBSOCKET_API.md). Retention: threads are kept until deleted; there is no automa
 | Method | Path | Body | Response |
 |---|---|---|---|
 | POST | `/api/v1/ask/threads/enumerate` | `AskThreadEnumerateRequest` | `200` `EnumerationResult<AskThread>`, pinned first, then most recent activity |
-| POST | `/api/v1/ask/threads` | `AskThreadCreateRequest` | `201` `AskThread` |
+| POST | `/api/v1/ask/threads` | `AskThreadCreateRequest` | `201` `AskThread`; `400` for a Harbor outside the caller's tenant or a `WorkingDirectory` over 1024 characters |
 | GET | `/api/v1/ask/threads/{id}` | | `200` `AskThreadDetail` |
-| PUT | `/api/v1/ask/threads/{id}` | `AskThreadUpdateRequest` | `200` `AskThread` |
+| PUT | `/api/v1/ask/threads/{id}` | `AskThreadUpdateRequest` | `200` `AskThread`; `400` as for create. `HarborId` and `WorkingDirectory` are unchanged when null or absent and cleared when empty |
 | DELETE | `/api/v1/ask/threads/{id}` | | `204` (stops a running turn; deletes messages, tool calls, proposals, tracked-work rows; the work itself is untouched) |
 | POST | `/api/v1/ask/threads/delete/multiple` | `DeleteMultipleRequest` | `200` `AskThreadDeleteMultipleResult` (`Status`, `Deleted`, `DeletedIds`, `Skipped` with `Id` and `Reason`); `400` when `Ids` is missing or empty, and `400` `CollectionLimitExceeded` (nothing deleted) when it holds more than 1000 IDs. Another user's or an unknown ID is skipped, never deleted |
 | POST | `/api/v1/ask/threads/{id}/messages/enumerate` | `AskMessageEnumerateRequest` | `200` `AskMessagePage` |
@@ -4552,6 +4552,14 @@ thread has a captain and `Ask.ReportResultsOnCompletion` is on, a short captain 
 when the user posted after the final milestone or the thread was archived or deleted. It is a normal turn (`ask.turn`
 events, CLI permission policy, telemetry). Captain and Armada messages increment `UnreadCount`; `POST .../read` resets it.
 
+**Where turns run.** A thread's `HarborId` pins every turn to that Harbor (it must be a Harbor in the owner's tenant or a
+shared one): the captain runs on that Harbor's machine, and while the Harbor is not connected the turn fails with an
+`Error` message instead of running on the Admiral host. `WorkingDirectory` is the folder the captain runs in on the
+machine that runs the turn (the pinned Harbor's host, or the Admiral host without a Harbor); a leading `~` is that
+machine's home directory, and a missing folder fails the turn rather than falling back to a scratch folder. Without a
+working directory a turn runs in a temporary scratch folder, as before. The prompt tells the captain which machine and
+folder it is in, so questions about "files" or "here" are answered by inspecting that machine.
+
 **CLI tool permissions.** The CLI's own tools (shell commands, web fetches, file tools outside its temporary working
 directory) follow the turn's CLI tool permission policy, resolved in this order: the thread's `CliPermissionPolicy`; the
 captain's `CliPermissionPolicy` (a captain-level `Bypass` only when `Ask.CaptainAutoApprove` is true); when
@@ -4570,7 +4578,7 @@ tenant admin. See [ASK_ARMADA_HOME_BASE.md](ASK_ARMADA_HOME_BASE.md#cli-tool-per
 
 `AskThread`: `Id` (ath_), `TenantId`, `UserId`, `Title`, `CaptainId`, `AutoApprove`, `CliPermissionPolicy` (`Refuse`,
 `ApproveInArmada`, `Bypass`, or null to inherit), `CliPermission` (computed [CliPermissionResolution](#clipermissionresolution)
-for the next turn, or null without a captain), `SummaryText`, `SummaryUtc`, `Pinned`, `Archived`, `LastMessageUtc`,
+for the next turn, or null without a captain), `HarborId` (hbr_, or null), `WorkingDirectory` (or null), `SummaryText`, `SummaryUtc`, `Pinned`, `Archived`, `LastMessageUtc`,
 `MessageCount`, `UnreadCount`, `ActiveWorkCount` (computed), `ActiveTurnId` (computed; set while a turn runs),
 `CreatedUtc`, `LastUpdateUtc`.
 

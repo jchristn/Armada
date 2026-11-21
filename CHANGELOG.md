@@ -14,6 +14,10 @@ All notable changes to Armada are documented in this file.
 - Captain processes and `run_process` commands do not inherit `ARMADA_INITIAL_ADMIN_PASSWORD`. Armada still reads this
   variable during server startup to set the initial admin password.
 
+### Ask Armada
+
+- An Ask Armada conversation can run on your own machine. A thread's new `HarborId` pins every turn to that Harbor, and its `WorkingDirectory` is the folder the captain runs in on the machine that runs the turn (the Harbor's host, or the Admiral host without a Harbor). A leading `~` means that machine's home directory. Both fields are accepted by `POST` and `PUT /api/v1/ask/threads` and by the `create_ask_thread` and `update_ask_thread` MCP tools. On update a null value leaves the field unchanged and an empty value clears it. A Harbor outside the caller's tenant returns 400. While the pinned Harbor is not connected the turn fails with a message naming it instead of running on the Admiral host, and a folder that does not exist fails the turn instead of falling back to a scratch folder. The prompt now tells the captain which machine and folder it is in, so a question such as "what files do you see?" is answered by inspecting that machine. Migration 132 adds `ask_threads.harbor_id` and `ask_threads.working_directory` on SQLite, PostgreSQL, MySQL and SQL Server.
+
 ### Fixes
 
 - **Git launches fail without opening a credential prompt.** Shared Git launch settings disable terminal and Git Credential Manager interaction, so unattended commands return an authentication error when credentials are missing.

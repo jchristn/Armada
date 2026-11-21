@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { AskThread, Captain, CliPermissionPolicy } from '../../types/models';
+import type { AskThread, Captain, CliPermissionPolicy, Harbor } from '../../types/models';
 import { useLocale } from '../../context/LocaleContext';
 import ActionMenu, { type ActionMenuItem } from '../shared/ActionMenu';
 import CliPermissionPolicySelect from '../cliPermissions/CliPermissionPolicySelect';
@@ -27,6 +27,12 @@ interface AskConversationHeaderProps {
   onCliPolicyChange?: (policy: CliPermissionPolicy | null) => void;
   /** The current user may choose Bypass (global or tenant admin). */
   canBypassCli?: boolean;
+  /** Harbors the conversation can run on (the user's machines). */
+  harbors?: Harbor[];
+  /** Run the conversation on a Harbor ('' runs it on the Armada server). */
+  onRunOnChange?: (harborId: string) => void;
+  /** Set ('' clears) the folder the captain works in on the machine that runs the turn. */
+  onWorkingDirectoryChange?: (folder: string) => void;
 }
 
 /**
@@ -34,7 +40,9 @@ interface AskConversationHeaderProps {
  * and an overflow menu. On narrow screens a button opens the conversation list drawer.
  */
 export default function AskConversationHeader(props: AskConversationHeaderProps) {
-  const { thread, captains, draftCaptainId, onDraftCaptainChange, onRename, onCaptainChange, onAutoApproveChange, onSummarize, onTogglePin, onToggleArchive, onDelete, onOpenList, busy, onCliPolicyChange, canBypassCli } = props;
+  const { thread, captains, draftCaptainId, onDraftCaptainChange, onRename, onCaptainChange, onAutoApproveChange, onSummarize, onTogglePin, onToggleArchive, onDelete, onOpenList, busy, onCliPolicyChange, canBypassCli, harbors, onRunOnChange, onWorkingDirectoryChange } = props;
+  const [folder, setFolder] = useState(thread?.workingDirectory ?? '');
+  useEffect(() => { setFolder(thread?.workingDirectory ?? ''); }, [thread?.id, thread?.workingDirectory]);
   const { t } = useLocale();
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState('');
@@ -145,6 +153,31 @@ export default function AskConversationHeader(props: AskConversationHeaderProps)
               </span>
             )}
           </div>
+        )}
+
+        {thread && onRunOnChange && (
+          <label className="ask-run-on-field" title={t('Where the captain runs: a Harbor runs it on that machine, so it sees that machine\'s files; the Armada server runs it on the server.')}>
+            <span className="text-dim">{t('Run on')}</span>
+            <select value={thread.harborId ?? ''} disabled={busy} onChange={(e) => onRunOnChange(e.target.value)} aria-label={t('Run on')}>
+              <option value="">{t('Armada server')}</option>
+              {(harbors ?? []).map((h) => <option key={h.id} value={h.id}>{t('Harbor')}: {h.name}{String(h.connectionStatus) === 'Connected' ? '' : ` (${String(h.connectionStatus ?? 'offline').toLowerCase()})`}</option>)}
+            </select>
+          </label>
+        )}
+
+        {thread && onWorkingDirectoryChange && (
+          <label className="ask-folder-field" title={t('The folder the captain works in on the machine that runs the turn (~ is that machine\'s home). Empty uses a temporary folder.')}>
+            <span className="text-dim">{t('Folder')}</span>
+            <input
+              value={folder}
+              placeholder={t('temporary folder')}
+              disabled={busy}
+              onChange={(e) => setFolder(e.target.value)}
+              onBlur={() => { if (folder.trim() !== (thread.workingDirectory ?? '')) onWorkingDirectoryChange(folder.trim()); }}
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); (e.target as HTMLInputElement).blur(); } }}
+              aria-label={t('Folder')}
+            />
+          </label>
         )}
 
         {thread && (

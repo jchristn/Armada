@@ -12,6 +12,11 @@ namespace Armada.Core.Models
         #region Public-Members
 
         /// <summary>
+        /// Maximum length of <see cref="WorkingDirectory"/>.
+        /// </summary>
+        public const int MaxWorkingDirectoryLength = 1024;
+
+        /// <summary>
         /// Unique identifier (ath_ prefix).
         /// </summary>
         public string Id
@@ -61,6 +66,40 @@ namespace Armada.Core.Models
         /// (computed on read; not persisted).
         /// </summary>
         public CliPermissionResolution? CliPermission { get; set; } = null;
+
+        /// <summary>
+        /// Harbor (hbr_ prefix) that runs every turn of this conversation, or null to let Armada pick where turns
+        /// run (usually the Admiral host). When set, turns run on that Harbor's machine and fail while it is not
+        /// connected.
+        /// </summary>
+        public string? HarborId
+        {
+            get => _HarborId;
+            set => _HarborId = String.IsNullOrWhiteSpace(value) ? null : value.Trim();
+        }
+
+        /// <summary>
+        /// Folder the captain runs in, on the machine that runs the turn (the pinned Harbor's host, or the Admiral
+        /// host when <see cref="HarborId"/> is null), or null to run in a temporary scratch folder. A leading
+        /// <c>~</c> expands to that machine's home directory. Trimmed; maximum 1024 characters.
+        /// </summary>
+        public string? WorkingDirectory
+        {
+            get => _WorkingDirectory;
+            set
+            {
+                if (String.IsNullOrWhiteSpace(value))
+                {
+                    _WorkingDirectory = null;
+                    return;
+                }
+
+                string trimmed = value.Trim();
+                if (trimmed.Length > MaxWorkingDirectoryLength)
+                    throw new ArgumentOutOfRangeException(nameof(WorkingDirectory), "WorkingDirectory must be at most " + MaxWorkingDirectoryLength + " characters.");
+                _WorkingDirectory = trimmed;
+            }
+        }
 
         /// <summary>
         /// Latest conversation summary, used as context when older history is trimmed, or null.
@@ -135,6 +174,8 @@ namespace Armada.Core.Models
 
         private string _Id = Constants.IdGenerator.GenerateKSortable(Constants.AskThreadIdPrefix, 24);
         private string _Title = "New conversation";
+        private string? _HarborId = null;
+        private string? _WorkingDirectory = null;
         private int _MessageCount = 0;
         private int _UnreadCount = 0;
         private int _ActiveWorkCount = 0;

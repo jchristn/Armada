@@ -245,6 +245,11 @@ namespace Armada.Server
             string workingDirectory = Path.Combine(Path.GetTempPath(), "armada-chat-" + Guid.NewGuid().ToString("N"));
             string finalMessageFilePath = Path.Combine(workingDirectory, "reply.txt");
 
+            // Where the conversation asked to run: a pinned Harbor (the turn runs there or fails) and a folder on the
+            // machine that runs it. Without either, the turn runs in the scratch directory above as before.
+            string? pinnedHarborId = String.IsNullOrWhiteSpace(options.HarborId) ? null : options.HarborId!.Trim();
+            string? requestedDirectory = String.IsNullOrWhiteSpace(options.WorkingDirectory) ? null : options.WorkingDirectory!.Trim();
+
             IAgentRuntime? runtime = null;
             RemoteAgentRuntime? remoteRuntime = null;
             int processId = -1;
@@ -265,17 +270,36 @@ namespace Armada.Server
                             Display = options.Display,
                             TenantId = options.TenantId ?? captain.TenantId,
                             UserId = options.UserId,
-                            AllowScratchWorkingDirectory = true
+                            PinnedHarborId = pinnedHarborId,
+                            // A named folder must exist on the Harbor host: a missing one fails the turn instead of
+                            // silently running in a Harbor scratch folder.
+                            AllowScratchWorkingDirectory = requestedDirectory == null
                         };
                         CaptainLaunchTarget target = await LaunchRouter.SelectAsync(launch, token).ConfigureAwait(false);
                         runtime = target.Runtime;
                         remoteRuntime = runtime as RemoteAgentRuntime;
+
+                        // A pinned turn runs on its Harbor or not at all. The router falls back to the Admiral host when
+                        // the pinned Harbor is not connected (unless Harbor execution is required), so refuse that here.
+                        if (pinnedHarborId != null && (remoteRuntime == null || !String.Equals(remoteRuntime.HarborId, pinnedHarborId, StringComparison.Ordinal)))
+                        {
+                            _Logging.Warn(_Header + "chat turn for captain " + captainId + " is pinned to Harbor " + pinnedHarborId + " but was routed elsewhere (" + target.Reason + "); not running it");
+                            return Failed(DescribePinnedHarborUnavailable(options, pinnedHarborId, captain), CaptainChatErrorCodeEnum.HarborRequired);
+                        }
+
+                        if (remoteRuntime != null && requestedDirectory != null) remoteRuntime.UseScratchWorkingDirectory = false;
+                        if (options.DescribeRunLocation)
+                            prompt = AppendRunLocation(prompt, DescribeRunLocation(options, remoteRuntime, requestedDirectory));
                         if (remoteRuntime != null && options.HarborContext != null)
                             prompt = await AppendHarborContextAsync(prompt, options.HarborContext, remoteRuntime.HarborId, captainId, token).ConfigureAwait(false);
                     }
                     else
                     {
+                        if (pinnedHarborId != null)
+                            return Failed(DescribePinnedHarborUnavailable(options, pinnedHarborId, captain), CaptainChatErrorCodeEnum.HarborRequired);
                         runtime = _RuntimeFactory.Create(captain.Runtime);
+                        if (options.DescribeRunLocation)
+                            prompt = AppendRunLocation(prompt, DescribeRunLocation(options, null, requestedDirectory));
                     }
                 }
                 catch (OperationCanceledException)
@@ -284,9 +308,23 @@ namespace Armada.Server
                 }
                 catch (Exception e)
                 {
+                    if (pinnedHarborId != null && e is Armada.Core.Services.HarborLaunchUnavailableException)
+                        return Failed(DescribePinnedHarborUnavailable(options, pinnedHarborId, captain), CaptainChatErrorCodeEnum.HarborRequired);
                     if (CaptainLaunchRouter.TryDescribeFailure(e, out string described, out CaptainChatErrorCodeEnum code))
                         return Failed(described, code);
                     return Failed("This captain's runtime (" + captain.Runtime + ") could not be launched for chat: " + e.Message);
+                }
+
+                // A turn on the Admiral host runs in the conversation's folder when it names one (~ is this host's home
+                // directory), which must exist; the final-message artifact stays in the scratch directory either way.
+                string localDirectory = workingDirectory;
+                if (remoteRuntime == null && requestedDirectory != null)
+                {
+                    string expanded = Armada.Core.Hosting.HomePath.Expand(requestedDirectory) ?? requestedDirectory;
+                    if (!Directory.Exists(expanded))
+                        return Failed("The working directory '" + expanded + "' does not exist on the Armada server's machine, where this conversation runs. "
+                            + "Create it there, change the conversation's working directory, or set a Harbor to run on your own machine.");
+                    localDirectory = expanded;
                 }
 
                 // Claude Code streams token-by-token only in streaming-JSON mode; enable it for chat so the
@@ -665,6 +703,8 @@ namespace Armada.Server
                     {
                         scopedRuntime.McpSessionToken = options.McpSessionToken;
                         scopedRuntime.McpHost = _McpHost;
+                        // Never write MCP client files into a folder the user chose (only into the turn's scratch folder).
+                        if (!String.Equals(localDirectory, workingDirectory, StringComparison.Ordinal)) scopedRuntime.McpAllowWorkingDirectoryFiles = false;
                         isolateLaunch = true;
 
                         // ApproveInArmada: Claude Code sends permission prompts to Armada's prompt tool on the scoped
@@ -678,7 +718,7 @@ namespace Armada.Server
                 {
                     Armada.Core.Services.CaptainEligibility.RequireActive(await _Database.Captains.ReadAsync(captain.Id).ConfigureAwait(false) ?? captain);
                     processId = await runtime.StartAsync(
-                        remoteRuntime != null ? String.Empty : workingDirectory,
+                        remoteRuntime != null ? (requestedDirectory ?? String.Empty) : localDirectory,
                         prompt,
                         environment: environment,
                         finalMessageFilePath: finalMessageFilePath,
@@ -827,6 +867,60 @@ namespace Armada.Server
             }
         }
 
+
+        private static string HarborLabel(CaptainChatTurnOptions options, string harborId)
+        {
+            return String.IsNullOrWhiteSpace(options.HarborName) ? harborId : options.HarborName!.Trim();
+        }
+
+        private string DescribePinnedHarborUnavailable(CaptainChatTurnOptions options, string harborId, Captain captain)
+        {
+            string harbor = HarborLabel(options, harborId);
+            if (LaunchRouter != null && LaunchRouter.IsHarborConnected(harborId))
+            {
+                if (captain.Runtime == AgentRuntimeEnum.ApiEndpoint)
+                    return "The Harbor " + harbor + " that runs this conversation is connected, but the captain " + captain.Name
+                        + " is an API-endpoint captain, which runs inside the Armada server. Choose a CLI captain for this conversation, or clear its Harbor.";
+                return "The Harbor " + harbor + " that runs this conversation is connected but cannot run the captain " + captain.Name + " (" + captain.Runtime
+                    + "): the Harbor is disabled or does not have that runtime. Enable it or install the runtime there, choose another captain, or clear the conversation's Harbor.";
+            }
+
+            return "The Harbor " + harbor + " that runs this conversation is not connected, so this turn did not run. "
+                + "Start Armada Harbor on that machine and try again, or clear the conversation's Harbor to run on the Armada server.";
+        }
+
+        private static string DescribeRunLocation(CaptainChatTurnOptions options, RemoteAgentRuntime? remote, string? requestedDirectory)
+        {
+            StringBuilder text = new StringBuilder();
+            text.AppendLine("## Where you are running");
+            if (remote != null)
+            {
+                string harbor = HarborLabel(options, remote.HarborId);
+                text.AppendLine("You are running on the user's machine, through the Harbor " + harbor + ".");
+                if (requestedDirectory != null)
+                    text.AppendLine("Your working directory is " + requestedDirectory
+                        + (Armada.Core.Hosting.HomePath.StartsWithHome(requestedDirectory) ? " (~ is the home directory on that machine)." : "."));
+                else
+                    text.AppendLine("Your working directory is a temporary scratch folder on that machine.");
+            }
+            else
+            {
+                text.AppendLine("You are running on the Armada server's machine (the Admiral host), not on the user's own computer.");
+                if (requestedDirectory != null)
+                    text.AppendLine("Your working directory is " + (Armada.Core.Hosting.HomePath.Expand(requestedDirectory) ?? requestedDirectory) + ".");
+                else
+                    text.AppendLine("Your working directory is a temporary scratch folder on that machine.");
+            }
+
+            text.Append("Questions about \"files\", \"the current directory\", \"here\", or paths starting with ~ refer to this machine and this folder. "
+                + "Answer them by inspecting it with your own tools (list the directory, read the files), not from memory.");
+            return text.ToString();
+        }
+
+        private static string AppendRunLocation(string prompt, string section)
+        {
+            return prompt.TrimEnd() + "\n\n" + section + "\n";
+        }
 
         private CaptainChatTurnResult Failed(string error)
         {

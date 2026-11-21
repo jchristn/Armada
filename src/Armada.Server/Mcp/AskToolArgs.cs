@@ -40,6 +40,12 @@ namespace Armada.Server.Mcp
         /// <summary>True to clear the conversation's captain (use the default) on update.</summary>
         public bool? ClearCaptain { get; set; } = null;
 
+        /// <summary>Harbor (hbr_ prefix) that runs the conversation's turns; empty clears it on update.</summary>
+        public string? HarborId { get; set; } = null;
+
+        /// <summary>Folder the captain runs in on the machine that runs the turn; empty clears it on update.</summary>
+        public string? WorkingDirectory { get; set; } = null;
+
         /// <summary>Whether proposed actions run without asking.</summary>
         public bool? AutoApprove { get; set; } = null;
 

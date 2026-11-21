@@ -227,7 +227,127 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(0, s.LocalLaunches, "did not fall back to the Admiral host");
             }));
 
-            cases.Add(CaseAsync("stop_kills_the_harbor_process", "Stopping an Ask turn that runs on a Harbor kills the captain process on the Harbor", TestTags.Positive, async () =>
+            cases.Add(CaseAsync("ask_thread_pinned_harbor_runs_in_its_folder", "An Ask thread with a HarborId and WorkingDirectory runs every turn on that Harbor in that folder and tells the captain where it is", TestTags.Positive, async () =>
+            {
+                using Scenario s = await Scenario.CreateAsync().ConfigureAwait(false);
+                using InProcessHarbor first = await s.ConnectHarborAsync("hbr_pin_a", Constants.DefaultTenantId, "usr_pin").ConfigureAwait(false);
+                using InProcessHarbor pinned = await s.ConnectHarborAsync("hbr_pin_b", Constants.DefaultTenantId, "usr_pin").ConfigureAwait(false);
+                string folder = Path.Combine(s.Root, "user-folder-" + Guid.NewGuid().ToString("N").Substring(0, 8));
+                Directory.CreateDirectory(folder);
+                AuthContext owner = AuthContext.Authenticated(Constants.DefaultTenantId, "usr_pin", false, true, "Test");
+                Captain captain = await s.CreateCaptainAsync("ask-pinned", AgentRuntimeEnum.ClaudeCode).ConfigureAwait(false);
+                AskThread thread = await s.Threads.CreateThreadAsync(owner, new AskThreadCreateRequest { CaptainId = captain.Id, HarborId = "hbr_pin_b", WorkingDirectory = folder }).ConfigureAwait(false);
+                AssertEqual("hbr_pin_b", thread.HarborId);
+
+                await s.Turns.SendMessageAsync(owner, thread.Id, new AskMessageSendRequest { Content = "What files do you see?" }).ConfigureAwait(false);
+                await s.WaitForTurnEndAsync(thread.Id).ConfigureAwait(false);
+
+                AskMessagePage page = (await s.Threads.EnumerateMessagesAsync(owner, thread.Id, null).ConfigureAwait(false))!;
+                AssertEqual("Hello from the Harbor", page.Messages.Last().ContentText, "the turn ran: " + page.Messages.Last().ContentText);
+                AssertEqual(0, first.Runner.LaunchSnapshot().Count, "the least-loaded Harbor was not chosen over the pinned one");
+                List<HarborLaunchRequest> launches = pinned.Runner.LaunchSnapshot();
+                AssertEqual(1, launches.Count, "one launch on the pinned Harbor");
+                AssertEqual(folder, launches[0].WorkingDirectory, "the conversation's folder is sent to the Harbor");
+                AssertFalse(launches[0].ScratchWorkingDirectory, "a named folder never falls back to scratch");
+                AssertEqual(0, s.LocalLaunches, "nothing ran on the Admiral host");
+
+                AssertContains(Path.GetFileName(folder), ChatShimCli.ReadRecord(s.HarborRecord, "cwd.txt"), "the CLI ran in the conversation's folder");
+                AssertTrue(Directory.Exists(folder), "the Harbor did not remove the user's folder");
+                string prompt = ChatShimCli.ReadRecord(s.HarborRecord, "prompt.txt");
+                AssertContains("## Where you are running", prompt);
+                AssertContains("on the user's machine, through the Harbor hbr_pin_b", prompt);
+                AssertContains("Your working directory is " + folder, prompt);
+                AssertContains("list the directory, read the files", prompt);
+            }));
+
+            cases.Add(CaseAsync("pinned_harbor_offline_fails_without_fallback", "A turn pinned to a Harbor that is not connected fails with a clear message and never runs on the Admiral host or another Harbor", TestTags.Negative, async () =>
+            {
+                using Scenario s = await Scenario.CreateAsync().ConfigureAwait(false);
+                Captain captain = await s.CreateCaptainAsync("pinned-offline", AgentRuntimeEnum.ClaudeCode).ConfigureAwait(false);
+                CaptainChatTurnOptions options = s.TurnOptions(captain, "usr_off");
+                options.HarborId = "hbr_gone";
+                options.HarborName = "gone-laptop";
+
+                CaptainChatTurnResult none = await s.Chat.RunTurnAsync(options).ConfigureAwait(false);
+                AssertFalse(none.Response.Success, "the turn failed");
+                AssertEqual(CaptainChatErrorCodeEnum.HarborRequired, none.Response.ErrorCode);
+                AssertContains("The Harbor gone-laptop that runs this conversation is not connected", none.Response.Error ?? String.Empty);
+
+                using InProcessHarbor other = await s.ConnectHarborAsync("hbr_off_other", Constants.DefaultTenantId, "usr_off").ConfigureAwait(false);
+                CaptainChatTurnResult elsewhere = await s.Chat.RunTurnAsync(options).ConfigureAwait(false);
+                AssertEqual(CaptainChatErrorCodeEnum.HarborRequired, elsewhere.Response.ErrorCode, "another connected Harbor does not stand in");
+                AssertContains("is not connected", elsewhere.Response.Error ?? String.Empty);
+                AssertEqual(0, other.Runner.LaunchSnapshot().Count, "nothing was sent to the other Harbor");
+
+                s.Settings.RequireHarborForLaunch = true;
+                CaptainChatTurnResult required = await s.Chat.RunTurnAsync(options).ConfigureAwait(false);
+                AssertContains("The Harbor gone-laptop that runs this conversation is not connected", required.Response.Error ?? String.Empty, "same message under requireHarborForLaunch");
+                AssertEqual(String.Empty, ChatShimCli.ReadRecord(s.LocalRecord, "cwd.txt"), "nothing ran on the Admiral host");
+            }));
+
+            cases.Add(CaseAsync("pinned_harbor_missing_folder_fails", "A turn on a Harbor whose working directory does not exist there fails instead of running in a scratch folder", TestTags.Negative, async () =>
+            {
+                using Scenario s = await Scenario.CreateAsync().ConfigureAwait(false);
+                using InProcessHarbor harbor = await s.ConnectHarborAsync("hbr_nofolder", Constants.DefaultTenantId, "usr_nofolder").ConfigureAwait(false);
+                Captain captain = await s.CreateCaptainAsync("pinned-nofolder", AgentRuntimeEnum.ClaudeCode).ConfigureAwait(false);
+                string missing = Path.Combine(s.Root, "no-such-folder");
+                CaptainChatTurnOptions options = s.TurnOptions(captain, "usr_nofolder");
+                options.HarborId = "hbr_nofolder";
+                options.WorkingDirectory = missing;
+
+                CaptainChatTurnResult result = await s.Chat.RunTurnAsync(options).ConfigureAwait(false);
+                AssertFalse(result.Response.Success, "the turn failed");
+                AssertEqual(CaptainChatErrorCodeEnum.HarborLaunchFailed, result.Response.ErrorCode);
+                AssertContains("does not exist on this Harbor host", result.Response.Error ?? String.Empty);
+                AssertContains(missing, result.Response.Error ?? String.Empty, "names the folder");
+                List<HarborLaunchRequest> launches = harbor.Runner.LaunchSnapshot();
+                AssertEqual(1, launches.Count, "the launch reached the Harbor");
+                AssertFalse(launches[0].ScratchWorkingDirectory, "scratch fallback was off");
+                AssertEqual(String.Empty, ChatShimCli.ReadRecord(s.HarborRecord, "cwd.txt"), "the CLI never started");
+            }));
+
+            cases.Add(CaseAsync("local_turn_runs_in_working_directory", "Without a Harbor a turn with a WorkingDirectory runs on the Admiral host in that folder, and the reply still comes back", TestTags.Positive, async () =>
+            {
+                using Scenario s = await Scenario.CreateAsync().ConfigureAwait(false);
+                Captain captain = await s.CreateCaptainAsync("local-folder", AgentRuntimeEnum.ClaudeCode).ConfigureAwait(false);
+                string folder = Path.Combine(s.Root, "admiral-folder-" + Guid.NewGuid().ToString("N").Substring(0, 8));
+                Directory.CreateDirectory(folder);
+                CaptainChatTurnOptions options = s.TurnOptions(captain, "usr_lfolder");
+                options.WorkingDirectory = folder;
+                options.DescribeRunLocation = true;
+
+                CaptainChatTurnResult result = await s.Chat.RunTurnAsync(options).ConfigureAwait(false);
+                AssertTrue(result.Response.Success, "the turn succeeded: " + result.Response.Error);
+                AssertEqual("Hello from the Admiral", result.Response.Reply);
+                AssertContains(Path.GetFileName(folder), ChatShimCli.ReadRecord(s.LocalRecord, "cwd.txt"), "the CLI ran in the conversation's folder");
+                AssertTrue(Directory.Exists(folder), "the folder is not removed after the turn");
+                string prompt = ChatShimCli.ReadRecord(s.LocalRecord, "prompt.txt");
+                AssertContains("on the Armada server's machine", prompt);
+                AssertContains("Your working directory is " + folder, prompt);
+
+                CaptainChatTurnOptions scratch = s.TurnOptions(captain, "usr_lfolder");
+                scratch.DescribeRunLocation = true;
+                CaptainChatTurnResult plain = await s.Chat.RunTurnAsync(scratch).ConfigureAwait(false);
+                AssertTrue(plain.Response.Success, "a turn without a folder still runs");
+                AssertContains("armada-chat-", ChatShimCli.ReadRecord(s.LocalRecord, "cwd.txt"), "without a folder the turn runs in its scratch directory");
+                AssertContains("temporary scratch folder", ChatShimCli.ReadRecord(s.LocalRecord, "prompt.txt"));
+            }));
+
+            cases.Add(CaseAsync("local_turn_missing_working_directory_fails", "A turn on the Admiral host whose WorkingDirectory does not exist fails with the path in the message", TestTags.Negative, async () =>
+            {
+                using Scenario s = await Scenario.CreateAsync().ConfigureAwait(false);
+                Captain captain = await s.CreateCaptainAsync("local-nofolder", AgentRuntimeEnum.ClaudeCode).ConfigureAwait(false);
+                string missing = Path.Combine(s.Root, "missing-admiral-folder");
+                CaptainChatTurnOptions options = s.TurnOptions(captain, "usr_lnofolder");
+                options.WorkingDirectory = missing;
+
+                CaptainChatTurnResult result = await s.Chat.RunTurnAsync(options).ConfigureAwait(false);
+                AssertFalse(result.Response.Success, "the turn failed");
+                AssertContains("The working directory '" + missing + "' does not exist on the Armada server's machine", result.Response.Error ?? String.Empty);
+                AssertEqual(String.Empty, ChatShimCli.ReadRecord(s.LocalRecord, "cwd.txt"), "the CLI never started");
+            }));
+
+            cases.Add(CaseAsync("stop_kills_the_harbor_process","Stopping an Ask turn that runs on a Harbor kills the captain process on the Harbor", TestTags.Positive, async () =>
             {
                 using Scenario s = await Scenario.CreateAsync().ConfigureAwait(false);
                 s.HarborSleeps = true;

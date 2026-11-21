@@ -2,10 +2,18 @@
 
 ## Unreleased
 
+- **Ask Armada chat layout and telemetry**: your messages on the right, Armada's on the left; each reply shows its
+  telemetry (TTFT, first text, streaming and total time, prompt, completion and cached tokens, tokens per second,
+  cost, tool calls and their time) with detail on hover, the conversation's totals, and a running timer while a reply
+  streams.
+- **Where Ask Armada runs**: **Run on** picks a Harbor (this computer's Harbor by default) or the Armada server, and
+  **Folder** picks the working directory there (the open workspace folder by default on this computer; `~` expands to
+  your home directory), so questions about files are answered from your machine. Needs an Admiral newer than 1.3.0;
+  an older one is detected and explained.
 - **Editor tabs**: Ask Armada and every sidebar view open as editor tabs (a button on each view, and **Open a View in
   an Editor Tab...**); view tabs are full-width live pages of the view's groups and records with its main actions.
 - **Ask Armada conversation settings**: pick the captain (or none), turn auto-approve on or off (with the dashboard's
-  warning), and set the CLI tool policy (inherit, ask in Armada, refuse, bypass for global admins) with the policy in
+  warning), and set the CLI tool policy (inherit, ask in Armada, refuse, bypass for tenant and global admins) with the policy in
   force shown; a new conversation starts with the chosen settings.
 - **Full dashboard parity, natively**: every entry of the parity manifest (`parity.json`, 759 entries) is implemented
   or not applicable. Added since the first native views: planning and backlog refinement chats that dispatch a plan or

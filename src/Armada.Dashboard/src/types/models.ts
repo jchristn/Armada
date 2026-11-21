@@ -3885,6 +3885,10 @@ export interface AskThread {
   cliPermissionPolicy?: CliPermissionPolicy | null;
   /** The resolved CLI tool permission policy for this thread's captain turns (computed by the server). */
   cliPermission?: CliPermissionResolution | null;
+  /** The Harbor (hbr_) that runs this conversation's turns on the user's machine, or null for the Admiral host. */
+  harborId?: string | null;
+  /** The folder the captain runs in on the machine that runs the turn, or null for a temporary scratch folder. */
+  workingDirectory?: string | null;
   createdUtc?: string;
   lastUpdateUtc?: string;
 }
@@ -4164,6 +4168,10 @@ export interface AskThreadUpdateRequest {
   autoApprove?: boolean;
   pinned?: boolean;
   archived?: boolean;
+  /** The Harbor (hbr_) that runs the conversation's turns on the user's machine; '' clears it (run on the Admiral). */
+  harborId?: string;
+  /** The folder the captain runs in on the machine that runs the turn ('~' is that machine's home); '' clears it. */
+  workingDirectory?: string;
 }
 
 /** One entry of `GET /ask/quick-actions`. */

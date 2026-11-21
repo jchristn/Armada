@@ -143,6 +143,59 @@ namespace Test.Shared.Suites.E2E
                 AssertStatusCode(HttpStatusCode.BadRequest, await a.PutAsync("/api/v1/ask/threads/" + thread.Id, JsonHelper.ToJsonContent(new { CaptainId = "cpt_missing" })).ConfigureAwait(false));
             }));
 
+            cases.Add(CaseAsync("harbor_and_working_directory", "HarborId must be a Harbor in the caller's tenant; HarborId and WorkingDirectory are kept when null and cleared when empty", async () =>
+            {
+                E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this).ConfigureAwait(false);
+                E2ETenantUser alice = await E2ETenantUser.CreateAsync(fx.AuthClient, "askloc").ConfigureAwait(false);
+                E2ETenantUser carol = await E2ETenantUser.CreateAsync(fx.AuthClient, "asklocc").ConfigureAwait(false);
+                using HttpClient a = alice.CreateClient(fx.BaseUrl);
+                using HttpClient c = carol.CreateClient(fx.BaseUrl);
+
+                HttpResponseMessage ownResp = await a.PostAsync("/api/v1/harbors", JsonHelper.ToJsonContent(new { Name = "alice-laptop" })).ConfigureAwait(false);
+                AssertStatusCode(HttpStatusCode.Created, ownResp);
+                Harbor own = await JsonHelper.DeserializeAsync<Harbor>(ownResp).ConfigureAwait(false);
+                HttpResponseMessage foreignResp = await c.PostAsync("/api/v1/harbors", JsonHelper.ToJsonContent(new { Name = "carol-laptop" })).ConfigureAwait(false);
+                AssertStatusCode(HttpStatusCode.Created, foreignResp);
+                Harbor foreign = await JsonHelper.DeserializeAsync<Harbor>(foreignResp).ConfigureAwait(false);
+
+                // Create: a Harbor in another tenant or an unknown one is 400; the folder is trimmed.
+                HttpResponseMessage rejected = await a.PostAsync("/api/v1/ask/threads", JsonHelper.ToJsonContent(new { HarborId = foreign.Id })).ConfigureAwait(false);
+                AssertStatusCode(HttpStatusCode.BadRequest, rejected);
+                AssertContains("Harbor not found", await rejected.Content.ReadAsStringAsync().ConfigureAwait(false));
+                AssertStatusCode(HttpStatusCode.BadRequest, await a.PostAsync("/api/v1/ask/threads", JsonHelper.ToJsonContent(new { HarborId = "hbr_missing" })).ConfigureAwait(false));
+                AssertStatusCode(HttpStatusCode.BadRequest, await a.PostAsync("/api/v1/ask/threads", JsonHelper.ToJsonContent(new { WorkingDirectory = "/" + new string('x', 1024) })).ConfigureAwait(false));
+
+                HttpResponseMessage created = await a.PostAsync("/api/v1/ask/threads", JsonHelper.ToJsonContent(new { HarborId = own.Id, WorkingDirectory = "  ~/Code  " })).ConfigureAwait(false);
+                AssertStatusCode(HttpStatusCode.Created, created);
+                string createdJson = await created.Content.ReadAsStringAsync().ConfigureAwait(false);
+                AssertContains("\"HarborId\":\"" + own.Id + "\"", createdJson, "HarborId on the response");
+                AssertContains("\"WorkingDirectory\":\"~/Code\"", createdJson, "trimmed WorkingDirectory on the response");
+                AskThread thread = System.Text.Json.JsonSerializer.Deserialize<AskThread>(createdJson, JsonHelper.Options)!;
+                AssertEqual(own.Id, thread.HarborId);
+                AssertEqual("~/Code", thread.WorkingDirectory);
+
+                // Update: null or absent keeps both.
+                AskThread renamed = await JsonHelper.DeserializeAsync<AskThread>(await a.PutAsync("/api/v1/ask/threads/" + thread.Id, new StringContent("{\"Title\":\"Here\",\"HarborId\":null,\"WorkingDirectory\":null}", System.Text.Encoding.UTF8, "application/json")).ConfigureAwait(false)).ConfigureAwait(false);
+                AssertEqual("Here", renamed.Title);
+                AssertEqual(own.Id, renamed.HarborId, "null HarborId keeps it");
+                AssertEqual("~/Code", renamed.WorkingDirectory, "null WorkingDirectory keeps it");
+
+                // Update: an invalid Harbor is 400 and changes nothing.
+                AssertStatusCode(HttpStatusCode.BadRequest, await a.PutAsync("/api/v1/ask/threads/" + thread.Id, JsonHelper.ToJsonContent(new { HarborId = foreign.Id })).ConfigureAwait(false));
+                AskThreadDetail afterReject = await JsonHelper.DeserializeAsync<AskThreadDetail>(await a.GetAsync("/api/v1/ask/threads/" + thread.Id).ConfigureAwait(false)).ConfigureAwait(false);
+                AssertEqual(own.Id, afterReject.Thread.HarborId, "rejected update kept the Harbor");
+
+                AskThread moved = await JsonHelper.DeserializeAsync<AskThread>(await a.PutAsync("/api/v1/ask/threads/" + thread.Id, JsonHelper.ToJsonContent(new { WorkingDirectory = "/srv/projects" })).ConfigureAwait(false)).ConfigureAwait(false);
+                AssertEqual("/srv/projects", moved.WorkingDirectory);
+                AssertEqual(own.Id, moved.HarborId, "absent HarborId keeps it");
+
+                // Update: empty or whitespace clears.
+                AskThread cleared = await JsonHelper.DeserializeAsync<AskThread>(await a.PutAsync("/api/v1/ask/threads/" + thread.Id, JsonHelper.ToJsonContent(new { HarborId = "", WorkingDirectory = "   " })).ConfigureAwait(false)).ConfigureAwait(false);
+                AssertNull(cleared.HarborId, "empty HarborId clears it");
+                AssertNull(cleared.WorkingDirectory, "whitespace WorkingDirectory clears it");
+                AssertEqual("Here", cleared.Title, "title kept");
+            }));
+
             cases.Add(CaseAsync("messages_and_quick_action_events_owner_only", "Messages and quick actions work, and ask.* events reach only the owner's sockets", async () =>
             {
                 E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this).ConfigureAwait(false);

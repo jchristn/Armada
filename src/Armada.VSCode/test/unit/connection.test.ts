@@ -159,6 +159,7 @@ describe('endpoint discovery', () => {
       baseUrl: 'http://view.example.org:8710',
       accessKey: 'hk',
       dashboardUrl: 'http://view.example.org:9710/dashboard',
+      harborId: null,
     });
     assert.deepStrictEqual(discoverTuiProfiles({ env: {}, homeDir: home, readFile: read }), [
       { name: 'default', url: 'http://127.0.0.1:7890', active: false, followsLocalAdmiral: true },

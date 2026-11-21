@@ -4,7 +4,8 @@ namespace Armada.Core.Models
 
     /// <summary>
     /// Body of PUT /api/v1/ask/threads/{id}. Absent fields are left unchanged; CaptainId present with null (or empty)
-    /// clears the captain.
+    /// clears the captain. HarborId and WorkingDirectory are left unchanged when null and cleared when empty or
+    /// whitespace.
     /// </summary>
     public class AskThreadUpdateRequest
     {
@@ -40,6 +41,19 @@ namespace Armada.Core.Models
         /// New archived flag, or null.
         /// </summary>
         public bool? Archived { get; set; } = null;
+
+        /// <summary>
+        /// New Harbor (hbr_ prefix) that runs every turn of the conversation. Null leaves it unchanged; an empty or
+        /// whitespace string clears it (turns run where Armada picks, usually the Admiral host).
+        /// </summary>
+        public string? HarborId { get; set; } = null;
+
+        /// <summary>
+        /// New folder the captain runs in, on the machine that runs the turn. A leading ~ expands to that machine's
+        /// home directory. Null leaves it unchanged; an empty or whitespace string clears it (turns run in a
+        /// temporary scratch folder). Trimmed; maximum 1024 characters.
+        /// </summary>
+        public string? WorkingDirectory { get; set; } = null;
 
         #endregion
 

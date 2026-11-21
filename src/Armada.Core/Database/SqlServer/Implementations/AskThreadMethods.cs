@@ -21,12 +21,13 @@ namespace Armada.Core.Database.SqlServer.Implementations
         #region Private-Members
 
         private static readonly string _Insert = @"INSERT INTO ask_threads
-            (id, tenant_id, user_id, title, captain_id, auto_approve, cli_permission_policy, summary_text, summary_utc, pinned, archived, last_message_utc, message_count, unread_count, created_utc, last_update_utc)
+            (id, tenant_id, user_id, title, captain_id, auto_approve, cli_permission_policy, harbor_id, working_directory, summary_text, summary_utc, pinned, archived, last_message_utc, message_count, unread_count, created_utc, last_update_utc)
             VALUES
-            (@id, @tenant_id, @user_id, @title, @captain_id, @auto_approve, @cli_permission_policy, @summary_text, @summary_utc, @pinned, @archived, @last_message_utc, @message_count, @unread_count, @created_utc, @last_update_utc);";
+            (@id, @tenant_id, @user_id, @title, @captain_id, @auto_approve, @cli_permission_policy, @harbor_id, @working_directory, @summary_text, @summary_utc, @pinned, @archived, @last_message_utc, @message_count, @unread_count, @created_utc, @last_update_utc);";
 
         private static readonly string _Update = @"UPDATE ask_threads SET
-            title = @title, captain_id = @captain_id, auto_approve = @auto_approve, summary_text = @summary_text, summary_utc = @summary_utc,
+            title = @title, captain_id = @captain_id, auto_approve = @auto_approve, harbor_id = @harbor_id, working_directory = @working_directory,
+            summary_text = @summary_text, summary_utc = @summary_utc,
             pinned = @pinned, archived = @archived, last_update_utc = @last_update_utc
             WHERE tenant_id = @tenant_id AND id = @id;";
 
@@ -153,6 +154,8 @@ namespace Armada.Core.Database.SqlServer.Implementations
                     SqlServerCommandHelper.Add(cmd, "@title", thread.Title);
                     SqlServerCommandHelper.Add(cmd, "@captain_id", thread.CaptainId);
                     SqlServerCommandHelper.Add(cmd, "@auto_approve", thread.AutoApprove);
+                    SqlServerCommandHelper.Add(cmd, "@harbor_id", thread.HarborId);
+                    SqlServerCommandHelper.Add(cmd, "@working_directory", thread.WorkingDirectory);
                     SqlServerCommandHelper.Add(cmd, "@summary_text", thread.SummaryText);
                     SqlServerCommandHelper.AddDate(cmd, "@summary_utc", thread.SummaryUtc);
                     SqlServerCommandHelper.Add(cmd, "@pinned", thread.Pinned);
@@ -321,6 +324,8 @@ namespace Armada.Core.Database.SqlServer.Implementations
             SqlServerCommandHelper.Add(cmd, "@captain_id", thread.CaptainId);
             SqlServerCommandHelper.Add(cmd, "@auto_approve", thread.AutoApprove);
             SqlServerCommandHelper.Add(cmd, "@cli_permission_policy", thread.CliPermissionPolicy?.ToString());
+            SqlServerCommandHelper.Add(cmd, "@harbor_id", thread.HarborId);
+            SqlServerCommandHelper.Add(cmd, "@working_directory", thread.WorkingDirectory);
             SqlServerCommandHelper.Add(cmd, "@summary_text", thread.SummaryText);
             SqlServerCommandHelper.AddDate(cmd, "@summary_utc", thread.SummaryUtc);
             SqlServerCommandHelper.Add(cmd, "@pinned", thread.Pinned);
@@ -343,6 +348,8 @@ namespace Armada.Core.Database.SqlServer.Implementations
             thread.AutoApprove = SqlServerCommandHelper.ReadBool(reader["auto_approve"], false);
             string? cliPolicy = SqlServerCommandHelper.ReadString(reader["cli_permission_policy"]);
             thread.CliPermissionPolicy = cliPolicy != null && Enum.TryParse<CliPermissionPolicyEnum>(cliPolicy, true, out CliPermissionPolicyEnum parsedPolicy) ? parsedPolicy : (CliPermissionPolicyEnum?)null;
+            thread.HarborId = SqlServerCommandHelper.ReadString(reader["harbor_id"]);
+            thread.WorkingDirectory = SqlServerCommandHelper.ReadString(reader["working_directory"]);
             thread.SummaryText = SqlServerCommandHelper.ReadString(reader["summary_text"]);
             thread.SummaryUtc = SqlServerCommandHelper.ReadNullableDate(reader["summary_utc"]);
             thread.Pinned = SqlServerCommandHelper.ReadBool(reader["pinned"], false);

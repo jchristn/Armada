@@ -193,6 +193,10 @@ namespace Test.Shared.Suites.Client
                 AskThreadUpdateRequest update = new AskThreadUpdateRequest { Pinned = true, CaptainIdSpecified = true };
                 AskThread? pinned = await c.UpdateAskThreadAsync(thread.Id, update);
                 AssertTrue(pinned?.Pinned == true, "pinned");
+                AskThread? located = await c.UpdateAskThreadAsync(thread.Id, new AskThreadUpdateRequest { WorkingDirectory = "~/client-contract" });
+                AssertEqual("~/client-contract", located?.WorkingDirectory, "working directory sent");
+                AskThread? unlocated = await c.UpdateAskThreadAsync(thread.Id, new AskThreadUpdateRequest { WorkingDirectory = "" });
+                AssertNull(unlocated?.WorkingDirectory, "empty working directory clears it");
                 AssertNotNull(await c.GetAskThreadAsync(thread.Id), "detail");
                 AssertNotNull(await c.EnumerateAskMessagesAsync(thread.Id), "messages");
                 List<AskQuickAction> actions = await c.GetAskQuickActionsAsync();

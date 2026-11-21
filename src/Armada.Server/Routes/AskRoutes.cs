@@ -136,8 +136,9 @@ namespace Armada.Server.Routes
             api => api
                 .WithTag("Ask")
                 .WithSummary("Create an Ask Armada thread")
-                .WithDescription("Creates a private conversation owned by the caller. The title defaults to \"New conversation\" and is replaced by the first message.")
-                .WithRequestBody(OpenApiJson.BodyFor<AskThreadCreateRequest>("Optional title, captain, auto-approve", false))
+                .WithDescription("Creates a private conversation owned by the caller. The title defaults to \"New conversation\" and is replaced by the first message. "
+                    + "HarborId (a Harbor in the caller's tenant) runs every turn on that Harbor's machine; WorkingDirectory (at most 1024 characters, a leading ~ is that machine's home directory) is the folder the captain runs in. Returns 400 for an unknown Harbor or a directory that is too long.")
+                .WithRequestBody(OpenApiJson.BodyFor<AskThreadCreateRequest>("Optional title, captain, auto-approve, Harbor, working directory", false))
                 .WithResponse(201, OpenApiJson.For<AskThread>("The created thread"))
                 .WithResponse(400, OpenApiResponseMetadata.BadRequest())
                 .WithSecurity("ApiKey"));
@@ -180,7 +181,8 @@ namespace Armada.Server.Routes
             api => api
                 .WithTag("Ask")
                 .WithSummary("Update an Ask Armada thread")
-                .WithDescription("Updates title, captain, auto-approve, pinned, or archived. Absent fields are unchanged; CaptainId null clears the captain.")
+                .WithDescription("Updates title, captain, auto-approve, pinned, archived, Harbor, or working directory. Absent fields are unchanged; CaptainId null clears the captain. "
+                    + "HarborId and WorkingDirectory are unchanged when null or absent and cleared when empty; an unknown Harbor returns 400.")
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Thread ID (ath_ prefix)"))
                 .WithRequestBody(OpenApiJson.BodyFor<AskThreadUpdateRequest>("Fields to change", true))
                 .WithResponse(200, OpenApiJson.For<AskThread>("The updated thread"))

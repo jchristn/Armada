@@ -480,6 +480,26 @@ namespace Armada.Server.Ask
 
         #region Private-Methods
 
+        // Run the turn where the conversation asks: on its Harbor (pinned, named in messages) and in its folder, and tell
+        // the captain where that is.
+        private async Task ApplyRunLocationAsync(CaptainChatTurnOptions options, AskThread thread)
+        {
+            options.DescribeRunLocation = true;
+            options.WorkingDirectory = thread.WorkingDirectory;
+            options.HarborId = thread.HarborId;
+            if (String.IsNullOrEmpty(thread.HarborId)) return;
+
+            try
+            {
+                Armada.Core.Models.Harbor? harbor = await _Database.Harbors.ReadAsync(thread.HarborId!).ConfigureAwait(false);
+                if (harbor != null && !String.IsNullOrWhiteSpace(harbor.Name)) options.HarborName = harbor.Name;
+            }
+            catch (Exception ex) when (!(ex is OperationCanceledException))
+            {
+                _Logging.Debug(_Header + "could not read Harbor " + thread.HarborId + " for thread " + thread.Id + ": " + ex.Message);
+            }
+        }
+
         private async Task<string?> BuildFocusAsync(AskThread thread)
         {
             try
@@ -601,6 +621,7 @@ namespace Armada.Server.Ask
                 options.McpSessionToken = MintToken(thread);
                 options.TimeoutMs = _Settings.Ask.TurnTimeoutMinutes * 60000;
                 options.Display = HarborLaunchDisplayBuilder.ForAskTurn(thread.Id, QuestionOf(history, userSequence), captain);
+                await ApplyRunLocationAsync(options, current).ConfigureAwait(false);
                 HarborCheckoutDirectory? harborCheckouts = HarborCheckouts;
                 if (harborCheckouts != null)
                     options.HarborContext = (harborId, cancel) => AskHarborCheckoutContext.BuildAsync(_Database, harborCheckouts, _Threads, current, harborId, cancel);

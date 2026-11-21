@@ -14,6 +14,7 @@ import {
   getAskWorkSnapshot,
   getCaptainTools,
   listCaptains,
+  listHarbors,
   markAskThreadRead,
   markAskThreadUnread,
   rejectAskProposal,
@@ -24,19 +25,7 @@ import {
   updateAskThread,
 } from '../api/client';
 import { listAll } from '../api/paging';
-import type {
-  AskActionProposal,
-  AskMessage,
-  AskQuickAction,
-  AskThread,
-  AskThreadUpdateRequest,
-  AskTrackedWork,
-  Captain,
-  CaptainToolAccessResult,
-  CliPermissionPolicy,
-  CliPermissionRequest,
-  WebSocketMessage,
-} from '../types/models';
+import type { AskActionProposal, AskMessage, AskQuickAction, AskThread, AskThreadUpdateRequest, AskTrackedWork, Captain, CaptainToolAccessResult, CliPermissionPolicy, CliPermissionRequest, Harbor, WebSocketMessage } from '../types/models';
 import { useLocale } from '../context/LocaleContext';
 import { useWebSocket } from '../context/WebSocketContext';
 import { useAuth } from '../context/AuthContext';
@@ -136,6 +125,7 @@ export default function AskArmada() {
 
   // Captains and quick actions.
   const [captains, setCaptains] = useState<Captain[]>([]);
+  const [harbors, setHarbors] = useState<Harbor[]>([]);
   const [draftCaptainId, setDraftCaptainId] = useState(() => readStored(CAPTAIN_STORAGE_KEY));
   const [quickActions, setQuickActions] = useState<AskQuickAction[]>(DEFAULT_QUICK_ACTIONS);
   const [tools, setTools] = useState<CaptainToolAccessResult | null>(null);
@@ -224,6 +214,9 @@ export default function AskArmada() {
     getAskQuickActions()
       .then((catalog) => setQuickActions(mergeQuickActions(catalog)))
       .catch(() => setQuickActions(DEFAULT_QUICK_ACTIONS));
+    listHarbors()
+      .then((list) => setHarbors(list))
+      .catch(() => setHarbors([]));
   }, []);
 
   // Whether the conversation's captain can reach Armada over MCP (it cannot propose actions otherwise).
@@ -910,6 +903,9 @@ export default function AskArmada() {
           busy={conv.turnActive}
           onCliPolicyChange={(policy) => { if (thread) void changeCliPolicy(thread, policy); }}
           canBypassCli={!!isAdmin || !!isTenantAdmin}
+          harbors={harbors}
+          onRunOnChange={(harborId) => { if (thread) void updateThread(thread, { harborId }); }}
+          onWorkingDirectoryChange={(workingDirectory) => { if (thread) void updateThread(thread, { workingDirectory }); }}
         />
 
         {ungated && (

@@ -71,6 +71,8 @@ export interface HarborLink {
   baseUrl: string;
   accessKey: string | null;
   dashboardUrl: string | null;
+  /** This machine's Harbor id (hbr_), or null. */
+  harborId: string | null;
 }
 
 /** A TUI server profile. */
@@ -135,7 +137,7 @@ export function discoverHarbor(environment: DiscoveryEnvironment = {}): HarborLi
   const link = stringProperty(settings, 'ServerLinkUrl');
   const baseUrl = link ? restBaseFromLinkUrl(link) : null;
   if (!baseUrl) return null;
-  return { settingsPath, baseUrl, accessKey: stringProperty(settings, 'AccessKey'), dashboardUrl: stringProperty(settings, 'DashboardUrl') };
+  return { settingsPath, baseUrl, accessKey: stringProperty(settings, 'AccessKey'), dashboardUrl: stringProperty(settings, 'DashboardUrl'), harborId: stringProperty(settings, 'HarborId') };
 }
 
 /** Reads the TUI's server profiles. Empty when there is no tui.json. Never throws. */

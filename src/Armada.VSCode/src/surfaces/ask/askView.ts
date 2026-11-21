@@ -7,6 +7,8 @@
  */
 
 import * as crypto from 'crypto';
+import * as os from 'os';
+import * as path from 'path';
 import * as vscode from 'vscode';
 import {
   approveAskProposal,
@@ -17,6 +19,7 @@ import {
   getAskQuickActions,
   getAskWorkSnapshot,
   listCaptains,
+  listHarbors,
   markAskThreadUnread,
   runAskQuickAction,
   enumerateAskMessages,
@@ -32,8 +35,9 @@ import { ConversationAction, conversationReducer, ConversationState, initialConv
 import { parseAskEvent } from '@dashboard/lib/askEvents';
 import { loadAskThreadView, withToolCalls } from '@dashboard/lib/askPaging';
 import { parseCliPermissionEvent } from '@dashboard/lib/cliPermissions';
-import type { AskMessage, AskQuickAction, Captain, CliPermissionPolicy, WebSocketMessage } from '@dashboard/types/models';
+import type { AskMessage, AskQuickAction, AskThread, Captain, CliPermissionPolicy, Harbor, WebSocketMessage } from '@dashboard/types/models';
 import { ConnectionManager } from '../../connection/connectionManager';
+import { discoverHarbor } from '../../connection/endpoints';
 import { describeError } from '../../transport/errors';
 import { ArmadaEventBus } from '../../transport/eventBus';
 import { formatAge } from '../../util/format';
@@ -68,7 +72,10 @@ type ChatInbound =
   | { type: 'openInEditor' }
   | { type: 'setCaptain'; id: string }
   | { type: 'setAutoApprove'; value: boolean }
-  | { type: 'setCliPolicy'; value: string };
+  | { type: 'setCliPolicy'; value: string }
+  | { type: 'setRunOn'; value: string }
+  | { type: 'chooseFolder' }
+  | { type: 'clearFolder' };
 
 /** Host dependencies. */
 export interface AskViewDeps {
@@ -89,6 +96,10 @@ export class AskViewProvider implements vscode.WebviewViewProvider, vscode.Dispo
   private _DraftCaptainId: string | undefined;
   private _DraftAutoApprove = false;
   private _DraftCliPolicy: CliPermissionPolicy | null = null;
+  private _Harbors: Harbor[] = [];
+  private _DraftHarborId: string | undefined;
+  private _DraftFolder: string | undefined;
+  private _ServerSupportsLocation = true;
   private _State: ConversationState = initialConversation();
   private _Error: string | null = null;
   private _RenderTimer: ReturnType<typeof setTimeout> | undefined;
@@ -330,6 +341,15 @@ export class AskViewProvider implements vscode.WebviewViewProvider, vscode.Dispo
         case 'setCliPolicy':
           await this.setCliPolicy(isCliPolicy(message.value) ? message.value : null);
           return;
+        case 'setRunOn':
+          await this.setRunOn(message.value || '');
+          return;
+        case 'chooseFolder':
+          await this.chooseFolder();
+          return;
+        case 'clearFolder':
+          await this.setFolder('');
+          return;
       }
     } catch (err) {
       this._Error = describeError(err);
@@ -384,7 +404,8 @@ export class AskViewProvider implements vscode.WebviewViewProvider, vscode.Dispo
     this._Error = null;
     let threadId = this._State.threadId;
     if (!threadId) {
-      let created = await createAskThread({ captainId: this.draftCaptainId() ?? null, autoApprove: this._DraftAutoApprove });
+      let created = await createAskThread({ captainId: this.draftCaptainId() ?? null, autoApprove: this._DraftAutoApprove, harborId: this.draftHarborId() || null, workingDirectory: this.draftFolder() || null });
+      this.noteLocationSupport(created, { harborId: this.draftHarborId(), workingDirectory: this.draftFolder() });
       if (this._DraftCliPolicy) created = await setAskThreadCliPermissionPolicy(created.id, this._DraftCliPolicy);
       threadId = created.id;
       this.dispatch({ type: 'reset', threadId });
@@ -467,7 +488,12 @@ export class AskViewProvider implements vscode.WebviewViewProvider, vscode.Dispo
       autoApprove: thread ? thread.autoApprove === true : this._DraftAutoApprove,
       cliPolicy: (thread ? thread.cliPermissionPolicy ?? null : this._DraftCliPolicy) ?? '',
       cliEffective: thread?.cliPermission ? `${policyLabel(thread.cliPermission.effective)} (from ${humanizeSource(thread.cliPermission.source)})` : '',
-      canBypass: this._Deps.connection.state.identity?.globalAdmin === true,
+      canBypass: this._Deps.connection.state.identity?.tenantAdmin === true,
+      harbors: this._Harbors.map((h) => ({ id: h.id, label: `${h.name}${h.id === discoverHarbor()?.harborId ? ' (this computer)' : ''}${String(h.connectionStatus) === 'Connected' ? '' : ` (${String(h.connectionStatus ?? 'offline').toLowerCase()})`}` })),
+      harborId: this.currentHarborId(),
+      folder: thread ? thread.workingDirectory ?? '' : this.draftFolder(),
+      onThisMachine: this.runsOnThisMachine(this.currentHarborId()),
+      locationSupported: this._ServerSupportsLocation,
     };
     const message = { type: 'state', view: buildChatView(this._State, this._Deps.connection.connected, this._Error), controls };
     for (const host of this._Hosts) void host.postMessage(message);
@@ -486,7 +512,94 @@ export class AskViewProvider implements vscode.WebviewViewProvider, vscode.Dispo
     } catch {
       this._Captains = [];
     }
+    try {
+      this._Harbors = (await listHarbors()).sort((a, b) => a.name.localeCompare(b.name));
+    } catch {
+      this._Harbors = [];
+    }
     this.render();
+  }
+
+  /** This machine's Harbor id, when it is registered with the connected Admiral. */
+  private localHarborId(): string | undefined {
+    const id = discoverHarbor()?.harborId ?? undefined;
+    return id && this._Harbors.some((h) => h.id === id) ? id : undefined;
+  }
+
+  /** New conversations run on this machine's Harbor when it has one, else on the Admiral. */
+  private draftHarborId(): string {
+    if (this._DraftHarborId !== undefined) return this._DraftHarborId;
+    return this.localHarborId() ?? '';
+  }
+
+  /** New conversations on this machine start in the open workspace folder. */
+  private draftFolder(): string {
+    if (this._DraftFolder !== undefined) return this._DraftFolder;
+    return this.runsOnThisMachine(this.draftHarborId()) ? vscode.workspace.workspaceFolders?.find((f) => f.uri.scheme === 'file')?.uri.fsPath ?? '' : '';
+  }
+
+  /** Whether a conversation run on this Harbor (or on the Admiral when empty) runs on this computer. */
+  private runsOnThisMachine(harborId: string): boolean {
+    if (harborId) return harborId === discoverHarbor()?.harborId;
+    return this._Deps.connection.state.target?.kind === 'local';
+  }
+
+  private currentHarborId(): string {
+    const thread = this._State.thread;
+    return thread ? thread.harborId ?? '' : this.draftHarborId();
+  }
+
+  private async setRunOn(harborId: string): Promise<void> {
+    const thread = this._State.thread;
+    if (thread) {
+      const updated = await updateAskThread(thread.id, { harborId });
+      this.noteLocationSupport(updated, { harborId });
+      this.dispatch({ type: 'thread', thread: updated });
+    } else {
+      this._DraftHarborId = harborId;
+      this._DraftFolder = undefined;
+      this.render();
+    }
+  }
+
+  private async chooseFolder(): Promise<void> {
+    const harborId = this.currentHarborId();
+    let folder: string | undefined;
+    if (this.runsOnThisMachine(harborId)) {
+      const picked = await vscode.window.showOpenDialog({ canSelectFolders: true, canSelectFiles: false, canSelectMany: false, openLabel: 'Use This Folder', title: 'Ask Armada: working directory' });
+      folder = picked?.[0]?.fsPath;
+    } else {
+      const where = harborId ? `the Harbor ${this._Harbors.find((h) => h.id === harborId)?.name ?? harborId}` : 'the Armada server';
+      folder = await vscode.window.showInputBox({ title: 'Ask Armada: working directory', prompt: `A folder on ${where}'s machine (~ is that machine's home)`, value: this._State.thread?.workingDirectory ?? '', ignoreFocusOut: true });
+    }
+    if (folder === undefined) return;
+    await this.setFolder(folder.trim());
+  }
+
+  private async setFolder(folder: string): Promise<void> {
+    // On this machine, ~ is the user's home here, whatever Harbor version runs the turn.
+    let value = folder;
+    if (value && this.runsOnThisMachine(this.currentHarborId()) && (value === '~' || value.startsWith('~/') || value.startsWith('~\\'))) value = path.join(os.homedir(), value.slice(1));
+    const thread = this._State.thread;
+    if (thread) {
+      const updated = await updateAskThread(thread.id, { workingDirectory: value });
+      this.noteLocationSupport(updated, { workingDirectory: value });
+      this.dispatch({ type: 'thread', thread: updated });
+    } else {
+      this._DraftFolder = value;
+      this.render();
+    }
+  }
+
+  /**
+   * An Admiral from before conversation locations ignores them (the server omits null fields, so only a value that was
+   * set and did not come back counts). Says so once instead of failing silently.
+   */
+  private noteLocationSupport(thread: AskThread, requested: { harborId?: string | null; workingDirectory?: string | null }): void {
+    const missing = (requested.harborId && !thread.harborId) || (requested.workingDirectory && !thread.workingDirectory);
+    if (!missing || !this._ServerSupportsLocation) return;
+    this._ServerSupportsLocation = false;
+    void vscode.window.showWarningMessage(`Armada: this Admiral (Armada ${this._Deps.connection.state.serverVersion ?? 'unknown'}) cannot run Ask Armada on a Harbor or in a chosen folder yet; its turns still run on the Armada server. Update the Admiral to use this.`);
   }
 
   private async setCaptain(captainId: string | null): Promise<void> {
@@ -556,10 +669,19 @@ header .title { flex: 1; font-weight: 600; white-space: nowrap; overflow: hidden
 .controls select { max-width: 220px; color: var(--vscode-dropdown-foreground); background: var(--vscode-dropdown-background); border: 1px solid var(--vscode-dropdown-border, var(--vscode-panel-border)); border-radius: 2px; padding: 1px 4px; font: inherit; }
 .controls .auto.on { color: var(--vscode-charts-yellow); }
 .controls .effective { font-size: 0.9em; }
-#messages { flex: 1; overflow-y: auto; padding: 8px 10px 4px; }
-.msg { margin: 0 0 12px; line-height: 1.5; overflow-wrap: anywhere; }
+#messages { flex: 1; overflow-y: auto; padding: 8px 10px 4px; display: flex; flex-direction: column; }
+.controls.location code { font-family: var(--vscode-editor-font-family); color: var(--vscode-foreground); overflow-wrap: anywhere; }
+button.link { background: none; border: none; padding: 0 2px; color: var(--vscode-textLink-foreground); cursor: pointer; font: inherit; }
+button.link:hover { text-decoration: underline; }
+.metrics { font-size: 0.78em; color: var(--vscode-descriptionForeground); margin-top: 3px; font-variant-numeric: tabular-nums; }
+.totals { font-size: 0.8em; color: var(--vscode-descriptionForeground); }
+.msg { margin: 0 0 12px; line-height: 1.5; overflow-wrap: anywhere; max-width: 88%; align-self: flex-start; }
+.msg.user { align-self: flex-end; }
+.msg.user .meta { text-align: right; }
+.msg.assistant .body { background: var(--vscode-editorWidget-background); border: 1px solid var(--vscode-widget-border, var(--vscode-panel-border)); border-radius: 8px 8px 8px 2px; padding: 6px 10px; }
+.msg.system { align-self: stretch; max-width: 100%; }
 .msg .meta { font-size: 0.8em; color: var(--vscode-descriptionForeground); margin-bottom: 2px; }
-.msg.user .body { background: var(--vscode-input-background); border: 1px solid var(--vscode-input-border, transparent); border-radius: 6px; padding: 6px 9px; }
+.msg.user .body { background: var(--vscode-button-secondaryBackground); color: var(--vscode-button-secondaryForeground); border-radius: 8px 8px 2px 8px; padding: 6px 10px; }
 .msg.system .body, .msg.kind-WorkUpdate .body, .msg.kind-WorkReport .body { border-left: 2px solid var(--vscode-charts-blue); padding-left: 8px; color: var(--vscode-descriptionForeground); }
 .msg.kind-Error .body { border-left: 2px solid var(--vscode-errorForeground); padding-left: 8px; }
 .body p { margin: 0 0 6px; } .body p:last-child { margin-bottom: 0; }
@@ -613,6 +735,10 @@ textarea { resize: none; border: none; background: transparent; color: var(--vsc
   <label title="How the captain CLI handles shell commands, file edits, and fetches that need permission in this conversation. Inherit uses the captain policy, then the server default.">CLI tools <select id="cli" aria-label="CLI tools"><option value="">Inherit</option><option value="ApproveInArmada">Ask in Armada</option><option value="Refuse">Refuse</option><option value="Bypass">Bypass (no prompts)</option></select></label>
   <span class="effective" id="effective"></span>
 </div>
+<div class="controls location" role="group" aria-label="Where the captain runs">
+  <label title="Where the captain runs: a Harbor runs it on that machine (your computer, for this computer's Harbor), so it sees that machine's files; the Armada server runs it on the server.">Run on <select id="runon" aria-label="Run on"></select></label>
+  <span class="folder" title="The folder the captain works in on that machine. Questions about files, the current directory or ~ are answered from there."><span class="label">Folder</span> <code id="folder"></code> <button class="link" id="chooseFolder">Change...</button> <button class="link" id="clearFolder">Clear</button></span>
+</div>
 <div id="messages" role="log" aria-live="polite"></div>
 <div class="error" id="error" role="alert" hidden></div>
 <footer>
@@ -627,6 +753,8 @@ const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 const SUGGESTIONS = ['What needs my attention right now?', 'Summarize what my captains worked on today', 'Why did the most recent mission fail?', 'Which vessels have the most failures this week?'];
 let view = null;
+let turnStarted = 0;
+setInterval(() => { if (view && view.turnActive) render(); }, 1000);
 let draftKept = (vscode.getState() || {}).draft || '';
 $('input').value = draftKept;
 
@@ -653,12 +781,21 @@ function render() {
     if (view.hasMore) html += '<button class="btn secondary older" id="older">Load earlier messages</button>';
     for (const m of view.messages) {
       const who = m.role === 'user' ? 'You' : m.role === 'system' ? 'Armada' : 'Armada';
-      html += '<div class="msg ' + m.role + ' kind-' + esc(m.kind) + '"><div class="meta">' + who + (m.time ? ' · ' + esc(m.time) : '') + (m.local ? ' · sending' : '') + '</div>' + chips(m.tools) + (m.html ? '<div class="body">' + m.html + '</div>' : '') + card(m.card) + '</div>';
+      html += '<div class="msg ' + m.role + ' kind-' + esc(m.kind) + '"><div class="meta">' + who + (m.time ? ' · ' + esc(m.time) : '') + (m.local ? ' · sending' : '') + '</div>' + chips(m.tools) + (m.html ? '<div class="body">' + m.html + '</div>' : '') + card(m.card) + (m.metrics ? '<div class="metrics" title="' + esc(m.metricsDetail) + '">' + esc(m.metrics) + '</div>' : '') + '</div>';
     }
     if (view.streaming) {
       html += '<div class="msg assistant"><div class="meta">Armada</div>' + (view.streaming.thinking && !view.streaming.html ? '<div class="thinking">' + esc(view.streaming.thinking) + '</div>' : '') + chips(view.streaming.tools) + (view.streaming.html ? '<div class="body">' + view.streaming.html + '</div>' : '') + '</div>';
     }
-    if (view.turnActive) html += '<div class="working">Armada is working</div>';
+    if (view.turnActive) {
+      if (!turnStarted) turnStarted = Date.now();
+      const secs = Math.round((Date.now() - turnStarted) / 1000);
+      const chars = view.streaming && view.streaming.html ? view.streaming.html.replace(/<[^>]+>/g, '').length : 0;
+      html += '<div class="working">Armada is working · ' + secs + 's' + (chars ? ' · ' + chars.toLocaleString() + ' characters so far' : '') + '</div>';
+    } else {
+      turnStarted = 0;
+    }
+    const t = view.totals;
+    if (t && t.replies) html += '<div class="totals">This conversation: ' + t.replies + ' replies · ' + (t.estimated ? '~' : '') + t.promptTokens.toLocaleString() + ' in · ' + (t.estimated ? '~' : '') + t.completionTokens.toLocaleString() + ' out' + (t.cachedTokens ? ' · ' + t.cachedTokens.toLocaleString() + ' cached' : '') + (t.costUsd ? ' · $' + t.costUsd.toFixed(t.costUsd < 0.01 ? 4 : 3) : '') + '</div>';
   }
   box.innerHTML = html;
   if (atBottom || view.turnActive) box.scrollTop = box.scrollHeight;
@@ -708,7 +845,17 @@ function renderControls(c) {
   bypass.disabled = !c.canBypass && c.cliPolicy !== 'Bypass';
   $('cli').value = c.cliPolicy || '';
   $('effective').textContent = c.cliEffective ? 'In force: ' + c.cliEffective : '';
+  const runOptions = '<option value="">Armada server</option>' + (c.harbors || []).map((h) => '<option value="' + esc(h.id) + '">Harbor: ' + esc(h.label) + '</option>').join('');
+  if (runOptions !== runOnOptions) { $('runon').innerHTML = runOptions; runOnOptions = runOptions; }
+  $('runon').value = c.harborId || '';
+  $('runon').disabled = !!(view && view.turnActive);
+  $('folder').textContent = c.folder || 'a temporary folder';
+  $('clearFolder').hidden = !c.folder;
 }
+let runOnOptions = '';
+$('runon').addEventListener('change', () => vscode.postMessage({ type: 'setRunOn', value: $('runon').value }));
+$('chooseFolder').addEventListener('click', () => vscode.postMessage({ type: 'chooseFolder' }));
+$('clearFolder').addEventListener('click', () => vscode.postMessage({ type: 'clearFolder' }));
 $('captain').addEventListener('change', () => vscode.postMessage({ type: 'setCaptain', id: $('captain').value }));
 $('auto').addEventListener('change', () => vscode.postMessage({ type: 'setAutoApprove', value: $('auto').checked }));
 $('cli').addEventListener('change', () => vscode.postMessage({ type: 'setCliPolicy', value: $('cli').value }));

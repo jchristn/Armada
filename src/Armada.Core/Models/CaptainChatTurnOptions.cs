@@ -105,6 +105,30 @@ namespace Armada.Core.Models
         /// </summary>
         public Func<string, System.Threading.CancellationToken, System.Threading.Tasks.Task<string?>>? HarborContext { get; set; } = null;
 
+        /// <summary>
+        /// Harbor (hbr_ prefix) the turn must run on, or null to let the launch router choose. When set, the turn runs
+        /// on that Harbor or fails (it never falls back to the Admiral host).
+        /// </summary>
+        public string? HarborId { get; set; } = null;
+
+        /// <summary>
+        /// Display name of <see cref="HarborId"/> for messages and the prompt, or null to use the identifier.
+        /// </summary>
+        public string? HarborName { get; set; } = null;
+
+        /// <summary>
+        /// Folder the captain runs in on the machine that runs the turn, or null for a temporary scratch folder. A
+        /// leading ~ expands to that machine's home directory. On a Harbor a missing folder fails the turn (no scratch
+        /// fallback); on the Admiral host it must exist too.
+        /// </summary>
+        public string? WorkingDirectory { get; set; } = null;
+
+        /// <summary>
+        /// When true, a short "Where you are running" section (the machine and folder the turn runs in) is added to the
+        /// prompt once the launch target is known. Default false.
+        /// </summary>
+        public bool DescribeRunLocation { get; set; } = false;
+
         #endregion
 
         #region Private-Members

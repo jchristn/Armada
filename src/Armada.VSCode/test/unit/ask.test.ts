@@ -49,3 +49,25 @@ describe('ask chat view model', () => {
     assert.strictEqual(buildChatView(initialConversation(), false, 'boom').error, 'boom');
   });
 });
+
+describe('ask reply telemetry', () => {
+  it('formats the metrics of a reply on one line and in detail, and totals the conversation', async () => {
+    const { formatMetrics } = await import('../../src/surfaces/ask/askViewModel');
+    const metrics = { timeToFirstTokenMs: 1234, timeToFirstTextMs: 1500, streamingMs: 8300, totalMs: 9900, promptTokens: 1234, completionTokens: 567, totalTokens: 1801, tokensPerSecond: 58.27, cachedTokens: 200, costUsd: 0.0123, toolCallCount: 3, toolTimeMs: 1200 };
+    assert.strictEqual(formatMetrics(metrics, null, false), 'TTFT 1.23s · first text 1.50s · streaming 8.30s · total 9.90s · 1,234 in · 567 out · 200 cached · 58.3 tok/s · cost $0.012 · tools 3 (1.20s)');
+    assert.match(formatMetrics(metrics, null, true), /^Time to first token: 1\.23s\nTime to first text: 1\.50s\n/);
+    assert.strictEqual(formatMetrics({ ...metrics, tokensEstimated: true, timeToFirstTextMs: null, cachedTokens: 0, costUsd: null, toolCallCount: 0 } as never, null, false), 'TTFT 1.23s · streaming 8.30s · total 9.90s · ~1,234 in · ~567 out · 58.3 tok/s');
+    assert.strictEqual(formatMetrics(null, null, false), '');
+    assert.strictEqual(formatMetrics(null, 450, false), 'total 450 ms');
+    let state = initialConversation('ath_1');
+    state = conversationReducer(state, { type: 'loaded', threadId: 'ath_1', detail: { thread: { id: 'ath_1', title: 'T', captainId: null, autoApprove: false, pinned: false, archived: false } } as never, hasMore: false, messages: [
+      { id: 'm1', threadId: 'ath_1', sequence: 1, role: 'User', kind: 'Text', contentText: 'hi' },
+      { id: 'm2', threadId: 'ath_1', sequence: 2, role: 'Assistant', kind: 'Text', contentText: 'hello', metrics: metrics as never },
+      { id: 'm3', threadId: 'ath_1', sequence: 3, role: 'Assistant', kind: 'Text', contentText: 'again', metrics: { ...metrics, costUsd: 0.01 } as never },
+    ] });
+    const view = buildChatView(state, true, null);
+    assert.deepStrictEqual(view.totals, { replies: 2, promptTokens: 2468, completionTokens: 1134, cachedTokens: 400, costUsd: 0.0223, estimated: false });
+    assert.strictEqual(view.messages[0].metrics, '', 'user messages carry no telemetry');
+    assert.match(view.messages[1].metrics, /^TTFT 1\.23s/);
+  });
+});

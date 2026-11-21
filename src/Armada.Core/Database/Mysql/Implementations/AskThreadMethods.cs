@@ -19,12 +19,13 @@ namespace Armada.Core.Database.Mysql.Implementations
         #region Private-Members
 
         private static readonly string _Insert = @"INSERT INTO ask_threads
-            (id, tenant_id, user_id, title, captain_id, auto_approve, cli_permission_policy, summary_text, summary_utc, pinned, archived, last_message_utc, message_count, unread_count, created_utc, last_update_utc)
+            (id, tenant_id, user_id, title, captain_id, auto_approve, cli_permission_policy, harbor_id, working_directory, summary_text, summary_utc, pinned, archived, last_message_utc, message_count, unread_count, created_utc, last_update_utc)
             VALUES
-            (@id, @tenant_id, @user_id, @title, @captain_id, @auto_approve, @cli_permission_policy, @summary_text, @summary_utc, @pinned, @archived, @last_message_utc, @message_count, @unread_count, @created_utc, @last_update_utc);";
+            (@id, @tenant_id, @user_id, @title, @captain_id, @auto_approve, @cli_permission_policy, @harbor_id, @working_directory, @summary_text, @summary_utc, @pinned, @archived, @last_message_utc, @message_count, @unread_count, @created_utc, @last_update_utc);";
 
         private static readonly string _Update = @"UPDATE ask_threads SET
-            title = @title, captain_id = @captain_id, auto_approve = @auto_approve, summary_text = @summary_text, summary_utc = @summary_utc,
+            title = @title, captain_id = @captain_id, auto_approve = @auto_approve, harbor_id = @harbor_id, working_directory = @working_directory,
+            summary_text = @summary_text, summary_utc = @summary_utc,
             pinned = @pinned, archived = @archived, last_update_utc = @last_update_utc
             WHERE tenant_id = @tenant_id AND id = @id;";
 
@@ -146,6 +147,8 @@ namespace Armada.Core.Database.Mysql.Implementations
                     MysqlCommandHelper.Add(cmd, "@title", thread.Title);
                     MysqlCommandHelper.Add(cmd, "@captain_id", thread.CaptainId);
                     MysqlCommandHelper.Add(cmd, "@auto_approve", thread.AutoApprove);
+                    MysqlCommandHelper.Add(cmd, "@harbor_id", thread.HarborId);
+                    MysqlCommandHelper.Add(cmd, "@working_directory", thread.WorkingDirectory);
                     MysqlCommandHelper.Add(cmd, "@summary_text", thread.SummaryText);
                     MysqlCommandHelper.AddDate(cmd, "@summary_utc", thread.SummaryUtc);
                     MysqlCommandHelper.Add(cmd, "@pinned", thread.Pinned);
@@ -314,6 +317,8 @@ namespace Armada.Core.Database.Mysql.Implementations
             MysqlCommandHelper.Add(cmd, "@captain_id", thread.CaptainId);
             MysqlCommandHelper.Add(cmd, "@auto_approve", thread.AutoApprove);
             MysqlCommandHelper.Add(cmd, "@cli_permission_policy", thread.CliPermissionPolicy?.ToString());
+            MysqlCommandHelper.Add(cmd, "@harbor_id", thread.HarborId);
+            MysqlCommandHelper.Add(cmd, "@working_directory", thread.WorkingDirectory);
             MysqlCommandHelper.Add(cmd, "@summary_text", thread.SummaryText);
             MysqlCommandHelper.AddDate(cmd, "@summary_utc", thread.SummaryUtc);
             MysqlCommandHelper.Add(cmd, "@pinned", thread.Pinned);
@@ -336,6 +341,8 @@ namespace Armada.Core.Database.Mysql.Implementations
             thread.AutoApprove = MysqlCommandHelper.ReadBool(reader["auto_approve"], false);
             string? cliPolicy = MysqlCommandHelper.ReadString(reader["cli_permission_policy"]);
             thread.CliPermissionPolicy = cliPolicy != null && Enum.TryParse<CliPermissionPolicyEnum>(cliPolicy, true, out CliPermissionPolicyEnum parsedPolicy) ? parsedPolicy : (CliPermissionPolicyEnum?)null;
+            thread.HarborId = MysqlCommandHelper.ReadString(reader["harbor_id"]);
+            thread.WorkingDirectory = MysqlCommandHelper.ReadString(reader["working_directory"]);
             thread.SummaryText = MysqlCommandHelper.ReadString(reader["summary_text"]);
             thread.SummaryUtc = MysqlCommandHelper.ReadNullableDate(reader["summary_utc"]);
             thread.Pinned = MysqlCommandHelper.ReadBool(reader["pinned"], false);

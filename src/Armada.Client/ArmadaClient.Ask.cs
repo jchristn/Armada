@@ -94,6 +94,8 @@ namespace Armada.Client
             if (data.AutoApprove.HasValue) body["AutoApprove"] = data.AutoApprove.Value;
             if (data.Pinned.HasValue) body["Pinned"] = data.Pinned.Value;
             if (data.Archived.HasValue) body["Archived"] = data.Archived.Value;
+            if (data.HarborId != null) body["HarborId"] = data.HarborId;
+            if (data.WorkingDirectory != null) body["WorkingDirectory"] = data.WorkingDirectory;
             return PutAsync<AskThread>($"/api/v1/ask/threads/{E(id)}", body, null, token);
         }
 
