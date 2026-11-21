@@ -4,7 +4,9 @@ All notable changes to Armada are documented in this file.
 
 ---
 
-## v1.4.0 (unreleased)
+## Unreleased
+
+## v1.4.0 (2026-11-21)
 
 ### Security
 

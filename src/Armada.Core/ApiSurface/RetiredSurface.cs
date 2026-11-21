@@ -17,7 +17,7 @@ namespace Armada.Core.ApiSurface
         /// <summary>
         /// Release that retired the items.
         /// </summary>
-        public const string RetiredIn = "Unreleased";
+        public const string RetiredIn = "v1.3.0";
 
         #endregion
 
