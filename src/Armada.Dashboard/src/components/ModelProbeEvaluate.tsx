@@ -6,6 +6,7 @@ import { useLocale } from '../context/LocaleContext';
 import { useOptionalNotifications } from '../context/NotificationContext';
 import { evaluationResultsPath } from '../lib/evaluationLinks';
 import ModelEvaluateDialog from './ModelEvaluateDialog';
+import LoadingIndicator from './shared/LoadingIndicator';
 import StatusBadge from './shared/StatusBadge';
 import { FullReport, ModelProbeResultsTable } from './evaluations/ModelProbeRunDetails';
 
@@ -255,6 +256,7 @@ export default function ModelProbeEvaluate({ target, targetId, onError, pollMs =
       {run?.profileError && <p role="alert" className="text-danger">{run.profileError}</p>}
       {run?.batteryError && <p role="alert" className="text-danger">{run.batteryError}</p>}
       {inlineError && <p role="alert" className="text-danger">{inlineError}</p>}
+      {loading && !run && history.length === 0 && <LoadingIndicator compact label={t('Loading...')} />}
       {run && <div className="model-probe-evaluate-status" aria-live="polite">
         <p className="model-probe-evaluate-timing">{run.depth} | {elapsed}s{run.depth === 'Full' && !finished && <> | {t(phase)}</>}</p>
         <label className="model-probe-evaluate-tokens">{t('Tokens')}: {run.tokensUsed} / {run.tokenBudget}

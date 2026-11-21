@@ -8,6 +8,7 @@ import { useAuth } from '../context/AuthContext';
 import { canEdit as canEditScoped, type ScopeViewer } from '../lib/scoping';
 import ScopeBadge from '../components/shared/ScopeBadge';
 import DataTable, { type DataTableColumn } from '../components/shared/DataTable';
+import LoadingIndicator from '../components/shared/LoadingIndicator';
 import ActionMenu from '../components/shared/ActionMenu';
 import ConfirmDialog from '../components/shared/ConfirmDialog';
 import JsonViewer from '../components/shared/JsonViewer';
@@ -34,6 +35,7 @@ export default function PromptTemplates() {
   const { pushToast } = useNotifications();
   const [templates, setTemplates] = useState<PromptTemplate[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState('');
 
   // JSON viewer
@@ -69,6 +71,7 @@ export default function PromptTemplates() {
       setError(translate('Failed to load prompt templates.'));
     } finally {
       setLoading(false);
+      setLoaded(true);
     }
   }, [translate]);
 
@@ -261,9 +264,10 @@ export default function PromptTemplates() {
         autoRefresh={{ seconds: refreshSeconds, onChange: setRefreshSeconds }}
         onRefresh={load}
         refreshTitle={translate('Refresh prompt template data')}
+        loading={loading}
         emptyMessage={translate('No prompt templates match the current filters.')}
-        placeholder={templates.length > 0 ? undefined : loading
-          ? <p className="text-dim">{translate('Loading...')}</p>
+        placeholder={templates.length > 0 ? undefined : !loaded
+          ? <LoadingIndicator compact label={translate('Loading...')} />
           : <p className="text-dim">{translate('No prompt templates found.')}</p>}
       />
     </div>

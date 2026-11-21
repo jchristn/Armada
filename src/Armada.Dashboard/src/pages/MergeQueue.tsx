@@ -497,6 +497,7 @@ export default function MergeQueue() {
           rowLabel: () => t('Select this entry for Delete Selected.'),
         }}
         emptyMessage={t('No entries match the current filters.')}
+        loading={loading}
         placeholder={entries.length > 0 ? undefined : loading
           ? <p className="text-dim">{t('Loading...')}</p>
           : <p className="text-dim">{t('Merge queue is empty.')}</p>}

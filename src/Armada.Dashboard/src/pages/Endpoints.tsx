@@ -26,6 +26,7 @@ import ConfirmDialog from '../components/shared/ConfirmDialog';
 import ErrorModal from '../components/shared/ErrorModal';
 import DialogShell from '../components/shared/DialogShell';
 import LoadingIndicator from '../components/shared/LoadingIndicator';
+import LoadingValue from '../components/shared/LoadingValue';
 import JsonViewer from '../components/shared/JsonViewer';
 import DataTable, { type DataTableColumn } from '../components/shared/DataTable';
 import { useAutoRefresh } from '../lib/useAutoRefresh';
@@ -129,6 +130,7 @@ export default function Endpoints() {
   const [endpoints, setEndpoints] = useState<ModelEndpoint[]>([]);
   const [endpointTotal, setEndpointTotal] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
   const [kindFilter, setKindFilter] = useState('all');
@@ -314,6 +316,7 @@ export default function Endpoints() {
       setError(err instanceof Error ? err.message : t('Failed to load endpoints.'));
     } finally {
       setLoading(false);
+      setLoaded(true);
     }
   }
 
@@ -817,19 +820,19 @@ export default function Endpoints() {
       <div className="playbook-overview-grid">
         <div className="card playbook-overview-card" title={t('All endpoints you can see, enabled and disabled.')}>
           <span>{t('Total Endpoints')}</span>
-          <strong>{Math.max(endpointTotal, endpoints.length)}</strong>
+          <strong><LoadingValue loading={!loaded}>{Math.max(endpointTotal, endpoints.length)}</LoadingValue></strong>
         </div>
         <div className="card playbook-overview-card" title={t('Endpoints whose latest health check passed.')}>
           <span>{t('Healthy')}</span>
-          <strong>{endpoints.filter((e) => e.healthStatus === 'Healthy').length}</strong>
+          <strong><LoadingValue loading={!loaded}>{endpoints.filter((e) => e.healthStatus === 'Healthy').length}</LoadingValue></strong>
         </div>
         <div className="card playbook-overview-card" title={t('Endpoints whose latest health check failed. Open one to see the error.')}>
           <span>{t('Unhealthy')}</span>
-          <strong>{endpoints.filter((e) => e.healthStatus === 'Unhealthy').length}</strong>
+          <strong><LoadingValue loading={!loaded}>{endpoints.filter((e) => e.healthStatus === 'Unhealthy').length}</LoadingValue></strong>
         </div>
         <div className="card playbook-overview-card" title={t('Endpoints that can be used and are included in health checks.')}>
           <span>{t('Enabled')}</span>
-          <strong>{endpoints.filter((e) => e.enabled).length}</strong>
+          <strong><LoadingValue loading={!loaded}>{endpoints.filter((e) => e.enabled).length}</LoadingValue></strong>
         </div>
       </div>
 
@@ -853,7 +856,8 @@ export default function Endpoints() {
         autoRefresh={{ seconds: refreshSeconds, onChange: setRefreshSeconds }}
         onRefresh={load}
         refreshTitle={t('Refresh endpoints')}
-        placeholder={loading && endpoints.length === 0 ? <p className="text-dim">{t('Loading...')}</p> : filtered.length === 0 ? (
+        loading={loading}
+        placeholder={loading && endpoints.length === 0 ? <LoadingIndicator compact label={t('Loading...')} /> : filtered.length === 0 ? (
           <div className="playbook-empty-state">
             <strong>{t('No endpoints match the current filters.')}</strong>
             <span>{canManage ? t('Add an embedding or inference endpoint to manage and monitor it.') : t('Ask a tenant administrator to configure model endpoints.')}</span>

@@ -42,6 +42,7 @@ export default function BlackBoxNearbySuccesses({ entryId }: { entryId: string }
           columns={columns}
           rows={paged.rows}
           rowKey={(r) => r.successId}
+          loading={paged.loading}
           placeholder={paged.loading && paged.rows.length === 0 ? <LoadingState /> : paged.rows.length === 0 ? <EmptyState title={t('No nearby successes')}>{t('No mission landed on this vessel near the failure with the same files.')}</EmptyState> : undefined}
           pagination={{ pageNumber: paged.pageNumber, pageSize: paged.pageSize, totalPages: paged.totalPages, totalRecords: paged.totalRecords, onPageChange: paged.setPageNumber, onPageSizeChange: paged.setPageSize }}
           onRefresh={paged.reload}

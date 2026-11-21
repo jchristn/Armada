@@ -21,6 +21,7 @@ export default function BuildContextModal({ vessel, onClose, onBuilt }: BuildCon
   const refine = !!(vessel.modelContext && vessel.modelContext.trim().length > 0);
 
   const [captains, setCaptains] = useState<Captain[]>([]);
+  const [captainsLoading, setCaptainsLoading] = useState(true);
   const [captainId, setCaptainId] = useState('');
   const [notes, setNotes] = useState('');
   const [busy, setBusy] = useState(false);
@@ -32,7 +33,8 @@ export default function BuildContextModal({ vessel, onClose, onBuilt }: BuildCon
         setCaptains(result.objects);
         if (result.objects.length > 0) setCaptainId((current) => current || result.objects[0].id);
       })
-      .catch((err: unknown) => setError(err instanceof Error ? err.message : t('Failed to load captains.')));
+      .catch((err: unknown) => setError(err instanceof Error ? err.message : t('Failed to load captains.')))
+      .finally(() => setCaptainsLoading(false));
   }, [t]);
 
   async function submit() {
@@ -65,7 +67,7 @@ export default function BuildContextModal({ vessel, onClose, onBuilt }: BuildCon
         <label className="text-dim" style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', fontSize: '0.8rem', marginBottom: '0.9rem' }} title={t('Captain (AI agent) that reads the repository and writes the Model Context. It is busy for the duration and uses that model\'s tokens; idle captains finish fastest.')}>
           {t('Captain')}
           <select title={t('Captain (AI agent) that reads the repository and writes the Model Context. It is busy for the duration and uses that model\'s tokens; idle captains finish fastest.')} value={captainId} onChange={(e) => setCaptainId(e.target.value)} disabled={busy}>
-            {captains.length === 0 && <option value="">{t('No captains available')}</option>}
+            {captains.length === 0 && <option value="">{captainsLoading ? t('Loading...') : t('No captains available')}</option>}
             {captains.map((c) => (
               <option key={c.id} value={c.id}>{c.name} ({c.model || c.runtime})</option>
             ))}

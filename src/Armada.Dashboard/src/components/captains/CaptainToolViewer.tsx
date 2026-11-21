@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useLocale } from '../../context/LocaleContext';
 import { getCaptainTools } from '../../api/client';
 import DataTable, { type DataTableColumn, type DataTablePagination } from '../shared/DataTable';
+import LoadingIndicator from '../shared/LoadingIndicator';
 import type { CaptainToolAccessResult, CaptainToolServerSummary, CaptainToolSummary, CaptainToolsQuery, EnumerationResult } from '../../types/models';
 
 interface CaptainToolViewerProps {
@@ -43,7 +44,7 @@ function useToolSection(captainId: string | undefined, data: CaptainToolAccessRe
 
   if (!captainId) {
     const loaded = (data?.tools?.objects ?? []).filter((tool) => tool.sourceKind === kind);
-    return { rows: loaded, pagination: undefined as DataTablePagination | undefined, failed: false };
+    return { rows: loaded, pagination: undefined as DataTablePagination | undefined, failed: false, loading: false };
   }
 
   const rows = page?.objects ?? [];
@@ -57,7 +58,9 @@ function useToolSection(captainId: string | undefined, data: CaptainToolAccessRe
       onPageSizeChange: (size: number) => { setPageSize(size); setPageNumber(1); },
     }
     : undefined;
-  return { rows, pagination, failed };
+  // The first page of this section has not arrived yet (a later page keeps the previous one until it does).
+  const loading = !!data && !page && !failed;
+  return { rows, pagination, failed, loading };
 }
 
 export default function CaptainToolViewer({ open, captainName, loading, error, data, onClose, captainId }: CaptainToolViewerProps) {
@@ -134,7 +137,7 @@ export default function CaptainToolViewer({ open, captainName, loading, error, d
     );
   }
 
-  function renderToolTable(tableKey: string, title: string, tools: CaptainToolSummary[], emptyMessage: string, pagination?: DataTablePagination, failed = false) {
+  function renderToolTable(tableKey: string, title: string, tools: CaptainToolSummary[], emptyMessage: string, pagination?: DataTablePagination, failed = false, loading = false) {
     const columns: DataTableColumn<CaptainToolSummary>[] = [
       { key: 'tool', label: t('Tool'), required: true, headerTitle: t('Tool name as the agent sees and calls it.'), cellClassName: 'mono captain-tool-viewer-tool-name', render: (tool) => tool.name },
       {
@@ -147,9 +150,10 @@ export default function CaptainToolViewer({ open, captainName, loading, error, d
       <section className="captain-tool-viewer-section">
         <h4>{title}</h4>
         {failed && <p className="text-dim">{t('Failed to load captain tools.')}</p>}
-        {!failed && tools.length === 0 && (!pagination || pagination.totalRecords === 0) ? (
+        {!failed && loading && <LoadingIndicator compact label={t('Loading...')} />}
+        {!failed && !loading && tools.length === 0 && (!pagination || pagination.totalRecords === 0) ? (
           <p className="text-dim">{emptyMessage}</p>
-        ) : !failed && (
+        ) : !failed && !loading && (
           <DataTable
             tableKey={tableKey}
             columns={columns}
@@ -232,6 +236,7 @@ export default function CaptainToolViewer({ open, captainName, loading, error, d
                 : t('No named runtime-internal tools are currently exposed for this captain runtime.'),
               internalSection.pagination,
               internalSection.failed,
+              internalSection.loading,
             )}
 
             {renderToolTable(
@@ -243,6 +248,7 @@ export default function CaptainToolViewer({ open, captainName, loading, error, d
                 : t('No MCP tool inventory is available for this captain runtime.'),
               mcpSection.pagination,
               mcpSection.failed,
+              mcpSection.loading,
             )}
           </>
         )}

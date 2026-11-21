@@ -53,3 +53,16 @@ describe('Token activity calendar', () => {
     await waitFor(() => expect(screen.getByRole('grid')).toBeInTheDocument());
   });
 });
+
+describe('Token activity loading', () => {
+  it('shows a spinner on the first load and keeps the grid while a refresh of the same window runs', async () => {
+    vi.mocked(getTokenUsage).mockResolvedValue({ recordCount: 1, syntheticCount: 0, buckets: [{ bucketStartUtc: '2026-01-01T00:00:00Z', totalTokens: 10, inputTokens: 5, outputTokens: 5, cachedTokens: 0 }] } as never);
+    render(<TokenActivityHeatmap spec={{ kind: 'calendar', days: 30 }} />);
+    expect(screen.getByRole('status')).toHaveTextContent('Loading token usage...');
+    await waitFor(() => expect(screen.getByRole('grid')).toBeInTheDocument());
+    vi.mocked(getTokenUsage).mockReturnValue(new Promise(() => {}) as never);
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh token activity' }));
+    expect(screen.getByRole('grid')).toBeInTheDocument();
+    expect(screen.queryByText('Loading token usage...')).not.toBeInTheDocument();
+  });
+});

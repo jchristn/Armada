@@ -32,6 +32,8 @@ import ErrorModal from '../components/shared/ErrorModal';
 import JsonViewer from '../components/shared/JsonViewer';
 import CopyButton from '../components/shared/CopyButton';
 import DataTable, { type DataTableColumn } from '../components/shared/DataTable';
+import LoadingIndicator from '../components/shared/LoadingIndicator';
+import LoadingValue from '../components/shared/LoadingValue';
 import { useAutoRefresh } from '../lib/useAutoRefresh';
 import StatusBadge from '../components/shared/StatusBadge';
 import { buildEnvironmentOptions } from '../lib/deploymentEnvironments';
@@ -52,6 +54,7 @@ export default function Deployments() {
   const [releases, setReleases] = useState<Release[]>([]);
   const [profiles, setProfiles] = useState<WorkflowProfile[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | DeploymentStatus>('all');
@@ -123,6 +126,7 @@ export default function Deployments() {
       setError(err instanceof Error ? err.message : t('Failed to load deployments.'));
     } finally {
       setLoading(false);
+      setLoaded(true);
     }
   }
 
@@ -445,23 +449,23 @@ export default function Deployments() {
       <div className="playbook-overview-grid">
         <div className="card playbook-overview-card" title={t('All deployment records you can see, before filters.')}>
           <span>{t('Total Deployments')}</span>
-          <strong>{deployments.length}</strong>
+          <strong><LoadingValue loading={!loaded}>{deployments.length}</LoadingValue></strong>
         </div>
         <div className="card playbook-overview-card" title={t('Deployments waiting for someone to approve or deny them. They also appear in Needs You.')}>
           <span>{t('Pending Approval')}</span>
-          <strong>{pendingApprovalCount}</strong>
+          <strong><LoadingValue loading={!loaded}>{pendingApprovalCount}</LoadingValue></strong>
         </div>
         <div className="card playbook-overview-card" title={t('Deployments whose deploy or rollback is in progress now.')}>
           <span>{t('Running')}</span>
-          <strong>{runningCount}</strong>
+          <strong><LoadingValue loading={!loaded}>{runningCount}</LoadingValue></strong>
         </div>
         <div className="card playbook-overview-card" title={t('Deployments whose deploy and any verification passed.')}>
           <span>{t('Succeeded')}</span>
-          <strong>{successfulCount}</strong>
+          <strong><LoadingValue loading={!loaded}>{successfulCount}</LoadingValue></strong>
         </div>
         <div className="card playbook-overview-card" title={t('Deployments whose deploy command failed, or that deployed but failed verification. Consider a rollback.')}>
           <span>{t('Failed / Verification Failed')}</span>
-          <strong>{failedCount}</strong>
+          <strong><LoadingValue loading={!loaded}>{failedCount}</LoadingValue></strong>
         </div>
       </div>
 
@@ -504,7 +508,8 @@ export default function Deployments() {
         autoRefresh={{ seconds: refreshSeconds, onChange: setRefreshSeconds }}
         onRefresh={load}
         refreshTitle={t('Refresh deployments')}
-        placeholder={loading && deployments.length === 0 ? <p className="text-dim">{t('Loading...')}</p> : filtered.length === 0 ? (
+        loading={loading}
+        placeholder={loading && deployments.length === 0 ? <LoadingIndicator compact label={t('Loading...')} /> : filtered.length === 0 ? (
           <div className="playbook-empty-state">
             <strong>{t('No deployments match the current filters.')}</strong>
             <span>{canManage ? t('Create a deployment from an environment or release to track approval, execution, verification, and rollback in one record.') : t('Ask a tenant administrator to create and manage deployment records.')}</span>

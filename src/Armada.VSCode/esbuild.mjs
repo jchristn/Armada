@@ -51,6 +51,7 @@ if (tests) {
       ...listTests(path.join(root, 'test', 'unit')),
       path.join(root, 'test', 'setup.ts'),
       path.join(root, 'test', 'integration', 'suite', 'index.ts'),
+      path.join(root, 'test', 'integration', 'suite', 'shots.ts'),
     ],
     outdir: path.join(root, 'out', 'test'),
     outbase: path.join(root, 'test'),

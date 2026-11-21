@@ -44,6 +44,15 @@ describe('MissionFailureDetails (F37 wizard handoff)', () => {
     expect(await screen.findByText(/nothing to commit/, { selector: '#log-viewer-content *' })).toBeInTheDocument();
   });
 
+  it('shows a loading indicator until the rescue missions are read, then the waiting note', async () => {
+    vi.mocked(listIncidents).mockResolvedValue({ success: true, pageNumber: 1, pageSize: 50, totalPages: 1, totalRecords: 0, totalMs: 1, objects: [] } as never);
+    render(<MissionFailureDetails mission={mission('msn_3', 'Broke', 'Failed', null)} onOpenMission={vi.fn()} />);
+    expect(screen.getByText('Loading...')).toBeInTheDocument();
+    expect(screen.queryByText(/Armada may start a rescue mission/)).not.toBeInTheDocument();
+    expect(await screen.findByText(/Armada may start a rescue mission/)).toBeInTheDocument();
+    expect(screen.queryByText('Loading...')).not.toBeInTheDocument();
+  });
+
   it('says so when no reason was recorded', () => {
     vi.mocked(listIncidents).mockResolvedValue({ success: true, pageNumber: 1, pageSize: 50, totalPages: 1, totalRecords: 0, totalMs: 1, objects: [] } as never);
     render(<MissionFailureDetails mission={mission('msn_2', 'Broke', 'Failed', null)} onOpenMission={vi.fn()} />);

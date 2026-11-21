@@ -526,6 +526,7 @@ export default function VesselHealth({ onRunAction }: VesselHealthProps) {
             </button>
           );
         })}
+        {!summary && !summaryError && <LoadingIndicator compact label={t('Loading...')} />}
         {summaryError && !summary && <span className="text-dim">{t('Summary unavailable.')}</span>}
         <div className="vh-summary-meta">
           {summary && <span title={t('Vessels counted in the tiles: every vessel in the tenant, including ones never evaluated.')}>{t('{{count}} vessels', { count: formatCount(locale, summary.totalVessels) })}</span>}
@@ -721,6 +722,7 @@ export default function VesselHealth({ onRunAction }: VesselHealthProps) {
           )}
 
           <DataTable
+            loading={!loaded && loading}
             tableKey={TABLE_KEY}
             columns={tableColumns}
             columnsVersion={DEFAULT_COLUMNS_VERSION}

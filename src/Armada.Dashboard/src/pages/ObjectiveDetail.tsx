@@ -75,6 +75,7 @@ import {
 import ConfirmDialog from '../components/shared/ConfirmDialog';
 import ErrorModal from '../components/shared/ErrorModal';
 import JsonViewer from '../components/shared/JsonViewer';
+import LoadingIndicator from '../components/shared/LoadingIndicator';
 import PageHeader from '../components/shared/PageHeader';
 import { ErrorState } from '../components/shared/StateBlocks';
 import StatusBadge from '../components/shared/StatusBadge';
@@ -257,6 +258,7 @@ export default function ObjectiveDetail() {
   const [refinementSessions, setRefinementSessions] = useState<ObjectiveRefinementSession[]>([]);
   const [selectedRefinementSessionId, setSelectedRefinementSessionId] = useState('');
   const [refinementDetail, setRefinementDetail] = useState<ObjectiveRefinementSessionView | null>(null);
+  const [refinementDetailLoading, setRefinementDetailLoading] = useState(false);
   const [refinementSessionsTotal, setRefinementSessionsTotal] = useState(0);
   const [loadingOlderRefinement, setLoadingOlderRefinement] = useState(false);
   const [refinementCaptainId, setRefinementCaptainId] = useState('');
@@ -596,12 +598,16 @@ export default function ObjectiveDetail() {
   useEffect(() => {
     if (!selectedRefinementSessionId) return;
     let cancelled = false;
+    setRefinementDetailLoading(true);
     loadRefinementView(selectedRefinementSessionId)
       .then((detail) => {
         if (!cancelled) setRefinementDetail(detail);
       })
       .catch(() => {
         if (!cancelled) setRefinementDetail(null);
+      })
+      .finally(() => {
+        if (!cancelled) setRefinementDetailLoading(false);
       });
     return () => { cancelled = true; };
   }, [selectedRefinementSessionId]);
@@ -1594,7 +1600,9 @@ export default function ObjectiveDetail() {
               </div>
 
               <div className="backlog-refinement-column backlog-refinement-main">
-                {!refinementDetail ? (
+                {!refinementDetail && selectedRefinementSessionId && refinementDetailLoading ? (
+                  <LoadingIndicator compact label={t('Loading...')} />
+                ) : !refinementDetail ? (
                   <div className="playbook-empty-state">
                     <strong>{t('No active refinement transcript selected.')}</strong>
                     <span>{t('Start a session with a selected captain or choose an existing transcript from the left.')}</span>

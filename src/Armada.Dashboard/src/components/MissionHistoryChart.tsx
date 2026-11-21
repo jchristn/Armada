@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { getMissionHistory } from '../api/client';
 import type { MissionHistorySummaryResult, Vessel, Fleet } from '../types/models';
 import { useLocale } from '../context/LocaleContext';
+import LoadingIndicator from './shared/LoadingIndicator';
+import LoadingValue from './shared/LoadingValue';
 import {
   computeYTicks,
   formatBucketLabel,
@@ -121,14 +123,14 @@ export default function MissionHistoryChart({ vessels, fleets, onRefresh, refres
       </div>
 
       <div className="mission-history-stats">
-        <span title={t('All missions created in the selected range that match the filters.')}><span className="mission-history-stat-value">{history?.totalCount ?? 0}</span> {t('Total')}</span>
-        <span title={t('Missions whose work is done or landing: Complete, WorkProduced, PullRequestOpen, Testing or Review.')}><span className="mission-history-stat-value" style={{ color: 'var(--green)' }}>{totalComplete}</span> {t('Complete')}</span>
-        <span title={t('Missions that are Failed or LandingFailed.')}><span className="mission-history-stat-value" style={{ color: 'var(--red)' }}>{totalFailed}</span> {t('Failed')}</span>
+        <span title={t('All missions created in the selected range that match the filters.')}><span className="mission-history-stat-value"><LoadingValue loading={loading && history == null}>{history?.totalCount ?? 0}</LoadingValue></span> {t('Total')}</span>
+        <span title={t('Missions whose work is done or landing: Complete, WorkProduced, PullRequestOpen, Testing or Review.')}><span className="mission-history-stat-value" style={{ color: 'var(--green)' }}><LoadingValue loading={loading && history == null}>{totalComplete}</LoadingValue></span> {t('Complete')}</span>
+        <span title={t('Missions that are Failed or LandingFailed.')}><span className="mission-history-stat-value" style={{ color: 'var(--red)' }}><LoadingValue loading={loading && history == null}>{totalFailed}</LoadingValue></span> {t('Failed')}</span>
         {totalOther > 0 && <span title={t('Missions still waiting or running (Pending, Assigned, InProgress) or Cancelled.')}><span className="mission-history-stat-value" style={{ color: 'var(--text-dim)' }}>{totalOther}</span> {t('Other')}</span>}
       </div>
 
       {loading ? (
-        <div className="mission-history-empty">{t('Loading mission history...')}</div>
+        <div className="mission-history-empty"><LoadingIndicator compact label={t('Loading mission history...')} /></div>
       ) : buckets.length === 0 ? (
         <div className="mission-history-empty">{t('No mission data for this time range')}</div>
       ) : (

@@ -59,6 +59,7 @@ import {
 } from '../lib/workspace';
 import { PLANNING_PATH } from '../lib/navTargets';
 import { useDeleteProgress } from '../lib/useDeleteProgress';
+import LoadingValue from '../components/shared/LoadingValue';
 
 interface PersistedWorkspaceState {
   expandedPaths: Record<string, boolean>;
@@ -116,6 +117,8 @@ export default function Workspace() {
   const [recentFiles, setRecentFiles] = useState<string[]>([]);
   const [selectedPaths, setSelectedPaths] = useState<string[]>([]);
   const [loadingWorkspace, setLoadingWorkspace] = useState(false);
+  // The vessel whose first workspace read has finished (or failed); until then the status pills show a spinner.
+  const [statusSettledFor, setStatusSettledFor] = useState<string | null>(null);
   const [loadingReadiness, setLoadingReadiness] = useState(false);
   const [openingTerminal, setOpeningTerminal] = useState(false);
   const [workspaceError, setWorkspaceError] = useState('');
@@ -308,6 +311,7 @@ export default function Workspace() {
       if (rebuilt) {
         workspaceStateHydratedRef.current = true;
       }
+      setStatusSettledFor(vesselId);
       setLoadingWorkspace(false);
     }
   }
@@ -807,6 +811,7 @@ export default function Workspace() {
 
   const recentVesselIds = readRecentVesselIds();
   const hasUnsavedChanges = activePath ? isDirty(activePath) : false;
+  const statusLoading = !status && statusSettledFor !== vesselId;
 
   if (!vesselId) {
     return (
@@ -832,10 +837,10 @@ export default function Workspace() {
           <h2>{currentVessel?.name || t('Workspace')}</h2>
           <div className="workspace-header-row">
             <div className="workspace-header-status">
-              <span className="workspace-status-pill" title={t('Branch currently checked out in the vessel working directory.')}>{status?.branchName || t('No branch')}</span>
-              <span className="workspace-status-pill" title={status?.isDirty ? t('The working directory has uncommitted changes. Review them in Review Diff below.') : t('The working directory has no uncommitted changes.')}>{status?.isDirty ? t('Dirty working tree') : t('Clean working tree')}</span>
-              <span className="workspace-status-pill" title={t('Missions currently running on this vessel. Selecting a file one of them is changing shows a warning in the Selection pane.')}>{status?.activeMissionCount || 0} {t('active mission(s)')}</span>
-              <span className="workspace-status-pill" title={t('Commits the checked-out branch has that its remote tracking branch lacks (ahead), and commits it is missing (behind).')}>{status?.commitsAhead ?? 0} {t('ahead')} / {status?.commitsBehind ?? 0} {t('behind')}</span>
+              <span className="workspace-status-pill" title={t('Branch currently checked out in the vessel working directory.')}><LoadingValue loading={statusLoading}>{status?.branchName || t('No branch')}</LoadingValue></span>
+              <span className="workspace-status-pill" title={status?.isDirty ? t('The working directory has uncommitted changes. Review them in Review Diff below.') : t('The working directory has no uncommitted changes.')}><LoadingValue loading={statusLoading}>{status?.isDirty ? t('Dirty working tree') : t('Clean working tree')}</LoadingValue></span>
+              <span className="workspace-status-pill" title={t('Missions currently running on this vessel. Selecting a file one of them is changing shows a warning in the Selection pane.')}><LoadingValue loading={statusLoading}>{status?.activeMissionCount || 0}</LoadingValue> {t('active mission(s)')}</span>
+              <span className="workspace-status-pill" title={t('Commits the checked-out branch has that its remote tracking branch lacks (ahead), and commits it is missing (behind).')}><LoadingValue loading={statusLoading}>{status?.commitsAhead ?? 0}</LoadingValue> {t('ahead')} / <LoadingValue loading={statusLoading}>{status?.commitsBehind ?? 0}</LoadingValue> {t('behind')}</span>
             </div>
 
             <div className="workspace-header-actions">

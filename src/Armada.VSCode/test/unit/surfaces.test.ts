@@ -9,7 +9,7 @@ import { connectionActions, describeStatus } from '../../src/connection/statusBa
 import { activate, ArmadaExtensionApi } from '../../src/extension';
 import { FAILURES_EXPLORER_VIEW_ID } from '../../src/surfaces/blackbox/failuresTreeProvider';
 import { ASK_VIEW_ID } from '../../src/surfaces/ask/askView';
-import { NAV_REVEAL_COMMAND, NAV_VIEW_ID } from '../../src/surfaces/nav/navTree';
+import { NAV_VIEW_ID } from '../../src/surfaces/nav/navTree';
 import { CONVERSATIONS_VIEW_ID } from '../../src/surfaces/ask/conversationsTree';
 import { fake, FakeMemento, FakeSecretStorage, Uri } from '../fakes/vscode';
 
@@ -118,7 +118,7 @@ describe('extension manifest and activation', () => {
         for (const match of welcome.contents.matchAll(/command:([A-Za-z.]+)/g)) assert.ok(contributed.includes(match[1]), `welcome link ${match[1]}`);
       }
       assert.deepStrictEqual(fake.treeViews, [NAV_VIEW_ID, CONVERSATIONS_VIEW_ID, FAILURES_EXPLORER_VIEW_ID]);
-      assert.deepStrictEqual(fake.statusBarItems.map((i) => (typeof i.command === 'string' ? i.command : (i.command as { command: string } | undefined)?.command)), [NAV_REVEAL_COMMAND, 'armada.showConnectionActions']);
+      assert.deepStrictEqual(fake.statusBarItems.map((i) => (typeof i.command === 'string' ? i.command : (i.command as { command: string } | undefined)?.command)), ['armada.page.open', 'armada.showConnectionActions']);
       assert.strictEqual(api.connection.state.phase, 'disconnected', 'no network work during activate');
       assert.strictEqual(api.liveMode(), 'stopped');
       for (const s of context.subscriptions) s.dispose();

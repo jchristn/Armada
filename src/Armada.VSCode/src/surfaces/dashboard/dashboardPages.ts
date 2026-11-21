@@ -114,6 +114,14 @@ export class DashboardPages implements vscode.Disposable {
     return this._Pages.size;
   }
 
+  /** Sends an automation step (scroll or click) to the active page tab; false when there is none. */
+  public automate(step: { action: 'scroll' | 'click' | 'select'; selector?: string; text?: string; y?: number; value?: string }): boolean {
+    const page = [...this._Pages].find((p) => p.panel.active) ?? [...this._Pages].pop();
+    if (!page) return false;
+    void page.panel.webview.postMessage({ type: 'automation', ...step } satisfies HostMessage);
+    return true;
+  }
+
   /** Reloads every open page (its data, not the tab). */
   public reload(): void {
     this.broadcast({ type: 'reload' });

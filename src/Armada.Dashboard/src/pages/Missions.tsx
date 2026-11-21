@@ -14,6 +14,7 @@ import { reconcileServerPage, useListRequestGuard } from '../lib/serverPage';
 import type { Mission, MissionSummary, Vessel, Captain, Voyage, MissionMode } from '../types/models';
 import DataTable, { type DataTableColumn } from '../components/shared/DataTable';
 import LoadingIndicator from '../components/shared/LoadingIndicator';
+import LoadingValue from '../components/shared/LoadingValue';
 import ActionMenu from '../components/shared/ActionMenu';
 import StatusBadge from '../components/shared/StatusBadge';
 import EvaluationBadge from '../components/shared/EvaluationBadge';
@@ -46,6 +47,8 @@ export default function Missions() {
   const [vessels, setVessels] = useState<Vessel[]>([]);
   const [captains, setCaptains] = useState<Captain[]>([]);
   const [voyages, setVoyages] = useState<Voyage[]>([]);
+  // Names for the vessel, captain and voyage cells; until each lookup arrives its cells show a spinner, not a raw ID.
+  const [lookupsLoaded, setLookupsLoaded] = useState({ vessels: false, captains: false, voyages: false });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const { pushToast } = useNotifications();
@@ -136,9 +139,9 @@ export default function Missions() {
   }, [beginListRequest, pageNumber, pageSize, statusFilter, userScope, t]);
 
   useEffect(() => {
-    listAll(listVessels).then(r => setVessels(r.objects || [])).catch(() => {});
-    listAll(listCaptains).then(r => setCaptains(r.objects || [])).catch(() => {});
-    listAll(listVoyages).then(r => setVoyages(r.objects || [])).catch(() => {});
+    listAll(listVessels).then(r => setVessels(r.objects || [])).catch(() => {}).finally(() => setLookupsLoaded(l => ({ ...l, vessels: true })));
+    listAll(listCaptains).then(r => setCaptains(r.objects || [])).catch(() => {}).finally(() => setLookupsLoaded(l => ({ ...l, captains: true })));
+    listAll(listVoyages).then(r => setVoyages(r.objects || [])).catch(() => {}).finally(() => setLookupsLoaded(l => ({ ...l, voyages: true })));
   }, []);
 
   useEffect(() => { load(); }, [load]);
@@ -367,19 +370,19 @@ export default function Missions() {
     {
       key: 'vessel', label: t('Vessel'), headerTitle: t('Repository the mission works in. Click a name to open that vessel.'), interactive: true,
       render: (m) => m.vesselId ? (
-        <a href="#" onClick={e => { e.preventDefault(); navigate(`/vessels/${m.vesselId}`); }}>{vesselName(m.vesselId)}</a>
+        <a href="#" onClick={e => { e.preventDefault(); navigate(`/vessels/${m.vesselId}`); }}><LoadingValue loading={!lookupsLoaded.vessels}>{vesselName(m.vesselId)}</LoadingValue></a>
       ) : '-',
     },
     {
       key: 'captain', label: t('Captain'), headerTitle: t('Agent that ran or is running the mission. Shows - until dispatch assigns one.'), interactive: true,
       render: (m) => m.captainId ? (
-        <a href="#" onClick={e => { e.preventDefault(); navigate(`/captains/${m.captainId}`); }}>{captainName(m.captainId)}</a>
+        <a href="#" onClick={e => { e.preventDefault(); navigate(`/captains/${m.captainId}`); }}><LoadingValue loading={!lookupsLoaded.captains}>{captainName(m.captainId)}</LoadingValue></a>
       ) : '-',
     },
     {
       key: 'voyage', label: t('Voyage'), headerTitle: t('Voyage (batch of related missions) this mission belongs to. Shows - for a standalone mission.'), interactive: true,
       render: (m) => m.voyageId ? (
-        <span className="cell-clip mono"><a href="#" title={m.voyageId} onClick={e => { e.preventDefault(); navigate(`/voyages/${m.voyageId}`); }}>{voyageMap.get(m.voyageId)?.title || m.voyageId}</a></span>
+        <span className="cell-clip mono"><a href="#" title={m.voyageId} onClick={e => { e.preventDefault(); navigate(`/voyages/${m.voyageId}`); }}><LoadingValue loading={!lookupsLoaded.voyages}>{voyageMap.get(m.voyageId)?.title || m.voyageId}</LoadingValue></a></span>
       ) : '-',
     },
     {
@@ -506,6 +509,7 @@ export default function Missions() {
       />
 
       <DataTable
+        loading={loading}
         tableKey="missions"
         columns={columns}
         rows={sorted}

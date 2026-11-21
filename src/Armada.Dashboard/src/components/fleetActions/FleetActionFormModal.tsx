@@ -30,6 +30,7 @@ export default function FleetActionFormModal({ open, mode, source, defaultTimeou
   const { t } = useLocale();
   const [form, setForm] = useState<FormState>(() => formFromAction(source, mode, defaultTimeoutSeconds, t('(copy)')));
   const [pipelines, setPipelines] = useState<Pipeline[]>([]);
+  const [pipelinesLoading, setPipelinesLoading] = useState(true);
   const [personas, setPersonas] = useState<Persona[]>([]);
   const [submitted, setSubmitted] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -42,7 +43,8 @@ export default function FleetActionFormModal({ open, mode, source, defaultTimeou
     setSubmitted(false);
     setServerError('');
     let cancelled = false;
-    listAll(listPipelines).then((r) => { if (!cancelled) setPipelines(r.objects || []); }).catch(() => undefined);
+    setPipelinesLoading(true);
+    listAll(listPipelines).then((r) => { if (!cancelled) setPipelines(r.objects || []); }).catch(() => undefined).finally(() => { if (!cancelled) setPipelinesLoading(false); });
     listAll(listPersonas).then((r) => { if (!cancelled) setPersonas(r.objects || []); }).catch(() => undefined);
     return () => { cancelled = true; };
   }, [open, source, mode, defaultTimeoutSeconds, t]);
@@ -173,6 +175,8 @@ export default function FleetActionFormModal({ open, mode, source, defaultTimeou
                 <select title={t('Pipeline the voyages run through. Vessel default uses the vessel or fleet default pipeline, unless a persona is set below.')} value={form.pipelineId} onChange={(e) => setForm({ ...form, pipelineId: e.target.value })}>
                   <option value="">{t('Vessel default')}</option>
                   {pipelines.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  {/* Until the pipelines arrive, the saved pipeline reads as loading rather than as Vessel default. */}
+                  {pipelinesLoading && form.pipelineId && !pipelines.some((p) => p.id === form.pipelineId) && <option value={form.pipelineId}>{t('Loading...')}</option>}
                 </select>
               </label>
               <label className="form-field">

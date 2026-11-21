@@ -98,6 +98,7 @@ export default function BlackBoxPanel({ missionId, voyageId, entryId, fallbackRe
   const [entry, setEntry] = useState<BlackBoxEntry | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(entryId ?? null);
   const [attempts, setAttempts] = useState<BlackBoxEntrySummary[]>([]);
+  const [attemptsFor, setAttemptsFor] = useState<string | null>(null);
   const [brief, setBrief] = useState<{ key: string; text: string } | null>(null);
   const [briefError, setBriefError] = useState('');
   const [showResolve, setShowResolve] = useState(false);
@@ -146,6 +147,8 @@ export default function BlackBoxPanel({ missionId, voyageId, entryId, fallbackRe
       setAttempts(rows);
     } catch {
       setAttempts([]);
+    } finally {
+      setAttemptsFor(attemptMissionId);
     }
   }, [attemptMissionId]);
   useEffect(() => { void loadAttempts(); }, [loadAttempts]);
@@ -521,7 +524,7 @@ export default function BlackBoxPanel({ missionId, voyageId, entryId, fallbackRe
       </Section>
 
       <Section title={t('Attempts')} tooltip={t('Each failed attempt of the mission has its own entry. Pick one to show it.')} testId="blackbox-attempts">
-        {attempts.length > 1 ? (
+        {!!attemptMissionId && attemptsFor !== attemptMissionId && attempts.length === 0 ? <LoadingIndicator compact label={t('Loading...')} /> : attempts.length > 1 ? (
           <div className="blackbox-attempts" role="group" aria-label={t('Attempts')}>
             {attempts.map((a) => (
               <button key={a.id} type="button" className="btn btn-sm" aria-pressed={a.id === entry.id} onClick={() => { setSelectedId(a.id); setBrief(null); }} title={a.reasonExcerpt || a.step}>
@@ -567,7 +570,7 @@ export default function BlackBoxPanel({ missionId, voyageId, entryId, fallbackRe
         {() => <BlackBoxNearbySuccesses entryId={entry.id} />}
       </Lazy>
       <Lazy title={t('Brief preview')}>
-        {() => brief ? <Markdown>{brief.text}</Markdown> : <LoadingIndicator label={t('Loading...')} />}
+        {() => brief ? <Markdown>{brief.text}</Markdown> : briefError ? <p className="text-dim" style={{ margin: 0 }}>{t('The brief could not be loaded: {{message}}', { message: briefError })}</p> : <LoadingIndicator label={t('Loading...')} />}
       </Lazy>
       <Lazy title={t('Evidence')} defaultOpen={variant === 'page'}>
         {() => <BlackBoxEvidence entryId={entry.id} />}

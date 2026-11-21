@@ -5,6 +5,7 @@ import type { BatteryPackInfo, Captain, ModelEvaluationOptions, ModelProbeDepth 
 import { useLocale } from '../context/LocaleContext';
 import { captainModelFamily } from '../lib/modelFamily';
 import DialogShell from './shared/DialogShell';
+import LoadingIndicator from './shared/LoadingIndicator';
 
 /** Run counts the server accepts for a Full Evaluate (default 3). */
 export const EVALUATE_RUN_COUNT_MIN = 1;
@@ -161,6 +162,7 @@ export default function ModelEvaluateDialog({ open, captainId, submitting = fals
     >
       {error && <p role="alert" className="text-danger">{error}</p>}
       {loadError && <p role="alert" className="text-danger">{loadError}</p>}
+      {loading && <LoadingIndicator compact label={t('Loading...')} />}
       <fieldset className="model-evaluate-depth">
         <legend><strong>{t('Depth')}</strong></legend>
         <label>

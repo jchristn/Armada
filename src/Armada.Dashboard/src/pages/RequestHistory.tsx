@@ -18,6 +18,8 @@ import type {
 import { useDeleteProgress } from '../lib/useDeleteProgress';
 import { deleteMatchingRequestHistoryTitle } from '../lib/deleteProgress';
 import DataTable, { type DataTableColumn } from '../components/shared/DataTable';
+import LoadingIndicator from '../components/shared/LoadingIndicator';
+import LoadingValue from '../components/shared/LoadingValue';
 import ActionMenu from '../components/shared/ActionMenu';
 import ConfirmDialog from '../components/shared/ConfirmDialog';
 import CopyButton from '../components/shared/CopyButton';
@@ -151,6 +153,9 @@ export default function RequestHistory() {
       if (request.isCurrent()) setLoading(false);
     }
   }, [beginListRequest, query, t]);
+
+  // Only the first summary load shows spinners; a refresh keeps the previous tiles and chart visible.
+  const summaryFirstLoad = summaryLoading && !summary;
 
   const loadSummary = useCallback(async () => {
     try {
@@ -330,22 +335,22 @@ export default function RequestHistory() {
       <div className="request-history-summary-grid">
         <div className="card request-summary-card" title={t('Requests recorded in the activity range chosen below, with the current filters.')}>
           <div className="card-label">{t('Total Requests')}</div>
-          <div className="card-value">{summaryLoading ? '...' : (summary?.totalCount || 0).toLocaleString()}</div>
+          <div className="card-value"><LoadingValue loading={summaryFirstLoad}>{(summary?.totalCount || 0).toLocaleString()}</LoadingValue></div>
           <div className="card-detail text-dim">{t('Current activity window')}</div>
         </div>
         <div className="card request-summary-card" title={t('Share of those requests that returned a success status.')}>
           <div className="card-label">{t('Success Rate')}</div>
-          <div className="card-value">{summaryLoading ? '...' : `${(summary?.successRate || 0).toFixed(1)}%`}</div>
+          <div className="card-value"><LoadingValue loading={summaryFirstLoad}>{`${(summary?.successRate || 0).toFixed(1)}%`}</LoadingValue></div>
           <div className="card-detail text-dim">{t('Based on visible summary range')}</div>
         </div>
         <div className="card request-summary-card" title={t('Requests in the activity range that returned an error status, 4xx or 5xx.')}>
           <div className="card-label">{t('Failures')}</div>
-          <div className="card-value">{summaryLoading ? '...' : (summary?.failureCount || 0).toLocaleString()}</div>
+          <div className="card-value"><LoadingValue loading={summaryFirstLoad}>{(summary?.failureCount || 0).toLocaleString()}</LoadingValue></div>
           <div className="card-detail text-dim">{t('Non-successful responses')}</div>
         </div>
         <div className="card request-summary-card" title={t('Mean time the Admiral took per request in the activity range, in milliseconds.')}>
           <div className="card-label">{t('Average Duration')}</div>
-          <div className="card-value">{summaryLoading ? '...' : `${(summary?.averageDurationMs || 0).toFixed(2)} ms`}</div>
+          <div className="card-value"><LoadingValue loading={summaryFirstLoad}>{`${(summary?.averageDurationMs || 0).toFixed(2)} ms`}</LoadingValue></div>
           <div className="card-detail text-dim">{t('Across summary buckets')}</div>
         </div>
       </div>
@@ -372,8 +377,8 @@ export default function RequestHistory() {
           </div>
         </div>
         <div className="request-card-body">
-          {summaryLoading ? (
-            <div className="request-history-empty">{t('Loading summary...')}</div>
+          {summaryFirstLoad ? (
+            <div className="request-history-empty"><LoadingIndicator compact label={t('Loading summary...')} /></div>
           ) : (
             <RequestHistoryChart summary={summary} rangeId={activityRange} t={t} formatDateTime={formatDateTime} />
           )}
@@ -473,7 +478,8 @@ export default function RequestHistory() {
       <DataTable
         tableKey="requesthistory"
         columns={columns}
-        rows={loading ? [] : entries}
+        rows={entries}
+        loading={loading}
         rowKey={(entry) => entry.id}
         onRowClick={(entry) => void openDetail(entry.id)}
         className="request-history-table"
@@ -497,7 +503,7 @@ export default function RequestHistory() {
           selectAllLabel: t('Select all visible requests'),
           rowLabel: () => t('Select this request'),
         }}
-        emptyMessage={loading ? t('Loading request history...') : t('No request history entries match the current filters.')}
+        emptyMessage={t('No request history entries match the current filters.')}
       />
 
       {(detailLoading || detailRecord) && (
@@ -529,7 +535,7 @@ export default function RequestHistory() {
               </div>
             </div>
             {detailLoading || !detailRecord ? (
-              <div className="request-history-empty">{t('Loading request detail...')}</div>
+              <div className="request-history-empty"><LoadingIndicator compact label={t('Loading request detail...')} /></div>
             ) : (
               <div className="request-detail-body">
                 <div className="request-detail-summary-grid">

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, Suspense } from 'react';
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import LoadingIndicator from './shared/LoadingIndicator';
+import LoadingValue from './shared/LoadingValue';
 import DashboardBreadcrumbs, { DashboardBreadcrumbProvider } from './shared/DashboardBreadcrumbs';
 import DefaultCredentialsBanner from './DefaultCredentialsBanner';
 import { useLocale } from '../context/LocaleContext';
@@ -356,11 +357,13 @@ export default function Layout() {
             </button>
 
             <NavLink to="/server?tab=diagnostics" className="top-bar-health" title={t('Admiral health: {{status}}. Checked every 30 seconds; click to open Diagnostics for details.', { status: t(healthStatus === 'healthy' ? 'Healthy' : healthStatus === 'warning' ? 'Degraded' : healthStatus === 'unknown' ? 'Checking...' : 'Unhealthy') })}>
-              <span
-                className={`status-dot ${
-                  healthStatus === 'healthy' ? 'healthy' : healthStatus === 'warning' ? 'warning' : 'error'
-                }`}
-              />
+              <LoadingValue loading={healthStatus === 'unknown'} label={t('Checking...')}>
+                <span
+                  className={`status-dot ${
+                    healthStatus === 'healthy' ? 'healthy' : healthStatus === 'warning' ? 'warning' : 'error'
+                  }`}
+                />
+              </LoadingValue>
               <span className="top-bar-status-label">
                 {healthStatus === 'healthy'
                   ? t('Healthy')

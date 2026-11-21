@@ -13,6 +13,8 @@ import StatusBadge from '../components/shared/StatusBadge';
 import CopyButton from '../components/shared/CopyButton';
 import DataTable from '../components/shared/DataTable';
 import ErrorModal from '../components/shared/ErrorModal';
+import LoadingIndicator from '../components/shared/LoadingIndicator';
+import LoadingValue from '../components/shared/LoadingValue';
 import ReadinessPanel from '../components/shared/ReadinessPanel';
 import VesselHealthButton from '../components/vessels/health/VesselHealthButton';
 import { useLocale } from '../context/LocaleContext';
@@ -38,6 +40,8 @@ export default function VesselDetail() {
   const [missionPage, setMissionPage] = useState(1);
   const [missionPageSize, setMissionPageSize] = usePersistedPageSize('vessel-detail-missions', 25);
   const [missionTotals, setMissionTotals] = useState({ totalRecords: 0, totalPages: 1, totalMs: 0 });
+  // The vessel whose missions have been read at least once; until then "No missions yet" would be a guess.
+  const [missionsLoadedFor, setMissionsLoadedFor] = useState<string | null>(null);
   const [pipelines, setPipelines] = useState<Pipeline[]>([]);
   const [readiness, setReadiness] = useState<VesselReadinessResult | null>(null);
   const [landingPreview, setLandingPreview] = useState<LandingPreviewResult | null>(null);
@@ -129,8 +133,9 @@ export default function VesselDetail() {
           totalPages: Math.max(1, result.totalPages || 1),
           totalMs: result.totalMs ?? 0,
         });
+        setMissionsLoadedFor(id);
       })
-      .catch(() => { if (!cancelled) setMissions([]); });
+      .catch(() => { if (!cancelled) { setMissions([]); setMissionsLoadedFor(id); } });
     return () => { cancelled = true; };
   }, [id, missionPage, missionPageSize]);
 
@@ -197,6 +202,8 @@ export default function VesselDetail() {
   }
 
   if (loading) return <p className="text-dim">{t('Loading...')}</p>;
+  // A refresh keeps the shown landing preview; only the first read for this vessel shows the loading state.
+  const landingPreviewFirstLoad = loadingLandingPreview && !landingPreview;
   if (error && !vessel) return <ErrorModal error={error} onClose={() => setError('')} />;
   if (!vessel) return <p className="text-dim">{t('Vessel not found.')}</p>;
 
@@ -288,15 +295,17 @@ export default function VesselDetail() {
           <div>
             <h3 title={t('What would happen if a mission landed on this vessel now: the landing mode, branch rules that apply, and anything predicted to block it.')}>{t('Landing Preview')}</h3>
             <div className="readiness-panel-meta">
-              {landingPreview?.sourceBranch ? `${landingPreview.sourceBranch} -> ${landingPreview.targetBranch}` : landingPreview?.targetBranch || t('No branch selected')}
+              <LoadingValue loading={landingPreviewFirstLoad}>
+                {landingPreview?.sourceBranch ? `${landingPreview.sourceBranch} -> ${landingPreview.targetBranch}` : landingPreview?.targetBranch || t('No branch selected')}
+              </LoadingValue>
             </div>
           </div>
-          <span className={`readiness-pill ${landingPreview?.isReadyToLand ? 'ready' : 'warning'}`} title={landingPreview?.isReadyToLand ? t('No blocking issues are predicted, so a finished mission can land with the current settings.') : t('At least one issue below would block or hold landing. Fix it, or expect missions to wait for review.')}>
+          {!landingPreviewFirstLoad && <span className={`readiness-pill ${landingPreview?.isReadyToLand ? 'ready' : 'warning'}`} title={landingPreview?.isReadyToLand ? t('No blocking issues are predicted, so a finished mission can land with the current settings.') : t('At least one issue below would block or hold landing. Fix it, or expect missions to wait for review.')}>
             {landingPreview?.isReadyToLand ? t('Ready To Land') : t('Needs Review')}
-          </span>
+          </span>}
         </div>
-        {loadingLandingPreview ? (
-          <div className="text-dim">{t('Calculating landing preview...')}</div>
+        {landingPreviewFirstLoad ? (
+          <LoadingIndicator compact label={t('Calculating landing preview...')} />
         ) : !landingPreview ? (
           <div className="text-dim">{t('Landing preview is not available for this vessel yet.')}</div>
         ) : (
@@ -508,6 +517,8 @@ export default function VesselDetail() {
               },
             ]}
           />
+        ) : missionsLoadedFor !== vessel.id ? (
+          <LoadingIndicator compact label={t('Loading...')} />
         ) : (
           <p className="text-dim" style={{ marginTop: '0.5rem' }}>{t('No missions yet')}</p>
         )}

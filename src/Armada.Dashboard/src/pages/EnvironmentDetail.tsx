@@ -22,6 +22,8 @@ import ConfirmDialog from '../components/shared/ConfirmDialog';
 import CopyButton from '../components/shared/CopyButton';
 import ErrorModal from '../components/shared/ErrorModal';
 import JsonViewer from '../components/shared/JsonViewer';
+import LoadingIndicator from '../components/shared/LoadingIndicator';
+import LoadingValue from '../components/shared/LoadingValue';
 import PageHeader from '../components/shared/PageHeader';
 import { ErrorState } from '../components/shared/StateBlocks';
 import { buildEnvironmentDuplicatePayload } from '../lib/duplicates';
@@ -68,6 +70,7 @@ export default function EnvironmentDetail() {
 
   const [environment, setEnvironment] = useState<DeploymentEnvironment | null>(null);
   const [vessels, setVessels] = useState<Vessel[]>([]);
+  const [vesselsLoading, setVesselsLoading] = useState(true);
   const [vesselId, setVesselId] = useState('');
   const [name, setName] = useState('Environment');
   const [description, setDescription] = useState('');
@@ -104,6 +107,8 @@ export default function EnvironmentDetail() {
       if (!cancelled) setVessels(result.objects || []);
     }).catch(() => {
       if (!cancelled) setError(t('Failed to load vessels.'));
+    }).finally(() => {
+      if (!cancelled) setVesselsLoading(false);
     });
 
     return () => {
@@ -257,7 +262,7 @@ export default function EnvironmentDetail() {
     }
   }
 
-  if (loading) return <p className="text-dim">{t('Loading...')}</p>;
+  if (loading) return <LoadingIndicator fullHeight label={t('Loading...')} />;
 
   if (!createMode && loadFailure && loadFailure.id === id) {
     return (
@@ -391,7 +396,7 @@ export default function EnvironmentDetail() {
             <div className="detail-field">
               <span className="detail-label" title={tips.vessel}>{t('Vessel')}</span>
               <select aria-label={t('Vessel')} title={tips.vessel} value={vesselId} onChange={(event) => setVesselId(event.target.value)} disabled={!canManage}>
-                <option value="">{t('Select a vessel')}</option>
+                <option value="">{vesselsLoading && vesselId ? t('Loading...') : t('Select a vessel')}</option>
                 {vessels.map((vessel) => (
                   <option key={vessel.id} value={vessel.id}>{vessel.name}</option>
                 ))}
@@ -550,7 +555,7 @@ export default function EnvironmentDetail() {
         <section className="card detail-panel">
           <h3>{t('Overview')}</h3>
           <div className="detail-meta-grid">
-            <div className="detail-field" title={tips.vessel}><span className="detail-label">{t('Vessel')}</span><span>{selectedVessel?.name || vesselId || '-'}</span></div>
+            <div className="detail-field" title={tips.vessel}><span className="detail-label">{t('Vessel')}</span><span><LoadingValue loading={vesselsLoading && !!vesselId && !selectedVessel}>{selectedVessel?.name || vesselId || '-'}</LoadingValue></span></div>
             <div className="detail-field" title={tips.kind}><span className="detail-label">{t('Kind')}</span><span>{kind}</span></div>
             <div className="detail-field" title={tips.isDefault}><span className="detail-label">{t('Default')}</span><span>{isDefault ? t('Yes') : t('No')}</span></div>
             <div className="detail-field" title={tips.requiresApproval}><span className="detail-label">{t('Approval')}</span><span>{requiresApproval ? t('Required') : t('Not required')}</span></div>

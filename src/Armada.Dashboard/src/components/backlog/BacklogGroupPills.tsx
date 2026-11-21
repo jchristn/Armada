@@ -1,10 +1,13 @@
 import type { BacklogGroupDefinition, BacklogGroupKey } from './backlogUtils';
+import LoadingValue from '../shared/LoadingValue';
 
 interface BacklogGroupPillsProps {
   groups: BacklogGroupDefinition[];
   activeGroup: BacklogGroupKey;
   counts: Record<BacklogGroupKey, number>;
   onChange: (group: BacklogGroupKey) => void;
+  /** True until the backlog first loads: the counts show a spinner instead of 0. */
+  loading?: boolean;
 }
 
 /** Hover text per group: what the pill shows and which items count toward it. */
@@ -21,6 +24,7 @@ export default function BacklogGroupPills({
   activeGroup,
   counts,
   onChange,
+  loading = false,
 }: BacklogGroupPillsProps) {
   return (
     <div className="backlog-group-pills" role="group" aria-label="Backlog group views" title="Quick views of the backlog by stage. The number is how many items are in each view.">
@@ -34,7 +38,7 @@ export default function BacklogGroupPills({
           onClick={() => onChange(group.key)}
         >
           <span>{group.label}</span>
-          <strong>{counts[group.key] || 0}</strong>
+          <strong>{loading ? <LoadingValue loading /> : counts[group.key] || 0}</strong>
         </button>
       ))}
     </div>

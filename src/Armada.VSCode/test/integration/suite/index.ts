@@ -35,33 +35,33 @@ function log(line: string): void {
   console.log(`[integration] ${line}`);
 }
 
-async function capture(dir: string, name: string): Promise<void> {
-  if (process.platform !== 'darwin') return;
-  fs.mkdirSync(dir, { recursive: true });
-  await new Promise((r) => setTimeout(r, 2500));
-  const file = path.join(dir, `${name}.png`);
-  await new Promise<void>((resolve) => execFile('screencapture', ['-x', file], (err) => {
-    log(err ? `screenshot ${name} failed: ${err.message}` : `screenshot ${file}`);
+/** Saves a screenshot of this VS Code window only (never the screen), with ARMADA_VSCODE_WINDOW_SHOT. */
+async function windowShot(file: string): Promise<void> {
+  const program = process.env.ARMADA_VSCODE_WINDOW_SHOT;
+  if (!program) {
+    log(`screenshot ${path.basename(file)} skipped: ARMADA_VSCODE_WINDOW_SHOT is not set`);
+    return;
+  }
+  await new Promise<void>((resolve) => execFile(program, [String(process.pid), file], (err) => {
+    log(err ? `screenshot ${path.basename(file)} failed: ${err.message}` : `screenshot ${file}`);
     resolve();
   }));
 }
 
+async function capture(dir: string, name: string): Promise<void> {
+  fs.mkdirSync(dir, { recursive: true });
+  await new Promise((r) => setTimeout(r, 2500));
+  await windowShot(path.join(dir, `${name}.png`));
+}
+
 async function screenshots(dir: string): Promise<void> {
-  if (process.platform !== 'darwin') {
-    log('screenshots skipped: only macOS (screencapture) is supported');
-    return;
-  }
   fs.mkdirSync(dir, { recursive: true });
   const config = vscode.workspace.getConfiguration('workbench');
   for (const [theme, name] of [['Default Light Modern', 'light'], ['Default Dark Modern', 'dark']]) {
     await config.update('colorTheme', theme, vscode.ConfigurationTarget.Global);
     await vscode.commands.executeCommand('workbench.view.extension.armada');
     await new Promise((r) => setTimeout(r, 2500));
-    const file = path.join(dir, `armada-container-${name}.png`);
-    await new Promise<void>((resolve) => execFile('screencapture', ['-x', file], (err) => {
-      log(err ? `screenshot ${name} failed: ${err.message}` : `screenshot ${file}`);
-      resolve();
-    }));
+    await windowShot(path.join(dir, `armada-container-${name}.png`));
   }
 }
 

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { getMission, getMissionLog, listIncidents } from '../../api/client';
 import type { Mission } from '../../types/models';
 import { useLocale } from '../../context/LocaleContext';
+import LoadingIndicator from './LoadingIndicator';
 import LogViewer from './LogViewer';
 
 /** Mission statuses this panel explains. */
@@ -23,6 +24,7 @@ interface MissionFailureDetailsProps {
 export default function MissionFailureDetails({ mission, onOpenMission }: MissionFailureDetailsProps) {
   const { t } = useLocale();
   const [rescues, setRescues] = useState<Mission[]>([]);
+  const [rescuesLoaded, setRescuesLoaded] = useState(false);
   const [logOpen, setLogOpen] = useState(false);
   const [logContent, setLogContent] = useState('');
   const [logTotal, setLogTotal] = useState<number | undefined>(undefined);
@@ -37,6 +39,8 @@ export default function MissionFailureDetails({ mission, onOpenMission }: Missio
       setRescues(missions.filter((m): m is Mission => m !== null));
     } catch {
       // Incidents may be unavailable to this user; the failure reason and log still help.
+    } finally {
+      setRescuesLoaded(true);
     }
   }, [mission.id]);
 
@@ -92,6 +96,8 @@ export default function MissionFailureDetails({ mission, onOpenMission }: Missio
             ))}
           </ul>
         </div>
+      ) : !rescuesLoaded ? (
+        <div style={{ marginTop: '0.6rem' }}><LoadingIndicator compact label={t('Loading...')} /></div>
       ) : (
         <div className="text-dim" style={{ marginTop: '0.6rem' }}>
           {t('Armada may start a rescue mission for this failure automatically; it will appear here.')}

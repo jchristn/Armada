@@ -10,6 +10,7 @@ import { copyOrDownloadSvgImage } from '../lib/chartImage';
 import RefreshButton from '../components/shared/RefreshButton';
 import { tokenHeatmapSpecForHours } from '../lib/tokenHeatmap';
 import { computeYTicks, formatTokens, splitTokenTypes, TOKEN_USAGE_TIME_RANGES } from '../lib/tokenUsage';
+import LoadingValue from '../components/shared/LoadingValue';
 
 const TIME_RANGES = TOKEN_USAGE_TIME_RANGES;
 
@@ -195,6 +196,8 @@ export default function TokenUsage() {
   const totalOutput = data?.outputTokens ?? 0;
   const totalCached = data?.cachedTokens ?? 0;
   const totalTokens = data?.totalTokens ?? 0;
+  // Before the first summary arrives the totals are unknown, not 0 (a refresh keeps the previous totals).
+  const totalsLoading = loading && !data;
 
   const hasTimeData = bucketTimestamps.length > 0 && series.length > 0;
   const hasModelData = byModel.length > 0;
@@ -283,10 +286,10 @@ export default function TokenUsage() {
       </div>
 
       <div className="mission-history-stats token-usage-stats">
-        <span title={t('All tokens consumed by missions, Ask Armada, and planning in the selected window.')}><span className="mission-history-stat-value">{formatTokens(totalTokens)}</span> {t('Total')}</span>
-        <span title={t('Prompt tokens sent to models in the selected window.')}><span className="mission-history-stat-value" style={{ color: TYPE_COLORS.input }}>{formatTokens(totalInput)}</span> {t('Input')}</span>
-        <span title={t('Completion tokens the models generated in the selected window.')}><span className="mission-history-stat-value" style={{ color: TYPE_COLORS.output }}>{formatTokens(totalOutput)}</span> {t('Output')}</span>
-        <span title={t('Prompt tokens served from the provider\'s prompt cache, usually billed at a lower rate.')}><span className="mission-history-stat-value" style={{ color: TYPE_COLORS.cached }}>{formatTokens(totalCached)}</span> {t('Cached')}</span>
+        <span title={t('All tokens consumed by missions, Ask Armada, and planning in the selected window.')}><span className="mission-history-stat-value"><LoadingValue loading={totalsLoading}>{formatTokens(totalTokens)}</LoadingValue></span> {t('Total')}</span>
+        <span title={t('Prompt tokens sent to models in the selected window.')}><span className="mission-history-stat-value" style={{ color: TYPE_COLORS.input }}><LoadingValue loading={totalsLoading}>{formatTokens(totalInput)}</LoadingValue></span> {t('Input')}</span>
+        <span title={t('Completion tokens the models generated in the selected window.')}><span className="mission-history-stat-value" style={{ color: TYPE_COLORS.output }}><LoadingValue loading={totalsLoading}>{formatTokens(totalOutput)}</LoadingValue></span> {t('Output')}</span>
+        <span title={t('Prompt tokens served from the provider\'s prompt cache, usually billed at a lower rate.')}><span className="mission-history-stat-value" style={{ color: TYPE_COLORS.cached }}><LoadingValue loading={totalsLoading}>{formatTokens(totalCached)}</LoadingValue></span> {t('Cached')}</span>
         {(data?.estimatedCount ?? 0) > 0 && (
           <span className="token-usage-estimated-note" title={t('Some runtimes do not report real usage, so Armada estimates those counts. Totals that include estimates are approximate.')}>{t('{{estimated}} of {{total}} records estimated', { estimated: data!.estimatedCount, total: data!.recordCount })}</span>
         )}

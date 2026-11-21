@@ -15,6 +15,7 @@ import DataTable, { type DataTableColumn, type DataTableSort } from '../componen
 import ConfirmDialog from '../components/shared/ConfirmDialog';
 import JsonViewer from '../components/shared/JsonViewer';
 import ScopeBadge from '../components/shared/ScopeBadge';
+import LoadingValue from '../components/shared/LoadingValue';
 import { MEMORY_TYPES } from '../lib/configuration';
 import { reconcileServerPage, useListRequestGuard } from '../lib/serverPage';
 import { usePersistedPageSize } from '../lib/usePersistedPageSize';
@@ -75,7 +76,7 @@ export default function Memories() {
   }
 
   const [memories, setMemories] = useState<Memory[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [pageNumber, setPageNumber] = useState(1);
   const [pageSize, setPageSize] = usePersistedPageSize('memories', 25);
   const [totalPages, setTotalPages] = useState(1);
@@ -85,6 +86,7 @@ export default function Memories() {
   const [jsonData, setJsonData] = useState<{ open: boolean; title: string; data: unknown }>({ open: false, title: '', data: null });
   const [confirm, setConfirm] = useState<{ open: boolean; id: string }>({ open: false, id: '' });
   const [vessels, setVessels] = useState<Vessel[]>([]);
+  const [vesselsLoaded, setVesselsLoaded] = useState(false);
   // Sort and column filters are sent to POST /api/v1/memories/enumerate; the server filters, sorts and pages.
   const [sortField, setSortField] = useState<SortField>('updated');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
@@ -130,7 +132,7 @@ export default function Memories() {
   useEffect(() => { void load(); }, [load]);
 
   useEffect(() => {
-    listAll(listVessels).then(r => setVessels(r.objects || [])).catch(() => {});
+    listAll(listVessels).then(r => setVessels(r.objects || [])).catch(() => {}).finally(() => setVesselsLoaded(true));
   }, []);
 
   const vesselMap = useMemo(() => new Map(vessels.map(v => [v.id, v.name])), [vessels]);
@@ -169,7 +171,7 @@ export default function Memories() {
         const vesselId = memoryVesselId(m);
         return vesselId ? (
           <span className="cell-clip" title={vesselId}>
-            <a href="#" onClick={e => { e.preventDefault(); navigate(`/vessels/${vesselId}`); }}>{vesselName(vesselId)}</a>
+            <a href="#" onClick={e => { e.preventDefault(); navigate(`/vessels/${vesselId}`); }}><LoadingValue loading={!vesselsLoaded}>{vesselName(vesselId)}</LoadingValue></a>
           </span>
         ) : '-';
       },
@@ -293,9 +295,8 @@ export default function Memories() {
           onPageSizeChange: (s) => { setPageSize(s); setPageNumber(1); },
         }}
         onRefresh={load}
-        placeholder={memories.length > 0 ? undefined : loading
-          ? <p className="text-dim">{t('Loading...')}</p>
-          : <p className="text-dim">{t('No memories recorded yet.')}</p>}
+        loading={loading}
+        placeholder={memories.length > 0 || loading ? undefined : <p className="text-dim">{t('No memories recorded yet.')}</p>}
         emptyMessage={t('No memories match the current filters.')}
       />
     </div>

@@ -281,6 +281,7 @@ export default function Voyages() {
         onConfirm={confirm.onConfirm} onCancel={() => setConfirm(c => ({ ...c, open: false }))} />
 
       <DataTable
+        loading={loading}
         tableKey="voyages"
         columns={columns}
         rows={table.sorted}

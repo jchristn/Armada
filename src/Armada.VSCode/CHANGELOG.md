@@ -1,7 +1,8 @@
 # Changelog
 
-## 1.4.0 (unreleased)
+## 1.4.0
 
+- **Loading indicators everywhere**: dashboard pages show a spinner for every value, table, cell and chart that is still loading, never a default 0 or an empty state; the status bar shows a spinner while missions load and opens the Missions page.
 - **Manage is a table of contents**: each hub lists its dashboard tabs (Activity: All Activity, API Requests, Events,
   Signals, Token Usage, Captain Usage, Concurrency; Configuration: Workflow Profiles through Memory; and so on), every
   entry has an icon and opens its page, and nothing expands into lists of raw records (no more rows named by

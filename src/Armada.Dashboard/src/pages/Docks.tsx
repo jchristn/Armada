@@ -4,6 +4,7 @@ import { apiErrorMessage, listDocks, deleteDock, listCaptains, listVessels } fro
 import { listAll } from '../api/paging';
 import type { Dock, Captain, Vessel } from '../types/models';
 import DataTable, { type DataTableColumn } from '../components/shared/DataTable';
+import LoadingIndicator from '../components/shared/LoadingIndicator';
 import ActionMenu from '../components/shared/ActionMenu';
 import ConfirmDialog from '../components/shared/ConfirmDialog';
 import JsonViewer from '../components/shared/JsonViewer';
@@ -28,6 +29,7 @@ export default function Docks() {
   const [captains, setCaptains] = useState<Captain[]>([]);
   const [vessels, setVessels] = useState<Vessel[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState('');
 
   // Pagination (server-side)
@@ -85,6 +87,7 @@ export default function Docks() {
       setError(t('Failed to load docks.'));
     } finally {
       setLoading(false);
+      setLoaded(true);
     }
   }, [pageNumber, pageSize, userScope, t]);
 
@@ -251,8 +254,9 @@ export default function Docks() {
           selectAllLabel: t('Select all docks'),
           rowLabel: () => t('Select this dock'),
         }}
+        loading={loading}
         emptyMessage={t('No docks match the current filters.')}
-        placeholder={docks.length > 0 ? undefined : <p className="text-dim">{loading ? t('Loading...') : t('No docks found.')}</p>}
+        placeholder={docks.length > 0 ? undefined : !loaded ? <LoadingIndicator compact label={t('Loading...')} /> : <p className="text-dim">{t('No docks found.')}</p>}
       />
     </div>
   );

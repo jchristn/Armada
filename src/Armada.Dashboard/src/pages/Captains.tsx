@@ -34,6 +34,7 @@ import { useDeleteProgress } from '../lib/useDeleteProgress';
 import { useLatestUsageForCaptains } from '../lib/useUsage';
 import CaptainUsageCell from '../components/usage/CaptainUsageCell';
 import UsageState from '../components/usage/UsageState';
+import LoadingIndicator from '../components/shared/LoadingIndicator';
 
 type SortDir = 'asc' | 'desc';
 type SortField = 'name' | 'runtime' | 'state' | 'createdUtc';
@@ -50,6 +51,8 @@ export default function Captains() {
   const canEvaluate = !!isAdmin || !!isTenantAdmin;
   const [captains, setCaptains] = useState<Captain[]>([]);
   const [loading, setLoading] = useState(true);
+  // The first load has finished (an auto-refresh of an empty list must not flash the loading state).
+  const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState('');
 
   // Modal state
@@ -99,6 +102,7 @@ export default function Captains() {
       setError(t('Failed to load captains.'));
     } finally {
       setLoading(false);
+      setLoaded(true);
     }
   }, [userScope, t]);
 
@@ -653,6 +657,7 @@ export default function Captains() {
         <p className="text-dim usage-table-notice">{t('Usage shows the first account pages for these captains. Open a captain\'s usage section for every account.')}</p>
       )}
       <DataTable
+        loading={loading && !loaded}
         tableKey="captains"
         columns={columns}
         rows={paginated}
@@ -676,7 +681,7 @@ export default function Captains() {
           rowLabel: () => t('Select this captain'),
         }}
         emptyMessage={t('No captains match the current filters.')}
-        placeholder={captains.length > 0 ? undefined : <p className="text-dim">{loading ? t('Loading...') : t('No captains configured.')}</p>}
+        placeholder={captains.length > 0 ? undefined : loading && !loaded ? <LoadingIndicator compact label={t('Loading...')} /> : <p className="text-dim">{t('No captains configured.')}</p>}
       />
     </div>
   );

@@ -6,6 +6,7 @@ import AutoRefreshSelect from './AutoRefreshSelect';
 import ColumnChooser from './ColumnChooser';
 import Pagination from './Pagination';
 import RefreshButton from './RefreshButton';
+import LoadingIndicator from './LoadingIndicator';
 
 export interface DataTableColumn<T> {
   /** Stable key: persisted in the column choice and set as `data-col` on the header and cells. */
@@ -46,6 +47,8 @@ export interface DataTablePagination {
   totalMs?: number;
   onPageChange: (page: number) => void;
   onPageSizeChange: (size: number) => void;
+  /** True while the first page loads (the table's own `loading` with no rows also counts). */
+  loading?: boolean;
 }
 
 export interface DataTableSort {
@@ -86,6 +89,11 @@ export interface DataTableProps<T> {
   emptyMessage?: ReactNode;
   /** Replaces the table (the toolbar stays), e.g. a loading indicator or an empty-state card. */
   placeholder?: ReactNode;
+  /**
+   * True while the rows are being loaded. With no rows yet the table shows a loading indicator instead of its empty
+   * message, and the record count waits; with rows (a refresh) the rows stay and the table is marked busy.
+   */
+  loading?: boolean;
   /** Pager in the toolbar; without it the toolbar shows the record count only. */
   pagination?: DataTablePagination;
   /** Record count shown when there is no pager (defaults to rows.length); null hides it. */
@@ -147,7 +155,7 @@ export default function DataTable<T>(props: DataTableProps<T>) {
   const {
     tableKey, columns, rows, rowKey, onRowClick, isRowClickable, rowClassName, rowTitle, renderRowDetail, selection, sort,
     emptyMessage, placeholder, pagination, recordCount, autoRefresh, onRefresh, refreshTitle, toolbarExtra,
-    columnsVersion = 0, className, wrapClassName, ariaLabel, busy,
+    columnsVersion = 0, className, wrapClassName, ariaLabel, busy: busyProp, loading = false,
   } = props;
   const { t } = useLocale();
   const tableRef = useRef<HTMLTableElement>(null);
@@ -195,10 +203,13 @@ export default function DataTable<T>(props: DataTableProps<T>) {
     </>
   );
   const hasTools = Boolean(toolbarExtra || showChooser || autoRefresh || onRefresh);
-  const count = recordCount === undefined ? rows.length : recordCount;
+  const firstLoad = loading && rows.length === 0;
+  const busy = busyProp || loading;
+  // While the first page loads there is no count to show yet (a 0 would read as "nothing here").
+  const count = firstLoad ? null : recordCount === undefined ? rows.length : recordCount;
 
   const toolbar = pagination ? (
-    <Pagination {...pagination} tools={hasTools ? tools : undefined} />
+    <Pagination {...pagination} tools={hasTools ? tools : undefined} loading={firstLoad || pagination.loading} />
   ) : (count !== null || hasTools) ? (
     <div className="pagination-bar data-table-toolbar">
       <div className="pagination-info">
@@ -314,7 +325,10 @@ export default function DataTable<T>(props: DataTableProps<T>) {
                   </Fragment>
                 );
               })}
-              {rows.length === 0 && emptyMessage !== undefined && (
+              {firstLoad && (
+                <tr className="data-table-loading"><td colSpan={colSpan}><LoadingIndicator compact label={t('Loading...')} /></td></tr>
+              )}
+              {!firstLoad && rows.length === 0 && emptyMessage !== undefined && (
                 <tr className="data-table-empty"><td colSpan={colSpan} className="text-dim">{emptyMessage}</td></tr>
               )}
             </tbody>

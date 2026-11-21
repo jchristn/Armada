@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { addBlackBoxNote, listBlackBoxNotes } from '../../api/client';
 import type { BlackBoxNote } from '../../types/blackbox';
 import { useLocale } from '../../context/LocaleContext';
+import LoadingIndicator from '../shared/LoadingIndicator';
 
 const NOTE_PAGE_SIZE = 25;
 const NOTE_MAX_LENGTH = 8000;
@@ -15,6 +16,7 @@ export default function BlackBoxNotes({ entryId, refreshKey }: { entryId: string
   const [draft, setDraft] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [loaded, setLoaded] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -24,6 +26,8 @@ export default function BlackBoxNotes({ entryId, refreshKey }: { entryId: string
       setError('');
     } catch (err: unknown) {
       setError(t('Notes could not be loaded: {{message}}', { message: err instanceof Error ? err.message : String(err) }));
+    } finally {
+      setLoaded(true);
     }
   }, [entryId, pageSize, t]);
 
@@ -47,7 +51,8 @@ export default function BlackBoxNotes({ entryId, refreshKey }: { entryId: string
   return (
     <div className="blackbox-notes">
       {error && <div className="blackbox-notice blackbox-notice-error" role="alert">{error}</div>}
-      {notes.length === 0 && !error && <p className="text-dim" style={{ margin: 0 }}>{t('No notes yet.')}</p>}
+      {!loaded && !error && <LoadingIndicator compact label={t('Loading...')} />}
+      {loaded && notes.length === 0 && !error && <p className="text-dim" style={{ margin: 0 }}>{t('No notes yet.')}</p>}
       {notes.map((note) => (
         <div key={note.id} className="blackbox-note">
           <div className="blackbox-note-meta">{t(note.authorKind)} · {formatDateTime(note.createdUtc)}{note.userId ? ` · ${note.userId}` : ''}</div>

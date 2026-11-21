@@ -9,6 +9,7 @@ import CopyButton from '../components/shared/CopyButton';
 import DataTable, { type DataTableColumn } from '../components/shared/DataTable';
 import DialogShell from '../components/shared/DialogShell';
 import ErrorModal from '../components/shared/ErrorModal';
+import LoadingIndicator from '../components/shared/LoadingIndicator';
 import PageHeader from '../components/shared/PageHeader';
 import StatusBadge from '../components/shared/StatusBadge';
 import { ErrorState } from '../components/shared/StateBlocks';
@@ -144,6 +145,7 @@ export default function BatteryPacks() {
       <ErrorModal error={editorError ? '' : error} onClose={() => setError('')} />
 
       <DataTable
+        loading={loading}
         tableKey="battery-packs"
         columns={columns}
         rows={packs}
@@ -157,7 +159,7 @@ export default function BatteryPacks() {
         onRefresh={load}
         refreshTitle={t('Reload the battery pack list now.')}
         busy={busy}
-        placeholder={packs.length > 0 ? undefined : <p className="text-dim">{loading ? t('Loading...') : t('No battery packs are installed.')}</p>}
+        placeholder={packs.length > 0 ? undefined : loading ? <LoadingIndicator compact label={t('Loading...')} /> : <p className="text-dim">{t('No battery packs are installed.')}</p>}
       />
 
       <DialogShell

@@ -137,6 +137,7 @@ export default function AccountLimitsTable({ provider, accountKey, hostId, refre
       columns={columns}
       rows={rows}
       rowKey={(view) => view.accountId ?? view.id ?? `${view.hostId}|${view.runtime}|${view.provider}|${view.accountKey}`}
+      loading={status === 'loading' && !result}
       placeholder={status === 'loading' && !result ? <UsageState kind="loading" /> : undefined}
       emptyMessage={status === 'error' ? <UsageState kind="error" compact /> :
         <div className="usage-limits-empty">

@@ -5,6 +5,7 @@ import { getHarborMetrics } from '../../api/client';
 import type { HarborLaunchSpeed, HarborMetrics, HarborMetricsRange } from '../../types/models';
 import { useLocale } from '../../context/LocaleContext';
 import DataTable, { type DataTableColumn } from '../shared/DataTable';
+import LoadingIndicator from '../shared/LoadingIndicator';
 import { formatTokens } from '../../lib/tokenUsage';
 import {
   HARBOR_METRICS_RANGES,
@@ -135,7 +136,7 @@ export default function HarborMetricsPanel({ harborId, initialRange = '24h' }: H
       </div>
 
       {loading && !metrics ? (
-        <div className="mission-history-empty">{t('Loading Harbor metrics...')}</div>
+        <div className="mission-history-empty"><LoadingIndicator compact label={t('Loading Harbor metrics...')} /></div>
       ) : error ? (
         <div className="mission-history-empty harbor-metrics-error" role="alert">{error}</div>
       ) : !metrics ? null : (

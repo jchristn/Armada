@@ -288,6 +288,7 @@ export default function Events() {
       {deletion.dialog}
 
       <DataTable
+        loading={loading}
         tableKey="events"
         columns={columns}
         rows={sorted}

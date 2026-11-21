@@ -12,7 +12,7 @@ import { useWebSocket } from '@dashboard/context/WebSocketContext';
 import { DashboardBreadcrumbProvider, useDashboardBreadcrumbTrail } from '@dashboard/components/shared/BreadcrumbContext';
 import DashboardBreadcrumbs from '@dashboard/components/shared/DashboardBreadcrumbs';
 import LoadingIndicator from '@dashboard/components/shared/LoadingIndicator';
-import { hostHandledRoute } from '../../src/surfaces/dashboard/protocol';
+import { hostHandledRoute, type HostMessage } from '../../src/surfaces/dashboard/protocol';
 import { onHostMessage, post, saveState } from './bridge';
 
 class PageErrorBoundary extends Component<{ children: ReactNode; resetKey: string }, { error: Error | null }> {
@@ -39,6 +39,27 @@ class PageErrorBoundary extends Component<{ children: ReactNode; resetKey: strin
         <button className="btn" onClick={() => this.setState({ error: null })}>Try again</button>
       </div>
     );
+  }
+}
+
+/** Scrolls the page or clicks an element (host automation for screenshots and tests). */
+function automate(message: Extract<HostMessage, { type: 'automation' }>): void {
+  const main = document.getElementById('main-content');
+  const candidates = message.selector ? Array.from(document.querySelectorAll<HTMLElement>(message.selector)) : [];
+  const target = message.text ? candidates.find((el) => el.textContent?.trim() === message.text) : candidates[0];
+  if (message.action === 'scroll') {
+    if (target) target.scrollIntoView({ block: 'start' });
+    else if (main && typeof message.y === 'number') main.scrollTop = message.y;
+  } else if (message.action === 'click') {
+    target?.click();
+  } else if (message.action === 'select' && message.value !== undefined) {
+    const value = message.value;
+    const select = Array.from(document.querySelectorAll<HTMLSelectElement>(message.selector ?? 'select'))
+      .find((el) => Array.from(el.options).some((option) => option.value === value));
+    if (!select) return;
+    // React tracks the value itself: set it through the native setter, then announce the change.
+    Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')?.set?.call(select, value);
+    select.dispatchEvent(new Event('change', { bubbles: true }));
   }
 }
 
@@ -87,6 +108,7 @@ export default function EmbeddedShell() {
   useEffect(() => onHostMessage((message) => {
     if (message.type === 'navigate') navigate(message.path, { state: message.state ?? null });
     else if (message.type === 'reload') setRevision((r) => r + 1);
+    else if (message.type === 'automation') automate(message);
   }), [navigate]);
 
   // Ask Armada has its own view in VS Code; a link to it opens that view and the page stays where it was.

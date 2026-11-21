@@ -44,6 +44,7 @@ export default function VesselReservationsCard({ vesselId, serializeOverlappingM
       </p>
       {paged.error ? <ErrorState message={t('Reservations could not be loaded: {{message}}', { message: paged.error })} onRetry={() => void paged.reload()} /> : (
         <DataTable
+          loading={paged.loading}
           tableKey="vessel-reservations"
           columns={columns}
           rows={paged.rows}

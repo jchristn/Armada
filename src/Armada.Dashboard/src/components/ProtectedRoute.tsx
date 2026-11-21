@@ -2,13 +2,15 @@ import type { ReactNode } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useLocale } from '../context/LocaleContext';
 import LoginFlow from './LoginFlow';
+import LoadingIndicator from './shared/LoadingIndicator';
 import PasswordChangeRequired from './PasswordChangeRequired';
 
 export default function ProtectedRoute({ children, requireAdmin, requireTenantAdmin }: { children: ReactNode; requireAdmin?: boolean; requireTenantAdmin?: boolean }) {
   const { isAuthenticated, isAdmin, isTenantAdmin, loading, user, passwordChangeSkipped } = useAuth();
   const { t } = useLocale();
 
-  if (loading) return null;
+  // Checking the session (whoami): a spinner, not a blank page.
+  if (loading) return <LoadingIndicator fullHeight label={t('Loading...')} />;
   if (!isAuthenticated) return <LoginFlow />;
   if (user?.passwordChangeRequired && !passwordChangeSkipped) return <PasswordChangeRequired />;
   if (requireAdmin && !isAdmin) {

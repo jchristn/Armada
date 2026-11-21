@@ -3,6 +3,7 @@ import { listUsers, createUser, updateUser, deleteUser, listTenants, isApiStatus
 import { listAll } from '../../api/paging';
 import type { UserMaster, TenantMetadata, UserUpsertRequest } from '../../types/models';
 import DataTable, { type DataTableColumn } from '../../components/shared/DataTable';
+import LoadingIndicator from '../../components/shared/LoadingIndicator';
 import ActionMenu from '../../components/shared/ActionMenu';
 import ConfirmDialog from '../../components/shared/ConfirmDialog';
 import JsonViewer from '../../components/shared/JsonViewer';
@@ -28,6 +29,7 @@ export default function Users() {
   const [items, setItems] = useState<UserMaster[]>([]);
   const [tenants, setTenants] = useState<TenantMetadata[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<UserMaster | null>(null);
@@ -69,7 +71,7 @@ export default function Users() {
       setTenants(tResult.objects);
       setError('');
     } catch { setError(t('Failed to load users.')); }
-    finally { setLoading(false); }
+    finally { setLoading(false); setLoaded(true); }
   }, [isAdmin, t, user?.tenant]);
 
   useEffect(() => { load(); }, [load]);
@@ -427,9 +429,10 @@ export default function Users() {
           selectAllLabel: t('Select all users'),
           rowLabel: () => t('Select this user'),
         }}
+        loading={loading}
         emptyMessage={t('No users match filters.')}
-        placeholder={items.length > 0 ? undefined : loading
-          ? <p className="text-dim">{t('Loading...')}</p>
+        placeholder={items.length > 0 ? undefined : !loaded
+          ? <LoadingIndicator compact label={t('Loading...')} />
           : <p className="text-dim">{t('No users found.')}</p>}
       />
     </div>

@@ -45,6 +45,7 @@ import JsonViewer from '../components/shared/JsonViewer';
 import RecordDetailModal from '../components/shared/RecordDetailModal';
 import CopyButton from '../components/shared/CopyButton';
 import DataTable, { type DataTableColumn } from '../components/shared/DataTable';
+import LoadingValue from '../components/shared/LoadingValue';
 import StatusBadge from '../components/shared/StatusBadge';
 import UserScopeFilter from '../components/shared/UserScopeFilter';
 import { useAutoRefresh } from '../lib/useAutoRefresh';
@@ -64,6 +65,8 @@ export default function Objectives() {
   const [fleets, setFleets] = useState<Fleet[]>([]);
   const [vessels, setVessels] = useState<Vessel[]>([]);
   const [loading, setLoading] = useState(true);
+  // False until the first load finishes: the overview counts wait for it instead of reading 0.
+  const [loaded, setLoaded] = useState(false);
   const [userScope, setUserScope] = useState('');
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
@@ -113,6 +116,7 @@ export default function Objectives() {
       setError(err instanceof Error ? err.message : t('Failed to load backlog.'));
     } finally {
       setLoading(false);
+      setLoaded(true);
     }
   }
 
@@ -495,19 +499,19 @@ export default function Objectives() {
       <div className="playbook-overview-grid">
         <div className="card playbook-overview-card">
           <span title={t('Total backlog items loaded, before the filters below are applied.')}>{t('Backlog Items')}</span>
-          <strong>{objectives.length}</strong>
+          <strong><LoadingValue loading={!loaded}>{objectives.length}</LoadingValue></strong>
         </div>
         <div className="card playbook-overview-card">
           <span title={t('Items in the ReadyForPlanning stage: scoped well enough to start a planning session.')}>{t('Ready For Planning')}</span>
-          <strong>{planningReadyCount}</strong>
+          <strong><LoadingValue loading={!loaded}>{planningReadyCount}</LoadingValue></strong>
         </div>
         <div className="card playbook-overview-card">
           <span title={t('Items in the ReadyForDispatch stage: planned and ready to send to captains.')}>{t('Ready For Dispatch')}</span>
-          <strong>{dispatchReadyCount}</strong>
+          <strong><LoadingValue loading={!loaded}>{dispatchReadyCount}</LoadingValue></strong>
         </div>
         <div className="card playbook-overview-card">
           <span title={t('Items whose status is Blocked or that are waiting on other backlog items.')}>{t('Blocked')}</span>
-          <strong>{blockedCount}</strong>
+          <strong><LoadingValue loading={!loaded}>{blockedCount}</LoadingValue></strong>
         </div>
       </div>
 
@@ -516,6 +520,7 @@ export default function Objectives() {
         activeGroup={groupFilter}
         counts={groupCounts}
         onChange={setGroupFilter}
+        loading={!loaded}
       />
 
       <div className="card backlog-filter-card">
@@ -605,6 +610,7 @@ export default function Objectives() {
       </div>
 
       <DataTable
+        loading={loading}
         tableKey="objectives"
         columns={columns}
         rows={orderedObjectives}

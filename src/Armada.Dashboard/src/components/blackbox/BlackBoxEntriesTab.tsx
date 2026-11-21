@@ -237,6 +237,7 @@ export default function BlackBoxEntriesTab({ vessels }: { vessels: Vessel[] }) {
           rows={rows}
           rowKey={(r) => r.id}
           onRowClick={(r) => navigate(`/blackbox/${encodeURIComponent(r.id)}`)}
+          loading={loading}
           placeholder={loading && rows.length === 0 ? <LoadingState /> : rows.length === 0 ? (
             <EmptyState title={t('No black box entries')}>{Object.keys(applied).length ? t('No entry matches these filters.') : t('Armada records an entry here whenever a mission or voyage fails.')}</EmptyState>
           ) : undefined}

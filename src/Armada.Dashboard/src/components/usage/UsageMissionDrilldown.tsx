@@ -60,6 +60,8 @@ export default function UsageMissionDrilldown({ selection, onClose, refreshRevis
   if (shownKey !== selectionKey) {
     setShownKey(selectionKey);
     setPageNumber(1);
+    // A different bucket is a new list: its first load shows the loading state, not the previous bucket's rows.
+    setResult(null);
   }
 
   useEffect(() => {
@@ -93,7 +95,9 @@ export default function UsageMissionDrilldown({ selection, onClose, refreshRevis
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectionKey, sortField, sortDir, pageNumber, pageSize, revision, attempt, refreshRevision]);
 
-  const rows = status === 'ready' ? result?.objects ?? [] : [];
+  // A refresh (sort, page, a usage change) keeps the shown rows until the new page arrives.
+  const rows = status !== 'error' ? result?.objects ?? [] : [];
+  const firstLoad = status === 'loading' && !result;
   const coverage = result?.coverage ?? null;
 
   const costTotals = useMemo(() => {
@@ -170,7 +174,7 @@ export default function UsageMissionDrilldown({ selection, onClose, refreshRevis
       <p className="text-dim usage-coverage-note">
         {t('Limit utilization can change without any Armada mission completing, so the listed missions need not explain the percentage line.')} {t('Only retained token records are shown. Deleted consumption cannot be reconstructed from quota history.')}
       </p>
-      {coverage && status === 'ready' && (
+      {coverage && status !== 'error' && (
         <ul className="usage-coverage-list" aria-label={t('Coverage')}>
           {coverage.excludedUnattributedRecords > 0 && (
             <li>{t('{{count}} unattributed token records are excluded from this account-specific view.', { count: tokens.format(coverage.excludedUnattributedRecords) })}</li>
@@ -198,7 +202,8 @@ export default function UsageMissionDrilldown({ selection, onClose, refreshRevis
           rows={rows}
           rowKey={(row) => `${row.missionId}-${row.captainId ?? ''}`}
           sort={{ field: sortField, dir: sortDir, onSort }}
-          placeholder={status === 'loading' ? <UsageState kind="loading" /> : undefined}
+          placeholder={firstLoad ? <UsageState kind="loading" /> : undefined}
+          loading={status === 'loading'}
           emptyMessage={t('No completed missions in this bucket')}
           wrapClassName="usage-table-scroll"
           pagination={{

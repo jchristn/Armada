@@ -9,6 +9,8 @@ import ConfirmDialog from '../components/shared/ConfirmDialog';
 import ErrorModal from '../components/shared/ErrorModal';
 import JsonViewer from '../components/shared/JsonViewer';
 import DataTable, { type DataTableColumn } from '../components/shared/DataTable';
+import LoadingIndicator from '../components/shared/LoadingIndicator';
+import LoadingValue from '../components/shared/LoadingValue';
 import PageHeader from '../components/shared/PageHeader';
 import { HISTORY_RANGE_OPTIONS, historyRangeStart, parseHistoryRange, type HistoryRangeId } from '../lib/historyRange';
 import { fetchAllPages, MAX_PAGE_SIZE } from '../api/paging';
@@ -95,6 +97,7 @@ export default function History() {
   const [vessels, setVessels] = useState<Vessel[]>([]);
   const [objectives, setObjectives] = useState<Objective[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState('');
   const [objectiveFilter, setObjectiveFilter] = useState(initialQuery.get('objectiveId') || 'all');
   const [textFilter, setTextFilter] = useState(initialQuery.get('text') || '');
@@ -153,6 +156,7 @@ export default function History() {
       setError(err instanceof Error ? err.message : t('Failed to load history.'));
     } finally {
       setLoading(false);
+      setLoaded(true);
     }
   }
 
@@ -456,22 +460,22 @@ export default function History() {
       <div className="playbook-overview-grid">
         <div className="card playbook-overview-card" title={t('Entries matching the applied filters, across all pages.')}>
           <span>{t('Total Entries')}</span>
-          <strong>{totals.totalRecords.toLocaleString()}</strong>
+          <strong><LoadingValue loading={!loaded}>{totals.totalRecords.toLocaleString()}</LoadingValue></strong>
           {totals.totalRecords > entries.length && (
             <span className="text-dim">{t('Showing {{shown}} of {{total}}', { shown: entries.length.toLocaleString(), total: totals.totalRecords.toLocaleString() })}</span>
           )}
         </div>
         <div className="card playbook-overview-card" title={t('Entries with error severity among those shown on this page.')}>
           <span>{t('Errors on this page')}</span>
-          <strong>{errorCount}</strong>
+          <strong><LoadingValue loading={!loaded}>{errorCount}</LoadingValue></strong>
         </div>
         <div className="card playbook-overview-card" title={t('Entries with warning severity among those shown on this page.')}>
           <span>{t('Warnings on this page')}</span>
-          <strong>{warningCount}</strong>
+          <strong><LoadingValue loading={!loaded}>{warningCount}</LoadingValue></strong>
         </div>
         <div className="card playbook-overview-card" title={t('Distinct kinds of records among the entries shown on this page.')}>
           <span>{t('Source types on this page')}</span>
-          <strong>{sourceTypeCounts.size}</strong>
+          <strong><LoadingValue loading={!loaded}>{sourceTypeCounts.size}</LoadingValue></strong>
         </div>
       </div>
 
@@ -577,7 +581,8 @@ export default function History() {
         autoRefresh={{ seconds: refreshSeconds, onChange: setRefreshSeconds }}
         onRefresh={() => load()}
         refreshTitle={t('Refresh history')}
-        placeholder={loading ? <p className="text-dim">{t('Loading...')}</p> : entries.length === 0 ? (
+        loading={loading}
+        placeholder={!loaded ? <LoadingIndicator compact label={t('Loading...')} /> : entries.length === 0 ? (
           <div className="playbook-empty-state">
             <strong>{t('No history entries match the current filters.')}</strong>
             <span>{t('Try broadening the filters or refresh after running additional work in Armada.')}</span>

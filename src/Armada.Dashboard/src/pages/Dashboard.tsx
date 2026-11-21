@@ -29,6 +29,7 @@ import CopyButton, { copyToClipboard } from '../components/shared/CopyButton';
 import JsonViewer from '../components/shared/JsonViewer';
 import DataTable from '../components/shared/DataTable';
 import FilterBar from '../components/shared/FilterBar';
+import LoadingIndicator from '../components/shared/LoadingIndicator';
 import MissionHistoryChart from '../components/MissionHistoryChart';
 import OverviewActivityCharts from '../components/activity/OverviewActivityCharts';
 import UsageObservabilityCard from '../components/usage/UsageObservabilityCard';
@@ -555,7 +556,9 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {filteredRecentMissions.length > 0 ? (
+        {missionsLoading && recentMissions.length === 0 ? (
+          <LoadingIndicator compact label={t('Loading...')} />
+        ) : filteredRecentMissions.length > 0 ? (
           <DataTable
             tableKey="dashboard-recent-missions"
             className="table"

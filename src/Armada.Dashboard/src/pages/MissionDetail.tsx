@@ -35,6 +35,7 @@ import ActionMenu from '../components/shared/ActionMenu';
 import ConfirmDialog from '../components/shared/ConfirmDialog';
 import JsonViewer from '../components/shared/JsonViewer';
 import DiffViewer from '../components/shared/DiffViewer';
+import LoadingValue from '../components/shared/LoadingValue';
 import LogViewer from '../components/shared/LogViewer';
 import PageHeader from '../components/shared/PageHeader';
 import EvaluationBadge from '../components/shared/EvaluationBadge';
@@ -67,10 +68,11 @@ export default function MissionDetail() {
   const [landingPreview, setLandingPreview] = useState<LandingPreviewResult | null>(null);
   const [linkedCheckRuns, setLinkedCheckRuns] = useState<CheckRun[]>([]);
   const [linkedDeployments, setLinkedDeployments] = useState<Deployment[]>([]);
+  const [linkedLoadedFor, setLinkedLoadedFor] = useState<string | null>(null);
   const [pullRequestEvidence, setPullRequestEvidence] = useState<PullRequestEvidence | null>(null);
   const gitHubPullRequest = pullRequestEvidence?.detail ?? null;
   const [loadingGitHubPullRequest, setLoadingGitHubPullRequest] = useState(false);
-  const [loadingLandingPreview, setLoadingLandingPreview] = useState(false);
+  const [landingPreviewFor, setLandingPreviewFor] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const { pushToast } = useNotifications();
@@ -142,18 +144,16 @@ export default function MissionDetail() {
       setLoading(true);
       setMission(null);
       setLandingPreview(null);
-      setLoadingLandingPreview(false);
     }
     const current = () => generation === requestGenerationRef.current;
     try {
       const m = await getMission(routeId);
       if (!current()) return;
       setMission(m);
-      setLoadingLandingPreview(true);
       getMissionLandingPreview(routeId)
         .then((result) => { if (current()) setLandingPreview(result); })
         .catch(() => { if (current()) setLandingPreview(null); })
-        .finally(() => { if (current()) setLoadingLandingPreview(false); });
+        .finally(() => setLandingPreviewFor(routeId));
       loadedMissionIdRef.current = routeId;
       // Only clear error on the first load of this route -- don't dismiss user-facing errors from actions
       if (isInitialLoad) setError('');
@@ -210,6 +210,8 @@ export default function MissionDetail() {
         setLinkedCheckRuns([]);
         setLinkedDeployments([]);
       }
+    }).finally(() => {
+      if (!cancelled) setLinkedLoadedFor(id);
     });
 
     return () => {
@@ -450,6 +452,8 @@ export default function MissionDetail() {
   const { canResolveReview, canMarkComplete, showManualMerge, showLand } = landing;
   const landLabel = landing.isRetry ? t('Retry Landing') : t('Land');
   const landingPill = { className: landing.pill.tone, label: t(landing.pill.label) };
+  // The first preview of this mission is still on its way (a refresh keeps the previous one on screen).
+  const landingPreviewPending = landingPreviewFor !== id;
   const handleLand = async () => { try { await retryMissionLanding(mission.id); pushToast('success', t('Landing succeeded! Mission status updated.')); loadMission(); } catch (e) { setError(e instanceof Error ? e.message : t('Landing failed.')); } };
 
   return (
@@ -542,11 +546,13 @@ export default function MissionDetail() {
               {landingPreview?.sourceBranch ? `${landingPreview.sourceBranch} -> ${landingPreview.targetBranch}` : mission.branchName || t('No branch selected')}
             </div>
           </div>
-          <span className={`readiness-pill ${landingPill.className}`} title={t('Overall landing outlook for this mission, from the preview and its current status.')}>
-            {landingPill.label}
-          </span>
+          <LoadingValue loading={landingPreviewPending}>
+            <span className={`readiness-pill ${landingPill.className}`} title={t('Overall landing outlook for this mission, from the preview and its current status.')}>
+              {landingPill.label}
+            </span>
+          </LoadingValue>
         </div>
-        {loadingLandingPreview ? (
+        {landingPreviewPending ? (
           <div className="text-dim">{t('Calculating landing preview...')}</div>
         ) : !landingPreview ? (
           <div className="text-dim">{t('Landing preview is not available for this mission yet.')}</div>
@@ -955,11 +961,11 @@ export default function MissionDetail() {
         </div>
         <div className="detail-field">
           <span className="detail-label" title={t('Number of check runs (builds, tests and similar) recorded against this mission.')}>{t('Linked Checks')}</span>
-          <span>{linkedCheckRuns.length}</span>
+          <span><LoadingValue loading={linkedLoadedFor !== id}>{linkedCheckRuns.length}</LoadingValue></span>
         </div>
         <div className="detail-field">
           <span className="detail-label" title={t('Number of deployments that include this mission\'s work.')}>{t('Linked Deployments')}</span>
-          <span>{linkedDeployments.length}</span>
+          <span><LoadingValue loading={linkedLoadedFor !== id}>{linkedDeployments.length}</LoadingValue></span>
         </div>
       </div>
 

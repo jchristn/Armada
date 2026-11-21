@@ -29,6 +29,7 @@ All notable changes to Armada are documented in this file.
 
 ### Dashboard
 
+- **Loading shows as loading, never as a default value.** Counts and totals on cards, record counts, table cells, charts, heatmaps, sparklines and empty-state text show a spinner until their first data arrives, instead of `0`, `-`, `0 records` or "No ..." (a value that is 0 after loading still shows 0). Refreshes keep the values already on screen. Shared pieces: `LoadingValue` (an inline spinner for a value), `LoadingIndicator compact`, and a `loading` prop on `DataTable` that shows a loading row and holds back the record count, paged or not. The session check, the health dot and the backlog group counts follow the same rule.
 - **All Activity has time ranges**: Last Hour, Last Day (the default), Last Week, Last Month and All Time, as on API Requests; `?range=` picks one.
 - **The Overview shows before Recent Missions arrive**: status, runs, voyages and the charts render at once, and the Recent Missions table fills in when its rows load.
 - **The API Explorer works without `/openapi.json`**: it lists every route at once from a built-in catalog (`src/lib/apiCatalog.generated.json`, generated from `docs/api-surface-1.0.json` by `scripts/dashboard/generate-api-catalog.py`, which `generate-api-surface.sh` now runs), with path parameters and a JSON body editor, and switches to the server's OpenAPI document for request schemas when it loads. When that document cannot be loaded the explorer says so and keeps working.

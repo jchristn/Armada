@@ -33,6 +33,7 @@ import RecordDetailModal from '../components/shared/RecordDetailModal';
 import CopyButton from '../components/shared/CopyButton';
 import DataTable, { type DataTableColumn } from '../components/shared/DataTable';
 import StatusBadge from '../components/shared/StatusBadge';
+import LoadingValue from '../components/shared/LoadingValue';
 import { useAutoRefresh } from '../lib/useAutoRefresh';
 import { INCIDENT_SEVERITIES, INCIDENT_STATUSES } from '../lib/deliveryForms';
 import { useDeleteProgress } from '../lib/useDeleteProgress';
@@ -56,6 +57,7 @@ export default function Incidents() {
   const [deployments, setDeployments] = useState<Deployment[]>([]);
   const [releases, setReleases] = useState<Release[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | IncidentStatus>('all');
@@ -181,6 +183,7 @@ export default function Incidents() {
       setError(err instanceof Error ? err.message : t('Failed to load incidents.'));
     } finally {
       setLoading(false);
+      setLoaded(true);
     }
   }
 
@@ -214,6 +217,8 @@ export default function Incidents() {
   const monitoringCount = incidents.filter((incident) => incident.status === 'Monitoring').length;
   const mitigatedCount = incidents.filter((incident) => incident.status === 'Mitigated').length;
   const closedCount = incidents.filter((incident) => incident.status === 'Closed' || incident.status === 'RolledBack').length;
+  // The first load has no counts yet; a refresh keeps the previous ones visible.
+  const firstLoad = loading && !loaded;
 
   function handleDelete(incident: Incident) {
     setConfirm({
@@ -394,23 +399,23 @@ export default function Incidents() {
       <div className="playbook-overview-grid">
         <div className="card playbook-overview-card" title={t('All incident records you can see, before filters.')}>
           <span>{t('Total Incidents')}</span>
-          <strong>{incidents.length}</strong>
+          <strong><LoadingValue loading={firstLoad}>{incidents.length}</LoadingValue></strong>
         </div>
         <div className="card playbook-overview-card" title={t('Incidents still active and needing attention.')}>
           <span>{t('Open')}</span>
-          <strong>{openCount}</strong>
+          <strong><LoadingValue loading={firstLoad}>{openCount}</LoadingValue></strong>
         </div>
         <div className="card playbook-overview-card" title={t('Incidents being watched after mitigation work.')}>
           <span>{t('Monitoring')}</span>
-          <strong>{monitoringCount}</strong>
+          <strong><LoadingValue loading={firstLoad}>{monitoringCount}</LoadingValue></strong>
         </div>
         <div className="card playbook-overview-card" title={t('Incidents whose impact is stopped but may still have follow-up work.')}>
           <span>{t('Mitigated')}</span>
-          <strong>{mitigatedCount}</strong>
+          <strong><LoadingValue loading={firstLoad}>{mitigatedCount}</LoadingValue></strong>
         </div>
         <div className="card playbook-overview-card" title={t('Incidents fully closed or resolved by a rollback.')}>
           <span>{t('Closed / Rolled Back')}</span>
-          <strong>{closedCount}</strong>
+          <strong><LoadingValue loading={firstLoad}>{closedCount}</LoadingValue></strong>
         </div>
       </div>
 
@@ -447,7 +452,8 @@ export default function Incidents() {
         autoRefresh={{ seconds: refreshSeconds, onChange: setRefreshSeconds }}
         onRefresh={load}
         refreshTitle={t('Refresh incidents')}
-        placeholder={loading && incidents.length === 0 ? <p className="text-dim">{t('Loading...')}</p> : filtered.length === 0 ? (
+        loading={firstLoad}
+        placeholder={firstLoad ? undefined : filtered.length === 0 ? (
           <div className="playbook-empty-state">
             <strong>{t('No incidents match the current filters.')}</strong>
             <span>{canManage ? t('Create incidents from deployments or environments to preserve hotfix and rollback context.') : t('Ask a tenant administrator to create and manage incident records.')}</span>

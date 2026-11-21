@@ -38,7 +38,7 @@ export default function Signals() {
   const [signals, setSignals] = useState<Signal[]>([]);
   const [captains, setCaptains] = useState<Captain[]>([]);
   const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   // Pagination
   const [page, setPage] = useState(1);
@@ -323,6 +323,7 @@ export default function Signals() {
           selectAllLabel: t('Select all signals'),
           rowLabel: () => t('Select this signal for Delete Selected.'),
         }}
+        loading={loading}
         placeholder={sorted.length > 0 ? undefined : <p className="text-muted" style={{ padding: 20 }}>{loading ? t('Loading...') : t('No signals found.')}</p>}
       />
 

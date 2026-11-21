@@ -20,6 +20,7 @@ import RecordDetailModal from '../components/shared/RecordDetailModal';
 import ReadinessPanel from '../components/shared/ReadinessPanel';
 import CopyButton from '../components/shared/CopyButton';
 import DataTable, { type DataTableColumn } from '../components/shared/DataTable';
+import LoadingValue from '../components/shared/LoadingValue';
 import { useAutoRefresh } from '../lib/useAutoRefresh';
 import StatusBadge from '../components/shared/StatusBadge';
 import WorkflowCommandPreview from '../components/shared/WorkflowCommandPreview';
@@ -43,7 +44,7 @@ export default function CheckRuns() {
   const [runs, setRuns] = useState<CheckRun[]>([]);
   const [vessels, setVessels] = useState<Vessel[]>([]);
   const [profiles, setProfiles] = useState<WorkflowProfile[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState('');
   const [vesselFilter, setVesselFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'Passed' | 'Failed' | 'Running' | 'Pending' | 'Canceled'>('all');
@@ -73,7 +74,6 @@ export default function CheckRuns() {
 
   async function load() {
     try {
-      setLoading(true);
       const [runResult, vesselResult, profileResult] = await Promise.all([
         listAll(listCheckRuns),
         listAll(listVessels),
@@ -86,7 +86,7 @@ export default function CheckRuns() {
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : t('Failed to load check runs.'));
     } finally {
-      setLoading(false);
+      setLoaded(true);
     }
   }
 
@@ -515,19 +515,19 @@ export default function CheckRuns() {
       <div className="playbook-overview-grid">
         <div className="card playbook-overview-card" title={t('All check runs you can see, before filters.')}>
           <span>{t('Total Runs')}</span>
-          <strong>{runs.length}</strong>
+          <strong><LoadingValue loading={!loaded}>{runs.length}</LoadingValue></strong>
         </div>
         <div className="card playbook-overview-card" title={t('Runs whose command exited successfully.')}>
           <span>{t('Passed')}</span>
-          <strong>{passedCount}</strong>
+          <strong><LoadingValue loading={!loaded}>{passedCount}</LoadingValue></strong>
         </div>
         <div className="card playbook-overview-card" title={t('Runs whose command failed or timed out.')}>
           <span>{t('Failed')}</span>
-          <strong>{failedCount}</strong>
+          <strong><LoadingValue loading={!loaded}>{failedCount}</LoadingValue></strong>
         </div>
         <div className="card playbook-overview-card" title={t('Runs still in progress.')}>
           <span>{t('Running')}</span>
-          <strong>{runningCount}</strong>
+          <strong><LoadingValue loading={!loaded}>{runningCount}</LoadingValue></strong>
         </div>
       </div>
 
@@ -570,7 +570,8 @@ export default function CheckRuns() {
         autoRefresh={{ seconds: refreshSeconds, onChange: setRefreshSeconds }}
         onRefresh={load}
         refreshTitle={t('Refresh check runs')}
-        placeholder={loading && runs.length === 0 ? <p className="text-dim">{t('Loading...')}</p> : filtered.length === 0 ? (
+        loading={!loaded}
+        placeholder={!loaded ? undefined : filtered.length === 0 ? (
           <div className="playbook-empty-state">
             <strong>{t('No check runs match the current filters.')}</strong>
             <span>{t('Run a structured check to capture build, test, or deploy evidence for a vessel.')}</span>

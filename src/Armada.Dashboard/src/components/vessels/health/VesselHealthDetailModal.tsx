@@ -443,6 +443,7 @@ export default function VesselHealthDetailModal({
                 tableKey="vessel-health-dependencies"
                 className="vh-deps-table"
                 rows={deps}
+                loading={depsLoading}
                 rowKey={(dep) => dep.id ?? `${dep.projectPath}-${dep.packageName}-${dep.currentVersion}`}
                 columns={[
                   { key: 'ecosystem', label: t('Ecosystem'), headerTitle: t('Package manager the package comes from: NuGet (.NET) or npm.'), cellClassName: 'vh-nowrap', render: (dep) => dep.ecosystem },

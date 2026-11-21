@@ -58,6 +58,8 @@ export default function ProjectProfileDetail() {
   const canManage = createMode ? true : (profile ? canEditScoped(viewer, { scope: profile.ownershipScope, tenantId: profile.tenantId, userId: profile.userId }) : (isAdmin || isTenantAdmin));
   const [fleets, setFleets] = useState<Fleet[]>([]);
   const [vessels, setVessels] = useState<Vessel[]>([]);
+  const [fleetsLoading, setFleetsLoading] = useState(true);
+  const [vesselsLoading, setVesselsLoading] = useState(true);
   const [name, setName] = useState('Default Project Profile');
   const [description, setDescription] = useState('');
   const [scope, setScope] = useState<'Global' | 'Fleet' | 'Vessel'>('Global');
@@ -82,8 +84,8 @@ export default function ProjectProfileDetail() {
   const [previewLoading, setPreviewLoading] = useState(false);
 
   useEffect(() => {
-    void listAll(listFleets).then((r) => setFleets(r.objects || [])).catch(() => {});
-    void listAll(listVessels).then((r) => setVessels(r.objects || [])).catch(() => {});
+    void listAll(listFleets).then((r) => setFleets(r.objects || [])).catch(() => {}).finally(() => setFleetsLoading(false));
+    void listAll(listVessels).then((r) => setVessels(r.objects || [])).catch(() => {}).finally(() => setVesselsLoading(false));
     if (createMode) return;
     setLoading(true);
     getProjectProfile(id!)
@@ -269,6 +271,7 @@ export default function ProjectProfileDetail() {
               <select title={t(FLEET_TIP)} value={fleetId} onChange={(e) => setFleetId(e.target.value)} disabled={!canManage}>
                 <option value="">{t('Select a fleet...')}</option>
                 {fleets.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
+                {fleetsLoading && fleetId && !fleets.some((f) => f.id === fleetId) && <option value={fleetId}>{t('Loading...')}</option>}
               </select>
             </label>
           )}
@@ -278,6 +281,7 @@ export default function ProjectProfileDetail() {
               <select title={t(VESSEL_TIP)} value={vesselId} onChange={(e) => setVesselId(e.target.value)} disabled={!canManage}>
                 <option value="">{t('Select a vessel...')}</option>
                 {vessels.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
+                {vesselsLoading && vesselId && !vessels.some((v) => v.id === vesselId) && <option value={vesselId}>{t('Loading...')}</option>}
               </select>
             </label>
           )}

@@ -3,6 +3,7 @@ import { apiErrorCode, browseAllVesselImport } from '../../../api/client';
 import type { VesselBrowseEntry } from '../../../types/models';
 import { useLocale } from '../../../context/LocaleContext';
 import CodeStatusBadge from '../../shared/CodeStatusBadge';
+import LoadingIndicator from '../../shared/LoadingIndicator';
 import { importErrorLabel } from '../../../lib/vesselImportLabels';
 
 interface BrowseTreeProps {
@@ -111,7 +112,7 @@ export default function BrowseTree({ selected, onToggle, allowWorktrees }: Brows
           </div>
           {node?.expanded && (
             <ul className="browse-tree-children">
-              {node.loading && <li className="text-dim browse-tree-empty" style={{ paddingLeft: `${(depth + 1) * 1.1 + 1.6}rem` }}>{t('Loading...')}</li>}
+              {node.loading && <li className="text-dim browse-tree-empty" style={{ paddingLeft: `${(depth + 1) * 1.1 + 1.6}rem` }}><LoadingIndicator compact label={t('Loading...')} /></li>}
               {node.error && (
                 <li className="field-error browse-tree-empty" style={{ paddingLeft: `${(depth + 1) * 1.1 + 1.6}rem` }}>
                   {node.error}{' '}
@@ -129,7 +130,7 @@ export default function BrowseTree({ selected, onToggle, allowWorktrees }: Brows
 
   return (
     <div className="browse-tree" role="group" aria-label={t('Folders on the Admiral host')}>
-      {rootLoading && <p className="text-dim">{t('Loading allowed roots...')}</p>}
+      {rootLoading && <LoadingIndicator compact label={t('Loading allowed roots...')} />}
       {rootError && (
         <div className="alert alert-error" role="alert">
           {rootError} <button type="button" className="btn btn-sm" onClick={() => void loadRoots()} title={t('Try loading the allowed import folders again.')}>{t('Retry')}</button>

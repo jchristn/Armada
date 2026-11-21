@@ -55,6 +55,14 @@ describe('CaptainToolViewer tool paging', () => {
     for (const call of vi.mocked(getCaptainTools).mock.calls) expect(call[1]?.refresh).toBeFalsy();
   });
 
+  it('shows a loading indicator, not the empty message, while a section reads its first page', async () => {
+    vi.mocked(getCaptainTools).mockReturnValue(new Promise(() => undefined));
+    render(<CaptainToolViewer open captainName="cap" captainId="cpt_1" loading={false} error="" data={result([], 1, 0, 1)} onClose={() => undefined} />);
+    expect(screen.getAllByRole('status').length).toBe(2);
+    expect(screen.queryByText('No MCP tool inventory is available for this captain runtime.')).not.toBeInTheDocument();
+    expect(screen.queryByText(/0 records/)).not.toBeInTheDocument();
+  });
+
   it('says so when a section page fails to load', async () => {
     vi.mocked(getCaptainTools).mockRejectedValue(new Error('down'));
     render(<CaptainToolViewer open captainName="cap" captainId="cpt_1" loading={false} error="" data={result([], 1, 5, 1)} onClose={() => undefined} />);

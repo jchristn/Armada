@@ -1,5 +1,6 @@
 import '../vessels/history/vesselHistory.css';
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
+import LoadingIndicator from '../shared/LoadingIndicator';
 import RefreshButton from '../shared/RefreshButton';
 import { getTokenUsage } from '../../api/client';
 import type { TokenUsageSummaryResult } from '../../types/models';
@@ -27,6 +28,8 @@ const TokenActivityHeatmap = forwardRef<TokenActivityHeatmapHandle, TokenActivit
   const [ownDays, setOwnDays] = useState(365);
   const [metric, setMetric] = useState<TokenHeatmapMetric>('total');
   const [data, setData] = useState<TokenUsageSummaryResult | null>(null);
+  // The query the shown data answers: a refresh of the same query keeps it visible, a new window or filter waits.
+  const [dataKey, setDataKey] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [selected, setSelected] = useState('');
@@ -41,6 +44,7 @@ const TokenActivityHeatmap = forwardRef<TokenActivityHeatmapHandle, TokenActivit
     () => (specKind === 'calendar' ? { kind: 'calendar', days: specSize } : specKind === 'hours' ? { kind: 'hours', hours: specSize } : { kind: 'minutes', minutes: specSize }),
     [specKind, specSize],
   );
+  const queryKey = JSON.stringify([active, harborId, captainId, model]);
   const load = useCallback(async () => {
     const version = ++requestVersion.current;
     const end = new Date();
@@ -49,12 +53,13 @@ const TokenActivityHeatmap = forwardRef<TokenActivityHeatmapHandle, TokenActivit
     setLoading(true); setError(false);
     try {
       const value = await getTokenUsage({ fromUtc: query.fromUtc, toUtc: query.toUtc, bucketMinutes: query.bucketMinutes, harborId: harborId || undefined, captainId: captainId || undefined, model: model || undefined });
-      if (version === requestVersion.current) setData(value);
+      if (version === requestVersion.current) { setData(value); setDataKey(queryKey); }
     } catch (error: unknown) {
       if (version === requestVersion.current) setError(true);
       throw error;
     } finally { if (version === requestVersion.current) setLoading(false); }
-  }, [active, harborId, captainId, model]);
+  }, [active, harborId, captainId, model, queryKey]);
+  const firstLoad = loading && (!data || dataKey !== queryKey);
   useImperativeHandle(ref, () => ({ refresh: load }), [load]);
   useEffect(() => {
     void load().catch(() => {});
@@ -83,18 +88,18 @@ const TokenActivityHeatmap = forwardRef<TokenActivityHeatmapHandle, TokenActivit
     const observer = new ResizeObserver(measure);
     observer.observe(host);
     return () => observer.disconnect();
-  }, [heat.columns, calendar, loading]);
+  }, [heat.columns, calendar, firstLoad]);
 
   useEffect(() => {
     const host = scroll.current;
     const cell = selectedCell ? grid.current?.querySelector<HTMLElement>(`[data-key="${selectedCell.key}"]`) : null;
-    if (!loading && host && cell) {
+    if (!firstLoad && host && cell) {
       const x = cell.getBoundingClientRect().left - host.getBoundingClientRect().left + host.scrollLeft;
       if (x < host.scrollLeft) host.scrollLeft = x;
       const right = x + cell.offsetWidth;
       if (right > host.scrollLeft + host.clientWidth) host.scrollLeft = right - host.clientWidth;
     }
-  }, [selectedCell, loading]);
+  }, [selectedCell, firstLoad]);
 
   const timeOf = (iso: string, withMinutes: boolean) => `${iso.slice(11, 13)}:${withMinutes ? iso.slice(14, 16) : '00'}`;
   const cellWhen = (cell: TokenHeatCell) => {
@@ -151,7 +156,7 @@ const TokenActivityHeatmap = forwardRef<TokenActivityHeatmapHandle, TokenActivit
         <RefreshButton onRefresh={load} title="Refresh token activity" />
       </div>
     </div>
-    {loading ? <p role="status">{t('Loading token usage...')}</p> : error ? <p role="alert">{t('Unable to load token activity.')}</p> : <>
+    {firstLoad ? <LoadingIndicator compact label={t('Loading token usage...')} /> : error ? <p role="alert">{t('Unable to load token activity.')}</p> : <>
       <div className="token-activity-stats"><span title={t('Sum of the chosen metric over the heatmap window.')}>{t('Total')}: <strong>{formatTokens(stats.total)}</strong></span><span title={t('Highest single-square count in the window. It sets the darkest color.')}>{peakLabel}: <strong>{formatTokens(stats.peak)}</strong></span><span title={t('Squares in the window with any token usage.')}>{activeLabel}: <strong>{stats.active}</strong></span></div>
       <div ref={scroll} className="vhist-heatmap-scroll token-activity-scroll">
         <div className="tok-heat-columns" style={gridStyle} aria-hidden="true">

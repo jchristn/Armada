@@ -16,6 +16,7 @@ import ErrorModal from '../components/shared/ErrorModal';
 import JsonViewer from '../components/shared/JsonViewer';
 import CopyButton from '../components/shared/CopyButton';
 import DataTable, { type DataTableColumn } from '../components/shared/DataTable';
+import LoadingValue from '../components/shared/LoadingValue';
 import { useAutoRefresh } from '../lib/useAutoRefresh';
 import PageHeader from '../components/shared/PageHeader';
 import StatusBadge from '../components/shared/StatusBadge';
@@ -36,6 +37,7 @@ export default function Skills() {
   const { pushToast } = useNotifications();
   const [skills, setSkills] = useState<Skill[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
@@ -120,12 +122,16 @@ export default function Skills() {
       setError(err instanceof Error ? err.message : t('Failed to load skills.'));
     } finally {
       setLoading(false);
+      setLoaded(true);
     }
   }
 
   useEffect(() => { load(); }, []);
 
   const { seconds: refreshSeconds, setSeconds: setRefreshSeconds } = useAutoRefresh('skills', load);
+
+  // The first load has no counts yet; a refresh keeps the previous ones visible.
+  const firstLoad = loading && !loaded;
 
   const categories = useMemo(() => {
     const set = new Set<string>();
@@ -274,19 +280,19 @@ export default function Skills() {
       <div className="playbook-overview-grid">
         <div className="card playbook-overview-card" title={t('All skills you can see, active and inactive.')}>
           <span>{t('Total Skills')}</span>
-          <strong>{skills.length}</strong>
+          <strong><LoadingValue loading={firstLoad}>{skills.length}</LoadingValue></strong>
         </div>
         <div className="card playbook-overview-card" title={t('Skills that are added to mission prompts when a project profile lists them.')}>
           <span>{t('Active')}</span>
-          <strong>{skills.filter((skill) => skill.active).length}</strong>
+          <strong><LoadingValue loading={firstLoad}>{skills.filter((skill) => skill.active).length}</LoadingValue></strong>
         </div>
         <div className="card playbook-overview-card" title={t('Skills that are skipped even when a project profile lists them.')}>
           <span>{t('Inactive')}</span>
-          <strong>{skills.filter((skill) => !skill.active).length}</strong>
+          <strong><LoadingValue loading={firstLoad}>{skills.filter((skill) => !skill.active).length}</LoadingValue></strong>
         </div>
         <div className="card playbook-overview-card" title={t('Number of distinct categories used by skills.')}>
           <span>{t('Categories')}</span>
-          <strong>{categories.length}</strong>
+          <strong><LoadingValue loading={firstLoad}>{categories.length}</LoadingValue></strong>
         </div>
       </div>
 
@@ -310,7 +316,8 @@ export default function Skills() {
         onRefresh={load}
         refreshTitle={t('Refresh skills')}
         emptyMessage={emptyState}
-        placeholder={skills.length > 0 ? undefined : loading ? <p className="text-dim">{t('Loading...')}</p> : emptyState}
+        loading={firstLoad}
+        placeholder={skills.length > 0 || firstLoad ? undefined : loading ? <p className="text-dim">{t('Loading...')}</p> : emptyState}
       />
     </div>
   );

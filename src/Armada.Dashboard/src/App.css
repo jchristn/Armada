@@ -5001,6 +5001,19 @@ table.table-dense td { padding-left: 0.45rem; padding-right: 0.45rem; }
     animation: spin 0.8s linear infinite;
 }
 .loading-indicator-label { font-size: 0.85rem; }
+.loading-indicator-compact { flex-direction: row; gap: 0.6rem; padding: 0.75rem 0.5rem; }
+.loading-indicator-compact .loading-indicator-spinner { width: 16px; height: 16px; border-width: 2px; }
+.data-table-loading td { padding: 0; }
+.loading-value { display: inline-flex; align-items: center; vertical-align: middle; min-height: 1em; }
+.loading-value-spinner {
+    display: inline-block;
+    width: 0.8em;
+    height: 0.8em;
+    border: 2px solid color-mix(in srgb, var(--accent) 22%, var(--border));
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
 
 /* Forms */
 .dispatch-form { max-width: 1000px; }

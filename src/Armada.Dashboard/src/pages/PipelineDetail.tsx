@@ -13,6 +13,7 @@ import JsonViewer from '../components/shared/JsonViewer';
 import ConfirmDialog from '../components/shared/ConfirmDialog';
 import CopyButton from '../components/shared/CopyButton';
 import DataTable from '../components/shared/DataTable';
+import LoadingIndicator from '../components/shared/LoadingIndicator';
 import ErrorModal from '../components/shared/ErrorModal';
 import { useLocale } from '../context/LocaleContext';
 import { useNotifications } from '../context/NotificationContext';
@@ -237,7 +238,7 @@ export default function PipelineDetail() {
     }
   }
 
-  if (loading) return <p className="text-dim">{t('Loading...')}</p>;
+  if (loading) return <LoadingIndicator fullHeight label={t('Loading...')} />;
   if (error && !pipeline) return <ErrorModal error={error} onClose={() => setError('')} />;
   if (!pipeline) return <p className="text-dim">{t('Pipeline not found.')}</p>;
 

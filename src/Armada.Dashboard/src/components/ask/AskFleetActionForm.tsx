@@ -3,6 +3,7 @@ import { enumerateFleetActions, listVessels } from '../../api/client';
 import { listAll } from '../../api/paging';
 import type { FleetAction, Vessel } from '../../types/models';
 import { useLocale } from '../../context/LocaleContext';
+import LoadingIndicator from '../shared/LoadingIndicator';
 import { buildFleetActionArguments, validateFleetAction, type FleetActionDraft } from '../../lib/askQuickActions';
 
 interface AskFleetActionFormProps {
@@ -117,6 +118,7 @@ export default function AskFleetActionForm({ busy, onSubmit, onCancel }: AskFlee
               </label>
             </li>
           ))}
+          {loading && <li><LoadingIndicator compact label={t('Loading...')} /></li>}
           {!loading && visible.length === 0 && <li className="text-dim">{t('No vessels match.')}</li>}
         </ul>
         {errors.vessels && <span className="ask-field-error">{t(errors.vessels)}</span>}

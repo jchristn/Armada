@@ -17,6 +17,8 @@ import ErrorModal from '../components/shared/ErrorModal';
 import JsonViewer from '../components/shared/JsonViewer';
 import CopyButton from '../components/shared/CopyButton';
 import DataTable, { type DataTableColumn } from '../components/shared/DataTable';
+import LoadingIndicator from '../components/shared/LoadingIndicator';
+import LoadingValue from '../components/shared/LoadingValue';
 import PageHeader from '../components/shared/PageHeader';
 import StatusBadge from '../components/shared/StatusBadge';
 import { useAutoRefresh } from '../lib/useAutoRefresh';
@@ -46,6 +48,7 @@ export default function ProjectProfiles() {
   const [fleets, setFleets] = useState<Fleet[]>([]);
   const [vessels, setVessels] = useState<Vessel[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
   const [scopeFilter, setScopeFilter] = useState<'all' | 'Global' | 'Fleet' | 'Vessel'>('all');
@@ -90,6 +93,7 @@ export default function ProjectProfiles() {
       setError(err instanceof Error ? err.message : t('Failed to load project profiles.'));
     } finally {
       setLoading(false);
+      setLoaded(true);
     }
   }
 
@@ -362,19 +366,19 @@ export default function ProjectProfiles() {
       <div className="playbook-overview-grid">
         <div className="card playbook-overview-card" title={t('All project profiles you can see, active and inactive.')}>
           <span>{t('Total Profiles')}</span>
-          <strong>{profiles.length}</strong>
+          <strong><LoadingValue loading={!loaded}>{profiles.length}</LoadingValue></strong>
         </div>
         <div className="card playbook-overview-card" title={t('Profiles Armada can choose for vessels.')}>
           <span>{t('Active')}</span>
-          <strong>{activeCount}</strong>
+          <strong><LoadingValue loading={!loaded}>{activeCount}</LoadingValue></strong>
         </div>
         <div className="card playbook-overview-card" title={t('Profiles marked default, which win over other profiles that match the same scope.')}>
           <span>{t('Defaults')}</span>
-          <strong>{defaultCount}</strong>
+          <strong><LoadingValue loading={!loaded}>{defaultCount}</LoadingValue></strong>
         </div>
         <div className="card playbook-overview-card" title={t('Total persona customizations across all project profiles.')}>
           <span>{t('Persona Overrides')}</span>
-          <strong>{overrideCount}</strong>
+          <strong><LoadingValue loading={!loaded}>{overrideCount}</LoadingValue></strong>
         </div>
       </div>
 
@@ -410,8 +414,9 @@ export default function ProjectProfiles() {
         autoRefresh={{ seconds: refreshSeconds, onChange: setRefreshSeconds }}
         onRefresh={load}
         refreshTitle={t('Refresh project profiles')}
+        loading={loading}
         emptyMessage={emptyState}
-        placeholder={profiles.length > 0 ? undefined : loading ? <p className="text-dim">{t('Loading...')}</p> : emptyState}
+        placeholder={profiles.length > 0 ? undefined : !loaded ? <LoadingIndicator compact label={t('Loading...')} /> : emptyState}
       />
     </div>
   );

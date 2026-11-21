@@ -67,6 +67,7 @@ export default function BlackBoxHotspotsTab({ vessels }: { vessels: Vessel[] }) 
       </div>
       {error ? <ErrorState message={error} onRetry={() => void load()} /> : (
         <DataTable
+          loading={loading}
           tableKey="blackbox-hotspots"
           columns={columns}
           rows={rows}

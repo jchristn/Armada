@@ -16,6 +16,7 @@ import ErrorModal from '../components/shared/ErrorModal';
 import JsonViewer from '../components/shared/JsonViewer';
 import CopyButton from '../components/shared/CopyButton';
 import DataTable, { type DataTableColumn } from '../components/shared/DataTable';
+import LoadingValue from '../components/shared/LoadingValue';
 import { useAutoRefresh } from '../lib/useAutoRefresh';
 import PageHeader from '../components/shared/PageHeader';
 import StatusBadge from '../components/shared/StatusBadge';
@@ -54,6 +55,8 @@ export default function WorkflowProfiles() {
   const [fleets, setFleets] = useState<Fleet[]>([]);
   const [vessels, setVessels] = useState<Vessel[]>([]);
   const [loading, setLoading] = useState(true);
+  // False until the first load finishes: the overview counts wait for it instead of reading 0.
+  const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
   const [scopeFilter, setScopeFilter] = useState<'all' | 'Global' | 'Fleet' | 'Vessel'>('all');
@@ -104,6 +107,7 @@ export default function WorkflowProfiles() {
       setError(err instanceof Error ? err.message : t('Failed to load workflow profiles.'));
     } finally {
       setLoading(false);
+      setLoaded(true);
     }
   }
 
@@ -443,19 +447,19 @@ export default function WorkflowProfiles() {
       <div className="playbook-overview-grid">
         <div className="card playbook-overview-card" title={t('All workflow profiles you can see, active and inactive.')}>
           <span>{t('Total Profiles')}</span>
-          <strong>{profiles.length}</strong>
+          <strong><LoadingValue loading={!loaded}>{profiles.length}</LoadingValue></strong>
         </div>
         <div className="card playbook-overview-card" title={t('Profiles Armada can choose for vessels and check runs.')}>
           <span>{t('Active')}</span>
-          <strong>{activeCount}</strong>
+          <strong><LoadingValue loading={!loaded}>{activeCount}</LoadingValue></strong>
         </div>
         <div className="card playbook-overview-card" title={t('Profiles marked default, which win over other profiles that match the same scope.')}>
           <span>{t('Defaults')}</span>
-          <strong>{defaultCount}</strong>
+          <strong><LoadingValue loading={!loaded}>{defaultCount}</LoadingValue></strong>
         </div>
         <div className="card playbook-overview-card" title={t('Total deployment environments defined across all profiles.')}>
           <span>{t('Environment Targets')}</span>
-          <strong>{profiles.reduce((total, profile) => total + profile.environments.length, 0)}</strong>
+          <strong><LoadingValue loading={!loaded}>{profiles.reduce((total, profile) => total + profile.environments.length, 0)}</LoadingValue></strong>
         </div>
       </div>
 
@@ -483,6 +487,7 @@ export default function WorkflowProfiles() {
       </div>
 
       <DataTable
+        loading={loading}
         tableKey="workflowprofiles"
         columns={columns}
         rows={filtered}

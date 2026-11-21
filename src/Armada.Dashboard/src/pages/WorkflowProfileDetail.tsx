@@ -19,6 +19,7 @@ import ConfirmDialog from '../components/shared/ConfirmDialog';
 import CopyButton from '../components/shared/CopyButton';
 import ErrorModal from '../components/shared/ErrorModal';
 import JsonViewer from '../components/shared/JsonViewer';
+import LoadingIndicator from '../components/shared/LoadingIndicator';
 import PageHeader from '../components/shared/PageHeader';
 import { ErrorState } from '../components/shared/StateBlocks';
 import StatusBadge from '../components/shared/StatusBadge';
@@ -334,7 +335,7 @@ export default function WorkflowProfileDetail() {
     )));
   }
 
-  if (loading) return <p className="text-dim">{t('Loading...')}</p>;
+  if (loading) return <LoadingIndicator fullHeight label={t('Loading...')} />;
 
   if (!createMode && loadFailure && loadFailure.id === id) {
     return (

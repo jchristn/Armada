@@ -10,6 +10,7 @@ import {
   type UsageSettingsFormState,
   type UsageSettingsNumericField,
 } from '../../lib/usageSettingsForm';
+import LoadingIndicator from '../shared/LoadingIndicator';
 
 interface UsageCaptureSettingsPanelProps {
   /** GlobalAdmin: may change the server-wide capture settings. */
@@ -86,7 +87,7 @@ export default function UsageCaptureSettingsPanel({ canEdit }: UsageCaptureSetti
   return (
     <div className="settings-section usage-settings" style={{ marginTop: '1.5rem' }}>
       <h3 title={t('Server-wide switch and limits for reading provider account limits. Per-captain capture is configured on each captain.')}>{t('Usage capture')}</h3>
-      {status === 'loading' && <p className="text-dim" role="status">{t('Loading usage capture settings...')}</p>}
+      {status === 'loading' && <LoadingIndicator compact label={t('Loading usage capture settings...')} />}
       {status === 'error' && (
         <div className="usage-state usage-state-error" role="alert">
           <strong>{t('Usage capture settings could not be loaded.')}</strong>

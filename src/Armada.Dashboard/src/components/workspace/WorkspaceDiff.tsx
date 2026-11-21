@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { getWorkspaceDiff } from '../../api/client';
 import { useLocale } from '../../context/LocaleContext';
 import { parseUnifiedDiff, type UnifiedDiffLineKind } from '../../lib/unifiedDiff';
+import LoadingValue from '../shared/LoadingValue';
 
 /** Color by the parser's line classification (an added line reading "+++ x" inside a hunk is still an addition). */
 function lineColor(kind: UnifiedDiffLineKind): string | undefined {
@@ -108,7 +109,7 @@ export default function WorkspaceDiff({ vesselId }: { vesselId: string }) {
           </span>
           <strong>{t('Review Diff')}</strong>
         </button>
-        <span className={`workspace-diff-summary${error ? ' is-error' : ''}`}>{summary}</span>
+        <span className={`workspace-diff-summary${error ? ' is-error' : ''}`}><LoadingValue loading={loading && !loaded && !error}>{summary}</LoadingValue></span>
         <button className="btn btn-sm" onClick={load} disabled={loading} title={loaded ? t('Reload the diff to include changes made since it was last loaded.') : t('Run git diff against HEAD in the vessel working directory and show the result here. Read-only.')}>
           {loading ? t('Loading...') : loaded ? t('Refresh') : t('Load diff')}
         </button>

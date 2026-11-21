@@ -34,6 +34,7 @@ import ConfirmDialog from '../components/shared/ConfirmDialog';
 import CopyButton from '../components/shared/CopyButton';
 import ErrorModal from '../components/shared/ErrorModal';
 import JsonViewer from '../components/shared/JsonViewer';
+import LoadingIndicator from '../components/shared/LoadingIndicator';
 import PageHeader from '../components/shared/PageHeader';
 import { ErrorState } from '../components/shared/StateBlocks';
 import StatusBadge from '../components/shared/StatusBadge';
@@ -81,6 +82,7 @@ export default function DeploymentDetail() {
   const [environments, setEnvironments] = useState<DeploymentEnvironment[]>([]);
   const [releases, setReleases] = useState<Release[]>([]);
   const [runbookExecutions, setRunbookExecutions] = useState<RunbookExecution[]>([]);
+  const [runbookExecutionsLoaded, setRunbookExecutionsLoaded] = useState(false);
   const [vesselId, setVesselId] = useState('');
   const [workflowProfileId, setWorkflowProfileId] = useState('');
   const [environmentId, setEnvironmentId] = useState('');
@@ -192,6 +194,8 @@ export default function DeploymentDetail() {
       if (!cancelled) setRunbookExecutions(result.objects || []);
     }).catch(() => {
       if (!cancelled) setRunbookExecutions([]);
+    }).finally(() => {
+      if (!cancelled) setRunbookExecutionsLoaded(true);
     });
 
     return () => { cancelled = true; };
@@ -700,7 +704,9 @@ export default function DeploymentDetail() {
 
               <div className="detail-divider" />
               <h4 title={t('Runbook executions started for this deployment.')}>{t('Runbook Executions')}</h4>
-              {runbookExecutions.length === 0 ? (
+              {!runbookExecutionsLoaded && runbookExecutions.length === 0 ? (
+                <LoadingIndicator compact label={t('Loading...')} />
+              ) : runbookExecutions.length === 0 ? (
                 <p className="text-dim">{t('No runbook executions are linked to this deployment yet.')}</p>
               ) : (
                 <div style={{ display: 'grid', gap: '0.75rem' }}>

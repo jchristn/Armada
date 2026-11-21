@@ -26,6 +26,7 @@ export default function BranchesModal({ vesselId, vesselName, open, onClose, ini
   const { t } = useLocale();
   const { pushToast } = useNotifications();
   const [loading, setLoading] = useState(false);
+  const [loaded, setLoaded] = useState(false);
   const [branches, setBranches] = useState<BranchInfo[]>([]);
   const [defaultBranch, setDefaultBranch] = useState<string>('main');
   const [error, setError] = useState<string>('');
@@ -47,6 +48,7 @@ export default function BranchesModal({ vesselId, vesselName, open, onClose, ini
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setLoading(false);
+      setLoaded(true);
     }
   }, [vesselId]);
 
@@ -107,7 +109,7 @@ export default function BranchesModal({ vesselId, vesselName, open, onClose, ini
 
         {error && <p className="text-dim" style={{ color: 'var(--red)' }}>{error}</p>}
 
-        {loading && branches.length === 0 ? (
+        {(loading || !loaded) && branches.length === 0 && !error ? (
           <LoadingIndicator label={t('Loading branches...')} />
         ) : (
           <>

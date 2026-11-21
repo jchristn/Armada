@@ -31,7 +31,7 @@ export default function Fleets() {
   const deletion = useDeleteProgress();
   const [fleets, setFleets] = useState<FleetWithCount[]>([]);
   const [vessels, setVessels] = useState<Vessel[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState('');
 
   // Modal state
@@ -65,7 +65,6 @@ export default function Fleets() {
 
   const load = useCallback(async () => {
     try {
-      setLoading(true);
       const [fResult, vResult, pResult] = await Promise.all([listAll(listFleets), listAll(listVessels), listAll(listPipelines)]);
       setPipelines(pResult.objects);
       const vesselsByFleet = new Map<string, Vessel[]>();
@@ -86,7 +85,7 @@ export default function Fleets() {
     } catch {
       setError(t('Failed to load fleets.'));
     } finally {
-      setLoading(false);
+      setLoaded(true);
     }
   }, [t]);
 
@@ -296,7 +295,8 @@ export default function Fleets() {
           rowLabel: () => t('Select this fleet'),
         }}
         emptyMessage={t('No fleets match the current filters.')}
-        placeholder={fleets.length > 0 ? undefined : <p className="text-dim">{loading ? t('Loading...') : t('No fleets configured.')}</p>}
+        loading={!loaded}
+        placeholder={fleets.length > 0 || !loaded ? undefined : <p className="text-dim">{t('No fleets configured.')}</p>}
       />
     </div>
   );

@@ -79,7 +79,7 @@ export default function Storage() {
     </>} />
     {error && <div role="alert" className="error-banner">{t('storage.error')} <button className="btn btn-sm" onClick={() => void load()}>{t('storage.reload')}</button></div>}
     {snapshot?.lastError && <p role="alert">{state(snapshot.lastError)}</p>}
-    {!snapshot ? <p role="status">{t('storage.loading')}</p> : <>
+    {!snapshot ? (!error && <p role="status">{t('storage.loading')}</p>) : <>
       <p className="text-dim">{t('storage.measured', { time: date(snapshot.measuredUtc), seconds: snapshot.intervalSeconds })}</p>
       {!snapshot.measuredUtc && <p role="status">{t('storage.pending')}</p>}
       <div className="storage-kpis">

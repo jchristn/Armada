@@ -9,6 +9,7 @@ import DataTable, { type DataTableColumn } from '../shared/DataTable';
 import RefreshButton from '../shared/RefreshButton';
 import CopyButton from '../shared/CopyButton';
 import JsonViewer from '../shared/JsonViewer';
+import LoadingIndicator from '../shared/LoadingIndicator';
 import SelectionRecoveryDialog from './SelectionRecoveryDialog';
 
 interface CaptainSelectionCardProps { missionId: string; status: string; revision?: string }
@@ -132,7 +133,7 @@ export default function CaptainSelectionCard({ missionId, status, revision }: Ca
       </summary><p className="text-dim">{summary.recovery.reason} · {formatDateTime(summary.recovery.createdUtc)}</p>
     </details>}
     {error && <p className="usage-form-error" role="alert">{t('usageSelection.historyLoadFailed')}</p>}
-    {!summary && !error && <p className="text-dim" role="status">{t('Loading...')}</p>}
+    {!summary && !error && <LoadingIndicator compact label={t('Loading...')} />}
     {summary && !latest && <p className="text-dim selection-empty">{t('usageSelection.noHistory')}</p>}
     {latest && <>
       {!summary?.currentAttempt && <p className="text-dim selection-summary">{t('usageSelection.latestRetained')}</p>}
@@ -151,7 +152,7 @@ export default function CaptainSelectionCard({ missionId, status, revision }: Ca
         {status === 'Pending' && <button type="button" className={`btn btn-sm ${view === 'preview' ? 'btn-primary' : ''}`} aria-pressed={view === 'preview'} onClick={() => openView('preview')}>{t('usageSelection.preview')}</button>}
       </div>
       {view === 'history' ? <DataTable tableKey="captain-selection-history" className="selection-history-table" columns={historyColumns} rows={history?.objects ?? []} rowKey={row => row.id}
-        busy={busy} ariaLabel={t('usageSelection.history')} emptyMessage={t('usageSelection.noMatchingHistory')}
+        busy={busy} loading={busy && !history} ariaLabel={t('usageSelection.history')} emptyMessage={t('usageSelection.noMatchingHistory')}
         pagination={{ pageNumber: historyPage, pageSize: historySize, totalPages: history?.totalPages ?? 0, totalRecords: history?.totalRecords ?? 0,
           onPageChange: setHistoryPage, onPageSizeChange: size => { setHistorySize(size); setHistoryPage(1); } }}
         toolbarExtra={<label className="selection-outcome-filter">{t('Status')}<select aria-label={t('usageSelection.historyFilter')} value={outcome} onChange={e => { setOutcome(e.target.value); setHistoryPage(1); }}>
@@ -164,7 +165,7 @@ export default function CaptainSelectionCard({ missionId, status, revision }: Ca
         {view === 'comparison' && recorded?.nextReconsiderUtc && <p className="text-dim">{t('usageSelection.reconsiderAt', { time: formatDateTime(recorded.nextReconsiderUtc) })}</p>}
         {view === 'preview' && preview && <p className="selection-summary">{t(selectionReasonKey(preview.reasonCode))} <span className="text-dim">{formatDateTime(preview.evaluatedUtc)}</span></p>}
         <DataTable tableKey={view === 'preview' ? 'captain-selection-preview' : 'captain-selection-comparison'} columns={candidateColumns} rows={comparison?.objects ?? []} rowKey={row => row.captainId}
-          className="selection-comparison-table" busy={busy} ariaLabel={t('usageSelection.comparison')} emptyMessage={t(summary?.historyAvailable || view === 'preview' ? 'usageSelection.noCandidates' : 'usageSelection.noHistory')}
+          className="selection-comparison-table" busy={busy} loading={busy && !comparison} ariaLabel={t('usageSelection.comparison')} emptyMessage={t(summary?.historyAvailable || view === 'preview' ? 'usageSelection.noCandidates' : 'usageSelection.noHistory')}
           pagination={{ pageNumber: candidatePage, pageSize: candidateSize, totalPages: comparison?.totalPages ?? 0, totalRecords: comparison?.totalRecords ?? 0,
             onPageChange: setCandidatePage, onPageSizeChange: size => { setCandidateSize(size); setCandidatePage(1); } }}
           autoRefresh={{ seconds: refreshSeconds, onChange: setRefreshSeconds }} onRefresh={load} refreshTitle="usageSelection.refresh" />

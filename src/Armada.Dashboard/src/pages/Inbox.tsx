@@ -8,6 +8,8 @@ import { useLocale } from '../context/LocaleContext';
 import { useNotifications } from '../context/NotificationContext';
 import { notificationRoute } from '../lib/routing';
 import ErrorModal from '../components/shared/ErrorModal';
+import LoadingIndicator from '../components/shared/LoadingIndicator';
+import LoadingValue from '../components/shared/LoadingValue';
 import RefreshButton from '../components/shared/RefreshButton';
 import PageHeader from '../components/shared/PageHeader';
 import AutoRefreshSelect from '../components/shared/AutoRefreshSelect';
@@ -35,7 +37,8 @@ export default function Inbox() {
   const { t, formatRelativeTime, formatDateTime } = useLocale();
   const { notifications, unreadCount, markRead, markAllRead, pushToast } = useNotifications();
   const [items, setItems] = useState<InboxItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  // The first load has finished; until then the counts are unknown (not 0). Refreshes keep the shown values.
+  const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState('');
 
   // A short preview of the newest unread alerts; the heading always says how many there are in total.
@@ -44,14 +47,13 @@ export default function Inbox() {
 
   async function load() {
     try {
-      setLoading(true);
       const result = await getInbox();
       setItems(result || []);
       setError('');
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : t('Failed to load inbox.'));
     } finally {
-      setLoading(false);
+      setLoaded(true);
     }
   }
 
@@ -229,15 +231,15 @@ export default function Inbox() {
       <div className="playbook-overview-grid">
         <div className="card playbook-overview-card">
           <span title={t('Everything waiting on a decision or intervention from you.')}>{t('Total')}</span>
-          <strong>{items.length}</strong>
+          <strong><LoadingValue loading={!loaded}>{items.length}</LoadingValue></strong>
         </div>
         <div className="card playbook-overview-card">
           <span title={t('Items blocking work now, such as a failed landing or merge, or an overdue review.')}>{t('Critical')}</span>
-          <strong style={{ color: severityColor('Critical') }}>{counts.critical}</strong>
+          <strong style={{ color: severityColor('Critical') }}><LoadingValue loading={!loaded}>{counts.critical}</LoadingValue></strong>
         </div>
         <div className="card playbook-overview-card">
           <span title={t('Items that need attention soon, such as a failed mission, a stalled captain or a review waiting for you.')}>{t('Warning')}</span>
-          <strong style={{ color: severityColor('Warning') }}>{counts.warning}</strong>
+          <strong style={{ color: severityColor('Warning') }}><LoadingValue loading={!loaded}>{counts.warning}</LoadingValue></strong>
         </div>
         <div className="card playbook-overview-card">
           <span title={t('Dashboard notifications you have not read yet. They are kept in this browser only.')}>{t('Unread alerts')}</span>
@@ -245,8 +247,8 @@ export default function Inbox() {
         </div>
       </div>
 
-      {loading && items.length === 0 ? (
-        <p className="text-dim">{t('Loading...')}</p>
+      {!loaded ? (
+        <LoadingIndicator compact label={t('Loading...')} />
       ) : items.length === 0 ? (
         <div className="playbook-empty-state">
           <strong>{t('You are all caught up.')}</strong>

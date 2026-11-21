@@ -12,6 +12,7 @@ import ErrorModal from '../components/shared/ErrorModal';
 import JsonViewer from '../components/shared/JsonViewer';
 import CopyButton from '../components/shared/CopyButton';
 import DataTable, { type DataTableColumn } from '../components/shared/DataTable';
+import LoadingValue from '../components/shared/LoadingValue';
 import PageHeader from '../components/shared/PageHeader';
 import { useAutoRefresh } from '../lib/useAutoRefresh';
 import { buildEnvironmentDuplicatePayload } from '../lib/duplicates';
@@ -27,7 +28,7 @@ export default function Environments() {
 
   const [environments, setEnvironments] = useState<DeploymentEnvironment[]>([]);
   const [vessels, setVessels] = useState<Vessel[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
   const [kindFilter, setKindFilter] = useState<'all' | EnvironmentKind>('all');
@@ -171,7 +172,6 @@ export default function Environments() {
 
   async function load() {
     try {
-      setLoading(true);
       const [environmentResult, vesselResult] = await Promise.all([
         listAll(listEnvironments),
         listAll(listVessels),
@@ -182,7 +182,7 @@ export default function Environments() {
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : t('Failed to load environments.'));
     } finally {
-      setLoading(false);
+      setLoaded(true);
     }
   }
 
@@ -403,19 +403,19 @@ export default function Environments() {
       <div className="playbook-overview-grid">
         <div className="card playbook-overview-card" title={t('All environment records you can see, before filters.')}>
           <span>{t('Total Environments')}</span>
-          <strong>{environments.length}</strong>
+          <strong><LoadingValue loading={!loaded}>{environments.length}</LoadingValue></strong>
         </div>
         <div className="card playbook-overview-card" title={t('Environments that are active and can be picked as a default target or monitored.')}>
           <span>{t('Active')}</span>
-          <strong>{activeCount}</strong>
+          <strong><LoadingValue loading={!loaded}>{activeCount}</LoadingValue></strong>
         </div>
         <div className="card playbook-overview-card" title={t('Environments marked as their vessel\'s default target. At most one per vessel.')}>
           <span>{t('Default Targets')}</span>
-          <strong>{defaultCount}</strong>
+          <strong><LoadingValue loading={!loaded}>{defaultCount}</LoadingValue></strong>
         </div>
         <div className="card playbook-overview-card" title={t('Environments where deployments wait for someone to approve them before running.')}>
           <span>{t('Require Approval')}</span>
-          <strong>{approvalCount}</strong>
+          <strong><LoadingValue loading={!loaded}>{approvalCount}</LoadingValue></strong>
         </div>
       </div>
 
@@ -457,7 +457,8 @@ export default function Environments() {
         autoRefresh={{ seconds: refreshSeconds, onChange: setRefreshSeconds }}
         onRefresh={load}
         refreshTitle={t('Refresh environments')}
-        placeholder={loading && environments.length === 0 ? <p className="text-dim">{t('Loading...')}</p> : filtered.length === 0 ? (
+        loading={!loaded}
+        placeholder={!loaded ? undefined : filtered.length === 0 ? (
           <div className="playbook-empty-state">
             <strong>{t('No environments match the current filters.')}</strong>
             <span>{canManage ? t('Create an environment to capture deployment metadata, URLs, and approval rules for a vessel.') : t('Ask a tenant administrator to create and manage environment records.')}</span>

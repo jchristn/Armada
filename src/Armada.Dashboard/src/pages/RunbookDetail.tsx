@@ -34,6 +34,7 @@ import { ErrorState } from '../components/shared/StateBlocks';
 import CopyButton from '../components/shared/CopyButton';
 import ErrorModal from '../components/shared/ErrorModal';
 import JsonViewer from '../components/shared/JsonViewer';
+import LoadingIndicator from '../components/shared/LoadingIndicator';
 import StatusBadge from '../components/shared/StatusBadge';
 import { canEdit as canEditScoped, type ScopeViewer } from '../lib/scoping';
 import { buildRunbookDuplicatePayload } from '../lib/duplicates';
@@ -436,7 +437,7 @@ export default function RunbookDetail() {
     });
   }
 
-  if (loading) return <p className="text-dim">{t('Loading...')}</p>;
+  if (loading) return <LoadingIndicator fullHeight label={t('Loading...')} />;
 
   if (!createMode && loadFailure && loadFailure.id === id) {
     return (

@@ -4,6 +4,7 @@ import StatusBadge from '../components/shared/StatusBadge';
 import ErrorModal from '../components/shared/ErrorModal';
 import PageHeader from '../components/shared/PageHeader';
 import DataTable from '../components/shared/DataTable';
+import LoadingIndicator from '../components/shared/LoadingIndicator';
 import { useLocale } from '../context/LocaleContext';
 
 interface DiagnosticCheck {
@@ -76,9 +77,7 @@ export default function Doctor() {
       <ErrorModal error={error} onClose={() => setError('')} />
 
       {running && (
-        <div style={{ textAlign: 'center', padding: '2rem' }}>
-          <span className="text-muted">{t('Running health checks...')}</span>
-        </div>
+        <LoadingIndicator label={t('Running health checks...')} />
       )}
 
       {!running && hasResults && (

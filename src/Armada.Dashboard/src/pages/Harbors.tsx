@@ -18,6 +18,8 @@ import ErrorModal from '../components/shared/ErrorModal';
 import JsonViewer from '../components/shared/JsonViewer';
 import CopyButton from '../components/shared/CopyButton';
 import DataTable, { type DataTableColumn } from '../components/shared/DataTable';
+import LoadingIndicator from '../components/shared/LoadingIndicator';
+import LoadingValue from '../components/shared/LoadingValue';
 import { useAutoRefresh } from '../lib/useAutoRefresh';
 import PageHeader from '../components/shared/PageHeader';
 import HarborMetricsPanel from '../components/harbors/HarborMetricsPanel';
@@ -50,6 +52,7 @@ export default function Harbors() {
   const [harbors, setHarbors] = useState<Harbor[]>([]);
   const [harborTotal, setHarborTotal] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -126,6 +129,7 @@ export default function Harbors() {
       setError(err instanceof Error ? err.message : t('Failed to load harbors.'));
     } finally {
       setLoading(false);
+      setLoaded(true);
     }
   }
 
@@ -314,19 +318,19 @@ export default function Harbors() {
       <div className="playbook-overview-grid">
         <div className="card playbook-overview-card" title={t('All registered Harbors, connected or not.')}>
           <span>{t('Total Harbors')}</span>
-          <strong>{Math.max(harborTotal, harbors.length)}</strong>
+          <strong><LoadingValue loading={!loaded}>{Math.max(harborTotal, harbors.length)}</LoadingValue></strong>
         </div>
         <div className="card playbook-overview-card" title={t('Harbors with an open link and recent heartbeats.')}>
           <span>{t('Connected')}</span>
-          <strong>{harbors.filter((h) => h.connectionStatus === 'Connected').length}</strong>
+          <strong><LoadingValue loading={!loaded}>{harbors.filter((h) => h.connectionStatus === 'Connected').length}</LoadingValue></strong>
         </div>
         <div className="card playbook-overview-card" title={t('Harbors with no open link right now.')}>
           <span>{t('Disconnected')}</span>
-          <strong>{harbors.filter((h) => h.connectionStatus === 'Disconnected').length}</strong>
+          <strong><LoadingValue loading={!loaded}>{harbors.filter((h) => h.connectionStatus === 'Disconnected').length}</LoadingValue></strong>
         </div>
         <div className="card playbook-overview-card" title={t('Harbors that can receive new missions.')}>
           <span>{t('Enabled')}</span>
-          <strong>{harbors.filter((h) => h.enabled).length}</strong>
+          <strong><LoadingValue loading={!loaded}>{harbors.filter((h) => h.enabled).length}</LoadingValue></strong>
         </div>
       </div>
 
@@ -353,8 +357,9 @@ export default function Harbors() {
         autoRefresh={{ seconds: refreshSeconds, onChange: setRefreshSeconds }}
         onRefresh={load}
         refreshTitle={t('Refresh harbors')}
+        loading={loading}
         emptyMessage={emptyState}
-        placeholder={harbors.length > 0 ? undefined : loading ? <p className="text-dim">{t('Loading...')}</p> : emptyState}
+        placeholder={harbors.length > 0 ? undefined : !loaded ? <LoadingIndicator compact label={t('Loading...')} /> : emptyState}
       />
 
       {chartHarbor && (

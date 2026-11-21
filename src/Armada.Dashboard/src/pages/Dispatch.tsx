@@ -34,6 +34,7 @@ export default function Dispatch() {
   const location = useLocation();
 
   const [vessels, setVessels] = useState<Vessel[]>([]);
+  const [listsLoading, setListsLoading] = useState(true);
   const [pipelines, setPipelines] = useState<Pipeline[]>([]);
   const [captains, setCaptains] = useState<Captain[]>([]);
   const [personas, setPersonas] = useState<Persona[]>([]);
@@ -64,7 +65,7 @@ export default function Dispatch() {
       if (pRes) setPipelines(pRes.objects);
       if (cRes) setCaptains(cRes.objects);
       if (prRes) setPersonas(prRes.objects);
-    });
+    }).finally(() => setListsLoading(false));
   }, []);
 
   // The distinct personas (steps) of the selected pipeline, in stage order, de-duplicated.
@@ -217,7 +218,7 @@ export default function Dispatch() {
                 onChange={(e) => setVesselId(e.target.value)}
                 required
               >
-                <option value="">{t('Select a vessel...')}</option>
+                <option value="">{listsLoading ? t('Loading...') : t('Select a vessel...')}</option>
                 {vessels.map((v) => (
                   <option key={v.id} value={v.id}>
                     {v.name}

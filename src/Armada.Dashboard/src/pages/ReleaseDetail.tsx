@@ -24,6 +24,8 @@ import CopyButton from '../components/shared/CopyButton';
 import DataTable from '../components/shared/DataTable';
 import ErrorModal from '../components/shared/ErrorModal';
 import JsonViewer from '../components/shared/JsonViewer';
+import LoadingIndicator from '../components/shared/LoadingIndicator';
+import LoadingValue from '../components/shared/LoadingValue';
 import PageHeader from '../components/shared/PageHeader';
 import { ErrorState } from '../components/shared/StateBlocks';
 import StatusBadge from '../components/shared/StatusBadge';
@@ -72,6 +74,8 @@ export default function ReleaseDetail() {
   const [checkRuns, setCheckRuns] = useState<CheckRun[]>([]);
   const [deployments, setDeployments] = useState<Deployment[]>([]);
   const [objectives, setObjectives] = useState<Objective[]>([]);
+  const [loadingDeployments, setLoadingDeployments] = useState(!createMode);
+  const [loadingObjectives, setLoadingObjectives] = useState(!createMode);
   const [gitHubPullRequests, setGitHubPullRequests] = useState<GitHubPullRequestDetail[]>([]);
   const [vesselId, setVesselId] = useState('');
   const [workflowProfileId, setWorkflowProfileId] = useState('');
@@ -187,16 +191,20 @@ export default function ReleaseDetail() {
   useEffect(() => {
     if (createMode || !id) {
       setDeployments([]);
+      setLoadingDeployments(false);
       return;
     }
 
     let cancelled = false;
+    setLoadingDeployments(true);
 
     // Ask the server for this release's deployments (every page) instead of filtering one capped page.
     void listAll(listDeployments, { releaseId: id }).then((result) => {
       if (!cancelled) setDeployments(result.objects || []);
     }).catch(() => {
       if (!cancelled) setError(t('Failed to load release reference data.'));
+    }).finally(() => {
+      if (!cancelled) setLoadingDeployments(false);
     });
 
     return () => { cancelled = true; };
@@ -205,15 +213,19 @@ export default function ReleaseDetail() {
   useEffect(() => {
     if (createMode || !id) {
       setObjectives([]);
+      setLoadingObjectives(false);
       return;
     }
 
     let cancelled = false;
+    setLoadingObjectives(true);
 
     void listAll(listObjectives, { releaseId: id }).then((result) => {
       if (!cancelled) setObjectives(result.objects || []);
     }).catch(() => {
       if (!cancelled) setError(t('Failed to load linked objectives.'));
+    }).finally(() => {
+      if (!cancelled) setLoadingObjectives(false);
     });
 
     return () => { cancelled = true; };
@@ -598,11 +610,13 @@ export default function ReleaseDetail() {
             <div className="detail-header" style={{ marginBottom: '0.75rem' }}>
               <h3 title={t('Backlog items that reference this release.')}>{t('Linked Backlog Items')}</h3>
               <div className="text-dim">
-                {relatedObjectives.length} {t('linked backlog items')}
+                <LoadingValue loading={loadingObjectives && relatedObjectives.length === 0}>{relatedObjectives.length}</LoadingValue> {t('linked backlog items')}
               </div>
             </div>
 
-            {relatedObjectives.length === 0 ? (
+            {loadingObjectives && relatedObjectives.length === 0 ? (
+              <LoadingIndicator compact label={t('Loading...')} />
+            ) : relatedObjectives.length === 0 ? (
               <p className="text-dim">{t('No backlog items currently reference this release.')}</p>
             ) : (
               <div style={{ display: 'grid', gap: '0.75rem' }}>
@@ -636,11 +650,13 @@ export default function ReleaseDetail() {
             <div className="detail-header" style={{ marginBottom: '0.75rem' }}>
               <h3 title={t('Deployments that ship this release, with their rollout and verification status, check count, and API request count.')}>{t('Deployment Evidence')}</h3>
               <div className="text-dim">
-                {relatedDeployments.length} {t('linked deployments')}
+                <LoadingValue loading={loadingDeployments && relatedDeployments.length === 0}>{relatedDeployments.length}</LoadingValue> {t('linked deployments')}
               </div>
             </div>
 
-            {relatedDeployments.length === 0 ? (
+            {loadingDeployments && relatedDeployments.length === 0 ? (
+              <LoadingIndicator compact label={t('Loading...')} />
+            ) : relatedDeployments.length === 0 ? (
               <p className="text-dim">{t('No deployments are linked to this release yet.')}</p>
             ) : (
               <div style={{ display: 'grid', gap: '0.75rem' }}>
@@ -717,12 +733,12 @@ export default function ReleaseDetail() {
               <div className="text-dim">
                 {gitHubPullRequests.length < gitHubPullRequestTotal
                   ? t('{{shown}} of {{total}} linked pull requests', { shown: gitHubPullRequests.length, total: gitHubPullRequestTotal })
-                  : `${gitHubPullRequestTotal} ${t('linked pull requests')}`}
+                  : <><LoadingValue loading={loadingGitHubPullRequests}>{gitHubPullRequestTotal}</LoadingValue> {t('linked pull requests')}</>}
               </div>
             </div>
 
             {loadingGitHubPullRequests ? (
-              <p className="text-dim">{t('Loading GitHub pull-request evidence...')}</p>
+              <LoadingIndicator compact label={t('Loading GitHub pull-request evidence...')} />
             ) : gitHubPullRequests.length === 0 ? (
               <p className="text-dim">{t('No linked GitHub pull requests were found for this release yet.')}</p>
             ) : (

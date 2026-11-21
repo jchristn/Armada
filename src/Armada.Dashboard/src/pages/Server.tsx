@@ -50,6 +50,7 @@ import {
 type RemoteSecretField = 'enrollmentToken' | 'password';
 import LogViewer from '../components/shared/LogViewer';
 import RefreshButton from '../components/shared/RefreshButton';
+import LoadingIndicator from '../components/shared/LoadingIndicator';
 import AutoRefreshSelect from '../components/shared/AutoRefreshSelect';
 import { baseAfterSave, mergeDraft } from '../lib/settingsDraft';
 import { useAutoRefresh } from '../lib/useAutoRefresh';
@@ -101,6 +102,7 @@ export default function Server() {
   const [buildRef, setBuildRef] = useState('');
   const [branches, setBranches] = useState<BranchInfo[]>([]);
   const [vessels, setVessels] = useState<Vessel[]>([]);
+  const [vesselsLoading, setVesselsLoading] = useState(true);
   const [rebuildLogOpen, setRebuildLogOpen] = useState(false);
   const [rebuild, setRebuild] = useState<RebuildStatus | null>(null);
   const rebuildPollRef = useRef<number | null>(null);
@@ -138,7 +140,8 @@ export default function Server() {
     let cancelled = false;
     listAll(listVessels)
       .then((r) => { if (!cancelled) setVessels(r.objects || []); })
-      .catch(() => { if (!cancelled) setVessels([]); });
+      .catch(() => { if (!cancelled) setVessels([]); })
+      .finally(() => { if (!cancelled) setVesselsLoading(false); });
     return () => { cancelled = true; };
   }, []);
 
@@ -564,7 +567,7 @@ export default function Server() {
     return (
       <div>
         <h2>{t('Server Settings')}</h2>
-        <p className="text-muted">{t('Loading...')}</p>
+        <LoadingIndicator fullHeight label={t('Loading...')} />
       </div>
     );
   }
@@ -604,7 +607,7 @@ export default function Server() {
         <div className="card" title={t('Health reported by the Admiral health endpoint. Anything other than Healthy means a core check failed; run Doctor for details.')}>
           <div className="card-label">{t('Health')}</div>
           <div className="card-value" style={{ fontSize: '1.2rem' }}>
-            {health ? translateHealthStatus(health.status) : t('Loading...')}
+            {health ? translateHealthStatus(health.status) : '-'}
           </div>
           {health && (
             <div className="card-detail text-muted">
@@ -732,7 +735,7 @@ export default function Server() {
                   onChange={(e) => setSettings({ ...settings, selfVesselId: e.target.value })}
                   title={t('The vessel whose repository holds Armada source code. Rebuild Armada builds from it. Choose none to turn off rebuilding.')}
                 >
-                  <option value="">{t('-- none --')}</option>
+                  <option value="">{vesselsLoading && settings.selfVesselId ? t('Loading...') : t('-- none --')}</option>
                   {vessels.map((v) => (
                     <option key={v.id} value={v.id}>{v.name} ({v.id})</option>
                   ))}

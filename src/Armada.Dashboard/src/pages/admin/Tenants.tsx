@@ -3,6 +3,7 @@ import { listTenants, createTenant, updateTenant, deleteTenant, apiErrorMessage 
 import { listAll } from '../../api/paging';
 import type { TenantMetadata, TenantCreateRequest } from '../../types/models';
 import DataTable, { type DataTableColumn } from '../../components/shared/DataTable';
+import LoadingIndicator from '../../components/shared/LoadingIndicator';
 import ActionMenu from '../../components/shared/ActionMenu';
 import ConfirmDialog from '../../components/shared/ConfirmDialog';
 import JsonViewer from '../../components/shared/JsonViewer';
@@ -37,6 +38,7 @@ export default function Tenants() {
   const proxyContext = useProxySessionContext();
   const [items, setItems] = useState<TenantMetadata[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<TenantMetadata | null>(null);
@@ -64,7 +66,7 @@ export default function Tenants() {
       }
       setError('');
     } catch { setError(t('Failed to load tenants.')); }
-    finally { setLoading(false); }
+    finally { setLoading(false); setLoaded(true); }
   }, [isAdmin, t, user?.tenant]);
 
   useEffect(() => { load(); }, [load]);
@@ -319,9 +321,10 @@ export default function Tenants() {
           selectAllLabel: t('Select all tenants'),
           rowLabel: () => t('Select this tenant'),
         }}
+        loading={loading}
         emptyMessage={t('No tenants match filters.')}
-        placeholder={items.length > 0 ? undefined : loading
-          ? <p className="text-dim">{t('Loading...')}</p>
+        placeholder={items.length > 0 ? undefined : !loaded
+          ? <LoadingIndicator compact label={t('Loading...')} />
           : <p className="text-dim">{t('No tenants found.')}</p>}
       />
     </div>

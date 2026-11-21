@@ -5,6 +5,7 @@ import { useLocale } from '../../context/LocaleContext';
 import { useUsageRevision } from '../../context/WebSocketContext';
 import { accountAlias } from '../../lib/usage';
 import type { UsageSeries, UsageSnapshotView } from '../../types/models';
+import LoadingValue from '../shared/LoadingValue';
 
 interface UsageSparklineProps {
   view: UsageSnapshotView;
@@ -79,6 +80,7 @@ export default function UsageSparkline({ view, historyPath }: UsageSparklineProp
           <polyline key={`${s}-${k}`} className="usage-sparkline-line" points={points} fill="none" />
         )))}
       </svg>
+      {state.status === 'loading' && <LoadingValue loading />}
       {state.status === 'ready' && !hasData && <span className="usage-sparkline-empty text-dim">{t('No history yet')}</span>}
     </Link>
   );

@@ -27,6 +27,7 @@ import RefreshButton from '../components/shared/RefreshButton';
 import ConfirmDialog from '../components/shared/ConfirmDialog';
 import DataTable, { type DataTableColumn } from '../components/shared/DataTable';
 import ErrorModal from '../components/shared/ErrorModal';
+import LoadingIndicator from '../components/shared/LoadingIndicator';
 import CliPermissionCard from '../components/cliPermissions/CliPermissionCard';
 import { useLiveRefresh } from '../lib/useLiveRefresh';
 import { CLI_PERMISSION_EVENT_PREFIX, mergeCliRequest, requestStatusLabel } from '../lib/cliPermissions';
@@ -106,7 +107,7 @@ function RequestsPanel() {
         </div>
       )}
       {loading && requests.length === 0 ? (
-        <p className="text-dim">{t('Loading...')}</p>
+        <LoadingIndicator compact label={t('Loading...')} />
       ) : requests.length === 0 ? (
         <div className="playbook-empty-state">
           <strong>{status === 'Pending' ? t('No CLI tool requests are waiting.') : t('No CLI tool requests match this filter.')}</strong>
@@ -325,7 +326,8 @@ function RulesPanel() {
         rowKey={(rule) => rule.id}
         onRefresh={load}
         refreshTitle="Reload the rule list."
-        placeholder={rules.length > 0 ? undefined : loading ? <p className="text-dim">{t('Loading...')}</p> : <p className="text-dim">{t('No rules yet.')}</p>}
+        loading={loading}
+        placeholder={rules.length > 0 ? undefined : loading ? <LoadingIndicator compact label={t('Loading...')} /> : <p className="text-dim">{t('No rules yet.')}</p>}
       />
 
       {canEdit && (

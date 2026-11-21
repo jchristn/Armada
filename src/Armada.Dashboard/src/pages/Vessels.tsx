@@ -9,6 +9,7 @@ import BranchesModal from '../components/vessels/BranchesModal';
 import VesselCleanupModal from '../components/vessels/VesselCleanupModal';
 import type { Fleet, Vessel, Pipeline } from '../types/models';
 import DataTable, { type DataTableColumn } from '../components/shared/DataTable';
+import LoadingValue from '../components/shared/LoadingValue';
 import ActionMenu from '../components/shared/ActionMenu';
 import BuildContextModal from '../components/vessels/BuildContextModal';
 import StatusBadge from '../components/shared/StatusBadge';
@@ -213,7 +214,9 @@ export default function Vessels() {
 
   function syncCell(v: Vessel) {
     const gs = gitStatus[v.id];
-    if (!gs || (gs.ahead === null && gs.behind === null)) return <span className="text-dim">-</span>;
+    // Not read yet (the row's status request is still running): a dash would read as "no working directory".
+    if (!gs) return <LoadingValue loading />;
+    if (gs.ahead === null && gs.behind === null) return <span className="text-dim">-</span>;
     const ahead = gs.ahead ?? 0;
     const behind = gs.behind ?? 0;
     if (ahead === 0 && behind === 0) return <span className="git-sync-badge git-sync-even" title={t('The working directory has every commit on the remote default branch, and nothing unpushed.')}>{t('in sync')}</span>;
@@ -305,7 +308,7 @@ export default function Vessels() {
             className="btn btn-sm"
             title={t('Open branch management: see ahead/behind counts, push a branch, or merge one into another.')}
             onClick={() => setBranchesModal({ vesselId: v.id, vesselName: v.name })}>
-            {count === null || count === undefined ? t('Branches') : t('{{count}} branches', { count })}
+            <LoadingValue loading={count === undefined}>{count === null || count === undefined ? t('Branches') : t('{{count}} branches', { count })}</LoadingValue>
           </button>
         );
       },
@@ -411,6 +414,7 @@ export default function Vessels() {
       )}
 
       <DataTable
+        loading={loading}
         tableKey="vessels"
         columns={columns}
         rows={table.paginated}

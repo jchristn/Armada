@@ -11,6 +11,7 @@ import ActionMenu from '../components/shared/ActionMenu';
 import ConfirmDialog from '../components/shared/ConfirmDialog';
 import ErrorModal from '../components/shared/ErrorModal';
 import JsonViewer from '../components/shared/JsonViewer';
+import LoadingIndicator from '../components/shared/LoadingIndicator';
 import CopyButton from '../components/shared/CopyButton';
 import DataTable, { type DataTableColumn } from '../components/shared/DataTable';
 import PageHeader from '../components/shared/PageHeader';
@@ -30,6 +31,8 @@ export default function Releases() {
   const [vessels, setVessels] = useState<Vessel[]>([]);
   const [profiles, setProfiles] = useState<WorkflowProfile[]>([]);
   const [loading, setLoading] = useState(true);
+  // The first load has finished; until then there is no record count and no empty state to show.
+  const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | ReleaseStatus>('all');
@@ -160,6 +163,7 @@ export default function Releases() {
       setError(err instanceof Error ? err.message : t('Failed to load releases.'));
     } finally {
       setLoading(false);
+      setLoaded(true);
     }
   }
 
@@ -411,7 +415,8 @@ export default function Releases() {
         autoRefresh={{ seconds: refreshSeconds, onChange: setRefreshSeconds }}
         onRefresh={load}
         refreshTitle={t('Refresh releases')}
-        placeholder={loading && releases.length === 0 ? <p className="text-dim">{t('Loading...')}</p> : filtered.length === 0 ? (
+        loading={loading && !loaded}
+        placeholder={loading && !loaded ? <LoadingIndicator compact label={t('Loading...')} /> : filtered.length === 0 ? (
           <div className="playbook-empty-state">
             <strong>{t('No releases match the current filters.')}</strong>
             <span>{canManage ? t('Create a draft release from voyages, missions, or checks to begin tracking what is shipping.') : t('Ask a tenant administrator to create and manage release records.')}</span>

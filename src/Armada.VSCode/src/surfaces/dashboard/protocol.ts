@@ -47,7 +47,12 @@ export type HostMessage =
   | { type: 'event'; data: unknown }
   | { type: 'socket'; connected: boolean }
   | { type: 'navigate'; path: string; state?: unknown }
-  | { type: 'reload' };
+  | { type: 'reload' }
+  /**
+   * Drives a page for screenshots and tests: scroll to a position or an element, click the element with a text, or
+   * choose `value` in the first matching select that offers it.
+   */
+  | { type: 'automation'; action: 'scroll' | 'click' | 'select'; selector?: string; text?: string; y?: number; value?: string };
 
 /** Routes the host handles itself instead of the page (Ask Armada has its own view in VS Code). */
 export function hostHandledRoute(path: string): string | undefined {

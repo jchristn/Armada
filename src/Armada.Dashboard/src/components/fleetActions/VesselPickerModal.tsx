@@ -25,7 +25,8 @@ export default function VesselPickerModal({ open, onClose, onPicked, title }: Ve
   const { t } = useLocale();
   const [vessels, setVessels] = useState<Vessel[]>([]);
   const [fleets, setFleets] = useState<Fleet[]>([]);
-  const [loading, setLoading] = useState(false);
+  // True until the first load finishes, so the dialog never opens on "No vessels yet".
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
   const [fleetId, setFleetId] = useState('');

@@ -396,3 +396,16 @@ describe('Needs You model scorecard alerts', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('The action could not be applied:');
   });
 });
+
+describe('Needs You loading', () => {
+  it('shows loading spinners, not 0, on the count cards until the inbox arrives', async () => {
+    let resolve: (items: InboxItem[]) => void = () => {};
+    vi.mocked(getInbox).mockReturnValue(new Promise<InboxItem[]>((r) => { resolve = r; }));
+    const { container } = render(<MemoryRouter initialEntries={['/inbox']}><Inbox /></MemoryRouter>);
+    const cards = () => Array.from(container.querySelectorAll('.playbook-overview-card strong')).slice(0, 3);
+    expect(cards().every((card) => card.querySelector('[role="status"]'))).toBe(true);
+    expect(screen.queryByText('You are all caught up.')).not.toBeInTheDocument();
+    await act(async () => { resolve([item('failed', 'Failed: Append line', '/missions/msn_1', 'Critical')]); });
+    await waitFor(() => expect(cards().map((card) => card.textContent)).toEqual(['1', '1', '0']));
+  });
+});

@@ -237,6 +237,7 @@ export default function FleetActionsTable({ startRunOnMount, onRunFlowStarted }:
         onRefresh={load}
         refreshTitle="Refresh fleet actions"
         emptyMessage={t('No actions on this page.')}
+        loading={loading && !error}
         placeholder={placeholder}
       />
 

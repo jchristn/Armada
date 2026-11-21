@@ -120,7 +120,7 @@ export default function FleetDetail() {
     }
   }
 
-  if (loading) return <p className="text-dim">{t('Loading...')}</p>;
+  if (loading && !fleet) return <p className="text-dim">{t('Loading...')}</p>;
   if (error && !fleet) return <ErrorModal error={error} onClose={() => setError('')} />;
   if (!fleet) return <p className="text-dim">{t('Fleet not found.')}</p>;
 

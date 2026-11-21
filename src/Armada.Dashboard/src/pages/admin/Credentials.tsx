@@ -384,9 +384,8 @@ export default function Credentials() {
           rowLabel: () => t('Select this credential'),
         }}
         emptyMessage={t('No credentials match filters.')}
-        placeholder={items.length > 0 ? undefined : loading
-          ? <p className="text-dim">{t('Loading...')}</p>
-          : <p className="text-dim">{t('No credentials found.')}</p>}
+        loading={loading && items.length === 0}
+        placeholder={items.length > 0 || loading ? undefined : <p className="text-dim">{t('No credentials found.')}</p>}
       />
     </div>
   );

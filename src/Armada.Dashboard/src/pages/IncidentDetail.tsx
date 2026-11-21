@@ -31,6 +31,7 @@ import ConfirmDialog from '../components/shared/ConfirmDialog';
 import CopyButton from '../components/shared/CopyButton';
 import ErrorModal from '../components/shared/ErrorModal';
 import JsonViewer from '../components/shared/JsonViewer';
+import LoadingIndicator from '../components/shared/LoadingIndicator';
 import PageHeader from '../components/shared/PageHeader';
 import { ErrorState } from '../components/shared/StateBlocks';
 import StatusBadge from '../components/shared/StatusBadge';
@@ -83,6 +84,7 @@ export default function IncidentDetail() {
   const [deployments, setDeployments] = useState<Deployment[]>([]);
   const [releases, setReleases] = useState<Release[]>([]);
   const [executions, setExecutions] = useState<RunbookExecution[]>([]);
+  const [executionsLoading, setExecutionsLoading] = useState(!createMode);
   const [vesselId, setVesselId] = useState('');
   const [environmentId, setEnvironmentId] = useState('');
   const [environmentName, setEnvironmentName] = useState('');
@@ -207,14 +209,18 @@ export default function IncidentDetail() {
   useEffect(() => {
     if (createMode || !id) {
       setExecutions([]);
+      setExecutionsLoading(false);
       return;
     }
 
     let cancelled = false;
+    setExecutionsLoading(true);
     listAll(listRunbookExecutions, { incidentId: id }).then((result) => {
       if (!cancelled) setExecutions(result.objects || []);
     }).catch(() => {
       if (!cancelled) setExecutions([]);
+    }).finally(() => {
+      if (!cancelled) setExecutionsLoading(false);
     });
 
     return () => { cancelled = true; };
@@ -631,7 +637,9 @@ export default function IncidentDetail() {
 
               <div className="detail-divider" />
               <h4 title={t('Runbook executions started for this incident.')}>{t('Runbook Executions')}</h4>
-              {executions.length === 0 ? (
+              {executionsLoading && executions.length === 0 ? (
+                <LoadingIndicator compact label={t('Loading...')} />
+              ) : executions.length === 0 ? (
                 <p className="text-dim">{t('No runbook executions are linked to this incident yet.')}</p>
               ) : (
                 <div style={{ display: 'grid', gap: '0.75rem' }}>

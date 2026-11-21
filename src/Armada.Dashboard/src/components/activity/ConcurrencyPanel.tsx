@@ -3,6 +3,7 @@ import { getConcurrencyMetrics, listVessels } from '../../api/client';
 import { listAll } from '../../api/paging';
 import type { ConcurrencyMetrics, Vessel } from '../../types/models';
 import { useLocale } from '../../context/LocaleContext';
+import LoadingIndicator from '../shared/LoadingIndicator';
 import RefreshButton from '../shared/RefreshButton';
 import { bucketBars, CONCURRENCY_RANGES, niceMax, WAIT_GROUPS, type WaitBucketBar } from '../../lib/concurrencyCharts';
 import { formatWaitDuration, waitGateLabel } from '../../lib/missionWaits';
@@ -113,6 +114,8 @@ export default function ConcurrencyPanel() {
       </div>
 
       {error && <p className="text-dim" role="status">{t('Concurrency metrics unavailable: {{message}}', { message: error })}</p>}
+
+      {!metrics && !error && <LoadingIndicator compact label={t('Loading...')} />}
 
       {metrics && (
         <>

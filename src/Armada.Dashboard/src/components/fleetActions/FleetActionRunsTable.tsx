@@ -181,6 +181,7 @@ export default function FleetActionRunsTable() {
       {error && <ErrorState message={error} onRetry={() => void load()} />}
 
       <DataTable
+        loading={loading && !error}
         tableKey="fleet-action-runs"
         columns={columns}
         rows={rows}

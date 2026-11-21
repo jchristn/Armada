@@ -77,6 +77,7 @@ export default function BlackBoxRecoveryStatsTab({ vessels }: { vessels: Vessel[
       </div>
       {paged.error ? <ErrorState message={t('Recovery statistics could not be loaded: {{message}}', { message: paged.error })} onRetry={() => void paged.reload()} /> : (
         <DataTable
+          loading={paged.loading}
           tableKey="blackbox-recovery-stats"
           columns={columns}
           rows={paged.rows}

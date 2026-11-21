@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import { useLocale } from '../../context/LocaleContext';
 import { PAGE_SIZE_OPTIONS } from '../../lib/pageSizePrefs';
+import LoadingValue from './LoadingValue';
 
 interface PaginationProps {
   pageNumber: number;
@@ -12,6 +13,8 @@ interface PaginationProps {
   onPageSizeChange: (size: number) => void;
   /** Table tools (column chooser, auto-refresh, refresh) shown in the same row, before the pager. */
   tools?: ReactNode;
+  /** True while the first page loads: the record count and timing show a spinner instead of 0. */
+  loading?: boolean;
 }
 
 const PAGE_SIZES = PAGE_SIZE_OPTIONS;
@@ -29,6 +32,7 @@ export default function Pagination({
   onPageChange,
   onPageSizeChange,
   tools,
+  loading = false,
 }: PaginationProps) {
   const { t } = useLocale();
   const [pageInput, setPageInput] = useState(String(pageNumber));
@@ -57,11 +61,13 @@ export default function Pagination({
     <div className="pagination-bar">
       <div className="pagination-info">
         <span className="pagination-records" title={t('Total rows across all pages, after any filters.')}>
-          {t(totalRecords === 1 ? '{{count}} record' : '{{count}} records', {
-            count: totalRecords.toLocaleString(),
-          })}
+          <LoadingValue loading={loading}>
+            {t(totalRecords === 1 ? '{{count}} record' : '{{count}} records', {
+              count: totalRecords.toLocaleString(),
+            })}
+          </LoadingValue>
         </span>
-        {totalMs !== undefined && (
+        {totalMs !== undefined && !loading && (
           <span className="pagination-timing" title={t('Time the server took to answer this page of results, in milliseconds.')}>{totalMs}ms</span>
         )}
       </div>

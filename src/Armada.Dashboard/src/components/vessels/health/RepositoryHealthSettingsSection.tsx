@@ -6,6 +6,7 @@ import { useNotifications } from '../../../context/NotificationContext';
 import type { RepositoryHealthSettings, VesselHealthCriterion } from '../../../types/models';
 import { mergeRepositoryHealth, REPOSITORY_HEALTH_FIELDS, REPOSITORY_HEALTH_THRESHOLD_FIELDS, validateRange, type NumericFieldDef } from '../../../lib/settingsRanges';
 import { HEALTH_CRITERIA, criterionLabel, formatCount } from '../../../lib/health/healthText';
+import LoadingIndicator from '../../shared/LoadingIndicator';
 import { criterionHelp } from './criterionHelp';
 import './vesselHealth.css';
 
@@ -165,6 +166,7 @@ export default function RepositoryHealthSettingsSection({ locked = false }: { lo
         </div>
       )}
       {!isAdmin && <p className="text-dim">{t('Only administrators can change these settings.')}</p>}
+      {!settings && !loadError && <LoadingIndicator compact label={t('Loading...')} />}
       {settings && (
         <fieldset disabled={!editable} style={{ border: 'none', margin: 0, padding: 0 }}>
           <div className="settings-grid">

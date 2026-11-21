@@ -13,6 +13,7 @@ import { useLocale } from '../../context/LocaleContext';
 import { formatBytes } from '../../lib/format';
 import ConfirmDialog from '../shared/ConfirmDialog';
 import LoadingIndicator from '../shared/LoadingIndicator';
+import LoadingValue from '../shared/LoadingValue';
 
 interface VesselCleanupModalProps {
   vesselId: string;
@@ -243,12 +244,16 @@ export default function VesselCleanupModal({ vesselId, vesselName, open, onClose
               const rows = grouped[group.disposition];
               const page = pages[group.disposition];
               const total = page?.totalRecords ?? rows.length;
+              // After a cleanup the groups reload: until a group's page arrives its count and rows are not known yet.
+              const pending = !page && running;
               const selectable = group.disposition === 'Safe';
               return (
                 <section key={group.disposition} className="vessel-cleanup-group" data-disposition={group.disposition} aria-label={t(group.title)} style={{ marginBottom: '1rem' }}>
-                  <h4 style={{ margin: '0 0 0.25rem' }}>{t(group.title)} ({total})</h4>
+                  <h4 style={{ margin: '0 0 0.25rem' }}>{t(group.title)} (<LoadingValue loading={pending}>{total}</LoadingValue>)</h4>
                   <p className="text-dim" style={{ margin: '0 0 0.4rem', fontSize: '0.85rem' }}>{t(group.hint)}</p>
-                  {rows.length === 0 ? (
+                  {rows.length === 0 && pending ? (
+                    <LoadingIndicator compact label={t('Loading...')} />
+                  ) : rows.length === 0 ? (
                     <p className="text-dim" style={{ margin: 0 }}>{t('None.')}</p>
                   ) : (
                     <div className="table-wrap"><table className="table-dense">

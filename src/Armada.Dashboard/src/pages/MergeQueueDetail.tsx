@@ -7,6 +7,7 @@ import ActionMenu from '../components/shared/ActionMenu';
 import ConfirmDialog from '../components/shared/ConfirmDialog';
 import JsonViewer from '../components/shared/JsonViewer';
 import DiffViewer from '../components/shared/DiffViewer';
+import LoadingValue from '../components/shared/LoadingValue';
 import LogViewer from '../components/shared/LogViewer';
 import PageHeader from '../components/shared/PageHeader';
 import StatusBadge from '../components/shared/StatusBadge';
@@ -160,7 +161,7 @@ export default function MergeQueueDetail() {
     if (logModal.missionId) fetchLog(logModal.missionId, lines);
   }, [logModal.missionId, fetchLog]);
 
-  if (loading) return <p className="text-dim">{t('Loading...')}</p>;
+  if (loading && entry?.id !== id) return <p className="text-dim">{t('Loading...')}</p>;
   if (error && !entry) return <ErrorModal error={error} onClose={() => setError('')} />;
   if (!entry) return <p className="text-dim">{t('Merge entry not found.')}</p>;
 
@@ -226,11 +227,13 @@ export default function MergeQueueDetail() {
             <h3 title={t('What would happen if this branch landed now, based on the vessel\'s landing mode, branch protection and check rules. Nothing is merged by viewing it.')}>{t('Landing Preview')}</h3>
             <div className="readiness-panel-meta" title={t('Branch being merged, then the target branch it merges into.')}>{`${entry.branchName} -> ${entry.targetBranch}`}</div>
           </div>
-          <span className={`readiness-pill ${landingPreview?.isReadyToLand ? 'ready' : 'warning'}`} title={landingPreview?.isReadyToLand ? t('No blocking issues were found; the entry can land when the queue processes it.') : t('Something may block landing. See the issues listed in this card.')}>
-            {landingPreview?.isReadyToLand ? t('Ready To Land') : t('Needs Review')}
-          </span>
+          <LoadingValue loading={loadingLandingPreview && !landingPreview}>
+            <span className={`readiness-pill ${landingPreview?.isReadyToLand ? 'ready' : 'warning'}`} title={landingPreview?.isReadyToLand ? t('No blocking issues were found; the entry can land when the queue processes it.') : t('Something may block landing. See the issues listed in this card.')}>
+              {landingPreview?.isReadyToLand ? t('Ready To Land') : t('Needs Review')}
+            </span>
+          </LoadingValue>
         </div>
-        {loadingLandingPreview ? (
+        {loadingLandingPreview && !landingPreview ? (
           <div className="text-dim">{t('Calculating landing preview...')}</div>
         ) : !landingPreview ? (
           <div className="text-dim">{t('Landing preview is not available for this merge entry yet.')}</div>

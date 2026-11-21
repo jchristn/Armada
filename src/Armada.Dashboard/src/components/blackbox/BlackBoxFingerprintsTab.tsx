@@ -8,6 +8,7 @@ import { BLACKBOX_RESOLUTIONS } from '../../lib/blackbox';
 import DataTable, { type DataTableColumn } from '../shared/DataTable';
 import { EmptyState, ErrorState, LoadingState } from '../shared/StateBlocks';
 import { blackBoxHref } from '../../lib/navTargets';
+import LoadingValue from '../shared/LoadingValue';
 
 const SPARK_WIDTH = 96;
 const SPARK_HEIGHT = 22;
@@ -27,7 +28,7 @@ export function FingerprintSparkline({ fingerprint }: { fingerprint: string }) {
   }, [fingerprint]);
 
   if (failed) return <span className="text-dim">-</span>;
-  if (!trend) return <span className="text-dim">...</span>;
+  if (!trend) return <LoadingValue loading />;
   const versions = [...(trend.versions ?? [])].sort((a, b) => a.firstSeenUtc.localeCompare(b.firstSeenUtc));
   if (versions.length === 0) return <span className="text-dim">-</span>;
   const max = Math.max(1, ...versions.map((v) => v.count));
@@ -107,6 +108,7 @@ export default function BlackBoxFingerprintsTab({ vessels }: { vessels: Vessel[]
       </div>
       {error ? <ErrorState message={error} onRetry={() => void load()} /> : (
         <DataTable
+          loading={loading}
           tableKey="blackbox-fingerprints"
           columns={columns}
           rows={rows}

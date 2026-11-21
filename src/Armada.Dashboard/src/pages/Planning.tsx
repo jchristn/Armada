@@ -39,6 +39,7 @@ import { useLocale } from '../context/LocaleContext';
 import { useNotifications } from '../context/NotificationContext';
 import { useWebSocket } from '../context/WebSocketContext';
 import ConfirmDialog from '../components/shared/ConfirmDialog';
+import LoadingIndicator from '../components/shared/LoadingIndicator';
 import PlanningDispatchCard from '../components/planning/PlanningDispatchCard';
 import PlanningSessionListCard from '../components/planning/PlanningSessionListCard';
 import PlanningStartCard from '../components/planning/PlanningStartCard';
@@ -111,6 +112,7 @@ export default function Planning() {
   const [detail, setDetail] = useState<PlanningSessionView | null>(null);
   const [readiness, setReadiness] = useState<VesselReadinessResult | null>(null);
   const [loadingCatalog, setLoadingCatalog] = useState(true);
+  const [catalogLoaded, setCatalogLoaded] = useState(false);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [loadingReadiness, setLoadingReadiness] = useState(false);
   const [error, setError] = useState('');
@@ -175,6 +177,7 @@ export default function Planning() {
       setError(err instanceof Error ? err.message : t('Failed to load planning data.'));
     } finally {
       setLoadingCatalog(false);
+      setCatalogLoaded(true);
     }
   }, [t]);
 
@@ -900,7 +903,11 @@ export default function Planning() {
       )}
 
       <div className="planning-section-stack">
-        <PlanningSessionListCard
+        {!catalogLoaded ? (
+          <div className="card" style={{ padding: '1rem' }}>
+            <LoadingIndicator compact label={t('Loading...')} />
+          </div>
+        ) : <PlanningSessionListCard
           t={t}
           sessions={sessions}
           totalCount={Math.max(sessionsTotal, sessions.length)}
@@ -917,7 +924,7 @@ export default function Planning() {
           onDeleteSession={handleDeleteSessionById}
           onDeleteAll={() => setConfirmDeleteAllOpen(true)}
           deletingAll={deletingAll}
-        />
+        />}
 
         {!id ? (
           <div className="card" style={{ padding: '1.25rem' }}>

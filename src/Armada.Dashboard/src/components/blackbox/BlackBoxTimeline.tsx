@@ -73,6 +73,7 @@ export default function BlackBoxTimeline({ entryId }: { entryId: string }) {
           columns={columns}
           rows={paged.rows}
           rowKey={(r) => `${r.timestampUtc}|${r.source}|${r.kind}|${r.entityId ?? ''}|${r.message}`}
+          loading={paged.loading}
           placeholder={paged.loading && paged.rows.length === 0 ? <LoadingState /> : paged.rows.length === 0 ? <EmptyState title={t('No timeline items')}>{t('Nothing was recorded around this failure.')}</EmptyState> : undefined}
           pagination={{ pageNumber: paged.pageNumber, pageSize: paged.pageSize, totalPages: paged.totalPages, totalRecords: paged.totalRecords, onPageChange: paged.setPageNumber, onPageSizeChange: paged.setPageSize }}
           onRefresh={paged.reload}

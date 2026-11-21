@@ -361,6 +361,7 @@ export default function FleetActionRunDetail() {
 
       {targetsError && <ErrorState message={targetsError} onRetry={() => void refresh()} />}
       <DataTable
+        loading={targetsLoading && !targetsError}
         tableKey="fleet-action-run-targets"
         rows={targets}
         rowKey={(target) => target.id}

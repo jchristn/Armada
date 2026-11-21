@@ -33,6 +33,8 @@ import JsonViewer from '../components/shared/JsonViewer';
 import RecordDetailModal from '../components/shared/RecordDetailModal';
 import CopyButton from '../components/shared/CopyButton';
 import DataTable, { type DataTableColumn } from '../components/shared/DataTable';
+import LoadingIndicator from '../components/shared/LoadingIndicator';
+import LoadingValue from '../components/shared/LoadingValue';
 import StatusBadge from '../components/shared/StatusBadge';
 import { useAutoRefresh } from '../lib/useAutoRefresh';
 import { buildRunbookDuplicatePayload } from '../lib/duplicates';
@@ -57,6 +59,7 @@ export default function Runbooks() {
   const [profiles, setProfiles] = useState<WorkflowProfile[]>([]);
   const [environments, setEnvironments] = useState<DeploymentEnvironment[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
   const [activeFilter, setActiveFilter] = useState<'all' | 'active' | 'inactive'>('all');
@@ -168,6 +171,7 @@ export default function Runbooks() {
       setError(err instanceof Error ? err.message : t('Failed to load runbooks.'));
     } finally {
       setLoading(false);
+      setLoaded(true);
     }
   }
 
@@ -416,19 +420,19 @@ export default function Runbooks() {
       <div className="playbook-overview-grid">
         <div className="card playbook-overview-card" title={t('All runbooks you can see, before filters.')}>
           <span>{t('Total Runbooks')}</span>
-          <strong>{runbooks.length}</strong>
+          <strong><LoadingValue loading={!loaded}>{runbooks.length}</LoadingValue></strong>
         </div>
         <div className="card playbook-overview-card" title={t('Runbooks currently in use, not retired.')}>
           <span>{t('Active')}</span>
-          <strong>{runbooks.filter((runbook) => runbook.active).length}</strong>
+          <strong><LoadingValue loading={!loaded}>{runbooks.filter((runbook) => runbook.active).length}</LoadingValue></strong>
         </div>
         <div className="card playbook-overview-card" title={t('Times any runbook has been started.')}>
           <span>{t('Executions')}</span>
-          <strong>{executions.length}</strong>
+          <strong><LoadingValue loading={!loaded}>{executions.length}</LoadingValue></strong>
         </div>
         <div className="card playbook-overview-card" title={t('Runbook executions still in progress.')}>
           <span>{t('Running')}</span>
-          <strong>{executions.filter((execution) => execution.status === 'Running').length}</strong>
+          <strong><LoadingValue loading={!loaded}>{executions.filter((execution) => execution.status === 'Running').length}</LoadingValue></strong>
         </div>
       </div>
 
@@ -458,8 +462,9 @@ export default function Runbooks() {
         autoRefresh={{ seconds: refreshSeconds, onChange: setRefreshSeconds }}
         onRefresh={load}
         refreshTitle={t('Refresh runbooks')}
+        loading={loading}
         emptyMessage={emptyState}
-        placeholder={runbooks.length > 0 ? undefined : loading ? <p className="text-dim">{t('Loading...')}</p> : emptyState}
+        placeholder={runbooks.length > 0 ? undefined : !loaded ? <LoadingIndicator compact label={t('Loading...')} /> : emptyState}
       />
     </div>
   );

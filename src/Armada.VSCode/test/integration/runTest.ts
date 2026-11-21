@@ -6,7 +6,9 @@
  * TUI paths under it, point at ARMADA_VSCODE_TEST_DATA_DIR when set (the data directory of a throwaway Admiral, for
  * the connected smoke run with ARMADA_VSCODE_EXPECT_ADMIRAL=1), otherwise at an empty temporary directory (the
  * disconnected run). ARMADA_VSCODE_SCREENSHOT_DIR, when set, asks the
- * suite for light and dark screenshots of the Armada container (macOS only).
+ * suite for light and dark screenshots of the Armada container, and ARMADA_VSCODE_SHOTS_DIR runs the screenshot pass
+ * (suite/shots.ts) instead of the checks. Both capture only the VS Code test window, through the program named by
+ * ARMADA_VSCODE_WINDOW_SHOT (`<program> <pid> <file>`), never the whole screen; without it they are skipped.
  *
  * Skipped (exit code 0, with a message) when ARMADA_VSCODE_SKIP_INTEGRATION=1, when Linux has no display, or when VS
  * Code cannot be downloaded (offline or blocked). A test failure inside VS Code exits 1.
@@ -26,7 +28,9 @@ async function main(): Promise<void> {
   if (process.platform === 'linux' && !process.env.DISPLAY && !process.env.WAYLAND_DISPLAY) skip('no display (run under xvfb-run to enable)');
 
   const extensionDevelopmentPath = path.resolve(__dirname, '../../../');
-  const extensionTestsPath = path.resolve(__dirname, './suite/index');
+  // ARMADA_VSCODE_SHOTS_DIR runs the screenshot pass (suite/shots.ts) instead of the checks.
+  const shots = process.env.ARMADA_VSCODE_SHOTS_DIR ?? '';
+  const extensionTestsPath = path.resolve(__dirname, shots ? './suite/shots' : './suite/index');
 
   let vscodeExecutablePath: string;
   try {
@@ -37,6 +41,24 @@ async function main(): Promise<void> {
 
   // A short user data directory: the IPC socket path inside it must stay under the 103-character Unix limit.
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'avsc-'));
+  if (shots) {
+    // A large window and no distractions for screenshots.
+    fs.mkdirSync(path.join(userDataDir, 'User'), { recursive: true });
+    fs.writeFileSync(path.join(userDataDir, 'User', 'settings.json'), JSON.stringify({
+      'window.newWindowDimensions': 'maximized',
+      'workbench.startupEditor': 'none',
+      'workbench.tips.enabled': false,
+      'chat.commandCenter.enabled': false,
+      'workbench.secondarySideBar.defaultVisibility': 'hidden',
+      'telemetry.telemetryLevel': 'off',
+      'update.mode': 'none',
+      'chat.disableAIFeatures': true,
+      'window.commandCenter': false,
+      'workbench.layoutControl.enabled': false,
+      'armada.notifications.onCapture': false,
+      'armada.notifications.needsYou': false,
+    }, null, 2));
+  }
   const emptyDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'avsc-data-'));
   const dataDir = process.env.ARMADA_VSCODE_TEST_DATA_DIR || emptyDataDir;
   console.log(`[integration] ARMADA_DATA_DIR for the extension host: ${dataDir}`);
@@ -54,6 +76,9 @@ async function main(): Promise<void> {
         ARMADA_TUI_CREDENTIALS: path.join(dataDir, 'tui-credentials.json'),
         ARMADA_VSCODE_EXPECT_ADMIRAL: process.env.ARMADA_VSCODE_EXPECT_ADMIRAL ?? '',
         ARMADA_VSCODE_SCREENSHOT_DIR: process.env.ARMADA_VSCODE_SCREENSHOT_DIR ?? '',
+        ARMADA_VSCODE_SHOTS_DIR: shots,
+        // Captures only this VS Code window (`<program> <pid> <file>`); screenshots are skipped without it.
+        ARMADA_VSCODE_WINDOW_SHOT: process.env.ARMADA_VSCODE_WINDOW_SHOT ?? '',
       },
     });
   } catch (err) {

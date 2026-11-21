@@ -167,6 +167,32 @@ describe('RequestHistory', () => {
     expect(screen.getByText('100.0%')).toBeInTheDocument();
   });
 
+  it('shows loading indicators on the summary tiles until the first summary arrives, never 0', async () => {
+    let resolveSummary: (value: Awaited<ReturnType<typeof getRequestHistorySummary>>) => void = () => {};
+    const pending = new Promise<Awaited<ReturnType<typeof getRequestHistorySummary>>>((resolve) => { resolveSummary = resolve; });
+    const loaded = await vi.mocked(getRequestHistorySummary).getMockImplementation()?.({} as never);
+    vi.mocked(getRequestHistorySummary).mockReturnValueOnce(pending);
+
+    render(
+      <MemoryRouter initialEntries={['/requests']}>
+        <Routes>
+          <Route path="/requests" element={<RequestHistory />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    const tiles = document.querySelectorAll('.request-summary-card .card-value');
+    expect(tiles).toHaveLength(4);
+    tiles.forEach((tile) => {
+      expect(within(tile as HTMLElement).getByRole('status', { name: 'Loading...' })).toBeInTheDocument();
+      expect(tile.textContent).not.toContain('0');
+    });
+
+    await act(async () => { resolveSummary(loaded as Awaited<ReturnType<typeof getRequestHistorySummary>>); });
+    expect(await screen.findByText('100.0%')).toBeInTheDocument();
+    expect(document.querySelectorAll('.request-summary-card [role="status"]')).toHaveLength(0);
+  });
+
   it('renders collapsible request detail sections for headers and bodies', async () => {
     vi.mocked(getRequestHistoryEntry).mockResolvedValueOnce({
       entry: {

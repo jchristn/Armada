@@ -6,6 +6,7 @@ import PageHeader from '../components/shared/PageHeader';
 import StatusBadge from '../components/shared/StatusBadge';
 import { FullReport, ModelProbeResultsTable } from '../components/evaluations/ModelProbeRunDetails';
 import AutoRefreshSelect from '../components/shared/AutoRefreshSelect';
+import LoadingIndicator from '../components/shared/LoadingIndicator';
 import { useAutoRefresh } from '../lib/useAutoRefresh';
 import { useLocale } from '../context/LocaleContext';
 import { evaluationsListPath } from '../lib/evaluationLinks';
@@ -110,7 +111,7 @@ export default function EvaluationDetail({ pollMs }: EvaluationDetailProps) {
         ) : undefined}
       />
       {error && <p role="alert" className="text-danger">{error}</p>}
-      {loading && !run && <p className="text-dim">{t('Loading...')}</p>}
+      {loading && !run && !error && <LoadingIndicator compact label={t('Loading...')} />}
       {run && (
         <>
           <dl className="detail-kv evaluation-detail-fields">

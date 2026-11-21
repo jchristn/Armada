@@ -15,6 +15,7 @@ import ErrorModal from '../components/shared/ErrorModal';
 import JsonViewer from '../components/shared/JsonViewer';
 import CopyButton from '../components/shared/CopyButton';
 import DataTable, { type DataTableColumn } from '../components/shared/DataTable';
+import LoadingValue from '../components/shared/LoadingValue';
 import PageHeader from '../components/shared/PageHeader';
 import StatusBadge from '../components/shared/StatusBadge';
 import { useAutoRefresh } from '../lib/useAutoRefresh';
@@ -35,6 +36,7 @@ export default function Playbooks() {
   const { pushToast } = useNotifications();
   const [playbooks, setPlaybooks] = useState<Playbook[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
@@ -125,6 +127,7 @@ export default function Playbooks() {
       setError(err instanceof Error ? err.message : t('Failed to load playbooks.'));
     } finally {
       setLoading(false);
+      setLoaded(true);
     }
   }
 
@@ -153,6 +156,8 @@ export default function Playbooks() {
   const activeCount = playbooks.filter((playbook) => playbook.active).length;
   const inactiveCount = playbooks.length - activeCount;
   const totalChars = playbooks.reduce((total, playbook) => total + playbook.content.length, 0);
+  // The first load has no counts yet; a refresh keeps the previous ones visible.
+  const firstLoad = loading && !loaded;
 
   function handleDelete(playbook: Playbook) {
     setConfirm({
@@ -289,19 +294,19 @@ export default function Playbooks() {
       <div className="playbook-overview-grid">
         <div className="card playbook-overview-card" title={t('All playbooks you can see, active and inactive.')}>
           <span>{t('Total Playbooks')}</span>
-          <strong>{playbooks.length}</strong>
+          <strong><LoadingValue loading={firstLoad}>{playbooks.length}</LoadingValue></strong>
         </div>
         <div className="card playbook-overview-card" title={t('Playbooks that can be selected during dispatch.')}>
           <span>{t('Active')}</span>
-          <strong>{activeCount}</strong>
+          <strong><LoadingValue loading={firstLoad}>{activeCount}</LoadingValue></strong>
         </div>
         <div className="card playbook-overview-card" title={t('Playbooks hidden from dispatch selection. Turn one back on by editing it.')}>
           <span>{t('Inactive')}</span>
-          <strong>{inactiveCount}</strong>
+          <strong><LoadingValue loading={firstLoad}>{inactiveCount}</LoadingValue></strong>
         </div>
         <div className="card playbook-overview-card" title={t('Total characters of markdown across all playbooks.')}>
           <span>{t('Stored Markdown')}</span>
-          <strong>{totalChars.toLocaleString()} {t('chars')}</strong>
+          <strong><LoadingValue loading={firstLoad}>{totalChars.toLocaleString()} {t('chars')}</LoadingValue></strong>
         </div>
       </div>
 
@@ -332,7 +337,8 @@ export default function Playbooks() {
         onRefresh={load}
         refreshTitle={t('Refresh playbooks')}
         emptyMessage={emptyState}
-        placeholder={playbooks.length > 0 ? undefined : loading ? <p className="text-dim">{t('Loading...')}</p> : emptyState}
+        loading={firstLoad}
+        placeholder={playbooks.length > 0 || firstLoad ? undefined : loading ? <p className="text-dim">{t('Loading...')}</p> : emptyState}
       />
     </div>
   );

@@ -19,6 +19,7 @@ import RecordDetailModal from '../components/shared/RecordDetailModal';
 import CopyButton from '../components/shared/CopyButton';
 import PageHeader from '../components/shared/PageHeader';
 import ErrorModal from '../components/shared/ErrorModal';
+import LoadingIndicator from '../components/shared/LoadingIndicator';
 import { useAutoRefresh } from '../lib/useAutoRefresh';
 import { useLocale } from '../context/LocaleContext';
 import { useNotifications } from '../context/NotificationContext';
@@ -39,6 +40,8 @@ export default function Personas() {
   const { pushToast } = useNotifications();
   const [personas, setPersonas] = useState<Persona[]>([]);
   const [loading, setLoading] = useState(true);
+  // The first load has finished (an auto-refresh of an empty list must not flash the loading state).
+  const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState('');
 
   // Modal state
@@ -86,6 +89,7 @@ export default function Personas() {
       setError(t('Failed to load personas.'));
     } finally {
       setLoading(false);
+      setLoaded(true);
     }
   }, [t]);
 
@@ -250,6 +254,7 @@ export default function Personas() {
         onConfirm={confirm.onConfirm} onCancel={() => setConfirm(c => ({ ...c, open: false }))} />
 
       <DataTable
+        loading={loading && !loaded}
         tableKey="personas"
         columns={columns}
         rows={table.paginated}
@@ -261,7 +266,7 @@ export default function Personas() {
         onRefresh={load}
         refreshTitle={t('Refresh persona data')}
         emptyMessage={t('No personas match the current filters.')}
-        placeholder={personas.length > 0 ? undefined : <p className="text-dim">{loading ? t('Loading...') : t('No personas configured.')}</p>}
+        placeholder={personas.length > 0 ? undefined : loading && !loaded ? <LoadingIndicator compact label={t('Loading...')} /> : <p className="text-dim">{t('No personas configured.')}</p>}
       />
     </div>
   );

@@ -228,4 +228,28 @@ describe('CheckRuns', () => {
     fireEvent.click(screen.getByRole('button', { name: /Run Check/ }));
     expect(screen.getByRole('heading', { name: 'Run Check' })).toBeInTheDocument();
   });
+  it('shows spinners, not zero counts or an empty table, until the first load finishes', async () => {
+    let resolveRuns: (value: Awaited<ReturnType<typeof listCheckRuns>>) => void = () => undefined;
+    const pending = new Promise<Awaited<ReturnType<typeof listCheckRuns>>>((resolve) => { resolveRuns = resolve; });
+    const loaded = await vi.mocked(listCheckRuns)();
+    vi.mocked(listCheckRuns).mockReturnValue(pending);
+
+    render(
+      <MemoryRouter initialEntries={['/checks']}>
+        <Routes>
+          <Route path="/checks" element={<CheckRuns />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    const totalCard = screen.getByText('Total Runs').closest('.playbook-overview-card') as HTMLElement;
+    expect(totalCard.querySelector('[role="status"]')).not.toBeNull();
+    expect(totalCard).not.toHaveTextContent('0');
+    expect(screen.queryByText('No check runs match the current filters.')).not.toBeInTheDocument();
+
+    resolveRuns(loaded);
+    expect(await screen.findByText('Nightly Build')).toBeInTheDocument();
+    expect(totalCard).toHaveTextContent('1');
+    expect(totalCard.querySelector('[role="status"]')).toBeNull();
+  });
 });

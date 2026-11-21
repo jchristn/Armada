@@ -24,6 +24,7 @@ interface MuxRuntimeFieldsProps {
 export default function MuxRuntimeFields({ runtime, form, onChange, t, compact = false }: MuxRuntimeFieldsProps) {
   const [endpoints, setEndpoints] = useState<MuxEndpointInfo[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loaded, setLoaded] = useState(false);
   const [loadError, setLoadError] = useState('');
   const [harborId, setHarborId] = useState<string | null>(null);
   const [harborLabel, setHarborLabel] = useState<{ id: string; name: string } | null>(null);
@@ -51,6 +52,7 @@ export default function MuxRuntimeFields({ runtime, form, onChange, t, compact =
       setLoadError(error instanceof Error ? error.message : t('Mux endpoint discovery failed.'));
     } finally {
       setLoading(false);
+      setLoaded(true);
     }
   }, [configDirectory, runtime, t]);
 
@@ -76,13 +78,13 @@ export default function MuxRuntimeFields({ runtime, form, onChange, t, compact =
 
   const endpointHint = useMemo(() => {
     if (!isMuxRuntime(runtime)) return '';
-    if (loading) return t('Loading saved Mux endpoints...');
+    if (loading || !loaded) return t('Loading saved Mux endpoints...');
     if (loadError) return loadError;
     // Mux runs on the user's Harbor (where Mux captains run); say which machine answered.
     const source = harborId ? t('Read from the mux on Harbor {{harbor}}.', { harbor: harborName || harborId }) : t('Read from the mux on the Admiral host.');
     if (endpoints.length === 0) return t('No saved Mux endpoints were found for this config directory.') + ' ' + source;
     return t('{{count}} saved Mux endpoint(s) available.', { count: endpoints.length }) + ' ' + source;
-  }, [endpoints.length, harborId, harborName, loadError, loading, runtime, t]);
+  }, [endpoints.length, harborId, harborName, loadError, loaded, loading, runtime, t]);
 
   if (!isMuxRuntime(runtime)) return null;
 

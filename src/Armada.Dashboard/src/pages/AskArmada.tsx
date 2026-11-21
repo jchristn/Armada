@@ -34,6 +34,7 @@ import ErrorModal from '../components/shared/ErrorModal';
 import ConfirmDialog from '../components/shared/ConfirmDialog';
 import { useDeleteProgress } from '../lib/useDeleteProgress';
 import { ErrorState, LoadingState } from '../components/shared/StateBlocks';
+import LoadingValue from '../components/shared/LoadingValue';
 import ImportWizard from '../components/vessels/import/ImportWizard';
 import AskThreadList from '../components/ask/AskThreadList';
 import AskConversationHeader, { CAPTAIN_SELECT_ID } from '../components/ask/AskConversationHeader';
@@ -125,6 +126,7 @@ export default function AskArmada() {
 
   // Captains and quick actions.
   const [captains, setCaptains] = useState<Captain[]>([]);
+  const [captainsLoaded, setCaptainsLoaded] = useState(false);
   const [harbors, setHarbors] = useState<Harbor[]>([]);
   const [draftCaptainId, setDraftCaptainId] = useState(() => readStored(CAPTAIN_STORAGE_KEY));
   const [quickActions, setQuickActions] = useState<AskQuickAction[]>(DEFAULT_QUICK_ACTIONS);
@@ -210,7 +212,8 @@ export default function AskArmada() {
         setCaptains(list);
         setDraftCaptainId((current) => (current && list.some((c) => c.id === current) ? current : list[0]?.id ?? ''));
       })
-      .catch(() => setCaptains([]));
+      .catch(() => setCaptains([]))
+      .finally(() => setCaptainsLoaded(true));
     getAskQuickActions()
       .then((catalog) => setQuickActions(mergeQuickActions(catalog)))
       .catch(() => setQuickActions(DEFAULT_QUICK_ACTIONS));
@@ -811,7 +814,7 @@ export default function AskArmada() {
       <p className="ask-empty-sub">
         {activeCaptain
           ? t('Ask {{name}} anything about your fleet, or start work with a quick action.', { name: activeCaptain.name })
-          : t('Choose a captain to chat, or start work with a quick action.')}
+          : <LoadingValue loading={!captainsLoaded}>{t('Choose a captain to chat, or start work with a quick action.')}</LoadingValue>}
       </p>
       <div className="ask-empty-actions">
         {quickActions.map((action) => (

@@ -5,6 +5,7 @@ import { useLocale } from '../../context/LocaleContext';
 import { useUsageRevision } from '../../context/WebSocketContext';
 import { ACTIVITY_RANGE_OPTIONS, buildRequestHistorySummaryQuery, defaultRequestHistoryFilters, type ActivityRangeId } from '../../lib/requestHistory';
 import type { RequestHistorySummaryResult } from '../../types/models';
+import LoadingIndicator from '../shared/LoadingIndicator';
 import RequestHistoryChart from './RequestHistoryChart';
 import TokenActivityHeatmap from './TokenActivityHeatmap';
 
@@ -68,7 +69,7 @@ export default function OverviewActivityCharts() {
           </div>
           <div className="request-card-body">
             {loading && !summary
-              ? <div className="request-history-empty">{t('Loading summary...')}</div>
+              ? <div className="request-history-empty"><LoadingIndicator compact label={t('Loading summary...')} /></div>
               : <RequestHistoryChart summary={summary} rangeId={range} t={t} formatDateTime={formatDateTime} />}
           </div>
         </div>

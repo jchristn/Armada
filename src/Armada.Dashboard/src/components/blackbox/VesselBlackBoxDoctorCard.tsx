@@ -74,6 +74,7 @@ export default function VesselBlackBoxDoctorCard({ vesselId, onApplied }: { vess
           columns={columns}
           rows={paged.rows}
           rowKey={(r) => r.key}
+          loading={paged.loading}
           placeholder={paged.loading && paged.rows.length === 0 ? <LoadingState /> : paged.rows.length === 0 ? <EmptyState title={t('No recurring recommendations')}>{t('No configuration recommendation recurred on this vessel in the window.')}</EmptyState> : undefined}
           pagination={{ pageNumber: paged.pageNumber, pageSize: paged.pageSize, totalPages: paged.totalPages, totalRecords: paged.totalRecords, onPageChange: paged.setPageNumber, onPageSizeChange: paged.setPageSize }}
           onRefresh={paged.reload}

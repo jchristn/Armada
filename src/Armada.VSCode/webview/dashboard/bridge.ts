@@ -182,7 +182,7 @@ export function installBridge(connected: boolean): void {
       if (!message.connected) for (const socket of [...sockets]) socket.fail();
     }
     if (!hostListeners.size) {
-      if (message.type === 'navigate' || message.type === 'reload') undelivered.push(message);
+      if (message.type === 'navigate' || message.type === 'reload' || message.type === 'automation') undelivered.push(message);
       return;
     }
     for (const listener of hostListeners) listener(message);

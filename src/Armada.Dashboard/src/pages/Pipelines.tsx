@@ -342,6 +342,7 @@ export default function Pipelines() {
         onConfirm={confirm.onConfirm} onCancel={() => setConfirm(c => ({ ...c, open: false }))} />
 
       <DataTable
+        loading={loading}
         tableKey="pipelines"
         columns={columns}
         rows={table.paginated}

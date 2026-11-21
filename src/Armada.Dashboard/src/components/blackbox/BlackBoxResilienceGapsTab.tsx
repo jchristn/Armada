@@ -81,6 +81,7 @@ export default function BlackBoxResilienceGapsTab({ vessels }: { vessels: Vessel
       </div>
       {error ? <ErrorState message={error} onRetry={() => void load()} /> : (
         <DataTable
+          loading={loading}
           tableKey="blackbox-resilience-gaps"
           columns={columns}
           rows={rows}

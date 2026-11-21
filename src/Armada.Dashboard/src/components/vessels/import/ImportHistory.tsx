@@ -98,6 +98,7 @@ export default function ImportHistory({ onOpen }: ImportHistoryProps) {
       </div>
       {error && <ErrorState message={error} onRetry={() => void load()} />}
       <DataTable
+        loading={loading && !error}
         tableKey="vessel-import-history"
         columns={columns}
         rows={rows}

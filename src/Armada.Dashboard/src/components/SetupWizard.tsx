@@ -23,6 +23,7 @@ import type { Captain, DeploymentEnvironment, Fleet, Mission, Vessel, VesselRead
 import { useLocale } from '../context/LocaleContext';
 import MissionFailureDetails, { FAILED_MISSION_STATUSES } from './shared/MissionFailureDetails';
 import CopyButton from './shared/CopyButton';
+import LoadingValue from './shared/LoadingValue';
 import { PLANNING_PATH } from '../lib/navTargets';
 
 const STORAGE_KEY = 'armada_setup_completed';
@@ -193,6 +194,7 @@ export default function SetupWizard({ onClose, onHighlightChange }: SetupWizardP
   const [matchingProfiles, setMatchingProfiles] = useState<WorkflowProfile[]>([]);
   const [matchingEnvironments, setMatchingEnvironments] = useState<DeploymentEnvironment[]>([]);
   const [nextSetupLoading, setNextSetupLoading] = useState(false);
+  const [nextSetupLoaded, setNextSetupLoaded] = useState(false);
 
   const activeFleet = useMemo(
     () => fleets.find((fleet) => fleet.id === activeFleetId) ?? null,
@@ -230,6 +232,8 @@ export default function SetupWizard({ onClose, onHighlightChange }: SetupWizardP
 
   const workflowProfileCount = matchingProfiles.length;
   const environmentCount = matchingEnvironments.length;
+  // The final step's counts are unknown until their first load finishes (the load starts after the step renders).
+  const nextSetupPending = nextSetupLoading || (Boolean(activeVesselId) && !nextSetupLoaded);
   const handoffFleetId = activeFleetId || activeVessel?.fleetId || '';
   const handoffBacklogPath = useMemo(() => {
     const params = new URLSearchParams();
@@ -348,7 +352,10 @@ export default function SetupWizard({ onClose, onHighlightChange }: SetupWizardP
         setMatchingProfiles([]);
         setMatchingEnvironments([]);
       } finally {
-        if (mounted) setNextSetupLoading(false);
+        if (mounted) {
+          setNextSetupLoading(false);
+          setNextSetupLoaded(true);
+        }
       }
     }
 
@@ -1060,10 +1067,10 @@ export default function SetupWizard({ onClose, onHighlightChange }: SetupWizardP
       )}
 
       <div className="wizard-summary-grid" style={{ marginTop: '1rem' }}>
-        <SummaryItem label={t('Readiness')} hint={t('Setup checklist items this vessel satisfies, out of the total. Open Vessel Onboarding to see and fix the rest.')} value={nextSetupLoading ? t('Loading...') : readiness ? `${readiness.setupChecklistSatisfiedCount}/${readiness.setupChecklistTotalCount}` : '-'} />
-        <SummaryItem label={t('Blocking Issues')} hint={t('Readiness errors that would stop missions or checks on this vessel, such as a missing working directory or toolchain.')} value={nextSetupLoading ? t('Loading...') : readiness ? readiness.errorCount : '-'} />
-        <SummaryItem label={t('Workflow Profiles')} hint={t('Workflow profiles that apply to this vessel (global, its fleet\'s, or its own). They tell Armada how to build, test and deploy it.')} value={nextSetupLoading ? t('Loading...') : workflowProfileCount} />
-        <SummaryItem label={t('Environments')} hint={t('Deployment environments defined for this vessel, such as Development or Production.')} value={nextSetupLoading ? t('Loading...') : environmentCount} />
+        <SummaryItem label={t('Readiness')} hint={t('Setup checklist items this vessel satisfies, out of the total. Open Vessel Onboarding to see and fix the rest.')} value={<LoadingValue loading={nextSetupPending}>{readiness ? `${readiness.setupChecklistSatisfiedCount}/${readiness.setupChecklistTotalCount}` : '-'}</LoadingValue>} />
+        <SummaryItem label={t('Blocking Issues')} hint={t('Readiness errors that would stop missions or checks on this vessel, such as a missing working directory or toolchain.')} value={<LoadingValue loading={nextSetupPending}>{readiness ? readiness.errorCount : '-'}</LoadingValue>} />
+        <SummaryItem label={t('Workflow Profiles')} hint={t('Workflow profiles that apply to this vessel (global, its fleet\'s, or its own). They tell Armada how to build, test and deploy it.')} value={<LoadingValue loading={nextSetupPending}>{workflowProfileCount}</LoadingValue>} />
+        <SummaryItem label={t('Environments')} hint={t('Deployment environments defined for this vessel, such as Development or Production.')} value={<LoadingValue loading={nextSetupPending}>{environmentCount}</LoadingValue>} />
       </div>
 
       {nextChecklistItem && (
