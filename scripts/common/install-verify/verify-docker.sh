@@ -167,6 +167,8 @@ else
 fi
 
 export ARMADA_INITIAL_ADMIN_PASSWORD="$PASSWORD"
+# The stack also requires a Grafana admin password; the verification never signs in to Grafana.
+export ARMADA_GRAFANA_ADMIN_PASSWORD="${ARMADA_GRAFANA_ADMIN_PASSWORD:-$PASSWORD}"
 compose config --quiet || iv_die "compose configuration is invalid"
 
 if [ "$BUILD" -eq 1 ]; then
