@@ -42,3 +42,6 @@ docs/captain-usage-plan/mockups/*.png
 # Local-only configuration and private notes (never committed)
 *.local.json
 *.local.md
+
+# Agent worktrees
+.claude/worktrees/
