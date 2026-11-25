@@ -982,6 +982,7 @@ namespace Armada.Core.Services
             // released the captain. Both writes below are therefore compare-and-set: the captain's process handle is
             // recorded only while it still holds this mission, and the launch only while the mission is still Assigned.
             // A failure past this point must not roll back: the agent is running and its exit handler owns the outcome.
+            CrashPoints.Hit(CrashPointNames.LaunchBeforeProcessRecorded);
             try
             {
                 if (await _Database.Captains.TrySetProcessAsync(captain.Id, mission.Id, processId, CancellationToken.None).ConfigureAwait(false))

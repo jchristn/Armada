@@ -242,6 +242,7 @@ namespace Armada.Core.Services
                     RootCause = "Classified failure kind: " + kind
                 }, token).ConfigureAwait(false);
 
+                CrashPoints.Hit(CrashPointNames.RecoveryIncidentCreated);
                 incident.FailureKind = kind.ToString();
                 await UpdateIncidentAsync(auth, incident, token).ConfigureAwait(false);
                 linkedMissionIds.Add(mission.Id);
@@ -320,6 +321,7 @@ namespace Armada.Core.Services
             rescue.Status = MissionStatusEnum.Pending;
 
             rescue = await _Database.Missions.CreateAsync(rescue, token).ConfigureAwait(false);
+            CrashPoints.Hit(CrashPointNames.RecoveryRescueCreated);
             return rescue;
         }
 

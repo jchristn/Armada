@@ -302,6 +302,7 @@ namespace Armada.Core.Services
             voyage.LandingMode = landingMode;
             voyage.IsEvaluation = isEvaluation;
             voyage = await _Database.Voyages.CreateAsync(voyage, token).ConfigureAwait(false);
+            CrashPoints.Hit(CrashPointNames.VoyageCreated);
             voyage.SelectedPlaybooks = ClonePlaybookSelections(selectedPlaybooks);
             if (voyage.SelectedPlaybooks.Count > 0)
             {
@@ -336,6 +337,7 @@ namespace Armada.Core.Services
                 mission.Mode = md.Mode;
                 MissionDispatchAdvice? advice = await AdviseDispatchAsync(mission, vessel, token).ConfigureAwait(false);
                 mission = await _Database.Missions.CreateAsync(mission, token).ConfigureAwait(false);
+                CrashPoints.Hit(CrashPointNames.VoyageMissionCreated);
                 hierarchyRoots[descriptionIndex] = mission;
                 ApplyDispatchAdvice(mission, advice, voyageWarnings, voyageLint);
                 await PersistMissionPlaybooksAsync(mission, voyage.SelectedPlaybooks, token).ConfigureAwait(false);
@@ -343,6 +345,7 @@ namespace Armada.Core.Services
 
                 // Try to auto-assign
                 await _Missions.TryAssignAsync(mission, vessel, LaunchInBackground, token).ConfigureAwait(false);
+                CrashPoints.Hit(CrashPointNames.VoyageMissionAssigned);
             }
 
             // Update voyage status - only transition to InProgress if at least one mission was assigned
@@ -444,6 +447,7 @@ namespace Armada.Core.Services
             voyage.LandingMode = landingMode;
             voyage.IsEvaluation = isEvaluation;
             voyage = await _Database.Voyages.CreateAsync(voyage, token).ConfigureAwait(false);
+            CrashPoints.Hit(CrashPointNames.VoyageCreated);
             voyage.SelectedPlaybooks = ClonePlaybookSelections(selectedPlaybooks);
             if (voyage.SelectedPlaybooks.Count > 0)
             {
@@ -491,6 +495,7 @@ namespace Armada.Core.Services
                     // but won't be assigned until their dependency completes. The first stage is checked for overlaps.
                     MissionDispatchAdvice? advice = previousMissionId == null ? await AdviseDispatchAsync(mission, vessel, token).ConfigureAwait(false) : null;
                     mission = await _Database.Missions.CreateAsync(mission, token).ConfigureAwait(false);
+                    CrashPoints.Hit(CrashPointNames.VoyageMissionCreated);
                     if (previousMissionId == null) hierarchyRoots[descriptionIndex] = mission;
                     ApplyDispatchAdvice(mission, advice, voyageWarnings, voyageLint);
                     await PersistMissionPlaybooksAsync(mission, voyage.SelectedPlaybooks, token).ConfigureAwait(false);
@@ -503,6 +508,7 @@ namespace Armada.Core.Services
                     if (previousMissionId == null)
                     {
                         await _Missions.TryAssignAsync(mission, vessel, LaunchInBackground, token).ConfigureAwait(false);
+                        CrashPoints.Hit(CrashPointNames.VoyageMissionAssigned);
                     }
 
                     previousMissionId = mission.Id;

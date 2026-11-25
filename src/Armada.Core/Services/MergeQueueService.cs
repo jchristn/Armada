@@ -731,12 +731,14 @@ namespace Armada.Core.Services
                 return;
             }
 
+            CrashPoints.Hit(CrashPointNames.MergeQueuePushed);
             entry.Status = MergeStatusEnum.Landed;
             entry.CompletedUtc = DateTime.UtcNow;
             if (!await _Database.MergeEntries.TryUpdateIfUnchangedAsync(entry, entry.LastUpdateUtc, token).ConfigureAwait(false)) return;
             ArmadaMetrics.MergeEntriesProcessed.Add(1);
             _Logging.Info(_Header + "landed " + entry.Id + " branch " + entry.BranchName);
 
+            CrashPoints.Hit(CrashPointNames.MergeQueueEntryLanded);
             // Reconcile linked mission to Complete
             await ReconcileMissionStatusAsync(entry.MissionId, MissionStatusEnum.Complete,
                 "Landed via merge queue entry " + entry.Id, token, entry.TenantId).ConfigureAwait(false);

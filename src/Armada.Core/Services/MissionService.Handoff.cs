@@ -169,16 +169,19 @@ namespace Armada.Core.Services
                     nextMission.LastUpdateUtc = DateTime.UtcNow;
                     await _Database.Missions.UpdateAsync(nextMission, token).ConfigureAwait(false);
                     await RetitleDependentChainAsync(voyageMissions, nextMission, first.Title, first.Description, token).ConfigureAwait(false);
+                    CrashPoints.Hit(CrashPointNames.FanOutFirstSlice);
                     await ApplyArchitectWorkerEnvelopeAsync(completedMission, nextMission, first, voyageMissions, token).ConfigureAwait(false);
 
                     // Find what depends on this worker mission (Judge, Test Engineer stages)
                     // Create additional worker missions for remaining parsed items
                     for (int i = 1; i < parsed.Count; i++)
                         await CreateArchitectSliceAsync(completedMission, nextMission, voyageMissions, parsed, i, token).ConfigureAwait(false);
+                        CrashPoints.Hit(CrashPointNames.FanOutSliceCreated);
                 }
             }
 
                     await ApplyArchitectMissionDependenciesAsync(completedMission, parsed, token).ConfigureAwait(false);
+                    CrashPoints.Hit(CrashPointNames.FanOutBeforeComplete);
                     await MarkArchitectFanOutCompleteAsync(completedMission, token).ConfigureAwait(false);
                     return true; // Architect special handling complete, skip normal handoff
                 }
@@ -225,6 +228,7 @@ namespace Armada.Core.Services
                 nextMission.BranchName = completedMission.BranchName;
                 nextMission.LastUpdateUtc = DateTime.UtcNow;
                 await _Database.Missions.UpdateAsync(nextMission, token).ConfigureAwait(false);
+                CrashPoints.Hit(CrashPointNames.HandoffDependentUpdated);
 
                 _Logging.Debug(_Header + "pipeline handoff: prepared mission " + nextMission.Id +
                     " (" + nextMission.Persona + ") with context from " + completedMission.Id +
