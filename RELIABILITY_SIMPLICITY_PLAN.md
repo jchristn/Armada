@@ -451,7 +451,8 @@ routing; a renamed Architect slice breaks fan-out recovery. Everything a program
   parallel dispatch passes proving no over-admission. Evidence:
 - [ ] **RS-4.10** Launch intent. Persist `LaunchIntentUtc` and the job or process id as part of launch. On startup,
   find and stop any orphaned agent process for a dock (by job id, worktree path, or command line) before resuming in
-  that dock. Crash-point test between launch and PID record. Evidence:
+  that dock. Crash-point test between launch and PID record. Includes the `Services.CrashConsistency` case for
+  `CrashPointNames.LaunchBeforeProcessRecorded` (one live agent per mission after restart). Evidence:
 
 ## Phase 5: Failure classification, recovery, and escalation
 
