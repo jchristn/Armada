@@ -425,19 +425,14 @@ namespace Armada.Server.WebSocket
                     string voyDesc = voyageData.Description ?? "";
                     string voyVesselId = voyageData.VesselId ?? "";
 
-                    List<MissionDescription> missionDescs = voyageData.Missions ?? new List<MissionDescription>();
-                    CollectionLimits.RequireRequestItems(missionDescs, "Missions");
-
-                    Voyage createdVoyage;
-                    if (String.IsNullOrEmpty(voyVesselId) || missionDescs.Count == 0)
+                    Voyage createdVoyage = await _Admiral.CreateVoyageAsync(caller, new VoyageCreationRequest
                     {
-                        createdVoyage = new Voyage(voyTitle, voyDesc);
-                        createdVoyage = await _Database.Voyages.CreateAsync(createdVoyage).ConfigureAwait(false);
-                    }
-                    else
-                    {
-                        createdVoyage = await _Admiral.DispatchVoyageAsync(voyTitle, voyDesc, voyVesselId, missionDescs).ConfigureAwait(false);
-                    }
+                        Title = voyTitle,
+                        Description = voyDesc,
+                        VesselId = voyVesselId,
+                        Missions = voyageData.Missions ?? new List<MissionDescription>(),
+                        AllowBareVoyage = true
+                    }).ConfigureAwait(false);
                     return new { type = "command.result", action = "create_voyage", data = (object)createdVoyage };
 
                 case "cancel_voyage":

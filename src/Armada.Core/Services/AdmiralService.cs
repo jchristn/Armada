@@ -29,7 +29,11 @@ namespace Armada.Core.Services
         /// optional chaining after an overlapping mission), or null. Its findings are returned on the dispatched mission
         /// and voyage (OverlapWarnings, BriefLintWarnings); it never blocks a dispatch.
         /// </summary>
-        public IMissionDispatchAdvisor? DispatchAdvisor { get; set; } = null;
+        public IMissionDispatchAdvisor? DispatchAdvisor
+        {
+            get => _VoyageCreation.DispatchAdvisor;
+            set => _VoyageCreation.DispatchAdvisor = value;
+        }
 
         /// <inheritdoc />
         public Func<Captain, Mission, Dock, Task<int>>? OnLaunchAgent
@@ -68,7 +72,26 @@ namespace Armada.Core.Services
         /// background. Callers and the health check then never wait on per-repository git work. Off by default; the
         /// Admiral server turns it on.
         /// </summary>
-        public bool LaunchInBackground { get; set; }
+        public bool LaunchInBackground
+        {
+            get => _VoyageCreation.LaunchInBackground;
+            set => _VoyageCreation.LaunchInBackground = value;
+        }
+
+        /// <summary>
+        /// Objective service that voyage creation links objectives through (so its change callback fires), or null
+        /// for a private instance.
+        /// </summary>
+        public ObjectiveService? Objectives
+        {
+            get => _VoyageCreation.Objectives;
+            set => _VoyageCreation.Objectives = value;
+        }
+
+        /// <summary>
+        /// The voyage creation service (RS-4.1).
+        /// </summary>
+        public VoyageCreationService VoyageCreation => _VoyageCreation;
 
         /// <inheritdoc />
         public Func<Mission, Task<bool>>? OnReconcilePullRequest { get; set; }
@@ -189,6 +212,7 @@ namespace Armada.Core.Services
         private IVoyageService _Voyages;
         private IDockService _Docks;
         private IPlaybookService _Playbooks;
+        private VoyageCreationService _VoyageCreation;
         private IEscalationService? _Escalation;
         private readonly StageOutcomeService _StageOutcomes;
         private bool _RetryDispatchNeeded = false;
@@ -230,6 +254,7 @@ namespace Armada.Core.Services
             _Voyages = voyages ?? throw new ArgumentNullException(nameof(voyages));
             _Docks = docks ?? throw new ArgumentNullException(nameof(docks));
             _Playbooks = new PlaybookService(_Database, _Logging);
+            _VoyageCreation = new VoyageCreationService(_Logging, _Database, _Settings, _Missions, _Playbooks);
             _Escalation = escalation;
             // DockHosts is assigned after construction, so the provenance probe resolves the host on each probe.
             _StageOutcomes = new StageOutcomeService(_Database, _Logging, new StageProvenanceProbe(_Logging, ProvenanceCommandsFor), () => (_Missions as MissionService)?.DockHosts);
@@ -252,306 +277,9 @@ namespace Armada.Core.Services
         }
 
         /// <inheritdoc />
-        public async Task<Voyage> DispatchVoyageAsync(
-            string title,
-            string description,
-            string vesselId,
-            List<MissionDescription> missionDescriptions,
-            CancellationToken token = default)
+        public Task<Voyage> CreateVoyageAsync(AuthContext? caller, VoyageCreationRequest request, CancellationToken token = default)
         {
-            return await DispatchVoyageAsync(title, description, vesselId, missionDescriptions, (List<SelectedPlaybook>?)null, token).ConfigureAwait(false);
-        }
-
-        /// <inheritdoc />
-        public async Task<Voyage> DispatchVoyageAsync(
-            string title,
-            string description,
-            string vesselId,
-            List<MissionDescription> missionDescriptions,
-            List<SelectedPlaybook>? selectedPlaybooks,
-            CancellationToken token = default)
-        {
-            return await DispatchStandardVoyageAsync(title, description, vesselId, missionDescriptions, selectedPlaybooks, null, null, null, null, false, token).ConfigureAwait(false);
-        }
-
-        private async Task<Voyage> DispatchStandardVoyageAsync(
-            string title,
-            string description,
-            string vesselId,
-            List<MissionDescription> missionDescriptions,
-            List<SelectedPlaybook>? selectedPlaybooks,
-            PipelineStage? singleStagePolicy,
-            string? captainOverridesJson,
-            LandingModeEnum? landingMode,
-            RunApprovalOptions? approvalOptions,
-            bool isEvaluation,
-            CancellationToken token)
-        {
-            if (String.IsNullOrEmpty(title)) throw new ArgumentNullException(nameof(title));
-            if (String.IsNullOrEmpty(vesselId)) throw new ArgumentNullException(nameof(vesselId));
-            if (missionDescriptions == null || missionDescriptions.Count == 0)
-                throw new ArgumentException("At least one mission is required", nameof(missionDescriptions));
-            RequireDispatchLimits(missionDescriptions, selectedPlaybooks);
-            foreach (string captainId in missionDescriptions.Select(m => m.RequestedCaptainId)
-                .Concat(MissionService.DeserializeCaptainOverrides(captainOverridesJson).Select(o => o.CaptainId))
-                .Where(id => !String.IsNullOrEmpty(id)).Select(id => id!).Distinct())
-            {
-                Captain? requested = await _Database.Captains.ReadAsync(captainId, token).ConfigureAwait(false);
-                if (requested != null) CaptainEligibility.RequireActive(requested);
-            }
-
-            // Verify vessel exists
-            Vessel? vessel = await _Database.Vessels.ReadAsync(vesselId, token).ConfigureAwait(false);
-            if (vessel == null) throw new KeyNotFoundException("Vessel not found: " + vesselId);
-            // Resolve Key/ParentKey links before anything is written, so a bad tree creates nothing.
-            MissionHierarchyPlan hierarchy = MissionHierarchyPlan.Resolve(missionDescriptions, _Settings.Concurrency.MaxHierarchyDepth);
-            Dictionary<int, Mission> hierarchyRoots = new Dictionary<int, Mission>();
-            if (selectedPlaybooks != null && selectedPlaybooks.Count > 0 && !String.IsNullOrEmpty(vessel.TenantId))
-            {
-                await _Playbooks.ResolveSelectionsAsync(vessel.TenantId, selectedPlaybooks, token).ConfigureAwait(false);
-            }
-
-            // Create voyage. Persist the per-persona captain overrides up front so the inline mission
-            // assignment below resolves the preferred captain.
-            Voyage voyage = new Voyage(title, description);
-            voyage.TenantId = vessel.TenantId;
-            voyage.UserId = vessel.UserId;
-            voyage.Status = VoyageStatusEnum.Open;
-            voyage.CaptainOverridesJson = captainOverridesJson;
-            voyage.ApprovalOptions = approvalOptions?.Snapshot();
-            voyage.LandingMode = landingMode;
-            voyage.IsEvaluation = isEvaluation;
-            voyage = await _Database.Voyages.CreateAsync(voyage, token).ConfigureAwait(false);
-            CrashPoints.Hit(CrashPointNames.VoyageCreated);
-            voyage.SelectedPlaybooks = ClonePlaybookSelections(selectedPlaybooks);
-            if (voyage.SelectedPlaybooks.Count > 0)
-            {
-                await _Database.Playbooks.SetVoyageSelectionsAsync(voyage.Id, voyage.SelectedPlaybooks, token).ConfigureAwait(false);
-            }
-            _Logging.Info(_Header + "created voyage " + voyage.Id + ": " + title);
-
-            // Create missions
-            List<MissionOverlapWarning> voyageWarnings = new List<MissionOverlapWarning>();
-            List<BriefLintFinding> voyageLint = new List<BriefLintFinding>();
-            for (int descriptionIndex = 0; descriptionIndex < missionDescriptions.Count; descriptionIndex++)
-            {
-                MissionDescription md = missionDescriptions[descriptionIndex];
-                Mission mission = new Mission(md.Title, md.Description);
-                ApplyHierarchy(mission, md, hierarchy, hierarchyRoots, descriptionIndex);
-                mission.TenantId = vessel.TenantId;
-                mission.UserId = vessel.UserId;
-                mission.VoyageId = voyage.Id;
-                mission.VesselId = vesselId;
-                mission.IsEvaluation = voyage.IsEvaluation;
-                mission.Tier = md.Tier;
-                mission.RequestedCaptainId = md.RequestedCaptainId;
-                if (singleStagePolicy != null)
-                {
-                    mission.Persona = singleStagePolicy.PersonaName;
-                    mission.RequiresReview = singleStagePolicy.RequiresReview;
-                    mission.ReviewDenyAction = singleStagePolicy.ReviewDenyAction;
-                }
-
-                if (!String.IsNullOrWhiteSpace(md.Persona))
-                    mission.Persona = md.Persona!.Trim();
-                mission.Mode = md.Mode;
-                MissionDispatchAdvice? advice = await AdviseDispatchAsync(mission, vessel, token).ConfigureAwait(false);
-                mission = await _Database.Missions.CreateAsync(mission, token).ConfigureAwait(false);
-                CrashPoints.Hit(CrashPointNames.VoyageMissionCreated);
-                hierarchyRoots[descriptionIndex] = mission;
-                ApplyDispatchAdvice(mission, advice, voyageWarnings, voyageLint);
-                await PersistMissionPlaybooksAsync(mission, voyage.SelectedPlaybooks, token).ConfigureAwait(false);
-                _Logging.Info(_Header + "created mission " + mission.Id + ": " + md.Title);
-
-                // Try to auto-assign
-                await _Missions.TryAssignAsync(mission, vessel, LaunchInBackground, token).ConfigureAwait(false);
-                CrashPoints.Hit(CrashPointNames.VoyageMissionAssigned);
-            }
-
-            // Update voyage status - only transition to InProgress if at least one mission was assigned
-            List<Mission> voyageMissions = await _Database.Missions.EnumerateByVoyageAsync(voyage.Id, token).ConfigureAwait(false);
-            bool anyAssigned = voyageMissions.Any(m =>
-                m.Status == MissionStatusEnum.Assigned ||
-                m.Status == MissionStatusEnum.InProgress);
-
-            if (anyAssigned)
-            {
-                voyage.Status = VoyageStatusEnum.InProgress;
-            }
-
-            voyage.LastUpdateUtc = DateTime.UtcNow;
-            await _Database.Voyages.UpdateAsync(voyage, token).ConfigureAwait(false);
-            voyage.OverlapWarnings = voyageWarnings.Count > 0 ? voyageWarnings.Take(BlackBoxInsightLimits.MaxOverlapWarnings).ToList() : null;
-            voyage.BriefLintWarnings = voyageLint.Count > 0 ? voyageLint.Take(BlackBoxInsightLimits.MaxLintFindings).ToList() : null;
-
-            return voyage;
-        }
-
-        /// <inheritdoc />
-        public async Task<Voyage> DispatchVoyageAsync(
-            string title,
-            string description,
-            string vesselId,
-            List<MissionDescription> missionDescriptions,
-            string? pipelineId,
-            CancellationToken token = default)
-        {
-            return await DispatchVoyageAsync(title, description, vesselId, missionDescriptions, pipelineId, null, null, null, token).ConfigureAwait(false);
-        }
-
-        /// <inheritdoc />
-        public async Task<Voyage> DispatchVoyageAsync(
-            string title,
-            string description,
-            string vesselId,
-            List<MissionDescription> missionDescriptions,
-            string? pipelineId,
-            List<SelectedPlaybook>? selectedPlaybooks,
-            string? captainOverridesJson = null,
-            LandingModeEnum? landingMode = null,
-            CancellationToken token = default,
-            RunApprovalOptions? approvalOptions = null,
-            bool isEvaluation = false)
-        {
-            if (String.IsNullOrEmpty(title)) throw new ArgumentNullException(nameof(title));
-            if (String.IsNullOrEmpty(vesselId)) throw new ArgumentNullException(nameof(vesselId));
-            if (missionDescriptions == null || missionDescriptions.Count == 0)
-                throw new ArgumentException("At least one mission is required", nameof(missionDescriptions));
-            RequireDispatchLimits(missionDescriptions, selectedPlaybooks);
-            foreach (string captainId in missionDescriptions.Select(m => m.RequestedCaptainId)
-                .Concat(MissionService.DeserializeCaptainOverrides(captainOverridesJson).Select(o => o.CaptainId))
-                .Where(id => !String.IsNullOrEmpty(id)).Select(id => id!).Distinct())
-            {
-                Captain? requested = await _Database.Captains.ReadAsync(captainId, token).ConfigureAwait(false);
-                if (requested != null) CaptainEligibility.RequireActive(requested);
-            }
-
-            // Verify vessel exists
-            Vessel? vessel = await _Database.Vessels.ReadAsync(vesselId, token).ConfigureAwait(false);
-            if (vessel == null) throw new KeyNotFoundException("Vessel not found: " + vesselId);
-            // Resolve Key/ParentKey links before anything is written, so a bad tree creates nothing.
-            MissionHierarchyPlan hierarchy = MissionHierarchyPlan.Resolve(missionDescriptions, _Settings.Concurrency.MaxHierarchyDepth);
-            Dictionary<int, Mission> hierarchyRoots = new Dictionary<int, Mission>();
-            if (selectedPlaybooks != null && selectedPlaybooks.Count > 0 && !String.IsNullOrEmpty(vessel.TenantId))
-            {
-                await _Playbooks.ResolveSelectionsAsync(vessel.TenantId, selectedPlaybooks, token).ConfigureAwait(false);
-            }
-
-            // Resolve pipeline: explicit > vessel default > fleet default > WorkerOnly. When no pipeline is named and
-            // every mission carries its own persona (a Mission fleet action's Persona), the missions run as single
-            // stages with those personas instead of the vessel or fleet default pipeline.
-            bool personaDispatch = String.IsNullOrWhiteSpace(pipelineId)
-                && missionDescriptions.All(md => !String.IsNullOrWhiteSpace(md.Persona));
-            Pipeline? pipeline = personaDispatch ? null : await ResolvePipelineAsync(pipelineId, vessel, token).ConfigureAwait(false);
-
-            // If pipeline is single-stage Worker (or null), use the standard dispatch path
-            if (pipeline == null)
-            {
-                return await DispatchStandardVoyageAsync(title, description, vesselId, missionDescriptions, selectedPlaybooks, null, captainOverridesJson, landingMode, approvalOptions, isEvaluation, token).ConfigureAwait(false);
-            }
-
-            if (pipeline.Stages.Count == 1 && PersonaCatalog.Matches(pipeline.Stages[0].PersonaName, PersonaCatalog.Worker))
-            {
-                return await DispatchStandardVoyageAsync(title, description, vesselId, missionDescriptions, selectedPlaybooks, pipeline.Stages[0], captainOverridesJson, landingMode, approvalOptions, isEvaluation, token).ConfigureAwait(false);
-            }
-
-            // Multi-stage pipeline: create voyage, then for each mission create a chain of persona stages.
-            // Persist the per-persona captain overrides on the voyage BEFORE creating missions so the first
-            // stage's inline assignment (below) resolves the preferred captain.
-            Voyage voyage = new Voyage(title, description);
-            voyage.TenantId = vessel.TenantId;
-            voyage.UserId = vessel.UserId;
-            voyage.Status = VoyageStatusEnum.Open;
-            voyage.CaptainOverridesJson = captainOverridesJson;
-            voyage.ApprovalOptions = approvalOptions?.Snapshot();
-            voyage.LandingMode = landingMode;
-            voyage.IsEvaluation = isEvaluation;
-            voyage = await _Database.Voyages.CreateAsync(voyage, token).ConfigureAwait(false);
-            CrashPoints.Hit(CrashPointNames.VoyageCreated);
-            voyage.SelectedPlaybooks = ClonePlaybookSelections(selectedPlaybooks);
-            if (voyage.SelectedPlaybooks.Count > 0)
-            {
-                await _Database.Playbooks.SetVoyageSelectionsAsync(voyage.Id, voyage.SelectedPlaybooks, token).ConfigureAwait(false);
-            }
-            _Logging.Info(_Header + "created pipeline voyage " + voyage.Id + ": " + title + " (pipeline: " + pipeline.Name + ")");
-            List<MissionOverlapWarning> voyageWarnings = new List<MissionOverlapWarning>();
-            List<BriefLintFinding> voyageLint = new List<BriefLintFinding>();
-
-            for (int descriptionIndex = 0; descriptionIndex < missionDescriptions.Count; descriptionIndex++)
-            {
-                MissionDescription md = missionDescriptions[descriptionIndex];
-                string? previousMissionId = null;
-
-                // Use a short base title (first 60 chars of the mission title)
-                string baseTitle = md.Title.Length > 60 ? md.Title.Substring(0, 60).TrimEnd() + "..." : md.Title;
-
-                foreach (PipelineStage stage in pipeline.Stages.OrderBy(s => s.Order))
-                {
-                    string stagePersonaName = PersonaCatalog.NormalizeName(stage.PersonaName);
-                    if (String.IsNullOrEmpty(stagePersonaName)) stagePersonaName = stage.PersonaName;
-
-                    Mission mission = new Mission(
-                        "[" + stagePersonaName + "] " + baseTitle,
-                        md.Description);
-                    mission.TenantId = vessel.TenantId;
-                    mission.UserId = vessel.UserId;
-                    mission.VoyageId = voyage.Id;
-                    mission.VesselId = vesselId;
-                    mission.IsEvaluation = voyage.IsEvaluation;
-                    mission.Persona = stagePersonaName;
-                    mission.DependsOnMissionId = previousMissionId;
-                    // Every stage carries its logical mission's parent so the tree shows it (D14); only the root waits on it.
-                    ApplyHierarchy(mission, md, hierarchy, hierarchyRoots, descriptionIndex);
-                    mission.RequiresReview = stage.RequiresReview;
-                    mission.ReviewDenyAction = stage.ReviewDenyAction;
-                    mission.Mode = md.Mode;
-
-                    // A mission's tier floor applies to every stage; a requested captain applies to the first stage
-                    // only (later stages are routed by their persona).
-                    mission.Tier = md.Tier;
-                    if (previousMissionId == null) mission.RequestedCaptainId = md.RequestedCaptainId;
-
-                    // Only the first stage starts as Pending; dependent stages also start as Pending
-                    // but won't be assigned until their dependency completes. The first stage is checked for overlaps.
-                    MissionDispatchAdvice? advice = previousMissionId == null ? await AdviseDispatchAsync(mission, vessel, token).ConfigureAwait(false) : null;
-                    mission = await _Database.Missions.CreateAsync(mission, token).ConfigureAwait(false);
-                    CrashPoints.Hit(CrashPointNames.VoyageMissionCreated);
-                    if (previousMissionId == null) hierarchyRoots[descriptionIndex] = mission;
-                    ApplyDispatchAdvice(mission, advice, voyageWarnings, voyageLint);
-                    await PersistMissionPlaybooksAsync(mission, voyage.SelectedPlaybooks, token).ConfigureAwait(false);
-                    _Logging.Info(_Header + "created pipeline mission " + mission.Id + ": " + mission.Title +
-                        " (stage " + stage.Order + "/" + pipeline.Stages.Count + ", persona: " + stagePersonaName +
-                        (previousMissionId != null ? ", depends on: " + previousMissionId : "") + ")");
-
-                    // Try to auto-assign only if no dependency (first stage); a first stage chained after an
-                    // overlapping mission waits for it like any dependent mission.
-                    if (previousMissionId == null)
-                    {
-                        await _Missions.TryAssignAsync(mission, vessel, LaunchInBackground, token).ConfigureAwait(false);
-                        CrashPoints.Hit(CrashPointNames.VoyageMissionAssigned);
-                    }
-
-                    previousMissionId = mission.Id;
-                }
-            }
-
-            // Update voyage status
-            List<Mission> voyageMissions = await _Database.Missions.EnumerateByVoyageAsync(voyage.Id, token).ConfigureAwait(false);
-            bool anyAssigned = voyageMissions.Any(m =>
-                m.Status == MissionStatusEnum.Assigned ||
-                m.Status == MissionStatusEnum.InProgress);
-
-            if (anyAssigned)
-            {
-                voyage.Status = VoyageStatusEnum.InProgress;
-            }
-
-            voyage.LastUpdateUtc = DateTime.UtcNow;
-            await _Database.Voyages.UpdateAsync(voyage, token).ConfigureAwait(false);
-            voyage.OverlapWarnings = voyageWarnings.Count > 0 ? voyageWarnings.Take(BlackBoxInsightLimits.MaxOverlapWarnings).ToList() : null;
-            voyage.BriefLintWarnings = voyageLint.Count > 0 ? voyageLint.Take(BlackBoxInsightLimits.MaxLintFindings).ToList() : null;
-
-            return voyage;
+            return _VoyageCreation.CreateAsync(caller, request, token);
         }
 
         /// <inheritdoc />
@@ -576,9 +304,9 @@ namespace Armada.Core.Services
             Vessel? dispatchVessel = String.IsNullOrEmpty(mission.VesselId) ? null : await _Database.Vessels.ReadAsync(mission.VesselId, token).ConfigureAwait(false);
             mission.WorkerEnvelope = WorkerEnvelopeRules.ValidateMissionEnvelope(dispatchVessel?.WorkerEnvelope, mission.WorkerEnvelope);
             await new MissionHierarchyValidator(_Database, _Settings).NormalizeAsync(mission, false, null, token).ConfigureAwait(false);
-            MissionDispatchAdvice? advice = dispatchVessel != null ? await AdviseDispatchAsync(mission, dispatchVessel, token).ConfigureAwait(false) : null;
+            MissionDispatchAdvice? advice = dispatchVessel != null ? await _VoyageCreation.AdviseAsync(mission, dispatchVessel, token).ConfigureAwait(false) : null;
             mission = await _Database.Missions.CreateAsync(mission, token).ConfigureAwait(false);
-            await PersistMissionPlaybooksAsync(mission, mission.SelectedPlaybooks, token).ConfigureAwait(false);
+            await _VoyageCreation.PersistMissionPlaybooksAsync(mission, mission.SelectedPlaybooks, token).ConfigureAwait(false);
             _Logging.Info(_Header + "created mission " + mission.Id + ": " + mission.Title);
 
             if (!String.IsNullOrEmpty(mission.VesselId))
@@ -605,80 +333,8 @@ namespace Armada.Core.Services
                 }
             }
 
-            ApplyDispatchAdvice(mission, advice, null, null);
+            VoyageCreationService.ApplyAdvice(mission, advice, null, null);
             return mission;
-        }
-
-        private static void ApplyHierarchy(Mission mission, MissionDescription md, MissionHierarchyPlan hierarchy, Dictionary<int, Mission> roots, int index)
-        {
-            List<string> owned = (md.OwnedPaths ?? new List<string>()).Select(OwnedPathMatcher.Normalize).Where(p => p.Length > 0).Distinct(StringComparer.Ordinal).ToList();
-            if (owned.Count > 0) mission.OwnedPathsJson = System.Text.Json.JsonSerializer.Serialize(owned);
-            int parentIndex = hierarchy.ParentOf(index);
-            if (parentIndex < 0) return;
-            mission.ParentMissionId = roots[parentIndex].Id;
-            mission.Depth = hierarchy.DepthOf(index);
-            if (md.BranchStrategy.HasValue && md.BranchStrategy.Value != MissionBranchStrategyEnum.New) mission.BranchStrategy = md.BranchStrategy.Value;
-        }
-
-        private async Task<MissionDispatchAdvice?> AdviseDispatchAsync(Mission mission, Vessel vessel, CancellationToken token)
-        {
-            IMissionDispatchAdvisor? advisor = DispatchAdvisor;
-            if (advisor == null) return null;
-            try
-            {
-                return await advisor.AdviseAsync(mission, vessel, token).ConfigureAwait(false);
-            }
-            catch (Exception ex) when (!(ex is OperationCanceledException && token.IsCancellationRequested))
-            {
-                _Logging.Warn(_Header + "dispatch advisor failed for mission \"" + mission.Title + "\" on vessel " + vessel.Id + " (dispatch continues): " + ex.Message);
-                return null;
-            }
-        }
-
-        private static void ApplyDispatchAdvice(Mission mission, MissionDispatchAdvice? advice, List<MissionOverlapWarning>? voyageWarnings, List<BriefLintFinding>? voyageLint)
-        {
-            if (advice == null) return;
-            foreach (MissionOverlapWarning w in advice.OverlapWarnings) w.MissionId = mission.Id;
-            mission.OverlapWarnings = advice.OverlapWarnings.Count > 0 ? advice.OverlapWarnings.Take(BlackBoxInsightLimits.MaxOverlapWarnings).ToList() : null;
-            mission.BriefLintWarnings = advice.BriefLintWarnings.Count > 0 ? advice.BriefLintWarnings.Take(BlackBoxInsightLimits.MaxLintFindings).ToList() : null;
-            if (voyageWarnings != null) voyageWarnings.AddRange(advice.OverlapWarnings);
-            if (voyageLint != null) voyageLint.AddRange(advice.BriefLintWarnings);
-        }
-
-        private static void RequireDispatchLimits(List<MissionDescription> missionDescriptions, List<SelectedPlaybook>? selectedPlaybooks)
-        {
-            CollectionLimits.RequireRequestItems(missionDescriptions, "Missions");
-            CollectionLimits.RequireConfigItems(selectedPlaybooks, "SelectedPlaybooks");
-        }
-
-        private List<SelectedPlaybook> ClonePlaybookSelections(List<SelectedPlaybook>? selections)
-        {
-            if (selections == null || selections.Count == 0) return new List<SelectedPlaybook>();
-
-            return selections.Select(s => new SelectedPlaybook
-            {
-                PlaybookId = s.PlaybookId,
-                DeliveryMode = s.DeliveryMode
-            }).ToList();
-        }
-
-        private async Task PersistMissionPlaybooksAsync(Mission mission, List<SelectedPlaybook>? selections, CancellationToken token)
-        {
-            if (mission == null) throw new ArgumentNullException(nameof(mission));
-
-            mission.SelectedPlaybooks = ClonePlaybookSelections(selections);
-            if (mission.SelectedPlaybooks.Count == 0 || String.IsNullOrEmpty(mission.TenantId))
-            {
-                mission.PlaybookSnapshots = new List<MissionPlaybookSnapshot>();
-                return;
-            }
-
-            List<MissionPlaybookSnapshot> snapshots = await _Playbooks.CreateSnapshotsAsync(
-                mission.TenantId,
-                mission.SelectedPlaybooks,
-                token).ConfigureAwait(false);
-            mission.PlaybookSnapshots = snapshots;
-            await _Database.Playbooks.SetMissionSnapshotsAsync(mission.Id, snapshots, token).ConfigureAwait(false);
         }
 
         /// <inheritdoc />
@@ -1114,7 +770,7 @@ namespace Armada.Core.Services
         }
 
         /// <inheritdoc />
-        public async Task<DispatchValidationResult> ValidateDispatchAsync(
+        public Task<DispatchValidationResult> ValidateDispatchAsync(
             string? objectiveId,
             string? pipelineId,
             string? pipelineName,
@@ -1123,46 +779,7 @@ namespace Armada.Core.Services
             bool allowBareVoyage,
             CancellationToken token = default)
         {
-            // One dispatch request carries at most MaxRequestItems missions (REST, MCP, and every other caller).
-            CollectionLimits.RequireCount(missionCount, "Missions", CollectionLimits.MaxRequestItems);
-
-            // Objective link must exist when supplied.
-            if (!String.IsNullOrWhiteSpace(objectiveId))
-            {
-                Objective? objective = await _Database.Objectives.ReadAsync(objectiveId!, token).ConfigureAwait(false);
-                if (objective == null)
-                    return DispatchValidationResult.Invalid(DispatchValidationErrorEnum.ObjectiveNotFound, "Objective not found: " + objectiveId);
-            }
-
-            // Resolve a pipeline by explicit id (an id that is really a name is accepted too), else by name. A named
-            // pipeline that does not exist is an error; the vessel and fleet defaults apply only when none was named.
-            string? resolvedPipelineId = String.IsNullOrWhiteSpace(pipelineId) ? null : pipelineId!.Trim();
-            if (resolvedPipelineId != null)
-            {
-                Pipeline? explicitPipeline = await _Database.Pipelines.ReadAsync(resolvedPipelineId, token).ConfigureAwait(false)
-                    ?? await _Database.Pipelines.ReadByNameAsync(resolvedPipelineId, token).ConfigureAwait(false);
-                if (explicitPipeline == null)
-                    return DispatchValidationResult.Invalid(DispatchValidationErrorEnum.PipelineNotFound, "Pipeline not found: " + resolvedPipelineId);
-                resolvedPipelineId = explicitPipeline.Id;
-            }
-            else if (!String.IsNullOrWhiteSpace(pipelineName))
-            {
-                Pipeline? namedPipeline = await _Database.Pipelines.ReadByNameAsync(pipelineName!, token).ConfigureAwait(false);
-                if (namedPipeline == null)
-                    return DispatchValidationResult.Invalid(DispatchValidationErrorEnum.PipelineNotFound, "Pipeline not found: " + pipelineName);
-                resolvedPipelineId = namedPipeline.Id;
-            }
-
-            // A missing vessel or zero missions is a bare voyage when allowed, otherwise an error.
-            bool isBareVoyage = String.IsNullOrWhiteSpace(vesselId) || missionCount == 0;
-            if (isBareVoyage && !allowBareVoyage)
-            {
-                if (String.IsNullOrWhiteSpace(vesselId))
-                    return DispatchValidationResult.Invalid(DispatchValidationErrorEnum.MissingVessel, "A vessel id is required to dispatch a voyage.");
-                return DispatchValidationResult.Invalid(DispatchValidationErrorEnum.NoMissions, "At least one mission is required to dispatch a voyage.");
-            }
-
-            return DispatchValidationResult.Valid(resolvedPipelineId, isBareVoyage);
+            return _VoyageCreation.ValidateAsync(objectiveId, pipelineId, pipelineName, vesselId, missionCount, allowBareVoyage, token);
         }
 
         /// <summary>
@@ -1617,59 +1234,6 @@ namespace Armada.Core.Services
                 ? await _Database.Voyages.EnumerateAsync(tenantId!, query, token).ConfigureAwait(false)
                 : await _Database.Voyages.EnumerateAsync(query, token).ConfigureAwait(false);
             return (int)Math.Min(int.MaxValue, page.TotalRecords);
-        }
-
-        /// <summary>
-        /// Resolve which pipeline to use for a dispatch.
-        /// Resolution order: explicit pipelineId > vessel default > fleet default > null (WorkerOnly).
-        /// An explicit pipeline that does not resolve throws <see cref="PipelineNotFoundException"/> instead of
-        /// silently falling back to a default.
-        /// </summary>
-        private async Task<Pipeline?> ResolvePipelineAsync(string? pipelineId, Vessel vessel, CancellationToken token)
-        {
-            // Explicit pipeline ID takes priority
-            if (!String.IsNullOrWhiteSpace(pipelineId))
-            {
-                string reference = pipelineId!.Trim();
-                Pipeline? explicit_ = await _Database.Pipelines.ReadAsync(reference, token).ConfigureAwait(false);
-                if (explicit_ != null) return explicit_;
-
-                // Try by name if not found by ID
-                explicit_ = await _Database.Pipelines.ReadByNameAsync(reference, token).ConfigureAwait(false);
-                if (explicit_ != null) return explicit_;
-
-                throw new PipelineNotFoundException(reference);
-            }
-
-            // Vessel default
-            if (!String.IsNullOrEmpty(vessel.DefaultPipelineId))
-            {
-                Pipeline? vesselPipeline = await _Database.Pipelines.ReadAsync(vessel.DefaultPipelineId, token).ConfigureAwait(false);
-                if (vesselPipeline != null) return vesselPipeline;
-
-                // Pipeline no longer exists -- clear the stale reference
-                _Logging.Warn(_Header + "vessel " + vessel.Id + " references missing pipeline " + vessel.DefaultPipelineId + " -- clearing");
-                vessel.DefaultPipelineId = null;
-                await _Database.Vessels.UpdateAsync(vessel, token).ConfigureAwait(false);
-            }
-
-            // Fleet default
-            if (!String.IsNullOrEmpty(vessel.FleetId))
-            {
-                Fleet? fleet = await _Database.Fleets.ReadAsync(vessel.FleetId, token).ConfigureAwait(false);
-                if (fleet != null && !String.IsNullOrEmpty(fleet.DefaultPipelineId))
-                {
-                    Pipeline? fleetPipeline = await _Database.Pipelines.ReadAsync(fleet.DefaultPipelineId, token).ConfigureAwait(false);
-                    if (fleetPipeline != null) return fleetPipeline;
-
-                    // Pipeline no longer exists -- clear the stale reference
-                    _Logging.Warn(_Header + "fleet " + fleet.Id + " references missing pipeline " + fleet.DefaultPipelineId + " -- clearing");
-                    fleet.DefaultPipelineId = null;
-                    await _Database.Fleets.UpdateAsync(fleet, token).ConfigureAwait(false);
-                }
-            }
-
-            return null;
         }
 
         /// <summary>

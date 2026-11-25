@@ -34,6 +34,14 @@ Conductor) with Opus and GPT-6.1 reliable. The work is tracked item by item in `
   tests if a direct status write returns. A stage approved in review whose handoff then fails is now marked Failed and
   its later stages are cancelled; before, that write was silently refused and the later stages waited forever
   (RS-3.5, RS-3.6).
+- **One path creates every voyage.** REST, MCP, WebSocket, planning sessions, fleet actions and battery runs now
+  create voyages through `VoyageCreationService`, replacing four `DispatchVoyageAsync` overloads and two copies of the
+  creation loop (a standard voyage is a pipeline with one stage). What used to differ by surface is now the same: the
+  voyage belongs to the caller (it used to belong to the vessel's owner), an MCP bare
+  voyage keeps its landing mode, an MCP objective link also records the voyage's missions, an unknown objective
+  creates nothing (REST created the voyage and then failed), and a planning session's link is written with the voyage.
+  The .NET client's `VoyageDispatchRequest` gains `ObjectiveId`, `CaptainAssignments` and `LandingMode` to match REST
+  (RS-4.1).
 - **Recovery state survives a restart.** Endpoint circuit breakers, launch backoff (with the captains that failed to
   start the mission), the start of a transient outage, and escalation rule cooldowns were kept only in memory, so a
   restart sent missions straight back to a failing endpoint, relaunched a broken captain at once, granted an outage a

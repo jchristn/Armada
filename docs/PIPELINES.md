@@ -155,8 +155,9 @@ The complete lifecycle of a pipeline dispatch:
 User calls dispatch(title, vesselId, missions, pipeline: "Reviewed")
     |
     v
-AdmiralService.DispatchVoyageAsync(title, desc, vesselId, missions, pipelineId)
-    |
+VoyageCreationService.CreateAsync(caller, request)
+    |  REST, MCP, WebSocket, planning, fleet actions and battery runs all call it
+    |  Checks: objective, pipeline by id or name, caller can see the vessel
     v
 ResolvePipelineAsync(pipelineId, vessel)
     |  Checks: explicit param -> vessel default -> fleet default -> null
@@ -183,10 +184,16 @@ Is pipeline null or single-stage Worker?
                 Update Voyage status (InProgress if any mission assigned)
                     |
                     v
+                Link the objective, if named
+                    |
+                    v
                 Return Voyage to caller
 ```
 
-**Source:** `src/Armada.Core/Services/AdmiralService.cs`, method `DispatchVoyageAsync` (the pipelineId overload)
+A standard dispatch is the same loop with one stage: the mission keeps its own title, and a mission's `Persona`
+replaces the stage persona.
+
+**Source:** `src/Armada.Core/Services/VoyageCreationService.cs`, method `CreateAsync`
 
 ---
 

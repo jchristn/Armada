@@ -511,13 +511,13 @@ routing; a renamed Architect slice breaks fan-out recovery. Everything a program
 
 ## Phase 4: One path for voyage creation and dispatch
 
-- [ ] **RS-4.1** `VoyageCreationService` in Core taking an auth context and one `VoyageDispatchRequest`. It owns
+- [x] **RS-4.1** `VoyageCreationService` in Core taking an auth context and one `VoyageDispatchRequest`. It owns
   validation, pipeline resolution (a standard voyage is a pipeline with one stage), playbooks, hierarchy, ownership,
   and the dispatch advisor. REST (`Routes/VoyageRoutes.cs:190`), MCP (`McpVoyageTools.cs:150`), WebSocket
   (`WebSocketCommandHandler.cs:424`), planning, and Architect fan-out all call it. Removes the four public overloads,
   `DispatchStandardVoyageAsync`, and the duplicated preamble in `AdmiralService.cs:257-540`. Fixes the drift (MCP
   `LandingMode`, tenant fallback, objective linking through `ObjectiveService.LinkVoyageAsync`). Surfaces: REST,
-  MCP, WebSocket, SDK. Evidence:
+  MCP, WebSocket, SDK. Evidence: `VoyageCreationService.CreateAsync(caller, VoyageCreationRequest)` (exposed as `IAdmiralService.CreateVoyageAsync`) is the only creation path for REST, MCP, WebSocket, planning, fleet actions and battery runs; the four overloads and both creation loops are gone (a standard voyage is one stage). The voyage belongs to the caller (RS-2.9 ownership half), MCP bare voyages keep `LandingMode`, objective linking goes through `ObjectiveService.LinkVoyageAsync` before returning (an unknown objective creates nothing), and `SourcePlanningSessionId` is set in the create request (RS-2.4). The SDK request gains `ObjectiveId`, `CaptainAssignments` and `LandingMode`. New `Services.VoyageCreation` (5 cases) passes. Architect fan-out slice creation moves onto this path with RS-4.3, which makes it one transaction.
 - [ ] **RS-4.2** REST `MissionRequest` gains `Persona` and `Mode` to match MCP. Surfaces: REST, SDK, Postman,
   dashboard voyage form, mobile, TUI, CLI. Evidence:
 - [ ] **RS-4.3** Atomic creation. Create the voyage (status `Building`) and all mission rows in one transaction, then

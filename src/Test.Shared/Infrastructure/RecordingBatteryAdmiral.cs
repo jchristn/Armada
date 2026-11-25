@@ -12,7 +12,7 @@ namespace Test.Shared.Infrastructure
 
     /// <summary>
     /// A stand-in <see cref="IAdmiralService"/> for battery dispatch tests, built with <see cref="DispatchProxy"/>:
-    /// DispatchVoyageAsync records its arguments and creates the voyage and an InProgress mission in the database;
+    /// CreateVoyageAsync records its request (in the positional form the battery cases read) and creates the voyage and an InProgress mission in the database;
     /// CancelMissionAsync marks the mission Cancelled. Every other member throws.
     /// </summary>
     public class RecordingBatteryAdmiral : DispatchProxy
@@ -25,7 +25,8 @@ namespace Test.Shared.Infrastructure
         public DatabaseDriver Database { get; set; } = null!;
 
         /// <summary>
-        /// Arguments of every DispatchVoyageAsync call.
+        /// Every CreateVoyageAsync request as { Title, Description, VesselId, Missions, PipelineId, SelectedPlaybooks,
+        /// CaptainOverridesJson, LandingMode, null, ApprovalOptions, IsEvaluation }.
         /// </summary>
         public List<object?[]> Dispatches { get; } = new List<object?[]>();
 
@@ -35,7 +36,7 @@ namespace Test.Shared.Infrastructure
         public List<string> Cancelled { get; } = new List<string>();
 
         /// <summary>
-        /// Thrown by DispatchVoyageAsync when set.
+        /// Thrown by CreateVoyageAsync when set.
         /// </summary>
         public Exception? DispatchError { get; set; } = null;
 
@@ -63,7 +64,13 @@ namespace Test.Shared.Infrastructure
         protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
         {
             if (targetMethod == null) throw new ArgumentNullException(nameof(targetMethod));
-            if (targetMethod.Name == "DispatchVoyageAsync" && args != null && args.Length >= 9) return DispatchAsync(args);
+            if (targetMethod.Name == "CreateVoyageAsync" && args != null && args.Length >= 2 && args[1] is VoyageCreationRequest request)
+                return DispatchAsync(new object?[]
+                {
+                    request.Title, request.Description, request.VesselId, request.Missions, request.PipelineId, request.SelectedPlaybooks,
+                    Armada.Core.Services.MissionService.SerializeCaptainOverrides(request.CaptainOverrides), request.LandingMode, null,
+                    request.ApprovalOptions, request.IsEvaluation
+                });
             if (targetMethod.Name == "CancelMissionAsync" && args != null) return CancelAsync((Mission)args[0]!);
             throw new NotSupportedException(targetMethod.Name + " is not used by battery dispatch.");
         }

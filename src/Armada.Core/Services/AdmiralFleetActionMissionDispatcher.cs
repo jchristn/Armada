@@ -98,8 +98,16 @@ namespace Armada.Core.Services
                 }
             };
 
-            Voyage voyage = await _Admiral.DispatchVoyageAsync(dispatch.Title, dispatch.Prompt, dispatch.Vessel.Id, missions, dispatch.PipelineId, null,
-                landingMode: dispatch.LandingMode, token: token, approvalOptions: dispatch.ApprovalOptions).ConfigureAwait(false);
+            Voyage voyage = await _Admiral.CreateVoyageAsync(null, new VoyageCreationRequest
+            {
+                Title = dispatch.Title,
+                Description = dispatch.Prompt,
+                VesselId = dispatch.Vessel.Id,
+                Missions = missions,
+                PipelineId = dispatch.PipelineId,
+                LandingMode = dispatch.LandingMode,
+                ApprovalOptions = dispatch.ApprovalOptions
+            }, token).ConfigureAwait(false);
             return voyage.Id;
         }
 

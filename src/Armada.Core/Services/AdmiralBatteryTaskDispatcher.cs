@@ -103,18 +103,17 @@ namespace Armada.Core.Services
             Voyage voyage;
             try
             {
-                voyage = await _Admiral.DispatchVoyageAsync(
-                    "Battery: " + request.Title,
-                    request.Description,
-                    request.Vessel.Id,
-                    new List<MissionDescription> { mission },
-                    pipelineRun ? request.Pipeline! : BatteryFixtureService.PipelineName,
-                    null,
-                    JsonSerializer.Serialize(overrides),
-                    LandingModeEnum.None,
-                    token,
-                    null,
-                    true).ConfigureAwait(false);
+                voyage = await _Admiral.CreateVoyageAsync(null, new VoyageCreationRequest
+                {
+                    Title = "Battery: " + request.Title,
+                    Description = request.Description,
+                    VesselId = request.Vessel.Id,
+                    Missions = new List<MissionDescription> { mission },
+                    PipelineId = pipelineRun ? request.Pipeline! : BatteryFixtureService.PipelineName,
+                    CaptainOverrides = overrides,
+                    LandingMode = LandingModeEnum.None,
+                    IsEvaluation = true
+                }, token).ConfigureAwait(false);
             }
             catch (Exception ex) when (!(ex is OperationCanceledException))
             {

@@ -270,10 +270,10 @@ namespace Test.Shared.Suites.Services
 
                     Voyage standard = await service.DispatchVoyageAsync("Eval", "d", vessel.Id,
                         new List<MissionDescription> { new MissionDescription("m1", "d1"), new MissionDescription("m2", "d2") },
-                        null, null, null, null, CancellationToken.None, null, true).ConfigureAwait(false);
+                        isEvaluation: true).ConfigureAwait(false);
                     Voyage staged = await service.DispatchVoyageAsync("Eval staged", "d", vessel.Id,
                         new List<MissionDescription> { new MissionDescription("m3", "d3") },
-                        pipeline.Id, null, null, null, CancellationToken.None, null, true).ConfigureAwait(false);
+                        pipeline.Id, isEvaluation: true).ConfigureAwait(false);
 
                     foreach (Voyage voyage in new[] { standard, staged })
                     {

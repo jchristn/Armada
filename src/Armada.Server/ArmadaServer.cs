@@ -382,6 +382,7 @@ namespace Armada.Server
                 _Logging);
             _VesselHealthService = new Armada.Core.Services.Health.VesselHealthService(_Database, _Settings, healthEvaluator, _JobService, _Logging);
             _ObjectiveService = new ObjectiveService(_Database, _Logging);
+            admiralService.Objectives = _ObjectiveService;
             _ReleaseService = new ReleaseService(_Database, _WorkflowProfileService, _Logging);
             _DeploymentService = new DeploymentService(_Database, _WorkflowProfileService, _EnvironmentService, _CheckRunService, _Logging);
             _IncidentService = new IncidentService(_Database);

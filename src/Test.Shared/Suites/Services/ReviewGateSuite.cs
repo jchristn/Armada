@@ -325,7 +325,7 @@ namespace Test.Shared.Suites.Services
                 {
                     new MissionDescription("Implement review gate", "Implement the requested change.")
                 },
-                pipeline.Id, null, approvalOptions: approvalOptions).ConfigureAwait(false);
+                pipeline.Id, approvalOptions: approvalOptions).ConfigureAwait(false);
 
             List<Mission> voyageMissions = await db.Missions.EnumerateByVoyageAsync(voyage.Id).ConfigureAwait(false);
             Mission workerMission = voyageMissions.First(m => String.Equals(m.Persona ?? "Worker", "Worker", StringComparison.OrdinalIgnoreCase));

@@ -1700,22 +1700,7 @@ namespace Test.Shared.Suites.Services
             public Func<int, bool>? OnIsProcessExitHandled { get; set; }
             public MissionTransitions Transitions => throw new NotImplementedException();
 
-            public Task<Voyage> DispatchVoyageAsync(string title, string description, string vesselId, List<MissionDescription> missionDescriptions, CancellationToken token = default)
-            {
-                throw new NotImplementedException();
-            }
-
-            public Task<Voyage> DispatchVoyageAsync(string title, string description, string vesselId, List<MissionDescription> missionDescriptions, List<SelectedPlaybook>? selectedPlaybooks, CancellationToken token = default)
-            {
-                throw new NotImplementedException();
-            }
-
-            public Task<Voyage> DispatchVoyageAsync(string title, string description, string vesselId, List<MissionDescription> missionDescriptions, string? pipelineId, CancellationToken token = default)
-            {
-                throw new NotImplementedException();
-            }
-
-            public Task<Voyage> DispatchVoyageAsync(string title, string description, string vesselId, List<MissionDescription> missionDescriptions, string? pipelineId, List<SelectedPlaybook>? selectedPlaybooks, string? captainOverridesJson = null, LandingModeEnum? landingMode = null, CancellationToken token = default, RunApprovalOptions? approvalOptions = null, bool isEvaluation = false)
+            public Task<Voyage> CreateVoyageAsync(AuthContext? caller, VoyageCreationRequest request, CancellationToken token = default)
             {
                 throw new NotImplementedException();
             }

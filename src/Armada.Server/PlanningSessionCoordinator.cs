@@ -404,20 +404,17 @@ namespace Armada.Server
 
             // The voyage description is the drafted objective: Architect slices give it to every Worker as the overall
             // objective. The planning session is linked through SourcePlanningSessionId, not through this text.
-            Voyage voyage = await _Admiral.DispatchVoyageAsync(
-                title,
-                description,
-                session.VesselId,
-                missions,
-                session.PipelineId,
-                session.SelectedPlaybooks,
-                null,
-                null,
-                token).ConfigureAwait(false);
-
-            voyage.SourcePlanningSessionId = session.Id;
-            voyage.SourcePlanningMessageId = sourceMessage.Id;
-            voyage = await _Database.Voyages.UpdateAsync(voyage, token).ConfigureAwait(false);
+            Voyage voyage = await _Admiral.CreateVoyageAsync(null, new VoyageCreationRequest
+            {
+                Title = title,
+                Description = description,
+                VesselId = session.VesselId,
+                Missions = missions,
+                PipelineId = session.PipelineId,
+                SelectedPlaybooks = session.SelectedPlaybooks ?? new List<SelectedPlaybook>(),
+                SourcePlanningSessionId = session.Id,
+                SourcePlanningMessageId = sourceMessage.Id
+            }, token).ConfigureAwait(false);
 
             _WebSocketHub?.BroadcastToTenant(
                 session.TenantId,
