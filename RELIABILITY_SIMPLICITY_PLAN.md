@@ -392,9 +392,12 @@ Each of these is a confirmed defect in 1.4.0. They are small, and each gets a re
   (`IsRescue`) of the mission that the incident does not reference is adopted in any status before a new one is
   dispatched; an operator's re-apply still suppresses without spending budget, and the title and description dedup
   stays behind it (decision R11). Both recovery cases in `Services.CrashConsistency` are on and pass.
-- [ ] **RS-2.7** Startup burns retries. `CleanupStaleCaptainsAsync` (`AdmiralService.cs:1007`) treats an Assigned
+- [x] **RS-2.7** Startup burns retries. `CleanupStaleCaptainsAsync` (`AdmiralService.cs:1007`) treats an Assigned
   mission with no process as an interrupted run and spends `RedispatchAttempts`. Return never-launched Assigned
-  missions to Pending without charging an attempt. Evidence:
+  missions to Pending without charging an attempt. Evidence: startup cleanup returns an Assigned mission with no process and no
+  start time to Pending through a compare-and-set without charging, as orphan recovery does; such a mission ran no
+  agent, so its branch has no commits from it (archive CI:33 constraint). The orphan-claim race test in
+  `Services.SequentialDispatch` now requires zero attempts; it fails on the old code (1) and passes.
 - [ ] **RS-2.8** Architect slices may lose playbooks. Verify whether slices 2..N get playbook snapshots
   (`LoadMissionPlaybookSnapshotsAsync`); fix by routing slice creation through the creation service (RS-4.1).
   Regression test either way. Evidence:

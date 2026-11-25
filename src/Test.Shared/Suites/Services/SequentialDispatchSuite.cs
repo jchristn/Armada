@@ -368,8 +368,11 @@ namespace Test.Shared.Suites.Services
                 await db.Captains.ReconcileMissionSlotsAsync();
                 Mission recovered = (await db.Missions.ReadAsync(orphan.Id))!;
                 Captain captain = (await db.Captains.ReadAsync(work.Captains[0].Id))!;
+                // A mission that never launched was not interrupted: it returns to Pending without spending an attempt
+                // (RS-2.7); releasing the captain may dispatch it again at once.
                 AssertTrue(recovered.Status == MissionStatusEnum.Pending || recovered.Status == MissionStatusEnum.InProgress,
                     "restart recovery returns the orphan to Pending or relaunches it, never leaves it Assigned without a process: " + recovered.Status);
+                AssertEqual(0, recovered.RedispatchAttempts, "a never-launched mission is not charged a redispatch attempt");
                 if (recovered.Status == MissionStatusEnum.Pending)
                 {
                     AssertEqual(0, captain.ActiveMissionCount, "the orphan's slot is released");

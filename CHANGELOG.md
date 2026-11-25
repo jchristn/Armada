@@ -20,6 +20,8 @@ Conductor) with Opus and GPT-6.1 reliable. The work is tracked item by item in `
 - **Autonomous recovery is crash-consistent.** A recovery incident is created with its failure kind in one write, so a
   restart can no longer open a second incident for the same failure; a rescue that was created but not yet recorded on
   its incident is adopted rather than left uncounted against the rescue budget (RS-2.6).
+- **A restart no longer charges queued missions a retry.** A mission that was Assigned but had not started its agent
+  when the Admiral stopped returns to Pending without spending one of its redispatch attempts (RS-2.7).
 - **Planning dispatch keeps the drafted objective.** A voyage dispatched from a planning session now carries the
   drafted description instead of "Created from planning session ...", which Architect slices passed to every Worker
   as the overall objective. The session stays linked through `SourcePlanningSessionId` (RS-2.4).

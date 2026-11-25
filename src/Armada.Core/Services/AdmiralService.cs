@@ -1008,6 +1008,25 @@ namespace Armada.Core.Services
 
                 if (processAlive) continue;
 
+                // An Assigned mission that never started an agent process (it was still waiting for its dock or launch
+                // when the Admiral stopped) was not interrupted: it goes back to Pending without spending a redispatch
+                // attempt, as orphan recovery already does (RS-2.7).
+                if (currentMission != null && currentMission.Status == MissionStatusEnum.Assigned
+                    && !currentMission.ProcessId.HasValue && !currentMission.StartedUtc.HasValue)
+                {
+                    MissionStatusEnum observedStatus = currentMission.Status;
+                    currentMission.Status = MissionStatusEnum.Pending;
+                    currentMission.CaptainId = null;
+                    currentMission.DockId = null;
+                    currentMission.ProcessId = null;
+                    currentMission.LastUpdateUtc = DateTime.UtcNow;
+                    if (await _Database.Missions.TryUpdateIfStatusAsync(currentMission, new MissionStatusEnum[] { observedStatus }, token).ConfigureAwait(false))
+                        _Logging.Info(_Header + "mission " + currentMission.Id + " never launched before the restart; returned to Pending without charging a redispatch");
+                    await _Captains.ReleaseAsync(captain, token).ConfigureAwait(false);
+                    resetCount++;
+                    continue;
+                }
+
                 // Dead local agents (or a Harbor job with no recoverable ownership record) represent an actual
                 // interruption. Resume in the existing dock instead of quietly provisioning a fresh generation.
                 if (currentMission != null && (currentMission.Status == MissionStatusEnum.InProgress || currentMission.Status == MissionStatusEnum.Assigned))
