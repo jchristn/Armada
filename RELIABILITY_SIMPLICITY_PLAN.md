@@ -152,7 +152,7 @@ table first. Abbreviations: HER `archive/HANDOFF_EXAMINATION_RESULTS.md`, FLF `a
 `archive/CONCURRENCY_IMPROVEMENTS.md`, MH `docs/MODEL_HETEROGENEITY.md`, HDR `docs/HYBRID_DEVELOPMENT_RESULTS.md`, PHI
 `archive/PROMPT_AND_HANDOFF_IMPROVEMENTS.md`, FCA/FCX `archive/FAILURE_CASES_ACTIONABLE.md` and `_CODEX.md`.
 
-### Reversals (need a decision)
+### Reversals (decided 2026-11-25)
 
 The earlier decisions were sound for the goal they served, which was keeping frontier pipelines stable without
 large refactors. This plan's goal is different, and in most cases the old reasoning does not survive it. Where it
@@ -160,17 +160,17 @@ does, the recommendation is to keep the decision and change the item.
 
 | # | Items | Recorded decision | Recommendation | Decision |
 |---|---|---|---|---|
-| R1 | RS-3.1 to RS-3.4 | HER:660 markers in descriptions stay; HER:645 chose the `<title> [Worker]` lookup | Reverse. Typed columns are what make G2 and G3 testable | |
-| R2 | RS-3.5, RS-3.6 | HER:653 converting remaining full-row writes to compare-and-set is not planned | Reverse, keeping the `UpdateAsync` Cancelled guard and the Blocked edges (FCC FC-4.4) | |
-| R3 | RS-4.5 | HER:655 dispatch callers not serialized; a global lock would slow every completion | Reverse the single-loop part only: a coalescing wake signal, never a lock in the completion path; completion never waits for dispatch | |
-| R4 | RS-5.2 | HER:583, C6 (:460) arbitrary `runtime_error` stays Crash because retrying can repeat side effects | Change the item: `Unclassified` resumes in place only when the attempt ran no external side-effect tool (git push, network, process outside the dock); otherwise it escalates without a resume | |
-| R5 | RS-6.6 | HER:457 (C3) do not strip formatting or select the last verdict | Keep C3. Drop "accept the last line" from RS-6.6; ambiguity goes to the format-only repair turn (RS-6.4) instead | |
-| R6 | RS-6.5 | HER:717 strict matching, no automatic plan normalization; MH: two plan blocks are refused | Keep refusing two blocks and keep validation strict. Limit RS-6.5 to locating one block (bare or `~~~`) and better error detail; type coercion happens only through the repair turn | |
-| R7 | RS-8.8 | HER:640 no per-runtime stall thresholds (delays catching real hangs) | Keep. Replace per-profile stall thresholds with streaming heartbeats (RS-7.7); per-profile limits only for first-token time and maximum runtime | |
-| R8 | RS-8.6 | HER:609 least-recently-used rejected; name order kept; a fix must respect Judge independence | Proceed behind a setting, default off, and only with Judge independence preserved | |
-| R9 | RS-8.1, RS-8.5 | MH: the profile does not set tier or change routing automatically; routing changes only after held-out production tasks | Keep. Probes propose capabilities and tier; an administrator accepts them in the profile UI (one click), and data-driven tier stays opt-in | |
-| R10 | RS-11.1 | HER:656 separate services not created because the methods share mutable state | Reverse after Phases 3 to 6 remove the shared state (agrees with REFACTORING_PLAN "no partial classes") | |
-| R11 | RS-2.6, RS-4.4 | FLF:219 dedup any dispatch whose description references a LandingFailed mission; CI:58 v3 ownership overlap only warns | Keep both: `RescueOfMissionId` is added in front of the description dedup, and overlap rejects only for v4 plans | |
+| R1 | RS-3.1 to RS-3.4 | HER:660 markers in descriptions stay; HER:645 chose the `<title> [Worker]` lookup | Reverse. Typed columns are what make G2 and G3 testable | Reverse (Joel, 2026-11-25). Descriptions stay as written; history is rendered into prompts at launch and shown as an attempts timeline; migration backfills columns from old markers without rewriting old text |
+| R2 | RS-3.5, RS-3.6 | HER:653 converting remaining full-row writes to compare-and-set is not planned | Reverse, keeping the `UpdateAsync` Cancelled guard and the Blocked edges (FCC FC-4.4) | Reverse as planned (Joel, 2026-11-25) |
+| R3 | RS-4.5 | HER:655 dispatch callers not serialized; a global lock would slow every completion | Reverse the single-loop part only: a coalescing wake signal, never a lock in the completion path; completion never waits for dispatch | Approved as recommended (Joel, 2026-11-25) |
+| R4 | RS-5.2 | HER:583, C6 (:460) arbitrary `runtime_error` stays Crash because retrying can repeat side effects | Change the item: `Unclassified` resumes in place only when the attempt ran no external side-effect tool (git push, network, process outside the dock); otherwise it escalates without a resume | Approved as recommended (Joel, 2026-11-25) |
+| R5 | RS-6.6 | HER:457 (C3) do not strip formatting or select the last verdict | Keep C3. Drop "accept the last line" from RS-6.6; ambiguity goes to the format-only repair turn (RS-6.4) instead | Approved as recommended (Joel, 2026-11-25) |
+| R6 | RS-6.5 | HER:717 strict matching, no automatic plan normalization; MH: two plan blocks are refused | Keep refusing two blocks and keep validation strict. Limit RS-6.5 to locating one block (bare or `~~~`) and better error detail; type coercion happens only through the repair turn | Approved as recommended (Joel, 2026-11-25) |
+| R7 | RS-8.8 | HER:640 no per-runtime stall thresholds (delays catching real hangs) | Keep. Replace per-profile stall thresholds with streaming heartbeats (RS-7.7); per-profile limits only for first-token time and maximum runtime | Approved as recommended (Joel, 2026-11-25) |
+| R8 | RS-8.6 | HER:609 least-recently-used rejected; name order kept; a fix must respect Judge independence | Proceed behind a setting, default off, and only with Judge independence preserved | Approved as recommended (Joel, 2026-11-25) |
+| R9 | RS-8.1, RS-8.5 | MH: the profile does not set tier or change routing automatically; routing changes only after held-out production tasks | Keep. Probes propose capabilities and tier; an administrator accepts them in the profile UI (one click), and data-driven tier stays opt-in | Approved as recommended (Joel, 2026-11-25) |
+| R10 | RS-11.1 | HER:656 separate services not created because the methods share mutable state | Reverse after Phases 3 to 6 remove the shared state (agrees with REFACTORING_PLAN "no partial classes") | Approved as recommended (Joel, 2026-11-25) |
+| R11 | RS-2.6, RS-4.4 | FLF:219 dedup any dispatch whose description references a LandingFailed mission; CI:58 v3 ownership overlap only warns | Keep both: `RescueOfMissionId` is added in front of the description dedup, and overlap rejects only for v4 plans | Approved as recommended (Joel, 2026-11-25) |
 
 ### Constraints by item
 
@@ -274,8 +274,8 @@ branch starts adding tests to it.
 - [x] **RS-0.9** Read the archive docs the review did not fully cover (`archive/FAILURE_CASES_*.md`,
   `archive/FIX_LANDING_FAILURES.md`, `archive/FRAGILITY_REMEDIATION.md`, `archive/SIMPLIFICATION.md`,
   `archive/REFACTORING_PLAN.md`, `archive/DISPATCH_ISSUES.md`). For each item in this plan that they already
-  cover, add a note "see archive/X.md#section" so prior decisions are not undone by accident. Evidence: recorded in "Prior decisions and archive constraints"; reversals R1 to R11 wait
-  for Joel.
+  cover, add a note "see archive/X.md#section" so prior decisions are not undone by accident. Evidence: recorded in "Prior decisions and archive constraints"; Joel decided R1 to R11 on
+  2026-11-25 (all as recommended).
 
 ## Phase 1: Test and measurement harness
 
