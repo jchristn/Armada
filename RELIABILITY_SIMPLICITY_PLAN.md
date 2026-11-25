@@ -247,12 +247,18 @@ branch starts adding tests to it.
   instance. Additional families that must pass: DeepSeek 4.1, GLM, and inkling-2-mini, through Conductor, with
   Ollama Cloud as the fallback for DeepSeek, GLM, and Kimi. Frontier: Opus on Claude Code, GPT-6.1 on Codex.
   Connection details are in the git-ignored local file (see Definitions).
-- [ ] **RS-0.10** Endpoint inventory. Read the Conductor source (`~/Code/Conductor`, its `REST_API.md` and Postman
+- [-] **RS-0.10** Endpoint inventory. Read the Conductor source (`~/Code/Conductor`, its `REST_API.md` and Postman
   collection) and use its API to list every model it hosts, with served context length, quantization, and tool
   support. Fill in the model path segments in `benchmarks/config/gate-endpoints.local.json` (local file only), and
   confirm each reference model answers a chat request with a tool call through Conductor, using Ollama Cloud only
   for families Conductor does not host. Record in the validation log which models are available and where, without
-  hosts or tokens. Evidence:
+  hosts or tokens. Evidence: (2026-11-25) Conductor lists 42 runners; qwen3.8:27b answered a native
+  tool call (262,144 context, Q4_K_M). inkling-2-mini timed out at Conductor's 300 s limit twice, after which
+  Conductor reported "No healthy endpoints", and later the same 502 for qwen3.8 (both runners appear to share one
+  backend). Ollama Cloud models picked from a free listing: deepseek-v4.1-flash, glm-5.3, kimi-k3. First live gate run
+  (Gate-D, csharp, 1 run) stopped on that outage: Armada classified the 502 as Transient and relaunched about ten times
+  over the outage grace, each attempt waiting out the proxy timeout (up to about 10 minutes), then failed the stage as
+  Infra and halted the voyage. Inputs for RS-7.16 (cold loads, proxy time-to-first-byte) and RS-8.8 (timeouts).
 - [ ] **RS-0.11** Register the reference models in a development Admiral as model endpoints and captains (Qwen3.8,
   DeepSeek 4.1, GLM, inkling-2-mini on ApiEndpoint; Opus on Claude Code; GPT-6.1 on Codex), run the existing probes
   and battery once per model, and save the scorecards as the 1.4.0 starting picture for RS-0.8. Evidence:
