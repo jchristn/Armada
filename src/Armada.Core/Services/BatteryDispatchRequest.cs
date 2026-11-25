@@ -1,6 +1,7 @@
 namespace Armada.Core.Services
 {
     using System;
+    using System.Collections.Generic;
     using Armada.Core.Enums;
     using Armada.Core.Models;
 
@@ -44,6 +45,16 @@ namespace Armada.Core.Services
         /// it on the voyage's captain override.
         /// </summary>
         public PromptVariantEnum? PromptVariant { get; set; } = null;
+
+        /// <summary>
+        /// Pipeline to dispatch under, or null for the built-in ModelEvaluation pipeline with <see cref="Captain"/>.
+        /// </summary>
+        public string? Pipeline { get; set; } = null;
+
+        /// <summary>
+        /// Per-persona captains used with <see cref="Pipeline"/>; ignored without it.
+        /// </summary>
+        public List<CaptainAssignmentOverride>? CaptainOverrides { get; set; } = null;
 
         /// <summary>
         /// Instantiate.

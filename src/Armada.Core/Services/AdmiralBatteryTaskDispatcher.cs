@@ -83,15 +83,22 @@ namespace Armada.Core.Services
             if (replacement != null) return await replacement.RunAsync(request, token).ConfigureAwait(false);
             BatteryDispatchResult result = new BatteryDispatchResult();
 
-            List<CaptainAssignmentOverride> overrides = new List<CaptainAssignmentOverride>
-            {
-                new CaptainAssignmentOverride("*", request.Captain.Id, null) { StrictCaptain = true, PromptVariant = request.PromptVariant }
-            };
-            MissionDescription mission = new MissionDescription(request.Title, request.Description)
-            {
-                RequestedCaptainId = request.Captain.Id,
-                Persona = request.Persona
-            };
+            // A pipeline run staffs each persona from its overrides and lets the pipeline create the stages; the default
+            // run sends one mission to one captain under the ModelEvaluation pipeline.
+            bool pipelineRun = !String.IsNullOrWhiteSpace(request.Pipeline) && request.CaptainOverrides != null && request.CaptainOverrides.Count > 0;
+            List<CaptainAssignmentOverride> overrides = pipelineRun
+                ? request.CaptainOverrides!.Select(o => new CaptainAssignmentOverride(o.Persona, o.CaptainId, o.FallbackTier) { StrictCaptain = true, PromptVariant = o.PromptVariant ?? request.PromptVariant }).ToList()
+                : new List<CaptainAssignmentOverride>
+                {
+                    new CaptainAssignmentOverride("*", request.Captain.Id, null) { StrictCaptain = true, PromptVariant = request.PromptVariant }
+                };
+            MissionDescription mission = pipelineRun
+                ? new MissionDescription(request.Title, request.Description)
+                : new MissionDescription(request.Title, request.Description)
+                {
+                    RequestedCaptainId = request.Captain.Id,
+                    Persona = request.Persona
+                };
 
             Voyage voyage;
             try
@@ -101,7 +108,7 @@ namespace Armada.Core.Services
                     request.Description,
                     request.Vessel.Id,
                     new List<MissionDescription> { mission },
-                    BatteryFixtureService.PipelineName,
+                    pipelineRun ? request.Pipeline! : BatteryFixtureService.PipelineName,
                     null,
                     JsonSerializer.Serialize(overrides),
                     LandingModeEnum.None,

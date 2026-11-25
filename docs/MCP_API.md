@@ -1705,6 +1705,13 @@ entries; a pack with more is malformed and lists the first 256 tasks and toolcha
 | `runCount` | integer | No | Runs of each task (1-10, default 3) |
 | `seed` | integer | No | Seed to record (default: picked at random) |
 | `createFixtureVessel` | boolean | No | Create the pack's fixture vessel if it does not exist yet (default false) |
+| `promptVariant` | string | No | `Current`, `Lean`, or `Compact`: the persona prompt variant every task renders with (default: the captain's own setting) |
+| `pipeline` | string | No | Pipeline name to run each Worker task under as a full voyage. Default: the built-in `ModelEvaluation` pipeline with `captainId` alone |
+| `captainOverrides` | object[] | With `pipeline` | `{ persona, captainId }` for each persona of the pipeline, applied strictly. Every captain must be visible to the caller |
+
+With `pipeline`, only the packs' Worker tasks run, each as a voyage through every stage of the pipeline staffed by
+`captainOverrides`, graded on the final branch. This measures a mixed pipeline, for example an Opus Architect, a Qwen
+Worker and Test Engineer, and a GPT Judge. The run records the pipeline and the staffing in its configuration.
 
 **Response:** the queued BatteryRun. The tasks run in the background; poll `get_battery_run`.
 

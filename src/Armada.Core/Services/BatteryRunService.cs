@@ -277,6 +277,21 @@ namespace Armada.Core.Services
                 packs.Add(pack);
             }
 
+            if (!String.IsNullOrWhiteSpace(options?.Pipeline))
+            {
+                Pipeline? pipeline = await _Database.Pipelines.ReadByNameAsync(options!.Pipeline!, token).ConfigureAwait(false);
+                if (pipeline == null) throw new ArgumentException("Unknown pipeline '" + options.Pipeline + "'.", nameof(options));
+                if (options.CaptainOverrides == null || options.CaptainOverrides.Count == 0)
+                    throw new ArgumentException("A pipeline battery run needs a captain for each persona (CaptainOverrides).", nameof(options));
+                foreach (CaptainAssignmentOverride entry in options.CaptainOverrides)
+                {
+                    if (String.IsNullOrWhiteSpace(entry.Persona)) throw new ArgumentException("Each captain override names a persona.", nameof(options));
+                    if (String.IsNullOrWhiteSpace(entry.CaptainId) || await _Database.Captains.ReadAsync(entry.CaptainId!, token).ConfigureAwait(false) == null)
+                        throw new ArgumentException("Unknown captain '" + entry.CaptainId + "' for persona " + entry.Persona + ".", nameof(options));
+                    entry.StrictCaptain = true;
+                }
+            }
+
             int tasksPerRun = packs.Sum(p => p.Manifest!.Tasks.Count(t => Selected(t, options)));
             if (tasksPerRun == 0)
                 throw new ArgumentException("No task of the packs tests the selected personas (" + String.Join(", ", options?.Personas ?? new List<string>()) + ").", nameof(options));
@@ -297,7 +312,7 @@ namespace Armada.Core.Services
                 RunCount = count,
                 Status = BatteryRunStatusEnum.Queued,
                 IsEvaluation = true,
-                Pipeline = BatteryFixtureService.PipelineName,
+                Pipeline = String.IsNullOrWhiteSpace(options?.Pipeline) ? BatteryFixtureService.PipelineName : options!.Pipeline!,
                 Seed = seed ?? RandomNumberGenerator.GetInt32(1, Int32.MaxValue),
                 Runtime = captain.Runtime.ToString(),
                 Model = !String.IsNullOrWhiteSpace(captain.Model) ? captain.Model : endpoint?.Model,
@@ -306,7 +321,7 @@ namespace Armada.Core.Services
                 TotalTasks = tasksPerRun * count
             };
             run.SamplingJson = JsonSerializer.Serialize(BuildSampling(captain, endpoint), _Json);
-            run.ConfigurationJson = JsonSerializer.Serialize(BuildConfiguration(run, captain, endpoint, packs, promptVariant), _Json);
+            run.ConfigurationJson = JsonSerializer.Serialize(BuildConfiguration(run, captain, endpoint, packs, promptVariant, options?.CaptainOverrides), _Json);
             run.ConfigurationRevision = Revision(run.ConfigurationJson);
 
             run = await _Database.BatteryRuns.CreateAsync(run, token).ConfigureAwait(false);
@@ -591,7 +606,9 @@ namespace Armada.Core.Services
                         PersonaCatalog.NormalizeName(task.Persona),
                         timeoutMinutes * 60000)
                     {
-                        PromptVariant = promptVariant
+                        PromptVariant = promptVariant,
+                        Pipeline = String.IsNullOrWhiteSpace(options.Pipeline) ? null : options.Pipeline,
+                        CaptainOverrides = options.CaptainOverrides
                     };
                     string description = request.Description;
                     BatteryDispatchResult dispatched = await _Dispatcher.RunAsync(request, options.Cancellation).ConfigureAwait(false);
@@ -668,6 +685,7 @@ namespace Armada.Core.Services
 
         private static bool Selected(BatteryTaskDefinition task, BatteryRunOptions? options)
         {
+            if (!String.IsNullOrWhiteSpace(options?.Pipeline) && !PersonaCatalog.Matches(task.Persona, PersonaCatalog.Worker)) return false;
             if (options?.Personas == null || options.Personas.Count == 0) return true;
             return options.Personas.Any(p => PersonaCatalog.Matches(p, task.Persona));
         }
@@ -731,12 +749,13 @@ namespace Armada.Core.Services
             };
         }
 
-        private Dictionary<string, object?> BuildConfiguration(BatteryRun run, Captain captain, ModelEndpoint? endpoint, List<BatteryPack> packs, PromptVariantEnum? promptVariant)
+        private Dictionary<string, object?> BuildConfiguration(BatteryRun run, Captain captain, ModelEndpoint? endpoint, List<BatteryPack> packs, PromptVariantEnum? promptVariant, List<CaptainAssignmentOverride>? captainOverrides)
         {
             Dictionary<string, object?> configuration = new Dictionary<string, object?>(StringComparer.Ordinal)
             {
                 ["armadaVersion"] = _ArmadaVersion,
-                ["pipeline"] = BatteryFixtureService.PipelineName,
+                ["pipeline"] = run.Pipeline,
+                ["captainOverrides"] = captainOverrides?.Select(o => new Dictionary<string, object?>(StringComparer.Ordinal) { ["persona"] = o.Persona, ["captainId"] = o.CaptainId }).ToList(),
                 ["runCount"] = run.RunCount,
                 ["seed"] = run.Seed,
                 ["captain"] = new Dictionary<string, object?>(StringComparer.Ordinal)

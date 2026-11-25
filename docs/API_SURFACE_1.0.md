@@ -799,7 +799,7 @@ Arguments are camelCase; `*` marks a required argument. See [MCP_API.md](MCP_API
 | `retry_landing` | TenantAdmin | `missionId*: string` |  |
 | `rollback_deployment` | TenantAdmin | `deploymentId*: string` |  |
 | `run_ask_quick_action` | Authenticated | `arguments: object`, `threadId*: string`, `toolName*: string` |  |
-| `run_battery` | Authenticated | `captainId*: string`, `createFixtureVessel: boolean`, `packs*: array<string>`, `promptVariant: string`, `runCount: integer`, `seed: integer` |  |
+| `run_battery` | Authenticated | `captainId*: string`, `captainOverrides: array<object>`, `createFixtureVessel: boolean`, `packs*: array<string>`, `pipeline: string`, `promptVariant: string`, `runCount: integer`, `seed: integer` |  |
 | `run_blackbox_gc` | AdminOnly | `dryRun: boolean` |  |
 | `run_blackbox_recovery` | Authenticated | `acknowledgeDataLoss: boolean`, `confirmToken: string`, `dryRun: boolean`, `entryId: string`, `missionId: string`, `pathId*: string`, `voyageId: string` |  |
 | `run_check` | TenantAdmin | `branchName: string`, `commandOverride: string`, `commitHash: string`, `environmentName: string`, `label: string`, `missionId: string`, `type*: string`, `vesselId*: string`, `voyageId: string`, `workflowProfileId: string` |  |

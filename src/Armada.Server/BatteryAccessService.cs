@@ -104,8 +104,21 @@ namespace Armada.Server
             if (!String.IsNullOrWhiteSpace(captain.ModelEndpointId))
                 endpoint = await _Database.ModelEndpoints.ReadAsync(captain.ModelEndpointId!, token).ConfigureAwait(false);
 
+            BatteryRunOptions? options = null;
+            if (!String.IsNullOrWhiteSpace(request.Pipeline))
+            {
+                // Every staffed captain must be visible to the caller, as the primary captain is.
+                foreach (CaptainAssignmentOverride entry in request.CaptainOverrides ?? new List<CaptainAssignmentOverride>())
+                {
+                    Captain? staffed = String.IsNullOrWhiteSpace(entry.CaptainId) ? null : await _Database.Captains.ReadAsync(entry.CaptainId!.Trim(), token).ConfigureAwait(false);
+                    if (staffed == null || !CanSeeTenant(caller, staffed.TenantId)) throw new KeyNotFoundException("Captain not found for persona " + entry.Persona + ".");
+                }
+
+                options = new BatteryRunOptions { Pipeline = request.Pipeline.Trim(), CaptainOverrides = request.CaptainOverrides };
+            }
+
             BatteryRun run = await _Service.StartAsync(captain, endpoint, request.Packs, request.RunCount, request.Seed,
-                request.CreateFixtureVessel, caller.TenantId, caller.UserId, request.PromptVariant, token).ConfigureAwait(false);
+                request.CreateFixtureVessel, caller.TenantId, caller.UserId, request.PromptVariant, options, token).ConfigureAwait(false);
             _Logging.Info(_Header + "battery run " + run.Id + " of captain " + captain.Id + " started by " + caller.UserId);
             return run;
         }

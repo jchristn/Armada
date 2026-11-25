@@ -15506,6 +15506,11 @@
           "required": true
         },
         {
+          "name": "captainOverrides",
+          "type": "array<object>",
+          "required": false
+        },
+        {
           "name": "createFixtureVessel",
           "type": "boolean",
           "required": false
@@ -15514,6 +15519,11 @@
           "name": "packs",
           "type": "array<string>",
           "required": true
+        },
+        {
+          "name": "pipeline",
+          "type": "string",
+          "required": false
         },
         {
           "name": "promptVariant",

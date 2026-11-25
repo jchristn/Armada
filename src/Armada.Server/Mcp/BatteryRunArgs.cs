@@ -36,5 +36,15 @@ namespace Armada.Server.Mcp
         /// Persona prompt variant for every task (Current, Lean or Compact), or null for the captain's own setting.
         /// </summary>
         public string? PromptVariant { get; set; } = null;
+
+        /// <summary>
+        /// Pipeline to run each Worker task under, or null for the built-in ModelEvaluation pipeline.
+        /// </summary>
+        public string? Pipeline { get; set; } = null;
+
+        /// <summary>
+        /// Captain per persona for the pipeline.
+        /// </summary>
+        public List<Armada.Core.Models.CaptainAssignmentOverride>? CaptainOverrides { get; set; } = null;
     }
 }

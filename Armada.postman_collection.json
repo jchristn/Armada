@@ -257,6 +257,16 @@
             "description": "Fleet action run ID (far_ prefix)."
         },
         {
+            "key": "architectCaptainId",
+            "value": "",
+            "description": "Captain id staffing that persona in a mixed-pipeline battery run (cpt_ prefix)"
+        },
+        {
+            "key": "judgeCaptainId",
+            "value": "",
+            "description": "Captain id staffing that persona in a mixed-pipeline battery run (cpt_ prefix)"
+        },
+        {
             "key": "batteryRunId",
             "value": "",
             "type": "string",
@@ -5069,6 +5079,35 @@
                             ]
                         },
                         "description": "One page of the fixture battery packs the Admiral found, ordered by pack directory name. Body: EnumerationQuery (PageNumber, PageSize 1 to 1000, default 10). Captain sessions get 403."
+                    }
+                },
+                {
+                    "name": "Run Battery Under a Mixed Pipeline",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"Packs\": [\n    \"csharp\",\n    \"python\"\n  ],\n  \"CaptainId\": \"{{captainId}}\",\n  \"RunCount\": 1,\n  \"Pipeline\": \"Gate-A\",\n  \"CaptainOverrides\": [\n    {\n      \"Persona\": \"Architect\",\n      \"CaptainId\": \"{{architectCaptainId}}\"\n    },\n    {\n      \"Persona\": \"Worker\",\n      \"CaptainId\": \"{{captainId}}\"\n    },\n    {\n      \"Persona\": \"TestEngineer\",\n      \"CaptainId\": \"{{captainId}}\"\n    },\n    {\n      \"Persona\": \"Judge\",\n      \"CaptainId\": \"{{judgeCaptainId}}\"\n    }\n  ]\n}"
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/api/v1/battery/runs",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "battery",
+                                "runs"
+                            ]
+                        },
+                        "description": "Runs the packs' Worker tasks under a pipeline whose personas are staffed by different captains, for example an Opus Architect, a Qwen Worker and Test Engineer, and a GPT Judge. Each Worker task becomes one voyage through every stage of the pipeline and is graded on the final branch; tasks of other personas are skipped. Body: BatteryRunRequest with Pipeline (a pipeline name) and CaptainOverrides (Persona and CaptainId per stage persona, applied strictly). Without Pipeline the run uses the built-in ModelEvaluation pipeline with CaptainId alone. Returns 201 with the queued BatteryRun; poll GET /api/v1/battery/runs/{id}. Global admins, or tenant admins of the captains' tenant."
                     }
                 },
                 {

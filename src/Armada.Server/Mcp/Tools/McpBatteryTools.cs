@@ -176,7 +176,23 @@ namespace Armada.Server.Mcp.Tools
                         runCount = new { type = "integer", description = "Runs of each task (1-10, default 3)" },
                         seed = new { type = "integer", description = "Seed to record with the run (default: picked at random)" },
                         createFixtureVessel = new { type = "boolean", description = "Create a pack's fixture vessel when it does not exist yet (default false)" },
-                        promptVariant = new { type = "string", @enum = new[] { "Current", "Lean", "Compact" }, description = "Persona prompt variant every task renders with (default: the captain's own setting, else Current). Runs that differ only in this compare the variants." }
+                        promptVariant = new { type = "string", @enum = new[] { "Current", "Lean", "Compact" }, description = "Persona prompt variant every task renders with (default: the captain's own setting, else Current). Runs that differ only in this compare the variants." },
+                        pipeline = new { type = "string", description = "Pipeline name to run each Worker task under as a full voyage (default: the built-in ModelEvaluation pipeline with captainId). Measures a mixed pipeline of models." },
+                        captainOverrides = new
+                        {
+                            type = "array",
+                            description = "Required with pipeline: the captain for each persona, for example [{\"persona\":\"Worker\",\"captainId\":\"cpt_...\"},{\"persona\":\"Judge\",\"captainId\":\"cpt_...\"}]",
+                            items = new
+                            {
+                                type = "object",
+                                properties = new
+                                {
+                                    persona = new { type = "string", description = "Persona name" },
+                                    captainId = new { type = "string", description = "Captain ID (cpt_ prefix)" }
+                                },
+                                required = new[] { "persona", "captainId" }
+                            }
+                        }
                     },
                     required = new[] { "packs", "captainId" }
                 },
@@ -192,7 +208,9 @@ namespace Armada.Server.Mcp.Tools
                         RunCount = request.RunCount,
                         Seed = request.Seed,
                         CreateFixtureVessel = request.CreateFixtureVessel ?? false,
-                        PromptVariant = PromptVariantResolver.Parse(request.PromptVariant)
+                        PromptVariant = PromptVariantResolver.Parse(request.PromptVariant),
+                        Pipeline = request.Pipeline,
+                        CaptainOverrides = request.CaptainOverrides
                     };
                     return (object)await service.RunAsync(caller, body).ConfigureAwait(false);
                 });

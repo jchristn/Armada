@@ -2,6 +2,7 @@ namespace Armada.Core.Services
 {
     using System.Collections.Generic;
     using System.Threading;
+    using Armada.Core.Models;
 
     /// <summary>
     /// Options a Full Evaluate passes to a battery run: a persona filter, its own token budget, a cancellation token and
@@ -16,6 +17,20 @@ namespace Armada.Core.Services
         /// Personas to run, or null for every task of the packs. Tasks of other personas are not dispatched.
         /// </summary>
         public List<string>? Personas { get; set; } = null;
+
+        /// <summary>
+        /// Pipeline to run each task under, or null for the built-in ModelEvaluation pipeline with one captain. With a
+        /// pipeline, only Worker tasks run: each becomes a voyage through every stage of the pipeline, staffed by
+        /// <see cref="CaptainOverrides"/>, and is graded on the final branch. This is how a mixed pipeline of open and
+        /// frontier models is measured (RELIABILITY_SIMPLICITY_PLAN.md RS-1.6).
+        /// </summary>
+        public string? Pipeline { get; set; } = null;
+
+        /// <summary>
+        /// Per-persona captains for <see cref="Pipeline"/> (for example Architect to an Opus captain, Worker to a Qwen
+        /// captain, Judge to a GPT captain). Required when <see cref="Pipeline"/> is set; each entry is strict.
+        /// </summary>
+        public List<CaptainAssignmentOverride>? CaptainOverrides { get; set; } = null;
 
         /// <summary>
         /// Estimated tokens the run may spend (prompt plus output of each attempt); 0 means no limit.

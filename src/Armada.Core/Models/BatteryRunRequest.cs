@@ -47,6 +47,19 @@ namespace Armada.Core.Models
         /// </summary>
         public PromptVariantEnum? PromptVariant { get; set; } = null;
 
+        /// <summary>
+        /// Pipeline to run each Worker task under, or null for the built-in ModelEvaluation pipeline with
+        /// <see cref="CaptainId"/>. With a pipeline, each Worker task becomes a voyage through every stage, staffed by
+        /// <see cref="CaptainOverrides"/>, and is graded on the final branch; tasks of other personas are skipped.
+        /// </summary>
+        public string? Pipeline { get; set; } = null;
+
+        /// <summary>
+        /// Captain per persona for <see cref="Pipeline"/>, for example Architect, Worker, TestEngineer and Judge. Required
+        /// with a pipeline; every captain must be visible to the caller. Each entry is applied strictly.
+        /// </summary>
+        public List<CaptainAssignmentOverride>? CaptainOverrides { get; set; } = null;
+
         #endregion
 
         #region Private-Members
