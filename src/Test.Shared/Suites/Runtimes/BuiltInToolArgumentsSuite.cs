@@ -265,7 +265,7 @@ namespace Test.Shared.Suites.Runtimes
                 }
             }));
 
-            string shellSkip = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+            string? shellSkip = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
                     || !File.Exists("/bin/bash")
                     || !File.Exists("/usr/bin/env")
                     || !File.Exists("/usr/bin/head")

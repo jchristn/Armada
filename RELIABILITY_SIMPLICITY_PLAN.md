@@ -42,6 +42,8 @@ Tags on items:
 - **Surfaces:** which product surfaces the item touches. Every surface named there has a matching item in Phase 12,
   13, or 14; an item is not complete until those are too, or are explicitly marked not applicable with a reason.
 
+Before starting an item, check "Prior decisions and archive constraints" for its id.
+
 Each item lists "Start at" locations from the review. Line numbers are from commit `a2503b7a2` and will drift; search
 for the quoted symbol if the line has moved.
 
@@ -142,6 +144,86 @@ and are not avoided to save cost, but they are counted and reported.
 A gate run that misses a threshold is not "close enough". Find the cause, fix it under a new item, and rerun the
 affected pipelines.
 
+## Prior decisions and archive constraints (RS-0.9)
+
+Several items here touch ground earlier work already covered. Before starting any item, read its row below. A
+"constraint" narrows how the item is done; a "reversal" changes a recorded decision and needs Joel's answer in the
+table first. Abbreviations: HER `archive/HANDOFF_EXAMINATION_RESULTS.md`, FLF `archive/FIX_LANDING_FAILURES.md`, CI
+`archive/CONCURRENCY_IMPROVEMENTS.md`, MH `docs/MODEL_HETEROGENEITY.md`, HDR `docs/HYBRID_DEVELOPMENT_RESULTS.md`, PHI
+`archive/PROMPT_AND_HANDOFF_IMPROVEMENTS.md`, FCA/FCX `archive/FAILURE_CASES_ACTIONABLE.md` and `_CODEX.md`.
+
+### Reversals (need a decision)
+
+The earlier decisions were sound for the goal they served, which was keeping frontier pipelines stable without
+large refactors. This plan's goal is different, and in most cases the old reasoning does not survive it. Where it
+does, the recommendation is to keep the decision and change the item.
+
+| # | Items | Recorded decision | Recommendation | Decision |
+|---|---|---|---|---|
+| R1 | RS-3.1 to RS-3.4 | HER:660 markers in descriptions stay; HER:645 chose the `<title> [Worker]` lookup | Reverse. Typed columns are what make G2 and G3 testable | |
+| R2 | RS-3.5, RS-3.6 | HER:653 converting remaining full-row writes to compare-and-set is not planned | Reverse, keeping the `UpdateAsync` Cancelled guard and the Blocked edges (FCC FC-4.4) | |
+| R3 | RS-4.5 | HER:655 dispatch callers not serialized; a global lock would slow every completion | Reverse the single-loop part only: a coalescing wake signal, never a lock in the completion path; completion never waits for dispatch | |
+| R4 | RS-5.2 | HER:583, C6 (:460) arbitrary `runtime_error` stays Crash because retrying can repeat side effects | Change the item: `Unclassified` resumes in place only when the attempt ran no external side-effect tool (git push, network, process outside the dock); otherwise it escalates without a resume | |
+| R5 | RS-6.6 | HER:457 (C3) do not strip formatting or select the last verdict | Keep C3. Drop "accept the last line" from RS-6.6; ambiguity goes to the format-only repair turn (RS-6.4) instead | |
+| R6 | RS-6.5 | HER:717 strict matching, no automatic plan normalization; MH: two plan blocks are refused | Keep refusing two blocks and keep validation strict. Limit RS-6.5 to locating one block (bare or `~~~`) and better error detail; type coercion happens only through the repair turn | |
+| R7 | RS-8.8 | HER:640 no per-runtime stall thresholds (delays catching real hangs) | Keep. Replace per-profile stall thresholds with streaming heartbeats (RS-7.7); per-profile limits only for first-token time and maximum runtime | |
+| R8 | RS-8.6 | HER:609 least-recently-used rejected; name order kept; a fix must respect Judge independence | Proceed behind a setting, default off, and only with Judge independence preserved | |
+| R9 | RS-8.1, RS-8.5 | MH: the profile does not set tier or change routing automatically; routing changes only after held-out production tasks | Keep. Probes propose capabilities and tier; an administrator accepts them in the profile UI (one click), and data-driven tier stays opt-in | |
+| R10 | RS-11.1 | HER:656 separate services not created because the methods share mutable state | Reverse after Phases 3 to 6 remove the shared state (agrees with REFACTORING_PLAN "no partial classes") | |
+| R11 | RS-2.6, RS-4.4 | FLF:219 dedup any dispatch whose description references a LandingFailed mission; CI:58 v3 ownership overlap only warns | Keep both: `RescueOfMissionId` is added in front of the description dedup, and overlap rejects only for v4 plans | |
+
+### Constraints by item
+
+- RS-1.1: `StubCaptainRuntime` fault scripts and `Services.RuntimeFaultMatrix` already fake the runtime process; the
+  simulator fakes the model server below it. Extend those for process-level faults instead of adding another fake.
+- RS-1.4: record into `StageOutcome` (it already holds provenance, suspected cause, `ContractRepairKind`, escalation
+  links), keep observed failure separate from suspected cause, and add Judge finding categories, tool failure kinds,
+  and per-turn input tokens (HDR: qwen3-coder used 15.2M input tokens resending context).
+- RS-1.7: already done; `judge-negative` with a `seededSet` grader is in all 8 packs.
+- RS-2.2: keep `deepseek-v4.1-flash` and API captains at Standard (HER D12, C10); 8B and below stay Economy.
+- RS-2.7: update the orphan-claim race test (CI:33); re-pend without charge only when the branch has no commits.
+- RS-2.11: a missing dock stays `Infra` (FLF:212-215).
+- RS-2.12: `SPEC_CONFLICT` recovery still requires the quoted `## Spec Conflict` section.
+- RS-4.6: `MissionAdmissionEvaluator` already runs Parent, BroadScope, VesselVoyageSlot, VoyageMissionSlot, BranchLock
+  with fairness over eligible missions; keep them and the `admission.stuck` meaning; escalation eligibility differs
+  on purpose (HER D18).
+- RS-4.9: endpoint and runtime caps are only enforced under the lock today (CI:401); re-validate them inside the
+  claim, keep vessel-then-capacity lock order and the deadlock retries.
+- RS-4.10: PID reuse needs a start-time match; gate a Harbor `LaunchJobId` behind a capability flag.
+- RS-5.1: suspected-cause rules stay administrator data; `FailureKindMapper` maps observed kinds only.
+- RS-5.5: `MaxOutputRepairAttempts` (0 to 3) and `TransientResumeDelaySeconds` exist; per-profile policy cannot
+  shorten the FullPipeline rework chain.
+- RS-5.6: escalation returns false for strict assignments (HER:630); strict missions are excluded from G12.
+- RS-5.8: rescue stays limited to standalone work stages, and its brief keeps "integrate commit X".
+- RS-6.1: generated contracts replace only templates the operator has not edited.
+- RS-6.4: review-gated stages are never repaired.
+- RS-6.8: citing an inspected file stays sufficient (the Codex Judge could not run dotnet in its sandbox).
+- RS-6.12: list removal for 2.0; removal is only allowed in a major release (CI D-026).
+- RS-7.2: never execute calls recovered from a failed or incomplete stream (HER HF-24).
+- RS-7.7: default streaming on only where the Harbor reports `api-inference-streaming-v1`.
+- RS-7.8: served context is part of profile identity; a discovered context creates a new profile revision, and
+  discovery runs on the serving Harbor (HER D14).
+- RS-7.9: keep the default read cap of 200 lines and 24,000 characters (HF-06); scale only the hard maximums.
+- RS-8.3: measure the lean template on the battery before switching to it automatically (MH principle 1).
+- RS-8.7: model-identity Judge exclusion can stall two-captain pools; fall back to the typed blocker, not a stall.
+- RS-9.1: re-verify on each push attempt and end as `LandingConflict` with both heads; reuse `MaxLandingRetries`
+  (default 3) or name a new setting deliberately.
+- RS-9.2: keep deferred LocalMerge retry, auto-reconcile, and dock repair.
+- RS-9.3, RS-10.4: concurrent fetches per repository are already combined and branch paths cached for 30 s; the
+  remaining work is the per-voyage advisor context.
+- RS-12.10, RS-12.13: use `useResourceTable`, `PageHeader`, and `RecordDetailModal` (SIMPLIFICATION).
+
+### Deferred work the plan does not cover
+
+Recorded for completeness; each goes to `docs/BACKLOG.md` with a reason unless it is pulled in later: PHI R18
+(Usability reproducibility), R19 escalation when evidence is inaccessible, R20 and R21 (Recorder, with HF-23), R22
+(linter split), R25 (Usability viewports); FCA T3-4 integration worktree for LocalMerge; FLF C3 (ordering-language
+lint), C4 (repeated-papercut escalation), per-voyage integration branches; HER HF-05 (semantic plan validation), HF-11
+(transcript), HF-14 (shell exit masking), R6 load timeout (partly RS-7.16); MH 3.5 translator, Decision 4 tool
+guidance, Phase 6.3 persona-scoped quarantine; FR R5 production TODOs (MCP enumerate with `includeDescription`
+ignores filters and tenant scope; WebSocket `command.error` has no code). The tenant-scope TODO is a security issue
+and is pulled in as RS-2.13.
+
 ---
 
 ## Phase 0: Setup and baseline
@@ -174,10 +256,13 @@ branch starts adding tests to it.
 - [ ] **RS-0.11** Register the reference models in a development Admiral as model endpoints and captains (Qwen3.8,
   DeepSeek 4.1, GLM, inkling-2-mini on ApiEndpoint; Opus on Claude Code; GPT-6.1 on Codex), run the existing probes
   and battery once per model, and save the scorecards as the 1.4.0 starting picture for RS-0.8. Evidence:
-- [ ] **RS-0.5** Fix the four failing `ci.yml` cases recorded in the runbook section 14 ("SDK preserves passive capture
+- [x] **RS-0.5** Fix the four failing `ci.yml` cases recorded in the runbook section 14 ("SDK preserves passive capture
   observations and their original timestamps" and three "real pi run" cases that need the `pi` CLI; the latter should
   skip with a reason when the CLI is absent, not fail). Fix the `full.yml` compose job's missing
-  `ARMADA_GRAFANA_ADMIN_PASSWORD`. Evidence:
+  `ARMADA_GRAFANA_ADMIN_PASSWORD`. Evidence: `fab7099ca` (Touchstone 0.2.1 runs a case with a skipReason unless
+  `skip` is also true: five suites fixed, `Models.TestSkipFlagHygiene` guards it, real pi runs opt-in with
+  `ARMADA_TEST_REAL_PI=1`; passive capture compares whole seconds), `ae8057a80` (Grafana password in compose
+  validation), `b29365f37` (TUI focus sweep: stale placements below nested scopes; all 658 TUI cases pass).
 - [ ] **RS-0.6** Baseline run of everything: `dotnet build src/Armada.sln -c Release -warnaserror` (both frameworks),
   `Test.Automated` net8.0 and net10.0, xUnit and NUnit adapters, dashboard, mobile, TUI parity, VS Code extension.
   Record counts in the validation log. Evidence:
@@ -186,24 +271,27 @@ branch starts adding tests to it.
 - [ ] **RS-0.8** Baseline reliability: after RS-1.6 exists, run the four reference pipelines on 1.4.0 code (a
   worktree at `a2503b7a2`) with the same battery and record G1 to G12. This is the "before" column of the release
   notes. Evidence:
-- [ ] **RS-0.9** Read the archive docs the review did not fully cover (`archive/FAILURE_CASES_*.md`,
+- [x] **RS-0.9** Read the archive docs the review did not fully cover (`archive/FAILURE_CASES_*.md`,
   `archive/FIX_LANDING_FAILURES.md`, `archive/FRAGILITY_REMEDIATION.md`, `archive/SIMPLIFICATION.md`,
   `archive/REFACTORING_PLAN.md`, `archive/DISPATCH_ISSUES.md`). For each item in this plan that they already
-  cover, add a note "see archive/X.md#section" so prior decisions are not undone by accident. Evidence:
+  cover, add a note "see archive/X.md#section" so prior decisions are not undone by accident. Evidence: recorded in "Prior decisions and archive constraints"; reversals R1 to R11 wait
+  for Joel.
 
 ## Phase 1: Test and measurement harness
 
 The fixes in later phases are mostly about rare paths: a crash between two writes, a model that prints its tool call
 instead of calling it, a 429 from a local proxy. Those paths need to be reproducible on demand before they are fixed.
 
-- [ ] **RS-1.1** Open-model behavior simulator. Extend `postman/simulations` (or add an in-process fake under
+- [x] **RS-1.1** Open-model behavior simulator. Extend `postman/simulations` (or add an in-process fake under
   `Test.Shared`) to an OpenAI-compatible and Ollama `/api/chat` fake that can be scripted per request to produce:
   Hermes/Qwen `<tool_call>` text instead of `tool_calls`, `<function=...>` text, fenced JSON tool calls, malformed
   tool-argument JSON, Ollama's malformed-tool-call HTTP 500, an unknown tool name, the same tool call repeated,
   reasoning without the opening `<think>`, a 429 without quota information (backpressure), a 429 with
   `insufficient_quota`, "llama runner process has terminated", "model requires more system memory", a
   context-overflow 400, a response cut by `length`, slow streaming (configurable tokens per second), and no streaming.
-  Document it in `postman/README.md`. Evidence:
+  Document it in `postman/README.md`. Evidence: in-process `OpenModelSimulator` (`src/Test.Shared/Infrastructure/OpenModel`), suite
+  `Runtimes.OpenModelSimulator` 23/23; documented in `docs/TESTING.md` "Open-model simulator" rather than the
+  Postman README because it runs in-process.
 - [ ] **RS-1.2** Scripted model outputs for contract tests: canned Architect plans (fenced, unfenced, `~~~`, prose
   inside the fence, draft then final, `"parent":"1"`, `"kind":"Implementation"`), Judge outputs (verdict in bold,
   verdict under a heading, two verdicts, verdict inside a truncated fence, `SPEC_CONFLICT` near-miss), Worker outputs
@@ -230,8 +318,9 @@ instead of calling it, a 429 from a local proxy. Those paths need to be reproduc
     final judgment to a frontier model or flags it).
   - **P-D** Every persona Qwen3.8, escalation ladder Qwen3.8 -> GPT-6.1 -> Opus (RS-5.6).
   Evidence:
-- [ ] **RS-1.7** Seeded-defect tasks in at least the `csharp`, `python`, and `javascript` battery packs so G7 can be
-  measured (a task whose correct verdict is FAIL). Evidence:
+- [x] **RS-1.7** Seeded-defect tasks in at least the `csharp`, `python`, and `javascript` battery packs so G7 can be
+  measured (a task whose correct verdict is FAIL). Evidence: already present: `judge-negative` with a `seededSet`
+  grader in all 8 `battery/*/battery-pack.json` (RS-0.9).
 
 ## Phase 2: Correctness bugs found in review
 
@@ -277,6 +366,9 @@ Each of these is a confirmed defect in 1.4.0. They are small, and each gets a re
   failure. Narrow it to the start path. Evidence:
 - [ ] **RS-2.12** `ParseSeverity` style issue aside, `ContractRepair.TryRecoverVerdict` maps `SPEC_CONFLICT` to
   None (around `ContractRepair.cs:115`). Recover it like the other verdicts. Evidence:
+
+- [ ] **RS-2.13** MCP enumerate with `includeDescription` ignores filters and tenant scope (FR R5 production TODO).
+  Confirm with a cross-tenant test and fix. Evidence:
 
 ## Phase 3: Typed state and an enforced state machine
 
@@ -397,6 +489,9 @@ routing; a renamed Architect slice breaks fan-out recovery. Everything a program
   `"not something we can merge"` (`MergeQueueService.cs:927`), and process-start detection without
   `"trying to start process"` (`LandingFailureClassifier.cs:49`). Evidence:
 
+- [ ] **RS-5.12** Iteration-limit exhaustion (gpt-oss:120b hit the limit 4 times, HDR) becomes a typed failure kind
+  and an escalation trigger in RS-5.6. Evidence:
+
 ## Phase 6: Output contracts and repair
 
 The biggest single cost for open models today is that a formatting slip reruns the whole stage. This phase makes
@@ -458,6 +553,10 @@ the contract a schema, lets the model submit through a tool, and repairs format 
   keep it behind a setting defaulting on in 1.5.0, log a deprecation warning when it is used, and list it in
   `DEPRECATION.md` for removal in a later release. Precompile any regex that remains. Evidence:
 
+- [ ] **RS-6.13** Count tool schemas in every prompt budget (RS-6.11, RS-8.4) and scope the tool catalog per persona:
+  qwen3.8 used 36,271 input tokens with the full 175-tool catalog against 723 with scoped tools (HER:1224).
+  Evidence:
+
 ## Phase 7: API runtime hardening for open models
 
 `docs/MODEL_GUIDANCE.md:67` says tool-calling reliability on generic runtimes "is the model's responsibility". After
@@ -500,6 +599,18 @@ this phase it is Armada's job to absorb the predictable failures.
 - [ ] **RS-7.13** Harbor compatibility. The runtime changes run on Harbor in split mode. Add a Harbor capability flag
   for each new runtime behavior; a 1.5.0 Admiral with a 1.4.0 Harbor falls back to 1.4.0 behavior and shows "Harbor
   update recommended" in the Harbor and captain views. Update `docs/HARBOR_PROTOCOL.md`. Evidence:
+
+- [ ] **RS-7.14** Edit and write tools keep a UTF-8 byte order mark and line endings (`EditFileTool.cs:94,150`,
+  `MultiEditTool.cs:111,184`, `WriteFileTool.cs:93` read and write with no encoding; Mux fixed the same bug in 1.4.1,
+  HDR Tooling 1). Battery byte-comparison test. Evidence:
+- [ ] **RS-7.15** Reject edits whose text carries `read_file` line-number prefixes (gpt-oss:20b pasted them into code,
+  HDR and MH A4), with an error the model can act on; optionally a per-profile read format without numbers.
+  Evidence:
+- [ ] **RS-7.16** Cold loads: warm the model with `keep_alive` before the first turn, and classify "model loading" and
+  proxy time-to-first-byte timeouts (Conductor's 504 after 300 s, seen 2026-11-25 on inkling-2-mini) as Transient
+  (HER:353, HER:685, HDR gpt-oss:120b cold start). Evidence:
+- [ ] **RS-7.17** Ollama's "token repeat limit reached" 500 (HDR, gpt-oss:20b) becomes a simulator kind (RS-1.1) and is
+  handled like RS-7.3. Evidence:
 
 ## Phase 8: Capability-aware routing and prompts
 

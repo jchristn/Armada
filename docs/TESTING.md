@@ -198,6 +198,29 @@ scripts/common/generate-api-surface.sh
 
 See [COMPATIBILITY.md](COMPATIBILITY.md).
 
+## Open-model simulator
+
+Open models fail in ways frontier models rarely do, and the servers that host them add failures of their own. The
+`OpenModelSimulator` in `src/Test.Shared/Infrastructure/OpenModel` reproduces those failures on a loopback port so a
+test can drive the API runtime, recovery, and routing code through them without a real model. It answers Ollama routes
+(`/api/chat`, `/api/show`, `/api/ps`, `/api/tags`) and OpenAI-compatible routes (`/v1/chat/completions`, `/v1/models`),
+including behind a proxy prefix such as `/v1.0/api/<runner>/`, and it streams the way each server does (NDJSON for
+Ollama, server-sent events for OpenAI) when the request asks for it.
+
+Each chat request takes the next `SimulatedTurn` from the script. The kinds cover native tool calls; tool calls written
+as text (Hermes `<tool_call>`, `<function=...>`, fenced JSON); malformed arguments; an unknown tool; Ollama's tool-call
+parse 500; 429 backpressure with `Retry-After` and 429 quota exhaustion; runner crashes and out-of-memory 500s; context
+overflow; replies cut by the token limit; reasoning that leaks with only a closing `</think>`; and a hang that never
+sends headers. Slow models are imitated with `ChunkDelayMs`.
+
+```bash
+dotnet run --project src/Test.Automated --framework net10.0 -- --suites Runtimes.OpenModelSimulator
+```
+
+That suite checks the simulator's wire formats and that the API runtime ends, rather than hangs, for every kind. The
+suites for the reliability work in `RELIABILITY_SIMPLICITY_PLAN.md` use the simulator to assert the recovery each kind
+should get.
+
 ## Adding Tests
 
 1. Find the suite for the area in `src/Test.Shared/Suites/<Area>/`, or add a class that implements `IArmadaTestSuite`
