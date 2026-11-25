@@ -304,8 +304,9 @@ instead of calling it, a 429 from a local proxy. Those paths need to be reproduc
   (`CrashPointNames`); the harness freezes the flow at the point instead of throwing, because the merge queue's
   catch-all handled a thrown crash as an ordinary failure. `Services.CrashConsistency`: merge queue cases reproduce
   RS-2.5 (entry stuck Testing) and RS-2.3 (mission stuck WorkProduced); recovery cases reproduce RS-2.6 (a duplicate
-  incident after a crash past incident creation; an orphaned rescue the incident never records). All four are skipped
-  until those items land. Still to do: cases for voyage creation, launch, handoff, and fan-out.
+  incident after a crash past incident creation; an orphaned rescue the incident never records); the voyage case
+  reproduces RS-4.3 (a voyage left Open with 1 of its 3 missions, forever). All five are skipped until those items
+  land. Still to do: cases for launch, handoff, and fan-out.
 - [ ] **RS-1.4** Pipeline reliability metrics recorded per attempt (persisted, not in memory): runtime failure kind,
   repair kind and outcome (in-session, format-only, full rerun), escalation from and to (captain, model, tier),
   human interventions, dispatch latency. Exposed through Prometheus metrics per `TELEMETRY_REQUIREMENTS.md` and

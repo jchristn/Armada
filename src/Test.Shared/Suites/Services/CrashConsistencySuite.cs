@@ -10,6 +10,7 @@ namespace Test.Shared.Suites.Services
     using Armada.Core.Enums;
     using Armada.Core.Models;
     using Armada.Core.Services;
+    using Armada.Core.Services.Interfaces;
     using Armada.Core.Settings;
     using SyslogLogging;
     using Test.Shared.Infrastructure;
@@ -73,6 +74,9 @@ namespace Test.Shared.Suites.Services
 
             cases.Add(Case("recovery_crash_after_rescue_created", "Crash after a rescue is created: the next cycle adopts it instead of dispatching a second rescue",
                 "Adopting rescues by RescueOfMissionId in any status is RS-2.6.", () => RecoveryCrashAsync(CrashPointNames.RecoveryRescueCreated)));
+
+            cases.Add(Case("voyage_crash_mid_build_is_completed_or_failed", "Crash while a voyage's missions are being created: after restart the voyage is whole or failed, never half-built and open",
+                "Building the voyage and its missions atomically is RS-4.3.", VoyageCrashAsync));
 
             return new TestSuiteDescriptor(suiteId: SuiteId, displayName: "Crash consistency", cases: cases);
         }
@@ -145,6 +149,51 @@ namespace Test.Shared.Suites.Services
             AssertEqual("Compile", forMission[0].FailureKind, "the incident records the failure kind");
             AssertEqual(1, rescues.Count, "one rescue mission, not a duplicate");
             AssertTrue(forMission[0].RescueMissionIds.Contains(rescues[0].Id), "the incident references the rescue");
+        }
+
+        private static async Task VoyageCrashAsync()
+        {
+            using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+            Vessel vessel = await testDb.Driver.Vessels.CreateAsync(new Vessel("crash-voyage-vessel", "https://github.com/test/repo.git") { DefaultBranch = "main" }).ConfigureAwait(false);
+            List<MissionDescription> work = new List<MissionDescription>
+            {
+                new MissionDescription("First", "Do the first part"),
+                new MissionDescription("Second", "Do the second part"),
+                new MissionDescription("Third", "Do the third part")
+            };
+
+            AdmiralService before = CreateAdmiral(testDb.Driver);
+            CrashRunOutcomeEnum outcome = await CrashRun.RunAsync(CrashPointNames.VoyageMissionCreated,
+                () => before.DispatchVoyageAsync("Crash voyage", "Three-part change", vessel.Id, work)).ConfigureAwait(false);
+            AssertEqual(CrashRunOutcomeEnum.Crashed, outcome, "the operation reached the crash point");
+
+            // Restart: a new Admiral cleans up and runs its health loop twice.
+            AdmiralService after = CreateAdmiral(testDb.Driver);
+            await after.CleanupStaleCaptainsAsync().ConfigureAwait(false);
+            await after.HealthCheckAsync().ConfigureAwait(false);
+            await after.HealthCheckAsync().ConfigureAwait(false);
+
+            List<Voyage> voyages = (await testDb.Driver.Voyages.EnumerateAsync().ConfigureAwait(false)).Where(v => v.Title == "Crash voyage").ToList();
+            AssertEqual(1, voyages.Count, "one voyage row");
+            List<Mission> missions = await testDb.Driver.Missions.EnumerateByVoyageAsync(voyages[0].Id).ConfigureAwait(false);
+            bool whole = missions.Count == work.Count;
+            bool failed = voyages[0].Status == VoyageStatusEnum.Failed || voyages[0].Status == VoyageStatusEnum.Cancelled;
+            AssertTrue(whole || (failed && missions.All(m => m.Status != MissionStatusEnum.Pending && m.Status != MissionStatusEnum.Assigned && m.Status != MissionStatusEnum.InProgress)),
+                "voyage is whole or failed with no live work; it has " + missions.Count + " of " + work.Count + " missions and status " + voyages[0].Status);
+        }
+
+        private static AdmiralService CreateAdmiral(DatabaseDriver db)
+        {
+            LoggingModule logging = CreateLogging();
+            ArmadaSettings settings = new ArmadaSettings();
+            settings.DocksDirectory = TestTemp.NewDirectory("crash_admiral_docks");
+            settings.ReposDirectory = TestTemp.NewDirectory("crash_admiral_repos");
+            StubGitService git = new StubGitService();
+            IDockService docks = new DockService(logging, db, settings, git);
+            ICaptainService captains = new CaptainService(logging, db, settings, git, docks);
+            IMissionService missions = new MissionService(logging, db, settings, docks, captains);
+            IVoyageService voyages = new VoyageService(logging, db);
+            return new AdmiralService(logging, db, settings, captains, missions, voyages, docks);
         }
 
         private static LoggingModule CreateLogging()
