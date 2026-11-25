@@ -777,6 +777,10 @@ Parity manifests (`src/Armada.Tui/parity.json`, `src/Armada.Mobile/parity.json`)
   history with failure kind, repairs, and escalations (RS-1.4), `Persona` and `Mode` on mission requests (RS-4.2),
   reliability gate report (RS-1.5), and submitted stage results (RS-6.2). Request validation and authorization per
   `AUTHENTICATION.md`, tenant scoping tested. Evidence:
+- [ ] **RS-12.1a** Battery runs have no list or cancel route (found 2026-11-25: stopping the gate client left its run
+  executing on the Admiral). Add `GET /api/v1/battery/runs` (paged, filters) and `POST /api/v1/battery/runs/{id}/cancel`
+  (cancels open missions and releases docks, as a Full Evaluate stop does), with MCP, SDK, Postman, CLI, and dashboard
+  surfaces; the gate runner cancels its run on Ctrl+C. Evidence:
 - [ ] **RS-12.2** MCP: matching tools and fields, plus the submit tools (RS-6.2). Mark which tools a captain may call
   and which are operator tools. Evidence:
 - [ ] **RS-12.3** WebSocket: events for escalation, repair, and attempt changes; existing `mission.changed` payloads
