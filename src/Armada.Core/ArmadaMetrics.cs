@@ -38,6 +38,15 @@ namespace Armada.Core
         /// <summary>Pending missions observed ready before/after three consecutive dispatch opportunities.</summary>
         public static readonly Counter<long> AdmissionStuck = _Meter.CreateCounter<long>("armada.admission.stuck");
 
+        /// <summary>
+        /// One per recorded stage attempt, exported as armada_stage_outcomes_total. Tags: persona, runtime, model,
+        /// disposition (Completed, Relaunched, OutputRepair, Escalated, Failed, ...), failure_kind, runtime_failure_kind,
+        /// and contract_repair (the deterministic repair kind, or None). The pipeline reliability panels and the
+        /// acceptance gate's per-model views read it (RELIABILITY_SIMPLICITY_PLAN.md RS-1.4).
+        /// </summary>
+        public static readonly Counter<long> StageOutcomes =
+            _Meter.CreateCounter<long>("armada.stage_outcomes", null, "Stage attempts by outcome");
+
         /// <summary>Missions that reached Failed.</summary>
         public static readonly Counter<long> MissionsFailed =
             _Meter.CreateCounter<long>("armada.missions.failed", null, "Missions failed");

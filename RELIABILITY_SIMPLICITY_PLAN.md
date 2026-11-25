@@ -312,10 +312,18 @@ instead of calling it, a 429 from a local proxy. Those paths need to be reproduc
   land. The handoff and fan-out cases pass today (`RecoverDanglingHandoffsAsync` prepares the remaining dependent and
   creates the missing slice once, found by title) and guard RS-3.3. The launch case is written with RS-4.10, which
   builds the launch intent it needs to check.
-- [ ] **RS-1.4** Pipeline reliability metrics recorded per attempt (persisted, not in memory): runtime failure kind,
+- [x] **RS-1.4** Pipeline reliability metrics recorded per attempt (persisted, not in memory): runtime failure kind,
   repair kind and outcome (in-session, format-only, full rerun), escalation from and to (captain, model, tier),
   human interventions, dispatch latency. Exposed through Prometheus metrics per `TELEMETRY_REQUIREMENTS.md` and
-  queryable for the gate report. Surfaces: Server, Grafana. Evidence:
+  queryable for the gate report. Surfaces: Server, Grafana. Evidence: no migration was needed. Per attempt, `StageOutcome` already holds
+  failure kind, runtime failure kind, disposition (`OutputRepair` is a full rerun), deterministic repair kind, the next
+  captain, and timing; tokens come from `TokenUsageRecord` (Source "mission", SourceId, CreatedUtc in the attempt
+  window); dispatch wait from `MissionWaitInterval` and `armada_missions_queue_seconds`. Added
+  `armada_stage_outcomes_total` (persona, runtime, model, disposition, failure kinds, repair) and documented it in
+  `docs/TELEMETRY.md`. Human interventions are not separate rows: the gate runs unattended, so any mutating
+  operator request during a gate run (request history) counts; product-facing intervention counts come with
+  RS-12.13. New repair modes (in-session, format-only) become `StageDispositionEnum` values in RS-6.4, and tool-call
+  failure counts arrive with Phase 7.
 - [ ] **RS-1.5** Gate report generator: a `Armada.Benchmark` runner (or `armada battery report`) that reads RS-1.4
   data for a set of battery runs and prints G1 to G12 with pass or fail, as Markdown and JSON, into
   `benchmarks/results/`. Evidence:

@@ -59,6 +59,7 @@ as `armada_*_total` series:
 | `armada_captains_stalls_total`          | Captain stalls detected                             |
 | `armada_captains_recoveries_total`      | Captain auto-recovery attempts                      |
 | `armada_missions_failed_total`          | Missions that reached Failed                        |
+| `armada_stage_outcomes_total` | One per stage attempt; labels `persona`, `runtime`, `model`, `disposition`, `failure_kind`, `runtime_failure_kind`, `contract_repair`. Rates by model and persona show which models fail, need repairs, or get escalated |
 | `armada_missions_runtime_exceeded_total`| Missions force-failed for exceeding the max runtime |
 | `armada_reviews_overdue_total`          | Reviews released after going overdue                |
 | `armada_handoffs_redriven_total`        | Dangling pipeline handoffs re-driven                |
