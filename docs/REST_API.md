@@ -12160,6 +12160,12 @@ A mission within a VoyageRequest.
 | `Description` | string | no | Mission description/instructions |
 | `RequestedCaptainId` | string? | null | Preferred captain; used when idle, otherwise dispatch falls back by `Tier` |
 | `Tier` | string? | null | Required/fallback capability tier (`CaptainTierEnum`) |
+| `Persona` | string? | null | Persona for this mission (`Worker`, `Judge`, `Test Engineer`, ...). When every mission names one and no pipeline is given, the vessel and fleet default pipelines are skipped and each mission runs as one stage with its persona; a single-stage pipeline takes it; a multi-stage pipeline picks its own personas and ignores it |
+| `Mode` | string? | null | `Implementation` (default), `Audit`, or `Research`. Audit and Research are read-only report modes whose empty diff counts as success; every stage of the mission gets this mode |
+| `Key` | string? | null | Names this mission so a later one in the same request can name it as `ParentKey` |
+| `ParentKey` | string? | null | Key of an earlier mission in the request: this mission becomes its child. An unknown or later key is a 400 and creates nothing |
+| `BranchStrategy` | string? | null | `New`, `ContinueParent` or `ForkFromParent` |
+| `OwnedPaths` | string[]? | null | Files or directories (trailing `/` for a directory) this mission may change |
 
 ---
 

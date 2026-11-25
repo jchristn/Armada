@@ -42,6 +42,13 @@ Conductor) with Opus and GPT-6.1 reliable. The work is tracked item by item in `
   creates nothing (REST created the voyage and then failed), and a planning session's link is written with the voyage.
   The .NET client's `VoyageDispatchRequest` gains `ObjectiveId`, `CaptainAssignments` and `LandingMode` to match REST
   (RS-4.1).
+- **Missions in a voyage request take a persona and a mode.** `POST /api/v1/voyages` missions accept `Persona` and
+  `Mode` (`Implementation`, `Audit`, `Research`), as the MCP `dispatch` tool does. MCP advertised `persona` before but
+  dropped it, so every MCP mission ran as the pipeline decided; it is now applied. When every mission names a persona
+  and no pipeline is given, each runs as one stage with its persona; a multi-stage pipeline still picks its own. The
+  dashboard and mobile voyage forms and the TUI Create Voyage screen have a Persona and a Mode per mission,
+  `armada voyage create` has `--persona` and `--mode`, the .NET client's `DispatchRequest` has both fields, and Postman
+  has a "Dispatch Persona and Mode Voyage" example (RS-4.2).
 - **Recovery state survives a restart.** Endpoint circuit breakers, launch backoff (with the captains that failed to
   start the mission), the start of a transient outage, and escalation rule cooldowns were kept only in memory, so a
   restart sent missions straight back to a failing endpoint, relaunched a broken captain at once, granted an outage a

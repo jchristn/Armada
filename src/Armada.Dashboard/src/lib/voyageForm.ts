@@ -17,6 +17,10 @@ export interface VoyageMissionRow {
   branchStrategy?: '' | 'ContinueParent' | 'ForkFromParent';
   /** Files or directories this mission may change, one per line or comma-separated. */
   ownedPaths?: string;
+  /** Persona name; '' leaves the choice to the pipeline. */
+  persona?: string;
+  /** Mission mode; '' is Implementation. */
+  mode?: '' | 'Implementation' | 'Audit' | 'Research';
 }
 
 /** Everything the form collects. `landingMode` '' inherits (vessel, then the global setting). */
@@ -67,7 +71,7 @@ export function validateVoyageForm(form: VoyageFormState): string | null {
 
 /**
  * The createVoyage payload: rows without a title are dropped, a mission without a description uses its title,
- * and the optional fields (pipeline, playbooks, landing mode) are sent only when set.
+ * and the optional fields (pipeline, playbooks, landing mode, persona, mode) are sent only when set.
  */
 export function buildVoyageCreateRequest(form: VoyageFormState): VoyageCreateRequest {
   const kept = form.missions.filter((m) => m.title.trim());
@@ -91,6 +95,8 @@ export function buildVoyageCreateRequest(form: VoyageFormState): VoyageCreateReq
       ...(parentKey ? { parentKey } : {}),
       ...(parentKey && m.branchStrategy ? { branchStrategy: m.branchStrategy } : {}),
       ...(owned.length > 0 ? { ownedPaths: owned } : {}),
+      ...(m.persona?.trim() ? { persona: m.persona.trim() } : {}),
+      ...(m.mode && m.mode !== 'Implementation' ? { mode: m.mode } : {}),
     };
   });
   return {

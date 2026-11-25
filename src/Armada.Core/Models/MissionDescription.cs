@@ -1,7 +1,6 @@
 namespace Armada.Core.Models
 {
     using System.Collections.Generic;
-    using System.Text.Json.Serialization;
 
     /// <summary>
     /// Describes a mission's title and description for voyage dispatch.
@@ -36,21 +35,17 @@ namespace Armada.Core.Models
         public string? RequestedCaptainId { get; set; } = null;
 
         /// <summary>
-        /// Optional persona for this mission, set by in-process callers (a Mission fleet action's <c>Persona</c>). When
-        /// every mission of a dispatch carries a persona and no pipeline is named, the vessel and fleet default pipelines
-        /// are skipped and each mission runs as a single stage with its persona; with a single-stage pipeline the
-        /// persona replaces the stage persona (the stage's review policy still applies); a multi-stage pipeline decides
-        /// its own personas and this is ignored. Not part of the wire format.
+        /// Optional persona for this mission (REST, MCP, fleet actions). When every mission of a dispatch carries a
+        /// persona and no pipeline is named, the vessel and fleet default pipelines are skipped and each mission runs as
+        /// a single stage with its persona; with a single-stage pipeline the persona replaces the stage persona (the
+        /// stage's review policy still applies); a multi-stage pipeline decides its own personas and this is ignored.
         /// </summary>
-        [JsonIgnore]
         public string? Persona { get; set; } = null;
 
         /// <summary>
-        /// Mission mode, set by in-process callers (a report-only Mission fleet action uses Audit or Research). Every
-        /// mission created from this description, including each pipeline stage, gets this mode. Not part of the wire
-        /// format.
+        /// Mission mode: Implementation (default), or the read-only report modes Audit and Research. Every mission
+        /// created from this description, including each pipeline stage, gets this mode.
         /// </summary>
-        [JsonIgnore]
         public Armada.Core.Enums.MissionModeEnum Mode { get; set; } = Armada.Core.Enums.MissionModeEnum.Implementation;
 
         /// <summary>

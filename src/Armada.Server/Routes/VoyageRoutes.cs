@@ -161,7 +161,7 @@ namespace Armada.Server.Routes
                 {
                     foreach (MissionRequest m in voyageReq.Missions)
                     {
-                        missions.Add(new MissionDescription(m.Title, m.Description) { Tier = m.Tier, RequestedCaptainId = m.RequestedCaptainId, Key = m.Key, ParentKey = m.ParentKey, BranchStrategy = m.BranchStrategy, OwnedPaths = m.OwnedPaths });
+                        missions.Add(new MissionDescription(m.Title, m.Description) { Tier = m.Tier, RequestedCaptainId = m.RequestedCaptainId, Key = m.Key, ParentKey = m.ParentKey, BranchStrategy = m.BranchStrategy, OwnedPaths = m.OwnedPaths, Persona = String.IsNullOrWhiteSpace(m.Persona) ? null : m.Persona.Trim(), Mode = m.Mode ?? MissionModeEnum.Implementation });
                     }
                 }
 

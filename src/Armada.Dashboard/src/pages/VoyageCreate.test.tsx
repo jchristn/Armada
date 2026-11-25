@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import VoyageCreate from './VoyageCreate';
-import { createVoyage, listPipelines, listCaptains, listVessels } from '../api/client';
+import { createVoyage, listPipelines, listCaptains, listPersonas, listVessels } from '../api/client';
 import { translateTemplate } from '../i18n/runtime';
 import { onlyCallArgs } from '../test/mockCalls';
 
@@ -11,6 +11,7 @@ vi.mock('../api/client', () => ({
   listVessels: vi.fn(),
   listPipelines: vi.fn(),
   listCaptains: vi.fn(),
+  listPersonas: vi.fn(),
   createVoyage: vi.fn(),
 }));
 
@@ -47,6 +48,7 @@ describe('VoyageCreate landing mode', () => {
     vi.mocked(listVessels).mockResolvedValue(page([{ id: 'vsl_1', name: 'gateway' }]) as never);
     vi.mocked(listPipelines).mockResolvedValue(page([]) as never);
     vi.mocked(listCaptains).mockResolvedValue(page([]) as never);
+    vi.mocked(listPersonas).mockResolvedValue(page([]) as never);
     vi.mocked(createVoyage).mockReset();
     vi.mocked(createVoyage).mockResolvedValue({ id: 'vyg_1' } as never);
   });
@@ -97,6 +99,18 @@ describe('VoyageCreate landing mode', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Create Voyage' }));
     await waitFor(() => expect(createVoyage).toHaveBeenCalledTimes(1));
     expect(onlyCallArgs(vi.mocked(createVoyage))[0].captainAssignments).toEqual([{ persona: '*', captainId: 'cpt_1' }]);
+  });
+
+  it('sends each mission\'s persona and mode', async () => {
+    vi.mocked(listPersonas).mockResolvedValue(page([{ name: 'Judge' }, { name: 'Judge' }, { name: 'Worker' }]) as never);
+    await fillForm();
+    await screen.findByRole('option', { name: 'Judge' });
+    expect(screen.getAllByRole('option', { name: 'Judge' })).toHaveLength(1);
+    fireEvent.change(selectFor('Persona'), { target: { value: 'Judge' } });
+    fireEvent.change(selectFor('Mode'), { target: { value: 'Audit' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create Voyage' }));
+    await waitFor(() => expect(createVoyage).toHaveBeenCalledTimes(1));
+    expect(onlyCallArgs(vi.mocked(createVoyage))[0].missions[0]).toMatchObject({ persona: 'Judge', mode: 'Audit' });
   });
 
   it('sends no captain assignment when routing is automatic', async () => {

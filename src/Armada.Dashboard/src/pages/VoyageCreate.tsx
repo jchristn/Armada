@@ -2,12 +2,12 @@ import Breadcrumbs from '../components/shared/Breadcrumbs';
 import RunApprovalFields, { DEFAULT_RUN_APPROVALS } from '../components/shared/RunApprovalFields';
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { listVessels, listPipelines, listCaptains, createVoyage } from '../api/client';
+import { listVessels, listPipelines, listCaptains, listPersonas, createVoyage } from '../api/client';
 import { ALL_STEPS_PERSONA } from '../lib/dispatchRequest';
 import DispatchPreview from '../components/blackbox/DispatchWarnings';
 import { dispatchWarningsFrom } from '../lib/dispatchPreview';
 import { listAll } from '../api/paging';
-import type { Captain, Vessel, Pipeline, SelectedPlaybook } from '../types/models';
+import type { Captain, Persona, Vessel, Pipeline, SelectedPlaybook } from '../types/models';
 import ErrorModal from '../components/shared/ErrorModal';
 import { useLocale } from '../context/LocaleContext';
 import { useNotifications } from '../context/NotificationContext';
@@ -15,6 +15,9 @@ import PlaybookSelector from '../components/shared/PlaybookSelector';
 import { sortByName } from '../lib/sortByName';
 import { findLandingMode, getVoyageLandingModes } from '../lib/vesselForm';
 import { buildVoyageCreateRequest, newVoyageMissionRow, removeVoyageMissionRow, validateVoyageForm, type VoyageMissionRow } from '../lib/voyageForm';
+
+const PERSONA_HELP = 'Persona for this mission. When every mission names one and no pipeline is chosen, each runs as one step with its persona; a one-step pipeline takes it; a multi-step pipeline picks its own personas and ignores it.';
+const MODE_HELP = 'Implementation changes code. Audit and Research are read-only: the captain writes a report, and an empty diff counts as success. Every step of the mission uses this mode.';
 
 export default function VoyageCreate() {
   const { t } = useLocale();
@@ -26,6 +29,7 @@ export default function VoyageCreate() {
   const [selectedPipeline, setSelectedPipeline] = useState('');
   const [captains, setCaptains] = useState<Captain[]>([]);
   const [captainId, setCaptainId] = useState('');
+  const [personas, setPersonas] = useState<Persona[]>([]);
 
   // Form state
   const [title, setTitle] = useState('');
@@ -45,6 +49,7 @@ export default function VoyageCreate() {
     listAll(listVessels).then(r => setVessels(sortByName(r.objects))).catch(() => {});
     listAll(listPipelines).then(r => setPipelines(r.objects || [])).catch(() => {});
     listAll(listCaptains).then(r => setCaptains(sortByName(r.objects))).catch(() => {});
+    listAll(listPersonas).then(r => setPersonas(sortByName(r.objects))).catch(() => {});
   }, []);
 
   function addMission() {
@@ -221,6 +226,21 @@ export default function VoyageCreate() {
                     </select>
                   </label>
                 )}
+                <label>
+                  <span title={t(PERSONA_HELP)}>{t('Persona')}</span>
+                  <select value={m.persona || ''} onChange={e => updateMission(i, 'persona', e.target.value)} title={t(PERSONA_HELP)}>
+                    <option value="">{t('From the pipeline')}</option>
+                    {[...new Set(personas.map(p => p.name))].map(name => <option key={name} value={name}>{name}</option>)}
+                  </select>
+                </label>
+                <label>
+                  <span title={t(MODE_HELP)}>{t('Mode')}</span>
+                  <select value={m.mode || ''} onChange={e => updateMission(i, 'mode', e.target.value)} title={t(MODE_HELP)}>
+                    <option value="">{t('Implementation (changes code)')}</option>
+                    <option value="Audit">{t('Audit (read-only report)')}</option>
+                    <option value="Research">{t('Research (read-only report)')}</option>
+                  </select>
+                </label>
                 <label className="voyage-mission-owned">
                   <span title={t('Files or directories this mission may change, comma-separated (a trailing / means a directory). Missions that run at the same time should not share files.')}>{t('Owned paths (optional)')}</span>
                   <input value={m.ownedPaths || ''} onChange={e => updateMission(i, 'ownedPaths', e.target.value)} placeholder={t('src/Billing/, docs/billing.md')}

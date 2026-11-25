@@ -49,6 +49,19 @@ namespace Armada.Server
         public string? RequestedCaptainId { get; set; } = null;
 
         /// <summary>
+        /// Optional persona (for example Worker, Judge, Test Engineer). When every mission names one and no pipeline is
+        /// given, each runs as a single stage with its persona; a single-stage pipeline takes this persona; a multi-stage
+        /// pipeline decides its own personas and this is ignored.
+        /// </summary>
+        public string? Persona { get; set; } = null;
+
+        /// <summary>
+        /// Optional mode: Implementation (default), or the read-only report modes Audit and Research, whose empty diff
+        /// counts as success. Applies to every stage of the mission.
+        /// </summary>
+        public MissionModeEnum? Mode { get; set; } = null;
+
+        /// <summary>
         /// Optional key naming this mission within the request, so a later mission can name it as its ParentKey.
         /// </summary>
         public string? Key { get; set; } = null;

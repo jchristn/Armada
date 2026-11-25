@@ -3694,6 +3694,34 @@
                         },
                         "description": "A tree in one call: Key names a mission and ParentKey makes a later mission its child. Children start once the parent's last stage finishes; the first child continues the parent's branch and later ones fork from its head (BranchStrategy overrides). An unknown or later ParentKey returns 400 and creates nothing."
                     }
+                },
+                {
+                    "name": "Dispatch Persona and Mode Voyage",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"Title\": \"Review the billing module\",\n  \"VesselId\": \"{{vesselId}}\",\n  \"Missions\": [\n    {\n      \"Title\": \"Audit billing error handling\",\n      \"Description\": \"Report every billing path that swallows an exception. Do not change code.\",\n      \"Persona\": \"Judge\",\n      \"Mode\": \"Audit\"\n    },\n    {\n      \"Title\": \"Research invoice rounding\",\n      \"Description\": \"Summarize how invoice totals are rounded and where the rules live.\",\n      \"Persona\": \"Worker\",\n      \"Mode\": \"Research\"\n    }\n  ]\n}"
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/api/v1/voyages",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "voyages"
+                            ]
+                        },
+                        "description": "Each mission may name a Persona and a Mode. When every mission names a persona and no pipeline is given, the vessel and fleet default pipelines are skipped and each mission runs as one stage with its persona; a single-stage pipeline takes the persona; a multi-stage pipeline picks its own personas and ignores it. Mode is Implementation (default), Audit, or Research; Audit and Research are read-only report modes whose empty diff counts as success, and every stage of the mission gets the mode. The same fields are accepted by the MCP dispatch tool."
+                    }
                 }
             ]
         },

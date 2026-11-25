@@ -2881,6 +2881,10 @@ export interface DispatchRequest {
   branchStrategy?: 'New' | 'ContinueParent' | 'ForkFromParent';
   /** Files or directories this mission may change. */
   ownedPaths?: string[];
+  /** Persona for this mission; when every mission names one and no pipeline is chosen, each runs as one step with it. */
+  persona?: string;
+  /** Implementation (default), or the read-only report modes Audit and Research. */
+  mode?: 'Implementation' | 'Audit' | 'Research';
 }
 
 export interface PlanningSessionCreateRequest {

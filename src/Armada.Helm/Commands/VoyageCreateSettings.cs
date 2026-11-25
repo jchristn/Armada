@@ -41,5 +41,19 @@ namespace Armada.Helm.Commands
         [Description("Playbook selection (repeatable): id-or-file-name[[:InlineFullContent|InstructionWithReference|AttachIntoWorktree]] (default InstructionWithReference)")]
         [CommandOption("--playbook|-p <PLAYBOOK>")]
         public string[]? Playbooks { get; set; }
+
+        /// <summary>
+        /// Persona for every mission. With no pipeline, each mission runs as one stage with this persona.
+        /// </summary>
+        [Description("Persona for every mission (for example Judge). With no pipeline each mission runs as one step with it; a multi-step pipeline picks its own personas")]
+        [CommandOption("--persona <PERSONA>")]
+        public string? Persona { get; set; }
+
+        /// <summary>
+        /// Mode for every mission.
+        /// </summary>
+        [Description("Mode for every mission: Implementation (default), Audit, or Research (read-only report modes)")]
+        [CommandOption("--mode <MODE>")]
+        public MissionModeEnum? Mode { get; set; }
     }
 }

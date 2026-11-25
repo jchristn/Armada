@@ -518,8 +518,12 @@ routing; a renamed Architect slice breaks fan-out recovery. Everything a program
   `DispatchStandardVoyageAsync`, and the duplicated preamble in `AdmiralService.cs:257-540`. Fixes the drift (MCP
   `LandingMode`, tenant fallback, objective linking through `ObjectiveService.LinkVoyageAsync`). Surfaces: REST,
   MCP, WebSocket, SDK. Evidence: `VoyageCreationService.CreateAsync(caller, VoyageCreationRequest)` (exposed as `IAdmiralService.CreateVoyageAsync`) is the only creation path for REST, MCP, WebSocket, planning, fleet actions and battery runs; the four overloads and both creation loops are gone (a standard voyage is one stage). The voyage belongs to the caller (RS-2.9 ownership half), MCP bare voyages keep `LandingMode`, objective linking goes through `ObjectiveService.LinkVoyageAsync` before returning (an unknown objective creates nothing), and `SourcePlanningSessionId` is set in the create request (RS-2.4). The SDK request gains `ObjectiveId`, `CaptainAssignments` and `LandingMode`. New `Services.VoyageCreation` (5 cases) passes. Architect fan-out slice creation moves onto this path with RS-4.3, which makes it one transaction.
-- [ ] **RS-4.2** REST `MissionRequest` gains `Persona` and `Mode` to match MCP. Surfaces: REST, SDK, Postman,
-  dashboard voyage form, mobile, TUI, CLI. Evidence:
+- [x] **RS-4.2** REST `MissionRequest` gains `Persona` and `Mode` to match MCP. Surfaces: REST, SDK, Postman,
+  dashboard voyage form, mobile, TUI, CLI. Evidence: `MissionDescription.Persona` and `Mode` are part of the wire format
+  (MCP's advertised `persona` was dropped by `[JsonIgnore]`; MCP `dispatch` also gains `mode`); REST `MissionRequest`,
+  SDK `DispatchRequest`, dashboard and mobile voyage forms (shared `voyageForm.ts`), TUI `VoyageCreateScreen`,
+  `armada voyage create --persona --mode`, Postman "Dispatch Persona and Mode Voyage", `REST_API.md` and `MCP_API.md`.
+  Tests: `E2E.MissionPersonaMode` (REST, MCP, SDK; bad mode is 400), `voyageForm.test.ts`, `VoyageCreate.test.tsx`.
 - [ ] **RS-4.3** Atomic creation. Create the voyage (status `Building`) and all mission rows in one transaction, then
   move it to `Open` and run one assignment pass. No captain launches before every stage of the voyage exists. Same
   for Architect fan-out (one transaction for all slice rows, rewiring, and ownership) and stage handoff (reuse the

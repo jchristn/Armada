@@ -3058,7 +3058,7 @@ Optional `approvalOptions` has `approveAll` (default false), `timeoutSeconds` (1
 | `title` | string | Yes | Voyage title |
 | `description` | string | No | Voyage description |
 | `vesselId` | string | No | Target vessel ID (prefix `vsl_`). Omit (with no `missions`) to create a bare voyage; missions are added later. |
-| `missions` | array | No | Array of mission objects with `title` and optional `description`, `requestedCaptainId` (runs this mission, the first stage in a pipeline, overriding persona priorities), `tier` (minimum captain tier for every stage), and `persona` (single-stage missions without a pipeline; defaults to Worker). Omit for a bare voyage. |
+| `missions` | array | No | Array of mission objects with `title` and optional `description`, `requestedCaptainId` (runs this mission, the first stage in a pipeline, overriding persona priorities), `tier` (minimum captain tier for every stage), `persona` (when every mission names one and no pipeline is given, each runs as one stage with its persona; a single-stage pipeline takes it; a multi-stage pipeline ignores it), and `mode` (`Implementation` by default, or the read-only report modes `Audit` and `Research`). Omit for a bare voyage. |
 | `pipelineId` | string | No | Pipeline ID to use for this voyage (overrides vessel/fleet default) |
 | `pipeline` | string | No | Pipeline name to use (convenience alias for `pipelineId` -- resolves by name; a bad name is rejected) |
 | `objectiveId` | string | No | Objective (prefix `obj_`) to link this voyage to; must exist |
