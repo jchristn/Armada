@@ -58,6 +58,7 @@ namespace Armada.Core.Models
         /// Captain per persona for <see cref="Pipeline"/>, for example Architect, Worker, TestEngineer and Judge. Required
         /// with a pipeline; every captain must be visible to the caller. Each entry is applied strictly.
         /// </summary>
+        [CollectionBound(CollectionLimits.MaxConfigItems)]
         public List<CaptainAssignmentOverride>? CaptainOverrides { get; set; } = null;
 
         #endregion
