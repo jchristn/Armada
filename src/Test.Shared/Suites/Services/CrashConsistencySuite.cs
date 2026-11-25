@@ -82,6 +82,9 @@ namespace Test.Shared.Suites.Services
             cases.Add(Case("handoff_crash_between_dependents_recovers", "Crash after a stage handoff prepared one of two dependents: restart recovery prepares the other on the same branch",
                 null, HandoffCrashAsync));
 
+            cases.Add(Case("fanout_crash_between_slices_recovers_once", "Crash after the second of three Architect slices: restart recovery creates the third once, each with its Judge stage",
+                null, FanOutCrashAsync));
+
             return new TestSuiteDescriptor(suiteId: SuiteId, displayName: "Crash consistency", cases: cases);
         }
 
@@ -230,6 +233,58 @@ namespace Test.Shared.Suites.Services
             {
                 Mission? current = await db.Missions.ReadAsync(dependent.Id).ConfigureAwait(false);
                 AssertEqual(worker.BranchName, current!.BranchName, dependent.Persona + " is prepared on the worker's branch after restart");
+            }
+        }
+
+        private static async Task FanOutCrashAsync()
+        {
+            using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+            DatabaseDriver db = testDb.Driver;
+            StubGitService git = new StubGitService();
+            git.HeadCommitResult = "7777777777777777777777777777777777777777";
+            ArmadaSettings settings = new ArmadaSettings
+            {
+                DocksDirectory = TestTemp.NewDirectory("crash_fanout_docks"),
+                ReposDirectory = TestTemp.NewDirectory("crash_fanout_repos"),
+                LogDirectory = TestTemp.NewDirectory("crash_fanout_logs")
+            };
+            string plan = "Plan follows.\n```armada-plan\n{\"missions\":[{\"title\":\"Alpha\",\"description\":\"do alpha\"},{\"title\":\"Bravo\",\"description\":\"do bravo\"},{\"title\":\"Charlie\",\"description\":\"do charlie\"}]}\n```\n";
+            MissionService before = CreateMissionService(db, settings, git);
+            before.OnGetMissionOutput = _ => plan;
+
+            Vessel vessel = await db.Vessels.CreateAsync(new Vessel("crash-fanout-vessel", "https://github.com/test/repo.git") { DefaultBranch = "main" }).ConfigureAwait(false);
+            Captain captain = await CaptainAssignmentFixture.CreateAsync(db, new Captain("crash-fanout") { State = CaptainStateEnum.Working }).ConfigureAwait(false);
+            Voyage voyage = await db.Voyages.CreateAsync(new Voyage("crash fanout") { Status = VoyageStatusEnum.InProgress }).ConfigureAwait(false);
+            Mission architect = await db.Missions.CreateAsync(new Mission("[Architect] Plan", "Plan the change")
+            {
+                VesselId = vessel.Id, VoyageId = voyage.Id, Persona = "Architect", Status = MissionStatusEnum.InProgress,
+                CaptainId = captain.Id, BranchName = "armada/crash/architect"
+            }).ConfigureAwait(false);
+            Dock dock = new Dock(vessel.Id) { CaptainId = captain.Id, BranchName = architect.BranchName, Active = true };
+            dock.WorktreePath = Path.Combine(settings.DocksDirectory, vessel.Name, architect.Id);
+            Directory.CreateDirectory(dock.WorktreePath);
+            dock = await db.Docks.CreateAsync(dock).ConfigureAwait(false);
+            architect.DockId = dock.Id;
+            await db.Missions.UpdateAsync(architect).ConfigureAwait(false);
+            captain.Assignment = architect;
+            await CaptainAssignmentFixture.UpdateAsync(db, captain).ConfigureAwait(false);
+            Mission worker = await db.Missions.CreateAsync(new Mission("[Worker] Build", "Build it") { VesselId = vessel.Id, VoyageId = voyage.Id, Persona = "Worker", DependsOnMissionId = architect.Id }).ConfigureAwait(false);
+            await db.Missions.CreateAsync(new Mission("[Judge] Review", "Review it") { VesselId = vessel.Id, VoyageId = voyage.Id, Persona = "Judge", DependsOnMissionId = worker.Id }).ConfigureAwait(false);
+
+            CrashRunOutcomeEnum outcome = await CrashRun.RunAsync(CrashPointNames.FanOutSliceCreated, () => before.HandleCompletionAsync(captain, architect.Id)).ConfigureAwait(false);
+            AssertEqual(CrashRunOutcomeEnum.Crashed, outcome, "the operation reached the crash point");
+
+            MissionService after = CreateMissionService(db, settings, git);
+            after.OnGetMissionOutput = _ => plan;
+            await after.RecoverDanglingHandoffsAsync().ConfigureAwait(false);
+            await after.RecoverDanglingHandoffsAsync().ConfigureAwait(false);
+
+            List<Mission> all = await db.Missions.EnumerateByVoyageAsync(voyage.Id).ConfigureAwait(false);
+            foreach (string title in new[] { "Alpha", "Bravo", "Charlie" })
+            {
+                List<Mission> workers = all.Where(m => m.Persona == "Worker" && m.Title.StartsWith(title, StringComparison.Ordinal)).ToList();
+                AssertEqual(1, workers.Count, "exactly one Worker for slice " + title);
+                AssertTrue(all.Any(m => m.Persona == "Judge" && m.DependsOnMissionId == workers[0].Id), "slice " + title + " has its Judge stage");
             }
         }
 

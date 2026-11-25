@@ -296,18 +296,19 @@ instead of calling it, a 429 from a local proxy. Those paths need to be reproduc
   inside the fence, draft then final, `"parent":"1"`, `"kind":"Implementation"`), Judge outputs (verdict in bold,
   verdict under a heading, two verdicts, verdict inside a truncated fence, `SPEC_CONFLICT` near-miss), Worker outputs
   (marker in backticks, marker in bold, missing marker). Stored as fixture files under `Test.Shared`. Evidence:
-- [-] **RS-1.3** Crash-point injection. A test-only `ICrashPoints` service (no-op in production builds) with named
+- [x] **RS-1.3** Crash-point injection. A test-only `ICrashPoints` service (no-op in production builds) with named
   points at every multi-write sequence this plan touches: merge queue push / entry Landed / mission Complete;
   incident create / FailureKind set / rescue dispatch; voyage row / mission rows / first assignment; Architect
   fan-out steps; stage handoff steps; launch / PID recorded. A harness kills and restarts the Admiral at a chosen
-  point and checks the end state. Evidence: (in progress, 2026-11-25) `CrashPoints` hooks at 12 points
+  point and checks the end state. Evidence: (2026-11-25) `CrashPoints` hooks at 12 points
   (`CrashPointNames`); the harness freezes the flow at the point instead of throwing, because the merge queue's
   catch-all handled a thrown crash as an ordinary failure. `Services.CrashConsistency`: merge queue cases reproduce
   RS-2.5 (entry stuck Testing) and RS-2.3 (mission stuck WorkProduced); recovery cases reproduce RS-2.6 (a duplicate
   incident after a crash past incident creation; an orphaned rescue the incident never records); the voyage case
   reproduces RS-4.3 (a voyage left Open with 1 of its 3 missions, forever). All five are skipped until those items
-  land. The handoff case passes today (`RecoverDanglingHandoffsAsync` prepares the remaining dependent) and stays as a
-  regression. Still to do: cases for launch and fan-out.
+  land. The handoff and fan-out cases pass today (`RecoverDanglingHandoffsAsync` prepares the remaining dependent and
+  creates the missing slice once, found by title) and guard RS-3.3. The launch case is written with RS-4.10, which
+  builds the launch intent it needs to check.
 - [ ] **RS-1.4** Pipeline reliability metrics recorded per attempt (persisted, not in memory): runtime failure kind,
   repair kind and outcome (in-session, format-only, full rerun), escalation from and to (captain, model, tier),
   human interventions, dispatch latency. Exposed through Prometheus metrics per `TELEMETRY_REQUIREMENTS.md` and
