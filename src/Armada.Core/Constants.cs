@@ -22,7 +22,7 @@ namespace Armada.Core
         /// <summary>
         /// Product version.
         /// </summary>
-        public static readonly string ProductVersion = "1.4.0";
+        public static readonly string ProductVersion = "1.5.0";
 
         /// <summary>
         /// Version (major.minor) of the client contract reported by GET /api/v1/status/health as ContractVersion. Clients

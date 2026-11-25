@@ -62,7 +62,7 @@ These apply to every item. A change that breaks one of them is not complete, how
 2. **No em-dashes anywhere:** code, comments, XML docs, docs, Postman, changelog, commit messages, store copy.
 3. **Persistence.** Every schema change is a numbered migration for SQLite, PostgreSQL, MySQL, and SQL Server, with
    relational columns or child rows (no JSON blobs for fixed contracts), registered in each provider, and covered by
-   the database parity run and the upgrade test from the v1.4.0 baseline. The latest migration at plan time is 130.
+   the database parity run and the upgrade test from the v1.4.0 baseline. The latest migration at plan time is 132 (131 and 132 shipped in 1.4.0); new work starts at 133.
 4. **Tests.** New behavior gets Touchstone descriptors in `Test.Shared` so it runs under `Test.Automated`, xUnit, and
    NUnit. A bug fix gets a regression test that fails before the fix. Front-end changes get Vitest (dashboard), Jest
    (mobile), and TUI shape tests.
@@ -106,9 +106,9 @@ These apply to every item. A change that breaks one of them is not complete, how
 Phases 0 to 16 are the work. This gate is how we know the work achieved the goal. It is checked in RS-14.6 and must
 pass on the release candidate commit. Joel set the thresholds on 2026-11-25 (RS-0.3): G1 at 99%, the rest as drafted.
 
-| # | Measure (over the full gate run, all four reference pipelines, every battery pack, 10 runs each) | Threshold |
+| # | Measure (over the full gate run sized in [Run budget](#run-budget)) | Threshold |
 |---|---|---|
-| G1 | Voyages that reach a correct terminal state with no human intervention | at least 99% |
+| G1 | Voyages that reach a correct terminal state with no human intervention (pooled; per-pipeline counts reported) | at least 99% |
 | G2 | Missions left in a non-terminal state with no actionable blocker for longer than 2x their stage timeout | 0 |
 | G3 | Duplicate work: a stage executed twice for the same attempt, two rescues for one failure, or a mission landed twice | 0 |
 | G4 | Format-only failures that caused a full stage rerun (instead of an in-session or format-only repair) | 0 |
@@ -121,6 +121,24 @@ pass on the release candidate commit. Joel set the thresholds on 2026-11-25 (RS-
 | G11 | Database queries per dispatch pass with 50 pending missions (Armada.Benchmark admission runner) | at least 5x fewer than the 1.4.0 baseline |
 | G12 | Escalations that went to a captain with a strictly higher effective tier or the configured ladder's next rung | 100% |
 
+### Run budget
+
+Joel set the model budget on 2026-11-25. Models hosted on the maintainer's Conductor instance (Qwen3.8,
+inkling-2-mini, and anything else it serves) run as often as the work needs. DeepSeek, GLM, and Kimi run on Ollama
+Cloud credits, so use them as little as a result allows. Opus and GPT-6.1 get few runs. The gate is sized to that:
+
+| Run | Pipelines | Runs per battery pack |
+|---|---|---|
+| Development checks (any phase) | P-D and single-persona runs on Conductor models only | as needed |
+| RS-0.8 baseline (1.4.0) | P-D: 10. P-A, P-B, P-C: 1 | |
+| RS-14.6 gate | P-D: 10, plus P-D with inkling-2-mini in place of Qwen3.8: 10. P-A, P-B, P-C: 3 | |
+| RS-14.6 additional families | DeepSeek 4.1, GLM, Kimi substituted on P-D only: 1 run per pack | |
+
+G1 is computed over the whole gate run (about 260 voyages with eight packs). Frontier pipelines with 3 runs per pack
+cannot show 99% on their own, so the report gives the per-pipeline counts next to the pooled figure; any failure on
+a frontier pipeline is investigated individually. Escalations to Opus or GPT-6.1 inside P-D are part of the design
+and are not avoided to save cost, but they are counted and reported.
+
 A gate run that misses a threshold is not "close enough". Find the cause, fix it under a new item, and rerun the
 affected pipelines.
 
@@ -131,12 +149,15 @@ affected pipelines.
 Nothing in later phases can claim an improvement without a before measurement, and CI must be green before the
 branch starts adding tests to it.
 
-- [ ] **RS-0.1** Branch. `feature/v1.5.0` created from `main` at `a2503b7a2`. Confirm `git status` shows only the
-  untracked `assets/vscode/`. Evidence:
-- [ ] **RS-0.2** Version 1.5.0 (authorized 2026-11-25). Update every version location listed in the runbook section
+- [x] **RS-0.1** Branch. `feature/v1.5.0` created from `main` at `a2503b7a2`. Confirm `git status` shows only the
+  untracked `assets/vscode/`. Evidence: branch pushed to origin with the plan in `3c0a9086a`; status showed only
+  `assets/vscode/` before the first commit.
+- [x] **RS-0.2** Version 1.5.0 (authorized 2026-11-25). Update every version location listed in the runbook section
   15 and `src/Test.Shared/Suites/Services/ReleaseVersionSuite.cs`, following the reference bump commit `c3f5dc176`.
   Add `## Unreleased` entries for 1.5.0 work as it lands; the release heading is written in RS-15.2. Mobile:
-  `app.config.ts` version 1.5.0 (build numbers are handled in RS-16.4). Evidence:
+  `app.config.ts` version 1.5.0 (build numbers are handled in RS-16.4). Evidence: same 26 files as `c3f5dc176`
+  (the `docs/UPGRADING.md` section is written with the migration in RS-13.6); `CHANGELOG.md` heading is
+  `## v1.5.0 (unreleased)` per the 1.4.0 convention; Grafana image tag left at 11.4.0.
 - [x] **RS-0.3** [DECISION] Confirm or change the acceptance gate thresholds G1 to G12. Answer (2026-11-25): G1 at
   99%; G2 to G12 as drafted.
 - [x] **RS-0.4** [DECISION] Reference configuration for the open models. Answer (2026-11-25): Qwen3.8 27B on the
@@ -262,7 +283,7 @@ Each of these is a confirmed defect in 1.4.0. They are small, and each gets a re
 Text markers in descriptions route missions today. A user brief that happens to contain "## Escalated to " pins
 routing; a renamed Architect slice breaks fan-out recovery. Everything a program reads goes into a column.
 
-- [ ] **RS-3.1** Migration 131 (all four providers): on missions add `EscalationCount`, `EscalatedFromCaptainId`,
+- [ ] **RS-3.1** Migration 133 (all four providers): on missions add `EscalationCount`, `EscalatedFromCaptainId`,
   `EscalatedFromModel`, `OutputRepairCount`, `FanOutCompletedUtc`, `ArchitectSourceMissionId`, `ArchitectPlanIndex`,
   `LaunchIntentUtc`, `LaunchJobId`; on merge entries nothing new unless RS-9 needs it. Backfill from the existing
   text markers so upgraded databases keep their state. Upgrade test from the v1.4.0 baseline with missions in every
@@ -664,7 +685,7 @@ humanizer pass and a manual check against the Signs of AI writing page before an
 - [ ] **RS-13.5** `docs/REST_API.md`, `docs/MCP_API.md` (including the submit tools and their schemas),
   `docs/WEBSOCKET_API.md`, `docs/PROXY_API.md` if changed, `docs/HARBOR_PROTOCOL.md`. Evidence:
 - [ ] **RS-13.6** `docs/OPERATIONS.md` (every new setting with default, minimum, maximum, and effect),
-  `docs/UPGRADING.md` (migration 131 and its backfill, behavior changes, Harbor version advice, the legacy plan
+  `docs/UPGRADING.md` (migration 133 and its backfill, behavior changes, Harbor version advice, the legacy plan
   format deprecation), `DEPRECATION.md`. Evidence:
 - [ ] **RS-13.7** `docs/MERGING.md` (requeue on non-fast-forward, single reconciler, batching), `docs/BLACKBOX.md`
   if rule hints change, `docs/CONCURRENCY_TESTING.md` and `docs/PERFORMANCE.md` (single dispatcher, snapshot,
@@ -698,8 +719,7 @@ humanizer pass and a manual check against the Signs of AI writing page before an
   personas including an operator setting up Qwen3.8 for the first time from `docs/OPEN_MODELS.md` alone. S1 and S2
   findings fixed; lower ones fixed or added to `docs/BACKLOG.md` with a reason. Evidence:
 - [ ] **RS-14.6** Acceptance gate (G1 to G12) on the release candidate with the reference configuration from RS-0.4,
-  all four reference pipelines, every battery pack, 10 runs each, plus DeepSeek 4.1, GLM, and inkling-2-mini each
-  substituted for Qwen3.8 on P-A and P-D. Save the RS-1.5 report under `benchmarks/results/1.5.0/` with model names
+  all four reference pipelines, every battery pack, with the run counts in [Run budget](#run-budget). Save the RS-1.5 report under `benchmarks/results/1.5.0/` with model names
   but no hosts, tokens, or keys. Evidence:
 - [ ] **RS-14.7** Two weeks of real use: run the maintainer's own repositories through at least P-A and P-D. Any
   intervention gets a cause and an item. Evidence:
@@ -896,6 +916,7 @@ Record each [DECISION] answer here as well as inline, with the date.
 | RS-15.1 | Release shape | Tag `v1.5.0` and a GitHub Release; candidate commit go-ahead still pending | 2026-11-25 |
 | RS-16.9 | Reviewer demo Admiral | Next to the proxy on the EC2 proxy host | 2026-11-25 |
 | RS-16.25 | Over-the-air updates | Later release | 2026-11-25 |
+| Run budget | Model spend | Conductor models unlimited; Ollama Cloud (DeepSeek, GLM, Kimi) frugal; Opus and GPT-6.1 few runs | 2026-11-25 |
 
 ## Validation log
 

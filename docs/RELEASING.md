@@ -8,8 +8,8 @@ One rule sits above everything else: **version numbers change only on the mainta
 agent preparing a release does not bump `Version` in `src/Directory.Build.props`, `src/Armada.Helm/Armada.Helm.csproj`,
 `ProductVersion` in `src/Armada.Core/Constants.cs`, the dashboard's `package.json` and `package-lock.json`, the build
 scripts, the image tags in the `docker/` compose files, the Postman collection, or the CHANGELOG heading on its own. It may propose a bump and explain why, then wait
-for approval. The rules are in `VERSIONING.md` in the shared requirements. The development tree is at `1.4.0`; release
-candidates (`1.4.0-rc.N`) and any other pre-release label are applied only on the maintainer's instruction.
+for approval. The rules are in `VERSIONING.md` in the shared requirements. The development tree is at `1.5.0`; release
+candidates (`1.5.0-rc.N`) and any other pre-release label are applied only on the maintainer's instruction.
 
 ## 1. Decide what is in the release
 

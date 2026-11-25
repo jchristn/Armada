@@ -1,5 +1,7 @@
 # Changelog
 
+## 1.5.0 (unreleased)
+
 ## 1.4.0
 
 - **Loading indicators everywhere**: dashboard pages show a spinner for every value, table, cell and chart that is still loading, never a default 0 or an empty state; the status bar shows a spinner while missions load and opens the Missions page.
