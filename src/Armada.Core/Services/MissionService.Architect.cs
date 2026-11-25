@@ -34,11 +34,32 @@ namespace Armada.Core.Services
             worker.ReviewDenyAction = template.ReviewDenyAction;
             worker.BranchName = null;
             worker = await _Database.Missions.CreateAsync(worker, token).ConfigureAwait(false);
+            await CopyPlaybookSnapshotsAsync(template.Id, worker.Id, token).ConfigureAwait(false);
             _Logging.Info(_Header + "architect created additional worker mission " + worker.Id + ": " + parsed[index].Title);
 
             await CloneDependentChainAsync(voyageMissions, template, worker, parsed[index].Title, parsed[index].Description, token).ConfigureAwait(false);
             await ApplyArchitectWorkerEnvelopeAsync(architect, worker, parsed[index], voyageMissions, token).ConfigureAwait(false);
             return worker;
+        }
+
+        // A slice or stage created by the fan-out carries the playbooks of the mission it is cloned from: the voyage's
+        // selections are snapshotted per mission at dispatch, and a mission reads only its own snapshots (RS-2.8).
+        private async Task CopyPlaybookSnapshotsAsync(string fromMissionId, string toMissionId, CancellationToken token)
+        {
+            List<MissionPlaybookSnapshot> snapshots = await _Database.Playbooks.GetMissionSnapshotsAsync(fromMissionId, token).ConfigureAwait(false);
+            if (snapshots.Count == 0) return;
+
+            // Content is copied; where a playbook was materialized is per mission and is resolved again at launch.
+            List<MissionPlaybookSnapshot> copies = snapshots.Select(s => new MissionPlaybookSnapshot
+            {
+                PlaybookId = s.PlaybookId,
+                FileName = s.FileName,
+                Description = s.Description,
+                Content = s.Content,
+                DeliveryMode = s.DeliveryMode,
+                SourceLastUpdateUtc = s.SourceLastUpdateUtc
+            }).ToList();
+            await _Database.Playbooks.SetMissionSnapshotsAsync(toMissionId, copies, token).ConfigureAwait(false);
         }
 
         private async Task MarkArchitectFanOutCompleteAsync(Mission architect, CancellationToken token)

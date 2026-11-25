@@ -51,6 +51,7 @@ namespace Armada.Core.Services
                 clonedStage.ReviewDenyAction = templateChild.ReviewDenyAction;
                 clonedStage.BranchName = null;
                 clonedStage = await _Database.Missions.CreateAsync(clonedStage, token).ConfigureAwait(false);
+                await CopyPlaybookSnapshotsAsync(templateChild.Id, clonedStage.Id, token).ConfigureAwait(false);
                 _Logging.Info(_Header + "architect created chained stage " + clonedStage.Id +
                     " (" + clonedStage.Persona + ") depending on " + newDependency.Id);
                 await CloneDependentChainAsync(voyageMissions, templateChild, clonedStage, parsedTitle, parsedDescription, token).ConfigureAwait(false);

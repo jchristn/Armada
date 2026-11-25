@@ -29,6 +29,8 @@ Conductor) with Opus and GPT-6.1 reliable. The work is tracked item by item in `
   its incident is adopted rather than left uncounted against the rescue budget (RS-2.6).
 - **A restart no longer charges queued missions a retry.** A mission that was Assigned but had not started its agent
   when the Admiral stopped returns to Pending without spending one of its redispatch attempts (RS-2.7).
+- **Every Architect slice keeps the voyage's playbooks.** Slices after the first, and the stages cloned for them,
+  were created without the playbook snapshots the voyage selected, so they ran without those playbooks (RS-2.8).
 - **Planning dispatch keeps the drafted objective.** A voyage dispatched from a planning session now carries the
   drafted description instead of "Created from planning session ...", which Architect slices passed to every Worker
   as the overall objective. The session stays linked through `SourcePlanningSessionId` (RS-2.4).

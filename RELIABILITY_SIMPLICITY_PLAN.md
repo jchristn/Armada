@@ -404,9 +404,12 @@ Each of these is a confirmed defect in 1.4.0. They are small, and each gets a re
   start time to Pending through a compare-and-set without charging, as orphan recovery does; such a mission ran no
   agent, so its branch has no commits from it (archive CI:33 constraint). The orphan-claim race test in
   `Services.SequentialDispatch` now requires zero attempts; it fails on the old code (1) and passes.
-- [ ] **RS-2.8** Architect slices may lose playbooks. Verify whether slices 2..N get playbook snapshots
+- [x] **RS-2.8** Architect slices may lose playbooks. Verify whether slices 2..N get playbook snapshots
   (`LoadMissionPlaybookSnapshotsAsync`); fix by routing slice creation through the creation service (RS-4.1).
-  Regression test either way. Evidence:
+  Regression test either way. Evidence: confirmed (a mission reads only its own snapshots; slices 2..N and
+  their cloned stages had none). Fan-out now copies the template's snapshot content (not its per-mission paths) onto
+  each created slice and stage. `Services.ArchitectFanOutPlaybooks` fails on the old code ("Bravo [Worker]" has 0) and
+  passes. Routing slice creation through the creation service remains part of RS-4.1.
 - [x] **RS-2.9** Voyage ownership and tenancy on REST. Voyages take `UserId = vessel.UserId` rather than the caller;
   REST does not check the vessel against the caller's tenant before dispatch while MCP does
   (`McpCallerScope.ReadVesselAsync`). Confirm with tests for a non-admin caller and a cross-tenant vessel; fix
