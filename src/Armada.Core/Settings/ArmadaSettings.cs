@@ -243,7 +243,25 @@ namespace Armada.Core.Settings
             set => _StageCheckConcurrencyPerHarbor = value >= 1 && value <= 64 ? value : throw new ArgumentOutOfRangeException(nameof(StageCheckConcurrencyPerHarbor));
         }
 
+        private int _MergeQueueLeaseSeconds = 900;
         private int _StageCheckConcurrencyPerHarbor = 1;
+
+        /// <summary>
+        /// Lifetime in seconds of the merge queue's processing lease. The Admiral that holds it renews it before every
+        /// entry, so a long pass is never taken over while it is working; a crashed holder's lease expires after this
+        /// long, after which another instance takes over and re-processes entries left in Testing. Default 900 (15
+        /// minutes). Values outside [5, 14400] are clamped.
+        /// </summary>
+        public int MergeQueueLeaseSeconds
+        {
+            get => _MergeQueueLeaseSeconds;
+            set
+            {
+                if (value < 5) value = 5;
+                if (value > 14400) value = 14400;
+                _MergeQueueLeaseSeconds = value;
+            }
+        }
 
         /// <summary>
         /// Maximum number of automatic landing retries per deferred landing: a LocalMerge landing refused because the

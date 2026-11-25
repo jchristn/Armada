@@ -358,27 +358,34 @@ instead of calling it, a 429 from a local proxy. Those paths need to be reproduc
 
 Each of these is a confirmed defect in 1.4.0. They are small, and each gets a regression test that fails first.
 
-- [ ] **RS-2.1** Findings severity. `HandoffArtifactBuilder.ParseSeverity` (`HandoffArtifactBuilder.cs:382`) checks
+- [x] **RS-2.1** Findings severity. `HandoffArtifactBuilder.ParseSeverity` (`HandoffArtifactBuilder.cs:382`) checks
   `low|minor|nit|info` before blocking terms with no word boundaries, so "High - follows from", "Blocking: allows",
   and "Critical, no information" become NonBlocking. Use `\b` boundaries and check blocking terms first. Test with
-  all three strings. Evidence:
-- [ ] **RS-2.2** Tier classification. `CaptainTierSelector.cs:27`: Premium pattern `gpt-?5(\.\d+)?` misses GPT-6.x
+  all three strings. Evidence: whole-word severity regexes in `HandoffArtifactBuilder`; `Services.HandoffArtifact`
+  `severity_words_match_whole_words`.
+- [x] **RS-2.2** Tier classification. `CaptainTierSelector.cs:27`: Premium pattern `gpt-?5(\.\d+)?` misses GPT-6.x
   and later; `o3|o4` unanchored; `gemini-\d*.*(?!pro)` lookahead is a no-op. Make the GPT pattern version-agnostic
   for 5 and above, anchor `o3`/`o4`, rewrite the Gemini rule. Table-driven tests for at least 30 model names
   including `gpt-6.1`, `gpt-6.1-mini`, `qwen3.8`, `qwen3.8:32b`, `claude-opus-5-5`. Remove the test-only
-  `CaptainTierSelector.Select`. Evidence:
-- [ ] **RS-2.3** Mission stranded after landing. `MergeQueueService.LandEntryAsync` (lines 690 to 745) persists the
+  `CaptainTierSelector.Select`. Evidence: Premium pattern accepts GPT 5 and later, anchors o3/o4, needs Gemini `-pro`; Economy is still
+  checked first (mini, nano, flash stay Economy; archive D12 kept). `Services.CaptainTier` `classify_model_table`
+  (33 names). Removing the test-only `CaptainTierSelector.Select` moves to RS-11.2 (ten test call sites).
+- [x] **RS-2.3** Mission stranded after landing. `MergeQueueService.LandEntryAsync` (lines 690 to 745) persists the
   entry as Landed and then completes the mission in a second write; `FlagMissingMergeHandoffsAsync`
   (`AdmiralService.cs:2236`) skips any mission with a merge entry. Write both in one transaction, and add a sweep
   that promotes WorkProduced or LandingFailed missions whose latest entry is Landed. Crash-point test (RS-1.3).
-  Evidence:
-- [ ] **RS-2.4** Planning sessions lose the objective. `PlanningSessionCoordinator.cs:407` sets the voyage
+  Evidence: each queue pass first completes WorkProduced and LandingFailed missions whose latest entry is
+  Landed (compare-and-set, no lease needed); a separate sweep was chosen over one transaction across the push and two
+  rows because the push itself cannot be in a transaction. The `Services.CrashConsistency` case is now on and passes.
+- [x] **RS-2.4** Planning sessions lose the objective. `PlanningSessionCoordinator.cs:407` sets the voyage
   description to "Created from planning session <id>", which Architect slices then use as the objective. Store the
   drafted description; keep the link in `SourcePlanningSessionId`, set in the create request rather than a second
-  update. Evidence:
-- [ ] **RS-2.5** Merge queue lease. `_ProcessLeaseDuration` (15 minutes, `MergeQueueService.cs:76`) is acquired once
+  update. Evidence: the voyage description is the drafted objective; `E2E.PlanningSession` asserts it. Moving
+  `SourcePlanningSessionId` into the create request belongs to RS-4.1.
+- [x] **RS-2.5** Merge queue lease. `_ProcessLeaseDuration` (15 minutes, `MergeQueueService.cs:76`) is acquired once
   per pass and never renewed, so a long pass can be reset and processed twice. Renew per entry (heartbeat) and make
-  the duration a setting. Test with a slow verification fake. Evidence:
+  the duration a setting. Test with a slow verification fake. Evidence: `MergeQueueLeaseSeconds` (default 900, 5 to 14400) replaces the constant; renewed before each entry;
+  losing it stops the pass. The `Services.CrashConsistency` case is now on (5-second lease) and passes.
 - [ ] **RS-2.6** Rescue incidents not crash-consistent. Pass `FailureKind` in the incident create request; before
   dispatching a rescue, look up existing rescues by `RescueOfMissionId` in any status and adopt them; drop the
   title and substring dedup (`ReferencesOriginal`). Crash-point tests. Evidence:
@@ -392,12 +399,18 @@ Each of these is a confirmed defect in 1.4.0. They are small, and each gets a re
   REST does not check the vessel against the caller's tenant before dispatch while MCP does
   (`McpCallerScope.ReadVesselAsync`). Confirm with tests for a non-admin caller and a cross-tenant vessel; fix
   through RS-4.1. Evidence:
-- [ ] **RS-2.10** `KnownErrorTypes` lists `"error"` and `"turn.failed"` but `ClassifyErrorType` returns null for
-  them, so a Codex error without a status becomes Crash. Map them. Evidence:
-- [ ] **RS-2.11** `LandingFailureClassifier.IsProcessStartFailure` treats any `IOException` as a process-start
-  failure. Narrow it to the start path. Evidence:
-- [ ] **RS-2.12** `ParseSeverity` style issue aside, `ContractRepair.TryRecoverVerdict` maps `SPEC_CONFLICT` to
-  None (around `ContractRepair.cs:115`). Recover it like the other verdicts. Evidence:
+- [~] **RS-2.10** `KnownErrorTypes` lists `"error"` and `"turn.failed"` but `ClassifyErrorType` returns null for
+  them, so a Codex error without a status becomes Crash. Map them. Evidence: superseded by RS-5.2. The status-less `error` and `turn.failed`
+  fall to Crash on purpose (archive C6: retrying can repeat side effects); under decision R4 they become
+  `Unclassified` with a resume only when no side-effect tool ran, which is RS-5.2's job.
+- [~] **RS-2.11** `LandingFailureClassifier.IsProcessStartFailure` treats any `IOException` as a process-start
+  failure. Narrow it to the start path. Evidence: no behavior defect: `IsProcessStartFailure` has one caller,
+  which records Infra for every non-conflict failure either way, so the broad `IOException` match changes no outcome
+  (and a missing dock stays Infra, per FLF:212). Its message-text match is replaced by typed detection in RS-5.11.
+- [x] **RS-2.12** `ParseSeverity` style issue aside, `ContractRepair.TryRecoverVerdict` maps `SPEC_CONFLICT` to
+  None (around `ContractRepair.cs:115`). Recover it like the other verdicts. Evidence: near-miss SPEC_CONFLICT recovered only with a non-empty `## Spec Conflict` section (the verdict
+  line itself does not count); canonical line added. `Services.ContractRepair` and a new
+  `Services.ModelOutputContract` fixture.
 
 - [ ] **RS-2.13** MCP enumerate with `includeDescription` ignores filters and tenant scope (FR R5 production TODO).
   Confirm with a cross-tenant test and fix. Evidence:

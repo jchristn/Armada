@@ -35,6 +35,7 @@ namespace Test.Shared.Infrastructure.ModelOutputs
             Make("judge_echoed_in_fence", "Judge", "the contract example echoed inside a fence, then a real verdict", "The contract says:\n" + Fence + "\n[ARMADA:VERDICT] PASS\n" + Fence + "\nI found a defect.\n\n[ARMADA:VERDICT] FAIL", "Fail", null),
             Make("judge_after_truncated_fence", "Judge", "a verdict after output truncation cut a fence open", "Log excerpt:\n" + Fence + "\nline 1\n[...output truncated...]\n\n[ARMADA:VERDICT] PASS", "Pass", "RS-6.6"),
             Make("judge_spec_conflict_bare", "Judge", "a near-miss SPEC_CONFLICT with no quoted criterion", "This cannot be satisfied.\n\n**ARMADA VERDICT: SPEC CONFLICT**", "None", null),
+            Make("judge_spec_conflict_section", "Judge", "a near-miss SPEC_CONFLICT with its quoted criterion", "## Spec Conflict\n> AC-2: keep escapes\nThis contradicts AC-1.\n\n**ARMADA VERDICT: SPEC CONFLICT**", "SpecConflict", null),
             Make("judge_missing", "Judge", "a review with no verdict at all", "## Review\nLooks reasonable overall.", "None", null),
 
             // Worker

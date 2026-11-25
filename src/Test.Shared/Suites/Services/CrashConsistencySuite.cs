@@ -65,10 +65,10 @@ namespace Test.Shared.Suites.Services
             }));
 
             cases.Add(Case("mergequeue_crash_after_push_lands_on_restart", "Crash after the merge queue push: after restart the entry is Landed and the mission Complete",
-                "Recovery of an entry left Testing needs the configurable lease of RS-2.5.", () => MergeQueueCrashAsync(CrashPointNames.MergeQueuePushed)));
+                null, () => MergeQueueCrashAsync(CrashPointNames.MergeQueuePushed)));
 
             cases.Add(Case("mergequeue_crash_after_entry_landed_completes_mission", "Crash after the entry is Landed: after restart the mission is Complete",
-                "The sweep that completes a mission whose entry is Landed is RS-2.3.", () => MergeQueueCrashAsync(CrashPointNames.MergeQueueEntryLanded)));
+                null, () => MergeQueueCrashAsync(CrashPointNames.MergeQueueEntryLanded)));
 
             cases.Add(Case("recovery_crash_after_incident_created", "Crash after a recovery incident is created: the next cycle leaves one incident with its failure kind and one rescue",
                 "Creating the incident with its failure kind in one write and adopting existing rescues is RS-2.6.", () => RecoveryCrashAsync(CrashPointNames.RecoveryIncidentCreated)));
@@ -112,7 +112,9 @@ namespace Test.Shared.Suites.Services
             CrashRunOutcomeEnum outcome = await CrashRun.RunAsync(crashPoint, () => before.ProcessSingleAsync(entry.Id)).ConfigureAwait(false);
             AssertEqual(CrashRunOutcomeEnum.Crashed, outcome, "the operation reached the crash point");
 
-            // Restart: new services over the same database run the queue and its sweeps.
+            // Restart: new services over the same database run the queue and its sweeps. The crashed instance's lease
+            // (5 seconds in these tests) must expire before another instance re-processes an entry left Testing.
+            await Task.Delay(TimeSpan.FromSeconds(6)).ConfigureAwait(false);
             MergeQueueService after = CreateQueue(testDb.Driver);
             await after.ProcessQueueAsync().ConfigureAwait(false);
 
@@ -325,6 +327,7 @@ namespace Test.Shared.Suites.Services
             settings.DocksDirectory = TestTemp.NewDirectory("crash_docks");
             settings.ReposDirectory = TestTemp.NewDirectory("crash_repos");
             settings.MergeQueueTestCommand = null;
+            settings.MergeQueueLeaseSeconds = 5;
             return new MergeQueueService(logging, db, settings, new GitService(logging));
         }
 

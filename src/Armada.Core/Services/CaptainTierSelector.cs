@@ -24,11 +24,11 @@ namespace Armada.Core.Services
         // Anchored model-family patterns -> tier. Routine version bumps auto-register without config edits.
         private static readonly KeyValuePair<Regex, CaptainTierEnum>[] _ModelFamilies = new KeyValuePair<Regex, CaptainTierEnum>[]
         {
-            new KeyValuePair<Regex, CaptainTierEnum>(new Regex(@"opus|gpt-?5(\.\d+)?($|[^-])|o3|o4|gemini-\d*.*pro", RegexOptions.IgnoreCase | RegexOptions.Compiled), CaptainTierEnum.Premium),
+            new KeyValuePair<Regex, CaptainTierEnum>(new Regex(@"opus|gpt-?(?:[5-9]|[1-9]\d)(\.\d+)?($|[^-])|(^|[/:_\s])o[34]([-.:_]|$)|gemini-[\d.]+-pro", RegexOptions.IgnoreCase | RegexOptions.Compiled), CaptainTierEnum.Premium),
             // \bmini avoids matching "geMINI"; the others are distinctive enough to leave unanchored.
             new KeyValuePair<Regex, CaptainTierEnum>(new Regex(@"haiku|\bmini|nano|flash|gpt-?oss|small|-lite", RegexOptions.IgnoreCase | RegexOptions.Compiled), CaptainTierEnum.Economy),
             // OpenCode / OpenAI-compatible open model families default to Standard unless matched as economy above.
-            new KeyValuePair<Regex, CaptainTierEnum>(new Regex(@"sonnet|gpt-?4|gemini-\d*.*(?!pro)|glm|qwen|kimi|deepseek|\bllama|mistral|codestral|devstral|command-?r", RegexOptions.IgnoreCase | RegexOptions.Compiled), CaptainTierEnum.Standard),
+            new KeyValuePair<Regex, CaptainTierEnum>(new Regex(@"sonnet|gpt-?4|gemini|glm|qwen|kimi|deepseek|\bllama|mistral|codestral|devstral|command-?r", RegexOptions.IgnoreCase | RegexOptions.Compiled), CaptainTierEnum.Standard),
         };
 
         // A parameter count of 8B or less (qwen2.5-coder:7b, llama3.2:3b, gemma-2b, phi3:3.8b) is Economy whatever the family.
@@ -58,7 +58,8 @@ namespace Armada.Core.Services
         public static CaptainTierEnum ClassifyModel(string? model)
         {
             if (String.IsNullOrWhiteSpace(model)) return CaptainTierEnum.Standard;
-            // Economy and Premium patterns are checked before the broad Standard fallback.
+            // Economy is checked first, so a mini, nano, flash, or small variant of a premium family stays Economy; the
+            // Premium pattern accepts GPT 5 and every later major version, anchors o3 and o4, and needs a Gemini "-pro".
             if (_SmallParameterCount.IsMatch(model) || _ModelFamilies[1].Key.IsMatch(model)) return CaptainTierEnum.Economy;
             if (_ModelFamilies[0].Key.IsMatch(model)) return CaptainTierEnum.Premium;
             return CaptainTierEnum.Standard;

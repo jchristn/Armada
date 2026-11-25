@@ -6,6 +6,53 @@ All notable changes to Armada are documented in this file.
 
 ## v1.5.0 (unreleased)
 
+Armada 1.5.0 makes pipelines that mix open models (Qwen3.8 and others served by Ollama, vLLM, or a proxy such as
+Conductor) with Opus and GPT-6.1 reliable. The work is tracked item by item in `RELIABILITY_SIMPLICITY_PLAN.md`.
+
+### Reliability
+
+- **A mission whose merge entry already landed is completed after a restart.** If the Admiral stopped between
+  marking a merge queue entry Landed and completing its mission, the mission stayed `WorkProduced` for good. Each
+  queue pass now completes such missions first (RS-2.3).
+- **The merge queue renews its processing lease before every entry.** A pass longer than the lease (several builds and
+  test runs) could be taken over by another instance and processed twice. The lease length is the new setting
+  `MergeQueueLeaseSeconds` (default 900, 5 to 14400) (RS-2.5).
+- **Planning dispatch keeps the drafted objective.** A voyage dispatched from a planning session now carries the
+  drafted description instead of "Created from planning session ...", which Architect slices passed to every Worker
+  as the overall objective. The session stays linked through `SourcePlanningSessionId` (RS-2.4).
+
+### Routing and contracts
+
+- **GPT 6 and later classify as Premium.** The tier pattern stopped at GPT 5, so `gpt-6.1` ranked as Standard beside
+  Sonnet and open models. `o3` and `o4` now match only as model names, and a Gemini model is Premium only with
+  `-pro`. Mini, nano, and flash variants stay Economy (RS-2.2).
+- **Finding severity is read by whole words.** "High - follows from ...", "Blocking: allows ...", and "Critical, no
+  information ..." were read as non-blocking because "low" and "info" matched inside other words, so a real blocker
+  could reach the Worker as optional (RS-2.1).
+- **A near-miss SPEC_CONFLICT verdict is recovered when it quotes the criterion.** `**ARMADA VERDICT: SPEC
+  CONFLICT**` with a non-empty `## Spec Conflict` section is repaired like the other verdicts; without the section it
+  is still refused (RS-2.12).
+
+### Measurement
+
+- **Battery runs can run under a mixed pipeline.** `BatteryRunRequest` and MCP `run_battery` take `Pipeline` and
+  `CaptainOverrides` (a captain per persona). Each Worker task then runs as a voyage through every stage of that
+  pipeline and is graded on the final branch (RS-1.6).
+- **`armada_stage_outcomes_total`** counts stage attempts by persona, runtime, model, disposition, failure kinds, and
+  contract repair (RS-1.4).
+- **The 1.5.0 acceptance gate** (`src/Armada.Gate`, `benchmarks/config/reference-pipelines.json`) runs the reference
+  pipelines against an isolated Admiral and scores the gate measures; `benchmarks/start-bench-server.sh` gained
+  `--real-agents` (RS-1.5).
+
+### Tests
+
+- Cases that set a skip reason now also set Touchstone's skip flag; five suites ran cases that were meant to skip,
+  including the real pi smoke cases on hosts without pi. Real pi runs are opt-in with `ARMADA_TEST_REAL_PI=1`.
+- New: the open-model simulator (`Runtimes.OpenModelSimulator`), crash consistency (`Services.CrashConsistency`),
+  canned model outputs (`Services.ModelOutputContract`), and gate scoring (`Models.GateScoring`).
+- Fixed: the TUI focus sweep at 80x24 and 120x40 (stale placements under nested focus scopes), the passive usage
+  capture contract's timestamp precision, and the compose validation's missing Grafana password.
+
 ## v1.4.0 (2026-11-21)
 
 ### Security

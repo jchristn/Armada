@@ -29299,6 +29299,12 @@
       "experimental": false
     },
     {
+      "key": "mergeQueueLeaseSeconds",
+      "type": "int",
+      "default": "900",
+      "experimental": false
+    },
+    {
       "key": "mergeQueueTestCommand",
       "type": "string",
       "default": "null",

@@ -83,11 +83,11 @@ namespace Armada.Core.Services
         /// Recover a Judge verdict written in a nearby non-canonical form, such as <c>**[ARMADA:VERDICT] PASS**</c>,
         /// <c>[ARMADA:VERDICT]: FAIL</c> or <c>ARMADA VERDICT: NEEDS REVISION.</c>. Refused when any canonical verdict line
         /// exists (the canonical parser decides, including conflicts), when there is not exactly one candidate line, or when
-        /// the candidate is a SPEC_CONFLICT (which needs a quoted criterion). Fenced lines are ignored, as they are by the
+        /// the candidate is a SPEC_CONFLICT without a non-empty <c>## Spec Conflict</c> section quoting the criterion. Fenced lines are ignored, as they are by the
         /// canonical parser.
         /// </summary>
         /// <param name="output">Judge output.</param>
-        /// <param name="verdict">The recovered PASS, FAIL or NEEDS_REVISION verdict; None when refused.</param>
+        /// <param name="verdict">The recovered PASS, FAIL, NEEDS_REVISION, or SPEC_CONFLICT verdict; None when refused.</param>
         /// <param name="sourceLine">The trimmed line the verdict was read from; null when refused.</param>
         /// <returns>True when exactly one unambiguous verdict was recovered.</returns>
         public static bool TryRecoverVerdict(string? output, out JudgeVerdictEnum verdict, out string? sourceLine)
@@ -122,18 +122,27 @@ namespace Armada.Core.Services
                     "PASS" => JudgeVerdictEnum.Pass,
                     "FAIL" => JudgeVerdictEnum.Fail,
                     "NEEDSREVISION" => JudgeVerdictEnum.NeedsRevision,
+                    "SPECCONFLICT" => JudgeVerdictEnum.SpecConflict,
                     _ => JudgeVerdictEnum.None
                 };
             }
 
             if (candidates.Count != 1 || candidateVerdict == JudgeVerdictEnum.None) return false;
+
+            // A spec conflict sends the stage to a person, so it is only recovered with its quoted criterion and evidence.
+            if (candidateVerdict == JudgeVerdictEnum.SpecConflict)
+            {
+                // The verdict line itself does not count as the quoted criterion.
+                string withoutVerdict = String.Join("\n", output.Replace("\r\n", "\n").Split('\n').Where(l => !String.Equals(l.Trim(), candidates[0], StringComparison.Ordinal)));
+                if (JudgeContract.ExtractSpecConflict(withoutVerdict) == null) return false;
+            }
             verdict = candidateVerdict;
             sourceLine = candidates[0];
             return true;
         }
 
         /// <summary>
-        /// The canonical verdict line for a PASS, FAIL or NEEDS_REVISION verdict.
+        /// The canonical verdict line for a PASS, FAIL, NEEDS_REVISION, or SPEC_CONFLICT verdict.
         /// </summary>
         /// <param name="verdict">Verdict.</param>
         /// <returns>The canonical line.</returns>
@@ -145,6 +154,7 @@ namespace Armada.Core.Services
                 JudgeVerdictEnum.Pass => "[ARMADA:VERDICT] PASS",
                 JudgeVerdictEnum.Fail => "[ARMADA:VERDICT] FAIL",
                 JudgeVerdictEnum.NeedsRevision => "[ARMADA:VERDICT] NEEDS_REVISION",
+                JudgeVerdictEnum.SpecConflict => "[ARMADA:VERDICT] SPEC_CONFLICT",
                 _ => throw new ArgumentOutOfRangeException(nameof(verdict))
             };
         }

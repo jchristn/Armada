@@ -33,7 +33,7 @@ Client contract version: `1.0` (reported as `ContractVersion` by
 | WebSocket commands | 65 | 0 |
 | WebSocket event types | 81 | 0 |
 | CLI commands | 101 | 0 |
-| Settings keys | 351 | 12 |
+| Settings keys | 352 | 12 |
 
 ## REST API
 
@@ -1283,6 +1283,7 @@ install with the home directory written as `~`; defaults are not frozen (see COM
 | `mcp.missionScopedTokens` | bool | `true` |  |
 | `mcp.toolCallsPerSecond` | int | `100` |  |
 | `mcpPort` | int | `7891` |  |
+| `mergeQueueLeaseSeconds` | int | `900` |  |
 | `mergeQueueTestCommand` | string | `null` |  |
 | `messageTemplates` | object |  |  |
 | `messageTemplates.commitMessageTemplate` | string | `"\nArmada-Mission-Id: {MissionId}\nArmada-Voyage-Id: {VoyageId}\nArmada-Capta...` |  |

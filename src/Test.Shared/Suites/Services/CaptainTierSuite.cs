@@ -2,6 +2,7 @@ namespace Test.Shared.Suites.Services
 {
     using System;
     using System.Collections.Generic;
+    using System.Linq;
     using System.Threading;
     using System.Threading.Tasks;
     using Armada.Core.Enums;
@@ -35,6 +36,49 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(CaptainTierEnum.Premium, CaptainTierSelector.ClassifyModel("gpt-5.2"));
                 AssertEqual(CaptainTierEnum.Premium, CaptainTierSelector.ClassifyModel("o3-pro"));
                 AssertEqual(CaptainTierEnum.Premium, CaptainTierSelector.ClassifyModel("gemini-2.5-pro"));
+            }));
+
+            cases.Add(Case("classify_model_table", "Model names across vendors and versions classify as intended (GPT 6 and later are Premium; mini, nano, and flash variants stay Economy; o3 and o4 match only as a model name)", TestTags.Positive, () =>
+            {
+                Dictionary<string, CaptainTierEnum> table = new Dictionary<string, CaptainTierEnum>(StringComparer.Ordinal)
+                {
+                    ["claude-opus-5-5"] = CaptainTierEnum.Premium,
+                    ["claude-opus-4-8"] = CaptainTierEnum.Premium,
+                    ["gpt-5"] = CaptainTierEnum.Premium,
+                    ["gpt-5.2"] = CaptainTierEnum.Premium,
+                    ["gpt-6.1"] = CaptainTierEnum.Premium,
+                    ["gpt-6"] = CaptainTierEnum.Premium,
+                    ["gpt-7.0-codex"] = CaptainTierEnum.Premium,
+                    ["gpt-10"] = CaptainTierEnum.Premium,
+                    ["openai/gpt-6.1"] = CaptainTierEnum.Premium,
+                    ["o3"] = CaptainTierEnum.Premium,
+                    ["o3-pro"] = CaptainTierEnum.Premium,
+                    ["openai/o4"] = CaptainTierEnum.Premium,
+                    ["gemini-2.5-pro"] = CaptainTierEnum.Premium,
+                    ["gemini-3-pro"] = CaptainTierEnum.Premium,
+                    ["gpt-6.1-mini"] = CaptainTierEnum.Economy,
+                    ["gpt-5-nano"] = CaptainTierEnum.Economy,
+                    ["o4-mini"] = CaptainTierEnum.Economy,
+                    ["gemini-2.5-flash"] = CaptainTierEnum.Economy,
+                    ["claude-haiku-5-5"] = CaptainTierEnum.Economy,
+                    ["gpt-oss:120b"] = CaptainTierEnum.Economy,
+                    ["deepseek-v4.1-flash"] = CaptainTierEnum.Economy,
+                    ["qwen3:8b"] = CaptainTierEnum.Economy,
+                    ["claude-sonnet-5-5"] = CaptainTierEnum.Standard,
+                    ["gpt-4.1"] = CaptainTierEnum.Standard,
+                    ["gpt-4o"] = CaptainTierEnum.Standard,
+                    ["qwen3.8"] = CaptainTierEnum.Standard,
+                    ["qwen3.8:27b"] = CaptainTierEnum.Standard,
+                    ["inkling-2-mini"] = CaptainTierEnum.Economy,
+                    ["glm-5.3"] = CaptainTierEnum.Standard,
+                    ["kimi-k3"] = CaptainTierEnum.Standard,
+                    ["deepseek-v4-pro:0813"] = CaptainTierEnum.Standard,
+                    ["gemini-2.5"] = CaptainTierEnum.Standard,
+                    ["qwen3-o3-merge"] = CaptainTierEnum.Standard
+                };
+                List<string> wrong = table.Where(pair => CaptainTierSelector.ClassifyModel(pair.Key) != pair.Value)
+                    .Select(pair => pair.Key + " => " + CaptainTierSelector.ClassifyModel(pair.Key) + " (want " + pair.Value + ")").ToList();
+                AssertTrue(wrong.Count == 0, String.Join("; ", wrong));
             }));
 
             cases.Add(Case("classify_economy_models", "Economy models classify as Economy", TestTags.Positive, () =>

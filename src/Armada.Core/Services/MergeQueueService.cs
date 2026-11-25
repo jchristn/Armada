@@ -73,7 +73,6 @@ namespace Armada.Core.Services
         /// Name of the durable lease that serializes queue processing across instances.
         /// </summary>
         private const string _ProcessLeaseName = "merge-queue:process";
-        private static readonly TimeSpan _ProcessLeaseDuration = TimeSpan.FromMinutes(15);
         private readonly object _ProcessLock = new object();
 
         /// <summary>
@@ -137,11 +136,16 @@ namespace Armada.Core.Services
             bool leaseAcquired = false;
             try
             {
+                // A mission whose entry already Landed is completed first, without the lease: an Admiral that stopped
+                // between marking the entry Landed and completing the mission (RS-2.3) leaves it WorkProduced, and the
+                // completion is a compare-and-set that any instance may apply.
+                await CompleteMissionsOfLandedEntriesAsync(token).ConfigureAwait(false);
+
                 // Cross-instance guard: only one Admiral processes the queue at a time. The lease
                 // TTL guarantees a crashed holder does not block the queue forever, and takeover is
                 // automatic once it expires.
                 leaseAcquired = await _Database.CoordinationLeases
-                    .TryAcquireAsync(_ProcessLeaseName, _InstanceId, _ProcessLeaseDuration, null, token)
+                    .TryAcquireAsync(_ProcessLeaseName, _InstanceId, LeaseDuration, null, token)
                     .ConfigureAwait(false);
                 if (!leaseAcquired)
                 {
@@ -152,7 +156,7 @@ namespace Armada.Core.Services
                 // Recover work left in Testing only after the processing lease expires. A null
                 // start time has no evidence of a live processor and is safe to resume. A newer
                 // status write keeps the entry.
-                DateTime staleBeforeUtc = DateTime.UtcNow - _ProcessLeaseDuration;
+                DateTime staleBeforeUtc = DateTime.UtcNow - LeaseDuration;
                 List<MergeEntry> testing = await _Database.MergeEntries.EnumerateByStatusAsync(MergeStatusEnum.Testing, token).ConfigureAwait(false);
                 foreach (MergeEntry entry in testing)
                 {
@@ -475,6 +479,14 @@ namespace Armada.Core.Services
             // and on different Harbors.
             foreach (MergeEntry entry in entries)
             {
+                // Renew the processing lease before each entry, so a pass longer than the lease (several builds and test
+                // runs) is never taken over and processed twice (RS-2.5). Losing the lease stops this pass.
+                if (!await _Database.CoordinationLeases.TryRenewAsync(_ProcessLeaseName, _InstanceId, LeaseDuration, token).ConfigureAwait(false))
+                {
+                    _Logging.Warn(_Header + "lost the merge queue lease; stopping this pass before entry " + entry.Id);
+                    return;
+                }
+
                 await ProcessEntryAsync(entry, pass, token).ConfigureAwait(false);
             }
         }
@@ -750,6 +762,28 @@ namespace Armada.Core.Services
         /// <see cref="OnMissionReconciled"/>. A LandingFailed reconciliation records the failure's kind on the mission and
         /// the structured failure as the event payload.
         /// </summary>
+        private TimeSpan LeaseDuration => TimeSpan.FromSeconds(_Settings.MergeQueueLeaseSeconds);
+
+        private async Task CompleteMissionsOfLandedEntriesAsync(CancellationToken token)
+        {
+            List<Mission> awaiting = new List<Mission>();
+            awaiting.AddRange(await _Database.Missions.EnumerateByStatusAsync(MissionStatusEnum.WorkProduced, token).ConfigureAwait(false));
+            awaiting.AddRange(await _Database.Missions.EnumerateByStatusAsync(MissionStatusEnum.LandingFailed, token).ConfigureAwait(false));
+            foreach (Mission mission in awaiting)
+            {
+                token.ThrowIfCancellationRequested();
+                EnumerationResult<MergeEntry> latest = await _Database.MergeEntries.EnumerateAsync(new EnumerationQuery
+                {
+                    MissionId = mission.Id,
+                    PageSize = 1,
+                    Order = EnumerationOrderEnum.CreatedDescending
+                }, token).ConfigureAwait(false);
+                MergeEntry? entry = latest.Objects.FirstOrDefault();
+                if (entry == null || entry.Status != MergeStatusEnum.Landed) continue;
+                await ReconcileMissionStatusAsync(mission.Id, MissionStatusEnum.Complete, "Landed via merge queue entry " + entry.Id + " (completed after a restart)", token, entry.TenantId).ConfigureAwait(false);
+            }
+        }
+
         private async Task ReconcileMissionStatusAsync(string? missionId, MissionStatusEnum targetStatus, string reason, CancellationToken token, string? tenantId = null, MergeQueueFailure? failure = null, Exception? exception = null)
         {
             if (String.IsNullOrEmpty(missionId)) return;

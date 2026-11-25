@@ -44,6 +44,24 @@ namespace Test.Shared.Suites.Services
         {
             List<TestCaseDescriptor> cases = new List<TestCaseDescriptor>();
 
+            cases.Add(CaseAsync("severity_words_match_whole_words", "Severity text is read by whole words: High, Blocking, and Critical stay blocking even when the sentence contains low, info, or minor inside other words", TestTags.Negative, () =>
+            {
+                string output = "## Findings\n"
+                    + "1. File: src/A.cs:1 Severity: High - follows from the missing guard.\n"
+                    + "2. File: src/B.cs:2 Severity: Blocking: allows invalid input through.\n"
+                    + "3. File: src/C.cs:3 Severity: Critical, no information is logged.\n"
+                    + "4. File: src/D.cs:4 Severity: Low, a naming nit.\n"
+                    + "5. File: src/E.cs:5 Severity: Non-blocking cleanup.\n";
+                List<HandoffFinding> findings = HandoffArtifactBuilder.ExtractFindings(output, true);
+                AssertEqual(5, findings.Count, String.Join(" || ", findings.Select(f => f.Summary)));
+                AssertEqual(HandoffFindingSeverityEnum.Blocking, findings[0].Severity, "High - follows (contains low)");
+                AssertEqual(HandoffFindingSeverityEnum.Blocking, findings[1].Severity, "Blocking: allows (contains low)");
+                AssertEqual(HandoffFindingSeverityEnum.Blocking, findings[2].Severity, "Critical, no information (contains info)");
+                AssertEqual(HandoffFindingSeverityEnum.NonBlocking, findings[3].Severity, "Low");
+                AssertEqual(HandoffFindingSeverityEnum.NonBlocking, findings[4].Severity, "Non-blocking");
+                return Task.CompletedTask;
+            }));
+
             cases.Add(CaseAsync("builder_parses_judge_findings", "A Judge NEEDS_REVISION yields numbered findings with file, line, severity and required fix, plus verdict, protocol lines, commits, criteria and actions", TestTags.Positive, () =>
             {
                 Mission judge = JudgeMission(JudgeOutput(0));

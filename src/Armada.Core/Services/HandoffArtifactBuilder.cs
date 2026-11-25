@@ -377,10 +377,19 @@ namespace Armada.Core.Services
             return finding;
         }
 
+        private static readonly Regex _NonBlockingSeverity = new Regex(@"\bnon-?blocking\b|\boptional\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
+
+        private static readonly Regex _BlockingSeverity = new Regex(@"\bblocking\b|\bblocker\b|\bhigh\b|\bcritical\b|\bmajor\b|\bmedium\b|\bsevere\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
+
+        private static readonly Regex _WeakSeverity = new Regex(@"\blow\b|\bminor\b|\bnit\b|\bnitpick\b|\binfo\b|\binformational\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
+
         private static HandoffFindingSeverityEnum ParseSeverity(string value, HandoffFindingSeverityEnum fallback)
         {
-            if (Regex.IsMatch(value, @"non-?blocking|optional|low|minor|nit|info", RegexOptions.IgnoreCase)) return HandoffFindingSeverityEnum.NonBlocking;
-            if (Regex.IsMatch(value, @"blocking|high|critical|major|medium", RegexOptions.IgnoreCase)) return HandoffFindingSeverityEnum.Blocking;
+            // Whole words only, and non-blocking phrases before blocking terms: "High - follows from", "Blocking: allows",
+            // and "Critical, no information" must not match "low", "low", and "info" inside other words.
+            if (_NonBlockingSeverity.IsMatch(value)) return HandoffFindingSeverityEnum.NonBlocking;
+            if (_BlockingSeverity.IsMatch(value)) return HandoffFindingSeverityEnum.Blocking;
+            if (_WeakSeverity.IsMatch(value)) return HandoffFindingSeverityEnum.NonBlocking;
             return fallback;
         }
 

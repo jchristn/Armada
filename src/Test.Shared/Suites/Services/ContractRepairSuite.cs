@@ -120,6 +120,19 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
+            cases.Add(Case("spec_conflict_recovered_only_with_quoted_section", "A near-miss SPEC_CONFLICT is recovered when a Spec Conflict section quotes the criterion, and refused without one (RS-2.12)", TestTags.Positive, () =>
+            {
+                string withSection = "## Spec Conflict\n> AC-2: keep escapes\nThis contradicts AC-1, which rejects every backslash.\n\n**ARMADA VERDICT: SPEC CONFLICT**";
+                AssertTrue(ContractRepair.TryRecoverVerdict(withSection, out JudgeVerdictEnum verdict, out string? line), "recovered with the section");
+                AssertEqual(JudgeVerdictEnum.SpecConflict, verdict);
+                AssertEqual("**ARMADA VERDICT: SPEC CONFLICT**", line);
+                AssertEqual("[ARMADA:VERDICT] SPEC_CONFLICT", ContractRepair.CanonicalVerdictLine(JudgeVerdictEnum.SpecConflict));
+
+                string emptySection = "## Spec Conflict\n\n**ARMADA VERDICT: SPEC CONFLICT**";
+                AssertFalse(ContractRepair.TryRecoverVerdict(emptySection, out JudgeVerdictEnum refused, out string? _), "an empty section quotes nothing");
+                AssertEqual(JudgeVerdictEnum.None, refused);
+            }));
+
             // Architect plan repair and refusal.
 
             cases.Add(Case("plan_single_noncanonical_block_recovered", "A single valid plan in a json fence, a bare fence or an unclosed armada-plan fence is recovered", TestTags.Positive, () =>

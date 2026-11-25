@@ -402,9 +402,11 @@ namespace Armada.Server
                 }).ToList()
                 : new List<MissionDescription> { new MissionDescription(title, description) { OwnedPaths = drafted.Count == 1 && drafted[0].OwnedPaths.Count > 0 ? drafted[0].OwnedPaths : null } };
 
+            // The voyage description is the drafted objective: Architect slices give it to every Worker as the overall
+            // objective. The planning session is linked through SourcePlanningSessionId, not through this text.
             Voyage voyage = await _Admiral.DispatchVoyageAsync(
                 title,
-                "Created from planning session " + session.Id,
+                description,
                 session.VesselId,
                 missions,
                 session.PipelineId,
