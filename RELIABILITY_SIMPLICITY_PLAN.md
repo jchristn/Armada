@@ -424,8 +424,10 @@ Each of these is a confirmed defect in 1.4.0. They are small, and each gets a re
   line itself does not count); canonical line added. `Services.ContractRepair` and a new
   `Services.ModelOutputContract` fixture.
 
-- [ ] **RS-2.13** MCP enumerate with `includeDescription` ignores filters and tenant scope (FR R5 production TODO).
-  Confirm with a cross-tenant test and fix. Evidence:
+- [x] **RS-2.13** MCP enumerate with `includeDescription` ignores filters and tenant scope (FR R5 production TODO).
+  Confirm with a cross-tenant test and fix. Evidence: already fixed since the archive note: both enumerate branches use
+  `EnumerationScope.EnumerateScopedAsync`, and `E2E.McpTenantIsolation` checks every filter with includeDescription on
+  and off plus tenant isolation (8/8 pass, 2026-11-25). No change needed.
 
 ## Phase 3: Typed state and an enforced state machine
 
