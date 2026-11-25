@@ -17,6 +17,9 @@ Conductor) with Opus and GPT-6.1 reliable. The work is tracked item by item in `
 - **The merge queue renews its processing lease before every entry.** A pass longer than the lease (several builds and
   test runs) could be taken over by another instance and processed twice. The lease length is the new setting
   `MergeQueueLeaseSeconds` (default 900, 5 to 14400) (RS-2.5).
+- **Autonomous recovery is crash-consistent.** A recovery incident is created with its failure kind in one write, so a
+  restart can no longer open a second incident for the same failure; a rescue that was created but not yet recorded on
+  its incident is adopted rather than left uncounted against the rescue budget (RS-2.6).
 - **Planning dispatch keeps the drafted objective.** A voyage dispatched from a planning session now carries the
   drafted description instead of "Created from planning session ...", which Architect slices passed to every Worker
   as the overall objective. The session stays linked through `SourcePlanningSessionId` (RS-2.4).

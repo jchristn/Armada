@@ -71,10 +71,10 @@ namespace Test.Shared.Suites.Services
                 null, () => MergeQueueCrashAsync(CrashPointNames.MergeQueueEntryLanded)));
 
             cases.Add(Case("recovery_crash_after_incident_created", "Crash after a recovery incident is created: the next cycle leaves one incident with its failure kind and one rescue",
-                "Creating the incident with its failure kind in one write and adopting existing rescues is RS-2.6.", () => RecoveryCrashAsync(CrashPointNames.RecoveryIncidentCreated)));
+                null, () => RecoveryCrashAsync(CrashPointNames.RecoveryIncidentCreated)));
 
             cases.Add(Case("recovery_crash_after_rescue_created", "Crash after a rescue is created: the next cycle adopts it instead of dispatching a second rescue",
-                "Adopting rescues by RescueOfMissionId in any status is RS-2.6.", () => RecoveryCrashAsync(CrashPointNames.RecoveryRescueCreated)));
+                null, () => RecoveryCrashAsync(CrashPointNames.RecoveryRescueCreated)));
 
             cases.Add(Case("voyage_crash_mid_build_is_completed_or_failed", "Crash while a voyage's missions are being created: after restart the voyage is whole or failed, never half-built and open",
                 "Building the voyage and its missions atomically is RS-4.3.", VoyageCrashAsync));

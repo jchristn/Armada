@@ -386,9 +386,12 @@ Each of these is a confirmed defect in 1.4.0. They are small, and each gets a re
   per pass and never renewed, so a long pass can be reset and processed twice. Renew per entry (heartbeat) and make
   the duration a setting. Test with a slow verification fake. Evidence: `MergeQueueLeaseSeconds` (default 900, 5 to 14400) replaces the constant; renewed before each entry;
   losing it stops the pass. The `Services.CrashConsistency` case is now on (5-second lease) and passes.
-- [ ] **RS-2.6** Rescue incidents not crash-consistent. Pass `FailureKind` in the incident create request; before
+- [x] **RS-2.6** Rescue incidents not crash-consistent. Pass `FailureKind` in the incident create request; before
   dispatching a rescue, look up existing rescues by `RescueOfMissionId` in any status and adopt them; drop the
-  title and substring dedup (`ReferencesOriginal`). Crash-point tests. Evidence:
+  title and substring dedup (`ReferencesOriginal`). Crash-point tests. Evidence: the incident is created with `FailureKind`; an Armada rescue
+  (`IsRescue`) of the mission that the incident does not reference is adopted in any status before a new one is
+  dispatched; an operator's re-apply still suppresses without spending budget, and the title and description dedup
+  stays behind it (decision R11). Both recovery cases in `Services.CrashConsistency` are on and pass.
 - [ ] **RS-2.7** Startup burns retries. `CleanupStaleCaptainsAsync` (`AdmiralService.cs:1007`) treats an Assigned
   mission with no process as an interrupted run and spends `RedispatchAttempts`. Return never-launched Assigned
   missions to Pending without charging an attempt. Evidence:

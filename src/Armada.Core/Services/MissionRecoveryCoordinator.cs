@@ -239,12 +239,12 @@ namespace Armada.Core.Services
                     MissionId = mission.Id,
                     VoyageId = mission.VoyageId,
                     Impact = "Mission " + mission.Id + " failed: " + Trim(mission.FailureReason, 500),
-                    RootCause = "Classified failure kind: " + kind
+                    RootCause = "Classified failure kind: " + kind,
+                    // Written with the incident, so a restart can never find a recovery incident without its kind (RS-2.6).
+                    FailureKind = kind.ToString()
                 }, token).ConfigureAwait(false);
 
                 CrashPoints.Hit(CrashPointNames.RecoveryIncidentCreated);
-                incident.FailureKind = kind.ToString();
-                await UpdateIncidentAsync(auth, incident, token).ConfigureAwait(false);
                 linkedMissionIds.Add(mission.Id);
                 _Logging.Info(_Header + "opened incident " + incident.Id + " for failed mission " + mission.Id + " (" + kind + ")");
 
@@ -287,6 +287,18 @@ namespace Armada.Core.Services
             // terminal voyage) linked back through RescueOfMissionId and the incident. The normal pending-dispatch
             // sweep assigns it on the next health cycle.
             List<Mission> peers = await _Database.Missions.EnumerateByVesselAsync(original.VesselId!, token).ConfigureAwait(false);
+
+            // A rescue of this mission that the incident does not reference yet (an Admiral that stopped between creating
+            // the rescue and recording it) is adopted, in any status, instead of dispatching another one (RS-2.6).
+            // Only Armada's own rescues are adopted; an operator's re-apply of the same work suppresses a rescue instead.
+            Mission? orphan = peers.FirstOrDefault(m => m.IsRescue && m.RescueOfMissionId == original.Id && m.TenantId == original.TenantId
+                && !incident.RescueMissionIds.Contains(m.Id));
+            if (orphan != null)
+            {
+                _Logging.Info(_Header + "adopting rescue " + orphan.Id + " (" + orphan.Status + ") of " + original.Id + " into incident " + incident.Id);
+                return orphan;
+            }
+
             Mission? existing = peers.FirstOrDefault(m => m.Id != original.Id && m.TenantId == original.TenantId
                 && _ActiveStatuses.Contains(m.Status)
                 && (m.RescueOfMissionId == original.Id || String.Equals(m.Title, original.Title, StringComparison.OrdinalIgnoreCase)
