@@ -73,6 +73,12 @@ namespace Armada.Core.Services
         public DockHostResolver? DockHosts { get; set; }
 
         /// <summary>
+        /// Mission status transitions (RS-3.5). The server shares one instance across services; a standalone service gets
+        /// its own, which re-evaluates voyages through this service.
+        /// </summary>
+        public MissionTransitions Transitions { get; set; }
+
+        /// <summary>
         /// Black box capture called at mission failure sites, or null when the black box is not wired (no capture).
         /// </summary>
         public IBlackBoxCapture? BlackBox { get; set; }
@@ -253,6 +259,8 @@ namespace Armada.Core.Services
             _PromptTemplates = promptTemplates;
             _DefinitionOfDone = definitionOfDone;
             _WaitTracker = new MissionWaitTracker(_Database, _Settings, _Logging);
+            Transitions = new MissionTransitions(_Database, _Logging);
+            Transitions.VoyageChanged = ReevaluateVoyageAsync;
         }
 
         #endregion
@@ -502,10 +510,8 @@ namespace Armada.Core.Services
                          voyage.Status == VoyageStatusEnum.Failed ||
                          voyage.Status == VoyageStatusEnum.Complete))
                     {
-                        mission.Status = MissionStatusEnum.Cancelled;
                         mission.ProcessId = null;
                         mission.CompletedUtc = DateTime.UtcNow;
-                        mission.LastUpdateUtc = DateTime.UtcNow;
                         if (String.IsNullOrWhiteSpace(mission.FailureReason))
                         {
                             mission.FailureReason = "Parent voyage " + voyage.Id + " is " + voyage.Status + ".";
@@ -516,7 +522,7 @@ namespace Armada.Core.Services
                             mission.FailureKind = MissionFailureKindEnum.DependencyFailed;
                         }
 
-                        await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
+                        if (!await Transitions.TryTransitionAsync(mission, new[] { MissionStatusEnum.Pending }, MissionStatusEnum.Cancelled, null, token).ConfigureAwait(false)) return false;
                         _Logging.Info(_Header + "mission " + mission.Id + " belongs to terminal voyage " + voyage.Id +
                             " (" + voyage.Status + ") -- cancelling instead of assigning");
                         await RecordFailureAsync(mission, MissionStatusEnum.Pending, BlackBoxStepEnum.VoyageParentNotRunnable, null, context =>
@@ -755,12 +761,13 @@ namespace Armada.Core.Services
             _UsageSelectionBlockers.TryRemove(mission.Id, out _);
             mission.BranchName = branchName;
             mission.CaptainId = captain.Id;
-            mission.Status = MissionStatusEnum.Assigned;
-            mission.LastUpdateUtc = DateTime.UtcNow;
             DateTime? previousReadyUtc = mission.ReadyUtc;
             DateTime? previousAssignedUtc = mission.AssignedUtc;
             AssignmentWaitTiming waitTiming = await _WaitTracker.PrepareAssignmentAsync(mission, token).ConfigureAwait(false);
-            bool assignmentRecorded = await _Database.Missions.TryUpdateIfStatusAsync(mission, new MissionStatusEnum[] { MissionStatusEnum.Assigned }, token).ConfigureAwait(false);
+            // Captain admission already moved the stored row from Pending to Assigned; this records the assignment fields.
+            MissionTransitionRequest assignment = new MissionTransitionRequest { To = MissionStatusEnum.Assigned, Message = "Mission Assigned to " + captain.Id + ": " + mission.Title };
+            assignment.AllowedFrom.Add(MissionStatusEnum.Assigned);
+            bool assignmentRecorded = await Transitions.TryTransitionAsync(mission, assignment, token).ConfigureAwait(false);
             if (!assignmentRecorded)
             {
                 // Someone else moved the mission (cancelled, or assigned by another caller) after it was read.
@@ -988,16 +995,13 @@ namespace Armada.Core.Services
                 }
 
                 mission.ProcessId = processId;
-                mission.Status = MissionStatusEnum.InProgress;
                 mission.StartedUtc = DateTime.UtcNow;
-                mission.LastUpdateUtc = DateTime.UtcNow;
-                bool launchRecorded = await _Database.Missions.TryUpdateIfStatusAsync(mission, new MissionStatusEnum[] { MissionStatusEnum.Assigned }, CancellationToken.None).ConfigureAwait(false);
+                bool launchRecorded = await Transitions.TryTransitionAsync(mission, new[] { MissionStatusEnum.Assigned }, MissionStatusEnum.InProgress, null, CancellationToken.None).ConfigureAwait(false);
                 Mission? currentMission = launchRecorded ? null : await _Database.Missions.ReadAsync(mission.Id, CancellationToken.None).ConfigureAwait(false);
                 if (currentMission != null)
                 {
                     _Logging.Info(_Header + "mission " + mission.Id + " already moved to " + currentMission.Status + " before its launch was recorded (agent process " + processId + " finished first); keeping that state");
                     mission.ProcessId = currentMission.ProcessId;
-                    mission.Status = currentMission.Status;
                     mission.StartedUtc = currentMission.StartedUtc;
                     mission.LastUpdateUtc = currentMission.LastUpdateUtc;
                 }
@@ -1405,7 +1409,6 @@ namespace Armada.Core.Services
 
             mission.OutputRepairAttempts = attempt;
             MissionNotes.Set(mission, MissionNoteKindEnum.OutputRepair, note);
-            mission.Status = MissionStatusEnum.Pending;
             mission.CaptainId = null;
             mission.DockId = null;
             mission.ProcessId = null;
@@ -1416,8 +1419,7 @@ namespace Armada.Core.Services
             mission.StartedUtc = null;
             mission.CompletedUtc = null;
             mission.TotalRuntimeMs = null;
-            mission.LastUpdateUtc = DateTime.UtcNow;
-            if (!await _Database.Missions.TryUpdateIfStatusAsync(mission, new MissionStatusEnum[] { observedStatus }, token).ConfigureAwait(false))
+            if (!await Transitions.TryTransitionAsync(mission, new[] { observedStatus }, MissionStatusEnum.Pending, null, token).ConfigureAwait(false))
             {
                 _Logging.Info(_Header + "mission " + mission.Id + " left " + observedStatus + " before its output repair was recorded; not repairing");
                 mission.OutputRepairAttempts = attempt - 1;
@@ -1476,15 +1478,13 @@ namespace Armada.Core.Services
             // Cleanup runs with no cancellation: a shutdown mid-assignment must not strand a claimed captain.
             try
             {
-                mission.Status = MissionStatusEnum.Pending;
                 mission.CaptainId = null;
                 if (!preserveExistingBranch)
                     mission.BranchName = null;
                 mission.DockId = null;
                 mission.ProcessId = null;
                 mission.StartedUtc = null;
-                mission.LastUpdateUtc = DateTime.UtcNow;
-                bool reverted = await _Database.Missions.TryUpdateIfStatusAsync(mission, new MissionStatusEnum[] { MissionStatusEnum.Assigned }, CancellationToken.None).ConfigureAwait(false);
+                bool reverted = await Transitions.TryTransitionAsync(mission, new[] { MissionStatusEnum.Assigned }, MissionStatusEnum.Pending, null, CancellationToken.None).ConfigureAwait(false);
                 if (!reverted)
                     _Logging.Info(_Header + "mission " + mission.Id + " already left Assigned; leaving its current state during rollback");
             }
@@ -1505,15 +1505,13 @@ namespace Armada.Core.Services
                 await ReleaseSelectionIfUnstartedAsync(mission, captain).ConfigureAwait(false);
             try
             {
-                mission.Status = MissionStatusEnum.Failed;
                 mission.FailureKind = MissionFailureKindEnum.Infra;
                 mission.FailureReason = reason;
                 mission.CaptainId = null;
                 mission.DockId = null;
                 mission.ProcessId = null;
                 mission.CompletedUtc = DateTime.UtcNow;
-                mission.LastUpdateUtc = DateTime.UtcNow;
-                failed = await _Database.Missions.TryUpdateIfStatusAsync(mission, new MissionStatusEnum[] { MissionStatusEnum.Assigned }, CancellationToken.None).ConfigureAwait(false);
+                failed = await Transitions.TryTransitionAsync(mission, new[] { MissionStatusEnum.Assigned }, MissionStatusEnum.Failed, null, CancellationToken.None).ConfigureAwait(false);
                 if (failed)
                     ArmadaMetrics.MissionsFailed.Add(1);
                 else
@@ -1754,12 +1752,10 @@ namespace Armada.Core.Services
             }
 
             MissionStatusEnum statusBefore = mission.Status;
-            mission.Status = MissionStatusEnum.Failed;
             mission.CompletedUtc = DateTime.UtcNow;
-            mission.LastUpdateUtc = DateTime.UtcNow;
             mission.FailureReason = "Mission modified files outside its scoped file list: " + String.Join(", ", outOfScopeFiles);
             mission.FailureKind = MissionFailureKindEnum.ScopeViolation;
-            await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
+            if (!await Transitions.TryTransitionAsync(mission, new[] { MissionStatusEnum.WorkProduced }, MissionStatusEnum.Failed, null, token).ConfigureAwait(false)) return true;
             _Logging.Warn(_Header + "mission " + mission.Id + " failed scope validation: " + mission.FailureReason);
 
             // Black box reference capture site: update the row first, then record the failure in one line. The capture

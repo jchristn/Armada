@@ -84,6 +84,74 @@ namespace Armada.Core.Services
         }
 
         /// <summary>
+        /// Whether Armada itself may move a mission from <paramref name="current"/> to <paramref name="target"/>. This is
+        /// <see cref="IsValidTransition"/> (the operator table) plus the edges only Armada's own handlers take: requeueing
+        /// an in-flight or produced mission (redispatch, escalation, rework, output repair, no-op retry), restarting a
+        /// finished one, verifying after a clean exit, failing or holding produced work for review, failing an approved
+        /// stage whose handoff failed, and settling an incident. A non-terminal status may also be rewritten to itself to update the mission's other fields.
+        /// </summary>
+        /// <param name="current">Current status.</param>
+        /// <param name="target">Proposed next status.</param>
+        /// <returns>True if Armada may make the transition.</returns>
+        public static bool IsValidInternalTransition(MissionStatusEnum current, MissionStatusEnum target)
+        {
+            if (current == target) return !IsTerminal(current);
+            if (IsValidTransition(current, target)) return true;
+
+            switch (target)
+            {
+                case MissionStatusEnum.Pending:
+                    // Requeue (redispatch, escalation, rework, output repair, no-op retry) or restart.
+                    return current == MissionStatusEnum.Assigned
+                        || current == MissionStatusEnum.InProgress
+                        || current == MissionStatusEnum.Testing
+                        || current == MissionStatusEnum.Review
+                        || current == MissionStatusEnum.Verifying
+                        || current == MissionStatusEnum.WorkProduced
+                        || current == MissionStatusEnum.LandingFailed
+                        || current == MissionStatusEnum.Failed
+                        || current == MissionStatusEnum.Cancelled;
+
+                case MissionStatusEnum.Verifying:
+                    return current == MissionStatusEnum.InProgress || current == MissionStatusEnum.Testing;
+
+                case MissionStatusEnum.Failed:
+                    // Complete: a stage approved in review whose handoff to the next stage then failed.
+                    return current == MissionStatusEnum.Complete
+                        || current == MissionStatusEnum.Pending
+                        || current == MissionStatusEnum.Blocked
+                        || current == MissionStatusEnum.Assigned
+                        || current == MissionStatusEnum.WorkProduced
+                        || current == MissionStatusEnum.PullRequestOpen;
+
+                case MissionStatusEnum.Review:
+                    return current == MissionStatusEnum.WorkProduced || current == MissionStatusEnum.PullRequestOpen;
+
+                case MissionStatusEnum.WorkProduced:
+                    // Completion from any in-flight status, approval of a review, a manual land, and a verifier restart.
+                    return current == MissionStatusEnum.Assigned
+                        || current == MissionStatusEnum.Testing
+                        || current == MissionStatusEnum.Review
+                        || current == MissionStatusEnum.PullRequestOpen
+                        || current == MissionStatusEnum.Failed;
+
+                case MissionStatusEnum.LandingFailed:
+                    return current == MissionStatusEnum.Review;
+
+                case MissionStatusEnum.Cancelled:
+                    // Failed: a cancellation (of the mission or its voyage) dismissing a failed mission.
+                    return current == MissionStatusEnum.Testing || current == MissionStatusEnum.Review || current == MissionStatusEnum.Failed;
+
+                case MissionStatusEnum.Complete:
+                    // An incident resolved by hand or by a rescue.
+                    return current == MissionStatusEnum.Failed;
+
+                default:
+                    return false;
+            }
+        }
+
+        /// <summary>
         /// Whether an agent's own <c>[ARMADA:STATUS]</c> protocol line may move a mission from
         /// <paramref name="current"/> to <paramref name="target"/>. Only the informational in-flight phase toggle
         /// InProgress to Testing and back is agent-reportable. Every other status (Review, WorkProduced, Complete,

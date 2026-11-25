@@ -38,6 +38,10 @@ Scripts that read those sections from `Description` should read `Notes` instead.
 across the upgrade can show an earlier handoff in its description and the next one as a note; the captain receives
 both.
 
+`mission.status_changed` is now emitted for every mission status change (assignment, launch, verification, completion,
+landing, recovery and review included), not only for failures and operator transitions, and never twice for one
+change. A client that counted these events, or treated each one as a failure, should read `status` and
+`previousStatus` instead.
 ### Changes to act on when coming from 1.0.0
 
 1.0.1 fixes the landing modes. `LocalMerge` now merges into the working directory without pushing; the new

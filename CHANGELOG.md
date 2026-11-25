@@ -27,6 +27,13 @@ Conductor) with Opus and GPT-6.1 reliable. The work is tracked item by item in `
   the description when a captain launches. Missions expose the new `Notes`, `EscalationCount`,
   `EscalatedFromCaptainId`, `EscalatedFromModel`, `FanOutCompletedUtc`, `ArchitectSourceMissionId`,
   `ArchitectPlanIndex`, `LaunchIntentUtc` and `LaunchJobId` fields (RS-3.4).
+- **Every mission status change goes through one checked transition.** It refuses an edge the state machine does not
+  have, writes only while the mission still has the status the caller read, emits `mission.status_changed` exactly
+  once, and settles the voyage when the mission finishes. Before, 34 of the 66 places that changed a status wrote
+  the whole row unconditionally, so a late handler could overwrite a newer state. A source scan now fails the build's
+  tests if a direct status write returns. A stage approved in review whose handoff then fails is now marked Failed and
+  its later stages are cancelled; before, that write was silently refused and the later stages waited forever
+  (RS-3.5, RS-3.6).
 - **A mission whose merge entry already landed is completed after a restart.** If the Admiral stopped between
   marking a merge queue entry Landed and completing its mission, the mission stayed `WorkProduced` for good. Each
   queue pass now completes such missions first (RS-2.3).

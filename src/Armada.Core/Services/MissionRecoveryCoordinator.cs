@@ -30,6 +30,11 @@ namespace Armada.Core.Services
 
         #endregion
 
+        /// <summary>
+        /// Mission status transitions (RS-3.5); the server replaces this with the instance shared across services.
+        /// </summary>
+        public MissionTransitions Transitions { get; set; }
+
         #region Private-Members
 
         private readonly string _Header = "[MissionRecoveryCoordinator] ";
@@ -70,6 +75,7 @@ namespace Armada.Core.Services
         {
             _Logging = logging ?? throw new ArgumentNullException(nameof(logging));
             _Database = database ?? throw new ArgumentNullException(nameof(database));
+            Transitions = new MissionTransitions(database, logging);
             _Settings = settings ?? throw new ArgumentNullException(nameof(settings));
             _Incidents = new IncidentService(_Database);
         }
@@ -168,11 +174,9 @@ namespace Armada.Core.Services
                 Mission? unresolved = await _Database.Missions.ReadAsync(original.Id, token).ConfigureAwait(false);
                 if (unresolved != null && (unresolved.Status == MissionStatusEnum.Failed || unresolved.Status == MissionStatusEnum.LandingFailed))
                 {
-                    unresolved.Status = MissionStatusEnum.Complete;
                     unresolved.FailureReason = "Resolved by landed rescue " + landed.Id + ". Prior failure: " + unresolved.FailureReason;
                     unresolved.CompletedUtc = DateTime.UtcNow;
-                    unresolved.LastUpdateUtc = DateTime.UtcNow;
-                    await _Database.Missions.TryUpdateIfStatusAsync(unresolved, new[] { MissionStatusEnum.Failed, MissionStatusEnum.LandingFailed }, token).ConfigureAwait(false);
+                    await Transitions.TryTransitionAsync(unresolved, new[] { MissionStatusEnum.Failed, MissionStatusEnum.LandingFailed }, MissionStatusEnum.Complete, null, token).ConfigureAwait(false);
                 }
                 await TransitionAsync(auth, incident, IncidentStatusEnum.Mitigated, "A rescue mission landed successfully.", token).ConfigureAwait(false);
                 return;
@@ -330,8 +334,6 @@ namespace Armada.Core.Services
             rescue.Priority = Math.Max(0, original.Priority - 50);
             rescue.Title = "[Rescue] " + original.Title;
             rescue.Description = HasRecordedWork(original) ? BuildIntegrationRescueBrief(original, incident) : BuildRescueBrief(original, incident);
-            rescue.Status = MissionStatusEnum.Pending;
-
             rescue = await _Database.Missions.CreateAsync(rescue, token).ConfigureAwait(false);
             CrashPoints.Hit(CrashPointNames.RecoveryRescueCreated);
             return rescue;

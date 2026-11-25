@@ -488,30 +488,24 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(mission.FailureReason, (await bb.Pipeline.LoadRecordAsync(entry).ConfigureAwait(false)).Classification!.RawReason, "the erased reason survives in the record");
             }));
 
-            cases.Add(Case("status_changed_on_every_capture", "Each capture whose status changed emits mission.status_changed with PreviousStatus; a same-status entry emits none; it is emitted with the black box disabled", TestTags.Positive, async () =>
+            cases.Add(Case("status_changed_comes_from_the_transition", "The transition emits mission.status_changed once with PreviousStatus; a capture adds none, and the timeline does not depend on the black box", TestTags.Positive, async () =>
             {
                 using TestDatabase t = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
                 ArmadaSettings settings = BlackBoxTestKit.Settings();
                 using BlackBoxRuntime bb = BlackBoxTestKit.Runtime(t.Driver, settings);
-                Mission mission = await BlackBoxTestKit.FailedMissionAsync(t.Driver).ConfigureAwait(false);
+                Mission mission = await t.Driver.Missions.CreateAsync(new Mission("capture", "brief") { Status = MissionStatusEnum.InProgress }).ConfigureAwait(false);
+                MissionTransitions transitions = new MissionTransitions(t.Driver);
+                AssertTrue(await transitions.TryTransitionAsync(mission, new[] { MissionStatusEnum.InProgress }, MissionStatusEnum.Failed, m => m.FailureReason = "crash").ConfigureAwait(false));
                 await bb.Capture.RecordMissionFailureAsync(mission, MissionStatusEnum.InProgress, BlackBoxStepEnum.ProcessCrash).ConfigureAwait(false);
                 List<ArmadaEvent> changes = await StatusEventsAsync(t.Driver, mission.Id).ConfigureAwait(false);
-                AssertEqual(1, changes.Count, "one status change");
+                AssertEqual(1, changes.Count, "one status change, from the transition");
                 MissionStatusChangedPayload payload = JsonSerializer.Deserialize<MissionStatusChangedPayload>(changes[0].Payload!, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })!;
                 AssertEqual(MissionStatusEnum.Failed, payload.Status);
                 AssertEqual(MissionStatusEnum.InProgress, payload.PreviousStatus);
 
-                await bb.Capture.RecordMissionFailureAsync(mission, MissionStatusEnum.Failed, BlackBoxStepEnum.UnconfirmedStop).ConfigureAwait(false);
-                AssertEqual(1, (await StatusEventsAsync(t.Driver, mission.Id).ConfigureAwait(false)).Count, "a same-status entry is not a status change");
-
-                List<string> delivered = new List<string>();
-                ((BlackBoxCapture)bb.Capture).MissionStatusChanged = (m, previous, message) => { delivered.Add(m.Id + ":" + previous); return Task.CompletedTask; };
-                await bb.Capture.RecordMissionFailureAsync(mission, MissionStatusEnum.WorkProduced, BlackBoxStepEnum.NoOp).ConfigureAwait(false);
-                AssertEqual(mission.Id + ":WorkProduced", delivered.Single(), "routed through the Admiral's EmitMissionStatusChangedAsync");
-
                 settings.BlackBox.Enabled = false;
-                ((BlackBoxCapture)bb.Capture).MissionStatusChanged = null;
-                Mission other = await BlackBoxTestKit.FailedMissionAsync(t.Driver).ConfigureAwait(false);
+                Mission other = await t.Driver.Missions.CreateAsync(new Mission("disabled", "brief") { Status = MissionStatusEnum.InProgress }).ConfigureAwait(false);
+                AssertTrue(await transitions.TryTransitionAsync(other, new[] { MissionStatusEnum.InProgress }, MissionStatusEnum.Failed).ConfigureAwait(false));
                 AssertNull(await bb.Capture.RecordMissionFailureAsync(other, MissionStatusEnum.InProgress, BlackBoxStepEnum.ProcessCrash).ConfigureAwait(false), "no entry when disabled");
                 AssertEqual(1, (await StatusEventsAsync(t.Driver, other.Id).ConfigureAwait(false)).Count, "the status timeline does not depend on the black box");
             }));

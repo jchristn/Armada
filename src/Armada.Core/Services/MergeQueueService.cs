@@ -47,6 +47,11 @@ namespace Armada.Core.Services
 
         #endregion
 
+        /// <summary>
+        /// Mission status transitions (RS-3.5); the server replaces this with the instance shared across services.
+        /// </summary>
+        public MissionTransitions Transitions { get; set; }
+
         #region Private-Members
 
         private string _Header = "[MergeQueue] ";
@@ -100,6 +105,7 @@ namespace Armada.Core.Services
         {
             _Logging = logging ?? throw new ArgumentNullException(nameof(logging));
             _Database = database ?? throw new ArgumentNullException(nameof(database));
+            Transitions = new MissionTransitions(database, logging);
             _Settings = settings ?? throw new ArgumentNullException(nameof(settings));
             _Git = git ?? throw new ArgumentNullException(nameof(git));
         }
@@ -806,8 +812,6 @@ namespace Armada.Core.Services
 
                 DateTime version = mission.LastUpdateUtc;
                 MissionStatusEnum previous = mission.Status;
-                mission.Status = targetStatus;
-                mission.LastUpdateUtc = DateTime.UtcNow;
                 if (targetStatus == MissionStatusEnum.Complete)
                 {
                     mission.CompletedUtc = DateTime.UtcNow;
@@ -819,7 +823,9 @@ namespace Armada.Core.Services
                     mission.FailureReason = reason;
                     mission.FailureKind = failure?.Kind ?? MissionFailureKindEnum.Infra;
                 }
-                if (!await _Database.Missions.TryUpdateIfUnchangedAsync(mission, version, new[] { previous }, token).ConfigureAwait(false)) return;
+                MissionTransitionRequest reconciled = new MissionTransitionRequest { To = targetStatus, ExpectedLastUpdateUtc = version };
+                reconciled.AllowedFrom.Add(previous);
+                if (!await Transitions.TryTransitionAsync(mission, reconciled, token).ConfigureAwait(false)) return;
                 _Logging.Info(_Header + "reconciled mission " + missionId + " to " + targetStatus + ": " + reason);
                 if (targetStatus == MissionStatusEnum.LandingFailed)
                 {

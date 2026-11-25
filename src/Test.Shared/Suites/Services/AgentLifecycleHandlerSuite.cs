@@ -1698,6 +1698,7 @@ namespace Test.Shared.Suites.Services
             public Func<Voyage, Task>? OnVoyageComplete { get; set; }
             public Func<Mission, Task<bool>>? OnReconcilePullRequest { get; set; }
             public Func<int, bool>? OnIsProcessExitHandled { get; set; }
+            public MissionTransitions Transitions => throw new NotImplementedException();
 
             public Task<Voyage> DispatchVoyageAsync(string title, string description, string vesselId, List<MissionDescription> missionDescriptions, CancellationToken token = default)
             {

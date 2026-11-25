@@ -140,11 +140,9 @@ namespace Armada.Core.Services
 
                     MissionStatusEnum planStatusBefore = completedMission.Status;
                     completedMission.FailureReason = AppendRepairHistory(planError, completedMission);
-                    completedMission.Status = MissionStatusEnum.Failed;
                     completedMission.FailureKind = MissionFailureKindEnum.InvalidOutput;
                     completedMission.CompletedUtc = DateTime.UtcNow;
-                    completedMission.LastUpdateUtc = DateTime.UtcNow;
-                    await _Database.Missions.UpdateAsync(completedMission, token).ConfigureAwait(false);
+                    if (!await Transitions.TryTransitionAsync(completedMission, new[] { planStatusBefore }, MissionStatusEnum.Failed, null, token).ConfigureAwait(false)) return false;
                     await RecordFailureAsync(completedMission, planStatusBefore, BlackBoxStepEnum.PlanParse, null, context =>
                         context.Note = "Architect plan error: " + planError, token).ConfigureAwait(false);
                     return false;
@@ -204,12 +202,10 @@ namespace Armada.Core.Services
                 _Logging.Warn(_Header + "architect mission " + completedMission.Id +
                     " produced no valid mission definitions -- marking as failed");
                 MissionStatusEnum markersStatusBefore = completedMission.Status;
-                completedMission.Status = MissionStatusEnum.Failed;
                 completedMission.FailureReason = failureReason;
                 completedMission.FailureKind = MissionFailureKindEnum.InvalidOutput;
                 completedMission.CompletedUtc = DateTime.UtcNow;
-                completedMission.LastUpdateUtc = DateTime.UtcNow;
-                await _Database.Missions.UpdateAsync(completedMission, token).ConfigureAwait(false);
+                if (!await Transitions.TryTransitionAsync(completedMission, new[] { markersStatusBefore }, MissionStatusEnum.Failed, null, token).ConfigureAwait(false)) return false;
                 await RecordFailureAsync(completedMission, markersStatusBefore, BlackBoxStepEnum.PlanParse, null, context =>
                     context.Note = hadArchitectMarkers ? "The output had [ARMADA:MISSION] markers but none was valid." : "The output had no plan block and no mission markers.", token).ConfigureAwait(false);
                 return false;
@@ -270,15 +266,13 @@ namespace Armada.Core.Services
                 if (!advanced)
                 {
                     MissionStatusEnum hardenStatusBefore = completedMission.Status;
-                    completedMission.Status = MissionStatusEnum.Failed;
                     completedMission.CommitHash = headCommit;
                     completedMission.FailureKind = MissionFailureKindEnum.LandingConflict;
                     completedMission.FailureReason = "Pipeline handoff could not safely advance branch " + completedMission.BranchName
                         + " to stage commit " + headCommit + ". No downstream stage was dispatched. "
                         + "Remediation: inspect the branch and saved stage commit; integrate any divergent work without resetting newer commits, then restart the failed stage. Check Harbor/git availability if the update itself failed.";
                     completedMission.CompletedUtc = DateTime.UtcNow;
-                    completedMission.LastUpdateUtc = DateTime.UtcNow;
-                    await _Database.Missions.UpdateAsync(completedMission, token).ConfigureAwait(false);
+                    await Transitions.TryTransitionAsync(completedMission, new[] { hardenStatusBefore }, MissionStatusEnum.Failed, null, token).ConfigureAwait(false);
                     await RecordFailureAsync(completedMission, hardenStatusBefore, BlackBoxStepEnum.StageBranchHarden, dock, context =>
                     {
                         context.GitFacts = new BlackBoxGitFacts { BranchTip = headCommit, GitOperation = "update-ref refs/heads/" + completedMission.BranchName, WorktreeExisted = true };
@@ -323,13 +317,11 @@ namespace Armada.Core.Services
                 // Blocking applies to stages still waiting; one that somehow started is cancelled either way.
                 bool blockThis = block && dependent.Status == MissionStatusEnum.Pending;
                 MissionStatusEnum dependentStatusBefore = dependent.Status;
-                dependent.Status = blockThis ? MissionStatusEnum.Blocked : MissionStatusEnum.Cancelled;
                 dependent.FailureReason = "Blocked by failed dependency " + failedMission.Id
                     + (blockThis ? ". Restart that mission to continue, or cancel the voyage." : String.Empty);
                 dependent.FailureKind = MissionFailureKindEnum.DependencyFailed;
                 dependent.CompletedUtc = blockThis ? null : DateTime.UtcNow;
-                dependent.LastUpdateUtc = DateTime.UtcNow;
-                await _Database.Missions.UpdateAsync(dependent, token).ConfigureAwait(false);
+                if (!await Transitions.TryTransitionAsync(dependent, new[] { dependentStatusBefore }, blockThis ? MissionStatusEnum.Blocked : MissionStatusEnum.Cancelled, null, token).ConfigureAwait(false)) continue;
                 _Logging.Info(_Header + (blockThis ? "blocked" : "cancelled") + " dependent mission " + dependent.Id +
                     " because upstream mission " + failedMission.Id + " ended in " + failedMission.Status);
                 await RecordFailureAsync(dependent, dependentStatusBefore, BlackBoxStepEnum.DependencyCancelled, null, context =>
@@ -339,6 +331,21 @@ namespace Armada.Core.Services
                 }, token).ConfigureAwait(false);
                 await CancelDependentPipelineStagesAsync(dependent, token).ConfigureAwait(false);
             }
+        }
+
+        /// <summary>
+        /// Settle a voyage whose missions have all finished; does nothing while any is still running or completing, or
+        /// when the voyage is already settled.
+        /// </summary>
+        /// <param name="voyageId">Voyage id.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>Task.</returns>
+        public async Task ReevaluateVoyageAsync(string voyageId, CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(voyageId)) return;
+            Voyage? voyage = await _Database.Voyages.ReadAsync(voyageId, token).ConfigureAwait(false);
+            if (voyage == null || voyage.Status == VoyageStatusEnum.Complete || voyage.Status == VoyageStatusEnum.Failed || voyage.Status == VoyageStatusEnum.Cancelled) return;
+            await UpdateVoyageTerminalStatusAsync(voyageId, token).ConfigureAwait(false);
         }
 
         private async Task UpdateVoyageTerminalStatusAsync(string? voyageId, CancellationToken token)

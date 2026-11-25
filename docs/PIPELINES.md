@@ -334,20 +334,27 @@ Approving a stage whose handoff then fails (for example an Architect whose outpu
 
 ### Internal status transitions
 
-The mission state machine (`MissionStateMachine`, documented with `transition_mission_status`) is the contract for operators and agents. Armada itself also moves missions between statuses as part of dispatch, completion and recovery; these internal transitions are listed here so they are not mistaken for violations of that table:
+The mission state machine (`MissionStateMachine.IsValidTransition`, documented with `transition_mission_status`) is the contract for operators and agents. Armada itself also moves missions between statuses as part of dispatch, completion and recovery. Those internal edges are a second table, `MissionStateMachine.IsValidInternalTransition`, which includes every operator edge. Every status change, internal or operator, goes through `MissionTransitions`: it refuses an edge that is not in the table, writes only while the mission still has the status the caller read (a compare-and-set, so a late writer never overwrites a newer state), emits `mission.status_changed`, and settles the voyage when the mission reaches a terminal status. The internal edges are:
 
 | From | To | Done by |
 |---|---|---|
 | Assigned | Pending | Assignment rollback when provisioning or launch fails (`RollbackAssignmentAsync`) |
-| InProgress, Assigned | Pending | Restart recovery after an interrupted process (`HandleInterruptedProcessExitAsync`), orphan recovery, and escalation to another captain (`TryEscalateToPlannerAsync`) |
-| WorkProduced | Pending | An output repair turn, a no-op re-dispatch, or a review denied with RetryStage |
-| WorkProduced | Failed | A completion gate refused the work: Judge or verifier rejection, scope violation, invalid output, stage check, no-op budget, or a captain that reported BLOCKED with no work (`Blocked`) |
-| WorkProduced | Review | A review-gated stage waiting for a person |
+| Assigned, InProgress, Testing, Review, Verifying | Pending | Restart recovery after an interrupted process (`HandleInterruptedProcessExitAsync`), orphan recovery, and escalation to another captain (`TryEscalateToPlannerAsync`); Review also for a review denied with RetryStage |
+| InProgress, Testing | Verifying | A clean process exit, while the stage's checks run |
+| WorkProduced | Pending | An output repair turn or a no-op re-dispatch |
+| Pending, Blocked, Assigned | Failed | Maximum runtime, stall recovery exhausted, or a launch that failed |
+| WorkProduced, PullRequestOpen | Failed | A completion gate refused the work: Judge or verifier rejection, scope violation, Definition-of-Done, invalid output, stage check, no-op budget, or a captain that reported BLOCKED with no work (`Blocked`) |
+| Complete | Failed | A stage approved in review whose handoff to the next stage then failed (for example an unparseable Architect plan) |
+| WorkProduced, PullRequestOpen | Review | A review-gated stage, or a change held by the auto-land rules, waiting for a person |
+| Assigned, Testing, Review, PullRequestOpen, Failed | WorkProduced | Completion from any running status, an approved review, a manual land, and a verifier restarted after its rework |
+| Review | LandingFailed | A landing retry for a review mission with no review gate |
+| Testing, Review, Failed | Cancelled | A cancellation of the mission or its voyage |
 | Pending | Blocked, Cancelled | A dependency failed (`BlockDependentsOfFailedStages` picks which), or the voyage was cancelled |
 | LandingFailed | Complete | The landing reconciler proved the work is on `origin/<default branch>` (commit ancestry or the `Armada-Mission-Id` trailer; see MERGING.md) |
+| Failed | Complete | A rescue mission landed and resolved the incident |
 | Failed, LandingFailed, Cancelled, Blocked | Pending | A restart of the mission, or of the failed stage a Blocked or cancelled stage waits on |
 
-One rule is enforced at the database for every plain update: a Cancelled mission is never moved to anything but Pending (a restart). A completion still running when its mission was cancelled therefore cannot revive it; its late write is refused and it sees the mission as Cancelled.
+A non-terminal status may also be rewritten to itself to update the mission's other fields; that emits no event. A completed mission is never cancelled, and a Cancelled mission moves only to Pending (a restart): a completion still running when its mission was cancelled cannot revive it, because its write is refused and it sees the mission as Cancelled.
 
 ### When a verifier finds a product defect
 

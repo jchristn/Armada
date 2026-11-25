@@ -35,6 +35,11 @@ namespace Armada.Core.Services
 
         #endregion
 
+        /// <summary>
+        /// Mission status transitions (RS-3.5); the server replaces this with the instance shared across services.
+        /// </summary>
+        public MissionTransitions Transitions { get; set; }
+
         #region Private-Members
 
         private const int _WipPreserveTimeoutMs = 60000;
@@ -68,6 +73,7 @@ namespace Armada.Core.Services
         {
             _Logging = logging ?? throw new ArgumentNullException(nameof(logging));
             _Database = database ?? throw new ArgumentNullException(nameof(database));
+            Transitions = new MissionTransitions(database, logging);
             _Settings = settings ?? throw new ArgumentNullException(nameof(settings));
             _Git = git ?? throw new ArgumentNullException(nameof(git));
             _Docks = docks ?? throw new ArgumentNullException(nameof(docks));
@@ -286,15 +292,16 @@ namespace Armada.Core.Services
                 if (voyageCancelled || !missionRecoverable)
                 {
                     MissionStatusEnum skippedStatusBefore = mission.Status;
-                    if (voyageCancelled && mission.Status != MissionStatusEnum.Cancelled)
-                    {
-                        mission.Status = MissionStatusEnum.Cancelled;
-                        mission.CompletedUtc = DateTime.UtcNow;
-                    }
-
                     mission.ProcessId = null;
-                    mission.LastUpdateUtc = DateTime.UtcNow;
-                    await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
+                    if (voyageCancelled && mission.Status != MissionStatusEnum.Cancelled && mission.Status != MissionStatusEnum.Complete)
+                    {
+                        mission.CompletedUtc = DateTime.UtcNow;
+                        await Transitions.TryTransitionAsync(mission, new[] { skippedStatusBefore }, MissionStatusEnum.Cancelled, null, token).ConfigureAwait(false);
+                    }
+                    else
+                    {
+                        await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
+                    }
                     if (skippedStatusBefore != mission.Status)
                     {
                         await BlackBox.RecordMissionFailureAsync(mission, skippedStatusBefore, BlackBoxStepEnum.VoyageParentNotRunnable, context =>
@@ -399,9 +406,7 @@ namespace Armada.Core.Services
 
                         MissionStatusEnum relaunchedFrom = mission.Status;
                         mission.ProcessId = processId;
-                        mission.Status = MissionStatusEnum.InProgress;
-                        mission.LastUpdateUtc = DateTime.UtcNow;
-                        if (!await _Database.Missions.TryUpdateIfStatusAsync(mission, new MissionStatusEnum[] { relaunchedFrom, MissionStatusEnum.Assigned, MissionStatusEnum.InProgress }, token).ConfigureAwait(false))
+                        if (!await Transitions.TryTransitionAsync(mission, new[] { relaunchedFrom, MissionStatusEnum.Assigned, MissionStatusEnum.InProgress }, MissionStatusEnum.InProgress, null, token).ConfigureAwait(false))
                             _Logging.Info(_Header + "mission " + mission.Id + " moved on before relaunch process " + processId + " was recorded; keeping its newer state");
 
                         await _Database.Missions.TryUpdateRuntimeContextAsync(mission.Id, captain.Id, processId,
@@ -618,13 +623,11 @@ namespace Armada.Core.Services
             }
 
             MissionStatusEnum stopStatusBefore = mission.Status;
-            mission.Status = MissionStatusEnum.Cancelled;
             mission.FailureKind = MissionFailureKindEnum.OperatorAction;
             mission.FailureReason = reason;
             mission.ProcessId = null;
             mission.CompletedUtc = DateTime.UtcNow;
-            mission.LastUpdateUtc = DateTime.UtcNow;
-            await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
+            await Transitions.TryTransitionAsync(mission, new[] { stopStatusBefore }, MissionStatusEnum.Cancelled, null, token).ConfigureAwait(false);
             _Logging.Info(_Header + "mission " + mission.Id + " cancelled: " + reason);
             await BlackBox.RecordMissionFailureAsync(mission, stopStatusBefore, BlackBoxStepEnum.OperatorStop, context =>
             {
@@ -717,13 +720,11 @@ namespace Armada.Core.Services
                 !MissionStateMachine.IsTerminalOrPostWork(mission.Status))
             {
                 MissionStatusEnum recoveryStatusBefore = mission.Status;
-                mission.Status = MissionStatusEnum.Failed;
                 mission.FailureReason = reason;
                 mission.FailureKind = failureKind;
                 mission.ProcessId = null;
                 mission.CompletedUtc = DateTime.UtcNow;
-                mission.LastUpdateUtc = DateTime.UtcNow;
-                await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
+                await Transitions.TryTransitionAsync(mission, new[] { recoveryStatusBefore }, MissionStatusEnum.Failed, null, token).ConfigureAwait(false);
                 await BlackBox.RecordMissionFailureAsync(mission, recoveryStatusBefore, BlackBoxStepEnum.RecoveryExhausted, context =>
                 {
                     context.Captain = captain;

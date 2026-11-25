@@ -41,11 +41,10 @@ namespace Armada.Core.Services
 
             if (hasDependentPipelineStages)
             {
-                mission.Status = MissionStatusEnum.Complete;
                 mission.FailureReason = null;
                 mission.FailureKind = null;
-                mission.LastUpdateUtc = DateTime.UtcNow;
-                await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
+                if (!await Transitions.TryTransitionAsync(mission, new[] { MissionStatusEnum.Review }, MissionStatusEnum.Complete, null, token).ConfigureAwait(false)) return mission;
+
 
                 await TryHandoffToNextStageAsync(mission, token).ConfigureAwait(false);
 
@@ -75,20 +74,16 @@ namespace Armada.Core.Services
             }
 
             Dock? dock = await ReadMissionDockAsync(mission, token).ConfigureAwait(false);
-            mission.Status = MissionStatusEnum.WorkProduced;
             mission.FailureReason = null;
             mission.FailureKind = null;
-            mission.LastUpdateUtc = DateTime.UtcNow;
-            await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
+            if (!await Transitions.TryTransitionAsync(mission, new[] { MissionStatusEnum.Review }, MissionStatusEnum.WorkProduced, null, token).ConfigureAwait(false)) return mission;
 
             if (dock == null)
             {
-                mission.Status = MissionStatusEnum.LandingFailed;
                 mission.FailureReason = "Review approved but the mission dock was unavailable for landing.";
                 mission.FailureKind = MissionFailureKindEnum.Infra;
                 mission.CompletedUtc = DateTime.UtcNow;
-                mission.LastUpdateUtc = DateTime.UtcNow;
-                await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
+                if (!await Transitions.TryTransitionAsync(mission, new[] { MissionStatusEnum.WorkProduced }, MissionStatusEnum.LandingFailed, null, token).ConfigureAwait(false)) return mission;
                 await RecordFailureAsync(mission, MissionStatusEnum.WorkProduced, BlackBoxStepEnum.ReviewApprovedDockMissing, null, context =>
                 {
                     context.GitFacts = new BlackBoxGitFacts { WorktreeExisted = false };
@@ -173,8 +168,9 @@ namespace Armada.Core.Services
                 keptBranch = dependency?.BranchName ?? mission.BranchName;
             }
 
+            MissionStatusEnum restartFrom = mission.Status;
             ResetForRestart(mission, keptBranch);
-            mission = await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
+            if (!await Transitions.TryTransitionAsync(mission, new[] { restartFrom }, MissionStatusEnum.Pending, null, token).ConfigureAwait(false)) return mission;
 
             List<string> restoredIds = new List<string>();
             if (!String.IsNullOrEmpty(mission.VoyageId))
@@ -217,9 +213,10 @@ namespace Armada.Core.Services
                 && m.FailureReason.StartsWith(_IntegrationBlockedPrefix, StringComparison.Ordinal)
                 && m.FailureReason.Contains("(" + mission.Id + ")", StringComparison.Ordinal)).ToList())
             {
+                MissionStatusEnum integrationFrom = integration.Status;
                 ResetForRestart(integration, integration.BranchName);
                 MissionNotes.Remove(integration, MissionNoteKindEnum.IntegrationMerge);
-                await _Database.Missions.UpdateAsync(integration, token).ConfigureAwait(false);
+                if (!await Transitions.TryTransitionAsync(integration, new[] { integrationFrom }, MissionStatusEnum.Pending, null, token).ConfigureAwait(false)) continue;
                 chain.Add(integration.Id);
                 _Logging.Info(_Header + "restored integration mission " + integration.Id + " with restarted mission " + mission.Id);
             }
@@ -233,8 +230,9 @@ namespace Armada.Core.Services
                     if ((candidate.Status != MissionStatusEnum.Cancelled && candidate.Status != MissionStatusEnum.Blocked)
                         || candidate.FailureKind != MissionFailureKindEnum.DependencyFailed) continue;
                     chain.Add(candidate.Id);
+                    MissionStatusEnum candidateFrom = candidate.Status;
                     ResetForRestart(candidate, null);
-                    await _Database.Missions.UpdateAsync(candidate, token).ConfigureAwait(false);
+                    await Transitions.TryTransitionAsync(candidate, new[] { candidateFrom }, MissionStatusEnum.Pending, null, token).ConfigureAwait(false);
                     grew = true;
                 }
             }
@@ -263,11 +261,9 @@ namespace Armada.Core.Services
 
             // The blocked stage has done its job (it found the defect), exactly as when automatic rework was available:
             // it stays as produced work and the new chain hangs off it.
-            verifier.Status = MissionStatusEnum.WorkProduced;
             verifier.FailureReason = null;
             verifier.FailureKind = null;
-            verifier.LastUpdateUtc = DateTime.UtcNow;
-            await _Database.Missions.UpdateAsync(verifier, token).ConfigureAwait(false);
+            if (!await Transitions.TryTransitionAsync(verifier, new[] { MissionStatusEnum.Failed }, MissionStatusEnum.WorkProduced, null, token).ConfigureAwait(false)) return verifier;
 
             // The stages cancelled after the blocked stage now follow the new verifier: restore them with it.
             await ReopenVoyageAndRestoreDependentsAsync(verifier, new HashSet<string>(StringComparer.Ordinal) { verifier.Id, nextReviewerId }, token).ConfigureAwait(false);
@@ -308,7 +304,6 @@ namespace Armada.Core.Services
         {
             // A restarted Architect fans out again, and that new fan-out must be recoverable too.
             mission.FanOutCompletedUtc = null;
-            mission.Status = MissionStatusEnum.Pending;
             mission.CaptainId = null;
             mission.BranchName = branchName;
             mission.PrUrl = null;
@@ -365,14 +360,12 @@ namespace Armada.Core.Services
                 // The approval timer's default answer arrives without a reviewer once the deadline has passed.
                 bool timedOut = reviewedByUserId == null && mission.ReviewDeadlineUtc.HasValue && mission.ReviewDeadlineUtc.Value <= DateTime.UtcNow;
                 MissionStatusEnum deniedStatusBefore = mission.Status;
-                mission.Status = MissionStatusEnum.Failed;
                 mission.FailureReason = BuildReviewDeniedFailureReason(reviewComment);
                 mission.FailureKind = MissionFailureKindEnum.ReviewDenied;
                 mission.CompletedUtc = DateTime.UtcNow;
                 mission.ProcessId = null;
                 mission.DockId = null;
-                mission.LastUpdateUtc = DateTime.UtcNow;
-                await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
+                if (!await Transitions.TryTransitionAsync(mission, new[] { deniedStatusBefore }, MissionStatusEnum.Failed, null, token).ConfigureAwait(false)) return mission;
                 await RecordFailureAsync(mission, deniedStatusBefore, timedOut ? BlackBoxStepEnum.ReviewTimeout : BlackBoxStepEnum.ReviewDenied, dock, context =>
                 {
                     context.Note = timedOut ? "The approval timer expired and its default answer denied the review." : "Denied by " + (reviewedByUserId ?? "a reviewer") + ".";
@@ -383,7 +376,7 @@ namespace Armada.Core.Services
                 return mission;
             }
 
-            mission.Status = MissionStatusEnum.Pending;
+            MissionStatusEnum reworkFrom = mission.Status;
             MissionNotes.Set(mission, MissionNoteKindEnum.ReviewFeedback, ReviewFeedbackNote(reviewComment));
             mission.CaptainId = null;
             mission.DockId = null;
@@ -397,8 +390,8 @@ namespace Armada.Core.Services
             mission.StartedUtc = null;
             mission.CompletedUtc = null;
             mission.TotalRuntimeMs = null;
-            mission.LastUpdateUtc = DateTime.UtcNow;
-            await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
+            if (!await Transitions.TryTransitionAsync(mission, new[] { reworkFrom }, MissionStatusEnum.Pending, null, token).ConfigureAwait(false)) return mission;
+
 
             if (!String.IsNullOrEmpty(mission.VesselId))
             {

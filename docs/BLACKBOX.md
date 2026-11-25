@@ -1057,9 +1057,9 @@ Site conventions (every failure write in plan 5.1 is wired; `Services.BlackBoxCa
 - Kind: an `OperatorStop` or External-phase entry (`OperatorTransition`, `VesselDeleted`) whose mission row has no
   `FailureKind` records `FailureKind` `OperatorAction` on the entry and in `classification.kind`, so every surface shows
   a kind.
-- Every mission capture whose status changed emits `mission.status_changed` with `MissionStatusChangedPayload`
-  (`PreviousStatus`), through `BlackBoxCapture.MissionStatusChanged` (the Admiral's `EmitMissionStatusChangedAsync`) or as
-  an event row, whether or not the black box is enabled.
+- `mission.status_changed` (with `MissionStatusChangedPayload` and `PreviousStatus`) is emitted by the status
+  transition itself (`MissionTransitions`), not by the capture, so it is recorded once per change whether or not the
+  black box is enabled.
 - Volatile facts: `DockService` writes the start commit into `Dock.GitAnchorsJson` on every provision (`DockStartCommit`)
   and `Mission.StartCommit` is set when the dock is recorded; checks read the `.start` file, then the anchors, then the
   mission. `BlackBoxCapture.Harbors` records `HarborConnectionManager.GetLinkState(harborId)` for Harbor-hosted docks.

@@ -477,7 +477,9 @@ Both are recorded as events (`GET /api/v1/events`) and pushed live with the reco
 
 ### mission.status_changed
 
-Broadcast (and recorded as an event) when a mission's status changes. It carries the generic event fields plus the new
+Broadcast (and recorded as an event) every time a mission's status changes, whoever changed it: dispatch, launch,
+completion, landing, recovery, review, or an operator. Every change goes through one transition, so each one produces
+exactly one event, and an update that keeps the status produces none. It carries the generic event fields plus the new
 and previous status as typed fields, so clients never need to read them from the `message` text (which is not stable).
 The recorded event's `Payload` (REST and MCP events) holds the same two values as `{"Status": ..., "PreviousStatus": ...}`.
 

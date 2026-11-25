@@ -157,6 +157,7 @@ namespace Armada.Server
         private ArmadaWebSocketHub _WebSocketHub = null!;
 
         private IMergeQueueService _MergeQueue = null!;
+        private MissionTransitions _Transitions = null!;
         private Armada.Core.Services.JobService _JobService = null!;
         private Armada.Core.Services.MissionRecoveryCoordinator _MissionRecovery = null!;
         private LandingService _LandingService = null!;
@@ -319,6 +320,10 @@ namespace Armada.Server
 
             IDefinitionOfDoneGate definitionOfDoneGate = new DefinitionOfDoneGate(_Logging);
             MissionService missionService = new MissionService(_Logging, _Database, _Settings, dockService, captainService, _PromptTemplateService, _Git, definitionOfDoneGate);
+            // One transition path for every mission status change (RS-3.5): it broadcasts mission.status_changed and settles voyages.
+            _Transitions = missionService.Transitions;
+            _Transitions.StatusChanged = (mission, previous, message) => EmitMissionStatusChangedAsync(mission, previous, message);
+            if (captainService is CaptainService transitionCaptains) transitionCaptains.Transitions = _Transitions;
             _MissionService = missionService;
 
             // Mission and voyage black box: one runtime shared by capture sites, background loops and every surface.
@@ -333,6 +338,7 @@ namespace Armada.Server
             IVoyageService voyageService = new VoyageService(_Logging, _Database);
             IEscalationService escalationService = new EscalationService(_Logging, _Database, _Settings);
             AdmiralService admiralService = new AdmiralService(_Logging, _Database, _Settings, captainService, missionService, voyageService, dockService, escalationService);
+            admiralService.Transitions = _Transitions;
             // Dispatch returns once a mission is admitted; dock provisioning and launch continue in the background, so neither
             // create requests nor the health check wait on per-repository git work.
             admiralService.LaunchInBackground = true;
@@ -340,10 +346,13 @@ namespace Armada.Server
             admiralService.OnConcurrencyEvent = evt => _WebSocketHub?.BroadcastToTenant(evt.TenantId, evt.EventType, evt.Message, evt);
             _Admiral = admiralService;
             _MergeQueue = new MergeQueueService(_Logging, _Database, _Settings, _Git);
+            if (_MergeQueue is MergeQueueService transitionQueue) transitionQueue.Transitions = _Transitions;
             _JobService = new Armada.Core.Services.JobService(_Database, _Logging);
             _VesselService = new VesselService(_Database);
             _MissionRecovery = new Armada.Core.Services.MissionRecoveryCoordinator(_Logging, _Database, _Settings);
+            _MissionRecovery.Transitions = _Transitions;
             _LandingService = new LandingService(_Logging, _Database, _Settings, _Git);
+            _LandingService.Transitions = _Transitions;
             _TemplateService = new MessageTemplateService(_Logging, _PromptTemplateService);
             _RuntimeFactory = new AgentRuntimeFactory(_Logging, ResolveInferenceEndpoint);
             _FleetCategorizationService = new FleetCategorizationService(_Database, _Settings, _JobService, new CaptainPromptRunner(_RuntimeFactory, _Logging) { Settings = _Settings }, _PromptTemplateService, _Logging);
@@ -380,16 +389,17 @@ namespace Armada.Server
             _GitHubIntegrationService = new GitHubIntegrationService(_Database, _ObjectiveService, _CheckRunService, _DeploymentService, _Settings, _Logging);
             _LandingPreviewService = new LandingPreviewService(_Database, _Logging, _Settings);
             _ManualLandingReconciler = new ManualLandingReconciler(_Database, _Settings, _Git, _Logging);
-            _ManualLandingReconciler.OnMissionReconciled = async (mission) =>
+            _ManualLandingReconciler.Transitions = _Transitions;
+            _ManualLandingReconciler.OnMissionReconciled = (mission) =>
             {
-                await EmitMissionStatusChangedAsync(mission, MissionStatusEnum.WorkProduced, "Mission completed (branch merged by hand): " + mission.Title).ConfigureAwait(false);
                 _WebSocketHub?.BroadcastMissionChange(mission, mission.Status.ToString());
+                return Task.CompletedTask;
             };
             admiralService.OnReconcileManualLandings = (ct) => _ManualLandingReconciler.ReconcileAsync(null, ct);
             _LandingReconciler = new LandingReconciler(_Database, _Git, _Logging);
-            _LandingReconciler.OnMissionReconciled = async (mission, evt) =>
+            _LandingReconciler.Transitions = _Transitions;
+            _LandingReconciler.OnMissionReconciled = (mission, evt) =>
             {
-                await EmitMissionStatusChangedAsync(mission, MissionStatusEnum.LandingFailed, "Mission completed (landing reconciled: work is on the target branch): " + mission.Title).ConfigureAwait(false);
                 _WebSocketHub?.BroadcastMissionChange(mission, mission.Status.ToString());
                 _WebSocketHub?.BroadcastToTenant(mission.TenantId, evt.EventType, evt.Message, new
                 {
@@ -399,6 +409,7 @@ namespace Armada.Server
                     vesselId = mission.VesselId,
                     voyageId = mission.VoyageId
                 });
+                return Task.CompletedTask;
             };
             admiralService.OnReconcileLandingFailures = (ct) => _LandingReconciler.ReconcileAsync(ct);
             _HistoricalTimelineService = new HistoricalTimelineService(_Database);
@@ -459,7 +470,7 @@ namespace Armada.Server
 
             // Fleet actions: runner (owned here, started below) and service; seed built-ins into every tenant.
             FleetActionSeedService fleetActionSeeder = new FleetActionSeedService(_Database, _Logging);
-            _FleetActionRunner = new FleetActionRunner(_Database, _Settings, _Logging, new AdmiralFleetActionMissionDispatcher(_Database, _Admiral), new LocalHostCommandExecutor(), _HarborConnectionManager);
+            _FleetActionRunner = new FleetActionRunner(_Database, _Settings, _Logging, new AdmiralFleetActionMissionDispatcher(_Database, _Admiral) { Transitions = _Transitions }, new LocalHostCommandExecutor(), _HarborConnectionManager);
 
             // Account usage capture (disabled by default): the Admiral host runs the probe helper in-process
             // for local captures, Harbor captures go over the link, and every attempt owns its own dedicated
@@ -535,9 +546,11 @@ namespace Armada.Server
             // Initialize handler classes (WebSocketHub is created later, so pass null initially)
             _MissionLanding = new MissionLandingHandler(
                 _Logging, _Database, _Settings, _Git, _MergeQueue, _TemplateService, _PromptTemplateService, _Docks, null);
+            _MissionLanding.Transitions = _Transitions;
 
             _AgentLifecycle = new AgentLifecycleHandler(
                 _Logging, _Database, _Settings, _RuntimeFactory, _Admiral, _TemplateService, _PromptTemplateService, null, EmitEventAsync);
+            _AgentLifecycle.Transitions = _Transitions;
 
             // Delegate captain launches to a connected Harbor by default; falls back to local when none is eligible.
             _AgentLifecycle.SetHarborConnections(_HarborConnectionManager);
@@ -605,7 +618,6 @@ namespace Armada.Server
             if (blackBoxCapture is Armada.Core.BlackBox.BlackBoxCapture concreteCapture)
             {
                 concreteCapture.Harbors = _HarborConnectionManager;
-                concreteCapture.MissionStatusChanged = EmitMissionStatusChangedAsync;
             }
             admiralService.BlackBox = blackBoxCapture;
             admiralService.DispatchAdvisor = _BlackBox.Insights.DispatchAdvisor;
@@ -1726,7 +1738,7 @@ namespace Armada.Server
             new ConcurrencyRoutes(_Database).Register(_App, authenticate, _AuthorizationService);
 
             // Missions
-            new MissionRoutes(_Database, _Admiral, _MissionService, _Settings, _Git, _LandingService, _LandingPreviewService, _GitHubIntegrationService, EmitEventAsync, EmitMissionStatusChangedAsync, _MissionLanding.HandleMissionCompleteAsync, _WebSocketHub, _Logging, _JsonOptions)
+            new MissionRoutes(_Database, _Admiral, _MissionService, _Settings, _Git, _LandingService, _LandingPreviewService, _GitHubIntegrationService, EmitEventAsync, _MissionLanding.HandleMissionCompleteAsync, _WebSocketHub, _Logging, _JsonOptions)
                 { MissionActivityLookup = _AgentLifecycle.MissionActivity.Get, DockHosts = new DockHostResolver(_Git, _Logging, _HarborConnectionManager), BlackBox = _BlackBox?.Capture, BlackBoxHooks = _BlackBox?.Hooks }
                 .Register(_App, authenticate, _AuthorizationService);
 

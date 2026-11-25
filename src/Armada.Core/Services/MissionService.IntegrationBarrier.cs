@@ -42,14 +42,12 @@ namespace Armada.Core.Services
         {
             MissionStatusEnum observed = integration.Status;
             bool block = _Settings.BlockDependentsOfFailedStages && observed == MissionStatusEnum.Pending;
-            integration.Status = block ? MissionStatusEnum.Blocked : MissionStatusEnum.Cancelled;
             integration.FailureKind = MissionFailureKindEnum.DependencyFailed;
             integration.FailureReason = _IntegrationBlockedPrefix + "mission '" + failed.Title + "' (" + failed.Id + ") in another slice ended "
                 + failed.Status + ", so its work cannot be integrated. Restart that mission to bring this integration back, "
                 + "or restart this one once the slice is resolved.";
             integration.CompletedUtc = block ? null : DateTime.UtcNow;
-            integration.LastUpdateUtc = DateTime.UtcNow;
-            if (!await _Database.Missions.TryUpdateIfStatusAsync(integration, new MissionStatusEnum[] { observed }, token).ConfigureAwait(false)) return;
+            if (!await Transitions.TryTransitionAsync(integration, new[] { observed }, block ? MissionStatusEnum.Blocked : MissionStatusEnum.Cancelled, null, token).ConfigureAwait(false)) return;
             _Logging.Info(_Header + (block ? "blocked" : "cancelled") + " integration mission " + integration.Id + " because sibling mission " + failed.Id + " ended " + failed.Status);
             await RecordFailureAsync(integration, observed, BlackBoxStepEnum.IntegrationBarrier, null, context =>
             {

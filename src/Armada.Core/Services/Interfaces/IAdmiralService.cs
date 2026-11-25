@@ -195,6 +195,11 @@ namespace Armada.Core.Services.Interfaces
         Task<Mission> CancelMissionAsync(Mission mission, MissionCancelOptions? options, CancellationToken token = default);
 
         /// <summary>
+        /// Mission status transitions (RS-3.5): the one path every mission status change takes.
+        /// </summary>
+        MissionTransitions Transitions { get; }
+
+        /// <summary>
         /// Stop a specific captain gracefully.
         /// </summary>
         /// <param name="captainId">Captain identifier.</param>

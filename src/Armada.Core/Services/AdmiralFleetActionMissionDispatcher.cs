@@ -18,6 +18,11 @@ namespace Armada.Core.Services
     /// </summary>
     public class AdmiralFleetActionMissionDispatcher : IFleetActionMissionDispatcher
     {
+        /// <summary>
+        /// Mission status transitions (RS-3.5); the server replaces this with the instance shared across services.
+        /// </summary>
+        public MissionTransitions Transitions { get; set; }
+
         #region Private-Members
 
         private readonly DatabaseDriver _Database;
@@ -36,6 +41,7 @@ namespace Armada.Core.Services
         public AdmiralFleetActionMissionDispatcher(DatabaseDriver database, IAdmiralService admiral)
         {
             _Database = database ?? throw new ArgumentNullException(nameof(database));
+            Transitions = new MissionTransitions(database);
             _Admiral = admiral ?? throw new ArgumentNullException(nameof(admiral));
         }
 
@@ -149,10 +155,8 @@ namespace Armada.Core.Services
                 if (mission.Status != MissionStatusEnum.Pending && mission.Status != MissionStatusEnum.Assigned && mission.Status != MissionStatusEnum.Blocked) continue;
 
                 MissionStatusEnum missionStatusBefore = mission.Status;
-                mission.Status = MissionStatusEnum.Cancelled;
                 mission.CompletedUtc = DateTime.UtcNow;
-                mission.LastUpdateUtc = DateTime.UtcNow;
-                await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
+                if (!await Transitions.TryTransitionAsync(mission, new[] { missionStatusBefore }, MissionStatusEnum.Cancelled, null, token).ConfigureAwait(false)) continue;
                 if (!String.IsNullOrEmpty(mission.CaptainId))
                 {
                     Captain? owner = await _Database.Captains.ReadAsync(mission.CaptainId, token).ConfigureAwait(false);

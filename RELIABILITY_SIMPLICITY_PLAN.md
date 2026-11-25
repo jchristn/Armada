@@ -478,13 +478,28 @@ routing; a renamed Architect slice breaks fan-out recovery. Everything a program
   and description once, because the plan is their definition. A mission in flight across the upgrade may show an
   old handoff in its description and the new one as a note. `Database.MissionTypedStateUpgrade`
   `notes_keep_description_immutable` passes on all four providers.
-- [ ] **RS-3.5** One transition API. `MissionTransitions.TryTransitionAsync(mission, allowedFrom, to, mutate, token)`
+- [x] **RS-3.5** One transition API. `MissionTransitions.TryTransitionAsync(mission, allowedFrom, to, mutate, token)`
   that checks `MissionStateMachine`, does the compare-and-set, emits the event, and triggers voyage re-evaluation.
   Add the real internal edges to the table (Assigned -> Pending, InProgress -> Pending for escalation,
-  InProgress -> Verifying). Evidence:
-- [ ] **RS-3.6** Move all 65 direct `.Status = MissionStatusEnum.X` writes in `Armada.Core` and `Armada.Server` to
+  InProgress -> Verifying). Evidence: `MissionTransitions` (one instance shared by every service, wired in
+  `ArmadaServer`) drops any allowed status with no legal edge, writes with `TryUpdateIfStatusAsync` or
+  `TryUpdateIfUnchangedAsync`, restores the stored status on a refused write, emits `mission.status_changed` once per
+  change (the black box capture and the operator routes no longer emit it), and re-evaluates the voyage at a terminal
+  status. `MissionStateMachine.IsValidInternalTransition` is the internal table (a superset of the operator table,
+  listed in docs/PIPELINES.md); operator surfaces (REST, MCP, WebSocket) still use `IsValidTransition`. Two latent bugs
+  fixed on the way: a stage approved in review whose handoff failed was never marked Failed (the full-row guard
+  refused Complete -> Failed), and a cancel of a Complete mission is no longer attempted. `Services.MissionTransitions`
+  (7 cases) passes on SQLite, PostgreSQL, MySQL and SQL Server.
+- [x] **RS-3.6** Move all 65 direct `.Status = MissionStatusEnum.X` writes in `Armada.Core` and `Armada.Server` to
   RS-3.5. Add a test that scans source for direct writes outside the transition class and fails if any return.
-  Includes the coordinator's direct `unresolved.Status = Complete`. Evidence:
+  Includes the coordinator's direct `unresolved.Status = Complete`. Evidence: all 66 regex matches plus the 8 the
+  regex missed (conditional and variable targets, the operator routes, the agent status line, the merge queue,
+  vessel deletion) go through `MissionTransitions`; 34 of them were unconditional full-row writes. Only the database
+  layer writes status directly: row readers, the admission compare-and-set in `CaptainSlotStore`, and startup
+  migrations. `no_direct_status_writes` scans Armada.Core and Armada.Server and fails on any other write. Full suite
+  on SQLite: 7425 tests, 0 failures after the fix, 39 skipped. The admiral, pipeline, review, handoff, landing and
+  recovery suites (316 tests) pass on PostgreSQL, MySQL and SQL Server except two pre-existing `AdmiralService` cases
+  that open a SQLite connection directly and cannot run on a server database.
 - [ ] **RS-3.7** Persist in-memory recovery state that must survive a restart: endpoint breakers, launch backoff,
   `_TransientOutageStarts`, escalation cooldowns (`EscalationService`). Evidence:
 

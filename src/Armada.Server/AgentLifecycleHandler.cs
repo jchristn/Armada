@@ -56,6 +56,11 @@ namespace Armada.Server
 
         #endregion
 
+        /// <summary>
+        /// Mission status transitions (RS-3.5); the server replaces this with the instance shared across services.
+        /// </summary>
+        public MissionTransitions Transitions { get; set; }
+
         #region Private-Members
 
         private string _Header = "[AgentLifecycle] ";
@@ -221,6 +226,7 @@ namespace Armada.Server
         {
             _Logging = logging ?? throw new ArgumentNullException(nameof(logging));
             _Database = database ?? throw new ArgumentNullException(nameof(database));
+            Transitions = new MissionTransitions(database, logging);
             _Settings = settings ?? throw new ArgumentNullException(nameof(settings));
             _RuntimeFactory = runtimeFactory ?? throw new ArgumentNullException(nameof(runtimeFactory));
             _HostProcessExecutor = new LocalHostProcessExecutor(_RuntimeFactory);
@@ -1637,9 +1643,7 @@ namespace Armada.Server
                 return false;
             }
 
-            mission.Status = requested;
-            mission.LastUpdateUtc = DateTime.UtcNow;
-            await _Database.Missions.UpdateAsync(mission).ConfigureAwait(false);
+            if (!await Transitions.TryTransitionAsync(mission, new[] { mission.Status }, requested, null, CancellationToken.None).ConfigureAwait(false)) return false;
             _Logging.Info(_Header + "mission " + mission.Id + " transitioned to " + requested + " via agent signal");
             return true;
         }

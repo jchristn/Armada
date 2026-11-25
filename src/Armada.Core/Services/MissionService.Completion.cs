@@ -65,15 +65,13 @@ namespace Armada.Core.Services
 
             MissionStatusEnum boundaryStatusBefore = mission.Status;
             string? boundaryCaptainId = mission.CaptainId;
-            mission.Status = MissionStatusEnum.Failed;
             mission.FailureReason = DockBoundaryScanner.Summarize(findings);
             mission.FailureKind = MissionFailureKindEnum.Boundary;
             mission.CaptainId = null;
             mission.DockId = null;
             mission.ProcessId = null;
             mission.CompletedUtc = DateTime.UtcNow;
-            mission.LastUpdateUtc = DateTime.UtcNow;
-            await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
+            if (!await Transitions.TryTransitionAsync(mission, new[] { boundaryStatusBefore }, MissionStatusEnum.Failed, null, token).ConfigureAwait(false)) return true;
             _Logging.Warn(_Header + "mission " + mission.Id + " blocked by dock-boundary scanner (" + findings.Count + " finding(s))");
             await RecordFailureAsync(mission, boundaryStatusBefore, BlackBoxStepEnum.BoundaryViolation, dock, context =>
             {
@@ -168,12 +166,10 @@ namespace Armada.Core.Services
             if (result.Passed) return false;
 
             MissionStatusEnum dodStatusBefore = mission.Status;
-            mission.Status = MissionStatusEnum.Failed;
             mission.FailureReason = "Definition-of-Done gate failed (" + result.Outcome + "): " + result.Detail;
             mission.FailureKind = MissionFailureClassifier.FromDefinitionOfDone(result.Outcome);
             mission.CompletedUtc = DateTime.UtcNow;
-            mission.LastUpdateUtc = DateTime.UtcNow;
-            await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
+            if (!await Transitions.TryTransitionAsync(mission, new[] { dodStatusBefore }, MissionStatusEnum.Failed, null, token).ConfigureAwait(false)) return true;
             _Logging.Warn(_Header + "mission " + mission.Id + " failed the Definition-of-Done gate (" + result.Outcome + ")");
             await RecordFailureAsync(mission, dodStatusBefore, BlackBoxStepEnum.DefinitionOfDone, dock, context =>
             {
@@ -256,7 +252,7 @@ namespace Armada.Core.Services
             AutoLandDecision decision = AutoLandPredicate.Evaluate(filesChanged, linesChanged, changedPaths, policy);
             if (decision.Land) return false;
 
-            mission.Status = MissionStatusEnum.Review;
+            MissionStatusEnum holdStatusBefore = mission.Status;
             mission.CompletedUtc = DateTime.UtcNow;
             mission.ReviewRequestedUtc = DateTime.UtcNow;
             mission.ReviewDeadlineUtc = await ReviewDeadlineAsync(mission, token).ConfigureAwait(false);
@@ -264,8 +260,7 @@ namespace Armada.Core.Services
             mission.ReviewComment = "Auto-land held: " + (decision.HoldReason ?? "change exceeds auto-land rules");
             mission.ReviewedByUserId = null;
             mission.ReviewedUtc = null;
-            mission.LastUpdateUtc = DateTime.UtcNow;
-            await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
+            if (!await Transitions.TryTransitionAsync(mission, new[] { holdStatusBefore }, MissionStatusEnum.Review, null, token).ConfigureAwait(false)) return true;
             OnReviewRequested?.Invoke(mission);
             _Logging.Info(_Header + "auto-land held mission " + mission.Id + " for review: " + (decision.HoldReason ?? "rules"));
             return true;
@@ -326,8 +321,8 @@ namespace Armada.Core.Services
                 // The retry takes over this attempt's usage reservation instead of adding a second one (in memory only:
                 // after a restart the retry simply reserves again, which over-reserves but never under-reserves).
                 if (!String.IsNullOrEmpty(mission.UsageAdmissionExecutionKey)) _NoOpRedispatchCarry[mission.Id] = mission.UsageAdmissionExecutionKey;
+                MissionStatusEnum noOpRetryFrom = mission.Status;
                 mission.NoOpRedispatchAttempts++;
-                mission.Status = MissionStatusEnum.Pending;
                 mission.CaptainId = null;
                 mission.DockId = null;
                 mission.ProcessId = null;
@@ -340,8 +335,7 @@ namespace Armada.Core.Services
                 mission.StartedUtc = null;
                 mission.CompletedUtc = null;
                 mission.TotalRuntimeMs = null;
-                mission.LastUpdateUtc = DateTime.UtcNow;
-                await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
+                if (!await Transitions.TryTransitionAsync(mission, new[] { noOpRetryFrom }, MissionStatusEnum.Pending, null, token).ConfigureAwait(false)) return true;
                 _Logging.Warn(_Header + (unfinished ? "unfinished completion (no commit, no diff, no completion line)" : "no-op completion") + " detected for mission " + mission.Id +
                     "; re-dispatching (attempt " + mission.NoOpRedispatchAttempts + "/" + maxAttempts + ")");
 
@@ -356,7 +350,6 @@ namespace Armada.Core.Services
             // Retries exhausted: fail and surface to the operator inbox (LandingFailed/Failed feed it).
             MissionStatusEnum noOpStatusBefore = mission.Status;
             string? noOpCaptainId = mission.CaptainId;
-            mission.Status = MissionStatusEnum.Failed;
             mission.FailureReason = unfinished
                 ? (CaptainBlockedContract.HasResultLine(mission.AgentOutput) || CaptainBlockedContract.IsReported(mission.AgentOutput)
                     ? "Unfinished completion: the captain repeatedly ended its run without a commit or a diff, after "
@@ -370,8 +363,7 @@ namespace Armada.Core.Services
             mission.DockId = null;
             mission.ProcessId = null;
             mission.CompletedUtc = DateTime.UtcNow;
-            mission.LastUpdateUtc = DateTime.UtcNow;
-            await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
+            if (!await Transitions.TryTransitionAsync(mission, new[] { noOpStatusBefore }, MissionStatusEnum.Failed, null, token).ConfigureAwait(false)) return true;
             _Logging.Warn(_Header + "no-op completion for mission " + mission.Id +
                 " exhausted re-dispatch attempts; failing to operator inbox");
             await RecordFailureAsync(mission, noOpStatusBefore, unfinished ? BlackBoxStepEnum.Unfinished : BlackBoxStepEnum.NoOp, dock, context =>
@@ -429,15 +421,13 @@ namespace Armada.Core.Services
 
             string? captainId = mission.CaptainId;
             MissionStatusEnum blockedStatusBefore = mission.Status;
-            mission.Status = MissionStatusEnum.Failed;
             mission.FailureReason = CaptainBlockedContract.FailureReason(output);
             mission.FailureKind = MissionFailureKindEnum.Blocked;
             mission.CaptainId = null;
             mission.DockId = null;
             mission.ProcessId = null;
             mission.CompletedUtc = DateTime.UtcNow;
-            mission.LastUpdateUtc = DateTime.UtcNow;
-            await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
+            if (!await Transitions.TryTransitionAsync(mission, new[] { blockedStatusBefore }, MissionStatusEnum.Failed, null, token).ConfigureAwait(false)) return true;
             _Logging.Warn(_Header + "captain reported BLOCKED for mission " + mission.Id + " with no work on its branch; failing to operator inbox without re-dispatch");
             await RecordFailureAsync(mission, blockedStatusBefore, BlackBoxStepEnum.CaptainBlocked, dock, context => context.CaptainId = captainId, token).ConfigureAwait(false);
 
@@ -532,12 +522,17 @@ namespace Armada.Core.Services
             // re-dispatch, a cancel, a second completion) is never overwritten by this one.
             MissionStatusEnum observedStatus = mission.Status;
             DateTime observedVersion = mission.LastUpdateUtc;
-            mission.Status = MissionStatusEnum.WorkProduced;
+            if (!MissionStateMachine.IsValidInternalTransition(observedStatus, MissionStatusEnum.WorkProduced))
+            {
+                _Logging.Debug(_Header + "mission " + missionId + " is " + observedStatus + ", which cannot produce work -- skipping completion handler");
+                return;
+            }
             mission.FailureReason = null;
             mission.FailureKind = null;
             mission.ProcessId = null;
-            mission.LastUpdateUtc = DateTime.UtcNow;
-            if (!await _Database.Missions.TryUpdateIfUnchangedAsync(mission, observedVersion, new MissionStatusEnum[] { observedStatus }, token).ConfigureAwait(false))
+            MissionTransitionRequest produced = new MissionTransitionRequest { To = MissionStatusEnum.WorkProduced, ExpectedLastUpdateUtc = observedVersion };
+            produced.AllowedFrom.Add(observedStatus);
+            if (!await Transitions.TryTransitionAsync(mission, produced, token).ConfigureAwait(false))
             {
                 _Logging.Debug(_Header + "mission " + missionId + " left " + observedStatus + " before its completion was recorded -- skipping completion handler");
                 return;
@@ -764,13 +759,11 @@ namespace Armada.Core.Services
                     {
                         if (rejectedPass || !isBlockingVerdict || !exhibitsAffectedCase)
                             blockingReason = AppendRepairHistory(blockingReason, mission);
-                        mission.Status = MissionStatusEnum.Failed;
                         mission.CompletedUtc = DateTime.UtcNow;
-                        mission.LastUpdateUtc = DateTime.UtcNow;
                         mission.FailureReason = blockingReason + (reworkUnavailableReason == null ? String.Empty
                             : "\n" + reworkUnavailableReason + "\nRemediation: Read this Judge's affected-case report and correct the identified code or configuration defects. Dispatch a follow-up mission using the preserved work branch and an independent Judge; keep strict selection unless you explicitly choose a different captain. Rejected work has not been approved for landing.");
                         mission.FailureKind = MissionFailureKindEnum.JudgeRejected;
-                        await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
+                        await Transitions.TryTransitionAsync(mission, new[] { MissionStatusEnum.WorkProduced }, MissionStatusEnum.Failed, null, token).ConfigureAwait(false);
                         _Logging.Warn(_Header + "judge mission " + mission.Id + " blocked landing: " + blockingReason);
                         await RecordFailureAsync(mission, MissionStatusEnum.WorkProduced, BlackBoxStepEnum.JudgeRejected, dock, context =>
                         {
@@ -804,14 +797,12 @@ namespace Armada.Core.Services
                 }
                 else
                 {
-                    mission.Status = MissionStatusEnum.Failed;
                     mission.CompletedUtc = DateTime.UtcNow;
-                    mission.LastUpdateUtc = DateTime.UtcNow;
                     mission.FailureReason = mission.Persona + " reported a blocking defect (see its Affected Case)."
                         + (reworkUnavailableReason == null ? String.Empty : "\n" + reworkUnavailableReason)
                         + "\nRemediation: read the stage's affected case, then restart this mission (restart_mission " + mission.Id + "): the restart sends the work back to its Worker for one more rework round on the preserved branch, followed by a fresh " + mission.Persona + " check; it does not re-run this stage on the unchanged product code. Unverified work has not been approved for landing.";
                     mission.FailureKind = MissionFailureKindEnum.JudgeRejected;
-                    await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
+                    await Transitions.TryTransitionAsync(mission, new[] { MissionStatusEnum.WorkProduced }, MissionStatusEnum.Failed, null, token).ConfigureAwait(false);
                     _Logging.Warn(_Header + mission.Persona + " mission " + mission.Id + " reported a blocking defect and no rework could be scheduled");
                     await RecordFailureAsync(mission, MissionStatusEnum.WorkProduced, BlackBoxStepEnum.JudgeRejected, dock, context =>
                     {
@@ -827,7 +818,6 @@ namespace Armada.Core.Services
                 mission.Status == MissionStatusEnum.WorkProduced &&
                 mission.RequiresReview)
             {
-                mission.Status = MissionStatusEnum.Review;
                 mission.CompletedUtc = DateTime.UtcNow;
                 mission.ReviewRequestedUtc = DateTime.UtcNow;
                 mission.ReviewDeadlineUtc = await ReviewDeadlineAsync(mission, token).ConfigureAwait(false);
@@ -836,10 +826,11 @@ namespace Armada.Core.Services
                     : null;
                 mission.ReviewedByUserId = null;
                 mission.ReviewedUtc = null;
-                mission.LastUpdateUtc = DateTime.UtcNow;
-                await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
-                OnReviewRequested?.Invoke(mission);
-                awaitingManualReview = true;
+                if (await Transitions.TryTransitionAsync(mission, new[] { MissionStatusEnum.WorkProduced }, MissionStatusEnum.Review, null, token).ConfigureAwait(false))
+                {
+                    OnReviewRequested?.Invoke(mission);
+                    awaitingManualReview = true;
+                }
             }
 
             // Pipeline handoff: if missions in the same voyage depend on this one, prepare them
@@ -881,11 +872,8 @@ namespace Armada.Core.Services
                 !hasDependentPipelineStages &&
                 mission.Status == MissionStatusEnum.WorkProduced)
             {
-                mission.Status = MissionStatusEnum.Complete;
                 mission.CompletedUtc = DateTime.UtcNow;
-                mission.LastUpdateUtc = DateTime.UtcNow;
-                await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
-                await UpdateVoyageTerminalStatusAsync(mission.VoyageId, token).ConfigureAwait(false);
+                await Transitions.TryTransitionAsync(mission, new[] { MissionStatusEnum.WorkProduced }, MissionStatusEnum.Complete, null, token).ConfigureAwait(false);
                 _Logging.Info(_Header + "read-only " + mission.Mode + " mission " + mission.Id +
                     " completed without landing (no commit expected)");
             }
@@ -943,12 +931,11 @@ namespace Armada.Core.Services
                     if (stranded?.Status == MissionStatusEnum.WorkProduced)
                     {
                         DateTime version = stranded.LastUpdateUtc;
-                        stranded.Status = MissionStatusEnum.LandingFailed;
                         stranded.FailureKind = LandingFailureClassifier.Classify(ex);
                         stranded.FailureReason = "Landing handoff failed: " + ex.Message;
-                        stranded.LastUpdateUtc = DateTime.UtcNow;
-                        if (await _Database.Missions.TryUpdateIfUnchangedAsync(stranded, version,
-                            new[] { MissionStatusEnum.WorkProduced }, token).ConfigureAwait(false))
+                        MissionTransitionRequest strandedFailure = new MissionTransitionRequest { To = MissionStatusEnum.LandingFailed, ExpectedLastUpdateUtc = version };
+                        strandedFailure.AllowedFrom.Add(MissionStatusEnum.WorkProduced);
+                        if (await Transitions.TryTransitionAsync(stranded, strandedFailure, token).ConfigureAwait(false))
                         {
                             mission = stranded;
                             bool queueHandoffMissing = ex is InvalidOperationException && ex.Message.Contains("merge queue entry", StringComparison.Ordinal);

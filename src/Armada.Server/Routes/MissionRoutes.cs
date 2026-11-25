@@ -40,7 +40,6 @@ namespace Armada.Server.Routes
         private readonly LandingPreviewService _landingPreview;
         private readonly GitHubIntegrationService _gitHub;
         private readonly Func<string, string, string?, string?, string?, string?, string?, string?, Task> _emitEvent;
-        private readonly Func<Mission, MissionStatusEnum?, string, Task> _emitMissionStatusChanged;
         private readonly Func<Mission, Dock, Task> _handleMissionComplete;
         private readonly ArmadaWebSocketHub? _webSocketHub;
         private readonly LoggingModule _logging;
@@ -84,7 +83,6 @@ namespace Armada.Server.Routes
         /// <param name="landingPreview">Mission landing-preview service.</param>
         /// <param name="gitHub">GitHub integration service.</param>
         /// <param name="emitEvent">Event broadcast callback.</param>
-        /// <param name="emitMissionStatusChanged">mission.status_changed callback (mission after the change, previous status, message).</param>
         /// <param name="handleMissionComplete">Mission completion callback.</param>
         /// <param name="webSocketHub">WebSocket hub for real-time notifications.</param>
         /// <param name="logging">Logging module.</param>
@@ -99,7 +97,6 @@ namespace Armada.Server.Routes
             LandingPreviewService landingPreview,
             GitHubIntegrationService gitHub,
             Func<string, string, string?, string?, string?, string?, string?, string?, Task> emitEvent,
-            Func<Mission, MissionStatusEnum?, string, Task> emitMissionStatusChanged,
             Func<Mission, Dock, Task> handleMissionComplete,
             ArmadaWebSocketHub? webSocketHub,
             LoggingModule logging,
@@ -114,7 +111,6 @@ namespace Armada.Server.Routes
             _landingPreview = landingPreview ?? throw new ArgumentNullException(nameof(landingPreview));
             _gitHub = gitHub ?? throw new ArgumentNullException(nameof(gitHub));
             _emitEvent = emitEvent;
-            _emitMissionStatusChanged = emitMissionStatusChanged ?? throw new ArgumentNullException(nameof(emitMissionStatusChanged));
             _handleMissionComplete = handleMissionComplete;
             _webSocketHub = webSocketHub;
             _logging = logging;
@@ -793,9 +789,6 @@ namespace Armada.Server.Routes
                 }
 
                 // Standard transition: no dock available or not transitioning to Complete
-                mission.Status = newStatus;
-                mission.LastUpdateUtc = DateTime.UtcNow;
-
                 if (newStatus == MissionStatusEnum.InProgress && mission.StartedUtc == null)
                 {
                     mission.StartedUtc = DateTime.UtcNow;
@@ -807,7 +800,10 @@ namespace Armada.Server.Routes
                     mission.CompletedUtc = DateTime.UtcNow;
                 }
 
-                await _database.Missions.UpdateAsync(mission).ConfigureAwait(false);
+                MissionTransitionRequest manual = new MissionTransitionRequest { To = newStatus, Operator = true, Message = "Mission " + id + " transitioned to " + newStatus };
+                manual.AllowedFrom.Add(previousStatus);
+                if (!await _admiral.Transitions.TryTransitionAsync(mission, manual).ConfigureAwait(false))
+                { req.Http.Response.StatusCode = 409; return new ApiErrorResponse { Error = ApiResultEnum.Conflict, Message = "Mission " + id + " changed to " + mission.Status + " before the transition was recorded" }; }
                 await BlackBoxOperatorCapture.RecordTransitionAsync(BlackBox, mission, previousStatus, "REST").ConfigureAwait(false);
 
                 // Audit event: manual Complete without an active dock bypasses the landing pipeline.
@@ -823,10 +819,6 @@ namespace Armada.Server.Routes
                 Signal signal = new Signal(SignalTypeEnum.Progress, "Mission " + id + " transitioned to " + newStatus);
                 if (!String.IsNullOrEmpty(mission.CaptainId)) signal.FromCaptainId = mission.CaptainId;
                 await _database.Signals.CreateAsync(signal).ConfigureAwait(false);
-
-                // The black box capture already emitted mission.status_changed for a transition it captured.
-                if (!BlackBoxOperatorCapture.EmitsStatusChanged(BlackBox, mission.Status))
-                    await _emitMissionStatusChanged(mission, previousStatus, "Mission " + id + " transitioned to " + newStatus).ConfigureAwait(false);
 
                 // Broadcast specific mission change for dashboard toast notifications
                 if (_webSocketHub != null)

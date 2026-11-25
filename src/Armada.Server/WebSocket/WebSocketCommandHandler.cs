@@ -629,11 +629,12 @@ namespace Armada.Server.WebSocket
                     else
                     {
                         MissionStatusEnum tmBefore = tmMission.Status;
-                        tmMission.Status = tmNewStatus;
-                        tmMission.LastUpdateUtc = DateTime.UtcNow;
                         if (tmNewStatus == MissionStatusEnum.Complete || tmNewStatus == MissionStatusEnum.Failed || tmNewStatus == MissionStatusEnum.LandingFailed || tmNewStatus == MissionStatusEnum.Cancelled)
                             tmMission.CompletedUtc = DateTime.UtcNow;
-                        await _Database.Missions.UpdateAsync(tmMission).ConfigureAwait(false);
+                        MissionTransitionRequest tmManual = new MissionTransitionRequest { To = tmNewStatus, Operator = true, Message = "Mission " + tmId + " transitioned to " + tmNewStatus };
+                        tmManual.AllowedFrom.Add(tmBefore);
+                        if (!await _Admiral.Transitions.TryTransitionAsync(tmMission, tmManual).ConfigureAwait(false))
+                            return WebSocketCommandError.Create("transition_mission_status", WebSocketCommandErrorCodeEnum.Conflict, "Mission " + tmId + " changed to " + tmMission.Status + " before the transition was recorded");
                         await BlackBoxOperatorCapture.RecordTransitionAsync(BlackBoxCapture, tmMission, tmBefore, "WebSocket").ConfigureAwait(false);
                         Signal tmSignal = new Signal(SignalTypeEnum.Progress, "Mission " + tmId + " transitioned to " + tmNewStatus);
                         if (!String.IsNullOrEmpty(tmMission.CaptainId)) tmSignal.FromCaptainId = tmMission.CaptainId;

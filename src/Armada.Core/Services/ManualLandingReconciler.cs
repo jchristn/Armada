@@ -20,6 +20,11 @@ namespace Armada.Core.Services
     /// </summary>
     public class ManualLandingReconciler
     {
+        /// <summary>
+        /// Mission status transitions (RS-3.5); the server replaces this with the instance shared across services.
+        /// </summary>
+        public MissionTransitions Transitions { get; set; }
+
         #region Private-Members
 
         private readonly string _Header = "[ManualLandingReconciler] ";
@@ -59,6 +64,7 @@ namespace Armada.Core.Services
         public ManualLandingReconciler(DatabaseDriver database, ArmadaSettings settings, IGitService git, LoggingModule logging)
         {
             _Database = database ?? throw new ArgumentNullException(nameof(database));
+            Transitions = new MissionTransitions(database, logging);
             _Settings = settings ?? throw new ArgumentNullException(nameof(settings));
             _Git = git ?? throw new ArgumentNullException(nameof(git));
             _Logging = logging ?? throw new ArgumentNullException(nameof(logging));
@@ -169,10 +175,10 @@ namespace Armada.Core.Services
             Mission? current = await _Database.Missions.ReadAsync(mission.Id, token).ConfigureAwait(false);
             if (current == null || current.Status != MissionStatusEnum.WorkProduced) return false;
 
-            current.Status = MissionStatusEnum.Complete;
             current.CompletedUtc = DateTime.UtcNow;
-            current.LastUpdateUtc = DateTime.UtcNow;
-            await _Database.Missions.UpdateAsync(current, token).ConfigureAwait(false);
+            MissionTransitionRequest mergedByHand = new MissionTransitionRequest { To = MissionStatusEnum.Complete, Message = "Mission completed (branch merged by hand): " + current.Title };
+            mergedByHand.AllowedFrom.Add(MissionStatusEnum.WorkProduced);
+            if (!await Transitions.TryTransitionAsync(current, mergedByHand, token).ConfigureAwait(false)) return false;
             _Logging.Info(_Header + "mission " + current.Id + " branch " + current.BranchName + " is merged into " + target + "; status set to Complete");
 
             if (OnMissionReconciled != null)

@@ -64,6 +64,11 @@ namespace Armada.Core.Services
 
         #endregion
 
+        /// <summary>
+        /// Mission status transitions (RS-3.5); the server replaces this with the instance shared across services.
+        /// </summary>
+        public MissionTransitions Transitions { get; set; }
+
         #region Private-Members
 
         private readonly string _Header = "[LandingReconciler] ";
@@ -88,6 +93,7 @@ namespace Armada.Core.Services
         public LandingReconciler(DatabaseDriver database, IGitService git, LoggingModule logging)
         {
             _Database = database ?? throw new ArgumentNullException(nameof(database));
+            Transitions = new MissionTransitions(database, logging);
             _Git = git ?? throw new ArgumentNullException(nameof(git));
             _Logging = logging ?? throw new ArgumentNullException(nameof(logging));
         }
@@ -274,12 +280,12 @@ namespace Armada.Core.Services
                 : target.TargetRef;
             string? previousReason = mission.FailureReason;
 
-            mission.Status = MissionStatusEnum.Complete;
             mission.CompletedUtc = DateTime.UtcNow;
-            mission.LastUpdateUtc = DateTime.UtcNow;
             mission.FailureReason = null;
             mission.FailureKind = null;
-            bool written = await _Database.Missions.TryUpdateIfStatusAsync(mission, new[] { MissionStatusEnum.LandingFailed }, token).ConfigureAwait(false);
+            MissionTransitionRequest reconciled = new MissionTransitionRequest { To = MissionStatusEnum.Complete, Message = "Mission completed (landing reconciled: work is on the target branch): " + mission.Title };
+            reconciled.AllowedFrom.Add(MissionStatusEnum.LandingFailed);
+            bool written = await Transitions.TryTransitionAsync(mission, reconciled, token).ConfigureAwait(false);
             if (!written) return false;
 
             string how = kind == LandingEvidenceKindEnum.CommitAncestry

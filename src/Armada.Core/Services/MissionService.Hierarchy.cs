@@ -89,12 +89,10 @@ namespace Armada.Core.Services
                 if (latest == null) continue;
                 if (latest.Status == MissionStatusEnum.Pending)
                 {
-                    latest.Status = MissionStatusEnum.Cancelled;
                     latest.FailureKind = MissionFailureKindEnum.ParentFailed;
                     latest.FailureReason = "Cancelled because ancestor mission " + failedTerminal.Id + " ended " + failedTerminal.Status + ". Restart that mission to bring this one back.";
                     latest.CompletedUtc = DateTime.UtcNow;
-                    latest.LastUpdateUtc = DateTime.UtcNow;
-                    if (await _Database.Missions.TryUpdateIfStatusAsync(latest, new MissionStatusEnum[] { MissionStatusEnum.Pending }, token).ConfigureAwait(false))
+                    if (await Transitions.TryTransitionAsync(latest, new[] { MissionStatusEnum.Pending }, MissionStatusEnum.Cancelled, null, token).ConfigureAwait(false))
                     {
                         _Logging.Info(_Header + "cancelled mission " + latest.Id + " because ancestor " + failedTerminal.Id + " ended " + failedTerminal.Status);
                         await CancelDependentPipelineStagesAsync(latest, token).ConfigureAwait(false);
@@ -126,10 +124,8 @@ namespace Armada.Core.Services
                 foreach (Mission member in chain.Where(m => m.Status == MissionStatusEnum.Cancelled))
                 {
                     MissionStatusEnum observed = member.Status;
-                    member.Status = MissionStatusEnum.Pending;
                     member.FailureKind = null; member.FailureReason = null; member.CompletedUtc = null;
-                    member.LastUpdateUtc = DateTime.UtcNow;
-                    if (await _Database.Missions.TryUpdateIfStatusAsync(member, new MissionStatusEnum[] { observed }, token).ConfigureAwait(false)) restored.Add(member.Id);
+                    if (await Transitions.TryTransitionAsync(member, new[] { observed }, MissionStatusEnum.Pending, null, token).ConfigureAwait(false)) restored.Add(member.Id);
                 }
                 foreach (Mission descendant in await ChildRootsAsync(child, token).ConfigureAwait(false)) queue.Enqueue(descendant);
             }
