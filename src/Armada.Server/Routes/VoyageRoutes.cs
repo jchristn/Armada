@@ -188,6 +188,15 @@ namespace Armada.Server.Routes
 
                 string? pipelineId = validation.ResolvedPipelineId;
 
+                // The vessel must be visible to the caller, as it is for MCP: a vessel in another tenant (or, for a
+                // regular user, another user's vessel) is not found, so no work is dispatched into it (RS-2.9).
+                if (!String.IsNullOrWhiteSpace(voyageReq.VesselId)
+                    && await Armada.Server.Mcp.Tools.McpCallerScope.ReadVesselAsync(_database, ctx, voyageReq.VesselId).ConfigureAwait(false) == null)
+                {
+                    req.Http.Response.StatusCode = 404;
+                    return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Vessel not found" };
+                }
+
                 Voyage voyage;
                 if (validation.IsBareVoyage)
                 {

@@ -9,6 +9,13 @@ All notable changes to Armada are documented in this file.
 Armada 1.5.0 makes pipelines that mix open models (Qwen3.8 and others served by Ollama, vLLM, or a proxy such as
 Conductor) with Opus and GPT-6.1 reliable. The work is tracked item by item in `RELIABILITY_SIMPLICITY_PLAN.md`.
 
+### Security
+
+- **REST voyage and mission creation check that the vessel and voyage belong to the caller.** `POST /api/v1/voyages`
+  and `POST /api/v1/missions` accepted another tenant's `VesselId` (and a mission another tenant's `VoyageId`), so a user
+  who knew the id could create work that a captain then ran in that tenant's repository. Both now return `404`, as MCP
+  already did (RS-2.9).
+
 ### Reliability
 
 - **A mission whose merge entry already landed is completed after a restart.** If the Admiral stopped between

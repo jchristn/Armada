@@ -407,10 +407,15 @@ Each of these is a confirmed defect in 1.4.0. They are small, and each gets a re
 - [ ] **RS-2.8** Architect slices may lose playbooks. Verify whether slices 2..N get playbook snapshots
   (`LoadMissionPlaybookSnapshotsAsync`); fix by routing slice creation through the creation service (RS-4.1).
   Regression test either way. Evidence:
-- [ ] **RS-2.9** Voyage ownership and tenancy on REST. Voyages take `UserId = vessel.UserId` rather than the caller;
+- [x] **RS-2.9** Voyage ownership and tenancy on REST. Voyages take `UserId = vessel.UserId` rather than the caller;
   REST does not check the vessel against the caller's tenant before dispatch while MCP does
   (`McpCallerScope.ReadVesselAsync`). Confirm with tests for a non-admin caller and a cross-tenant vessel; fix
-  through RS-4.1. Evidence:
+  through RS-4.1. Evidence: confirmed and fixed: tenant B got 201 for a voyage with missions on
+  tenant A's vessel and for a mission on tenant A's vessel or voyage. `POST /api/v1/voyages` and `POST /api/v1/missions`
+  now resolve the vessel (and voyage) through `McpCallerScope`, returning 404. `E2E.CrossTenantApi` has two new cases
+  (both fail on the old code). WebSocket create commands are global-admin only by design. The ownership half (voyage
+  `UserId` taken from the vessel) only matters for a tenant admin dispatching on another user's vessel and moves to
+  RS-4.1, which passes the caller to voyage creation.
 - [~] **RS-2.10** `KnownErrorTypes` lists `"error"` and `"turn.failed"` but `ClassifyErrorType` returns null for
   them, so a Codex error without a status becomes Crash. Map them. Evidence: superseded by RS-5.2. The status-less `error` and `turn.failed`
   fall to Crash on purpose (archive C6: retrying can repeat side effects); under decision R4 they become

@@ -3201,7 +3201,8 @@ Create a new voyage with optional missions. Missions are automatically dispatche
 **Response:** `201 Created` - [Voyage](#voyage)
 
 **Errors:** `404` when `ObjectiveId`, `PipelineId`, or `Pipeline` names something that does not exist (an unknown
-pipeline is not replaced by the vessel or fleet default); `400` for other validation failures, including more than 1000
+pipeline is not replaced by the vessel or fleet default), or when `VesselId` is not visible to the caller (another
+tenant's vessel, or for a regular user another user's vessel); `400` for other validation failures, including more than 1000
 `Missions` or more than 256 `SelectedPlaybooks` (`Data.Code` `CollectionLimitExceeded`).
 
 ```bash
@@ -3459,6 +3460,9 @@ Create and dispatch a new mission. If a `VesselId` is provided, the Admiral will
 usually `Assigned` while the Admiral provisions the dock and launches the agent in the background; poll the mission (or
 watch `mission.status_changed`) for `InProgress`. A failed launch returns it to `Pending`. A mission no captain can take
 yet stays `Pending` and the response carries an `X-Armada-Warning` header.
+
+**Errors:** `404` when `VesselId` or `VoyageId` is not visible to the caller (another tenant's, or for a regular user
+another user's); `400` for an invalid Worker envelope.
 
 ```bash
 curl -X POST http://localhost:7890/api/v1/missions \

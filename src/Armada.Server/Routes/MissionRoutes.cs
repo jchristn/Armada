@@ -374,6 +374,23 @@ namespace Armada.Server.Routes
                 mission.TenantId = ctx.TenantId;
                 mission.UserId = ctx.UserId;
                 EntityUpdateMerger.ResetMissionConcurrencyMetadata(mission);
+
+                // The vessel and voyage must be visible to the caller, as they are for MCP; another tenant's are not
+                // found, so no work is created against them (RS-2.9).
+                if (!String.IsNullOrWhiteSpace(mission.VesselId)
+                    && await Armada.Server.Mcp.Tools.McpCallerScope.ReadVesselAsync(_database, ctx, mission.VesselId).ConfigureAwait(false) == null)
+                {
+                    req.Http.Response.StatusCode = 404;
+                    return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Vessel not found" };
+                }
+
+                if (!String.IsNullOrWhiteSpace(mission.VoyageId)
+                    && await Armada.Server.Mcp.Tools.McpCallerScope.ReadVoyageAsync(_database, ctx, mission.VoyageId).ConfigureAwait(false) == null)
+                {
+                    req.Http.Response.StatusCode = 404;
+                    return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Voyage not found" };
+                }
+
                 if (mission.WorkerEnvelope != null)
                 {
                     // A mission may only tighten its vessel's Worker envelope; a looser or invalid one is a 400 with the reason.
