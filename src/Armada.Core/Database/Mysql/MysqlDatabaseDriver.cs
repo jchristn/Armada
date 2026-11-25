@@ -82,6 +82,7 @@ namespace Armada.Core.Database.Mysql
             BlackBoxFiles = new BlackBoxFileMethods(_ConnectionString);
             BlackBoxLinks = new BlackBoxLinkMethods(_ConnectionString);
             BlackBoxNotes = new BlackBoxNoteMethods(_ConnectionString);
+            RecoveryState = new RecoveryStateMethods(_ConnectionString);
             BlackBoxMigrations = new BlackBoxMigrationMethods(_ConnectionString);
             BlackBoxSuccesses = new BlackBoxSuccessMethods(_ConnectionString);
             BlackBoxRecoveryOutcomes = new BlackBoxRecoveryOutcomeMethods(_ConnectionString);
@@ -1558,7 +1559,8 @@ namespace Armada.Core.Database.Mysql
                 Armada.Core.Database.UsageSelectionSchema.TenantTimestampMigration(Armada.Core.Enums.DatabaseTypeEnum.Mysql),
                 Armada.Core.Database.ProcessLaunchSchema.Migration(Armada.Core.Enums.DatabaseTypeEnum.Mysql),
                 Armada.Core.Database.AskThreadLocationSchema.Migration(Armada.Core.Enums.DatabaseTypeEnum.Mysql),
-                Armada.Core.Database.MissionTypedStateSchema.Migration(Armada.Core.Enums.DatabaseTypeEnum.Mysql)
+                Armada.Core.Database.MissionTypedStateSchema.Migration(Armada.Core.Enums.DatabaseTypeEnum.Mysql),
+                Armada.Core.Database.RecoveryStateSchema.Migration(Armada.Core.Enums.DatabaseTypeEnum.Mysql)
 
             };
         }

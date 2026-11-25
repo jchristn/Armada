@@ -34,6 +34,11 @@ Conductor) with Opus and GPT-6.1 reliable. The work is tracked item by item in `
   tests if a direct status write returns. A stage approved in review whose handoff then fails is now marked Failed and
   its later stages are cancelled; before, that write was silently refused and the later stages waited forever
   (RS-3.5, RS-3.6).
+- **Recovery state survives a restart.** Endpoint circuit breakers, launch backoff (with the captains that failed to
+  start the mission), the start of a transient outage, and escalation rule cooldowns were kept only in memory, so a
+  restart sent missions straight back to a failing endpoint, relaunched a broken captain at once, granted an outage a
+  new grace period, and re-fired every escalation. They are now kept in a new `recovery_state` table (migration 134)
+  and reloaded at startup (RS-3.7).
 - **A mission whose merge entry already landed is completed after a restart.** If the Admiral stopped between
   marking a merge queue entry Landed and completing its mission, the mission stayed `WorkProduced` for good. Each
   queue pass now completes such missions first (RS-2.3).

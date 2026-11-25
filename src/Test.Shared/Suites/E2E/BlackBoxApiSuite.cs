@@ -975,7 +975,14 @@ namespace Test.Shared.Suites.E2E
             AssertEqual(step, entry.Step, surface + " step");
             AssertEqual(BlackBoxPhaseEnum.External, entry.Phase, surface + " phase");
             AssertEqual(BlackBoxTriageEnum.External, entry.Triage, surface + " triage");
+            // Capture writes the entry row before record.json, so a brief read in between is rebuilt from the row
+            // without the note; read again until the record is there.
             string brief = await GetTextAsync(client, "/api/v1/blackbox/" + entry.Id + "/brief").ConfigureAwait(false);
+            for (int attempt = 0; attempt < 50 && !brief.Contains(surface, StringComparison.Ordinal); attempt++)
+            {
+                await Task.Delay(100).ConfigureAwait(false);
+                brief = await GetTextAsync(client, "/api/v1/blackbox/" + entry.Id + "/brief").ConfigureAwait(false);
+            }
             AssertContains(surface, brief, surface + " named in the brief's note");
         }
 

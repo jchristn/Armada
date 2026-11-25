@@ -74,7 +74,7 @@ namespace Armada.Core.Services
                         step: BlackBoxStepEnum.StageCheck, check: check, exitCode: 0).ConfigureAwait(false);
                     return;
                 }
-                _TransientOutageStarts.TryRemove(mission.Id, out _);
+                await ForgetTransientOutageAsync(mission.Id).ConfigureAwait(false);
                 await _Missions.HandleClaimedCompletionAsync(captain, mission.Id, version, token).ConfigureAwait(false);
             }
             finally { _VerificationsInProgress.TryRemove(mission.Id, out _); }

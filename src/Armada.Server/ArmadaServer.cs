@@ -939,6 +939,11 @@ namespace Armada.Server
 
             // Watson 7 StartAsync is long-running; Start() binds and returns after
             // scheduling the accept loop.
+            // Endpoint breakers, launch backoff, outage starts and escalation cooldowns from the previous run (RS-3.7).
+            await missionService.LoadRecoveryStateAsync(_TokenSource.Token).ConfigureAwait(false);
+            await admiralService.LoadRecoveryStateAsync(_TokenSource.Token).ConfigureAwait(false);
+            if (escalationService is EscalationService recoveringEscalation) await recoveringEscalation.LoadRecoveryStateAsync(_TokenSource.Token).ConfigureAwait(false);
+
             int restoredJobs = await _AgentLifecycle.RestoreHarborMissionsAsync(_TokenSource.Token).ConfigureAwait(false);
             _Logging.Info(_Header + "restored ownership of " + restoredJobs + " Harbor mission job(s) before accepting links");
             _App.Start(_TokenSource.Token);

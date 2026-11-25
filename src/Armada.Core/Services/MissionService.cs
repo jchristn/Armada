@@ -97,6 +97,8 @@ namespace Armada.Core.Services
         private readonly SemaphoreSlim _ReviewDecisionGate = new SemaphoreSlim(1, 1);
 
         private const int _MaxLaunchFailuresBeforeFail = 6;
+        private readonly RecoveryStateStore _RecoveryState;
+        private static readonly TimeSpan _RecoveryStateRetention = TimeSpan.FromDays(1);
         private readonly System.Collections.Concurrent.ConcurrentDictionary<string, MissionLaunchFailure> _LaunchFailures = new System.Collections.Concurrent.ConcurrentDictionary<string, MissionLaunchFailure>(StringComparer.Ordinal);
 
         private string _Header = "[MissionService] ";
@@ -261,6 +263,7 @@ namespace Armada.Core.Services
             _WaitTracker = new MissionWaitTracker(_Database, _Settings, _Logging);
             Transitions = new MissionTransitions(_Database, _Logging);
             Transitions.VoyageChanged = ReevaluateVoyageAsync;
+            _RecoveryState = new RecoveryStateStore(_Database, _Logging);
         }
 
         #endregion
@@ -922,7 +925,7 @@ namespace Armada.Core.Services
             {
                 // A deterministic policy/configuration problem cannot be repaired by repeatedly launching.
                 // Keep it visible as a terminal operational failure, without a provider call or rescue loop.
-                _LaunchFailures.TryRemove(mission.Id, out MissionLaunchFailure? _);
+                await ForgetLaunchFailureAsync(mission.Id).ConfigureAwait(false);
                 await FailAssignmentAsync(mission, captain, dock, configuration.Message, BlackBoxStepEnum.AssignmentFailed, configuration).ConfigureAwait(false);
 
                 // The same configuration fails every mission this captain is given; take it out of the pool for the
@@ -948,9 +951,10 @@ namespace Armada.Core.Services
                 // failures with the same cause (a CLI that is not installed where the mission lands) fail the
                 // mission with the reason rather than loop forever.
                 MissionLaunchFailure failure = RecordLaunchFailure(mission, captain, ex);
+                await SaveLaunchFailureAsync(mission.Id, failure).ConfigureAwait(false);
                 if (failure.Count >= _MaxLaunchFailuresBeforeFail && IsRuntimeMissing(ex))
                 {
-                    _LaunchFailures.TryRemove(mission.Id, out MissionLaunchFailure? _);
+                    await ForgetLaunchFailureAsync(mission.Id).ConfigureAwait(false);
                     await FailAssignmentAsync(mission, captain, dock,
                         "Captain " + captain.Name + " could not be started " + failure.Count + " times: " + failure.Reason
                         + " If this mission should run on your Harbor, connect it and turn on Require Harbor for launch (Server settings), then restart the mission.",
@@ -1012,7 +1016,7 @@ namespace Armada.Core.Services
                     + " (the process exit handler and health checks own the outcome)");
             }
 
-            _LaunchFailures.TryRemove(mission.Id, out MissionLaunchFailure? _);
+            await ForgetLaunchFailureAsync(mission.Id).ConfigureAwait(false);
             _Logging.Info(_Header + "launched agent process " + processId + " for captain " + captain.Id);
             _Logging.Info(_Header + "assigned mission " + mission.Id + " to captain " + captain.Id + " at " + dock.WorktreePath);
             return true;
@@ -1103,22 +1107,56 @@ namespace Armada.Core.Services
 
             string key = EndpointCapacityKey(endpoint);
             EndpointBreakerState state = _EndpointBreakers.GetOrAdd(key, _ => new EndpointBreakerState());
+            EndpointBreakerState snapshot = new EndpointBreakerState();
+            bool wasClean;
             lock (state)
             {
+                wasClean = state.ConsecutiveFailures == 0 && !state.OpenUntilUtc.HasValue;
                 if (healthy)
                 {
                     if (state.OpenUntilUtc.HasValue) _Logging.Info(_Header + "endpoint " + endpoint.BaseUrl + " ran cleanly; circuit closed");
                     state.ConsecutiveFailures = 0;
                     state.OpenUntilUtc = null;
-                    return;
                 }
-
-                state.ConsecutiveFailures++;
-                if (state.ConsecutiveFailures >= _EndpointBreakerThreshold)
+                else
                 {
-                    state.OpenUntilUtc = DateTime.UtcNow.Add(_EndpointBreakerOpenFor);
-                    _Logging.Warn(_Header + "endpoint " + endpoint.BaseUrl + " failed " + state.ConsecutiveFailures + " run(s) in a row; no new missions go to it until " + state.OpenUntilUtc.Value.ToString("o"));
+                    state.ConsecutiveFailures++;
+                    if (state.ConsecutiveFailures >= _EndpointBreakerThreshold)
+                    {
+                        state.OpenUntilUtc = DateTime.UtcNow.Add(_EndpointBreakerOpenFor);
+                        _Logging.Warn(_Header + "endpoint " + endpoint.BaseUrl + " failed " + state.ConsecutiveFailures + " run(s) in a row; no new missions go to it until " + state.OpenUntilUtc.Value.ToString("o"));
+                    }
                 }
+                snapshot.ConsecutiveFailures = state.ConsecutiveFailures;
+                snapshot.OpenUntilUtc = state.OpenUntilUtc;
+            }
+
+            // Kept across a restart so an Admiral restarted mid-outage does not send the next missions straight back to
+            // the failing endpoint. A clean run on a clean breaker writes nothing.
+            if (healthy)
+            {
+                if (!wasClean) await _RecoveryState.DeleteAsync(RecoveryStateKinds.EndpointBreaker, key, token).ConfigureAwait(false);
+            }
+            else
+            {
+                await _RecoveryState.SaveAsync(RecoveryStateKinds.EndpointBreaker, key, snapshot, (snapshot.OpenUntilUtc ?? DateTime.UtcNow).Add(_RecoveryStateRetention), token).ConfigureAwait(false);
+            }
+        }
+
+        /// <summary>
+        /// Load the endpoint breakers and launch backoff a previous run left (RELIABILITY_SIMPLICITY_PLAN.md RS-3.7). Call
+        /// once at startup, before dispatch.
+        /// </summary>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>Task.</returns>
+        public async Task LoadRecoveryStateAsync(CancellationToken token = default)
+        {
+            foreach (KeyValuePair<string, EndpointBreakerState> breaker in await _RecoveryState.LoadAsync<EndpointBreakerState>(RecoveryStateKinds.EndpointBreaker, token).ConfigureAwait(false))
+                _EndpointBreakers[breaker.Key] = breaker.Value;
+            foreach (KeyValuePair<string, MissionLaunchFailure> failure in await _RecoveryState.LoadAsync<MissionLaunchFailure>(RecoveryStateKinds.LaunchFailure, token).ConfigureAwait(false))
+            {
+                failure.Value.FailedCaptainIds = new HashSet<string>(failure.Value.FailedCaptainIds ?? new HashSet<string>(), StringComparer.Ordinal);
+                _LaunchFailures[failure.Key] = failure.Value;
             }
         }
 
@@ -2165,6 +2203,23 @@ namespace Armada.Core.Services
         /// The Harbor host of a Harbor-hosted dock, or null for a dock on this machine (which keeps using the local git
         /// service and disk exactly as before).
         /// </summary>
+        private async Task SaveLaunchFailureAsync(string missionId, MissionLaunchFailure failure)
+        {
+            MissionLaunchFailure snapshot = new MissionLaunchFailure();
+            snapshot.Count = failure.Count;
+            snapshot.Reason = failure.Reason;
+            snapshot.LastUtc = failure.LastUtc;
+            snapshot.NextAttemptUtc = failure.NextAttemptUtc;
+            lock (failure.FailedCaptainIds) snapshot.FailedCaptainIds = new HashSet<string>(failure.FailedCaptainIds, StringComparer.Ordinal);
+            await _RecoveryState.SaveAsync(RecoveryStateKinds.LaunchFailure, missionId, snapshot, snapshot.NextAttemptUtc.Add(_RecoveryStateRetention), CancellationToken.None).ConfigureAwait(false);
+        }
+
+        private async Task ForgetLaunchFailureAsync(string missionId)
+        {
+            if (_LaunchFailures.TryRemove(missionId, out MissionLaunchFailure? _))
+                await _RecoveryState.DeleteAsync(RecoveryStateKinds.LaunchFailure, missionId, CancellationToken.None).ConfigureAwait(false);
+        }
+
         private MissionLaunchFailure RecordLaunchFailure(Mission mission, Captain captain, Exception ex)
         {
             MissionLaunchFailure failure = _LaunchFailures.AddOrUpdate(mission.Id,

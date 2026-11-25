@@ -500,8 +500,14 @@ routing; a renamed Architect slice breaks fan-out recovery. Everything a program
   on SQLite: 7425 tests, 0 failures after the fix, 39 skipped. The admiral, pipeline, review, handoff, landing and
   recovery suites (316 tests) pass on PostgreSQL, MySQL and SQL Server except two pre-existing `AdmiralService` cases
   that open a SQLite connection directly and cannot run on a server database.
-- [ ] **RS-3.7** Persist in-memory recovery state that must survive a restart: endpoint breakers, launch backoff,
-  `_TransientOutageStarts`, escalation cooldowns (`EscalationService`). Evidence:
+- [x] **RS-3.7** Persist in-memory recovery state that must survive a restart: endpoint breakers, launch backoff,
+  `_TransientOutageStarts`, escalation cooldowns (`EscalationService`). Evidence: one `recovery_state` table
+  (migration 134, all four providers, one shared SQL class) behind `RecoveryStateStore`; each service writes through
+  on change (a clean run on a clean breaker and a successful launch write nothing) and `ArmadaServer` reloads all four
+  before the listener and health check start. Escalation cooldowns stay on the monotonic clock in memory and are
+  placed on it from the stored wall-clock fire time at load. `Services.RecoveryState` (5 cases: store round trip and
+  one restart case per state) passes on SQLite, PostgreSQL, MySQL and SQL Server; full SQLite suite 7430 tests, the
+  one failure a race in `E2E.BlackBox` (brief read before record.json), fixed in the test.
 
 ## Phase 4: One path for voyage creation and dispatch
 

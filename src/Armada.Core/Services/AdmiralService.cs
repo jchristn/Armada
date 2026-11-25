@@ -180,6 +180,7 @@ namespace Armada.Core.Services
         // When each mission's current run of transient failures began, for TransientOutageGraceMinutes.
         private readonly System.Collections.Concurrent.ConcurrentDictionary<string, DateTime> _TransientOutageStarts =
             new System.Collections.Concurrent.ConcurrentDictionary<string, DateTime>(StringComparer.Ordinal);
+        private readonly RecoveryStateStore _RecoveryState;
         private readonly System.Collections.Concurrent.ConcurrentDictionary<string, List<long>> _CaptainCrashTimes =
             new System.Collections.Concurrent.ConcurrentDictionary<string, List<long>>();
         private TimeProvider _Time = TimeProvider.System;
@@ -220,6 +221,7 @@ namespace Armada.Core.Services
             _Logging = logging ?? throw new ArgumentNullException(nameof(logging));
             _Database = database ?? throw new ArgumentNullException(nameof(database));
             Transitions = new MissionTransitions(database, logging);
+            _RecoveryState = new RecoveryStateStore(database, logging);
             _Settings = settings ?? throw new ArgumentNullException(nameof(settings));
             _ConcurrencyInvariants = new ConcurrencyInvariantMonitor(_Database, _Settings, _Logging);
             _AdmissionStuck = new AdmissionStuckMonitor(_Database);
@@ -236,6 +238,18 @@ namespace Armada.Core.Services
         #endregion
 
         #region Public-Methods
+
+        /// <summary>
+        /// Load the transient outage starts a previous run left (RELIABILITY_SIMPLICITY_PLAN.md RS-3.7). Call once at
+        /// startup, before the first health check.
+        /// </summary>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>Task.</returns>
+        public async Task LoadRecoveryStateAsync(CancellationToken token = default)
+        {
+            foreach (KeyValuePair<string, TransientOutageRecord> outage in await _RecoveryState.LoadAsync<TransientOutageRecord>(RecoveryStateKinds.TransientOutage, token).ConfigureAwait(false))
+                _TransientOutageStarts[outage.Key] = outage.Value.StartedUtc;
+        }
 
         /// <inheritdoc />
         public async Task<Voyage> DispatchVoyageAsync(
@@ -1357,7 +1371,7 @@ namespace Armada.Core.Services
                 }
 
                 // Clean exit — delegate to the normal completion flow
-                _TransientOutageStarts.TryRemove(missionId, out DateTime _);
+                await ForgetTransientOutageAsync(missionId).ConfigureAwait(false);
                 _Logging.Info(_Header + "agent process " + processId + " exited cleanly for mission " + missionId + " — handling completion");
                 await _Missions.HandleClaimedCompletionAsync(captain, missionId, mission!.LastUpdateUtc, token).ConfigureAwait(false);
             }
@@ -1391,8 +1405,8 @@ namespace Armada.Core.Services
                 // a note about the earlier attempt, up to MaxRecoveryAttempts times.
                 // Transient failures past MaxRecoveryAttempts keep resuming while the outage is younger than
                 // TransientOutageGraceMinutes, so a proxy or model-server restart does not fail work in progress.
-                bool withinOutageGrace = exitInfo.FailureKind == RuntimeFailureKindEnum.Transient && mission != null && WithinTransientOutageGrace(mission.Id);
-                if (exitInfo.FailureKind != RuntimeFailureKindEnum.Transient) _TransientOutageStarts.TryRemove(missionId, out DateTime _);
+                bool withinOutageGrace = exitInfo.FailureKind == RuntimeFailureKindEnum.Transient && mission != null && await WithinTransientOutageGraceAsync(mission.Id).ConfigureAwait(false);
+                if (exitInfo.FailureKind != RuntimeFailureKindEnum.Transient) await ForgetTransientOutageAsync(missionId).ConfigureAwait(false);
                 if ((exitInfo.FailureKind == RuntimeFailureKindEnum.Transient || exitInfo.FailureKind == RuntimeFailureKindEnum.TaskFailure)
                     && mission != null
                     && (captain.RecoveryAttempts < _Settings.MaxRecoveryAttempts || withinOutageGrace)
@@ -2757,14 +2771,25 @@ namespace Armada.Core.Services
         /// Pending for a fresh assignment, and the voyage is left running. Bounded by the caller against
         /// <see cref="ArmadaSettings.MaxNoOpRedispatchAttempts"/>.
         /// </summary>
-        private bool WithinTransientOutageGrace(string missionId)
+        internal async Task<bool> WithinTransientOutageGraceAsync(string missionId)
         {
             int graceMinutes = _Settings.TransientOutageGraceMinutes;
             if (graceMinutes <= 0) return false;
-            DateTime started = _TransientOutageStarts.GetOrAdd(missionId, _ => DateTime.UtcNow);
-            if (DateTime.UtcNow - started < TimeSpan.FromMinutes(graceMinutes)) return true;
-            _TransientOutageStarts.TryRemove(missionId, out DateTime _);
+            DateTime now = DateTime.UtcNow;
+            DateTime started = _TransientOutageStarts.GetOrAdd(missionId, now);
+            // The start is kept across a restart, so restarting the Admiral during an outage does not grant a new grace.
+            if (started == now)
+                await _RecoveryState.SaveAsync(RecoveryStateKinds.TransientOutage, missionId, new TransientOutageRecord { StartedUtc = started },
+                    started.AddMinutes(graceMinutes).AddDays(1), CancellationToken.None).ConfigureAwait(false);
+            if (now - started < TimeSpan.FromMinutes(graceMinutes)) return true;
+            await ForgetTransientOutageAsync(missionId).ConfigureAwait(false);
             return false;
+        }
+
+        private async Task ForgetTransientOutageAsync(string missionId)
+        {
+            if (_TransientOutageStarts.TryRemove(missionId, out DateTime _))
+                await _RecoveryState.DeleteAsync(RecoveryStateKinds.TransientOutage, missionId, CancellationToken.None).ConfigureAwait(false);
         }
 
         private TimeSpan TransientResumeDelay(int recoveryAttempts)
