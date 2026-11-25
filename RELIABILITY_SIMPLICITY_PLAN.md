@@ -292,10 +292,13 @@ instead of calling it, a 429 from a local proxy. Those paths need to be reproduc
   Document it in `postman/README.md`. Evidence: in-process `OpenModelSimulator` (`src/Test.Shared/Infrastructure/OpenModel`), suite
   `Runtimes.OpenModelSimulator` 23/23; documented in `docs/TESTING.md` "Open-model simulator" rather than the
   Postman README because it runs in-process.
-- [ ] **RS-1.2** Scripted model outputs for contract tests: canned Architect plans (fenced, unfenced, `~~~`, prose
+- [x] **RS-1.2** Scripted model outputs for contract tests: canned Architect plans (fenced, unfenced, `~~~`, prose
   inside the fence, draft then final, `"parent":"1"`, `"kind":"Implementation"`), Judge outputs (verdict in bold,
   verdict under a heading, two verdicts, verdict inside a truncated fence, `SPEC_CONFLICT` near-miss), Worker outputs
-  (marker in backticks, marker in bold, missing marker). Stored as fixture files under `Test.Shared`. Evidence:
+  (marker in backticks, marker in bold, missing marker). Stored as fixture files under `Test.Shared`. Evidence: `ModelOutputFixtures` (22 outputs, C# catalog in
+  `src/Test.Shared/Infrastructure/ModelOutputs`, expected results follow decisions R5 and R6) and
+  `Services.ModelOutputContract`: 19 read as intended today; `~~~` fences and bare JSON plans (RS-6.5) and a verdict
+  after a truncation-cut fence (RS-6.6, confirming the review's suspicion) are skipped until those items land.
 - [x] **RS-1.3** Crash-point injection. A test-only `ICrashPoints` service (no-op in production builds) with named
   points at every multi-write sequence this plan touches: merge queue push / entry Landed / mission Complete;
   incident create / FailureKind set / rescue dispatch; voyage row / mission rows / first assignment; Architect
