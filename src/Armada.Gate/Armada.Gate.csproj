@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The 1.5.0 acceptance gate (RELIABILITY_SIMPLICITY_PLAN.md RS-1.5): drives an isolated Admiral through the public
+       .NET SDK (Armada.Client, REST only) and scores G1 to G12. Kept apart from Armada.Benchmark, which is black-box. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>Armada.Gate</AssemblyName>
+    <RootNamespace>Armada.Gate</RootNamespace>
+    <IsTestProject>false</IsTestProject>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Armada.Client\Armada.Client.csproj" />
+  </ItemGroup>
+
+</Project>

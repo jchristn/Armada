@@ -13,7 +13,10 @@
 #
 # Usage:
 #   start-bench-server.sh [--name admission] [--port 25160] [--framework net10.0]
-#                         [--stub-seconds 1] [--telemetry] [--no-build]
+#                         [--stub-seconds 1] [--telemetry] [--no-build] [--real-agents]
+#
+# --real-agents leaves the stub agent off PATH so captains run the real Claude Code, Codex and
+# API runtimes. The acceptance gate (src/Armada.Gate) needs it.
 #
 # --telemetry turns on the Admiral's Prometheus exporter at
 # http://127.0.0.1:<port + 2>/metrics (selection stage latency and outcomes).
@@ -24,13 +27,14 @@
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-NAME="admission"; PORT=25160; FRAMEWORK="net10.0"; STUB_SECONDS=1; DO_BUILD=1; TELEMETRY=false
+NAME="admission"; PORT=25160; FRAMEWORK="net10.0"; STUB_SECONDS=1; DO_BUILD=1; TELEMETRY=false; REAL_AGENTS=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --name) NAME="$2"; shift 2 ;;
     --port) PORT="$2"; shift 2 ;;
     --framework) FRAMEWORK="$2"; shift 2 ;;
     --stub-seconds) STUB_SECONDS="$2"; shift 2 ;;
+    --real-agents) REAL_AGENTS=1; shift ;;
     --telemetry) TELEMETRY=true; shift ;;
     --no-build) DO_BUILD=0; shift ;;
     -h|--help) grep '^#' "$0" | grep -v '^#!' | sed 's/^# \{0,1\}//'; exit 0 ;;
@@ -59,7 +63,7 @@ git -C "$WORK" -c user.name=bench -c user.email=bench@example.invalid add README
 git -C "$WORK" -c user.name=bench -c user.email=bench@example.invalid commit -q -m "Benchmark seed"
 git clone -q --bare "$WORK" "$BARE"
 
-ARMADA_DATA_DIR="$DATA_DIR" ARMADA_BENCH_STUB_SECONDS="$STUB_SECONDS" PATH="${SCRIPT_DIR}/stub/agent:${PATH}" \
+ARMADA_DATA_DIR="$DATA_DIR" ARMADA_BENCH_STUB_SECONDS="$STUB_SECONDS" PATH="$([ "$REAL_AGENTS" = 1 ] && echo "${PATH}" || echo "${SCRIPT_DIR}/stub/agent:${PATH}")" \
   nohup dotnet "${REPO_ROOT}/src/Armada.Server/bin/Release/${FRAMEWORK}/Armada.Server.dll" > "${DATA_DIR}/server-console.log" 2>&1 &
 PID=$!
 for i in $(seq 1 120); do

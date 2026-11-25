@@ -27,6 +27,8 @@
     <ProjectReference Include="..\Armada.Tui\Armada.Tui.csproj" />
     <!-- The API surface builder reads the CLI command model from Helm (docs/API_SURFACE_1.0.md, E2E.ApiContract). -->
     <ProjectReference Include="..\Armada.Helm\Armada.Helm.csproj" />
+    <!-- The acceptance gate runner's scoring (Models.GateScoring). -->
+    <ProjectReference Include="..\Armada.Gate\Armada.Gate.csproj" />
   </ItemGroup>
 
   <!-- The Publisher is a net10.0-only build tool; its suite (Services.Publisher) compiles for net10.0 only. -->

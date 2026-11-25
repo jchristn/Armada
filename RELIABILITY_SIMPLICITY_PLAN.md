@@ -324,10 +324,15 @@ instead of calling it, a 429 from a local proxy. Those paths need to be reproduc
   operator request during a gate run (request history) counts; product-facing intervention counts come with
   RS-12.13. New repair modes (in-session, format-only) become `StageDispositionEnum` values in RS-6.4, and tool-call
   failure counts arrive with Phase 7.
-- [ ] **RS-1.5** Gate report generator: a `Armada.Benchmark` runner (or `armada battery report`) that reads RS-1.4
+- [x] **RS-1.5** Gate report generator: a `Armada.Benchmark` runner (or `armada battery report`) that reads RS-1.4
   data for a set of battery runs and prints G1 to G12 with pass or fail, as Markdown and JSON, into
-  `benchmarks/results/`. Evidence:
-- [-] **RS-1.6** Reference pipelines, seeded as built-in example pipelines (disabled by default) and as battery run
+  `benchmarks/results/`. Evidence: `src/Armada.Gate` (own project: Armada.Benchmark is black-box
+  by design) sets up roles, endpoints, captains, and pipelines idempotently through the SDK, runs each reference
+  pipeline as a pipeline-mode battery run, and writes `benchmarks/results/gate-<time>.md|json`. It scores G1, G2, G4,
+  G5, G6; G3 and G7 to G12 report NotMeasured with the suite that checks them (crash suite, admission benchmark,
+  metrics, and records that later items add). `Models.GateScoring` covers the scoring. `start-bench-server.sh`
+  gained `--real-agents`. Documented in `benchmarks/README.md`.
+- [x] **RS-1.6** Reference pipelines, seeded as built-in example pipelines (disabled by default) and as battery run
   presets. Opus always runs on Claude Code, GPT-6.1 on Codex, and every open model on ApiEndpoint. The gate harness
   reads endpoint details from `benchmarks/config/gate-endpoints.local.json` and fails with a clear message when the
   file is missing:
@@ -336,14 +341,15 @@ instead of calling it, a 429 from a local proxy. Those paths need to be reproduc
   - **P-C** Architect Qwen3.8, Worker Opus, Judge Qwen3.8 with the tier rule from RS-8.7 (proves the rule routes the
     final judgment to a frontier model or flags it).
   - **P-D** Every persona Qwen3.8, escalation ladder Qwen3.8 -> GPT-6.1 -> Opus (RS-5.6).
-  Evidence: (in progress) Battery runs gained a pipeline mode
+  Evidence: Battery runs gained a pipeline mode
   (`BatteryRunRequest.Pipeline` and `CaptainOverrides`, REST, MCP `run_battery`, SDK through the shared model, Postman
   "Run Battery Under a Mixed Pipeline"): each Worker task runs as a voyage through every stage of the named pipeline,
   staffed per persona, graded on the final branch; the run records pipeline and staffing in its configuration.
   `Services.Battery` covers it. The reference pipelines are not product seeds after all: no built-in pipeline is
   Architect, Worker, Test Engineer, Judge, and the staffing (not the stages) is what differs between P-A and P-D, so
-  the gate harness (RS-1.5) creates its pipelines and captains in its isolated Admiral from a committed preset file
-  (`benchmarks/config/reference-pipelines.json`, roles only) plus the local endpoint file. Still to do: that preset file.
+  the gate harness (RS-1.5) creates its pipelines and captains in its isolated Admiral from the committed preset file
+  `benchmarks/config/reference-pipelines.json` (roles only: Gate-A to Gate-D plus Gate-D variants for inkling,
+  DeepSeek, GLM, Kimi, sized to the run budget) and the local endpoint file.
 - [x] **RS-1.7** Seeded-defect tasks in at least the `csharp`, `python`, and `javascript` battery packs so G7 can be
   measured (a task whose correct verdict is FAIL). Evidence: already present: `judge-negative` with a `seededSet`
   grader in all 8 `battery/*/battery-pack.json` (RS-0.9).

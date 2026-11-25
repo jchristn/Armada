@@ -48,6 +48,32 @@ Each report records the commit, whether the tree was dirty, OS, architecture, pr
 provider, HTTP connection limit and timeout, and a SHA-256 of the scenario inputs. `compare` refuses reports whose
 scenario hashes differ.
 
+## Acceptance gate (1.5.0)
+
+The gate in `RELIABILITY_SIMPLICITY_PLAN.md` measures whether open models such as Qwen3.8 can live in a pipeline with
+Opus and GPT-6.1. It is its own program, `src/Armada.Gate`, because it drives the Admiral through the public .NET SDK
+while this harness stays black-box.
+
+Two files configure it. `config/reference-pipelines.json` is committed and names roles only: which runtime and model
+each role uses, the stages of each reference pipeline (Gate-A to Gate-D and the Gate-D variants for other open
+families), which role staffs each persona, and how many runs each gets. `config/gate-endpoints.local.json` is
+git-ignored and says where the open models are served (Conductor first, Ollama Cloud as a fallback) with their
+credentials; copy `config/gate-endpoints.example.json` to start one. Nothing from the local file reaches a report or
+a log.
+
+```bash
+benchmarks/start-bench-server.sh --name gate --port 25160 --real-agents --telemetry
+dotnet run --project src/Armada.Gate -- --url http://127.0.0.1:25160 --setup-only
+dotnet run --project src/Armada.Gate -- --url http://127.0.0.1:25160 --pipelines Gate-D --packs csharp --runs 1
+```
+
+The first run creates one model endpoint and captain per role and the gate pipelines in the isolated Admiral; later
+runs reuse them by name. Each pipeline is a battery run in pipeline mode: every Worker task becomes a voyage through
+all of the pipeline's stages and is graded on the final branch. The report lands in `results/gate-<time>.md` and
+`.json`. It scores G1, G2, G4, G5, and G6 from the battery results and stage outcomes; the other measures name the
+suite or benchmark that checks them and show as NotMeasured, never as passed. Mind the run budget in the plan:
+Conductor models run freely, Ollama Cloud models sparingly, Opus and GPT-6.1 only a few times.
+
 ## Limits
 
 - The standard run uses SQLite. Pass `--provider` only as a label; pointing the Admiral at a server database means
