@@ -1,0 +1,907 @@
+# Reliability and Simplicity Plan (v1.5.0)
+
+Branch: `feature/v1.5.0`. Target release: Armada 1.5.0. Created 2026-11-25.
+
+## Why this plan exists
+
+Armada 1.4.0 can put an open model in a pipeline, but it cannot keep one there reliably. A five-part review of voyage
+creation, plan parsing, dispatch, persona handoff, recovery, and landing (2026-11-25) found the same two patterns at
+the root of most failures. Control state is kept as text: headings and HTML comments in mission descriptions, exact
+marker lines in model output, and regular expressions over model names. And the fallback for almost any mistake is
+the most expensive one available: run the whole stage again. A frontier model rarely trips over either. Qwen3.8 trips
+over both several times per voyage, and every trip costs a full stage, a lost review, or a mission that needs a human.
+
+The goal of 1.5.0 is concrete. When this plan is complete, an operator can build a pipeline that mixes Qwen3.8 with
+Opus and GPT-6.1 in any persona, run it unattended, and trust the outcome: work lands, failures are classified and
+recovered or escalated, nothing gets stuck or duplicated, and a weak model can never be the last word on whether work
+passes. Section "Acceptance gate" turns that sentence into numbers.
+
+The plan also pays down the complexity that made those failures hard to fix: two dispatch loops, two voyage dispatch
+paths, three ways to create a voyage, seven failure taxonomies, six copies of the handoff state, and a state machine
+that 65 call sites bypass. Simplification is not a side quest here. Most of the reliability work is impossible to do
+once and test once until those duplicates are collapsed.
+
+## How to use this document
+
+Every actionable line is a checklist item with a stable ID (`RS-<phase>.<n>`). Update the box and append evidence as
+you go; never delete an item. If an item turns out to be wrong, mark it `[~]` and say why.
+
+| Mark | Meaning |
+|---|---|
+| `[ ]` | Not started |
+| `[-]` | In progress (add your name or session and the date) |
+| `[x]` | Complete. Evidence is required: commit hash, test suite ids, command and result, log path, or screenshot path |
+| `[!]` | Blocked. Say on what, and who can unblock it |
+| `[~]` | Dropped or superseded. Say why and what replaces it |
+
+Tags on items:
+
+- **[HUMAN]** only a person can do it (store consoles, two-factor sign-ins, approvals). An agent prepares everything
+  around it and stops.
+- **[DECISION]** needs Joel's answer before work that depends on it starts. Record the answer and date inline.
+- **Surfaces:** which product surfaces the item touches. Every surface named there has a matching item in Phase 12,
+  13, or 14; an item is not complete until those are too, or are explicitly marked not applicable with a reason.
+
+Each item lists "Start at" locations from the review. Line numbers are from commit `a2503b7a2` and will drift; search
+for the quoted symbol if the line has moved.
+
+Record build and test results in the [Validation log](#validation-log) at the end, not inside items, except for the
+one-line evidence pointer.
+
+## Ground rules
+
+These apply to every item. A change that breaks one of them is not complete, however well it works.
+
+1. **Requirements.** Follow `~/Code/Agents/requirements`, in particular `CODE_STYLE.md` (no `var`, no tuples, one
+   class or enum per file, usings inside the namespace, XML docs on public members only, `<exception>` tags,
+   `ConfigureAwait(false)` and a `CancellationToken` on every async method, configurable public members instead of
+   constants, specific exception types), `BACKEND_ARCHITECTURE.md`, `BACKEND_TEST_ARCHITECTURE.md`,
+   `FRONTEND_ARCHITECTURE.md`, `DASHBOARD_STYLE_AND_USABILITY.md`, `I18N.md`, `TELEMETRY_REQUIREMENTS.md`,
+   `AUTHENTICATION.md`, `BENCHMARKING.md`, `SIMULATED_USER_TESTING.md`, `REPOSITORY_REQUIREMENTS.md`,
+   `INSTALLERS.md`, and `WRITING_DOCUMENTS.md`. Project rules in `CLAUDE.md` and `AGENTS.md` also apply.
+2. **No em-dashes anywhere:** code, comments, XML docs, docs, Postman, changelog, commit messages, store copy.
+3. **Persistence.** Every schema change is a numbered migration for SQLite, PostgreSQL, MySQL, and SQL Server, with
+   relational columns or child rows (no JSON blobs for fixed contracts), registered in each provider, and covered by
+   the database parity run and the upgrade test from the v1.4.0 baseline. The latest migration at plan time is 130.
+4. **Tests.** New behavior gets Touchstone descriptors in `Test.Shared` so it runs under `Test.Automated`, xUnit, and
+   NUnit. A bug fix gets a regression test that fails before the fix. Front-end changes get Vitest (dashboard), Jest
+   (mobile), and TUI shape tests.
+5. **API sync.** Any REST, MCP, or WebSocket change updates `docs/REST_API.md`, `docs/MCP_API.md`,
+   `docs/WEBSOCKET_API.md`, `Armada.postman_collection.json`, the API surface file
+   (`scripts/common/generate-api-surface.sh` -> `docs/api-surface-1.0.json`), and `Armada.Client` in the same commit.
+6. **Compatibility.** No breaking REST or MCP changes in a minor release. New fields are additive with defaults that
+   reproduce 1.4.0 behavior unless the item says otherwise and the CHANGELOG calls it out. A 1.5.0 Admiral must work
+   with a 1.4.0 Harbor (degraded where needed, never broken), and the reverse must fail with a clear message.
+7. **Versions.** Joel authorized 1.5.0 for this work in the request that created this plan (2026-11-25). Do not
+   change any other version, and do not tag, sign, or publish to NuGet or Open VSX without a new instruction (see the
+   runbook, section 16.4 note 10).
+8. **Secrets and private data.** The repository is public. Never copy anything from
+   `~/Documents/Employers/Lattice AI/Armada` into it: account emails, team ids, App Store Connect ids, key ids,
+   reviewer credentials. Reference the runbook section instead. Private store details go in the git-ignored
+   `src/Armada.Mobile/store-private.local.md`. Model endpoint hosts, the Conductor bearer token, and the Ollama Cloud
+   API key go only in `benchmarks/config/gate-endpoints.local.json`. `.gitignore` ignores `*.local.json` and
+   `*.local.md`; check with `git check-ignore -v <file>` before writing any secret, and scan every diff for them
+   before committing (RS-14.8).
+9. **Leave alone:** the untracked `assets/vscode/` folder. `AGENTS.md` changes only through RS-13.12.
+10. **Commits.** Small, one item or a tight group per commit, message prefixed with the item id
+    (`RS-5.2: classify unrecognized runtime errors as Unclassified`). Commit only when asked; push only when asked.
+
+## Definitions
+
+- **Reference models.** Frontier: Claude Opus on the Claude Code runtime and GPT-6.1 on the Codex runtime. Open:
+  Qwen3.8 27B on the ApiEndpoint runtime, served by Ollama behind the maintainer's Conductor instance (Ollama
+  `/api/chat` format, bearer token). "Other models" in the goal means the same results hold for DeepSeek 4.1, GLM,
+  and inkling-2-mini, served the same way through Conductor, with Ollama Cloud as the fallback for DeepSeek, GLM,
+  and Kimi when Conductor does not host them. A direct Ollama host on the maintainer's network is a last resort;
+  prefer Conductor. Endpoint addresses, model path segments, tokens, and keys live only in the git-ignored
+  `benchmarks/config/gate-endpoints.local.json` (shape in the committed `gate-endpoints.example.json`).
+- **Reference pipelines.** The four pipelines in RS-1.6. The acceptance gate runs all four.
+- **Human intervention.** Any action by a person after dispatch: retry, restart, manual land, edit, cancel, or
+  config change. Approving a review gate that the pipeline is configured to require does not count.
+- **Format-only failure.** The work was done but the report broke the contract (missing verdict line, malformed plan
+  JSON, missing completion marker).
+
+## Acceptance gate (definition of done for 1.5.0)
+
+Phases 0 to 16 are the work. This gate is how we know the work achieved the goal. It is checked in RS-14.6 and must
+pass on the release candidate commit. Joel set the thresholds on 2026-11-25 (RS-0.3): G1 at 99%, the rest as drafted.
+
+| # | Measure (over the full gate run, all four reference pipelines, every battery pack, 10 runs each) | Threshold |
+|---|---|---|
+| G1 | Voyages that reach a correct terminal state with no human intervention | at least 99% |
+| G2 | Missions left in a non-terminal state with no actionable blocker for longer than 2x their stage timeout | 0 |
+| G3 | Duplicate work: a stage executed twice for the same attempt, two rescues for one failure, or a mission landed twice | 0 |
+| G4 | Format-only failures that caused a full stage rerun (instead of an in-session or format-only repair) | 0 |
+| G5 | Format-only failures repaired without a full rerun | at least 90% |
+| G6 | Runtime failures classified as `Unclassified` | under 2% of all runtime failures |
+| G7 | Judge PASS on a seeded-defect task (`BatterySeededSetGrader`) | 0 |
+| G8 | Voyages where an open model was the final Judge of its own tier's work without a tier rule exception | 0 |
+| G9 | Crash consistency: Admiral killed at a random crash point (RS-1.3) in 50 runs; every voyage reaches the same terminal state as an uninterrupted run | 50 of 50 |
+| G10 | Median time from mission Pending (ready) to agent process started, with free capacity | under 2 s (1.4.0: up to 10 s) |
+| G11 | Database queries per dispatch pass with 50 pending missions (Armada.Benchmark admission runner) | at least 5x fewer than the 1.4.0 baseline |
+| G12 | Escalations that went to a captain with a strictly higher effective tier or the configured ladder's next rung | 100% |
+
+A gate run that misses a threshold is not "close enough". Find the cause, fix it under a new item, and rerun the
+affected pipelines.
+
+---
+
+## Phase 0: Setup and baseline
+
+Nothing in later phases can claim an improvement without a before measurement, and CI must be green before the
+branch starts adding tests to it.
+
+- [ ] **RS-0.1** Branch. `feature/v1.5.0` created from `main` at `a2503b7a2`. Confirm `git status` shows only the
+  untracked `assets/vscode/`. Evidence:
+- [ ] **RS-0.2** Version 1.5.0 (authorized 2026-11-25). Update every version location listed in the runbook section
+  15 and `src/Test.Shared/Suites/Services/ReleaseVersionSuite.cs`, following the reference bump commit `c3f5dc176`.
+  Add `## Unreleased` entries for 1.5.0 work as it lands; the release heading is written in RS-15.2. Mobile:
+  `app.config.ts` version 1.5.0 (build numbers are handled in RS-16.4). Evidence:
+- [x] **RS-0.3** [DECISION] Confirm or change the acceptance gate thresholds G1 to G12. Answer (2026-11-25): G1 at
+  99%; G2 to G12 as drafted.
+- [x] **RS-0.4** [DECISION] Reference configuration for the open models. Answer (2026-11-25): Qwen3.8 27B on the
+  ApiEndpoint runtime, Ollama `/api/chat` format with a bearer token, served through the maintainer's Conductor
+  instance. Additional families that must pass: DeepSeek 4.1, GLM, and inkling-2-mini, through Conductor, with
+  Ollama Cloud as the fallback for DeepSeek, GLM, and Kimi. Frontier: Opus on Claude Code, GPT-6.1 on Codex.
+  Connection details are in the git-ignored local file (see Definitions).
+- [ ] **RS-0.10** Endpoint inventory. Read the Conductor source (`~/Code/Conductor`, its `REST_API.md` and Postman
+  collection) and use its API to list every model it hosts, with served context length, quantization, and tool
+  support. Fill in the model path segments in `benchmarks/config/gate-endpoints.local.json` (local file only), and
+  confirm each reference model answers a chat request with a tool call through Conductor, using Ollama Cloud only
+  for families Conductor does not host. Record in the validation log which models are available and where, without
+  hosts or tokens. Evidence:
+- [ ] **RS-0.11** Register the reference models in a development Admiral as model endpoints and captains (Qwen3.8,
+  DeepSeek 4.1, GLM, inkling-2-mini on ApiEndpoint; Opus on Claude Code; GPT-6.1 on Codex), run the existing probes
+  and battery once per model, and save the scorecards as the 1.4.0 starting picture for RS-0.8. Evidence:
+- [ ] **RS-0.5** Fix the four failing `ci.yml` cases recorded in the runbook section 14 ("SDK preserves passive capture
+  observations and their original timestamps" and three "real pi run" cases that need the `pi` CLI; the latter should
+  skip with a reason when the CLI is absent, not fail). Fix the `full.yml` compose job's missing
+  `ARMADA_GRAFANA_ADMIN_PASSWORD`. Evidence:
+- [ ] **RS-0.6** Baseline run of everything: `dotnet build src/Armada.sln -c Release -warnaserror` (both frameworks),
+  `Test.Automated` net8.0 and net10.0, xUnit and NUnit adapters, dashboard, mobile, TUI parity, VS Code extension.
+  Record counts in the validation log. Evidence:
+- [ ] **RS-0.7** Baseline performance with `Armada.Benchmark` (admission runner and dispatch latency) and the
+  `benchmarks/run-baseline.sh` flow, saved under `benchmarks/baselines/1.4.0/`. Evidence:
+- [ ] **RS-0.8** Baseline reliability: after RS-1.6 exists, run the four reference pipelines on 1.4.0 code (a
+  worktree at `a2503b7a2`) with the same battery and record G1 to G12. This is the "before" column of the release
+  notes. Evidence:
+- [ ] **RS-0.9** Read the archive docs the review did not fully cover (`archive/FAILURE_CASES_*.md`,
+  `archive/FIX_LANDING_FAILURES.md`, `archive/FRAGILITY_REMEDIATION.md`, `archive/SIMPLIFICATION.md`,
+  `archive/REFACTORING_PLAN.md`, `archive/DISPATCH_ISSUES.md`). For each item in this plan that they already
+  cover, add a note "see archive/X.md#section" so prior decisions are not undone by accident. Evidence:
+
+## Phase 1: Test and measurement harness
+
+The fixes in later phases are mostly about rare paths: a crash between two writes, a model that prints its tool call
+instead of calling it, a 429 from a local proxy. Those paths need to be reproducible on demand before they are fixed.
+
+- [ ] **RS-1.1** Open-model behavior simulator. Extend `postman/simulations` (or add an in-process fake under
+  `Test.Shared`) to an OpenAI-compatible and Ollama `/api/chat` fake that can be scripted per request to produce:
+  Hermes/Qwen `<tool_call>` text instead of `tool_calls`, `<function=...>` text, fenced JSON tool calls, malformed
+  tool-argument JSON, Ollama's malformed-tool-call HTTP 500, an unknown tool name, the same tool call repeated,
+  reasoning without the opening `<think>`, a 429 without quota information (backpressure), a 429 with
+  `insufficient_quota`, "llama runner process has terminated", "model requires more system memory", a
+  context-overflow 400, a response cut by `length`, slow streaming (configurable tokens per second), and no streaming.
+  Document it in `postman/README.md`. Evidence:
+- [ ] **RS-1.2** Scripted model outputs for contract tests: canned Architect plans (fenced, unfenced, `~~~`, prose
+  inside the fence, draft then final, `"parent":"1"`, `"kind":"Implementation"`), Judge outputs (verdict in bold,
+  verdict under a heading, two verdicts, verdict inside a truncated fence, `SPEC_CONFLICT` near-miss), Worker outputs
+  (marker in backticks, marker in bold, missing marker). Stored as fixture files under `Test.Shared`. Evidence:
+- [ ] **RS-1.3** Crash-point injection. A test-only `ICrashPoints` service (no-op in production builds) with named
+  points at every multi-write sequence this plan touches: merge queue push / entry Landed / mission Complete;
+  incident create / FailureKind set / rescue dispatch; voyage row / mission rows / first assignment; Architect
+  fan-out steps; stage handoff steps; launch / PID recorded. A harness kills and restarts the Admiral at a chosen
+  point and checks the end state. Evidence:
+- [ ] **RS-1.4** Pipeline reliability metrics recorded per attempt (persisted, not in memory): runtime failure kind,
+  repair kind and outcome (in-session, format-only, full rerun), escalation from and to (captain, model, tier),
+  human interventions, dispatch latency. Exposed through Prometheus metrics per `TELEMETRY_REQUIREMENTS.md` and
+  queryable for the gate report. Surfaces: Server, Grafana. Evidence:
+- [ ] **RS-1.5** Gate report generator: a `Armada.Benchmark` runner (or `armada battery report`) that reads RS-1.4
+  data for a set of battery runs and prints G1 to G12 with pass or fail, as Markdown and JSON, into
+  `benchmarks/results/`. Evidence:
+- [ ] **RS-1.6** Reference pipelines, seeded as built-in example pipelines (disabled by default) and as battery run
+  presets. Opus always runs on Claude Code, GPT-6.1 on Codex, and every open model on ApiEndpoint. The gate harness
+  reads endpoint details from `benchmarks/config/gate-endpoints.local.json` and fails with a clear message when the
+  file is missing:
+  - **P-A** Architect Opus, Worker Qwen3.8, Test Engineer Qwen3.8, Judge GPT-6.1.
+  - **P-B** Architect GPT-6.1, Architect fan-out to Qwen3.8 Workers, Judge Opus.
+  - **P-C** Architect Qwen3.8, Worker Opus, Judge Qwen3.8 with the tier rule from RS-8.7 (proves the rule routes the
+    final judgment to a frontier model or flags it).
+  - **P-D** Every persona Qwen3.8, escalation ladder Qwen3.8 -> GPT-6.1 -> Opus (RS-5.6).
+  Evidence:
+- [ ] **RS-1.7** Seeded-defect tasks in at least the `csharp`, `python`, and `javascript` battery packs so G7 can be
+  measured (a task whose correct verdict is FAIL). Evidence:
+
+## Phase 2: Correctness bugs found in review
+
+Each of these is a confirmed defect in 1.4.0. They are small, and each gets a regression test that fails first.
+
+- [ ] **RS-2.1** Findings severity. `HandoffArtifactBuilder.ParseSeverity` (`HandoffArtifactBuilder.cs:382`) checks
+  `low|minor|nit|info` before blocking terms with no word boundaries, so "High - follows from", "Blocking: allows",
+  and "Critical, no information" become NonBlocking. Use `\b` boundaries and check blocking terms first. Test with
+  all three strings. Evidence:
+- [ ] **RS-2.2** Tier classification. `CaptainTierSelector.cs:27`: Premium pattern `gpt-?5(\.\d+)?` misses GPT-6.x
+  and later; `o3|o4` unanchored; `gemini-\d*.*(?!pro)` lookahead is a no-op. Make the GPT pattern version-agnostic
+  for 5 and above, anchor `o3`/`o4`, rewrite the Gemini rule. Table-driven tests for at least 30 model names
+  including `gpt-6.1`, `gpt-6.1-mini`, `qwen3.8`, `qwen3.8:32b`, `claude-opus-5-5`. Remove the test-only
+  `CaptainTierSelector.Select`. Evidence:
+- [ ] **RS-2.3** Mission stranded after landing. `MergeQueueService.LandEntryAsync` (lines 690 to 745) persists the
+  entry as Landed and then completes the mission in a second write; `FlagMissingMergeHandoffsAsync`
+  (`AdmiralService.cs:2236`) skips any mission with a merge entry. Write both in one transaction, and add a sweep
+  that promotes WorkProduced or LandingFailed missions whose latest entry is Landed. Crash-point test (RS-1.3).
+  Evidence:
+- [ ] **RS-2.4** Planning sessions lose the objective. `PlanningSessionCoordinator.cs:407` sets the voyage
+  description to "Created from planning session <id>", which Architect slices then use as the objective. Store the
+  drafted description; keep the link in `SourcePlanningSessionId`, set in the create request rather than a second
+  update. Evidence:
+- [ ] **RS-2.5** Merge queue lease. `_ProcessLeaseDuration` (15 minutes, `MergeQueueService.cs:76`) is acquired once
+  per pass and never renewed, so a long pass can be reset and processed twice. Renew per entry (heartbeat) and make
+  the duration a setting. Test with a slow verification fake. Evidence:
+- [ ] **RS-2.6** Rescue incidents not crash-consistent. Pass `FailureKind` in the incident create request; before
+  dispatching a rescue, look up existing rescues by `RescueOfMissionId` in any status and adopt them; drop the
+  title and substring dedup (`ReferencesOriginal`). Crash-point tests. Evidence:
+- [ ] **RS-2.7** Startup burns retries. `CleanupStaleCaptainsAsync` (`AdmiralService.cs:1007`) treats an Assigned
+  mission with no process as an interrupted run and spends `RedispatchAttempts`. Return never-launched Assigned
+  missions to Pending without charging an attempt. Evidence:
+- [ ] **RS-2.8** Architect slices may lose playbooks. Verify whether slices 2..N get playbook snapshots
+  (`LoadMissionPlaybookSnapshotsAsync`); fix by routing slice creation through the creation service (RS-4.1).
+  Regression test either way. Evidence:
+- [ ] **RS-2.9** Voyage ownership and tenancy on REST. Voyages take `UserId = vessel.UserId` rather than the caller;
+  REST does not check the vessel against the caller's tenant before dispatch while MCP does
+  (`McpCallerScope.ReadVesselAsync`). Confirm with tests for a non-admin caller and a cross-tenant vessel; fix
+  through RS-4.1. Evidence:
+- [ ] **RS-2.10** `KnownErrorTypes` lists `"error"` and `"turn.failed"` but `ClassifyErrorType` returns null for
+  them, so a Codex error without a status becomes Crash. Map them. Evidence:
+- [ ] **RS-2.11** `LandingFailureClassifier.IsProcessStartFailure` treats any `IOException` as a process-start
+  failure. Narrow it to the start path. Evidence:
+- [ ] **RS-2.12** `ParseSeverity` style issue aside, `ContractRepair.TryRecoverVerdict` maps `SPEC_CONFLICT` to
+  None (around `ContractRepair.cs:115`). Recover it like the other verdicts. Evidence:
+
+## Phase 3: Typed state and an enforced state machine
+
+Text markers in descriptions route missions today. A user brief that happens to contain "## Escalated to " pins
+routing; a renamed Architect slice breaks fan-out recovery. Everything a program reads goes into a column.
+
+- [ ] **RS-3.1** Migration 131 (all four providers): on missions add `EscalationCount`, `EscalatedFromCaptainId`,
+  `EscalatedFromModel`, `OutputRepairCount`, `FanOutCompletedUtc`, `ArchitectSourceMissionId`, `ArchitectPlanIndex`,
+  `LaunchIntentUtc`, `LaunchJobId`; on merge entries nothing new unless RS-9 needs it. Backfill from the existing
+  text markers so upgraded databases keep their state. Upgrade test from the v1.4.0 baseline with missions in every
+  marker state. Evidence:
+- [ ] **RS-3.2** Replace `"## Escalated to "` detection (`AdmiralService.cs:2854`, `MissionService.CaptainRouting.cs:77`
+  and `:281`, `MissionService.WorkerEnvelope.cs:106`) with the columns. The escalation note can stay in the prompt
+  rendering; nothing reads it back. Evidence:
+- [ ] **RS-3.3** Replace `<!-- ARMADA:ARCHITECT-HANDOFF -->`, the fan-out-complete marker, and title-based slice
+  lookup (`Title == parsed.Title + " [Worker]"`) with `FanOutCompletedUtc` and (`ArchitectSourceMissionId`,
+  `ArchitectPlanIndex`). Evidence:
+- [ ] **RS-3.4** Mission description is immutable after creation. Handoff text, rework findings, repair notes, and
+  escalation notes are rendered at launch from typed records (Phase 6) rather than appended to `Description`. Remove
+  `StripPipelineHandoff` and its duplicated `SectionMarker` literal. Keep reading old markers only in the RS-3.1
+  backfill. Evidence:
+- [ ] **RS-3.5** One transition API. `MissionTransitions.TryTransitionAsync(mission, allowedFrom, to, mutate, token)`
+  that checks `MissionStateMachine`, does the compare-and-set, emits the event, and triggers voyage re-evaluation.
+  Add the real internal edges to the table (Assigned -> Pending, InProgress -> Pending for escalation,
+  InProgress -> Verifying). Evidence:
+- [ ] **RS-3.6** Move all 65 direct `.Status = MissionStatusEnum.X` writes in `Armada.Core` and `Armada.Server` to
+  RS-3.5. Add a test that scans source for direct writes outside the transition class and fails if any return.
+  Includes the coordinator's direct `unresolved.Status = Complete`. Evidence:
+- [ ] **RS-3.7** Persist in-memory recovery state that must survive a restart: endpoint breakers, launch backoff,
+  `_TransientOutageStarts`, escalation cooldowns (`EscalationService`). Evidence:
+
+## Phase 4: One path for voyage creation and dispatch
+
+- [ ] **RS-4.1** `VoyageCreationService` in Core taking an auth context and one `VoyageDispatchRequest`. It owns
+  validation, pipeline resolution (a standard voyage is a pipeline with one stage), playbooks, hierarchy, ownership,
+  and the dispatch advisor. REST (`Routes/VoyageRoutes.cs:190`), MCP (`McpVoyageTools.cs:150`), WebSocket
+  (`WebSocketCommandHandler.cs:424`), planning, and Architect fan-out all call it. Removes the four public overloads,
+  `DispatchStandardVoyageAsync`, and the duplicated preamble in `AdmiralService.cs:257-540`. Fixes the drift (MCP
+  `LandingMode`, tenant fallback, objective linking through `ObjectiveService.LinkVoyageAsync`). Surfaces: REST,
+  MCP, WebSocket, SDK. Evidence:
+- [ ] **RS-4.2** REST `MissionRequest` gains `Persona` and `Mode` to match MCP. Surfaces: REST, SDK, Postman,
+  dashboard voyage form, mobile, TUI, CLI. Evidence:
+- [ ] **RS-4.3** Atomic creation. Create the voyage (status `Building`) and all mission rows in one transaction, then
+  move it to `Open` and run one assignment pass. No captain launches before every stage of the voyage exists. Same
+  for Architect fan-out (one transaction for all slice rows, rewiring, and ownership) and stage handoff (reuse the
+  `CreateChainAsync` pattern). Crash-point tests. Evidence:
+- [ ] **RS-4.4** One hierarchy and ownership validator: a pure function over (index, parent, dependsOn, ownedPaths)
+  used by REST, MCP, Architect v3/v4 plans, and legacy plans, with one outcome per rule (reject with a typed error
+  list). Ownership overlap is checked for all dispatch paths. Replaces `MissionHierarchyPlan.Resolve`,
+  `ArchitectPlanParser.ValidateHierarchy`, the silent flattening in `Normalize`, and the warning in
+  `ApplyArchitectMissionDependenciesAsync`. Evidence:
+- [ ] **RS-4.5** One dispatcher. Delete `MissionService.DispatchPendingMissionsAsync` (`MissionService.cs:2109`), the
+  head-of-queue synchronous copy. The Admiral dispatcher runs on a coalescing wake signal raised by mission create,
+  completion, review, cancel, captain freed, endpoint breaker closed, and Harbor connect; the 10 s heartbeat stays as
+  a safety net. Launches always run in the background with a shutdown-aware token (not `CancellationToken.None`,
+  `MissionService.cs:792`). Evidence:
+- [ ] **RS-4.6** Admission pipeline. Ordered gates (readiness, dependency, barrier, global capacity, persona routing,
+  captain eligibility, runtime and endpoint capacity, usage selection, placement), each returning a typed
+  `MissionAssignmentBlocker`. Dispatch, `DescribePendingReasonAsync`, `_PlacementWaitReasons`, and
+  `AdmissionStuckMonitor` all read that one result. The stuck monitor stops re-running admission and only watches
+  blocker age. Evidence:
+- [ ] **RS-4.7** Admission snapshot. One read per pass of captains, active missions grouped by vessel, endpoints,
+  voyages, overrides, and personas; every pending mission is evaluated against it in memory; only the atomic claim
+  re-reads. Add projection queries (`WHERE vessel_id = ... AND status IN (...)`, no description column) on all four
+  providers. Evidence:
+- [ ] **RS-4.8** One capacity model per (captain, runtime, endpoint), computed from the snapshot, replacing the three
+  calculations in `HasAvailableCapacityAsync` (`AdmiralService.cs:2654`), `SchedulerAllowsAdmissionObservationAsync`
+  (`:2638`), and `EvaluateGlobalAdmissionAsync` (`CaptainRouting.cs:435`). Skip a mission early when every eligible
+  captain is limited. Evidence:
+- [ ] **RS-4.9** Narrow `_CapacityLock` (`MissionService.cs:135`): select and place before the lock, then claim with
+  a conditional write and re-validate. The lock covers only the counter check and claim. Concurrency test with
+  parallel dispatch passes proving no over-admission. Evidence:
+- [ ] **RS-4.10** Launch intent. Persist `LaunchIntentUtc` and the job or process id as part of launch. On startup,
+  find and stop any orphaned agent process for a dock (by job id, worktree path, or command line) before resuming in
+  that dock. Crash-point test between launch and PID record. Evidence:
+
+## Phase 5: Failure classification, recovery, and escalation
+
+- [ ] **RS-5.1** One failure taxonomy. Keep `MissionFailureKindEnum` as the single kind on a mission; every source
+  (runtime, landing, merge queue, definition of done, BlackBox, FailureCause rules) maps into it in exactly one
+  class, `FailureKindMapper`. Remove the inline ternary near `AdmiralService.cs:3013` and the hard-coded `Infra` in
+  `LandingEntryAsync` and `FlagMissingMergeHandoffsAsync`. Document the mapping table in `docs/MODEL_HETEROGENEITY.md`
+  Part 4. Evidence:
+- [ ] **RS-5.2** `Unclassified` runtime failure kind. `RuntimeFailureClassifier.Classify` returns it instead of
+  `Crash` when no provider error is parsed or the status is unmapped (`RuntimeFailureClassifier.cs:48`). Recovery
+  gives `Unclassified` one resume, then escalation. `Crash` is reserved for a process that died abnormally. Count
+  `Unclassified` per runtime and model (G6). Evidence:
+- [ ] **RS-5.3** Open-model error patterns in `RuntimeProviderErrorParser`: Ollama, vLLM, LM Studio, and LiteLLM
+  messages for runner terminated, out of memory, model not found, model loading, context overflow, and tool-call
+  parse failures. 400s on tool or schema errors map to `TaskFailure`. Table tests from captured real outputs
+  (store them as fixtures). Evidence:
+- [ ] **RS-5.4** 429 handling. A 429 without `insufficient_quota`, a reset time, or a usage-limit error type is
+  `Transient` and honors `Retry-After`; it does not quarantine the captain. 402 stays `UsageLimit`. Evidence:
+- [ ] **RS-5.5** Recovery policy per model profile (or tier default): in-place resumes, transient grace, Judge rework
+  rounds (replacing the hard-coded `_MaxJudgeReworkRounds = 2`, `MissionService.cs:2264`), format repairs, and
+  "escalate after". Global settings become the defaults. Surfaces: REST, MCP, SDK, dashboard model profile page,
+  TUI, mobile (read-only), docs. Evidence:
+- [ ] **RS-5.6** Escalation ladder. Personas (and optionally pipelines) get an ordered escalation ladder of captain
+  matchers, stored as relational child rows like `CaptainPriorities`. Escalation is allowed for standalone missions,
+  can take more than one hop, and must move to the next rung or a strictly higher effective tier (G12). Triggers:
+  exhausted resumes, `Unclassified` after its resume, Judge FAIL past the rework budget, repeated no-op, repeated
+  malformed tool calls, and an open endpoint breaker (optional early fallback). Persists RS-3.1 columns. Surfaces:
+  REST, MCP, SDK, Postman, dashboard persona and pipeline editors, TUI, mobile, docs. Evidence:
+- [ ] **RS-5.7** Escalation carries memory: the escalated attempt's prompt gets the prior attempt's failure kind,
+  output tail, diff summary, and BlackBox rule hint, rendered from typed records. Evidence:
+- [ ] **RS-5.8** Rescue routing. From the second rescue on, `MissionRecoveryCoordinator.DispatchRescueAsync` uses
+  the escalation selector with the failed captain excluded (`rescue.Tier = original.Tier`, line 316, is replaced).
+  The rescue brief includes the output tail and BlackBox hint. Evidence:
+- [ ] **RS-5.9** Fix the RecoveryExhausted notification: fire it when the rescue budget is actually exhausted
+  (coordinator `ExhaustedNote`), not on every terminal failure keyed by captain (`AdmiralService.cs:3083`). Mitigated
+  incidents close only after a verification cycle shows the fix held. Evidence:
+- [ ] **RS-5.10** Collapse the recovery loops into one `RecoveryPolicyEngine` that decides resume, repair,
+  escalate, rescue, or fail from (failure kind, attempt history, recovery policy). Resume-in-place, escalate to
+  planner, Judge rework escalation (`MissionService.Rework.cs:69`), and the incident rescue loop become actions it
+  chooses. Evidence:
+- [ ] **RS-5.11** Typed exceptions instead of message matching: `MergeQueueEntryNotFoundException` for
+  `ex.Message.Contains("merge queue entry")` (`MissionService.Completion.cs:954`), a typed git result for
+  `"not something we can merge"` (`MergeQueueService.cs:927`), and process-start detection without
+  `"trying to start process"` (`LandingFailureClassifier.cs:49`). Evidence:
+
+## Phase 6: Output contracts and repair
+
+The biggest single cost for open models today is that a formatting slip reruns the whole stage. This phase makes
+the contract a schema, lets the model submit through a tool, and repairs format problems without redoing the work.
+
+- [ ] **RS-6.1** One contract source. Generate the Architect plan, Judge verdict, Worker result, Test Engineer, and
+  Verifier contracts (prompt text, JSON example, field table, accepted verdicts) from the C# models and
+  `JudgeVerdictEnum`. Remove the copies in `PromptTemplateService.cs:1065-1080` and `:1116-1181`,
+  `JudgeContract.OutputContract`/`PersonaPromptFallback`/`RoleSummary`, `PersonaPromptVariants`,
+  `MissionService.Instructions.cs:836`, and `ContractRepair.CanonicalVerdictLine`. The Architect prompt shows one
+  versioned contract (v4) with a complete JSON example. `RoleSummary` loses its .NET-specific advice (move it to the
+  .NET workflow profile). Test that every persona prompt contains exactly one contract and that it matches the
+  parser. Evidence:
+- [ ] **RS-6.2** Submit tools. MCP tools `armada_submit_plan`, `armada_submit_verdict`, and `armada_submit_result`
+  with `inputSchema` generated from the models, validated synchronously, errors returned in the same call so the
+  model fixes them in-loop. The validated submission is stored as a typed record on the mission attempt; parsers stop
+  re-reading `AgentOutput` (`MissionService.Handoff.cs:133-153` parses it several times). Marker text remains the
+  fallback for runtimes without tools. Surfaces: MCP, docs/MCP_API.md. Evidence:
+- [ ] **RS-6.3** The same submit tools are native tools in `ApiAgentRuntime`. When the model stops calling work
+  tools without submitting, send `tool_choice` set to the submit tool (PolyPrompt `ToolChatRequest.ToolChoice`);
+  where the endpoint supports `response_format: json_schema`, use it for the final turn as a second fallback.
+  Evidence:
+- [ ] **RS-6.4** Format-only repair turn. Replace "Do the same job again" in `TryScheduleOutputRepairAsync`
+  (`MissionService.cs:1395`) for format-only failures: (1) in-session restatement when the runtime supports resume
+  (ApiEndpoint always; Claude Code and Codex via session resume), (2) otherwise a tool-less format call that gets the
+  stored output, the contract, and the parser's error list, optionally routed to a configured normalizer captain
+  (for example Opus). The repair keeps the original output and diff, is bounded (RS-5.5), never creates a PASS,
+  findings, or evidence the original lacked (MODEL_HETEROGENEITY principle 4), and records its outcome (RS-1.4). A
+  full rerun is the last resort. Evidence:
+- [ ] **RS-6.5** Plan parser tolerance (`ArchitectPlanParser.cs`, `ContractRepair.TryRecoverArchitectPlan`): reuse
+  `Protocol/EmbeddedJsonExtractor` for bare JSON, `~~~` fences, and prose in fences, preferring the last valid
+  candidate; `NumberHandling = AllowReadingFromString`; case-insensitive `kind` and `branchStrategy`; keep the
+  `JsonException` path, line, and position; return errors as a capped, ordered list; replace the null-error "no block
+  found" signal with a result enum. Evidence:
+- [ ] **RS-6.6** Verdict and marker tolerance. `ContractRepair` recovers prose verdicts (`**Verdict: NEEDS_REVISION**`
+  under `## Verdict`) without requiring the token `ARMADA`; when two canonical lines conflict, accept the final
+  non-empty line outside fences only if it is the last line; reset fence state at the `[...output truncated...]`
+  marker. `ApiAgentRuntime`'s completion check (`ApiAgentRuntime.cs:1048`) uses the same decoration-tolerant matcher
+  as Core and takes `requiresCompletion` explicitly instead of sniffing the prompt. Prompts stop showing markers in
+  backticks. Evidence:
+- [ ] **RS-6.7** Structured findings. The Judge and Test Engineer submit findings as
+  `{file, line, severity, scenario, requiredFix}` through RS-6.2; the Judge template asks for a `## Findings`
+  section for text runtimes; the eight-regex heading scraper in `HandoffArtifactBuilder.ExtractFindings` becomes the
+  fallback. Evidence:
+- [ ] **RS-6.8** PASS evidence. A PASS must cite the checks it ran or at least one inspected file (deferred R19 in
+  `archive/PROMPT_AND_HANDOFF_IMPROVEMENTS.md`). A PASS without it becomes a format-only failure. Evidence:
+- [ ] **RS-6.9** One handoff store. Every stage reads handoffs from `HandoffArtifact` rows created once, at stage
+  completion, in the completion transaction. Remove the lazy `GetOrCreateForStageAsync` at launch and the unstored
+  build in `MissionPromptBuilder.BuildTemplateParams`; replace the length-based `IsSameAttempt` with an attempt id.
+  Evidence:
+- [ ] **RS-6.10** Chain-aware handoff. A downstream stage sees the artifacts of the whole chain, newest first,
+  within its budget (the Judge sees the Worker's report, not only the Test Engineer's). Evidence:
+- [ ] **RS-6.11** One prompt composer for first runs, rework (`ReworkPromptBuilder.Compose`), repair, and escalation:
+  declared template slots instead of `personaPrompt.Contains(handoff.Evidence.Trim())`
+  (`MissionService.Instructions.cs:115-131`), one render of the persona prompt, and a token budget for the whole
+  instructions file (playbooks, skills, papercuts, persona prompt, contract, handoff). Remove the unused
+  `MaxMissionDescriptionChars` and `MaxPersonaSummaryChars` or wire them into the budget. Evidence:
+- [ ] **RS-6.12** Deprecate the legacy `[ARMADA:MISSION]` regex plan path (`MissionService.ArchitectPlan.cs:310-625`):
+  keep it behind a setting defaulting on in 1.5.0, log a deprecation warning when it is used, and list it in
+  `DEPRECATION.md` for removal in a later release. Precompile any regex that remains. Evidence:
+
+## Phase 7: API runtime hardening for open models
+
+`docs/MODEL_GUIDANCE.md:67` says tool-calling reliability on generic runtimes "is the model's responsibility". After
+this phase it is Armada's job to absorb the predictable failures.
+
+- [ ] **RS-7.1** Upgrade PolyPrompt from 3.5.0 to the current 5.x in every project that references it. Run the model
+  provider simulation suites (`Services.ModelEndpoint`, `Runtimes.ApiAgent`) and the reasoning-continuation
+  regression in `postman/README.md`. Evidence:
+- [ ] **RS-7.2** Text tool-call recovery. When a turn has no `ToolCalls`, parse `<tool_call>{json}</tool_call>`,
+  `<function=name>...</function>`, and fenced JSON tool-call blocks (at the terminal branch near
+  `ApiAgentRuntime.cs:693`, or in PolyPrompt if it belongs there) and execute them as real calls. Count recoveries
+  per model. Evidence:
+- [ ] **RS-7.3** Malformed-tool-call 500. In `IsRetryableInferenceStatus`/`WithInferenceRetryAsync`
+  (`ApiAgentRuntime.cs:456-460`), when the 500 body names a tool or JSON parse failure, do not resend the identical
+  request: add a corrective user turn with the valid tool names and a schema hint, and vary the seed or temperature
+  within the profile's bounds. Evidence:
+- [ ] **RS-7.4** Unknown tool name returns "unknown tool <name>; available: ..." instead of "disabled by the
+  endpoint's inference policy" (`ApiAgentRuntime.cs:727`). Evidence:
+- [ ] **RS-7.5** Repetition guard: N identical consecutive tool calls (setting, default 3) inject a corrective note;
+  2N end the run as a classified `TaskFailure` (feeds escalation). Evidence:
+- [ ] **RS-7.6** Reasoning hygiene: strip reasoning when only `</think>` is present, and strip reasoning from history
+  before it is sent back (`ToAssistantMessage()` near line 691), except where the provider requires reasoning replay
+  (keep the PolyPrompt 3.4.0 regression passing). Evidence:
+- [ ] **RS-7.7** Streaming on by default for OpenAI-compatible and Ollama endpoints (`InferenceOptions.Streaming`),
+  so progress heartbeats reach the stall detector. Evidence:
+- [ ] **RS-7.8** Context discovery. When `ContextLength` is null, discover it at endpoint validation and on first use
+  (PolyPrompt model info, Ollama `/api/ps`, vLLM `/v1/models` `max_model_len`), store it on the model profile as
+  "discovered", and let a configured value override it. Compaction is always on with a known window. Evidence:
+- [ ] **RS-7.9** Tool output limits scale to the window: read and process output caps default to a percentage of the
+  window (setting, default 12%) with paged reads, replacing the fixed 1 MB read and 100 KB process caps.
+  `ToolSafetyLimits` statics become settings on the runtime options. Evidence:
+- [ ] **RS-7.10** Compaction shrinks old assistant tool-call arguments (file bodies written by `write_file`) and
+  reasoning, not only tool results. Token estimation uses a tokenizer when the profile names one and about 3.2
+  characters per token for code otherwise. Evidence:
+- [ ] **RS-7.11** Extract `ApiAgentRuntime.RunLoopAsync` into a turn loop, terminal-handling policy, and context
+  policy classes with unit tests per class. Evidence:
+- [ ] **RS-7.12** Audit Mux, OpenCode, and Pi runtimes for the same failure modes (text tool calls, reasoning
+  leakage into the final message, error text reaching `RuntimeProviderErrorParser`). Fix or document each gap.
+  Evidence:
+- [ ] **RS-7.13** Harbor compatibility. The runtime changes run on Harbor in split mode. Add a Harbor capability flag
+  for each new runtime behavior; a 1.5.0 Admiral with a 1.4.0 Harbor falls back to 1.4.0 behavior and shows "Harbor
+  update recommended" in the Harbor and captain views. Update `docs/HARBOR_PROTOCOL.md`. Evidence:
+
+## Phase 8: Capability-aware routing and prompts
+
+Armada already measures models (probes, battery, profiles, scorecards). Almost none of it reaches routing or prompt
+rendering. This phase closes that loop.
+
+- [ ] **RS-8.1** Probes fill capabilities. After a passing tool-calling probe, `ModelProbeService` writes
+  `ToolsAvailable` and `McpAvailable`; served context from `/api/ps` or RS-7.8 is written too. Manual values still
+  win. The envelope's `requiredTools` then works without hand edits. Evidence:
+- [ ] **RS-8.2** Apply `ModelProfile.Rendering` (`Template`, `RepeatContractAtEnd`, `MaxFilesPerMission`), which is
+  stored today but never read (`ModelProfileAccessService.cs:134-140`). Evidence:
+- [ ] **RS-8.3** Prompt variant resolution order: voyage override, captain option, model profile rendering, then
+  automatic from served context (Compact below a threshold setting). `PromptVariantResolver.Resolve` consults
+  context tokens. Evidence:
+- [ ] **RS-8.4** Context as a hard routing filter: a captain whose served context cannot hold the estimated prompt
+  (instructions budget plus handoff plus contract) is not eligible, with a typed blocker. Evidence:
+- [ ] **RS-8.5** Tier from data. Effective tier = explicit captain tier, else the model profile's tier (set by hand or,
+  behind a setting, proposed from scorecard data once it has enough samples), else the name regex. Evidence:
+- [ ] **RS-8.6** Rank within a tier by per-persona outcomes from `StageOutcome` and `ModelScorecardService`
+  (Judge pass rate, no-op rate, tool-call validity, repair rate), with a minimum sample size and decay. Replaces the
+  current `tier, ActiveMissionCount, LastUpdateUtc` order (`CaptainRouting.cs:305`) only when data exists. Selection
+  telemetry records why. Evidence:
+- [ ] **RS-8.7** Judge strength rule (per pipeline or persona, default on for new pipelines and off for existing ones
+  to keep 1.4.0 behavior): the Judge's effective tier is at least the highest tier among the stages it reviews, and
+  a different `ModelFamily` is preferred (reuse `EvaluatorSelector`). `ExcludeReviewAuthorsFromJudge` compares model
+  identity, not captain id. When no captain satisfies the rule, the mission waits with a typed blocker or, if the
+  policy says so, proceeds and is flagged (G8). Evidence:
+- [ ] **RS-8.8** Per-profile timeouts: stall threshold, tool-wait hard limit, maximum runtime, and first-token time,
+  with defaults scaled by measured tokens per second from probes. Global settings stay as defaults. Evidence:
+- [ ] **RS-8.9** Endpoint concurrency key becomes (Harbor or Admiral, normalized URL, model) instead of the base URL
+  (`ConcurrencyCapacityPolicy.EndpointKey`), so `localhost` on two Harbors are two limits and `127.0.0.1` and
+  `localhost` are one. Evidence:
+- [ ] **RS-8.10** Default instructions file per runtime: map Codex to `AGENTS.md` if that is what it reads natively
+  (verify), and stop defaulting unknown runtimes to `CLAUDE.md` (`MissionPromptBuilder.cs:74-86`). Evidence:
+
+## Phase 9: Landing and the merge queue
+
+- [ ] **RS-9.1** Non-fast-forward push rejection is requeued from a fresh fetch a bounded number of times (setting,
+  default 3) before failing, instead of the hard-coded `Infra` at `MergeQueueService.cs:726`. Same for the lost
+  handoff case at `AdmiralService.cs:2243`. Detect it from the git exit status through a typed result, not text.
+  Evidence:
+- [ ] **RS-9.2** Merge three landing sweeps (`LandingReconciler`, `ManualLandingReconciler`,
+  `LandingIntegrityService`) into one reconciler with one scan per tick and explicit cases, including the RS-2.3
+  promotion. Evidence:
+- [ ] **RS-9.3** Fetch once per (vessel, target branch) group per pass instead of per entry. Evidence:
+- [ ] **RS-9.4** Optional batched landing (setting, default off in 1.5.0, confirmed by Joel 2026-11-25): merge N
+  entries, verify once, bisect on failure. Benchmarked against serial landing. Evidence:
+
+## Phase 10: Performance
+
+Most performance work lands in Phase 4. These are the remaining hot spots and the regression gate.
+
+- [ ] **RS-10.1** Orphan-dock reclaim (`AdmiralService.cs:2098-2129`): hoist the five status scans out of the
+  per-dock loop into one set of active dock ids. Evidence:
+- [ ] **RS-10.2** Time-bounded scans: the recovery coordinator and similar sweeps query with `updatedSince` on all
+  four providers instead of loading every Failed mission and filtering in memory. Add the indexes they need.
+  Evidence:
+- [ ] **RS-10.3** `CaptainEscalationSelector` and `ReviewAuthorCaptainIdsAsync` read profiles and parents in one
+  query, not one per captain or parent. Evidence:
+- [ ] **RS-10.4** Dispatch advisor loads its vessel context once per voyage creation and adds each new mission to it,
+  which also catches overlaps inside the same voyage (`BlackBoxDispatchAdvisor.cs:59`,
+  `MissionOverlapAnalyzer.LoadAsync`). The analyzer prefers declared `OwnedPathsJson` over files guessed from prose.
+  Evidence:
+- [ ] **RS-10.5** `BoundedTextBuffer.Trim` becomes a ring buffer (no full `ToString()` per line over the cap).
+  Evidence:
+- [ ] **RS-10.6** Benchmark gate: rerun RS-0.7, save under `benchmarks/baselines/1.5.0/`, and record G10 and G11.
+  Any regression against 1.4.0 on another benchmark is explained or fixed. Evidence:
+
+## Phase 11: Code health
+
+Done last among the backend phases because earlier phases already remove most of the duplication. These items finish
+the job and keep it from coming back.
+
+- [ ] **RS-11.1** Decompose `MissionService` (about 8,700 lines in 25 partial files sharing 15+ mutable dictionaries)
+  into classes with one responsibility each, following what Phases 3 to 6 created: `MissionTransitions`,
+  `AdmissionPipeline`, `MissionLauncher`, `StageCompletionHandler`, `HandoffService`, `ReworkService`,
+  `OutputRepairService`, `ArchitectFanOutService`. No partial shares mutable state with another. Same for the
+  orchestration parts of `AdmiralService` (3,272 lines). Evidence:
+- [ ] **RS-11.2** Style fixes: `var` and tuples in `MissionService.cs` (around line 548), `MissionService.Readiness.cs:11`,
+  and `AdmissionStuckMonitor.cs:57-66`; the mis-indented blocks at `MissionService.Handoff.cs:162-178`; inline
+  non-compiled regexes in `MissionService.ArchitectPlan.cs:317, 547, 577`. Evidence:
+- [ ] **RS-11.3** Rename `SlotManager` to describe what it manages (binary rebuild slots). Evidence:
+- [ ] **RS-11.4** Source-scan tests that keep the simplifications in place: no direct mission status writes (RS-3.6),
+  no reads of control markers from `Description`, no `ex.Message.Contains` in Core, no second dispatcher. Evidence:
+- [ ] **RS-11.5** Warning-free Release build on both frameworks after all changes. Evidence:
+
+## Phase 12: Product surfaces
+
+Every backend change above that a person can see or configure appears on every surface that shows that kind of data.
+Parity manifests (`src/Armada.Tui/parity.json`, `src/Armada.Mobile/parity.json`) are updated with each item.
+
+### Server and APIs
+
+- [ ] **RS-12.1** REST: new and changed endpoints and fields for recovery policy (RS-5.5), escalation ladder (RS-5.6),
+  judge strength rule (RS-8.7), per-profile timeouts (RS-8.8), discovered context (RS-7.8), mission attempt
+  history with failure kind, repairs, and escalations (RS-1.4), `Persona` and `Mode` on mission requests (RS-4.2),
+  reliability gate report (RS-1.5), and submitted stage results (RS-6.2). Request validation and authorization per
+  `AUTHENTICATION.md`, tenant scoping tested. Evidence:
+- [ ] **RS-12.2** MCP: matching tools and fields, plus the submit tools (RS-6.2). Mark which tools a captain may call
+  and which are operator tools. Evidence:
+- [ ] **RS-12.3** WebSocket: events for escalation, repair, and attempt changes; existing `mission.changed` payloads
+  carry the new fields; visibility rules from 1.4.0 apply. Evidence:
+- [ ] **RS-12.4** Settings: every new setting has validation in its setter, defaults documented, and appears in the
+  runtime settings API and dashboard Settings page. Evidence:
+- [ ] **RS-12.5** Telemetry: Prometheus metrics for RS-1.4, Grafana dashboard panels added under
+  `docker/armada/observability/grafana` (pipeline reliability: completion rate, failure kinds, repairs, escalations,
+  dispatch latency), per `TELEMETRY_REQUIREMENTS.md`. Evidence:
+
+### SDK and Postman
+
+- [ ] **RS-12.6** `Armada.Client` (.NET SDK): typed models and methods for every RS-12.1 change, XML docs, contract
+  tests against a live server (`Client.Contract.*` suites), loopback base URLs use `127.0.0.1`. Evidence:
+- [ ] **RS-12.7** Postman: `Armada.postman_collection.json` updated with folder- and request-level descriptions for
+  every new or changed request, variables for base URL and credentials, no em-dashes; the open-model simulation
+  (RS-1.1) documented in `postman/README.md`; regenerate `docs/api-surface-1.0.json` and pass the API contract
+  test. Evidence:
+
+### CLI and TUI
+
+- [ ] **RS-12.8** `armada` CLI (Armada.Helm): commands and flags for persona escalation ladders, model profile
+  recovery policy and timeouts, mission attempt history (`armada mission attempts <id>`), mission create `--persona`
+  and `--mode`, and the gate report (`armada battery report`). Help text and docs. Evidence:
+- [ ] **RS-12.9** TUI: mission detail shows attempts, failure kinds, repairs, and escalations; persona and pipeline
+  screens edit the ladder and judge rule; model profile screen shows recovery policy, timeouts, and discovered
+  context; blockers show the typed RS-4.6 reasons. `scripts/tui/generate-parity-manifest.py --check` passes.
+  Evidence:
+
+### Dashboard
+
+All dashboard work follows `DASHBOARD_STYLE_AND_USABILITY.md` and `FRONTEND_ARCHITECTURE.md`, is localized for every
+shipped locale per `I18N.md`, and is checked in light and dark themes at desktop and phone widths.
+
+- [ ] **RS-12.10** Mission detail: an attempts timeline (each attempt's captain, model, tier, failure kind, repair
+  kind, escalation, duration), the submitted structured result, and findings with severity. Evidence:
+- [ ] **RS-12.11** Persona and pipeline editors: escalation ladder editor (same interaction as Captain Priorities),
+  judge strength rule, and reference pipeline templates (RS-1.6) available as "create from template". Evidence:
+- [ ] **RS-12.12** Model profiles and endpoints: recovery policy, timeouts, rendering, discovered versus configured
+  context, probe-derived capabilities with their source, streaming toggle. Evidence:
+- [ ] **RS-12.13** A reliability view (under Captains or Insights, per the navigation model in
+  `docs/DASHBOARD_NAVIGATION.md`): per model and persona completion, failure kinds, repairs, escalations,
+  `Unclassified` rate, and the latest gate report. Backend filtering and sorting. Evidence:
+- [ ] **RS-12.14** Voyage and mission creation forms: persona and mode fields on every path; blockers on pending
+  missions show the typed reason and the action that clears it. Evidence:
+- [ ] **RS-12.15** Dashboard tests (Vitest) for every new view and editor; `npm run build` and `npm run test:run`
+  green; Playwright visual check (light, dark, phone, one non-English locale, no horizontal overflow, no console
+  errors) with screenshots saved. Evidence:
+
+### Mobile
+
+- [ ] **RS-12.16** Mobile app: mission detail attempts timeline and structured findings, blockers with typed reasons,
+  read-only recovery policy and escalation ladder on persona and model views, push notifications for escalation and
+  recovery-exhausted events (respecting existing notification categories). Localized and accessible. Evidence:
+- [ ] **RS-12.17** Mobile tests: `npm run typecheck`, `npm run lint`, `npm run test:ci`, `npm run test:android`,
+  route screens, parity manifest, and Maestro flows (`scripts/mobile/run-e2e.sh`) for the new screens. Evidence:
+
+### VS Code extension, Harbor, Proxy
+
+- [ ] **RS-12.18** VS Code extension (`src/Armada.VSCode`): mission views show attempts, failure kinds, escalations,
+  and blockers; dashboard pages in editor tabs pick up the new views. Unit and integration tests. Update its
+  `CHANGELOG.md` and `README.md`. Evidence:
+- [ ] **RS-12.19** Harbor app: shows Harbor capability flags (RS-7.13) and an update prompt when the Admiral needs a
+  newer Harbor; discovered context for local endpoints. Evidence:
+- [ ] **RS-12.20** Proxy: confirm every new REST, WebSocket, and MCP route passes through the tunnel and portal
+  unchanged (route allow-lists, payload size limits). Update `docs/PROXY_API.md` if anything changes. Evidence:
+
+## Phase 13: Documentation
+
+Documents written for people follow `WRITING_DOCUMENTS.md`: prose that explains, not only lists; no em-dashes; a
+humanizer pass and a manual check against the Signs of AI writing page before an item is complete.
+
+- [ ] **RS-13.1** New `docs/OPEN_MODELS.md`: how to run Qwen3.8 (and the second family) in a pipeline with Opus and
+  GPT-6.1. Endpoint setup for Ollama, vLLM, and LM Studio; served context; streaming; the reference pipelines; what
+  the escalation ladder and judge rule do; what the gate measured for 1.5.0 with the real numbers; known limits.
+  Evidence:
+- [ ] **RS-13.2** `docs/MODEL_GUIDANCE.md`: replace the "tool-calling reliability is the model's responsibility"
+  stance with what Armada now absorbs (RS-7.2 to RS-7.6) and what still belongs to the model. Evidence:
+- [ ] **RS-13.3** `docs/MODEL_HETEROGENEITY.md`: update "Where Armada stands today", the failure taxonomy mapping
+  (RS-5.1), escalation with memory (RS-5.7), rendering (RS-8.2, RS-8.3), and the scorecard feeding routing (RS-8.6).
+  Evidence:
+- [ ] **RS-13.4** `docs/CAPTAIN_ROUTING.md`, `docs/PERSONAS.md`, `docs/PERSONAS_GUIDE.md`, `docs/PIPELINES.md`:
+  escalation ladders, judge strength rule, capability filters, ranking, the admission gate order, typed blockers.
+  Evidence:
+- [ ] **RS-13.5** `docs/REST_API.md`, `docs/MCP_API.md` (including the submit tools and their schemas),
+  `docs/WEBSOCKET_API.md`, `docs/PROXY_API.md` if changed, `docs/HARBOR_PROTOCOL.md`. Evidence:
+- [ ] **RS-13.6** `docs/OPERATIONS.md` (every new setting with default, minimum, maximum, and effect),
+  `docs/UPGRADING.md` (migration 131 and its backfill, behavior changes, Harbor version advice, the legacy plan
+  format deprecation), `DEPRECATION.md`. Evidence:
+- [ ] **RS-13.7** `docs/MERGING.md` (requeue on non-fast-forward, single reconciler, batching), `docs/BLACKBOX.md`
+  if rule hints change, `docs/CONCURRENCY_TESTING.md` and `docs/PERFORMANCE.md` (single dispatcher, snapshot,
+  new benchmarks). Evidence:
+- [ ] **RS-13.8** `docs/TESTING.md`: the open-model simulator, crash-point harness, seeded-defect tasks, gate report,
+  and how to run each. `docs/RELEASING.md`: add the reliability gate as a release step; fix its statement that the
+  dashboard `dist/` is committed (it is git-ignored, per `CLAUDE.md`). Evidence:
+- [ ] **RS-13.9** `docs/TUI.md`, `docs/MOBILE.md` (new screens; store submission section rewritten from what
+  Phase 16 actually did, without private ids), `docs/DASHBOARD_NAVIGATION.md`, `src/Armada.VSCode/README.md`,
+  `docs/INSTRUCTIONS_FOR_*.md` and `docs/*_AS_ORCHESTRATOR.md` where the submit tools or contracts change what an
+  orchestrator sees. Evidence:
+- [ ] **RS-13.10** `README.md`, `DOCKERHUB_README.md`, `GETTING_STARTED.md`, `FAST_TRACK_SETUP.md`: mention mixed
+  open and frontier pipelines and link `docs/OPEN_MODELS.md`. Evidence:
+- [ ] **RS-13.11** `CHANGELOG.md`: every user-visible change, setting, migration, deprecation, and behavior change
+  under the 1.5.0 entries, with the before and after gate numbers. Evidence:
+- [ ] **RS-13.12** Update `CLAUDE.md` and `AGENTS.md` architecture notes where this plan changed the architecture they
+  describe (new services replacing `MissionService` partials, single dispatcher, submit tools). Joel approved
+  editing `AGENTS.md` on 2026-11-25; keep the two files in sync in the same commit. Evidence:
+
+## Phase 14: Verification
+
+- [ ] **RS-14.1** Full local run: warning-free Release build; `Test.Automated` net8.0 and net10.0; xUnit and NUnit
+  adapters; dashboard; mobile; TUI parity; VS Code extension. Record counts. Evidence:
+- [ ] **RS-14.2** `full.yml`, `security.yml`, `db-parity.yml` (`RESULT: PARITY OK`), and `install-verify.yml` green on
+  the release candidate commit. Evidence:
+- [ ] **RS-14.3** Upgrade test from the v1.4.0 baseline on all four providers (`scripts/common/run-upgrade-test.sh
+  --from-ref <v1.4.0 commit> --providers all`), with seeded missions in every text-marker state so the RS-3.1
+  backfill is exercised. Evidence:
+- [ ] **RS-14.4** Crash-point matrix (RS-1.3): every named point, every provider, recorded. Evidence:
+- [ ] **RS-14.5** Simulated user testing per `SIMULATED_USER_TESTING.md` on an isolated `armada-usertest` stack,
+  personas including an operator setting up Qwen3.8 for the first time from `docs/OPEN_MODELS.md` alone. S1 and S2
+  findings fixed; lower ones fixed or added to `docs/BACKLOG.md` with a reason. Evidence:
+- [ ] **RS-14.6** Acceptance gate (G1 to G12) on the release candidate with the reference configuration from RS-0.4,
+  all four reference pipelines, every battery pack, 10 runs each, plus DeepSeek 4.1, GLM, and inkling-2-mini each
+  substituted for Qwen3.8 on P-A and P-D. Save the RS-1.5 report under `benchmarks/results/1.5.0/` with model names
+  but no hosts, tokens, or keys. Evidence:
+- [ ] **RS-14.7** Two weeks of real use: run the maintainer's own repositories through at least P-A and P-D. Any
+  intervention gets a cause and an item. Evidence:
+- [ ] **RS-14.8** Final diff review for requirements compliance, tenancy leaks, unsafe fallbacks, em-dashes
+  (`grep -rnP '\x{2014}'` over the changed files), private data, documentation drift, and unintended edits. Evidence:
+
+## Phase 15: Release (server, installers, images, extension)
+
+Follow `docs/RELEASING.md` and the runbook section 16.4. Stop at each approval point.
+
+- [-] **RS-15.1** [DECISION] Release shape. Answer (2026-11-25): 1.5.0 gets a `v1.5.0` tag and a GitHub Release with
+  installers; signing, NuGet, and Open VSX stay off. Still required: Joel's go-ahead on the specific candidate commit
+  once RS-14 is green. Answer:
+- [ ] **RS-15.2** Move `## Unreleased` entries under `## v1.5.0 (<date>)` in `CHANGELOG.md`. Evidence:
+- [ ] **RS-15.3** Merge `feature/v1.5.0` to `main` when Joel asks (pull request, CI green). Evidence:
+- [ ] **RS-15.4** Docker images: `./build-all.sh v1.5.0`; Docker Hub shows `v1.5.0` and `latest` for server,
+  dashboard, and proxy, amd64 and arm64. Evidence:
+- [ ] **RS-15.5** Tag `v1.5.0` and push the tag (after the RS-15.1 go-ahead), watch `release.yml`, verify the
+  installers for Windows, macOS, and Linux and `SHA256SUMS` (runbook 16.4 steps 5 and 6), and write the release page
+  per `INSTALLERS.md` "Writing the release page", including the unsigned-build notices. Evidence:
+- [ ] **RS-15.6** VS Code extension: `./build-vscode.sh`, publish by hand (runbook 16.5), confirm with
+  `npx @vscode/vsce show LatticeAI.armada-ai`. Evidence:
+- [ ] **RS-15.7** Proxy: deploy only if Phase 12 changed the proxy (runbook 16.1 and section 17). Evidence:
+- [ ] **RS-15.8** Website `armadago.ai`: mention mixed open and frontier pipelines and link the docs (runbook 16.2).
+  Evidence:
+- [ ] **RS-15.9** Post-release checks in the runbook section 17; add a line to the runbook's document history
+  (section 21). Signing, NuGet, and Open VSX stay out of scope unless Joel says otherwise. Evidence:
+
+## Phase 16: Mobile rebuild and store submission
+
+The app has never been in a store; every one-time step in the runbook section 12.12 and `INSTALLERS.md` ("Mobile
+apps: Expo and EAS", "Apple App Store", "Google Play Store") is still open. Steps tagged [HUMAN] need Joel at a
+console or a two-factor prompt. Record build and submission URLs in `src/Armada.Mobile/EXPO.md` and private ids in
+`src/Armada.Mobile/store-private.local.md` (git-ignored), never in this file.
+
+### Prepare (agent)
+
+- [ ] **RS-16.1** Bundle ID and Android package become `ai.latticetech.armada` in `app.config.ts` (permanent once a
+  store record exists). Add the `*_LOCAL_TEAM_ID` switch used by Mux Cloud so personal-team device builds append
+  `.dev` and drop the push and associated-domains entitlements, instead of editing the real ID. Evidence:
+- [ ] **RS-16.2** `eas.json` to the family standard: `development` (plus `development-device`), `preview` as a store
+  build (`"distribution": "store"`), `production`; `appVersionSource: remote` with `autoIncrement: true` on store
+  profiles; `APP_VARIANT` per profile and read by the app config; Android submit `track: internal` and
+  `releaseStatus: draft` for both profiles; iOS submit `appleTeamId` and `ascAppId` filled after RS-16.6 (no
+  `appleId`). Set `owner` and the EAS project id in the app config with environment overrides. Evidence:
+- [ ] **RS-16.3** `.gitignore` covers `secrets/`, `*.p8`, `*.key`, `*.local.md`, `google-services.json` where
+  required; nothing with a password is committed. Evidence:
+- [ ] **RS-16.4** Version 1.5.0 in `app.config.ts`; `extra.releaseVersion` set; build numbers come from EAS remote
+  versioning. Evidence:
+- [ ] **RS-16.5** Store readiness checks from `INSTALLERS.md` "What review needs from every app":
+  - Real content on first launch: an always-on demo Admiral for reviewers with representative fleets, voyages, and
+    missions (decide where it runs in RS-16.9), and a reviewer account whose credentials go only in
+    `store-private.local.md` and the consoles.
+  - Account deletion: confirm whether the app can create accounts. If it can, add in-app deletion (Apple 5.1.1(v))
+    and a public web deletion URL; if it only signs in to an Admiral the user runs, document that for review.
+  - No outside purchase paths; copy My Morning News's policy test.
+  - Privacy answers match the binary; no tracking; `usesNonExemptEncryption: false` stays.
+  - Android: no `AD_ID` permission in the merged manifest; current target API level.
+  Evidence:
+- [ ] **RS-16.6** Store assets in `src/Armada.Mobile/store/`: iPhone 6.9" (1320x2868) and iPad 13" (2064x2752)
+  screenshots of real views including the new reliability screens, Play 512x512 icon, 1024x500 feature graphic,
+  phone screenshots; store copy with no em-dashes; support contact per `INSTALLERS.md`. Evidence:
+
+### One-time console setup ([HUMAN] unless noted)
+
+- [ ] **RS-16.7** [HUMAN] `npx eas-cli login` and `npx eas-cli init` in `src/Armada.Mobile` under the family Expo
+  account (runbook 12.2); record the project id in the app config (agent). Evidence:
+- [ ] **RS-16.8** [HUMAN] Apple: register the App ID `ai.latticetech.armada` under the family team (runbook 12.3),
+  then create the App Store Connect record (store name availability checked first, fallback name ready, SKU
+  `armada-ios`). Agent fills `ascAppId` and `appleTeamId` in `eas.json` (RS-16.2). Evidence:
+- [x] **RS-16.9** [DECISION] Where the reviewer demo Admiral runs. Answer (2026-11-25): next to the proxy on the
+  existing EC2 proxy host, reached through the proxy.
+- [ ] **RS-16.9a** Demo Admiral build-out (agent, with [HUMAN] for host access if needed): a compose file under
+  `docker/demo/` (healthcheck, `depends_on`, `.yaml`, `update` helper per `REPOSITORY_REQUIREMENTS.md`) running
+  `armada-server` 1.5.0 with remote control pointed at the proxy; a seeding script built on
+  `src/Armada.PerfSeed` or the REST API that creates representative fleets, vessels, captains, voyages, and missions
+  in every status; a scheduled reset that restores the seed nightly; captains that cannot execute real work or reach
+  real repositories; resource limits so it cannot starve the proxy. Deploy per the runbook section 11 procedure;
+  reviewer credentials only in `store-private.local.md` and the store consoles. Verify the mobile app connects
+  through the proxy and shows real content on first launch. Update the runbook sections 11 and 21. Evidence:
+- [ ] **RS-16.10** [HUMAN] Firebase project with an Android app for `ai.latticetech.armada`; FCM V1 key uploaded with
+  `npx eas-cli credentials`; agent adds `googleServicesFile` handling without committing the file. APNs key attached
+  for iOS push. Evidence:
+- [ ] **RS-16.11** [HUMAN] Google Play Console: create the app under the Lattice AI organization account, package
+  `ai.latticetech.armada`. Evidence:
+
+### Build and submit
+
+- [ ] **RS-16.12** Pre-build gate: RS-12.17 green; `expo export` succeeds; Maestro flows pass on an iOS simulator and
+  an Android emulator. Evidence:
+- [ ] **RS-16.13** [HUMAN] First iOS build interactively: `npx eas-cli build -p ios --profile production` (Apple
+  sign-in and two-factor; accept the distribution certificate, provisioning profile, and push setup). Evidence:
+- [ ] **RS-16.14** [HUMAN] First iOS submission interactively:
+  `npx eas-cli submit -p ios --profile production --latest`, letting EAS generate the App Store Connect API key
+  (ADMIN role). Later submissions are non-interactive. Evidence:
+- [ ] **RS-16.15** [HUMAN] TestFlight: after processing, add internal testers and test on real devices: sign-in
+  (direct and through the proxy), Face ID, push, the new reliability screens. Evidence:
+- [ ] **RS-16.16** Android build: `npx eas-cli build --profile preview --platform android` (agent can run it once
+  EAS is set up). Evidence:
+- [ ] **RS-16.17** [HUMAN] Upload that first `.aab` by hand to the Play internal testing track (Google refuses API
+  uploads before one manual upload); create the Google Cloud service account with release permissions and hand
+  its key to EAS. Evidence:
+- [ ] **RS-16.18** [HUMAN] Register Play App Signing SHA-1 and SHA-256 wherever the app's signature is checked
+  (Firebase at least). Evidence:
+- [ ] **RS-16.19** Later builds and submissions non-interactively (agent):
+  `npx eas-cli build -p all --profile production --non-interactive`, then
+  `npx eas-cli submit -p ios --profile production --latest --non-interactive` and the Android equivalent to the
+  internal track. Record URLs in `EXPO.md`. Evidence:
+- [ ] **RS-16.20** [HUMAN] Internal testing on Android devices, same checklist as RS-16.15. Evidence:
+
+### Listings and review
+
+- [ ] **RS-16.21** [HUMAN] App Store listing: copy, keywords, category, privacy answers, screenshots, reviewer
+  account and notes (pointing at the demo Admiral), then submit `production` for review. The agent can prepare the
+  listing through the App Store Connect API where `INSTALLERS.md` describes it. Evidence:
+- [ ] **RS-16.22** [HUMAN] Play listing: store listing, data safety form answered from the merged manifest of the
+  production build, content rating, target audience, reviewer access; promote from internal to production with
+  `releaseStatus: draft` and release by hand. Evidence:
+- [ ] **RS-16.23** Respond to review feedback; record what each store said in `INSTALLERS.md` (the family document
+  asks for this after the first submission) and in the runbook. Evidence:
+- [ ] **RS-16.24** Update the runbook (outside the repository) sections 1, 12, 16.6, and 21 with the real state:
+  app records, tracks, build numbers, dates. Update `docs/MOBILE.md` "Building and store submission" with the
+  procedure as it actually ran, without private ids. Evidence:
+- [x] **RS-16.25** [DECISION] Over-the-air updates. Answer (2026-11-25): not in 1.5.0; a later release. Add an entry
+  to `docs/BACKLOG.md` (EAS Update with fingerprint runtime policy and code signing) as part of RS-13.11.
+
+---
+
+## Traceability: review findings to items
+
+Every finding from the 2026-11-25 review maps to at least one item. If an item is dropped, the finding it covered
+must move to another item or be recorded in `docs/BACKLOG.md` with a reason.
+
+| Review finding | Items |
+|---|---|
+| Two dispatch loops; synchronous head-of-queue dispatch; 10 s latency | RS-4.5, G10 |
+| Two voyage dispatch bodies; four overloads; REST/MCP/WebSocket drift; REST lacks Persona and Mode | RS-4.1, RS-4.2 |
+| Voyage, fan-out, and handoff creation not atomic | RS-4.3, RS-2.8 |
+| Per-tick database load; capacity pre-check disagrees; three capacity calculations; global lock | RS-4.6 to RS-4.9, G11 |
+| State machine advisory; 65 direct writes | RS-3.5, RS-3.6, RS-11.4 |
+| Control state in description text (escalation, fan-out, rework, repair markers, title lookup) | RS-3.1 to RS-3.4 |
+| In-memory state lost on restart | RS-3.7 |
+| Crash recovery: Assigned burns retries; launch without PID | RS-2.7, RS-4.10 |
+| Seven failure taxonomies; five mapping sites; four recovery loops; three landing sweeps | RS-5.1, RS-5.10, RS-9.2 |
+| Unrecognized errors become Crash and get no recovery | RS-5.2, RS-5.3, RS-2.10, G6 |
+| Local 429 quarantines the captain | RS-5.4 |
+| Escalation one hop, voyage only, not stronger, tracked in prose | RS-5.6, RS-3.2, G12 |
+| Rescues same tier, same captain, no output tail | RS-5.8, RS-5.7 |
+| Global retry budgets; hard-coded rework rounds | RS-5.5 |
+| RecoveryExhausted fires on the wrong event; incidents closed without verification | RS-5.9 |
+| Exception message matching | RS-5.11, RS-11.4 |
+| Stranded mission after landing; lease not renewed; non-fast-forward as Infra; serial queue | RS-2.3, RS-2.5, RS-9.1, RS-9.3, RS-9.4 |
+| Rescue incidents not crash-consistent | RS-2.6 |
+| Full stage rerun for format errors | RS-6.4, G4, G5 |
+| No structured output or tool submission | RS-6.2, RS-6.3 |
+| Contract text duplicated and inconsistent; Architect prompt gives two formats | RS-6.1 |
+| Plan parser brittle (fences, number strings, case, error detail) | RS-6.5 |
+| Verdict recovery needs "ARMADA"; SPEC_CONFLICT not recovered; truncated fences; marker strictness mismatch | RS-6.6, RS-2.12 |
+| Findings scraped from headings; severity bug | RS-6.7, RS-2.1 |
+| Shallow PASS gate | RS-6.8, G7 |
+| Six copies of handoff state; three artifact creation paths; length-based dedup | RS-6.9, RS-3.4 |
+| Judge sees only the previous stage | RS-6.10 |
+| Prompt assembly sniffs content; no whole-file budget; dead caps | RS-6.11 |
+| Legacy `[ARMADA:MISSION]` regex path | RS-6.12 |
+| Text tool calls never recovered; Ollama 500 retried identically; misleading unknown-tool error; no repetition guard | RS-7.2 to RS-7.5 |
+| Reasoning leakage | RS-7.6 |
+| Streaming off; global timeouts | RS-7.7, RS-8.8 |
+| Context not discovered; fixed tool caps; compaction keeps assistant bodies; chars/4 | RS-7.8 to RS-7.10 |
+| `RunLoopAsync` too large; mutable static limits | RS-7.11, RS-7.9 |
+| Profiles do not drive prompts or routing; probes do not fill capabilities; tier by regex | RS-8.1 to RS-8.6, RS-2.2 |
+| No strong-judge rule; author exclusion by captain id | RS-8.7, G8 |
+| Endpoint concurrency key too coarse | RS-8.9 |
+| Claude-specific instructions file default | RS-8.10 |
+| Planning loses objective | RS-2.4 |
+| Ownership and tenancy on REST voyages | RS-2.9 |
+| Hierarchy rules in four places; ownership overlap only for Architect | RS-4.4 |
+| Dispatch advisor reloads per mission; ignores declared ownership | RS-10.4 |
+| Orphan-dock O(docks x missions); unbounded scans; per-captain profile reads | RS-10.1 to RS-10.3 |
+| `BoundedTextBuffer` O(n^2) | RS-10.5 |
+| `MissionService` god class; style violations; misleading `SlotManager` name; dead code | RS-11.1 to RS-11.3, RS-2.2 |
+
+## Decisions log
+
+Record each [DECISION] answer here as well as inline, with the date.
+
+| Item | Question | Answer | Date |
+|---|---|---|---|
+| RS-0.2 | Release version for this work | 1.5.0, branch `feature/v1.5.0` | 2026-11-25 |
+| RS-0.3 | Gate thresholds | G1 at least 99%; G2 to G12 as drafted | 2026-11-25 |
+| RS-0.4 | Open model reference configuration | Qwen3.8 27B on ApiEndpoint, Ollama `/api/chat` through Conductor; also DeepSeek 4.1, GLM, inkling-2-mini; Ollama Cloud fallback; details in the local file only | 2026-11-25 |
+| RS-1.6 | Frontier runtimes | Opus on Claude Code, GPT-6.1 on Codex | 2026-11-25 |
+| RS-9.4 | Batched landing default | Off | 2026-11-25 |
+| RS-13.12 | May the work edit `AGENTS.md` | Yes, in sync with `CLAUDE.md` | 2026-11-25 |
+| RS-15.1 | Release shape | Tag `v1.5.0` and a GitHub Release; candidate commit go-ahead still pending | 2026-11-25 |
+| RS-16.9 | Reviewer demo Admiral | Next to the proxy on the EC2 proxy host | 2026-11-25 |
+| RS-16.25 | Over-the-air updates | Later release | 2026-11-25 |
+
+## Validation log
+
+Append entries newest last: date, item ids, exact command, result counts, log path. Record failures and their fixes
+too; a validation entry is not complete until the command passes.
+
+| Date | Items | Command | Result | Log |
+|---|---|---|---|---|
+| | | | | |

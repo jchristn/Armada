@@ -1,0 +1,22 @@
+{
+  "_comment": "Copy to gate-endpoints.local.json (git-ignored) and fill in real values. The acceptance gate harness (RELIABILITY_SIMPLICITY_PLAN.md RS-1.5) reads the local file.",
+  "conductor": {
+    "baseUrl": "http://<conductor-host>:<port>/v1.0/api/",
+    "bearerToken": "<conductor bearer token>",
+    "apiFormat": "ollama",
+    "chatPath": "api/chat",
+    "models": {
+      "qwen3.8": "<virtual model path segment>",
+      "deepseek-4.1": "<virtual model path segment>",
+      "glm": "<virtual model path segment>",
+      "inkling-2-mini": "<virtual model path segment>"
+    }
+  },
+  "ollamaDirect": {
+    "baseUrl": "http://<ollama-host>:11434/"
+  },
+  "ollamaCloud": {
+    "baseUrl": "https://ollama.com/",
+    "apiKey": "<ollama cloud api key>"
+  }
+}

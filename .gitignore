@@ -38,3 +38,7 @@ src/Armada.VSCode/*.vsix
 docs/usage-selection/screenshots/
 docs/concurrency/*.png
 docs/captain-usage-plan/mockups/*.png
+
+# Local-only configuration and private notes (never committed)
+*.local.json
+*.local.md
