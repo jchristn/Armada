@@ -45,6 +45,7 @@ namespace Test.Shared.Suites.E2E
                 displayName: "The pi gate's prompt appears in Approvals and the Ask thread; allow runs the command, deny blocks it with the approver's message",
                 executeAsync: (CancellationToken ct) => RunAsync(),
                 tags: new List<string> { TestTags.EndToEnd },
+                skip: skip != null,
                 skipReason: skip));
 
             return new TestSuiteDescriptor(SuiteId, "pi permission gate (E2E)", cases);

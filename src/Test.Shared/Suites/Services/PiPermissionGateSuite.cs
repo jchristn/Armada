@@ -191,6 +191,7 @@ namespace Test.Shared.Suites.Services
                 displayName: displayName,
                 executeAsync: (CancellationToken ct) => body(),
                 tags: new List<string> { tag },
+                skip: skipReason != null,
                 skipReason: skipReason);
         }
 

@@ -111,6 +111,12 @@ dotnet run --project src/Test.Automated --framework net10.0 -- --suites Database
 
 The xUnit and NUnit adapters take no arguments; set the `ARMADA_TEST_*` environment variables instead.
 
+The real pi smoke cases (`Runtimes.PiSmoke`, "pi Runtime Smoke (real pi)") call a model provider and spend its tokens,
+so they are skipped unless `ARMADA_TEST_REAL_PI=1` is set. When it is set they also need the `pi` CLI on `PATH`, a
+working login for `ARMADA_TEST_PI_PROVIDER` (default `anthropic`), and, for the bad-key case, `ARMADA_TEST_PI_MODEL`.
+An expired provider login fails these cases rather than skipping them, because `pi auth check --no-refresh` cannot
+see an expired refresh token; run `pi` once interactively to sign in again.
+
 ```bash
 # Default: SQLite, no connection arguments needed
 dotnet run --project src/Test.Automated --framework net10.0

@@ -449,7 +449,7 @@ namespace Test.Shared.Suites.Runtimes
             try { Directory.Delete(dir, true); } catch { }
         }
 
-        private static TestCaseDescriptor CaseAsync(string caseId, string displayName, string tag, Func<Task> body, string skipReason = null)
+        private static TestCaseDescriptor CaseAsync(string caseId, string displayName, string tag, Func<Task> body, string? skipReason = null)
         {
             return new TestCaseDescriptor(
                 suiteId: _SuiteId,
@@ -457,6 +457,7 @@ namespace Test.Shared.Suites.Runtimes
                 displayName: displayName,
                 executeAsync: (CancellationToken ct) => body(),
                 tags: new List<string> { tag },
+                skip: skipReason != null,
                 skipReason: skipReason);
         }
 

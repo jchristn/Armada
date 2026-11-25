@@ -70,7 +70,10 @@ namespace Test.Shared.Suites.Client
                     using DatabaseDriver db = await UsageTestData.OpenAsync(fx).ConfigureAwait(false);
                     string account = "sdk-passive-" + ClientContract.Suffix();
                     Captain captain = await db.Captains.CreateAsync(new Captain { TenantId = Armada.Core.Constants.SystemTenantId, Name = account, Runtime = Armada.Core.Enums.AgentRuntimeEnum.ApiEndpoint }).ConfigureAwait(false);
-                    DateTime observed = DateTime.UtcNow.AddMinutes(-20);
+                    // Whole seconds: providers and the JSON round trip keep different sub-second precision, and this case is
+                    // about the observation time being preserved, not about tick-level storage.
+                    DateTime now = DateTime.UtcNow.AddMinutes(-20);
+                    DateTime observed = new DateTime(now.Year, now.Month, now.Day, now.Hour, now.Minute, now.Second, DateTimeKind.Utc);
                     UsageSnapshot snapshot = await db.UsageSnapshots.CreateAsync(new UsageSnapshot { TenantId = captain.TenantId!, HostId = "host-passive", Runtime = captain.Runtime, AccountKey = account, CapturedUtc = observed, Status = Armada.Core.Enums.UsageSnapshotStatusEnum.Ok, WindowsJson = UsageWindowsJson.Serialize(new List<UsageWindow> { new UsageWindow { Name = "requests", UsedPercent = 25 } }) }, new List<string> { captain.Id }).ConfigureAwait(false);
                     await db.UsageSnapshots.UpsertLatestStateAsync(new UsageLatestState { TenantId = captain.TenantId!, HostId = snapshot.HostId, Runtime = captain.Runtime, AccountKey = account, LastGoodSnapshotId = snapshot.Id, LastGoodCapturedUtc = observed, LastGoodWindowsJson = snapshot.WindowsJson }).ConfigureAwait(false);
                     await db.UsageMemberships.CreateAsync(new UsageAccountMembership { TenantId = captain.TenantId!, CaptainId = captain.Id, HostId = snapshot.HostId, Runtime = captain.Runtime, AccountKey = account, EffectiveFromUtc = observed }).ConfigureAwait(false);
