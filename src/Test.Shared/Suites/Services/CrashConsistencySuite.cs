@@ -2,6 +2,7 @@ namespace Test.Shared.Suites.Services
 {
     using System;
     using System.Collections.Generic;
+    using System.IO;
     using System.Linq;
     using System.Threading;
     using System.Threading.Tasks;
@@ -77,6 +78,9 @@ namespace Test.Shared.Suites.Services
 
             cases.Add(Case("voyage_crash_mid_build_is_completed_or_failed", "Crash while a voyage's missions are being created: after restart the voyage is whole or failed, never half-built and open",
                 "Building the voyage and its missions atomically is RS-4.3.", VoyageCrashAsync));
+
+            cases.Add(Case("handoff_crash_between_dependents_recovers", "Crash after a stage handoff prepared one of two dependents: restart recovery prepares the other on the same branch",
+                null, HandoffCrashAsync));
 
             return new TestSuiteDescriptor(suiteId: SuiteId, displayName: "Crash consistency", cases: cases);
         }
@@ -180,6 +184,61 @@ namespace Test.Shared.Suites.Services
             bool failed = voyages[0].Status == VoyageStatusEnum.Failed || voyages[0].Status == VoyageStatusEnum.Cancelled;
             AssertTrue(whole || (failed && missions.All(m => m.Status != MissionStatusEnum.Pending && m.Status != MissionStatusEnum.Assigned && m.Status != MissionStatusEnum.InProgress)),
                 "voyage is whole or failed with no live work; it has " + missions.Count + " of " + work.Count + " missions and status " + voyages[0].Status);
+        }
+
+        private static async Task HandoffCrashAsync()
+        {
+            using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+            DatabaseDriver db = testDb.Driver;
+            StubGitService git = new StubGitService();
+            git.HeadCommitResult = "6666666666666666666666666666666666666666";
+            ArmadaSettings settings = new ArmadaSettings
+            {
+                DocksDirectory = TestTemp.NewDirectory("crash_handoff_docks"),
+                ReposDirectory = TestTemp.NewDirectory("crash_handoff_repos"),
+                LogDirectory = TestTemp.NewDirectory("crash_handoff_logs")
+            };
+            MissionService before = CreateMissionService(db, settings, git);
+            before.OnGetMissionOutput = _ => "Implemented the change and committed it.";
+
+            Vessel vessel = await db.Vessels.CreateAsync(new Vessel("crash-handoff-vessel", "https://github.com/test/repo.git") { DefaultBranch = "main" }).ConfigureAwait(false);
+            Captain captain = await CaptainAssignmentFixture.CreateAsync(db, new Captain("crash-handoff") { State = CaptainStateEnum.Working }).ConfigureAwait(false);
+            Voyage voyage = await db.Voyages.CreateAsync(new Voyage("crash handoff") { Status = VoyageStatusEnum.InProgress }).ConfigureAwait(false);
+            Mission worker = await db.Missions.CreateAsync(new Mission("[Worker] Task", "Do the task")
+            {
+                VesselId = vessel.Id, VoyageId = voyage.Id, Persona = "Worker", Status = MissionStatusEnum.InProgress,
+                CaptainId = captain.Id, BranchName = "armada/crash/worker"
+            }).ConfigureAwait(false);
+            Dock dock = new Dock(vessel.Id) { CaptainId = captain.Id, BranchName = worker.BranchName, Active = true };
+            dock.WorktreePath = Path.Combine(settings.DocksDirectory, vessel.Name, worker.Id);
+            Directory.CreateDirectory(dock.WorktreePath);
+            dock = await db.Docks.CreateAsync(dock).ConfigureAwait(false);
+            worker.DockId = dock.Id;
+            await db.Missions.UpdateAsync(worker).ConfigureAwait(false);
+            captain.Assignment = worker;
+            await CaptainAssignmentFixture.UpdateAsync(db, captain).ConfigureAwait(false);
+            Mission testEngineer = await db.Missions.CreateAsync(new Mission("[TestEngineer] Test", "Test it") { VesselId = vessel.Id, VoyageId = voyage.Id, Persona = "TestEngineer", DependsOnMissionId = worker.Id }).ConfigureAwait(false);
+            Mission judge = await db.Missions.CreateAsync(new Mission("[Judge] Review", "Review it") { VesselId = vessel.Id, VoyageId = voyage.Id, Persona = "Judge", DependsOnMissionId = worker.Id }).ConfigureAwait(false);
+
+            CrashRunOutcomeEnum outcome = await CrashRun.RunAsync(CrashPointNames.HandoffDependentUpdated, () => before.HandleCompletionAsync(captain, worker.Id)).ConfigureAwait(false);
+            AssertEqual(CrashRunOutcomeEnum.Crashed, outcome, "the operation reached the crash point");
+
+            MissionService after = CreateMissionService(db, settings, git);
+            await after.RecoverDanglingHandoffsAsync().ConfigureAwait(false);
+
+            foreach (Mission dependent in new[] { testEngineer, judge })
+            {
+                Mission? current = await db.Missions.ReadAsync(dependent.Id).ConfigureAwait(false);
+                AssertEqual(worker.BranchName, current!.BranchName, dependent.Persona + " is prepared on the worker's branch after restart");
+            }
+        }
+
+        private static MissionService CreateMissionService(DatabaseDriver db, ArmadaSettings settings, StubGitService git)
+        {
+            LoggingModule logging = CreateLogging();
+            IDockService docks = new DockService(logging, db, settings, git);
+            CaptainService captains = new CaptainService(logging, db, settings, git, docks);
+            return new MissionService(logging, db, settings, docks, captains, git: git);
         }
 
         private static AdmiralService CreateAdmiral(DatabaseDriver db)
