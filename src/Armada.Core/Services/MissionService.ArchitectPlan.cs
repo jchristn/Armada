@@ -102,10 +102,7 @@ namespace Armada.Core.Services
 
             for (int i = 0; i < parsed.Count; i++)
             {
-                string workerTitle = parsed[i].Title + " [Worker]";
-                Mission? workerRoot = voyageMissions.FirstOrDefault(m =>
-                    PersonaCatalog.Matches(m.Persona, PersonaCatalog.Worker) &&
-                    String.Equals(m.Title, workerTitle, StringComparison.OrdinalIgnoreCase));
+                Mission? workerRoot = FindArchitectSlice(voyageMissions, architectMission.Id, i);
                 if (workerRoot == null) continue;
 
                 Mission terminalStage = FindTerminalPipelineStage(voyageMissions, workerRoot);

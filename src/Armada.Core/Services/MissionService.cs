@@ -108,9 +108,6 @@ namespace Armada.Core.Services
             new System.Collections.Concurrent.ConcurrentDictionary<string, string>(StringComparer.Ordinal);
         private readonly System.Collections.Concurrent.ConcurrentDictionary<string, byte> _RefusedHandoffWarnings =
             new System.Collections.Concurrent.ConcurrentDictionary<string, byte>(StringComparer.Ordinal);
-        private const string ArchitectHandoffMarker = "<!-- ARMADA:ARCHITECT-HANDOFF -->";
-        private const string ReviewFeedbackMarker = "<!-- ARMADA:REVIEW-FEEDBACK -->";
-        private const string ReviewerGuidanceMarker = "<!-- ARMADA:REVIEWER-GUIDANCE -->";
         private static readonly System.Text.RegularExpressions.Regex _ScopedFilesDirectiveRegex =
             new System.Text.RegularExpressions.Regex(@"^\s*(?:Touch|Edit|Modify)\s+only\s+(?<files>.+)$",
                 System.Text.RegularExpressions.RegexOptions.IgnoreCase |
@@ -1390,8 +1387,6 @@ namespace Armada.Core.Services
                 + "or push branch " + mission.BranchName + " to the vessel's remote, then restart this mission.";
         }
 
-        private const string _OutputRepairStart = "<!-- armada:output-repair -->";
-        private const string _OutputRepairEnd = "<!-- /armada:output-repair -->";
 
         private async Task<bool> TryScheduleOutputRepairAsync(Mission mission, string problem, string contract, CancellationToken token)
         {
@@ -1403,14 +1398,13 @@ namespace Armada.Core.Services
 
             MissionStatusEnum observedStatus = mission.Status;
             int attempt = mission.OutputRepairAttempts + 1;
-            string note = _OutputRepairStart + "\n## Output contract repair (attempt " + attempt + " of " + max + ")\n"
+            string note = "## Output contract repair (attempt " + attempt + " of " + max + ")\n"
                 + "Your previous response for this mission could not be used: " + problem.Trim() + "\n"
                 + "Do the same job again from the current branch and respond in exactly this format. Nothing else about the task has changed.\n"
-                + "Required format: " + contract.Trim() + "\n"
-                + _OutputRepairEnd;
+                + "Required format: " + contract.Trim();
 
             mission.OutputRepairAttempts = attempt;
-            mission.Description = ReplaceOutputRepairNote(mission.Description, note);
+            MissionNotes.Set(mission, MissionNoteKindEnum.OutputRepair, note);
             mission.Status = MissionStatusEnum.Pending;
             mission.CaptainId = null;
             mission.DockId = null;
@@ -1454,20 +1448,6 @@ namespace Armada.Core.Services
             return reason + " (after " + mission.OutputRepairAttempts + " output-contract repair attempt(s); the stage kept breaking its output format, so check the captain's model and persona template)";
         }
 
-        private static string ReplaceOutputRepairNote(string? description, string note)
-        {
-            string current = description ?? String.Empty;
-            int start = current.IndexOf(_OutputRepairStart, StringComparison.Ordinal);
-            if (start >= 0)
-            {
-                int end = current.IndexOf(_OutputRepairEnd, start, StringComparison.Ordinal);
-                current = end >= 0
-                    ? current.Substring(0, start) + current.Substring(end + _OutputRepairEnd.Length)
-                    : current.Substring(0, start);
-            }
-
-            return current.TrimEnd() + "\n\n" + note;
-        }
 
         private async Task ReleaseCaptainAfterCompletionAsync(Captain captain, string missionId)
         {
@@ -2132,55 +2112,15 @@ namespace Armada.Core.Services
             return "Review denied: " + comment;
         }
 
-        private static string ApplyReviewFeedback(string? description, string reviewComment)
+        private static string ReviewFeedbackNote(string reviewComment)
         {
-            string existing = description ?? String.Empty;
-            int markerIndex = existing.IndexOf(ReviewFeedbackMarker, StringComparison.Ordinal);
-            if (markerIndex >= 0)
-            {
-                existing = existing.Substring(0, markerIndex).TrimEnd();
-            }
-
-            string feedbackSection =
-                ReviewFeedbackMarker + "\n" +
-                "## Review Feedback\n" +
-                reviewComment.Trim() + "\n\n" +
-                "Address this feedback and continue the mission on the existing branch.\n";
-
-            if (String.IsNullOrWhiteSpace(existing))
-            {
-                return feedbackSection;
-            }
-
-            return existing.TrimEnd() + "\n\n---\n\n" + feedbackSection;
+            return "---\n\n## Review Feedback\n" + reviewComment.Trim() + "\n\nAddress this feedback and continue the mission on the existing branch.";
         }
 
-        /// <summary>
-        /// Append reviewer guidance from a conditional approval to a downstream stage description, so the next
-        /// captain must take the prior-stage feedback into account. Idempotent: an existing guidance block is
-        /// replaced rather than stacked.
-        /// </summary>
-        private static string ApplyReviewerGuidance(string? description, string reviewComment)
+        private static string ReviewerGuidanceNote(string reviewComment)
         {
-            string existing = description ?? String.Empty;
-            int markerIndex = existing.IndexOf(ReviewerGuidanceMarker, StringComparison.Ordinal);
-            if (markerIndex >= 0)
-            {
-                existing = existing.Substring(0, markerIndex).TrimEnd();
-            }
-
-            string guidanceSection =
-                ReviewerGuidanceMarker + "\n" +
-                "## Reviewer Guidance (from prior stage approval)\n" +
-                reviewComment.Trim() + "\n\n" +
-                "The previous stage was conditionally approved with the guidance above. Take it into account as you carry out this stage.\n";
-
-            if (String.IsNullOrWhiteSpace(existing))
-            {
-                return guidanceSection;
-            }
-
-            return existing.TrimEnd() + "\n\n---\n\n" + guidanceSection;
+            return "---\n\n## Reviewer Guidance (from prior stage approval)\n" + reviewComment.Trim()
+                + "\n\nThe previous stage was conditionally approved with the guidance above. Take it into account as you carry out this stage.";
         }
 
         /// <summary>
@@ -2197,7 +2137,7 @@ namespace Armada.Core.Services
                 if (next.DependsOnMissionId != mission.Id) continue;
                 if (next.Status != MissionStatusEnum.Pending) continue;
 
-                next.Description = ApplyReviewerGuidance(next.Description, reviewComment);
+                MissionNotes.Set(next, MissionNoteKindEnum.ReviewerGuidance, ReviewerGuidanceNote(reviewComment));
                 next.LastUpdateUtc = DateTime.UtcNow;
                 await _Database.Missions.UpdateAsync(next, token).ConfigureAwait(false);
             }
@@ -2215,8 +2155,7 @@ namespace Armada.Core.Services
 
             if (PersonaCatalog.Matches(dependency.Persona, PersonaCatalog.Architect))
             {
-                return !String.IsNullOrEmpty(mission.Description) &&
-                    mission.Description.Contains(ArchitectHandoffMarker, StringComparison.Ordinal);
+                return String.Equals(mission.ArchitectSourceMissionId, dependency.Id, StringComparison.Ordinal);
             }
 
             // If the dependency never had a branch, there is no stronger handoff signal
@@ -2263,14 +2202,6 @@ namespace Armada.Core.Services
         }
 
         private const int _MaxJudgeReworkRounds = 2;
-
-        private static string StripPipelineHandoff(string? description)
-        {
-            // A stage's description is the task plus what earlier stages handed it; keep the task.
-            string text = description ?? String.Empty;
-            int cut = text.IndexOf("\n\n---\n## Prior Stage Output", StringComparison.Ordinal);
-            return cut > 0 ? text.Substring(0, cut).TrimEnd() : text;
-        }
 
         /// <summary>
         /// The persona a mission is routed as: its own, or Worker for a mission dispatched without one (a plain dispatch

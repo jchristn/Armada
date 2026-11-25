@@ -157,7 +157,7 @@ namespace Test.Shared.Suites.Services
                     AssertEqual(1, launches, "exactly one new run");
                     AssertEqual(MissionStatusEnum.InProgress, after.Status, after.FailureReason);
                     AssertEqual(8001, after.ProcessId, "new process attached");
-                    AssertContains("CS0001", after.Description ?? "");
+                    AssertContains("CS0001", Armada.Core.Services.MissionNotes.EffectiveDescription(after));
                     AssertTrue(commands.Requests.Any(r => r.Kind == HostCommandKindEnum.CheckRun && r.Arguments.Any(a => a.Contains("build-broken", StringComparison.Ordinal))), "capture saw the configured check");
                     AssertFalse((await db.Events.EnumerateByMissionAsync(mission.Id).ConfigureAwait(false)).Any(e => e.EventType == "mission.orphan_recovered" || e.EventType == "mission.completed"), "no false completion or orphan event");
                     // A stale completion must still be blocked after the resume guard has been released.

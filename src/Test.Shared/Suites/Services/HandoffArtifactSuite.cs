@@ -598,7 +598,7 @@ namespace Test.Shared.Suites.Services
                 Mission? rework = all.FirstOrDefault(m => m.DependsOnMissionId == judge.Id && m.Persona == "Worker");
                 AssertNotNull(rework, "the Judge's NEEDS_REVISION scheduled a rework Worker");
                 flow.Rework = rework!;
-                AssertContains(PipelineHandoffContext.ArtifactPlaceholder, flow.Rework.Description, "the persisted handoff carries the placeholder, not an excerpt");
+                AssertContains(PipelineHandoffContext.ArtifactPlaceholder, Armada.Core.Services.MissionNotes.EffectiveDescription(flow.Rework), "the persisted handoff carries the placeholder, not an excerpt");
                 AssertFalse(flow.Rework.Description!.Contains("src/Parser.cs:42", StringComparison.Ordinal), "no excerpt persisted on the description");
 
                 flow.Reader = await CaptainAssignmentFixture.CreateAsync(testDb.Driver, new Captain("rework-cpt", readerRuntime)).ConfigureAwait(false);

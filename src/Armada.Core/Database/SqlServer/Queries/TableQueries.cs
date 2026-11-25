@@ -2505,7 +2505,8 @@ namespace Armada.Core.Database.SqlServer.Queries
                 Armada.Core.Database.UsageSelectionSchema.OmittedCandidatesMigration(Armada.Core.Enums.DatabaseTypeEnum.SqlServer),
                 Armada.Core.Database.UsageSelectionSchema.TenantTimestampMigration(Armada.Core.Enums.DatabaseTypeEnum.SqlServer),
                 Armada.Core.Database.ProcessLaunchSchema.Migration(Armada.Core.Enums.DatabaseTypeEnum.SqlServer),
-                Armada.Core.Database.AskThreadLocationSchema.Migration(Armada.Core.Enums.DatabaseTypeEnum.SqlServer)
+                Armada.Core.Database.AskThreadLocationSchema.Migration(Armada.Core.Enums.DatabaseTypeEnum.SqlServer),
+                Armada.Core.Database.MissionTypedStateSchema.Migration(Armada.Core.Enums.DatabaseTypeEnum.SqlServer)
 
             };
         }

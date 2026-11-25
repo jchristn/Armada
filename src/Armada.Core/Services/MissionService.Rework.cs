@@ -89,7 +89,7 @@ namespace Armada.Core.Services
             }
 
             // The task without earlier handoffs or an earlier round's rework section (a later round restates its own).
-            string taskSpec = ReworkPromptBuilder.StripSection(StripPipelineHandoff(worker.Description));
+            string taskSpec = ReworkPromptBuilder.StripSection(worker.Description);
             Mission rework = new Mission(_ReworkTitlePrefix + round + (escalateTo != null ? _EscalatedMarker : "") + ": " + baseTitle,
                 // Numbered demands, one per line; the reviewer's findings are filled in from its handoff artifact at launch.
                 taskSpec + ReworkPromptBuilder.BuildSection(round, judge.Persona)

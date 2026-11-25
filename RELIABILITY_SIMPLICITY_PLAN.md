@@ -442,21 +442,42 @@ Each of these is a confirmed defect in 1.4.0. They are small, and each gets a re
 Text markers in descriptions route missions today. A user brief that happens to contain "## Escalated to " pins
 routing; a renamed Architect slice breaks fan-out recovery. Everything a program reads goes into a column.
 
-- [ ] **RS-3.1** Migration 133 (all four providers): on missions add `EscalationCount`, `EscalatedFromCaptainId`,
+- [x] **RS-3.1** Migration 133 (all four providers): on missions add `EscalationCount`, `EscalatedFromCaptainId`,
   `EscalatedFromModel`, `OutputRepairCount`, `FanOutCompletedUtc`, `ArchitectSourceMissionId`, `ArchitectPlanIndex`,
   `LaunchIntentUtc`, `LaunchJobId`; on merge entries nothing new unless RS-9 needs it. Backfill from the existing
   text markers so upgraded databases keep their state. Upgrade test from the v1.4.0 baseline with missions in every
-  marker state. Evidence:
-- [ ] **RS-3.2** Replace `"## Escalated to "` detection (`AdmiralService.cs:2854`, `MissionService.CaptainRouting.cs:77`
+  marker state. Evidence: `MissionTypedStateSchema` (migration 133) adds
+  the columns and backfills escalation count, fan-out completion, and slice source and plan index from the markers.
+  `OutputRepairCount` already existed as `OutputRepairAttempts` and was not duplicated. Old descriptions are not
+  rewritten. Suite `Database.MissionTypedStateUpgrade` (upgrade from schema 132 with every marker state, replay, and
+  round-trip) passes on SQLite, PostgreSQL, MySQL and SQL Server (2026-11-25). Fields reach REST and MCP through the
+  mission model; dashboard, TUI and SDK display follows in the later surface items.
+- [x] **RS-3.2** Replace `"## Escalated to "` detection (`AdmiralService.cs:2854`, `MissionService.CaptainRouting.cs:77`
   and `:281`, `MissionService.WorkerEnvelope.cs:106`) with the columns. The escalation note can stay in the prompt
-  rendering; nothing reads it back. Evidence:
-- [ ] **RS-3.3** Replace `<!-- ARMADA:ARCHITECT-HANDOFF -->`, the fan-out-complete marker, and title-based slice
+  rendering; nothing reads it back. Evidence: the three routing checks and the escalation guard read
+  `EscalationCount`; escalation records `EscalationCount`, `EscalatedFromCaptainId` and `EscalatedFromModel`. The
+  note is still appended for the prompt until RS-3.4 and nothing reads it back. `Services.AdmiralService`
+  `stuck_local_worker_escalates_to_planner` now uses a brief that quotes the old heading, and asserts the columns.
+- [x] **RS-3.3** Replace `<!-- ARMADA:ARCHITECT-HANDOFF -->`, the fan-out-complete marker, and title-based slice
   lookup (`Title == parsed.Title + " [Worker]"`) with `FanOutCompletedUtc` and (`ArchitectSourceMissionId`,
-  `ArchitectPlanIndex`). Evidence:
-- [ ] **RS-3.4** Mission description is immutable after creation. Handoff text, rework findings, repair notes, and
+  `ArchitectPlanIndex`). Evidence: the fan-out writes `ArchitectSourceMissionId` and
+  `ArchitectPlanIndex` on every slice and `FanOutCompletedUtc` on the Architect; readiness, recovery and plan
+  dependencies find slices through `FindArchitectSlice` (source and index, newest live slice). Both markers and the
+  title lookups are gone. `Services.PipelineDispatch` `interrupted_architect_fanout_is_finished_without_duplicates`
+  now renames a slice before recovery and asserts it is not recreated.
+- [x] **RS-3.4** Mission description is immutable after creation. Handoff text, rework findings, repair notes, and
   escalation notes are rendered at launch from typed records (Phase 6) rather than appended to `Description`. Remove
   `StripPipelineHandoff` and its duplicated `SectionMarker` literal. Keep reading old markers only in the RS-3.1
-  backfill. Evidence:
+  backfill. Evidence: `Mission.Notes` (one `MissionNote` per
+  `MissionNoteKindEnum`, stored in `notes_json`, migration 133) holds the pipeline handoff, reviewer guidance, review
+  feedback, prior Judge findings, output repair, resume, escalation and integration merge text; `MissionNotes`
+  sets, removes and renders them, and the prompt and rescue brief use `MissionNotes.EffectiveDescription`.
+  `StripPipelineHandoff`, `ReplaceOutputRepairNote`, `ApplyReviewFeedback`, `ApplyReviewerGuidance`,
+  `RemoveIntegrationMergeSection` and their marker constants are removed. One exception, by design: an Architect
+  fan-out still defines the waiting pipeline placeholders (first slice and its stage chain) by writing their title
+  and description once, because the plan is their definition. A mission in flight across the upgrade may show an
+  old handoff in its description and the new one as a note. `Database.MissionTypedStateUpgrade`
+  `notes_keep_description_immutable` passes on all four providers.
 - [ ] **RS-3.5** One transition API. `MissionTransitions.TryTransitionAsync(mission, allowedFrom, to, mutate, token)`
   that checks `MissionStateMachine`, does the compare-and-set, emits the event, and triggers voyage re-evaluation.
   Add the real internal edges to the table (Assigned -> Pending, InProgress -> Pending for escalation,

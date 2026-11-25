@@ -592,8 +592,8 @@ namespace Test.Shared.Suites.Services
                     AssertEqual(MissionStatusEnum.InProgress, resumed!.Status, "a transient endpoint error resumes instead of failing");
                     AssertEqual(1, relaunches, "relaunched once in the same dock");
                     AssertEqual(dock.Id, resumed.DockId, "the same dock, with the work so far");
-                    AssertContains("Earlier attempt 1 stopped", resumed.Description ?? "");
-                    AssertContains("git status", resumed.Description ?? "");
+                    AssertContains("Earlier attempt 1 stopped", Armada.Core.Services.MissionNotes.EffectiveDescription(resumed));
+                    AssertContains("git status", Armada.Core.Services.MissionNotes.EffectiveDescription(resumed));
                     Voyage? stillRunning = await db.Voyages.ReadAsync(voyage.Id).ConfigureAwait(false);
                     AssertEqual(VoyageStatusEnum.InProgress, stillRunning!.Status, "the voyage keeps running");
 
@@ -673,7 +673,7 @@ namespace Test.Shared.Suites.Services
                     }
                     AssertEqual(3, relaunches, "resumed past MaxRecoveryAttempts of 1");
                     Mission? after = await db.Missions.ReadAsync(mission.Id).ConfigureAwait(false);
-                    int notes = (after!.Description ?? "").Split("stopped" + "\n", StringSplitOptions.None).Length - 1;
+                    int notes = Armada.Core.Services.MissionNotes.EffectiveDescription(after).Split("stopped" + "\n", StringSplitOptions.None).Length - 1;
                     AssertEqual(1, notes, "a repeating failure is recorded once, not once per resume");
                     try { Directory.Delete(dock.WorktreePath, true); } catch { }
                 }
@@ -723,8 +723,8 @@ namespace Test.Shared.Suites.Services
                     Mission? resumed = await db.Missions.ReadAsync(mission.Id).ConfigureAwait(false);
                     AssertEqual(MissionStatusEnum.InProgress, resumed!.Status, "a failing build resumes the local model");
                     AssertEqual(1, relaunches);
-                    AssertContains("stage check failed", resumed.Description ?? "");
-                    AssertContains("CS1513", resumed.Description ?? "", "the build output reaches the model");
+                    AssertContains("stage check failed", Armada.Core.Services.MissionNotes.EffectiveDescription(resumed));
+                    AssertContains("CS1513", Armada.Core.Services.MissionNotes.EffectiveDescription(resumed), "the build output reaches the model");
 
                     // A frontier captain is not checked: it proceeds to completion.
                     Captain claude = new Captain("claude", AgentRuntimeEnum.ClaudeCode);
@@ -776,7 +776,7 @@ namespace Test.Shared.Suites.Services
                     Dock dock = new Dock(vessel.Id) { WorktreePath = Path.Combine(Path.GetTempPath(), "armada_esc_dock_" + Guid.NewGuid().ToString("N")), Active = true };
                     Directory.CreateDirectory(dock.WorktreePath);
                     dock = await db.Docks.CreateAsync(dock).ConfigureAwait(false);
-                    Mission worker = await db.Missions.CreateAsync(new Mission("Build it [Worker]", "Do it.") { VoyageId = voyage.Id, VesselId = vessel.Id, Persona = "Worker", Status = MissionStatusEnum.InProgress, ProcessId = 4242, DockId = dock.Id, BranchName = "armada/mux/w" }).ConfigureAwait(false);
+                    Mission worker = await db.Missions.CreateAsync(new Mission("Build it [Worker]", "Do it. A brief may quote the old marker text:\n\n## Escalated to nobody\n\nwhich no longer blocks escalation (RS-3.2).") { VoyageId = voyage.Id, VesselId = vessel.Id, Persona = "Worker", Status = MissionStatusEnum.InProgress, ProcessId = 4242, DockId = dock.Id, BranchName = "armada/mux/w" }).ConfigureAwait(false);
                     Captain mux = await CaptainAssignmentFixture.CreateAsync(db, new Captain("mux", AgentRuntimeEnum.Mux) { State = CaptainStateEnum.Working, ProcessId = 4242, RecoveryAttempts = 1 , Assignment = new Mission { Id = worker.Id, DockId = dock.Id }}).ConfigureAwait(false);
 
                     RuntimeProviderError endpoint500 = new RuntimeProviderError { HttpStatusCode = 500, ErrorType = "llm_error", Reason = "the model endpoint rejected the request" };
@@ -786,7 +786,9 @@ namespace Test.Shared.Suites.Services
                     AssertNotEqual(MissionStatusEnum.Failed, escalated!.Status, "the stuck Worker is not failed");
                     AssertEqual(claude.Id, escalated.RequestedCaptainId, "the planner's captain takes it over");
                     AssertEqual("armada/mux/w", escalated.BranchName, "on the same branch");
-                    AssertContains("## Escalated to claude", escalated.Description ?? "");
+                    AssertContains("## Escalated to claude", Armada.Core.Services.MissionNotes.EffectiveDescription(escalated));
+                    AssertEqual(1, escalated.EscalationCount, "escalation is counted in its column");
+                    AssertEqual(mux.Id, escalated.EscalatedFromCaptainId, "the captain it was taken from is recorded");
                     try { Directory.Delete(dock.WorktreePath, true); } catch { }
                 }
             }));

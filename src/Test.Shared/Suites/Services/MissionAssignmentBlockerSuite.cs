@@ -72,7 +72,7 @@ namespace Test.Shared.Suites.Services
                     Mission waiting = await AddMissionAsync(db, h.Vessel, "downstream", MissionStatusEnum.Pending);
                     waiting.DependsOnMissionId = handoff == "missing" ? "msn_missing" : dependency.Id;
                     if (handoff == "branch_ready" || handoff == "architect_pending") waiting.BranchName = dependency.BranchName;
-                    if (handoff == "architect_ready") waiting.Description = "<!-- ARMADA:ARCHITECT-HANDOFF -->";
+                    if (handoff == "architect_ready") { waiting.ArchitectSourceMissionId = dependency.Id; waiting.ArchitectPlanIndex = 0; }
                     await db.Missions.UpdateAsync(waiting);
                     bool ready = handoff.EndsWith("ready") || handoff == "complete";
                     MissionAssignmentBlocker blocker = (await h.Missions.GetAssignmentBlockerAsync(waiting))!;

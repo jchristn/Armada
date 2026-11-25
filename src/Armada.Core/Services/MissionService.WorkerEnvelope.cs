@@ -103,7 +103,7 @@ namespace Armada.Core.Services
             }
 
             bool escalatedRework = !String.IsNullOrEmpty(mission.RequestedCaptainId) && (IntegrationBarrier.IsEscalatedRework(mission)
-                || (mission.Description ?? "").Contains("## Escalated to ", StringComparison.Ordinal));
+                || mission.EscalationCount > 0);
             gate.Pinned = escalatedRework || (!String.IsNullOrEmpty(mission.RequestedCaptainId) && await HasStrictCaptainOverrideAsync(mission, token).ConfigureAwait(false));
             Persona? persona = String.IsNullOrEmpty(mission.RequestedCaptainId)
                 ? await ReadPersonaByNameAsync(mission.TenantId, RoutingPersona(mission), token, mission.UserId).ConfigureAwait(false)

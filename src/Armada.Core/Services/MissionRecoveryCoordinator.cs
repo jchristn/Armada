@@ -371,7 +371,7 @@ namespace Armada.Core.Services
                 "3. Fix only what the failure below requires, stay strictly in scope, and rerun the relevant build and tests.\n\n" +
                 "## Original Mission\n" +
                 original.Title + "\n\n" +
-                (String.IsNullOrWhiteSpace(original.Description) ? "" : BoundRescueDescription(original.Description) + "\n\n") +
+                (String.IsNullOrWhiteSpace(MissionNotes.EffectiveDescription(original)) ? "" : BoundRescueDescription(MissionNotes.EffectiveDescription(original)) + "\n\n") +
                 "## Failure To Fix\n" +
                 "Classified kind: " + (incident.FailureKind ?? "Unknown") + "\n" +
                 "Reason: " + Trim(original.FailureReason, 1500) + "\n\n";
@@ -393,7 +393,7 @@ namespace Armada.Core.Services
                 "Re-implement the change correctly, addressing the failure, and stay strictly in scope.\n\n" +
                 "## Original Mission\n" +
                 original.Title + "\n\n" +
-                (String.IsNullOrWhiteSpace(original.Description) ? "" : BoundRescueDescription(original.Description) + "\n\n") +
+                (String.IsNullOrWhiteSpace(MissionNotes.EffectiveDescription(original)) ? "" : BoundRescueDescription(MissionNotes.EffectiveDescription(original)) + "\n\n") +
                 "## Failure To Fix\n" +
                 "Classified kind: " + (incident.FailureKind ?? "Unknown") + "\n" +
                 "Reason: " + Trim(original.FailureReason, 1500) + "\n\n";

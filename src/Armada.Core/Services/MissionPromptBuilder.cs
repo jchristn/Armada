@@ -151,7 +151,7 @@ namespace Armada.Core.Services
             {
                 ["MissionId"] = mission.Id,
                 ["MissionTitle"] = mission.Title,
-                ["MissionDescription"] = mission.Description ?? "No additional description provided.",
+                ["MissionDescription"] = String.IsNullOrWhiteSpace(MissionNotes.EffectiveDescription(mission)) ? "No additional description provided." : MissionNotes.EffectiveDescription(mission),
                 ["MissionCommitInstruction"] = "",
                 ["MissionPushInstruction"] = "",
                 ["MissionPersona"] = PersonaCatalog.NormalizeName(mission.Persona ?? PersonaCatalog.Worker),

@@ -19,8 +19,10 @@ namespace Armada.Core.Services
 
         private async Task<Mission> CreateArchitectSliceAsync(Mission architect, Mission template, List<Mission> voyageMissions, List<ParsedArchitectMission> parsed, int index, CancellationToken token)
         {
-            Mission worker = new Mission(parsed[index].Title + " [Worker]", ArchitectHandoffMarker + "\n" + parsed[index].Description
+            Mission worker = new Mission(parsed[index].Title + " [Worker]", parsed[index].Description
                 + await BuildArchitectSliceContextAsync(architect, parsed, index, token).ConfigureAwait(false));
+            worker.ArchitectSourceMissionId = architect.Id;
+            worker.ArchitectPlanIndex = index;
             worker.TenantId = architect.TenantId;
             worker.UserId = architect.UserId;
             worker.VoyageId = architect.VoyageId;
@@ -62,14 +64,29 @@ namespace Armada.Core.Services
             await _Database.Playbooks.SetMissionSnapshotsAsync(toMissionId, copies, token).ConfigureAwait(false);
         }
 
+        /// <summary>
+        /// The Worker slice an Architect's plan entry created, found by its typed source and plan index (never by title,
+        /// which a rename or a duplicate plan title would break). The newest live slice wins after a restarted fan-out.
+        /// </summary>
+        private static Mission? FindArchitectSlice(List<Mission> voyageMissions, string architectId, int planIndex)
+        {
+            return voyageMissions
+                .Where(m => m.ArchitectPlanIndex == planIndex
+                    && String.Equals(m.ArchitectSourceMissionId, architectId, StringComparison.Ordinal)
+                    && PersonaCatalog.Matches(m.Persona, PersonaCatalog.Worker)
+                    && m.Status != MissionStatusEnum.Cancelled)
+                .OrderByDescending(m => m.CreatedUtc)
+                .FirstOrDefault();
+        }
+
         private async Task MarkArchitectFanOutCompleteAsync(Mission architect, CancellationToken token)
         {
             Mission? current = await _Database.Missions.ReadAsync(architect.Id, token).ConfigureAwait(false);
-            if (current == null || (current.Description ?? String.Empty).Contains(_ArchitectFanOutCompleteMarker, StringComparison.Ordinal)) return;
-            current.Description = (current.Description ?? String.Empty).TrimEnd() + "\n" + _ArchitectFanOutCompleteMarker;
-            current.LastUpdateUtc = DateTime.UtcNow;
+            if (current == null || current.FanOutCompletedUtc.HasValue) return;
+            current.FanOutCompletedUtc = DateTime.UtcNow;
+            current.LastUpdateUtc = current.FanOutCompletedUtc.Value;
             if (await _Database.Missions.TryUpdateIfStatusAsync(current, new MissionStatusEnum[] { current.Status }, token).ConfigureAwait(false))
-                architect.Description = current.Description;
+                architect.FanOutCompletedUtc = current.FanOutCompletedUtc;
         }
 
         /// <summary>
@@ -82,7 +99,7 @@ namespace Armada.Core.Services
         /// </summary>
         private async Task<bool> TryRecoverArchitectFanOutAsync(Mission architect, CancellationToken token)
         {
-            if ((architect.Description ?? String.Empty).Contains(_ArchitectFanOutCompleteMarker, StringComparison.Ordinal)) return false;
+            if (architect.FanOutCompletedUtc.HasValue) return false;
             if (IsCompletionInFlight(architect.Id)) return false;
             Voyage? voyage = await _Database.Voyages.ReadAsync(architect.VoyageId!, token).ConfigureAwait(false);
             if (voyage == null || voyage.Status == VoyageStatusEnum.Complete || voyage.Status == VoyageStatusEnum.Failed || voyage.Status == VoyageStatusEnum.Cancelled) return false;
@@ -99,16 +116,14 @@ namespace Armada.Core.Services
 
             List<ParsedArchitectMission> parsed = ParseArchitectOutput(architect);
             if (parsed.Count == 0) return false;
-            Mission? template = voyageMissions.FirstOrDefault(m => PersonaCatalog.Matches(m.Persona, PersonaCatalog.Worker)
-                && String.Equals(m.Title, parsed[0].Title + " [Worker]", StringComparison.OrdinalIgnoreCase));
+            Mission? template = FindArchitectSlice(voyageMissions, architect.Id, 0);
             if (template == null) return false;
 
             int repaired = 0;
             bool templateHasChain = voyageMissions.Any(m => m.DependsOnMissionId == template.Id);
             for (int i = 1; i < parsed.Count; i++)
             {
-                Mission? worker = voyageMissions.FirstOrDefault(m => PersonaCatalog.Matches(m.Persona, PersonaCatalog.Worker)
-                    && String.Equals(m.Title, parsed[i].Title + " [Worker]", StringComparison.OrdinalIgnoreCase));
+                Mission? worker = FindArchitectSlice(voyageMissions, architect.Id, i);
                 if (worker == null)
                 {
                     await CreateArchitectSliceAsync(architect, template, voyageMissions, parsed, i, token).ConfigureAwait(false);

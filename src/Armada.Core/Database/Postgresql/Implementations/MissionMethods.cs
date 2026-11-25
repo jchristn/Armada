@@ -907,10 +907,10 @@ namespace Armada.Core.Database.Postgresql.Implementations
                 cmd.Transaction = tx;
                 cmd.Connection = conn;
                 cmd.CommandText = @"INSERT INTO missions (id, tenant_id, user_id, voyage_id, vessel_id, captain_id, requested_captain_id, assigned_harbor_id, title, description,
-                    status, mode, priority, stall_recovery_attempts, parent_mission_id, rescue_of_mission_id, base_branch_name, ready_utc, assigned_utc, owned_paths_json, reads_paths_json, depth, branch_strategy, branch_name, dock_id, process_id,
+                    status, mode, priority, stall_recovery_attempts, parent_mission_id, rescue_of_mission_id, escalation_count, escalated_from_captain_id, escalated_from_model, fan_out_completed_utc, architect_source_mission_id, architect_plan_index, launch_intent_utc, launch_job_id, notes_json, base_branch_name, ready_utc, assigned_utc, owned_paths_json, reads_paths_json, depth, branch_strategy, branch_name, dock_id, process_id,
                     pr_url, commit_hash, diff_snapshot, agent_output, persona, depends_on_mission_id, failure_reason, failure_kind, last_blackbox_entry_id, start_commit, wait_for_voyage_workers, requires_review, review_deny_action, review_comment, reviewed_by_user_id, review_requested_utc, reviewed_utc, review_deadline_utc, total_runtime_ms, redispatch_attempts, output_repair_attempts, noop_redispatch_attempts, is_rescue, is_evaluation, worker_envelope_json, rework_round, rework_escalated, tier, created_utc, started_utc, completed_utc, last_update_utc, last_heartbeat_utc)
                     VALUES (@id, @tenant_id, @user_id, @voyage_id, @vessel_id, @captain_id, @requested_captain_id, @assigned_harbor_id, @title, @description,
-                    @status, @mode, @priority, @stall_recovery_attempts, @parent_mission_id, @rescue_of_mission_id, @base_branch_name, @ready_utc, @assigned_utc, @owned_paths_json, @reads_paths_json, @depth, @branch_strategy, @branch_name, @dock_id, @process_id,
+                    @status, @mode, @priority, @stall_recovery_attempts, @parent_mission_id, @rescue_of_mission_id, @escalation_count, @escalated_from_captain_id, @escalated_from_model, @fan_out_completed_utc, @architect_source_mission_id, @architect_plan_index, @launch_intent_utc, @launch_job_id, @notes_json, @base_branch_name, @ready_utc, @assigned_utc, @owned_paths_json, @reads_paths_json, @depth, @branch_strategy, @branch_name, @dock_id, @process_id,
                     @pr_url, @commit_hash, @diff_snapshot, @agent_output, @persona, @depends_on_mission_id, @failure_reason, @failure_kind, @last_blackbox_entry_id, @start_commit, @wait_for_voyage_workers, @requires_review, @review_deny_action, @review_comment, @reviewed_by_user_id, @review_requested_utc, @reviewed_utc, @review_deadline_utc, @total_runtime_ms, @redispatch_attempts, @output_repair_attempts, @noop_redispatch_attempts, @is_rescue, @is_evaluation, @worker_envelope_json, @rework_round, @rework_escalated, @tier, @created_utc, @started_utc, @completed_utc, @last_update_utc, @last_heartbeat_utc);";
                 AddMissionParameters(cmd, mission);
                 PostgresqlCommandHelper.AddDate(cmd, "@last_heartbeat_utc", mission.LastHeartbeatUtc);
@@ -943,7 +943,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
                         assigned_harbor_id = @assigned_harbor_id,
                         title = @title, description = @description, status = @status,
                         mode = @mode,
-                        priority = @priority, parent_mission_id = @parent_mission_id, rescue_of_mission_id = @rescue_of_mission_id, base_branch_name = @base_branch_name, ready_utc = @ready_utc, assigned_utc = COALESCE(@assigned_utc, assigned_utc), owned_paths_json = @owned_paths_json, reads_paths_json = @reads_paths_json, depth = @depth, branch_strategy = @branch_strategy,
+                        priority = @priority, parent_mission_id = @parent_mission_id, rescue_of_mission_id = @rescue_of_mission_id, escalation_count = @escalation_count, escalated_from_captain_id = @escalated_from_captain_id, escalated_from_model = @escalated_from_model, fan_out_completed_utc = @fan_out_completed_utc, architect_source_mission_id = @architect_source_mission_id, architect_plan_index = @architect_plan_index, launch_intent_utc = @launch_intent_utc, launch_job_id = @launch_job_id, notes_json = @notes_json, base_branch_name = @base_branch_name, ready_utc = @ready_utc, assigned_utc = COALESCE(@assigned_utc, assigned_utc), owned_paths_json = @owned_paths_json, reads_paths_json = @reads_paths_json, depth = @depth, branch_strategy = @branch_strategy,
                         branch_name = @branch_name, dock_id = @dock_id, process_id = @process_id,
                         pr_url = @pr_url, commit_hash = @commit_hash, diff_snapshot = @diff_snapshot,
                         agent_output = @agent_output,
@@ -1002,6 +1002,15 @@ namespace Armada.Core.Database.Postgresql.Implementations
             cmd.Parameters.AddWithValue("@priority", mission.Priority);
             cmd.Parameters.AddWithValue("@parent_mission_id", (object?)mission.ParentMissionId ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@rescue_of_mission_id", (object?)mission.RescueOfMissionId ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@escalation_count", mission.EscalationCount);
+            cmd.Parameters.AddWithValue("@escalated_from_captain_id", (object?)mission.EscalatedFromCaptainId ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@escalated_from_model", (object?)mission.EscalatedFromModel ?? DBNull.Value);
+            PostgresqlCommandHelper.AddDate(cmd, "@fan_out_completed_utc", mission.FanOutCompletedUtc);
+            cmd.Parameters.AddWithValue("@architect_source_mission_id", (object?)mission.ArchitectSourceMissionId ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@architect_plan_index", mission.ArchitectPlanIndex.HasValue ? (object)mission.ArchitectPlanIndex.Value : DBNull.Value);
+            PostgresqlCommandHelper.AddDate(cmd, "@launch_intent_utc", mission.LaunchIntentUtc);
+            cmd.Parameters.AddWithValue("@launch_job_id", (object?)mission.LaunchJobId ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@notes_json", (object?)Armada.Core.Services.MissionNotes.ToJson(mission.Notes) ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@base_branch_name", (object?)mission.BaseBranchName ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@owned_paths_json", (object?)mission.OwnedPathsJson ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@reads_paths_json", (object?)mission.ReadsPathsJson ?? DBNull.Value);
@@ -1143,6 +1152,15 @@ namespace Armada.Core.Database.Postgresql.Implementations
             mission.CreatedUtc = DateTime.SpecifyKind((DateTime)reader["created_utc"], DateTimeKind.Utc);
             mission.StartedUtc = NullableDateTime(reader["started_utc"]);
             mission.RescueOfMissionId = reader["rescue_of_mission_id"] == DBNull.Value ? null : reader["rescue_of_mission_id"].ToString();
+            mission.EscalationCount = reader["escalation_count"] == DBNull.Value ? 0 : Convert.ToInt32(reader["escalation_count"]);
+            mission.EscalatedFromCaptainId = reader["escalated_from_captain_id"] == DBNull.Value ? null : reader["escalated_from_captain_id"].ToString();
+            mission.EscalatedFromModel = reader["escalated_from_model"] == DBNull.Value ? null : reader["escalated_from_model"].ToString();
+            mission.FanOutCompletedUtc = NullableDateTime(reader["fan_out_completed_utc"]);
+            mission.ArchitectSourceMissionId = reader["architect_source_mission_id"] == DBNull.Value ? null : reader["architect_source_mission_id"].ToString();
+            mission.ArchitectPlanIndex = reader["architect_plan_index"] == DBNull.Value ? null : Convert.ToInt32(reader["architect_plan_index"]);
+            mission.LaunchIntentUtc = NullableDateTime(reader["launch_intent_utc"]);
+            mission.LaunchJobId = reader["launch_job_id"] == DBNull.Value ? null : reader["launch_job_id"].ToString();
+            mission.Notes = Armada.Core.Services.MissionNotes.FromJson(reader["notes_json"] == DBNull.Value ? null : reader["notes_json"].ToString());
             mission.BaseBranchName = reader["base_branch_name"] == DBNull.Value ? null : reader["base_branch_name"].ToString();
             mission.OwnedPathsJson = reader["owned_paths_json"] == DBNull.Value ? null : reader["owned_paths_json"].ToString();
             mission.ReadsPathsJson = reader["reads_paths_json"] == DBNull.Value ? null : reader["reads_paths_json"].ToString();

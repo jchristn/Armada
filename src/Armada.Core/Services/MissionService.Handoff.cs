@@ -111,7 +111,6 @@ namespace Armada.Core.Services
             return redriven;
         }
 
-        private const string _ArchitectFanOutCompleteMarker = "<!-- armada:fanout-complete -->";
 
         private async Task<bool> TryHandoffToNextStageAsync(Mission completedMission, CancellationToken token)
         {
@@ -163,7 +162,9 @@ namespace Armada.Core.Services
                     // Update the first parsed mission into this existing Worker mission slot
                     ParsedArchitectMission first = parsed[0];
                     nextMission.Title = first.Title + " [Worker]";
-                    nextMission.Description = ArchitectHandoffMarker + "\n" + first.Description + await BuildArchitectSliceContextAsync(completedMission, parsed, 0, token).ConfigureAwait(false);
+                    nextMission.ArchitectSourceMissionId = completedMission.Id;
+                    nextMission.ArchitectPlanIndex = 0;
+                    nextMission.Description = first.Description + await BuildArchitectSliceContextAsync(completedMission, parsed, 0, token).ConfigureAwait(false);
                     nextMission.WaitForVoyageWorkers = first.WaitForOtherMissions;
                     nextMission.BranchName = null;
                     nextMission.LastUpdateUtc = DateTime.UtcNow;
@@ -223,8 +224,7 @@ namespace Armada.Core.Services
             foreach (Mission nextMission in dependentMissions)
             {
                 // The persona template supplies role instructions; keep the persisted handoff concise.
-                nextMission.Description = StripPipelineHandoff(nextMission.Description)
-                    + PipelineHandoffContext.Build(completedMission);
+                MissionNotes.Set(nextMission, MissionNoteKindEnum.PipelineHandoff, PipelineHandoffContext.Build(completedMission));
                 nextMission.BranchName = completedMission.BranchName;
                 nextMission.LastUpdateUtc = DateTime.UtcNow;
                 await _Database.Missions.UpdateAsync(nextMission, token).ConfigureAwait(false);

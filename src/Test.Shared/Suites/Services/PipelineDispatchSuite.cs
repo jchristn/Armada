@@ -465,7 +465,9 @@ namespace Test.Shared.Suites.Services
                         bool assignedBeforeHandoff = await missionService.TryAssignAsync(workerMission, vessel).ConfigureAwait(false);
                         AssertFalse(assignedBeforeHandoff, "Worker mission should not be assigned before architect handoff marks it prepared");
 
-                        workerMission.Description = "<!-- ARMADA:ARCHITECT-HANDOFF -->\nPrepared handoff description";
+                        workerMission.Description = "Prepared handoff description";
+                        workerMission.ArchitectSourceMissionId = workerMission.DependsOnMissionId;
+                        workerMission.ArchitectPlanIndex = 0;
                         await testDb.Driver.Missions.UpdateAsync(workerMission).ConfigureAwait(false);
 
                         bool assignedAfterHandoff = await missionService.TryAssignAsync(workerMission, vessel).ConfigureAwait(false);
@@ -933,8 +935,8 @@ namespace Test.Shared.Suites.Services
                     AssertNotNull(repaired);
                     AssertEqual(1, repaired!.OutputRepairAttempts, "The Architect gets one output repair turn");
                     AssertTrue(repaired.Status != MissionStatusEnum.Failed, "The first contract violation is repaired, not failed");
-                    AssertContains("Output contract repair (attempt 1 of 1)", repaired.Description ?? String.Empty);
-                    AssertContains("armada-plan", repaired.Description ?? String.Empty, "The repair note quotes the required plan format");
+                    AssertContains("Output contract repair (attempt 1 of 1)", Armada.Core.Services.MissionNotes.EffectiveDescription(repaired));
+                    AssertContains("armada-plan", Armada.Core.Services.MissionNotes.EffectiveDescription(repaired), "The repair note quotes the required plan format");
                     AssertNull(repaired.AgentOutput, "The unusable output is cleared before the repair turn");
 
                     Captain? releasedArchitect = await testDb.Driver.Captains.ReadAsync(architectCaptain.Id).ConfigureAwait(false);
@@ -1420,7 +1422,7 @@ namespace Test.Shared.Suites.Services
                     AssertEqual(1, await missionService.RecoverDanglingHandoffsAsync().ConfigureAwait(false), "the unstarted fan-out is run");
                     List<Mission> fanned = await testDb.Driver.Missions.EnumerateByVoyageAsync(voyage.Id).ConfigureAwait(false);
                     foreach (string title in titles) AssertEqual(1, fanned.Count(m => m.Title == title + " [Worker]"), title);
-                    AssertContains("armada:fanout-complete", (await testDb.Driver.Missions.ReadAsync(architect.Id).ConfigureAwait(false))!.Description ?? "");
+                    AssertTrue((await testDb.Driver.Missions.ReadAsync(architect.Id).ConfigureAwait(false))!.FanOutCompletedUtc.HasValue, "the fan-out is marked complete");
                     AssertEqual(0, await missionService.RecoverDanglingHandoffsAsync().ConfigureAwait(false), "a completed fan-out is left alone");
 
                     // A restart part-way through: the third slice was never created, the second lost its stage chain, and the
@@ -1431,18 +1433,22 @@ namespace Test.Shared.Suites.Services
                     Mission second = fanned.Single(m => m.Title == "Second slice [Worker]");
                     foreach (Mission stage in fanned.Where(m => m.DependsOnMissionId == second.Id)) await testDb.Driver.Missions.DeleteAsync(stage.Id).ConfigureAwait(false);
                     second.DependsOnMissionId = architect.Id;
+                    // An operator renamed the slice; recovery finds it by its plan index, not its title (RS-3.3).
+                    second.Title = "Second slice, renamed by an operator [Worker]";
                     await testDb.Driver.Missions.UpdateAsync(second).ConfigureAwait(false);
                     Mission first = fanned.Single(m => m.Title == "Core slice [Worker]");
                     first.Status = MissionStatusEnum.InProgress;
                     first.BranchName = "armada/core";
                     await testDb.Driver.Missions.UpdateAsync(first).ConfigureAwait(false);
                     Mission interrupted = (await testDb.Driver.Missions.ReadAsync(architect.Id).ConfigureAwait(false))!;
-                    interrupted.Description = "Break this down";
+                    interrupted.FanOutCompletedUtc = null;
                     await testDb.Driver.Missions.UpdateAsync(interrupted).ConfigureAwait(false);
 
                     AssertEqual(1, await missionService.RecoverDanglingHandoffsAsync().ConfigureAwait(false), "the interrupted fan-out is finished");
                     List<Mission> repaired = await testDb.Driver.Missions.EnumerateByVoyageAsync(voyage.Id).ConfigureAwait(false);
-                    foreach (string title in titles) AssertEqual(1, repaired.Count(m => m.Title == title + " [Worker]"), "exactly one Worker for " + title);
+                    for (int index = 0; index < titles.Length; index++)
+                        AssertEqual(1, repaired.Count(m => m.Persona == "Worker" && m.ArchitectSourceMissionId == architect.Id && m.ArchitectPlanIndex == index), "exactly one Worker for plan entry " + index);
+                    AssertEqual(0, repaired.Count(m => m.Title == "Second slice [Worker]"), "the renamed slice is not recreated under its old title");
                     Mission rebuilt = repaired.Single(m => m.Title == "Integrate slices [Worker]");
                     AssertTrue(rebuilt.WaitForVoyageWorkers, "the recreated integration slice keeps its barrier");
                     AssertTrue(repaired.Any(m => m.DependsOnMissionId == rebuilt.Id && m.Persona == "Judge"), "the recreated slice has its Judge");
@@ -1923,7 +1929,8 @@ namespace Test.Shared.Suites.Services
                     AssertNotNull(secondWorker, "Expected second worker mission to exist after architect handoff");
                     AssertContains("REST and Postman examples for captain model validation and mission total runtime.", firstWorker!.Description ?? String.Empty);
                     AssertContains("MCP schema and response consistency for captain model handling.", secondWorker!.Description ?? String.Empty);
-                    AssertFalse((firstWorker.Description ?? String.Empty).EndsWith("<!-- ARMADA:ARCHITECT-HANDOFF -->", StringComparison.Ordinal), "Worker description should contain actionable text, not only the handoff marker");
+                    AssertFalse(String.IsNullOrWhiteSpace(firstWorker.Description), "Worker description should contain actionable text");
+                    AssertEqual((int?)0, firstWorker.ArchitectPlanIndex, "the first slice records its plan index");
                 }
             }));
 
@@ -3287,7 +3294,7 @@ namespace Test.Shared.Suites.Services
                     AssertNotNull(handedOffTest, "Dependent test mission should remain readable");
                     AssertEqual(workerDock.BranchName, completedWorker!.BranchName, "Completion should backfill the mission branch from the dock");
                     AssertEqual(workerDock.BranchName, handedOffTest!.BranchName, "Downstream handoff should inherit the backfilled branch");
-                    AssertTrue((handedOffTest.Description ?? String.Empty).Contains("Branch: " + workerDock.BranchName), "Handoff context should show the recovered branch");
+                    AssertTrue(Armada.Core.Services.MissionNotes.EffectiveDescription(handedOffTest).Contains("Branch: " + workerDock.BranchName), "Handoff context should show the recovered branch");
                     AssertEqual(MissionStatusEnum.InProgress, handedOffTest.Status, "Dependent stage should dispatch once branch context is restored");
                 }
             }));

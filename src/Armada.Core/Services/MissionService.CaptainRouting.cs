@@ -74,7 +74,7 @@ namespace Armada.Core.Services
             if (_Settings.ExcludeReviewAuthorsFromJudge)
                 context.ExcludedAuthors = await ReviewAuthorCaptainIdsAsync(mission, token).ConfigureAwait(false);
             context.EscalatedToRequestedCaptain = !String.IsNullOrEmpty(mission.RequestedCaptainId) && (IntegrationBarrier.IsEscalatedRework(mission)
-                || (mission.Description ?? "").Contains("## Escalated to ", StringComparison.Ordinal));
+                || mission.EscalationCount > 0);
             context.UsageFallbackAuthorized = _Settings.EffectiveUsageSelection.Mode == UsageSelectionModeEnum.Enforce && mission.UsageRecovery?.AllowFallback == true;
             context.UsageFallbackRequired = _Settings.EffectiveUsageSelection.Mode == UsageSelectionModeEnum.Enforce
                 && !String.IsNullOrEmpty(mission.RequestedCaptainId) && mission.UsageRecovery?.AllowFallback != true;
@@ -278,7 +278,7 @@ namespace Armada.Core.Services
             {
                 AddGroup("RequestedCaptain", idleCaptains.Where(c => c.Id == requestedCaptainId));
                 // Strict and recovery assignments have no fallback buckets, including when their captain is absent.
-                if (IntegrationBarrier.IsEscalatedRework(mission) || (mission.Description ?? "").Contains("## Escalated to ", StringComparison.Ordinal)
+                if (IntegrationBarrier.IsEscalatedRework(mission) || mission.EscalationCount > 0
                     || await HasStrictCaptainOverrideAsync(mission, token).ConfigureAwait(false))
                     return groups.FirstOrDefault()?.Captains.FirstOrDefault();
             }

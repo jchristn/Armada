@@ -138,7 +138,7 @@ namespace Test.Shared.Suites.Services
                 Mission? repaired = await testDb.Driver.Missions.ReadAsync(judge.Id).ConfigureAwait(false);
                 AssertTrue(repaired!.Status != MissionStatusEnum.Failed, "the first contract violation is repaired, not failed");
                 AssertEqual(1, repaired.OutputRepairAttempts);
-                AssertContains("Affected Case", repaired.Description ?? String.Empty, "the repair note quotes the Judge contract");
+                AssertContains("Affected Case", Armada.Core.Services.MissionNotes.EffectiveDescription(repaired), "the repair note quotes the Judge contract");
                 AssertEqual(0, landingCalls);
 
                 // Second violation with the budget spent: the mission fails closed and says why.
@@ -354,16 +354,16 @@ namespace Test.Shared.Suites.Services
                 }).ConfigureAwait(false);
                 Mission restarted = await h.Missions.RestartAsync(judge, description: "Updated requirements").ConfigureAwait(false);
                 AssertContains("Updated requirements", restarted.Description);
-                AssertContains("Blank-key tool chat sends an unauthenticated request.", restarted.Description);
-                AssertContains("historical", restarted.Description);
-                AssertContains("recheck", restarted.Description);
+                AssertContains("Blank-key tool chat sends an unauthenticated request.", Armada.Core.Services.MissionNotes.EffectiveDescription(restarted));
+                AssertContains("historical", Armada.Core.Services.MissionNotes.EffectiveDescription(restarted));
+                AssertContains("recheck", Armada.Core.Services.MissionNotes.EffectiveDescription(restarted));
                 restarted.Status = MissionStatusEnum.Failed;
                 restarted.FailureKind = MissionFailureKindEnum.JudgeRejected;
                 restarted.AgentOutput = "## Affected Case\nUnknown providers need an explicit unsupported error.\n[ARMADA:VERDICT] NEEDS_REVISION";
                 await testDb.Driver.Missions.UpdateAsync(restarted).ConfigureAwait(false);
                 Mission again = await h.Missions.RestartAsync(restarted).ConfigureAwait(false);
-                AssertContains("Blank-key tool chat sends an unauthenticated request.", again.Description);
-                AssertContains("Unknown providers need an explicit unsupported error.", again.Description);
+                AssertContains("Blank-key tool chat sends an unauthenticated request.", Armada.Core.Services.MissionNotes.EffectiveDescription(again));
+                AssertContains("Unknown providers need an explicit unsupported error.", Armada.Core.Services.MissionNotes.EffectiveDescription(again));
             }));
 
             cases.Add(CaseAsync("restart_pending_starts_with_idle_captain", "Restarting a Pending mission applies the new title and description, resets nothing, and launches it at once on an idle captain", TestTags.Positive, async () =>
@@ -581,7 +581,7 @@ namespace Test.Shared.Suites.Services
 
                 Mission? repaired = await testDb.Driver.Missions.ReadAsync(linter.Id).ConfigureAwait(false);
                 AssertEqual(1, repaired!.OutputRepairAttempts, "the unsubstantiated block gets one repair turn");
-                AssertContains("without a concrete affected case", repaired.Description ?? "");
+                AssertContains("without a concrete affected case", Armada.Core.Services.MissionNotes.EffectiveDescription(repaired));
                 AssertFalse((await testDb.Driver.Missions.EnumerateByVoyageAsync(voyage.Id).ConfigureAwait(false)).Exists(m => m.DependsOnMissionId == linter.Id && m.Persona == "Worker"), "no rework on an unsubstantiated block");
                 AssertTrue(VerifierContract.IsBlocked("x\n  " + VerifierContract.BlockedMarker + "  \n"));
                 AssertFalse(VerifierContract.IsBlocked("The text mentions " + VerifierContract.BlockedMarker + " inline"));
@@ -806,7 +806,7 @@ namespace Test.Shared.Suites.Services
                 AssertTrue(await h.Missions.TryAssignAsync(integration, vessel).ConfigureAwait(false), "integration starts once the slices settle");
                 AssertEqual("aaa111@armada/a,bbb222@armada/b", String.Join(",", merges.Calls), "each kept slice's commit is merged, oldest first; the dropped slice is not");
                 Mission? started = await testDb.Driver.Missions.ReadAsync(integration.Id).ConfigureAwait(false);
-                string description = started!.Description ?? "";
+                string description = Armada.Core.Services.MissionNotes.EffectiveDescription(started);
                 AssertContains("Slice A [Worker]", description);
                 AssertContains(": merged", description);
                 AssertContains("`git merge bbb222` conflicts in `src/shared.cs`", description);

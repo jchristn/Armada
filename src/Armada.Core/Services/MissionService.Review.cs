@@ -153,13 +153,14 @@ namespace Armada.Core.Services
                         priorFindings = priorFindings.Substring(0, maxFindings / 2)
                             + "\n(previous review excerpt truncated)\n"
                             + priorFindings.Substring(priorFindings.Length - maxFindings / 2);
-                    if (!(mission.Description ?? String.Empty).Contains(priorFindings, StringComparison.Ordinal))
-                        mission.Description = (mission.Description ?? String.Empty)
-                            + "\n\n## Previous Judge findings (historical; recheck on restart)\n"
+                    string? earlierFindings = MissionNotes.Get(mission, MissionNoteKindEnum.PriorJudgeFindings);
+                    if (earlierFindings == null || !earlierFindings.Contains(priorFindings, StringComparison.Ordinal))
+                        MissionNotes.Set(mission, MissionNoteKindEnum.PriorJudgeFindings, (earlierFindings == null ? "" : earlierFindings + "\n\n")
+                            + "## Previous Judge findings (historical; recheck on restart)\n"
                             + "Re-evaluate every finding below against the current branch and current requirements. "
                             + "Report which are resolved, superseded, or still reproducible, and check the full mission scope. "
                             + "This is historical evidence, not the current verdict or a reason to skip independent validation.\n\n"
-                            + priorFindings;
+                            + priorFindings);
                 }
             }
 
@@ -217,7 +218,7 @@ namespace Armada.Core.Services
                 && m.FailureReason.Contains("(" + mission.Id + ")", StringComparison.Ordinal)).ToList())
             {
                 ResetForRestart(integration, integration.BranchName);
-                integration.Description = RemoveIntegrationMergeSection(integration.Description);
+                MissionNotes.Remove(integration, MissionNoteKindEnum.IntegrationMerge);
                 await _Database.Missions.UpdateAsync(integration, token).ConfigureAwait(false);
                 chain.Add(integration.Id);
                 _Logging.Info(_Header + "restored integration mission " + integration.Id + " with restarted mission " + mission.Id);
@@ -306,8 +307,7 @@ namespace Armada.Core.Services
         private static void ResetForRestart(Mission mission, string? branchName)
         {
             // A restarted Architect fans out again, and that new fan-out must be recoverable too.
-            if (mission.Description != null && mission.Description.Contains(_ArchitectFanOutCompleteMarker, StringComparison.Ordinal))
-                mission.Description = mission.Description.Replace(_ArchitectFanOutCompleteMarker, String.Empty).TrimEnd();
+            mission.FanOutCompletedUtc = null;
             mission.Status = MissionStatusEnum.Pending;
             mission.CaptainId = null;
             mission.BranchName = branchName;
@@ -384,7 +384,7 @@ namespace Armada.Core.Services
             }
 
             mission.Status = MissionStatusEnum.Pending;
-            mission.Description = ApplyReviewFeedback(mission.Description, reviewComment);
+            MissionNotes.Set(mission, MissionNoteKindEnum.ReviewFeedback, ReviewFeedbackNote(reviewComment));
             mission.CaptainId = null;
             mission.DockId = null;
             mission.ProcessId = null;

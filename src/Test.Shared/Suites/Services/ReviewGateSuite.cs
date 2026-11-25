@@ -132,7 +132,7 @@ namespace Test.Shared.Suites.Services
                     AssertNotNull(downstream, "Downstream stage should still exist");
                     AssertEqual(MissionStatusEnum.InProgress, downstream!.Status, "Approval should release the next stage");
                     AssertEqual(branchName, downstream.BranchName, "Downstream stage should inherit the reviewed branch");
-                    AssertContains("## Prior Stage Output", downstream.Description ?? "", "Downstream description should include prior-stage handoff");
+                    AssertContains("## Prior Stage Output", Armada.Core.Services.MissionNotes.EffectiveDescription(downstream), "Downstream description should include prior-stage handoff");
                     AssertEqual(scenario.JudgeCaptain!.Id, downstream.CaptainId, "Judge stage should be assigned to the judge captain");
                 }
             }));
@@ -159,8 +159,8 @@ namespace Test.Shared.Suites.Services
                     AssertEqual(branchName, retried.BranchName, "Retry should stay on the existing branch");
                     AssertEqual("usr_reviewer", retried.ReviewedByUserId, "Reviewer should be recorded");
                     AssertEqual("Add tests before continuing", retried.ReviewComment, "Denial comment should be recorded");
-                    AssertContains("## Review Feedback", retried.Description ?? "", "Retry description should embed review feedback");
-                    AssertContains("Add tests before continuing", retried.Description ?? "", "Retry description should include reviewer comment");
+                    AssertContains("## Review Feedback", Armada.Core.Services.MissionNotes.EffectiveDescription(retried), "Retry description should embed review feedback");
+                    AssertContains("Add tests before continuing", Armada.Core.Services.MissionNotes.EffectiveDescription(retried), "Retry description should include reviewer comment");
                     AssertNotNull(downstream, "Downstream stage should still exist");
                     AssertEqual(MissionStatusEnum.Pending, downstream!.Status, "Denied review should keep downstream work blocked");
                 }

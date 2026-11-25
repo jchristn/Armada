@@ -2837,13 +2837,14 @@ namespace Armada.Core.Services
             if (dock == null || String.IsNullOrEmpty(dock.WorktreePath)) return false;
 
             int attempt = captain.RecoveryAttempts + 1;
-            string note = "\n\n## Earlier attempt " + attempt + " stopped\n" + failureReason.Trim()
+            string note = "## Earlier attempt " + attempt + " stopped\n" + failureReason.Trim()
                 + "\nYour work so far is still in the working tree. Run git status and git diff to see it, keep what is right, and continue the mission from there. Do not start over."
                 + " Every line in git diff was written by you during this mission: you may change or remove it, even where the instructions say not to change existing lines (that means lines that were there before the mission started)."
                 + " Write files with plain content only, never with the line numbers that read_file shows.";
             // An outage ridden out over many resumes repeats one failure; record it once instead of once per attempt.
-            if (!(mission.Description ?? String.Empty).Contains(failureReason.Trim(), StringComparison.Ordinal))
-                mission.Description = (mission.Description ?? String.Empty) + note;
+            string? earlier = MissionNotes.Get(mission, MissionNoteKindEnum.Resume);
+            if (earlier == null || !earlier.Contains(failureReason.Trim(), StringComparison.Ordinal))
+                MissionNotes.Set(mission, MissionNoteKindEnum.Resume, earlier == null ? note : earlier + "\n\n" + note);
             DateTime resumeVersion = mission.LastUpdateUtc;
             mission.ProcessId = null;
             mission.LastUpdateUtc = DateTime.UtcNow;
@@ -2876,7 +2877,7 @@ namespace Armada.Core.Services
             if (PersonaCatalog.Matches(mission.Persona, PersonaCatalog.Judge) || PersonaCatalog.Matches(mission.Persona, PersonaCatalog.Architect)
                 || PersonaCatalog.Matches(mission.Persona, PersonaCatalog.ProductManager) || PersonaCatalog.Matches(mission.Persona, PersonaCatalog.Recorder))
                 return false;
-            if (String.IsNullOrEmpty(mission.VoyageId) || (mission.Description ?? String.Empty).Contains(_EscalatedHeading, StringComparison.Ordinal)) return false;
+            if (String.IsNullOrEmpty(mission.VoyageId) || mission.EscalationCount > 0) return false;
             // A strict assignment fixes the captain on purpose (tests that control model identity), so it fails rather
             // than finishing on a different model.
             if (await _Missions.HasStrictCaptainAssignmentAsync(mission, token).ConfigureAwait(false)) return false;
@@ -2905,9 +2906,12 @@ namespace Armada.Core.Services
             MissionStatusEnum observedStatus = mission.Status;
             DateTime escalationVersion = mission.LastUpdateUtc;
 
-            mission.Description = (mission.Description ?? String.Empty) + "\n\n" + _EscalatedHeading + plannerCaptain.Name + "\n"
+            MissionNotes.Set(mission, MissionNoteKindEnum.Escalation, _EscalatedHeading + plannerCaptain.Name + "\n"
                 + captain.Name + " could not finish this mission (" + failureReason.Trim() + "). Its work so far is committed on this branch and may not build yet. "
-                + "Review it with git log and git diff against the base branch, fix what is wrong, and finish the mission.";
+                + "Review it with git log and git diff against the base branch, fix what is wrong, and finish the mission.");
+            mission.EscalationCount++;
+            mission.EscalatedFromCaptainId = captain.Id;
+            mission.EscalatedFromModel = captain.Model;
             mission.RequestedCaptainId = plannerCaptain.Id;
             mission.Status = MissionStatusEnum.Pending;
             mission.CaptainId = null;

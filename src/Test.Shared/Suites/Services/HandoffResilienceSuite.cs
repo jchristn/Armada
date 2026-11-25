@@ -194,7 +194,8 @@ namespace Test.Shared.Suites.Services
                 Mission? final = await db.Missions.ReadAsync(judge.Id).ConfigureAwait(false);
                 AssertEqual(MissionStatusEnum.Failed, final!.Status, "the third violation fails closed");
                 AssertEqual(2, final.OutputRepairAttempts);
-                string description = final.Description ?? String.Empty;
+                string description = Armada.Core.Services.MissionNotes.EffectiveDescription(final);
+                AssertFalse((final.Description ?? String.Empty).Contains("## Output contract repair", StringComparison.Ordinal), "the description is never rewritten (RS-3.4)");
                 AssertEqual(1, CountOccurrences(description, "## Output contract repair"), "only the latest repair note is kept");
                 AssertContains("attempt 2 of 2", description);
                 AssertContains("after 2 output-contract repair attempt(s)", final.FailureReason ?? String.Empty);
@@ -684,7 +685,7 @@ namespace Test.Shared.Suites.Services
 
                 Mission? repaired = await db.Missions.ReadAsync(judge.Id).ConfigureAwait(false);
                 AssertEqual(1, repaired!.OutputRepairAttempts);
-                AssertContains("Spec Conflict", repaired.Description ?? String.Empty, "the repair note names the required section");
+                AssertContains("Spec Conflict", Armada.Core.Services.MissionNotes.EffectiveDescription(repaired), "the repair note names the required section");
             }));
 
             cases.Add(CaseAsync("stop_signals_gracefully_then_forces", "Stopping a local agent asks it to exit first and force-kills only one that ignores the request", TestTags.Reliability, async () =>

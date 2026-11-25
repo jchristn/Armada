@@ -722,6 +722,15 @@ namespace Armada.Core.Database.SqlServer
             mission.CreatedUtc = FromIso8601(reader["created_utc"].ToString()!);
             mission.StartedUtc = FromIso8601Nullable(reader["started_utc"]);
             mission.RescueOfMissionId = reader["rescue_of_mission_id"] == DBNull.Value ? null : reader["rescue_of_mission_id"].ToString();
+            mission.EscalationCount = reader["escalation_count"] == DBNull.Value ? 0 : Convert.ToInt32(reader["escalation_count"]);
+            mission.EscalatedFromCaptainId = reader["escalated_from_captain_id"] == DBNull.Value ? null : reader["escalated_from_captain_id"].ToString();
+            mission.EscalatedFromModel = reader["escalated_from_model"] == DBNull.Value ? null : reader["escalated_from_model"].ToString();
+            mission.FanOutCompletedUtc = FromIso8601Nullable(reader["fan_out_completed_utc"]);
+            mission.ArchitectSourceMissionId = reader["architect_source_mission_id"] == DBNull.Value ? null : reader["architect_source_mission_id"].ToString();
+            mission.ArchitectPlanIndex = reader["architect_plan_index"] == DBNull.Value ? null : Convert.ToInt32(reader["architect_plan_index"]);
+            mission.LaunchIntentUtc = FromIso8601Nullable(reader["launch_intent_utc"]);
+            mission.LaunchJobId = reader["launch_job_id"] == DBNull.Value ? null : reader["launch_job_id"].ToString();
+            mission.Notes = Armada.Core.Services.MissionNotes.FromJson(reader["notes_json"] == DBNull.Value ? null : reader["notes_json"].ToString());
             mission.BaseBranchName = reader["base_branch_name"] == DBNull.Value ? null : reader["base_branch_name"].ToString();
             mission.OwnedPathsJson = reader["owned_paths_json"] == DBNull.Value ? null : reader["owned_paths_json"].ToString();
             mission.ReadsPathsJson = reader["reads_paths_json"] == DBNull.Value ? null : reader["reads_paths_json"].ToString();

@@ -11091,6 +11091,15 @@ An atomic unit of work assigned to a captain.
 | `PlaybookSnapshots` | array\<[MissionPlaybookSnapshot](#missionplaybooksnapshot)\> | `[]` | Immutable playbook materialization used for execution |
 | `ParentMissionId` | string? | null | Parent mission ID for sub-tasks |
 | `RescueOfMissionId` | string? | null | Server-owned rescue provenance, separate from hierarchy; cleared if the original is purged |
+| `EscalationCount` | int | 0 | Times the mission was escalated to a stronger captain; routing reads this, never the description |
+| `EscalatedFromCaptainId` | string? | null | Captain that held the mission when it was last escalated |
+| `EscalatedFromModel` | string? | null | Model that held the mission when it was last escalated |
+| `FanOutCompletedUtc` | datetime? | null | When an Architect's fan-out finished writing every slice and dependency |
+| `ArchitectSourceMissionId` | string? | null | Architect mission whose plan created this Worker slice |
+| `ArchitectPlanIndex` | int? | null | Zero-based index of this slice in its Architect's plan |
+| `LaunchIntentUtc` | datetime? | null | When the Admiral recorded its intent to launch the captain; null when no launch is in flight |
+| `LaunchJobId` | string? | null | Identifier of the in-flight launch job |
+| `Notes` | array\<MissionNote\> | `[]` | Notes Armada attached after creation (handoff, review feedback, reviewer guidance, prior Judge findings, output repair, resume, escalation, integration merge), at most one per `Kind`, each with `Body` and `UpdatedUtc`. The description never changes; captains receive it followed by these notes |
 | `BranchStrategy` | string | New | Persisted branch metadata; hierarchy execution is a later milestone |
 | `BaseBranchName` | string? | null | Server-owned base branch metadata |
 | `Depth` | int | 0 | Server-owned hierarchy depth |

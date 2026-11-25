@@ -27,6 +27,17 @@ then replace the binaries the way you installed them. The new Admiral migrates t
 Use the update script that matches how you installed; they are not interchangeable (for example `update.bat`
 updates the global-tool install and does not touch the `ArmadaAdmiral` startup entry).
 
+### Changes to act on when coming to 1.5.0
+
+Migration 133 moves mission state that earlier releases kept in description text into typed columns, and fills
+them from the old markers on the first start: escalations (`EscalationCount`), Architect fan-outs
+(`FanOutCompletedUtc`) and Architect slices (`ArchitectSourceMissionId`, `ArchitectPlanIndex`). Old descriptions are
+not rewritten. From 1.5.0 a mission's description never changes after it is created: handoffs, review feedback,
+repair, resume and escalation notes are kept in the mission's `Notes` and rendered after the description at launch.
+Scripts that read those sections from `Description` should read `Notes` instead. A pipeline voyage that is running
+across the upgrade can show an earlier handoff in its description and the next one as a note; the captain receives
+both.
+
 ### Changes to act on when coming from 1.0.0
 
 1.0.1 fixes the landing modes. `LocalMerge` now merges into the working directory without pushing; the new

@@ -110,7 +110,7 @@ namespace Test.Shared.Suites.Services
                     AssertEqual(MissionStatusEnum.InProgress, resumed.Status, gate);
                     AssertEqual(8001, resumed.ProcessId); AssertEqual(1, resumed.StallRecoveryAttempts);
                     AssertEqual(1, headChecks); AssertEqual(1, h.Launches);
-                    AssertContains("broken build", resumed.Description!);
+                    AssertContains("broken build", Armada.Core.Services.MissionNotes.EffectiveDescription(resumed));
                 });
             Add("idle_captain_restart_replays_unfinished_verification", async () =>
             {

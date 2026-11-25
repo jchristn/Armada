@@ -18,6 +18,15 @@ Conductor) with Opus and GPT-6.1 reliable. The work is tracked item by item in `
 
 ### Reliability
 
+- **Mission state lives in typed columns, not in description text.** Migration 133 adds escalation, fan-out, Architect
+  slice, launch and note columns to missions and fills them from the old description markers, so an upgraded database
+  keeps its state. A brief that happens to contain "## Escalated to " no longer pins a mission's captain or blocks its
+  escalation, and renaming an Architect slice no longer breaks recovery of an interrupted fan-out (RS-3.1 to RS-3.3).
+- **A mission's description is never rewritten after it is created.** Handoffs, review feedback, reviewer guidance,
+  repair, resume, escalation and integration notes are kept as the mission's `Notes` (one per kind) and rendered after
+  the description when a captain launches. Missions expose the new `Notes`, `EscalationCount`,
+  `EscalatedFromCaptainId`, `EscalatedFromModel`, `FanOutCompletedUtc`, `ArchitectSourceMissionId`,
+  `ArchitectPlanIndex`, `LaunchIntentUtc` and `LaunchJobId` fields (RS-3.4).
 - **A mission whose merge entry already landed is completed after a restart.** If the Admiral stopped between
   marking a merge queue entry Landed and completing its mission, the mission stayed `WorkProduced` for good. Each
   queue pass now completes such missions first (RS-2.3).

@@ -203,7 +203,7 @@ namespace Test.Shared.Suites.Services
 
                     Mission next = (await testDb.Driver.Missions.ReadAsync(s.Next!.Id).ConfigureAwait(false))!;
                     AssertEqual(s.Mission.BranchName, next.BranchName, "the next stage was handed the branch");
-                    AssertNotEqual("Review the work", next.Description, "the next stage received the handoff");
+                    AssertNotEqual("Review the work", Armada.Core.Services.MissionNotes.EffectiveDescription(next), "the next stage received the handoff");
 
                     List<ContractRepairRecord> repairs = await RepairsAsync(testDb, s.Mission.Id).ConfigureAwait(false);
                     AssertEqual(1, repairs.Count, "one repair recorded");

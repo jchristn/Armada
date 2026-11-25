@@ -70,8 +70,6 @@ namespace Armada.Core.Services
             }
         }
 
-        private const string _IntegrationMergeStart = "<!-- armada:integration-merge -->";
-        private const string _IntegrationMergeEnd = "<!-- /armada:integration-merge -->";
 
         /// <summary>
         /// Bring the other slices' work onto a final integration slice's branch before it starts (H10): each settled
@@ -129,7 +127,6 @@ namespace Armada.Core.Services
             StringBuilder section = new StringBuilder();
             if (merged.Count > 0 || conflicts.Count > 0 || state.DroppedSlices.Count > 0)
             {
-                section.AppendLine(_IntegrationMergeStart);
                 section.AppendLine("## Work from the voyage's other slices");
                 if (merged.Count > 0)
                 {
@@ -146,30 +143,18 @@ namespace Armada.Core.Services
                     section.AppendLine("These slices were cancelled by an operator and are out of scope; do not implement or integrate them:");
                     foreach (Mission dropped in state.DroppedSlices) section.AppendLine("- " + dropped.Title + " (" + dropped.Id + ")");
                 }
-                section.Append(_IntegrationMergeEnd);
             }
 
-            string description = RemoveIntegrationMergeSection(mission.Description);
-            if (section.Length > 0) description = description.TrimEnd() + "\n\n" + section.ToString();
-            if (!String.Equals(description, mission.Description ?? String.Empty, StringComparison.Ordinal))
+            string? before = MissionNotes.Get(mission, MissionNoteKindEnum.IntegrationMerge);
+            MissionNotes.Set(mission, MissionNoteKindEnum.IntegrationMerge, section.ToString());
+            if (!String.Equals(before, MissionNotes.Get(mission, MissionNoteKindEnum.IntegrationMerge), StringComparison.Ordinal))
             {
-                mission.Description = description;
                 mission.LastUpdateUtc = DateTime.UtcNow;
                 await _Database.Missions.TryUpdateIfStatusAsync(mission, new MissionStatusEnum[] { MissionStatusEnum.Assigned }, token).ConfigureAwait(false);
             }
             _Logging.Info(_Header + "integration mission " + mission.Id + ": " + merged.Count + " sibling commit(s) on the branch, "
                 + conflicts.Count + " left to the Worker, " + state.DroppedSlices.Count + " dropped slice(s)");
             return null;
-        }
-
-        private static string RemoveIntegrationMergeSection(string? description)
-        {
-            string text = description ?? String.Empty;
-            int start = text.IndexOf(_IntegrationMergeStart, StringComparison.Ordinal);
-            if (start < 0) return text;
-            int end = text.IndexOf(_IntegrationMergeEnd, start, StringComparison.Ordinal);
-            if (end < 0) return text;
-            return (text.Substring(0, start).TrimEnd() + text.Substring(end + _IntegrationMergeEnd.Length)).TrimEnd();
         }
 
         private static string ShortCommit(string commit)
