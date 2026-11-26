@@ -228,6 +228,16 @@ Conductor) with Opus and GPT-6.1 reliable. The work is tracked item by item in `
   failure). The `--dir` flag, which OpenCode 2 rejects, is no longer passed. Think blocks, a bare closing think tag and
   an unclosed think block are stripped from the final message of Mux, OpenCode, pi, Gemini and Cursor captains
   (RS-7.12).
+- **File edits keep the file's encoding and line endings.** `edit_file`, `multi_edit` and `write_file` rewrote files
+  without the UTF-8 byte order mark and with the platform line ending; they now keep the byte order mark, encoding and
+  CRLF or LF endings of the existing file (RS-7.14).
+- **Edits that paste `read_file` line numbers are rejected.** An edit or write whose every line carries the line-number
+  prefix `read_file` shows fails with `line_number_prefix` and a message saying to drop the numbers, instead of writing
+  them into the code (RS-7.15).
+- **Tool output maximums scale to the context window.** With a known context length, the hard maximums for `read_file`
+  and process output are the new inference option `toolOutputWindowPercent` (default 12, 1 to 50) of the window;
+  explicit reads page at that maximum, and files up to 16 MB are paged instead of refused. The default page of 200
+  lines and 24,000 characters is unchanged, and an unknown window keeps the 1 MB and 100 KB caps (RS-7.9).
 - **Recovery state survives a restart.** Endpoint circuit breakers, launch backoff (with the captains that failed to
   start the mission), the start of a transient outage, and escalation rule cooldowns were kept only in memory, so a
   restart sent missions straight back to a failing endpoint, relaunched a broken captain at once, granted an outage a

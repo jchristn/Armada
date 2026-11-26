@@ -934,9 +934,12 @@ this phase it is Armada's job to absorb the predictable failures.
 - [ ] **RS-7.8** Context discovery. When `ContextLength` is null, discover it at endpoint validation and on first use
   (PolyPrompt model info, Ollama `/api/ps`, vLLM `/v1/models` `max_model_len`), store it on the model profile as
   "discovered", and let a configured value override it. Compaction is always on with a known window. Evidence:
-- [ ] **RS-7.9** Tool output limits scale to the window: read and process output caps default to a percentage of the
+- [x] **RS-7.9** Tool output limits scale to the window: read and process output caps default to a percentage of the
   window (setting, default 12%) with paged reads, replacing the fixed 1 MB read and 100 KB process caps.
-  `ToolSafetyLimits` statics become settings on the runtime options. Evidence:
+  `ToolSafetyLimits` statics become settings on the runtime options. Evidence: (c23d311c7) `ToolSafetyLimits` statics became `ToolLimits`, set per run on the registry,
+  `ReadFileTool` and `RunProcessTool`; hard maximums are `toolOutputWindowPercent` (default 12) of a known window at 3.2
+  characters per token (floor 24,000 characters read, 8 KB per stream, ceiling 1 MB); paged explicit reads; option on
+  REST, dashboard, TUI, mobile. Suite `Runtimes.ToolLimits`.
 - [ ] **RS-7.10** Compaction shrinks old assistant tool-call arguments (file bodies written by `write_file`) and
   reasoning, not only tool results. Token estimation uses a tokenizer when the profile names one and about 3.2
   characters per token for code otherwise. Evidence:
@@ -954,12 +957,15 @@ this phase it is Armada's job to absorb the predictable failures.
   for each new runtime behavior; a 1.5.0 Admiral with a 1.4.0 Harbor falls back to 1.4.0 behavior and shows "Harbor
   update recommended" in the Harbor and captain views. Update `docs/HARBOR_PROTOCOL.md`. Evidence:
 
-- [ ] **RS-7.14** Edit and write tools keep a UTF-8 byte order mark and line endings (`EditFileTool.cs:94,150`,
+- [x] **RS-7.14** Edit and write tools keep a UTF-8 byte order mark and line endings (`EditFileTool.cs:94,150`,
   `MultiEditTool.cs:111,184`, `WriteFileTool.cs:93` read and write with no encoding; Mux fixed the same bug in 1.4.1,
-  HDR Tooling 1). Battery byte-comparison test. Evidence:
-- [ ] **RS-7.15** Reject edits whose text carries `read_file` line-number prefixes (gpt-oss:20b pasted them into code,
+  HDR Tooling 1). Battery byte-comparison test. Evidence: (b80716233) `TextFileCodec`/`TextFileSnapshot` keep BOM, encoding and CRLF/LF for edit_file,
+  multi_edit and write_file; suite `Runtimes.ToolFileFormat` compares bytes (15 cases).
+- [x] **RS-7.15** Reject edits whose text carries `read_file` line-number prefixes (gpt-oss:20b pasted them into code,
   HDR and MH A4), with an error the model can act on; optionally a per-profile read format without numbers.
-  Evidence:
+  Evidence: (ce948cebd) `LineNumberPrefix` rejects with `line_number_prefix` (edits and write_file);
+  numberless read format per profile not added (tool descriptions say numbers are display only). Suite
+  `Runtimes.EditLineNumberPrefix` (8 cases).
 - [ ] **RS-7.16** Cold loads: warm the model with `keep_alive` before the first turn, and classify "model loading" and
   proxy time-to-first-byte timeouts (Conductor's 504 after 300 s, seen 2026-11-25 on inkling-2-mini) as Transient
   (HER:353, HER:685, HDR gpt-oss:120b cold start). Evidence (partial): more loading phrases read as `model_loading`, a 504
