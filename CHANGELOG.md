@@ -258,6 +258,10 @@ Conductor) with Opus and GPT-6.1 reliable. The work is tracked item by item in `
   is marked `updateRecommended`, with the missing flags in `missingCapabilities`; a captain whose session or active
   mission is on such a Harbor carries `harborUpdateRecommended`. The dashboard, TUI, mobile app and Harbor app show
   "Harbor update recommended" (RS-7.13).
+- **Compaction also shrinks old file bodies and reasoning.** Old `write_file`, `edit_file` and `multi_edit` calls in
+  an API captain's history keep their path and a size note instead of the full text, and old reasoning is stripped;
+  the turns behind the last 6 tool outputs stay whole. Token estimates use 3.2 characters per token (was 4 in the
+  instructions budget), so that budget trims slightly sooner (RS-7.10).
 - **Recovery state survives a restart.** Endpoint circuit breakers, launch backoff (with the captains that failed to
   start the mission), the start of a transient outage, and escalation rule cooldowns were kept only in memory, so a
   restart sent missions straight back to a failing endpoint, relaunched a broken captain at once, granted an outage a

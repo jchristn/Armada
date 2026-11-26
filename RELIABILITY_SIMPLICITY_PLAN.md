@@ -954,9 +954,14 @@ this phase it is Armada's job to absorb the predictable failures.
   `ReadFileTool` and `RunProcessTool`; hard maximums are `toolOutputWindowPercent` (default 12) of a known window at 3.2
   characters per token (floor 24,000 characters read, 8 KB per stream, ceiling 1 MB); paged explicit reads; option on
   REST, dashboard, TUI, mobile. Suite `Runtimes.ToolLimits`.
-- [ ] **RS-7.10** Compaction shrinks old assistant tool-call arguments (file bodies written by `write_file`) and
+- [x] **RS-7.10** Compaction shrinks old assistant tool-call arguments (file bodies written by `write_file`) and
   reasoning, not only tool results. Token estimation uses a tokenizer when the profile names one and about 3.2
-  characters per token for code otherwise. Evidence:
+  characters per token for code otherwise. Evidence: (ff5e295e7) `ApiContextCompactor.Compact` replaces old write/edit arguments with valid
+  JSON keeping the path and a size note and strips old reasoning (`ProviderState` and thought signatures untouched);
+  same recency rule as tool outputs. `CharacterRatioTokenEstimator` (3.2) shared with `ToolLimits` and
+  `InstructionsComposer`; `ITokenEstimator`/`TokenEstimators` seam for a named tokenizer (no profile field yet). Schema
+  constants recalibrated (built-in 3000, per MCP tool 200). Suite `Runtimes.ApiContextCompactor` (6); nine affected
+  suites 100/100.
 - [x] **RS-7.11** Extract `ApiAgentRuntime.RunLoopAsync` into a turn loop, terminal-handling policy, and context
   policy classes with unit tests per class. Evidence: (7ffd9ed2e) `ApiTurnLoop`, `ApiTerminalPolicy`, `ApiContextPolicy`; ApiAgentRuntime suite
   unchanged and passing; new suites Runtimes.ApiTurnLoop, ApiTerminalPolicy, ApiContextPolicy (23 cases). Merged head:
