@@ -63,7 +63,8 @@ namespace Test.Shared.Suites.Services
             {
                 AssertEqual(RuntimeFailureKindEnum.TaskFailure, RuntimeFailureClassifier.Classify(1, new RuntimeProviderError { HttpStatusCode = 413 }));
                 AssertEqual(RuntimeFailureKindEnum.TaskFailure, RuntimeFailureClassifier.Classify(1, new RuntimeProviderError { HttpStatusCode = 400, Message = "This model's maximum context length is 8192 tokens" }));
-                AssertEqual(RuntimeFailureKindEnum.Unclassified, RuntimeFailureClassifier.Classify(1, new RuntimeProviderError { HttpStatusCode = 400, Message = "Unsupported tool request shape" }));
+                AssertEqual(RuntimeFailureKindEnum.TaskFailure, RuntimeFailureClassifier.Classify(1, new RuntimeProviderError { HttpStatusCode = 400, Message = "Unsupported tool request shape" }), "a 400 on the tool shape is a task failure (RS-5.3)");
+                AssertEqual(RuntimeFailureKindEnum.Unclassified, RuntimeFailureClassifier.Classify(1, new RuntimeProviderError { HttpStatusCode = 400, Message = "Bad request" }));
             }));
 
             cases.Add(Case("generic_inference_failure_uses_status_then_transient", "inference_error takes its HTTP status; without one it is Transient (bounded by recovery attempts)", TestTags.Positive, () =>
@@ -103,6 +104,12 @@ namespace Test.Shared.Suites.Services
                     { "invalid_api_key", RuntimeFailureKindEnum.AuthFailure },
                     { "not_found_error", RuntimeFailureKindEnum.ModelUnavailable },
                     { "model_not_found", RuntimeFailureKindEnum.ModelUnavailable },
+                    { "model_out_of_memory", RuntimeFailureKindEnum.ModelUnavailable },
+                    { "tool_calling_unsupported", RuntimeFailureKindEnum.ModelUnavailable },
+                    { "tool_call_parse_error", RuntimeFailureKindEnum.TaskFailure },
+                    { "unavailable_error", RuntimeFailureKindEnum.Transient },
+                    { "runner_terminated", RuntimeFailureKindEnum.Transient },
+                    { "model_loading", RuntimeFailureKindEnum.Transient },
                     { "max_iterations_reached", RuntimeFailureKindEnum.TaskFailure },
                     { "budget_exceeded", RuntimeFailureKindEnum.TaskFailure },
                     { "degenerate_output", RuntimeFailureKindEnum.TaskFailure },

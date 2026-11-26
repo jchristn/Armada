@@ -223,6 +223,36 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
+            cases.Add(Case("open_model_errors_classify_from_fixtures", "Ollama, vLLM, LM Studio, llama.cpp and LiteLLM error responses get a machine type and kind (RS-5.3)", TestTags.Positive, () =>
+            {
+                string path = Path.Combine(DashboardSource.RepoRoot(), "src", "Test.Shared", "Fixtures", "OpenModelErrors", "open-model-errors.json");
+                OpenModelErrorFixtureFile? fixture = System.Text.Json.JsonSerializer.Deserialize<OpenModelErrorFixtureFile>(File.ReadAllText(path));
+                AssertNotNull(fixture);
+                AssertTrue(fixture!.Cases.Count >= 20, "fixture rows load");
+                AssertTrue(fixture.Cases.Exists(c => c.Provenance == "captured"), "at least one row was captured from a live server");
+                foreach (OpenModelErrorFixtureCase row in fixture.Cases)
+                {
+                    string label = row.Server + " " + row.Status + " " + row.ErrorType;
+                    RuntimeProviderError? error = RuntimeProviderErrorParser.FromHttpStatus(row.Status, row.Body);
+                    AssertNotNull(error, label);
+                    AssertEqual(row.ErrorType, error!.ErrorType, label);
+                    AssertEqual(Enum.Parse<RuntimeFailureKindEnum>(row.Kind), RuntimeFailureClassifier.Classify(1, error), label);
+                    // The same message from a generic runtime error type (Mux llm_error, a CLI line) classifies the same way.
+                    AssertEqual(Enum.Parse<RuntimeFailureKindEnum>(row.Kind), RuntimeFailureClassifier.Classify(1, new RuntimeProviderError { ErrorType = "llm_error", HttpStatusCode = row.Status, Message = row.Body }), label + " via llm_error");
+                }
+            }));
+
+            cases.Add(Case("open_model_patterns_ignore_unrelated_text", "A message that names no known failure gets no type, and only a 400 uses the tool or schema rule", TestTags.Negative, () =>
+            {
+                AssertNull(OpenModelErrorPatterns.Match(500, "{\"error\":\"unexpected server error\"}"));
+                AssertNull(OpenModelErrorPatterns.Match(500, "tool registry unavailable"), "the tool or schema rule is for a rejected request only");
+                AssertNull(OpenModelErrorPatterns.Match(null, null));
+                AssertEqual("schema_validation_failed", OpenModelErrorPatterns.Match(400, "invalid tool definition"));
+                AssertNull(RuntimeProviderErrorParser.TryParseCliStderrLine("Compiling project... done", "OpenCode"), "ordinary stderr is not a provider error");
+                RuntimeProviderError? cli = RuntimeProviderErrorParser.TryParseCliStderrLine("Error: llama runner process has terminated: signal: killed", "OpenCode");
+                AssertEqual(OpenModelErrorPatterns.RunnerTerminated, cli?.ErrorType);
+            }));
+
             return new TestSuiteDescriptor(
                 suiteId: "Services.RuntimeProviderErrorParser",
                 displayName: "Runtime Provider Error Parser",

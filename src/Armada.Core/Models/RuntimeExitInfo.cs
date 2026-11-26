@@ -63,6 +63,9 @@ namespace Armada.Core.Models
                 "output_token_limit_reached" => "Increase Max Output Tokens in the inference endpoint, including room for reasoning and the visible answer. Reduce reasoning effort where the model supports it.",
                 "incomplete_completion" => "Inspect the final inference turn and mission log. Check output-token limits and model tool support; the captain must finish the work and return the required completion marker and summary.",
                 "context_limit_exceeded" => "Reduce tool output and mission context, or select a model with a larger context window.",
+                "model_out_of_memory" => "The model server could not fit the model in memory. Unload other models, lower the context length, choose a smaller quantization, or route this persona to a different endpoint.",
+                "tool_calling_unsupported" => "The model or server cannot do tool calling as configured. Choose a model with tool support, or enable the server's tool-call parser (vLLM: --enable-auto-tool-choice and --tool-call-parser).",
+                "tool_call_parse_error" => "The server could not parse the model's tool call. Check the server's tool-call parser for this model, lower the temperature, or select a model that emits tool calls reliably.",
                 _ => FailureKind switch
                 {
                     RuntimeFailureKindEnum.AuthFailure => "Check the endpoint credentials and provider permissions, then re-enable the captain.",

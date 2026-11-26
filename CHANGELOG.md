@@ -114,6 +114,12 @@ Conductor) with Opus and GPT-6.1 reliable. The work is tracked item by item in `
   being treated as a crash. `Crash` now means the process died abnormally (killed by a signal, a Windows crash status,
   or cancelled). Repeated `Unclassified` exits still count toward crash-loop quarantine, and the acceptance gate's G6
   counts them per runtime and model (RS-5.2).
+- **Open-model server errors are recognized.** Ollama, vLLM, LM Studio, llama.cpp and LiteLLM report most failures
+  only as a message. Armada now gives those messages a machine type. A crashed runner or a model still loading is
+  transient. Out of memory and no tool support make the captain unavailable. A context overflow, a tool call the server
+  could not parse, or a 400 on the tool or schema shape is a task failure. A tool-call parse error no longer counts
+  against the endpoint's circuit breaker or its outage grace. Remediation text names the fix. The table tests run on
+  responses captured from live servers plus the servers' own source text (RS-5.3).
 - **Recovery state survives a restart.** Endpoint circuit breakers, launch backoff (with the captains that failed to
   start the mission), the start of a transient outage, and escalation rule cooldowns were kept only in memory, so a
   restart sent missions straight back to a failing endpoint, relaunched a broken captain at once, granted an outage a

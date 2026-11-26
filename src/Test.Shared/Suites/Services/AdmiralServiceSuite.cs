@@ -585,7 +585,7 @@ namespace Test.Shared.Suites.Services
                     captain.ProcessId = 4242;
                     await CaptainAssignmentFixture.CreateAsync(db, captain);
 
-                    RuntimeProviderError endpoint500 = new RuntimeProviderError { HttpStatusCode = 500, ErrorType = "llm_error", Message = "error parsing tool call", Reason = "the model endpoint rejected the request" };
+                    RuntimeProviderError endpoint500 = new RuntimeProviderError { HttpStatusCode = 500, ErrorType = "llm_error", Message = "internal server error", Reason = "the model endpoint rejected the request" };
                     await service.HandleProcessExitAsync(4242, RuntimeFailureClassifier.Decide(1, endpoint500), captain.Id, mission.Id).ConfigureAwait(false);
 
                     Mission? resumed = await db.Missions.ReadAsync(mission.Id).ConfigureAwait(false);
@@ -720,7 +720,7 @@ namespace Test.Shared.Suites.Services
                     captain.ProcessId = 4242;
                     await CaptainAssignmentFixture.CreateAsync(db, captain);
 
-                    RuntimeProviderError endpoint500 = new RuntimeProviderError { HttpStatusCode = 500, ErrorType = "llm_error", Message = "error parsing tool call", Reason = "the model endpoint rejected the request" };
+                    RuntimeProviderError endpoint500 = new RuntimeProviderError { HttpStatusCode = 500, ErrorType = "llm_error", Message = "internal server error", Reason = "the model endpoint rejected the request" };
                     await service.HandleProcessExitAsync(4242, RuntimeFailureClassifier.Decide(1, endpoint500), captain.Id, mission.Id).ConfigureAwait(false);
 
                     int? processId = 4242;

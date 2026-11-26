@@ -672,10 +672,17 @@ routing; a renamed Architect slice breaks fan-out recovery. Everything a program
   applies until RS-5.6. G6 counts it with a runtime / model breakdown. New case
   `handle_process_exit_async_resumes_unclassified_exit_once`; affected suites pass (RuntimeFailureClassifier,
   RuntimeProviderErrorParser, AdmiralService, AgentLifecycleHandler, GateScoring, BlackBox*, StageOutcomes, runtimes).
-- [ ] **RS-5.3** Open-model error patterns in `RuntimeProviderErrorParser`: Ollama, vLLM, LM Studio, and LiteLLM
+- [x] **RS-5.3** Open-model error patterns in `RuntimeProviderErrorParser`: Ollama, vLLM, LM Studio, and LiteLLM
   messages for runner terminated, out of memory, model not found, model loading, context overflow, and tool-call
   parse failures. 400s on tool or schema errors map to `TaskFailure`. Table tests from captured real outputs
-  (store them as fixtures). Evidence:
+  (store them as fixtures). Evidence: `OpenModelErrorPatterns.Match` (the one place an open-model message is read) feeds
+  `RuntimeProviderErrorParser.FromHttpStatus`, CLI stderr parsing, and `RuntimeFailureClassifier.Classify` for generic
+  types (Mux `llm_error`). New types `runner_terminated`, `model_loading`, `unavailable_error` (Transient),
+  `model_out_of_memory`, `tool_calling_unsupported` (ModelUnavailable), `tool_call_parse_error` (TaskFailure).
+  Fixtures in `src/Test.Shared/Fixtures/OpenModelErrors/open-model-errors.json`: 4 rows captured 2026-11-25 (proxied
+  Ollama, Ollama Cloud; hosts removed), 19 from server source text (vLLM, LM Studio, llama.cpp, LiteLLM had no live
+  server). `open_model_errors_classify_from_fixtures` and `open_model_patterns_ignore_unrelated_text` pass, as do
+  RuntimeFailureClassifier, AdmiralService, runtime and OpenModelSimulator suites.
 - [ ] **RS-5.4** 429 handling. A 429 without `insufficient_quota`, a reset time, or a usage-limit error type is
   `Transient` and honors `Retry-After`; it does not quarantine the captain. 402 stays `UsageLimit`. Evidence:
 - [ ] **RS-5.5** Recovery policy per model profile (or tier default): in-place resumes, transient grace, Judge rework

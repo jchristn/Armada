@@ -69,6 +69,7 @@ namespace Armada.Core.Services
             RuntimeProviderError error = new RuntimeProviderError();
             error.HttpStatusCode = httpStatusCode;
             error.Message = message;
+            error.ErrorType = OpenModelErrorPatterns.Match(httpStatusCode, message);
             if (retryAfterSeconds.HasValue && retryAfterSeconds.Value > 0) error.RetryAfterSeconds = retryAfterSeconds.Value;
             return error;
         }
@@ -227,6 +228,7 @@ namespace Armada.Core.Services
             if (status.Success)
             {
                 error.HttpStatusCode = Int32.Parse(status.Groups["status"].Value, CultureInfo.InvariantCulture);
+                error.ErrorType = OpenModelErrorPatterns.Match(error.HttpStatusCode, text);
                 return error;
             }
 
@@ -236,6 +238,8 @@ namespace Armada.Core.Services
             if (text.Contains("DEADLINE_EXCEEDED", StringComparison.Ordinal)) { error.ErrorType = "llm_timeout"; return error; }
             if (text.Contains("UNAVAILABLE", StringComparison.Ordinal) && text.Contains("\"status\"", StringComparison.Ordinal)) { error.ErrorType = "server_error"; return error; }
             if (_CliNetworkError.IsMatch(text)) { error.ErrorType = "llm_connection_error"; return error; }
+            string? openModel = OpenModelErrorPatterns.Match(null, text);
+            if (openModel != null) { error.ErrorType = openModel; return error; }
             return null;
         }
 

@@ -51,6 +51,10 @@ namespace Armada.Core.Services
             RuntimeFailureKindEnum? fromType = ClassifyErrorType(providerError.ErrorType);
             if (fromType.HasValue) return fromType.Value;
 
+            // An open-model server names most failures only in its message (RS-5.3).
+            RuntimeFailureKindEnum? fromMessage = ClassifyErrorType(OpenModelErrorPatterns.Match(providerError.HttpStatusCode, providerError.Message));
+            if (fromMessage.HasValue) return fromMessage.Value;
+
             RuntimeFailureKindEnum? fromStatus = ClassifyHttpStatus(providerError.HttpStatusCode, providerError.Message);
             if (fromStatus.HasValue) return fromStatus.Value;
 
@@ -98,10 +102,12 @@ namespace Armada.Core.Services
         {
             "rate_limit_error", "rate_limit_exceeded", "insufficient_quota", "usage_limit_reached", "billing_error",
             "authentication_error", "permission_error", "invalid_api_key",
-            "not_found_error", "model_not_found",
+            "not_found_error", "model_not_found", "model_out_of_memory", "tool_calling_unsupported",
             "max_iterations_reached", "budget_exceeded", "degenerate_output", "incomplete_completion",
             "output_token_limit_reached", "tool_call_limit_reached", "context_limit_exceeded", "schema_validation_failed",
+            "tool_call_parse_error",
             "llm_connection_error", "llm_timeout", "llm_stream_error", "api_error", "server_error", "overloaded_error",
+            "unavailable_error", "runner_terminated", "model_loading",
             "timeout_error", "inference_error", "llm_error", "error", "turn.failed",
             "runtime_error", "cancelled"
         };
@@ -156,6 +162,8 @@ namespace Armada.Core.Services
                     return RuntimeFailureKindEnum.AuthFailure;
                 case "not_found_error":
                 case "model_not_found":
+                case OpenModelErrorPatterns.ModelOutOfMemory:
+                case OpenModelErrorPatterns.ToolCallingUnsupported:
                     return RuntimeFailureKindEnum.ModelUnavailable;
                 case "max_iterations_reached":
                 case "budget_exceeded":
@@ -165,6 +173,7 @@ namespace Armada.Core.Services
                 case "tool_call_limit_reached":
                 case "context_limit_exceeded":
                 case "schema_validation_failed":
+                case OpenModelErrorPatterns.ToolCallParseError:
                     return RuntimeFailureKindEnum.TaskFailure;
                 case "llm_connection_error":
                 case "llm_timeout":
@@ -173,6 +182,9 @@ namespace Armada.Core.Services
                 case "server_error":
                 case "timeout_error":
                 case "overloaded_error":
+                case "unavailable_error":
+                case OpenModelErrorPatterns.RunnerTerminated:
+                case OpenModelErrorPatterns.ModelLoading:
                     // Overload is capacity backpressure, not an exhausted quota: retry with backoff rather than
                     // quarantining the captain as if its account were out of credit.
                     return RuntimeFailureKindEnum.Transient;
@@ -207,23 +219,10 @@ namespace Armada.Core.Services
                 case 413:
                     return RuntimeFailureKindEnum.TaskFailure;
                 case 400:
-                    return MentionsContextLimit(message) ? RuntimeFailureKindEnum.TaskFailure : (RuntimeFailureKindEnum?)null;
+                    return OpenModelErrorPatterns.MentionsContextLimit(message) ? RuntimeFailureKindEnum.TaskFailure : (RuntimeFailureKindEnum?)null;
                 default:
                     return null;
             }
-        }
-
-        private static bool MentionsContextLimit(string? message)
-        {
-            if (String.IsNullOrWhiteSpace(message)) return false;
-            string lower = message.ToLowerInvariant();
-            return lower.Contains("context length")
-                || lower.Contains("context window")
-                || lower.Contains("context_length")
-                || lower.Contains("maximum context")
-                || lower.Contains("too many tokens")
-                || lower.Contains("prompt is too long")
-                || lower.Contains("num_ctx");
         }
 
         private static bool IsGenericInferenceFailure(string? errorType)
