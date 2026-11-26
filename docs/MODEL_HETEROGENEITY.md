@@ -699,6 +699,11 @@ Measure first, then change handoffs and contracts, then prompts, then add profil
    migration 98) holds the latest repair recorded since the attempt started, or null when none was needed. When one
    attempt needs two repairs (a leftover-work commit and a completion-line repair) the outcome keeps the last and each
    repair still has its own event.
+   Since 1.5.0 (RS-6.5, RS-6.6) a plan in a `~~~` fence is parsed directly, and a single plan written as bare JSON or
+   inside a fence with prose is recovered; two plans are still refused, and wrong types or casing are reported, never
+   coerced. Plan errors name the JSON path, line and position. A FAIL or NEEDS_REVISION verdict written in prose under a
+   Verdict heading is recovered without the `ARMADA` token; a prose PASS is never recovered and goes to format repair.
+   Fence tracking resets at the `[...output truncated...]` marker, so a verdict after a truncated fence is still read.
 4. Measure each change on the battery, separately from prompt changes.
 
 ### Phase 4: prompts

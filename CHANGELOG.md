@@ -170,6 +170,13 @@ Conductor) with Opus and GPT-6.1 reliable. The work is tracked item by item in `
   `AcceptLegacyMissionMarkers` is on (the default), logs a warning each time it is used, and is removed in 2.0 (D-027).
   Turn the setting off to require an `armada-plan` block; marker output then gets the output repair turn like a missing
   plan. The setting is in the dashboard, TUI and mobile Agent settings.
+- **Plan and verdict parsing is more forgiving, without guessing.** An Architect plan in a `~~~` fence, written as bare
+  JSON, or inside a fence with prose is accepted when there is exactly one; two plans are still refused, and plan errors
+  name the JSON path, line and position. A FAIL or NEEDS_REVISION verdict written in prose under a Verdict heading is
+  recovered; a prose PASS still goes to format repair. A verdict after a fence cut open by output truncation is read.
+- **API endpoint captains on Judge and Architect stages are no longer asked for a completion line.** The Admiral now
+  says which missions need `[ARMADA:RESULT] COMPLETE` (`ARMADA_REQUIRES_COMPLETION_LINE`) instead of the runtime
+  searching the prompt for it, and a bold, backticked or bulleted completion line is accepted.
 - **Recovery state survives a restart.** Endpoint circuit breakers, launch backoff (with the captains that failed to
   start the mission), the start of a transient outage, and escalation rule cooldowns were kept only in memory, so a
   restart sent missions straight back to a failing endpoint, relaunched a broken captain at once, granted an outage a

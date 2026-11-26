@@ -829,17 +829,22 @@ the contract a schema, lets the model submit through a tool, and repairs format 
   (for example Opus). The repair keeps the original output and diff, is bounded (RS-5.5), never creates a PASS,
   findings, or evidence the original lacked (MODEL_HETEROGENEITY principle 4), and records its outcome (RS-1.4). A
   full rerun is the last resort. Evidence:
-- [ ] **RS-6.5** Plan parser tolerance (`ArchitectPlanParser.cs`, `ContractRepair.TryRecoverArchitectPlan`): reuse
+- [x] **RS-6.5** Plan parser tolerance (`ArchitectPlanParser.cs`, `ContractRepair.TryRecoverArchitectPlan`): reuse
   `Protocol/EmbeddedJsonExtractor` for bare JSON, `~~~` fences, and prose in fences, preferring the last valid
   candidate; `NumberHandling = AllowReadingFromString`; case-insensitive `kind` and `branchStrategy`; keep the
   `JsonException` path, line, and position; return errors as a capped, ordered list; replace the null-error "no block
-  found" signal with a result enum. Evidence:
-- [ ] **RS-6.6** Verdict and marker tolerance. `ContractRepair` recovers prose verdicts (`**Verdict: NEEDS_REVISION**`
+  found" signal with a result enum. Evidence: dec336d5f. `ArchitectPlanParser.Parse` returns a status enum and up to 20
+  ordered errors with JSON path, line and position; tilde fences parse; one bare or prose-in-fence plan is recovered and
+  two are refused (R6); no type or case coercion (R6).
+- [x] **RS-6.6** Verdict and marker tolerance. `ContractRepair` recovers prose verdicts (`**Verdict: NEEDS_REVISION**`
   under `## Verdict`) without requiring the token `ARMADA`; when two canonical lines conflict, accept the final
   non-empty line outside fences only if it is the last line; reset fence state at the `[...output truncated...]`
   marker. `ApiAgentRuntime`'s completion check (`ApiAgentRuntime.cs:1048`) uses the same decoration-tolerant matcher
   as Core and takes `requiresCompletion` explicitly instead of sniffing the prompt. Prompts stop showing markers in
-  backticks. Evidence:
+  backticks. Evidence: dec336d5f. Prose FAIL and NEEDS_REVISION are recovered, prose PASS is not (PipelineDispatch
+  requires a protocol line for a landing PASS); no last-line rule (R5); fence state resets at the truncation marker;
+  `ARMADA_REQUIRES_COMPLETION_LINE` and a shared `CompletionLine` matcher. ModelOutputContract 27/27, none skipped.
+  Backtick removal from prompts lands with RS-6.1.
 - [ ] **RS-6.7** Structured findings. The Judge and Test Engineer submit findings as
   `{file, line, severity, scenario, requiredFix}` through RS-6.2; the Judge template asks for a `## Findings`
   section for text runtimes; the eight-regex heading scraper in `HandoffArtifactBuilder.ExtractFindings` becomes the

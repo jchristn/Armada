@@ -342,6 +342,11 @@ supplies `ARMADA_MCP_URL` and `ARMADA_MCP_TOKEN`, the loop also connects to Arma
 exposes its tools to the model. Ask turns always supply them; missions supply them while `Mcp.MissionScopedTokens` is
 on (the default), and otherwise a mission run by an API-endpoint captain has the coding tools only.
 
+A run ends when the model replies without calling a tool. The Admiral sets `ARMADA_REQUIRES_COMPLETION_LINE=1` on
+mission launches whose persona must end with `[ARMADA:RESULT] COMPLETE` (every persona except Judge, Architect and
+Recorder, which end with a verdict, a plan or a record). With it set, a reply without that line gets a nudge to finish;
+bold, backticked or bulleted forms of the line are accepted. The variable travels to Harbors in the launch environment.
+
 ## Mission progress streaming
 
 In text mode a captain prints nothing until it finishes (Claude Code's `--print` prints only the final reply), so a
