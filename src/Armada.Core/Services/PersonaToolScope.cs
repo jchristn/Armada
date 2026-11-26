@@ -26,13 +26,13 @@ namespace Armada.Core.Services
         /// Estimated schema tokens of the API endpoint runtime's built-in coding tools (read, write, edit, search, run
         /// process, task plan), sent with every model turn. A Runtimes test keeps it within a quarter of the measured value.
         /// </summary>
-        public const int BuiltInToolSchemaTokens = 2400;
+        public const int BuiltInToolSchemaTokens = 3000;
 
         /// <summary>
-        /// Estimated schema tokens of one scoped Armada MCP tool (measured: Judge 5 tools about 835 tokens, Recorder 9
-        /// tools about 1,789).
+        /// Estimated schema tokens of one scoped Armada MCP tool (measured at 3.2 characters per token: Judge 5 tools
+        /// about 1,045 tokens, Recorder 9 tools about 2,235).
         /// </summary>
-        public const int ArmadaToolSchemaTokens = 180;
+        public const int ArmadaToolSchemaTokens = 200;
 
         /// <summary>
         /// Tools every persona is shown: the stage's handoff artifact, the memory search, the mission's own status, and the

@@ -3,6 +3,7 @@ namespace Armada.Runtimes
     using System;
     using System.Collections.Generic;
     using Armada.Core.Models;
+    using Armada.Core.Services;
     using PolyPrompt.Models;
 
     /// <summary>
@@ -37,6 +38,7 @@ namespace Armada.Runtimes
         #region Private-Members
 
         private readonly int? _ContextLength;
+        private readonly ITokenEstimator _Estimator;
         private long _LastPromptTokens = 0;
 
         #endregion
@@ -47,9 +49,12 @@ namespace Armada.Runtimes
         /// Create the policy for one run.
         /// </summary>
         /// <param name="contextLength">Configured context window in tokens, or null when unknown.</param>
-        public ApiContextPolicy(int? contextLength)
+        /// <param name="estimator">Token counter for the local estimate, or null for the 3.2 characters-per-token default
+        /// (<see cref="TokenEstimators.Resolve"/> gives the counter for a named tokenizer).</param>
+        public ApiContextPolicy(int? contextLength, ITokenEstimator? estimator = null)
         {
             _ContextLength = contextLength;
+            _Estimator = estimator ?? CharacterRatioTokenEstimator.Default;
         }
 
         #endregion
@@ -69,13 +74,13 @@ namespace Armada.Runtimes
         {
             if (messages == null) throw new ArgumentNullException(nameof(messages));
             if (tools == null) throw new ArgumentNullException(nameof(tools));
-            long pressure = Math.Max(_LastPromptTokens, ApiContextCompactor.EstimateTokens(messages) + ApiContextCompactor.EstimateToolTokens(tools));
+            long pressure = Math.Max(_LastPromptTokens, ApiContextCompactor.EstimateTokens(messages, _Estimator) + ApiContextCompactor.EstimateToolTokens(tools, _Estimator));
             if (!ApiContextCompactor.ShouldCompact(pressure, _ContextLength)) return null;
             long removed = ApiContextCompactor.Compact(messages);
             if (removed <= 0) return null;
             _LastPromptTokens = 0;
             return "[context] about " + pressure + " of " + _ContextLength
-                + " tokens in use; replaced earlier tool output (about " + (removed / 4) + " tokens) with short notes to stay inside the window";
+                + " tokens in use; replaced earlier tool output, file text and reasoning (about " + CharacterRatioTokenEstimator.Default.FromCharacters(removed) + " tokens) with short notes to stay inside the window";
         }
 
         /// <summary>
@@ -99,7 +104,7 @@ namespace Armada.Runtimes
                 if (removed > 0)
                 {
                     check.Note = "[context] prompt reached " + usage.PromptTokens + " of " + _ContextLength
-                        + " tokens; replaced earlier tool output (about " + (removed / 4) + " tokens) with short notes and continued";
+                        + " tokens; replaced earlier tool output, file text and reasoning (about " + CharacterRatioTokenEstimator.Default.FromCharacters(removed) + " tokens) with short notes and continued";
                     _LastPromptTokens = 0;
                     failure = null;
                 }

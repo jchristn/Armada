@@ -64,14 +64,13 @@ namespace Armada.Core.Services
         #region Public-Methods
 
         /// <summary>
-        /// Estimated tokens of a text: four characters per token, the estimate the API runtime uses.
+        /// Estimated tokens of a text, with the estimate the API runtime uses (<see cref="CharacterRatioTokenEstimator.Default"/>).
         /// </summary>
         /// <param name="text">Text, or null.</param>
         /// <returns>Estimated tokens.</returns>
         public static long EstimateTokens(string? text)
         {
-            if (String.IsNullOrEmpty(text)) return 0;
-            return (text.Length + 3) / 4;
+            return CharacterRatioTokenEstimator.Default.CountTokens(text);
         }
 
         /// <summary>

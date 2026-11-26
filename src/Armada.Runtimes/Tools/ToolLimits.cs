@@ -29,7 +29,7 @@ namespace Armada.Runtimes.Tools
         /// <summary>
         /// Characters per token assumed when converting a token budget to characters (code averages about 3.2).
         /// </summary>
-        public const double CharactersPerToken = 3.2;
+        public const double CharactersPerToken = Armada.Core.Services.CharacterRatioTokenEstimator.CodeCharactersPerToken;
 
         /// <summary>
         /// read_file output maximum when the context window is unknown (the 1.4.0 file-size cap, 1 MB).
