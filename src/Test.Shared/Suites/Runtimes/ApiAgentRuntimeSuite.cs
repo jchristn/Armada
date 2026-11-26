@@ -6,6 +6,7 @@ namespace Test.Shared.Suites.Runtimes
     using System.Linq;
     using System.Threading;
     using System.Threading.Tasks;
+    using Armada.Core;
     using Armada.Core.Enums;
     using Armada.Core.Models;
     using Armada.Core.Services;
@@ -477,6 +478,64 @@ namespace Test.Shared.Suites.Runtimes
                 CatalogRun collision = await RunCatalogAsync(50, new[] { CatalogCall("armada_discover_mcp_tools", "{}") }, reservedCollision: true).ConfigureAwait(false);
                 AssertEqual(50, collision.Client.ToolNames.Count(n => n.StartsWith("remote_", StringComparison.Ordinal)));
                 AssertEqual(1, collision.Stub.Requests.Count(r => r.Method == "tools/call" && r.Params!.Name == "armada_discover_mcp_tools"));
+            }));
+
+            cases.Add(CaseAsync("judge_launch_exposes_persona_scope", "A Judge launch shows its declared Armada tools up front, defers the rest, and keeps them callable", TestTags.Positive, async () =>
+            {
+                // The Armada tools named in captain prompts, mixed into a larger catalog.
+                List<string> armadaTools = new List<string> { "get_handoff_artifact", "search_memory", "mission_status", "update_vessel_context", "get_mission_log", "voyage_status", "create_memory" };
+                string scope = PersonaToolScope.Format(PersonaToolScope.ForPersona(PersonaCatalog.Judge));
+                CatalogRun run = await RunCatalogAsync(50, new[] { CatalogCall("voyage_status", "{}") }, toolScope: scope, extraNames: armadaTools).ConfigureAwait(false);
+                List<string> first = run.Client.ToolHistory[0];
+                foreach (string name in new[] { "get_handoff_artifact", "search_memory", "mission_status", "update_vessel_context", "get_mission_log" })
+                    AssertTrue(first.Contains(name), name + " is in the Judge scope");
+                AssertFalse(first.Contains("voyage_status"), "voyage_status is not in the Judge scope");
+                AssertFalse(first.Contains("create_memory"), "create_memory is not in the Judge scope");
+                AssertEqual(0, first.Count(n => n.StartsWith("remote_", StringComparison.Ordinal)));
+                AssertTrue(first.Contains("armada_discover_mcp_tools"), "the rest of the catalog is discoverable");
+                AssertEqual(1, run.Stub.Requests.Count(r => r.Method == "tools/call" && r.Params!.Name == "voyage_status"), "a permitted tool outside the scope stays callable");
+            }));
+
+            cases.Add(CaseAsync("persona_scope_applies_to_small_catalogs", "A declared scope defers even a catalog under the eager threshold; no scope keeps the threshold", TestTags.Positive, async () =>
+            {
+                string scope = PersonaToolScope.Format(PersonaToolScope.ForPersona(PersonaCatalog.Worker));
+                CatalogRun scoped = await RunCatalogAsync(10, Array.Empty<ToolCall>(), toolScope: scope, extraNames: new[] { "search_memory" }).ConfigureAwait(false);
+                AssertTrue(scoped.Client.ToolNames.Contains("search_memory"));
+                AssertEqual(0, scoped.Client.ToolNames.Count(n => n.StartsWith("remote_", StringComparison.Ordinal)));
+                AssertTrue(scoped.Client.ToolNames.Contains("armada_discover_mcp_tools"));
+                CatalogRun unscoped = await RunCatalogAsync(10, Array.Empty<ToolCall>(), extraNames: new[] { "search_memory" }).ConfigureAwait(false);
+                AssertEqual(10, unscoped.Client.ToolNames.Count(n => n.StartsWith("remote_", StringComparison.Ordinal)));
+                AssertFalse(unscoped.Client.ToolNames.Contains("armada_discover_mcp_tools"));
+            }));
+
+            cases.Add(CaseAsync("tool_schema_estimate_counts_schemas", "The tool-schema estimate grows with the schemas sent, so the window check counts them", TestTags.Positive, () =>
+            {
+                Dictionary<string, object> schema = new Dictionary<string, object> { ["type"] = "object", ["properties"] = new Dictionary<string, object> { ["target"] = new { type = "string", description = new string('d', 400) } } };
+                List<PolyPrompt.Models.ToolDefinition> one = new List<PolyPrompt.Models.ToolDefinition> { PolyPrompt.Models.ToolDefinition.Function("a", "first tool", schema) };
+                List<PolyPrompt.Models.ToolDefinition> many = Enumerable.Range(0, 175).Select(i => PolyPrompt.Models.ToolDefinition.Function("t" + i, "tool " + i, schema)).ToList();
+                long oneTokens = ApiContextCompactor.EstimateToolTokens(one);
+                long manyTokens = ApiContextCompactor.EstimateToolTokens(many);
+                AssertTrue(oneTokens >= 100, "a 400-character schema description counts: " + oneTokens);
+                AssertTrue(manyTokens > oneTokens * 150, "175 schemas cost about 175 times one: " + manyTokens);
+                AssertEqual(0L, ApiContextCompactor.EstimateToolTokens(new List<PolyPrompt.Models.ToolDefinition>()));
+                return Task.CompletedTask;
+            }));
+
+            cases.Add(CaseAsync("persona_tool_scope_declared_per_persona", "Each persona has a declared scope; custom personas get the common tools; the variable round-trips", TestTags.Positive, () =>
+            {
+                List<string> judge = PersonaToolScope.ForPersona(PersonaCatalog.Judge);
+                List<string> recorder = PersonaToolScope.ForPersona(PersonaCatalog.Recorder);
+                List<string> custom = PersonaToolScope.ForPersona("Security Reviewer");
+                AssertTrue(judge.Contains("get_mission_log") && !judge.Contains("create_memory"));
+                AssertTrue(recorder.Contains("create_memory") && recorder.Contains("voyage_status"));
+                AssertEqual(PersonaToolScope.CommonTools.Count, custom.Count);
+                AssertEqual(PersonaToolScope.CommonTools.Count, PersonaToolScope.ForPersona(null).Count);
+                HashSet<string>? parsed = PersonaToolScope.Parse(PersonaToolScope.Format(judge));
+                AssertNotNull(parsed);
+                AssertTrue(parsed!.SetEquals(judge));
+                AssertNull(PersonaToolScope.Parse(" , "));
+                AssertNull(PersonaToolScope.Parse(null));
+                return Task.CompletedTask;
             }));
 
             cases.Add(CaseAsync("deferred_mcp_named_directly_remains_callable", "Schema deferral does not revoke a permitted tool named directly by a mission", TestTags.Positive, async () =>
@@ -1204,7 +1263,8 @@ namespace Test.Shared.Suites.Runtimes
         private static ToolCall CatalogCall(string name, string arguments) => new ToolCall { Id = Guid.NewGuid().ToString("N"), Name = name, ArgumentsJson = arguments };
 
         private static async Task<CatalogRun> RunCatalogAsync(
-            int count, ToolCall[] calls, InferenceOptions? policy = null, bool reservedCollision = false, bool remoteError = false)
+            int count, ToolCall[] calls, InferenceOptions? policy = null, bool reservedCollision = false, bool remoteError = false,
+            string? toolScope = null, IEnumerable<string>? extraNames = null)
         {
             string dir = NewTempDir();
             try
@@ -1213,6 +1273,7 @@ namespace Test.Shared.Suites.Runtimes
                 // Remote tools cannot shadow built-ins, even when the catalog is deferred.
                 names.Add("read_file");
                 if (reservedCollision) names.Add("armada_discover_mcp_tools");
+                if (extraNames != null) names.AddRange(extraNames);
                 string catalog = System.Text.Json.JsonSerializer.Serialize(new { tools = names.Select(n => new { name = n, description = "Managed workload " + n, inputSchema = new { type = "object", properties = new { target = new { type = "string" } } } }) });
                 ToolClientStubHandler stub = new ToolClientStubHandler();
                 stub.Respond = request => request.Method == "tools/list" ? ToolClientStubHandler.Json(request.Id, catalog)
@@ -1228,7 +1289,9 @@ namespace Test.Shared.Suites.Runtimes
                 int exitCode = -1;
                 runtime.OnToolEvent += (pid, e) => events.Add(e);
                 runtime.OnProcessExited += (pid, value) => { exitCode = value ?? -1; exited.Set(); };
-                await runtime.StartAsync(dir, "exercise catalog", new Dictionary<string, string> { ["ARMADA_MCP_URL"] = "http://stub.invalid/mcp" }).ConfigureAwait(false);
+                Dictionary<string, string> environment = new Dictionary<string, string> { ["ARMADA_MCP_URL"] = "http://stub.invalid/mcp" };
+                if (toolScope != null) environment[PersonaToolScope.EnvironmentVariable] = toolScope;
+                await runtime.StartAsync(dir, "exercise catalog", environment).ConfigureAwait(false);
                 AssertTrue(exited.Wait(TimeSpan.FromSeconds(10)), "catalog loop must finish");
                 AssertEqual(0, exitCode);
                 return new CatalogRun(client, stub, events);

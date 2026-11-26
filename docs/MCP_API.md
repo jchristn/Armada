@@ -463,6 +463,13 @@ vessel. Mission tokens are refused by the REST API, `/ws`, and the Harbor link. 
 without `IsolateCaptainLaunch`, and every captain when `Mcp.MissionScopedTokens` is false, keep using their host MCP
 configuration (the loopback identity above when it is allowed).
 
+API-endpoint mission captains also receive `ARMADA_MCP_TOOL_SCOPE`, the Armada tools their persona is shown up front
+(`PersonaToolScope`): every persona gets `get_handoff_artifact`, `search_memory`, `mission_status` and
+`update_vessel_context`; the Architect adds `voyage_status`, the Judge adds `get_mission_log`, and the Recorder adds
+`voyage_status`, `get_mission_log`, `create_memory`, `update_memory` and `delete_memory`. The rest of the catalog is
+found through `armada_discover_mcp_tools`, and any tool the token permits can still be called by name. The scope changes
+which schemas are sent, not what the token may do. CLI runtimes load MCP schemas themselves and get no scope.
+
 ---
 
 ### Ask Armada Thread-Scoped Calls

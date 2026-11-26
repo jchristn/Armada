@@ -2,10 +2,15 @@ namespace Test.Shared.Suites.E2E
 {
     using System;
     using System.Collections.Generic;
+    using System.Linq;
     using System.Net.Http;
+    using System.Text.Json;
     using System.Threading;
     using System.Threading.Tasks;
+    using Armada.Core;
     using Armada.Core.Models;
+    using Armada.Core.Services;
+    using Armada.Runtimes;
     using Armada.Runtimes.Mcp;
     using Test.Shared.Infrastructure;
     using Touchstone.Core;
@@ -65,6 +70,26 @@ namespace Test.Shared.Suites.E2E
                 }
             }));
 
+            cases.Add(CaseAsync("persona_tool_scopes_name_real_tools", "Every persona tool scope names advertised tools and costs far fewer schema tokens than the catalog", TestTags.Positive, async () =>
+            {
+                E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this).ConfigureAwait(false);
+
+                using (McpToolClient client = new McpToolClient(Endpoint(fx)))
+                {
+                    await client.InitializeAsync().ConfigureAwait(false);
+                    List<McpRemoteTool> tools = await client.ListToolsAsync().ConfigureAwait(false);
+                    List<PolyPrompt.Models.ToolDefinition> catalog = tools.Select(ToDefinition).ToList();
+                    long catalogTokens = ApiContextCompactor.EstimateToolTokens(catalog);
+                    foreach (string persona in new[] { PersonaCatalog.Worker, PersonaCatalog.Architect, PersonaCatalog.Judge, PersonaCatalog.Recorder })
+                    {
+                        List<string> scope = PersonaToolScope.ForPersona(persona);
+                        foreach (string name in scope) AssertTrue(HasTool(tools, name), persona + " scope names " + name + ", which the MCP server must advertise");
+                        long scopedTokens = ApiContextCompactor.EstimateToolTokens(catalog.Where(t => scope.Contains(t.Name)).ToList());
+                        AssertTrue(scopedTokens * 10 < catalogTokens, persona + " scope costs about " + scopedTokens + " schema tokens against " + catalogTokens + " for " + catalog.Count + " tools");
+                    }
+                }
+            }));
+
             cases.Add(CaseAsync("client_calls_create_and_enumerate", "The MCP client can call a tool and round-trip its result", TestTags.Positive, async () =>
             {
                 E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this).ConfigureAwait(false);
@@ -121,6 +146,14 @@ namespace Test.Shared.Suites.E2E
         private static string Endpoint(E2EServerFixture fx)
         {
             return "http://127.0.0.1:" + fx.McpPort + "/mcp";
+        }
+
+        private static PolyPrompt.Models.ToolDefinition ToDefinition(McpRemoteTool tool)
+        {
+            Dictionary<string, object> parameters = String.IsNullOrEmpty(tool.InputSchemaJson)
+                ? new Dictionary<string, object>()
+                : JsonSerializer.Deserialize<Dictionary<string, object>>(tool.InputSchemaJson) ?? new Dictionary<string, object>();
+            return PolyPrompt.Models.ToolDefinition.Function(tool.Name, tool.Description, parameters);
         }
 
         private static bool HasTool(List<McpRemoteTool> tools, string name)

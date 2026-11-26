@@ -1,0 +1,102 @@
+namespace Armada.Core.Services
+{
+    using System;
+    using System.Collections.Generic;
+    using System.Linq;
+
+    /// <summary>
+    /// The Armada MCP tools each mission persona is shown up front. A captain's prompt names a handful of Armada tools
+    /// (handoff artifacts, memory, the mission's own status, and for the Recorder the voyage record); sending the schemas
+    /// of the whole catalog (175 tools) on every model turn costs tens of thousands of input tokens and makes small models
+    /// pick the wrong tool. The scope changes exposure only: every tool the caller's token permits stays callable, and
+    /// the rest of the catalog is found through tool discovery. The Admiral passes the scope to the runtime in
+    /// <see cref="EnvironmentVariable"/>.
+    /// </summary>
+    public static class PersonaToolScope
+    {
+        #region Public-Members
+
+        /// <summary>
+        /// Environment variable the Admiral sets on a mission launch to the comma-separated Armada MCP tools the persona
+        /// is shown up front. The API endpoint runtime reads it; a Harbor receives it in the launch environment.
+        /// </summary>
+        public const string EnvironmentVariable = "ARMADA_MCP_TOOL_SCOPE";
+
+        /// <summary>
+        /// Tools every persona is shown: the stage's handoff artifact, the memory search, the mission's own status, and the
+        /// vessel model-context update the instructions ask for.
+        /// </summary>
+        public static readonly IReadOnlyList<string> CommonTools = new List<string>
+        {
+            "get_handoff_artifact",
+            "search_memory",
+            "mission_status",
+            "update_vessel_context"
+        };
+
+        #endregion
+
+        #region Private-Members
+
+        private static readonly IReadOnlyList<string> _ArchitectTools = new List<string> { "voyage_status" };
+
+        private static readonly IReadOnlyList<string> _JudgeTools = new List<string> { "get_mission_log" };
+
+        private static readonly IReadOnlyList<string> _RecorderTools = new List<string>
+        {
+            "voyage_status",
+            "get_mission_log",
+            "create_memory",
+            "update_memory",
+            "delete_memory"
+        };
+
+        #endregion
+
+        #region Public-Methods
+
+        /// <summary>
+        /// The Armada MCP tools a persona is shown up front: <see cref="CommonTools"/> plus the persona's own. A custom or
+        /// empty persona gets the common tools.
+        /// </summary>
+        /// <param name="persona">Mission persona, or null.</param>
+        /// <returns>Distinct tool names in a stable order.</returns>
+        public static List<string> ForPersona(string? persona)
+        {
+            List<string> tools = new List<string>(CommonTools);
+            if (PersonaCatalog.Matches(persona, PersonaCatalog.Architect)) tools.AddRange(_ArchitectTools);
+            else if (PersonaCatalog.Matches(persona, PersonaCatalog.Judge)) tools.AddRange(_JudgeTools);
+            else if (PersonaCatalog.Matches(persona, PersonaCatalog.Recorder)) tools.AddRange(_RecorderTools);
+            return tools.Distinct(StringComparer.Ordinal).ToList();
+        }
+
+        /// <summary>
+        /// Format a scope for <see cref="EnvironmentVariable"/>.
+        /// </summary>
+        /// <param name="tools">Tool names.</param>
+        /// <returns>Comma-separated names.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="tools"/> is null.</exception>
+        public static string Format(IEnumerable<string> tools)
+        {
+            if (tools == null) throw new ArgumentNullException(nameof(tools));
+            return String.Join(",", tools.Where(t => !String.IsNullOrWhiteSpace(t)).Select(t => t.Trim()));
+        }
+
+        /// <summary>
+        /// Parse the value of <see cref="EnvironmentVariable"/>. Null or blank means no scope (the runtime keeps its own
+        /// exposure rules).
+        /// </summary>
+        /// <param name="value">Comma-separated tool names, or null.</param>
+        /// <returns>Distinct tool names, or null when there is no scope.</returns>
+        public static HashSet<string>? Parse(string? value)
+        {
+            if (String.IsNullOrWhiteSpace(value)) return null;
+            HashSet<string> tools = new HashSet<string>(
+                value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
+                StringComparer.Ordinal);
+            return tools.Count == 0 ? null : tools;
+        }
+
+        #endregion
+    }
+}

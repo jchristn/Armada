@@ -347,6 +347,13 @@ mission launches whose persona must end with `[ARMADA:RESULT] COMPLETE` (every p
 Recorder, which end with a verdict, a plan or a record). With it set, a reply without that line gets a nudge to finish;
 bold, backticked or bulleted forms of the line are accepted. The variable travels to Harbors in the launch environment.
 
+Armada's MCP catalog has about 270 tools, and their schemas are resent on every model turn (about 62,000 input tokens
+for the whole catalog). A mission launch therefore names the few Armada tools its persona uses in
+`ARMADA_MCP_TOOL_SCOPE` (see [MCP API](MCP_API.md#mission-scoped-captain-calls)); those are sent up front (about 700 to
+900 tokens, 1,800 for the Recorder) and the rest stay available through `armada_discover_mcp_tools`. Without a scope
+(Ask turns), a catalog of more than 32 tools is deferred behind discovery as before. The context-window check that
+compacts earlier tool output counts the tool schemas sent, not only the messages.
+
 ## Mission progress streaming
 
 In text mode a captain prints nothing until it finishes (Claude Code's `--print` prints only the final reply), so a

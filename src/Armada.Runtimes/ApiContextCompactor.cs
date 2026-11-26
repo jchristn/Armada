@@ -62,6 +62,25 @@ namespace Armada.Runtimes
         }
 
         /// <summary>
+        /// Estimate the input tokens the tool schemas of a request cost (the same four characters per token as
+        /// <see cref="EstimateTokens"/>). Every model turn resends them, so they count toward the window like messages.
+        /// </summary>
+        /// <param name="tools">Tool definitions sent with the request.</param>
+        /// <returns>Estimated tokens.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="tools"/> is null.</exception>
+        public static long EstimateToolTokens(IReadOnlyList<ToolDefinition> tools)
+        {
+            if (tools == null) throw new ArgumentNullException(nameof(tools));
+            long characters = 0;
+            foreach (ToolDefinition tool in tools)
+            {
+                if (tool == null) continue;
+                characters += 16 + System.Text.Json.JsonSerializer.Serialize(tool).Length;
+            }
+            return characters / 4;
+        }
+
+        /// <summary>
         /// Whether a conversation of this size should be compacted for this window.
         /// </summary>
         /// <param name="promptTokens">The larger of the provider's prompt count and the local estimate.</param>

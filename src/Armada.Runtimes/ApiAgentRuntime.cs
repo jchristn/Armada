@@ -282,6 +282,11 @@ namespace Armada.Runtimes
                 && environment.TryGetValue(CompletionLine.RequiredEnvironmentVariable, out string? requiredFlag)
                 && String.Equals(requiredFlag, "1", StringComparison.Ordinal);
 
+            // The Admiral names the Armada MCP tools this persona is shown up front; the rest stay callable through discovery.
+            HashSet<string>? toolScope = null;
+            if (environment != null && environment.TryGetValue(PersonaToolScope.EnvironmentVariable, out string? scopeValue))
+                toolScope = PersonaToolScope.Parse(scopeValue);
+
             int processId = Interlocked.Increment(ref _PidCounter);
             CancellationTokenSource cts = CancellationTokenSource.CreateLinkedTokenSource(token);
             _Running[processId] = cts;
@@ -290,7 +295,7 @@ namespace Armada.Runtimes
             OnProcessStarted?.Invoke(processId);
 
             // Run the loop in the background so StartAsync returns the pid promptly, mirroring a process launch.
-            Task loop = Task.Run(() => RunLoopAsync(processId, endpoint, workingDirectory, prompt, model, captain?.ReasoningEffort, finalMessageFilePath, mcpUrl, mcpToken, requiresCompletionLine, cts));
+            Task loop = Task.Run(() => RunLoopAsync(processId, endpoint, workingDirectory, prompt, model, captain?.ReasoningEffort, finalMessageFilePath, mcpUrl, mcpToken, requiresCompletionLine, toolScope, cts));
             _Loops[processId] = loop;
             _ = loop.ContinueWith(_ => _Loops.TryRemove(processId, out Task? _), TaskScheduler.Default);
 
@@ -526,6 +531,7 @@ namespace Armada.Runtimes
             string? mcpUrl,
             string? mcpToken,
             bool requiresCompletionLine,
+            HashSet<string>? toolScope,
             CancellationTokenSource cts)
         {
             int exitCode = 0;
@@ -628,10 +634,21 @@ namespace Armada.Runtimes
 
                         // Explicit allowlists and small catalogs keep eager exposure. Large default catalogs
                         // remain callable under the same policy, with schemas discovered only when needed.
+                        // A mission persona's declared scope is shown up front and the rest is discovered.
                         // A real remote tool with the discovery name keeps its original meaning.
-                        if (settings.AllowedTools == null && remoteDefinitions.Count > DeferredMcpToolCatalog.EagerCatalogLimit
-                            && !mcpRouting.ContainsKey(DeferredMcpToolCatalog.DiscoveryName)
-                            && !builtInNames.Contains(DeferredMcpToolCatalog.DiscoveryName))
+                        bool discoveryNameFree = !mcpRouting.ContainsKey(DeferredMcpToolCatalog.DiscoveryName)
+                            && !builtInNames.Contains(DeferredMcpToolCatalog.DiscoveryName);
+                        List<PolyToolDefinition> scoped = toolScope == null ? new List<PolyToolDefinition>()
+                            : remoteDefinitions.Where(t => toolScope.Contains(t.Name)).ToList();
+                        List<PolyToolDefinition> unscoped = toolScope == null ? new List<PolyToolDefinition>()
+                            : remoteDefinitions.Where(t => !toolScope.Contains(t.Name)).ToList();
+                        if (settings.AllowedTools == null && toolScope != null && unscoped.Count > 0 && discoveryNameFree)
+                        {
+                            tools.AddRange(scoped);
+                            deferredCatalog = new DeferredMcpToolCatalog(unscoped, tools);
+                            tools.Add(DeferredMcpToolCatalog.Definition());
+                        }
+                        else if (settings.AllowedTools == null && remoteDefinitions.Count > DeferredMcpToolCatalog.EagerCatalogLimit && discoveryNameFree)
                         {
                             deferredCatalog = new DeferredMcpToolCatalog(remoteDefinitions, tools);
                             tools.Add(DeferredMcpToolCatalog.Definition());
@@ -656,6 +673,9 @@ namespace Armada.Runtimes
                     return;
                 }
 
+                EmitDiagnostic(processId, ApiRuntimeDiagnosticKindEnum.Inference, "[tools] " + tools.Count + " tool schema(s) sent, about "
+                    + ApiContextCompactor.EstimateToolTokens(tools) + " input tokens per turn" + (toolScope == null ? String.Empty : "; persona scope applied"));
+
                 List<ChatMessage> messages = new List<ChatMessage>();
                 messages.Add(ChatMessage.System(BuildSystemPrompt(workingDirectory)
                     + (deferredCatalog == null ? String.Empty : " Additional Armada MCP tools are available through "
@@ -677,7 +697,8 @@ namespace Armada.Runtimes
 
                     // Keep the conversation inside the window before it is sent: the provider's count can lag or undercount
                     // (Ollama does not count cached prompt tokens), so the local estimate also decides.
-                    long pressure = Math.Max(lastPromptTokens, ApiContextCompactor.EstimateTokens(messages));
+                    // Tool schemas are resent on every turn, so they count toward the window too (discovery can add more).
+                    long pressure = Math.Max(lastPromptTokens, ApiContextCompactor.EstimateTokens(messages) + ApiContextCompactor.EstimateToolTokens(tools));
                     if (ApiContextCompactor.ShouldCompact(pressure, settings.ContextLength))
                     {
                         long removed = ApiContextCompactor.Compact(messages);

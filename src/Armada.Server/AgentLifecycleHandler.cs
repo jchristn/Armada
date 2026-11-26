@@ -1204,6 +1204,16 @@ namespace Armada.Server
                     environment[Armada.Core.Services.CompletionLine.RequiredEnvironmentVariable] = "1";
                 }
 
+                // Name the Armada MCP tools this persona is shown up front (the API endpoint runtime defers the rest of the
+                // catalog behind discovery). Exposure only: the mission token still decides what may be called. CLI
+                // runtimes load MCP schemas on their own and are not given a scope.
+                if (captain.Runtime == AgentRuntimeEnum.ApiEndpoint)
+                {
+                    environment ??= new Dictionary<string, string>();
+                    environment[Armada.Core.Services.PersonaToolScope.EnvironmentVariable] =
+                        Armada.Core.Services.PersonaToolScope.Format(Armada.Core.Services.PersonaToolScope.ForPersona(mission.Persona));
+                }
+
                 processId = await runtime.StartAsync(
                     dock.WorktreePath ?? throw new InvalidOperationException("Dock worktree path is null"),
                     prompt,
