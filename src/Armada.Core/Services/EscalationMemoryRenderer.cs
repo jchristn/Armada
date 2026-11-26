@@ -44,6 +44,46 @@ namespace Armada.Core.Services
         }
 
         /// <summary>
+        /// Render what is known about the attempt, without a heading: the failure kind, rule hint, changed files and
+        /// output tail (RS-5.7). Rescue briefs reuse it (RS-5.8).
+        /// </summary>
+        /// <param name="memory">The memory.</param>
+        /// <returns>Markdown lines, or an empty string when nothing is known.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when memory is null.</exception>
+        public static string RenderFacts(EscalationMemory memory)
+        {
+            if (memory == null) throw new ArgumentNullException(nameof(memory));
+            StringBuilder sb = new StringBuilder();
+            if (memory.FailureKind.HasValue || memory.RuntimeFailureKind.HasValue)
+            {
+                List<string> kind = new List<string>();
+                if (memory.FailureKind.HasValue) kind.Add(memory.FailureKind.Value.ToString());
+                if (memory.RuntimeFailureKind.HasValue) kind.Add("runtime " + memory.RuntimeFailureKind.Value);
+                if (memory.ExitCode.HasValue) kind.Add("exit " + memory.ExitCode.Value);
+                sb.Append("- Failure kind: ").Append(String.Join(", ", kind)).Append('\n');
+            }
+            if (!String.IsNullOrWhiteSpace(memory.Hint)) sb.Append("- Likely cause: ").Append(memory.Hint!.Trim()).Append(" (").Append(memory.HintRuleId).Append(")\n");
+            if (memory.ChangedFiles != null)
+            {
+                if (memory.ChangedFiles.Count == 0)
+                {
+                    sb.Append("- Changed files: none\n");
+                }
+                else
+                {
+                    string files = String.Join(", ", memory.ChangedFiles.Take(MaxChangedFiles));
+                    if (memory.ChangedFiles.Count > MaxChangedFiles) files += ", and " + (memory.ChangedFiles.Count - MaxChangedFiles) + " more";
+                    sb.Append("- Changed files (").Append(memory.ChangedFiles.Count).Append("): ").Append(files).Append('\n');
+                }
+            }
+            if (!String.IsNullOrWhiteSpace(memory.OutputTail))
+            {
+                sb.Append("\nThe end of its output:\n\n```text\n").Append(memory.OutputTail!.Replace("```", "'''").TrimEnd()).Append("\n```\n");
+            }
+            return sb.ToString().Replace("\u2014", "-").TrimEnd();
+        }
+
+        /// <summary>
         /// Render the note body: what happened, then the failure kind, rule hint, changed files and output tail when known.
         /// </summary>
         /// <param name="memory">The memory.</param>
@@ -61,38 +101,8 @@ namespace Armada.Core.Services
             sb.Append("Its work so far is committed on this branch and may not build yet. ");
             sb.Append("Review it with git log and git diff against the base branch, fix what is wrong, and finish the mission.\n");
 
-            List<string> facts = new List<string>();
-            if (memory.FailureKind.HasValue || memory.RuntimeFailureKind.HasValue)
-            {
-                List<string> kind = new List<string>();
-                if (memory.FailureKind.HasValue) kind.Add(memory.FailureKind.Value.ToString());
-                if (memory.RuntimeFailureKind.HasValue) kind.Add("runtime " + memory.RuntimeFailureKind.Value);
-                if (memory.ExitCode.HasValue) kind.Add("exit " + memory.ExitCode.Value);
-                facts.Add("- Failure kind: " + String.Join(", ", kind));
-            }
-            if (!String.IsNullOrWhiteSpace(memory.Hint)) facts.Add("- Likely cause: " + memory.Hint!.Trim() + " (" + memory.HintRuleId + ")");
-            if (memory.ChangedFiles != null)
-            {
-                if (memory.ChangedFiles.Count == 0)
-                {
-                    facts.Add("- Changed files: none");
-                }
-                else
-                {
-                    string files = String.Join(", ", memory.ChangedFiles.Take(MaxChangedFiles));
-                    if (memory.ChangedFiles.Count > MaxChangedFiles) files += ", and " + (memory.ChangedFiles.Count - MaxChangedFiles) + " more";
-                    facts.Add("- Changed files (" + memory.ChangedFiles.Count + "): " + files);
-                }
-            }
-            if (facts.Count > 0 || !String.IsNullOrWhiteSpace(memory.OutputTail))
-            {
-                sb.Append("\n### What the previous attempt left\n");
-                foreach (string fact in facts) sb.Append(fact).Append('\n');
-                if (!String.IsNullOrWhiteSpace(memory.OutputTail))
-                {
-                    sb.Append("\nThe end of its output:\n\n```text\n").Append(memory.OutputTail!.Replace("```", "'''").TrimEnd()).Append("\n```\n");
-                }
-            }
+            string facts = RenderFacts(memory);
+            if (facts.Length > 0) sb.Append("\n### What the previous attempt left\n").Append(facts).Append('\n');
             return sb.ToString().Replace("\u2014", "-").TrimEnd();
         }
     }

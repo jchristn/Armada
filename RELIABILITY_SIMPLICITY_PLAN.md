@@ -744,9 +744,15 @@ routing; a renamed Architect slice breaks fan-out recovery. Everything a program
   `escalation_memory_renders_hint_and_files`; EscalationLadder plus NoOpCompletion 30/30, AdmiralService plus
   MultiRuntimeFlow 109/109. Docs: CAPTAIN_ROUTING.md, CHANGELOG. Diff summary is the changed-file list, not line
   counts (the branch diff is not read on this path).
-- [ ] **RS-5.8** Rescue routing. From the second rescue on, `MissionRecoveryCoordinator.DispatchRescueAsync` uses
+- [x] **RS-5.8** Rescue routing. From the second rescue on, `MissionRecoveryCoordinator.DispatchRescueAsync` uses
   the escalation selector with the failed captain excluded (`rescue.Tier = original.Tier`, line 316, is replaced).
-  The rescue brief includes the output tail and BlackBox hint. Evidence:
+  The rescue brief includes the output tail and BlackBox hint. Evidence: from the second rescue on, the rescue is
+  pinned (`RequestedCaptainId`, `EscalatedFromCaptainId`, `EscalationCount = 1`) to
+  `CaptainEscalationSelector.ChooseAsync` with the failed rescue's captain excluded; the original tier stays as a
+  floor, and with no qualifying captain the rescue goes out unpinned. Both briefs get a "Last Failed Attempt" section
+  built from `EscalationMemory` and `EscalationMemoryRenderer.RenderFacts` (kind, hint, redacted 2000-character
+  tail). Case `second_rescue_excludes_failed_captain_and_carries_memory`; MissionRecoveryCoordinator, EscalationLadder
+  and CrashConsistency 44/44, BlackBoxCaptureSites 86/86.
 - [ ] **RS-5.9** Fix the RecoveryExhausted notification: fire it when the rescue budget is actually exhausted
   (coordinator `ExhaustedNote`), not on every terminal failure keyed by captain (`AdmiralService.cs:3083`). Mitigated
   incidents close only after a verification cycle shows the fix held. Evidence:

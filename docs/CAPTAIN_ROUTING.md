@@ -181,6 +181,10 @@ started (up to 25 named), and the last 2000 characters of the previous output, r
 Parts that are not known are left out. The previous output is then cleared from the mission so it is not read as the
 escalated attempt's output.
 
+Autonomous rescues (RS-5.8) reuse the same selector and memory: from the second rescue of an incident on, the rescue is
+pinned to the escalation choice with the captain of the failed rescue excluded, and every rescue brief carries the last
+failed attempt's failure kind, rule hint and output tail. See [Delivery operations](DELIVERY_OPERATIONS.md).
+
 ## Explicit overrides and legacy defaults
 
 An explicit mission RequestedCaptainId takes precedence, followed by the voyage's exact per-persona captain assignment, then its wildcard (`*`) assignment. Those choices retain legacy behavior: an available requested captain bypasses AllowedPersonas and tier checks; a busy or deleted one falls back through ordinary persona/tier routing. Ownership and quarantine checks still apply. These explicit overrides bypass the hierarchy.

@@ -229,6 +229,43 @@ namespace Test.Shared.Suites.Services
                 AssertContains("exhausted", incident.RecoveryNotes ?? String.Empty, "the incident notes explain the exhausted budget");
             }));
 
+            cases.Add(CaseAsync("second_rescue_excludes_failed_captain_and_carries_memory", "From the second rescue on, the rescue goes to a stronger captain than the one whose rescue failed, and its brief carries that attempt's output tail and hint", TestTags.Positive, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                MissionRecoveryCoordinator coordinator = new MissionRecoveryCoordinator(CreateLogging(), testDb.Driver, new ArmadaSettings { MaxMissionRecoveryAttempts = 3 });
+                IncidentService incidents = new IncidentService(testDb.Driver);
+                Captain qwen = await CaptainAssignmentFixture.CreateAsync(testDb.Driver, new Captain("qwen", AgentRuntimeEnum.ClaudeCode) { Model = "qwen3.8" }).ConfigureAwait(false);
+                Captain opus = await CaptainAssignmentFixture.CreateAsync(testDb.Driver, new Captain("opus", AgentRuntimeEnum.ClaudeCode) { Model = "claude-opus-5-5" }).ConfigureAwait(false);
+                Vessel vessel = await CreateVesselAsync(testDb).ConfigureAwait(false);
+                await CreateFailedMissionAsync(testDb, vessel.Id, MissionFailureKindEnum.Compile, "Definition-of-Done gate failed (Compile): build phase exited 1").ConfigureAwait(false);
+
+                await coordinator.MaintainAsync().ConfigureAwait(false);
+                Incident incident = (await ReadRecoveryIncidentsAsync(incidents).ConfigureAwait(false))[0];
+                Mission first = (await testDb.Driver.Missions.ReadAsync(incident.RescueMissionIds[0]).ConfigureAwait(false))!;
+                AssertNull(first.RequestedCaptainId, "the first rescue keeps ordinary routing");
+
+                first.CaptainId = qwen.Id;
+                first.AgentOutput = new string('x', 3000) + "\nusing key sk-ant-abcdefghijklmnopqrstuv\nerror CS0103: the name 'Foo' does not exist";
+                await testDb.Driver.Missions.UpdateAsync(first).ConfigureAwait(false);
+                await FailMissionAsync(testDb, first.Id, MissionFailureKindEnum.Compile, "Definition-of-Done gate failed (Compile): build phase exited 1").ConfigureAwait(false);
+                await coordinator.MaintainAsync().ConfigureAwait(false);
+
+                incident = (await ReadRecoveryIncidentsAsync(incidents).ConfigureAwait(false))[0];
+                AssertEqual(2, incident.RescueMissionIds.Count, "a second rescue is dispatched");
+                Mission second = (await testDb.Driver.Missions.ReadAsync(incident.RescueMissionIds[1]).ConfigureAwait(false))!;
+                AssertEqual(opus.Id, second.RequestedCaptainId, "the second rescue goes to the stronger captain");
+                AssertEqual(qwen.Id, second.EscalatedFromCaptainId, "the failed captain is recorded");
+                AssertEqual(1, second.EscalationCount, "the pin is strict, so the failed captain cannot take it");
+                string brief = second.Description ?? String.Empty;
+                AssertContains("## Last Failed Attempt", brief, "the brief has the last attempt section");
+                AssertContains("Rescue " + first.Id + " by qwen (qwen3.8) failed", brief, "the section names the failed rescue");
+                AssertContains("- Failure kind: Compile", brief, "the failure kind is listed");
+                AssertContains("error CS0103", brief, "the output tail is included");
+                AssertFalse(brief.Contains("sk-ant-abcdefghijklmnopqrstuv", StringComparison.Ordinal), "secrets in the output are redacted");
+                AssertFalse(brief.Contains(new string('x', 2001), StringComparison.Ordinal), "the output tail is bounded");
+                AssertFalse(brief.Contains("\u2014", StringComparison.Ordinal), "no em-dashes");
+            }));
+
             cases.Add(CaseAsync("orphaned_rescue_is_not_rescued_again", "A failed rescue whose incident is gone opens no new incident, so rescues never spawn rescues", TestTags.Negative, async () =>
             {
                 using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);

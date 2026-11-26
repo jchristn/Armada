@@ -180,7 +180,11 @@ action. On each health cycle the recovery coordinator:
    brief plus the failure evidence (classified kind, failure reason, prior diff). Rescues
    are capped per incident by `MaxMissionRecoveryAttempts` (default 2, maximum 5); a failed rescue
    re-dispatches until the cap, after which the incident is left **Open** with a note for a
-   human.
+   human. The brief also has a "Last Failed Attempt" section with the latest failed attempt's
+   failure kind, black box rule hint and redacted output tail. From the second rescue on, the
+   rescue is pinned to the captain the escalation selector picks with the failed rescue's
+   captain excluded (the Worker escalation ladder, or a strictly higher tier); when no captain
+   qualifies it is dispatched unpinned (RS-5.8).
 4. **Advances the incident from evidence alone**: `Open -> Mitigated` when a rescue mission
    lands (Complete), then `Mitigated -> Closed` once the fix has held. The `RecoveryAttempts`
    count and the linked `RescueMissionIds` are visible on the incident detail page.
