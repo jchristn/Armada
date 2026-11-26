@@ -238,6 +238,16 @@ Conductor) with Opus and GPT-6.1 reliable. The work is tracked item by item in `
   and process output are the new inference option `toolOutputWindowPercent` (default 12, 1 to 50) of the window;
   explicit reads page at that maximum, and files up to 16 MB are paged instead of refused. The default page of 200
   lines and 24,000 characters is unchanged, and an unknown window keeps the 1 MB and 100 KB caps (RS-7.9).
+- **Context length is discovered when it is not configured.** An endpoint with no `ContextLength` reads the served
+  window from Ollama (`/api/ps`, then the Modelfile `num_ctx`) or vLLM (`/v1/models` `max_model_len`) at validation and
+  before an API captain's first turn, and stores it as `DiscoveredContextLength` with its source and time (migration
+  139). A configured value always wins; the trained maximum is never used. Compaction and the context-limit stop now
+  apply whenever a window is known. A Harbor that advertises `api-context-discovery-v1` discovers on its own host
+  (RS-7.8).
+- **PolyPrompt 5.0.1.** Upgraded from 3.5.0. OpenAI and OpenAI-compatible endpoints stay on Chat Completions; Azure
+  OpenAI uses the v1 Chat Completions route with the `api-key` header, so `ApiVersion` is now ignored (RS-7.1).
+- **The API runtime's turn loop is split into tested parts.** `ApiAgentRuntime.RunLoopAsync` became a turn loop, a
+  terminal policy and a context policy, each with its own suite; behavior is unchanged (RS-7.11).
 - **Recovery state survives a restart.** Endpoint circuit breakers, launch backoff (with the captains that failed to
   start the mission), the start of a transient outage, and escalation rule cooldowns were kept only in memory, so a
   restart sent missions straight back to a failing endpoint, relaunched a broken captain at once, granted an outage a

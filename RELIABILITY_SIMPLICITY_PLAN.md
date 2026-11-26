@@ -911,9 +911,14 @@ the contract a schema, lets the model submit through a tool, and repairs format 
 `docs/MODEL_GUIDANCE.md:67` says tool-calling reliability on generic runtimes "is the model's responsibility". After
 this phase it is Armada's job to absorb the predictable failures.
 
-- [ ] **RS-7.1** Upgrade PolyPrompt from 3.5.0 to the current 5.x in every project that references it. Run the model
+- [x] **RS-7.1** Upgrade PolyPrompt from 3.5.0 to the current 5.x in every project that references it. Run the model
   provider simulation suites (`Services.ModelEndpoint`, `Runtimes.ApiAgent`) and the reasoning-continuation
-  regression in `postman/README.md`. Evidence:
+  regression in `postman/README.md`. Evidence: (07f4e06c8) PolyPrompt 5.0.1 in Armada.Core and Armada.Server; one `ProviderClientBase` per
+  endpoint; OpenAI stays on Chat Completions via `OpenAiCompatibleClient`; Azure on v1 Chat Completions (`ApiVersion`
+  ignored, form field removal in Phase 12); Anthropic/Gemini/Voyage get a placeholder key under Armada auth, stripped by
+  `ModelEndpointAuthHandler`. ModelEndpointService 43/43 and ApiAgentRuntime 49/49 against the local postman fixture
+  (reasoning-continuation regression included); ModelEndpointAuth 8/8. 5.x still lacks json_schema and text tool-call
+  recovery.
 - [ ] **RS-7.2** Text tool-call recovery. When a turn has no `ToolCalls`, parse `<tool_call>{json}</tool_call>`,
   `<function=name>...</function>`, and fenced JSON tool-call blocks (at the terminal branch near
   `ApiAgentRuntime.cs:693`, or in PolyPrompt if it belongs there) and execute them as real calls. Count recoveries
@@ -931,9 +936,14 @@ this phase it is Armada's job to absorb the predictable failures.
   (keep the PolyPrompt 3.4.0 regression passing). Evidence:
 - [ ] **RS-7.7** Streaming on by default for OpenAI-compatible and Ollama endpoints (`InferenceOptions.Streaming`),
   so progress heartbeats reach the stall detector. Evidence:
-- [ ] **RS-7.8** Context discovery. When `ContextLength` is null, discover it at endpoint validation and on first use
+- [x] **RS-7.8** Context discovery. When `ContextLength` is null, discover it at endpoint validation and on first use
   (PolyPrompt model info, Ollama `/api/ps`, vLLM `/v1/models` `max_model_len`), store it on the model profile as
-  "discovered", and let a configured value override it. Compaction is always on with a known window. Evidence:
+  "discovered", and let a configured value override it. Compaction is always on with a known window. Evidence: (045d128e4) discovery at validation and before the first API turn (cached 10 min); stored
+  as `DiscoveredContextLength`/`DiscoveredContextSource`/`ContextDiscoveredUtc` (migration 139, all four providers);
+  configured value wins; trained maximum never used; Harbor discovery behind `api-context-discovery-v1`; profiles record
+  `ServedContextSource`. A new window yields a new profile (served context is in the identity key) rather than a
+  revision. Suite `Services.ModelContextDiscovery` (11) and `discovered_window_applies_without_configured`; DB suites on
+  Postgres, MySQL, SQL Server.
 - [x] **RS-7.9** Tool output limits scale to the window: read and process output caps default to a percentage of the
   window (setting, default 12%) with paged reads, replacing the fixed 1 MB read and 100 KB process caps.
   `ToolSafetyLimits` statics become settings on the runtime options. Evidence: (c23d311c7) `ToolSafetyLimits` statics became `ToolLimits`, set per run on the registry,
@@ -943,8 +953,10 @@ this phase it is Armada's job to absorb the predictable failures.
 - [ ] **RS-7.10** Compaction shrinks old assistant tool-call arguments (file bodies written by `write_file`) and
   reasoning, not only tool results. Token estimation uses a tokenizer when the profile names one and about 3.2
   characters per token for code otherwise. Evidence:
-- [ ] **RS-7.11** Extract `ApiAgentRuntime.RunLoopAsync` into a turn loop, terminal-handling policy, and context
-  policy classes with unit tests per class. Evidence:
+- [x] **RS-7.11** Extract `ApiAgentRuntime.RunLoopAsync` into a turn loop, terminal-handling policy, and context
+  policy classes with unit tests per class. Evidence: (7ffd9ed2e) `ApiTurnLoop`, `ApiTerminalPolicy`, `ApiContextPolicy`; ApiAgentRuntime suite
+  unchanged and passing; new suites Runtimes.ApiTurnLoop, ApiTerminalPolicy, ApiContextPolicy (23 cases). Merged head:
+  10 affected suites 209/209.
 - [x] **RS-7.12** Audit Mux, OpenCode, and Pi runtimes for the same failure modes (text tool calls, reasoning
   leakage into the final message, error text reaching `RuntimeProviderErrorParser`). Fix or document each gap.
   Evidence: (7963adf69) fixed: `ReasoningText.Strip` on every CLI final message

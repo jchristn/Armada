@@ -348,9 +348,9 @@ namespace Test.Shared.Suites.Runtimes
                 string dir = NewTempDir();
                 try
                 {
-                    Queue<ToolChatResponse> script = new Queue<ToolChatResponse>();
-                    script.Enqueue(new ToolChatResponse { Success = true, Usage = new TokenUsage { PromptTokens = 31500 }, ToolCalls = new List<ToolCall> { new ToolCall { Id = "read", Name = "list_directory", ArgumentsJson = "{}" } } });
-                    script.Enqueue(new ToolChatResponse { Success = true, Usage = new TokenUsage { PromptTokens = 31500 }, Text = "done", ToolCalls = new List<ToolCall>() });
+                    Queue<ChatResponse> script = new Queue<ChatResponse>();
+                    script.Enqueue(new ChatResponse { Success = true, Usage = new TokenUsage { PromptTokens = 31500 }, ToolCalls = new List<ToolCall> { new ToolCall { Id = "read", Name = "list_directory", ArgumentsJson = "{}" } } });
+                    script.Enqueue(new ChatResponse { Success = true, Usage = new TokenUsage { PromptTokens = 31500 }, Text = "done", ToolCalls = new List<ToolCall>() });
                     ModelEndpoint endpoint = new ModelEndpoint { Kind = ModelEndpointKindEnum.Inference, Provider = ModelProviderEnum.Ollama, BaseUrl = "http://localhost:1",
                         InferenceOptions = new InferenceOptions { McpToolsEnabled = false } };
                     int discoveries = 0;
