@@ -71,6 +71,7 @@ namespace Armada.Core.Models
                     RuntimeFailureKindEnum.AuthFailure => "Check the endpoint credentials and provider permissions, then re-enable the captain.",
                     RuntimeFailureKindEnum.UsageLimit => "Check provider quota, billing and rate limits; wait for the limit to reset or select an available endpoint.",
                     RuntimeFailureKindEnum.ModelUnavailable => "Check the endpoint URL, model identifier and account access to that model.",
+                    RuntimeFailureKindEnum.Transient when ProviderError?.HttpStatusCode == 429 => "The endpoint is rate limiting requests. Armada resumes the captain after the endpoint's Retry-After; if this repeats, lower the concurrency for this endpoint.",
                     RuntimeFailureKindEnum.Transient => "Check provider availability, connectivity and request timeout settings.",
                     RuntimeFailureKindEnum.Unclassified when ProviderError == null => "The runtime reported no provider error. Inspect the mission log for the last model turn and tool call; if the cause is a provider message Armada does not recognize, report it so it can be classified.",
                     _ => ProviderError?.HttpStatusCode switch

@@ -683,8 +683,14 @@ routing; a renamed Architect slice breaks fan-out recovery. Everything a program
   Ollama, Ollama Cloud; hosts removed), 19 from server source text (vLLM, LM Studio, llama.cpp, LiteLLM had no live
   server). `open_model_errors_classify_from_fixtures` and `open_model_patterns_ignore_unrelated_text` pass, as do
   RuntimeFailureClassifier, AdmiralService, runtime and OpenModelSimulator suites.
-- [ ] **RS-5.4** 429 handling. A 429 without `insufficient_quota`, a reset time, or a usage-limit error type is
+- [x] **RS-5.4** 429 handling. A 429 without `insufficient_quota`, a reset time, or a usage-limit error type is
   `Transient` and honors `Retry-After`; it does not quarantine the captain. 402 stays `UsageLimit`. Evidence:
+  `RuntimeFailureClassifier` checks rate limits first (`IsRateLimit` / `IsExhaustedQuota`; a `Retry-After` over
+  `MaxTransientRetryAfterSeconds` (600) also counts as exhausted). `ApiAgentRuntime` reads `Retry-After` from the last
+  PolyPrompt `CallDetail` (`MaxCallDetails = 2`), waits up to 30 s in the run and otherwise returns it on the provider
+  error; `TransientResumeDelay` honors it. Cases `rate_limit_is_transient_unless_quota_is_gone` and the simulator's
+  `retry_after_is_honored` (real HTTP 429); 375 cases across the classifier, parser, Admiral, runtime, Mux, handoff and
+  usage-enforcement suites pass. Docs: CAPTAIN_ROUTING.md. Also fixes a MuxRunOutcome case RS-5.2 left failing.
 - [ ] **RS-5.5** Recovery policy per model profile (or tier default): in-place resumes, transient grace, Judge rework
   rounds (replacing the hard-coded `_MaxJudgeReworkRounds = 2`, `MissionService.cs:2264`), format repairs, and
   "escalate after". Global settings become the defaults. Surfaces: REST, MCP, SDK, dashboard model profile page,

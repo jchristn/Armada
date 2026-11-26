@@ -40,7 +40,7 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(429, error!.HttpStatusCode);
                 AssertEqual("rate_limit_error", error.ErrorType);
                 AssertContains("per-minute rate limit", error.Message ?? String.Empty);
-                AssertEqual(RuntimeFailureKindEnum.UsageLimit, RuntimeFailureClassifier.Classify(1, error));
+                AssertEqual(RuntimeFailureKindEnum.Transient, RuntimeFailureClassifier.Classify(1, error));
             }));
 
             cases.Add(Case("claude_api_error_line_with_trailing_hint", "A Claude API Error line with a trailing hint still deserializes", TestTags.Positive, () =>
@@ -123,11 +123,11 @@ namespace Test.Shared.Suites.Services
             {
                 Dictionary<string, RuntimeFailureKindEnum> lines = new Dictionary<string, RuntimeFailureKindEnum>
                 {
-                    ["[API Error: got status: 429 Too Many Requests. Please wait before retrying.]"] = RuntimeFailureKindEnum.UsageLimit,
+                    ["[API Error: got status: 429 Too Many Requests. Please wait before retrying.]"] = RuntimeFailureKindEnum.Transient,
                     ["Error: Request failed with status code 503"] = RuntimeFailureKindEnum.Transient,
                     ["AI_APICallError: Unauthorized (HTTP 401)"] = RuntimeFailureKindEnum.AuthFailure,
                     ["upstream returned HTTP/1.1 502 Bad Gateway"] = RuntimeFailureKindEnum.Transient,
-                    ["{\"error\":{\"code\":429,\"message\":\"Quota exceeded\",\"status\":\"RESOURCE_EXHAUSTED\"}}"] = RuntimeFailureKindEnum.UsageLimit,
+                    ["{\"error\":{\"code\":429,\"message\":\"Quota exceeded\",\"status\":\"RESOURCE_EXHAUSTED\"}}"] = RuntimeFailureKindEnum.Transient,
                     ["Error: [UNAUTHENTICATED] API key not valid"] = RuntimeFailureKindEnum.AuthFailure,
                     ["{\"error\":{\"message\":\"The model is overloaded\",\"status\":\"UNAVAILABLE\"}}"] = RuntimeFailureKindEnum.Transient,
                     ["TypeError: fetch failed (cause: connect ECONNREFUSED 127.0.0.1:11434)"] = RuntimeFailureKindEnum.Transient,
@@ -151,7 +151,7 @@ namespace Test.Shared.Suites.Services
             cases.Add(Case("pi_terminal_errors_classified", "pi 401/429/529 terminal records classify by their leading status; a recovered retry and non-terminal records do not", TestTags.Positive, () =>
             {
                 AssertEqual(RuntimeFailureKindEnum.AuthFailure, ClassifyPi(PiStreamFixtures.BadKey));
-                AssertEqual(RuntimeFailureKindEnum.UsageLimit, ClassifyPi(PiStreamFixtures.RateLimited));
+                AssertEqual(RuntimeFailureKindEnum.Transient, ClassifyPi(PiStreamFixtures.RateLimited), "a 429 without a quota signal is backpressure");
                 AssertEqual(RuntimeFailureKindEnum.Transient, ClassifyPi(PiStreamFixtures.Overloaded));
                 AssertEqual(RuntimeFailureKindEnum.Transient, ClassifyPi(PiStreamFixtures.RetryExhausted));
                 AssertNull(FirstPiError(PiStreamFixtures.RetryRecovered), "a retry that recovered is not a provider error");
@@ -177,7 +177,7 @@ namespace Test.Shared.Suites.Services
                     (log, stub) => new CursorRuntime(log) { ExecutablePath = stub },
                     (log, stub) => new OpenCodeRuntime(log) { ExecutablePath = stub } })
                 {
-                    AssertEqual(RuntimeFailureKindEnum.UsageLimit, RunStubClassification(factory, ">&2"));
+                    AssertEqual(RuntimeFailureKindEnum.Transient, RunStubClassification(factory, ">&2"));
                     AssertEqual(RuntimeFailureKindEnum.Unclassified, RunStubClassification(factory, String.Empty));
                 }
             }));

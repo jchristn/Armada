@@ -896,7 +896,7 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(RuntimeFailureKindEnum.Transient, RuntimeFailureClassifier.Classify(1, new RuntimeProviderError { HttpStatusCode = 503 }));
                 AssertEqual(RuntimeFailureKindEnum.Transient, RuntimeFailureClassifier.Classify(1, new RuntimeProviderError { ErrorType = "llm_connection_error" }));
                 AssertEqual(RuntimeFailureKindEnum.TaskFailure, RuntimeFailureClassifier.Classify(1, new RuntimeProviderError { ErrorType = "max_iterations_reached" }));
-                AssertEqual(RuntimeFailureKindEnum.UsageLimit, RuntimeFailureClassifier.Classify(1, new RuntimeProviderError { HttpStatusCode = 429 }));
+                AssertEqual(RuntimeFailureKindEnum.Transient, RuntimeFailureClassifier.Classify(1, new RuntimeProviderError { HttpStatusCode = 429 }));
                 AssertEqual(RuntimeFailureKindEnum.Unclassified, RuntimeFailureClassifier.Classify(1, null));
             }));
 
@@ -1739,7 +1739,7 @@ namespace Test.Shared.Suites.Services
                     await CaptainAssignmentFixture.CreateAsync(db, captain);
 
                     DateTime before = DateTime.UtcNow;
-                    RuntimeProviderError providerError = new RuntimeProviderError { HttpStatusCode = 429, ErrorType = "rate_limit_error", RetryAfterSeconds = 300 };
+                    RuntimeProviderError providerError = new RuntimeProviderError { HttpStatusCode = 429, ErrorType = "insufficient_quota", RetryAfterSeconds = 300 };
                     await service.HandleProcessExitAsync(4343, RuntimeFailureClassifier.Decide(1, providerError), captain.Id, mission.Id).ConfigureAwait(false);
 
                     Captain? updatedCaptain = await db.Captains.ReadAsync(captain.Id).ConfigureAwait(false);

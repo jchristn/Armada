@@ -1171,7 +1171,7 @@ namespace Test.Shared.Suites.Services
                 await db.Missions.UpdateAsync(running).ConfigureAwait(false);
                 Mission waiting = await db.Missions.CreateAsync(new Mission("Waiting", "Do it next") { VesselId = vessel.Id }).ConfigureAwait(false);
 
-                RuntimeProviderError quota = new RuntimeProviderError { HttpStatusCode = 429, ErrorType = "rate_limit_error", Reason = "quota exhausted" };
+                RuntimeProviderError quota = new RuntimeProviderError { HttpStatusCode = 429, ErrorType = "insufficient_quota", Reason = "quota exhausted" };
                 await admiral.HandleProcessExitAsync(4500, RuntimeFailureClassifier.Decide(1, quota), captain.Id, running.Id).ConfigureAwait(false);
 
                 Captain? after = await db.Captains.ReadAsync(captain.Id).ConfigureAwait(false);

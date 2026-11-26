@@ -141,6 +141,9 @@ namespace Armada.Runtimes
         // record from the previous run still holds is not handed out again after a restart (L6).
         private static int _PidCounter = 2_000_000_000 + (int)(DateTimeOffset.UtcNow.ToUnixTimeSeconds() % 100_000_000);
         private int _InferenceRetries = 2;
+
+        // RS-5.4: the longest Retry-After the runtime waits out inside one run; longer waits return to the Admiral.
+        private const int MaxInRunRetryAfterSeconds = 30;
         // Outer bound on one streamed call; the idle and first-response watchdog is what normally ends a stalled stream.
         private const int StreamingTotalTimeoutMs = 3600000;
         private static readonly ConcurrentDictionary<int, CancellationTokenSource> _Running = new ConcurrentDictionary<int, CancellationTokenSource>();
@@ -316,7 +319,7 @@ namespace Armada.Runtimes
 
         #region Private-Methods
 
-        private async Task<T> WithInferenceRetryAsync<T>(Func<Task<T>> call, Func<T, bool> succeeded, Func<T, int?> status, Func<T, string?> error, int processId, StrongBox<long> lastCallMs, CancellationToken token)
+        private async Task<T> WithInferenceRetryAsync<T>(Func<Task<T>> call, Func<T, bool> succeeded, Func<T, int?> status, Func<T, string?> error, int processId, StrongBox<long> lastCallMs, CancellationToken token, Func<int?>? retryAfterSeconds = null)
         {
             for (int attempt = 0; ; attempt++)
             {
@@ -343,7 +346,11 @@ namespace Armada.Runtimes
                 }
 
                 if (succeeded(result) || attempt >= _InferenceRetries || !IsRetryableInferenceStatus(status(result))) return result;
-                await DelayBeforeInferenceRetryAsync(attempt, processId, (status(result).HasValue ? "HTTP " + status(result) + " " : String.Empty) + (error(result) ?? "no detail"), token).ConfigureAwait(false);
+                // RS-5.4: honor the server's Retry-After. A wait longer than the in-run cap goes back to the Admiral, which
+                // resumes the captain after it instead of holding an HTTP retry loop open.
+                int? waitSeconds = retryAfterSeconds?.Invoke();
+                if (waitSeconds.HasValue && waitSeconds.Value > MaxInRunRetryAfterSeconds) return result;
+                await DelayBeforeInferenceRetryAsync(attempt, processId, (status(result).HasValue ? "HTTP " + status(result) + " " : String.Empty) + (error(result) ?? "no detail"), token, waitSeconds).ConfigureAwait(false);
             }
         }
 
@@ -427,9 +434,9 @@ namespace Armada.Runtimes
             }
         }
 
-        private RuntimeProviderError InferenceFailure(int? status, string? error, string fallbackReason, long lastCallMs, bool streaming)
+        private RuntimeProviderError InferenceFailure(int? status, string? error, string fallbackReason, long lastCallMs, bool streaming, int? retryAfterSeconds = null)
         {
-            RuntimeProviderError? failure = status.HasValue ? RuntimeProviderErrorParser.FromHttpStatus(status.Value, error) : null;
+            RuntimeProviderError? failure = status.HasValue ? RuntimeProviderErrorParser.FromHttpStatus(status.Value, error, retryAfterSeconds) : null;
             if (failure == null) return new RuntimeProviderError { ErrorType = "inference_error", Reason = fallbackReason };
 
             // A gateway error that arrives only after a long wait is a proxy or load balancer giving up before the model
@@ -453,6 +460,40 @@ namespace Armada.Runtimes
                 : "The model did not start responding within " + firstResponseMs + " ms (first-response deadline: model load and prompt evaluation).";
         }
 
+        private static int? LastRetryAfterSeconds(CompletionClientBase client)
+        {
+            List<CallDetail> calls = client.CallDetails;
+            if (calls.Count == 0) return null;
+            CallDetail last = calls[calls.Count - 1];
+            if (last.ResponseHeaders == null) return null;
+            foreach (KeyValuePair<string, string> header in last.ResponseHeaders)
+            {
+                if (!String.Equals(header.Key, "Retry-After", StringComparison.OrdinalIgnoreCase)) continue;
+                return ParseRetryAfterSeconds(header.Value, DateTime.UtcNow);
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// Parse an HTTP Retry-After value: delta seconds or an HTTP date.
+        /// </summary>
+        /// <param name="value">Header value.</param>
+        /// <param name="nowUtc">Current time, for an HTTP date.</param>
+        /// <returns>Whole seconds to wait (at least 1), or null when the value is missing or unreadable.</returns>
+        public static int? ParseRetryAfterSeconds(string? value, DateTime nowUtc)
+        {
+            if (String.IsNullOrWhiteSpace(value)) return null;
+            string text = value.Trim();
+            if (Int32.TryParse(text, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out int seconds))
+                return Math.Max(1, seconds);
+            if (DateTimeOffset.TryParse(text, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AssumeUniversal, out DateTimeOffset date))
+            {
+                double delta = (date.UtcDateTime - nowUtc).TotalSeconds;
+                return delta <= 0 ? 1 : (int)Math.Min(Int32.MaxValue, Math.Ceiling(delta));
+            }
+            return null;
+        }
+
         private static bool IsRetryableInferenceStatus(int? status)
         {
             if (!status.HasValue) return true;
@@ -460,10 +501,11 @@ namespace Armada.Runtimes
             return code == 408 || code == 429 || code == 500 || code == 502 || code == 503 || code == 504 || code == 529;
         }
 
-        private async Task DelayBeforeInferenceRetryAsync(int attempt, int processId, string reason, CancellationToken token)
+        private async Task DelayBeforeInferenceRetryAsync(int attempt, int processId, string reason, CancellationToken token, int? retryAfterSeconds = null)
         {
             double baseMs = Math.Max(0, InferenceRetryBaseDelay.TotalMilliseconds) * Math.Pow(2, attempt);
             double jittered = baseMs * (0.75 + Random.Shared.NextDouble() * 0.5);
+            if (retryAfterSeconds.HasValue && retryAfterSeconds.Value * 1000.0 > jittered) jittered = retryAfterSeconds.Value * 1000.0;
             EmitDiagnostic(processId, ApiRuntimeDiagnosticKindEnum.Error, "[retry] inference call failed (" + reason + "); retry " + (attempt + 1) + " of " + _InferenceRetries + " in " + (jittered / 1000).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + "s");
             if (jittered > 0) await Task.Delay(TimeSpan.FromMilliseconds(jittered), token).ConfigureAwait(false);
         }
@@ -489,6 +531,8 @@ namespace Armada.Runtimes
             {
                 using CompletionClientBase client = _ClientFactory(endpoint, _Logging);
                 if (!String.IsNullOrWhiteSpace(model)) client.Model = model;
+                // Only the last call's response headers are read (Retry-After); retaining more holds request bodies in memory.
+                client.MaxCallDetails = 2;
 
                 InferenceOptions settings = endpoint.InferenceOptions;
                 // Without streaming the client timeout bounds the whole call, so the first-response deadline (cold model
@@ -518,13 +562,13 @@ namespace Armada.Runtimes
                 async Task RunPlainChatAsync()
                 {
                     completionOptions.SystemPrompt = BuildSystemPrompt(workingDirectory);
-                    ChatResponse reply = await WithInferenceRetryAsync(() => settings.Streaming ? StreamChatAsync(client, prompt, completionOptions, firstResponseMs, idleMs, token) : client.ChatAsync(prompt, completionOptions, token), r => r.Success, r => r.StatusCode, r => r.Error, processId, lastCallMs, token).ConfigureAwait(false);
+                    ChatResponse reply = await WithInferenceRetryAsync(() => settings.Streaming ? StreamChatAsync(client, prompt, completionOptions, firstResponseMs, idleMs, token) : client.ChatAsync(prompt, completionOptions, token), r => r.Success, r => r.StatusCode, r => r.Error, processId, lastCallMs, token, () => LastRetryAfterSeconds(client)).ConfigureAwait(false);
                     EmitDiagnostic(processId, ApiRuntimeDiagnosticKindEnum.Inference, "[inference] " + JsonSerializer.Serialize(new { iteration = 1, streamed = settings.Streaming, reply.Success, reply.FinishReason, reply.Usage, textLength = reply.Text?.Length ?? 0, toolCalls = 0 }));
                     if (!reply.Success)
                     {
                         exitCode = 1;
                         EmitDiagnostic(processId, ApiRuntimeDiagnosticKindEnum.Error, reply.Error ?? "Inference request failed.");
-                        RaiseProviderError(processId, InferenceFailure(reply.StatusCode, reply.Error, "Inference request failed: " + (reply.Error ?? "the endpoint returned failure without detail"), lastCallMs.Value, settings.Streaming));
+                        RaiseProviderError(processId, InferenceFailure(reply.StatusCode, reply.Error, "Inference request failed: " + (reply.Error ?? "the endpoint returned failure without detail"), lastCallMs.Value, settings.Streaming, LastRetryAfterSeconds(client)));
                         WriteFinalMessage(finalMessageFilePath, String.Empty);
                         return;
                     }
@@ -644,7 +688,7 @@ namespace Armada.Runtimes
                     request.Tools = tools;
                     request.Options = completionOptions;
 
-                    ToolChatResponse response = await WithInferenceRetryAsync(() => settings.Streaming ? StreamToolChatAsync(client, request, firstResponseMs, idleMs, token) : client.ToolChatAsync(request, token), r => r.Success, r => r.StatusCode, r => r.Error, processId, lastCallMs, token).ConfigureAwait(false);
+                    ToolChatResponse response = await WithInferenceRetryAsync(() => settings.Streaming ? StreamToolChatAsync(client, request, firstResponseMs, idleMs, token) : client.ToolChatAsync(request, token), r => r.Success, r => r.StatusCode, r => r.Error, processId, lastCallMs, token, () => LastRetryAfterSeconds(client)).ConfigureAwait(false);
 
                     EmitDiagnostic(processId, ApiRuntimeDiagnosticKindEnum.Inference, "[inference] " + JsonSerializer.Serialize(new { iteration = iteration + 1, maxIterations, streamed = settings.Streaming, response.Success, response.ResponseId, response.FinishReason, response.Usage, reasoningLength = response.Reasoning?.Length ?? 0, textLength = response.Text?.Length ?? 0, toolCalls = response.ToolCalls?.Count ?? 0 }));
 
@@ -652,7 +696,7 @@ namespace Armada.Runtimes
                     {
                         string reason = String.IsNullOrEmpty(response.Error) ? "the inference endpoint reported failure without detail" : response.Error!;
                         EmitDiagnostic(processId, ApiRuntimeDiagnosticKindEnum.Error, "[error] inference call failed: " + reason);
-                        RaiseProviderError(processId, InferenceFailure(response.StatusCode, response.Error, "Inference request failed: " + reason, lastCallMs.Value, settings.Streaming));
+                        RaiseProviderError(processId, InferenceFailure(response.StatusCode, response.Error, "Inference request failed: " + reason, lastCallMs.Value, settings.Streaming, LastRetryAfterSeconds(client)));
                         exitCode = 1;
                         break;
                     }

@@ -554,7 +554,7 @@ namespace Test.Shared.Suites.Services
 
                     AssertEqual(1, admiral.ExitInfos.Count, "one typed exit outcome reaches the admiral");
                     AssertEqual(1, admiral.ExitInfos[0].ExitCode);
-                    AssertEqual(RuntimeFailureKindEnum.UsageLimit, admiral.ExitInfos[0].FailureKind);
+                    AssertEqual(RuntimeFailureKindEnum.Transient, admiral.ExitInfos[0].FailureKind, "a 429 with a short Retry-After is backpressure");
                     AssertEqual(120, admiral.ExitInfos[0].ProviderError!.RetryAfterSeconds);
                 }
             }));

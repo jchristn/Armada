@@ -10,6 +10,7 @@ namespace Test.Shared.Suites.Runtimes
     using System.Threading.Tasks;
     using Armada.Core.Enums;
     using Armada.Core.Models;
+    using Armada.Core.Services;
     using Armada.Runtimes;
     using SyslogLogging;
     using Test.Shared.Infrastructure;
@@ -154,6 +155,22 @@ namespace Test.Shared.Suites.Runtimes
                 cases.Add(Case("api_runtime_ends_on_" + captured.ToString().ToLowerInvariant(), "The API runtime run against " + captured + " ends instead of hanging", () => RuntimeEndsAsync(captured)));
             }
 
+            cases.Add(Case("retry_after_is_honored", "A 429 with a short Retry-After is retried in the run; a long one ends the run as Transient carrying the wait (RS-5.4)", async () =>
+            {
+                RuntimeProviderError? shortWait = await RunBackpressureAsync("1", 1).ConfigureAwait(false);
+                AssertNull(shortWait, "a one-second Retry-After is waited out inside the run, which then finishes");
+
+                RuntimeProviderError? longWait = await RunBackpressureAsync("120", 3).ConfigureAwait(false);
+                AssertNotNull(longWait, "a two-minute Retry-After goes back to the Admiral");
+                AssertEqual(429, longWait!.HttpStatusCode ?? 0);
+                AssertEqual(120, longWait.RetryAfterSeconds ?? 0, "the wait travels with the provider error");
+                AssertEqual(RuntimeFailureKindEnum.Transient, RuntimeFailureClassifier.Classify(1, longWait), "backpressure does not quarantine");
+                AssertEqual(30, Armada.Runtimes.ApiAgentRuntime.ParseRetryAfterSeconds("30", DateTime.UtcNow) ?? 0);
+                AssertEqual(1, Armada.Runtimes.ApiAgentRuntime.ParseRetryAfterSeconds("0", DateTime.UtcNow) ?? 0);
+                AssertEqual(60, Armada.Runtimes.ApiAgentRuntime.ParseRetryAfterSeconds(new DateTime(2026, 1, 1, 0, 1, 0, DateTimeKind.Utc).ToString("R"), new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)) ?? 0);
+                AssertNull(Armada.Runtimes.ApiAgentRuntime.ParseRetryAfterSeconds("soon", DateTime.UtcNow));
+            }));
+
             return new TestSuiteDescriptor(suiteId: SuiteId, displayName: "Open-model simulator", cases: cases);
         }
 
@@ -196,6 +213,48 @@ namespace Test.Shared.Suites.Runtimes
                 await runtime.StartAsync(dir, "Read a.txt with read_file, then reply with exactly: DONE", new Dictionary<string, string>()).ConfigureAwait(false);
                 AssertTrue(exited.Wait(TimeSpan.FromSeconds(90)), kind + ": the runtime must end, successfully or not, within 90 seconds");
                 AssertTrue(sim.Requests.Count >= 1, kind + ": the runtime called the model");
+            }
+            finally
+            {
+                try { Directory.Delete(dir, true); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+            }
+        }
+
+        private static async Task<RuntimeProviderError?> RunBackpressureAsync(string retryAfter, int busyTurns)
+        {
+            string dir = Path.Combine(Path.GetTempPath(), "armada_sim_429_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(dir);
+            try
+            {
+                using OpenModelSimulator sim = new OpenModelSimulator();
+                sim.FallbackText = "DONE";
+                for (int i = 0; i < busyTurns; i++)
+                {
+                    SimulatedTurn busy = SimulatedTurn.Of(SimulatedTurnKindEnum.Backpressure429);
+                    busy.Headers["Retry-After"] = retryAfter;
+                    sim.Enqueue(busy);
+                }
+
+                ModelEndpoint endpoint = new ModelEndpoint
+                {
+                    Name = "sim",
+                    Kind = ModelEndpointKindEnum.Inference,
+                    Provider = ModelProviderEnum.Ollama,
+                    Model = sim.ModelName,
+                    BaseUrl = sim.BaseUrl,
+                    InferenceOptions = new InferenceOptions { McpToolsEnabled = false, MaxIterations = 4, ContextLength = 32768 }
+                };
+                LoggingModule logging = new LoggingModule();
+                logging.Settings.EnableConsole = false;
+                ApiAgentRuntime runtime = new ApiAgentRuntime(endpoint, logging, 8);
+                runtime.InferenceRetryBaseDelay = TimeSpan.Zero;
+                RuntimeProviderError? reported = null;
+                runtime.OnProviderError += (pid, error) => reported = error;
+                using ManualResetEventSlim exited = new ManualResetEventSlim(false);
+                runtime.OnProcessExited += (pid, value) => exited.Set();
+                await runtime.StartAsync(dir, "Reply with exactly: DONE", new Dictionary<string, string>()).ConfigureAwait(false);
+                AssertTrue(exited.Wait(TimeSpan.FromSeconds(60)), "the runtime ends within 60 seconds");
+                return reported;
             }
             finally
             {

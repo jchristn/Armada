@@ -35,9 +35,15 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(RuntimeFailureKindEnum.Clean, RuntimeFailureClassifier.Classify(0, new RuntimeProviderError { HttpStatusCode = 429 }));
             }));
 
-            cases.Add(Case("usage_limit_from_status", "HTTP 429 and 402 classify as UsageLimit", TestTags.Positive, () =>
+            cases.Add(Case("rate_limit_is_transient_unless_quota_is_gone", "A 429 is Transient unless the provider names an exhausted quota, a reset time, or a long Retry-After; 402 is UsageLimit (RS-5.4)", TestTags.Positive, () =>
             {
-                AssertEqual(RuntimeFailureKindEnum.UsageLimit, RuntimeFailureClassifier.Classify(1, new RuntimeProviderError { HttpStatusCode = 429 }));
+                AssertEqual(RuntimeFailureKindEnum.Transient, RuntimeFailureClassifier.Classify(1, new RuntimeProviderError { HttpStatusCode = 429 }), "plain backpressure");
+                AssertEqual(RuntimeFailureKindEnum.Transient, RuntimeFailureClassifier.Classify(1, new RuntimeProviderError { HttpStatusCode = 429, ErrorType = "rate_limit_error", RetryAfterSeconds = 30 }));
+                AssertEqual(RuntimeFailureKindEnum.Transient, RuntimeFailureClassifier.Classify(1, new RuntimeProviderError { HttpStatusCode = 429, RetryAfterSeconds = RuntimeFailureClassifier.MaxTransientRetryAfterSeconds }));
+                AssertEqual(RuntimeFailureKindEnum.UsageLimit, RuntimeFailureClassifier.Classify(1, new RuntimeProviderError { HttpStatusCode = 429, RetryAfterSeconds = RuntimeFailureClassifier.MaxTransientRetryAfterSeconds + 1 }), "a long wait is a usage limit");
+                AssertEqual(RuntimeFailureKindEnum.UsageLimit, RuntimeFailureClassifier.Classify(1, new RuntimeProviderError { HttpStatusCode = 429, ResetUtc = DateTime.UtcNow.AddHours(2) }), "a stated reset time");
+                AssertEqual(RuntimeFailureKindEnum.UsageLimit, RuntimeFailureClassifier.Classify(1, new RuntimeProviderError { HttpStatusCode = 429, ErrorType = "insufficient_quota" }));
+                AssertEqual(RuntimeFailureKindEnum.UsageLimit, RuntimeFailureClassifier.Classify(1, new RuntimeProviderError { HttpStatusCode = 429, Message = "{\"error\":{\"code\":\"insufficient_quota\",\"message\":\"You exceeded your current quota\"}}" }));
                 AssertEqual(RuntimeFailureKindEnum.UsageLimit, RuntimeFailureClassifier.Classify(1, new RuntimeProviderError { HttpStatusCode = 402 }));
             }));
 
@@ -94,8 +100,8 @@ namespace Test.Shared.Suites.Services
             {
                 Dictionary<string, RuntimeFailureKindEnum> expected = new Dictionary<string, RuntimeFailureKindEnum>(StringComparer.Ordinal)
                 {
-                    { "rate_limit_error", RuntimeFailureKindEnum.UsageLimit },
-                    { "rate_limit_exceeded", RuntimeFailureKindEnum.UsageLimit },
+                    { "rate_limit_error", RuntimeFailureKindEnum.Transient },
+                    { "rate_limit_exceeded", RuntimeFailureKindEnum.Transient },
                     { "insufficient_quota", RuntimeFailureKindEnum.UsageLimit },
                     { "usage_limit_reached", RuntimeFailureKindEnum.UsageLimit },
                     { "billing_error", RuntimeFailureKindEnum.UsageLimit },
@@ -143,7 +149,7 @@ namespace Test.Shared.Suites.Services
 
             cases.Add(Case("usage_limit_from_error_type", "Provider usage error types classify as UsageLimit", TestTags.Positive, () =>
             {
-                AssertEqual(RuntimeFailureKindEnum.UsageLimit, RuntimeFailureClassifier.Classify(1, new RuntimeProviderError { ErrorType = "rate_limit_error" }));
+                AssertEqual(RuntimeFailureKindEnum.Transient, RuntimeFailureClassifier.Classify(1, new RuntimeProviderError { ErrorType = "rate_limit_error" }), "a rate limit is backpressure");
                 AssertEqual(RuntimeFailureKindEnum.UsageLimit, RuntimeFailureClassifier.Classify(1, new RuntimeProviderError { ErrorType = "insufficient_quota" }));
                 AssertEqual(RuntimeFailureKindEnum.UsageLimit, RuntimeFailureClassifier.Classify(1, new RuntimeProviderError { ErrorType = "usage_limit_reached" }));
             }));
@@ -164,7 +170,7 @@ namespace Test.Shared.Suites.Services
 
             cases.Add(Case("error_type_wins_over_status", "A known provider error type decides before the HTTP status", TestTags.Positive, () =>
             {
-                AssertEqual(RuntimeFailureKindEnum.UsageLimit, RuntimeFailureClassifier.Classify(1, new RuntimeProviderError { HttpStatusCode = 403, ErrorType = "rate_limit_error" }));
+                AssertEqual(RuntimeFailureKindEnum.UsageLimit, RuntimeFailureClassifier.Classify(1, new RuntimeProviderError { HttpStatusCode = 403, ErrorType = "insufficient_quota" }));
             }));
 
             cases.Add(Case("no_provider_error_is_unclassified", "A non-zero exit without a provider error is Unclassified unless the process died abnormally", TestTags.Negative, () =>
@@ -222,7 +228,8 @@ namespace Test.Shared.Suites.Services
                 }
                 AssertFalse(RuntimeFailureClassifier.Decide(1, new RuntimeProviderError { Message = "HTTP 400 in ordinary output" }).Describe().Contains("provider rejected"), "guidance requires a structured status, not message keywords");
                 AssertContains("credentials", RuntimeFailureClassifier.Decide(1, new RuntimeProviderError { HttpStatusCode = 401 }).Describe());
-                AssertContains("quota", RuntimeFailureClassifier.Decide(1, new RuntimeProviderError { HttpStatusCode = 429 }).Describe());
+                AssertContains("quota", RuntimeFailureClassifier.Decide(1, new RuntimeProviderError { HttpStatusCode = 402 }).Describe());
+                AssertContains("rate limiting", RuntimeFailureClassifier.Decide(1, new RuntimeProviderError { HttpStatusCode = 429 }).Describe());
             }));
 
             return new TestSuiteDescriptor(

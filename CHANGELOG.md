@@ -120,6 +120,11 @@ Conductor) with Opus and GPT-6.1 reliable. The work is tracked item by item in `
   could not parse, or a 400 on the tool or schema shape is a task failure. A tool-call parse error no longer counts
   against the endpoint's circuit breaker or its outage grace. Remediation text names the fix. The table tests run on
   responses captured from live servers plus the servers' own source text (RS-5.3).
+- **A 429 is backpressure, not a usage limit.** A rate-limited captain used to be quarantined. Now it is quarantined
+  only when the provider says the quota is gone: `insufficient_quota` or a usage-limit error, a stated reset time, or a
+  `Retry-After` over 10 minutes. Otherwise the captain resumes after the endpoint's `Retry-After`. API captains now
+  read `Retry-After` from the response and wait out up to 30 seconds inside the run. HTTP 402 stays a usage limit
+  (RS-5.4).
 - **Recovery state survives a restart.** Endpoint circuit breakers, launch backoff (with the captains that failed to
   start the mission), the start of a transient outage, and escalation rule cooldowns were kept only in memory, so a
   restart sent missions straight back to a failing endpoint, relaunched a broken captain at once, granted an outage a

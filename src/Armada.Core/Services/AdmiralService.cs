@@ -1090,7 +1090,7 @@ namespace Armada.Core.Services
                     && mission != null
                     && (unclassifiedResume || captain.RecoveryAttempts < _Settings.MaxRecoveryAttempts || withinOutageGrace)
                     && await TryResumeInPlaceAsync(captain, mission, failureReason, token,
-                        exitInfo.FailureKind == RuntimeFailureKindEnum.Transient ? TransientResumeDelay(captain.RecoveryAttempts) : TimeSpan.Zero).ConfigureAwait(false))
+                        exitInfo.FailureKind == RuntimeFailureKindEnum.Transient ? TransientResumeDelay(captain.RecoveryAttempts, exitInfo.ProviderError?.RetryAfterSeconds) : TimeSpan.Zero).ConfigureAwait(false))
                 {
                     return;
                 }
@@ -2458,12 +2458,20 @@ namespace Armada.Core.Services
                 await _RecoveryState.DeleteAsync(RecoveryStateKinds.TransientOutage, missionId, CancellationToken.None).ConfigureAwait(false);
         }
 
-        private TimeSpan TransientResumeDelay(int recoveryAttempts)
+        private TimeSpan TransientResumeDelay(int recoveryAttempts, int? retryAfterSeconds = null)
         {
             int baseSeconds = _Settings.TransientResumeDelaySeconds;
-            if (baseSeconds <= 0) return TimeSpan.Zero;
-            double seconds = Math.Min(60, baseSeconds * Math.Pow(2, Math.Max(0, recoveryAttempts)));
-            return TimeSpan.FromSeconds(seconds * (0.75 + Random.Shared.NextDouble() * 0.5));
+            TimeSpan backoff = TimeSpan.Zero;
+            if (baseSeconds > 0)
+            {
+                double seconds = Math.Min(60, baseSeconds * Math.Pow(2, Math.Max(0, recoveryAttempts)));
+                backoff = TimeSpan.FromSeconds(seconds * (0.75 + Random.Shared.NextDouble() * 0.5));
+            }
+
+            // RS-5.4: a rate-limited endpoint's Retry-After is honored, up to the cap past which the exit is a usage limit.
+            if (!retryAfterSeconds.HasValue || retryAfterSeconds.Value <= 0) return backoff;
+            TimeSpan stated = TimeSpan.FromSeconds(Math.Min(retryAfterSeconds.Value, RuntimeFailureClassifier.MaxTransientRetryAfterSeconds));
+            return stated > backoff ? stated : backoff;
         }
 
         private async Task<bool> TryResumeInPlaceAsync(Captain captain, Mission mission, string failureReason, CancellationToken token, TimeSpan delay = default)

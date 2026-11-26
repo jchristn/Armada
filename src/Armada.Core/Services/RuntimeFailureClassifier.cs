@@ -48,6 +48,10 @@ namespace Armada.Core.Services
             if (exitCode.HasValue && exitCode.Value == 0) return RuntimeFailureKindEnum.Clean;
             if (providerError == null) return Unexplained(exitCode);
 
+            // RS-5.4: a 429 (or a rate-limit error type) is backpressure unless the provider says the quota is gone: an
+            // insufficient_quota or usage-limit type, a stated reset time, or a Retry-After longer than the resume cap.
+            if (IsRateLimit(providerError)) return IsExhaustedQuota(providerError) ? RuntimeFailureKindEnum.UsageLimit : RuntimeFailureKindEnum.Transient;
+
             RuntimeFailureKindEnum? fromType = ClassifyErrorType(providerError.ErrorType);
             if (fromType.HasValue) return fromType.Value;
 
@@ -125,9 +129,31 @@ namespace Armada.Core.Services
                 || kind == RuntimeFailureKindEnum.ModelUnavailable;
         }
 
+        /// <summary>
+        /// Longest Retry-After, in seconds, a rate-limited (429) captain is resumed after. A longer wait is a usage limit and
+        /// quarantines the captain until then.
+        /// </summary>
+        public const int MaxTransientRetryAfterSeconds = 600;
+
         #endregion
 
         #region Private-Methods
+
+        private static bool IsRateLimit(RuntimeProviderError error)
+        {
+            if (error.HttpStatusCode == 429) return true;
+            string type = (error.ErrorType ?? String.Empty).Trim().ToLowerInvariant();
+            return type == "rate_limit_error" || type == "rate_limit_exceeded";
+        }
+
+        private static bool IsExhaustedQuota(RuntimeProviderError error)
+        {
+            string type = (error.ErrorType ?? String.Empty).Trim().ToLowerInvariant();
+            if (type == "insufficient_quota" || type == "usage_limit_reached" || type == "billing_error") return true;
+            if (error.ResetUtc.HasValue) return true;
+            if (error.RetryAfterSeconds.HasValue && error.RetryAfterSeconds.Value > MaxTransientRetryAfterSeconds) return true;
+            return !String.IsNullOrEmpty(error.Message) && error.Message.Contains("insufficient_quota", StringComparison.OrdinalIgnoreCase);
+        }
 
         private static RuntimeFailureKindEnum Unexplained(int? exitCode)
         {

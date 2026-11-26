@@ -110,7 +110,7 @@ namespace Test.Shared.Suites.Runtimes
                 AssertEqual(0, unstructured.ResolveExitCode(0) ?? -99, "no structured outcome: the process code stands");
             }));
 
-            cases.Add(Case("tracker_llm_error_status_classifies", "An llm_error names its HTTP status, so a 401 is an auth failure and a 429 a usage limit", TestTags.Positive, () =>
+            cases.Add(Case("tracker_llm_error_status_classifies", "An llm_error names its HTTP status, so a 401 is an auth failure and a 429 backpressure", TestTags.Positive, () =>
             {
                 MuxRunOutcomeTracker tracker = new MuxRunOutcomeTracker();
                 RuntimeProviderError? unauthorized = tracker.ObserveLine(MuxJsonlFixtures.UnauthorizedError);
@@ -121,7 +121,7 @@ namespace Test.Shared.Suites.Runtimes
 
                 RuntimeProviderError? named = tracker.ObserveLine("{\"eventType\":\"error\",\"code\":\"llm_error\",\"message\":\"LLM request to http://x failed with status TooManyRequests: slow down\"}");
                 AssertEqual(429, named!.HttpStatusCode ?? 0, "a status name is read too");
-                AssertEqual(RuntimeFailureKindEnum.UsageLimit, RuntimeFailureClassifier.Classify(1, named));
+                AssertEqual(RuntimeFailureKindEnum.Transient, RuntimeFailureClassifier.Classify(1, named), "a 429 without a quota signal is backpressure (RS-5.4)");
 
                 RuntimeProviderError? connection = new MuxRunOutcomeTracker().ObserveLine(MuxJsonlFixtures.ConnectionError);
                 AssertNull(connection!.HttpStatusCode, "no status without an HTTP response");
@@ -152,8 +152,9 @@ namespace Test.Shared.Suites.Runtimes
             {
                 RuntimeProviderError plain = new RuntimeProviderError { HttpStatusCode = 429, ErrorType = "rate_limit_error" };
                 AssertEqual("Agent process exited with code 1 (provider error HTTP 429 rate_limit_error)", RuntimeFailureClassifier.Decide(1, plain).Describe().Split('\n')[0]);
-                AssertContains("Remediation: Check provider quota", RuntimeFailureClassifier.Decide(1, plain).Describe());
-                AssertEqual("Agent process exited with code 2", RuntimeFailureClassifier.Decide(2, null).Describe());
+                AssertContains("Remediation: The endpoint is rate limiting", RuntimeFailureClassifier.Decide(1, plain).Describe());
+                AssertEqual("Agent process exited with code 2", RuntimeFailureClassifier.Decide(2, null).Describe().Split('\n')[0]);
+                AssertContains("Remediation: The runtime reported no provider error", RuntimeFailureClassifier.Decide(2, null).Describe(), "an Unclassified exit says where to look (RS-5.2)");
             }));
 
             // ---- Local launch ----
