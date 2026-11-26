@@ -315,7 +315,7 @@ namespace Test.Shared.Suites.Runtimes
                     Provider = ModelProviderEnum.Ollama,
                     Model = sim.ModelName,
                     BaseUrl = sim.BaseUrl,
-                    InferenceOptions = new InferenceOptions { McpToolsEnabled = false, MaxIterations = 4, ContextLength = 32768 }
+                    InferenceOptions = new InferenceOptions { StreamingMode = InferenceStreamingModeEnum.Off, McpToolsEnabled = false, MaxIterations = 4, ContextLength = 32768 }
                 };
                 LoggingModule logging = new LoggingModule();
                 logging.Settings.EnableConsole = false;

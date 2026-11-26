@@ -266,6 +266,8 @@ namespace Armada.Runtimes
             snapshot.ApiKey = endpoint.ApiKey;
             snapshot.Headers = endpoint.Headers.Select(h => new ModelEndpointHeader(h.Name, h.Value)).ToList();
             endpoint = snapshot;
+            // Automatic streaming resolves here for in-process runs; a Harbor launch arrives already resolved (RS-7.7).
+            endpoint.InferenceOptions.StreamingMode = endpoint.InferenceOptions.ResolveStreaming(endpoint.Provider, true) ? Armada.Core.Enums.InferenceStreamingModeEnum.On : Armada.Core.Enums.InferenceStreamingModeEnum.Off;
 
             // Optional MCP tool access: when the caller supplies an MCP endpoint (and, typically, a
             // short-lived per-user session token) the in-process loop also exposes that server's tools to

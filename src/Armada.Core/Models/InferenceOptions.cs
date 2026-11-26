@@ -3,6 +3,7 @@ namespace Armada.Core.Models
     using System;
     using System.Collections.Generic;
     using System.Linq;
+    using Armada.Core.Enums;
     using Armada.Core.Services;
 
     /// <summary>Inference defaults and execution restrictions shared by local and Harbor API captains.</summary>
@@ -40,11 +41,27 @@ namespace Armada.Core.Models
         /// </summary>
         public int? ContextLength { get; set; } = null;
         /// <summary>
-        /// Stream model responses. Each call then fails only when the model sends nothing for the endpoint's request
-        /// timeout (an idle deadline) instead of when the whole response takes longer, so long generations survive an
-        /// idle-based proxy or load balancer deadline. Default false.
+        /// Whether to stream model responses. A streamed call fails only when the model sends nothing for the endpoint's
+        /// request timeout (an idle deadline) instead of when the whole response takes longer, so long generations survive
+        /// an idle-based proxy or load balancer deadline, and each chunk is progress the stall detector sees. Automatic (the
+        /// default) streams on OpenAI-compatible, Ollama, and Ollama Cloud endpoints, and on a Harbor only when it advertises
+        /// api-inference-streaming-v1. On or Off set by the operator always wins.
         /// </summary>
-        public bool Streaming { get; set; } = false;
+        public InferenceStreamingModeEnum StreamingMode { get; set; } = InferenceStreamingModeEnum.Automatic;
+
+        /// <summary>
+        /// Compatibility form of <see cref="StreamingMode"/> for clients and Harbors before 1.5.0: true when the mode is On.
+        /// Setting true turns an Automatic mode On; setting false changes nothing (before 1.5.0 false was the default, not
+        /// an operator choice). Use <see cref="StreamingMode"/> to turn streaming off.
+        /// </summary>
+        public bool Streaming
+        {
+            get => StreamingMode == InferenceStreamingModeEnum.On;
+            set
+            {
+                if (value && StreamingMode == InferenceStreamingModeEnum.Automatic) StreamingMode = InferenceStreamingModeEnum.On;
+            }
+        }
         /// <summary>
         /// Optional deadline, from 1000 through 1800000 ms, for the model to start responding: cold model loads and long
         /// prompt evaluation. Streaming applies it to each call's first chunk; without streaming it extends each call's
@@ -70,16 +87,42 @@ namespace Armada.Core.Models
 
         /// <summary>Whether launching on a Harbor requires a Harbor that streams and applies the first-response deadline.</summary>
         [System.Text.Json.Serialization.JsonIgnore]
-        public bool RequiresStreamingSupport => Streaming || FirstResponseTimeoutMs.HasValue;
+        public bool RequiresStreamingSupport => StreamingMode == InferenceStreamingModeEnum.On || FirstResponseTimeoutMs.HasValue;
 
         /// <summary>Whether any setting differs from the defaults.</summary>
         [System.Text.Json.Serialization.JsonIgnore]
         public bool HasNonDefaultSettings => RequiresPolicySupport || RequiresContextSupport || RequiresStreamingSupport || MaxConcurrentMissions.HasValue
-            || ToolOutputWindowPercent.HasValue;
+            || ToolOutputWindowPercent.HasValue
+            || StreamingMode != InferenceStreamingModeEnum.Automatic;
+
+        /// <summary>
+        /// Whether an Automatic streaming mode streams on this provider: OpenAI-compatible, Ollama, and Ollama Cloud.
+        /// </summary>
+        /// <param name="provider">Endpoint provider.</param>
+        /// <returns>True when the provider streams by default.</returns>
+        public static bool StreamsByDefault(ModelProviderEnum provider)
+        {
+            return provider == ModelProviderEnum.OpenAICompatible || provider == ModelProviderEnum.Ollama || provider == ModelProviderEnum.OllamaCloud;
+        }
+
+        /// <summary>
+        /// Resolve <see cref="StreamingMode"/> to whether this run streams.
+        /// </summary>
+        /// <param name="provider">Endpoint provider.</param>
+        /// <param name="hostSupportsStreaming">Whether the host that runs the captain streams: true in process, and for a
+        /// Harbor whether it advertises api-inference-streaming-v1. Only Automatic consults it.</param>
+        /// <returns>True to stream.</returns>
+        public bool ResolveStreaming(ModelProviderEnum provider, bool hostSupportsStreaming)
+        {
+            if (StreamingMode == InferenceStreamingModeEnum.On) return true;
+            if (StreamingMode == InferenceStreamingModeEnum.Off) return false;
+            return hostSupportsStreaming && StreamsByDefault(provider);
+        }
 
         /// <summary>Validate supplied settings without silently changing them.</summary>
         public void Validate()
         {
+            if (!Enum.IsDefined(typeof(InferenceStreamingModeEnum), StreamingMode)) throw new ArgumentException("InferenceOptions.StreamingMode must be Automatic, On, or Off.");
             if (MaxIterations < 1 || MaxIterations > 1000) throw new ArgumentException("InferenceOptions.MaxIterations must be between 1 and 1000.");
             if (MaxTokens.HasValue && (MaxTokens < 1 || MaxTokens > 10000000)) throw new ArgumentException("InferenceOptions.MaxTokens must be between 1 and 10000000.");
             if (Temperature.HasValue && (!Double.IsFinite(Temperature.Value) || Temperature < 0 || Temperature > 2)) throw new ArgumentException("InferenceOptions.Temperature must be between 0 and 2.");

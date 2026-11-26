@@ -3294,6 +3294,9 @@ export interface ModelEndpointHealthRecord {
   success: boolean;
 }
 
+/** Whether an API captain endpoint streams model responses. */
+export type InferenceStreamingMode = 'Automatic' | 'On' | 'Off';
+
 export interface InferenceOptions {
   toolsEnabled: boolean;
   readOnlyTools: boolean;
@@ -3309,7 +3312,12 @@ export interface InferenceOptions {
   contextLength?: number | null;
   /** Missions allowed at once against this base URL; null is unlimited. */
   maxConcurrentMissions?: number | null;
-  /** Stream responses; the request timeout becomes an idle deadline. */
+  /**
+   * Automatic streams on OpenAI-compatible, Ollama and Ollama Cloud endpoints (on a Harbor only when it advertises
+   * api-inference-streaming-v1); On and Off always win. Absent on servers before 1.5.0.
+   */
+  streamingMode?: InferenceStreamingMode;
+  /** Compatibility form: true when streamingMode is On. Keep it equal to streamingMode === 'On' when sending. */
   streaming?: boolean;
   /** Deadline for the model to start responding (model load, prompt evaluation); null uses the request timeout. */
   firstResponseTimeoutMs?: number | null;

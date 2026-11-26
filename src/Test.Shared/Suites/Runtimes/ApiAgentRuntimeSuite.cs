@@ -54,6 +54,7 @@ namespace Test.Shared.Suites.Runtimes
                         bool mcpDiscovered = false;
                         bool denied = false;
                         ModelEndpoint endpoint = new ModelEndpoint { Name = "policy", Kind = ModelEndpointKindEnum.Inference, Provider = ModelProviderEnum.OpenAICompatible, Model = "endpoint-model", BaseUrl = "http://localhost:1", InferenceOptions = policy };
+                        endpoint.InferenceOptions.StreamingMode = InferenceStreamingModeEnum.Off; // the scripted client does not stream
                         ApiAgentRuntime runtime = new ApiAgentRuntime(endpoint, CreateLogging(), 20, (ep, log) => { endpoint.InferenceOptions = new InferenceOptions(); return client = new ScriptedClient(script, log); }, (url, key, log) => { mcpDiscovered = true; throw new InvalidOperationException("MCP discovery must be disabled"); });
                         using ManualResetEventSlim exited = new ManualResetEventSlim(false);
                         int code = -1;
@@ -87,6 +88,7 @@ namespace Test.Shared.Suites.Runtimes
                     {
                         ScriptedClient? client = null;
                         ModelEndpoint endpoint = new ModelEndpoint { Name = "plain", Kind = ModelEndpointKindEnum.Inference, Provider = ModelProviderEnum.OpenAICompatible, BaseUrl = "http://localhost:1", InferenceOptions = policy };
+                        endpoint.InferenceOptions.StreamingMode = InferenceStreamingModeEnum.Off; // the scripted client does not stream
                         ApiAgentRuntime runtime = new ApiAgentRuntime(endpoint, CreateLogging(), 20, (ep, log) => client = new ScriptedClient(new Queue<ChatResponse>(), log), (url, key, log) => throw new InvalidOperationException("No MCP"));
                         using ManualResetEventSlim exited = new ManualResetEventSlim(false);
                         int code = -1; runtime.OnProcessExited += (pid, value) => { code = value ?? -1; exited.Set(); };
@@ -129,7 +131,7 @@ namespace Test.Shared.Suites.Runtimes
                         script.Enqueue(new ChatResponse { Success = true, Text = "I will start by reading instructions.", ToolCalls = new List<ToolCall> { new ToolCall { Id = "read", Name = "list_directory", ArgumentsJson = "{}" } } });
                         script.Enqueue(new ChatResponse { Success = true, Text = terminal, FinishReason = terminal?.Contains("Truncated") == true ? "length" : "stop" });
                         if (recover) script.Enqueue(new ChatResponse { Success = true, Text = "[ARMADA:RESULT] COMPLETE\nImplemented and tested.", FinishReason = "stop", Usage = new TokenUsage { PromptTokens = 42, CompletionTokens = 7 } });
-                        ModelEndpoint endpoint = new ModelEndpoint { Kind = ModelEndpointKindEnum.Inference, Provider = ModelProviderEnum.OpenAICompatible, BaseUrl = "http://localhost:1", InferenceOptions = new InferenceOptions { McpToolsEnabled = false } };
+                        ModelEndpoint endpoint = new ModelEndpoint { Kind = ModelEndpointKindEnum.Inference, Provider = ModelProviderEnum.OpenAICompatible, BaseUrl = "http://localhost:1", InferenceOptions = new InferenceOptions { StreamingMode = InferenceStreamingModeEnum.Off, McpToolsEnabled = false } };
                         ApiAgentRuntime runtime = new ApiAgentRuntime(endpoint, CreateLogging(), 10, (ep, log) => new ScriptedClient(script, log));
                         using ManualResetEventSlim exited = new ManualResetEventSlim(false);
                         int code = -1; RuntimeProviderError? failure = null;
@@ -170,7 +172,7 @@ namespace Test.Shared.Suites.Runtimes
                     script.Enqueue(new ChatResponse { Success = true, ToolCalls = new List<ToolCall> { new ToolCall { Id = "s2", Name = StageSubmissionTools.SubmitVerdict, ArgumentsJson =
                         "{\"verdict\":\"PASS\",\"correctness\":\"" + lens + "\",\"blastRadius\":\"" + lens + "\",\"sourceFidelity\":\"" + lens + "\",\"evidence\":{\"checksRun\":[],\"inspectedFiles\":[\"src/Widgets/Validator.cs\"]}}" } } });
                     script.Enqueue(new ChatResponse { Success = true, Text = "Reviewed and approved.", FinishReason = "stop" });
-                    ModelEndpoint endpoint = new ModelEndpoint { Kind = ModelEndpointKindEnum.Inference, Provider = ModelProviderEnum.OpenAICompatible, BaseUrl = "http://localhost:1", InferenceOptions = new InferenceOptions { McpToolsEnabled = false } };
+                    ModelEndpoint endpoint = new ModelEndpoint { Kind = ModelEndpointKindEnum.Inference, Provider = ModelProviderEnum.OpenAICompatible, BaseUrl = "http://localhost:1", InferenceOptions = new InferenceOptions { StreamingMode = InferenceStreamingModeEnum.Off, McpToolsEnabled = false } };
                     ScriptedClient? client = null;
                     ApiAgentRuntime runtime = new ApiAgentRuntime(endpoint, CreateLogging(), 10, (ep, log) => client = new ScriptedClient(script, log));
                     using ManualResetEventSlim exited = new ManualResetEventSlim(false);
@@ -210,7 +212,7 @@ namespace Test.Shared.Suites.Runtimes
                     script.Enqueue(new ChatResponse { Success = true, Text = "I made the change.", FinishReason = "stop" });
                     script.Enqueue(new ChatResponse { Success = true, ToolCalls = new List<ToolCall> { new ToolCall { Id = "s1", Name = StageSubmissionTools.SubmitResult, ArgumentsJson = "{\"status\":\"complete\",\"summary\":\"Added the guard.\"}" } } });
                     script.Enqueue(new ChatResponse { Success = true, Text = "Submitted.", FinishReason = "stop" });
-                    ModelEndpoint endpoint = new ModelEndpoint { Kind = ModelEndpointKindEnum.Inference, Provider = ModelProviderEnum.OpenAICompatible, BaseUrl = "http://localhost:1", InferenceOptions = new InferenceOptions { McpToolsEnabled = false } };
+                    ModelEndpoint endpoint = new ModelEndpoint { Kind = ModelEndpointKindEnum.Inference, Provider = ModelProviderEnum.OpenAICompatible, BaseUrl = "http://localhost:1", InferenceOptions = new InferenceOptions { StreamingMode = InferenceStreamingModeEnum.Off, McpToolsEnabled = false } };
                     ScriptedClient? client = null;
                     ApiAgentRuntime runtime = new ApiAgentRuntime(endpoint, CreateLogging(), 10, (ep, log) => client = new ScriptedClient(script, log));
                     using ManualResetEventSlim exited = new ManualResetEventSlim(false);
@@ -237,7 +239,7 @@ namespace Test.Shared.Suites.Runtimes
                 {
                     Queue<ChatResponse> script = new Queue<ChatResponse>();
                     script.Enqueue(new ChatResponse { Success = true, ToolCalls = new List<ToolCall> { new ToolCall { Id = "read", Name = "list_directory", ArgumentsJson = "{}" } } });
-                    ModelEndpoint endpoint = new ModelEndpoint { Kind = ModelEndpointKindEnum.Inference, Provider = ModelProviderEnum.OpenAICompatible, BaseUrl = "http://localhost:1", InferenceOptions = new InferenceOptions { MaxIterations = 1 } };
+                    ModelEndpoint endpoint = new ModelEndpoint { Kind = ModelEndpointKindEnum.Inference, Provider = ModelProviderEnum.OpenAICompatible, BaseUrl = "http://localhost:1", InferenceOptions = new InferenceOptions { StreamingMode = InferenceStreamingModeEnum.Off, MaxIterations = 1 } };
                     ApiAgentRuntime runtime = new ApiAgentRuntime(endpoint, CreateLogging(), 20, (ep, log) => new ScriptedClient(script, log));
                     using ManualResetEventSlim exited = new ManualResetEventSlim(false); int code = -1;
                     RuntimeProviderError? failure = null;
@@ -290,7 +292,7 @@ namespace Test.Shared.Suites.Runtimes
                             ToolCalls = new List<ToolCall> { new ToolCall { Id = "r" + i, Name = "read_file", ArgumentsJson = "{\"file_path\":\"big.txt\"}" } } });
                     script.Enqueue(new ChatResponse { Success = true, Usage = new TokenUsage { PromptTokens = 9000 }, Text = "done", ToolCalls = new List<ToolCall>() });
                     ModelEndpoint endpoint = new ModelEndpoint { Kind = ModelEndpointKindEnum.Inference, Provider = ModelProviderEnum.Ollama, BaseUrl = "http://localhost:1",
-                        InferenceOptions = new InferenceOptions { McpToolsEnabled = false, ContextLength = 32768 } };
+                        InferenceOptions = new InferenceOptions { StreamingMode = InferenceStreamingModeEnum.Off, McpToolsEnabled = false, ContextLength = 32768 } };
                     ApiAgentRuntime runtime = new ApiAgentRuntime(endpoint, CreateLogging(), 20, (ep, log) => new ScriptedClient(script, log));
                     using ManualResetEventSlim exited = new ManualResetEventSlim(false); int code = -1;
                     RuntimeProviderError? failure = null;
@@ -317,7 +319,7 @@ namespace Test.Shared.Suites.Runtimes
                         script.Enqueue(new ChatResponse { Success = true, Usage = new TokenUsage { PromptTokens = promptTokens }, ToolCalls = new List<ToolCall> { new ToolCall { Id = "read", Name = "list_directory", ArgumentsJson = "{}" } } });
                         script.Enqueue(new ChatResponse { Success = true, Usage = new TokenUsage { PromptTokens = promptTokens }, Text = "done", ToolCalls = new List<ToolCall>() });
                         ModelEndpoint endpoint = new ModelEndpoint { Kind = ModelEndpointKindEnum.Inference, Provider = ModelProviderEnum.Ollama, BaseUrl = "http://localhost:1",
-                            InferenceOptions = new InferenceOptions { McpToolsEnabled = false, ContextLength = 32768 } };
+                            InferenceOptions = new InferenceOptions { StreamingMode = InferenceStreamingModeEnum.Off, McpToolsEnabled = false, ContextLength = 32768 } };
                         ApiAgentRuntime runtime = new ApiAgentRuntime(endpoint, CreateLogging(), 20, (ep, log) => new ScriptedClient(script, log));
                         using ManualResetEventSlim exited = new ManualResetEventSlim(false); int code = -1;
                         RuntimeProviderError? failure = null;
@@ -384,19 +386,19 @@ namespace Test.Shared.Suites.Runtimes
             cases.Add(CaseAsync("context_length_reaches_ollama_clients_only", "ContextLength becomes num_ctx on Ollama and Ollama Cloud clients and is validated", TestTags.Positive, () =>
             {
                 ModelEndpoint ollama = new ModelEndpoint { Kind = ModelEndpointKindEnum.Inference, Provider = ModelProviderEnum.Ollama, BaseUrl = "http://localhost:11434", Model = "qwen3",
-                    InferenceOptions = new InferenceOptions { ContextLength = 65536 } };
-                using (ProviderClientBase client = Armada.Core.Services.ModelEndpointClientFactory.CreateCompletion(ollama, CreateLogging()))
-                    AssertEqual(65536, (client.Defaults.Completion as PolyPrompt.Options.OllamaCompletionOptions)?.ContextLength);
+                    InferenceOptions = new InferenceOptions { StreamingMode = InferenceStreamingModeEnum.Off, ContextLength = 65536 } };
+                using (CompletionClientBase client = Armada.Core.Services.ModelEndpointClientFactory.CreateCompletion(ollama, CreateLogging()))
+                    AssertEqual(65536, (client.Defaults as PolyPrompt.Options.OllamaCompletionOptions)?.ContextLength);
 
                 ModelEndpoint cloud = new ModelEndpoint { Kind = ModelEndpointKindEnum.Inference, Provider = ModelProviderEnum.OllamaCloud, Model = "glm-4.6",
-                    InferenceOptions = new InferenceOptions { ContextLength = 131072 } };
+                    InferenceOptions = new InferenceOptions { StreamingMode = InferenceStreamingModeEnum.Off, ContextLength = 131072 } };
                 cloud.ApiKey = "test-token";
                 using (ProviderClientBase client = Armada.Core.Services.ModelEndpointClientFactory.CreateCompletion(cloud, CreateLogging()))
                     AssertEqual(131072, (client.Defaults.Completion as PolyPrompt.Options.OllamaCompletionOptions)?.ContextLength);
 
-                ModelEndpoint unset = new ModelEndpoint { Kind = ModelEndpointKindEnum.Inference, Provider = ModelProviderEnum.Ollama, BaseUrl = "http://localhost:11434", Model = "qwen3" };
-                using (ProviderClientBase client = Armada.Core.Services.ModelEndpointClientFactory.CreateCompletion(unset, CreateLogging()))
-                    AssertNull((client.Defaults.Completion as PolyPrompt.Options.OllamaCompletionOptions)?.ContextLength, "unset keeps the model default");
+                ModelEndpoint unset = new ModelEndpoint { InferenceOptions = new InferenceOptions { StreamingMode = InferenceStreamingModeEnum.Off }, Kind = ModelEndpointKindEnum.Inference, Provider = ModelProviderEnum.Ollama, BaseUrl = "http://localhost:11434", Model = "qwen3" };
+                using (CompletionClientBase client = Armada.Core.Services.ModelEndpointClientFactory.CreateCompletion(unset, CreateLogging()))
+                    AssertNull((client.Defaults as PolyPrompt.Options.OllamaCompletionOptions)?.ContextLength, "unset keeps the model default");
 
                 AssertThrows<ArgumentException>(() => new InferenceOptions { ContextLength = 100 }.Validate());
                 AssertThrows<ArgumentException>(() => new InferenceOptions { ContextLength = 3000000 }.Validate());
@@ -466,7 +468,7 @@ namespace Test.Shared.Suites.Runtimes
                         ToolCalls = new List<ToolCall>()
                     });
 
-                    ModelEndpoint endpoint = new ModelEndpoint { Name = "test-endpoint", Provider = ModelProviderEnum.OpenAICompatible, Kind = ModelEndpointKindEnum.Inference, Model = "test-model", BaseUrl = "http://localhost:1" };
+                    ModelEndpoint endpoint = new ModelEndpoint { InferenceOptions = new InferenceOptions { StreamingMode = InferenceStreamingModeEnum.Off }, Name = "test-endpoint", Provider = ModelProviderEnum.OpenAICompatible, Kind = ModelEndpointKindEnum.Inference, Model = "test-model", BaseUrl = "http://localhost:1" };
                     ApiAgentRuntime runtime = new ApiAgentRuntime(endpoint, CreateLogging(), 20, (ep, log) => new ScriptedClient(script, log));
 
                     int startedPid = 0;
@@ -697,7 +699,7 @@ namespace Test.Shared.Suites.Runtimes
                     });
                     script.Enqueue(new ChatResponse { Success = true, Text = "[tool] all done", ToolCalls = new List<ToolCall>() });
 
-                    ModelEndpoint endpoint = new ModelEndpoint { Name = "test-endpoint", Provider = ModelProviderEnum.OpenAICompatible, Kind = ModelEndpointKindEnum.Inference, Model = "test-model", BaseUrl = "http://localhost:1" };
+                    ModelEndpoint endpoint = new ModelEndpoint { InferenceOptions = new InferenceOptions { StreamingMode = InferenceStreamingModeEnum.Off }, Name = "test-endpoint", Provider = ModelProviderEnum.OpenAICompatible, Kind = ModelEndpointKindEnum.Inference, Model = "test-model", BaseUrl = "http://localhost:1" };
                     ApiAgentRuntime runtime = new ApiAgentRuntime(endpoint, CreateLogging(), 20, (ep, log) => new ScriptedClient(script, log), (url, token, log) => new McpToolClient(url, stub));
 
                     Armada.Core.Services.RuntimeToolWaitTracker waits = new Armada.Core.Services.RuntimeToolWaitTracker();
@@ -752,7 +754,7 @@ namespace Test.Shared.Suites.Runtimes
                     Queue<ChatResponse> script = new Queue<ChatResponse>();
                     script.Enqueue(new ChatResponse { Success = false, StatusCode = 503, Error = "model loading", ToolCalls = new List<ToolCall>() });
                     script.Enqueue(new ChatResponse { Success = true, Text = "[ARMADA:RESULT] COMPLETE\nDone after the retry.", FinishReason = "stop" });
-                    ModelEndpoint endpoint = new ModelEndpoint { Kind = ModelEndpointKindEnum.Inference, Provider = ModelProviderEnum.OpenAICompatible, BaseUrl = "http://localhost:1", InferenceOptions = new InferenceOptions { McpToolsEnabled = false } };
+                    ModelEndpoint endpoint = new ModelEndpoint { Kind = ModelEndpointKindEnum.Inference, Provider = ModelProviderEnum.OpenAICompatible, BaseUrl = "http://localhost:1", InferenceOptions = new InferenceOptions { StreamingMode = InferenceStreamingModeEnum.Off, McpToolsEnabled = false } };
                     ApiAgentRuntime runtime = new ApiAgentRuntime(endpoint, CreateLogging(), 10, (ep, log) => new ScriptedClient(script, log));
                     runtime.InferenceRetryBaseDelay = TimeSpan.FromMilliseconds(10);
                     using ManualResetEventSlim exited = new ManualResetEventSlim(false);
@@ -779,7 +781,7 @@ namespace Test.Shared.Suites.Runtimes
                     Queue<ChatResponse> script = new Queue<ChatResponse>();
                     script.Enqueue(new ChatResponse { Success = false, StatusCode = 400, Error = "unsupported tool shape", ToolCalls = new List<ToolCall>() });
                     script.Enqueue(new ChatResponse { Success = true, Text = "[ARMADA:RESULT] COMPLETE\nmust not be reached", FinishReason = "stop" });
-                    ModelEndpoint endpoint = new ModelEndpoint { Kind = ModelEndpointKindEnum.Inference, Provider = ModelProviderEnum.OpenAICompatible, BaseUrl = "http://localhost:1", InferenceOptions = new InferenceOptions { McpToolsEnabled = false } };
+                    ModelEndpoint endpoint = new ModelEndpoint { Kind = ModelEndpointKindEnum.Inference, Provider = ModelProviderEnum.OpenAICompatible, BaseUrl = "http://localhost:1", InferenceOptions = new InferenceOptions { StreamingMode = InferenceStreamingModeEnum.Off, McpToolsEnabled = false } };
                     ApiAgentRuntime runtime = new ApiAgentRuntime(endpoint, CreateLogging(), 10, (ep, log) => new ScriptedClient(script, log));
                     runtime.InferenceRetryBaseDelay = TimeSpan.FromMilliseconds(10);
                     using ManualResetEventSlim exited = new ManualResetEventSlim(false);
@@ -802,7 +804,7 @@ namespace Test.Shared.Suites.Runtimes
                     Queue<ChatResponse> script = new Queue<ChatResponse>();
                     script.Enqueue(new ChatResponse { Success = false, Error = null, Text = null, ToolCalls = new List<ToolCall>() });
 
-                    ModelEndpoint endpoint = new ModelEndpoint { Name = "test-endpoint", Provider = ModelProviderEnum.OpenAICompatible, Kind = ModelEndpointKindEnum.Inference, Model = "test-model", BaseUrl = "http://localhost:1" };
+                    ModelEndpoint endpoint = new ModelEndpoint { InferenceOptions = new InferenceOptions { StreamingMode = InferenceStreamingModeEnum.Off }, Name = "test-endpoint", Provider = ModelProviderEnum.OpenAICompatible, Kind = ModelEndpointKindEnum.Inference, Model = "test-model", BaseUrl = "http://localhost:1" };
                     ApiAgentRuntime runtime = new ApiAgentRuntime(endpoint, CreateLogging(), 20, (ep, log) => new ScriptedClient(script, log));
                     runtime.InferenceRetries = 0; // this case checks the outcome once retries are spent
 
@@ -829,7 +831,7 @@ namespace Test.Shared.Suites.Runtimes
                 try
                 {
                     // A client that blocks until cancelled, so the loop stays running until StopAsync fires.
-                    ModelEndpoint endpoint = new ModelEndpoint { Name = "blocking", Provider = ModelProviderEnum.OpenAICompatible, Kind = ModelEndpointKindEnum.Inference, Model = "m", BaseUrl = "http://localhost:1" };
+                    ModelEndpoint endpoint = new ModelEndpoint { InferenceOptions = new InferenceOptions { StreamingMode = InferenceStreamingModeEnum.Off }, Name = "blocking", Provider = ModelProviderEnum.OpenAICompatible, Kind = ModelEndpointKindEnum.Inference, Model = "m", BaseUrl = "http://localhost:1" };
                     ApiAgentRuntime runtime = new ApiAgentRuntime(endpoint, CreateLogging(), 20, (ep, log) => new BlockingClient(log));
 
                     int? exitCode = null;
@@ -858,7 +860,7 @@ namespace Test.Shared.Suites.Runtimes
                 string dir = NewTempDir();
                 try
                 {
-                    ModelEndpoint endpoint = new ModelEndpoint { Name = "timeout", Provider = ModelProviderEnum.OpenAICompatible, Kind = ModelEndpointKindEnum.Inference, Model = "m", BaseUrl = "http://localhost:1" };
+                    ModelEndpoint endpoint = new ModelEndpoint { InferenceOptions = new InferenceOptions { StreamingMode = InferenceStreamingModeEnum.Off }, Name = "timeout", Provider = ModelProviderEnum.OpenAICompatible, Kind = ModelEndpointKindEnum.Inference, Model = "m", BaseUrl = "http://localhost:1" };
                     ApiAgentRuntime runtime = new ApiAgentRuntime(endpoint, CreateLogging(), 20, (ep, log) => new TimeoutClient(log));
 
                     int? exitCode = null; RuntimeProviderError? failure = null;
@@ -1013,7 +1015,7 @@ namespace Test.Shared.Suites.Runtimes
                     string dir = NewTempDir();
                     try
                     {
-                        ModelEndpoint endpoint = new ModelEndpoint { Name = "gateway", Provider = ModelProviderEnum.OpenAICompatible, Kind = ModelEndpointKindEnum.Inference, Model = "m", BaseUrl = "http://localhost:1", InferenceOptions = new InferenceOptions { Streaming = streaming } };
+                        ModelEndpoint endpoint = new ModelEndpoint { Name = "gateway", Provider = ModelProviderEnum.OpenAICompatible, Kind = ModelEndpointKindEnum.Inference, Model = "m", BaseUrl = "http://localhost:1", InferenceOptions = new InferenceOptions { StreamingMode = streaming ? InferenceStreamingModeEnum.On : InferenceStreamingModeEnum.Off } };
                         ApiAgentRuntime runtime = new ApiAgentRuntime(endpoint, CreateLogging(), 20, (ep, log) => new GatewayClient(log, 300));
                         runtime.InferenceRetries = 0;
                         runtime.GatewayDeadlineHint = TimeSpan.FromMilliseconds(200);
@@ -1050,7 +1052,7 @@ namespace Test.Shared.Suites.Runtimes
                 string dir = NewTempDir();
                 try
                 {
-                    ModelEndpoint endpoint = new ModelEndpoint { Name = "slow", Provider = ModelProviderEnum.OpenAICompatible, Kind = ModelEndpointKindEnum.Inference, Model = "m", BaseUrl = "http://localhost:1" };
+                    ModelEndpoint endpoint = new ModelEndpoint { InferenceOptions = new InferenceOptions { StreamingMode = InferenceStreamingModeEnum.Off }, Name = "slow", Provider = ModelProviderEnum.OpenAICompatible, Kind = ModelEndpointKindEnum.Inference, Model = "m", BaseUrl = "http://localhost:1" };
                     ApiAgentRuntime runtime = new ApiAgentRuntime(endpoint, CreateLogging(), 20, (ep, log) => new GatewayClient(log, 700));
                     runtime.InferenceRetries = 0;
                     runtime.LivenessInterval = TimeSpan.FromMilliseconds(150);
@@ -1081,6 +1083,32 @@ namespace Test.Shared.Suites.Runtimes
                 return Task.CompletedTask;
             }));
 
+            cases.Add(CaseAsync("streaming_mode_defaults_and_compatibility", "Automatic streams on OpenAI-compatible and Ollama only where the host streams; explicit modes win; the legacy streaming flag maps without turning streaming off", TestTags.Positive, () =>
+            {
+                InferenceOptions automatic = new InferenceOptions();
+                AssertEqual(InferenceStreamingModeEnum.Automatic, automatic.StreamingMode);
+                AssertTrue(automatic.ResolveStreaming(ModelProviderEnum.OpenAICompatible, true), "OpenAI-compatible streams");
+                AssertTrue(automatic.ResolveStreaming(ModelProviderEnum.Ollama, true), "Ollama streams");
+                AssertTrue(automatic.ResolveStreaming(ModelProviderEnum.OllamaCloud, true), "Ollama Cloud streams");
+                AssertFalse(automatic.ResolveStreaming(ModelProviderEnum.Anthropic, true), "other providers do not by default");
+                AssertFalse(automatic.ResolveStreaming(ModelProviderEnum.Ollama, false), "not on a host without streaming");
+                AssertFalse(automatic.RequiresStreamingSupport, "Automatic requires nothing of a Harbor");
+                AssertTrue(new InferenceOptions { StreamingMode = InferenceStreamingModeEnum.On }.ResolveStreaming(ModelProviderEnum.Anthropic, false), "explicit On");
+                AssertFalse(new InferenceOptions { StreamingMode = InferenceStreamingModeEnum.Off }.ResolveStreaming(ModelProviderEnum.Ollama, true), "explicit Off");
+                AssertTrue(new InferenceOptions { StreamingMode = InferenceStreamingModeEnum.Off }.HasNonDefaultSettings, "Off is a setting");
+                AssertThrows<ArgumentException>(() => new InferenceOptions { StreamingMode = (InferenceStreamingModeEnum)42 }.Validate());
+
+                InferenceOptions legacyOff = System.Text.Json.JsonSerializer.Deserialize<InferenceOptions>("{\"Streaming\":false}")!;
+                AssertEqual(InferenceStreamingModeEnum.Automatic, legacyOff.StreamingMode, "a stored 1.4.0 false is the old default, not an operator Off");
+                InferenceOptions legacyOn = System.Text.Json.JsonSerializer.Deserialize<InferenceOptions>("{\"Streaming\":true}")!;
+                AssertEqual(InferenceStreamingModeEnum.On, legacyOn.StreamingMode, "a stored 1.4.0 true stays On");
+                InferenceOptions offFirst = System.Text.Json.JsonSerializer.Deserialize<InferenceOptions>("{\"StreamingMode\":\"Off\",\"Streaming\":true}")!;
+                AssertEqual(InferenceStreamingModeEnum.Off, offFirst.StreamingMode, "an explicit mode is not overridden by the flag");
+                string json = System.Text.Json.JsonSerializer.Serialize(new InferenceOptions { StreamingMode = InferenceStreamingModeEnum.On });
+                AssertContains("\"Streaming\":true", json, "older readers still see streaming");
+                return Task.CompletedTask;
+            }));
+
             string? simulation = Environment.GetEnvironmentVariable("ARMADA_MODEL_PROVIDER_SIMULATION");
             if (!String.IsNullOrWhiteSpace(simulation))
             {
@@ -1091,7 +1119,7 @@ namespace Test.Shared.Suites.Runtimes
                     {
                         ModelEndpoint endpoint = new ModelEndpoint { Name = "Ollama continuation HTTP", Provider = ModelProviderEnum.Ollama,
                             Kind = ModelEndpointKindEnum.Inference, Model = "ollama-thinking-replay", BaseUrl = simulation, ApiKey = "test-token",
-                            InferenceOptions = new InferenceOptions { McpToolsEnabled = false, MaxIterations = 3, MaxTokens = 32768 } };
+                            InferenceOptions = new InferenceOptions { StreamingMode = InferenceStreamingModeEnum.Off, McpToolsEnabled = false, MaxIterations = 3, MaxTokens = 32768 } };
                         LocalHarborJobRunner runner = new LocalHarborJobRunner(CreateLogging(), new AgentRuntimeFactory(CreateLogging()), Path.Combine(dir, "scratch"));
                         Armada.Core.Harbor.HarborLaunchRequest request = new Armada.Core.Harbor.HarborLaunchRequest { JobId = "thinking-replay", Runtime = "ApiEndpoint", WorkingDirectory = dir,
                             Prompt = "Write and verify provider-thinking.txt, then finish the mission.", InferenceEndpoint = Armada.Core.Harbor.HarborInferenceEndpoint.FromEndpoint(endpoint), ReturnProviderErrors = true };
@@ -1124,7 +1152,7 @@ namespace Test.Shared.Suites.Runtimes
                         try
                         {
                             ModelEndpoint endpoint = new ModelEndpoint { Provider = ModelProviderEnum.Ollama, Kind = ModelEndpointKindEnum.Inference, Model = "reasoning-budget",
-                                BaseUrl = simulation, InferenceOptions = new InferenceOptions { McpToolsEnabled = false, MaxTokens = maxTokens } };
+                                BaseUrl = simulation, InferenceOptions = new InferenceOptions { StreamingMode = InferenceStreamingModeEnum.Off, McpToolsEnabled = false, MaxTokens = maxTokens } };
                             endpoint.ApiKey = "test-token";
                             LocalHarborJobRunner runner = new LocalHarborJobRunner(CreateLogging(), new AgentRuntimeFactory(CreateLogging()), Path.Combine(dir, "scratch"));
                             Armada.Core.Harbor.HarborLaunchRequest request = new Armada.Core.Harbor.HarborLaunchRequest { JobId = "reasoning-budget", Runtime = "ApiEndpoint", WorkingDirectory = dir,
@@ -1166,7 +1194,7 @@ namespace Test.Shared.Suites.Runtimes
                         try
                         {
                             ModelEndpoint endpoint = new ModelEndpoint { Provider = ModelProviderEnum.XAI, Kind = ModelEndpointKindEnum.Inference, Model = recover ? "recover-incomplete" : "always-incomplete", BaseUrl = simulation,
-                                InferenceOptions = new InferenceOptions { McpToolsEnabled = false } };
+                                InferenceOptions = new InferenceOptions { StreamingMode = InferenceStreamingModeEnum.Off, McpToolsEnabled = false } };
                             endpoint.ApiKey = "test-token";
                             ApiAgentRuntime runtime = new ApiAgentRuntime(endpoint, CreateLogging());
                             int code = -1; RuntimeProviderError? failure = null;
@@ -1199,7 +1227,7 @@ namespace Test.Shared.Suites.Runtimes
                         try
                         {
                             ModelEndpoint endpoint = new ModelEndpoint { Name = "xAI Harbor", Provider = ModelProviderEnum.XAI, Kind = ModelEndpointKindEnum.Inference, Model = "test-model", BaseUrl = simulation,
-                                InferenceOptions = new InferenceOptions { ReadOnlyTools = readOnly, McpToolsEnabled = false, MaxIterations = 3, MaxTokens = 256, Temperature = 0, TopP = 1 } };
+                                InferenceOptions = new InferenceOptions { StreamingMode = InferenceStreamingModeEnum.Off, ReadOnlyTools = readOnly, McpToolsEnabled = false, MaxIterations = 3, MaxTokens = 256, Temperature = 0, TopP = 1 } };
                             endpoint.ApiKey = "test-token";
                             LocalHarborJobRunner runner = new LocalHarborJobRunner(CreateLogging(), new AgentRuntimeFactory(CreateLogging()), Path.Combine(dir, "scratch"));
                             Armada.Core.Harbor.HarborLaunchRequest request = new Armada.Core.Harbor.HarborLaunchRequest { JobId = "policy-job", Runtime = "ApiEndpoint", WorkingDirectory = dir, Prompt = "Write provider-test.txt",
@@ -1220,7 +1248,7 @@ namespace Test.Shared.Suites.Runtimes
                     string dir = NewTempDir();
                     try
                     {
-                        ModelEndpoint endpoint = new ModelEndpoint { Name = "xAI HTTP", Provider = ModelProviderEnum.XAI, Kind = ModelEndpointKindEnum.Inference, Model = "test-model", BaseUrl = simulation };
+                        ModelEndpoint endpoint = new ModelEndpoint { InferenceOptions = new InferenceOptions { StreamingMode = InferenceStreamingModeEnum.Off }, Name = "xAI HTTP", Provider = ModelProviderEnum.XAI, Kind = ModelEndpointKindEnum.Inference, Model = "test-model", BaseUrl = simulation };
                         endpoint.ApiKey = "test-token";
                         ApiAgentRuntime runtime = new ApiAgentRuntime(endpoint, CreateLogging(), 5);
                         int? exitCode = null;
@@ -1294,8 +1322,8 @@ namespace Test.Shared.Suites.Runtimes
                     ToolCalls = new List<ToolCall>()
                 });
                 InferenceOptions options = plainChat
-                    ? new InferenceOptions { ToolsEnabled = false }
-                    : new InferenceOptions { McpToolsEnabled = false };
+                    ? new InferenceOptions { StreamingMode = InferenceStreamingModeEnum.Off, ToolsEnabled = false }
+                    : new InferenceOptions { StreamingMode = InferenceStreamingModeEnum.Off, McpToolsEnabled = false };
                 ModelEndpoint endpoint = new ModelEndpoint
                 {
                     Name = "think-block",
@@ -1339,7 +1367,7 @@ namespace Test.Shared.Suites.Runtimes
                     ToolCalls = new List<ToolCall> { new ToolCall { Id = "sh1", Name = "run_process", ArgumentsJson = "{\"command\":\"echo hi\"}" } }
                 });
                 script.Enqueue(new ChatResponse { Success = true, Text = "Done.", ToolCalls = new List<ToolCall>() });
-                ModelEndpoint endpoint = new ModelEndpoint { Name = "test-endpoint", Provider = ModelProviderEnum.OpenAICompatible, Kind = ModelEndpointKindEnum.Inference, Model = "test-model", BaseUrl = "http://localhost:1" };
+                ModelEndpoint endpoint = new ModelEndpoint { InferenceOptions = new InferenceOptions { StreamingMode = InferenceStreamingModeEnum.Off }, Name = "test-endpoint", Provider = ModelProviderEnum.OpenAICompatible, Kind = ModelEndpointKindEnum.Inference, Model = "test-model", BaseUrl = "http://localhost:1" };
                 ApiAgentRuntime runtime = new ApiAgentRuntime(endpoint, CreateLogging(), 20, (ep, log) => new ScriptedClient(script, log));
                 runtime.ShellPolicy = policy;
                 runtime.PermissionPrompt = prompt;
@@ -1370,7 +1398,7 @@ namespace Test.Shared.Suites.Runtimes
                 Queue<ChatResponse> script = new Queue<ChatResponse>();
                 script.Enqueue(new ChatResponse { Success = true, Text = "Reading.", ToolCalls = new List<ToolCall> { new ToolCall { Id = "read", Name = "list_directory", ArgumentsJson = "{}" } } });
                 script.Enqueue(new ChatResponse { Success = true, Text = reply, FinishReason = "stop" });
-                ModelEndpoint endpoint = new ModelEndpoint { Kind = ModelEndpointKindEnum.Inference, Provider = ModelProviderEnum.OpenAICompatible, BaseUrl = "http://localhost:1", InferenceOptions = new InferenceOptions { McpToolsEnabled = false } };
+                ModelEndpoint endpoint = new ModelEndpoint { Kind = ModelEndpointKindEnum.Inference, Provider = ModelProviderEnum.OpenAICompatible, BaseUrl = "http://localhost:1", InferenceOptions = new InferenceOptions { StreamingMode = InferenceStreamingModeEnum.Off, McpToolsEnabled = false } };
                 ApiAgentRuntime runtime = new ApiAgentRuntime(endpoint, CreateLogging(), 10, (ep, log) => new ScriptedClient(script, log));
                 using ManualResetEventSlim exited = new ManualResetEventSlim(false);
                 int code = -1;
@@ -1408,6 +1436,7 @@ namespace Test.Shared.Suites.Runtimes
                 script.Enqueue(new ChatResponse { Success = true, Text = "done", ToolCalls = new List<ToolCall>() });
                 ScriptedClient client = new ScriptedClient(script, CreateLogging());
                 ModelEndpoint endpoint = new ModelEndpoint { Name = "catalog", Provider = ModelProviderEnum.OpenAICompatible, Kind = ModelEndpointKindEnum.Inference, BaseUrl = "http://localhost:1", InferenceOptions = policy ?? new InferenceOptions() };
+                endpoint.InferenceOptions.StreamingMode = InferenceStreamingModeEnum.Off; // the scripted client does not stream
                 ApiAgentRuntime runtime = new ApiAgentRuntime(endpoint, CreateLogging(), 20, (ep, log) => client, (url, key, log) => new McpToolClient(url, stub));
                 List<ApiRuntimeToolEvent> events = new List<ApiRuntimeToolEvent>();
                 using ManualResetEventSlim exited = new ManualResetEventSlim(false);
@@ -1452,6 +1481,8 @@ namespace Test.Shared.Suites.Runtimes
         private static async Task<StreamRunResult> RunStreamingAsync(string dir, InferenceOptions options, int timeoutMs, Queue<StreamPlan> plans, Func<LoggingModule, ProviderClientBase> factory, int retries = 2)
         {
             ModelEndpoint endpoint = new ModelEndpoint { Name = "stream", Provider = ModelProviderEnum.OpenAICompatible, Kind = ModelEndpointKindEnum.Inference, Model = "m", BaseUrl = "http://localhost:1", TimeoutMs = timeoutMs, InferenceOptions = options };
+            // Streaming = false here means a blocking call, as before Automatic streaming existed.
+            if (!options.Streaming && options.StreamingMode == InferenceStreamingModeEnum.Automatic) options.StreamingMode = InferenceStreamingModeEnum.Off;
             ApiAgentRuntime runtime = new ApiAgentRuntime(endpoint, CreateLogging(), 20, (ep, log) => factory(log));
             runtime.InferenceRetries = retries;
             runtime.InferenceRetryBaseDelay = TimeSpan.FromMilliseconds(10);

@@ -226,6 +226,12 @@ when none are missing; an older Harbor ignores the field), the Harbor record's `
 runs on such a Harbor reads `harborUpdateRecommended: true`. The dashboard, TUI, and mobile app show "Harbor update
 recommended" on the Harbor and the captain; the Harbor app shows it in its connection detail.
 
+Streaming default: an API captain endpoint whose `inferenceOptions.streamingMode` is `Automatic` streams on
+OpenAI-compatible, Ollama, and Ollama Cloud endpoints. For a Harbor launch the Admiral resolves `Automatic` before it
+sends the endpoint: on when the Harbor advertises `api-inference-streaming-v1`, off otherwise. It sends the result as
+`streamingMode` and as `streaming`, so a 1.4.0 Harbor applies it. `On` or `Off` set by the operator always wins; `On`
+still requires a Harbor with the flag.
+
 Delegate a git operation:
 
 ```

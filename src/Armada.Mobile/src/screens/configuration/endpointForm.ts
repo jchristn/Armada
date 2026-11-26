@@ -1,5 +1,5 @@
-import { defaultInferenceOptions, parseAllowedTools, validateInferenceOptions } from '@dashboard/lib/inferenceOptions';
-import type { ModelEndpoint, ModelEndpointKind, ModelProvider } from '@dashboard/types/models';
+import { defaultInferenceOptions, parseAllowedTools, streamingModeOf, validateInferenceOptions } from '@dashboard/lib/inferenceOptions';
+import type { InferenceStreamingMode, ModelEndpoint, ModelEndpointKind, ModelProvider } from '@dashboard/types/models';
 import { MODEL_ENDPOINT_KINDS, MODEL_PROVIDERS, unsupportedEndpointReason } from '@dashboard/lib/configuration';
 import { resolveCreateScope, type ScopeViewer } from '@dashboard/lib/scoping';
 import { bool, str, type FormField, type FormValues } from '../../components/resource/FormSheet';
@@ -103,7 +103,7 @@ function inferenceValues(endpoint: ModelEndpoint | null): FormValues {
   return { toolsEnabled: options.allowedTools?.length === 0 ? false : options.toolsEnabled, readOnlyTools: options.readOnlyTools, mcpToolsEnabled: options.mcpToolsEnabled, requireHarbor: options.requireHarbor,
     allowedTools: options.allowedTools?.join('\n') ?? '', maxIterations: String(options.maxIterations), maxTokens: options.maxTokens == null ? '' : String(options.maxTokens),
     temperature: options.temperature == null ? '' : String(options.temperature), topP: options.topP == null ? '' : String(options.topP),
-    streaming: options.streaming ?? false,
+    streamingMode: streamingModeOf(options),
     contextLength: options.contextLength == null ? '' : String(options.contextLength),
     maxConcurrentMissions: options.maxConcurrentMissions == null ? '' : String(options.maxConcurrentMissions),
     firstResponseTimeoutMs: options.firstResponseTimeoutMs == null ? '' : String(options.firstResponseTimeoutMs),
@@ -117,8 +117,9 @@ function inferencePayload(v: FormValues) {
       maxTokens: str(v, 'maxTokens').trim() ? Number(str(v, 'maxTokens')) : null,
       temperature: str(v, 'temperature').trim() ? Number(str(v, 'temperature')) : null,
       topP: str(v, 'topP').trim() ? Number(str(v, 'topP')) : null,
-      // Carried on every save, so editing an endpoint on a phone never turns streaming off or drops the window.
-      streaming: bool(v, 'streaming'),
+      // Carried on every save, so editing an endpoint on a phone never changes streaming or drops the window.
+      streamingMode: (str(v, 'streamingMode') || 'Automatic') as InferenceStreamingMode,
+      streaming: str(v, 'streamingMode') === 'On',
       contextLength: str(v, 'contextLength').trim() ? Number(str(v, 'contextLength')) : null,
       maxConcurrentMissions: str(v, 'maxConcurrentMissions').trim() ? Number(str(v, 'maxConcurrentMissions')) : null,
       firstResponseTimeoutMs: str(v, 'firstResponseTimeoutMs').trim() ? Number(str(v, 'firstResponseTimeoutMs')) : null,
@@ -330,7 +331,7 @@ export function endpointFields(t: Translate, viewer: ScopeViewer, v: FormValues,
       { kind: 'integer' as const, key: 'maxTokens', label: t('Maximum output tokens') },
       { kind: 'text' as const, key: 'temperature', label: t('Temperature (0–2, optional)') },
       { kind: 'text' as const, key: 'topP', label: t('Top P (0–1, optional)') },
-      { kind: 'switch' as const, key: 'streaming', label: t('Stream responses'), hint: t('Stream responses when a proxy or load balancer cuts long requests: the request timeout then limits only the silence between chunks.') },
+      { kind: 'select' as const, key: 'streamingMode', label: t('Stream responses'), options: (['Automatic', 'On', 'Off'] as const).map((m) => ({ value: m, label: t(m) })), hint: t('Automatic streams on OpenAI-compatible, Ollama and Ollama Cloud endpoints, and on a Harbor only when it supports streaming. Streaming makes the request timeout limit only the silence between chunks.') },
       { kind: 'integer' as const, key: 'firstResponseTimeoutMs', label: t('First-response timeout (ms)') },
       { kind: 'integer' as const, key: 'contextLength', label: t('Context window (Ollama num_ctx)') },
       { kind: 'integer' as const, key: 'maxConcurrentMissions', label: t('Max concurrent missions (per base URL)') },

@@ -388,8 +388,9 @@ order:
 3. **Capability.** A Harbor is eligible only if it is enabled, connected, under its `maxConcurrentJobs`
    capacity, and advertises the requested runtime plus every capability in `vessel.requiredCapabilities`.
    API captains also need `api-inference-policy-v1` when their endpoint restricts tools or generation, and
-   `api-inference-context-v1` when it sets `contextLength`, and `api-inference-streaming-v1` when it sets
-   `streaming` or `firstResponseTimeoutMs`; an older Harbor would ignore those settings.
+   `api-inference-context-v1` when it sets `contextLength`, and `api-inference-streaming-v1` when its
+   `streamingMode` is `On` or it sets `firstResponseTimeoutMs`; an older Harbor would ignore those settings.
+   `Automatic` streaming requires nothing: the Admiral streams only on a Harbor that advertises the flag.
 4. **Least load.** Among the remaining eligible Harbors, the least loaded one is chosen, with larger
    remaining headroom and then name used as deterministic tie-breakers.
 

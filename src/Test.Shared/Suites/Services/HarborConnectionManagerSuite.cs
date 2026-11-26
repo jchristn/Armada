@@ -207,6 +207,48 @@ namespace Test.Shared.Suites.Services
                 AssertThrows<ArgumentNullException>(() => resolver.ApplyAsync(null!).GetAwaiter().GetResult());
             }));
 
+            cases.Add(CaseAsync("harbor_launch_resolves_automatic_streaming", "A Harbor launch sends Automatic streaming resolved: on only for a streaming provider on a Harbor that advertises streaming; On and Off always win", TestTags.Positive, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                HarborService harbors = new HarborService(testDb.Driver, CreateLogging());
+                HarborConnectionManager manager = new HarborConnectionManager(harbors, CreateLogging(), null);
+                List<HarborCapability> streams = new List<HarborCapability> { new HarborCapability { Name = "ApiEndpoint", Available = true }, new HarborCapability { Name = HarborProtocol.InferenceStreamingCapability, Available = true } };
+                List<HarborCapability> blocking = new List<HarborCapability> { new HarborCapability { Name = "ApiEndpoint", Available = true } };
+
+                async Task<HarborLaunchRequest> LaunchAsync(List<HarborCapability> capabilities, ModelProviderEnum provider, InferenceStreamingModeEnum mode)
+                {
+                    string harborId = "hbr_stream_" + Guid.NewGuid().ToString("N").Substring(0, 8);
+                    HarborLaunchRequest? captured = null;
+                    using CancellationTokenSource cancel = new CancellationTokenSource();
+                    HarborSendDelegate send = (message, token) =>
+                    {
+                        if (message is HarborLaunchRequest launch && captured == null) { captured = launch; cancel.Cancel(); }
+                        return Task.CompletedTask;
+                    };
+                    await manager.OnHandshakeAsync(new HarborHandshake { HarborId = harborId, Name = "S", ProtocolVersion = HarborProtocol.Version, MaxConcurrentJobs = 4, Capabilities = capabilities }, null, null, send).ConfigureAwait(false);
+                    ModelEndpoint endpoint = new ModelEndpoint { Id = "mep_s", Name = "s", Provider = provider, Kind = ModelEndpointKindEnum.Inference, BaseUrl = "http://127.0.0.1:1", Model = "m", Enabled = true };
+                    endpoint.InferenceOptions.StreamingMode = mode;
+                    Armada.Runtimes.RemoteAgentRuntime runtime = new Armada.Runtimes.RemoteAgentRuntime(manager, harborId, AgentRuntimeEnum.ApiEndpoint, id => endpoint);
+                    try { await runtime.StartAsync("/w", "p", captain: new Captain { Name = "c", Runtime = AgentRuntimeEnum.ApiEndpoint, ModelEndpointId = "mep_s" }, token: cancel.Token).ConfigureAwait(false); }
+                    catch (OperationCanceledException) { }
+                    AssertNotNull(captured, "the launch was sent");
+                    return captured!;
+                }
+
+                HarborLaunchRequest onOllama = await LaunchAsync(streams, ModelProviderEnum.Ollama, InferenceStreamingModeEnum.Automatic).ConfigureAwait(false);
+                AssertEqual(InferenceStreamingModeEnum.On, onOllama.InferenceEndpoint!.InferenceOptions.StreamingMode, "Automatic on Ollama with a streaming Harbor");
+                AssertTrue(onOllama.InferenceEndpoint.InferenceOptions.Streaming, "a 1.4.0 Harbor reads the streaming flag");
+                HarborLaunchRequest olderHarbor = await LaunchAsync(blocking, ModelProviderEnum.OpenAICompatible, InferenceStreamingModeEnum.Automatic).ConfigureAwait(false);
+                AssertEqual(InferenceStreamingModeEnum.Off, olderHarbor.InferenceEndpoint!.InferenceOptions.StreamingMode, "no streaming flag, no default streaming");
+                AssertFalse(olderHarbor.InferenceEndpoint.InferenceOptions.Streaming);
+                HarborLaunchRequest openAi = await LaunchAsync(streams, ModelProviderEnum.OpenAI, InferenceStreamingModeEnum.Automatic).ConfigureAwait(false);
+                AssertEqual(InferenceStreamingModeEnum.Off, openAi.InferenceEndpoint!.InferenceOptions.StreamingMode, "OpenAI does not stream by default");
+                HarborLaunchRequest explicitOff = await LaunchAsync(streams, ModelProviderEnum.Ollama, InferenceStreamingModeEnum.Off).ConfigureAwait(false);
+                AssertEqual(InferenceStreamingModeEnum.Off, explicitOff.InferenceEndpoint!.InferenceOptions.StreamingMode, "explicit Off wins");
+                HarborLaunchRequest explicitOn = await LaunchAsync(streams, ModelProviderEnum.OpenAI, InferenceStreamingModeEnum.On).ConfigureAwait(false);
+                AssertEqual(InferenceStreamingModeEnum.On, explicitOn.InferenceEndpoint!.InferenceOptions.StreamingMode, "explicit On wins");
+            }));
+
             cases.Add(CaseAsync("eligible_harbor_is_scoped_to_the_owning_user", "HasEligibleHarborForUserAsync matches only the owning user's connected Harbor", TestTags.Positive, async () =>
             {
                 using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);

@@ -1,7 +1,7 @@
 import { duplicateModelEndpoint } from '../api/client';
 import { duplicateDisplayName } from '../lib/duplicates';
-import { defaultInferenceOptions, parseAllowedTools, validateInferenceOptions } from '../lib/inferenceOptions';
-import type { InferenceOptions } from '../types/models';
+import { defaultInferenceOptions, parseAllowedTools, streamingModeOf, validateInferenceOptions, withStreamingMode } from '../lib/inferenceOptions';
+import type { InferenceOptions, InferenceStreamingMode } from '../types/models';
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
@@ -664,12 +664,18 @@ export default function Endpoints() {
               {([
                 ['toolsEnabled', 'Enable tool calls'], ['readOnlyTools', 'Read-only built-in tools'],
                 ['mcpToolsEnabled', 'Enable scoped MCP tools'], ['requireHarbor', 'Require Harbor execution'],
-                ['streaming', 'Stream responses'],
               ] as const).map(([key, label]) => <label key={key} className="checkbox-row">
                 <input type="checkbox" checked={form.inferenceOptions[key] ?? false} onChange={e => setForm({ ...form, inferenceOptions: { ...form.inferenceOptions, [key]: e.target.checked } })} /><span>{t(label)}</span>
               </label>)}
               </div>
               <p className="text-dim">{t('Read-only excludes shell, file changes and MCP tools. Require Harbor prevents fallback to Admiral execution.')}</p>
+              <label title={t('Automatic streams on OpenAI-compatible, Ollama and Ollama Cloud endpoints, and on a Harbor only when it supports streaming. On and Off always apply; On needs an updated Harbor.')}>{t('Stream responses')}
+                <select value={streamingModeOf(form.inferenceOptions)} onChange={e => setForm({ ...form, inferenceOptions: withStreamingMode(form.inferenceOptions, e.target.value as InferenceStreamingMode) })}>
+                  <option value="Automatic">{t('Automatic')}</option>
+                  <option value="On">{t('On')}</option>
+                  <option value="Off">{t('Off')}</option>
+                </select>
+              </label>
               <label>{t('Allowed tool names (one per line; blank allows all)')}
                 <textarea rows={3} value={form.allowedToolsText} onChange={e => setForm({ ...form, allowedToolsText: e.target.value, inferenceOptions: { ...form.inferenceOptions, allowedTools: parseAllowedTools(e.target.value) } })} />
               </label>

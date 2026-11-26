@@ -279,6 +279,11 @@ namespace Armada.Runtimes
                 if (endpoint == null)
                     throw new InvalidOperationException("API-endpoint captain has no resolvable inference endpoint to delegate to the Harbor.");
                 request.InferenceEndpoint = HarborInferenceEndpoint.FromEndpoint(endpoint);
+                // Resolve Automatic streaming for this Harbor and send it as an explicit choice, so a 1.4.0 Harbor (which
+                // reads only the streaming flag) applies it. Automatic streams only where the Harbor advertises streaming.
+                InferenceOptions sent = request.InferenceEndpoint.InferenceOptions;
+                bool harborStreams = _Manager.Supports(_HarborId, HarborCapabilityFlags.InferenceStreaming);
+                sent.StreamingMode = sent.ResolveStreaming(endpoint.Provider, harborStreams) ? InferenceStreamingModeEnum.On : InferenceStreamingModeEnum.Off;
             }
 
             await _Manager.LaunchAsync(_HarborId, request, this, token).ConfigureAwait(false);

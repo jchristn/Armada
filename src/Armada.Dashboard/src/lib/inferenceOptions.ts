@@ -1,4 +1,4 @@
-import type { InferenceOptions } from '../types/models';
+import type { InferenceOptions, InferenceStreamingMode } from '../types/models';
 
 export const defaultInferenceOptions: InferenceOptions = {
   toolsEnabled: true, readOnlyTools: false, mcpToolsEnabled: true, allowedTools: null,
@@ -6,6 +6,16 @@ export const defaultInferenceOptions: InferenceOptions = {
   contextLength: null, maxConcurrentMissions: null, streaming: false, firstResponseTimeoutMs: null,
   toolOutputWindowPercent: null,
 };
+
+/** The streaming mode of stored options; a server before 1.5.0 sends only the streaming flag. */
+export function streamingModeOf(options: InferenceOptions): InferenceStreamingMode {
+  return options.streamingMode ?? (options.streaming ? 'On' : 'Automatic');
+}
+
+/** Options with a streaming mode and the matching compatibility flag. */
+export function withStreamingMode(options: InferenceOptions, mode: InferenceStreamingMode): InferenceOptions {
+  return { ...options, streamingMode: mode, streaming: mode === 'On' };
+}
 
 /** Empty text permits all; use the tools switch to disable tools altogether. */
 export function parseAllowedTools(value: string): string[] | null {

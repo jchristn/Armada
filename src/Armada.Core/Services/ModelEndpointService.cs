@@ -659,7 +659,7 @@ namespace Armada.Core.Services
             if (left.RequireHarbor != right.RequireHarbor) return false;
             if (left.MaxConcurrentMissions != right.MaxConcurrentMissions) return false;
             if (left.ContextLength != right.ContextLength) return false;
-            if (left.Streaming != right.Streaming) return false;
+            if (left.StreamingMode != right.StreamingMode) return false;
             if (left.FirstResponseTimeoutMs != right.FirstResponseTimeoutMs) return false;
             if (left.ToolOutputWindowPercent != right.ToolOutputWindowPercent) return false;
             return SameNames(left.AllowedTools, right.AllowedTools);

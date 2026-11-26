@@ -188,13 +188,13 @@ describe('Endpoint inference policy', () => {
     fireEvent.change(screen.getByLabelText('Maximum output tokens'), { target: { value: '2048' } });
     fireEvent.change(screen.getByLabelText('Temperature'), { target: { value: '0' } });
     fireEvent.change(screen.getByLabelText('Context window (Ollama num_ctx)'), { target: { value: '32768' } });
-    fireEvent.click(screen.getByLabelText('Stream responses'));
+    fireEvent.change(screen.getByLabelText('Stream responses'), { target: { value: 'On' } });
     fireEvent.change(screen.getByLabelText('First-response timeout (ms)'), { target: { value: '300000' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }));
     await waitFor(() => expect(client.updateModelEndpoint).toHaveBeenCalledWith('mep_1', expect.objectContaining({
       inferenceOptions: { toolsEnabled: true, readOnlyTools: true, mcpToolsEnabled: false, requireHarbor: true,
         allowedTools: ['read_file', 'grep'], maxIterations: 8, maxTokens: 2048, temperature: 0, topP: null,
-        contextLength: 32768, maxConcurrentMissions: null, streaming: true, firstResponseTimeoutMs: 300000, toolOutputWindowPercent: null },
+        contextLength: 32768, maxConcurrentMissions: null, streamingMode: 'On', streaming: true, firstResponseTimeoutMs: 300000, toolOutputWindowPercent: null },
     })));
   });
 
