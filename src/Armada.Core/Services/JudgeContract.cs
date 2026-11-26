@@ -207,7 +207,7 @@ namespace Armada.Core.Services
 
         /// <summary>
         /// Whether a PASS verdict is substantiated: it must contain all three lenses and enough narrative to
-        /// justify approval.
+        /// justify approval, and it must cite at least one check it ran or one file it inspected (RS-6.8).
         /// </summary>
         /// <param name="output">Judge agent output.</param>
         /// <param name="narrative">The substantive review narrative (telemetry and verdict lines removed).</param>
@@ -232,6 +232,13 @@ namespace Armada.Core.Services
             if ((narrative ?? String.Empty).Length < MinNarrativeChars)
             {
                 failureReason = "Judge PASS verdict review is too short to justify approval";
+                return false;
+            }
+
+            // RS-6.8: a PASS names the checks it ran or at least one file it inspected.
+            if (!JudgeEvidence.HasPassEvidence(output))
+            {
+                failureReason = JudgeEvidence.MissingEvidenceReason;
                 return false;
             }
 

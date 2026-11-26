@@ -152,6 +152,9 @@ namespace Armada.Tui.Screens.Admin
         /// <summary>Agent: accept legacy [ARMADA:MISSION] Architect plans (deprecated).</summary>
         public ToggleField AcceptLegacyMissionMarkers { get; } = new ToggleField();
 
+        /// <summary>Agent: captain that runs the format-only repair turn (blank: the stage's own captain).</summary>
+        public InputField OutputRepairNormalizer { get; } = new InputField();
+
         /// <summary>Planning idle timeout.</summary>
         public InputField PlanningInactivity { get; } = new InputField();
 
@@ -656,6 +659,8 @@ namespace Armada.Tui.Screens.Admin
             AcceptLegacyMissionMarkers.Caption = "Accept Legacy Mission Markers";
             AcceptLegacyMissionMarkers.Visible = false;
             AddTracked(agent, "Legacy plans", AcceptLegacyMissionMarkers, "Deprecated, removed in 2.0. When on (the default), an Architect plan written as [ARMADA:MISSION] markers is still accepted and logs a warning. Off: such output gets the format repair turn and must use an armada-plan block.");
+            OutputRepairNormalizer.Visible = false;
+            AddTracked(agent, "Format Repair Captain", OutputRepairNormalizer, "Captain ID that restates a stage's report in its contract's format when the work is done but the format is wrong. Blank uses the stage's own captain.");
             AddButtons(agent);
 
             // Planning Session Settings.
@@ -1268,6 +1273,8 @@ namespace Armada.Tui.Screens.Admin
                 BlockDependentsOfFailedStages.SetValue(s.BlockDependentsOfFailedStages ?? false, false);
                 AcceptLegacyMissionMarkers.Visible = s.AcceptLegacyMissionMarkers.HasValue;
                 AcceptLegacyMissionMarkers.SetValue(s.AcceptLegacyMissionMarkers ?? true, false);
+                OutputRepairNormalizer.Visible = s.OutputRepairNormalizerCaptainId != null;
+                OutputRepairNormalizer.Value = s.OutputRepairNormalizerCaptainId ?? "";
             });
             Apply("planning", force, () =>
             {
@@ -1639,6 +1646,7 @@ namespace Armada.Tui.Screens.Admin
                 d.RequireHarborForLaunch = RequireHarborForLaunch.Visible ? RequireHarborForLaunch.Value : (bool?)null;
                 d.BlockDependentsOfFailedStages = BlockDependentsOfFailedStages.Visible ? BlockDependentsOfFailedStages.Value : (bool?)null;
                 d.AcceptLegacyMissionMarkers = AcceptLegacyMissionMarkers.Visible ? AcceptLegacyMissionMarkers.Value : (bool?)null;
+                d.OutputRepairNormalizerCaptainId = OutputRepairNormalizer.Visible ? (OutputRepairNormalizer.Value ?? "").Trim() : null;
                 return d;
             }, "Agent settings saved");
         }

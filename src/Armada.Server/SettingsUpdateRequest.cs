@@ -139,6 +139,12 @@ namespace Armada.Server
         public bool? AcceptLegacyMissionMarkers { get; set; }
 
         /// <summary>
+        /// Captain that runs the format-only repair turn. An empty string clears it (the stage's own captain is used); null
+        /// leaves the stored value unchanged.
+        /// </summary>
+        public string? OutputRepairNormalizerCaptainId { get; set; }
+
+        /// <summary>
         /// Optional remote-control tunnel settings update.
         /// When supplied, replaces the full remoteControl settings object.
         /// </summary>

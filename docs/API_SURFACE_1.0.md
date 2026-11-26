@@ -33,7 +33,7 @@ Client contract version: `1.0` (reported as `ContractVersion` by
 | WebSocket commands | 65 | 0 |
 | WebSocket event types | 81 | 0 |
 | CLI commands | 101 | 0 |
-| Settings keys | 357 | 12 |
+| Settings keys | 358 | 12 |
 
 ## REST API
 
@@ -1323,6 +1323,7 @@ install with the home directory written as `~`; defaults are not frozen (see COM
 | `modelAlerts.thresholds.overrides[].protocolRepairMaxRate` | double? | `null` |  |
 | `modelAlerts.thresholds.overrides[].protocolRepairMinAttempts` | int? | `null` |  |
 | `notifications` | bool | `true` |  |
+| `outputRepairNormalizerCaptainId` | string | `null` |  |
 | `permissions` | object |  |  |
 | `permissions.allowOwnerApproval` | bool | `false` |  |
 | `permissions.askDefaultPolicy` | enum CliPermissionPolicyEnum (Refuse\|ApproveInArmada\|Bypass) | `"ApproveInArmada"` |  |

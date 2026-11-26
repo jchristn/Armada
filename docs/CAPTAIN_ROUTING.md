@@ -200,7 +200,7 @@ example, no stronger captain is free). The decisions:
 | Agent exit, usage limit, auth failure or crash | Fail (the captain may be quarantined) |
 | Process lost (health monitor) | Redispatch an interruption within the budget, else fail |
 | No-op or unfinished completion | Redispatch within `MaxNoOpRedispatchAttempts`, escalate, fail |
-| Broken output contract | Repair within `OutputRepairAttempts` (never on review-gated stages), else fail |
+| Broken output contract | One format-only turn that restates the stage's own output (accepted only when it adds nothing), then rerun within `OutputRepairAttempts` (never on review-gated stages), else fail |
 | Judge rejection | Rework within `JudgeReworkRounds`; past it, or on unchanged work, escalate one hop per round up to `MaxEscalations`; then stop |
 | Recovery incident | Wait for a rescue in flight; rescue within `MaxMissionRecoveryAttempts`; then notify `RecoveryExhausted` and leave it for a human |
 

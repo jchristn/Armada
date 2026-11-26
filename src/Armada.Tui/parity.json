@@ -5103,6 +5103,14 @@
     },
     {
       "kind": "setting",
+      "key": "settings.outputRepairNormalizerCaptainId",
+      "status": "implemented",
+      "tui": "ServerSettingsScreen",
+      "workstream": "W7.7",
+      "notes": ""
+    },
+    {
+      "kind": "setting",
       "key": "settings.admiralPort",
       "status": "implemented",
       "tui": "ServerSettingsScreen",

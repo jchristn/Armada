@@ -130,6 +130,10 @@ Reviews completed work through a bounded three-lens contract.
   field line: `File: <path>[:line]` or `Scenario: <inputs and the wrong result>`.
   Only those labeled lines are read; a blocking verdict without one is not
   accepted.
+- **Evidenced PASS:** A PASS must name the checks the Judge ran (for example the
+  build or test command) or at least one file it inspected. Citing one inspected
+  file is enough. A PASS with neither is a format failure: it never lands, and the
+  Judge runs again.
 - **Verdict signal:** The verdict is read only from a standalone
   `[ARMADA:VERDICT] PASS|FAIL|NEEDS_REVISION` line outside any code block. Prose
   such as "Verdict: PASS", bare PASS/FAIL lines (for example test-runner output),

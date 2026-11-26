@@ -731,6 +731,26 @@ namespace Armada.Core.Services
                     }
                 }
 
+                // RS-6.4: a format failure (no verdict, an unsubstantiated PASS, a block without an affected case) first gets
+                // one format-only turn that restates the existing review without tools. The restatement counts only when it
+                // parses and adds no verdict, evidence or finding the original lacked; the full rerun below is the last
+                // resort. A PASS that cites no evidence has nothing to restate, so it goes straight to the rerun.
+                string? judgeFormatProblem = JudgeFormatProblem(verdict, rejectedPass, verdictFailureReason, mission.AgentOutput);
+                if (judgeFormatProblem != null && !mission.RequiresReview
+                    && !(rejectedPass && String.Equals(verdictFailureReason, JudgeEvidence.MissingEvidenceReason, StringComparison.Ordinal))
+                    && await TryFormatRepairJudgeAsync(mission, captain, judgeFormatProblem, token).ConfigureAwait(false))
+                {
+                    verdict = JudgeVerdictParser.Parse(mission.AgentOutput);
+                    verdictFailureReason = null;
+                    rejectedPass = false;
+                    if (verdict == JudgeVerdictEnum.Pass && !TryValidateJudgePassOutput(mission.AgentOutput, out verdictFailureReason))
+                    {
+                        verdict = JudgeVerdictEnum.NeedsRevision;
+                        rejectedPass = true;
+                    }
+                    if (verdict == JudgeVerdictEnum.SpecConflict) verdict = JudgeVerdictEnum.None;
+                }
+
                 if (verdict != JudgeVerdictEnum.Pass && verdict != JudgeVerdictEnum.SpecConflict)
                 {
                     // To block, the Judge must exhibit a concrete affected case. A block without one is a
@@ -808,9 +828,14 @@ namespace Armada.Core.Services
                 && VerifierContract.Applies(mission.Persona) && VerifierContract.IsBlocked(mission.AgentOutput))
             {
                 string? reworkUnavailableReason = null;
-                if (!JudgeContract.ExhibitsAffectedCase(mission.AgentOutput))
+                // RS-6.4: a block without an affected case first gets a format-only turn that restates it from the stage's
+                // own output; only when that is rejected does the stage run again.
+                string verifierProblem = mission.Persona + " reported " + VerifierContract.BlockedMarker + " without a concrete affected case; a block must cite a real affected file, line, or scenario";
+                bool verifierCaseShown = JudgeContract.ExhibitsAffectedCase(mission.AgentOutput)
+                    || (!mission.RequiresReview && await TryFormatRepairVerifierBlockAsync(mission, captain, verifierProblem, token).ConfigureAwait(false));
+                if (!verifierCaseShown)
                 {
-                    string problem = mission.Persona + " reported " + VerifierContract.BlockedMarker + " without a concrete affected case; a block must cite a real affected file, line, or scenario";
+                    string problem = verifierProblem;
                     if (await TryScheduleOutputRepairAsync(mission, problem, VerifierContract.BlockingInstruction().Trim(), token).ConfigureAwait(false))
                     {
                         await FinishOutputRepairScheduledAsync(mission, captain, dock, token).ConfigureAwait(false);

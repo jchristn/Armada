@@ -31,7 +31,7 @@ namespace Test.Shared.Suites.Services
         private const string SuiteId = "Services.RuntimeFaultMatrix";
 
         private const string ValidPass =
-            "## Correctness\nThe change adds the requested file, the build passes and every existing test still passes. I read the diff line by line and ran the suite locally.\n"
+            "## Correctness\nThe change adds the requested file, the build passes and every existing test still passes. I read the diff line by line and ran dotnet test locally.\n"
             + "## Blast Radius\nOnly one new file is added; no existing behavior, configuration, or public interface changes, so nothing downstream is affected.\n"
             + "## Source Fidelity\nThe implementation matches the mission description exactly and does not invent requirements or skip any acceptance criterion.\n"
             + "## Verdict\n[ARMADA:VERDICT] PASS";

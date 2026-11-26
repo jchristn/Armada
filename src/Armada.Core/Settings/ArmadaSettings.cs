@@ -306,10 +306,18 @@ namespace Armada.Core.Settings
         public bool AcceptLegacyMissionMarkers { get; set; } = true;
 
         /// <summary>
-        /// Maximum number of output-contract repair turns per mission. When a Judge or Architect finishes with output
-        /// that breaks its contract (no verdict, conflicting verdicts, an unsubstantiated PASS, a block without an
-        /// affected case, or an invalid or missing plan), the same stage runs again with the exact errors quoted, up to
-        /// this many times, before the mission fails. Set to 0 to fail on the first contract violation. Must be in
+        /// Captain that runs the format-only repair turn (RS-6.4): a tool-less call that restates a stage's own output in
+        /// its contract's format when the work is done but the report broke the contract. Null (the default) uses the
+        /// captain that wrote the output. An unknown captain id falls back to that captain.
+        /// </summary>
+        public string? OutputRepairNormalizerCaptainId { get; set; } = null;
+
+        /// <summary>
+        /// Maximum number of output-contract repair turns per mission. When a Judge, Architect or verifier finishes with
+        /// output that breaks its contract (no verdict, conflicting verdicts, an unsubstantiated PASS, a block without an
+        /// affected case, or an invalid or missing plan), a format-only turn first restates the existing output; when that
+        /// is not possible or is rejected, the same stage runs again with the exact errors quoted, up to this many times,
+        /// before the mission fails. Set to 0 to fail on the first contract violation (no format turn either). Must be in
         /// range [0, 3].
         /// </summary>
         public int MaxOutputRepairAttempts

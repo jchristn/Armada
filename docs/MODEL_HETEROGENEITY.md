@@ -711,6 +711,22 @@ Measure first, then change handoffs and contracts, then prompts, then add profil
    coerced. Plan errors name the JSON path, line and position. A FAIL or NEEDS_REVISION verdict written in prose under a
    Verdict heading is recovered without the `ARMADA` token; a prose PASS is never recovered and goes to format repair.
    Fence tracking resets at the `[...output truncated...]` marker, so a verdict after a truncated fence is still read.
+   Since 1.5.0 (RS-6.4) a format failure that the deterministic repairs above cannot fix gets one format-only turn
+   before the stage is rerun: a Judge with no single verdict line, an unsubstantiated PASS, or a block without an
+   affected case; a verifier block without an affected case; and an Architect plan that exists but fails the parser or
+   the hierarchy check. The Admiral sends the stage's stored output, the contract and the parser's ordered errors to
+   the stage's captain (or `OutputRepairNormalizerCaptainId`) in a scratch directory, asking it to restate the report
+   without doing new work. The answer is appended below the original output (both are kept; the diff is untouched)
+   only when it parses and adds nothing the original lacked: its verdict must appear in the original, a PASS needs
+   evidence in the original and no blocking verdict there, every cited file and check must appear in the original, a
+   scenario must be taken from it, a SPEC_CONFLICT is never produced, and every planned mission title must already
+   be in the original plan. An accepted turn is recorded as repair kind `FormatRepairTurn`; a rejected or failed turn
+   falls through to the full rerun, which stays the last resort. Review-gated stages are never repaired, a missing
+   plan is never restated from narration, and `MaxOutputRepairAttempts` (or the profile's `OutputRepairAttempts`)
+   of 0 turns the format turn off. There is no in-session restatement: no runtime keeps a mission's conversation
+   after it exits, so every format turn is a separate call.
+   A Judge PASS must also cite evidence (RS-6.8): a check it ran or at least one file it inspected. A PASS with neither
+   is a format failure with nothing to restate, so it goes straight to the rerun.
 4. Measure each change on the battery, separately from prompt changes.
 
 ### Phase 4: prompts

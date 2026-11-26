@@ -5161,6 +5161,14 @@
     },
     {
       "kind": "setting",
+      "key": "settings.outputRepairNormalizerCaptainId",
+      "status": "implemented",
+      "mobile": "src/screens/system/ServerSettingsTab.tsx",
+      "workstream": "W4.4",
+      "notes": ""
+    },
+    {
+      "kind": "setting",
       "key": "settings.admiralPort",
       "status": "implemented",
       "mobile": "src/screens/system/ServerSettingsTab.tsx",

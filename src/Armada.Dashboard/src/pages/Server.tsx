@@ -276,6 +276,7 @@ export default function Server() {
         ...(settings.requireHarborForLaunch !== undefined ? { requireHarborForLaunch: settings.requireHarborForLaunch } : {}),
         ...(settings.blockDependentsOfFailedStages !== undefined ? { blockDependentsOfFailedStages: settings.blockDependentsOfFailedStages } : {}),
         ...(settings.acceptLegacyMissionMarkers !== undefined ? { acceptLegacyMissionMarkers: settings.acceptLegacyMissionMarkers } : {}),
+        ...(settings.outputRepairNormalizerCaptainId !== undefined ? { outputRepairNormalizerCaptainId: settings.outputRepairNormalizerCaptainId.trim() } : {}),
       };
       const updated = await updateSettings(sent);
       applyIncomingSettings(updated as unknown as ServerSettings, sent);
@@ -872,6 +873,20 @@ export default function Server() {
                     <span>{t('Accept Legacy Mission Markers')}</span>
                   </label>
                   <small className="text-dim">{t('Deprecated. On: [ARMADA:MISSION] plans still work. Off: the Architect must emit an armada-plan block.')}</small>
+                </div>
+              )}
+              {settings.outputRepairNormalizerCaptainId !== undefined && (
+                <div className="form-group">
+                  <label htmlFor="output-repair-normalizer">{t('Format Repair Captain')}</label>
+                  <input
+                    id="output-repair-normalizer"
+                    type="text"
+                    placeholder={t('Captain ID (blank: the stage\'s own captain)')}
+                    title={t('Captain that restates a stage\'s report in its contract\'s format when the work is done but the format is wrong. It runs without tools and cannot add a verdict, evidence or findings.')}
+                    value={settings.outputRepairNormalizerCaptainId}
+                    onChange={(e) => setSettings({ ...settings, outputRepairNormalizerCaptainId: e.target.value })}
+                  />
+                  <small className="text-dim">{t('Blank uses the captain that wrote the report.')}</small>
                 </div>
               )}
             </div>

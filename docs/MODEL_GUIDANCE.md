@@ -169,7 +169,7 @@ reports judgment calls. Stays strictly inside the files the mission changed.
 
 Reviews the Worker's diff through three lenses (Correctness, Blast Radius, Source Fidelity) and emits exactly one
 `[ARMADA:VERDICT] PASS|FAIL|NEEDS_REVISION` line. A blocking verdict must name a concrete affected case; a shallow
-PASS is rejected.
+PASS, or a PASS that names no check it ran and no file it inspected, is rejected.
 
 - **Matters most:** reasoning and skepticism, then contract fidelity, then the ability to read a diff in context.
   Coding knowledge matters for reading, not writing. Speed matters little.

@@ -383,6 +383,8 @@ namespace Armada.Core.Services
             text.Append(Heading).Append('\n');
             text.Append("Use these sections, even when you have no findings:\n");
             foreach (string section in RequiredSections(PersonaCatalog.Judge)) text.Append("- ## ").Append(section).Append('\n');
+            text.Append("A ").Append(VerdictToken(JudgeVerdictEnum.Pass))
+                .Append(" must name the checks you ran (for example the build or test command) or at least one file you inspected.\n");
             text.Append("To block (").Append(VerdictToken(JudgeVerdictEnum.Fail)).Append(" or ").Append(VerdictToken(JudgeVerdictEnum.NeedsRevision))
                 .Append("), add a ## ").Append(JudgeContract.AffectedCaseSection).Append(" section with a ")
                 .Append(JudgeContract.AffectedCaseFileField).Append(": <path>[:line] or ")

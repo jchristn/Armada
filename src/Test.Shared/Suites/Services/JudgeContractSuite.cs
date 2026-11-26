@@ -26,6 +26,7 @@ namespace Test.Shared.Suites.Services
             "Only the settings-update path is touched and its two callers were reviewed; no shared state or existing behavior regresses.\n\n" +
             "## Source Fidelity\n" +
             "The diff implements exactly the requested field and stays within the named files, inventing no new API surface.\n\n" +
+            "I inspected src/Settings/SettingsUpdate.cs and ran dotnet test.\n\n" +
             "## Verdict\n" +
             "[ARMADA:VERDICT] PASS\n";
 

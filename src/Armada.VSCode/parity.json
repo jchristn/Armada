@@ -5065,6 +5065,14 @@
     },
     {
       "kind": "setting",
+      "key": "settings.outputRepairNormalizerCaptainId",
+      "status": "implemented",
+      "surface": "view:armadaNav",
+      "milestone": "V6",
+      "notes": ""
+    },
+    {
+      "kind": "setting",
       "key": "settings.admiralPort",
       "status": "implemented",
       "surface": "view:armadaNav",

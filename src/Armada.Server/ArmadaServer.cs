@@ -641,6 +641,8 @@ namespace Armada.Server
                 LaunchRouter = _LaunchRouter,
                 OverrideSource = () => ModelProbeExecutorOverride
             };
+            // RS-6.4: the format-only repair turn runs through the same executor, in a scratch directory.
+            if (_MissionService is MissionService formatRepairMissions) formatRepairMissions.FormatRepairExecutor = modelProbeExecutor;
             StageProvenanceProbe modelProbeProvenance = new StageProvenanceProbe(_Logging, harborId =>
             {
                 if (String.IsNullOrEmpty(harborId)) return dockHosts.Local.Commands;

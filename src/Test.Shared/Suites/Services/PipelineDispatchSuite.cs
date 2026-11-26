@@ -1136,6 +1136,83 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
+            cases.Add(CaseAsync("architect_plan_type_error_gets_format_turn", "RS-6.4: an Architect plan with a type error is restated by a format-only turn and fanned out without rerunning the Architect", TestTags.Positive, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    LoggingModule logging = CreateLogging();
+                    ArmadaSettings settings = CreateSettings();
+                    DirCreatingGitStub git = new DirCreatingGitStub();
+                    IDockService dockService = new DockService(logging, testDb.Driver, settings, git);
+                    ICaptainService captainService = new CaptainService(logging, testDb.Driver, settings, git, dockService);
+                    MissionService missionService = new MissionService(logging, testDb.Driver, settings, dockService, captainService);
+                    captainService.OnLaunchAgent = (Captain c, Mission m, Dock d) => Task.FromResult(2600 + git.WorktreeCalls.Count);
+                    string example = StageOutputContract.ArchitectPlanExample();
+                    CannedModelProbeExecutor executor = new CannedModelProbeExecutor();
+                    executor.Answer = _ => new ModelProbeExchange { Output = "```armada-plan\n" + example + "\n```", ExitCode = 0 };
+                    missionService.FormatRepairExecutor = executor;
+
+                    Vessel vessel = new Vessel("architect-format-vessel", "https://github.com/test/repo.git");
+                    vessel.LocalPath = Path.Combine(Path.GetTempPath(), "armada_test_bare_" + Guid.NewGuid().ToString("N"));
+                    vessel.WorkingDirectory = Path.Combine(Path.GetTempPath(), "armada_test_work_" + Guid.NewGuid().ToString("N"));
+                    vessel.DefaultBranch = "main";
+                    vessel = await testDb.Driver.Vessels.CreateAsync(vessel).ConfigureAwait(false);
+
+                    Captain architectCaptain = new Captain("architect-format-captain");
+                    architectCaptain.State = CaptainStateEnum.Working;
+                    architectCaptain = await CaptainAssignmentFixture.CreateAsync(testDb.Driver, architectCaptain).ConfigureAwait(false);
+
+                    Voyage voyage = await testDb.Driver.Voyages.CreateAsync(new Voyage("architect-format-voyage")).ConfigureAwait(false);
+
+                    Mission architect = new Mission("[Architect] Plan", "Break this down");
+                    architect.VesselId = vessel.Id;
+                    architect.VoyageId = voyage.Id;
+                    architect.CaptainId = architectCaptain.Id;
+                    architect.Persona = "Architect";
+                    architect.Status = MissionStatusEnum.InProgress;
+                    architect.BranchName = "armada/architect/format";
+                    architect = await testDb.Driver.Missions.CreateAsync(architect).ConfigureAwait(false);
+
+                    Dock architectDock = new Dock(vessel.Id);
+                    architectDock.CaptainId = architectCaptain.Id;
+                    architectDock.WorktreePath = Path.Combine(settings.DocksDirectory, vessel.Name, architect.Id);
+                    architectDock.BranchName = architect.BranchName;
+                    architectDock.Active = true;
+                    architectDock = await testDb.Driver.Docks.CreateAsync(architectDock).ConfigureAwait(false);
+                    architect.DockId = architectDock.Id;
+                    await testDb.Driver.Missions.UpdateAsync(architect).ConfigureAwait(false);
+
+                    Mission worker = new Mission("[Worker] Placeholder", "Initial worker");
+                    worker.VesselId = vessel.Id;
+                    worker.VoyageId = voyage.Id;
+                    worker.Persona = "Worker";
+                    worker.Status = MissionStatusEnum.Pending;
+                    worker.DependsOnMissionId = architect.Id;
+                    worker = await testDb.Driver.Missions.CreateAsync(worker).ConfigureAwait(false);
+
+                    architectCaptain.Assignment = architect;
+                    architectCaptain.Assignment ??= new Mission("fixture assignment"); architectCaptain.Assignment.DockId = architectDock.Id;
+                    await CaptainAssignmentFixture.UpdateAsync(testDb.Driver, architectCaptain).ConfigureAwait(false);
+
+                    // The plan's content is right; one field has the wrong type, which the parser reports and never coerces.
+                    missionService.OnGetMissionOutput = _ => "```armada-plan\n" + example.Replace("\"parent\": null", "\"parent\": \"root\"") + "\n```";
+
+                    await missionService.HandleCompletionAsync(architectCaptain, architect.Id).ConfigureAwait(false);
+
+                    Mission? after = await testDb.Driver.Missions.ReadAsync(architect.Id).ConfigureAwait(false);
+                    AssertEqual(1, executor.Requests.Count, "one format call");
+                    executor.Requests.TryPeek(out ModelProbeExchangeRequest? request);
+                    AssertContains("$.missions[0].parent", request!.Prompt, "the parser's error is quoted");
+                    AssertEqual(0, after!.OutputRepairAttempts, "the Architect is not rerun");
+                    AssertNotEqual(MissionStatusEnum.Failed, after.Status);
+                    AssertContains("FormatRepairTurn", after.AgentOutput ?? "", "the restated plan is appended below the original");
+
+                    List<Mission> afterArchitect = await testDb.Driver.Missions.EnumerateByVoyageAsync(voyage.Id).ConfigureAwait(false);
+                    Mission? slotted = afterArchitect.FirstOrDefault(m => m.Id == worker.Id);
+                    AssertEqual("Reject empty widget names [Worker]", slotted!.Title, "the restated plan fans out");
+                }
+            }));
+
             cases.Add(CaseAsync("architect_markdown_mission_headings_without_plan_fail_closed", "Markdown mission headings without a plan block fail closed once repair is exhausted, creating no missions", TestTags.Negative, async () =>
             {
                 using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
@@ -1404,7 +1481,7 @@ namespace Test.Shared.Suites.Services
                         "## Blast Radius\n" +
                         "The staged work covers the assigned requirements and there are no missing deliverables in this chain.\n\n" +
                         "## Correctness\n" +
-                        "The implementation and test updates are coherent, and I do not see logic or scope defects in the reviewed diff.\n\n" +
+                        "The implementation and test updates are coherent, and I do not see logic or scope defects in the reviewed diff of src/App/Feature.cs.\n\n" +
                         "## Source Fidelity\n" +
                         "The automated tests added in the prior stage cover the reviewed behavior adequately for this mission.\n\n" +
                         "## Failure Modes\n" +
@@ -1921,7 +1998,7 @@ namespace Test.Shared.Suites.Services
                         "## Blast Radius\n" +
                         "The upstream worker and test stages completed the requested scope and nothing material is missing.\n\n" +
                         "## Correctness\n" +
-                        "I reviewed the diff and prior output and did not find correctness issues in the completed upstream chain.\n\n" +
+                        "I reviewed the diff of src/App/Feature.cs and prior output and did not find correctness issues in the completed upstream chain.\n\n" +
                         "## Source Fidelity\n" +
                         "The upstream tests cover the changed behavior and are sufficient for this dependency chain.\n\n" +
                         "## Failure Modes\n" +
@@ -2789,7 +2866,7 @@ namespace Test.Shared.Suites.Services
                         "## Blast Radius\n" +
                         "The mission requirements are fully implemented with no missing scope items.\n\n" +
                         "## Correctness\n" +
-                        "The reviewed changes are logically consistent and I do not see defects in the touched paths.\n\n" +
+                        "The reviewed changes are logically consistent and I do not see defects in the touched paths (src/App/Feature.cs).\n\n" +
                         "## Source Fidelity\n" +
                         "Automated coverage exists for the new behavior and the affected scenarios are exercised.\n\n" +
                         "## Failure Modes\n" +

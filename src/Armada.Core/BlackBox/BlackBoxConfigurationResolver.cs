@@ -135,6 +135,8 @@ namespace Armada.Core.BlackBox
             Add(config, "MaxConcurrentMissions", Int(g.MaxConcurrentMissions), BlackBoxConfigSourceEnum.Global);
             Add(config, "BlockDependentsOfFailedStages", Bool(g.BlockDependentsOfFailedStages), BlackBoxConfigSourceEnum.Global);
             Add(config, "AcceptLegacyMissionMarkers", Bool(g.AcceptLegacyMissionMarkers), BlackBoxConfigSourceEnum.Global);
+            if (!String.IsNullOrWhiteSpace(g.OutputRepairNormalizerCaptainId))
+                Add(config, "OutputRepairNormalizerCaptainId", g.OutputRepairNormalizerCaptainId, BlackBoxConfigSourceEnum.Global);
             if (vessel?.BlackBoxRetentionDays != null) Add(config, "BlackBoxRetentionDays", Int(vessel.BlackBoxRetentionDays.Value), BlackBoxConfigSourceEnum.Vessel);
             else Add(config, "BlackBoxRetentionDays", Int(g.BlackBox.Retention.RetentionDays), BlackBoxConfigSourceEnum.Global);
             return config;

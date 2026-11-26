@@ -44,6 +44,13 @@ namespace Armada.Core.Enums
         /// An Architect wrote exactly one valid plan, but not in a closed armada-plan fence.
         /// </summary>
         [EnumMember(Value = "PlanBlockNonCanonical")]
-        PlanBlockNonCanonical
+        PlanBlockNonCanonical,
+
+        /// <summary>
+        /// A format-only repair turn restated the stage's own output in the contract's format, without tools and without
+        /// redoing the work; the restatement is appended below the original output (RS-6.4).
+        /// </summary>
+        [EnumMember(Value = "FormatRepairTurn")]
+        FormatRepairTurn
     }
 }

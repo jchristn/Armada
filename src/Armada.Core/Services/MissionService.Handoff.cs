@@ -137,6 +137,21 @@ namespace Armada.Core.Services
                 string? planError = planResult.Error;
                 List<ParsedArchitectMission> parsed = planError == null ? ParseArchitectOutput(completedMission) : new List<ParsedArchitectMission>();
                 planError ??= ValidateArchitectHierarchy(parsed);
+
+                // RS-6.4: a plan that exists but breaks the contract (invalid JSON, a rejected field, a bad hierarchy) first
+                // gets one format-only turn that restates it with the parser's errors. A missing plan is never restated
+                // (narration is not inferred into missions), and an oversized plan must be split, not reformatted.
+                if (planError != null && planResult.Status != ArchitectPlanParseStatusEnum.NoPlanFound
+                    && planResult.Status != ArchitectPlanParseStatusEnum.TooLarge
+                    && await TryFormatRepairArchitectPlanAsync(completedMission, null, planError,
+                        planResult.Errors.Count > 0 ? planResult.Errors : new List<string> { planError }, token).ConfigureAwait(false))
+                {
+                    planResult = ArchitectPlanParser.Parse(completedMission.AgentOutput, _Settings.Concurrency.MaxHierarchyDepth);
+                    planError = planResult.Error;
+                    parsed = planError == null ? ParseArchitectOutput(completedMission) : new List<ParsedArchitectMission>();
+                    planError ??= ValidateArchitectHierarchy(parsed);
+                }
+
                 if (planError != null)
                 {
                     if (await TryScheduleOutputRepairAsync(completedMission, planError, StageOutputContract.For(PersonaCatalog.Architect), token).ConfigureAwait(false))

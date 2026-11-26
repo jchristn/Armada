@@ -84,6 +84,8 @@ export interface ServerSettings {
   blockDependentsOfFailedStages?: boolean;
   /** True: legacy [ARMADA:MISSION] Architect plans are still accepted (deprecated, removed in 2.0). Absent on older servers. */
   acceptLegacyMissionMarkers?: boolean;
+  /** Captain that runs the format-only repair turn; empty uses the stage's own captain. Absent on older servers. */
+  outputRepairNormalizerCaptainId?: string;
   remoteControl: RemoteControlSettings;
   import?: VesselImportSettingsData;
   fleetActions?: FleetActionSettingsData;

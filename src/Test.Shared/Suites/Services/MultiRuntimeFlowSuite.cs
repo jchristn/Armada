@@ -162,6 +162,99 @@ namespace Test.Shared.Suites.Services
                 AssertTrue(released!.ActiveMissionIds.SingleOrDefault() != judge.Id, "the captain is released after the terminal failure");
             }));
 
+            cases.Add(CaseAsync("judge_format_turn_restates_without_rerun", "RS-6.4: a Judge PASS written in prose gets a format-only turn that restates it; the work lands with no rerun and both outputs are kept", TestTags.Positive, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                Harness h = new Harness(testDb, new DirCreatingGitService());
+                CannedModelProbeExecutor executor = new CannedModelProbeExecutor();
+                executor.Answer = _ => new ModelProbeExchange { Output = FormatLenses + "Inspected: src/app/feature.cs\n## Verdict\n[ARMADA:VERDICT] PASS", ExitCode = 0 };
+                h.Missions.FormatRepairExecutor = executor;
+                int landingCalls = 0;
+                h.Missions.OnMissionComplete = (m, d) => { landingCalls++; return Task.CompletedTask; };
+                h.Missions.OnGetMissionOutput = _ => FormatLenses + "I inspected src/app/feature.cs and it is right. Verdict: **PASS**";
+
+                Vessel vessel = await CreateVesselAsync(testDb).ConfigureAwait(false);
+                Captain judgeCaptain = await CreateCaptainAsync(testDb, "Codex", AgentRuntimeEnum.Codex, CaptainStateEnum.Working).ConfigureAwait(false);
+                Voyage voyage = await testDb.Driver.Voyages.CreateAsync(new Voyage("judged")).ConfigureAwait(false);
+                Mission judge = await CreateRunningMissionAsync(testDb, h, vessel, voyage, judgeCaptain, "Judge", false).ConfigureAwait(false);
+
+                await h.Missions.HandleCompletionAsync(judgeCaptain, judge.Id).ConfigureAwait(false);
+                Mission? after = await testDb.Driver.Missions.ReadAsync(judge.Id).ConfigureAwait(false);
+                AssertEqual(1, executor.Requests.Count, "one format call");
+                AssertEqual(0, after!.OutputRepairAttempts, "no full rerun");
+                AssertNotEqual(MissionStatusEnum.Failed, after.Status);
+                AssertEqual(1, landingCalls, "the restated PASS lands the work");
+                AssertContains("Verdict: **PASS**", after.AgentOutput ?? "", "the original output is kept");
+                AssertContains("FormatRepairTurn", after.AgentOutput ?? "", "the restatement is appended and marked");
+                executor.Requests.TryPeek(out ModelProbeExchangeRequest? request);
+                AssertContains("Do not do any new work", request!.Prompt);
+            }));
+
+            cases.Add(CaseAsync("judge_pass_without_evidence_reruns", "RS-6.8: a PASS that cites no check and no file is a format failure with nothing to restate, so the Judge runs again without a format call", TestTags.Negative, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                Harness h = new Harness(testDb, new DirCreatingGitService());
+                CannedModelProbeExecutor executor = new CannedModelProbeExecutor();
+                h.Missions.FormatRepairExecutor = executor;
+                int landingCalls = 0;
+                h.Missions.OnMissionComplete = (m, d) => { landingCalls++; return Task.CompletedTask; };
+                h.Missions.OnGetMissionOutput = _ => FormatLenses + "## Verdict\n[ARMADA:VERDICT] PASS";
+
+                Vessel vessel = await CreateVesselAsync(testDb).ConfigureAwait(false);
+                Captain judgeCaptain = await CreateCaptainAsync(testDb, "Codex", AgentRuntimeEnum.Codex, CaptainStateEnum.Working).ConfigureAwait(false);
+                Voyage voyage = await testDb.Driver.Voyages.CreateAsync(new Voyage("judged")).ConfigureAwait(false);
+                Mission judge = await CreateRunningMissionAsync(testDb, h, vessel, voyage, judgeCaptain, "Judge", false).ConfigureAwait(false);
+
+                await h.Missions.HandleCompletionAsync(judgeCaptain, judge.Id).ConfigureAwait(false);
+                Mission? after = await testDb.Driver.Missions.ReadAsync(judge.Id).ConfigureAwait(false);
+                AssertEqual(0, executor.Requests.Count, "nothing to restate");
+                AssertEqual(1, after!.OutputRepairAttempts, "the Judge runs again");
+                AssertEqual(0, landingCalls, "an unevidenced PASS never lands");
+                AssertContains("cites no evidence", Armada.Core.Services.MissionNotes.EffectiveDescription(after));
+            }));
+
+            cases.Add(CaseAsync("judge_format_turn_cannot_invent_pass", "RS-6.4: a format turn that turns a prose FAIL into a PASS is rejected, and the Judge runs again", TestTags.Negative, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                Harness h = new Harness(testDb, new DirCreatingGitService());
+                CannedModelProbeExecutor executor = new CannedModelProbeExecutor();
+                executor.Answer = _ => new ModelProbeExchange { Output = FormatLenses + "Inspected: src/app/feature.cs\n[ARMADA:VERDICT] PASS", ExitCode = 0 };
+                h.Missions.FormatRepairExecutor = executor;
+                int landingCalls = 0;
+                h.Missions.OnMissionComplete = (m, d) => { landingCalls++; return Task.CompletedTask; };
+                h.Missions.OnGetMissionOutput = _ => FormatLenses + "I inspected src/app/feature.cs. Whitespace names still save, so this has to FAIL.";
+
+                Vessel vessel = await CreateVesselAsync(testDb).ConfigureAwait(false);
+                Captain judgeCaptain = await CreateCaptainAsync(testDb, "Codex", AgentRuntimeEnum.Codex, CaptainStateEnum.Working).ConfigureAwait(false);
+                Voyage voyage = await testDb.Driver.Voyages.CreateAsync(new Voyage("judged")).ConfigureAwait(false);
+                Mission judge = await CreateRunningMissionAsync(testDb, h, vessel, voyage, judgeCaptain, "Judge", false).ConfigureAwait(false);
+
+                await h.Missions.HandleCompletionAsync(judgeCaptain, judge.Id).ConfigureAwait(false);
+                Mission? after = await testDb.Driver.Missions.ReadAsync(judge.Id).ConfigureAwait(false);
+                AssertEqual(1, executor.Requests.Count, "the format call ran");
+                AssertEqual(1, after!.OutputRepairAttempts, "the rejected restatement falls through to the rerun");
+                AssertEqual(0, landingCalls);
+            }));
+
+            cases.Add(CaseAsync("gated_judge_gets_no_format_turn", "RS-6.4: a review-gated Judge is never repaired, not even by a format-only turn", TestTags.Negative, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                Harness h = new Harness(testDb, new DirCreatingGitService());
+                CannedModelProbeExecutor executor = new CannedModelProbeExecutor();
+                h.Missions.FormatRepairExecutor = executor;
+                h.Missions.OnGetMissionOutput = _ => FormatLenses + "I inspected src/app/feature.cs. Verdict: **PASS**";
+
+                Vessel vessel = await CreateVesselAsync(testDb).ConfigureAwait(false);
+                Captain judgeCaptain = await CreateCaptainAsync(testDb, "Codex", AgentRuntimeEnum.Codex, CaptainStateEnum.Working).ConfigureAwait(false);
+                Voyage voyage = await testDb.Driver.Voyages.CreateAsync(new Voyage("judged")).ConfigureAwait(false);
+                Mission judge = await CreateRunningMissionAsync(testDb, h, vessel, voyage, judgeCaptain, "Judge", true).ConfigureAwait(false);
+
+                await h.Missions.HandleCompletionAsync(judgeCaptain, judge.Id).ConfigureAwait(false);
+                Mission? after = await testDb.Driver.Missions.ReadAsync(judge.Id).ConfigureAwait(false);
+                AssertEqual(0, executor.Requests.Count, "no format call for a gated stage");
+                AssertEqual(MissionStatusEnum.Review, after!.Status, "a person decides");
+            }));
+
             cases.Add(CaseAsync("restart_later_stage_keeps_branch", "Restarting a failed later stage keeps the earlier stage's branch, reopens the voyage, and restores the cancelled stages after it", TestTags.Positive, async () =>
             {
                 using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
@@ -1188,6 +1281,11 @@ namespace Test.Shared.Suites.Services
                 return Task.FromResult(new GitCommitMergeResult(GitCommitMergeOutcomeEnum.Merged));
             }
         }
+
+        private const string FormatLenses =
+            "## Correctness\nThe validator rejects empty names before saving, and the save path is unchanged for valid names.\n"
+            + "## Blast Radius\nOnly the widget create route calls the validator; no other caller changes.\n"
+            + "## Source Fidelity\nThe change matches the requested 400 response and adds nothing else.\n";
 
         private sealed class Harness
         {

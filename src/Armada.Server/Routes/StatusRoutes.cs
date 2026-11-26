@@ -672,6 +672,9 @@ namespace Armada.Server.Routes
                 if (body.AcceptLegacyMissionMarkers.HasValue)
                     _settings.AcceptLegacyMissionMarkers = body.AcceptLegacyMissionMarkers.Value;
 
+                if (body.OutputRepairNormalizerCaptainId != null)
+                    _settings.OutputRepairNormalizerCaptainId = String.IsNullOrWhiteSpace(body.OutputRepairNormalizerCaptainId) ? null : body.OutputRepairNormalizerCaptainId.Trim();
+
                 if (body.Concurrency != null)
                 {
                     // Applied in place: admission, hierarchy validation and retention read this object on every use.
@@ -937,6 +940,7 @@ namespace Armada.Server.Routes
                 RequireHarborForLaunch = _settings.RequireHarborForLaunch,
                 BlockDependentsOfFailedStages = _settings.BlockDependentsOfFailedStages,
                 AcceptLegacyMissionMarkers = _settings.AcceptLegacyMissionMarkers,
+                OutputRepairNormalizerCaptainId = _settings.OutputRepairNormalizerCaptainId ?? "",
                 RemoteControl = RedactRemoteControl(_settings.RemoteControl),
                 Import = _settings.Import,
                 FleetActions = _settings.FleetActions,
