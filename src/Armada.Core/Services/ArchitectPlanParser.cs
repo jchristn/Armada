@@ -105,8 +105,8 @@ namespace Armada.Core.Services
                 }
                 else
                 {
-                    plan = Normalize(candidate, maxHierarchyDepth);
-                    error = plan == null ? "Architect plan contains no valid missions." : null;
+                    plan = Normalize(candidate, maxHierarchyDepth, out string? normalizeError);
+                    error = plan == null ? normalizeError ?? "Architect plan contains no valid missions." : null;
                 }
             }
             return plan != null;
@@ -155,76 +155,38 @@ namespace Armada.Core.Services
             return text;
         }
 
-        // Contract v4 hierarchy and ownership. v3 accepts the same fields; its ownership overlaps are warnings.
+        // Hierarchy and ownership through the one validator (RS-4.4). Only contract v4 rejects an ownership overlap.
         private static void ValidateHierarchy(ArchitectPlan plan, int maxHierarchyDepth, List<string> errors)
         {
-            int count = plan.Missions.Count;
-            int[] depth = new int[count];
-            for (int i = 0; i < count; i++)
+            PlanValidationResult result = MissionPlanValidator.Validate(ToNodes(plan), maxHierarchyDepth, plan.ContractVersion == 4);
+            errors.AddRange(result.Errors.Select(e => e.Message));
+            plan.Warnings.AddRange(result.Warnings.Select(w => w.Message));
+            for (int i = 0; i < plan.Missions.Count; i++)
             {
                 ArchitectPlanMission? mission = plan.Missions[i];
                 if (mission == null) continue;
-                string prefix = "mission " + (i + 1) + ": ";
-                if (mission.DependsOn.HasValue)
+                if (result.IsValid)
                 {
-                    if (!mission.Parent.HasValue)
-                    {
-                        mission.Parent = mission.DependsOn;
-                        plan.Warnings.Add(prefix + "dependsOn " + mission.DependsOn.Value + " was read as parent " + mission.DependsOn.Value + "; use parent");
-                    }
-                    else if (mission.Parent != mission.DependsOn) errors.Add(prefix + "parent and dependsOn disagree; use parent only");
+                    mission.Parent = result.ParentOf(i + 1);
                     mission.DependsOn = null;
                 }
-                if (mission.Parent.HasValue)
-                {
-                    if (mission.Parent.Value == i + 1) errors.Add(prefix + "parent cannot refer to the mission itself");
-                    else if (mission.Parent.Value < 1 || mission.Parent.Value > i) errors.Add(prefix + "parent must name an earlier mission");
-                    else
-                    {
-                        depth[i] = depth[mission.Parent.Value - 1] + 1;
-                        if (depth[i] > maxHierarchyDepth) errors.Add(prefix + "parent chain is " + depth[i] + " deep; the maximum is " + maxHierarchyDepth + ". Flatten the plan");
-                    }
-                }
-                if (mission.BranchStrategy != null && mission.BranchStrategy != "continue" && mission.BranchStrategy != "fork")
-                    errors.Add(prefix + "branchStrategy must be continue or fork");
-                if (mission.BranchStrategy != null && !mission.Parent.HasValue)
-                    errors.Add(prefix + "branchStrategy needs a parent");
                 if (plan.ContractVersion == 4 && (mission.OwnedPaths == null || mission.OwnedPaths.Count == 0) && mission.Kind == "implementation")
-                    plan.Warnings.Add(prefix + "no ownedPaths; give every implementation mission the files it may change");
-            }
-            foreach (string overlap in ParallelOverlaps(plan))
-            {
-                if (plan.ContractVersion == 4) errors.Add(overlap);
-                else plan.Warnings.Add(overlap);
+                    plan.Warnings.Add("mission " + (i + 1) + ": no ownedPaths; give every implementation mission the files it may change");
             }
         }
 
-        // Missions that can run at the same time: neither is an ancestor of the other and neither waits for all others.
-        private static List<string> ParallelOverlaps(ArchitectPlan plan)
+        private static List<PlanNode> ToNodes(ArchitectPlan plan)
         {
-            List<string> found = new List<string>();
-            int count = plan.Missions.Count;
-            bool IsAncestor(int ancestor, int index)
+            // Contract v2 and unversioned plans name the parent with dependsOn; v3 and later read it as parent with a warning.
+            bool dependsOnIsParent = plan.ContractVersion == null || plan.ContractVersion < 3;
+            return plan.Missions.Select(m => m == null ? new PlanNode() : new PlanNode
             {
-                for (int hops = 0; hops < count && plan.Missions[index]?.Parent is int parent && parent >= 1 && parent <= count; hops++)
-                {
-                    index = parent - 1;
-                    if (index == ancestor) return true;
-                }
-                return false;
-            }
-            for (int i = 0; i < count; i++)
-                for (int j = i + 1; j < count; j++)
-                {
-                    ArchitectPlanMission? a = plan.Missions[i], b = plan.Missions[j];
-                    if (a == null || b == null || a.WaitForOtherMissions || b.WaitForOtherMissions) continue;
-                    if (IsAncestor(i, j) || IsAncestor(j, i)) continue;
-                    string? overlap = OwnedPathMatcher.FirstOverlap(a.OwnedPaths, b.OwnedPaths);
-                    if (overlap != null)
-                        found.Add("Missions " + (i + 1) + " and " + (j + 1) + " can run in parallel but both own " + overlap
-                            + "; make one the parent of the other, merge them, or split ownership");
-                }
-            return found;
+                Parent = dependsOnIsParent ? m.Parent ?? m.DependsOn : m.Parent,
+                DependsOn = dependsOnIsParent && !m.Parent.HasValue ? null : m.DependsOn,
+                BranchStrategy = m.BranchStrategy,
+                OwnedPaths = (m.OwnedPaths ?? new List<string>()).Select(OwnedPathMatcher.Normalize).Where(p => p.Length > 0).ToList(),
+                WaitsForAll = m.WaitForOtherMissions
+            }).ToList();
         }
 
         private static List<string> ValidateContract(ArchitectPlan plan, int maxHierarchyDepth)
@@ -251,7 +213,6 @@ namespace Armada.Core.Services
                 if (String.IsNullOrWhiteSpace(mission.Title) || IsPlaceholder(mission.Title) || !titles.Add(mission.Title.Trim())) errors.Add(prefix + "real unique title required");
                 if (String.IsNullOrWhiteSpace(mission.Description)) errors.Add(prefix + "bounded description required");
                 if (mission.Kind != "implementation" && mission.Kind != "investigation" && mission.Kind != "integration") errors.Add(prefix + "kind must be implementation, investigation or integration");
-                if (plan.ContractVersion == 2 && mission.DependsOn.HasValue && (mission.DependsOn.Value < 1 || mission.DependsOn.Value > i)) errors.Add(prefix + "dependsOn must name an earlier mission");
                 if (mission.WaitForOtherMissions && i != plan.Missions.Count - 1) errors.Add(prefix + "only final integration may wait for all missions");
                 if (mission.DecisionIndexes != null && (mission.DecisionIndexes.Any(index => index < 1 || index > (plan.Decisions?.Count ?? 0))
                     || mission.DecisionIndexes.Distinct().Count() != mission.DecisionIndexes.Count)) errors.Add(prefix + "decisionIndexes must be unique 1-based plan decision indexes");
@@ -296,7 +257,7 @@ namespace Armada.Core.Services
                         errors.Add(prefix + "negativeCases or a specific non-applicability reason required");
                 }
             }
-            if (plan.ContractVersion >= 3) ValidateHierarchy(plan, maxHierarchyDepth, errors);
+            ValidateHierarchy(plan, maxHierarchyDepth, errors);
             ArchitectPlanMission? final = plan.Missions[plan.Missions.Count - 1];
             if (final?.Kind != "integration" || !final.WaitForOtherMissions) errors.Add("last mission must be integration with waitForOtherMissions=true");
             foreach (string requirement in requirements.Where(r => !covered.Contains(r))) errors.Add("uncovered objective requirement " + requirement);
@@ -369,59 +330,61 @@ namespace Armada.Core.Services
             return trimmed.StartsWith("<", StringComparison.Ordinal) && trimmed.EndsWith(">", StringComparison.Ordinal);
         }
 
-        private static ArchitectPlan? Normalize(ArchitectPlan? candidate, int maxHierarchyDepth)
+        // Unversioned plans: untitled, placeholder and duplicate-title entries are dropped, but the hierarchy is checked by
+        // the one validator against the Architect's own numbering first, so a bad link gets a repair turn (R12).
+        private static ArchitectPlan? Normalize(ArchitectPlan? candidate, int maxHierarchyDepth, out string? error)
         {
+            error = null;
             if (candidate == null || candidate.Missions == null) return null;
 
-            // Map each original 1-based position to its position after untitled entries are dropped, so dependsOn
-            // keeps naming the mission the Architect meant.
+            // Map each original 1-based position to its position after unusable entries are dropped, so a parent keeps
+            // naming the mission the Architect meant.
             Dictionary<int, int> positionMap = new Dictionary<int, int>();
             HashSet<string> seenTitles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             ArchitectPlan normalized = new ArchitectPlan();
+            List<ArchitectPlanMission?> kept = new List<ArchitectPlanMission?>();
             for (int i = 0; i < candidate.Missions.Count; i++)
             {
                 ArchitectPlanMission? mission = candidate.Missions[i];
-                if (mission == null || String.IsNullOrWhiteSpace(mission.Title)) continue;
-                if (IsPlaceholder(mission.Title)) continue;
-                if (!seenTitles.Add(mission.Title.Trim())) continue;
+                bool usable = mission != null && !String.IsNullOrWhiteSpace(mission.Title) && !IsPlaceholder(mission.Title) && seenTitles.Add(mission.Title.Trim());
+                kept.Add(usable ? mission : null);
+                if (usable) positionMap[i + 1] = positionMap.Count + 1;
+            }
 
+            ArchitectPlan numbering = new ArchitectPlan { Missions = candidate.Missions };
+            List<PlanNode> nodes = ToNodes(numbering);
+            for (int i = 0; i < nodes.Count; i++)
+                if (kept[i] != null && nodes[i].Parent is int parent && parent >= 1 && parent <= i && kept[parent - 1] == null)
+                    nodes[i].UnresolvedParent = "mission " + parent + " (untitled, a placeholder, or a duplicate title)";
+            for (int i = 0; i < nodes.Count; i++)
+                if (kept[i] == null) nodes[i] = new PlanNode();
+            PlanValidationResult result = MissionPlanValidator.Validate(nodes, maxHierarchyDepth, false);
+            if (!result.IsValid)
+            {
+                error = "Architect plan rejected: " + result.Describe() + ". Remediation: give each mission an earlier mission's number as its parent, or none.";
+                return null;
+            }
+
+            for (int i = 0; i < kept.Count; i++)
+            {
+                ArchitectPlanMission? mission = kept[i];
+                if (mission == null) continue;
                 ArchitectPlanMission copy = new ArchitectPlanMission();
-                copy.Title = mission.Title.Trim();
+                copy.Title = mission.Title!.Trim();
                 copy.Description = String.IsNullOrWhiteSpace(mission.Description) ? copy.Title : mission.Description.Trim();
                 copy.WaitForOtherMissions = mission.WaitForOtherMissions;
                 copy.Kind = mission.Kind;
                 copy.OwnedPaths = (mission.OwnedPaths ?? new List<string>()).Select(OwnedPathMatcher.Normalize).Where(p => p.Length > 0).ToList();
                 copy.ReadsPaths = (mission.ReadsPaths ?? new List<string>()).Select(OwnedPathMatcher.Normalize).Where(p => p.Length > 0).ToList();
-
-                // Legacy plans: parent (or dependsOn, read as the parent) must name an earlier kept mission.
-                int originalPosition = i + 1;
-                int? reference = mission.Parent ?? mission.DependsOn;
-                if (reference.HasValue
-                    && reference.Value < originalPosition
-                    && positionMap.TryGetValue(reference.Value, out int mapped))
+                if (result.ParentOf(i + 1) is int parent)
                 {
-                    copy.Parent = mapped;
-                    if (mission.BranchStrategy == "continue" || mission.BranchStrategy == "fork") copy.BranchStrategy = mission.BranchStrategy;
+                    copy.Parent = positionMap[parent];
+                    copy.BranchStrategy = mission.BranchStrategy;
                 }
-
                 normalized.Missions.Add(copy);
-                positionMap[originalPosition] = normalized.Missions.Count;
             }
 
-            // A legacy chain deeper than allowed is flattened at the limit rather than rejected.
-            int[] depth = new int[normalized.Missions.Count];
-            for (int i = 0; i < normalized.Missions.Count; i++)
-            {
-                ArchitectPlanMission mission = normalized.Missions[i];
-                if (!mission.Parent.HasValue) continue;
-                depth[i] = depth[mission.Parent.Value - 1] + 1;
-                if (depth[i] > maxHierarchyDepth)
-                {
-                    normalized.Warnings.Add("mission " + (i + 1) + ": parent chain exceeds " + maxHierarchyDepth + "; it starts as a top-level mission");
-                    mission.Parent = null; mission.BranchStrategy = null; depth[i] = 0;
-                }
-            }
-            normalized.Warnings.AddRange(ParallelOverlaps(normalized));
+            normalized.Warnings.AddRange(result.Warnings.Select(w => w.Message));
             return normalized.Missions.Count > 0 ? normalized : null;
         }
 

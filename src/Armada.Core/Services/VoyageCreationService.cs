@@ -308,7 +308,18 @@ namespace Armada.Core.Services
             }
 
             // Resolve Key/ParentKey links before anything is written, so a bad tree creates nothing.
-            MissionHierarchyPlan hierarchy = MissionHierarchyPlan.Resolve(missions, _Settings.Concurrency.MaxHierarchyDepth);
+            // RS-4.4: the same validator as Architect plans; an ownership overlap between parallel missions only warns (R11).
+            PlanValidationResult hierarchy = MissionPlanValidator.Validate(missions.Select(md => new PlanNode
+            {
+                Title = md.Title,
+                Key = md.Key,
+                ParentKey = md.ParentKey,
+                BranchStrategy = md.BranchStrategy == MissionBranchStrategyEnum.ContinueParent ? "continue"
+                    : md.BranchStrategy == MissionBranchStrategyEnum.ForkFromParent ? "fork" : null,
+                OwnedPaths = (md.OwnedPaths ?? new List<string>()).Select(OwnedPathMatcher.Normalize).Where(p => p.Length > 0).ToList()
+            }).ToList(), _Settings.Concurrency.MaxHierarchyDepth, false);
+            if (!hierarchy.IsValid) throw new ArgumentException("Mission hierarchy rejected: " + hierarchy.Describe() + ".", nameof(missions));
+            foreach (PlanFinding warning in hierarchy.Warnings) _Logging.Warn(_Header + "dispatch of voyage \"" + request.Title + "\": " + warning.Message);
             if (playbooks.Count > 0 && !String.IsNullOrEmpty(vessel.TenantId))
                 await _Playbooks.ResolveSelectionsAsync(vessel.TenantId, playbooks, token).ConfigureAwait(false);
 
@@ -470,14 +481,13 @@ namespace Armada.Core.Services
             return selections.Select(s => new SelectedPlaybook { PlaybookId = s.PlaybookId, DeliveryMode = s.DeliveryMode }).ToList();
         }
 
-        private static void ApplyHierarchy(Mission mission, MissionDescription md, MissionHierarchyPlan hierarchy, Dictionary<int, Mission> roots, int index)
+        private static void ApplyHierarchy(Mission mission, MissionDescription md, PlanValidationResult hierarchy, Dictionary<int, Mission> roots, int index)
         {
             List<string> owned = (md.OwnedPaths ?? new List<string>()).Select(OwnedPathMatcher.Normalize).Where(p => p.Length > 0).Distinct(StringComparer.Ordinal).ToList();
             if (owned.Count > 0) mission.OwnedPathsJson = System.Text.Json.JsonSerializer.Serialize(owned);
-            int parentIndex = hierarchy.ParentOf(index);
-            if (parentIndex < 0) return;
-            mission.ParentMissionId = roots[parentIndex].Id;
-            mission.Depth = hierarchy.DepthOf(index);
+            if (!(hierarchy.ParentOf(index + 1) is int parent)) return;
+            mission.ParentMissionId = roots[parent - 1].Id;
+            mission.Depth = hierarchy.DepthOf(index + 1);
             if (md.BranchStrategy.HasValue && md.BranchStrategy.Value != MissionBranchStrategyEnum.New) mission.BranchStrategy = md.BranchStrategy.Value;
         }
 

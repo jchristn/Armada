@@ -65,6 +65,12 @@ Conductor) with Opus and GPT-6.1 reliable. The work is tracked item by item in `
 - **A stage handoff prepares every next stage at once.** When a stage finishes, all the stages waiting on it get its
   branch and handoff note in one transaction. Before, a restart between them could leave a Judge prepared and a Test
   Engineer not until recovery ran (RS-4.3).
+- **One check for mission trees, whatever the plan's format.** REST and MCP voyages and Architect plans in every
+  format (v2 to v4, unversioned JSON, `[ARMADA:MISSION]` markers) go through one validator with typed findings. An
+  older-format plan whose parent is itself, a later mission, a dropped entry, or deeper than `MaxHierarchyDepth` is
+  no longer quietly flattened: the Architect gets a repair turn naming each mission, and the plan fails as invalid
+  output if it is still wrong. A voyage request with a `BranchStrategy` but no `ParentKey` is rejected. Ownership
+  overlaps between missions that can run at once are reported for every dispatch; only contract v4 rejects them (RS-4.4).
 - **Recovery state survives a restart.** Endpoint circuit breakers, launch backoff (with the captains that failed to
   start the mission), the start of a transient outage, and escalation rule cooldowns were kept only in memory, so a
   restart sent missions straight back to a failing endpoint, relaunched a broken captain at once, granted an outage a

@@ -92,22 +92,15 @@ namespace Armada.Core.Services
             if (String.IsNullOrEmpty(architectMission.VoyageId)) return;
             if (parsed == null || parsed.Count == 0) return;
 
+            // The plan was validated before the fan-out (RS-4.4), so every parent is an earlier slice within the depth limit.
+            // An invalid plan stored before that check (met only by recovery) leaves its slices after the Architect.
             List<Mission> voyageMissions = work.Missions;
+            bool hierarchyValid = ValidateArchitectHierarchy(parsed) == null;
             Dictionary<int, Mission> workerRootsByIndex = new Dictionary<int, Mission>();
-            Dictionary<int, Mission> terminalStagesByIndex = new Dictionary<int, Mission>();
-            Dictionary<string, Mission> terminalStagesByTitle = new Dictionary<string, Mission>(StringComparer.OrdinalIgnoreCase);
-            Dictionary<string, int> indexByTerminalId = new Dictionary<string, int>(StringComparer.Ordinal);
-
             for (int i = 0; i < parsed.Count; i++)
             {
                 Mission? workerRoot = FindArchitectSlice(voyageMissions, architectMission.Id, i);
-                if (workerRoot == null) continue;
-
-                Mission terminalStage = FindTerminalPipelineStage(voyageMissions, workerRoot);
-                workerRootsByIndex[i + 1] = workerRoot;
-                terminalStagesByIndex[i + 1] = terminalStage;
-                terminalStagesByTitle[parsed[i].Title] = terminalStage;
-                indexByTerminalId[terminalStage.Id] = i + 1;
+                if (workerRoot != null) workerRootsByIndex[i + 1] = workerRoot;
             }
 
             Dictionary<int, int> depthByIndex = new Dictionary<int, int>();
@@ -117,44 +110,12 @@ namespace Armada.Core.Services
                 // Idempotent: only a slice still waiting on the Architect is changed, so a recovery pass never touches one
                 // that already started (H11).
                 bool waitingOnArchitect = workerRoot.Status == MissionStatusEnum.Pending && workerRoot.DependsOnMissionId == architectMission.Id;
-                if (waitingOnArchitect) ApplySliceOwnership(work, workerRoot, parsed[i]);
-
-                string? dependencyReference = parsed[i].DependsOnReference;
-                int? dependencyIndex = parsed[i].DependsOnIndex;
-                if (!dependencyIndex.HasValue && String.IsNullOrWhiteSpace(dependencyReference)) continue;
                 if (!waitingOnArchitect) continue;
+                ApplySliceOwnership(work, workerRoot, parsed[i]);
 
-                // Structured plan: the parent is an index. Legacy marker format: resolve the "Parent:" or "Depends on:" text.
-                int? parentIndex = null;
-                if (dependencyIndex.HasValue)
-                {
-                    if (terminalStagesByIndex.ContainsKey(dependencyIndex.Value)) parentIndex = dependencyIndex.Value;
-                    dependencyReference = "mission " + dependencyIndex.Value;
-                }
-                else
-                {
-                    Mission? resolved = ResolveArchitectDependencyTerminalStage(terminalStagesByIndex, terminalStagesByTitle, i + 1, dependencyReference!);
-                    if (resolved != null && indexByTerminalId.TryGetValue(resolved.Id, out int found)) parentIndex = found;
-                }
-                if (!parentIndex.HasValue || !workerRootsByIndex.TryGetValue(parentIndex.Value, out Mission? parentRoot))
-                {
-                    _Logging.Warn(_Header + "could not resolve architect parent '" + dependencyReference +
-                        "' for mission '" + parsed[i].Title + "' -- leaving it after the architect");
-                    continue;
-                }
-                if (parentRoot.Id == workerRoot.Id || parentIndex.Value >= i + 1)
-                {
-                    _Logging.Warn(_Header + "ignoring architect parent '" + dependencyReference +
-                        "' for mission '" + parsed[i].Title + "': a parent must be an earlier mission");
-                    continue;
-                }
-                int depth = (depthByIndex.TryGetValue(parentIndex.Value, out int parentDepth) ? parentDepth : parentRoot.Depth) + 1;
-                if (depth > _Settings.Concurrency.MaxHierarchyDepth)
-                {
-                    _Logging.Warn(_Header + "architect parent for mission '" + parsed[i].Title + "' would be " + depth
-                        + " deep (maximum " + _Settings.Concurrency.MaxHierarchyDepth + ") -- it starts after the architect instead");
-                    continue;
-                }
+                if (!hierarchyValid || !parsed[i].DependsOnIndex.HasValue || !workerRootsByIndex.TryGetValue(parsed[i].DependsOnIndex!.Value, out Mission? parentRoot)) continue;
+                int parentIndex = parsed[i].DependsOnIndex!.Value;
+                int depth = (depthByIndex.TryGetValue(parentIndex, out int parentDepth) ? parentDepth : parentRoot.Depth) + 1;
 
                 // D13/D16: the slice becomes a child of the parent slice's root. It starts once the parent's last stage
                 // finishes (gate 2), so it no longer needs its own link to the Architect; the branch rule picks continue
@@ -168,13 +129,10 @@ namespace Armada.Core.Services
                 workerRoot.BranchName = null;
                 work.Changed(workerRoot);
                 depthByIndex[i + 1] = depth;
-
-                _Logging.Debug(_Header + "architect made worker mission " + workerRoot.Id + " a child of " + parentRoot.Id +
-                    " from reference '" + dependencyReference + "'");
+                _Logging.Debug(_Header + "architect made worker mission " + workerRoot.Id + " a child of " + parentRoot.Id + " (plan mission " + parentIndex + ")");
             }
         }
 
-        // Ownership is copied onto every stage of the slice, so any stage's prompt can name the slice's paths.
         private static void ApplySliceOwnership(ArchitectFanOutWork work, Mission workerRoot, ParsedArchitectMission slice)
         {
             string? owned = slice.OwnedPaths.Count == 0 ? null : JsonSerializer.Serialize(slice.OwnedPaths);
@@ -298,7 +256,44 @@ namespace Armada.Core.Services
                 if (results.Count > 0) break;
             }
 
+            ResolveMarkerDependencies(results);
             return results;
+        }
+
+        // Marker format: a "Depends on:" line names an earlier mission by number ("Mission 1") or by title. It is resolved
+        // to a plan position here, once, and a reference that names no mission is left for the validator to reject.
+        private static void ResolveMarkerDependencies(List<ParsedArchitectMission> parsed)
+        {
+            for (int i = 0; i < parsed.Count; i++)
+            {
+                if (parsed[i].DependsOnIndex.HasValue || String.IsNullOrWhiteSpace(parsed[i].DependsOnReference)) continue;
+                string reference = NormalizeArchitectDependencyReference(parsed[i].DependsOnReference!);
+                System.Text.RegularExpressions.Match numeric = System.Text.RegularExpressions.Regex.Match(
+                    reference, @"^(?:mission\s+)?(?<index>\d+)\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                if (numeric.Success && Int32.TryParse(numeric.Groups["index"].Value, out int number)) parsed[i].DependsOnIndex = number;
+                else
+                {
+                    int byTitle = parsed.FindIndex(p => String.Equals(p.Title, reference, StringComparison.OrdinalIgnoreCase));
+                    if (byTitle >= 0) parsed[i].DependsOnIndex = byTitle + 1;
+                }
+            }
+        }
+
+        // RS-4.4: the parsed plan, in any format, through the one hierarchy and ownership validator. Null when valid.
+        private string? ValidateArchitectHierarchy(List<ParsedArchitectMission> parsed)
+        {
+            List<PlanNode> nodes = parsed.Select(p => new PlanNode
+            {
+                Title = p.Title,
+                Parent = p.DependsOnIndex,
+                UnresolvedParent = !p.DependsOnIndex.HasValue && !String.IsNullOrWhiteSpace(p.DependsOnReference) ? p.DependsOnReference!.Trim() : null,
+                BranchStrategy = p.BranchStrategy,
+                OwnedPaths = p.OwnedPaths,
+                WaitsForAll = p.WaitForOtherMissions
+            }).ToList();
+            PlanValidationResult result = MissionPlanValidator.Validate(nodes, _Settings.Concurrency.MaxHierarchyDepth, false);
+            return result.IsValid ? null : "Architect plan rejected: " + result.Describe()
+                + ". Remediation: give each mission an earlier mission's number as its parent, or none.";
         }
 
         private void ParseArchitectMissionMarkers(
@@ -527,37 +522,6 @@ namespace Armada.Core.Services
             }
 
             return normalized.Trim().TrimEnd('.', ';', ',');
-        }
-
-        private static Mission? ResolveArchitectDependencyTerminalStage(
-            IReadOnlyDictionary<int, Mission> terminalStagesByIndex,
-            IReadOnlyDictionary<string, Mission> terminalStagesByTitle,
-            int currentMissionIndex,
-            string dependencyReference)
-        {
-            string normalizedReference = NormalizeArchitectDependencyReference(dependencyReference);
-            if (String.IsNullOrWhiteSpace(normalizedReference)) return null;
-
-            System.Text.RegularExpressions.Match numericMatch =
-                System.Text.RegularExpressions.Regex.Match(
-                    normalizedReference,
-                    @"^(?:mission\s+)?(?<index>\d+)\b",
-                    System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-            if (numericMatch.Success &&
-                Int32.TryParse(numericMatch.Groups["index"].Value, out int dependencyIndex) &&
-                dependencyIndex > 0 &&
-                dependencyIndex < currentMissionIndex &&
-                terminalStagesByIndex.TryGetValue(dependencyIndex, out Mission? terminalStage))
-            {
-                return terminalStage;
-            }
-
-            if (terminalStagesByTitle.TryGetValue(normalizedReference, out Mission? byTitle))
-            {
-                return byTitle;
-            }
-
-            return null;
         }
 
         private static bool IsAgentTelemetryLine(string? line)

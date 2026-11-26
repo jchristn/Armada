@@ -6,6 +6,7 @@ namespace Test.Shared.Suites.Services
     using System.Text.Json;
     using System.Threading;
     using System.Threading.Tasks;
+    using Armada.Core.Enums;
     using Armada.Core.Models;
     using Armada.Core.Services;
     using Test.Shared.Infrastructure;
@@ -68,17 +69,62 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(1, plan.Missions[1].Parent, "original mission 2 (Core) is now mission 1");
             }));
 
-            cases.Add(Case("invalid_dependencies_are_cleared", "Self, forward, and out-of-range dependencies are cleared", TestTags.Negative, () =>
+            cases.Add(Case("invalid_dependencies_are_rejected", "An unversioned plan with a self, forward, zero, dropped-mission or too-deep parent is rejected with each mission named (R12)", TestTags.Negative, () =>
             {
                 string output =
                     "```armada-plan\n" +
-                    "{\"missions\":[{\"title\":\"A\",\"dependsOn\":1},{\"title\":\"B\",\"dependsOn\":3},{\"title\":\"C\",\"dependsOn\":0},{\"title\":\"A\",\"dependsOn\":1}]}\n" +
+                    "{\"missions\":[{\"title\":\"A\",\"dependsOn\":1},{\"title\":\"B\",\"dependsOn\":3},{\"title\":\"C\",\"dependsOn\":0},{\"title\":\"\"},{\"title\":\"E\",\"parent\":4}]}\n" +
                     "```";
-                AssertTrue(ArchitectPlanParser.TryParse(output, out ArchitectPlan? plan));
-                AssertEqual(3, plan!.Missions.Count, "a repeated title is dropped");
-                AssertNull(plan.Missions[0].Parent, "self dependency");
-                AssertNull(plan.Missions[1].Parent, "forward dependency");
-                AssertNull(plan.Missions[2].Parent, "zero index");
+                AssertFalse(ArchitectPlanParser.TryParse(output, out ArchitectPlan? plan, out string? error), "rejected, not flattened");
+                AssertNull(plan);
+                AssertContains("mission 1: parent cannot refer to the mission itself", error!);
+                AssertContains("mission 2: parent must name an earlier mission", error!);
+                AssertContains("mission 3: parent must name an earlier mission", error!);
+                AssertContains("mission 5: parent 'mission 4 (untitled", error!);
+
+                string deep = "```armada-plan\n{\"missions\":[{\"title\":\"A\"},{\"title\":\"B\",\"parent\":1},{\"title\":\"C\",\"parent\":2}]}\n```";
+                AssertFalse(ArchitectPlanParser.TryParse(deep, out _, out string? deepError, 1), "a chain deeper than the limit is rejected, not flattened");
+                AssertContains("parent chain is 2 deep; the maximum is 1", deepError!);
+                AssertTrue(ArchitectPlanParser.TryParse(deep, out ArchitectPlan? ok, out _, 2), "the same chain within the limit is accepted");
+                AssertEqual(2, ok!.Missions[2].Parent);
+            }));
+
+            cases.Add(Case("validator_rules_have_typed_codes", "Every dispatch path's hierarchy and ownership rule reports a typed code; overlap rejects only when asked", TestTags.Negative, () =>
+            {
+                List<PlanNode> nodes = new List<PlanNode>
+                {
+                    new PlanNode { Key = "a", OwnedPaths = new List<string> { "src/A.cs" } },
+                    new PlanNode { Key = "a", ParentKey = "a" },
+                    new PlanNode { ParentKey = "missing" },
+                    new PlanNode { UnresolvedParent = "Nonexistent mission" },
+                    new PlanNode { Parent = 1, DependsOn = 2 },
+                    new PlanNode { BranchStrategy = "fork" },
+                    new PlanNode { Parent = 1, BranchStrategy = "sideways" }
+                };
+                PlanValidationResult result = MissionPlanValidator.Validate(nodes, 4, false);
+                AssertFalse(result.IsValid);
+                List<PlanFindingCodeEnum> codes = result.Errors.Select(e => e.Code).ToList();
+                foreach (PlanFindingCodeEnum expected in new[] { PlanFindingCodeEnum.DuplicateKey, PlanFindingCodeEnum.UnknownParentKey, PlanFindingCodeEnum.UnresolvedParent,
+                    PlanFindingCodeEnum.ParentDependsOnConflict, PlanFindingCodeEnum.BranchStrategyNeedsParent, PlanFindingCodeEnum.BranchStrategyInvalid })
+                    AssertTrue(codes.Contains(expected), "reports " + expected);
+                AssertEqual(2, result.Errors.Single(e => e.Code == PlanFindingCodeEnum.DuplicateKey).Position);
+
+                List<PlanNode> siblings = new List<PlanNode>
+                {
+                    new PlanNode { OwnedPaths = new List<string> { "src/" } },
+                    new PlanNode { OwnedPaths = new List<string> { "src/A.cs" } },
+                    new PlanNode { Parent = 1, OwnedPaths = new List<string> { "src/A.cs" } },
+                    new PlanNode { DependsOn = 3 }
+                };
+                PlanValidationResult warned = MissionPlanValidator.Validate(siblings, 4, false);
+                AssertTrue(warned.IsValid, "an overlap only warns by default (R11)");
+                AssertTrue(warned.Warnings.Any(w => w.Code == PlanFindingCodeEnum.OwnershipOverlap && w.Message.StartsWith("Missions 1 and 2")), "parallel siblings overlap");
+                AssertFalse(warned.Warnings.Any(w => w.Message.StartsWith("Missions 1 and 3")), "a parent and its child may share a path");
+                AssertTrue(warned.Warnings.Any(w => w.Code == PlanFindingCodeEnum.DependsOnReadAsParent), "dependsOn alone is read as the parent");
+                AssertEqual(3, warned.ParentOf(4));
+                AssertEqual(2, warned.DepthOf(4));
+                AssertFalse(MissionPlanValidator.Validate(siblings, 4, true).IsValid, "contract v4 rejects the overlap");
+                AssertFalse(MissionPlanValidator.Validate(siblings, 1, false).IsValid, "depth is checked against the limit");
             }));
 
             cases.Add(Case("no_plan_without_valid_block", "Malformed JSON, unfenced JSON, other fences, and placeholder-only examples yield no plan", TestTags.Negative, () =>

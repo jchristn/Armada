@@ -133,6 +133,8 @@ namespace Armada.Core.Services
                     await TryRepairArchitectPlanAsync(completedMission, token).ConfigureAwait(false);
 
                 ArchitectPlanParser.TryParse(completedMission.AgentOutput, out _, out string? planError, _Settings.Concurrency.MaxHierarchyDepth);
+                List<ParsedArchitectMission> parsed = planError == null ? ParseArchitectOutput(completedMission) : new List<ParsedArchitectMission>();
+                planError ??= ValidateArchitectHierarchy(parsed);
                 if (planError != null)
                 {
                     if (await TryScheduleOutputRepairAsync(completedMission, planError, ArchitectPlanParser.FormatInstructions(), token).ConfigureAwait(false))
@@ -147,7 +149,6 @@ namespace Armada.Core.Services
                         context.Note = "Architect plan error: " + planError, token).ConfigureAwait(false);
                     return false;
                 }
-                List<ParsedArchitectMission> parsed = ParseArchitectOutput(completedMission);
                 if (parsed.Count > 0)
                 {
                     await ProjectArchitectMissionsToLogAsync(completedMission, parsed, token).ConfigureAwait(false);

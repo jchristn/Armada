@@ -171,6 +171,7 @@ does, the recommendation is to keep the decision and change the item.
 | R9 | RS-8.1, RS-8.5 | MH: the profile does not set tier or change routing automatically; routing changes only after held-out production tasks | Keep. Probes propose capabilities and tier; an administrator accepts them in the profile UI (one click), and data-driven tier stays opt-in | Approved as recommended (Joel, 2026-11-25) |
 | R10 | RS-11.1 | HER:656 separate services not created because the methods share mutable state | Reverse after Phases 3 to 6 remove the shared state (agrees with REFACTORING_PLAN "no partial classes") | Approved as recommended (Joel, 2026-11-25) |
 | R11 | RS-2.6, RS-4.4 | FLF:219 dedup any dispatch whose description references a LandingFailed mission; CI:58 v3 ownership overlap only warns | Keep both: `RescueOfMissionId` is added in front of the description dedup, and overlap rejects only for v4 plans | Approved as recommended (Joel, 2026-11-25) |
+| R12 | RS-4.4 | Older Architect plan formats (unversioned JSON, `[ARMADA:MISSION]` markers) drop a bad parent link, flatten a too-deep chain, and only log a warning | Reverse: every format goes through the one validator; a bad parent, self-reference, conflicting `parent`/`dependsOn`, or excess depth gets the Architect a repair turn with typed errors, then fails as InvalidOutput | Approved as recommended (Joel, 2026-11-25) |
 
 ### Constraints by item
 
@@ -541,11 +542,21 @@ routing; a renamed Architect slice breaks fan-out recovery. Everything a program
   stage's branch and handoff note is written with one `WriteBatchAsync`, each guarded on Pending; crash points
   `handoff.planned` and `handoff.written` replace `handoff.dependent-updated`, and the crash cases check both dependents
   were prepared or neither.
-- [ ] **RS-4.4** One hierarchy and ownership validator: a pure function over (index, parent, dependsOn, ownedPaths)
+- [x] **RS-4.4** One hierarchy and ownership validator: a pure function over (index, parent, dependsOn, ownedPaths)
   used by REST, MCP, Architect v3/v4 plans, and legacy plans, with one outcome per rule (reject with a typed error
   list). Ownership overlap is checked for all dispatch paths. Replaces `MissionHierarchyPlan.Resolve`,
   `ArchitectPlanParser.ValidateHierarchy`, the silent flattening in `Normalize`, and the warning in
-  `ApplyArchitectMissionDependenciesAsync`. Evidence:
+  `ApplyArchitectMissionDependenciesAsync`. Evidence: `MissionPlanValidator.Validate(IReadOnlyList<PlanNode>, maxDepth,
+  overlapIsError)` returns `PlanValidationResult` with `PlanFinding`s typed by `PlanFindingCodeEnum` (11 rules) and the
+  resolved parents and depths. Callers: `VoyageCreationService` (REST and MCP; `MissionHierarchyPlan` deleted),
+  `ArchitectPlanParser` for v2 to v4 and unversioned plans (checked against the Architect's own numbering before
+  dropped entries are removed), and `MissionService.ValidateArchitectHierarchy` for every parsed plan at handoff,
+  including `[ARMADA:MISSION]` markers, whose "Depends on:" text is resolved to a position at parse time. A rejected
+  plan takes the existing output repair turn (R12). `ApplyArchitectMissionDependencies` no longer resolves text or
+  logs warnings; it applies validated positions. Overlap warns everywhere except contract v4 (R11). Tests:
+  ArchitectPlanParser `invalid_dependencies_are_rejected` and `validator_rules_have_typed_codes`, PipelineDispatch
+  `marker_plan_with_bad_parent_never_fans_out`, MissionHierarchy dispatch rejects a parentless `BranchStrategy`.
+  SQLite affected suites: 723 tests, 0 failed, 6 skipped, then PipelineDispatch with the new case: 49 of 49.
 - [ ] **RS-4.5** One dispatcher. Delete `MissionService.DispatchPendingMissionsAsync` (`MissionService.cs:2109`), the
   head-of-queue synchronous copy. The Admiral dispatcher runs on a coalescing wake signal raised by mission create,
   completion, review, cancel, captain freed, endpoint breaker closed, and Harbor connect; the 10 s heartbeat stays as
