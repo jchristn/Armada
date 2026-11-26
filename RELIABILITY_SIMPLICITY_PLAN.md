@@ -878,9 +878,13 @@ the contract a schema, lets the model submit through a tool, and repairs format 
   assertion in the fan-out case; PipelineDispatch, Docs.Deprecation, Tui.Parity, VsCode.Parity, BlackBoxConfiguration
   76/76.
 
-- [ ] **RS-6.13** Count tool schemas in every prompt budget (RS-6.11, RS-8.4) and scope the tool catalog per persona:
+- [x] **RS-6.13** Count tool schemas in every prompt budget (RS-6.11, RS-8.4) and scope the tool catalog per persona:
   qwen3.8 used 36,271 input tokens with the full 175-tool catalog against 723 with scoped tools (HER:1224).
-  Evidence:
+  Evidence: 12b23bd7c. `PersonaToolScope` declares per-persona lists sent as `ARMADA_MCP_TOOL_SCOPE` to
+  ApiEndpoint launches; the rest is deferred to discovery; `ApiContextCompactor.EstimateToolTokens` counts schemas in
+  compaction pressure. Real catalog 273 tools / ~62,518 tokens vs Judge 5 / ~835. Tests: `judge_launch_exposes_persona_scope`,
+  `persona_scope_applies_to_small_catalogs`, `tool_schema_estimate_counts_schemas`, `persona_tool_scopes_name_real_tools`.
+  Operator override of the scope deferred to RS-8.4 (needs a Persona column across providers).
 
 ## Phase 7: API runtime hardening for open models
 

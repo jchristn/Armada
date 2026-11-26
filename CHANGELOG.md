@@ -187,6 +187,11 @@ Conductor) with Opus and GPT-6.1 reliable. The work is tracked item by item in `
   its contract three times and the brief omitted SPEC_CONFLICT. Markers are no longer shown in backticks, and the .NET
   restore advice comes from the .NET workflow profile. Built-in templates you have not edited are upgraded; edited ones
   are kept, with the generated contract appended after them.
+- **API captains see the Armada tools their stage uses.** A mission launch names the few Armada MCP tools its persona
+  needs (`ARMADA_MCP_TOOL_SCOPE`): a Judge gets 5 tools, about 835 schema tokens, instead of discovering them in a
+  catalog of about 270 tools (about 62,000 tokens). The rest stays reachable through `armada_discover_mcp_tools`, and
+  permissions are unchanged. The context-window check now counts the tool schemas sent on every turn, and a reply
+  without tools uses the same explicit completion requirement as the tool loop.
 - **Recovery state survives a restart.** Endpoint circuit breakers, launch backoff (with the captains that failed to
   start the mission), the start of a transient outage, and escalation rule cooldowns were kept only in memory, so a
   restart sent missions straight back to a failing endpoint, relaunched a broken captain at once, granted an outage a

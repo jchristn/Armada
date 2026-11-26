@@ -585,7 +585,7 @@ namespace Armada.Runtimes
                         return;
                     }
                     finalText = RemoveCompleteThinkBlocks(reply.Text);
-                    if (!IsCompleteResponse(finalText, reply.FinishReason, prompt.Contains("[ARMADA:RESULT] COMPLETE", StringComparison.Ordinal)))
+                    if (!IsCompleteResponse(finalText, reply.FinishReason, requiresCompletionLine))
                     {
                         exitCode = 1;
                         RaiseProviderError(processId, new RuntimeProviderError { ErrorType = IsTokenLimit(reply.FinishReason) ? "output_token_limit_reached" : "incomplete_completion", Reason = IsTokenLimit(reply.FinishReason) ? "The inference response hit its output-token limit (finish reason: " + reply.FinishReason + "). The mission did not finish." : "Plain inference did not produce a valid mission completion." });
