@@ -1152,6 +1152,7 @@ namespace Test.Shared.Suites.Services
                     IDockService dockService = new DockService(logging, testDb.Driver, settings, git);
                     ICaptainService captainService = new CaptainService(logging, testDb.Driver, settings, git, dockService);
                     MissionService missionService = new MissionService(logging, testDb.Driver, settings, dockService, captainService, git: git);
+                    DispatchWakeProbe dispatcher = new DispatchWakeProbe(logging, testDb.Driver, settings, captainService, missionService, dockService);
                     captainService.OnLaunchAgent = (Captain c, Mission m, Dock d) => Task.FromResult(1000 + git.WorktreeCalls.Count);
 
                     int landingCalls = 0;
@@ -1235,6 +1236,7 @@ namespace Test.Shared.Suites.Services
                         "[ARMADA:MISSION] Update docs\nDocument endpoint";
 
                     await missionService.HandleCompletionAsync(captain1, architect.Id).ConfigureAwait(false);
+                    await dispatcher.DispatchAsync().ConfigureAwait(false);
 
                     List<Mission> afterArchitect = await testDb.Driver.Missions.EnumerateByVoyageAsync(voyage.Id).ConfigureAwait(false);
                     AssertEqual(7, afterArchitect.Count, "Architect fan-out should create full cloned downstream chain");
@@ -1265,7 +1267,9 @@ namespace Test.Shared.Suites.Services
                         + String.Join(",", new[] { apiWorker.Mode.ToString(), apiTest.Mode.ToString(), apiJudge.Mode.ToString(), docsWorker.Mode.ToString(), docsTest.Mode.ToString(), docsJudge.Mode.ToString() }));
                     AssertEqual(docsWorker!.Id, docsTest!.DependsOnMissionId, "Cloned test stage should depend on cloned worker");
                     AssertEqual(docsTest.Id, docsJudge!.DependsOnMissionId, "Cloned judge stage should depend on cloned test stage");
-                    AssertTrue(String.IsNullOrEmpty(docsWorker.BranchName), "Cloned worker should wait for its own branch assignment");
+                    // One dispatch pass assigns every ready mission while a captain is free (RS-4.5), so the cloned worker may already
+                    // run; either way it is on its own branch, never the primary worker's.
+                    AssertTrue(String.IsNullOrEmpty(docsWorker.BranchName) || docsWorker.BranchName != apiWorker.BranchName, "Cloned worker gets its own branch");
                     AssertContains("Implement endpoint", apiTest!.Description ?? String.Empty, "Primary test stage should inherit architect-split mission scope");
                     AssertContains("Implement endpoint", apiJudge!.Description ?? String.Empty, "Primary judge stage should inherit architect-split mission scope");
                     AssertContains("Document endpoint", docsTest.Description ?? String.Empty, "Cloned test stage should inherit architect-split mission scope");
@@ -1277,6 +1281,7 @@ namespace Test.Shared.Suites.Services
                     Captain? workerCaptain = await testDb.Driver.Captains.ReadAsync(apiWorker.CaptainId!).ConfigureAwait(false);
                     missionService.OnGetMissionOutput = _ => "worker complete\n[ARMADA:RESULT] COMPLETE";
                     await missionService.HandleCompletionAsync(workerCaptain!, apiWorker.Id).ConfigureAwait(false);
+                    await dispatcher.DispatchAsync().ConfigureAwait(false);
 
                     apiWorker = await testDb.Driver.Missions.ReadAsync(apiWorker.Id).ConfigureAwait(false);
                     apiTest = await testDb.Driver.Missions.ReadAsync(apiTest!.Id).ConfigureAwait(false);
@@ -1287,6 +1292,7 @@ namespace Test.Shared.Suites.Services
                     Captain? testCaptain = await testDb.Driver.Captains.ReadAsync(apiTest.CaptainId!).ConfigureAwait(false);
                     missionService.OnGetMissionOutput = _ => "test complete\n[ARMADA:RESULT] COMPLETE";
                     await missionService.HandleCompletionAsync(testCaptain!, apiTest.Id).ConfigureAwait(false);
+                    await dispatcher.DispatchAsync().ConfigureAwait(false);
 
                     apiTest = await testDb.Driver.Missions.ReadAsync(apiTest.Id).ConfigureAwait(false);
                     apiJudge = await testDb.Driver.Missions.ReadAsync(apiJudge!.Id).ConfigureAwait(false);
@@ -1327,6 +1333,7 @@ namespace Test.Shared.Suites.Services
                     IDockService dockService = new DockService(logging, testDb.Driver, settings, git);
                     ICaptainService captainService = new CaptainService(logging, testDb.Driver, settings, git, dockService);
                     MissionService missionService = new MissionService(logging, testDb.Driver, settings, dockService, captainService, git: git);
+                    DispatchWakeProbe dispatcher = new DispatchWakeProbe(logging, testDb.Driver, settings, captainService, missionService, dockService);
                     captainService.OnLaunchAgent = (Captain c, Mission m, Dock d) => Task.FromResult(2000 + git.WorktreeCalls.Count);
 
                     int landingCalls = 0;
@@ -1437,6 +1444,7 @@ namespace Test.Shared.Suites.Services
                         + "\n```\n[ARMADA:MISSION] Ignored legacy block\nThis is ignored.";
 
                     await missionService.HandleCompletionAsync(architectCaptain, architect.Id).ConfigureAwait(false);
+                    await dispatcher.DispatchAsync().ConfigureAwait(false);
 
                     List<Mission> afterArchitect = await testDb.Driver.Missions.EnumerateByVoyageAsync(voyage.Id).ConfigureAwait(false);
                     Mission? coreWorker = afterArchitect.FirstOrDefault(m => m.Title == "Add core model properties [Worker]");
@@ -1677,6 +1685,7 @@ namespace Test.Shared.Suites.Services
                     IDockService dockService = new DockService(logging, testDb.Driver, settings, git);
                     ICaptainService captainService = new CaptainService(logging, testDb.Driver, settings, git, dockService);
                     MissionService missionService = new MissionService(logging, testDb.Driver, settings, dockService, captainService, git: git);
+                    DispatchWakeProbe dispatcher = new DispatchWakeProbe(logging, testDb.Driver, settings, captainService, missionService, dockService);
                     captainService.OnLaunchAgent = (Captain c, Mission m, Dock d) => Task.FromResult(2000 + git.WorktreeCalls.Count);
 
                     int landingCalls = 0;
@@ -1765,6 +1774,7 @@ namespace Test.Shared.Suites.Services
                         "Update PostgreSQL, MySQL, and migration scripts.";
 
                     await missionService.HandleCompletionAsync(architectCaptain, architect.Id).ConfigureAwait(false);
+                    await dispatcher.DispatchAsync().ConfigureAwait(false);
 
                     List<Mission> afterArchitect = await testDb.Driver.Missions.EnumerateByVoyageAsync(voyage.Id).ConfigureAwait(false);
                     Mission? coreWorker = afterArchitect.FirstOrDefault(m => m.Title == "Add core model properties [Worker]");
@@ -1790,6 +1800,7 @@ namespace Test.Shared.Suites.Services
                     Captain? activeWorkerCaptain = await testDb.Driver.Captains.ReadAsync(coreWorker.CaptainId!).ConfigureAwait(false);
                     missionService.OnGetMissionOutput = _ => "core worker complete\n[ARMADA:RESULT] COMPLETE";
                     await missionService.HandleCompletionAsync(activeWorkerCaptain!, coreWorker.Id).ConfigureAwait(false);
+                    await dispatcher.DispatchAsync().ConfigureAwait(false);
 
                     coreTest = await testDb.Driver.Missions.ReadAsync(coreTest!.Id).ConfigureAwait(false);
                     backendWorker = await testDb.Driver.Missions.ReadAsync(backendWorker.Id).ConfigureAwait(false);
@@ -1799,6 +1810,7 @@ namespace Test.Shared.Suites.Services
                     Captain? activeTestCaptain = await testDb.Driver.Captains.ReadAsync(coreTest.CaptainId!).ConfigureAwait(false);
                     missionService.OnGetMissionOutput = _ => "core tests complete\n[ARMADA:RESULT] COMPLETE";
                     await missionService.HandleCompletionAsync(activeTestCaptain!, coreTest.Id).ConfigureAwait(false);
+                    await dispatcher.DispatchAsync().ConfigureAwait(false);
 
                     coreJudge = await testDb.Driver.Missions.ReadAsync(coreJudge.Id).ConfigureAwait(false);
                     backendWorker = await testDb.Driver.Missions.ReadAsync(backendWorker.Id).ConfigureAwait(false);
@@ -1819,6 +1831,7 @@ namespace Test.Shared.Suites.Services
                         "[ARMADA:VERDICT] PASS\n" +
                         "Upstream chain is approved.\n";
                     await missionService.HandleCompletionAsync(activeJudgeCaptain!, coreJudge.Id).ConfigureAwait(false);
+                    await dispatcher.DispatchAsync().ConfigureAwait(false);
 
                     coreJudge = await testDb.Driver.Missions.ReadAsync(coreJudge.Id).ConfigureAwait(false);
                     backendWorker = await testDb.Driver.Missions.ReadAsync(backendWorker.Id).ConfigureAwait(false);
@@ -3329,6 +3342,7 @@ namespace Test.Shared.Suites.Services
                     IDockService dockService = new DockService(logging, testDb.Driver, settings, git);
                     ICaptainService captainService = new CaptainService(logging, testDb.Driver, settings, git, dockService);
                     MissionService missionService = new MissionService(logging, testDb.Driver, settings, dockService, captainService);
+                    DispatchWakeProbe dispatcher = new DispatchWakeProbe(logging, testDb.Driver, settings, captainService, missionService, dockService);
                     captainService.OnLaunchAgent = (Captain c, Mission m, Dock d) => Task.FromResult(2000 + git.WorktreeCalls.Count);
 
                     Vessel vessel = new Vessel("branch-backfill-vessel", "https://github.com/test/repo.git");
@@ -3382,6 +3396,7 @@ namespace Test.Shared.Suites.Services
                     missionService.OnGetMissionOutput = _ => "worker complete\n[ARMADA:RESULT] COMPLETE";
 
                     await missionService.HandleCompletionAsync(workerCaptain, worker.Id).ConfigureAwait(false);
+                    await dispatcher.DispatchAsync().ConfigureAwait(false);
 
                     Mission? completedWorker = await testDb.Driver.Missions.ReadAsync(worker.Id).ConfigureAwait(false);
                     Mission? handedOffTest = await testDb.Driver.Missions.ReadAsync(testEngineer.Id).ConfigureAwait(false);

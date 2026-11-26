@@ -71,6 +71,12 @@ Conductor) with Opus and GPT-6.1 reliable. The work is tracked item by item in `
   no longer quietly flattened: the Architect gets a repair turn naming each mission, and the plan fails as invalid
   output if it is still wrong. A voyage request with a `BranchStrategy` but no `ParentKey` is rejected. Ownership
   overlaps between missions that can run at once are reported for every dispatch; only contract v4 rejects them (RS-4.4).
+- **One dispatcher, woken by events.** The Admiral has a single dispatch pass. Completion, review, cancel, a new
+  voyage with waiting missions, a Harbor linking, and an endpoint breaker reopening wake it at once instead of
+  waiting for the 10 s heartbeat, which stays as a safety net. Wakes raised together collapse into one pass, and a
+  completing mission never waits for dispatch. The separate head-of-queue dispatch that ran inside completion, and
+  assigned only one mission, is gone: one pass now fills every free captain. Background launches stop with the
+  server instead of running on after shutdown (RS-4.5).
 - **Recovery state survives a restart.** Endpoint circuit breakers, launch backoff (with the captains that failed to
   start the mission), the start of a transient outage, and escalation rule cooldowns were kept only in memory, so a
   restart sent missions straight back to a failing endpoint, relaunched a broken captain at once, granted an outage a

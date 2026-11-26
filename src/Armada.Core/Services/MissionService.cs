@@ -83,6 +83,18 @@ namespace Armada.Core.Services
         /// </summary>
         public IBlackBoxCapture? BlackBox { get; set; }
 
+        /// <summary>
+        /// Wakes the Admiral dispatcher (RS-4.5). Raised when a mission completes, is reviewed, or frees its captain. It must
+        /// return at once: completion never waits for dispatch. Null when no dispatcher is wired (the heartbeat still runs).
+        /// </summary>
+        public Action? DispatchRequested { get; set; }
+
+        /// <summary>
+        /// Cancelled when the Admiral shuts down. Background dock provisioning and launches run under it instead of
+        /// CancellationToken.None, so shutdown does not leave a launch running against a disposed database.
+        /// </summary>
+        public CancellationToken ShutdownToken { get; set; } = CancellationToken.None;
+
         #endregion
 
         #region Private-Members
@@ -805,7 +817,8 @@ namespace Armada.Core.Services
                 string deferredMissionId = mission.Id;
                 Task background = Task.Run(async () =>
                 {
-                    try { await ProvisionAndLaunchAsync(CancellationToken.None).ConfigureAwait(false); }
+                    try { await ProvisionAndLaunchAsync(ShutdownToken).ConfigureAwait(false); }
+                    catch (OperationCanceledException) when (ShutdownToken.IsCancellationRequested) { _Logging.Info(_Header + "background launch of mission " + deferredMissionId + " stopped by shutdown"); }
                     catch (Exception ex) { _Logging.Warn(_Header + "background launch of mission " + deferredMissionId + " failed: " + ex.Message); }
                     finally { _InFlightAssignments.TryRemove(deferredMissionId, out _); }
                 });
@@ -1133,6 +1146,7 @@ namespace Armada.Core.Services
                     {
                         state.OpenUntilUtc = DateTime.UtcNow.Add(_EndpointBreakerOpenFor);
                         _Logging.Warn(_Header + "endpoint " + endpoint.BaseUrl + " failed " + state.ConsecutiveFailures + " run(s) in a row; no new missions go to it until " + state.OpenUntilUtc.Value.ToString("o"));
+                        ScheduleDispatchAfter(_EndpointBreakerOpenFor);
                     }
                 }
                 snapshot.ConsecutiveFailures = state.ConsecutiveFailures;
@@ -1486,7 +1500,7 @@ namespace Armada.Core.Services
             }
 
             await ReleaseCaptainAfterCompletionAsync(captain, mission.Id).ConfigureAwait(false);
-            await DispatchPendingMissionsAsync(token).ConfigureAwait(false);
+            RequestDispatch();
         }
 
         private string AppendRepairHistory(string reason, Mission mission)
@@ -2127,20 +2141,6 @@ namespace Armada.Core.Services
             {
                 _Logging.Warn(_Header + "error reclaiming dock " + dockId + ": " + reclaimEx.Message);
             }
-        }
-
-        private async Task DispatchPendingMissionsAsync(CancellationToken token)
-        {
-            List<Mission> pendingMissions = await _Database.Missions.EnumerateByStatusAsync(MissionStatusEnum.Pending, token).ConfigureAwait(false);
-            if (!pendingMissions.Any()) return;
-
-            Mission nextMission = pendingMissions.OrderBy(m => m.Priority).ThenBy(m => m.CreatedUtc).First();
-            if (String.IsNullOrEmpty(nextMission.VesselId)) return;
-
-            Vessel? vessel = await _Database.Vessels.ReadAsync(nextMission.VesselId, token).ConfigureAwait(false);
-            if (vessel == null) return;
-
-            await TryAssignAsync(nextMission, vessel, token).ConfigureAwait(false);
         }
 
         private static string? NormalizeReviewComment(string? comment)

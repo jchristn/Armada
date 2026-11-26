@@ -66,7 +66,7 @@ namespace Armada.Core.Services
                     await ApplyConditionalFeedbackToNextStagesAsync(mission, mission.ReviewComment!, token).ConfigureAwait(false);
                 }
 
-                await DispatchPendingMissionsAsync(token).ConfigureAwait(false);
+                RequestDispatch();
                 await UpdateVoyageTerminalStatusAsync(mission.VoyageId, token).ConfigureAwait(false);
 
                 Mission? refreshed = await _Database.Missions.ReadAsync(mission.Id, token).ConfigureAwait(false);
@@ -103,7 +103,7 @@ namespace Armada.Core.Services
             Mission? afterApproval = await _Database.Missions.ReadAsync(mission.Id, token).ConfigureAwait(false);
             await ReclaimMissionDockAsync(dock.Id, token,
                 afterApproval?.Status == MissionStatusEnum.PullRequestOpen ? "pull request opened: the branch is published" : null).ConfigureAwait(false);
-            await DispatchPendingMissionsAsync(token).ConfigureAwait(false);
+            RequestDispatch();
             await UpdateVoyageTerminalStatusAsync(mission.VoyageId, token).ConfigureAwait(false);
 
             Mission? landed = await _Database.Missions.ReadAsync(mission.Id, token).ConfigureAwait(false);

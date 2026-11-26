@@ -645,7 +645,7 @@ namespace Armada.Core.Services
                 await TryRejectNoOpCompletionAsync(mission, dock, token).ConfigureAwait(false))
             {
                 await ReleaseCaptainAfterCompletionAsync(captain, mission.Id).ConfigureAwait(false);
-                await DispatchPendingMissionsAsync(token).ConfigureAwait(false);
+                RequestDispatch();
                 return;
             }
 
@@ -655,7 +655,7 @@ namespace Armada.Core.Services
                 await TryFailMissionForBoundaryViolationAsync(mission, dock, token).ConfigureAwait(false))
             {
                 await ReleaseCaptainAfterCompletionAsync(captain, mission.Id).ConfigureAwait(false);
-                await DispatchPendingMissionsAsync(token).ConfigureAwait(false);
+                RequestDispatch();
                 return;
             }
 
@@ -999,7 +999,7 @@ namespace Armada.Core.Services
             // finalize an older mission using a captain record that has already moved on.
             await ReleaseCaptainAfterCompletionAsync(captain, mission.Id).ConfigureAwait(false);
 
-            await DispatchPendingMissionsAsync(token).ConfigureAwait(false);
+            RequestDispatch();
         }
 
         #endregion

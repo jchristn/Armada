@@ -557,11 +557,20 @@ routing; a renamed Architect slice breaks fan-out recovery. Everything a program
   ArchitectPlanParser `invalid_dependencies_are_rejected` and `validator_rules_have_typed_codes`, PipelineDispatch
   `marker_plan_with_bad_parent_never_fans_out`, MissionHierarchy dispatch rejects a parentless `BranchStrategy`.
   SQLite affected suites: 723 tests, 0 failed, 6 skipped, then PipelineDispatch with the new case: 49 of 49.
-- [ ] **RS-4.5** One dispatcher. Delete `MissionService.DispatchPendingMissionsAsync` (`MissionService.cs:2109`), the
+- [x] **RS-4.5** One dispatcher. Delete `MissionService.DispatchPendingMissionsAsync` (`MissionService.cs:2109`), the
   head-of-queue synchronous copy. The Admiral dispatcher runs on a coalescing wake signal raised by mission create,
   completion, review, cancel, captain freed, endpoint breaker closed, and Harbor connect; the 10 s heartbeat stays as
   a safety net. Launches always run in the background with a shutdown-aware token (not `CancellationToken.None`,
-  `MissionService.cs:792`). Evidence:
+  `MissionService.cs:792`). Evidence: `DispatchWakeSignal` (a SemaphoreSlim(0,1) that coalesces); `AdmiralService.RequestDispatch`, `StartDispatcher` and
+  `DispatchOnceAsync`, with every pass serialized by `_DispatchGate` (completion paths never take it). Wakes come from
+  `MissionService.DispatchRequested` (completion, review), `MissionTransitions.DispatchWake` (every status change except
+  Assigned and InProgress, which covers cancel), `VoyageCreationService.DispatchRequested` (a voyage left Pending),
+  `HarborConnectionManager.OnLinked`, and a timer when an endpoint breaker opens. `MissionService.ShutdownToken`
+  replaces `CancellationToken.None` for background launches. Captain creation is left to the heartbeat. Tests:
+  SequentialDispatch `dispatch_wake_coalesces`, `completion_wakes_dispatcher_without_waiting`,
+  `background_launch_stops_on_shutdown`; 11 cases that relied on inline re-dispatch now assert the wake and run one pass
+  (`DispatchWakeProbe`). The fan-out case now allows the cloned worker to start in the same pass (one pass fills every
+  free captain). SQLite affected suites: 813 tests, 0 failed, 6 skipped.
 - [ ] **RS-4.6** Admission pipeline. Ordered gates (readiness, dependency, barrier, global capacity, persona routing,
   captain eligibility, runtime and endpoint capacity, usage selection, placement), each returning a typed
   `MissionAssignmentBlocker`. Dispatch, `DescribePendingReasonAsync`, `_PlacementWaitReasons`, and

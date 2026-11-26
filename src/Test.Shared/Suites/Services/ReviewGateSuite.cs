@@ -47,7 +47,10 @@ namespace Test.Shared.Suites.Services
             {
                 using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync();
                 ReviewScenario scenario = await CreateScenarioAsync(testDb.Driver, true, approvalOptions: new RunApprovalOptions { ApproveAll = true }).ConfigureAwait(false);
+                long wakesBefore = scenario.Admiral.DispatchWakeRequests;
                 await scenario.Missions.HandleCompletionAsync(scenario.WorkerCaptain, scenario.WorkerMission.Id).ConfigureAwait(false);
+                AssertTrue(scenario.Admiral.DispatchWakeRequests > wakesBefore, "completion wakes the dispatcher");
+                await scenario.Admiral.DispatchOnceAsync().ConfigureAwait(false);
                 Mission reviewed = (await testDb.Driver.Missions.ReadAsync(scenario.WorkerMission.Id).ConfigureAwait(false))!;
                 AssertEqual(MissionStatusEnum.WorkProduced, reviewed.Status);
                 AssertFalse(reviewed.RequiresReview);
@@ -118,7 +121,10 @@ namespace Test.Shared.Suites.Services
                     beforeApprove.FailureReason = "stale failure";
                     await testDb.Driver.Missions.UpdateAsync(beforeApprove).ConfigureAwait(false);
 
+                    long wakesBefore = scenario.Admiral.DispatchWakeRequests;
                     await scenario.Missions.ApproveReviewAsync(scenario.WorkerMission.Id, "usr_reviewer", "Looks good").ConfigureAwait(false);
+                    AssertTrue(scenario.Admiral.DispatchWakeRequests > wakesBefore, "approval wakes the dispatcher");
+                    await scenario.Admiral.DispatchOnceAsync().ConfigureAwait(false);
 
                     Mission? approved = await testDb.Driver.Missions.ReadAsync(scenario.WorkerMission.Id).ConfigureAwait(false);
                     Mission? downstream = await testDb.Driver.Missions.ReadAsync(scenario.DownstreamMission!.Id).ConfigureAwait(false);

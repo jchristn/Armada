@@ -216,6 +216,10 @@ namespace Armada.Core.Services
         private IEscalationService? _Escalation;
         private readonly StageOutcomeService _StageOutcomes;
         private bool _RetryDispatchNeeded = false;
+        private readonly DispatchWakeSignal _DispatchWake = new DispatchWakeSignal();
+        // One dispatch pass at a time, whether the heartbeat or a wake started it. Completion paths never take it.
+        private readonly SemaphoreSlim _DispatchGate = new SemaphoreSlim(1, 1);
+        private Task? _DispatcherTask = null;
 
         #endregion
 
@@ -258,6 +262,8 @@ namespace Armada.Core.Services
             _Escalation = escalation;
             // DockHosts is assigned after construction, so the provenance probe resolves the host on each probe.
             _StageOutcomes = new StageOutcomeService(_Database, _Logging, new StageProvenanceProbe(_Logging, ProvenanceCommandsFor), () => (_Missions as MissionService)?.DockHosts);
+            if (_Missions is MissionService wired) wired.DispatchRequested = RequestDispatch;
+            _VoyageCreation.DispatchRequested = RequestDispatch;
         }
 
         #endregion
@@ -325,6 +331,7 @@ namespace Armada.Core.Services
                     {
                         _Logging.Warn(_Header + "mission " + mission.Id + " created but could not be assigned to any captain");
                         _RetryDispatchNeeded = true;
+                        RequestDispatch();
                     }
                 }
                 else
@@ -496,6 +503,40 @@ namespace Armada.Core.Services
                     _Logging.Warn(_Header + "error stopping agent for captain " + captain.Id + " on shutdown: " + ex.ToString());
                 }
             }
+        }
+
+        /// <summary>
+        /// Ask the dispatcher for a pass (RS-4.5). Returns at once; requests made while a pass is pending coalesce into one.
+        /// Raised by mission create, completion, review, cancel, a freed captain, an endpoint breaker reopening, and a
+        /// Harbor linking. Without a running dispatcher (see StartDispatcher) the heartbeat still dispatches.
+        /// </summary>
+        public void RequestDispatch()
+        {
+            _DispatchWake.Request();
+        }
+
+        /// <summary>Wake requests raised since start, including coalesced ones.</summary>
+        public long DispatchWakeRequests => _DispatchWake.Requests;
+
+        /// <summary>
+        /// Run one dispatch pass now, serialized with the heartbeat and the dispatcher loop. Used at startup and by tests.
+        /// </summary>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>True when the pass found pending missions and capacity to try them.</returns>
+        public Task<bool> DispatchOnceAsync(CancellationToken token = default)
+        {
+            return DispatchPendingMissionsAsync(token);
+        }
+
+        /// <summary>
+        /// Start the dispatcher loop: one pass per coalesced wake until the token is cancelled. Calling it again while it
+        /// runs does nothing.
+        /// </summary>
+        /// <param name="token">Stops the loop; also the token of each pass.</param>
+        public void StartDispatcher(CancellationToken token)
+        {
+            if (_DispatcherTask != null && !_DispatcherTask.IsCompleted) return;
+            _DispatcherTask = Task.Run(() => RunDispatcherAsync(token));
         }
 
         /// <inheritdoc />
@@ -759,7 +800,7 @@ namespace Armada.Core.Services
                 _Logging.Info(_Header + "startup cleanup: reset " + resetCount + " stale captain(s) to Idle");
 
                 // Dispatch any pending missions that were freed up
-                await DispatchPendingMissionsAsync(token).ConfigureAwait(false);
+                RequestDispatch();
             }
         }
 
@@ -1012,7 +1053,7 @@ namespace Armada.Core.Services
                     && mission.RedispatchAttempts < InterruptedRedispatchLimit)
                 {
                     await HandleInterruptedProcessExitAsync(captain, mission, missionId, exitCode.Value, token).ConfigureAwait(false);
-                    await DispatchPendingMissionsAsync(token).ConfigureAwait(false);
+                    RequestDispatch();
                     return;
                 }
 
@@ -1040,7 +1081,7 @@ namespace Armada.Core.Services
                     && mission != null
                     && await TryEscalateToPlannerAsync(captain, mission, failureReason, capture, token).ConfigureAwait(false))
                 {
-                    await DispatchPendingMissionsAsync(token).ConfigureAwait(false);
+                    RequestDispatch();
                     return;
                 }
 
@@ -1057,7 +1098,7 @@ namespace Armada.Core.Services
             }
 
             // Try to dispatch any pending missions now that capacity may have freed up
-            await DispatchPendingMissionsAsync(token).ConfigureAwait(false);
+            RequestDispatch();
         }
 
         /// <summary>
@@ -2175,7 +2216,36 @@ namespace Armada.Core.Services
             return "assignment preconditions are not yet met (captain routing, vessel path configuration, or a transient in-flight assignment)";
         }
 
+        private async Task RunDispatcherAsync(CancellationToken token)
+        {
+            while (!token.IsCancellationRequested)
+            {
+                try
+                {
+                    await _DispatchWake.WaitAsync(token).ConfigureAwait(false);
+                    await DispatchPendingMissionsAsync(token).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (token.IsCancellationRequested)
+                {
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    // A failed pass is retried on the next wake or heartbeat; the loop itself never stops early.
+                    _Logging.Warn(_Header + "dispatch pass error: " + ex.ToString());
+                }
+            }
+        }
+
+        // The one dispatch pass (RS-4.5), serialized by _DispatchGate. The heartbeat passes its pending snapshot.
         private async Task<bool> DispatchPendingMissionsAsync(CancellationToken token, List<Mission>? snapshot = null)
+        {
+            await _DispatchGate.WaitAsync(token).ConfigureAwait(false);
+            try { return await DispatchPassAsync(token, snapshot).ConfigureAwait(false); }
+            finally { _DispatchGate.Release(); }
+        }
+
+        private async Task<bool> DispatchPassAsync(CancellationToken token, List<Mission>? snapshot)
         {
             List<Mission> pendingMissions = snapshot ?? await _Database.Missions.EnumerateByStatusAsync(MissionStatusEnum.Pending, token).ConfigureAwait(false);
             if (pendingMissions.Count == 0)

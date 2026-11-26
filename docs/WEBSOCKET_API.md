@@ -2184,7 +2184,8 @@ Get a mission by ID.
 
 Create a new mission and dispatch it for assignment. When no captain can take it yet, the mission stays `Pending` and
 the reply carries an extra top-level `warning` string ("Mission created but could not be assigned to any captain...");
-it is retried on the next health check cycle.
+it is retried as soon as capacity frees (a completion, review, or cancel wakes the dispatcher) and at the latest
+on the next health check cycle.
 
 **Request:**
 

@@ -55,6 +55,19 @@ namespace Armada.Core.Services
         private void NoteWait(Mission mission, MissionWaitGateEnum gate, string? detail)
             => _AttemptWaits[mission.Id] = new MissionWaitObservation { Mission = mission, Gate = gate, Detail = detail };
 
+        private void RequestDispatch()
+        {
+            try { DispatchRequested?.Invoke(); }
+            catch (Exception ex) { _Logging.Warn(_Header + "dispatch wake failed: " + ex.Message); }
+        }
+
+        // Wake the dispatcher when a breaker reopens to new missions, so its waiting missions do not wait for the heartbeat.
+        private void ScheduleDispatchAfter(TimeSpan delay)
+        {
+            CancellationToken shutdown = ShutdownToken;
+            _ = Task.Delay(delay + TimeSpan.FromSeconds(1), shutdown).ContinueWith(t => { if (!t.IsCanceled) RequestDispatch(); }, TaskScheduler.Default);
+        }
+
         private void NoteLeftPending(Mission mission)
             => _AttemptWaits[mission.Id] = new MissionWaitObservation { Mission = mission };
 

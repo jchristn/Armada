@@ -32,6 +32,12 @@ namespace Armada.Core.Services
         /// </summary>
         public Func<string, CancellationToken, Task>? VoyageChanged { get; set; } = null;
 
+        /// <summary>
+        /// Wakes the Admiral dispatcher (RS-4.5) after a transition that can free capacity or unblock a dependent: every
+        /// status except Assigned and InProgress, which only consume capacity. Must return at once. Null when not wired.
+        /// </summary>
+        public Action? DispatchWake { get; set; } = null;
+
         #endregion
 
         #region Private-Members
@@ -126,6 +132,12 @@ namespace Armada.Core.Services
                 mission.Status = stored?.Status ?? previous;
                 if (stored != null) mission.LastUpdateUtc = stored.LastUpdateUtc;
                 return false;
+            }
+
+            if (previous != request.To && request.To != MissionStatusEnum.Assigned && request.To != MissionStatusEnum.InProgress && DispatchWake != null)
+            {
+                try { DispatchWake(); }
+                catch (Exception e) { _Logging?.Warn(_Header + "dispatch wake failed: " + e.Message); }
             }
 
             if (previous != request.To)

@@ -36,6 +36,11 @@ namespace Armada.Core.Services
         public bool LaunchInBackground { get; set; } = false;
 
         /// <summary>
+        /// Wakes the Admiral dispatcher when a new voyage leaves missions Pending (RS-4.5). Must return at once.
+        /// </summary>
+        public Action? DispatchRequested { get; set; } = null;
+
+        /// <summary>
         /// Objective service used to link a voyage to its objective, or null for a private instance.
         /// </summary>
         public ObjectiveService? Objectives { get; set; } = null;
@@ -441,6 +446,8 @@ namespace Armada.Core.Services
                     voyage.LastUpdateUtc = DateTime.UtcNow;
                     voyage = await _Database.Voyages.UpdateAsync(voyage, token).ConfigureAwait(false);
                 }
+
+                if (created.Any(m => m.Status == MissionStatusEnum.Pending)) DispatchRequested?.Invoke();
 
                 voyage.OverlapWarnings = voyageWarnings.Count > 0 ? voyageWarnings.Take(BlackBoxInsightLimits.MaxOverlapWarnings).ToList() : null;
                 voyage.BriefLintWarnings = voyageLint.Count > 0 ? voyageLint.Take(BlackBoxInsightLimits.MaxLintFindings).ToList() : null;

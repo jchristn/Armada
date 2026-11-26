@@ -342,6 +342,9 @@ namespace Armada.Server
             // Dispatch returns once a mission is admitted; dock provisioning and launch continue in the background, so neither
             // create requests nor the health check wait on per-repository git work.
             admiralService.LaunchInBackground = true;
+            // One dispatcher (RS-4.5): status changes wake it, and background launches stop with the server.
+            missionService.ShutdownToken = _TokenSource.Token;
+            _Transitions.DispatchWake = admiralService.RequestDispatch;
             // Concurrency limit overruns reach the owning tenant's sockets; one without a tenant reaches only global admins.
             admiralService.OnConcurrencyEvent = evt => _WebSocketHub?.BroadcastToTenant(evt.TenantId, evt.EventType, evt.Message, evt);
             _Admiral = admiralService;
@@ -889,6 +892,8 @@ namespace Armada.Server
                 _AskTurns.HarborCheckouts = harborCheckouts;
                 _HarborConnectionManager.OnLinked = harborCheckouts.Warm;
             }
+            Action<string>? onLinked = _HarborConnectionManager.OnLinked;
+            _HarborConnectionManager.OnLinked = harborId => { onLinked?.Invoke(harborId); admiralService.RequestDispatch(); };
             _AgentLifecycle.SetCliPermissionService(_CliPermissions);
             _WebSocketHub.SetCliPermissionService(_CliPermissions);
             _WebSocketHub.SetMissionService(_MissionService);
@@ -1073,6 +1078,7 @@ namespace Armada.Server
 
             // Start health check loop
             _HealthCheckTask = HealthCheckLoopAsync(_TokenSource.Token);
+            admiralService.StartDispatcher(_TokenSource.Token);
             // Usage capture runs on its own loop: captures must stay fresh even while a health check is busy, because
             // captain selection treats stale usage as unknown.
             _UsageCaptureTask = UsageCaptureLoopAsync(_TokenSource.Token);
