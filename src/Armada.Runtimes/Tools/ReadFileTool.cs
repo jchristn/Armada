@@ -27,7 +27,7 @@ namespace Armada.Runtimes.Tools
         /// <summary>
         /// A human-readable description of what this tool does.
         /// </summary>
-        public string Description => "Reads a file from the filesystem and returns its contents with line numbers (like cat -n). "
+        public string Description => "Reads a file from the filesystem and returns its contents with line numbers (like cat -n); the numbers are for display, so leave them out of edits. "
             + "Defaults to pages of at most 200 lines and 24,000 characters with continuation instructions. CLAUDE.md and AGENTS.md are read completely by default. Explicit limit requests retain full/range behavior.";
 
         /// <summary>

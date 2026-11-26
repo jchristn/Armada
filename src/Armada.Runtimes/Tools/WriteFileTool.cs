@@ -85,6 +85,16 @@ namespace Armada.Runtimes.Tools
                 }
 
                 string normalizedContent = TextFileCodec.NormalizeToLf(content);
+                if (LineNumberPrefix.NewTextHasPrefixes(format.LfContent, normalizedContent))
+                {
+                    return new ToolResult
+                    {
+                        ToolCallId = toolCallId,
+                        Success = false,
+                        Content = JsonSerializer.Serialize(new { success = false, error = LineNumberPrefix.ErrorCode, message = LineNumberPrefix.Message("content", "content") })
+                    };
+                }
+
                 await TextFileCodec.WriteAsync(resolvedPath, normalizedContent, format, cancellationToken).ConfigureAwait(false);
 
                 int lineCount = normalizedContent.Split('\n').Length;

@@ -119,6 +119,16 @@ namespace Armada.Runtimes.Tools
 
                     if (matchCount == 0)
                     {
+                        if (LineNumberPrefix.OldStringHasPrefixes(lfContent, lfOldString))
+                        {
+                            return new ToolResult
+                            {
+                                ToolCallId = toolCallId,
+                                Success = false,
+                                Content = JsonSerializer.Serialize(new { success = false, error = LineNumberPrefix.ErrorCode, edit_index = i, message = "Edit at index " + i + ": " + LineNumberPrefix.Message("old_string") })
+                            };
+                        }
+
                         return new ToolResult
                         {
                             ToolCallId = toolCallId,
@@ -130,6 +140,16 @@ namespace Armada.Runtimes.Tools
                                 edit_index = i,
                                 message = $"Edit at index {i}: old_string was not found in the original file content."
                             })
+                        };
+                    }
+
+                    if (LineNumberPrefix.NewTextHasPrefixes(lfContent, TextFileCodec.NormalizeToLf(edits[i].NewString)))
+                    {
+                        return new ToolResult
+                        {
+                            ToolCallId = toolCallId,
+                            Success = false,
+                            Content = JsonSerializer.Serialize(new { success = false, error = LineNumberPrefix.ErrorCode, edit_index = i, message = "Edit at index " + i + ": " + LineNumberPrefix.Message("new_string") })
                         };
                     }
 

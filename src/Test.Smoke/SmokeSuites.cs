@@ -174,6 +174,7 @@ namespace Test.Smoke
             "Runtimes.ClaudeCodeRuntime",
             "Runtimes.CodexRuntime",
             "Runtimes.CursorRuntime",
+            "Runtimes.EditLineNumberPrefix",
             "Runtimes.GeminiRuntime",
             "Runtimes.HarborProcessLedger",
             "Runtimes.LocalHostProcessExecutor",

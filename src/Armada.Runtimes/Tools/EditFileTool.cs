@@ -44,7 +44,7 @@ namespace Armada.Runtimes.Tools
                 old_string = new
                 {
                     type = "string",
-                    description = "The exact string to find and replace."
+                    description = "The exact string to find and replace, as it appears in the file (without the line numbers read_file shows)."
                 },
                 new_string = new
                 {
@@ -100,6 +100,16 @@ namespace Armada.Runtimes.Tools
 
                 if (matchPositions.Count == 0)
                 {
+                    if (LineNumberPrefix.OldStringHasPrefixes(lfContent, lfOldString))
+                    {
+                        return new ToolResult
+                        {
+                            ToolCallId = toolCallId,
+                            Success = false,
+                            Content = JsonSerializer.Serialize(new { success = false, error = LineNumberPrefix.ErrorCode, message = LineNumberPrefix.Message("old_string") })
+                        };
+                    }
+
                     return new ToolResult
                     {
                         ToolCallId = toolCallId,
@@ -138,6 +148,16 @@ namespace Armada.Runtimes.Tools
                                 suggestion = "Provide more surrounding context in old_string to uniquely identify the target location."
                             }
                         })
+                    };
+                }
+
+                if (LineNumberPrefix.NewTextHasPrefixes(lfContent, lfNewString))
+                {
+                    return new ToolResult
+                    {
+                        ToolCallId = toolCallId,
+                        Success = false,
+                        Content = JsonSerializer.Serialize(new { success = false, error = LineNumberPrefix.ErrorCode, message = LineNumberPrefix.Message("new_string") })
                     };
                 }
 
