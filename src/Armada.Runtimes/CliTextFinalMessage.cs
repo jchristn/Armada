@@ -4,7 +4,7 @@ namespace Armada.Runtimes
     using System.Text;
 
     /// <summary>
-    /// Final-message capture for CLIs that run in plain-text mode (Gemini, Cursor, OpenCode). In that mode stdout carries
+    /// Final-message capture for CLIs that run in plain-text mode (Gemini, Cursor). In that mode stdout carries
     /// the agent's reply and stderr carries tool progress and diagnostics, so on a clean exit the collected stdout is
     /// written as the launch's final-message file, as Claude Code, Codex and Mux already do. A mission's verdict, plan and
     /// handoff are then read from the reply instead of from a transcript mixed with stderr. A file the CLI wrote itself is

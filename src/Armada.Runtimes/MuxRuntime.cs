@@ -170,12 +170,20 @@ namespace Armada.Runtimes
             int? resolved = _Outcome.ResolveExitCode(exitCode);
             if (resolved != exitCode)
                 _Logging.Info(_Header + "mux exited " + exitCode + " but its run " + (_Outcome.RunStatus ?? "reported a fatal error") + "; reporting exit " + resolved);
-            if (resolved == 0 && _Outcome.Succeeded) WriteFinalMessageIfMissing(_FinalMessageFilePath, _Outcome.FinalAssistantText);
+            if (resolved == 0 && _Outcome.Succeeded)
+            {
+                WriteFinalMessageIfMissing(_FinalMessageFilePath, _Outcome.FinalAssistantText);
+                // mux writes --output-last-message itself on a clean exit; reasoning an open model left in it is removed.
+                if (StripReasoningFromFinalMessage(_FinalMessageFilePath))
+                    _Logging.Info(_Header + "removed model reasoning from the final message");
+            }
             return resolved;
         }
 
         /// <summary>
         /// Write a final message rebuilt from the stream to the final-message file when mux left it missing or empty.
+        /// Reasoning that leaked into the text (<see cref="ReasoningText"/>) is removed first; nothing is written when only
+        /// reasoning remains.
         /// </summary>
         /// <param name="finalMessageFilePath">The final-message file, or null.</param>
         /// <param name="text">The rebuilt final message, or null.</param>
@@ -183,12 +191,40 @@ namespace Armada.Runtimes
         public static bool WriteFinalMessageIfMissing(string? finalMessageFilePath, string? text)
         {
             if (String.IsNullOrEmpty(finalMessageFilePath) || String.IsNullOrWhiteSpace(text)) return false;
+            text = ReasoningText.Strip(text);
+            if (String.IsNullOrWhiteSpace(text)) return false;
             try
             {
                 if (File.Exists(finalMessageFilePath) && !String.IsNullOrWhiteSpace(File.ReadAllText(finalMessageFilePath))) return false;
                 string? directory = Path.GetDirectoryName(finalMessageFilePath);
                 if (!String.IsNullOrEmpty(directory)) Directory.CreateDirectory(directory);
                 File.WriteAllText(finalMessageFilePath, text);
+                return true;
+            }
+            catch (Exception)
+            {
+                // The final message is optional; callers fall back to the streamed output.
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Remove leaked model reasoning (<see cref="ReasoningText"/>) from a final-message file the CLI wrote itself. A
+        /// file that is missing, empty, or holds only reasoning is left as it is.
+        /// </summary>
+        /// <param name="finalMessageFilePath">The final-message file, or null.</param>
+        /// <returns>True when the file was rewritten.</returns>
+        public static bool StripReasoningFromFinalMessage(string? finalMessageFilePath)
+        {
+            if (String.IsNullOrEmpty(finalMessageFilePath)) return false;
+            try
+            {
+                if (!File.Exists(finalMessageFilePath)) return false;
+                string text = File.ReadAllText(finalMessageFilePath);
+                if (!ReasoningText.HasReasoning(text)) return false;
+                string stripped = ReasoningText.Strip(text);
+                if (String.IsNullOrWhiteSpace(stripped)) return false;
+                File.WriteAllText(finalMessageFilePath, stripped);
                 return true;
             }
             catch (Exception)

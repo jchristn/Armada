@@ -117,6 +117,21 @@ how to find out which ones matter.
 | D2 | **Tooling bugs.** The Mux BOM bug, a repository that tracks a generated file, a Codex sandbox that cannot run `dotnet`. | These hit every model but count against whichever model was running. |
 | D3 | **Orchestration bugs.** A duplicate relaunch on the same dock, a stage-check timeout shorter than the test run, an exit -1 reported as a restart (see `DECISIONS.md`). | Failures are recorded against the model, and its scorecard is wrong. |
 
+#### CLI runtime audit for open-model failure modes (RS-7.12)
+
+The API endpoint runtime absorbs text tool calls and reasoning leakage itself (RS-7.2, RS-7.6). Mux, OpenCode and pi
+run the model inside their own CLI, so Armada sees only the CLI's events and final message. Each gap and what was done:
+
+| Gap | Runtime | Status |
+|---|---|---|
+| Reasoning in the final message: a complete `<think>` block, a bare `</think>` from a Qwen3-style template, or an unclosed block | Mux, OpenCode, pi (and Gemini, Cursor) | Fixed. `ReasoningText.Strip` runs on every final message Armada writes (`MuxRuntime.WriteFinalMessageIfMissing`) and on the file Mux writes itself. A tag quoted in backticks or in the middle of a line is kept. pi and OpenCode already keep their separate thinking and `reasoning` parts out of the reply. |
+| The final message held raw JSON events, including `reasoning` and `error` events, because OpenCode was read as plain text although it runs with `--format json` | OpenCode | Fixed. `OpenCodeFinalMessage` rebuilds the reply from the `text` events after the last tool call. |
+| A failed model call is an `error` event on stdout, which never reached `RuntimeProviderErrorParser` (only stderr was read) | OpenCode | Fixed. `RuntimeProviderErrorParser.TryParseOpenCodeJsonLine` reads the status, an open-model message (RS-5.3) or the event's type; exit 0 after an unrecovered error event is a failure. |
+| `--dir` is rejected by OpenCode 2 (`Unrecognized flag: --dir`), so every launch failed | OpenCode | Fixed. The flag is dropped; the process already starts in the dock. |
+| `--variant` is rejected by OpenCode 2 (the variant moved to a `provider/model#variant` suffix) | OpenCode | Documented. Needs CLI version detection; leave reasoning effort Off for an OpenCode 2 captain. |
+| A text tool call (`<tool_call>`, `<function=...>`, fenced JSON) ends the run as the final message | Mux, OpenCode, pi | Documented. The CLI owns the tool loop and its session is gone when Armada reads the reply, so Armada cannot execute the call. The stage then lacks its completion line and goes through contract repair, retry or escalation; prefer the API endpoint runtime for a model that does this often. |
+| Provider error text classification | Mux, pi | No gap. Mux `llm_error` and pi error text reach the classifier's open-model message patterns, and a status is read from both. |
+
 ### E. The pipeline structure
 
 | # | Challenge | How it shows up |

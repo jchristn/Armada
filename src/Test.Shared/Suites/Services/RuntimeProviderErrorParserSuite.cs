@@ -182,13 +182,13 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
-            cases.Add(Case("text_cli_reply_becomes_final_message", "A Gemini, Cursor or OpenCode run that exits cleanly writes its stdout reply, not its stderr progress, as the final message; a failed run writes none", TestTags.Positive, () =>
+            // OpenCode runs with --format json; its reply is rebuilt from text events (Services.OpenCodeRuntime).
+            cases.Add(Case("text_cli_reply_becomes_final_message", "A Gemini or Cursor run that exits cleanly writes its stdout reply, not its stderr progress, as the final message; a failed run writes none", TestTags.Positive, () =>
             {
                 if (OperatingSystem.IsWindows()) return;
                 foreach (Func<LoggingModule, string, BaseAgentRuntime> factory in new Func<LoggingModule, string, BaseAgentRuntime>[] {
                     (log, stub) => new GeminiRuntime(log) { ExecutablePath = stub },
-                    (log, stub) => new CursorRuntime(log) { ExecutablePath = stub },
-                    (log, stub) => new OpenCodeRuntime(log) { ExecutablePath = stub } })
+                    (log, stub) => new CursorRuntime(log) { ExecutablePath = stub } })
                 {
                     foreach (int exit in new[] { 0, 1 })
                     {

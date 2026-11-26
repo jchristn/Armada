@@ -51,7 +51,7 @@ namespace Armada.Runtimes
         #region Private-Members
 
         private string _ExecutablePath = "opencode";
-        private readonly CliTextFinalMessage _FinalMessage = new CliTextFinalMessage();
+        private readonly OpenCodeFinalMessage _FinalMessage = new OpenCodeFinalMessage();
 
         #endregion
 
@@ -98,9 +98,10 @@ namespace Armada.Runtimes
         #region Private-Methods
 
         /// <summary>
-        /// Recognize provider failures the CLI writes to stderr (an HTTP error status, a Google RPC status, a network
-        /// error) so a rate limit, an auth failure or an outage is classified instead of reported as a crash. Text-mode
-        /// stdout is the agent's own narration and is never parsed.
+        /// Recognize provider failures so a rate limit, an auth failure or an outage is classified instead of reported as a
+        /// crash. OpenCode runs with <c>--format json</c> and reports a failed model call as an <c>error</c> event on stdout
+        /// (<see cref="RuntimeProviderErrorParser.TryParseOpenCodeJsonLine"/>); stderr lines are read for an HTTP error
+        /// status, a Google RPC status or a network error. Text events are the agent's own narration and are never parsed.
         /// </summary>
         /// <param name="line">One output line.</param>
         /// <param name="fromStdout">True for a stdout line.</param>
@@ -110,13 +111,13 @@ namespace Armada.Runtimes
             if (fromStdout)
             {
                 _FinalMessage.Observe(line);
-                return null;
+                return RuntimeProviderErrorParser.TryParseOpenCodeJsonLine(line);
             }
             return RuntimeProviderErrorParser.TryParseCliStderrLine(line, "OpenCode");
         }
 
         /// <summary>
-        /// Start a launch: collect its stdout reply for the final-message file.
+        /// Start a launch: rebuild its reply from the stdout events for the final-message file.
         /// </summary>
         /// <param name="finalMessageFilePath">The launch's final-message file, or null.</param>
         protected override void BeginLaunch(string? finalMessageFilePath)
@@ -125,14 +126,15 @@ namespace Armada.Runtimes
         }
 
         /// <summary>
-        /// On a clean exit, write the stdout reply as the final message, so handoff reads the reply rather than a transcript.
+        /// On a clean exit, write the reply (the text events of the last turn, without reasoning or event JSON) as the
+        /// final message, so handoff reads the reply rather than a transcript. Exit 0 after an unrecovered error event is
+        /// reported as a failure (<see cref="OpenCodeFinalMessage.Complete"/>).
         /// </summary>
         /// <param name="exitCode">The process exit code, or null when unknown.</param>
-        /// <returns>The exit code, unchanged.</returns>
+        /// <returns>The resolved exit code.</returns>
         protected override int? ResolveExitCode(int? exitCode)
         {
-            _FinalMessage.Complete(exitCode);
-            return exitCode;
+            return _FinalMessage.Complete(exitCode);
         }
 
         /// <summary>

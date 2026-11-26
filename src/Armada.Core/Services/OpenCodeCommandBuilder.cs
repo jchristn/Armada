@@ -15,7 +15,7 @@ namespace Armada.Core.Services
         /// <summary>
         /// Build arguments for <c>opencode run</c> in JSONL-event mode.
         /// </summary>
-        /// <param name="workingDirectory">Directory to run in (passed as <c>--dir</c>).</param>
+        /// <param name="workingDirectory">Directory to run in; validated here, and set as the process's working directory by the runtime.</param>
         /// <param name="prompt">The message/prompt to send.</param>
         /// <param name="model">Optional <c>provider/model</c> identifier; omitted when null/blank.</param>
         /// <param name="variant">Optional reasoning variant (<c>minimal</c>/<c>high</c>); omitted when null/blank.</param>
@@ -62,8 +62,8 @@ namespace Armada.Core.Services
                 args.Add("--auto");
             }
 
-            args.Add("--dir");
-            args.Add(workingDirectory);
+            // No --dir: OpenCode 2 rejects it ("Unrecognized flag: --dir"), and the process already starts in the
+            // working directory, which every OpenCode version uses as the project directory.
 
             // The prompt is delivered on stdin by the runtime (OpenCodeRuntime.UsePromptStdin), not as a
             // positional argument, because on Windows the opencode executable is an npm ".cmd" wrapper and a

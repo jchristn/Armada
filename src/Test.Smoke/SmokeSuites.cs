@@ -316,6 +316,7 @@ namespace Test.Smoke
             "Services.ProxyRoutePolicyService",
             "Services.ProxySecurity",
             "Services.ReasoningEffort",
+            "Services.ReasoningText",
             "Services.RecorderSeeding",
             "Services.RecoveryPolicy",
             "Services.RecoveryPolicyEngine",

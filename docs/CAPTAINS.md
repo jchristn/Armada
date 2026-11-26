@@ -299,10 +299,17 @@ Guides: [INSTRUCTIONS_FOR_MUX.md](INSTRUCTIONS_FOR_MUX.md), [MUX_AS_ORCHESTRATOR
 ### OpenCode
 
 ```
-opencode run --format json [--model <model>] [--variant <variant>] [--thinking] [--auto] --dir <workingDirectory>
+opencode run --format json [--model <model>] [--variant <variant>] [--thinking] [--auto]
 ```
 
-`--auto` is omitted when the captain runs without auto-approve. OpenCode has no entry in the launch isolation planner, so `IsolateCaptainLaunch` does not isolate it (a mission with a
+The prompt goes to stdin and OpenCode runs in the dock working directory; there is no `--dir` flag, because OpenCode 2
+rejects it. `--auto` is omitted when the captain runs without auto-approve. The final message is rebuilt from the JSON
+events: the `text` events after the last `tool_use`, never `reasoning` or `error` events, with any leaked think block
+removed. A failed model call is an `error` event on stdout, read as a provider error (status, open-model message, or
+the event's own type such as `provider.no-route`); exit 0 after an error event with no later reply counts as a failure.
+OpenCode 2 also dropped `--variant` (the variant is now a `#variant` suffix on `--model`), so a captain with a reasoning
+effort set fails to launch on OpenCode 2 until Armada detects the CLI version; leave reasoning effort Off for an
+OpenCode 2 captain. OpenCode has no entry in the launch isolation planner, so `IsolateCaptainLaunch` does not isolate it (a mission with a
 mission-scoped token still gets the `OPENCODE_CONFIG_CONTENT` token binding); it always reads
 the user's `~/.config/opencode/opencode.json` (or `.jsonc`), where `armada mcp install` writes a `remote` entry under
 `mcp`. It is also missing from `armada doctor` runtime detection, as noted above.

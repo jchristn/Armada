@@ -38,7 +38,7 @@ You can edit the OpenCode config directly instead of using the CLI. Add an `mcp`
 OpenCode loads this config on startup, so the Armada tools are available to every interactive session and every headless `opencode run`:
 
 ```bash
-opencode run --format json --auto --dir . "what is the status of the fleet?"
+opencode run --format json --auto "what is the status of the fleet?"
 ```
 
 ### Option C -- stdio bridge (fallback)

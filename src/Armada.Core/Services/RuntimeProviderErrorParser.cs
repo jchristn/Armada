@@ -308,6 +308,29 @@ namespace Armada.Core.Services
             return error;
         }
 
+        /// <summary>
+        /// Try to read a provider error from one line of <c>opencode run --format json</c> output. OpenCode writes a
+        /// failed model call as an <c>error</c> event on stdout (for example
+        /// <c>{"type":"error","error":{"type":"provider.no-route","message":"Model unavailable: ..."}}</c>), not on stderr.
+        /// The status comes from <c>data.statusCode</c> or <c>statusCode</c>; the error type is an open-model failure the
+        /// message names (RS-5.3), otherwise the event's own kind.
+        /// </summary>
+        /// <param name="line">One stdout line.</param>
+        /// <returns>The provider error, or null when the line is not an OpenCode error event.</returns>
+        public static RuntimeProviderError? TryParseOpenCodeJsonLine(string? line)
+        {
+            if (!OpenCodeStreamEvent.TryParse(line, out OpenCodeStreamEvent? evt) || evt == null) return null;
+            string? message = evt.ProviderFailureMessage();
+            if (message == null) return null;
+
+            RuntimeProviderError error = new RuntimeProviderError();
+            error.HttpStatusCode = evt.ProviderFailureStatus();
+            error.Message = Shorten(message);
+            error.ErrorType = OpenModelErrorPatterns.Match(error.HttpStatusCode, message) ?? evt.ProviderFailureKind();
+            error.Reason = "OpenCode reported a provider error: " + error.Message;
+            return error;
+        }
+
         #endregion
 
         #region Private-Methods
