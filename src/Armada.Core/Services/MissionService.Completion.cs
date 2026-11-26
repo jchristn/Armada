@@ -347,9 +347,32 @@ namespace Armada.Core.Services
                 return true;
             }
 
-            // Retries exhausted: fail and surface to the operator inbox (LandingFailed/Failed feed it).
-            MissionStatusEnum noOpStatusBefore = mission.Status;
+            // Retries exhausted. RS-5.6: a repeated no-op or unfinished run escalates to the next captain on the ladder,
+            // which gets its own re-dispatches; past the last hop it fails to the operator inbox.
             string? noOpCaptainId = mission.CaptainId;
+            Captain? noOpCaptain = String.IsNullOrEmpty(noOpCaptainId) ? null : await _Database.Captains.ReadAsync(noOpCaptainId!, token).ConfigureAwait(false);
+            EscalationChoice? noOpEscalation = noOpCaptain == null ? null : await ChooseEscalationAsync(mission, noOpCaptainId, token).ConfigureAwait(false);
+            if (noOpCaptain != null && noOpEscalation != null)
+            {
+                int spent = mission.NoOpRedispatchAttempts;
+                mission.NoOpRedispatchAttempts = 0;
+                mission.PrUrl = null;
+                mission.CommitHash = null;
+                mission.DiffSnapshot = null;
+                mission.AgentOutput = null;
+                mission.TotalRuntimeMs = null;
+                string noOpReason = (unfinished ? "it repeatedly ended its run without a commit, a diff or the completion line" : "it repeatedly completed with no changes")
+                    + " after " + spent + " re-dispatch attempt(s)";
+                if (!await ApplyEscalationAsync(mission, noOpCaptain, noOpEscalation, noOpReason, token).ConfigureAwait(false)) return true;
+                if (!String.IsNullOrEmpty(mission.VesselId))
+                {
+                    Vessel? vessel = await _Database.Vessels.ReadAsync(mission.VesselId, token).ConfigureAwait(false);
+                    if (vessel != null) await TryAssignAsync(mission, vessel, token).ConfigureAwait(false);
+                }
+                return true;
+            }
+
+            MissionStatusEnum noOpStatusBefore = mission.Status;
             mission.FailureReason = unfinished
                 ? (CaptainBlockedContract.HasResultLine(mission.AgentOutput) || CaptainBlockedContract.IsReported(mission.AgentOutput)
                     ? "Unfinished completion: the captain repeatedly ended its run without a commit or a diff, after "

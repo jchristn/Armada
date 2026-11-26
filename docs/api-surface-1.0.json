@@ -10908,6 +10908,11 @@
           "required": false
         },
         {
+          "name": "escalationLadder",
+          "type": "array<object>",
+          "required": false
+        },
+        {
           "name": "name",
           "type": "string",
           "required": true
@@ -13038,7 +13043,7 @@
           "required": true
         }
       ],
-      "description": "Get one model profile visible to the caller (the model as served: runtime, provider, model and served context) with its capabilities, rendering overrides, recovery policy overrides (recovery) and the policy in effect for its captains (effectiveRecovery: maxResumes, unclassifiedResumes, transientGraceMinutes, judgeReworkRounds, outputRepairAttempts), notes and immutable revisions (runtime version, model digest, sampling, tool configuration, compatibleWith, firstSeenUtc), oldest first. Profiles are advisory: they do not set a captain's tier or change routing. A captain's modelProfileId points at its profile.",
+      "description": "Get one model profile visible to the caller (the model as served: runtime, provider, model and served context) with its capabilities, rendering overrides, recovery policy overrides (recovery) and the policy in effect for its captains (effectiveRecovery: maxResumes, unclassifiedResumes, transientGraceMinutes, judgeReworkRounds, outputRepairAttempts, escalateAfterResumes), notes and immutable revisions (runtime version, model digest, sampling, tool configuration, compatibleWith, firstSeenUtc), oldest first. Profiles are advisory: they do not set a captain's tier or change routing. A captain's modelProfileId points at its profile.",
       "experimental": false
     },
     {
@@ -17376,6 +17381,11 @@
         {
           "name": "description",
           "type": "string",
+          "required": false
+        },
+        {
+          "name": "escalationLadder",
+          "type": "array<object>",
           "required": false
         },
         {
@@ -28874,6 +28884,12 @@
       "experimental": false
     },
     {
+      "key": "escalateOnOpenEndpointBreaker",
+      "type": "bool",
+      "default": "false",
+      "experimental": false
+    },
+    {
       "key": "escalationRules",
       "type": "array<object>",
       "default": "[]",
@@ -29240,6 +29256,12 @@
       "key": "maxConcurrentMissions",
       "type": "int",
       "default": "0",
+      "experimental": false
+    },
+    {
+      "key": "maxEscalations",
+      "type": "int",
+      "default": "2",
       "experimental": false
     },
     {

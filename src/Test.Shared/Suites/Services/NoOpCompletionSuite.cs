@@ -139,6 +139,17 @@ namespace Test.Shared.Suites.Services
                 AssertContains("Unfinished completion", stored.FailureReason ?? "");
             }));
 
+            cases.Add(CaseAsync("repeated_noop_escalates_up_the_ladder", "RS-5.6: once the no-op re-dispatches are spent, the mission escalates to the next ladder rung with fresh re-dispatches instead of failing", TestTags.Reliability, async () =>
+            {
+                Mission stored = await CompleteStaleBranchAsync(new NoOpStaleBranchCase { EscalationLadder = true }).ConfigureAwait(false);
+                AssertNotEqual(MissionStatusEnum.Failed, stored.Status, "the repeated no-op is not failed while a rung remains");
+                AssertEqual(1, stored.EscalationCount);
+                AssertEqual("qwen3.8", stored.EscalatedFromModel);
+                AssertNotNull(stored.RequestedCaptainId, "pinned to the gpt-6.1 captain");
+                AssertEqual(0, stored.NoOpRedispatchAttempts, "the new captain gets its own re-dispatches");
+                AssertNull(stored.DiffSnapshot, "the no-op attempt's diff is cleared");
+            }));
+
             cases.Add(CaseAsync("new_commit_since_dock_start_is_not_noop", "A commit after dock start is not a no-op", TestTags.Positive, async () =>
             {
                 Mission stored = await CompleteStaleBranchAsync(new NoOpStaleBranchCase { CommitAfterStart = true }).ConfigureAwait(false);
@@ -310,6 +321,14 @@ namespace Test.Shared.Suites.Services
 
                     Captain captain = new Captain("captain");
                     captain.State = CaptainStateEnum.Working;
+                    if (scenario.EscalationLadder)
+                    {
+                        captain.Model = "qwen3.8";
+                        Persona worker = new Persona(PersonaCatalog.Worker, "persona.worker");
+                        worker.EscalationLadder = new List<PersonaCaptainPriority> { new PersonaCaptainPriority { Model = "qwen3.8" }, new PersonaCaptainPriority { Model = "gpt-6.1" } };
+                        await db.Personas.CreateAsync(worker).ConfigureAwait(false);
+                        await db.Captains.CreateAsync(new Captain("gpt") { Model = "gpt-6.1", State = CaptainStateEnum.Idle }).ConfigureAwait(false);
+                    }
                     await db.Captains.CreateAsync(captain).ConfigureAwait(false);
 
                     Dock dock = new Dock(vessel.Id);

@@ -24,6 +24,12 @@ namespace Test.Shared.Infrastructure
         /// <summary>Whether an untracked file is added after the dock start commit. Default false.</summary>
         public bool UntrackedAfterStart { get; set; }
 
+        /// <summary>
+        /// Whether the captain runs qwen3.8 and the Worker persona's escalation ladder goes on to an idle gpt-6.1 captain
+        /// (RS-5.6). Default false.
+        /// </summary>
+        public bool EscalationLadder { get; set; }
+
         /// <summary>Whether completion captures the diff against the default branch. Default true.</summary>
         public bool CaptureBranchDiff { get; set; } = true;
 

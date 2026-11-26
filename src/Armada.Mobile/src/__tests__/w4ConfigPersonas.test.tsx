@@ -136,8 +136,24 @@ describe('Configuration > Personas', () => {
     await fireEvent.press(await screen.findByRole('radio', { name: 'Codex' }));
     await act(async () => { await fireEvent.press(within(sheet).getByText('Save')); });
     expect(api.updatePersona).toHaveBeenCalledWith('Architect', {
-      captainPriorities: [{ runtime: 'Codex' }], priorityAvailability: 'FallThrough', priorityExhaustion: 'Wait', defaultCaptainId: null,
+      captainPriorities: [{ runtime: 'Codex' }], escalationLadder: [], priorityAvailability: 'FallThrough', priorityExhaustion: 'Wait', defaultCaptainId: null,
     });
+  });
+
+  it('edits the escalation ladder on its own sheet (RS-5.6)', async () => {
+    api.getPersona.mockResolvedValue(persona({ name: 'Worker', escalationLadder: [{ model: 'qwen3.8' }] }));
+    api.getPromptTemplate.mockResolvedValue(TEMPLATE);
+    api.updatePersona.mockResolvedValue(persona());
+    await renderW4Routes(ROUTES, '/personas/Worker');
+    await waitFor(() => expect(screen.getByTestId('persona-title')).toBeTruthy());
+    expect(screen.getByText('qwen3.8')).toBeTruthy();
+    await fireEvent.press(screen.getByText('Escalation ladder'));
+    const sheet = await screen.findByTestId('persona-escalation-ladder');
+    expect(within(sheet).queryByText('When a priority is unavailable')).toBeNull();
+    await fireEvent.press(within(sheet).getByRole('button', { name: 'Add rung' }));
+    await fireEvent.press(await screen.findByRole('radio', { name: 'Codex' }));
+    await act(async () => { await fireEvent.press(within(sheet).getByText('Save')); });
+    expect(api.updatePersona).toHaveBeenCalledWith('Worker', { escalationLadder: [{ model: 'qwen3.8' }, { runtime: 'Codex' }] });
   });
 
 });

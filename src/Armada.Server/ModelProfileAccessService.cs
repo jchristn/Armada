@@ -154,7 +154,8 @@ namespace Armada.Server
                     UnclassifiedResumes = request.Recovery.UnclassifiedResumes,
                     TransientGraceMinutes = request.Recovery.TransientGraceMinutes,
                     JudgeReworkRounds = request.Recovery.JudgeReworkRounds,
-                    OutputRepairAttempts = request.Recovery.OutputRepairAttempts
+                    OutputRepairAttempts = request.Recovery.OutputRepairAttempts,
+                    EscalateAfterResumes = request.Recovery.EscalateAfterResumes
                 };
             }
 

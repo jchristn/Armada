@@ -3044,6 +3044,8 @@ export interface Persona {
   active: boolean;
   defaultCaptainId?: string | null;
   captainPriorities?: PersonaCaptainPriority[];
+  /** Escalation ladder, lowest rung first (RS-5.6). */
+  escalationLadder?: PersonaCaptainPriority[];
   priorityAvailability?: PersonaPriorityAvailability;
   priorityExhaustion?: PersonaPriorityExhaustion;
   createdUtc: string;

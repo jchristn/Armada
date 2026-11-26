@@ -34,6 +34,8 @@ namespace Armada.Core.Services
             policy.TransientGraceMinutes = overrides.TransientGraceMinutes ?? settings.TransientOutageGraceMinutes;
             policy.JudgeReworkRounds = Math.Max(overrides.JudgeReworkRounds ?? 0, settings.JudgeReworkRounds);
             policy.OutputRepairAttempts = overrides.OutputRepairAttempts ?? settings.MaxOutputRepairAttempts;
+            policy.EscalateAfterResumes = Math.Min(overrides.EscalateAfterResumes ?? policy.MaxResumes, policy.MaxResumes);
+            policy.UnclassifiedResumes = Math.Min(policy.UnclassifiedResumes, policy.EscalateAfterResumes);
             return policy;
         }
 

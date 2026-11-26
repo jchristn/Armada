@@ -122,7 +122,7 @@ export default function PersonaDetail() {
     e.preventDefault();
     if (!persona) return;
     try {
-      const validation = validatePersonaPriorities(routing.captainPriorities);
+      const validation = validatePersonaPriorities(routing.captainPriorities) ?? validatePersonaPriorities(routing.escalationLadder);
       if (validation) throw new Error(t(validation));
       await updatePersona(persona.name, { description: form.description, promptTemplateName: form.promptTemplateName, defaultCaptainId: form.defaultCaptainId, ...routing });
       setShowForm(false);
@@ -263,6 +263,7 @@ export default function PersonaDetail() {
             </label>
           </div>
           <PersonaPriorityEditor value={routing} onChange={setRouting} />
+          <PersonaPriorityEditor value={routing} onChange={setRouting} list="escalationLadder" />
         </form>
       </DialogShell>
 
@@ -297,6 +298,10 @@ export default function PersonaDetail() {
         <div className="detail-field">
           <span className="detail-label" title={t('Captain classes tried in order (arrow = then) when assigning this persona\'s missions. None means the default captain and normal routing are used.')}>{t('Captain priorities')}</span>
           <span>{(persona.captainPriorities ?? []).map(prioritySummary).join(' → ') || t('None (default routing)')}</span>
+        </div>
+        <div className="detail-field">
+          <span className="detail-label" title={t('Captain classes, lowest rung first, that a work stage moves up when its captain cannot finish. None means escalation goes only to a captain with a higher tier.')}>{t('Escalation ladder')}</span>
+          <span>{(persona.escalationLadder ?? []).map(prioritySummary).join(' → ') || t('None (higher tier only)')}</span>
         </div>
         <div className="detail-field"><span className="detail-label" title={t('Try lower priorities moves down the list when a priority has no free captain. Wait for the first priority uses only priority 1 and waits for it.')}>{t('When a priority is unavailable')}</span><span>{t(persona.priorityAvailability === 'WaitForFirstPriority' ? 'Wait for the first priority' : 'Try lower priorities')}</span></div>
         <div className="detail-field"><span className="detail-label" title={t('Wait keeps the mission Pending until a listed captain is free. Use any eligible captain falls back to normal persona and tier routing.')}>{t('When all priorities are unavailable')}</span><span>{t(persona.priorityAvailability === 'WaitForFirstPriority' || persona.priorityExhaustion !== 'UseEligibleCaptain' ? 'Wait' : 'Use any eligible captain')}</span></div>

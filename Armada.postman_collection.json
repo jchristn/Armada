@@ -9147,7 +9147,7 @@
                         ],
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n  \"Name\": \"Platform Product Manager\",\n  \"Description\": \"Product manager variant for platform-oriented work.\",\n  \"PromptTemplateName\": \"persona.product_manager.copy\",\n  \"DefaultCaptainId\": \"{{captainId}}\",\n  \"CaptainPriorities\": [\n    {\n      \"Runtime\": \"Codex\",\n      \"MinimumTier\": \"Premium\"\n    },\n    {\n      \"Runtime\": \"Mux\",\n      \"Endpoint\": \"{{muxEndpoint}}\",\n      \"Model\": \"gpt-oss:120b\"\n    }\n  ],\n  \"PriorityAvailability\": \"FallThrough\",\n  \"PriorityExhaustion\": \"Wait\"\n}"
+                            "raw": "{\n  \"Name\": \"Platform Product Manager\",\n  \"Description\": \"Product manager variant for platform-oriented work.\",\n  \"PromptTemplateName\": \"persona.product_manager.copy\",\n  \"DefaultCaptainId\": \"{{captainId}}\",\n  \"CaptainPriorities\": [\n    {\n      \"Runtime\": \"Codex\",\n      \"MinimumTier\": \"Premium\"\n    },\n    {\n      \"Runtime\": \"Mux\",\n      \"Endpoint\": \"{{muxEndpoint}}\",\n      \"Model\": \"gpt-oss:120b\"\n    }\n  ],\n  \"PriorityAvailability\": \"FallThrough\",\n  \"PriorityExhaustion\": \"Wait\",\n  \"EscalationLadder\": [\n    {\n      \"Model\": \"qwen3.8\"\n    },\n    {\n      \"Model\": \"gpt-6.1\"\n    },\n    {\n      \"Model\": \"claude-opus-5-5\"\n    }\n  ]\n}"
                         },
                         "url": {
                             "raw": "{{baseUrl}}/api/v1/personas",
@@ -9160,7 +9160,7 @@
                                 "personas"
                             ]
                         },
-                        "description": "Create a persona and save its Name to personaName.\n\nPersona routing: CaptainPriorities is an ordered list of runtime/model/Mux endpoint/minimum-tier classes. FallThrough tries lower classes when busy; WaitForFirstPriority waits strictly for the first. PriorityExhaustion defaults to Wait; UseEligibleCaptain permits general fallback. Empty priorities preserve legacy routing. On updates, omitted routing fields are preserved and an empty array clears priorities."
+                        "description": "Create a persona and save its Name to personaName.\n\nPersona routing: CaptainPriorities is an ordered list of runtime/model/Mux endpoint/minimum-tier classes. FallThrough tries lower classes when busy; WaitForFirstPriority waits strictly for the first. PriorityExhaustion defaults to Wait; UseEligibleCaptain permits general fallback. Empty priorities preserve legacy routing. On updates, omitted routing fields are preserved and an empty array clears priorities. EscalationLadder (RS-5.6) lists captain classes, lowest rung first, that a work stage moves up when its captain cannot finish; with an empty ladder escalation goes only to a strictly higher tier, up to MaxEscalations hops. Omitted or null preserves it on update; empty clears it."
                     }
                 },
                 {
@@ -9195,7 +9195,7 @@
                         ],
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n  \"Description\": \"Updated platform-oriented product manager persona.\",\n  \"PromptTemplateName\": \"persona.product_manager.copy\",\n  \"DefaultCaptainId\": \"{{captainId}}\",\n  \"CaptainPriorities\": [\n    {\n      \"Runtime\": \"Codex\",\n      \"MinimumTier\": \"Premium\"\n    },\n    {\n      \"Runtime\": \"Mux\",\n      \"Endpoint\": \"{{muxEndpoint}}\",\n      \"Model\": \"gpt-oss:120b\"\n    }\n  ],\n  \"PriorityAvailability\": \"FallThrough\",\n  \"PriorityExhaustion\": \"Wait\"\n}"
+                            "raw": "{\n  \"Description\": \"Updated platform-oriented product manager persona.\",\n  \"PromptTemplateName\": \"persona.product_manager.copy\",\n  \"DefaultCaptainId\": \"{{captainId}}\",\n  \"CaptainPriorities\": [\n    {\n      \"Runtime\": \"Codex\",\n      \"MinimumTier\": \"Premium\"\n    },\n    {\n      \"Runtime\": \"Mux\",\n      \"Endpoint\": \"{{muxEndpoint}}\",\n      \"Model\": \"gpt-oss:120b\"\n    }\n  ],\n  \"PriorityAvailability\": \"FallThrough\",\n  \"PriorityExhaustion\": \"Wait\",\n  \"EscalationLadder\": [\n    {\n      \"Model\": \"qwen3.8\"\n    },\n    {\n      \"Model\": \"gpt-6.1\"\n    },\n    {\n      \"Model\": \"claude-opus-5-5\"\n    }\n  ]\n}"
                         },
                         "url": {
                             "raw": "{{baseUrl}}/api/v1/personas/{{personaName}}",
@@ -9209,7 +9209,7 @@
                                 "{{personaName}}"
                             ]
                         },
-                        "description": "Update a persona by name.\n\nPersona routing: CaptainPriorities is an ordered list of runtime/model/Mux endpoint/minimum-tier classes. FallThrough tries lower classes when busy; WaitForFirstPriority waits strictly for the first. PriorityExhaustion defaults to Wait; UseEligibleCaptain permits general fallback. Empty priorities preserve legacy routing. On updates, omitted routing fields are preserved and an empty array clears priorities."
+                        "description": "Update a persona by name.\n\nPersona routing: CaptainPriorities is an ordered list of runtime/model/Mux endpoint/minimum-tier classes. FallThrough tries lower classes when busy; WaitForFirstPriority waits strictly for the first. PriorityExhaustion defaults to Wait; UseEligibleCaptain permits general fallback. Empty priorities preserve legacy routing. On updates, omitted routing fields are preserved and an empty array clears priorities. EscalationLadder (RS-5.6) lists captain classes, lowest rung first, that a work stage moves up when its captain cannot finish; with an empty ladder escalation goes only to a strictly higher tier, up to MaxEscalations hops. Omitted or null preserves it on update; empty clears it."
                     }
                 },
                 {
@@ -14460,7 +14460,7 @@
                         ],
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n  \"Capabilities\": {\n    \"ToolsAvailable\": true,\n    \"McpAvailable\": false\n  },\n  \"Rendering\": {\n    \"Template\": \"Compact\",\n    \"RepeatContractAtEnd\": true,\n    \"MaxFilesPerMission\": 3\n  },\n  \"Recovery\": {\n    \"MaxResumes\": 5,\n    \"UnclassifiedResumes\": 1,\n    \"TransientGraceMinutes\": 20,\n    \"JudgeReworkRounds\": 3,\n    \"OutputRepairAttempts\": 2\n  },\n  \"Notes\": \"Keep each mission to one objective.\"\n}"
+                            "raw": "{\n  \"Capabilities\": {\n    \"ToolsAvailable\": true,\n    \"McpAvailable\": false\n  },\n  \"Rendering\": {\n    \"Template\": \"Compact\",\n    \"RepeatContractAtEnd\": true,\n    \"MaxFilesPerMission\": 3\n  },\n  \"Recovery\": {\n    \"MaxResumes\": 5,\n    \"UnclassifiedResumes\": 1,\n    \"TransientGraceMinutes\": 20,\n    \"JudgeReworkRounds\": 3,\n    \"OutputRepairAttempts\": 2,\n    \"EscalateAfterResumes\": 1\n  },\n  \"Notes\": \"Keep each mission to one objective.\"\n}"
                         },
                         "url": {
                             "raw": "{{baseUrl}}/api/v1/model-profiles/{{modelProfileId}}",
@@ -14474,7 +14474,7 @@
                                 "{{modelProfileId}}"
                             ]
                         },
-                        "description": "Update Capabilities, Rendering (explicit overrides; null means no override), Recovery (per-model recovery policy: MaxResumes 0-10, UnclassifiedResumes 0-3, TransientGraceMinutes 0-120, JudgeReworkRounds 1-5 which can raise but never lower the global value, OutputRepairAttempts 0-3; null uses the global setting) and Notes (empty clears). An omitted section keeps its value. The response includes EffectiveRecovery, the policy in effect. Global admin or tenant admin."
+                        "description": "Update Capabilities, Rendering (explicit overrides; null means no override), Recovery (per-model recovery policy: MaxResumes 0-10, UnclassifiedResumes 0-3, TransientGraceMinutes 0-120, JudgeReworkRounds 1-5 which can raise but never lower the global value, OutputRepairAttempts 0-3, EscalateAfterResumes 0-10 which hands a task failure to the persona escalation ladder after that many resumes; null uses the global setting) and Notes (empty clears). An omitted section keeps its value. The response includes EffectiveRecovery, the policy in effect. Global admin or tenant admin."
                     }
                 },
                 {

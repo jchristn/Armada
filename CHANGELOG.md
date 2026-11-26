@@ -131,6 +131,15 @@ Conductor) with Opus and GPT-6.1 reliable. The work is tracked item by item in `
   rounds take the larger of the two, so a profile never shortens the rework chain. A profile read returns
   `EffectiveRecovery`, the policy in effect. Two new settings replace hard-coded values: `UnclassifiedResumeLimit`
   (default 1) and `JudgeReworkRounds` (default 2). Migration 135 adds the columns (RS-5.5).
+- **Escalation ladder.** A persona has an `EscalationLadder` of captain classes, lowest rung first (for example
+  Qwen3.8, GPT-6.1, Opus), stored as relational rows like `CaptainPriorities`. A work stage whose captain cannot finish
+  moves on the same branch to the next rung with an eligible captain; with no ladder it moves only to a captain with a
+  strictly higher tier, so no escalation goes sideways. Escalation now takes up to `MaxEscalations` hops (default 2)
+  instead of one, works for standalone missions, and is triggered by spent resumes, an `Unclassified` exit past its
+  resume, two unparsable tool calls in a row, repeated no-op completions and Judge rejections past the rework budget.
+  A model profile's `EscalateAfterResumes` escalates before the resumes are spent, and `EscalateOnOpenEndpointBreaker`
+  (off by default) escalates a transient failure at once when the endpoint's breaker is open. Strict captain
+  assignments still never escalate. Migration 136 adds the ladder table and the profile column (RS-5.6).
 - **Recovery state survives a restart.** Endpoint circuit breakers, launch backoff (with the captains that failed to
   start the mission), the start of a transient outage, and escalation rule cooldowns were kept only in memory, so a
   restart sent missions straight back to a failing endpoint, relaunched a broken captain at once, granted an outage a

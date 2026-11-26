@@ -41,6 +41,7 @@ export function PersonasTab() {
   const [routing, setRouting] = useState<PersonaRoutingForm>(() => personaRoutingForm());
   const [routingTouched, setRoutingTouched] = useState(false);
   const [priorityEditing, setPriorityEditing] = useState(false);
+  const [ladderEditing, setLadderEditing] = useState(false);
   function openForm(persona: Persona | 'new') {
     setRouting(personaRoutingForm(persona === 'new' ? undefined : persona));
     setRoutingTouched(false);
@@ -151,6 +152,7 @@ export function PersonasTab() {
           { kind: 'select', key: 'promptTemplateName', label: t('Prompt Template Name'), required: true, placeholder: t('Select a template...'), options: templateOptions(t, templateNames) },
           scopeField(t, viewer),
           { kind: 'action', key: 'priorities', label: t('Captain priorities'), apply: values => { setPriorityEditing(true); return values; } },
+          { kind: 'action', key: 'escalationLadder', label: t('Escalation ladder'), apply: values => { setLadderEditing(true); return values; } },
         ]}
         validate={(v) => (str(v, 'promptTemplateName') ? null : t('{{field}} is required.', { field: t('Prompt Template Name') }))}
         submitLabel={t('Save')}
@@ -167,6 +169,7 @@ export function PersonasTab() {
         }}
       />
       {priorityEditing && <PersonaPrioritySheet persona={routing} onClose={() => setPriorityEditing(false)} onSave={async value => { setRouting(value); setRoutingTouched(true); }} />}
+      {ladderEditing && <PersonaPrioritySheet persona={routing} list="escalationLadder" onClose={() => setLadderEditing(false)} onSave={async value => { setRouting(value); setRoutingTouched(true); }} />}
       {dialog}
     </>
   );

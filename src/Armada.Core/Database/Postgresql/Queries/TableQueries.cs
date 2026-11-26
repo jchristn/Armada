@@ -2544,7 +2544,8 @@ namespace Armada.Core.Database.Postgresql.Queries
                 Armada.Core.Database.AskThreadLocationSchema.Migration(Armada.Core.Enums.DatabaseTypeEnum.Postgresql),
                 Armada.Core.Database.MissionTypedStateSchema.Migration(Armada.Core.Enums.DatabaseTypeEnum.Postgresql),
                 Armada.Core.Database.RecoveryStateSchema.Migration(Armada.Core.Enums.DatabaseTypeEnum.Postgresql),
-                Armada.Core.Database.ModelProfileRecoverySchema.Migration(Armada.Core.Enums.DatabaseTypeEnum.Postgresql)
+                Armada.Core.Database.ModelProfileRecoverySchema.Migration(Armada.Core.Enums.DatabaseTypeEnum.Postgresql),
+                Armada.Core.Database.EscalationLadderSchema.Migration(Armada.Core.Enums.DatabaseTypeEnum.Postgresql)
 
             };
         }

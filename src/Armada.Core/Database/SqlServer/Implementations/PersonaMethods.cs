@@ -402,26 +402,38 @@ namespace Armada.Core.Database.SqlServer.Implementations
         }
 
 
+        // The captain priorities and the escalation ladder (RS-5.6) share the matcher shape and are written together.
         private static async Task SavePrioritiesAsync(SqlConnection conn, SqlTransaction transaction, Persona persona, CancellationToken token)
+        {
+            await SaveMatchersAsync(conn, transaction, persona.Id, "persona_captain_priorities", "priority_order", persona.CaptainPriorities, token).ConfigureAwait(false);
+            await SaveMatchersAsync(conn, transaction, persona.Id, "persona_escalation_rungs", "rung_order", persona.EscalationLadder, token).ConfigureAwait(false);
+        }
+
+        private static async Task LoadPrioritiesAsync(SqlConnection conn, Persona persona, CancellationToken token)
+        {
+            await LoadMatchersAsync(conn, persona.Id, "persona_captain_priorities", "priority_order", persona.CaptainPriorities, token).ConfigureAwait(false);
+            await LoadMatchersAsync(conn, persona.Id, "persona_escalation_rungs", "rung_order", persona.EscalationLadder, token).ConfigureAwait(false);
+        }
+
+        private static async Task SaveMatchersAsync(SqlConnection conn, SqlTransaction transaction, string personaId, string table, string orderColumn, List<PersonaCaptainPriority> matchers, CancellationToken token)
         {
             using (SqlCommand cmd = conn.CreateCommand())
             {
                 cmd.Transaction = transaction;
-                cmd.CommandText = "DELETE FROM persona_captain_priorities WHERE persona_id = @persona_id;";
-                cmd.Parameters.AddWithValue("@persona_id", persona.Id);
+                cmd.CommandText = "DELETE FROM " + table + " WHERE persona_id = @persona_id;";
+                cmd.Parameters.AddWithValue("@persona_id", personaId);
                 await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
             }
-            for (int index = 0; index < persona.CaptainPriorities.Count; index++)
+            for (int index = 0; index < matchers.Count; index++)
             {
                 token.ThrowIfCancellationRequested();
-                PersonaCaptainPriority priority = persona.CaptainPriorities[index];
+                PersonaCaptainPriority priority = matchers[index];
                 using (SqlCommand cmd = conn.CreateCommand())
                 {
                     cmd.Transaction = transaction;
-                    cmd.CommandText = @"INSERT INTO persona_captain_priorities
-                        (persona_id, priority_order, runtime, model, endpoint, minimum_tier)
-                        VALUES (@persona_id, @priority_order, @runtime, @model, @endpoint, @minimum_tier);";
-                    cmd.Parameters.AddWithValue("@persona_id", persona.Id);
+                    cmd.CommandText = "INSERT INTO " + table + " (persona_id, " + orderColumn + ", runtime, model, endpoint, minimum_tier) "
+                        + "VALUES (@persona_id, @priority_order, @runtime, @model, @endpoint, @minimum_tier);";
+                    cmd.Parameters.AddWithValue("@persona_id", personaId);
                     cmd.Parameters.AddWithValue("@priority_order", index);
                     cmd.Parameters.AddWithValue("@runtime", (object?)priority.Runtime?.ToString() ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@model", (object?)priority.Model ?? DBNull.Value);
@@ -432,12 +444,12 @@ namespace Armada.Core.Database.SqlServer.Implementations
             }
         }
 
-        private static async Task LoadPrioritiesAsync(SqlConnection conn, Persona persona, CancellationToken token)
+        private static async Task LoadMatchersAsync(SqlConnection conn, string personaId, string table, string orderColumn, List<PersonaCaptainPriority> matchers, CancellationToken token)
         {
             using (SqlCommand cmd = conn.CreateCommand())
             {
-                cmd.CommandText = "SELECT * FROM persona_captain_priorities WHERE persona_id = @persona_id ORDER BY priority_order;";
-                cmd.Parameters.AddWithValue("@persona_id", persona.Id);
+                cmd.CommandText = "SELECT * FROM " + table + " WHERE persona_id = @persona_id ORDER BY " + orderColumn + ";";
+                cmd.Parameters.AddWithValue("@persona_id", personaId);
                 using (SqlDataReader reader = (SqlDataReader)await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
                 {
                     while (await reader.ReadAsync(token).ConfigureAwait(false))
@@ -447,7 +459,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
                         priority.Model = reader["model"] == DBNull.Value ? null : reader["model"].ToString();
                         priority.Endpoint = reader["endpoint"] == DBNull.Value ? null : reader["endpoint"].ToString();
                         priority.MinimumTier = reader["minimum_tier"] == DBNull.Value ? null : Enum.Parse<CaptainTierEnum>(reader["minimum_tier"].ToString()!);
-                        persona.CaptainPriorities.Add(priority);
+                        matchers.Add(priority);
                     }
                 }
             }

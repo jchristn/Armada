@@ -40,7 +40,7 @@ namespace Armada.Server.Mcp.Tools
 
             register(
                 "get_model_profile",
-                "Get one model profile visible to the caller (the model as served: runtime, provider, model and served context) with its capabilities, rendering overrides, recovery policy overrides (recovery) and the policy in effect for its captains (effectiveRecovery: maxResumes, unclassifiedResumes, transientGraceMinutes, judgeReworkRounds, outputRepairAttempts), notes and immutable revisions (runtime version, model digest, sampling, tool configuration, compatibleWith, firstSeenUtc), oldest first. Profiles are advisory: they do not set a captain's tier or change routing. A captain's modelProfileId points at its profile.",
+                "Get one model profile visible to the caller (the model as served: runtime, provider, model and served context) with its capabilities, rendering overrides, recovery policy overrides (recovery) and the policy in effect for its captains (effectiveRecovery: maxResumes, unclassifiedResumes, transientGraceMinutes, judgeReworkRounds, outputRepairAttempts, escalateAfterResumes), notes and immutable revisions (runtime version, model digest, sampling, tool configuration, compatibleWith, firstSeenUtc), oldest first. Profiles are advisory: they do not set a captain's tier or change routing. A captain's modelProfileId points at its profile.",
                 new
                 {
                     type = "object",

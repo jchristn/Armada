@@ -58,6 +58,17 @@ namespace Armada.Core.Models
             set => _OutputRepairAttempts = Check(value, 0, 3, nameof(OutputRepairAttempts));
         }
 
+        /// <summary>
+        /// Resumes after which a task or Unclassified failure escalates to the next captain on the persona's escalation
+        /// ladder instead of resuming again (RS-5.6), 0 to 10, or null to escalate only once the resumes are spent.
+        /// Never more than the effective <see cref="MaxResumes"/>. Transient outages keep resuming.
+        /// </summary>
+        public int? EscalateAfterResumes
+        {
+            get => _EscalateAfterResumes;
+            set => _EscalateAfterResumes = Check(value, 0, 10, nameof(EscalateAfterResumes));
+        }
+
         #endregion
 
         #region Private-Members
@@ -67,6 +78,7 @@ namespace Armada.Core.Models
         private int? _TransientGraceMinutes = null;
         private int? _JudgeReworkRounds = null;
         private int? _OutputRepairAttempts = null;
+        private int? _EscalateAfterResumes = null;
 
         #endregion
 

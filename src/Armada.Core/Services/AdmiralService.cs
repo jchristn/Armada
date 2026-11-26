@@ -204,6 +204,9 @@ namespace Armada.Core.Services
         private readonly System.Collections.Concurrent.ConcurrentDictionary<string, DateTime> _TransientOutageStarts =
             new System.Collections.Concurrent.ConcurrentDictionary<string, DateTime>(StringComparer.Ordinal);
         private readonly RecoveryStateStore _RecoveryState;
+        // Consecutive exits per mission whose provider error was an unparsable tool call (RS-5.6), in memory only.
+        private readonly System.Collections.Concurrent.ConcurrentDictionary<string, int> _MalformedToolCallExits =
+            new System.Collections.Concurrent.ConcurrentDictionary<string, int>(StringComparer.Ordinal);
         private readonly System.Collections.Concurrent.ConcurrentDictionary<string, List<long>> _CaptainCrashTimes =
             new System.Collections.Concurrent.ConcurrentDictionary<string, List<long>>();
         private TimeProvider _Time = TimeProvider.System;
@@ -1042,6 +1045,7 @@ namespace Armada.Core.Services
 
                 // Clean exit — delegate to the normal completion flow
                 await ForgetTransientOutageAsync(missionId).ConfigureAwait(false);
+                _MalformedToolCallExits.TryRemove(missionId, out int _);
                 _Logging.Info(_Header + "agent process " + processId + " exited cleanly for mission " + missionId + " — handling completion");
                 await _Missions.HandleClaimedCompletionAsync(captain, missionId, mission!.LastUpdateUtc, token).ConfigureAwait(false);
             }
@@ -1076,6 +1080,25 @@ namespace Armada.Core.Services
                 // Transient failures past that keep resuming while the outage is younger than the policy's
                 // TransientGraceMinutes (TransientOutageGraceMinutes by default), so a proxy or model-server restart does
                 // not fail work in progress.
+                // RS-5.6 optional early fallback: an endpoint whose breaker is open will not take this work soon, so move it
+                // up the escalation ladder now instead of waiting out the outage.
+                if (_Settings.EscalateOnOpenEndpointBreaker && exitInfo.FailureKind == RuntimeFailureKindEnum.Transient && mission != null
+                    && await _Missions.IsEndpointBreakerOpenAsync(captain, token).ConfigureAwait(false)
+                    && await TryEscalateAsync(captain, mission, failureReason + " (endpoint circuit breaker open)", capture, token).ConfigureAwait(false))
+                {
+                    RequestDispatch();
+                    return;
+                }
+
+                // RS-5.6: a model that emits a tool call the server cannot parse twice in a row rarely recovers on a resume.
+                if (TrackMalformedToolCall(missionId, exitInfo) && mission != null
+                    && await TryEscalateAsync(captain, mission, failureReason + " (repeated malformed tool calls)", capture, token).ConfigureAwait(false))
+                {
+                    _MalformedToolCallExits.TryRemove(missionId, out int _);
+                    RequestDispatch();
+                    return;
+                }
+
                 // RS-5.5: the resume budgets come from the captain's model profile when it overrides the global settings.
                 RecoveryPolicy policy = await RecoveryPolicyResolver.ResolveAsync(_Database, _Settings, captain, token).ConfigureAwait(false);
                 bool withinOutageGrace = exitInfo.FailureKind == RuntimeFailureKindEnum.Transient && mission != null && await WithinTransientOutageGraceAsync(mission.Id, policy.TransientGraceMinutes).ConfigureAwait(false);
@@ -1085,20 +1108,24 @@ namespace Armada.Core.Services
                 bool resumable = exitInfo.FailureKind == RuntimeFailureKindEnum.Transient || exitInfo.FailureKind == RuntimeFailureKindEnum.TaskFailure;
                 bool unclassifiedResume = exitInfo.FailureKind == RuntimeFailureKindEnum.Unclassified
                     && captain.RecoveryAttempts < policy.UnclassifiedResumes;
+                // RS-5.6: a profile's EscalateAfterResumes hands a task failure to the escalation ladder before the resumes
+                // are spent; a transient outage is not the model's fault and keeps resuming.
+                bool resumesLeft = captain.RecoveryAttempts < policy.MaxResumes
+                    && (exitInfo.FailureKind == RuntimeFailureKindEnum.Transient || captain.RecoveryAttempts < policy.EscalateAfterResumes);
                 if ((resumable || unclassifiedResume)
                     && mission != null
-                    && (unclassifiedResume || captain.RecoveryAttempts < policy.MaxResumes || withinOutageGrace)
+                    && (unclassifiedResume || resumesLeft || withinOutageGrace)
                     && await TryResumeInPlaceAsync(captain, mission, failureReason, token,
                         exitInfo.FailureKind == RuntimeFailureKindEnum.Transient ? TransientResumeDelay(captain.RecoveryAttempts, exitInfo.ProviderError?.RetryAfterSeconds) : TimeSpan.Zero).ConfigureAwait(false))
                 {
                     return;
                 }
 
-                // The resumes are used up and the captain still cannot finish (often a local model): hand one last
-                // attempt, on the same branch with the work so far, to the frontier captain that planned the voyage.
+                // The resumes are used up and the captain still cannot finish (often a local model): hand the attempt, on
+                // the same branch with the work so far, to the next rung of the escalation ladder (RS-5.6).
                 if ((resumable || exitInfo.FailureKind == RuntimeFailureKindEnum.Unclassified)
                     && mission != null
-                    && await TryEscalateToPlannerAsync(captain, mission, failureReason, capture, token).ConfigureAwait(false))
+                    && await TryEscalateAsync(captain, mission, failureReason, capture, token).ConfigureAwait(false))
                 {
                     RequestDispatch();
                     return;
@@ -2451,6 +2478,16 @@ namespace Armada.Core.Services
             return false;
         }
 
+        private bool TrackMalformedToolCall(string missionId, RuntimeExitInfo exitInfo)
+        {
+            if (!String.Equals(exitInfo.ProviderError?.ErrorType, OpenModelErrorPatterns.ToolCallParseError, StringComparison.OrdinalIgnoreCase))
+            {
+                _MalformedToolCallExits.TryRemove(missionId, out int _);
+                return false;
+            }
+            return _MalformedToolCallExits.AddOrUpdate(missionId, 1, (_, count) => count + 1) >= 2;
+        }
+
         private async Task ForgetTransientOutageAsync(string missionId)
         {
             if (_TransientOutageStarts.TryRemove(missionId, out DateTime _))
@@ -2564,22 +2601,12 @@ namespace Armada.Core.Services
             return after != null && after.Status != MissionStatusEnum.Failed;
         }
 
-        private const string _EscalatedHeading = "## Escalated to ";
-
-        private async Task<bool> TryEscalateToPlannerAsync(Captain captain, Mission mission, string failureReason, StageAttemptCapture capture, CancellationToken token)
+        private async Task<bool> TryEscalateAsync(Captain captain, Mission mission, string failureReason, StageAttemptCapture capture, CancellationToken token)
         {
-            // Planning and review stages are not escalated; only stages that do the work.
-            if (PersonaCatalog.Matches(mission.Persona, PersonaCatalog.Judge) || PersonaCatalog.Matches(mission.Persona, PersonaCatalog.Architect)
-                || PersonaCatalog.Matches(mission.Persona, PersonaCatalog.ProductManager) || PersonaCatalog.Matches(mission.Persona, PersonaCatalog.Recorder))
-                return false;
-            if (String.IsNullOrEmpty(mission.VoyageId) || mission.EscalationCount > 0) return false;
-            // A strict assignment fixes the captain on purpose (tests that control model identity), so it fails rather
-            // than finishing on a different model.
-            if (await _Missions.HasStrictCaptainAssignmentAsync(mission, token).ConfigureAwait(false)) return false;
-
-            List<Mission> voyageMissions = await _Database.Missions.EnumerateByVoyageAsync(mission.VoyageId!, token).ConfigureAwait(false);
-            Captain? plannerCaptain = await CaptainEscalationSelector.SelectAsync(_Database, mission, captain.Id, voyageMissions, token).ConfigureAwait(false);
-            if (plannerCaptain == null) return false;
+            // RS-5.6: the next rung of the persona's escalation ladder, or a strictly stronger captain; standalone missions
+            // escalate too, up to MaxEscalations hops.
+            EscalationChoice? choice = await _Missions.ChooseEscalationAsync(mission, captain.Id, token).ConfigureAwait(false);
+            if (choice == null) return false;
 
             // Keep the work so far on the branch before the dock goes.
             Dock? dock = String.IsNullOrEmpty(mission.DockId) ? null : await _Database.Docks.ReadAsync(mission.DockId!, token).ConfigureAwait(false);
@@ -2598,35 +2625,15 @@ namespace Armada.Core.Services
                 capture.EscalatedCommit = await TryReadDockHeadAsync(dock, token).ConfigureAwait(false);
             }
 
-            MissionStatusEnum observedStatus = mission.Status;
-            DateTime escalationVersion = mission.LastUpdateUtc;
-
-            MissionNotes.Set(mission, MissionNoteKindEnum.Escalation, _EscalatedHeading + plannerCaptain.Name + "\n"
-                + captain.Name + " could not finish this mission (" + failureReason.Trim() + "). Its work so far is committed on this branch and may not build yet. "
-                + "Review it with git log and git diff against the base branch, fix what is wrong, and finish the mission.");
-            mission.EscalationCount++;
-            mission.EscalatedFromCaptainId = captain.Id;
-            mission.EscalatedFromModel = captain.Model;
-            mission.RequestedCaptainId = plannerCaptain.Id;
-            mission.CaptainId = null;
-            mission.DockId = null;
-            mission.ProcessId = null;
-            mission.FailureReason = null;
-            mission.FailureKind = null;
-            mission.StartedUtc = null;
-            mission.CompletedUtc = null;
-            MissionTransitionRequest escalation = new MissionTransitionRequest { To = MissionStatusEnum.Pending, ExpectedLastUpdateUtc = escalationVersion };
-            escalation.AllowedFrom.Add(observedStatus);
-            if (!await Transitions.TryTransitionAsync(mission, escalation, token).ConfigureAwait(false))
+            if (!await _Missions.ApplyEscalationAsync(mission, captain, choice, failureReason, token).ConfigureAwait(false))
                 return true;
 
             await ReclaimDockAsync(captain, mission, token).ConfigureAwait(false);
             await _Captains.ReleaseAsync(captain, token).ConfigureAwait(false);
 
-            capture.EscalatedToCaptainId = plannerCaptain.Id;
-            _Logging.Warn(_Header + "mission " + mission.Id + ": " + captain.Name + " could not finish after its resumes (" + failureReason + "); escalating to " + plannerCaptain.Name);
-            await EmitEventAsync("mission.escalated", "Mission escalated to " + plannerCaptain.Name + " after " + captain.Name + " could not finish: " + mission.Title,
-                entityType: "mission", entityId: mission.Id, captainId: plannerCaptain.Id, missionId: mission.Id,
+            capture.EscalatedToCaptainId = choice.Captain.Id;
+            await EmitEventAsync("mission.escalated", "Mission escalated to " + choice.Captain.Name + " (" + choice.Describe() + ") after " + captain.Name + " could not finish: " + mission.Title,
+                entityType: "mission", entityId: mission.Id, captainId: choice.Captain.Id, missionId: mission.Id,
                 vesselId: mission.VesselId, voyageId: mission.VoyageId, token: token).ConfigureAwait(false);
             return true;
         }

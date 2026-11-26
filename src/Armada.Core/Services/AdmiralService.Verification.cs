@@ -68,7 +68,7 @@ namespace Armada.Core.Services
                         after = resumed;
                         if (await TryResumeInPlaceAsync(captain, resumed, failure, token).ConfigureAwait(false)) return;
                     }
-                    if (await TryEscalateToPlannerAsync(captain, after, failure, capture, token).ConfigureAwait(false))
+                    if (await TryEscalateAsync(captain, after, failure, capture, token).ConfigureAwait(false))
                     { RequestDispatch(); return; }
                     await HandleTerminalProcessExitFailureAsync(captain, after, after.Id, failure, RuntimeFailureKindEnum.TaskFailure, token,
                         step: BlackBoxStepEnum.StageCheck, check: check, exitCode: 0).ConfigureAwait(false);

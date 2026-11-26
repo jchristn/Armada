@@ -30,7 +30,7 @@ namespace Armada.Core.Services
             Mission? worker = null;
             Mission? previousJudge = null;
             int rounds = 0;
-            bool escalated = false;
+            int escalations = 0;
             HashSet<string> workerChain = new HashSet<string>(StringComparer.Ordinal);
             HashSet<string> seen = new HashSet<string>(StringComparer.Ordinal);
             for (Mission? cursor = judge; cursor != null && !String.IsNullOrEmpty(cursor.DependsOnMissionId) && seen.Add(cursor.Id);)
@@ -42,11 +42,13 @@ namespace Armada.Core.Services
                 if (!PersonaCatalog.Matches(cursor.Persona, PersonaCatalog.Worker)) continue;
                 if (worker == null) worker = cursor;
                 workerChain.Add(cursor.Id);
+                // In-place escalations (RS-5.6) and escalated rework rounds share the MaxEscalations budget.
+                escalations += cursor.EscalationCount;
                 // A fresh Worker is the boundary of this implementation slice. Its dependency may be a
                 // passing Judge from another Architect slice, whose rework budget is independent.
                 if (!IntegrationBarrier.IsRework(cursor)) break;
                 rounds++;
-                escalated |= IntegrationBarrier.IsEscalatedRework(cursor);
+                if (IntegrationBarrier.IsEscalatedRework(cursor)) escalations++;
             }
 
             if (worker == null) return Unavailable("Automatic Judge rework is unavailable because the reviewed Worker could not be found in the dependency chain.");
@@ -54,12 +56,10 @@ namespace Armada.Core.Services
             // RS-5.5: JudgeReworkRounds, raised (never lowered) by the Worker captain's model profile.
             int maxRounds = (await RecoveryPolicyResolver.ResolveForCaptainIdAsync(_Database, _Settings, worker.CaptainId, token).ConfigureAwait(false)).JudgeReworkRounds;
 
-            // Give the Worker bounded rework, then try one different captain. Unchanged rejected work
-            // switches earlier. Escalation also works in voyages with no planning stage.
-            // An operator restart of a blocked stage is an explicit decision to spend another round: the automatic
-            // budget and the automatic captain escalation do not apply to it (normal routing picks the captain).
-            if (!operatorRestart && (escalated || rounds > maxRounds))
-                return Unavailable("Automatic Judge rework limit reached after " + rounds + " rework round(s)" + (escalated ? ", including an escalated attempt." : "."));
+            // Give the Worker bounded rework, then move up the escalation ladder one captain per round (RS-5.6), up to
+            // MaxEscalations hops. Unchanged rejected work switches earlier. Escalation also works in voyages with no
+            // planning stage. An operator restart of a blocked stage is an explicit decision to spend another round: the
+            // automatic budget and the automatic captain escalation do not apply to it (normal routing picks the captain).
             string? escalateTo = null;
             Mission? previousWorker = voyageMissions.FirstOrDefault(m => m.Id != worker.Id && PersonaCatalog.Matches(m.Persona, PersonaCatalog.Worker)
                 && workerChain.Contains(m.Id) && !String.IsNullOrEmpty(m.CommitHash) && m.CommitHash == worker.CommitHash);
@@ -69,9 +69,14 @@ namespace Armada.Core.Services
             bool repeatedCase = previousJudge != null && currentCase != null
                 && String.Equals(currentCase, JudgeContract.AffectedCaseKey(previousJudge.AgentOutput), StringComparison.Ordinal);
             bool stagnant = (previousWorker != null || repeatedCase) && !MissionModeContract.IsReadOnly(worker.Mode);
-            if (!operatorRestart && (rounds == maxRounds || stagnant))
+            if (!operatorRestart && (escalations > 0 || rounds >= maxRounds || stagnant))
             {
-                string escalationTrigger = rounds == maxRounds
+                if (escalations >= _Settings.MaxEscalations)
+                    return Unavailable("Automatic Judge rework limit reached after " + rounds + " rework round(s)"
+                        + (escalations > 0 ? ", including " + escalations + " escalation(s) (MaxEscalations " + _Settings.MaxEscalations + ")." : "; escalation is off (MaxEscalations 0)."));
+                string escalationTrigger = escalations > 0
+                    ? "The escalated Worker's attempt was rejected too (" + escalations + " of " + _Settings.MaxEscalations + " escalations). "
+                    : rounds >= maxRounds
                     ? "Automatic Judge rework budget exhausted for this slice (" + rounds + " of " + maxRounds + " rounds). "
                     : previousWorker != null
                         ? "The Worker produced the same rejected commit after " + rounds + " rework round(s). "
@@ -79,7 +84,7 @@ namespace Armada.Core.Services
                 if (await HasStrictCaptainOverrideAsync(worker, token).ConfigureAwait(false))
                     return Unavailable(escalationTrigger + "Strict captain selection prevents automatic escalation; no captain substitution was made.");
                 Captain? alternative = await CaptainEscalationSelector.SelectAsync(_Database, worker, worker.CaptainId, voyageMissions, token).ConfigureAwait(false);
-                if (alternative == null) return Unavailable(escalationTrigger + "No alternate eligible Worker captain is available for Judge-requested escalation. Check captain availability, scope, tier and persona priorities.");
+                if (alternative == null) return Unavailable(escalationTrigger + "No eligible Worker captain is available for Judge-requested escalation: none on a higher rung of the Worker persona's escalation ladder or, with no ladder, with a higher tier. Check captain availability, scope, tier, persona priorities and the escalation ladder.");
                 escalateTo = alternative.Id;
             }
 

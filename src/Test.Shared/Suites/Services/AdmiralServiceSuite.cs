@@ -906,7 +906,7 @@ namespace Test.Shared.Suites.Services
                     Directory.CreateDirectory(dock.WorktreePath);
                     dock = await db.Docks.CreateAsync(dock).ConfigureAwait(false);
                     Mission worker = await db.Missions.CreateAsync(new Mission("Build it [Worker]", "Do it. A brief may quote the old marker text:\n\n## Escalated to nobody\n\nwhich no longer blocks escalation (RS-3.2).") { VoyageId = voyage.Id, VesselId = vessel.Id, Persona = "Worker", Status = MissionStatusEnum.InProgress, ProcessId = 4242, DockId = dock.Id, BranchName = "armada/mux/w" }).ConfigureAwait(false);
-                    Captain mux = await CaptainAssignmentFixture.CreateAsync(db, new Captain("mux", AgentRuntimeEnum.Mux) { State = CaptainStateEnum.Working, ProcessId = 4242, RecoveryAttempts = 1 , Assignment = new Mission { Id = worker.Id, DockId = dock.Id }}).ConfigureAwait(false);
+                    Captain mux = await CaptainAssignmentFixture.CreateAsync(db, new Captain("mux", AgentRuntimeEnum.Mux) { State = CaptainStateEnum.Working, ProcessId = 4242, RecoveryAttempts = 1, Tier = CaptainTierEnum.Economy, Assignment = new Mission { Id = worker.Id, DockId = dock.Id }}).ConfigureAwait(false);
 
                     RuntimeProviderError endpoint500 = new RuntimeProviderError { HttpStatusCode = 500, ErrorType = "llm_error", Reason = "the model endpoint rejected the request" };
                     await service.HandleProcessExitAsync(4242, RuntimeFailureClassifier.Decide(1, endpoint500), mux.Id, worker.Id).ConfigureAwait(false);
@@ -919,6 +919,45 @@ namespace Test.Shared.Suites.Services
                     AssertEqual(1, escalated.EscalationCount, "escalation is counted in its column");
                     AssertEqual(mux.Id, escalated.EscalatedFromCaptainId, "the captain it was taken from is recorded");
                     try { Directory.Delete(dock.WorktreePath, true); } catch { }
+                }
+            }));
+
+            cases.Add(CaseAsync("repeated_malformed_tool_calls_escalate", "RS-5.6: a second unparsable tool call in a row moves the mission up the escalation ladder instead of resuming again", TestTags.Reliability, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    LadderScenario scenario = await LadderScenario.CreateAsync(testDb.Driver, CreateLogging(), CreateSettings()).ConfigureAwait(false);
+                    RuntimeProviderError parse = new RuntimeProviderError { ErrorType = OpenModelErrorPatterns.ToolCallParseError, Reason = "could not parse the tool call" };
+                    await scenario.Service.HandleProcessExitAsync(4646, RuntimeFailureClassifier.Decide(1, parse), scenario.Qwen.Id, scenario.Mission.Id).ConfigureAwait(false);
+                    Mission? resumed = await testDb.Driver.Missions.ReadAsync(scenario.Mission.Id).ConfigureAwait(false);
+                    AssertEqual(MissionStatusEnum.InProgress, resumed!.Status, "the first malformed tool call resumes in place");
+                    await scenario.Service.HandleProcessExitAsync(resumed.ProcessId!.Value, RuntimeFailureClassifier.Decide(1, parse), scenario.Qwen.Id, scenario.Mission.Id).ConfigureAwait(false);
+                    Mission? escalated = await testDb.Driver.Missions.ReadAsync(scenario.Mission.Id).ConfigureAwait(false);
+                    AssertEqual(MissionStatusEnum.Pending, escalated!.Status, "the second one escalates");
+                    AssertEqual(scenario.Gpt.Id, escalated.RequestedCaptainId, "to the next rung");
+                    AssertEqual(1, escalated.EscalationCount);
+                    AssertEqual("qwen3.8", escalated.EscalatedFromModel);
+                    scenario.Cleanup();
+                }
+            }));
+
+            cases.Add(CaseAsync("escalate_after_resumes_skips_remaining_resumes", "RS-5.6: a profile with EscalateAfterResumes 0 escalates a task failure at once while resumes remain", TestTags.Reliability, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    LadderScenario scenario = await LadderScenario.CreateAsync(testDb.Driver, CreateLogging(), CreateSettings()).ConfigureAwait(false);
+                    ModelProfile profile = new ModelProfile();
+                    profile.Identity.Runtime = "Mux";
+                    profile.Recovery.EscalateAfterResumes = 0;
+                    profile = await testDb.Driver.ModelProfiles.CreateAsync(profile, ModelProfileRules.IdentityKey(null, profile.Identity)).ConfigureAwait(false);
+                    AssertTrue(await testDb.Driver.ModelProfiles.LinkCaptainAsync(scenario.Qwen.Id, profile.Id).ConfigureAwait(false), "captain linked to the profile");
+                    RuntimeProviderError degenerate = new RuntimeProviderError { ErrorType = "degenerate_output", Reason = "the model repeated itself" };
+                    await scenario.Service.HandleProcessExitAsync(4646, RuntimeFailureClassifier.Decide(1, degenerate), scenario.Qwen.Id, scenario.Mission.Id).ConfigureAwait(false);
+                    Mission? escalated = await testDb.Driver.Missions.ReadAsync(scenario.Mission.Id).ConfigureAwait(false);
+                    AssertEqual(MissionStatusEnum.Pending, escalated!.Status, "no resume was spent");
+                    AssertEqual(scenario.Gpt.Id, escalated.RequestedCaptainId);
+                    AssertEqual(0, scenario.Relaunches, "the captain was not relaunched");
+                    scenario.Cleanup();
                 }
             }));
 
@@ -2326,6 +2365,50 @@ namespace Test.Shared.Suites.Services
                 displayName: displayName,
                 executeAsync: (CancellationToken ct) => body(),
                 tags: new List<string> { tag });
+        }
+
+
+        // A Mux Worker on qwen3.8 (Economy) whose persona's ladder is qwen3.8, then gpt-6.1 (RS-5.6).
+        private sealed class LadderScenario
+        {
+            public AdmiralService Service { get; private set; } = null!;
+            public Mission Mission { get; private set; } = null!;
+            public Captain Qwen { get; private set; } = null!;
+            public Captain Gpt { get; private set; } = null!;
+            public int Relaunches { get; private set; } = 0;
+            private string _DockPath = String.Empty;
+
+            public static async Task<LadderScenario> CreateAsync(DatabaseDriver db, LoggingModule logging, ArmadaSettings settings)
+            {
+                LadderScenario scenario = new LadderScenario();
+                StubGitService git = new StubGitService();
+                settings.MaxRecoveryAttempts = 3;
+                settings.TransientOutageGraceMinutes = 0;
+                settings.LogDirectory = Path.Combine(Path.GetTempPath(), "armada_test_logs_" + Guid.NewGuid().ToString("N"));
+                IDockService dockService = new DockService(logging, db, settings, git);
+                CaptainService captainService = new CaptainService(logging, db, settings, git, dockService);
+                captainService.OnLaunchAgent = (_, _, _) => { scenario.Relaunches++; return Task.FromResult(7300 + scenario.Relaunches); };
+                IMissionService missionService = new MissionService(logging, db, settings, dockService, captainService);
+                scenario.Service = new AdmiralService(logging, db, settings, captainService, missionService, new VoyageService(logging, db), dockService);
+
+                Persona worker = new Persona("Worker", "persona.worker");
+                worker.EscalationLadder = new List<PersonaCaptainPriority> { new PersonaCaptainPriority { Model = "qwen3.8" }, new PersonaCaptainPriority { Model = "gpt-6.1" } };
+                await db.Personas.CreateAsync(worker).ConfigureAwait(false);
+                Vessel vessel = await db.Vessels.CreateAsync(new Vessel("ladder-vessel", "https://github.com/test/repo.git")).ConfigureAwait(false);
+                Dock dock = new Dock(vessel.Id) { WorktreePath = Path.Combine(Path.GetTempPath(), "armada_ladder_dock_" + Guid.NewGuid().ToString("N")), Active = true };
+                Directory.CreateDirectory(dock.WorktreePath);
+                scenario._DockPath = dock.WorktreePath;
+                dock = await db.Docks.CreateAsync(dock).ConfigureAwait(false);
+                scenario.Mission = await db.Missions.CreateAsync(new Mission("Build it", "Do the work.") { VesselId = vessel.Id, Persona = "Worker", Status = MissionStatusEnum.InProgress, ProcessId = 4646, DockId = dock.Id, BranchName = "armada/ladder" }).ConfigureAwait(false);
+                scenario.Qwen = await CaptainAssignmentFixture.CreateAsync(db, new Captain("qwen", AgentRuntimeEnum.Mux) { Model = "qwen3.8", State = CaptainStateEnum.Working, ProcessId = 4646, Assignment = new Mission { Id = scenario.Mission.Id, DockId = dock.Id } }).ConfigureAwait(false);
+                scenario.Gpt = await CaptainAssignmentFixture.CreateAsync(db, new Captain("gpt", AgentRuntimeEnum.Codex) { Model = "gpt-6.1", State = CaptainStateEnum.Idle }).ConfigureAwait(false);
+                return scenario;
+            }
+
+            public void Cleanup()
+            {
+                try { Directory.Delete(_DockPath, true); } catch { }
+            }
         }
 
         #endregion

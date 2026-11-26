@@ -707,12 +707,31 @@ routing; a renamed Architect slice breaks fan-out recovery. Everything a program
   `Client.Contract.ModelProfiles`. Not done here: there is no tier default (the global settings are the defaults);
   "escalate after" moves to RS-5.6, which adds the ladder it acts on; the dashboard, TUI and mobile have no model
   profile screen yet, so the editor lands with RS-12.12, RS-12.9 and RS-12.16.
-- [ ] **RS-5.6** Escalation ladder. Personas (and optionally pipelines) get an ordered escalation ladder of captain
+- [x] **RS-5.6** Escalation ladder. Personas (and optionally pipelines) get an ordered escalation ladder of captain
   matchers, stored as relational child rows like `CaptainPriorities`. Escalation is allowed for standalone missions,
   can take more than one hop, and must move to the next rung or a strictly higher effective tier (G12). Triggers:
   exhausted resumes, `Unclassified` after its resume, Judge FAIL past the rework budget, repeated no-op, repeated
   malformed tool calls, and an open endpoint breaker (optional early fallback). Persists RS-3.1 columns. Surfaces:
-  REST, MCP, SDK, Postman, dashboard persona and pipeline editors, TUI, mobile, docs. Evidence:
+  REST, MCP, SDK, Postman, dashboard persona and pipeline editors, TUI, mobile, docs. Evidence: `Persona.EscalationLadder` (the
+  `PersonaCaptainPriority` matcher, child table `persona_escalation_rungs`, migration 136 with the profile column
+  `recovery_escalate_after_resumes`). `CaptainEscalationSelector.ChooseAsync` returns an `EscalationChoice`: the first
+  eligible captain on a rung above the failed captain's rung (idle first), none past the top rung, and with no ladder
+  only a strictly higher effective tier. `MissionService.ChooseEscalationAsync` / `ApplyEscalationAsync` hold the
+  guards (work stages only, `MaxEscalations` hops, default 2, strict assignments refused) and the in-place rewrite;
+  standalone missions escalate. Triggers: spent resumes and `Unclassified` past its resume (Admiral), the profile's
+  `EscalateAfterResumes` (task and Unclassified failures; transient outages keep resuming), two consecutive
+  `tool_call_parse_error` exits, repeated no-op or unfinished completions (fresh re-dispatches for the new captain), Judge
+  rejection past the budget (one escalated round per hop, in-place and rework hops share `MaxEscalations`), and the
+  opt-in `EscalateOnOpenEndpointBreaker`. Surfaces: REST and MCP persona create/update, MCP `get_model_profile`, the
+  .NET SDK (shared models), Postman, dashboard persona editors and detail, TUI persona form and overview, mobile
+  persona detail and form, REST_API.md, CAPTAIN_ROUTING.md, MODEL_HETEROGENEITY.md, README settings, CHANGELOG, API
+  surface. Tests: new `Services.EscalationLadder` (6), Admiral cases `repeated_malformed_tool_calls_escalate` and
+  `escalate_after_resumes_skips_remaining_resumes`, `Services.NoOpCompletion` `repeated_noop_escalates_up_the_ladder`,
+  `Services.RecoveryPolicy` (2 more), multi-hop and same-tier refusal in `Services.MultiRuntimeFlow`, ladder round trip
+  in `Database.ScopedPaging` (passes on SQLite, PostgreSQL, MySQL and SQL Server), `E2E.PersonaPriorityApi`,
+  `Tui.Personas`, dashboard and mobile persona tests (2026-11-25). Not done here: a pipeline-level ladder (optional in
+  this item; persona ladders cover pipelines, whose stages resolve personas); the malformed-tool-call count is in memory
+  and restarts with the Admiral; the iteration-limit trigger is RS-5.12; G12 is measured by the gate in RS-14.6.
 - [ ] **RS-5.7** Escalation carries memory: the escalated attempt's prompt gets the prior attempt's failure kind,
   output tail, diff summary, and BlackBox rule hint, rendered from typed records. Evidence:
 - [ ] **RS-5.8** Rescue routing. From the second rescue on, `MissionRecoveryCoordinator.DispatchRescueAsync` uses

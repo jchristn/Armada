@@ -583,6 +583,15 @@ Notes:
   values, so a profile never shortens the FullPipeline rework chain. A single-profile read also returns
   `effectiveRecovery`, the policy in effect. The policy applies to missions run by captains linked to the profile; a
   captain is linked from its stage outcomes, so the override belongs on the profile those outcomes resolve to.
+  `escalateAfterResumes` (RS-5.6) hands a task or `Unclassified` failure to the persona's escalation ladder after that
+  many resumes instead of spending them all; transient outages keep resuming.
+- **Escalation ladder (RS-5.6):** a persona's `EscalationLadder` lists captain classes, lowest rung first, for example
+  Qwen3.8, then GPT-6.1, then Opus. A work stage whose captain cannot finish (resumes spent, `Unclassified` after its
+  resume, two unparsable tool calls in a row, repeated no-op completions, or Judge rejections past the rework budget)
+  moves on the same branch to the next rung with an eligible captain, up to `MaxEscalations` hops (default 2). With no
+  ladder, a hop must reach a strictly higher effective tier, so an escalation never goes sideways (G12). Strict captain
+  assignments never escalate. `EscalateOnOpenEndpointBreaker` optionally escalates a transient failure at once when the
+  endpoint's circuit breaker is open.
 - `measured` holds counts with provenance, not synthetic scores. Speed observations feed inference and inactivity
   timeout advice only.
 

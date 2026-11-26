@@ -48,7 +48,7 @@ namespace Armada.Server
         /// <returns>The result.</returns>
         /// <exception cref="ArgumentNullException">Thrown when caller or persona is null.</exception>
         /// <exception cref="DuplicateEntityException">Thrown when a persona with that name already exists.</exception>
-        /// <exception cref="CollectionLimitExceededException">Thrown when CaptainPriorities holds more than <see cref="CollectionLimits.MaxConfigItems"/> entries.</exception>
+        /// <exception cref="CollectionLimitExceededException">Thrown when CaptainPriorities or EscalationLadder holds more than <see cref="CollectionLimits.MaxConfigItems"/> entries.</exception>
         public async Task<PersonaWriteResult> CreateAsync(AuthContext caller, Persona persona, CancellationToken token = default)
         {
             if (caller == null) throw new ArgumentNullException(nameof(caller));
@@ -82,12 +82,13 @@ namespace Armada.Server
         /// <param name="token">Cancellation token.</param>
         /// <returns>The result.</returns>
         /// <exception cref="ArgumentNullException">Thrown when caller or update is null.</exception>
-        /// <exception cref="CollectionLimitExceededException">Thrown when CaptainPriorities holds more than <see cref="CollectionLimits.MaxConfigItems"/> entries.</exception>
+        /// <exception cref="CollectionLimitExceededException">Thrown when CaptainPriorities or EscalationLadder holds more than <see cref="CollectionLimits.MaxConfigItems"/> entries.</exception>
         public async Task<PersonaWriteResult> UpdateAsync(AuthContext caller, string name, PersonaUpdateRequest update, bool defaultCaptainIdPresent, CancellationToken token = default)
         {
             if (caller == null) throw new ArgumentNullException(nameof(caller));
             if (update == null) throw new ArgumentNullException(nameof(update));
             CollectionLimits.RequireConfigItems(update.CaptainPriorities, "CaptainPriorities");
+            CollectionLimits.RequireConfigItems(update.EscalationLadder, "EscalationLadder");
 
             Persona? existing = await ReadVisibleAsync(caller, name, token).ConfigureAwait(false);
             if (existing == null) return PersonaWriteResult.Fail(PersonaWriteStatusEnum.NotFound, "Persona not found: " + name);
@@ -109,6 +110,7 @@ namespace Armada.Server
             if (defaultCaptainIdPresent) existing.DefaultCaptainId = String.IsNullOrEmpty(update.DefaultCaptainId) ? null : update.DefaultCaptainId;
             if ((caller.IsAdmin || caller.IsTenantAdmin) && update.Scope.HasValue) existing.Scope = update.Scope.Value;
             if (update.CaptainPriorities != null) existing.CaptainPriorities = update.CaptainPriorities;
+            if (update.EscalationLadder != null) existing.EscalationLadder = update.EscalationLadder;
             if (update.PriorityAvailability.HasValue) existing.PriorityAvailability = update.PriorityAvailability.Value;
             if (update.PriorityExhaustion.HasValue) existing.PriorityExhaustion = update.PriorityExhaustion.Value;
             string? routingError = PersonaCaptainPrioritySelector.Validate(existing);

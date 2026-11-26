@@ -647,10 +647,22 @@ namespace Test.Shared.Suites.Services
                 finalJudge.DependsOnMissionId = alternative.Id;
                 await testDb.Driver.Missions.UpdateAsync(finalJudge).ConfigureAwait(false);
                 await h.Missions.HandleCompletionAsync(finalReviewer, finalJudge.Id).ConfigureAwait(false);
-                Mission stopped = (await testDb.Driver.Missions.ReadAsync(finalJudge.Id).ConfigureAwait(false))!;
+                // RS-5.6: a rejected escalated attempt takes the next hop, up to MaxEscalations (2 by default).
+                all = await testDb.Driver.Missions.EnumerateByVoyageAsync(voyage.Id).ConfigureAwait(false);
+                Mission? secondHop = all.Find(m => m.DependsOnMissionId == finalJudge.Id && m.Persona == "Worker");
+                AssertNotNull(secondHop, "a rejected escalated attempt escalates once more");
+                AssertContains("(escalated)", secondHop!.Title);
+                secondHop.Status = MissionStatusEnum.WorkProduced;
+                await testDb.Driver.Missions.UpdateAsync(secondHop).ConfigureAwait(false);
+                Captain lastReviewer = await CreateCaptainAsync(testDb, "Last reviewer", AgentRuntimeEnum.ClaudeCode, CaptainStateEnum.Working).ConfigureAwait(false);
+                Mission lastHopJudge = await CreateRunningMissionAsync(testDb, h, vessel, voyage, lastReviewer, "Judge", false).ConfigureAwait(false);
+                lastHopJudge.DependsOnMissionId = secondHop.Id;
+                await testDb.Driver.Missions.UpdateAsync(lastHopJudge).ConfigureAwait(false);
+                await h.Missions.HandleCompletionAsync(lastReviewer, lastHopJudge.Id).ConfigureAwait(false);
+                Mission stopped = (await testDb.Driver.Missions.ReadAsync(lastHopJudge.Id).ConfigureAwait(false))!;
                 AssertEqual(MissionStatusEnum.Failed, stopped.Status, "A rejected escalated attempt cannot create an infinite recovery chain");
                 AssertContains("Judge rework limit reached", stopped.FailureReason);
-                AssertContains("escalated attempt", stopped.FailureReason);
+                AssertContains("including 2 escalation(s)", stopped.FailureReason);
                 AssertContains("Remediation:", stopped.FailureReason);
                 AssertContains("independent Judge", stopped.FailureReason);
             }));
@@ -861,7 +873,7 @@ namespace Test.Shared.Suites.Services
                     h.Missions.OnGetMissionOutput = _ => "## Affected Case\nFile: " + (sameCase ? "src/a.py:42" : "src/b.py:3") + "\nThe null input still throws.\n[ARMADA:VERDICT] NEEDS_REVISION";
                     Vessel vessel = await CreateVesselAsync(testDb).ConfigureAwait(false);
                     Voyage voyage = await testDb.Driver.Voyages.CreateAsync(new Voyage("repeated case") { Status = VoyageStatusEnum.InProgress }).ConfigureAwait(false);
-                    Captain deepseek = await CreateCaptainAsync(testDb, "Deepseek", AgentRuntimeEnum.ApiEndpoint).ConfigureAwait(false);
+                    Captain deepseek = await CreateCaptainAsync(testDb, "Deepseek", AgentRuntimeEnum.ApiEndpoint, CaptainStateEnum.Idle, CaptainTierEnum.Economy).ConfigureAwait(false);
                     Mission initial = await testDb.Driver.Missions.CreateAsync(new Mission("Implement", "Implement it") { VesselId = vessel.Id, VoyageId = voyage.Id, Persona = "Worker", Status = MissionStatusEnum.WorkProduced, CaptainId = deepseek.Id, CommitHash = "commit-one", BranchName = "b" }).ConfigureAwait(false);
                     Mission firstReview = await testDb.Driver.Missions.CreateAsync(new Mission("Review", "Review it") { VesselId = vessel.Id, VoyageId = voyage.Id, Persona = "Judge", Status = MissionStatusEnum.WorkProduced, DependsOnMissionId = initial.Id,
                         AgentOutput = "## Affected Case\nFile: src/a.py:17\nThe null input throws.\n[ARMADA:VERDICT] NEEDS_REVISION" }).ConfigureAwait(false);
@@ -887,7 +899,7 @@ namespace Test.Shared.Suites.Services
                 h.Missions.OnGetMissionOutput = _ => "## Affected Case\nFile: a.py:1\nThe implementation is still missing.\n[ARMADA:VERDICT] NEEDS_REVISION";
                 Vessel vessel = await CreateVesselAsync(testDb).ConfigureAwait(false);
                 Voyage voyage = await testDb.Driver.Voyages.CreateAsync(new Voyage("stagnation") { Status = VoyageStatusEnum.InProgress }).ConfigureAwait(false);
-                Captain deepseek = await CreateCaptainAsync(testDb, "Deepseek", AgentRuntimeEnum.ApiEndpoint).ConfigureAwait(false);
+                Captain deepseek = await CreateCaptainAsync(testDb, "Deepseek", AgentRuntimeEnum.ApiEndpoint, CaptainStateEnum.Idle, CaptainTierEnum.Economy).ConfigureAwait(false);
                 Mission initial = await testDb.Driver.Missions.CreateAsync(new Mission("Implement", "Implement it") { VesselId = vessel.Id, VoyageId = voyage.Id, Persona = "Worker", Status = MissionStatusEnum.WorkProduced, CaptainId = deepseek.Id, CommitHash = "same-commit", BranchName = "b" }).ConfigureAwait(false);
                 Mission rework = await testDb.Driver.Missions.CreateAsync(new Mission("[Worker] Rework 1: Implement", "Implement it") { VesselId = vessel.Id, VoyageId = voyage.Id, Persona = "Worker", Status = MissionStatusEnum.WorkProduced, CaptainId = deepseek.Id, CommitHash = "same-commit", BranchName = "b", DependsOnMissionId = initial.Id }).ConfigureAwait(false);
                 Captain codex = await CreateCaptainAsync(testDb, "Reviewer", AgentRuntimeEnum.Codex, CaptainStateEnum.Working).ConfigureAwait(false);
@@ -1016,7 +1028,7 @@ namespace Test.Shared.Suites.Services
                 await h.Missions.HandleCompletionAsync(reviewer, judge.Id).ConfigureAwait(false);
                 Mission failed = (await testDb.Driver.Missions.ReadAsync(judge.Id).ConfigureAwait(false))!;
                 AssertEqual(MissionStatusEnum.Failed, failed.Status);
-                AssertContains("No alternate eligible Worker captain", failed.FailureReason);
+                AssertContains("No eligible Worker captain is available", failed.FailureReason);
                 AssertContains("persona priorities", failed.FailureReason);
                 AssertContains("Remediation:", failed.FailureReason);
             }));
@@ -1024,7 +1036,7 @@ namespace Test.Shared.Suites.Services
             cases.Add(CaseAsync("escalation_respects_scope_and_availability", "Recovery excludes failed, quarantined, wrong-owner, disallowed and insufficient-tier captains and honors alternative Worker priorities", TestTags.Negative, async () =>
             {
                 using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
-                Captain failed = await CreateCaptainAsync(testDb, "Failed", AgentRuntimeEnum.ApiEndpoint).ConfigureAwait(false);
+                Captain failed = await CreateCaptainAsync(testDb, "Failed", AgentRuntimeEnum.ApiEndpoint, CaptainStateEnum.Idle, CaptainTierEnum.Economy).ConfigureAwait(false);
                 Captain quarantined = await CreateCaptainAsync(testDb, "Quarantined", AgentRuntimeEnum.Codex, CaptainStateEnum.Quarantined).ConfigureAwait(false);
                 Captain disallowed = await CreateCaptainAsync(testDb, "Judge only", AgentRuntimeEnum.ClaudeCode).ConfigureAwait(false);
                 disallowed.AllowedPersonas = "[\"Judge\"]";
@@ -1055,6 +1067,10 @@ namespace Test.Shared.Suites.Services
                 await testDb.Driver.Personas.CreateAsync(new Persona("Judge", "persona.judge") { DefaultCaptainId = alternative.Id }).ConfigureAwait(false);
                 selected = await CaptainEscalationSelector.SelectAsync(testDb.Driver, mission, failed.Id, new List<Mission> { pendingJudge }).ConfigureAwait(false);
                 AssertEqual(alternative.Id, selected!.Id, "The pending Judge's configured default can also recover an early worker failure");
+                failed.Tier = CaptainTierEnum.Standard;
+                await CaptainAssignmentFixture.UpdateAsync(testDb.Driver, failed).ConfigureAwait(false);
+                AssertNull(await CaptainEscalationSelector.SelectAsync(testDb.Driver, mission, failed.Id, new List<Mission> { pendingJudge }).ConfigureAwait(false),
+                    "Without a ladder a same-tier captain is not an escalation (G12)");
             }));
 
             cases.Add(CaseAsync("finished_voyage_settles_intermediate_stages", "When a voyage completes, handed-off intermediate stages become Complete; a final WorkProduced result is left alone", TestTags.Positive, async () =>
@@ -1079,10 +1095,11 @@ namespace Test.Shared.Suites.Services
 
         #region Private-Methods
 
-        private static async Task<Captain> CreateCaptainAsync(TestDatabase testDb, string name, AgentRuntimeEnum runtime, CaptainStateEnum state = CaptainStateEnum.Idle)
+        private static async Task<Captain> CreateCaptainAsync(TestDatabase testDb, string name, AgentRuntimeEnum runtime, CaptainStateEnum state = CaptainStateEnum.Idle, CaptainTierEnum? tier = null)
         {
             Captain captain = new Captain(name, runtime);
             captain.State = state;
+            captain.Tier = tier;
             return await CaptainAssignmentFixture.CreateAsync(testDb.Driver, captain).ConfigureAwait(false);
         }
 

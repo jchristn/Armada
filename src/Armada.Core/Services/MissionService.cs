@@ -1171,6 +1171,16 @@ namespace Armada.Core.Services
         }
 
         /// <inheritdoc />
+        public async Task<bool> IsEndpointBreakerOpenAsync(Captain captain, CancellationToken token = default)
+        {
+            if (captain == null) throw new ArgumentNullException(nameof(captain));
+            if (String.IsNullOrEmpty(captain.ModelEndpointId)) return false;
+            ModelEndpoint? endpoint = await _Database.ModelEndpoints.ReadAsync(captain.ModelEndpointId!, token).ConfigureAwait(false);
+            if (endpoint == null || !_EndpointBreakers.TryGetValue(EndpointCapacityKey(endpoint), out EndpointBreakerState? state)) return false;
+            lock (state) return state.OpenUntilUtc.HasValue && state.OpenUntilUtc.Value > DateTime.UtcNow;
+        }
+
+        /// <inheritdoc />
         public async Task RecordEndpointOutcomeAsync(Captain captain, bool healthy, CancellationToken token = default)
         {
             if (captain == null) throw new ArgumentNullException(nameof(captain));

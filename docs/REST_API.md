@@ -6245,9 +6245,10 @@ is null unless an administrator sets it, and null means the global setting appli
 | `TransientGraceMinutes` | 0-120 | `TransientOutageGraceMinutes` | How long a transient endpoint outage is ridden out past the resumes |
 | `JudgeReworkRounds` | 1-5 | `JudgeReworkRounds` | Automatic Judge rework rounds for a Worker slice; it can raise the global value but never lower it |
 | `OutputRepairAttempts` | 0-3 | `MaxOutputRepairAttempts` | Output-contract repair turns per mission |
+| `EscalateAfterResumes` | 0-10 | (`MaxResumes`) | Resumes after which a task or `Unclassified` failure moves up the persona's escalation ladder instead of resuming; never more than `MaxResumes`; transient outages keep resuming |
 
-`EffectiveRecovery` (single-profile reads only) is the policy in effect: the same five values after the overrides are
-applied, plus `ModelProfileId`. Stall recovery of a captain whose process stopped reporting keeps using
+`EffectiveRecovery` (single-profile reads only) is the policy in effect: the values after the overrides are
+applied (six with `EscalateAfterResumes`), plus `ModelProfileId`. Stall recovery of a captain whose process stopped reporting keeps using
 `MaxRecoveryAttempts`.
 
 ```bash
@@ -8237,8 +8238,22 @@ Create a new persona.
 | `CaptainPriorities` | object[] | no | Ordered matching classes (at most 256; more is a 400 with `Data.Code` `CollectionLimitExceeded`); defaults empty |
 | `PriorityAvailability` | enum | no | FallThrough (default) or WaitForFirstPriority |
 | `PriorityExhaustion` | enum | no | Wait (default) or UseEligibleCaptain; ignored by first-priority wait |
+| `EscalationLadder` | object[] | no | Escalation ladder, lowest rung first (at most 256), with the same matcher shape as a priority; defaults empty |
 
 Each priority has optional Runtime (AgentRuntimeEnum), Model (exact case-insensitive identifier, maximum 1024 characters), Endpoint (Mux endpoint name, case-insensitive, when Runtime is Mux; exact case-sensitive managed inference endpoint ID matching Captain.ModelEndpointId when Runtime is ApiEndpoint; maximum 1024 characters), and MinimumTier (Economy, Standard, Premium). At least one field is required. Entries combine their fields with AND; array order defines priority. Other runtimes cannot specify Endpoint. For example, `{ "Runtime": "ApiEndpoint", "Endpoint": "mep_your_endpoint" }` restricts the priority to captains bound to that endpoint. Runtime ApiEndpoint without Endpoint preserves the legacy any-API-captain match. Invalid routing returns 400. Persona reads and enumerations return these fields, including an empty CaptainPriorities array for legacy personas.
+
+`EscalationLadder` (RS-5.6) lists captain classes, lowest rung first, that a work stage of this persona moves up when
+its captain cannot finish: after its resumes are spent (or after the model profile's `EscalateAfterResumes`), after an
+`Unclassified` exit past its resume, after two unparsable tool calls in a row, after repeated no-op completions, or when
+the Judge rejects the work past the rework budget. The mission goes, on the same branch with the work so far, to the
+first eligible captain on a rung above the failed captain's rung (rung 1 when the failed captain matches none); past the
+top rung there is no escalation. With an empty ladder, escalation goes only to a captain with a strictly higher effective
+tier. A mission takes at most `MaxEscalations` hops (default 2). Planning and review stages, and missions whose voyage
+assigns the captain strictly, are never escalated. Standalone missions escalate too.
+
+```json
+{"Name":"Worker","PromptTemplateName":"persona.worker","EscalationLadder":[{"Model":"qwen3.8"},{"Model":"gpt-6.1"},{"Model":"claude-opus-5-5"}]}
+```
 
 ```json
 {"Name":"reviewer","PromptTemplateName":"persona.judge","CaptainPriorities":[{"Runtime":"Codex","MinimumTier":"Premium"},{"Runtime":"Mux","Endpoint":"local","Model":"gpt-oss:120b"}],"PriorityAvailability":"FallThrough","PriorityExhaustion":"Wait"}
@@ -8259,7 +8274,7 @@ curl -X POST http://localhost:7890/api/v1/personas \
 
 #### PUT /api/v1/personas/{name}
 
-Update an existing persona. Omitted routing fields preserve their stored values; an empty CaptainPriorities array clears the hierarchy. Null routing fields also preserve their values. An omitted `DefaultCaptainId` keeps the stored default captain; an explicit `null` or empty string clears it. Scope changes require administrator privileges.
+Update an existing persona. Omitted routing fields preserve their stored values; an empty CaptainPriorities array clears the hierarchy and an empty EscalationLadder clears the ladder. Null routing fields also preserve their values. An omitted `DefaultCaptainId` keeps the stored default captain; an explicit `null` or empty string clears it. Scope changes require administrator privileges.
 
 **Permission:** Authenticated
 
@@ -8276,6 +8291,7 @@ Update an existing persona. Omitted routing fields preserve their stored values;
 | `PromptTemplateName` | string | no | Updated prompt template name |
 | `DefaultCaptainId` | string? | no | Legacy preferred captain (must be visible to the caller); omitted keeps it, explicit null or empty clears it |
 | `CaptainPriorities` | object[]? | no | Ordered matching classes described under POST (at most 256); omitted/null preserves, empty clears |
+| `EscalationLadder` | object[]? | no | Escalation ladder described under POST (at most 256); omitted/null preserves, empty clears |
 | `PriorityAvailability` | enum? | no | FallThrough or WaitForFirstPriority; omitted/null preserves |
 | `PriorityExhaustion` | enum? | no | Wait or UseEligibleCaptain; omitted/null preserves |
 | `Scope` | enum? | no | TenantWide or UserSpecific; administrator-only change |

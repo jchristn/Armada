@@ -19,6 +19,9 @@ namespace Armada.Server
         /// <summary>Ordered matching classes; empty clears, null preserves. At most 256 entries.</summary>
         [CollectionBound(CollectionLimits.MaxConfigItems)]
         public List<PersonaCaptainPriority>? CaptainPriorities { get; set; }
+        /// <summary>Escalation ladder, lowest rung first (RS-5.6); empty clears, null preserves. At most 256 entries.</summary>
+        [CollectionBound(CollectionLimits.MaxConfigItems)]
+        public List<PersonaCaptainPriority>? EscalationLadder { get; set; }
         /// <summary>Optional unavailable-class policy.</summary>
         public PersonaPriorityAvailabilityEnum? PriorityAvailability { get; set; }
         /// <summary>Optional exhausted-list policy.</summary>

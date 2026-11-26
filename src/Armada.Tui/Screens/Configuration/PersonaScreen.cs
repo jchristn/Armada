@@ -177,6 +177,7 @@ namespace Armada.Tui.Screens.Configuration
             Overview.Row("Captain priorities", String.Join(" -> ", p.CaptainPriorities.Select(priority => String.Join(" / ", new[] { priority.Runtime?.ToString(), priority.Model, priority.Endpoint, priority.MinimumTier?.ToString() }.Where(v => !String.IsNullOrEmpty(v))))));
             Overview.Row("When a priority is unavailable", Context.Loc.T(p.PriorityAvailability == Armada.Core.Enums.PersonaPriorityAvailabilityEnum.WaitForFirstPriority ? "Wait for the first priority" : "Try lower priorities"));
             Overview.Row("When all priorities are unavailable", Context.Loc.T(p.PriorityAvailability == Armada.Core.Enums.PersonaPriorityAvailabilityEnum.WaitForFirstPriority || p.PriorityExhaustion == Armada.Core.Enums.PersonaPriorityExhaustionEnum.Wait ? "Wait" : "Use any eligible captain"));
+            Overview.Row("Escalation ladder", p.EscalationLadder.Count == 0 ? T("None (higher tier only)") : String.Join(" -> ", p.EscalationLadder.Select(rung => String.Join(" / ", new[] { rung.Runtime?.ToString(), rung.Model, rung.Endpoint, rung.MinimumTier?.ToString() }.Where(v => !String.IsNullOrEmpty(v))))));
             Overview.Row("Built-in", p.IsBuiltIn ? T("Built-in") : T("No"));
             Overview.Row("Active", EntityUi.Badge(Context, p.Active ? "Active" : "Inactive"));
             Overview.Row("Visibility", T(ScopeRules.Label(p.Scope)));

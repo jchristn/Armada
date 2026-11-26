@@ -145,6 +145,15 @@ namespace Armada.Core.Services.Interfaces
         Task RecordEndpointOutcomeAsync(Captain captain, bool healthy, CancellationToken token = default);
 
         /// <summary>
+        /// Whether the circuit breaker of the captain's managed endpoint is open (no new missions go to it).
+        /// </summary>
+        /// <param name="captain">Captain.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>True when the breaker is open; false for a captain with no managed endpoint.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when captain is null.</exception>
+        Task<bool> IsEndpointBreakerOpenAsync(Captain captain, CancellationToken token = default);
+
+        /// <summary>
         /// The typed result of the last dispatch attempt for a Pending mission (RS-4.6), or null when it has not been
         /// attempted since it last changed status. Dispatch logging and the stuck-admission monitor read this result.
         /// </summary>
@@ -177,6 +186,31 @@ namespace Armada.Core.Services.Interfaces
         /// <returns>True for a strict assignment.</returns>
         /// <exception cref="ArgumentNullException">Thrown when mission is null.</exception>
         Task<bool> HasStrictCaptainAssignmentAsync(Mission mission, CancellationToken token = default);
+
+        /// <summary>
+        /// Choose the captain a work stage escalates to after its captain could not finish (RS-5.6): the next rung of the
+        /// persona's escalation ladder, or a captain with a strictly higher effective tier. Null when the stage is not a
+        /// work stage, its escalations reached MaxEscalations, its assignment is strict, or no captain qualifies.
+        /// </summary>
+        /// <param name="mission">Mission.</param>
+        /// <param name="failedCaptainId">The captain that could not finish, or null.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The choice, or null.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when mission is null.</exception>
+        Task<EscalationChoice?> ChooseEscalationAsync(Mission mission, string? failedCaptainId, CancellationToken token = default);
+
+        /// <summary>
+        /// Return the mission to Pending pinned to the chosen captain, with an escalation note and the escalation columns
+        /// updated. The caller commits the dock's work first and releases the dock and the failed captain after.
+        /// </summary>
+        /// <param name="mission">Mission.</param>
+        /// <param name="failedCaptain">The captain that could not finish.</param>
+        /// <param name="choice">The chosen captain.</param>
+        /// <param name="failureReason">Why the captain could not finish.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>True when the mission moved to Pending; false when another writer changed it first.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when mission, failed captain or choice is null.</exception>
+        Task<bool> ApplyEscalationAsync(Mission mission, Captain failedCaptain, EscalationChoice choice, string failureReason, CancellationToken token = default);
 
         /// <summary>
         /// Re-drive pipeline handoffs that dangled: WorkProduced missions whose Pending downstream

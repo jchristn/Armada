@@ -16,11 +16,19 @@ import { errorText } from '../../resource/useLoad';
 import { useTheme } from '../../theme/ThemeContext';
 import { radius, spacing } from '../../theme/typography';
 
-interface Props { persona: Partial<Persona>; onClose: () => void; onSave: (routing: PersonaRoutingForm) => Promise<void> }
+interface Props {
+  persona: Partial<Persona>;
+  onClose: () => void;
+  onSave: (routing: PersonaRoutingForm) => Promise<void>;
+  /** Which list the sheet edits: the captain priorities (default) or the escalation ladder (RS-5.6). */
+  list?: 'captainPriorities' | 'escalationLadder';
+}
 
 /** Structured ordered matcher editor; state is discarded when the sheet is closed. */
-export function PersonaPrioritySheet({ persona, onClose, onSave }: Props) {
+export function PersonaPrioritySheet({ persona, onClose, onSave, list = 'captainPriorities' }: Props) {
   const { t } = useLocale();
+  const ladder = list === 'escalationLadder';
+  const itemLabel = (number: number) => ladder ? t('Rung {{number}}', { number }) : t('Priority {{number}}', { number });
   const { colors } = useTheme();
   const [routing, setRouting] = useState(() => personaRoutingForm(persona));
   const [error, setError] = useState('');
@@ -40,17 +48,17 @@ export function PersonaPrioritySheet({ persona, onClose, onSave }: Props) {
   }
   const [saving, setSaving] = useState(false);
   function update(index: number, patch: Partial<PersonaCaptainPriority>) {
-    setRouting(r => ({ ...r, captainPriorities: r.captainPriorities.map((p, i) => i === index ? { ...p, ...patch } : p) }));
+    setRouting(r => ({ ...r, [list]: r[list].map((p, i) => i === index ? { ...p, ...patch } : p) }));
   }
   function move(index: number, offset: number) {
     setRouting(r => {
-      const priorities = [...r.captainPriorities];
+      const priorities = [...r[list]];
       [priorities[index], priorities[index + offset]] = [priorities[index + offset], priorities[index]];
-      return { ...r, captainPriorities: priorities };
+      return { ...r, [list]: priorities };
     });
   }
   async function save() {
-    const validation = validatePersonaPriorities(routing.captainPriorities);
+    const validation = validatePersonaPriorities(routing[list]);
     if (validation) { setError(t(validation)); return; }
     setSaving(true);
     try { await onSave(routing); onClose(); }
@@ -58,11 +66,11 @@ export function PersonaPrioritySheet({ persona, onClose, onSave }: Props) {
     finally { setSaving(false); }
   }
   const any = [{ value: '', label: t('Any') }];
-  return <BottomSheet open title={t('Captain priorities')} onClose={saving ? () => {} : onClose} closeLabel={t('Close')} testID="persona-priorities"
+  return <BottomSheet open title={t(ladder ? 'Escalation ladder' : 'Captain priorities')} onClose={saving ? () => {} : onClose} closeLabel={t('Close')} testID={ladder ? 'persona-escalation-ladder' : 'persona-priorities'}
     footer={<FormActions><Button label={t('Cancel')} variant="ghost" onPress={onClose} disabled={saving} style={styles.button} /><Button label={t('Save')} onPress={() => { void save(); }} busy={saving} style={styles.button} /></FormActions>}>
-    <AppText muted style={styles.intro}>{t('Priorities run from top to bottom. Empty lists use the default captain routing.')}</AppText>
-    {routing.captainPriorities.map((priority, index) => <View key={index} style={[styles.card, { borderColor: colors.border, backgroundColor: colors.background }]}>
-      <AppText variant="subheading" muted accessibilityRole="header" style={styles.cardTitle}>{t('Priority {{number}}', { number: index + 1 })}</AppText>
+    <AppText muted style={styles.intro}>{t(ladder ? 'Rungs run from the weakest captain at the top to the strongest at the bottom. An empty ladder escalates only to a higher tier.' : 'Priorities run from top to bottom. Empty lists use the default captain routing.')}</AppText>
+    {routing[list].map((priority, index) => <View key={index} style={[styles.card, { borderColor: colors.border, backgroundColor: colors.background }]}>
+      <AppText variant="subheading" muted accessibilityRole="header" style={styles.cardTitle}>{itemLabel(index + 1)}</AppText>
       <SelectField label={t('Runtime')} value={priorityTarget(priority)} closeLabel={t('Close')} options={[...any, ...choices(priority)]} onChange={target => update(index, priorityTargetPatch(target, priority))} />
       <TextField label={t('Model')} value={priority.model ?? ''} onChangeText={model => update(index, { model: model || null })} autoCapitalize="none" />
       {priority.runtime === 'ApiEndpoint'
@@ -73,16 +81,16 @@ export function PersonaPrioritySheet({ persona, onClose, onSave }: Props) {
       <SelectField label={t('Minimum tier')} value={priority.minimumTier ?? ''} closeLabel={t('Close')} options={[...any, ...CAPTAIN_TIERS.map(tier => ({ value: tier, label: t(tier) }))]} onChange={minimumTier => update(index, { minimumTier: minimumTier || null })} />
       <View style={styles.actions}>
         <Button label={t('Move up')} icon="arrow-up" onPress={() => move(index, -1)} disabled={index === 0} variant="secondary" style={styles.button} />
-        <Button label={t('Move down')} icon="arrow-down" onPress={() => move(index, 1)} disabled={index === routing.captainPriorities.length - 1} variant="secondary" style={styles.button} />
-        <Button label={t('Remove priority')} icon="trash-outline" onPress={() => setRouting(r => ({ ...r, captainPriorities: r.captainPriorities.filter((_, i) => i !== index) }))} variant="danger" style={styles.button} />
+        <Button label={t('Move down')} icon="arrow-down" onPress={() => move(index, 1)} disabled={index === routing[list].length - 1} variant="secondary" style={styles.button} />
+        <Button label={t(ladder ? 'Remove rung' : 'Remove priority')} icon="trash-outline" onPress={() => setRouting(r => ({ ...r, [list]: r[list].filter((_, i) => i !== index) }))} variant="danger" style={styles.button} />
       </View>
     </View>)}
     {/* Choosing a runtime adds the priority at once: a separate pick-then-press step let a choice that was never added
         be saved as an empty list. */}
-    <SelectField label={t('Add priority')} value="" placeholder={t('Choose a runtime to add')} closeLabel={t('Close')} options={targets}
-      onChange={(target) => { if (target) setRouting(r => ({ ...r, captainPriorities: [...r.captainPriorities, priorityTargetPatch(target)] })); }} />
-    <SelectField label={t('When a priority is unavailable')} closeLabel={t('Close')} value={routing.priorityAvailability} options={[{ value: 'FallThrough', label: t('Try lower priorities') }, { value: 'WaitForFirstPriority', label: t('Wait for the first priority') }]} onChange={priorityAvailability => setRouting(r => ({ ...r, priorityAvailability }))} />
-    <SelectField label={t('When all priorities are unavailable')} closeLabel={t('Close')} value={routing.priorityExhaustion} disabled={routing.priorityAvailability === 'WaitForFirstPriority'} options={[{ value: 'Wait', label: t('Wait') }, { value: 'UseEligibleCaptain', label: t('Use any eligible captain') }]} onChange={priorityExhaustion => setRouting(r => ({ ...r, priorityExhaustion }))} />
+    <SelectField label={t(ladder ? 'Add rung' : 'Add priority')} value="" placeholder={t('Choose a runtime to add')} closeLabel={t('Close')} options={targets}
+      onChange={(target) => { if (target) setRouting(r => ({ ...r, [list]: [...r[list], priorityTargetPatch(target)] })); }} />
+    {ladder ? null : <><SelectField label={t('When a priority is unavailable')} closeLabel={t('Close')} value={routing.priorityAvailability} options={[{ value: 'FallThrough', label: t('Try lower priorities') }, { value: 'WaitForFirstPriority', label: t('Wait for the first priority') }]} onChange={priorityAvailability => setRouting(r => ({ ...r, priorityAvailability }))} />
+    <SelectField label={t('When all priorities are unavailable')} closeLabel={t('Close')} value={routing.priorityExhaustion} disabled={routing.priorityAvailability === 'WaitForFirstPriority'} options={[{ value: 'Wait', label: t('Wait') }, { value: 'UseEligibleCaptain', label: t('Use any eligible captain') }]} onChange={priorityExhaustion => setRouting(r => ({ ...r, priorityExhaustion }))} /></>}
     {error ? <AppText accessibilityRole="alert" color="danger">{error}</AppText> : null}
   </BottomSheet>;
 }

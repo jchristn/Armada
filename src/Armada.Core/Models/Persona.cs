@@ -107,6 +107,19 @@ namespace Armada.Core.Models
             set => _CaptainPriorities = value ?? new List<PersonaCaptainPriority>();
         }
 
+        /// <summary>
+        /// Ordered escalation ladder (RS-5.6): captain classes, lowest rung first, that a failed mission of this persona
+        /// moves up when its captain cannot finish. Escalation goes to the first eligible captain on a rung above the
+        /// failed captain's rung (rung 0 when it matches none). Empty means escalation picks a captain with a strictly
+        /// higher effective tier. At most <see cref="CollectionLimits.MaxConfigItems"/> entries; a write with more is rejected.
+        /// </summary>
+        [CollectionBound(CollectionLimits.MaxConfigItems)]
+        public List<PersonaCaptainPriority> EscalationLadder
+        {
+            get => _EscalationLadder;
+            set => _EscalationLadder = value ?? new List<PersonaCaptainPriority>();
+        }
+
         /// <summary>Unavailable-class policy. Defaults to FallThrough.</summary>
         public PersonaPriorityAvailabilityEnum PriorityAvailability { get; set; } = PersonaPriorityAvailabilityEnum.FallThrough;
 
@@ -128,6 +141,7 @@ namespace Armada.Core.Models
         #region Private-Members
 
         private List<PersonaCaptainPriority> _CaptainPriorities = new List<PersonaCaptainPriority>();
+        private List<PersonaCaptainPriority> _EscalationLadder = new List<PersonaCaptainPriority>();
         private string _Id = Constants.IdGenerator.GenerateKSortable("prs_", 24);
         private string _Name = "Worker";
         private string _PromptTemplateName = "persona.worker";

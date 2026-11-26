@@ -124,6 +124,8 @@ namespace Test.Shared.Suites.Database
                 string tenantId = (await db.Tenants.CreateAsync(new TenantMetadata("paging-personas")).ConfigureAwait(false)).Id;
                 Persona shared = PersonaFor(tenantId, "usr_a", ScopeEnum.TenantWide, "pp-shared");
                 shared.CaptainPriorities.Add(new PersonaCaptainPriority { Runtime = AgentRuntimeEnum.Codex });
+                shared.EscalationLadder.Add(new PersonaCaptainPriority { Model = "qwen3.8", MinimumTier = CaptainTierEnum.Economy });
+                shared.EscalationLadder.Add(new PersonaCaptainPriority { Runtime = AgentRuntimeEnum.Mux, Endpoint = "frontier" });
                 await db.Personas.CreateAsync(shared).ConfigureAwait(false);
                 await db.Personas.CreateAsync(PersonaFor(tenantId, "usr_a", ScopeEnum.UserSpecific, "pp-mine")).ConfigureAwait(false);
                 for (int i = 0; i < 3; i++)
@@ -136,6 +138,16 @@ namespace Test.Shared.Suites.Database
                 Persona? loaded = page.Objects.FirstOrDefault(p => p.Name == "pp-shared");
                 AssertNotNull(loaded, "shared persona visible");
                 AssertEqual(1, loaded!.CaptainPriorities.Count, "priorities load with the page");
+                AssertEqual(2, loaded.EscalationLadder.Count, "the escalation ladder loads with the page (RS-5.6)");
+                AssertEqual("qwen3.8", loaded.EscalationLadder[0].Model);
+                AssertEqual(CaptainTierEnum.Economy, loaded.EscalationLadder[0].MinimumTier);
+                AssertEqual("frontier", loaded.EscalationLadder[1].Endpoint, "rung order is kept");
+                loaded.EscalationLadder.RemoveAt(0);
+                await db.Personas.UpdateAsync(loaded).ConfigureAwait(false);
+                Persona reread = (await db.Personas.ReadAsync(loaded.Id).ConfigureAwait(false))!;
+                AssertEqual(1, reread.EscalationLadder.Count, "an update replaces the ladder");
+                AssertEqual(AgentRuntimeEnum.Mux, reread.EscalationLadder[0].Runtime);
+                AssertEqual(1, reread.CaptainPriorities.Count, "and keeps the priorities apart");
 
                 AuthContext admin = new AuthContext { IsAuthenticated = true, IsAdmin = true };
                 EnumerationResult<Persona> adminPage = await db.Personas.EnumeratePageAsync(new EnumerationQuery { PageSize = 1000 }, ScopedEnumerationFilter.ForScopedEntity(admin)).ConfigureAwait(false);

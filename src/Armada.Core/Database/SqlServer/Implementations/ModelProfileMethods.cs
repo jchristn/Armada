@@ -22,17 +22,17 @@ namespace Armada.Core.Database.SqlServer.Implementations
         private static readonly string _InsertProfile = @"INSERT INTO model_profiles
             (id, tenant_id, identity_key, runtime, provider, model, served_context_tokens, tools_available, mcp_available,
              rendering_template, rendering_repeat_contract_at_end, rendering_max_files_per_mission,
-             recovery_max_resumes, recovery_unclassified_resumes, recovery_transient_grace_minutes, recovery_judge_rework_rounds, recovery_output_repair_attempts, notes, created_utc, last_update_utc)
+             recovery_max_resumes, recovery_unclassified_resumes, recovery_transient_grace_minutes, recovery_judge_rework_rounds, recovery_output_repair_attempts, recovery_escalate_after_resumes, notes, created_utc, last_update_utc)
             VALUES
             (@id, @tenant_id, @identity_key, @runtime, @provider, @model, @served_context_tokens, @tools_available, @mcp_available,
              @rendering_template, @rendering_repeat_contract_at_end, @rendering_max_files_per_mission,
-             @recovery_max_resumes, @recovery_unclassified_resumes, @recovery_transient_grace_minutes, @recovery_judge_rework_rounds, @recovery_output_repair_attempts, @notes, @created_utc, @last_update_utc);";
+             @recovery_max_resumes, @recovery_unclassified_resumes, @recovery_transient_grace_minutes, @recovery_judge_rework_rounds, @recovery_output_repair_attempts, @recovery_escalate_after_resumes, @notes, @created_utc, @last_update_utc);";
 
         private static readonly string _UpdateProfile = @"UPDATE model_profiles SET
             tools_available = @tools_available, mcp_available = @mcp_available, rendering_template = @rendering_template,
             rendering_repeat_contract_at_end = @rendering_repeat_contract_at_end,
             rendering_max_files_per_mission = @rendering_max_files_per_mission,
-            recovery_max_resumes = @recovery_max_resumes, recovery_unclassified_resumes = @recovery_unclassified_resumes, recovery_transient_grace_minutes = @recovery_transient_grace_minutes, recovery_judge_rework_rounds = @recovery_judge_rework_rounds, recovery_output_repair_attempts = @recovery_output_repair_attempts, notes = @notes, last_update_utc = @last_update_utc
+            recovery_max_resumes = @recovery_max_resumes, recovery_unclassified_resumes = @recovery_unclassified_resumes, recovery_transient_grace_minutes = @recovery_transient_grace_minutes, recovery_judge_rework_rounds = @recovery_judge_rework_rounds, recovery_output_repair_attempts = @recovery_output_repair_attempts, recovery_escalate_after_resumes = @recovery_escalate_after_resumes, notes = @notes, last_update_utc = @last_update_utc
             WHERE id = @id;";
 
         private static readonly string _InsertRevision = @"INSERT INTO model_profile_revisions
@@ -300,6 +300,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
             SqlServerCommandHelper.Add(cmd, "@recovery_transient_grace_minutes", profile.Recovery.TransientGraceMinutes);
             SqlServerCommandHelper.Add(cmd, "@recovery_judge_rework_rounds", profile.Recovery.JudgeReworkRounds);
             SqlServerCommandHelper.Add(cmd, "@recovery_output_repair_attempts", profile.Recovery.OutputRepairAttempts);
+            SqlServerCommandHelper.Add(cmd, "@recovery_escalate_after_resumes", profile.Recovery.EscalateAfterResumes);
             SqlServerCommandHelper.Add(cmd, "@notes", profile.Notes);
             SqlServerCommandHelper.AddDate(cmd, "@last_update_utc", profile.LastUpdateUtc);
         }
@@ -329,6 +330,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
             profile.Recovery.TransientGraceMinutes = ReadRecovery(SqlServerCommandHelper.ReadNullableInt(reader["recovery_transient_grace_minutes"]), 0, 120);
             profile.Recovery.JudgeReworkRounds = ReadRecovery(SqlServerCommandHelper.ReadNullableInt(reader["recovery_judge_rework_rounds"]), 1, 5);
             profile.Recovery.OutputRepairAttempts = ReadRecovery(SqlServerCommandHelper.ReadNullableInt(reader["recovery_output_repair_attempts"]), 0, 3);
+            profile.Recovery.EscalateAfterResumes = ReadRecovery(SqlServerCommandHelper.ReadNullableInt(reader["recovery_escalate_after_resumes"]), 0, 10);
             profile.Notes = SqlServerCommandHelper.ReadString(reader["notes"]);
             profile.CreatedUtc = SqlServerCommandHelper.ReadDate(reader["created_utc"]);
             profile.LastUpdateUtc = SqlServerCommandHelper.ReadDate(reader["last_update_utc"]);

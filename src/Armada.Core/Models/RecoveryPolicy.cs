@@ -37,6 +37,12 @@ namespace Armada.Core.Models
         public int OutputRepairAttempts { get; set; } = 0;
 
         /// <summary>
+        /// Resumes after which a task or Unclassified failure escalates instead of resuming (RS-5.6). Equals
+        /// <see cref="MaxResumes"/> unless the profile sets a lower value.
+        /// </summary>
+        public int EscalateAfterResumes { get; set; } = 0;
+
+        /// <summary>
         /// Instantiate.
         /// </summary>
         public RecoveryPolicy()

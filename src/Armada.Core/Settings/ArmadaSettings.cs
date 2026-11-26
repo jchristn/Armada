@@ -470,6 +470,28 @@ namespace Armada.Core.Settings
         }
 
         /// <summary>
+        /// Escalation hops one mission may take up its persona's escalation ladder (or, with no ladder, to a captain with a
+        /// strictly higher effective tier) after its captain could not finish (RS-5.6). 0 turns automatic escalation off.
+        /// Must be in range [0, 5].
+        /// </summary>
+        public int MaxEscalations
+        {
+            get => _MaxEscalations;
+            set
+            {
+                if (value < 0) value = 0;
+                if (value > 5) value = 5;
+                _MaxEscalations = value;
+            }
+        }
+
+        /// <summary>
+        /// When true, a transient failure on a captain whose managed endpoint's circuit breaker is open escalates right
+        /// away (when an escalation captain exists) instead of riding out the outage on resumes (RS-5.6). Default false.
+        /// </summary>
+        public bool EscalateOnOpenEndpointBreaker { get; set; } = false;
+
+        /// <summary>
         /// How long, in minutes, a captain whose process runs on a Harbor that lost its link to the Admiral is held as
         /// unreachable instead of stalled. While held, missing output is not judged a stall: no recovery starts, no recovery
         /// attempt is counted, and the mission stays InProgress, because the captain may still be working on the Harbor.
@@ -1165,6 +1187,7 @@ namespace Armada.Core.Settings
         private int _TransientOutageGraceMinutes = 10;
         private int _UnclassifiedResumeLimit = 1;
         private int _JudgeReworkRounds = 2;
+        private int _MaxEscalations = 2;
         private int _HarborDisconnectGraceMinutes = 60;
         private int _LandingDeferralDeadlineHours = 24;
         private int _MinIdleCaptains = 0;

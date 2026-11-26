@@ -38,6 +38,23 @@ namespace Armada.Server.Mcp.Tools
             }
         };
 
+        private static readonly object _LadderSchema = new
+        {
+            type = "array",
+            description = "Escalation ladder (RS-5.6): captain classes, lowest rung first (at most 256), that a work stage moves up when its captain cannot finish; at least one field per entry. Empty clears it, and escalation then needs a strictly higher tier.",
+            items = new
+            {
+                type = "object",
+                properties = new
+                {
+                    runtime = new { type = "string", @enum = Enum.GetNames<AgentRuntimeEnum>() },
+                    model = new { type = "string", minLength = 1, maxLength = 1024 },
+                    endpoint = new { type = "string", minLength = 1, maxLength = 1024, description = "Mux endpoint name (runtime Mux) or exact managed inference endpoint ID (runtime ApiEndpoint; matches captain ModelEndpointId)" },
+                    minimumTier = new { type = "string", @enum = Enum.GetNames<CaptainTierEnum>() }
+                }
+            }
+        };
+
         /// <summary>
         /// Registers persona MCP tools with the server.
         /// </summary>
@@ -60,6 +77,7 @@ namespace Armada.Server.Mcp.Tools
                         defaultCaptainId = new { type = "string", description = "Optional default (preferred) captain id (cpt_ prefix) for this persona" },
                         scope = new { type = "string", @enum = Enum.GetNames<ScopeEnum>(), description = "Ownership: UserSpecific (only you) or TenantWide; a regular user can create only UserSpecific personas, and only an administrator can change it on update" },
                         captainPriorities = _PrioritySchema,
+                        escalationLadder = _LadderSchema,
                         priorityAvailability = new { type = "string", @enum = Enum.GetNames<PersonaPriorityAvailabilityEnum>() },
                         priorityExhaustion = new { type = "string", @enum = Enum.GetNames<PersonaPriorityExhaustionEnum>() }
                     },
@@ -75,6 +93,7 @@ namespace Armada.Server.Mcp.Tools
                     if (request.Description != null) persona.Description = request.Description;
                     persona.DefaultCaptainId = String.IsNullOrEmpty(request.DefaultCaptainId) ? null : request.DefaultCaptainId;
                     if (request.CaptainPriorities != null) persona.CaptainPriorities = request.CaptainPriorities;
+                    if (request.EscalationLadder != null) persona.EscalationLadder = request.EscalationLadder;
                     if (request.PriorityAvailability.HasValue) persona.PriorityAvailability = request.PriorityAvailability.Value;
                     if (request.PriorityExhaustion.HasValue) persona.PriorityExhaustion = request.PriorityExhaustion.Value;
                     if (request.Scope.HasValue) persona.Scope = request.Scope.Value;
@@ -118,6 +137,7 @@ namespace Armada.Server.Mcp.Tools
                         defaultCaptainId = new { type = "string", description = "Default (preferred) captain id (cpt_ prefix) for this persona; an empty string clears it, and omitting it keeps it" },
                         scope = new { type = "string", @enum = Enum.GetNames<ScopeEnum>(), description = "Ownership: UserSpecific (only you) or TenantWide; a regular user can create only UserSpecific personas, and only an administrator can change it on update" },
                         captainPriorities = _PrioritySchema,
+                        escalationLadder = _LadderSchema,
                         priorityAvailability = new { type = "string", @enum = Enum.GetNames<PersonaPriorityAvailabilityEnum>() },
                         priorityExhaustion = new { type = "string", @enum = Enum.GetNames<PersonaPriorityExhaustionEnum>() }
                     },
@@ -135,6 +155,7 @@ namespace Armada.Server.Mcp.Tools
                         DefaultCaptainId = request.DefaultCaptainId,
                         Scope = request.Scope,
                         CaptainPriorities = request.CaptainPriorities,
+                        EscalationLadder = request.EscalationLadder,
                         PriorityAvailability = request.PriorityAvailability,
                         PriorityExhaustion = request.PriorityExhaustion
                     };

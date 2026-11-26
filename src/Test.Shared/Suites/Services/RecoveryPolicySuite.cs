@@ -104,6 +104,31 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(1, settings.JudgeReworkRounds);
             }));
 
+            cases.Add(Case("escalate_after_resumes", "EscalateAfterResumes defaults to the resumes, never exceeds them, and caps Unclassified resumes (RS-5.6)", TestTags.Positive, () =>
+            {
+                AssertEqual(3, RecoveryPolicyResolver.Resolve(Settings(), null).EscalateAfterResumes, "default: escalate once the resumes are spent");
+                ModelProfile profile = new ModelProfile();
+                profile.Recovery.EscalateAfterResumes = 0;
+                RecoveryPolicy policy = RecoveryPolicyResolver.Resolve(Settings(), profile);
+                AssertEqual(0, policy.EscalateAfterResumes);
+                AssertEqual(0, policy.UnclassifiedResumes, "an Unclassified exit escalates at once too");
+                AssertEqual(3, policy.MaxResumes, "transient outages keep the resumes");
+                profile.Recovery.EscalateAfterResumes = 9;
+                AssertEqual(3, RecoveryPolicyResolver.Resolve(Settings(), profile).EscalateAfterResumes, "never more than the resumes");
+                AssertThrows<ArgumentOutOfRangeException>(() => profile.Recovery.EscalateAfterResumes = 11);
+            }));
+
+            cases.Add(Case("max_escalations_clamps", "MaxEscalations defaults to 2 (open, then two frontier rungs) and clamps to [0, 5]", TestTags.Negative, () =>
+            {
+                ArmadaSettings settings = new ArmadaSettings();
+                AssertEqual(2, settings.MaxEscalations);
+                AssertFalse(settings.EscalateOnOpenEndpointBreaker, "the breaker fallback is opt-in");
+                settings.MaxEscalations = 9;
+                AssertEqual(5, settings.MaxEscalations);
+                settings.MaxEscalations = -1;
+                AssertEqual(0, settings.MaxEscalations);
+            }));
+
             return new TestSuiteDescriptor(
                 suiteId: "Services.RecoveryPolicy",
                 displayName: "Recovery Policy",

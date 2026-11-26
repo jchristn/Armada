@@ -33,7 +33,7 @@ Client contract version: `1.0` (reported as `ContractVersion` by
 | WebSocket commands | 65 | 0 |
 | WebSocket event types | 81 | 0 |
 | CLI commands | 101 | 0 |
-| Settings keys | 354 | 12 |
+| Settings keys | 356 | 12 |
 
 ## REST API
 
@@ -620,7 +620,7 @@ Arguments are camelCase; `*` marks a required argument. See [MCP_API.md](MCP_API
 | `create_mission` | TenantAdmin | `branchStrategy: string`, `description*: string`, `isEvaluation: boolean`, `mode: string`, `parentMissionId: string`, `persona: string`, `selectedPlaybooks: array<object>`, `tier: string`, `title*: string`, `vesselId*: string`, `voyageId: string`, `workerEnvelope: object` |  |
 | `create_model_endpoint` | Authenticated | `apiKey: string`, `authHeaderName: string`, `authQueryParameter: string`, `authType: string`, `authUsername: string`, `baseUrl*: string`, `dimensionality: integer`, `enabled: boolean`, `headers: array<object>`, `inferenceOptions: object`, `kind: string`, `model: string`, `name*: string`, `provider: string`, `timeoutMs: integer` |  |
 | `create_objective` | TenantAdmin | `acceptanceCriteria: array<string>`, `backlogState: string`, `blockedByObjectiveIds: array<string>`, `category: string`, `checkRunIds: array<string>`, `deploymentIds: array<string>`, `description: string`, `dueUtc: string`, `effort: string`, `evidenceLinks: array<string>`, `fleetIds: array<string>`, `incidentIds: array<string>`, `kind: string`, `missionIds: array<string>`, `nonGoals: array<string>`, `owner: string`, `parentObjectiveId: string`, `planningSessionIds: array<string>`, `priority: string`, `rank: integer`, `refinementSessionIds: array<string>`, `refinementSummary: string`, `releaseIds: array<string>`, `rolloutConstraints: array<string>`, `status: string`, `suggestedPipelineId: string`, `tags: array<string>`, `targetVersion: string`, `title*: string`, `vesselIds: array<string>`, `voyageIds: array<string>` |  |
-| `create_persona` | Authenticated | `captainPriorities: array<object>`, `defaultCaptainId: string`, `description: string`, `name*: string`, `priorityAvailability: string`, `priorityExhaustion: string`, `promptTemplateName*: string`, `scope: string` |  |
+| `create_persona` | Authenticated | `captainPriorities: array<object>`, `defaultCaptainId: string`, `description: string`, `escalationLadder: array<object>`, `name*: string`, `priorityAvailability: string`, `priorityExhaustion: string`, `promptTemplateName*: string`, `scope: string` |  |
 | `create_pipeline` | Authenticated | `description: string`, `name*: string`, `scope: string`, `stages*: array<object>` |  |
 | `create_playbook` | TenantAdmin | `active: boolean`, `content*: string`, `description: string`, `fileName*: string`, `scope: string` |  |
 | `create_prompt_template` | Authenticated | `active: boolean`, `category*: string`, `content*: string`, `description: string`, `name*: string`, `scope: string` |  |
@@ -838,7 +838,7 @@ Arguments are camelCase; `*` marks a required argument. See [MCP_API.md](MCP_API
 | `update_model_alert_thresholds` | Authenticated | `defaults: object`, `overrides: array<object>` |  |
 | `update_model_endpoint` | Authenticated | `apiKey: string`, `authHeaderName: string`, `authQueryParameter: string`, `authType: string`, `authUsername: string`, `baseUrl: string`, `dimensionality: integer`, `enabled: boolean`, `endpointId*: string`, `headers: array<object>`, `inferenceOptions: object`, `kind: string`, `model: string`, `name: string`, `provider: string`, `timeoutMs: integer` |  |
 | `update_objective` | TenantAdmin | `acceptanceCriteria: array<string>`, `backlogState: string`, `blockedByObjectiveIds: array<string>`, `category: string`, `checkRunIds: array<string>`, `deploymentIds: array<string>`, `description: string`, `dueUtc: string`, `effort: string`, `evidenceLinks: array<string>`, `fleetIds: array<string>`, `incidentIds: array<string>`, `kind: string`, `missionIds: array<string>`, `nonGoals: array<string>`, `objectiveId*: string`, `owner: string`, `parentObjectiveId: string`, `planningSessionIds: array<string>`, `priority: string`, `rank: integer`, `refinementSessionIds: array<string>`, `refinementSummary: string`, `releaseIds: array<string>`, `rolloutConstraints: array<string>`, `status: string`, `suggestedPipelineId: string`, `tags: array<string>`, `targetVersion: string`, `title: string`, `vesselIds: array<string>`, `voyageIds: array<string>` |  |
-| `update_persona` | Authenticated | `captainPriorities: array<object>`, `defaultCaptainId: string`, `description: string`, `name*: string`, `priorityAvailability: string`, `priorityExhaustion: string`, `promptTemplateName: string`, `scope: string` |  |
+| `update_persona` | Authenticated | `captainPriorities: array<object>`, `defaultCaptainId: string`, `description: string`, `escalationLadder: array<object>`, `name*: string`, `priorityAvailability: string`, `priorityExhaustion: string`, `promptTemplateName: string`, `scope: string` |  |
 | `update_pipeline` | Authenticated | `description: string`, `name*: string`, `stages: array<object>` |  |
 | `update_playbook` | TenantAdmin | `active: boolean`, `content: string`, `description: string`, `fileName: string`, `id*: string` |  |
 | `update_prompt_template` | Authenticated | `content*: string`, `description: string`, `name*: string` |  |
@@ -1213,6 +1213,7 @@ install with the home directory written as `~`; defaults are not frozen (see COM
 | `defaultRuntime` | string | `null` |  |
 | `deploymentMode` | enum DeploymentModeEnum (Local\|Split) | `"Local"` | experimental |
 | `docksDirectory` | string | `"~/.armada/docks"` |  |
+| `escalateOnOpenEndpointBreaker` | bool | `false` |  |
 | `escalationRules` | array<object> | `[]` |  |
 | `escalationRules[].action` | enum EscalationActionEnum (Log\|Webhook) | `"Log"` |  |
 | `escalationRules[].cooldownMinutes` | int | `30` |  |
@@ -1271,6 +1272,7 @@ install with the home directory written as `~`; defaults are not frozen (see COM
 | `loginRateLimit.windowMinutes` | int | `15` |  |
 | `maxCaptains` | int | `0` |  |
 | `maxConcurrentMissions` | int | `0` |  |
+| `maxEscalations` | int | `2` |  |
 | `maxLandingRetries` | int | `3` |  |
 | `maxLogFileCount` | int | `5` |  |
 | `maxLogFileSizeBytes` | long | `10485760` |  |
