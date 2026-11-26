@@ -109,12 +109,85 @@ namespace Test.Shared.Suites.Runtimes
                 await AssertThrowsAsync<OperationCanceledException>(() => h.RunAsync(cts.Token)).ConfigureAwait(false);
                 AssertEqual(0, h.Requests.Count);
             }));
+            cases.Add(Case("malformed_call_gets_corrective_turn", "A malformed tool-call 500 is not resent unchanged: the next request carries a corrective turn naming the tools and a higher temperature (RS-7.3)", TestTags.Positive, async () =>
+            {
+                Harness h = new Harness(Failed(500, "error parsing tool call: unexpected end of JSON input"), Calls("read_file"), Text(Done));
+                ApiTurnLoopResult result = await h.RunAsync().ConfigureAwait(false);
+                AssertEqual(0, result.ExitCode);
+                AssertEqual(0, h.Errors.Count, "a corrected failure raises no provider error");
+                AssertEqual(3, h.Requests.Count);
+                AssertNull(h.Requests[0].Temperature, "the first request keeps the configured options");
+                AssertEqual(0.8, h.Requests[1].Temperature ?? 0, "the corrective retry raises the temperature from 0.6 by 0.2");
+                AssertNull(h.Requests[2].Temperature, "later turns return to the configured options");
+                AssertContains("could not parse your last tool call", h.Requests[1].LastUser!);
+                AssertContains("read_file", h.Requests[1].LastUser!);
+                AssertTrue(h.Diagnostics.Any(d => d.StartsWith("[retry] malformed or degenerate generation", StringComparison.Ordinal)), "the correction is logged");
+            }));
+            cases.Add(Case("repeat_loop_gets_no_repeat_turn", "A token repeat limit 500 gets a corrective turn telling the model not to repeat itself (RS-7.3, RS-7.17)", TestTags.Positive, async () =>
+            {
+                Harness h = new Harness(Failed(500, "token repeat limit reached"), Text(Done));
+                h.Temperature = 0.2;
+                ApiTurnLoopResult result = await h.RunAsync().ConfigureAwait(false);
+                AssertEqual(0, result.ExitCode);
+                AssertContains("Do not repeat yourself", h.Requests[1].LastUser!);
+                AssertEqual(0.4, h.Requests[1].Temperature ?? 0, "the configured temperature is the starting point");
+            }));
+            cases.Add(Case("malformed_call_retries_are_bounded", "Consecutive malformed generations end the run with the provider error after the configured retries (RS-7.3)", TestTags.Negative, async () =>
+            {
+                Harness h = new Harness(Failed(500, "token repeat limit reached"), Failed(500, "token repeat limit reached"), Failed(500, "token repeat limit reached"), Text(Done));
+                ApiTurnLoopResult result = await h.RunAsync().ConfigureAwait(false);
+                AssertEqual(1, result.ExitCode);
+                AssertEqual(3, h.Requests.Count, "the first failure plus two corrective retries");
+                AssertEqual(1.0, h.Requests[2].Temperature ?? 0, "the second retry raises it again, capped at 1.0");
+                AssertContains("token repeat limit reached", h.Errors.Single().Reason);
+            }));
+            cases.Add(Case("malformed_call_retry_off_fails_at_once", "With corrective retries off (a Harbor without api-malformed-call-retry-v1), a malformed generation fails as in 1.4.0", TestTags.Negative, async () =>
+            {
+                Harness h = new Harness(Failed(500, "error parsing tool call: invalid character"), Text(Done));
+                h.Behaviors.MalformedCallRetries = 0;
+                ApiTurnLoopResult result = await h.RunAsync().ConfigureAwait(false);
+                AssertEqual(1, result.ExitCode);
+                AssertEqual(1, h.Requests.Count);
+            }));
+            cases.Add(Case("other_failures_are_not_corrected", "A failure that is not a malformed or degenerate generation still stops at once", TestTags.Negative, async () =>
+            {
+                Harness h = new Harness(Failed(500, "llama runner process has terminated"), Text(Done));
+                ApiTurnLoopResult result = await h.RunAsync().ConfigureAwait(false);
+                AssertEqual(1, result.ExitCode);
+                AssertEqual(1, h.Requests.Count);
+            }));
+            cases.Add(Case("history_reasoning_is_stripped", "Leaked reasoning (a bare closing think tag) is removed from visible text and from the assistant text kept in history; provider state is kept (RS-7.6)", TestTags.Positive, async () =>
+            {
+                ChatResponse leaked = Calls("read_file");
+                leaked.Text = "I should read the file first.\n</think>\nReading it.";
+                leaked.ProviderState = System.Text.Json.JsonDocument.Parse("{\"thinking\":\"kept\"}").RootElement.Clone();
+                Harness h = new Harness(leaked, Text(Done));
+                await h.RunAsync().ConfigureAwait(false);
+                ChatMessage assistant = h.Messages[2];
+                AssertEqual("Reading it.", assistant.Text);
+                AssertNotNull(assistant.ProviderState, "provider continuation state is replayed unchanged");
+                AssertEqual("Reading it.", h.Emitted[0]);
+            }));
+            cases.Add(Case("history_reasoning_kept_when_off", "With reasoning hygiene off, history keeps the assistant text as 1.4.0 did", TestTags.Negative, async () =>
+            {
+                ChatResponse leaked = Calls("read_file");
+                leaked.Text = "I should read the file first.\n</think>\nReading it.";
+                Harness h = new Harness(leaked, Text(Done));
+                h.Behaviors.ReasoningHygiene = false;
+                await h.RunAsync().ConfigureAwait(false);
+                AssertContains("</think>", h.Messages[2].Text!);
+            }));
             return new TestSuiteDescriptor(SuiteId, "API runtime turn loop", cases);
         }
 
         private static ChatResponse Text(string text)
         {
             return new ChatResponse { Success = true, Text = text, FinishReason = "stop" };
+        }
+
+        private static ChatResponse Failed(int status, string error)
+        {
+            return new ChatResponse { Success = false, StatusCode = status, Error = error };
         }
 
         private static ChatResponse Calls(params string[] names)
@@ -133,6 +206,8 @@ namespace Test.Shared.Suites.Runtimes
         {
             public List<string> ToolNames { get; set; } = new List<string>();
             public string? ToolChoice { get; set; } = null;
+            public double? Temperature { get; set; } = null;
+            public string? LastUser { get; set; } = null;
         }
 
         private sealed class Harness
@@ -148,6 +223,8 @@ namespace Test.Shared.Suites.Runtimes
             public int MaxIterations { get; set; } = 10;
             public int? ContextLength { get; set; } = null;
             public NativeSubmitTool? SubmitTool { get; set; } = null;
+            public ApiRuntimeBehaviors Behaviors { get; } = new ApiRuntimeBehaviors();
+            public double? Temperature { get; set; } = null;
             private readonly Queue<ChatResponse> _Script;
 
             public Harness(params ChatResponse[] script)
@@ -161,7 +238,13 @@ namespace Test.Shared.Suites.Runtimes
                 {
                     InferAsync = (request, ct) =>
                     {
-                        Requests.Add(new RequestRecord { ToolNames = request.Tools.Select(t => t.Name).ToList(), ToolChoice = request.ToolChoice });
+                        Requests.Add(new RequestRecord
+                        {
+                            ToolNames = request.Tools.Select(t => t.Name).ToList(),
+                            ToolChoice = request.ToolChoice,
+                            Temperature = request.Options?.Temperature,
+                            LastUser = request.Messages.Count == 0 ? null : request.Messages[request.Messages.Count - 1].Text
+                        });
                         return Task.FromResult(_Script.Count > 0 ? _Script.Dequeue() : Text(Done));
                     },
                     ExecuteToolAsync = (call, ct) =>
@@ -175,8 +258,8 @@ namespace Test.Shared.Suites.Runtimes
                     ProviderError = error => Errors.Add(error)
                 };
                 HashSet<string> permitted = Tools.Select(t => t.Name).ToHashSet(StringComparer.Ordinal);
-                ApiTurnLoop loop = new ApiTurnLoop(callbacks, new ApiContextPolicy(ContextLength), new ApiTerminalPolicy(SubmitTool == null, null, SubmitTool),
-                    SubmitTool, new CompletionOptions(), MaxIterations, false);
+                ApiTurnLoop loop = new ApiTurnLoop(callbacks, new ApiContextPolicy(ContextLength), new ApiTerminalPolicy(SubmitTool == null, null, SubmitTool, Behaviors.ReasoningHygiene),
+                    SubmitTool, new CompletionOptions { Temperature = Temperature }, MaxIterations, false, Behaviors);
                 return loop.RunAsync(Messages, Tools, permitted, token);
             }
         }

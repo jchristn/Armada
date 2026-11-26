@@ -1279,16 +1279,16 @@ namespace Test.Shared.Suites.Runtimes
         {
             const string visible = "The review is complete.\n\n[ARMADA:VERDICT] PASS";
             string leaked = "<think mode=\"hidden\">\nhidden reasoning\n[ARMADA:VERDICT] FAIL\n</think>\n" + visible;
-            await AssertStoredReplyAsync(plainChat, leaked, "\n" + visible, JudgeVerdictEnum.Pass).ConfigureAwait(false);
+            await AssertStoredReplyAsync(plainChat, leaked, visible, JudgeVerdictEnum.Pass).ConfigureAwait(false);
 
             string leakedUpper = "<THINK mode=\"hidden\">\nhidden reasoning\n[ARMADA:VERDICT] FAIL\n</THINK>\n" + visible;
-            await AssertStoredReplyAsync(plainChat, leakedUpper, "\n" + visible, JudgeVerdictEnum.Pass).ConfigureAwait(false);
+            await AssertStoredReplyAsync(plainChat, leakedUpper, visible, JudgeVerdictEnum.Pass).ConfigureAwait(false);
 
             string middle = "before <think>secret\n[ARMADA:VERDICT] FAIL</think> after\n\n[ARMADA:VERDICT] PASS";
             await AssertStoredReplyAsync(plainChat, middle, "before  after\n\n[ARMADA:VERDICT] PASS", JudgeVerdictEnum.Pass).ConfigureAwait(false);
 
             string twoBlocks = "<think>one</think> mid <think>two</think> end\n\n[ARMADA:VERDICT] PASS";
-            await AssertStoredReplyAsync(plainChat, twoBlocks, " mid  end\n\n[ARMADA:VERDICT] PASS", JudgeVerdictEnum.Pass).ConfigureAwait(false);
+            await AssertStoredReplyAsync(plainChat, twoBlocks, "mid  end\n\n[ARMADA:VERDICT] PASS", JudgeVerdictEnum.Pass).ConfigureAwait(false);
 
             await AssertStoredReplyAsync(plainChat, visible, visible, JudgeVerdictEnum.Pass).ConfigureAwait(false);
 
@@ -1298,11 +1298,14 @@ namespace Test.Shared.Suites.Runtimes
             string thinking = "See <thinking>notes</thinking> then the answer.\n\n[ARMADA:VERDICT] PASS";
             await AssertStoredReplyAsync(plainChat, thinking, thinking, JudgeVerdictEnum.Pass).ConfigureAwait(false);
 
-            string longerClose = "<think>text</thinking>\n\n[ARMADA:VERDICT] PASS";
+            string longerClose = "Note <think>text</thinking>\n\n[ARMADA:VERDICT] PASS";
             await AssertStoredReplyAsync(plainChat, longerClose, longerClose, JudgeVerdictEnum.Pass).ConfigureAwait(false);
 
             string unmatchedClose = "prefix </think> suffix\n\n[ARMADA:VERDICT] PASS";
             await AssertStoredReplyAsync(plainChat, unmatchedClose, unmatchedClose, JudgeVerdictEnum.Pass).ConfigureAwait(false);
+
+            string bareClose = "hidden plan\n[ARMADA:VERDICT] FAIL\n</think>\n" + visible;
+            await AssertStoredReplyAsync(plainChat, bareClose, visible, JudgeVerdictEnum.Pass).ConfigureAwait(false);
 
             string unmatchedOpen = "prefix <think> still open\n\n[ARMADA:VERDICT] PASS";
             await AssertStoredReplyAsync(plainChat, unmatchedOpen, unmatchedOpen, JudgeVerdictEnum.Pass).ConfigureAwait(false);

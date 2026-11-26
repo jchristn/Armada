@@ -7,6 +7,7 @@ namespace Armada.Runtimes
     using System.Threading;
     using System.Threading.Tasks;
     using Armada.Core.Models;
+    using Armada.Core.Services;
     using PolyPrompt.Models;
 
     /// <summary>
@@ -27,6 +28,7 @@ namespace Armada.Runtimes
         private readonly CompletionOptions _Options;
         private readonly int _MaxIterations;
         private readonly bool _Streamed;
+        private readonly ApiRuntimeBehaviors _Behaviors;
 
         #endregion
 
@@ -42,6 +44,7 @@ namespace Armada.Runtimes
         /// <param name="options">Completion options sent with every turn.</param>
         /// <param name="maxIterations">Model-turn limit; 0 sends no turn.</param>
         /// <param name="streamed">Whether turns are streamed (reported in diagnostics).</param>
+        /// <param name="behaviors">Open-model behavior switches; null uses the defaults (all on).</param>
         /// <exception cref="ArgumentNullException">Thrown when callbacks, context, terminal or options is null.</exception>
         /// <exception cref="ArgumentOutOfRangeException">Thrown when maxIterations is negative.</exception>
         public ApiTurnLoop(
@@ -51,7 +54,8 @@ namespace Armada.Runtimes
             NativeSubmitTool? submitTool,
             CompletionOptions options,
             int maxIterations,
-            bool streamed)
+            bool streamed,
+            ApiRuntimeBehaviors? behaviors = null)
         {
             _Callbacks = callbacks ?? throw new ArgumentNullException(nameof(callbacks));
             _Context = context ?? throw new ArgumentNullException(nameof(context));
@@ -61,6 +65,7 @@ namespace Armada.Runtimes
             _SubmitTool = submitTool;
             _MaxIterations = maxIterations;
             _Streamed = streamed;
+            _Behaviors = behaviors ?? new ApiRuntimeBehaviors();
         }
 
         #endregion
@@ -85,6 +90,8 @@ namespace Armada.Runtimes
 
             ApiTurnLoopResult result = new ApiTurnLoopResult();
             bool forceSubmitNext = false;
+            int corrections = 0;
+            CompletionOptions? correctedOptions = null;
             for (int iteration = 0; iteration < _MaxIterations; iteration++)
             {
                 token.ThrowIfCancellationRequested();
@@ -95,7 +102,8 @@ namespace Armada.Runtimes
                 ChatRequest request = new ChatRequest();
                 request.Messages = messages;
                 request.Tools = tools;
-                request.Options = _Options;
+                request.Options = correctedOptions ?? _Options;
+                correctedOptions = null;
                 if (forceSubmitNext && _SubmitTool != null)
                 {
                     // RS-6.3: only the submit tool is offered and a tool call is required.
@@ -109,6 +117,20 @@ namespace Armada.Runtimes
 
                 _Callbacks.Diagnostic(ApiRuntimeDiagnosticKindEnum.Inference, "[inference] " + JsonSerializer.Serialize(new { iteration = iteration + 1, maxIterations = _MaxIterations, streamed = _Streamed, response.Success, response.ResponseId, response.FinishReason, response.Usage, reasoningLength = response.Reasoning?.Length ?? 0, textLength = response.Text?.Length ?? 0, toolCalls = response.ToolCalls?.Count ?? 0 }));
 
+                if (!response.Success && corrections < _Behaviors.MalformedCallRetries && iteration < _MaxIterations - 1 && MalformedCallCorrection.Applies(response))
+                {
+                    // RS-7.3: a malformed tool call or a repeat loop is not resent unchanged. The next request carries a
+                    // corrective turn and a varied temperature; the provider error ends the run only after the retries.
+                    corrections++;
+                    correctedOptions = MalformedCallCorrection.Vary(_Options, corrections);
+                    _Callbacks.Diagnostic(ApiRuntimeDiagnosticKindEnum.Warning, "[retry] malformed or degenerate generation ("
+                        + (response.StatusCode.HasValue ? "HTTP " + response.StatusCode + " " : String.Empty) + (response.Error ?? "no detail")
+                        + "); corrective turn " + corrections + " of " + _Behaviors.MalformedCallRetries + " at temperature "
+                        + correctedOptions.Temperature?.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                    messages.Add(ChatMessage.User(MalformedCallCorrection.Message(response.Error, request.Tools ?? tools)));
+                    continue;
+                }
+
                 if (!response.Success)
                 {
                     string reason = String.IsNullOrEmpty(response.Error) ? "the inference endpoint reported failure without detail" : response.Error!;
@@ -118,6 +140,7 @@ namespace Armada.Runtimes
                     break;
                 }
 
+                corrections = 0;
                 ApiContextCheck window = _Context.AfterResponse(messages, response.Usage);
                 if (window.Note != null) _Callbacks.Diagnostic(ApiRuntimeDiagnosticKindEnum.Inference, window.Note);
                 if (window.Failure != null)
@@ -128,14 +151,14 @@ namespace Armada.Runtimes
                     break;
                 }
 
-                string visibleText = ApiTerminalPolicy.StripThinkBlocks(response.Text);
+                string visibleText = _Terminal.VisibleText(response.Text);
                 if (!String.IsNullOrEmpty(visibleText))
                 {
                     result.FinalText = visibleText;
                     _Callbacks.Emit(visibleText);
                 }
 
-                messages.Add(response.ToAssistantMessage());
+                messages.Add(HistoryMessage(response));
 
                 if (response.ToolCalls == null || response.ToolCalls.Count == 0)
                 {
@@ -185,6 +208,21 @@ namespace Armada.Runtimes
         #endregion
 
         #region Private-Methods
+
+        private ChatMessage HistoryMessage(ChatResponse response)
+        {
+            ChatMessage message = response.ToAssistantMessage();
+            // RS-7.6: leaked reasoning in assistant text is not sent back. Provider continuation state (thinking that a
+            // provider requires to be replayed, signatures) lives in ProviderState and is kept unchanged.
+            if (_Behaviors.ReasoningHygiene && ReasoningText.HasReasoning(message.Text))
+            {
+                string stripped = ReasoningText.Strip(message.Text);
+                bool hasCalls = message.ToolCalls != null && message.ToolCalls.Count > 0;
+                message.Text = stripped.Length == 0 && hasCalls ? null : stripped;
+            }
+
+            return message;
+        }
 
         private async Task ExecuteToolCallsAsync(List<ToolCall> calls, List<ChatMessage> messages, ISet<string> permittedTools, CancellationToken token)
         {

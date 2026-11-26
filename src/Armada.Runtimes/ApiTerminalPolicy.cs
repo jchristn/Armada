@@ -57,6 +57,7 @@ namespace Armada.Runtimes
         private readonly bool _RequiresCompletion;
         private readonly int? _ConfiguredMaxTokens;
         private readonly NativeSubmitTool? _SubmitTool;
+        private readonly bool _ReasoningHygiene;
         private int _IncompleteResponses = 0;
         private int _ForcedSubmits = 0;
         private RuntimeProviderError? _TokenLimitFailure = null;
@@ -71,8 +72,10 @@ namespace Armada.Runtimes
         /// <param name="requiresCompletion">Whether a finished reply must carry the standalone completion line.</param>
         /// <param name="configuredMaxTokens">The endpoint's Max Output Tokens, named in the token-limit error, or null.</param>
         /// <param name="submitTool">The stage's native submit tool, or null when the stage has none.</param>
-        public ApiTerminalPolicy(bool requiresCompletion, int? configuredMaxTokens, NativeSubmitTool? submitTool)
+        /// <param name="reasoningHygiene">Strip all leaked reasoning with <see cref="ReasoningText.Strip"/> (RS-7.6); false removes only complete think blocks, as in 1.4.0.</param>
+        public ApiTerminalPolicy(bool requiresCompletion, int? configuredMaxTokens, NativeSubmitTool? submitTool, bool reasoningHygiene = true)
         {
+            _ReasoningHygiene = reasoningHygiene;
             _RequiresCompletion = requiresCompletion;
             _ConfiguredMaxTokens = configuredMaxTokens;
             _SubmitTool = submitTool;
@@ -103,7 +106,7 @@ namespace Armada.Runtimes
             };
 
             ApiTerminalDecision decision = new ApiTerminalDecision();
-            decision.FinalText = StripThinkBlocks(response.Text);
+            decision.FinalText = VisibleText(response.Text);
             bool turnsLeft = iteration + 1 < maxIterations;
 
             // RS-6.3: a stage with a submit tool that stopped without submitting, and whose reply does not meet the
@@ -156,7 +159,7 @@ namespace Armada.Runtimes
         {
             if (reply == null) throw new ArgumentNullException(nameof(reply));
             ApiTerminalDecision decision = new ApiTerminalDecision();
-            decision.FinalText = StripThinkBlocks(reply.Text);
+            decision.FinalText = VisibleText(reply.Text);
             if (IsCompleteResponse(decision.FinalText, reply.FinishReason, _RequiresCompletion)) return decision;
 
             bool tokenLimit = IsTokenLimit(reply.FinishReason);
@@ -169,6 +172,18 @@ namespace Armada.Runtimes
                     : "Plain inference did not produce a valid mission completion."
             };
             return decision;
+        }
+
+        /// <summary>
+        /// The visible part of assistant text: with reasoning hygiene, <see cref="ReasoningText.Strip"/> (complete think
+        /// blocks, the text before a bare closing tag, an unclosed leading block); without it,
+        /// <see cref="StripThinkBlocks"/>.
+        /// </summary>
+        /// <param name="text">Assistant text from the inference client.</param>
+        /// <returns>The visible text, or an empty string.</returns>
+        public string VisibleText(string? text)
+        {
+            return _ReasoningHygiene ? ReasoningText.Strip(text) : StripThinkBlocks(text);
         }
 
         /// <summary>

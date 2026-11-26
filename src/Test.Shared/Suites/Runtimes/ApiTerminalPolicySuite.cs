@@ -38,6 +38,17 @@ namespace Test.Shared.Suites.Runtimes
                 AssertEqual("ab", ApiTerminalPolicy.StripThinkBlocks("a<think type=\"x\">hidden</think >b"));
                 AssertEqual(String.Empty, ApiTerminalPolicy.StripThinkBlocks(null));
             }));
+            cases.Add(Case("bare_close_think_is_stripped", "With reasoning hygiene, text before a bare closing think tag and an unclosed leading block are removed from the final text; without it, 1.4.0 stripping applies (RS-7.6)", TestTags.Positive, () =>
+            {
+                ApiTerminalPolicy hygienic = new ApiTerminalPolicy(false, null, null);
+                ApiTerminalDecision decision = hygienic.Decide(Reply("Let me check the plan.\n</think>\nAnswer", "stop"), 0, 10);
+                AssertEqual("Answer", decision.FinalText);
+                AssertEqual(String.Empty, hygienic.VisibleText("<think>still reasoning when the stream ended"));
+                AssertEqual("Use `</think>` to close a block.", hygienic.VisibleText("Use `</think>` to close a block."), "a quoted tag is not reasoning");
+                ApiTerminalPolicy legacy = new ApiTerminalPolicy(false, null, null, reasoningHygiene: false);
+                AssertContains("</think>", legacy.VisibleText("Let me check.\n</think>\nAnswer"));
+                AssertEqual("Answer", legacy.VisibleText("<think>plan</think>Answer"));
+            }));
             cases.Add(Case("continues_twice_then_fails", "An incomplete reply is continued twice, then fails as incomplete_completion", TestTags.Negative, () =>
             {
                 ApiTerminalPolicy policy = new ApiTerminalPolicy(true, null, null);

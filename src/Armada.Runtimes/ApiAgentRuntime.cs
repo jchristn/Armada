@@ -134,6 +134,17 @@ namespace Armada.Runtimes
         public Func<ModelEndpoint, string?, CancellationToken, Task>? ContextDiscovery { get; set; } = null;
 
         /// <summary>
+        /// Open-model behavior switches (RS-7.3 corrective retries, RS-7.6 reasoning hygiene, RS-7.16 model warm-up).
+        /// All are on by default; a host turns one off to keep 1.4.0 behavior.
+        /// </summary>
+        /// <exception cref="ArgumentNullException">Thrown when the value is null.</exception>
+        public ApiRuntimeBehaviors Behaviors
+        {
+            get { return _Behaviors; }
+            set { _Behaviors = value ?? throw new ArgumentNullException(nameof(Behaviors)); }
+        }
+
+        /// <summary>
         /// Name of the built-in shell tool gated by <see cref="ShellPolicy"/>.
         /// </summary>
         public const string ShellToolName = "run_process";
@@ -141,6 +152,9 @@ namespace Armada.Runtimes
         #endregion
 
         #region Private-Members
+
+        private static readonly TimeSpan _RetryAfterObservationAge = TimeSpan.FromSeconds(30);
+        private ApiRuntimeBehaviors _Behaviors = new ApiRuntimeBehaviors();
 
         // Synthetic process ids start well above any real OS process id so a stray Process.GetProcessById does
         // not collide with an unrelated live process.
@@ -343,7 +357,7 @@ namespace Armada.Runtimes
 
         #region Private-Methods
 
-        private async Task<T> WithInferenceRetryAsync<T>(Func<Task<T>> call, Func<T, bool> succeeded, Func<T, int?> status, Func<T, string?> error, int processId, StrongBox<long> lastCallMs, CancellationToken token, Func<int?>? retryAfterSeconds = null)
+        private async Task<T> WithInferenceRetryAsync<T>(Func<Task<T>> call, Func<T, bool> succeeded, Func<T, int?> status, Func<T, string?> error, int processId, StrongBox<long> lastCallMs, CancellationToken token, Func<int?>? retryAfterSeconds = null, Func<T, bool>? correctInstead = null)
         {
             for (int attempt = 0; ; attempt++)
             {
@@ -370,6 +384,9 @@ namespace Armada.Runtimes
                 }
 
                 if (succeeded(result) || attempt >= _InferenceRetries || !IsRetryableInferenceStatus(status(result))) return result;
+                // RS-7.3: a malformed tool call or a degenerate generation would fail the same way again; the turn loop
+                // retries it with a corrective turn instead of an identical resend.
+                if (correctInstead != null && correctInstead(result)) return result;
                 // RS-5.4: honor the server's Retry-After. A wait longer than the in-run cap goes back to the Admiral, which
                 // resumes the captain after it instead of holding an HTTP retry loop open.
                 int? waitSeconds = retryAfterSeconds?.Invoke();
@@ -484,18 +501,28 @@ namespace Armada.Runtimes
                 : "The model did not start responding within " + firstResponseMs + " ms (first-response deadline: model load and prompt evaluation).";
         }
 
-        private static int? LastRetryAfterSeconds(ProviderClientBase client)
+        private int? LastRetryAfterSeconds(ProviderClientBase client)
         {
             List<CallDetail> calls = client.CallDetails;
-            if (calls.Count == 0) return null;
-            CallDetail last = calls[calls.Count - 1];
-            if (last.ResponseHeaders == null) return null;
-            foreach (KeyValuePair<string, string> header in last.ResponseHeaders)
+            if (calls.Count > 0)
             {
-                if (!String.Equals(header.Key, "Retry-After", StringComparison.OrdinalIgnoreCase)) continue;
-                return ParseRetryAfterSeconds(header.Value, DateTime.UtcNow);
+                CallDetail last = calls[calls.Count - 1];
+                if (last.ResponseHeaders != null)
+                {
+                    foreach (KeyValuePair<string, string> header in last.ResponseHeaders)
+                    {
+                        if (!String.Equals(header.Key, "Retry-After", StringComparison.OrdinalIgnoreCase)) continue;
+                        return ParseRetryAfterSeconds(header.Value, DateTime.UtcNow);
+                    }
+                }
             }
-            return null;
+
+            // A streamed call that fails before its stream opens records no call detail headers (PolyPrompt 5.0.1), so
+            // the Retry-After comes from the rate-limit headers the HTTP handler saw: a 429 or 503 observed just now.
+            UsageHeaderObservation? observed = UsageHeaders.LatestObservation;
+            if (observed == null || (observed.StatusCode != 429 && observed.StatusCode != 503)) return null;
+            if (DateTime.UtcNow - observed.ObservedUtc > _RetryAfterObservationAge) return null;
+            return observed.Headers.TryGetValue("Retry-After", out string? value) ? ParseRetryAfterSeconds(value, DateTime.UtcNow) : null;
         }
 
         /// <summary>
@@ -516,6 +543,21 @@ namespace Armada.Runtimes
                 return delta <= 0 ? 1 : (int)Math.Min(Int32.MaxValue, Math.Ceiling(delta));
             }
             return null;
+        }
+
+        private async Task WarmModelAsync(int processId, ModelEndpoint endpoint, string? model, CancellationToken token)
+        {
+            // RS-7.16: load an Ollama model before the first turn so a cold load is not charged to the first-response
+            // deadline. A failed load is only a diagnostic; the first turn reports a real problem.
+            if (!_Behaviors.ModelWarmup || !OllamaModelWarmup.Applies(endpoint)) return;
+            int timeoutSeconds = Math.Min(OllamaModelWarmup.MaxTimeoutSeconds, Math.Max(OllamaModelWarmup.DefaultTimeoutSeconds,
+                (endpoint.InferenceOptions.FirstResponseTimeoutMs ?? 0) / 1000));
+            OllamaWarmupResult warmed = await OllamaModelWarmup.WarmAsync(endpoint, model, null, timeoutSeconds, token).ConfigureAwait(false);
+            if (!warmed.Attempted) return;
+            EmitDiagnostic(processId, warmed.Succeeded ? ApiRuntimeDiagnosticKindEnum.Inference : ApiRuntimeDiagnosticKindEnum.Warning,
+                warmed.Succeeded
+                    ? "[warmup] model loaded with keep_alive in " + warmed.ElapsedMs + " ms"
+                    : "[warmup] model load failed (" + (warmed.Reason ?? "no detail") + "); continuing with the first turn");
         }
 
         private static bool IsRetryableInferenceStatus(int? status)
@@ -559,6 +601,7 @@ namespace Armada.Runtimes
                 if (ContextDiscovery != null && !endpoint.InferenceOptions.ContextLength.HasValue) await ContextDiscovery(endpoint, model, token).ConfigureAwait(false);
                 if (ModelContextDiscovery.ApplyWindow(endpoint))
                     EmitDiagnostic(processId, ApiRuntimeDiagnosticKindEnum.Inference, "[context] window " + endpoint.InferenceOptions.ContextLength + " tokens, discovered from " + endpoint.DiscoveredContextSource);
+                await WarmModelAsync(processId, endpoint, model, token).ConfigureAwait(false);
                 using ProviderClientBase client = _ClientFactory(endpoint, _Logging);
                 if (!String.IsNullOrWhiteSpace(model) && client.Defaults.Completion != null) client.Defaults.Completion.Model = model;
                 // Only the last call's response headers are read (Retry-After); retaining more holds request bodies in memory.
@@ -602,7 +645,7 @@ namespace Armada.Runtimes
                         WriteFinalMessage(finalMessageFilePath, String.Empty);
                         return;
                     }
-                    ApiTerminalDecision plain = new ApiTerminalPolicy(requiresCompletionLine, settings.MaxTokens, null).DecidePlain(reply);
+                    ApiTerminalDecision plain = new ApiTerminalPolicy(requiresCompletionLine, settings.MaxTokens, null, _Behaviors.ReasoningHygiene).DecidePlain(reply);
                     finalText = plain.FinalText;
                     if (plain.Action == ApiTerminalActionEnum.Fail)
                     {
@@ -718,7 +761,8 @@ namespace Armada.Runtimes
 
                 ApiTurnLoopCallbacks callbacks = new ApiTurnLoopCallbacks
                 {
-                    InferAsync = (request, ct) => WithInferenceRetryAsync(() => settings.Streaming ? StreamToolChatAsync(client, request, firstResponseMs, idleMs, ct) : client.ChatAsync(request, ct), r => r.Success, r => r.StatusCode, r => r.Error, processId, lastCallMs, ct, () => LastRetryAfterSeconds(client)),
+                    InferAsync = (request, ct) => WithInferenceRetryAsync(() => settings.Streaming ? StreamToolChatAsync(client, request, firstResponseMs, idleMs, ct) : client.ChatAsync(request, ct), r => r.Success, r => r.StatusCode, r => r.Error, processId, lastCallMs, ct, () => LastRetryAfterSeconds(client),
+                        r => _Behaviors.MalformedCallRetries > 0 && MalformedCallCorrection.Applies(r)),
                     InferenceFailure = (response, reason) => InferenceFailure(response.StatusCode, response.Error, reason, lastCallMs.Value, settings.Streaming, LastRetryAfterSeconds(client)),
                     ExecuteToolAsync = (call, ct) => submitTool != null && String.Equals(call.Name, submitTool.Name, StringComparison.Ordinal)
                         ? ExecuteSubmitToolAsync(processId, submitTool, submitForward, call, ct)
@@ -731,11 +775,12 @@ namespace Armada.Runtimes
                 ApiTurnLoop loop = new ApiTurnLoop(
                     callbacks,
                     new ApiContextPolicy(settings.ContextLength),
-                    new ApiTerminalPolicy(requiresCompletionLine, settings.MaxTokens, submitTool),
+                    new ApiTerminalPolicy(requiresCompletionLine, settings.MaxTokens, submitTool, _Behaviors.ReasoningHygiene),
                     submitTool,
                     completionOptions,
                     Math.Min(_MaxIterations, settings.MaxIterations),
-                    settings.Streaming);
+                    settings.Streaming,
+                    _Behaviors);
                 ApiTurnLoopResult outcome = await loop.RunAsync(messages, tools, permittedTools, token).ConfigureAwait(false);
                 exitCode = outcome.ExitCode;
                 finalText = outcome.FinalText;

@@ -244,6 +244,45 @@ namespace Test.Shared.Suites.Runtimes
                 AssertNull(Armada.Runtimes.ApiAgentRuntime.ParseRetryAfterSeconds("soon", DateTime.UtcNow));
             }));
 
+            cases.Add(Case("api_runtime_corrects_degenerate_generation", "Against the simulator, a token repeat limit 500 and a tool-call parse 500 are each followed by one corrective request, not an identical resend, and the run finishes; the Ollama model is loaded first (RS-7.3, RS-7.16, RS-7.17)", async () =>
+            {
+                foreach (SimulatedTurnKindEnum kind in new[] { SimulatedTurnKindEnum.TokenRepeatLimit500, SimulatedTurnKindEnum.OllamaToolCallParse500 })
+                {
+                    using OpenModelSimulator sim = new OpenModelSimulator();
+                    sim.FallbackText = "DONE";
+                    sim.Enqueue(SimulatedTurn.Of(kind));
+                    int code = await RunSimulatedAsync(sim, new ApiRuntimeBehaviors()).ConfigureAwait(false);
+                    AssertEqual(0, code, kind + ": the corrected run finishes");
+                    AssertEqual("/api/generate", sim.Requests[0].Path, kind + ": the warm-up loads the model before the first turn");
+                    List<SimulatorRequest> chats = sim.Requests.Where(r => r.Path.EndsWith("/api/chat", StringComparison.Ordinal)).ToList();
+                    AssertEqual(2, chats.Count, kind + ": one failed turn and one corrective turn, no identical resend");
+                    AssertContains(kind == SimulatedTurnKindEnum.TokenRepeatLimit500 ? "Do not repeat yourself" : "could not parse your last tool call", chats[1].Body);
+                    AssertContains("\"temperature\":0.8", chats[1].Body.Replace(" ", String.Empty));
+                }
+            }));
+            cases.Add(Case("api_runtime_1_4_behaviors_when_switched_off", "With the open-model behaviors off, the runtime resends a degenerate generation unchanged and sends no warm-up, as 1.4.0 did", async () =>
+            {
+                using OpenModelSimulator sim = new OpenModelSimulator();
+                sim.FallbackText = "DONE";
+                sim.Enqueue(SimulatedTurn.Of(SimulatedTurnKindEnum.TokenRepeatLimit500));
+                int code = await RunSimulatedAsync(sim, new ApiRuntimeBehaviors { MalformedCallRetries = 0, ModelWarmup = false, ReasoningHygiene = false }).ConfigureAwait(false);
+                AssertEqual(0, code, "the identical resend gets the fallback reply");
+                AssertFalse(sim.Requests.Any(r => r.Path.EndsWith("/api/generate", StringComparison.Ordinal)), "no warm-up");
+                List<SimulatorRequest> chats = sim.Requests.Where(r => r.Path.EndsWith("/api/chat", StringComparison.Ordinal)).ToList();
+                AssertEqual(2, chats.Count);
+                AssertEqual(chats[0].Body, chats[1].Body, "the request is resent unchanged");
+            }));
+            cases.Add(Case("retry_after_is_honored_when_streaming", "A streamed turn's 429 keeps its Retry-After: a long wait ends the run as Transient carrying the wait (RS-5.4, RS-7.3)", async () =>
+            {
+                RuntimeProviderError? shortWait = await RunBackpressureAsync("1", 1, streaming: true).ConfigureAwait(false);
+                AssertNull(shortWait, "a one-second Retry-After on a streamed turn is waited out inside the run");
+
+                RuntimeProviderError? longWait = await RunBackpressureAsync("120", 3, streaming: true).ConfigureAwait(false);
+                AssertNotNull(longWait, "a two-minute Retry-After on a streamed turn goes back to the Admiral");
+                AssertEqual(429, longWait!.HttpStatusCode ?? 0);
+                AssertEqual(120, longWait.RetryAfterSeconds ?? 0, "the streamed 429's wait travels with the provider error");
+            }));
+
             return new TestSuiteDescriptor(suiteId: SuiteId, displayName: "Open-model simulator", cases: cases);
         }
 
@@ -293,7 +332,39 @@ namespace Test.Shared.Suites.Runtimes
             }
         }
 
-        private static async Task<RuntimeProviderError?> RunBackpressureAsync(string retryAfter, int busyTurns)
+        private static async Task<int> RunSimulatedAsync(OpenModelSimulator sim, ApiRuntimeBehaviors behaviors)
+        {
+            string dir = TestTemp.NewDirectory("open_model_sim");
+            try
+            {
+                ModelEndpoint endpoint = new ModelEndpoint
+                {
+                    Name = "sim",
+                    Kind = ModelEndpointKindEnum.Inference,
+                    Provider = ModelProviderEnum.Ollama,
+                    Model = sim.ModelName,
+                    BaseUrl = sim.BaseUrl,
+                    InferenceOptions = new InferenceOptions { StreamingMode = InferenceStreamingModeEnum.Off, McpToolsEnabled = false, MaxIterations = 6, ContextLength = 32768 }
+                };
+                LoggingModule logging = new LoggingModule();
+                logging.Settings.EnableConsole = false;
+                ApiAgentRuntime runtime = new ApiAgentRuntime(endpoint, logging, 8);
+                runtime.InferenceRetryBaseDelay = TimeSpan.Zero;
+                runtime.Behaviors = behaviors;
+                int code = -2;
+                using ManualResetEventSlim exited = new ManualResetEventSlim(false);
+                runtime.OnProcessExited += (pid, value) => { code = value ?? -2; exited.Set(); };
+                await runtime.StartAsync(dir, "Reply with exactly: DONE", new Dictionary<string, string>()).ConfigureAwait(false);
+                AssertTrue(exited.Wait(TimeSpan.FromSeconds(60)), "the runtime ends within 60 seconds");
+                return code;
+            }
+            finally
+            {
+                try { Directory.Delete(dir, true); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+            }
+        }
+
+        private static async Task<RuntimeProviderError?> RunBackpressureAsync(string retryAfter, int busyTurns, bool streaming = false)
         {
             string dir = Path.Combine(Path.GetTempPath(), "armada_sim_429_" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(dir);
@@ -315,7 +386,7 @@ namespace Test.Shared.Suites.Runtimes
                     Provider = ModelProviderEnum.Ollama,
                     Model = sim.ModelName,
                     BaseUrl = sim.BaseUrl,
-                    InferenceOptions = new InferenceOptions { StreamingMode = InferenceStreamingModeEnum.Off, McpToolsEnabled = false, MaxIterations = 4, ContextLength = 32768 }
+                    InferenceOptions = new InferenceOptions { StreamingMode = streaming ? InferenceStreamingModeEnum.On : InferenceStreamingModeEnum.Off, McpToolsEnabled = false, MaxIterations = 4, ContextLength = 32768 }
                 };
                 LoggingModule logging = new LoggingModule();
                 logging.Settings.EnableConsole = false;
