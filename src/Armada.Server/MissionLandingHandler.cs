@@ -224,7 +224,7 @@ namespace Armada.Server
             bool landingSucceeded = false;
             bool landingAttempted = false;
             string? landingFailureReason = null;
-            // Only a merge conflict git reports is a LandingConflict (LandingFailureClassifier); everything else is Infra.
+            // Only a merge conflict git reports is a LandingConflict (FailureKindMapper); everything else is Infra.
             MissionFailureKindEnum landingFailureKind = MissionFailureKindEnum.Infra;
             GitDirtyCheckoutException? dirtyCheckout = null;
             // Black box facts of the failing step, read while the merge lock is held (the target can move after it).
@@ -270,7 +270,7 @@ namespace Armada.Server
                     {
                         synchronizationFailed = true;
                         landingAttempted = true;
-                        landingFailureKind = LandingFailureClassifier.Classify(ex);
+                        landingFailureKind = FailureKindMapper.FromLandingException(ex);
                         landingFailureReason = "Current-target integration failed: " + ex.Message;
                         landingStep = BlackBoxStepEnum.TargetIntegration;
                         landingException = ex;
@@ -304,7 +304,7 @@ namespace Armada.Server
                         synchronizationFailed = true;
                         landingAttempted = true;
                         landingFailureReason = "Current-target integration failed: " + ex.Message;
-                        landingFailureKind = LandingFailureClassifier.Classify(ex);
+                        landingFailureKind = FailureKindMapper.FromLandingException(ex);
                         landingStep = BlackBoxSiteFacts.LandingStepOf(ex, BlackBoxStepEnum.TargetIntegration);
                         landingException = ex;
                     }
@@ -447,7 +447,7 @@ namespace Armada.Server
                         _Logging.Warn(_Header + "error pushing/creating PR for mission " + mission.Id + ": " + ex.ToString());
                         landingSucceeded = false;
                         landingFailureReason = "Error pushing/creating PR: " + ex.Message;
-                        landingFailureKind = LandingFailureClassifier.Classify(ex);
+                        landingFailureKind = FailureKindMapper.FromLandingException(ex);
                         landingStep = prStep;
                         landingException = ex;
                     }
@@ -558,7 +558,7 @@ namespace Armada.Server
 
                         // A dirty checkout or unpushed target commits are the operator's to resolve; a rescue mission cannot
                         // fix them, so record them as an environment failure rather than a landing conflict.
-                        landingFailureKind = LandingFailureClassifier.Classify(ex);
+                        landingFailureKind = FailureKindMapper.FromLandingException(ex);
                         landingStep = BlackBoxSiteFacts.LandingStepOf(ex, mergeStep);
                         landingException = ex;
                         if (ex is GitDirtyCheckoutException dirty)

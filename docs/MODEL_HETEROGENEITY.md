@@ -391,6 +391,33 @@ things separately on every failed, reworked or escalated stage:
 | Not the model | Environment, tooling or orchestration | `Infra`, `OperatorAction`, `Crash` from the runtime, tooling papercuts | Excluded from the model's results |
 | Unknown or mixed | The cause cannot be separated mechanically (context loss and insufficient capability often cannot) | Any | Collect more runs before acting |
 
+#### Where the observed failure kind comes from
+
+Every source maps to `MissionFailureKindEnum` in one class, `FailureKindMapper`
+(`src/Armada.Core/Services/FailureKindMapper.cs`). BlackBox rules and suspected-cause rules read the kind; they never
+set one.
+
+| Source | Signal | Failure kind |
+|---|---|---|
+| Runtime exit | Negative exit code (Armada stopped or lost the process, redispatch exhausted) | `Infra` |
+| Runtime exit | `TaskFailure` | `InvalidOutput` |
+| Runtime exit | `Transient` that outlasted its resumes and the outage grace | `Infra` |
+| Runtime exit | Any other runtime failure kind | `Crash` |
+| Definition of Done | `Compile`, `TestFail`, `Timeout`, `Infra` | The same kind |
+| Definition of Done | Any other outcome | `Unknown` |
+| Landing | A merge conflict git reported | `LandingConflict` |
+| Landing | Git could not start, dirty checkout, unpublished commits, refused push, anything else | `Infra` |
+| Merge queue merge | Conflicted files reported | `LandingConflict`, otherwise `Infra` |
+| Merge queue verification | Check failed / timed out / rewrote the tree | `TestFail` / `Timeout` / `Infra` |
+| Merge queue other steps | Any exception that is not a merge conflict | `Infra` |
+| Lost landing handoff | Nonblocking stage check, no merge queue entry after five minutes | `Infra` |
+| Mission status | `LandingFailed` with no recorded kind | `LandingConflict` |
+| Mission status | Any other failure with no recorded kind | `Unknown` |
+
+Kinds set directly where the failure is detected (for example `Boundary`, `NoOp`, `Blocked`, `JudgeRejected`,
+`MaxRuntimeExceeded`, `StallRecoveryExhausted`, `DependencyFailed`, `OperatorAction`) need no mapping. Only `Compile`,
+`TestFail`, `LandingConflict`, `Timeout` and `Crash` start an autonomous rescue (`FailureKindMapper.IsRecoverable`).
+
 Mechanical checks assign what they can. The Judge suggests a cause for its rejections, and any cause can be corrected
 by hand later. Because past failures were purged, this has to be captured going forward, starting in Phase 1.
 

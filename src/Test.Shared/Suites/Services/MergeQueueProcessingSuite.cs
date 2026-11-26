@@ -343,20 +343,20 @@ namespace Test.Shared.Suites.Services
 
             cases.Add(CaseAsync("failure_classifier_maps_steps_to_kinds", "The merge queue failure classifier maps each failing step to the kind that describes it", TestTags.Positive, async () =>
             {
-                AssertEqual(MissionFailureKindEnum.LandingConflict, MergeQueueFailureClassifier.ClassifyMerge(2));
-                AssertEqual(MissionFailureKindEnum.Infra, MergeQueueFailureClassifier.ClassifyMerge(0), "a merge that failed without conflicts is not a conflict");
-                AssertEqual(MissionFailureKindEnum.TestFail, MergeQueueFailureClassifier.Classify(MergeQueueFailureStepEnum.Verification,
+                AssertEqual(MissionFailureKindEnum.LandingConflict, FailureKindMapper.FromMergeResult(2));
+                AssertEqual(MissionFailureKindEnum.Infra, FailureKindMapper.FromMergeResult(0), "a merge that failed without conflicts is not a conflict");
+                AssertEqual(MissionFailureKindEnum.TestFail, FailureKindMapper.FromMergeQueueException(MergeQueueFailureStepEnum.Verification,
                     new LandingVerificationException("failed", "Failed", "exit 3", 3, "abc", false)));
-                AssertEqual(MissionFailureKindEnum.Timeout, MergeQueueFailureClassifier.Classify(MergeQueueFailureStepEnum.Verification,
+                AssertEqual(MissionFailureKindEnum.Timeout, FailureKindMapper.FromMergeQueueException(MergeQueueFailureStepEnum.Verification,
                     new LandingVerificationException("timed out", "TimedOut", "sleep 999", null, "abc", false)));
-                AssertEqual(MissionFailureKindEnum.Timeout, MergeQueueFailureClassifier.Classify(MergeQueueFailureStepEnum.Verification, new TimeoutException("budget")));
-                AssertEqual(MissionFailureKindEnum.Infra, MergeQueueFailureClassifier.Classify(MergeQueueFailureStepEnum.Verification,
+                AssertEqual(MissionFailureKindEnum.Timeout, FailureKindMapper.FromMergeQueueException(MergeQueueFailureStepEnum.Verification, new TimeoutException("budget")));
+                AssertEqual(MissionFailureKindEnum.Infra, FailureKindMapper.FromMergeQueueException(MergeQueueFailureStepEnum.Verification,
                     new LandingVerificationException("mutated", "Failed", "git reset", 0, "abc", true)));
-                AssertEqual(MissionFailureKindEnum.Infra, MergeQueueFailureClassifier.Classify(MergeQueueFailureStepEnum.Verification, new InvalidOperationException("could not start /bin/sh")));
-                AssertEqual(MissionFailureKindEnum.Infra, MergeQueueFailureClassifier.Classify(MergeQueueFailureStepEnum.Publication, new InvalidOperationException("push rejected")));
-                AssertEqual(MissionFailureKindEnum.Infra, MergeQueueFailureClassifier.Classify(MergeQueueFailureStepEnum.Preparation, new TimeoutException("fetch timed out")),
+                AssertEqual(MissionFailureKindEnum.Infra, FailureKindMapper.FromMergeQueueException(MergeQueueFailureStepEnum.Verification, new InvalidOperationException("could not start /bin/sh")));
+                AssertEqual(MissionFailureKindEnum.Infra, FailureKindMapper.FromMergeQueueException(MergeQueueFailureStepEnum.Publication, new InvalidOperationException("push rejected")));
+                AssertEqual(MissionFailureKindEnum.Infra, FailureKindMapper.FromMergeQueueException(MergeQueueFailureStepEnum.Preparation, new TimeoutException("fetch timed out")),
                     "a timeout outside verification is an environment failure");
-                AssertEqual(MissionFailureKindEnum.LandingConflict, MergeQueueFailureClassifier.Classify(MergeQueueFailureStepEnum.Preparation,
+                AssertEqual(MissionFailureKindEnum.LandingConflict, FailureKindMapper.FromMergeQueueException(MergeQueueFailureStepEnum.Preparation,
                     new GitMergeConflictException("conflict", new[] { "a.txt" })));
                 await Task.CompletedTask.ConfigureAwait(false);
             }));

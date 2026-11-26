@@ -290,7 +290,7 @@ namespace Armada.Core.Services
                 // conflicted carries its files (read before the merge was aborted); otherwise the list is read from the
                 // worktree where the merge ran, never from the owning repository, which is not where landing merges.
                 string failureReason = "Landing retry failed: " + ex.Message;
-                MissionFailureKindEnum failureKind = LandingFailureClassifier.Classify(ex);
+                MissionFailureKindEnum failureKind = FailureKindMapper.FromLandingException(ex);
                 IReadOnlyList<string> conflicts = ConflictedFilesFrom(ex);
                 if (conflicts.Count == 0)
                     conflicts = await ReadMergeWorktreeConflictsAsync(git, dock, vessel).ConfigureAwait(false);

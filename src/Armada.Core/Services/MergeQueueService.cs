@@ -630,7 +630,7 @@ namespace Armada.Core.Services
                 MergeQueueMergeResult merge = await MergeBranchAsync(host, integrationPath, landingRef, token).ConfigureAwait(false);
                 if (!merge.Merged)
                 {
-                    MissionFailureKindEnum mergeKind = MergeQueueFailureClassifier.ClassifyMerge(merge.ConflictedFiles.Count);
+                    MissionFailureKindEnum mergeKind = FailureKindMapper.FromMergeResult(merge.ConflictedFiles.Count);
                     string files = merge.ConflictedFiles.Count > 0 ? " in: " + String.Join(", ", merge.ConflictedFiles) : "";
                     string mergeReason = mergeKind == MissionFailureKindEnum.LandingConflict
                         ? "merge conflict with " + entry.TargetBranch + files
@@ -692,7 +692,7 @@ namespace Armada.Core.Services
 
                 // Best-effort cleanup
                 await CleanupWorktreeAsync(host, repoPath, integrationPath, integrationBranch, token).ConfigureAwait(false);
-                MergeQueueFailure failure = NewFailure(entry, step, MergeQueueFailureClassifier.Classify(step, ex),
+                MergeQueueFailure failure = NewFailure(entry, step, FailureKindMapper.FromMergeQueueException(step, ex),
                     "Merge queue entry " + entry.Id + ": " + ex.Message, targetCommit);
                 await ReconcileMissionStatusAsync(entry.MissionId, MissionStatusEnum.LandingFailed, failure.Reason, token, entry.TenantId, failure, ex).ConfigureAwait(false);
             }

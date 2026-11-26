@@ -167,7 +167,7 @@ namespace Armada.Core.Services
 
             MissionStatusEnum dodStatusBefore = mission.Status;
             mission.FailureReason = "Definition-of-Done gate failed (" + result.Outcome + "): " + result.Detail;
-            mission.FailureKind = MissionFailureClassifier.FromDefinitionOfDone(result.Outcome);
+            mission.FailureKind = FailureKindMapper.FromDefinitionOfDone(result.Outcome);
             mission.CompletedUtc = DateTime.UtcNow;
             if (!await Transitions.TryTransitionAsync(mission, new[] { dodStatusBefore }, MissionStatusEnum.Failed, null, token).ConfigureAwait(false)) return true;
             _Logging.Warn(_Header + "mission " + mission.Id + " failed the Definition-of-Done gate (" + result.Outcome + ")");
@@ -931,7 +931,7 @@ namespace Armada.Core.Services
                     if (stranded?.Status == MissionStatusEnum.WorkProduced)
                     {
                         DateTime version = stranded.LastUpdateUtc;
-                        stranded.FailureKind = LandingFailureClassifier.Classify(ex);
+                        stranded.FailureKind = FailureKindMapper.FromLandingException(ex);
                         stranded.FailureReason = "Landing handoff failed: " + ex.Message;
                         MissionTransitionRequest strandedFailure = new MissionTransitionRequest { To = MissionStatusEnum.LandingFailed, ExpectedLastUpdateUtc = version };
                         strandedFailure.AllowedFrom.Add(MissionStatusEnum.WorkProduced);

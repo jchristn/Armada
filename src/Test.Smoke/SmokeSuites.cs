@@ -277,7 +277,7 @@ namespace Test.Smoke
             "Services.MigrationBackup",
             "Services.MissionAssignmentBlocker",
             "Services.MissionCancelStop",
-            "Services.MissionFailureClassifier",
+            "Services.FailureKindMapper",
             "Services.MissionModeContract",
             "Services.MissionPrompt",
             "Services.MissionRecoveryCoordinator",

@@ -105,6 +105,10 @@ Conductor) with Opus and GPT-6.1 reliable. The work is tracked item by item in `
   leftover local agent whose process id and exact start time match the launch record (a reused id is never touched),
   then resumes the mission in its dock. Agents on a Harbor were already covered: a reconnecting Harbor stops every job
   the restarted Admiral does not own (RS-4.10).
+- **One failure taxonomy.** Every source of a mission failure (runtime exit, Definition of Done, landing, merge queue,
+  a lost landing handoff, a failure with no recorded kind) now maps to the mission failure kind in one place,
+  `FailureKindMapper`, which replaces three separate classifiers and inline mappings in the Admiral. Behavior is
+  unchanged. The mapping table is in docs/MODEL_HETEROGENEITY.md Part 4 (RS-5.1).
 - **Recovery state survives a restart.** Endpoint circuit breakers, launch backoff (with the captains that failed to
   start the mission), the start of a transient outage, and escalation rule cooldowns were kept only in memory, so a
   restart sent missions straight back to a failing endpoint, relaunched a broken captain at once, granted an outage a

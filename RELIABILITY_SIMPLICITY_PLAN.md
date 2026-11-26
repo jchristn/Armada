@@ -651,11 +651,17 @@ routing; a renamed Architect slice breaks fan-out recovery. Everything a program
 
 ## Phase 5: Failure classification, recovery, and escalation
 
-- [ ] **RS-5.1** One failure taxonomy. Keep `MissionFailureKindEnum` as the single kind on a mission; every source
+- [x] **RS-5.1** One failure taxonomy. Keep `MissionFailureKindEnum` as the single kind on a mission; every source
   (runtime, landing, merge queue, definition of done, BlackBox, FailureCause rules) maps into it in exactly one
   class, `FailureKindMapper`. Remove the inline ternary near `AdmiralService.cs:3013` and the hard-coded `Infra` in
   `LandingEntryAsync` and `FlagMissingMergeHandoffsAsync`. Document the mapping table in `docs/MODEL_HETEROGENEITY.md`
-  Part 4. Evidence:
+  Part 4. Evidence: `FailureKindMapper` replaces `MissionFailureClassifier`, `LandingFailureClassifier` and
+  `MergeQueueFailureClassifier`; `HandleTerminalProcessExitFailureAsync` and its three callers map through
+  `FromRuntimeExit` (the negative exit code rule moved into it), and `FlagMissingMergeHandoffsAsync` uses
+  `FromLostLandingHandoff`. `LandingEntryAsync` no longer exists. BlackBox and FailureCause rules only read the kind.
+  Table added to docs/MODEL_HETEROGENEITY.md Part 4. `Services.FailureKindMapper` (renamed from
+  `Services.MissionFailureClassifier`, new `runtime_exits_map` case), `Services.LandingConflict` and
+  `Services.MergeQueueProcessing` pass.
 - [ ] **RS-5.2** `Unclassified` runtime failure kind. `RuntimeFailureClassifier.Classify` returns it instead of
   `Crash` when no provider error is parsed or the status is unmapped (`RuntimeFailureClassifier.cs:48`). Recovery
   gives `Unclassified` one resume, then escalation. `Crash` is reserved for a process that died abnormally. Count

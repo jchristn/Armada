@@ -229,8 +229,8 @@ namespace Armada.Core.Services
                 if (linkedMissionIds.Contains(mission.Id)) continue;
                 if (mission.LastUpdateUtc < cutoff) continue;
 
-                MissionFailureKindEnum kind = MissionFailureClassifier.Classify(mission);
-                if (!MissionFailureClassifier.IsRecoverable(kind)) continue;
+                MissionFailureKindEnum kind = FailureKindMapper.FromMission(mission);
+                if (!FailureKindMapper.IsRecoverable(kind)) continue;
                 if (!await IsRescueEligibleAsync(mission, token).ConfigureAwait(false)) continue;
 
                 Incident incident = await _Incidents.CreateAsync(auth, new IncidentUpsertRequest

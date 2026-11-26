@@ -753,7 +753,7 @@ namespace Armada.Core.Services
                     if (currentMission.RedispatchAttempts < InterruptedRedispatchLimit)
                         await HandleInterruptedProcessExitAsync(captain, currentMission, currentMission.Id, -1, token).ConfigureAwait(false);
                     else
-                        await HandleTerminalProcessExitFailureAsync(captain, currentMission, currentMission.Id, "Restart recovery limit reached after Admiral interruption", RuntimeFailureKindEnum.Transient, token, MissionFailureKindEnum.Infra,
+                        await HandleTerminalProcessExitFailureAsync(captain, currentMission, currentMission.Id, "Restart recovery limit reached after Admiral interruption", RuntimeFailureKindEnum.Transient, token,
                             step: BlackBoxStepEnum.Interrupted).ConfigureAwait(false);
                     resetCount++;
                     continue;
@@ -1104,7 +1104,7 @@ namespace Armada.Core.Services
                 bool quarantine = failureKind == RuntimeFailureKindEnum.UsageLimit || failureKind == RuntimeFailureKindEnum.AuthFailure
                     || (exitCode >= 0 && failureKind == RuntimeFailureKindEnum.Crash && RecordCrashAndCheckLoop(captainId));
                 await HandleTerminalProcessExitFailureAsync(captain, mission, missionId, failureReason, exitInfo.FailureKind, token,
-                    exitCode < 0 ? MissionFailureKindEnum.Infra : null, quarantine, exitInfo.ProviderError,
+                    null, quarantine, exitInfo.ProviderError,
                     step: exitCode < 0 ? BlackBoxStepEnum.RedispatchExhausted : null, exitCode: exitCode).ConfigureAwait(false);
             }
 
@@ -1530,7 +1530,7 @@ namespace Armada.Core.Services
 
                     // The health monitor only knows the exit code (no structured provider error reached it).
                     RuntimeExitInfo healthExitInfo = RuntimeFailureClassifier.Decide(exitCode, null);
-                    await HandleTerminalProcessExitFailureAsync(captain, mission, missionId, healthExitInfo.Describe(), healthExitInfo.FailureKind, token, exitCode < 0 ? MissionFailureKindEnum.Infra : null,
+                    await HandleTerminalProcessExitFailureAsync(captain, mission, missionId, healthExitInfo.Describe(), healthExitInfo.FailureKind, token,
                         step: exitCode < 0 ? BlackBoxStepEnum.RedispatchExhausted : null, exitCode: exitCode).ConfigureAwait(false);
                 }
             }
@@ -1943,8 +1943,7 @@ namespace Armada.Core.Services
                 StageCheckResult? check = StageCheckEvents.Read(checks.Objects.FirstOrDefault());
                 if (check == null || check.IsBlocking) continue;
                 DateTime version = mission.LastUpdateUtc;
-                // A lost landing callback is an Armada handoff failure, not a merge conflict an autonomous rescue can fix.
-                mission.FailureKind = MissionFailureKindEnum.Infra;
+                mission.FailureKind = FailureKindMapper.FromLostLandingHandoff();
                 mission.FailureReason = "Stage check was nonblocking, but no merge queue entry was recorded within five minutes. Inspect the preserved branch and enqueue landing manually.";
                 MissionTransitionRequest handoffMissing = new MissionTransitionRequest { To = MissionStatusEnum.LandingFailed, ExpectedLastUpdateUtc = version };
                 handoffMissing.AllowedFrom.Add(MissionStatusEnum.WorkProduced);
@@ -2714,10 +2713,7 @@ namespace Armada.Core.Services
                 MissionStatusEnum observedStatus = mission.Status;
                 DateTime observedVersion = mission.LastUpdateUtc;
                 mission.FailureReason = failureReason;
-                // A transient endpoint failure that outlasted its resumes and the outage grace is the environment, not the
-                // captain: Infra, which is left to a person instead of an autonomous rescue against the same endpoint.
-                mission.FailureKind = missionFailureKind ?? (runtimeFailureKind == RuntimeFailureKindEnum.TaskFailure ? MissionFailureKindEnum.InvalidOutput
-                    : runtimeFailureKind == RuntimeFailureKindEnum.Transient ? MissionFailureKindEnum.Infra : MissionFailureKindEnum.Crash);
+                mission.FailureKind = missionFailureKind ?? FailureKindMapper.FromRuntimeExit(runtimeFailureKind, exitCode);
                 mission.ProcessId = null;
                 mission.CompletedUtc = DateTime.UtcNow;
                 MissionTransitionRequest exitFailure = new MissionTransitionRequest { To = MissionStatusEnum.Failed, ExpectedLastUpdateUtc = observedVersion };
