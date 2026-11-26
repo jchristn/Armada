@@ -214,8 +214,9 @@ the Admiral falls back to it: the launch still goes to that Harbor and nothing n
 | `api-malformed-call-retry-v1` | corrects instead of resending a request that failed on a malformed tool call | reserved |
 | `api-repetition-guard-v1` | stops repeated identical tool calls | reserved |
 | `api-reasoning-hygiene-v1` | strips reasoning from the final message and history | reserved |
-| `api-tool-limits-scaled-v1` | scales tool output limits to the context window | reserved |
-| `api-edit-encoding-preserve-v1` | keeps a file's byte order mark and line endings on edits | reserved |
+| `api-tool-limits-scaled-v1` | scales tool output limits to the context window | 1.5.0 |
+| `api-edit-encoding-preserve-v1` | keeps a file's byte order mark and line endings on edits | 1.5.0 |
+| `api-edit-line-prefix-guard-v1` | rejects edits and writes whose text carries `read_file` line-number prefixes | 1.5.0 |
 | `api-context-discovery-v1` | discovers a model's served context window on the Harbor | reserved |
 | `api-model-warmup-v1` | warms the model before the first turn | reserved |
 

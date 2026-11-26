@@ -50,6 +50,9 @@ namespace Armada.Core.Harbor
         /// <summary>Keeps a file's byte order mark and line endings on edits and writes (RS-7.14).</summary>
         public const string EditEncodingPreserve = "api-edit-encoding-preserve-v1";
 
+        /// <summary>Rejects edits and writes whose text carries read_file line-number prefixes (RS-7.15).</summary>
+        public const string EditLinePrefixGuard = "api-edit-line-prefix-guard-v1";
+
         /// <summary>Discovers a model's served context window on the Harbor (RS-7.8).</summary>
         public const string ContextDiscovery = "api-context-discovery-v1";
 
@@ -62,7 +65,7 @@ namespace Armada.Core.Harbor
         public static IReadOnlyList<string> All { get; } = new List<string>
         {
             InferenceStreaming, SubmitTool, ToolScope, CompletionLine, CliFinalMessageHygiene, TextToolCallRecovery, MalformedCallRetry,
-            RepetitionGuard, ReasoningHygiene, ToolLimitsScaled, EditEncodingPreserve, ContextDiscovery, ModelWarmup
+            RepetitionGuard, ReasoningHygiene, ToolLimitsScaled, EditEncodingPreserve, EditLinePrefixGuard, ContextDiscovery, ModelWarmup
         };
 
         /// <summary>
@@ -71,7 +74,7 @@ namespace Armada.Core.Harbor
         /// </summary>
         public static IReadOnlyList<string> Advertised { get; } = new List<string>
         {
-            SubmitTool, ToolScope, CompletionLine, CliFinalMessageHygiene
+            SubmitTool, ToolScope, CompletionLine, CliFinalMessageHygiene, ToolLimitsScaled, EditEncodingPreserve, EditLinePrefixGuard
         };
 
         #endregion
