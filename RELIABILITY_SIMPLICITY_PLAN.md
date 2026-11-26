@@ -817,15 +817,21 @@ the contract a schema, lets the model submit through a tool, and repairs format 
   `PromptVariants.every_persona_instructions_state_one_contract`. Untouched templates upgrade via briefs v7 and variant
   snapshots; edited templates are kept. 18 affected suites 357/357. Rework and rescue briefs still repeat the completion
   sentence (RS-6.11).
-- [ ] **RS-6.2** Submit tools. MCP tools `armada_submit_plan`, `armada_submit_verdict`, and `armada_submit_result`
+- [x] **RS-6.2** Submit tools. MCP tools `armada_submit_plan`, `armada_submit_verdict`, and `armada_submit_result`
   with `inputSchema` generated from the models, validated synchronously, errors returned in the same call so the
   model fixes them in-loop. The validated submission is stored as a typed record on the mission attempt; parsers stop
   re-reading `AgentOutput` (`MissionService.Handoff.cs:133-153` parses it several times). Marker text remains the
-  fallback for runtimes without tools. Surfaces: MCP, docs/MCP_API.md. Evidence:
-- [ ] **RS-6.3** The same submit tools are native tools in `ApiAgentRuntime`. When the model stops calling work
+  fallback for runtimes without tools. Surfaces: MCP, docs/MCP_API.md. Evidence: e7f214e12. Schemas from `StageSubmissionSchema`,
+  `StageSubmissionValidator`, `stage_submissions` (migration 138, four providers), `StageSubmissionText.EffectiveOutput`
+  at every decision site; the plan is parsed once into the fan-out. A valid submission wins over markers (logged). Tests:
+  `Services.StageSubmission` (12); providers 16/16 x3.
+- [x] **RS-6.3** The same submit tools are native tools in `ApiAgentRuntime`. When the model stops calling work
   tools without submitting, send `tool_choice` set to the submit tool (PolyPrompt `ToolChatRequest.ToolChoice`);
   where the endpoint supports `response_format: json_schema`, use it for the final turn as a second fallback.
-  Evidence:
+  Evidence: e7f214e12. `NativeSubmitTool` (forwarded to MCP or written as a block); forced turns offer only
+  the submit tool with `ToolChoice = "required"` (PolyPrompt 3.5.0 cannot name a tool), only when the text also fails.
+  `response_format: json_schema` not added: PolyPrompt 3.5.0 has no response-format option. Tests:
+  `native_submit_verdict_fixes_schema_error_in_loop`, `stopping_without_submit_forces_the_submit_tool`.
 - [x] **RS-6.4** Format-only repair turn. Replace "Do the same job again" in `TryScheduleOutputRepairAsync`
   (`MissionService.cs:1395`) for format-only failures: (1) in-session restatement when the runtime supports resume
   (ApiEndpoint always; Claude Code and Codex via session resume), (2) otherwise a tool-less format call that gets the
@@ -855,10 +861,11 @@ the contract a schema, lets the model submit through a tool, and repairs format 
   requires a protocol line for a landing PASS); no last-line rule (R5); fence state resets at the truncation marker;
   `ARMADA_REQUIRES_COMPLETION_LINE` and a shared `CompletionLine` matcher. ModelOutputContract 27/27, none skipped.
   Backtick removal from prompts lands with RS-6.1.
-- [ ] **RS-6.7** Structured findings. The Judge and Test Engineer submit findings as
+- [x] **RS-6.7** Structured findings. The Judge and Test Engineer submit findings as
   `{file, line, severity, scenario, requiredFix}` through RS-6.2; the Judge template asks for a `## Findings`
   section for text runtimes; the eight-regex heading scraper in `HandoffArtifactBuilder.ExtractFindings` becomes the
-  fallback. Evidence:
+  fallback. Evidence: e7f214e12. `StageFinding` mapped by `StageSubmissionText.HandoffFindings`; `ExtractFindings` is the
+  fallback; contracts ask for `## Findings`. Test: `structured_findings_replace_the_scraper`.
 - [x] **RS-6.8** PASS evidence. A PASS must cite the checks it ran or at least one inspected file (deferred R19 in
   `archive/PROMPT_AND_HANDOFF_IMPROVEMENTS.md`). A PASS without it becomes a format-only failure. Evidence: f0a1b86f0.
   `JudgeEvidence.HasPassEvidence` (a file path or a named check) in `JudgeContract.ValidatePass` and the generated

@@ -200,6 +200,17 @@ Conductor) with Opus and GPT-6.1 reliable. The work is tracked item by item in `
   captain that does it; empty uses the stage's own captain.
 - **A Judge PASS must cite evidence.** A PASS that names no check it ran and no file it inspected is a format failure.
   Citing one inspected file is enough.
+- **Captains can submit their result as typed JSON.** `armada_submit_plan`, `armada_submit_verdict` and
+  `armada_submit_result` check a submission at once with the same rules as the text contract and return any errors in
+  the same call, so a format slip is fixed in the loop instead of by a rerun. The latest submission of an attempt is
+  stored (migration 138, `stage_submissions`), decides the plan, verdict or result over any marker line, and can be read
+  at `GET /api/v1/missions/{id}/submissions` or with `get_mission_submissions`. Only the mission's own captain, in the
+  matching persona, may submit. Marker text stays the fallback.
+- **API endpoint captains get the submit tool natively.** A run that stops without submitting and without a valid text
+  result gets up to two turns that offer only the submit tool with a required tool call.
+- **Structured findings.** The Judge and verifiers submit findings as file, line, severity, scenario and required fix,
+  and these become the handoff findings. Text output is asked for a `## Findings` section; the heading scraper is the
+  fallback.
 - **Recovery state survives a restart.** Endpoint circuit breakers, launch backoff (with the captains that failed to
   start the mission), the start of a transient outage, and escalation rule cooldowns were kept only in memory, so a
   restart sent missions straight back to a failing endpoint, relaunched a broken captain at once, granted an outage a
