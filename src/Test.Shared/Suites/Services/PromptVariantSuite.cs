@@ -112,7 +112,10 @@ namespace Test.Shared.Suites.Services
                         string otherOptions = await GenerateAsync(service, fixture, "{\"autoApprove\":false}").ConfigureAwait(false);
                         string unreadable = await GenerateAsync(service, fixture, "{\"promptVariant\":\"Huge\"}").ConfigureAwait(false);
                         string malformed = await GenerateAsync(service, fixture, "{not json").ConfigureAwait(false);
-                        AssertContains(direct, baseline, persona.Name + " instructions carry the Current persona prompt");
+                        // RS-6.11: the instructions carry the persona prompt without its contract and close with the contract.
+                        string directBody = await templates.RenderAsync(persona.TemplateName, templateParams).ConfigureAwait(false);
+                        AssertContains(directBody, baseline, persona.Name + " instructions carry the Current persona prompt");
+                        AssertTrue(baseline.TrimEnd().EndsWith(persona.Contract.TrimEnd(), StringComparison.Ordinal), persona.Name + " instructions close with the contract");
                         AssertEqual(baseline, explicitCurrent, persona.Name + " explicit Current");
                         AssertEqual(baseline, otherOptions, persona.Name + " options without a variant");
                         AssertEqual(baseline, unreadable, persona.Name + " an unknown variant name falls back to Current");
@@ -131,6 +134,7 @@ namespace Test.Shared.Suites.Services
                         Fixture fixture = CreateFixture(persona.Name);
                         Dictionary<string, string> templateParams = MissionPromptBuilder.BuildTemplateParams(fixture.Mission, fixture.Vessel, fixture.Captain);
                         string currentPrompt = await MissionPromptBuilder.ResolvePersonaPromptAsync(persona.Name, null, PromptVariantEnum.Current, templateParams, templates).ConfigureAwait(false);
+                        string currentBody = await BodyAsync(persona.Name, PromptVariantEnum.Current, templateParams, templates).ConfigureAwait(false);
                         string currentDoc = await GenerateAsync(service, fixture, null).ConfigureAwait(false);
 
                         foreach (PromptVariantEnum variant in _Variants)
@@ -143,10 +147,11 @@ namespace Test.Shared.Suites.Services
                             AssertContains(ProjectContext, doc, label + " project context");
                             AssertContains(StyleGuide, doc, label + " style guide");
                             AssertContains("REPO RULE: run `dotnet build src/Widgets.sln` before committing.", doc, label + " repository rules");
-                            AssertContains(prompt, doc, label + " persona prompt");
+                            string body = await BodyAsync(persona.Name, variant, templateParams, templates).ConfigureAwait(false);
+                            AssertContains(body, doc, label + " persona prompt");
                             AssertEqual(1, StageOutputContract.CountContracts(doc), label + " instructions state exactly one output contract");
                             AssertContains(persona.Contract, doc, label + " instructions carry the generated contract");
-                            AssertEqual(currentDoc.Replace(currentPrompt, "<PERSONA>"), doc.Replace(prompt, "<PERSONA>"), label + " differs from Current only in the persona prompt");
+                            AssertEqual(currentDoc.Replace(currentBody, "<PERSONA>"), doc.Replace(body, "<PERSONA>"), label + " differs from Current only in the persona prompt");
 
                             if (variant != PromptVariantEnum.Current)
                             {
@@ -172,6 +177,61 @@ namespace Test.Shared.Suites.Services
                         AssertFalse(doc.Contains("`[ARMADA:RESULT]", StringComparison.Ordinal) || doc.Contains("`[ARMADA:VERDICT]", StringComparison.Ordinal), persona + " shows no result or verdict marker in backticks");
                         AssertFalse(doc.Contains("[ARMADA:MISSION]", StringComparison.Ordinal), persona + " shows only the versioned plan contract");
                     }
+                }
+            }));
+
+            cases.Add(CaseAsync("every_launch_kind_states_one_contract", "RS-6.11: a first run, a rework round (current and pre-1.5.0 sections) and a rescue-shaped brief each state the contract once, at the end of the file", TestTags.Positive, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                {
+                    MissionService service = CreateMissionService(CreateLogging(), testDb.Driver, out IPromptTemplateService templates);
+                    string contract = StageOutputContract.For(PersonaCatalog.Worker);
+                    string task = "Return 404 for unknown widgets.\n\n" + AcceptanceCriteria;
+                    Dictionary<string, string> kinds = new Dictionary<string, string>
+                    {
+                        ["first run"] = task,
+                        ["rework"] = task + ReworkPromptBuilder.BuildSection(1, PersonaCatalog.Judge),
+                        ["pre-1.5.0 rework"] = task + ReworkPromptBuilder.BuildSection(1, PersonaCatalog.Judge) + "\n### Output contract\n" + ReworkPromptBuilder.OutputContract + "\n",
+                        ["rescue"] = "This is an autonomous RESCUE mission.\n\n## Original Mission\n" + task + "\n\nClose with a brief summary of the fix, followed by the completion line in the Output Contract section at the end of these instructions."
+                    };
+                    foreach (KeyValuePair<string, string> kind in kinds)
+                    {
+                        Fixture fixture = CreateFixture(PersonaCatalog.Worker);
+                        fixture.Mission.Description = kind.Value;
+                        string doc = await GenerateAsync(service, fixture, null).ConfigureAwait(false);
+                        AssertEqual(1, StageOutputContract.CountContracts(doc), kind.Key + ": one contract heading");
+                        AssertEqual(1, doc.Replace("\r", "").Split('\n').Count(l => l.Trim() == StageOutputContract.ResultCompleteLine), kind.Key + ": the completion line is stated once");
+                        AssertTrue(doc.TrimEnd().EndsWith(contract.TrimEnd(), StringComparison.Ordinal), kind.Key + ": the contract closes the file");
+                        AssertContains(AcceptanceCriteria, doc, kind.Key + ": acceptance criteria kept");
+                    }
+                }
+            }));
+
+            cases.Add(CaseAsync("small_context_trims_in_order_and_keeps_contract", "RS-6.11: an API captain with a small served context gets the papercuts trimmed first; the description and contract are never trimmed; an unknown context trims nothing", TestTags.Reliability, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                {
+                    MissionService service = CreateMissionService(CreateLogging(), testDb.Driver, out IPromptTemplateService templates);
+                    Fixture unknown = CreateFixture(PersonaCatalog.Worker);
+                    string full = await GenerateAsync(service, unknown, null).ConfigureAwait(false);
+                    AssertContains("## Papercuts", full, "an unknown context trims nothing");
+
+                    ModelEndpoint endpoint = new ModelEndpoint();
+                    endpoint.Name = "small-context";
+                    endpoint.Model = "small";
+                    endpoint.InferenceOptions = new InferenceOptions { ContextLength = 4096 };
+                    endpoint = await testDb.Driver.ModelEndpoints.CreateAsync(endpoint).ConfigureAwait(false);
+                    Fixture small = CreateFixture(PersonaCatalog.Worker);
+                    small.Captain.Runtime = AgentRuntimeEnum.ApiEndpoint;
+                    small.Captain.ModelEndpointId = endpoint.Id;
+                    string trimmed = await GenerateAsync(service, small, null).ConfigureAwait(false);
+                    AssertFalse(trimmed.Contains("## Papercuts", StringComparison.Ordinal), "papercuts trimmed first");
+                    AssertContains("The papercut directive was left out to fit this model's context budget.", trimmed, "a note replaces it");
+                    AssertContains(AcceptanceCriteria, trimmed, "acceptance criteria never trimmed");
+                    AssertEqual(1, StageOutputContract.CountContracts(trimmed), "the contract is kept once");
+                    AssertTrue(trimmed.Length < full.Length, "the file is smaller");
+                    if (!trimmed.Contains(ProjectContext, StringComparison.Ordinal))
+                        AssertFalse(trimmed.Contains("## Papercuts", StringComparison.Ordinal), "project context goes only after the papercuts");
                 }
             }));
 
@@ -357,6 +417,12 @@ namespace Test.Shared.Suites.Services
         #endregion
 
         #region Private-Methods
+
+        private static async Task<string> BodyAsync(string persona, PromptVariantEnum variant, Dictionary<string, string> templateParams, IPromptTemplateService templates)
+        {
+            PromptTemplate? chosen = await MissionPromptBuilder.ChoosePersonaTemplateAsync(persona, null, variant, templates).ConfigureAwait(false);
+            return await MissionPromptBuilder.RenderPersonaPromptBodyAsync(persona, chosen, templateParams, templates).ConfigureAwait(false);
+        }
 
         private sealed class PersonaCase
         {

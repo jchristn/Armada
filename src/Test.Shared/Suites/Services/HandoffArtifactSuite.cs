@@ -479,7 +479,9 @@ namespace Test.Shared.Suites.Services
                 AssertTrue(brief.IndexOf("### Findings to fix", StringComparison.Ordinal) < brief.IndexOf(parserFinding, StringComparison.Ordinal), "finding in the rework section");
                 AssertContains("### Rework demands\n1. Resolve every reported finding.\n2. ", brief, "numbered demands, one per line");
                 AssertFalse(brief.Contains(ReworkPromptBuilder.FindingsPlaceholder, StringComparison.Ordinal), "findings placeholder filled");
-                AssertTrue(brief.IndexOf("#### Did not fit", StringComparison.Ordinal) < brief.LastIndexOf(ReworkPromptBuilder.OutputContract, StringComparison.Ordinal), "output contract repeated after the handoff");
+                AssertTrue(brief.IndexOf("#### Did not fit", StringComparison.Ordinal) < brief.LastIndexOf(StageOutputContract.Heading, StringComparison.Ordinal), "output contract after the handoff");
+                AssertEqual(1, StageOutputContract.CountContracts(brief), "RS-6.11: the rework brief states the contract once");
+                AssertTrue(brief.TrimEnd().EndsWith(StageOutputContract.For(Armada.Core.PersonaCatalog.Worker).TrimEnd(), StringComparison.Ordinal), "the contract closes the brief");
 
                 HandoffArtifact stored = (await testDb.Driver.HandoffArtifacts.ReadLatestByMissionAsync(flow.Judge.Id).ConfigureAwait(false))!;
                 AssertNotNull(stored, "the artifact the pointer names is stored");

@@ -16,7 +16,7 @@ namespace Test.Shared.Suites.Services
     /// The rework prompt built from the reviewer's handoff artifact (docs/MODEL_HETEROGENEITY.md, Phase 3 item 2): numbered
     /// findings with file, line, severity and required fix; the fallback when the review has no structured findings or
     /// there is no artifact; the renderer budget and did-not-fit list; every demand of the former paragraph, one per line;
-    /// and the output contract repeated at the end.
+    /// and no output contract of its own: the instructions file states it once, at the end (RS-6.11).
     /// </summary>
     public sealed class ReworkPromptSuite : IArmadaTestSuite
     {
@@ -56,7 +56,7 @@ namespace Test.Shared.Suites.Services
                 AssertContains("#### Did not fit\nNothing was left out.", prompt, "did-not-fit list kept");
                 AssertContains("diff --git a/src/File1.cs", prompt, "diff section delivered");
                 AssertTrue(prompt.StartsWith(TaskSpec + "\n\n## Rework round 1 requested by the Judge\n", StringComparison.Ordinal), "task first, then the rework heading");
-                AssertEndsWithContract(prompt);
+                AssertNoContract(prompt);
                 return Task.CompletedTask;
             }));
 
@@ -72,7 +72,7 @@ namespace Test.Shared.Suites.Services
                 AssertContains(rendering.Evidence.TrimEnd(), prompt, "the rendered handoff block is delivered whole");
                 AssertContains("The empty-input path is wrong in the parser.", prompt, "the review text is not lost");
                 AssertFalse(prompt.Contains(ReworkPromptBuilder.FindingsPlaceholder, StringComparison.Ordinal), "placeholder removed");
-                AssertEndsWithContract(prompt);
+                AssertNoContract(prompt);
                 return Task.CompletedTask;
             }));
 
@@ -84,14 +84,14 @@ namespace Test.Shared.Suites.Services
                 AssertContains("The reviewer's findings are in the prior stage evidence below.", prompt, "fallback findings line kept");
                 AssertFalse(prompt.Contains(ReworkPromptBuilder.FindingsPlaceholder, StringComparison.Ordinal), "placeholder removed");
                 foreach (string demand in ReworkPromptBuilder.Demands) AssertContains(demand, prompt, "demand kept");
-                AssertEqual(1, Count(prompt, ReworkPromptBuilder.OutputContract), "the contract already closes the section; it is not doubled");
-                AssertEndsWithContract(prompt);
+                AssertEqual(0, Count(prompt, ReworkPromptBuilder.OutputContract), "the description carries no contract; the instructions file states it once");
+                AssertNoContract(prompt);
 
-                // A handoff that was appended but cannot be rendered stays as it was persisted, with the contract after it.
+                // A handoff that was appended but cannot be rendered stays as it was persisted.
                 Mission judge = Judge(JudgeOutput(1));
                 string withHandoff = ReworkPromptBuilder.Compose(ReworkDescription(judge), null);
                 AssertContains(PipelineHandoffContext.ArtifactPlaceholder, withHandoff, "the unrendered handoff placeholder is left for the existing path");
-                AssertEndsWithContract(withHandoff);
+                AssertNoContract(withHandoff);
 
                 AssertEqual("", ReworkPromptBuilder.Compose(null, null), "null description");
                 AssertEqual(TaskSpec, ReworkPromptBuilder.Compose(TaskSpec, null), "a non-rework description is unchanged");
@@ -114,7 +114,6 @@ namespace Test.Shared.Suites.Services
                 AssertContains("More findings did not fit the handoff budget.", prompt, "note on the findings left out");
                 AssertContains("#### Did not fit\n", prompt, "did-not-fit list present");
                 AssertContains("- finding 12 (src/File12.cs)\n", prompt, "the left-out finding is listed");
-                AssertTrue(prompt.IndexOf("#### Did not fit", StringComparison.Ordinal) < prompt.LastIndexOf(ReworkPromptBuilder.OutputContract, StringComparison.Ordinal), "contract after the did-not-fit list");
 
                 // The findings move out of the evidence; the delivered content is the same as the rendering's.
                 AssertEqual(rendering.Evidence.Length, rendering.EvidenceWithoutFindings.Length + rendering.FindingsText.Length + "#### Unresolved findings\n".Length, "same content, findings moved");
@@ -124,7 +123,7 @@ namespace Test.Shared.Suites.Services
                 string empty = ReworkPromptBuilder.Compose(ReworkDescription(judge), none);
                 AssertContains("No finding fit the handoff budget.", empty, "says no finding fit");
                 AssertContains("- finding 1 (src/File1.cs)\n", empty, "every finding listed under Did not fit");
-                AssertEndsWithContract(empty);
+                AssertNoContract(empty);
                 return Task.CompletedTask;
             }));
 
@@ -147,7 +146,7 @@ namespace Test.Shared.Suites.Services
                     "Report every original requirement that remains unverified, including publication and delivery.",
                     "Do not start over.",
                     "Do not expand the mission scope.",
-                    "End with the completion line in the output contract below."
+                    "End with the completion line in the Output Contract section at the end of these instructions."
                 };
                 foreach (string demand in former) AssertContains(demand, section, "former demand present");
 
@@ -161,9 +160,21 @@ namespace Test.Shared.Suites.Services
                     AssertFalse(body.Contains(", and ", StringComparison.Ordinal) || body.Contains(';', StringComparison.Ordinal), "no compound demand: " + body);
                 }
 
-                AssertContains("### Output contract\n" + ReworkPromptBuilder.OutputContract, section, "contract stated");
+                AssertFalse(section.Contains(ReworkPromptBuilder.OutputContract, StringComparison.Ordinal), "the section states no contract of its own");
                 AssertContains("[ARMADA:RESULT] COMPLETE", ReworkPromptBuilder.OutputContract, "the Worker completion line");
                 AssertContains("## Rework round 1 requested by the Verifier", ReworkPromptBuilder.BuildSection(1, "Verifier"), "the requesting stage is named");
+                return Task.CompletedTask;
+            }));
+
+            cases.Add(Case("legacy_section_contract_removed", "RS-6.11: a rework section persisted before 1.5.0 loses its own contract block at launch, so the file states the contract once", TestTags.Reliability, () =>
+            {
+                Mission judge = Judge(JudgeOutput(1));
+                string legacy = TaskSpec + ReworkPromptBuilder.BuildSection(1, judge.Persona)
+                    + "\n### Output contract\n" + ReworkPromptBuilder.OutputContract + "\n" + PipelineHandoffContext.Build(judge);
+                string prompt = ReworkPromptBuilder.Compose(legacy, HandoffRenderer.RenderWithBudget(HandoffArtifactBuilder.Build(judge), null, 4000));
+                AssertNoContract(prompt);
+                AssertContains("### Rework demands", prompt, "the demands stay");
+                AssertContains("1. [Blocking] src/File1.cs:11", prompt, "the findings stay");
                 return Task.CompletedTask;
             }));
 
@@ -237,9 +248,9 @@ namespace Test.Shared.Suites.Services
             return TaskSpec + ReworkPromptBuilder.BuildSection(1, judge.Persona) + PipelineHandoffContext.Build(judge);
         }
 
-        private static void AssertEndsWithContract(string prompt)
+        private static void AssertNoContract(string prompt)
         {
-            AssertTrue(prompt.TrimEnd().EndsWith("### Output contract\n" + ReworkPromptBuilder.OutputContract, StringComparison.Ordinal), "the output contract closes the prompt");
+            AssertFalse(prompt.Contains(ReworkPromptBuilder.OutputContract, StringComparison.Ordinal), "the description states no contract; the instructions file closes with it");
         }
 
         private static int Count(string text, string value)

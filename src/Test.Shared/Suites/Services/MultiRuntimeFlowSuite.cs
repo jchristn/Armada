@@ -138,7 +138,8 @@ namespace Test.Shared.Suites.Services
                 Mission? repaired = await testDb.Driver.Missions.ReadAsync(judge.Id).ConfigureAwait(false);
                 AssertTrue(repaired!.Status != MissionStatusEnum.Failed, "the first contract violation is repaired, not failed");
                 AssertEqual(1, repaired.OutputRepairAttempts);
-                AssertContains("Affected Case", Armada.Core.Services.MissionNotes.EffectiveDescription(repaired), "the repair note quotes the Judge contract");
+                AssertContains("Output Contract section at the end of these instructions", Armada.Core.Services.MissionNotes.EffectiveDescription(repaired), "RS-6.11: the repair note points at the contract the instructions state once");
+                AssertContains("Affected Case", Armada.Core.Services.StageOutputContract.For(Armada.Core.PersonaCatalog.Judge), "the stated Judge contract names the section");
                 AssertEqual(0, landingCalls);
 
                 // Second violation with the budget spent: the mission fails closed and says why.

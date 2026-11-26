@@ -438,7 +438,7 @@ namespace Armada.Core.Services
                 brief += "## Prior Attempt Diff (already in commit " + commit + ")\n```diff\n" + Trim(original.DiffSnapshot, MaxDiffExcerptChars) + "\n```\n\n";
             }
 
-            brief += "End with a standalone " + StageOutputContract.ResultCompleteLine + " line and a brief summary of how the commit was integrated.";
+            brief += "Close with a brief summary of how the commit was integrated, followed by the completion line in the Output Contract section at the end of these instructions.";
             return brief;
         }
 
@@ -460,7 +460,7 @@ namespace Armada.Core.Services
                 brief += "## Prior Attempt Diff (for reference)\n```diff\n" + Trim(original.DiffSnapshot, MaxDiffExcerptChars) + "\n```\n\n";
             }
 
-            brief += "End with a standalone " + StageOutputContract.ResultCompleteLine + " line and a brief summary of the fix.";
+            brief += "Close with a brief summary of the fix, followed by the completion line in the Output Contract section at the end of these instructions.";
             return brief;
         }
 

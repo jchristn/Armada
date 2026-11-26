@@ -8,10 +8,11 @@ namespace Armada.Core.Services
 
     /// <summary>
     /// Builds the rework prompt of a Worker that a Judge or verifier sent back (docs/MODEL_HETEROGENEITY.md, Phase 3 item 2):
-    /// numbered findings from the reviewer's handoff artifact, the rework demands as a numbered list with one demand per
-    /// line, and the output contract repeated at the end. The section is persisted on the rework mission's description
-    /// when the rework is scheduled; at launch <see cref="Compose"/> replaces its findings placeholder with the findings
-    /// the <see cref="HandoffRenderer"/> delivered within the reader's budget and moves the output contract to the end.
+    /// numbered findings from the reviewer's handoff artifact and the rework demands as a numbered list with one demand per
+    /// line. The section is persisted on the rework mission's description when the rework is scheduled; at launch
+    /// <see cref="Compose"/> replaces its findings placeholder with the findings the <see cref="HandoffRenderer"/>
+    /// delivered within the reader's budget. The output contract is not part of the section: the instructions composer
+    /// states it once, at the end of the instructions file (RS-6.11).
     /// </summary>
     public static class ReworkPromptBuilder
     {
@@ -28,7 +29,8 @@ namespace Armada.Core.Services
         public const string FindingsPlaceholder = "<!-- armada:rework-findings -->";
 
         /// <summary>
-        /// The required completion line of a rework Worker, stated at the end of the rework prompt.
+        /// The completion sentence that rework sections persisted before 1.5.0 carried under <c>### Output contract</c>;
+        /// <see cref="Compose"/> removes that block, because the instructions file states the contract once.
         /// </summary>
         public const string OutputContract = StageOutputContract.CompletionSentence;
 
@@ -51,7 +53,7 @@ namespace Armada.Core.Services
             "Report every original requirement that remains unverified, including publication and delivery.",
             "Do not start over.",
             "Do not expand the mission scope.",
-            "End with the completion line in the output contract below."
+            "End with the completion line in the Output Contract section at the end of these instructions."
         };
 
         #endregion
@@ -69,7 +71,7 @@ namespace Armada.Core.Services
 
         /// <summary>
         /// The rework section persisted on a rework mission's description: heading, findings placeholder with a fallback
-        /// line, numbered demands and the output contract.
+        /// line and the numbered demands.
         /// </summary>
         /// <param name="round">Rework round (1-based).</param>
         /// <param name="reviewerPersona">Persona of the stage that requested rework (Judge or a verifier), or null.</param>
@@ -85,7 +87,6 @@ namespace Armada.Core.Services
             text.Append(FindingsPlaceholder).Append('\n');
             text.Append(_FindingsFallback).Append('\n');
             text.Append('\n').Append(BuildDemands());
-            text.Append('\n').Append(_ContractHeading).Append(OutputContract).Append('\n');
             return text.ToString();
         }
 
@@ -149,8 +150,9 @@ namespace Armada.Core.Services
         /// <summary>
         /// Complete a rework description at launch: the findings placeholder becomes the numbered findings of the
         /// rendering, the prior-stage placeholder receives the rest of the handoff (evidence without the findings, then the
-        /// diff), and the output contract is repeated at the end. Without a rendering the fallback line stays and only the
-        /// placeholder line is removed. A description without a rework section is returned unchanged.
+        /// diff), and the output contract block of a section persisted before 1.5.0 is removed (the instructions file states
+        /// the contract once). Without a rendering the fallback line stays and only the placeholder line is removed. A
+        /// description without a rework section is returned unchanged.
         /// </summary>
         /// <param name="description">The rework mission's description, or null.</param>
         /// <param name="rendering">The reviewer's handoff rendered for this reader, or null when there is none.</param>
@@ -172,10 +174,8 @@ namespace Armada.Core.Services
                 text = PipelineHandoffContext.Fill(text, block);
             }
 
-            // The output contract closes the rework prompt, after the prior-stage evidence appended at handoff.
-            string trimmed = text.TrimEnd();
-            if (!trimmed.EndsWith(OutputContract, StringComparison.Ordinal))
-                text = trimmed + "\n\n" + _ContractHeading + OutputContract + "\n";
+            // Sections persisted before 1.5.0 carried the completion line; the instructions file states it once, at the end.
+            text = text.Replace("\n" + _ContractHeading + OutputContract + "\n", "\n", StringComparison.Ordinal);
             return text;
         }
 

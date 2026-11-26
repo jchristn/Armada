@@ -579,6 +579,18 @@ namespace Test.Shared.Suites.Runtimes
                 AssertFalse(unscoped.Client.ToolNames.Contains("armada_discover_mcp_tools"));
             }));
 
+            cases.Add(CaseAsync("builtin_tool_schema_estimate_matches_registry", "RS-6.11: Core's built-in tool schema estimate for the instructions budget stays within a quarter of the registry's real schemas", TestTags.Reliability, () =>
+            {
+                List<PolyPrompt.Models.ToolDefinition> builtIn = new BuiltInToolRegistry(new Armada.Runtimes.Tools.Tasks.TaskPlan()).GetToolDefinitions()
+                    .Select(t => PolyPrompt.Models.ToolDefinition.Function(t.Name, t.Description,
+                        System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, object>>(System.Text.Json.JsonSerializer.Serialize(t.ParametersSchema)) ?? new Dictionary<string, object>()))
+                    .ToList();
+                long measured = ApiContextCompactor.EstimateToolTokens(builtIn);
+                long estimate = PersonaToolScope.BuiltInToolSchemaTokens;
+                AssertTrue(estimate >= measured * 3 / 4 && estimate <= measured * 5 / 4, "estimate " + estimate + " within 25% of measured " + measured);
+                return Task.CompletedTask;
+            }));
+
             cases.Add(CaseAsync("tool_schema_estimate_counts_schemas", "The tool-schema estimate grows with the schemas sent, so the window check counts them", TestTags.Positive, () =>
             {
                 Dictionary<string, object> schema = new Dictionary<string, object> { ["type"] = "object", ["properties"] = new Dictionary<string, object> { ["target"] = new { type = "string", description = new string('d', 400) } } };

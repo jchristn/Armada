@@ -447,13 +447,35 @@ Every stage's output contract comes from one place, `StageOutputContract` (Armad
 the sections the Test Engineer, Linter, Usability Engineer and Product Manager report, the Judge's sections and
 accepted verdict lines (generated from `JudgeVerdictEnum`, including `SPEC_CONFLICT`), and the Architect's contract
 version 4 plan with a complete JSON example and a field table generated from the plan models. The mission instructions
-state it once, under `## Output Contract`, after the persona prompt; persona templates (Current, Lean and Compact),
+state it once, under `## Output Contract`, at the end of the file (since RS-6.11; RS-6.1 placed it after the persona
+prompt); persona templates (Current, Lean and Compact),
 captain instructions and the runtime signals list no longer repeat it, and markers are shown on their own lines rather
 than in backticks. The launch prompt's one-line role summary and the format repair turn use the same source.
 
 Built-in templates an operator has not edited are upgraded in place at startup. A template the operator edited is kept
 as written, and the generated contract is still appended after it, so an edited template that kept an old contract
 sentence states it twice; remove that sentence from the template to state it once.
+
+### How the instructions file is composed
+
+Every launch kind (a first run, a rework round, an output repair rerun and a rescue) builds its instructions file the
+same way (`InstructionsComposer`, RS-6.11). The persona template is chosen first and its declared slots decide where the
+prior stage's handoff goes: a template that contains `{PreviousStageOutput}` (Judge, Test Engineer, Linter) carries the
+evidence, and the description's prior-stage section gets a note instead of a second copy; a template without the slot
+(for example an operator-edited one) gets the evidence in the description, or, when the description has no prior-stage
+section either, in a `## Prior Stage Output` section after the mission. The persona prompt is rendered once. Rework
+sections, repair notes and rescue briefs no longer restate the completion line; they point at the Output Contract
+section, which closes the file. Rework sections persisted before 1.5.0 lose their old `### Output contract` block at
+launch.
+
+When the captain's served context is known (an inference endpoint with a context length), the whole file is held to a
+quarter of it, less the tool schemas the launch sends (for API endpoint captains, the built-in coding tools plus the
+persona's scoped Armada tools). Over budget, sections are replaced by a one-line note in this order: papercuts,
+model-context updates, skills, validation notes, git anchors, the repository's own instructions file, model context,
+style guide, project context, then playbooks. The persona prompt, the mission description with its acceptance criteria
+and the handoff (which has its own budget), the mission mode, the rules, the progress signals and the output contract
+are never trimmed; if they alone exceed the budget the Admiral logs a warning. With an unknown context nothing is
+trimmed.
 
 ### Validated slice contracts
 

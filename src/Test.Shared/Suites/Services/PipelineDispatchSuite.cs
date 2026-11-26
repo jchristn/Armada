@@ -1127,7 +1127,8 @@ namespace Test.Shared.Suites.Services
                     AssertEqual(1, repaired!.OutputRepairAttempts, "The Architect gets one output repair turn");
                     AssertTrue(repaired.Status != MissionStatusEnum.Failed, "The first contract violation is repaired, not failed");
                     AssertContains("Output contract repair (attempt 1 of 1)", Armada.Core.Services.MissionNotes.EffectiveDescription(repaired));
-                    AssertContains("armada-plan", Armada.Core.Services.MissionNotes.EffectiveDescription(repaired), "The repair note quotes the required plan format");
+                    AssertContains("Output Contract section at the end of these instructions", Armada.Core.Services.MissionNotes.EffectiveDescription(repaired), "RS-6.11: the repair note points at the contract the instructions state once");
+                    AssertContains("armada-plan", Armada.Core.Services.StageOutputContract.For(Armada.Core.PersonaCatalog.Architect), "the stated contract carries the plan format");
                     AssertNull(repaired.AgentOutput, "The unusable output is cleared before the repair turn");
 
                     Captain? releasedArchitect = await testDb.Driver.Captains.ReadAsync(architectCaptain.Id).ConfigureAwait(false);

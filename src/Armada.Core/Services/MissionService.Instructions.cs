@@ -50,40 +50,47 @@ namespace Armada.Core.Services
             string instructionsPath = Path.Combine(worktreePath, instructionsFileName);
 
             Mission? previousStage = await ReadPreviousStageAsync(mission, token).ConfigureAwait(false);
+            HandoffReader reader = await ResolveReaderAsync(captain, token).ConfigureAwait(false);
             HandoffRendering? handoff = previousStage != null
-                ? await RenderHandoffAsync(harborHost, worktreePath, previousStage, captain, token).ConfigureAwait(false)
+                ? await RenderHandoffAsync(harborHost, worktreePath, previousStage, reader, token).ConfigureAwait(false)
                 : null;
             Dictionary<string, string> templateParams = MissionPromptBuilder.BuildTemplateParams(mission, vessel, captain, null, previousStage, handoff);
             await AddOwnershipParamsAsync(mission, templateParams, token).ConfigureAwait(false);
             List<MissionPlaybookSnapshot> playbookSnapshots = await LoadMissionPlaybookSnapshotsAsync(mission, token).ConfigureAwait(false);
 
-            string content = "";
+            // RS-6.11: the file is assembled from declared sections in a fixed order and held to the reader's budget
+            // (InstructionsComposer); a trimmable section carries a rank and a one-line note that replaces it.
+            List<InstructionSection> sections = new List<InstructionSection>();
 
-            // BuildTemplateParams includes the mandatory persona contract even when the captain
-            // has no custom system instructions. Deliver that contract to every generated brief.
             if (!String.IsNullOrWhiteSpace(templateParams["CaptainInstructions"]))
             {
-                content += await ResolveSectionAsync("mission.captain_instructions_wrapper", templateParams, token).ConfigureAwait(false);
-                content += "\n";
+                sections.Add(new InstructionSection("captain instructions",
+                    await ResolveSectionAsync("mission.captain_instructions_wrapper", templateParams, token).ConfigureAwait(false) + "\n"));
             }
 
             // Vessel context sections
             if (!String.IsNullOrEmpty(vessel.ProjectContext))
             {
-                content += await ResolveSectionAsync("mission.project_context_wrapper", templateParams, token).ConfigureAwait(false);
-                content += "\n";
+                sections.Add(new InstructionSection("project context",
+                    await ResolveSectionAsync("mission.project_context_wrapper", templateParams, token).ConfigureAwait(false) + "\n",
+                    InstructionsComposer.ProjectContextRank,
+                    InstructionsComposer.TrimNote("The vessel's project context", "Read the repository's README and docs instead.")));
             }
 
             if (!String.IsNullOrEmpty(vessel.StyleGuide))
             {
-                content += await ResolveSectionAsync("mission.code_style_wrapper", templateParams, token).ConfigureAwait(false);
-                content += "\n";
+                sections.Add(new InstructionSection("style guide",
+                    await ResolveSectionAsync("mission.code_style_wrapper", templateParams, token).ConfigureAwait(false) + "\n",
+                    InstructionsComposer.StyleGuideRank,
+                    InstructionsComposer.TrimNote("The vessel's style guide", "Follow the style of the surrounding code.")));
             }
 
             if (vessel.EnableModelContext && !String.IsNullOrEmpty(vessel.ModelContext))
             {
-                content += await ResolveSectionAsync("mission.model_context_wrapper", templateParams, token).ConfigureAwait(false);
-                content += "\n";
+                sections.Add(new InstructionSection("model context",
+                    await ResolveSectionAsync("mission.model_context_wrapper", templateParams, token).ConfigureAwait(false) + "\n",
+                    InstructionsComposer.ModelContextRank,
+                    InstructionsComposer.TrimNote("The vessel's model context")));
             }
 
             if (playbookSnapshots.Count > 0)
@@ -94,69 +101,51 @@ namespace Armada.Core.Services
                     mission,
                     playbookSnapshots,
                     token).ConfigureAwait(false);
-                content += await ResolveSectionAsync("mission.playbooks_wrapper", templateParams, token).ConfigureAwait(false);
-                content += "\n";
+                sections.Add(new InstructionSection("playbooks",
+                    await ResolveSectionAsync("mission.playbooks_wrapper", templateParams, token).ConfigureAwait(false) + "\n",
+                    InstructionsComposer.PlaybooksRank,
+                    InstructionsComposer.TrimNote("The selected playbooks (" + String.Join(", ", playbookSnapshots.Select(p => p.FileName)) + ")")));
             }
 
             // Inject the vessel's project-profile skills (best-effort) as a Skills section.
             string skillsMarkdown = await ResolveSkillsMarkdownAsync(vessel, token).ConfigureAwait(false);
             if (!String.IsNullOrWhiteSpace(skillsMarkdown))
             {
-                content += "## Skills\n\n" + skillsMarkdown + "\n";
+                sections.Add(new InstructionSection("skills", "## Skills\n\n" + skillsMarkdown + "\n",
+                    InstructionsComposer.SkillsRank, InstructionsComposer.TrimNote("The Skills section")));
             }
 
             // Toolchain validation advice from the vessel's workflow profile (best-effort), for example .NET restore.
             string validationGuidance = await ResolveValidationGuidanceAsync(vessel, token).ConfigureAwait(false);
             if (!String.IsNullOrEmpty(validationGuidance))
             {
-                content += "## Validation Notes\n\n" + validationGuidance + "\n\n";
+                sections.Add(new InstructionSection("validation notes", "## Validation Notes\n\n" + validationGuidance + "\n\n",
+                    InstructionsComposer.ValidationNotesRank, InstructionsComposer.TrimNote("The Validation Notes section")));
             }
 
-            // Mission preamble and metadata -- resolve persona prompt first, then inject into metadata template.
+            // Persona prompt: choose the template, read its declared slots, fill the description, then render it once.
             // Apply the vessel's project-profile persona override (if any) so per-project customization takes effect.
             PersonaOverride? personaOverride = await ResolvePersonaOverrideAsync(vessel, mission.Persona, token).ConfigureAwait(false);
             string? personaTemplateName = await ResolvePersonaTemplateNameAsync(mission, token).ConfigureAwait(false);
             PromptVariantEnum promptVariant = await ResolvePromptVariantAsync(mission, captain, token).ConfigureAwait(false);
-            string personaPrompt = await MissionPromptBuilder.ResolvePersonaPromptAsync(mission.Persona, personaTemplateName, promptVariant, templateParams, _PromptTemplates, personaOverride, token).ConfigureAwait(false);
-            if (handoff != null)
-            {
-                // The description's prior-stage placeholder receives the rendered handoff, unless the persona template
-                // already carries it through {PreviousStageOutput} (Judge, Test Engineer, Linter): deliver it once.
-                bool templateCarriesHandoff = personaPrompt.Contains(handoff.Evidence.Trim(), StringComparison.Ordinal);
-                string carriedNote = "The prior stage's handoff artifact is rendered in the role instructions below (prior stage evidence and diff).";
-                string block = templateCarriesHandoff ? carriedNote : handoff.Combined();
-                // A rework description lists the reviewer's findings, its demands and the output contract (Phase 3 item 2).
-                string filled = ReworkPromptBuilder.IsReworkDescription(templateParams["MissionDescription"])
-                    ? ReworkPromptBuilder.Compose(templateParams["MissionDescription"], handoff, templateCarriesHandoff ? carriedNote : null)
-                    : PipelineHandoffContext.Fill(templateParams["MissionDescription"], block);
-                if (!String.Equals(filled, templateParams["MissionDescription"], StringComparison.Ordinal))
-                {
-                    templateParams["MissionDescription"] = filled;
-                    personaPrompt = await MissionPromptBuilder.ResolvePersonaPromptAsync(mission.Persona, personaTemplateName, promptVariant, templateParams, _PromptTemplates, personaOverride, token).ConfigureAwait(false);
-                }
-            }
-            else if (ReworkPromptBuilder.IsReworkDescription(templateParams["MissionDescription"]))
-            {
-                // No reviewer stage to render: keep the fallback findings line and drop the placeholder.
-                templateParams["MissionDescription"] = ReworkPromptBuilder.Compose(templateParams["MissionDescription"], null);
-                personaPrompt = await MissionPromptBuilder.ResolvePersonaPromptAsync(mission.Persona, personaTemplateName, promptVariant, templateParams, _PromptTemplates, personaOverride, token).ConfigureAwait(false);
-            }
+            PromptTemplate? personaTemplate = await MissionPromptBuilder.ChoosePersonaTemplateAsync(mission.Persona, personaTemplateName, promptVariant, _PromptTemplates, personaOverride, token).ConfigureAwait(false);
+            string? appendedHandoff = DeliverHandoff(templateParams, handoff, personaTemplate?.Content);
+            string personaPrompt = await MissionPromptBuilder.RenderPersonaPromptBodyAsync(mission.Persona, personaTemplate, templateParams, _PromptTemplates, personaOverride, token).ConfigureAwait(false);
 
             string personaTemplateLabel = personaOverride != null && personaOverride.Enabled && !String.IsNullOrWhiteSpace(personaOverride.PromptTemplateName)
                 ? personaOverride.PromptTemplateName!.Trim()
                 : !String.IsNullOrWhiteSpace(personaTemplateName) ? personaTemplateName!.Trim() : MissionPromptBuilder.GetPersonaVariantTemplateName(mission.Persona, promptVariant);
             personaPrompt = EnsureWorkerEnvelopeSection(personaPrompt, mission, personaTemplateLabel, templateParams);
             templateParams["PersonaPrompt"] = personaPrompt;
-            content += await ResolveSectionAsync("mission.metadata", templateParams, token).ConfigureAwait(false);
-            content += "\n";
+            sections.Add(new InstructionSection("mission", await ResolveSectionAsync("mission.metadata", templateParams, token).ConfigureAwait(false) + "\n"));
+            if (appendedHandoff != null) sections.Add(new InstructionSection("prior stage output", appendedHandoff));
 
             // Mission-mode contract: read-only modes (Audit/Research) get a report-shaped brief that forbids
             // repository changes and states that an empty diff is a successful outcome. Write missions add nothing.
             string missionModeSection = MissionModeContract.BuildBriefSection(mission.Mode);
             if (!String.IsNullOrEmpty(missionModeSection))
             {
-                content += missionModeSection;
-                content += "\n";
+                sections.Add(new InstructionSection("mission mode", missionModeSection + "\n"));
             }
 
             // Resolved git anchors (start commit, target branch, working branch, recent commits on the paths
@@ -191,8 +180,8 @@ namespace Armada.Core.Services
             string gitAnchors = GitAnchorsFormatter.Render(headCommit, vessel.DefaultBranch, mission.BranchName, recentPathCommits, subjectTermsPresent);
             if (!String.IsNullOrEmpty(gitAnchors))
             {
-                content += gitAnchors;
-                content += "\n";
+                sections.Add(new InstructionSection("git anchors", gitAnchors + "\n",
+                    InstructionsComposer.GitAnchorsRank, InstructionsComposer.TrimNote("The git anchors section", "Run git log and git status to orient yourself.")));
 
                 // Persist the resolved anchors on the dock (documented raw-JSON snapshot) so the dashboard
                 // and a resuming captain can read them without re-deriving. Best-effort.
@@ -243,13 +232,11 @@ namespace Armada.Core.Services
                     LandingModeEnum.PullRequest => "- Commit and push your changes -- the Admiral will also push if needed\n",
                     _ => "- Commit and push your changes -- the Admiral will also push if needed\n"
                 };
-            content += await ResolveSectionAsync("mission.rules", templateParams, token).ConfigureAwait(false);
-            content += "\n";
-            content += await ResolveSectionAsync("mission.context_conservation", templateParams, token).ConfigureAwait(false);
-            content += "\n";
-            content += await ResolveSectionAsync("mission.merge_conflict_avoidance", templateParams, token).ConfigureAwait(false);
-            content += "\n";
-            content += await ResolveSectionAsync("mission.progress_signals", templateParams, token).ConfigureAwait(false);
+            sections.Add(new InstructionSection("rules",
+                await ResolveSectionAsync("mission.rules", templateParams, token).ConfigureAwait(false) + "\n"
+                + await ResolveSectionAsync("mission.context_conservation", templateParams, token).ConfigureAwait(false) + "\n"
+                + await ResolveSectionAsync("mission.merge_conflict_avoidance", templateParams, token).ConfigureAwait(false) + "\n"
+                + await ResolveSectionAsync("mission.progress_signals", templateParams, token).ConfigureAwait(false)));
 
             // Papercuts apply to every mission mode: an audit meets stale docs and dead links exactly as
             // an implementation does. Judge and Architect are excluded -- a judge reports what it finds
@@ -257,20 +244,22 @@ namespace Armada.Core.Services
             if (!PersonaCatalog.Matches(mission.Persona, PersonaCatalog.Judge) &&
                 !PersonaCatalog.Matches(mission.Persona, PersonaCatalog.Architect))
             {
-                content += "\n";
-                content += BuildPapercutsSection();
+                sections.Add(new InstructionSection("papercuts", "\n" + BuildPapercutsSection(),
+                    InstructionsComposer.PapercutsRank, "\n" + InstructionsComposer.TrimNote("The papercut directive")));
             }
 
             // Model context updates
             if (vessel.EnableModelContext)
             {
-                content += "\n";
-                content += await ResolveSectionAsync("mission.model_context_updates", templateParams, token).ConfigureAwait(false);
+                sections.Add(new InstructionSection("model context updates",
+                    "\n" + await ResolveSectionAsync("mission.model_context_updates", templateParams, token).ConfigureAwait(false),
+                    InstructionsComposer.ModelContextUpdatesRank, String.Empty));
             }
 
             // If there's an existing runtime instruction file, preserve it and prepend our instructions
             IDockFileSystem files = harborHost != null ? harborHost.Files : _LocalFiles;
             string? existing = await files.ReadTextAsync(instructionsPath, token).ConfigureAwait(false);
+            string existingSource = instructionsFileName;
             // Pi's generated override is output, not repository context. Read AGENTS.md again on regeneration.
             if (instructionsFileName == "AGENTS.override.md" && existing?.Contains("# Mission Instructions", StringComparison.Ordinal) == true)
                 existing = null;
@@ -291,6 +280,7 @@ namespace Armada.Core.Services
                     if (!String.IsNullOrWhiteSpace(projectInstructions))
                     {
                         existing = projectInstructions;
+                        existingSource = fallback;
                         _Logging.Debug(_Header + "carrying the repository's " + fallback + " into " + instructionsFileName + " for mission " + mission.Id);
                         break;
                     }
@@ -309,9 +299,36 @@ namespace Armada.Core.Services
                     }
 
                     templateParams["ExistingClaudeMd"] = sanitizedExisting;
-                    content += await ResolveSectionAsync("mission.existing_instructions_wrapper", templateParams, token).ConfigureAwait(false);
+                    string where = String.Equals(existingSource, instructionsFileName, StringComparison.Ordinal)
+                        ? "Read it with `git show HEAD:" + existingSource + "`."
+                        : "Read " + existingSource + " in the repository root.";
+                    sections.Add(new InstructionSection("repository instructions",
+                        await ResolveSectionAsync("mission.existing_instructions_wrapper", templateParams, token).ConfigureAwait(false),
+                        InstructionsComposer.ExistingInstructionsRank,
+                        "\n" + InstructionsComposer.TrimNote("The repository's own instructions file", where)));
                 }
             }
+
+            // The one output contract closes the file, after the handoff and everything else (RS-6.1, RS-6.11).
+            string outputContract = StageOutputContract.For(mission.Persona);
+            if (!String.IsNullOrEmpty(outputContract))
+                sections.Add(new InstructionSection("output contract", "\n\n" + outputContract));
+
+            long toolSchemaTokens = captain != null && captain.Runtime == AgentRuntimeEnum.ApiEndpoint
+                ? PersonaToolScope.EstimateSchemaTokens(mission.Persona, reader.CanReadFiles, reader.HasMcpTools)
+                : 0;
+            InstructionsComposition composition = InstructionsComposer.Compose(sections, InstructionsComposer.ResolveBudget(reader, toolSchemaTokens), toolSchemaTokens);
+            if (composition.TrimmedSections.Count > 0)
+            {
+                _Logging.Info(_Header + "mission " + mission.Id + " instructions trimmed to fit a budget of " + composition.BudgetTokens
+                    + " tokens (" + toolSchemaTokens + " of them tool schemas): " + String.Join(", ", composition.TrimmedSections));
+            }
+            if (composition.OverBudget)
+            {
+                _Logging.Warn(_Header + "mission " + mission.Id + " instructions are about " + composition.EstimatedTokens + " tokens, over the budget of "
+                    + composition.BudgetTokens + " after trimming; the role, description, rules and contract are never trimmed");
+            }
+            string content = composition.Text;
 
             await files.WriteTextAsync(instructionsPath, content, token).ConfigureAwait(false);
 
@@ -563,20 +580,10 @@ namespace Armada.Core.Services
         }
 
         /// <summary>
-        /// Render the prior stage's stored handoff artifact, followed by the earlier stages of the chain (newest first), for
-        /// the captain about to read it: the budget comes from the captain's
-        /// served context when known, else <see cref="ArmadaSettings.HandoffBudgetTokens"/>; the pointer to the complete
-        /// artifact uses a tool the captain has. A captain that can only read files gets the complete artifact written to
-        /// .armada/handoff/ in its worktree (git-excluded and a scratch path, so it is never committed). If that write
-        /// fails, the rendering says that nothing beyond it can reach the captain.
+        /// What the captain about to launch can receive (served context and tools), from its model endpoint.
         /// </summary>
-        private async Task<HandoffRendering> RenderHandoffAsync(DockHost? harborHost, string worktreePath, Mission previousStage, Captain? captain, CancellationToken token)
+        private async Task<HandoffReader> ResolveReaderAsync(Captain? captain, CancellationToken token)
         {
-            // RS-6.9 and RS-6.10: read the stored artifacts of the prior stage and of the stages behind it; a launch never
-            // stores one.
-            HandoffArtifactService artifacts = new HandoffArtifactService(_Database, _Logging);
-            HandoffArtifact artifact = await artifacts.ReadForLaunchAsync(previousStage, token).ConfigureAwait(false);
-            List<HandoffArtifact> earlier = await artifacts.ReadEarlierChainAsync(previousStage, token).ConfigureAwait(false);
             ModelEndpoint? endpoint = null;
             if (!String.IsNullOrEmpty(captain?.ModelEndpointId))
             {
@@ -584,7 +591,66 @@ namespace Armada.Core.Services
                 catch (Exception ex) when (!(ex is OperationCanceledException && token.IsCancellationRequested)) { endpoint = null; }
             }
 
-            HandoffReader reader = HandoffReaderResolver.Resolve(captain, endpoint);
+            return HandoffReaderResolver.Resolve(captain, endpoint);
+        }
+
+        /// <summary>
+        /// Deliver the prior stage's handoff once (RS-6.11). The persona template's declared slots decide where it goes:
+        /// a template that declares <c>{PreviousStageOutput}</c> (or <c>{Diff}</c>) receives that part, and the
+        /// description's prior-stage placeholder receives the rest, or a note that the evidence is in the role
+        /// instructions. A rework description gets its findings and the rest of the handoff. When neither the template nor
+        /// the description has a slot for the evidence (an operator-edited template and an older description), the
+        /// handoff is returned for the composer to append after the mission section; otherwise null.
+        /// </summary>
+        internal static string? DeliverHandoff(Dictionary<string, string> templateParams, HandoffRendering? handoff, string? personaTemplateContent)
+        {
+            string description = templateParams["MissionDescription"];
+            bool rework = ReworkPromptBuilder.IsReworkDescription(description);
+            if (handoff == null)
+            {
+                // No reviewer stage to render: keep the fallback findings line and drop the placeholder.
+                if (rework) templateParams["MissionDescription"] = ReworkPromptBuilder.Compose(description, null);
+                return null;
+            }
+
+            bool templateCarriesEvidence = InstructionsComposer.DeclaresSlot(personaTemplateContent, "PreviousStageOutput");
+            bool templateCarriesDiff = InstructionsComposer.DeclaresSlot(personaTemplateContent, "Diff");
+            string block;
+            if (templateCarriesEvidence)
+                block = HandoffInRoleNote + (templateCarriesDiff ? "" : "\n\n" + handoff.Diff.TrimEnd() + "\n");
+            else
+                block = templateCarriesDiff ? handoff.Evidence.TrimEnd() + "\n" : handoff.Combined();
+
+            // A rework description lists the reviewer's findings, its demands and the rest of the handoff (Phase 3 item 2).
+            string filled = rework
+                ? ReworkPromptBuilder.Compose(description, handoff, templateCarriesEvidence ? HandoffInRoleNote : null)
+                : PipelineHandoffContext.Fill(description, block);
+            templateParams["MissionDescription"] = filled;
+
+            bool delivered = templateCarriesEvidence || rework || !String.Equals(filled, description, StringComparison.Ordinal);
+            return delivered ? null : "## Prior Stage Output\n\n" + block.TrimEnd() + "\n\n";
+        }
+
+        /// <summary>
+        /// Note placed in the description when the persona template carries the prior stage's evidence.
+        /// </summary>
+        internal const string HandoffInRoleNote = "The prior stage's handoff artifact is rendered in the role instructions above (prior stage evidence and diff).";
+
+        /// <summary>
+        /// Render the prior stage's stored handoff artifact, followed by the earlier stages of the chain (newest first), for
+        /// the captain about to read it: the budget comes from the captain's
+        /// served context when known, else <see cref="ArmadaSettings.HandoffBudgetTokens"/>; the pointer to the complete
+        /// artifact uses a tool the captain has. A captain that can only read files gets the complete artifact written to
+        /// .armada/handoff/ in its worktree (git-excluded and a scratch path, so it is never committed). If that write
+        /// fails, the rendering says that nothing beyond it can reach the captain.
+        /// </summary>
+        private async Task<HandoffRendering> RenderHandoffAsync(DockHost? harborHost, string worktreePath, Mission previousStage, HandoffReader reader, CancellationToken token)
+        {
+            // RS-6.9 and RS-6.10: read the stored artifacts of the prior stage and of the stages behind it; a launch never
+            // stores one.
+            HandoffArtifactService artifacts = new HandoffArtifactService(_Database, _Logging);
+            HandoffArtifact artifact = await artifacts.ReadForLaunchAsync(previousStage, token).ConfigureAwait(false);
+            List<HandoffArtifact> earlier = await artifacts.ReadEarlierChainAsync(previousStage, token).ConfigureAwait(false);
             HandoffRendering rendering = HandoffRenderer.RenderChainWithBudget(artifact, earlier, reader, HandoffRenderer.ResolveBudget(reader, _Settings.HandoffBudgetTokens));
             if (rendering.Pointer == HandoffPointerKindEnum.File && rendering.FilePath != null)
             {

@@ -23,6 +23,18 @@ namespace Armada.Core.Services
         public const string EnvironmentVariable = "ARMADA_MCP_TOOL_SCOPE";
 
         /// <summary>
+        /// Estimated schema tokens of the API endpoint runtime's built-in coding tools (read, write, edit, search, run
+        /// process, task plan), sent with every model turn. A Runtimes test keeps it within a quarter of the measured value.
+        /// </summary>
+        public const int BuiltInToolSchemaTokens = 2400;
+
+        /// <summary>
+        /// Estimated schema tokens of one scoped Armada MCP tool (measured: Judge 5 tools about 835 tokens, Recorder 9
+        /// tools about 1,789).
+        /// </summary>
+        public const int ArmadaToolSchemaTokens = 180;
+
+        /// <summary>
         /// Tools every persona is shown: the stage's handoff artifact, the memory search, the mission's own status, and the
         /// vessel model-context update the instructions ask for.
         /// </summary>
@@ -72,6 +84,22 @@ namespace Armada.Core.Services
             string? submitTool = StageSubmissionTools.ToolForPersona(persona);
             if (submitTool != null) tools.Add(submitTool);
             return tools.Distinct(StringComparer.Ordinal).ToList();
+        }
+
+        /// <summary>
+        /// Estimated tool schema tokens a mission launch sends with every model turn, for the instructions budget: the
+        /// built-in coding tools when the captain has tools, plus the persona's scoped Armada tools and the discovery tool
+        /// when it has the Armada MCP tools. CLI runtimes load their own tool schemas and count as zero.
+        /// </summary>
+        /// <param name="persona">Mission persona, or null.</param>
+        /// <param name="builtInTools">Whether the launch sends the built-in coding tools.</param>
+        /// <param name="mcpTools">Whether the launch sends the scoped Armada MCP tools.</param>
+        /// <returns>Estimated tokens.</returns>
+        public static long EstimateSchemaTokens(string? persona, bool builtInTools, bool mcpTools)
+        {
+            long tokens = builtInTools ? BuiltInToolSchemaTokens : 0;
+            if (builtInTools && mcpTools) tokens += (long)(ForPersona(persona).Count + 1) * ArmadaToolSchemaTokens;
+            return tokens;
         }
 
         /// <summary>

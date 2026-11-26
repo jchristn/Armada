@@ -685,7 +685,8 @@ namespace Test.Shared.Suites.Services
 
                 Mission? repaired = await db.Missions.ReadAsync(judge.Id).ConfigureAwait(false);
                 AssertEqual(1, repaired!.OutputRepairAttempts);
-                AssertContains("Spec Conflict", Armada.Core.Services.MissionNotes.EffectiveDescription(repaired), "the repair note names the required section");
+                AssertContains("Output Contract section at the end of these instructions", Armada.Core.Services.MissionNotes.EffectiveDescription(repaired), "RS-6.11: the repair note points at the contract the instructions state once");
+                AssertContains("Spec Conflict", Armada.Core.Services.StageOutputContract.For(Armada.Core.PersonaCatalog.Judge), "the stated Judge contract names the section");
             }));
 
             cases.Add(CaseAsync("stop_signals_gracefully_then_forces", "Stopping a local agent asks it to exit first and force-kills only one that ignores the request", TestTags.Reliability, async () =>

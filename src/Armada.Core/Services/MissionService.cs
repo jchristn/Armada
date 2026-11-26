@@ -1479,7 +1479,7 @@ namespace Armada.Core.Services
         }
 
 
-        private async Task<bool> TryScheduleOutputRepairAsync(Mission mission, string problem, string contract, CancellationToken token)
+        private async Task<bool> TryScheduleOutputRepairAsync(Mission mission, string problem, CancellationToken token)
         {
             // A person decides review-gated stages; never re-run behind their back.
             if (mission.RequiresReview) return false;
@@ -1499,8 +1499,7 @@ namespace Armada.Core.Services
             int attempt = mission.OutputRepairAttempts + 1;
             string note = "## Output contract repair (attempt " + attempt + " of " + max + ")\n"
                 + "Your previous response for this mission could not be used: " + problem.Trim() + "\n"
-                + "Do the same job again from the current branch and respond in exactly this format. Nothing else about the task has changed.\n"
-                + "Required format: " + contract.Trim();
+                + "Do the same job again from the current branch and respond in exactly the format of the Output Contract section at the end of these instructions. Nothing else about the task has changed.";
 
             mission.OutputRepairAttempts = attempt;
             MissionNotes.Set(mission, MissionNoteKindEnum.OutputRepair, note);

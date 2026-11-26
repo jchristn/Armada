@@ -13,9 +13,6 @@ namespace Armada.Core.Services
     public static class MissionPromptBuilder
     {
         private const int MaxLaunchPromptChars = 6000;
-        private const int MaxPersonaSummaryChars = 320;
-        private const int MaxCaptainInstructionChars = 800;
-        private const int MaxMissionDescriptionChars = 3500;
 
         /// <summary>
         /// Text placed in <c>{Diff}</c> when the mission has no prior pipeline stage diff.
@@ -274,30 +271,83 @@ namespace Armada.Core.Services
         {
             if (templateParams == null) throw new ArgumentNullException(nameof(templateParams));
 
-            bool overrideActive = personaOverride != null && personaOverride.Enabled;
+            PromptTemplate? chosen = await ChoosePersonaTemplateAsync(persona, personaTemplateName, variant, promptTemplates, personaOverride, token).ConfigureAwait(false);
+            string body = await RenderPersonaPromptBodyAsync(persona, chosen, templateParams, promptTemplates, personaOverride, token).ConfigureAwait(false);
+
+            // The one output contract, generated from the models the parsers read (StageOutputContract).
+            return StageOutputContract.AppendTo(persona, body);
+        }
+
+        /// <summary>
+        /// The persona prompt template a launch renders, chosen with the precedence of
+        /// <see cref="ResolvePersonaPromptAsync(string?, string?, PromptVariantEnum, Dictionary{string, string}, IPromptTemplateService?, PersonaOverride?, CancellationToken)"/>:
+        /// an enabled project-profile override's template, then the persona's configured template, then the variant of the
+        /// conventional template; a missing or empty template falls back to the conventional one. The instructions composer
+        /// reads the chosen template's declared slots (for example <c>{PreviousStageOutput}</c>) before rendering it once.
+        /// </summary>
+        /// <param name="persona">Mission persona name.</param>
+        /// <param name="personaTemplateName">The persona's configured prompt template name, or null for the convention.</param>
+        /// <param name="variant">Prompt variant.</param>
+        /// <param name="promptTemplates">Template service, or null.</param>
+        /// <param name="personaOverride">Project-profile persona override, or null.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The chosen template, or null when none resolves (the built-in role summary is used).</returns>
+        public static async Task<PromptTemplate?> ChoosePersonaTemplateAsync(
+            string? persona,
+            string? personaTemplateName,
+            PromptVariantEnum variant,
+            IPromptTemplateService? promptTemplates,
+            PersonaOverride? personaOverride = null,
+            CancellationToken token = default)
+        {
+            if (promptTemplates == null) return null;
 
             string conventionalName = GetPersonaTemplateName(persona);
             string templateName = String.IsNullOrWhiteSpace(personaTemplateName) ? conventionalName : personaTemplateName!.Trim();
             if (variant != PromptVariantEnum.Current && String.Equals(templateName, conventionalName, StringComparison.Ordinal))
                 templateName = GetPersonaVariantTemplateName(persona, variant);
-            if (overrideActive && !String.IsNullOrWhiteSpace(personaOverride!.PromptTemplateName))
+            if (personaOverride != null && personaOverride.Enabled && !String.IsNullOrWhiteSpace(personaOverride.PromptTemplateName))
                 templateName = personaOverride.PromptTemplateName!.Trim();
 
+            PromptTemplate? chosen = await promptTemplates.ResolveAsync(templateName, token).ConfigureAwait(false);
+            if ((chosen == null || String.IsNullOrEmpty(chosen.Content)) && !String.Equals(templateName, conventionalName, StringComparison.Ordinal))
+                chosen = await promptTemplates.ResolveAsync(conventionalName, token).ConfigureAwait(false);
+            return chosen == null || String.IsNullOrEmpty(chosen.Content) ? null : chosen;
+        }
+
+        /// <summary>
+        /// Render a chosen persona template (or the built-in role summary when none was chosen) with the override's
+        /// additional instructions, without the output contract. The instructions composer places the contract itself, at
+        /// the end of the file.
+        /// </summary>
+        /// <param name="persona">Mission persona name.</param>
+        /// <param name="chosen">Template from <see cref="ChoosePersonaTemplateAsync"/>, or null.</param>
+        /// <param name="templateParams">Template parameters.</param>
+        /// <param name="promptTemplates">Template service, or null.</param>
+        /// <param name="personaOverride">Project-profile persona override, or null.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The persona prompt without its contract.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when templateParams is null.</exception>
+        public static async Task<string> RenderPersonaPromptBodyAsync(
+            string? persona,
+            PromptTemplate? chosen,
+            Dictionary<string, string> templateParams,
+            IPromptTemplateService? promptTemplates,
+            PersonaOverride? personaOverride = null,
+            CancellationToken token = default)
+        {
+            if (templateParams == null) throw new ArgumentNullException(nameof(templateParams));
+
             string result = GetPersonaPromptFallback(persona);
-            if (promptTemplates != null)
+            if (promptTemplates != null && chosen != null)
             {
-                string rendered = await promptTemplates.RenderAsync(templateName, templateParams, token).ConfigureAwait(false);
-                if (String.IsNullOrEmpty(rendered) && !String.Equals(templateName, conventionalName, StringComparison.Ordinal))
-                    rendered = await promptTemplates.RenderAsync(conventionalName, templateParams, token).ConfigureAwait(false);
-                if (!String.IsNullOrEmpty(rendered))
-                    result = rendered;
+                string rendered = await promptTemplates.RenderAsync(chosen.Name, templateParams, token).ConfigureAwait(false);
+                if (!String.IsNullOrEmpty(rendered)) result = rendered;
             }
 
-            if (overrideActive && !String.IsNullOrWhiteSpace(personaOverride!.AdditionalInstructions))
+            if (personaOverride != null && personaOverride.Enabled && !String.IsNullOrWhiteSpace(personaOverride.AdditionalInstructions))
                 result = result + "\n\n" + personaOverride.AdditionalInstructions!.Trim();
-
-            // The one output contract, generated from the models the parsers read (StageOutputContract).
-            return StageOutputContract.AppendTo(persona, result);
+            return result;
         }
 
         /// <summary>
@@ -349,16 +399,6 @@ namespace Armada.Core.Services
         private static string BuildBootstrapRoleSummary(string? persona)
         {
             return StageOutputContract.RoleSummary(persona);
-        }
-
-        private static string SummarizeText(string? input, int maxChars)
-        {
-            if (String.IsNullOrWhiteSpace(input)) return "";
-
-            string compact = Regex.Replace(input, "\\s+", " ").Trim();
-            if (compact.Length <= maxChars) return compact;
-            if (maxChars <= 3) return compact.Substring(0, maxChars);
-            return compact.Substring(0, maxChars - 3).TrimEnd() + "...";
         }
 
         private static string BuildCaptainInstructions(string? existingInstructions, string? persona)

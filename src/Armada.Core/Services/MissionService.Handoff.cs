@@ -155,7 +155,7 @@ namespace Armada.Core.Services
 
                 if (planError != null)
                 {
-                    if (await TryScheduleOutputRepairAsync(completedMission, planError, StageOutputContract.For(PersonaCatalog.Architect), token).ConfigureAwait(false))
+                    if (await TryScheduleOutputRepairAsync(completedMission, planError, token).ConfigureAwait(false))
                         return false;
 
                     MissionStatusEnum planStatusBefore = completedMission.Status;
@@ -211,7 +211,7 @@ namespace Armada.Core.Services
 
                 // An absent plan is a format failure, not a judgment about the work: run the Architect again with the
                 // exact contract before failing the voyage. Narration is never inferred into missions.
-                if (await TryScheduleOutputRepairAsync(completedMission, failureReason, StageOutputContract.For(PersonaCatalog.Architect), token).ConfigureAwait(false))
+                if (await TryScheduleOutputRepairAsync(completedMission, failureReason, token).ConfigureAwait(false))
                     return false;
 
                 failureReason = AppendRepairHistory(failureReason, completedMission);
