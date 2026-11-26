@@ -67,7 +67,7 @@ namespace Armada.Core.Services
             context.RoutingPersona = RoutingPersona(mission);
             if (!String.IsNullOrEmpty(mission.RequestedCaptainId))
             {
-                Captain? requested = await _Database.Captains.ReadAsync(mission.RequestedCaptainId, token).ConfigureAwait(false);
+                Captain? requested = await PassCaptainAsync(mission.RequestedCaptainId, token).ConfigureAwait(false);
                 context.InactiveRequestedCaptain = requested?.Active == false;
             }
             // Review authors only change eligibility when they are excluded; otherwise they are merely less preferred.
@@ -82,7 +82,7 @@ namespace Armada.Core.Services
             if (String.IsNullOrEmpty(mission.RequestedCaptainId))
             {
                 context.DefaultCaptainId = await PersonaDefaultCaptainIdAsync(mission, context.RoutingPersona, token).ConfigureAwait(false);
-                context.Persona = await ReadPersonaByNameAsync(mission.TenantId, context.RoutingPersona, token, mission.UserId).ConfigureAwait(false);
+                context.Persona = await PassPersonaAsync(mission.TenantId, context.RoutingPersona, mission.UserId, token).ConfigureAwait(false);
             }
             context.EnvelopeGate = await BuildWorkerEnvelopeGateAsync(mission, token).ConfigureAwait(false);
             return context;
@@ -417,22 +417,17 @@ namespace Armada.Core.Services
 
         /// <summary>
         /// The vessel's execution and verification missions, which the broad-scope and branch safety checks look
-        /// at. Read by status rather than as the vessel's whole history (with its stored outputs and diffs), which every
-        /// pending mission used to load on every dispatch tick (D17).
+        /// at. One indexed projection (vessel and status, no outputs or diffs), read once per vessel per dispatch pass
+        /// (D17, RS-4.7).
         /// </summary>
-        private async Task<List<Mission>> ActiveMissionsOnVesselAsync(string vesselId, CancellationToken token)
-        {
-            List<Mission> active = new List<Mission>();
-            foreach (MissionStatusEnum status in new[] { MissionStatusEnum.Assigned, MissionStatusEnum.InProgress, MissionStatusEnum.Verifying })
-                active.AddRange((await _Database.Missions.EnumerateByStatusAsync(status, token).ConfigureAwait(false)).Where(m => m.VesselId == vesselId));
-            return active;
-        }
+        private Task<List<Mission>> ActiveMissionsOnVesselAsync(string vesselId, CancellationToken token)
+            => PassRunningOnVesselAsync(vesselId, token);
 
         private async Task<MissionAssignmentBlocker?> EvaluateGlobalAdmissionAsync(CancellationToken token)
         {
             int limit = _Settings.MaxConcurrentMissions;
             if (limit == 0) return null;
-            int running = await _Database.Missions.CountExecutionSlotsAsync(token).ConfigureAwait(false);
+            int running = await PassExecutionSlotsAsync(token).ConfigureAwait(false);
             if (running < limit) return null;
             // Do not expose other tenants' mission IDs through a deployment-wide limit.
             return MissionAdmissionEvaluator.Capacity(MissionAssignmentBlockerReasonEnum.GlobalMissionLimit,
@@ -441,7 +436,7 @@ namespace Armada.Core.Services
 
         private async Task<MissionAssignmentBlocker?> EvaluateVesselAdmissionAsync(Mission mission, Vessel vessel, CancellationToken token)
         {
-            List<MissionAdmissionSnapshot> missions = await _Database.Missions.EnumerateAdmissionSnapshotsAsync(vessel.Id, token).ConfigureAwait(false);
+            List<MissionAdmissionSnapshot> missions = await PassAdmissionSnapshotsAsync(vessel.Id, token).ConfigureAwait(false);
             return VesselAdmission.EvaluateSnapshots(mission, vessel, missions);
         }
 
@@ -456,7 +451,7 @@ namespace Armada.Core.Services
         private async Task<string?> PersonaDefaultCaptainIdAsync(Mission mission, string? routingPersona, CancellationToken token)
         {
             if (String.IsNullOrEmpty(routingPersona)) return null;
-            Persona? persona = await ReadPersonaByNameAsync(mission.TenantId, routingPersona, token, mission.UserId).ConfigureAwait(false);
+            Persona? persona = await PassPersonaAsync(mission.TenantId, routingPersona, mission.UserId, token).ConfigureAwait(false);
             // A nonempty hierarchy supersedes the legacy default captain.
             if (persona == null || persona.CaptainPriorities.Count > 0 || String.IsNullOrEmpty(persona.DefaultCaptainId)) return null;
             return persona.DefaultCaptainId;
@@ -478,7 +473,7 @@ namespace Armada.Core.Services
         private async Task<CaptainTierEnum?> CaptainEffectiveTierAsync(string captainId, CancellationToken token)
         {
             if (String.IsNullOrEmpty(captainId)) return null;
-            Captain? captain = await _Database.Captains.ReadAsync(captainId, token).ConfigureAwait(false);
+            Captain? captain = await PassCaptainAsync(captainId, token).ConfigureAwait(false);
             if (captain == null) return null;
             return CaptainTierSelector.EffectiveTier(captain);
         }
@@ -486,7 +481,7 @@ namespace Armada.Core.Services
         private async Task<List<CaptainAssignmentOverride>> ReadVoyageCaptainOverridesAsync(string? voyageId, CancellationToken token)
         {
             if (String.IsNullOrEmpty(voyageId)) return new List<CaptainAssignmentOverride>();
-            Voyage? voyage = await _Database.Voyages.ReadAsync(voyageId, token).ConfigureAwait(false);
+            Voyage? voyage = await PassVoyageAsync(voyageId, token).ConfigureAwait(false);
             if (voyage == null) return new List<CaptainAssignmentOverride>();
             return DeserializeCaptainOverrides(voyage.CaptainOverridesJson);
         }

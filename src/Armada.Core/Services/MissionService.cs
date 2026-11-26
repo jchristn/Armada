@@ -457,6 +457,7 @@ namespace Armada.Core.Services
                 catch (Exception ex) when (!TransientDatabaseError.IsTransient(ex) && !(ex is OperationCanceledException))
                 {
                     _AttemptWaits.TryRemove(mission.Id, out _);
+                    PassStateChanged();
                     RecordAdmissionResult(new MissionWaitObservation { Mission = mission, Blocker = new MissionAssignmentBlocker
                     { Reason = MissionAssignmentBlockerReasonEnum.AwaitingDispatch, Summary = "Assignment failed with an error: " + ex.Message } });
                     throw;
@@ -468,6 +469,7 @@ namespace Armada.Core.Services
                         _Logging.Warn(_Header + "assignment of mission " + mission.Id + " hit a transient database error " + attempt + " times; retrying next dispatch cycle: " + ex.Message);
                         return false;
                     }
+                    PassStateChanged();
                     await Task.Delay(TimeSpan.FromMilliseconds(25 * attempt + Random.Shared.Next(0, 50)), token).ConfigureAwait(false);
                 }
             }
@@ -532,7 +534,7 @@ namespace Armada.Core.Services
 
                 if (!String.IsNullOrEmpty(mission.VoyageId))
                 {
-                    Voyage? voyage = await _Database.Voyages.ReadAsync(mission.VoyageId, token).ConfigureAwait(false);
+                    Voyage? voyage = await PassVoyageAsync(mission.VoyageId, token).ConfigureAwait(false);
                     // RS-4.3: nothing of a voyage starts until every one of its missions exists.
                     if (voyage != null && voyage.Status == VoyageStatusEnum.Building)
                     {
@@ -788,6 +790,8 @@ namespace Armada.Core.Services
                 if (receipt.AlreadyCommitted) return false;
             }
             else claimed = await _Database.CaptainSelections.TryAdmitLegacyAsync(captain.Id, mission.Id, usageExecutionHost, _Settings.Concurrency.MaxCaptainConcurrency, token).ConfigureAwait(false);
+            // RS-4.7: a claim attempt changes captain and slot state, so the next mission in this pass reads it again.
+            PassStateChanged();
             if (!claimed)
             {
                 _Logging.Info(_Header + "captain " + captain.Id + " was claimed by another mission before " + mission.Id + " could take it; retrying next cycle");
@@ -833,6 +837,7 @@ namespace Armada.Core.Services
                 string deferredMissionId = mission.Id;
                 Task background = Task.Run(async () =>
                 {
+                    _Pass.Value = null; // the launch outlives the pass and must never read its cache
                     try { await ProvisionAndLaunchAsync(ShutdownToken).ConfigureAwait(false); }
                     catch (OperationCanceledException) when (ShutdownToken.IsCancellationRequested) { _Logging.Info(_Header + "background launch of mission " + deferredMissionId + " stopped by shutdown"); }
                     catch (Exception ex) { _Logging.Warn(_Header + "background launch of mission " + deferredMissionId + " failed: " + ex.Message); }
@@ -1305,14 +1310,14 @@ namespace Armada.Core.Services
             bool anyEndpoint = idleCaptains.Any(c => !String.IsNullOrEmpty(c.ModelEndpointId));
             if (runtimeLimits.Count == 0 && !anyEndpoint) return idleCaptains;
 
-            List<Captain> working = (await _Database.Captains.EnumerateAsync(token).ConfigureAwait(false)).Where(c => c.ActiveMissionCount > 0 || c.State == CaptainStateEnum.Working).ToList();
+            List<Captain> working = (await PassCaptainsAsync(token).ConfigureAwait(false)).Where(c => c.ActiveMissionCount > 0 || c.State == CaptainStateEnum.Working).ToList();
             Dictionary<string, ModelEndpoint?> endpoints = new Dictionary<string, ModelEndpoint?>(StringComparer.Ordinal);
             async Task<ModelEndpoint?> EndpointOf(Captain captain)
             {
                 if (String.IsNullOrEmpty(captain.ModelEndpointId)) return null;
                 if (!endpoints.TryGetValue(captain.ModelEndpointId!, out ModelEndpoint? endpoint))
                 {
-                    endpoint = await _Database.ModelEndpoints.ReadAsync(captain.ModelEndpointId!, token).ConfigureAwait(false);
+                    endpoint = await PassEndpointAsync(captain.ModelEndpointId!, token).ConfigureAwait(false);
                     endpoints[captain.ModelEndpointId!] = endpoint;
                 }
                 return endpoint;

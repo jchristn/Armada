@@ -80,13 +80,13 @@ namespace Armada.Core.Services
         private async Task<WorkerEnvelopeGate?> BuildWorkerEnvelopeGateAsync(Mission mission, CancellationToken token)
         {
             if (!PersonaCatalog.Matches(RoutingPersona(mission), PersonaCatalog.Worker)) return null;
-            Vessel? vessel = String.IsNullOrEmpty(mission.VesselId) ? null : await _Database.Vessels.ReadAsync(mission.VesselId, token).ConfigureAwait(false);
+            Vessel? vessel = String.IsNullOrEmpty(mission.VesselId) ? null : await PassVesselAsync(mission.VesselId, token).ConfigureAwait(false);
             WorkerEnvelope? envelope = EffectiveWorkerEnvelope(mission, vessel);
             if (!WorkerEnvelopeRules.ConstrainsCaptains(envelope)) return null;
 
             WorkerEnvelopeGate gate = new WorkerEnvelopeGate();
             gate.Envelope = envelope!;
-            gate.Visible = (await _Database.Captains.EnumerateAsync(token).ConfigureAwait(false))
+            gate.Visible = (await PassCaptainsAsync(token).ConfigureAwait(false))
                 .Where(c => CaptainVisibleToMission(c, mission)).ToList();
             Dictionary<string, ModelProfile?> profiles = new Dictionary<string, ModelProfile?>(StringComparer.Ordinal);
             foreach (Captain captain in gate.Visible)
@@ -94,7 +94,7 @@ namespace Armada.Core.Services
                 ModelProfile? profile = null;
                 if (!String.IsNullOrEmpty(captain.ModelProfileId) && !profiles.TryGetValue(captain.ModelProfileId, out profile))
                 {
-                    profile = await _Database.ModelProfiles.ReadAsync(captain.ModelProfileId, token).ConfigureAwait(false);
+                    profile = await PassProfileAsync(captain.ModelProfileId, token).ConfigureAwait(false);
                     if (profile != null && !String.Equals(profile.TenantId, captain.TenantId, StringComparison.Ordinal)) profile = null;
                     profiles[captain.ModelProfileId] = profile;
                 }
@@ -106,7 +106,7 @@ namespace Armada.Core.Services
                 || mission.EscalationCount > 0);
             gate.Pinned = escalatedRework || (!String.IsNullOrEmpty(mission.RequestedCaptainId) && await HasStrictCaptainOverrideAsync(mission, token).ConfigureAwait(false));
             Persona? persona = String.IsNullOrEmpty(mission.RequestedCaptainId)
-                ? await ReadPersonaByNameAsync(mission.TenantId, RoutingPersona(mission), token, mission.UserId).ConfigureAwait(false)
+                ? await PassPersonaAsync(mission.TenantId, RoutingPersona(mission), mission.UserId, token).ConfigureAwait(false)
                 : null;
             gate.BaselineTier = gate.ComputeBaselineTier(mission, persona);
             return gate;

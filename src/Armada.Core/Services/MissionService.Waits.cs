@@ -108,7 +108,10 @@ namespace Armada.Core.Services
         }
 
         private void NoteLeftPending(Mission mission)
-            => _AttemptWaits[mission.Id] = new MissionWaitObservation { Mission = mission, LeftPending = true };
+        {
+            _AttemptWaits[mission.Id] = new MissionWaitObservation { Mission = mission, LeftPending = true };
+            PassStateChanged();
+        }
 
         // Runs after the attempt released its admission locks, so interval writes never extend a lock hold.
         private async Task RecordAttemptWaitAsync(Mission mission, bool assigned, CancellationToken token)

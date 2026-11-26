@@ -24,7 +24,7 @@ namespace Armada.Core.Services
                 view.UsageRecovery = await _Database.CaptainSelections.ReadRecoveryAsync(view.TenantId, view.Id, token).ConfigureAwait(false);
             await ResolvePreferredCaptainAsync(view, token, persist: false).ConfigureAwait(false);
             CaptainEligibilityContext context = await BuildCaptainEligibilityContextAsync(view, token).ConfigureAwait(false);
-            List<Captain> visible = (await _Database.Captains.EnumerateAsync(token).ConfigureAwait(false))
+            List<Captain> visible = (await PassCaptainsAsync(token).ConfigureAwait(false))
                 .Where(c => CaptainVisibleToMission(c, view)).ToList();
             foreach (Captain captain in visible) captain.MaxConcurrency = ConcurrencyClamp.CaptainLimit(captain.MaxConcurrency, _Settings.Concurrency.MaxCaptainConcurrency);
             CaptainAdmissionSelection selection = new()

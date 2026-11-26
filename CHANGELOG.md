@@ -83,6 +83,11 @@ Conductor) with Opus and GPT-6.1 reliable. The work is tracked item by item in `
   API, and the stuck-admission monitor all read that result, so they can no longer disagree. The monitor stops
   re-running admission on 64 sampled missions every heartbeat; it flags a mission that three passes left unclaimed
   with every gate open, and reports how long it has waited (RS-4.6).
+- **One read per dispatch pass.** A dispatch pass reads captains, running missions per vessel, admission rows,
+  voyages, vessels, personas, endpoints and model profiles once and evaluates every pending mission against them,
+  instead of reading them again for each mission. A claim drops the state it can change, so the next mission in the
+  pass never admits against counts from before it. Running missions on a vessel come from one indexed query
+  (`EnumerateRunningOnVesselAsync`) instead of a scan of every active status on every vessel (RS-4.7).
 - **Recovery state survives a restart.** Endpoint circuit breakers, launch backoff (with the captains that failed to
   start the mission), the start of a transient outage, and escalation rule cooldowns were kept only in memory, so a
   restart sent missions straight back to a failing endpoint, relaunched a broken captain at once, granted an outage a

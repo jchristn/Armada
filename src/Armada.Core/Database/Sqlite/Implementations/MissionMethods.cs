@@ -387,6 +387,37 @@ namespace Armada.Core.Database.Sqlite.Implementations
         }
 
         /// <inheritdoc />
+        public async Task<List<Mission>> EnumerateRunningOnVesselAsync(string vesselId, CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(vesselId)) throw new ArgumentNullException(nameof(vesselId));
+            List<Mission> results = new List<Mission>();
+            using (SqliteConnection conn = new SqliteProviderConnection(_Driver.ConnectionString))
+            {
+                await conn.OpenAsync(token).ConfigureAwait(false);
+                using (SqliteCommand cmd = conn.CreateCommand())
+                {
+                    cmd.CommandText = "SELECT id, title, description, status, branch_name, voyage_id FROM missions WHERE vessel_id = @vessel_id AND status IN ('Assigned', 'InProgress', 'Verifying');";
+                    cmd.Parameters.AddWithValue("@vessel_id", vesselId);
+                    using (SqliteDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
+                    {
+                        while (await reader.ReadAsync(token).ConfigureAwait(false))
+                            results.Add(new Mission
+                            {
+                                Id = reader.GetString(0),
+                                Title = reader.GetString(1),
+                                Description = reader.IsDBNull(2) ? null : reader.GetString(2),
+                                Status = Enum.Parse<MissionStatusEnum>(reader.GetString(3)),
+                                BranchName = reader.IsDBNull(4) ? null : reader.GetString(4),
+                                VoyageId = reader.IsDBNull(5) ? null : reader.GetString(5),
+                                VesselId = vesselId
+                            });
+                    }
+                }
+            }
+            return results;
+        }
+
+        /// <inheritdoc />
         public async Task<List<Mission>> EnumerateByVesselAsync(string vesselId, CancellationToken token = default)
         {
             if (string.IsNullOrEmpty(vesselId)) throw new ArgumentNullException(nameof(vesselId));

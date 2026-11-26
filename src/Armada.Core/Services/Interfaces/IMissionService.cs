@@ -153,6 +153,14 @@ namespace Armada.Core.Services.Interfaces
         MissionAdmissionResult? GetAdmissionResult(string missionId);
 
         /// <summary>
+        /// Start a dispatch pass on the calling flow: until the returned scope is disposed, admission reads the shared
+        /// tables (captains, running missions, voyages, vessels, personas, endpoints) once and evaluates every pending
+        /// mission against that snapshot. A claim drops the state it can change so later missions read it again.
+        /// </summary>
+        /// <returns>The pass scope; dispose it when the pass ends.</returns>
+        IDisposable BeginDispatchPass();
+
+        /// <summary>
         /// Whether the mission's voyage binds its persona to one captain strictly ("wait for selected captain"), so no
         /// recovery path may hand it to a different captain.
         /// </summary>

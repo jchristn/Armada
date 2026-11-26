@@ -2241,6 +2241,8 @@ namespace Armada.Core.Services
             }
 
             bool anyFailed = false;
+            using IDisposable pass = _Missions.BeginDispatchPass();
+            Dictionary<string, Vessel?> vessels = new Dictionary<string, Vessel?>(StringComparer.Ordinal);
 
             foreach (Mission mission in pendingMissions)
             {
@@ -2253,7 +2255,8 @@ namespace Armada.Core.Services
                 // not keep every mission behind it from being dispatched.
                 try
                 {
-                    Vessel? vessel = await _Database.Vessels.ReadAsync(mission.VesselId, token).ConfigureAwait(false);
+                    if (!vessels.TryGetValue(mission.VesselId, out Vessel? vessel))
+                        vessels[mission.VesselId] = vessel = await _Database.Vessels.ReadAsync(mission.VesselId, token).ConfigureAwait(false);
                     if (vessel == null) continue;
 
                     bool assigned = await _Missions.TryAssignAsync(mission, vessel, LaunchInBackground, token).ConfigureAwait(false);

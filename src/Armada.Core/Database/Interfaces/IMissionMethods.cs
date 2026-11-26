@@ -140,6 +140,13 @@ namespace Armada.Core.Database.Interfaces
         Task<List<MissionAdmissionSnapshot>> EnumerateAdmissionSnapshotsAsync(string vesselId, CancellationToken token = default);
 
         /// <summary>
+        /// Read the missions running on a vessel (Assigned, InProgress, Verifying) for its admission locks. Only Id, Title,
+        /// Description, Status, BranchName, VoyageId and VesselId are populated; outputs, diffs and evidence are not read.
+        /// </summary>
+        /// <exception cref="ArgumentNullException">vesselId is null or empty.</exception>
+        Task<List<Mission>> EnumerateRunningOnVesselAsync(string vesselId, CancellationToken token = default);
+
+        /// <summary>
         /// Enumerate lightweight mission summaries by vessel identifier.
         /// </summary>
         Task<List<MissionSummary>> EnumerateSummariesByVesselAsync(string vesselId, CancellationToken token = default);

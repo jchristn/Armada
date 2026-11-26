@@ -586,10 +586,22 @@ routing; a renamed Architect slice breaks fan-out recovery. Everything a program
   AdmissionStuck rewritten (`dispatch_records_the_blocker_reason_*`, reset cases, dedupe), parity assertions added
   to CaptainAdmissionParity and MissionAssignmentBlocker. SQLite affected suites: 858 tests, 0 failed (after
   switching one reflection call to `DispatchOnceAsync`), 6 skipped.
-- [ ] **RS-4.7** Admission snapshot. One read per pass of captains, active missions grouped by vessel, endpoints,
+- [x] **RS-4.7** Admission snapshot. One read per pass of captains, active missions grouped by vessel, endpoints,
   voyages, overrides, and personas; every pending mission is evaluated against it in memory; only the atomic claim
   re-reads. Add projection queries (`WHERE vessel_id = ... AND status IN (...)`, no description column) on all four
-  providers. Evidence:
+  providers. Evidence: `DispatchPassCache` held per pass by `IMissionService.BeginDispatchPass` (an
+  AsyncLocal scope the Admiral opens around each pass; vessels are cached by the Admiral). Cached: captains, execution
+  slot count, running missions and admission rows per vessel, voyages (and their overrides), vessels, personas,
+  endpoints, model profiles. A claim attempt, a mission leaving Pending, an error or a transient retry drops captains,
+  slots, running missions, admission rows and voyages (`PassStateChanged`); background launches clear the scope.
+  Projection `IMissionMethods.EnumerateRunningOnVesselAsync` (vessel and status IN Assigned, InProgress, Verifying,
+  index `idx_missions_vessel_status`) on all four providers replaces three whole-status scans per mission. Deviations:
+  the projection keeps `description` because broad-scope detection reads it (outputs and diffs are excluded), and
+  each attempt still re-reads its own mission row by primary key, because the assignment write saves the whole row
+  and a pass-start copy would overwrite a concurrent edit. Tests: Services.AdmissionSnapshot
+  (`running_on_vessel_returns_only_running_missions_of_that_vessel`, `a_pass_reads_shared_state_once_for_every_pending_mission`,
+  `a_claim_in_the_pass_is_seen_by_the_next_mission`, which fails with the post-claim refresh removed). SQLite affected
+  suites: 880 tests, 0 failed, 6 skipped.
 - [ ] **RS-4.8** One capacity model per (captain, runtime, endpoint), computed from the snapshot, replacing the three
   calculations in `HasAvailableCapacityAsync` (`AdmiralService.cs:2654`), `SchedulerAllowsAdmissionObservationAsync`
   (`:2638`), and `EvaluateGlobalAdmissionAsync` (`CaptainRouting.cs:435`). Skip a mission early when every eligible
