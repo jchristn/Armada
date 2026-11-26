@@ -317,6 +317,7 @@ namespace Test.Smoke
             "Services.ReasoningEffort",
             "Services.RecorderSeeding",
             "Services.RecoveryPolicy",
+            "Services.RecoveryPolicyEngine",
             "Services.EscalationLadder",
             "Services.ReleaseService",
             "Services.ReleaseVersion",

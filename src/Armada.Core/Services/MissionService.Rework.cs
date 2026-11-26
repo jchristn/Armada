@@ -54,33 +54,31 @@ namespace Armada.Core.Services
             if (worker == null) return Unavailable("Automatic Judge rework is unavailable because the reviewed Worker could not be found in the dependency chain.");
 
             // RS-5.5: JudgeReworkRounds, raised (never lowered) by the Worker captain's model profile.
-            int maxRounds = (await RecoveryPolicyResolver.ResolveForCaptainIdAsync(_Database, _Settings, worker.CaptainId, token).ConfigureAwait(false)).JudgeReworkRounds;
+            RecoveryPolicy reworkPolicy = await RecoveryPolicyResolver.ResolveForCaptainIdAsync(_Database, _Settings, worker.CaptainId, token).ConfigureAwait(false);
 
             // Give the Worker bounded rework, then move up the escalation ladder one captain per round (RS-5.6), up to
-            // MaxEscalations hops. Unchanged rejected work switches earlier. Escalation also works in voyages with no
-            // planning stage. An operator restart of a blocked stage is an explicit decision to spend another round: the
-            // automatic budget and the automatic captain escalation do not apply to it (normal routing picks the captain).
+            // MaxEscalations hops. Unchanged rejected work, or the same affected case reported again, switches earlier.
+            // Escalation also works in voyages with no planning stage. RS-5.10: RecoveryPolicyEngine makes the choice.
             string? escalateTo = null;
             Mission? previousWorker = voyageMissions.FirstOrDefault(m => m.Id != worker.Id && PersonaCatalog.Matches(m.Persona, PersonaCatalog.Worker)
                 && workerChain.Contains(m.Id) && !String.IsNullOrEmpty(m.CommitHash) && m.CommitHash == worker.CommitHash);
-            // The same concrete affected case reported again after a rework round means the change did not reach it,
-            // however much else changed: switch to another captain now instead of spending another full round.
             string? currentCase = JudgeContract.AffectedCaseKey(judge.AgentOutput);
             bool repeatedCase = previousJudge != null && currentCase != null
                 && String.Equals(currentCase, JudgeContract.AffectedCaseKey(previousJudge.AgentOutput), StringComparison.Ordinal);
-            bool stagnant = (previousWorker != null || repeatedCase) && !MissionModeContract.IsReadOnly(worker.Mode);
-            if (!operatorRestart && (escalations > 0 || rounds >= maxRounds || stagnant))
+            RecoveryDecision decision = RecoveryPolicyEngine.Decide(new RecoveryFacts(RecoverySiteEnum.JudgeRejection)
             {
-                if (escalations >= _Settings.MaxEscalations)
-                    return Unavailable("Automatic Judge rework limit reached after " + rounds + " rework round(s)"
-                        + (escalations > 0 ? ", including " + escalations + " escalation(s) (MaxEscalations " + _Settings.MaxEscalations + ")." : "; escalation is off (MaxEscalations 0)."));
-                string escalationTrigger = escalations > 0
-                    ? "The escalated Worker's attempt was rejected too (" + escalations + " of " + _Settings.MaxEscalations + " escalations). "
-                    : rounds >= maxRounds
-                    ? "Automatic Judge rework budget exhausted for this slice (" + rounds + " of " + maxRounds + " rounds). "
-                    : previousWorker != null
-                        ? "The Worker produced the same rejected commit after " + rounds + " rework round(s). "
-                        : "The Judge reported the same affected case (" + currentCase + ") after " + rounds + " rework round(s). ";
+                OperatorRestart = operatorRestart,
+                ReworkRounds = rounds,
+                Escalations = escalations,
+                MaxEscalations = _Settings.MaxEscalations,
+                ReworkSameCommit = previousWorker != null,
+                ReworkRepeatedCase = repeatedCase ? currentCase : null,
+                WorkerReadOnly = MissionModeContract.IsReadOnly(worker.Mode)
+            }, reworkPolicy);
+            if (decision.First.Action == RecoveryActionEnum.Fail) return Unavailable(decision.First.Reason ?? "Automatic Judge rework is unavailable.");
+            if (decision.First.Action == RecoveryActionEnum.Escalate)
+            {
+                string escalationTrigger = decision.First.Reason + " ";
                 if (await HasStrictCaptainOverrideAsync(worker, token).ConfigureAwait(false))
                     return Unavailable(escalationTrigger + "Strict captain selection prevents automatic escalation; no captain substitution was made.");
                 Captain? alternative = await CaptainEscalationSelector.SelectAsync(_Database, worker, worker.CaptainId, voyageMissions, token).ConfigureAwait(false);
@@ -177,7 +175,7 @@ namespace Armada.Core.Services
             onReviewerCreated?.Invoke(nextJudge.Id);
 
             _Logging.Info(_Header + "judge " + judge.Id + ": rework round " + round + " as Worker mission " + rework.Id + ", re-review " + nextJudge.Id
-                + (escalateTo != null ? "; escalating to " + escalateTo + (stagnant ? " after unchanged work" : " after the rework budget") : ""));
+                + (escalateTo != null ? "; escalating to " + escalateTo + ": " + decision.First.Reason : ""));
             return true;
         }
 

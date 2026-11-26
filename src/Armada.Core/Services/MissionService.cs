@@ -1485,8 +1485,15 @@ namespace Armada.Core.Services
             if (mission.RequiresReview) return false;
 
             // RS-5.5: the model profile of the captain that broke the contract can override MaxOutputRepairAttempts.
-            int max = (await RecoveryPolicyResolver.ResolveForCaptainIdAsync(_Database, _Settings, mission.CaptainId, token).ConfigureAwait(false)).OutputRepairAttempts;
-            if (mission.OutputRepairAttempts >= max) return false;
+            // RS-5.10: RecoveryPolicyEngine decides whether a repair turn is left.
+            RecoveryPolicy repairPolicy = await RecoveryPolicyResolver.ResolveForCaptainIdAsync(_Database, _Settings, mission.CaptainId, token).ConfigureAwait(false);
+            int max = repairPolicy.OutputRepairAttempts;
+            RecoveryDecision repair = RecoveryPolicyEngine.Decide(new RecoveryFacts(RecoverySiteEnum.OutputContract)
+            {
+                ReviewGated = mission.RequiresReview,
+                OutputRepairs = mission.OutputRepairAttempts
+            }, repairPolicy);
+            if (repair.First.Action != RecoveryActionEnum.Repair) return false;
 
             MissionStatusEnum observedStatus = mission.Status;
             int attempt = mission.OutputRepairAttempts + 1;

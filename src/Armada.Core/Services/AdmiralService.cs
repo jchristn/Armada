@@ -1057,78 +1057,44 @@ namespace Armada.Core.Services
                 // when the failure indicates the runtime itself is unavailable.
                 _Logging.Warn(_Header + "agent process " + processId + " exited with code " + (exitCode?.ToString() ?? "unknown") + " for mission " + missionId);
 
-                // A negative exit code is an interruption (the runtime maps OperationCanceledException from a
-                // stop/shutdown to -1, and a vanished PID reports -1), not a genuine agent failure — real
-                // agent/model/config failures exit with a positive code. Re-dispatch an interrupted mission
-                // (bounded by MaxNoOpRedispatchAttempts) instead of terminally failing the voyage, so a
-                // server/harbor restart or reconnect does not nuke an otherwise-fine pipeline.
-                if (exitCode.HasValue && exitCode.Value < 0
-                    && mission != null
-                    && mission.Status != MissionStatusEnum.Cancelled
-                    && mission.RedispatchAttempts < InterruptedRedispatchLimit)
-                {
-                    await HandleInterruptedProcessExitAsync(captain, mission, missionId, exitCode.Value, token).ConfigureAwait(false);
-                    RequestDispatch();
-                    return;
-                }
-
+                // RS-5.10: RecoveryPolicyEngine decides; this path gathers the facts and carries out the first step it can.
                 string failureReason = exitInfo.Describe();
-
-                // A model endpoint hiccup (Transient) or a run that ran out of iterations or budget (TaskFailure) is not
-                // the end of the mission: relaunch the captain in the same dock, where its edits so far still are, with
-                // a note about the earlier attempt, up to the policy's MaxResumes times (MaxRecoveryAttempts by default).
-                // Transient failures past that keep resuming while the outage is younger than the policy's
-                // TransientGraceMinutes (TransientOutageGraceMinutes by default), so a proxy or model-server restart does
-                // not fail work in progress.
-                // RS-5.6 optional early fallback: an endpoint whose breaker is open will not take this work soon, so move it
-                // up the escalation ladder now instead of waiting out the outage.
-                if (_Settings.EscalateOnOpenEndpointBreaker && exitInfo.FailureKind == RuntimeFailureKindEnum.Transient && mission != null
-                    && await _Missions.IsEndpointBreakerOpenAsync(captain, token).ConfigureAwait(false)
-                    && await TryEscalateAsync(captain, mission, EscalationTrigger(failureReason + " (endpoint circuit breaker open)", exitInfo), capture, token).ConfigureAwait(false))
-                {
-                    RequestDispatch();
-                    return;
-                }
-
-                // RS-5.6: a model that emits a tool call the server cannot parse twice in a row rarely recovers on a resume.
-                if (TrackMalformedToolCall(missionId, exitInfo) && mission != null
-                    && await TryEscalateAsync(captain, mission, EscalationTrigger(failureReason + " (repeated malformed tool calls)", exitInfo), capture, token).ConfigureAwait(false))
-                {
-                    _MalformedToolCallExits.TryRemove(missionId, out int _);
-                    RequestDispatch();
-                    return;
-                }
-
-                // RS-5.5: the resume budgets come from the captain's model profile when it overrides the global settings.
                 RecoveryPolicy policy = await RecoveryPolicyResolver.ResolveAsync(_Database, _Settings, captain, token).ConfigureAwait(false);
-                bool withinOutageGrace = exitInfo.FailureKind == RuntimeFailureKindEnum.Transient && mission != null && await WithinTransientOutageGraceAsync(mission.Id, policy.TransientGraceMinutes).ConfigureAwait(false);
-                if (exitInfo.FailureKind != RuntimeFailureKindEnum.Transient) await ForgetTransientOutageAsync(missionId).ConfigureAwait(false);
-                // An Unclassified exit (no provider error Armada recognizes, not an abnormal death) gets one resume in place:
-                // a second unexplained exit goes to escalation instead of spending the whole budget on a cause nobody named.
-                bool resumable = exitInfo.FailureKind == RuntimeFailureKindEnum.Transient || exitInfo.FailureKind == RuntimeFailureKindEnum.TaskFailure;
-                bool unclassifiedResume = exitInfo.FailureKind == RuntimeFailureKindEnum.Unclassified
-                    && captain.RecoveryAttempts < policy.UnclassifiedResumes;
-                // RS-5.6: a profile's EscalateAfterResumes hands a task failure to the escalation ladder before the resumes
-                // are spent; a transient outage is not the model's fault and keeps resuming.
-                bool resumesLeft = captain.RecoveryAttempts < policy.MaxResumes
-                    && (exitInfo.FailureKind == RuntimeFailureKindEnum.Transient || captain.RecoveryAttempts < policy.EscalateAfterResumes);
-                if ((resumable || unclassifiedResume)
-                    && mission != null
-                    && (unclassifiedResume || resumesLeft || withinOutageGrace)
-                    && await TryResumeInPlaceAsync(captain, mission, failureReason, token,
-                        exitInfo.FailureKind == RuntimeFailureKindEnum.Transient ? TransientResumeDelay(captain.RecoveryAttempts, exitInfo.ProviderError?.RetryAfterSeconds) : TimeSpan.Zero).ConfigureAwait(false))
+                RecoveryDecision decision = await DecideRuntimeExitAsync(captain, mission, missionId, exitCode, exitInfo, policy, token).ConfigureAwait(false);
+                foreach (RecoveryStep step in decision.Steps)
                 {
-                    return;
-                }
-
-                // The resumes are used up and the captain still cannot finish (often a local model): hand the attempt, on
-                // the same branch with the work so far, to the next rung of the escalation ladder (RS-5.6).
-                if ((resumable || exitInfo.FailureKind == RuntimeFailureKindEnum.Unclassified)
-                    && mission != null
-                    && await TryEscalateAsync(captain, mission, EscalationTrigger(failureReason, exitInfo), capture, token).ConfigureAwait(false))
-                {
-                    RequestDispatch();
-                    return;
+                    if (mission == null) break;
+                    if (step.Action == RecoveryActionEnum.Redispatch)
+                    {
+                        // A negative exit code is an interruption (the runtime maps OperationCanceledException from a stop or
+                        // shutdown to -1, and a vanished PID reports -1). Re-dispatch it (bounded by MaxNoOpRedispatchAttempts)
+                        // so a server or Harbor restart does not fail an otherwise-fine pipeline.
+                        await HandleInterruptedProcessExitAsync(captain, mission, missionId, exitCode!.Value, token).ConfigureAwait(false);
+                        RequestDispatch();
+                        return;
+                    }
+                    if (step.Action == RecoveryActionEnum.Resume)
+                    {
+                        // Relaunch the captain in the same dock, where its edits so far still are, with a note about the
+                        // earlier attempt. A transient failure waits a backoff first.
+                        if (await TryResumeInPlaceAsync(captain, mission, failureReason, token,
+                            exitInfo.FailureKind == RuntimeFailureKindEnum.Transient ? TransientResumeDelay(captain.RecoveryAttempts, exitInfo.ProviderError?.RetryAfterSeconds) : TimeSpan.Zero).ConfigureAwait(false))
+                            return;
+                        continue;
+                    }
+                    if (step.Action == RecoveryActionEnum.Escalate)
+                    {
+                        // Hand the attempt, on the same branch with the work so far, to the next rung of the escalation ladder.
+                        string trigger = step.Reason == null ? failureReason : failureReason + " (" + step.Reason + ")";
+                        if (await TryEscalateAsync(captain, mission, EscalationTrigger(trigger, exitInfo), capture, token).ConfigureAwait(false))
+                        {
+                            _MalformedToolCallExits.TryRemove(missionId, out int _);
+                            RequestDispatch();
+                            return;
+                        }
+                        continue;
+                    }
+                    break;
                 }
 
                 // Provider usage-limit / auth failures will just fail again immediately, and a crash loop (N non-clean
@@ -1555,10 +1521,15 @@ namespace Armada.Core.Services
                     // instead of terminally failing the voyage, so a server/harbor restart or reconnect does
                     // not nuke an otherwise-fine pipeline. Genuine, repeatable interruptions still fail once
                     // the redispatch budget is exhausted.
-                    if (exitCode < 0
-                        && mission != null
-                        && mission.Status != MissionStatusEnum.Cancelled
-                        && mission.RedispatchAttempts < InterruptedRedispatchLimit)
+                    RecoveryDecision lost = RecoveryPolicyEngine.Decide(new RecoveryFacts(RecoverySiteEnum.ProcessLost)
+                    {
+                        HasMission = mission != null,
+                        MissionCancelled = mission?.Status == MissionStatusEnum.Cancelled,
+                        ExitCode = exitCode,
+                        Redispatches = mission?.RedispatchAttempts ?? 0,
+                        RedispatchLimit = InterruptedRedispatchLimit
+                    });
+                    if (lost.First.Action == RecoveryActionEnum.Redispatch && mission != null)
                     {
                         await HandleInterruptedProcessExitAsync(captain, mission, missionId, exitCode, token).ConfigureAwait(false);
                         return;
@@ -2476,6 +2447,36 @@ namespace Armada.Core.Services
             if (now - started < TimeSpan.FromMinutes(graceMinutes)) return true;
             await ForgetTransientOutageAsync(missionId).ConfigureAwait(false);
             return false;
+        }
+
+        private async Task<RecoveryDecision> DecideRuntimeExitAsync(Captain captain, Mission? mission, string missionId, int? exitCode,
+            RuntimeExitInfo exitInfo, RecoveryPolicy policy, CancellationToken token)
+        {
+            RecoveryFacts facts = new RecoveryFacts(RecoverySiteEnum.RuntimeExit)
+            {
+                HasMission = mission != null,
+                MissionCancelled = mission?.Status == MissionStatusEnum.Cancelled,
+                RuntimeFailureKind = exitInfo.FailureKind,
+                ExitCode = exitCode,
+                Redispatches = mission?.RedispatchAttempts ?? 0,
+                RedispatchLimit = InterruptedRedispatchLimit,
+                Resumes = captain.RecoveryAttempts
+            };
+            RecoveryDecision interrupted = RecoveryPolicyEngine.Decide(facts, policy);
+            if (interrupted.First.Action == RecoveryActionEnum.Redispatch) return interrupted;
+
+            // The rest of the facts cost a read or update tracking state, so they are gathered only for a real failure.
+            bool transient = exitInfo.FailureKind == RuntimeFailureKindEnum.Transient;
+            if (!transient) await ForgetTransientOutageAsync(missionId).ConfigureAwait(false);
+            facts.RepeatedMalformedToolCalls = TrackMalformedToolCall(missionId, exitInfo);
+            if (mission != null && transient)
+            {
+                facts.WithinOutageGrace = await WithinTransientOutageGraceAsync(mission.Id, policy.TransientGraceMinutes).ConfigureAwait(false);
+                facts.EndpointBreakerOpen = _Settings.EscalateOnOpenEndpointBreaker && await _Missions.IsEndpointBreakerOpenAsync(captain, token).ConfigureAwait(false);
+            }
+            RecoveryDecision decision = RecoveryPolicyEngine.Decide(facts, policy);
+            _Logging.Debug(_Header + "recovery for mission " + missionId + " after " + exitInfo.FailureKind + ": " + decision);
+            return decision;
         }
 
         private bool TrackMalformedToolCall(string missionId, RuntimeExitInfo exitInfo)

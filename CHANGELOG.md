@@ -153,6 +153,11 @@ Conductor) with Opus and GPT-6.1 reliable. The work is tracked item by item in `
   fires `MissionFailed`, keyed by the mission, instead of `RecoveryExhausted` keyed by captain. Move rules that relied on
   the old behavior to `MissionFailed`. A mitigated recovery incident closes only after the next pass confirms the landed
   rescue is still Complete; otherwise it reopens and recovery continues (RS-5.9).
+- **One engine decides recovery.** Resume in place, output repair, Judge rework, escalation, no-op and interruption
+  re-dispatch, and incident rescues are now chosen by one `RecoveryPolicyEngine` from the failure's site and kind, the
+  attempts spent and the captain's recovery policy, instead of separate checks in each path. Behavior is unchanged,
+  except that a successful escalation now resets the malformed tool call count for the mission. The order of actions is
+  in [Captain routing](docs/CAPTAIN_ROUTING.md#how-recovery-is-chosen) (RS-5.10).
 - **Recovery state survives a restart.** Endpoint circuit breakers, launch backoff (with the captains that failed to
   start the mission), the start of a transient outage, and escalation rule cooldowns were kept only in memory, so a
   restart sent missions straight back to a failing endpoint, relaunched a broken captain at once, granted an outage a

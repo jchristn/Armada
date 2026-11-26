@@ -761,10 +761,22 @@ routing; a renamed Architect slice breaks fan-out recovery. Everything a program
   Complete on the next pass, and otherwise reopens with a "Verification failed" note. MissionRecoveryCoordinatorSuite
   `failed_rescue_redispatches_until_cap` (one notification) and `mitigation_reopens_when_rescue_regresses`;
   MissionRecoveryCoordinator, EscalationService and RecoveryState suites 30/30.
-- [ ] **RS-5.10** Collapse the recovery loops into one `RecoveryPolicyEngine` that decides resume, repair,
+- [x] **RS-5.10** Collapse the recovery loops into one `RecoveryPolicyEngine` that decides resume, repair,
   escalate, rescue, or fail from (failure kind, attempt history, recovery policy). Resume-in-place, escalate to
   planner, Judge rework escalation (`MissionService.Rework.cs:69`), and the incident rescue loop become actions it
-  chooses. Evidence:
+  chooses. Evidence: `RecoveryPolicyEngine.Decide(RecoveryFacts, RecoveryPolicy)` returns a `RecoveryDecision`, an
+  ordered list of `RecoveryStep`s (`RecoveryActionEnum`: Redispatch, Resume, Repair, Rework, Escalate, Rescue, Wait,
+  Fail) for six sites (`RecoverySiteEnum`: RuntimeExit, ProcessLost, NoOpCompletion, OutputContract, JudgeRejection,
+  Incident). Callers gather facts and carry out the first step they can, falling through when one cannot run (no
+  stronger captain). The Admiral exit path (`DecideRuntimeExitAsync`; interruption, breaker and malformed-tool-call
+  escalation, resume, escalate, fail), the health monitor's lost process, no-op completion, output repair, Judge rework
+  (trigger and limit texts now built by the engine) and the coordinator's rescue loop (`DecideRescue`, both the first
+  and later rescues) all use it; the executors (resume, escalation selector, rescue dispatch) are unchanged. Behavior is
+  unchanged except a successful escalation resets the malformed tool call count. "Escalate to planner" is the escalation
+  selector's no-ladder order, which the Escalate action reaches. New suite `Services.RecoveryPolicyEngine` (12 cases);
+  RecoveryPolicyEngine, RecoveryPolicy, EscalationLadder, NoOpCompletion and MissionRecoveryCoordinator 74/74;
+  AdmiralService, MultiRuntimeFlow, PipelineDispatch, ContractRepair and CaptainRouting 219/219. Docs: CAPTAIN_ROUTING.md
+  "How recovery is chosen", CHANGELOG. No REST, MCP, settings or SDK change.
 - [ ] **RS-5.11** Typed exceptions instead of message matching: `MergeQueueEntryNotFoundException` for
   `ex.Message.Contains("merge queue entry")` (`MissionService.Completion.cs:954`), a typed git result for
   `"not something we can merge"` (`MergeQueueService.cs:927`), and process-start detection without

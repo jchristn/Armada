@@ -195,13 +195,12 @@ namespace Armada.Core.Services
                 return;
             }
 
-            bool anyActive = rescues.Any(m => _ActiveStatuses.Contains(m.Status));
-            if (anyActive) return; // A rescue is in flight; wait for it.
-
-            // No rescue in flight and none succeeded: dispatch another if the budget allows.
+            // No rescue succeeded: wait for one in flight, dispatch another while the budget allows, or give up (RS-5.10).
             // The budget (MaxMissionRecoveryAttempts, at most 5) bounds RescueMissionIds; the link-list limit is checked too
             // so an incident edited by hand to hold many ids is never pushed past it.
-            if (incident.RecoveryAttempts < maxAttempts && incident.RescueMissionIds.Count < CollectionLimits.MaxLinkedIds)
+            RecoveryDecision decision = DecideRescue(incident, maxAttempts, rescues.Any(m => _ActiveStatuses.Contains(m.Status)));
+            if (decision.First.Action == RecoveryActionEnum.Wait) return;
+            if (decision.First.Action == RecoveryActionEnum.Rescue)
             {
                 if (String.IsNullOrEmpty(incident.MissionId)) return;
                 Mission? rescueMission = await DispatchRescueAsync(original, incident, rescues, token).ConfigureAwait(false);
@@ -275,7 +274,7 @@ namespace Armada.Core.Services
                 _Logging.Info(_Header + "opened incident " + incident.Id + " for failed mission " + mission.Id + " (" + kind + ")");
 
                 // Dispatch the first rescue immediately when the budget allows.
-                if (maxAttempts > 0 && incident.RescueMissionIds.Count < CollectionLimits.MaxLinkedIds)
+                if (DecideRescue(incident, maxAttempts, false).First.Action == RecoveryActionEnum.Rescue)
                 {
                     Mission? rescueMission = await DispatchRescueAsync(mission, incident, new List<Mission>(), token).ConfigureAwait(false);
                     if (rescueMission == null) continue;
@@ -287,6 +286,17 @@ namespace Armada.Core.Services
                     _Logging.Info(_Header + "dispatched first rescue " + rescueMission.Id + " for incident " + incident.Id);
                 }
             }
+        }
+
+        private static RecoveryDecision DecideRescue(Incident incident, int maxAttempts, bool rescueInFlight)
+        {
+            return RecoveryPolicyEngine.Decide(new RecoveryFacts(RecoverySiteEnum.Incident)
+            {
+                Rescues = incident.RecoveryAttempts,
+                RescueBudget = maxAttempts,
+                RescueInFlight = rescueInFlight,
+                RescueLinksFull = incident.RescueMissionIds.Count >= CollectionLimits.MaxLinkedIds
+            });
         }
 
         private async Task<bool> IsRescueEligibleAsync(Mission mission, CancellationToken token)

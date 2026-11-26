@@ -185,6 +185,28 @@ Autonomous rescues (RS-5.8) reuse the same selector and memory: from the second 
 pinned to the escalation choice with the captain of the failed rescue excluded, and every rescue brief carries the last
 failed attempt's failure kind, rule hint and output tail. See [Delivery operations](DELIVERY_OPERATIONS.md).
 
+### How recovery is chosen
+
+One engine, `RecoveryPolicyEngine` (RS-5.10), decides every recovery from where the failure happened, its kind, the
+attempts already spent and the captain's recovery policy (its model profile over the global settings). It returns the
+actions to try in order; the caller carries out the first one it can and falls through to the next when it cannot (for
+example, no stronger captain is free). The decisions:
+
+| Where | Order of actions |
+|---|---|
+| Agent exit, interrupted (negative exit code) | Redispatch while `MaxNoOpRedispatchAttempts` (at least 3) lasts, then fail |
+| Agent exit, transient or task failure | Escalate first if the endpoint breaker is open (opt-in) or two tool calls in a row were unparsable; resume in place within `MaxResumes` (a task failure stops resuming at `EscalateAfterResumes`; a transient outage also resumes within its grace); escalate; fail |
+| Agent exit, Unclassified | Resume within `UnclassifiedResumes`, escalate, fail |
+| Agent exit, usage limit, auth failure or crash | Fail (the captain may be quarantined) |
+| Process lost (health monitor) | Redispatch an interruption within the budget, else fail |
+| No-op or unfinished completion | Redispatch within `MaxNoOpRedispatchAttempts`, escalate, fail |
+| Broken output contract | Repair within `OutputRepairAttempts` (never on review-gated stages), else fail |
+| Judge rejection | Rework within `JudgeReworkRounds`; past it, or on unchanged work, escalate one hop per round up to `MaxEscalations`; then stop |
+| Recovery incident | Wait for a rescue in flight; rescue within `MaxMissionRecoveryAttempts`; then notify `RecoveryExhausted` and leave it for a human |
+
+The Admiral logs each runtime-exit decision at debug level, for example `recovery for mission msn_x after TaskFailure:
+Resume, then Escalate, then Fail`.
+
 ## Explicit overrides and legacy defaults
 
 An explicit mission RequestedCaptainId takes precedence, followed by the voyage's exact per-persona captain assignment, then its wildcard (`*`) assignment. Those choices retain legacy behavior: an available requested captain bypasses AllowedPersonas and tier checks; a busy or deleted one falls back through ordinary persona/tier routing. Ownership and quarantine checks still apply. These explicit overrides bypass the hierarchy.

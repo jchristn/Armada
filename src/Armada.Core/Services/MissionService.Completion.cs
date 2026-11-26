@@ -315,8 +315,14 @@ namespace Armada.Core.Services
                 catch (Exception ex) { _Logging.Warn(_Header + "no-op reclaim error for mission " + mission.Id + ": " + ex.ToString()); }
             }
 
+            // RS-5.10: re-dispatch while the budget lasts, then escalate, then fail.
             int maxAttempts = _Settings.MaxNoOpRedispatchAttempts;
-            if (mission.NoOpRedispatchAttempts < maxAttempts)
+            RecoveryDecision noOpDecision = RecoveryPolicyEngine.Decide(new RecoveryFacts(RecoverySiteEnum.NoOpCompletion)
+            {
+                Redispatches = mission.NoOpRedispatchAttempts,
+                RedispatchLimit = maxAttempts
+            });
+            if (noOpDecision.First.Action == RecoveryActionEnum.Redispatch)
             {
                 // The retry takes over this attempt's usage reservation instead of adding a second one (in memory only:
                 // after a restart the retry simply reserves again, which over-reserves but never under-reserves).
@@ -351,7 +357,7 @@ namespace Armada.Core.Services
             // which gets its own re-dispatches; past the last hop it fails to the operator inbox.
             string? noOpCaptainId = mission.CaptainId;
             Captain? noOpCaptain = String.IsNullOrEmpty(noOpCaptainId) ? null : await _Database.Captains.ReadAsync(noOpCaptainId!, token).ConfigureAwait(false);
-            EscalationChoice? noOpEscalation = noOpCaptain == null ? null : await ChooseEscalationAsync(mission, noOpCaptainId, token).ConfigureAwait(false);
+            EscalationChoice? noOpEscalation = noOpCaptain == null || !noOpDecision.Includes(RecoveryActionEnum.Escalate) ? null : await ChooseEscalationAsync(mission, noOpCaptainId, token).ConfigureAwait(false);
             if (noOpCaptain != null && noOpEscalation != null)
             {
                 int spent = mission.NoOpRedispatchAttempts;
