@@ -1215,7 +1215,7 @@ namespace Test.Shared.Suites.Services
                         }
                     }
 
-                    Dictionary<string, string> standalone = MissionPromptBuilder.BuildTemplateParams(new Mission("Solo", "Solo"), new Vessel("V", "https://github.com/test/repo"), null, null, null);
+                    Dictionary<string, string> standalone = MissionPromptBuilder.BuildTemplateParams(new Mission("Solo", "Solo"), new Vessel("V", "https://github.com/test/repo"), null, null);
                     AssertEqual(MissionPromptBuilder.NoPreviousStageDiffText, standalone["Diff"]);
                     AssertEqual(MissionPromptBuilder.NoPreviousStageOutputText, standalone["PreviousStageOutput"]);
                 }
@@ -1228,7 +1228,7 @@ namespace Test.Shared.Suites.Services
                     PromptTemplateService templates = new PromptTemplateService(testDb.Driver, CreateLogging());
                     HashSet<string> supplied = new HashSet<string>(MissionPromptBuilder.TemplateParameterNames, StringComparer.Ordinal);
 
-                    Dictionary<string, string> built = MissionPromptBuilder.BuildTemplateParams(new Mission("T", "D"), new Vessel("V", "https://github.com/test/repo"), new Captain("c"), null, null);
+                    Dictionary<string, string> built = MissionPromptBuilder.BuildTemplateParams(new Mission("T", "D"), new Vessel("V", "https://github.com/test/repo"), new Captain("c"), null);
                     HashSet<string> builtKeys = new HashSet<string>(built.Keys, StringComparer.Ordinal) { "PersonaPrompt", "ExistingClaudeMd" };
                     AssertTrue(builtKeys.SetEquals(supplied), "TemplateParameterNames must match what the builder fills: builder=" + String.Join(",", builtKeys) + " list=" + String.Join(",", supplied));
 

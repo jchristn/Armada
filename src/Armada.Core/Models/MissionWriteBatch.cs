@@ -4,7 +4,7 @@ namespace Armada.Core.Models
 
     /// <summary>
     /// Mission rows written together in one transaction: new missions, status-guarded full-row updates of existing ones,
-    /// and the playbook snapshots of either. The batch is written completely or not at all.
+    /// the playbook snapshots of either, and the handoff artifacts of stages whose work these rows hand on. The batch is written completely or not at all.
     /// </summary>
     public class MissionWriteBatch
     {
@@ -24,8 +24,14 @@ namespace Armada.Core.Models
         public List<MissionSnapshotSet> Snapshots { get; set; } = new List<MissionSnapshotSet>();
 
         /// <summary>
+        /// Handoff artifacts to store (RS-6.9): the completed stage's artifact is written in the same transaction that
+        /// prepares the stages reading it, so a stage can never launch before its handoff exists.
+        /// </summary>
+        public List<HandoffArtifact> HandoffArtifacts { get; set; } = new List<HandoffArtifact>();
+
+        /// <summary>
         /// True when the batch writes nothing.
         /// </summary>
-        public bool IsEmpty => Created.Count == 0 && Updated.Count == 0 && Snapshots.Count == 0;
+        public bool IsEmpty => Created.Count == 0 && Updated.Count == 0 && Snapshots.Count == 0 && HandoffArtifacts.Count == 0;
     }
 }

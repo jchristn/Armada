@@ -96,7 +96,11 @@ namespace Armada.Core.Services
                 extra.Add(new MissionGuardedWrite(current, new[] { current.Status }));
             }
 
-            if (!await _Database.Missions.WriteBatchAsync(work.ToBatch(extra.ToArray()), token).ConfigureAwait(false))
+            // RS-6.9: the Architect's handoff artifact is written with the slices that read it.
+            MissionWriteBatch fanOut = work.ToBatch(extra.ToArray());
+            HandoffArtifact? artifact = await new HandoffArtifactService(_Database, _Logging).PrepareForHandoffAsync(architect, token).ConfigureAwait(false);
+            if (artifact != null) fanOut.HandoffArtifacts.Add(artifact);
+            if (!await _Database.Missions.WriteBatchAsync(fanOut, token).ConfigureAwait(false))
             {
                 _Logging.Warn(_Header + "the fan-out of Architect mission " + architect.Id + " was not written: a mission it changes moved on meanwhile; recovery will compute it again");
                 return false;

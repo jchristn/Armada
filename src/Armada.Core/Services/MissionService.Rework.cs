@@ -171,6 +171,8 @@ namespace Armada.Core.Services
             // The stages after this reviewer (Recorder, landing) now follow the new one.
             List<MissionDependencyUpdate> repointed = voyageMissions.Where(m => m.DependsOnMissionId == judge.Id)
                 .Select(m => new MissionDependencyUpdate(m.Id, nextJudge.Id)).ToList();
+            // RS-6.9: the rework Worker reads this review's handoff artifact; store it before the chain can be dispatched.
+            await new HandoffArtifactService(_Database, _Logging).StoreForHandoffAsync(judge, token).ConfigureAwait(false);
             await _Database.Missions.CreateChainAsync(chain, repointed, token).ConfigureAwait(false);
             onReviewerCreated?.Invoke(nextJudge.Id);
 

@@ -29,7 +29,7 @@ namespace Armada.Core.Services
 
         /// <summary>
         /// Every placeholder (without braces) that mission prompt rendering supplies: the keys of
-        /// <see cref="BuildTemplateParams(Mission, Vessel, Captain?, Dock?, Mission?)"/> plus <c>PersonaPrompt</c> and
+        /// <see cref="BuildTemplateParams(Mission, Vessel, Captain?, Dock?)"/> plus <c>PersonaPrompt</c> and
         /// <c>ExistingClaudeMd</c>, which mission instruction generation adds while it renders. The dashboard and TUI
         /// placeholder panels list exactly these.
         /// </summary>
@@ -88,7 +88,9 @@ namespace Armada.Core.Services
         }
 
         /// <summary>
-        /// Build a consistent template parameter dictionary for mission prompt rendering.
+        /// Build a consistent template parameter dictionary for mission prompt rendering without a prior stage:
+        /// <c>{Diff}</c> and <c>{PreviousStageOutput}</c> hold <see cref="NoPreviousStageDiffText"/> and
+        /// <see cref="NoPreviousStageOutputText"/>. A launch passes the stored handoff it rendered instead.
         /// </summary>
         public static Dictionary<string, string> BuildTemplateParams(
             Mission mission,
@@ -96,32 +98,7 @@ namespace Armada.Core.Services
             Captain? captain = null,
             Dock? dock = null)
         {
-            return BuildTemplateParams(mission, vessel, captain, dock, null);
-        }
-
-        /// <summary>
-        /// Build the template parameter dictionary, filling the pipeline placeholders <c>{Diff}</c> and
-        /// <c>{PreviousStageOutput}</c> from the prior pipeline stage (the mission this one depends on): its handoff
-        /// artifact rendered for an unknown reader within the default handoff budget
-        /// (<see cref="Constants.DefaultHandoffBudgetTokens"/>). Without a prior stage they hold
-        /// <see cref="NoPreviousStageDiffText"/> and <see cref="NoPreviousStageOutputText"/>.
-        /// </summary>
-        /// <param name="mission">Mission.</param>
-        /// <param name="vessel">Vessel.</param>
-        /// <param name="captain">Captain, or null.</param>
-        /// <param name="dock">Dock, or null.</param>
-        /// <param name="previousStage">The prior pipeline stage mission, or null.</param>
-        /// <returns>Placeholder values keyed by name (without braces).</returns>
-        public static Dictionary<string, string> BuildTemplateParams(
-            Mission mission,
-            Vessel vessel,
-            Captain? captain,
-            Dock? dock,
-            Mission? previousStage)
-        {
-            HandoffRendering? handoff = previousStage == null ? null
-                : HandoffRenderer.Render(HandoffArtifactBuilder.Build(previousStage), null, Constants.DefaultHandoffBudgetTokens);
-            return BuildTemplateParams(mission, vessel, captain, dock, previousStage, handoff);
+            return BuildTemplateParams(mission, vessel, captain, dock, null, null);
         }
 
         /// <summary>

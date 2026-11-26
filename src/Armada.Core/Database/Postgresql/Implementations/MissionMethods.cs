@@ -124,6 +124,8 @@ namespace Armada.Core.Database.Postgresql.Implementations
                     }
                     foreach (MissionSnapshotSet set in batch.Snapshots)
                         await PlaybookMethods.ReplaceMissionSnapshotsAsync(conn, tx, set.MissionId, set.Snapshots, token).ConfigureAwait(false);
+                    foreach (HandoffArtifact artifact in batch.HandoffArtifacts)
+                        await HandoffArtifactMethods.InsertAsync(conn, tx, artifact, token).ConfigureAwait(false);
                     await tx.CommitAsync(token).ConfigureAwait(false);
                 }
 

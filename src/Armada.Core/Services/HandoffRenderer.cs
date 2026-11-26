@@ -169,6 +169,34 @@ namespace Armada.Core.Services
         }
 
         /// <summary>
+        /// Render a prior stage's artifact followed by the artifacts of the stages behind it (RS-6.10), newest first, all
+        /// within one budget: the prior stage gets two thirds of it, and the earlier stages, newest first, what the prior
+        /// stage left (each its verdict, required actions, open findings, then the tail of its output; room is kept for
+        /// every later stage's header). An earlier stage that does not fit is named with its artifact id. Without earlier stages this is <see cref="RenderWithBudget"/>.
+        /// </summary>
+        /// <param name="prior">The prior stage's artifact.</param>
+        /// <param name="earlier">Earlier stages' artifacts, newest first (may be empty).</param>
+        /// <param name="reader">Reader, or null for an unknown reader.</param>
+        /// <param name="budgetTokens">Budget in tokens for the whole rendering (negative values count as 0).</param>
+        /// <returns>The rendering.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when prior or earlier is null.</exception>
+        public static HandoffRendering RenderChainWithBudget(HandoffArtifact prior, List<HandoffArtifact> earlier, HandoffReader? reader, int budgetTokens)
+        {
+            if (prior == null) throw new ArgumentNullException(nameof(prior));
+            if (earlier == null) throw new ArgumentNullException(nameof(earlier));
+            int budget = budgetTokens < 0 ? 0 : budgetTokens;
+            if (earlier.Count == 0) return RenderWithBudget(prior, reader, budget);
+
+            HandoffRendering rendering = RenderWithBudget(prior, reader, budget - budget / 3);
+            string section = EarlierStagesText(earlier, budget - rendering.EstimatedTokens);
+            rendering.Evidence = rendering.Evidence.TrimEnd() + "\n" + section;
+            rendering.EvidenceWithoutFindings = rendering.EvidenceWithoutFindings.TrimEnd() + "\n" + section;
+            rendering.EstimatedTokens = EstimateTokens(rendering.Evidence) + EstimateTokens(rendering.Diff);
+            rendering.BudgetTokens = budget;
+            return rendering;
+        }
+
+        /// <summary>
         /// The complete artifact as Markdown: the content of the worktree file for readers that can only read files, and
         /// the body an operator reads. Nothing is cut.
         /// </summary>
@@ -205,6 +233,72 @@ namespace Armada.Core.Services
         #endregion
 
         #region Private-Methods
+
+        private static string EarlierStagesText(List<HandoffArtifact> earlier, int availableTokens)
+        {
+            const string title = "#### Earlier stages (newest first)\n";
+            StringBuilder text = new StringBuilder(title);
+            int left = availableTokens - EstimateTokens(title);
+            List<string> skipped = new List<string>();
+            for (int i = 0; i < earlier.Count; i++)
+            {
+                HandoffArtifact artifact = earlier[i];
+                string pointer = (artifact.Persona ?? "unknown") + " mission " + artifact.MissionId + " (artifact " + artifact.Id + ")";
+                // Newest first takes what it needs; every later stage keeps room for its header or its did-not-fit line.
+                int reserve = (earlier.Count - i - 1) * 48 + 24;
+                string block = EarlierStageBlock(artifact, left - reserve);
+                if (block.Length == 0 || EstimateTokens(block) > left - reserve)
+                {
+                    skipped.Add(pointer);
+                    continue;
+                }
+
+                text.Append(block);
+                left -= EstimateTokens(block);
+            }
+
+            if (skipped.Count > 0)
+            {
+                text.Append("Did not fit (read them with get_handoff_artifact):\n");
+                foreach (string item in skipped) text.Append("- ").Append(item).Append('\n');
+            }
+
+            return text.ToString();
+        }
+
+        private static string EarlierStageBlock(HandoffArtifact artifact, int shareTokens)
+        {
+            StringBuilder block = new StringBuilder();
+            block.Append("##### ").Append(artifact.Persona ?? "unknown").Append(" mission ").Append(artifact.MissionId)
+                .Append(", attempt ").Append(artifact.Attempt).Append(" (artifact ").Append(artifact.Id).Append("). Verdict: ")
+                .Append(artifact.Verdict ?? "none recorded").Append(". Commits: ")
+                .Append(artifact.CommitReferences.Count == 0 ? "none recorded" : String.Join(", ", artifact.CommitReferences.Take(3))).Append(".\n");
+            if (EstimateTokens(block.ToString()) > shareTokens) return String.Empty;
+
+            List<string> parts = new List<string>();
+            if (artifact.RequiredActions.Count > 0) parts.Add("Required actions:\n" + ListOrNone(artifact.RequiredActions));
+            foreach (HandoffFinding finding in artifact.Findings.Where(f => !f.Resolved)
+                .OrderBy(f => f.Severity == HandoffFindingSeverityEnum.Blocking ? 0 : 1).ThenBy(f => f.Number))
+                parts.Add(FindingText(finding));
+            foreach (string part in parts)
+            {
+                if (EstimateTokens(block.ToString() + part) > shareTokens) break;
+                block.Append(part);
+            }
+
+            if (!String.IsNullOrWhiteSpace(artifact.Output))
+            {
+                string output = artifact.Output!.Trim();
+                int chars = (shareTokens - EstimateTokens(block.ToString()) - 16) * 4;
+                if (chars >= output.Length) block.Append("Output:\n").Append(output).Append('\n');
+                else if (chars >= _MinPartialOutputChars)
+                    block.Append("Output [last ").Append(chars).Append(" of ").Append(output.Length).Append(" characters]:\n")
+                        .Append(output.Substring(output.Length - chars)).Append('\n');
+                else block.Append("Output (").Append(output.Length).Append(" characters) did not fit.\n");
+            }
+
+            return block.ToString();
+        }
 
         private static string BuildHeader(HandoffArtifact artifact, int budget)
         {

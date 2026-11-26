@@ -556,7 +556,8 @@ namespace Armada.Core.Services
         }
 
         /// <summary>
-        /// Render the prior stage's handoff artifact for the captain about to read it: the budget comes from the captain's
+        /// Render the prior stage's stored handoff artifact, followed by the earlier stages of the chain (newest first), for
+        /// the captain about to read it: the budget comes from the captain's
         /// served context when known, else <see cref="ArmadaSettings.HandoffBudgetTokens"/>; the pointer to the complete
         /// artifact uses a tool the captain has. A captain that can only read files gets the complete artifact written to
         /// .armada/handoff/ in its worktree (git-excluded and a scratch path, so it is never committed). If that write
@@ -564,7 +565,11 @@ namespace Armada.Core.Services
         /// </summary>
         private async Task<HandoffRendering> RenderHandoffAsync(DockHost? harborHost, string worktreePath, Mission previousStage, Captain? captain, CancellationToken token)
         {
-            HandoffArtifact artifact = await new HandoffArtifactService(_Database, _Logging).GetOrCreateForStageAsync(previousStage, token).ConfigureAwait(false);
+            // RS-6.9 and RS-6.10: read the stored artifacts of the prior stage and of the stages behind it; a launch never
+            // stores one.
+            HandoffArtifactService artifacts = new HandoffArtifactService(_Database, _Logging);
+            HandoffArtifact artifact = await artifacts.ReadForLaunchAsync(previousStage, token).ConfigureAwait(false);
+            List<HandoffArtifact> earlier = await artifacts.ReadEarlierChainAsync(previousStage, token).ConfigureAwait(false);
             ModelEndpoint? endpoint = null;
             if (!String.IsNullOrEmpty(captain?.ModelEndpointId))
             {
@@ -573,7 +578,7 @@ namespace Armada.Core.Services
             }
 
             HandoffReader reader = HandoffReaderResolver.Resolve(captain, endpoint);
-            HandoffRendering rendering = HandoffRenderer.Render(artifact, reader, _Settings.HandoffBudgetTokens);
+            HandoffRendering rendering = HandoffRenderer.RenderChainWithBudget(artifact, earlier, reader, HandoffRenderer.ResolveBudget(reader, _Settings.HandoffBudgetTokens));
             if (rendering.Pointer == HandoffPointerKindEnum.File && rendering.FilePath != null)
             {
                 IDockFileSystem files = harborHost != null ? harborHost.Files : _LocalFiles;
@@ -587,7 +592,7 @@ namespace Armada.Core.Services
                 {
                     _Logging.Warn(_Header + "could not write the handoff file for mission " + previousStage.Id + " into " + worktreePath + ": " + ex.Message);
                     HandoffReader noAccess = new HandoffReader { ContextTokens = reader.ContextTokens, HasMcpTools = false, CanReadFiles = false };
-                    rendering = HandoffRenderer.RenderWithBudget(artifact, noAccess, rendering.BudgetTokens);
+                    rendering = HandoffRenderer.RenderChainWithBudget(artifact, earlier, noAccess, rendering.BudgetTokens);
                 }
             }
 

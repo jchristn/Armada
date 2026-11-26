@@ -230,6 +230,11 @@ namespace Armada.Core.Services
                 batch.Updated.Add(new MissionGuardedWrite(nextMission, new[] { MissionStatusEnum.Pending }));
             }
 
+            // RS-6.9: the completed stage's handoff artifact is created once, here, in the transaction that prepares the
+            // stages reading it, so none of them can launch before it exists.
+            HandoffArtifact? handoffArtifact = await new HandoffArtifactService(_Database, _Logging).PrepareForHandoffAsync(completedMission, token).ConfigureAwait(false);
+            if (handoffArtifact != null) batch.HandoffArtifacts.Add(handoffArtifact);
+
             CrashPoints.Hit(CrashPointNames.HandoffPlanned);
             if (!await _Database.Missions.WriteBatchAsync(batch, token).ConfigureAwait(false))
             {

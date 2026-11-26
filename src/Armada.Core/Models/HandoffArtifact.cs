@@ -64,6 +64,12 @@ namespace Armada.Core.Models
         public string? StageOutcomeId { get; set; } = null;
 
         /// <summary>
+        /// The attempt this artifact belongs to (<see cref="AttemptIdFor"/>): the stage's id and the time its captain was
+        /// launched. One artifact exists per attempt. Null on artifacts stored before attempt ids were recorded.
+        /// </summary>
+        public string? AttemptId { get; set; } = null;
+
+        /// <summary>
         /// Persona of the stage (Worker, Judge, Test Engineer, ...).
         /// </summary>
         public string? Persona { get; set; } = null;
@@ -232,6 +238,26 @@ namespace Armada.Core.Models
         /// </summary>
         public HandoffArtifact()
         {
+        }
+
+        #endregion
+
+        #region Public-Methods
+
+        /// <summary>
+        /// The attempt id of a stage run: the mission id and the launch time to the millisecond (database providers keep
+        /// at least that precision). Two writers that read the same mission row compute the same id.
+        /// </summary>
+        /// <param name="missionId">Mission id.</param>
+        /// <param name="startedUtc">When the attempt's captain was launched, or null when it never was.</param>
+        /// <returns>The attempt id.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when missionId is null or empty.</exception>
+        public static string AttemptIdFor(string missionId, DateTime? startedUtc)
+        {
+            if (String.IsNullOrEmpty(missionId)) throw new ArgumentNullException(nameof(missionId));
+            if (!startedUtc.HasValue) return missionId + "@unstarted";
+            DateTime utc = startedUtc.Value.Kind == DateTimeKind.Local ? startedUtc.Value.ToUniversalTime() : startedUtc.Value;
+            return missionId + "@" + utc.ToString("yyyyMMddTHHmmssfff", System.Globalization.CultureInfo.InvariantCulture);
         }
 
         #endregion
