@@ -1072,19 +1072,19 @@ rendering. This phase closes that loop.
 
 Most performance work lands in Phase 4. These are the remaining hot spots and the regression gate.
 
-- [ ] **RS-10.1** Orphan-dock reclaim (`AdmiralService.cs:2098-2129`): hoist the five status scans out of the
-  per-dock loop into one set of active dock ids. Evidence:
-- [ ] **RS-10.2** Time-bounded scans: the recovery coordinator and similar sweeps query with `updatedSince` on all
+- [x] **RS-10.1** Orphan-dock reclaim (`AdmiralService.cs:2098-2129`): hoist the five status scans out of the
+  per-dock loop into one set of active dock ids. Evidence: 5c361f92b; five status scans hoisted out of the per-dock loop, run once per sweep and only when a dock needs them.
+- [x] **RS-10.2** Time-bounded scans: the recovery coordinator and similar sweeps query with `updatedSince` on all
   four providers instead of loading every Failed mission and filtering in memory. Add the indexes they need.
-  Evidence:
-- [ ] **RS-10.3** `CaptainEscalationSelector` and `ReviewAuthorCaptainIdsAsync` read profiles and parents in one
-  query, not one per captain or parent. Evidence:
-- [ ] **RS-10.4** Dispatch advisor loads its vessel context once per voyage creation and adds each new mission to it,
+  Evidence: 5c361f92b; `EnumerateByStatusAsync(status, updatedSince)` on all four providers, migration 143 `idx_missions_status_last_update`; recovery coordinator reads the last 24 hours. Other status scans need old rows, belong to Phase 9, or are doctor counts. DB suites 86/86 on PostgreSQL, MySQL, SQL Server.
+- [x] **RS-10.3** `CaptainEscalationSelector` and `ReviewAuthorCaptainIdsAsync` read profiles and parents in one
+  query, not one per captain or parent. Evidence: 5c361f92b; `ModelProfiles.ReadManyAsync` (chunked at 500) and one voyage summary read for review authors.
+- [x] **RS-10.4** Dispatch advisor loads its vessel context once per voyage creation and adds each new mission to it,
   which also catches overlaps inside the same voyage (`BlackBoxDispatchAdvisor.cs:59`,
   `MissionOverlapAnalyzer.LoadAsync`). The analyzer prefers declared `OwnedPathsJson` over files guessed from prose.
-  Evidence:
-- [ ] **RS-10.5** `BoundedTextBuffer.Trim` becomes a ring buffer (no full `ToString()` per line over the cap).
-  Evidence:
+  Evidence: 5c361f92b; `MissionDispatchBatch` loads vessel context once per voyage (one load for four missions in test); owned paths win over brief-guessed files.
+- [x] **RS-10.5** `BoundedTextBuffer.Trim` becomes a ring buffer (no full `ToString()` per line over the cap).
+  Evidence: 5c361f92b; ring buffer, output identical to the old trim on random input; 6,000 lines 192 ms to 8 ms.
 - [ ] **RS-10.6** Benchmark gate: rerun RS-0.7, save under `benchmarks/baselines/1.5.0/`, and record G10 and G11.
   Any regression against 1.4.0 on another benchmark is explained or fixed. Evidence:
 

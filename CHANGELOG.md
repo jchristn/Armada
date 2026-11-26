@@ -325,6 +325,19 @@ Conductor) with Opus and GPT-6.1 reliable. The work is tracked item by item in `
   pipelines against an isolated Admiral and scores the gate measures; `benchmarks/start-bench-server.sh` gained
   `--real-agents` (RS-1.5).
 
+### Performance
+
+- **Orphaned dock reclaim reads mission statuses once per sweep** instead of once per dock (RS-10.1).
+- **The recovery coordinator reads only recently updated missions.** Failed and LandingFailed missions come from a new
+  time-bounded status query on all four providers instead of a full scan filtered in memory; migration 143 adds a
+  (status, last_update_utc) index on missions (RS-10.2).
+- **Escalation and Judge routing batch their reads.** Model profiles and parent missions are read in single queries
+  instead of one per captain or parent (RS-10.3).
+- **The dispatch advisor reads a vessel's context once per voyage creation**, and overlap checks prefer a mission's
+  declared owned paths over paths guessed from its brief (RS-10.4).
+- **Live output buffers are ring buffers.** Mission, planning and refinement output no longer copies the whole buffer
+  on each append past the cap (6,000 lines into 256 KiB: 192 ms before, 8 ms after) (RS-10.5).
+
 ### Tests
 
 - Cases that set a skip reason now also set Touchstone's skip flag; five suites ran cases that were meant to skip,
