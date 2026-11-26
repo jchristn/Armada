@@ -148,6 +148,43 @@ namespace Armada.Core
         }
 
         /// <summary>
+        /// Stop a local agent process and its children, but only when a live process with this id started at the recorded
+        /// time (RS-4.10). A reused id, an unreadable start time, or a process that already ended is left alone.
+        /// </summary>
+        /// <param name="processId">OS process identifier recorded at launch.</param>
+        /// <param name="recordedStartUtc">Exact start time recorded at launch.</param>
+        /// <returns>True when the process was running and was stopped.</returns>
+        public static bool StopIfVerified(int processId, DateTime recordedStartUtc)
+        {
+            if (CheckIdentity(processId, null, processId, recordedStartUtc) != ProcessIdentityEnum.Verified) return false;
+            try
+            {
+                using (Process process = Process.GetProcessById(processId))
+                {
+                    process.Kill(entireProcessTree: true);
+                    process.WaitForExit(5000);
+                    return true;
+                }
+            }
+            catch (ArgumentException)
+            {
+                return false;
+            }
+            catch (InvalidOperationException)
+            {
+                return false;
+            }
+            catch (Win32Exception)
+            {
+                return false;
+            }
+            catch (NotSupportedException)
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
         /// Read the start time of a running process.
         /// </summary>
         /// <param name="processId">OS process identifier.</param>

@@ -99,6 +99,12 @@ Conductor) with Opus and GPT-6.1 reliable. The work is tracked item by item in `
   before the shared admission lock, so a slow dock placement on one vessel no longer holds up admission on every other
   vessel. The lock covers only a final re-check of the global, runtime and endpoint caps for the chosen captain and the
   claim itself, so parallel dispatch passes still cannot admit past any cap (RS-4.9).
+- **No second agent after a crash at launch.** If the Admiral stopped after an agent process started but before its id
+  was saved, the restarted Admiral treated the mission as never launched and dispatched it again while the first agent
+  kept working in the dock. Armada now records the launch intent before starting the agent. On startup it stops a
+  leftover local agent whose process id and exact start time match the launch record (a reused id is never touched),
+  then resumes the mission in its dock. Agents on a Harbor were already covered: a reconnecting Harbor stops every job
+  the restarted Admiral does not own (RS-4.10).
 - **Recovery state survives a restart.** Endpoint circuit breakers, launch backoff (with the captains that failed to
   start the mission), the start of a transient outage, and escalation rule cooldowns were kept only in memory, so a
   restart sent missions straight back to a failing endpoint, relaunched a broken captain at once, granted an outage a

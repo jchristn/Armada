@@ -971,6 +971,27 @@ namespace Armada.Core.Services
                 return false;
             }
 
+            // RS-4.10: record the intent to launch before the process exists, so a restart that finds no process id
+            // knows an agent may have started and worked in the dock (recovery stops it and resumes there).
+            mission.LaunchIntentUtc = DateTime.UtcNow;
+            bool intentRecorded;
+            try
+            {
+                intentRecorded = await _Database.Missions.TryUpdateIfStatusAsync(mission, new[] { MissionStatusEnum.Assigned }, CancellationToken.None).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _Logging.Warn(_Header + "could not record the launch intent of mission " + mission.Id + ": " + ex.Message);
+                intentRecorded = false;
+            }
+
+            if (!intentRecorded)
+            {
+                _Logging.Info(_Header + "mission " + mission.Id + " launch intent not recorded; not launching");
+                await RollbackAssignmentAsync(mission, captain, dock, preserveExistingBranch).ConfigureAwait(false);
+                return false;
+            }
+
             int processId;
             try
             {
@@ -1058,6 +1079,7 @@ namespace Armada.Core.Services
 
                 mission.ProcessId = processId;
                 mission.StartedUtc = DateTime.UtcNow;
+                mission.LaunchIntentUtc = null;
                 bool launchRecorded = await Transitions.TryTransitionAsync(mission, new[] { MissionStatusEnum.Assigned }, MissionStatusEnum.InProgress, null, CancellationToken.None).ConfigureAwait(false);
                 Mission? currentMission = launchRecorded ? null : await _Database.Missions.ReadAsync(mission.Id, CancellationToken.None).ConfigureAwait(false);
                 if (currentMission != null)
@@ -1539,6 +1561,7 @@ namespace Armada.Core.Services
                 mission.DockId = null;
                 mission.ProcessId = null;
                 mission.StartedUtc = null;
+                mission.LaunchIntentUtc = null;
                 bool reverted = await Transitions.TryTransitionAsync(mission, new[] { MissionStatusEnum.Assigned }, MissionStatusEnum.Pending, null, CancellationToken.None).ConfigureAwait(false);
                 if (!reverted)
                     _Logging.Info(_Header + "mission " + mission.Id + " already left Assigned; leaving its current state during rollback");
@@ -1565,6 +1588,7 @@ namespace Armada.Core.Services
                 mission.CaptainId = null;
                 mission.DockId = null;
                 mission.ProcessId = null;
+                mission.LaunchIntentUtc = null;
                 mission.CompletedUtc = DateTime.UtcNow;
                 failed = await Transitions.TryTransitionAsync(mission, new[] { MissionStatusEnum.Assigned }, MissionStatusEnum.Failed, null, CancellationToken.None).ConfigureAwait(false);
                 if (failed)

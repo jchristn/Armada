@@ -722,11 +722,18 @@ namespace Armada.Core.Services
 
                 if (processAlive) continue;
 
+                // RS-4.10: the Admiral can stop after an agent process started but before its id reached the captain and
+                // mission rows. The launch handler records the process id and exact start time first, so a process that
+                // outlived the Admiral is stopped here, before the mission resumes in that dock with a second agent.
+                if (currentMission != null && (currentMission.Status == MissionStatusEnum.Assigned || currentMission.Status == MissionStatusEnum.InProgress))
+                    StopOrphanedLaunch(currentMission);
+
                 // An Assigned mission that never started an agent process (it was still waiting for its dock or launch
                 // when the Admiral stopped) was not interrupted: it goes back to Pending without spending a redispatch
-                // attempt, as orphan recovery already does (RS-2.7).
+                // attempt, as orphan recovery already does (RS-2.7). A recorded launch intent means a process may have
+                // started and worked in the dock, so that mission resumes there as interrupted instead.
                 if (currentMission != null && currentMission.Status == MissionStatusEnum.Assigned
-                    && !currentMission.ProcessId.HasValue && !currentMission.StartedUtc.HasValue)
+                    && !currentMission.ProcessId.HasValue && !currentMission.StartedUtc.HasValue && !currentMission.LaunchIntentUtc.HasValue)
                 {
                     MissionStatusEnum observedStatus = currentMission.Status;
                     currentMission.CaptainId = null;
@@ -797,6 +804,15 @@ namespace Armada.Core.Services
                 // Dispatch any pending missions that were freed up
                 RequestDispatch();
             }
+        }
+
+        private void StopOrphanedLaunch(Mission mission)
+        {
+            if (!mission.ProcessStartedPid.HasValue || !mission.ProcessStartedUtc.HasValue) return;
+            if (OnIsProcessTracked?.Invoke(mission.ProcessStartedPid.Value) == true) return;
+            if (ProcessSupervisor.StopIfVerified(mission.ProcessStartedPid.Value, mission.ProcessStartedUtc.Value))
+                _Logging.Warn(_Header + "stopped agent process " + mission.ProcessStartedPid.Value + " for mission " + mission.Id
+                    + ", left running by an earlier Admiral run before its launch was recorded");
         }
 
         /// <inheritdoc />

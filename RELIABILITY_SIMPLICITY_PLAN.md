@@ -633,10 +633,21 @@ routing; a renamed Architect slice breaks fan-out recovery. Everything a program
   (`parallel_passes_never_admit_past_the_global_limit`, `parallel_passes_never_admit_past_a_runtime_or_endpoint_cap`,
   where every pass chooses before any claims; both over-admit, 6 of 2 and 3 of 1, with the re-check removed;
   `a_slow_placement_does_not_hold_the_capacity_lock`). SQLite affected suites: 896 tests, 0 failed, 6 skipped.
-- [ ] **RS-4.10** Launch intent. Persist `LaunchIntentUtc` and the job or process id as part of launch. On startup,
+- [x] **RS-4.10** Launch intent. Persist `LaunchIntentUtc` and the job or process id as part of launch. On startup,
   find and stop any orphaned agent process for a dock (by job id, worktree path, or command line) before resuming in
   that dock. Crash-point test between launch and PID record. Includes the `Services.CrashConsistency` case for
   `CrashPointNames.LaunchBeforeProcessRecorded` (one live agent per mission after restart). Evidence:
+  `TryAssignAsync` writes `LaunchIntentUtc` (conditional on Assigned) before `OnLaunchAgent` and clears it when the
+  launch is recorded, rolled back or failed. The local launch handler already saved the process id and exact start
+  time (`SetProcessLaunchAsync`) inside `OnLaunchAgent`, before the crash point; `CleanupStaleCaptainsAsync` now stops
+  that process through `ProcessSupervisor.StopIfVerified` (start time must match, so a reused id is never touched)
+  and sends a mission with a recorded intent down the interrupted path (resume in its dock) instead of "never
+  launched". Harbor launches need no new field or capability flag: the existing `HarborHandshakeAck.OwnedJobIds`
+  makes a reconnecting Harbor stop every job the restarted Admiral does not own, and `HarborProcessLedger` covers a
+  Harbor restart, so `LaunchJobId` stays unused. Not covered: a crash in the instant between process start and the
+  start-time write inside the handler (no worktree or command-line scan was added). New case
+  `launch_crash_before_process_recorded_leaves_one_agent` starts a real process as the agent; with the stop removed
+  it fails ("the agent left running by the crashed Admiral was stopped"). SQLite affected suites: 904, 0 failed.
 
 ## Phase 5: Failure classification, recovery, and escalation
 

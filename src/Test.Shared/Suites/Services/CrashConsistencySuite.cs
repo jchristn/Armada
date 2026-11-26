@@ -2,10 +2,12 @@ namespace Test.Shared.Suites.Services
 {
     using System;
     using System.Collections.Generic;
+    using System.Diagnostics;
     using System.IO;
     using System.Linq;
     using System.Threading;
     using System.Threading.Tasks;
+    using Armada.Core;
     using Armada.Core.Authorization;
     using Armada.Core.Database;
     using Armada.Core.Enums;
@@ -82,6 +84,9 @@ namespace Test.Shared.Suites.Services
                 cases.Add(Case("voyage_crash_at_" + crashPoint.Replace('.', '_').Replace('-', '_'), "Crash at " + crashPoint + " while creating a voyage: after restart it has all of its missions or none, and a voyage that never opened is failed with nothing started",
                     null, () => VoyageCrashAsync(crashPoint)));
             }
+
+            cases.Add(Case("launch_crash_before_process_recorded_leaves_one_agent", "Crash after the agent process started but before its id was recorded: after restart the orphaned agent is stopped and at most one agent runs for the mission",
+                null, LaunchCrashAsync));
 
             foreach (string point in new[] { CrashPointNames.HandoffPlanned, CrashPointNames.HandoffWritten })
             {
@@ -213,6 +218,62 @@ namespace Test.Shared.Suites.Services
             }
         }
 
+        private static async Task LaunchCrashAsync()
+        {
+            using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+            Vessel vessel = await testDb.Driver.Vessels.CreateAsync(new Vessel("crash-launch-vessel", "https://github.com/test/repo.git") { DefaultBranch = "main" }).ConfigureAwait(false);
+            await testDb.Driver.Captains.CreateAsync(new Captain("crash-launch-idle") { State = CaptainStateEnum.Idle }).ConfigureAwait(false);
+            List<Process> agents = new List<Process>();
+            try
+            {
+                AdmiralService before = CreateAdmiral(testDb.Driver, AgentLauncher(testDb.Driver, agents));
+                CrashRunOutcomeEnum outcome = await CrashRun.RunAsync(CrashPointNames.LaunchBeforeProcessRecorded,
+                    () => before.DispatchVoyageAsync("Crash launch", "One change", vessel.Id, new List<MissionDescription> { new MissionDescription("Only", "Do the change") })).ConfigureAwait(false);
+                AssertEqual(CrashRunOutcomeEnum.Crashed, outcome, "the launch reached the crash point");
+                AssertEqual(1, agents.Count(a => !a.HasExited), "the agent process started before the crash");
+
+                // Restart: a new Admiral cleans up and runs its health loop twice; it can launch agents too.
+                AdmiralService after = CreateAdmiral(testDb.Driver, AgentLauncher(testDb.Driver, agents));
+                await after.CleanupStaleCaptainsAsync().ConfigureAwait(false);
+                await after.HealthCheckAsync().ConfigureAwait(false);
+                await after.HealthCheckAsync().ConfigureAwait(false);
+
+                AssertTrue(agents[0].WaitForExit(5000), "the agent left running by the crashed Admiral was stopped");
+                AssertTrue(agents.Count(a => !a.HasExited) <= 1, "at most one live agent for the mission, found " + agents.Count(a => !a.HasExited));
+                Voyage voyage = (await testDb.Driver.Voyages.EnumerateAsync().ConfigureAwait(false)).Single(v => v.Title == "Crash launch");
+                Mission mission = (await testDb.Driver.Missions.EnumerateByVoyageAsync(voyage.Id).ConfigureAwait(false)).Single();
+                AssertTrue(mission.Status == MissionStatusEnum.Pending || mission.Status == MissionStatusEnum.Assigned || mission.Status == MissionStatusEnum.InProgress,
+                    "the mission resumes instead of being lost: " + mission.Status);
+            }
+            finally
+            {
+                foreach (Process agent in agents)
+                {
+                    try { if (!agent.HasExited) agent.Kill(entireProcessTree: true); } catch (InvalidOperationException) { }
+                    agent.Dispose();
+                }
+            }
+        }
+
+        // Starts a real long-running process as the agent and records its start time, as the Server's launch handler does.
+        private static Func<Captain, Mission, Dock, Task<int>> AgentLauncher(DatabaseDriver db, List<Process> agents)
+        {
+            return async (Captain captain, Mission mission, Dock dock) =>
+            {
+                ProcessStartInfo start = OperatingSystem.IsWindows()
+                    ? new ProcessStartInfo("ping", "-n 600 127.0.0.1")
+                    : new ProcessStartInfo("sleep", "600");
+                start.UseShellExecute = false;
+                start.CreateNoWindow = true;
+                start.RedirectStandardOutput = true;
+                Process agent = Process.Start(start) ?? throw new InvalidOperationException("could not start the stand-in agent");
+                lock (agents) agents.Add(agent);
+                if (ProcessSupervisor.TryReadStartTimeUtc(agent.Id, out DateTime startedUtc))
+                    await db.Missions.SetProcessLaunchAsync(mission.Id, agent.Id, startedUtc).ConfigureAwait(false);
+                return agent.Id;
+            };
+        }
+
         private static async Task HandoffCrashAsync(string crashPoint)
         {
             using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
@@ -340,7 +401,7 @@ namespace Test.Shared.Suites.Services
             return new MissionService(logging, db, settings, docks, captains, git: git);
         }
 
-        private static AdmiralService CreateAdmiral(DatabaseDriver db)
+        private static AdmiralService CreateAdmiral(DatabaseDriver db, Func<Captain, Mission, Dock, Task<int>>? launcher = null)
         {
             LoggingModule logging = CreateLogging();
             ArmadaSettings settings = new ArmadaSettings();
@@ -349,6 +410,7 @@ namespace Test.Shared.Suites.Services
             StubGitService git = new StubGitService();
             IDockService docks = new DockService(logging, db, settings, git);
             ICaptainService captains = new CaptainService(logging, db, settings, git, docks);
+            captains.OnLaunchAgent = launcher;
             IMissionService missions = new MissionService(logging, db, settings, docks, captains);
             IVoyageService voyages = new VoyageService(logging, db);
             return new AdmiralService(logging, db, settings, captains, missions, voyages, docks);
