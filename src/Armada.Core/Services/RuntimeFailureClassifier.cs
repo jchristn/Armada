@@ -35,9 +35,10 @@ namespace Armada.Core.Services
         /// exit is classified from the provider error's machine error type when it is a known code, otherwise from its
         /// HTTP status (429, 402: usage limit; 401, 403: auth failure; 404: model unavailable; 408, 500, 502, 503, 504,
         /// 529: transient; 413, or a 400 whose message names the context or token limit: task failure). A generic
-        /// inference failure with no usable status is transient: the recovery budget bounds its retries. A non-zero exit
-        /// with no provider error, or with one that carries neither a known type nor a known status, is
-        /// <see cref="RuntimeFailureKindEnum.Crash"/>.
+        /// inference failure with no usable status is transient: the recovery budget bounds its retries. A process that
+        /// died abnormally (see <see cref="IsAbnormalExit"/>) without a classified provider error is
+        /// <see cref="RuntimeFailureKindEnum.Crash"/>. Any other non-zero exit with no provider error, or with one that
+        /// carries neither a known type nor a known status, is <see cref="RuntimeFailureKindEnum.Unclassified"/>.
         /// </summary>
         /// <param name="exitCode">The process exit code (null is treated as a non-zero failure).</param>
         /// <param name="providerError">The structured provider error, if any.</param>
@@ -45,7 +46,7 @@ namespace Armada.Core.Services
         public static RuntimeFailureKindEnum Classify(int? exitCode, RuntimeProviderError? providerError)
         {
             if (exitCode.HasValue && exitCode.Value == 0) return RuntimeFailureKindEnum.Clean;
-            if (providerError == null) return RuntimeFailureKindEnum.Crash;
+            if (providerError == null) return Unexplained(exitCode);
 
             RuntimeFailureKindEnum? fromType = ClassifyErrorType(providerError.ErrorType);
             if (fromType.HasValue) return fromType.Value;
@@ -55,7 +56,20 @@ namespace Armada.Core.Services
 
             if (IsGenericInferenceFailure(providerError.ErrorType)) return RuntimeFailureKindEnum.Transient;
 
-            return RuntimeFailureKindEnum.Crash;
+            return Unexplained(exitCode);
+        }
+
+        /// <summary>
+        /// Whether an exit code means the process died abnormally rather than exiting on its own: killed by a signal
+        /// (129 to 192, the shell convention of 128 plus the signal number, on Linux and macOS) or a negative code (a
+        /// Windows crash status such as 0xC0000005 read as a signed integer).
+        /// </summary>
+        /// <param name="exitCode">The process exit code, or null.</param>
+        /// <returns>True for an abnormal death.</returns>
+        public static bool IsAbnormalExit(int? exitCode)
+        {
+            if (!exitCode.HasValue) return false;
+            return exitCode.Value < 0 || (exitCode.Value > 128 && exitCode.Value <= 192);
         }
 
         /// <summary>
@@ -77,7 +91,7 @@ namespace Armada.Core.Services
 
         /// <summary>
         /// Every machine error type a built-in runtime is known to report, so a test can assert that each one has a
-        /// deliberate classification rather than falling through to <see cref="RuntimeFailureKindEnum.Crash"/> by accident.
+        /// deliberate classification rather than falling through to <see cref="RuntimeFailureKindEnum.Unclassified"/> by accident.
         /// Types classified only through their HTTP status are listed with the status-less outcome.
         /// </summary>
         public static readonly IReadOnlyList<string> KnownErrorTypes = new List<string>
@@ -108,6 +122,11 @@ namespace Armada.Core.Services
         #endregion
 
         #region Private-Methods
+
+        private static RuntimeFailureKindEnum Unexplained(int? exitCode)
+        {
+            return IsAbnormalExit(exitCode) ? RuntimeFailureKindEnum.Crash : RuntimeFailureKindEnum.Unclassified;
+        }
 
         private static int Significance(RuntimeProviderError error)
         {

@@ -402,7 +402,7 @@ set one.
 | Runtime exit | Negative exit code (Armada stopped or lost the process, redispatch exhausted) | `Infra` |
 | Runtime exit | `TaskFailure` | `InvalidOutput` |
 | Runtime exit | `Transient` that outlasted its resumes and the outage grace | `Infra` |
-| Runtime exit | Any other runtime failure kind | `Crash` |
+| Runtime exit | Any other runtime failure kind, including `Unclassified` after its one resume | `Crash` |
 | Definition of Done | `Compile`, `TestFail`, `Timeout`, `Infra` | The same kind |
 | Definition of Done | Any other outcome | `Unknown` |
 | Landing | A merge conflict git reported | `LandingConflict` |
@@ -413,6 +413,10 @@ set one.
 | Lost landing handoff | Nonblocking stage check, no merge queue entry after five minutes | `Infra` |
 | Mission status | `LandingFailed` with no recorded kind | `LandingConflict` |
 | Mission status | Any other failure with no recorded kind | `Unknown` |
+
+The runtime kind itself is `Crash` only for an abnormal death (killed by a signal, a negative Windows crash status, or
+a runtime-reported cancellation). A non-zero exit with no provider error Armada recognizes is `Unclassified`: it gets
+one resume in place, then goes to escalation, and acceptance gate G6 counts it per runtime and model.
 
 Kinds set directly where the failure is detected (for example `Boundary`, `NoOp`, `Blocked`, `JudgeRejected`,
 `MaxRuntimeExceeded`, `StallRecoveryExhausted`, `DependencyFailed`, `OperatorAction`) need no mapping. Only `Compile`,

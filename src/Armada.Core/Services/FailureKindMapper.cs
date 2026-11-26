@@ -20,8 +20,9 @@ namespace Armada.Core.Services
         /// Map a runtime exit that ended a mission. A negative exit code means Armada stopped or lost the process (redispatch
         /// exhausted, Admiral interruption) and is <see cref="MissionFailureKindEnum.Infra"/>. Otherwise a task failure is
         /// <see cref="MissionFailureKindEnum.InvalidOutput"/>, a transient endpoint failure that outlasted its resumes and the
-        /// outage grace is <see cref="MissionFailureKindEnum.Infra"/> (the environment, not the captain), and everything else
-        /// is <see cref="MissionFailureKindEnum.Crash"/>.
+        /// outage grace is <see cref="MissionFailureKindEnum.Infra"/> (the environment, not the captain), and everything else,
+        /// including an <see cref="RuntimeFailureKindEnum.Unclassified"/> exit that used its resume, is
+        /// <see cref="MissionFailureKindEnum.Crash"/> so a bounded rescue still applies until escalation (RS-5.6) takes it.
         /// </summary>
         /// <param name="runtimeKind">The runtime failure kind.</param>
         /// <param name="exitCode">The process exit code, when known.</param>

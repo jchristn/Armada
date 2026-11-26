@@ -320,7 +320,7 @@ namespace Armada.Server.Mcp.Tools
                     personas = new { type = "array", items = new { type = "string" }, description = "Persona names (case-insensitive)" },
                     runtimes = new { type = "array", items = new { type = "string" }, description = "Runtimes (ClaudeCode, Codex, Gemini, Cursor, Mux, OpenCode, Pi, ApiEndpoint, Custom)" },
                     failureKinds = new { type = "array", items = new { type = "string" }, description = "Mission failure kinds (MissionFailureKindEnum names, for example InvalidOutput, Timeout, Infra)" },
-                    runtimeFailureKinds = new { type = "array", items = new { type = "string" }, description = "Runtime exit classifications (Clean, UsageLimit, AuthFailure, Crash, ModelUnavailable, TaskFailure, Transient)" },
+                    runtimeFailureKinds = new { type = "array", items = new { type = "string" }, description = "Runtime exit classifications (Clean, UsageLimit, AuthFailure, Crash, ModelUnavailable, TaskFailure, Transient, Unclassified)" },
                     stageCheckStatuses = new { type = "array", items = new { type = "string" }, description = "Stage check statuses (Passed, Failed, Skipped, CouldNotRun)" },
                     stageCheckReasons = new { type = "array", items = new { type = "string" }, description = "Stage check reasons (StageCheckReasonEnum names)" },
                     dispositions = new { type = "array", items = new { type = "string" }, description = "Dispositions (Completed, Relaunched, OutputRepair, Escalated, Failed, Interrupted, Cancelled, Pending)" },

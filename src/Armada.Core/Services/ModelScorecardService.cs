@@ -562,6 +562,7 @@ namespace Armada.Core.Services
                     || outcome.RuntimeFailureKind == RuntimeFailureKindEnum.UsageLimit
                     || outcome.RuntimeFailureKind == RuntimeFailureKindEnum.AuthFailure
                     || outcome.RuntimeFailureKind == RuntimeFailureKindEnum.Crash
+                    || outcome.RuntimeFailureKind == RuntimeFailureKindEnum.Unclassified
                     || outcome.RuntimeFailureKind == RuntimeFailureKindEnum.ModelUnavailable
                     || outcome.RuntimeFailureKind == RuntimeFailureKindEnum.Transient)
                     return RuleRuntimeEnvironment;

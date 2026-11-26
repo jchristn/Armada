@@ -614,6 +614,66 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
+            cases.Add(CaseAsync("handle_process_exit_async_resumes_unclassified_exit_once", "An Unclassified exit (no recognized provider error) resumes in place once, then fails instead of spending the whole recovery budget", TestTags.Reliability, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    DatabaseDriver db = testDb.Driver;
+                    StubGitService git = new StubGitService();
+                    ArmadaSettings settings = CreateSettings();
+                    settings.MaxRecoveryAttempts = 3;
+                    settings.LogDirectory = Path.Combine(Path.GetTempPath(), "armada_test_logs_" + Guid.NewGuid().ToString("N"));
+                    LoggingModule logging = CreateLogging();
+                    IDockService dockService = new DockService(logging, db, settings, git);
+                    CaptainService captainService = new CaptainService(logging, db, settings, git, dockService);
+                    int relaunches = 0;
+                    captainService.OnLaunchAgent = (_, _, _) => { relaunches++; return Task.FromResult(7100 + relaunches); };
+                    IMissionService missionService = new MissionService(logging, db, settings, dockService, captainService);
+                    AdmiralService service = new AdmiralService(logging, db, settings, captainService, missionService, new VoyageService(logging, db), dockService);
+
+                    Vessel vessel = await db.Vessels.CreateAsync(new Vessel("unclassified-vessel", "https://github.com/test/repo.git")).ConfigureAwait(false);
+                    Voyage voyage = new Voyage("Unclassified Voyage");
+                    voyage.Status = VoyageStatusEnum.InProgress;
+                    await db.Voyages.CreateAsync(voyage);
+
+                    Dock dock = new Dock(vessel.Id);
+                    dock.WorktreePath = Path.Combine(Path.GetTempPath(), "armada_unclassified_dock_" + Guid.NewGuid().ToString("N"));
+                    Directory.CreateDirectory(dock.WorktreePath);
+                    dock.Active = true;
+                    dock = await db.Docks.CreateAsync(dock).ConfigureAwait(false);
+
+                    Mission mission = new Mission("Worker on an open model", "Do the work.");
+                    mission.VoyageId = voyage.Id;
+                    mission.VesselId = vessel.Id;
+                    mission.Persona = "Worker";
+                    mission.Status = MissionStatusEnum.InProgress;
+                    mission.ProcessId = 4343;
+                    mission.DockId = dock.Id;
+                    await db.Missions.CreateAsync(mission);
+
+                    Captain captain = new Captain("mux", AgentRuntimeEnum.Mux);
+                    captain.State = CaptainStateEnum.Working;
+                    captain.Assignment = mission;
+                    captain.ProcessId = 4343;
+                    await CaptainAssignmentFixture.CreateAsync(db, captain);
+
+                    RuntimeExitInfo unexplained = RuntimeFailureClassifier.Decide(1, null);
+                    AssertEqual(RuntimeFailureKindEnum.Unclassified, unexplained.FailureKind);
+                    await service.HandleProcessExitAsync(4343, unexplained, captain.Id, mission.Id).ConfigureAwait(false);
+                    Mission? resumed = await db.Missions.ReadAsync(mission.Id).ConfigureAwait(false);
+                    AssertEqual(MissionStatusEnum.InProgress, resumed!.Status, "the first unexplained exit resumes");
+                    AssertEqual(1, relaunches);
+                    AssertEqual(dock.Id, resumed.DockId, "in the same dock");
+
+                    await service.HandleProcessExitAsync(resumed.ProcessId!.Value, RuntimeFailureClassifier.Decide(1, null), captain.Id, mission.Id).ConfigureAwait(false);
+                    Mission? failed = await db.Missions.ReadAsync(mission.Id).ConfigureAwait(false);
+                    AssertEqual(MissionStatusEnum.Failed, failed!.Status, "a second unexplained exit does not resume again, though MaxRecoveryAttempts is 3");
+                    AssertEqual(1, relaunches);
+                    AssertEqual(MissionFailureKindEnum.Crash, failed.FailureKind, "still eligible for a bounded rescue");
+                    try { Directory.Delete(dock.WorktreePath, true); } catch { }
+                }
+            }));
+
             cases.Add(CaseAsync("transient_outage_is_ridden_out_past_max_recovery", "Within TransientOutageGraceMinutes a repeating endpoint 5xx keeps resuming past MaxRecoveryAttempts, recording the failure once", TestTags.Reliability, async () =>
             {
                 using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
@@ -837,7 +897,7 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(RuntimeFailureKindEnum.Transient, RuntimeFailureClassifier.Classify(1, new RuntimeProviderError { ErrorType = "llm_connection_error" }));
                 AssertEqual(RuntimeFailureKindEnum.TaskFailure, RuntimeFailureClassifier.Classify(1, new RuntimeProviderError { ErrorType = "max_iterations_reached" }));
                 AssertEqual(RuntimeFailureKindEnum.UsageLimit, RuntimeFailureClassifier.Classify(1, new RuntimeProviderError { HttpStatusCode = 429 }));
-                AssertEqual(RuntimeFailureKindEnum.Crash, RuntimeFailureClassifier.Classify(1, null));
+                AssertEqual(RuntimeFailureKindEnum.Unclassified, RuntimeFailureClassifier.Classify(1, null));
             }));
 
             cases.Add(CaseAsync("handle_process_exit_async_waits_for_launch_to_be_recorded", "HandleProcessExitAsync waits for an Assigned mission's launch to be recorded before handling a fast exit", TestTags.Positive, async () =>
@@ -1806,7 +1866,8 @@ namespace Test.Shared.Suites.Services
                     Mission? updatedMission = await db.Missions.ReadAsync(mission.Id).ConfigureAwait(false);
                     Captain? updatedCaptain = await db.Captains.ReadAsync(captain.Id).ConfigureAwait(false);
                     AssertEqual(MissionStatusEnum.Failed, updatedMission!.Status);
-                    AssertEqual("Agent process exited with code 1", updatedMission.FailureReason, "The failure reason comes from the exit info, not a scraped log line");
+                    AssertTrue((updatedMission.FailureReason ?? "").StartsWith("Agent process exited with code 1\nRemediation: The runtime reported no provider error.", StringComparison.Ordinal),
+                        "The failure reason comes from the exit info, not a scraped log line: " + updatedMission.FailureReason);
                     AssertEqual(CaptainStateEnum.Idle, updatedCaptain!.State, "Log words neither stall nor quarantine the captain");
                     AssertNull(updatedCaptain.QuarantineUntilUtc);
                 }

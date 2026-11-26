@@ -20,7 +20,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// Classified failure kind.
         /// </summary>
-        public RuntimeFailureKindEnum FailureKind { get; set; } = RuntimeFailureKindEnum.Crash;
+        public RuntimeFailureKindEnum FailureKind { get; set; } = RuntimeFailureKindEnum.Unclassified;
 
         /// <summary>
         /// The last structured provider error the runtime reported before exiting, if any.
@@ -69,6 +69,7 @@ namespace Armada.Core.Models
                     RuntimeFailureKindEnum.UsageLimit => "Check provider quota, billing and rate limits; wait for the limit to reset or select an available endpoint.",
                     RuntimeFailureKindEnum.ModelUnavailable => "Check the endpoint URL, model identifier and account access to that model.",
                     RuntimeFailureKindEnum.Transient => "Check provider availability, connectivity and request timeout settings.",
+                    RuntimeFailureKindEnum.Unclassified when ProviderError == null => "The runtime reported no provider error. Inspect the mission log for the last model turn and tool call; if the cause is a provider message Armada does not recognize, report it so it can be classified.",
                     _ => ProviderError?.HttpStatusCode switch
                     {
                         400 or 405 or 415 or 422 => "The provider rejected the request. Check the endpoint URL, provider, model, inference options and tool support. If these are correct, inspect the provider error and SDK compatibility; a rejected request can also be an integration defect. Validate the endpoint after correcting the cause before restarting the mission.",

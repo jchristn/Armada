@@ -575,10 +575,10 @@ namespace Test.Shared.Suites.Services
                     await handler.HandleAgentProcessExitedAsync(9103, 2, "cpt_test", "msn_test").ConfigureAwait(false);
 
                     AssertEqual(3, admiral.ExitInfos.Count);
-                    AssertEqual(RuntimeFailureKindEnum.Crash, admiral.ExitInfos[0].FailureKind, "output text never classifies");
+                    AssertEqual(RuntimeFailureKindEnum.Unclassified, admiral.ExitInfos[0].FailureKind, "output text never classifies");
                     AssertNull(admiral.ExitInfos[0].ProviderError);
                     AssertEqual(RuntimeFailureKindEnum.Clean, admiral.ExitInfos[1].FailureKind, "a zero exit is clean even with a provider error");
-                    AssertEqual(RuntimeFailureKindEnum.Crash, admiral.ExitInfos[2].FailureKind, "the provider error is consumed by the exit that read it");
+                    AssertEqual(RuntimeFailureKindEnum.Unclassified, admiral.ExitInfos[2].FailureKind, "the provider error is consumed by the exit that read it");
                 }
             }));
 

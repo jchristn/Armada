@@ -211,7 +211,7 @@ Mechanism section: how a failure happened.
 | `exceptionMessage` | string | yes | no | at most 4000 chars | Exception message (redacted, at most 4000 characters). |
 | `stackFrames` | array of string | no | yes | at most 20 items; each at most 1024 chars | Armada stack frames only. |
 | `exitCode` | integer | yes | no |  | Agent exit code, or null. |
-| `runtimeFailureKind` | enum: `Clean`, `UsageLimit`, `AuthFailure`, `Crash`, `ModelUnavailable`, `TaskFailure`, `Transient` | yes | no |  | How the runtime classified the exit, or null. |
+| `runtimeFailureKind` | enum: `Clean`, `UsageLimit`, `AuthFailure`, `Crash`, `ModelUnavailable`, `TaskFailure`, `Transient`, `Unclassified` | yes | no |  | How the runtime classified the exit, or null. |
 | `failingCommand` | string | yes | no | at most 2000 chars | Failing command, or null. |
 | `commandExitCode` | integer | yes | no |  | Failing command's exit code, or null. |
 | `commandOutputTail` | string | yes | no | at most 8000 chars | Tail of the failing command's output (at most 8000 characters). |

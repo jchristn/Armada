@@ -179,6 +179,10 @@ namespace Armada.Core.Services
         // many times (more when MaxNoOpRedispatchAttempts is higher) before an interruption fails it.
         private const int _MinInterruptedRedispatches = 3;
 
+        // RS-5.2: an Unclassified runtime exit gets this many resumes in place before escalation. RS-5.5 moves it into the
+        // per-model recovery policy.
+        private const int _UnclassifiedResumeLimit = 1;
+
         private int InterruptedRedispatchLimit => Math.Max(_Settings.MaxNoOpRedispatchAttempts, _MinInterruptedRedispatches);
 
         private string _Header = "[AdmiralService] ";
@@ -1077,9 +1081,14 @@ namespace Armada.Core.Services
                 // TransientOutageGraceMinutes, so a proxy or model-server restart does not fail work in progress.
                 bool withinOutageGrace = exitInfo.FailureKind == RuntimeFailureKindEnum.Transient && mission != null && await WithinTransientOutageGraceAsync(mission.Id).ConfigureAwait(false);
                 if (exitInfo.FailureKind != RuntimeFailureKindEnum.Transient) await ForgetTransientOutageAsync(missionId).ConfigureAwait(false);
-                if ((exitInfo.FailureKind == RuntimeFailureKindEnum.Transient || exitInfo.FailureKind == RuntimeFailureKindEnum.TaskFailure)
+                // An Unclassified exit (no provider error Armada recognizes, not an abnormal death) gets one resume in place:
+                // a second unexplained exit goes to escalation instead of spending the whole budget on a cause nobody named.
+                bool resumable = exitInfo.FailureKind == RuntimeFailureKindEnum.Transient || exitInfo.FailureKind == RuntimeFailureKindEnum.TaskFailure;
+                bool unclassifiedResume = exitInfo.FailureKind == RuntimeFailureKindEnum.Unclassified
+                    && captain.RecoveryAttempts < Math.Min(_UnclassifiedResumeLimit, _Settings.MaxRecoveryAttempts);
+                if ((resumable || unclassifiedResume)
                     && mission != null
-                    && (captain.RecoveryAttempts < _Settings.MaxRecoveryAttempts || withinOutageGrace)
+                    && (unclassifiedResume || captain.RecoveryAttempts < _Settings.MaxRecoveryAttempts || withinOutageGrace)
                     && await TryResumeInPlaceAsync(captain, mission, failureReason, token,
                         exitInfo.FailureKind == RuntimeFailureKindEnum.Transient ? TransientResumeDelay(captain.RecoveryAttempts) : TimeSpan.Zero).ConfigureAwait(false))
                 {
@@ -1088,7 +1097,7 @@ namespace Armada.Core.Services
 
                 // The resumes are used up and the captain still cannot finish (often a local model): hand one last
                 // attempt, on the same branch with the work so far, to the frontier captain that planned the voyage.
-                if ((exitInfo.FailureKind == RuntimeFailureKindEnum.Transient || exitInfo.FailureKind == RuntimeFailureKindEnum.TaskFailure)
+                if ((resumable || exitInfo.FailureKind == RuntimeFailureKindEnum.Unclassified)
                     && mission != null
                     && await TryEscalateToPlannerAsync(captain, mission, failureReason, capture, token).ConfigureAwait(false))
                 {
@@ -1102,7 +1111,7 @@ namespace Armada.Core.Services
                 // Quarantined and is never Idle in between.
                 RuntimeFailureKindEnum failureKind = exitInfo.FailureKind;
                 bool quarantine = failureKind == RuntimeFailureKindEnum.UsageLimit || failureKind == RuntimeFailureKindEnum.AuthFailure
-                    || (exitCode >= 0 && failureKind == RuntimeFailureKindEnum.Crash && RecordCrashAndCheckLoop(captainId));
+                    || (exitCode >= 0 && (failureKind == RuntimeFailureKindEnum.Crash || failureKind == RuntimeFailureKindEnum.Unclassified) && RecordCrashAndCheckLoop(captainId));
                 await HandleTerminalProcessExitFailureAsync(captain, mission, missionId, failureReason, exitInfo.FailureKind, token,
                     null, quarantine, exitInfo.ProviderError,
                     step: exitCode < 0 ? BlackBoxStepEnum.RedispatchExhausted : null, exitCode: exitCode).ConfigureAwait(false);
@@ -1237,6 +1246,7 @@ namespace Armada.Core.Services
             {
                 RuntimeFailureKindEnum.AuthFailure => "provider auth failure",
                 RuntimeFailureKindEnum.Crash => "crash loop",
+                RuntimeFailureKindEnum.Unclassified => "crash loop",
                 _ => "provider usage limit"
             };
 

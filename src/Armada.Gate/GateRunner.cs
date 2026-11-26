@@ -237,14 +237,19 @@ namespace Armada.Gate
             });
 
             List<StageOutcome> runtimeFailures = outcomes.Where(o => o.RuntimeFailureKind.HasValue && o.RuntimeFailureKind.Value != RuntimeFailureKindEnum.Clean).ToList();
-            int unclassified = runtimeFailures.Count(o => o.RuntimeFailureKind == RuntimeFailureKindEnum.Crash);
+            List<StageOutcome> unclassifiedOutcomes = runtimeFailures.Where(o => o.RuntimeFailureKind == RuntimeFailureKindEnum.Unclassified).ToList();
+            int unclassified = unclassifiedOutcomes.Count;
+            string unclassifiedByModel = String.Join(", ", unclassifiedOutcomes
+                .GroupBy(o => (o.Runtime.HasValue ? o.Runtime.Value.ToString() : "unknown runtime") + " / " + (String.IsNullOrEmpty(o.Model) ? "unknown model" : o.Model))
+                .OrderByDescending(g => g.Count()).ThenBy(g => g.Key, StringComparer.Ordinal)
+                .Select(g => g.Key + ": " + g.Count()));
             double g6 = runtimeFailures.Count == 0 ? 0 : (double)unclassified / runtimeFailures.Count;
             measures.Add(new GateMeasure
             {
                 Id = "G6", Name = "Runtime failures left unclassified", Threshold = "< 2%",
                 Value = runtimeFailures.Count == 0 ? "no runtime failures" : g6.ToString("P1", CultureInfo.InvariantCulture),
                 Status = g6 < 0.02 ? GateMeasureStatusEnum.Pass : GateMeasureStatusEnum.Fail,
-                Detail = unclassified + " of " + runtimeFailures.Count + " runtime failures classified Crash (Unclassified after RS-5.2)"
+                Detail = unclassified + " of " + runtimeFailures.Count + " runtime failures Unclassified" + (unclassified == 0 ? "" : " (" + unclassifiedByModel + ")")
             });
 
             measures.Add(NotMeasured("G7", "Judge PASS on a seeded-defect task", "0", "single-persona Judge runs of each pipeline's Judge model on the judge-negative tasks; pipeline runs skip Judge tasks"));

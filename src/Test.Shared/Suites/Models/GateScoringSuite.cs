@@ -44,7 +44,7 @@ namespace Test.Shared.Suites.Models
                     List<StageOutcome> outcomes = new List<StageOutcome>
                     {
                         new StageOutcome { Disposition = StageDispositionEnum.OutputRepair },
-                        new StageOutcome { Disposition = StageDispositionEnum.Failed, RuntimeFailureKind = RuntimeFailureKindEnum.Crash },
+                        new StageOutcome { Disposition = StageDispositionEnum.Failed, RuntimeFailureKind = RuntimeFailureKindEnum.Unclassified },
                         new StageOutcome { Disposition = StageDispositionEnum.Relaunched, RuntimeFailureKind = RuntimeFailureKindEnum.Transient }
                     };
                     List<GateMeasure> failing = GateRunner.Score(bad, outcomes);

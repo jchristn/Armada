@@ -109,6 +109,11 @@ Conductor) with Opus and GPT-6.1 reliable. The work is tracked item by item in `
   a lost landing handoff, a failure with no recorded kind) now maps to the mission failure kind in one place,
   `FailureKindMapper`, which replaces three separate classifiers and inline mappings in the Admiral. Behavior is
   unchanged. The mapping table is in docs/MODEL_HETEROGENEITY.md Part 4 (RS-5.1).
+- **Unexplained exits are Unclassified, not Crash.** A captain that exits non-zero without a provider error Armada
+  recognizes is now `Unclassified`. It gets one resume in place, then escalation to the voyage planner, instead of
+  being treated as a crash. `Crash` now means the process died abnormally (killed by a signal, a Windows crash status,
+  or cancelled). Repeated `Unclassified` exits still count toward crash-loop quarantine, and the acceptance gate's G6
+  counts them per runtime and model (RS-5.2).
 - **Recovery state survives a restart.** Endpoint circuit breakers, launch backoff (with the captains that failed to
   start the mission), the start of a transient outage, and escalation rule cooldowns were kept only in memory, so a
   restart sent missions straight back to a failing endpoint, relaunched a broken captain at once, granted an outage a

@@ -662,10 +662,16 @@ routing; a renamed Architect slice breaks fan-out recovery. Everything a program
   Table added to docs/MODEL_HETEROGENEITY.md Part 4. `Services.FailureKindMapper` (renamed from
   `Services.MissionFailureClassifier`, new `runtime_exits_map` case), `Services.LandingConflict` and
   `Services.MergeQueueProcessing` pass.
-- [ ] **RS-5.2** `Unclassified` runtime failure kind. `RuntimeFailureClassifier.Classify` returns it instead of
+- [x] **RS-5.2** `Unclassified` runtime failure kind. `RuntimeFailureClassifier.Classify` returns it instead of
   `Crash` when no provider error is parsed or the status is unmapped (`RuntimeFailureClassifier.cs:48`). Recovery
   gives `Unclassified` one resume, then escalation. `Crash` is reserved for a process that died abnormally. Count
-  `Unclassified` per runtime and model (G6). Evidence:
+  `Unclassified` per runtime and model (G6). Evidence: `RuntimeFailureKindEnum.Unclassified`;
+  `RuntimeFailureClassifier.IsAbnormalExit` (exit 129 to 192 or negative) keeps `Crash`, everything else unexplained is
+  `Unclassified`. `HandleProcessExitAsync` gives it `_UnclassifiedResumeLimit` (1) resume, then `TryEscalateToPlannerAsync`;
+  it counts toward the crash loop. `FailureKindMapper.FromRuntimeExit` maps it to `Crash` so the bounded rescue still
+  applies until RS-5.6. G6 counts it with a runtime / model breakdown. New case
+  `handle_process_exit_async_resumes_unclassified_exit_once`; affected suites pass (RuntimeFailureClassifier,
+  RuntimeProviderErrorParser, AdmiralService, AgentLifecycleHandler, GateScoring, BlackBox*, StageOutcomes, runtimes).
 - [ ] **RS-5.3** Open-model error patterns in `RuntimeProviderErrorParser`: Ollama, vLLM, LM Studio, and LiteLLM
   messages for runner terminated, out of memory, model not found, model loading, context overflow, and tool-call
   parse failures. 400s on tool or schema errors map to `TaskFailure`. Table tests from captured real outputs

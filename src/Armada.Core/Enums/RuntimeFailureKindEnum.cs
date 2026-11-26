@@ -32,7 +32,8 @@ namespace Armada.Core.Enums
         AuthFailure,
 
         /// <summary>
-        /// A non-zero exit with no structured provider error: treat as a real crash.
+        /// The process died abnormally: it was killed by a signal (exit code 129 to 192 on Linux and macOS), ended with
+        /// a negative exit code (a Windows crash status), or the runtime reported it was cancelled.
         /// </summary>
         [EnumMember(Value = "Crash")]
         Crash,
@@ -58,6 +59,14 @@ namespace Armada.Core.Enums
         /// is relaunched in the same dock instead of failing the mission.
         /// </summary>
         [EnumMember(Value = "Transient")]
-        Transient
+        Transient,
+
+        /// <summary>
+        /// A non-zero exit that is not an abnormal death and whose provider error is missing, or carries neither a known
+        /// error type nor a mapped HTTP status (RS-5.2). Recovery gives it one resume in place, then hands the mission to
+        /// escalation. Counted per runtime and model by acceptance gate G6.
+        /// </summary>
+        [EnumMember(Value = "Unclassified")]
+        Unclassified
     }
 }

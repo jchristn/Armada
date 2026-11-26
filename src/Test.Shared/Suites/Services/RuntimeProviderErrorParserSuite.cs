@@ -178,7 +178,7 @@ namespace Test.Shared.Suites.Services
                     (log, stub) => new OpenCodeRuntime(log) { ExecutablePath = stub } })
                 {
                     AssertEqual(RuntimeFailureKindEnum.UsageLimit, RunStubClassification(factory, ">&2"));
-                    AssertEqual(RuntimeFailureKindEnum.Crash, RunStubClassification(factory, String.Empty));
+                    AssertEqual(RuntimeFailureKindEnum.Unclassified, RunStubClassification(factory, String.Empty));
                 }
             }));
 
