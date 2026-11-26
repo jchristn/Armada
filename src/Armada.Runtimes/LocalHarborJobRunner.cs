@@ -119,7 +119,10 @@ namespace Armada.Runtimes
                 {
                     // A Harbor must enforce the same resolved shell policy as the Admiral.
                     // Approval without a prompt bridge fails closed in ApiAgentRuntime.
-                    ShellPolicy = request.CliPermissionPolicy ?? Armada.Core.Enums.CliPermissionPolicyEnum.Refuse
+                    ShellPolicy = request.CliPermissionPolicy ?? Armada.Core.Enums.CliPermissionPolicyEnum.Refuse,
+                    // RS-7.8: read the window from the model server on this host, and keep it on the launch so the exit
+                    // reports it to the Admiral.
+                    ContextDiscovery = (snapshot, model, ct) => DiscoverContextAsync(request.InferenceEndpoint, snapshot, model, ct)
                 };
             }
             else
@@ -385,6 +388,26 @@ namespace Armada.Runtimes
         #endregion
 
         #region Private-Methods
+
+        private async System.Threading.Tasks.Task DiscoverContextAsync(HarborInferenceEndpoint? shipped, Armada.Core.Models.ModelEndpoint snapshot, string? model, System.Threading.CancellationToken token)
+        {
+            if (snapshot.InferenceOptions.ContextLength.HasValue || !ModelContextDiscovery.Applies(snapshot)) return;
+            Armada.Core.Models.ModelContextDiscoveryResult found = await ModelContextDiscovery.DiscoverAsync(snapshot, model, token).ConfigureAwait(false);
+            if (!found.Found)
+            {
+                // A window the Admiral shipped still applies; it is not reported back as this Harbor's own.
+                if (shipped != null) shipped.DiscoveredContextLength = null;
+                _Logging.Debug("[LocalHarborJobRunner] no context window for " + snapshot.Name + ": " + found.Reason);
+                return;
+            }
+
+            ModelContextDiscovery.Apply(snapshot, found, DateTime.UtcNow);
+            if (shipped != null)
+            {
+                shipped.DiscoveredContextLength = found.ContextLength;
+                shipped.DiscoveredContextSource = found.Source;
+            }
+        }
 
         /// <summary>
         /// Whether a launch runs in a per-job scratch directory: the request allows one and names no directory that

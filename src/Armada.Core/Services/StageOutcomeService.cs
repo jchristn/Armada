@@ -129,7 +129,9 @@ namespace Armada.Core.Services
 
                 // The provenance names the model as served: find or create its profile and revision and point the captain
                 // at it. Best effort; a failure is logged and never fails the mission.
-                await _ModelProfiles.TryResolveAsync(ModelProfileService.ObservationFrom(stored), token).ConfigureAwait(false);
+                ModelProfileObservation? observation = ModelProfileService.ObservationFrom(stored);
+                if (observation != null) observation.ServedContextSource = await ContextSourceAsync(stored, token).ConfigureAwait(false);
+                await _ModelProfiles.TryResolveAsync(observation, token).ConfigureAwait(false);
 
                 // Every attempt also leaves its handoff artifact for the next stage, linked to this outcome.
                 await _HandoffArtifacts.RecordAttemptAsync(mission, capture.StageCheck, capture.Captain, stored, token).ConfigureAwait(false);
@@ -268,6 +270,14 @@ namespace Armada.Core.Services
 
         #region Private-Methods
 
+        private async Task<ContextLengthSourceEnum?> ContextSourceAsync(StageOutcome outcome, CancellationToken token)
+        {
+            if (!outcome.ContextTokens.HasValue || String.IsNullOrEmpty(outcome.ModelEndpointId)) return null;
+            ModelEndpoint? endpoint = await _Database.ModelEndpoints.ReadAsync(outcome.ModelEndpointId!, token).ConfigureAwait(false);
+            if (endpoint == null || ModelContextDiscovery.WindowOf(endpoint) != outcome.ContextTokens) return null;
+            return ModelContextDiscovery.SourceOf(endpoint);
+        }
+
         private async Task<StageOutcome> BuildAsync(StageAttemptCapture capture, Mission mission, CancellationToken token)
         {
             Captain captain = capture.Captain!;
@@ -317,7 +327,8 @@ namespace Armada.Core.Services
                     if (String.IsNullOrWhiteSpace(outcome.Model)) outcome.Model = endpoint.Model;
                     if (endpoint.InferenceOptions != null)
                     {
-                        outcome.ContextTokens = endpoint.InferenceOptions.ContextLength;
+                        // RS-7.8: the window the run used, configured or discovered from the model server.
+                        outcome.ContextTokens = ModelContextDiscovery.WindowOf(endpoint);
                         outcome.Temperature = endpoint.InferenceOptions.Temperature;
                         outcome.TopP = endpoint.InferenceOptions.TopP;
                         outcome.ToolsEnabled = endpoint.InferenceOptions.ToolsEnabled;

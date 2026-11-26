@@ -68,7 +68,7 @@ Harbor to server:
 | `started` | `HarborStarted` | a launched process started (reports host PID) |
 | `output` | `HarborOutput` | a chunk of stdout or stderr for a job |
 | `activity` | `HarborActivity` | the latest activity of a job that asked for structured progress (a tool call, text, or reasoning) |
-| `exited` | `HarborExited` | a captain process exited (exit code, plus optional `durationMs` and `timeToFirstTokenMs`) |
+| `exited` | `HarborExited` | a captain process exited (exit code, plus optional `durationMs`, `timeToFirstTokenMs`, `discoveredContextLength` and `discoveredContextSource`) |
 | `gitResult` | `HarborGitResult` | the result of a git/gh request |
 | `dockResult` | `HarborDockResult` | the result of a dock request |
 | `fileResult` | `HarborFileResult` | the result of a file request |
@@ -130,8 +130,18 @@ Harbor  -> activity { jobId, activity }                (repeated, only with stru
 Admiral -> stdin   { jobId, data }                      (optional)
 Admiral -> kill    { jobId, gracefulTimeoutMs }         (optional)
 Harbor  -> output  { jobId, stream: "FinalMessage", data }   (once, only when returnFinalMessage was set)
-Harbor  -> exited  { jobId, exitCode, durationMs, timeToFirstTokenMs }
+Harbor  -> exited  { jobId, exitCode, durationMs, timeToFirstTokenMs, discoveredContextLength, discoveredContextSource }
 ```
+
+Context discovery (`api-context-discovery-v1`, RS-7.8): for an API captain whose `inferenceEndpoint.inferenceOptions` sets
+no `contextLength`, a Harbor that advertises this capability reads the window from the model server on its own host before
+the first turn (Ollama `/api/ps`, then `/api/show` `num_ctx`; `/v1/models` `max_model_len` for an OpenAI-compatible server),
+uses it for compaction and the context-limit stop, and returns it in `exited.discoveredContextLength` with
+`discoveredContextSource`. `inferenceEndpoint.discoveredContextLength` and `discoveredContextSource` carry the window the
+Admiral already knows; the Harbor uses it when its own read finds nothing, and does not report it back. The Admiral stores a
+reported window on the endpoint only from a Harbor that advertised the capability, and never over a configured
+`contextLength`. All four fields are optional and additive; a Harbor that predates them ignores them and runs without a
+window.
 
 The `launch` fields after `mcpSessionToken` were added for interactive launches (captain chat, Ask Armada turns,
 planning, refinement). They are additive and optional: each defaults to `false`, a Harbor that predates them ignores

@@ -102,6 +102,18 @@ namespace Armada.Core.Harbor
         /// </summary>
         public List<ModelEndpointHeaderRecord> Headers { get; set; } = new List<ModelEndpointHeaderRecord>();
 
+        /// <summary>
+        /// Context window the Admiral discovered for the model, or null (RS-7.8). A Harbor that advertises
+        /// <see cref="HarborContextDiscovery.Capability"/> rediscovers it on its own host when the endpoint configures no
+        /// window and reports what it found in <see cref="HarborExited.DiscoveredContextLength"/>; an older Harbor ignores it.
+        /// </summary>
+        public int? DiscoveredContextLength { get; set; } = null;
+
+        /// <summary>
+        /// Where <see cref="DiscoveredContextLength"/> was read, or null.
+        /// </summary>
+        public string? DiscoveredContextSource { get; set; } = null;
+
         #endregion
 
         #region Constructors-and-Factories
@@ -145,7 +157,9 @@ namespace Armada.Core.Harbor
                 AuthUsername = endpoint.AuthUsername,
                 AuthHeaderName = endpoint.AuthHeaderName,
                 AuthQueryParameter = endpoint.AuthQueryParameter,
-                Headers = ModelEndpointHeaderRecord.FromHeaders(endpoint.Headers)
+                Headers = ModelEndpointHeaderRecord.FromHeaders(endpoint.Headers),
+                DiscoveredContextLength = endpoint.DiscoveredContextLength,
+                DiscoveredContextSource = endpoint.DiscoveredContextSource
             };
         }
 
@@ -173,7 +187,9 @@ namespace Armada.Core.Harbor
                 AuthUsername = AuthUsername,
                 AuthHeaderName = AuthHeaderName,
                 AuthQueryParameter = AuthQueryParameter,
-                Headers = ModelEndpointHeaderRecord.ToHeaders(Headers)
+                Headers = ModelEndpointHeaderRecord.ToHeaders(Headers),
+                DiscoveredContextLength = DiscoveredContextLength,
+                DiscoveredContextSource = DiscoveredContextSource
             };
             endpoint.ApiKey = ApiKey;
             return endpoint;

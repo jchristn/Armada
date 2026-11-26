@@ -102,6 +102,17 @@ namespace Armada.Core.Services
             return null;
         }
 
+        /// <summary>
+        /// The Ollama server root for a base URL (a trailing /v1 or /api removed), or null when it is not an http or
+        /// https URL.
+        /// </summary>
+        /// <param name="baseUrl">Endpoint base URL.</param>
+        /// <returns>The root, or null.</returns>
+        public static string? OllamaRootOf(string? baseUrl)
+        {
+            return OllamaRoot(baseUrl);
+        }
+
         #endregion
 
         #region Private-Methods

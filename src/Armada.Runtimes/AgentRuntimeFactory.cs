@@ -13,6 +13,12 @@ namespace Armada.Runtimes
     {
         #region Public-Members
 
+        /// <summary>
+        /// Context discovery for in-process API captains (RS-7.8): set on every <see cref="ApiAgentRuntime"/> this factory
+        /// creates. Null skips discovery.
+        /// </summary>
+        public Func<ModelEndpoint, string?, System.Threading.CancellationToken, System.Threading.Tasks.Task>? ContextDiscovery { get; set; } = null;
+
         #endregion
 
         #region Private-Members
@@ -71,7 +77,7 @@ namespace Armada.Runtimes
                 case AgentRuntimeEnum.ApiEndpoint:
                     if (_EndpointResolver == null)
                         throw new InvalidOperationException("API-endpoint captains are not enabled: no model-endpoint resolver was configured.");
-                    return new ApiAgentRuntime(_EndpointResolver, _Logging);
+                    return new ApiAgentRuntime(_EndpointResolver, _Logging) { ContextDiscovery = ContextDiscovery };
                 case AgentRuntimeEnum.Custom:
                     throw new InvalidOperationException("Use Create(string name) for custom runtimes");
                 default:

@@ -259,6 +259,7 @@ namespace Test.Smoke
             "Services.InboxEntityName",
             "Services.IncidentService",
             "Services.InstructionsComposer",
+            "Services.ModelContextDiscovery",
             "Services.IntegrationBarrier",
             "Services.JobLifecycle",
             "Services.JobStateMachine",

@@ -11732,6 +11732,9 @@ A managed reference to an external embedding or inference model behind a provide
 | `LastHealthCheckUtc` | datetime? | null | Timestamp of the last probe (UTC) |
 | `LastHealthError` | string? | null | Error text from the last failed probe |
 | `LastLatencyMs` | int? | null | Latency of the last probe in milliseconds |
+| `DiscoveredContextLength` | int? | null | Read-only. The context window the model server reported for this endpoint's model, when `InferenceOptions.ContextLength` is not set: Ollama's served window (`/api/ps`) or Modelfile `num_ctx` (`/api/show`), or `max_model_len` from an OpenAI-compatible `/v1/models` (vLLM). Read at validation and before an API captain's first turn; a Harbor reads it on its own host. A configured `ContextLength` always wins. Changing the provider, base URL, or model clears it. See [Context discovery](CAPTAIN_ROUTING.md#context-discovery). |
+| `DiscoveredContextSource` | string? | null | Read-only. Where `DiscoveredContextLength` was read: `ollama /api/ps`, `ollama /api/show num_ctx`, or `/v1/models max_model_len`. |
+| `ContextDiscoveredUtc` | datetime? | null | Read-only. When `DiscoveredContextLength` was last read (UTC). |
 | `HealthHistory` | array | [] | Rolling series of recent probes (oldest first), each `{ TimestampUtc, Success }`, at most 500 records (the health check drops the oldest). Server-owned: a create or duplicate ignores a supplied history and an update leaves it unchanged. Drives the dashboard health-history bar. `Headers` and `InferenceOptions.AllowedTools` hold at most 256 entries each (400 `CollectionLimitExceeded`). |
 | `UptimePercentage` | double | 0 | Read-only. Percentage of retained probes that succeeded (0-100), derived from `HealthHistory`. |
 | `ConsecutiveSuccesses` | int | 0 | Read-only. Trailing run of successful probes, derived from `HealthHistory`. |
@@ -12436,6 +12439,9 @@ Result of `POST /api/v1/model-endpoints/{id}/validate`. Describes the outcome of
 | `EmbeddingDimensions` | int \| null | Dimensionality returned by an embedding probe |
 | `SampleText` | string \| null | Sample completion text returned by an inference probe |
 | `Note` | string \| null | Validation only: set for an Admiral-local address (`localhost`, a loopback IP), saying a Harbor-hosted mission calls that address on the Harbor's computer, which the check did not reach |
+| `DiscoveredContextLength` | int \| null | Validation only: the context window the model server reported, when the endpoint sets no `contextLength` and does not require a Harbor; stored on the endpoint |
+| `DiscoveredContextSource` | string \| null | Where `DiscoveredContextLength` was read |
+| `ContextDiscoveryNote` | string \| null | Why discovery found no window (for example, the model is not loaded and its Modelfile sets no `num_ctx`) |
 | `TimestampUtc` | datetime | When the probe ran (UTC) |
 
 ---

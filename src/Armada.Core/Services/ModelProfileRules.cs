@@ -63,7 +63,8 @@ namespace Armada.Core.Services
                 Runtime = Normalize(observation.Runtime) ?? String.Empty,
                 Provider = Normalize(observation.Provider),
                 Model = Normalize(observation.Model),
-                ServedContextTokens = observation.ServedContextTokens.HasValue && observation.ServedContextTokens.Value > 0 ? observation.ServedContextTokens : null
+                ServedContextTokens = observation.ServedContextTokens.HasValue && observation.ServedContextTokens.Value > 0 ? observation.ServedContextTokens : null,
+                ServedContextSource = observation.ServedContextTokens.HasValue && observation.ServedContextTokens.Value > 0 ? observation.ServedContextSource : null
             };
         }
 

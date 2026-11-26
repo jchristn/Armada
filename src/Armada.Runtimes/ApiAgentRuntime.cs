@@ -127,6 +127,14 @@ namespace Armada.Runtimes
         public Func<string, string, CancellationToken, Task<Armada.Core.Models.CliPermissionPromptOutcome>>? PermissionPrompt { get; set; } = null;
 
         /// <summary>
+        /// RS-7.8: reads the context window the model server runs (endpoint snapshot, model, cancellation) before the first
+        /// turn when the endpoint configures none, updating the snapshot's discovered fields. It runs on the host that
+        /// serves the run: the Admiral stores what it finds, a Harbor reports it. Null skips discovery; a window already
+        /// discovered still applies.
+        /// </summary>
+        public Func<ModelEndpoint, string?, CancellationToken, Task>? ContextDiscovery { get; set; } = null;
+
+        /// <summary>
         /// Name of the built-in shell tool gated by <see cref="ShellPolicy"/>.
         /// </summary>
         public const string ShellToolName = "run_process";
@@ -552,6 +560,9 @@ namespace Armada.Runtimes
 
             try
             {
+                if (ContextDiscovery != null && !endpoint.InferenceOptions.ContextLength.HasValue) await ContextDiscovery(endpoint, model, token).ConfigureAwait(false);
+                if (ModelContextDiscovery.ApplyWindow(endpoint))
+                    EmitDiagnostic(processId, ApiRuntimeDiagnosticKindEnum.Inference, "[context] window " + endpoint.InferenceOptions.ContextLength + " tokens, discovered from " + endpoint.DiscoveredContextSource);
                 using CompletionClientBase client = _ClientFactory(endpoint, _Logging);
                 if (!String.IsNullOrWhiteSpace(model)) client.Model = model;
                 // Only the last call's response headers are read (Retry-After); retaining more holds request bodies in memory.

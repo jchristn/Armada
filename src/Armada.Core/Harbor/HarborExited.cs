@@ -28,6 +28,18 @@ namespace Armada.Core.Harbor
         /// </summary>
         public long? TimeToFirstTokenMs { get; set; } = null;
 
+        /// <summary>
+        /// Context window the Harbor read from the model server for an API captain whose endpoint configures none, or null
+        /// (RS-7.8; only from a Harbor that advertises <see cref="HarborContextDiscovery.Capability"/>). The Admiral stores
+        /// it on the endpoint as discovered.
+        /// </summary>
+        public int? DiscoveredContextLength { get; set; } = null;
+
+        /// <summary>
+        /// Where <see cref="DiscoveredContextLength"/> was read, or null.
+        /// </summary>
+        public string? DiscoveredContextSource { get; set; } = null;
+
         #endregion
     }
 }

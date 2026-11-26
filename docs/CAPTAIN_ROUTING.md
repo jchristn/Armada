@@ -70,7 +70,7 @@ Configure the endpoint in dashboard, mobile, or TUI create/edit, or use the REST
 | `temperature` | `null` | Optional temperature, 0–2; provider/model support still applies. Zero is preserved. |
 | `topP` | `null` | Optional nucleus sampling setting, 0–1. |
 | `requireHarbor` | `false` | Require an eligible Harbor owned by the launching user. Never fall back to execution on the Admiral. |
-| `contextLength` | `null` | Optional context window, 512–2097152 tokens, sent as `num_ctx` on Ollama and Ollama Cloud. From 80% of the window, the oldest large tool outputs (all but the six most recent) are replaced with a one-line note saying what was removed, so long missions keep going; the system prompt, mission brief and assistant turns are never removed. A run stops with `context_limit_exceeded` only when its prompt reaches 95% and nothing is left to compact. Null uses the model default, and nothing is compacted. |
+| `contextLength` | `null` | Optional context window, 512–2097152 tokens, sent as `num_ctx` on Ollama and Ollama Cloud. From 80% of the window, the oldest large tool outputs (all but the six most recent) are replaced with a one-line note saying what was removed, so long missions keep going; the system prompt, mission brief and assistant turns are never removed. A run stops with `context_limit_exceeded` only when its prompt reaches 95% and nothing is left to compact. Null uses the model default; Armada then reads the window the server runs (see [Context discovery](#context-discovery)) and compacts against it, and with no window found nothing is compacted. |
 | `maxConcurrentMissions` | `null` | Optional cap, 1–64, on missions running at once against this endpoint's base URL across every captain that uses it. Null is unlimited. |
 | `streaming` | `false` | Stream responses. The endpoint's request timeout then limits only the silence between chunks, so a long generation is not cut by an idle-based proxy or by the timeout itself. Tools run only after the provider signals a complete response; a stream that stops early is retried. |
 | `firstResponseTimeoutMs` | `null` | Optional deadline, 1000–1800000 ms, for the model to start responding (cold model load, long prompt evaluation). With streaming it applies to each call's first chunk; without streaming it extends each call's timeout. Null uses the request timeout. |
@@ -121,6 +121,22 @@ The following controls remain future work and are not implied by enabling functi
 - Per-tool approval and argument/path/command policies, tool execution deadlines, maximum tool-result size, and an MCP read-only classification contract. The present allowlist controls names, not argument-level permissions or a filesystem sandbox.
 - Per-endpoint retry/backoff and rate/concurrency/cost budgets. Request timeout exists separately as `timeoutMs`; turn limits are now configurable.
 - Provider-specific reasoning effort, structured output/JSON schemas, native hosted tools, parallel calls and tool-choice settings. These require capability negotiation and PolyPrompt support per provider/model rather than assuming all endpoints support them.
+
+### Context discovery
+
+When an endpoint sets no `contextLength`, Armada reads the window the model server actually runs and uses it the way a
+configured one is used: compaction from 80% and `context_limit_exceeded` at 95%. The sources are Ollama's `/api/ps`
+(the served window of a loaded model), then the Modelfile's `num_ctx` from `/api/show`, and `max_model_len` from an
+OpenAI-compatible `/v1/models` (vLLM). The model's trained maximum is never used, because Ollama does not serve it unless
+asked. Other providers report nothing and run as before. The window is read when the endpoint is validated and before
+an API captain's first turn (reused for 10 minutes; a server that reports nothing is not asked again for 10 minutes), and
+stored on the endpoint as `discoveredContextLength` with its source. A configured `contextLength` always wins.
+
+Discovery runs on the host that serves the run. An endpoint with `requireHarbor` is not discovered by validation; the
+Harbor reads the window on its own host before the first turn and reports it on exit, and the Admiral stores it only from a
+Harbor that advertises `api-context-discovery-v1`. An older Harbor runs without a window, as in 1.4.0. The window is part
+of the model profile's identity, so a captain whose window becomes known moves to a profile for that window; the profile
+records whether the window was configured, discovered, or measured.
 
 ## Busy classes and exhausted hierarchies
 

@@ -202,6 +202,7 @@ namespace Armada.Core.Services
             connection.HostsCheckouts = connection.HostsDocks && HasAvailableCapability(handshake.Capabilities, HarborProtocol.CheckoutCapability);
             connection.OpensTerminals = connection.HostsCheckouts && HasAvailableCapability(handshake.Capabilities, HarborProtocol.OpenTerminalCapability);
             connection.HostsUsageProbes = HasAvailableCapability(handshake.Capabilities, HarborProtocol.UsageProbeCapability);
+            connection.DiscoversContext = HasAvailableCapability(handshake.Capabilities, HarborContextDiscovery.Capability);
             connection.PromptRuntimes = ReadPromptRuntimes(handshake.Capabilities);
             connection.Name = handshake.Name;
             connection.HeartbeatIntervalMs = handshake.HeartbeatIntervalMs;
@@ -1277,6 +1278,13 @@ namespace Armada.Core.Services
 
             if (message is HarborExited exited)
             {
+                // RS-7.8: a discovered window is taken only from a Harbor that advertised context discovery.
+                if (exited.DiscoveredContextLength.HasValue && !(_Connections.TryGetValue(harborId, out HarborConnection? reporter) && reporter!.DiscoversContext))
+                {
+                    exited.DiscoveredContextLength = null;
+                    exited.DiscoveredContextSource = null;
+                }
+
                 if (Metrics != null) await Metrics.OnExitedAsync(exited, token).ConfigureAwait(false);
                 ForgetJob(exited.JobId);
                 if (_JobListeners.TryRemove(exited.JobId, out IHarborJobListener? exitListener))

@@ -37,6 +37,11 @@ namespace Armada.Core.Models
         public int? ServedContextTokens { get; set; } = null;
 
         /// <summary>
+        /// Where the served context came from, or null.
+        /// </summary>
+        public Armada.Core.Enums.ContextLengthSourceEnum? ServedContextSource { get; set; } = null;
+
+        /// <summary>
         /// Runtime version, or null when not known.
         /// </summary>
         public string? RuntimeVersion { get; set; } = null;

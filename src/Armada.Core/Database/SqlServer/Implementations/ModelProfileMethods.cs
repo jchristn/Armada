@@ -8,6 +8,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
     using Microsoft.Data.SqlClient;
     using Armada.Core.Database;
     using Armada.Core.Database.Interfaces;
+    using Armada.Core.Enums;
     using Armada.Core.Models;
     using Armada.Core.Settings;
     using SyslogLogging;
@@ -20,11 +21,11 @@ namespace Armada.Core.Database.SqlServer.Implementations
         #region Private-Members
 
         private static readonly string _InsertProfile = @"INSERT INTO model_profiles
-            (id, tenant_id, identity_key, runtime, provider, model, served_context_tokens, tools_available, mcp_available,
+            (id, tenant_id, identity_key, runtime, provider, model, served_context_tokens, served_context_source, tools_available, mcp_available,
              rendering_template, rendering_repeat_contract_at_end, rendering_max_files_per_mission,
              recovery_max_resumes, recovery_unclassified_resumes, recovery_transient_grace_minutes, recovery_judge_rework_rounds, recovery_output_repair_attempts, recovery_escalate_after_resumes, notes, created_utc, last_update_utc)
             VALUES
-            (@id, @tenant_id, @identity_key, @runtime, @provider, @model, @served_context_tokens, @tools_available, @mcp_available,
+            (@id, @tenant_id, @identity_key, @runtime, @provider, @model, @served_context_tokens, @served_context_source, @tools_available, @mcp_available,
              @rendering_template, @rendering_repeat_contract_at_end, @rendering_max_files_per_mission,
              @recovery_max_resumes, @recovery_unclassified_resumes, @recovery_transient_grace_minutes, @recovery_judge_rework_rounds, @recovery_output_repair_attempts, @recovery_escalate_after_resumes, @notes, @created_utc, @last_update_utc);";
 
@@ -83,6 +84,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
                     SqlServerCommandHelper.Add(cmd, "@provider", profile.Identity.Provider);
                     SqlServerCommandHelper.Add(cmd, "@model", profile.Identity.Model);
                     SqlServerCommandHelper.Add(cmd, "@served_context_tokens", profile.Identity.ServedContextTokens);
+                    SqlServerCommandHelper.Add(cmd, "@served_context_source", profile.Identity.ServedContextSource.HasValue ? profile.Identity.ServedContextSource.Value.ToString() : null);
                     SqlServerCommandHelper.AddDate(cmd, "@created_utc", profile.CreatedUtc);
                     BindMutable(cmd, profile);
                 }, token).ConfigureAwait(false);
@@ -319,6 +321,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
             profile.Identity.Provider = SqlServerCommandHelper.ReadString(reader["provider"]);
             profile.Identity.Model = SqlServerCommandHelper.ReadString(reader["model"]);
             profile.Identity.ServedContextTokens = SqlServerCommandHelper.ReadNullableInt(reader["served_context_tokens"]);
+            profile.Identity.ServedContextSource = Enum.TryParse(SqlServerCommandHelper.ReadString(reader["served_context_source"]), true, out ContextLengthSourceEnum contextSource) ? contextSource : null;
             profile.Capabilities.ToolsAvailable = SqlServerCommandHelper.ReadNullableBool(reader["tools_available"]);
             profile.Capabilities.McpAvailable = SqlServerCommandHelper.ReadNullableBool(reader["mcp_available"]);
             profile.Rendering.Template = SqlServerCommandHelper.ReadString(reader["rendering_template"]);

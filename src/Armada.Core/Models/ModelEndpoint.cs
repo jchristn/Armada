@@ -287,6 +287,23 @@ namespace Armada.Core.Models
         public long? LastLatencyMs { get; set; } = null;
 
         /// <summary>
+        /// Context window the model server reported for this endpoint's model, in tokens, or null when none was found
+        /// (RS-7.8). Owned by the server: a create or update request cannot set it, and changing the provider, base URL or
+        /// model clears it. A configured InferenceOptions.ContextLength always wins over it.
+        /// </summary>
+        public int? DiscoveredContextLength { get; set; } = null;
+
+        /// <summary>
+        /// Where <see cref="DiscoveredContextLength"/> was read (for example "ollama /api/ps"), or null.
+        /// </summary>
+        public string? DiscoveredContextSource { get; set; } = null;
+
+        /// <summary>
+        /// When <see cref="DiscoveredContextLength"/> was last read (UTC), or null.
+        /// </summary>
+        public DateTime? ContextDiscoveredUtc { get; set; } = null;
+
+        /// <summary>
         /// Rolling series of recent health-check probes (oldest first), at most <see cref="MaxHealthHistoryRecords"/>
         /// (the health check trims the oldest). Owned by the server: a create or update request cannot set it. Drives the
         /// dashboard health-history bar and the uptime figures.

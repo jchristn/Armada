@@ -202,6 +202,8 @@ namespace Armada.Core.Services
                 _Capabilities.Add(new HarborCapability { Name = HarborProtocol.InferenceContextCapability, Available = true });
             if (jobRunner != null && !_Capabilities.Exists(c => String.Equals(c.Name, HarborProtocol.InferenceStreamingCapability, StringComparison.OrdinalIgnoreCase)))
                 _Capabilities.Add(new HarborCapability { Name = HarborProtocol.InferenceStreamingCapability, Available = true });
+            if (jobRunner != null && !_Capabilities.Exists(c => String.Equals(c.Name, HarborContextDiscovery.Capability, StringComparison.OrdinalIgnoreCase)))
+                _Capabilities.Add(new HarborCapability { Name = HarborContextDiscovery.Capability, Available = true });
             if (jobRunner != null && !_Capabilities.Exists(c => String.Equals(c.Name, HarborProtocol.CliPermissionPromptCapability, StringComparison.OrdinalIgnoreCase)))
             {
                 // Claude Code always can; Mux only from 1.5.0 (mux print --permission-prompt-tool).
@@ -903,7 +905,18 @@ namespace Armada.Core.Services
                             : (long)TimeSpan.FromTicks(firstOutput).TotalMilliseconds;
                         // Queue the exit before the job leaves the live set, so a heartbeat that no longer lists the job
                         // is built after its exit is queued.
-                        jobs.Outbox.Add(new HarborExited { JobId = launch.JobId, ExitCode = exitCode, DurationMs = durationMs, TimeToFirstTokenMs = ttftMs });
+                        // RS-7.8: the window the job runner discovered on this host for an endpoint that configures none.
+                        HarborInferenceEndpoint? inference = launch.InferenceEndpoint;
+                        bool discovered = inference != null && !inference.InferenceOptions.ContextLength.HasValue && inference.DiscoveredContextLength.HasValue;
+                        jobs.Outbox.Add(new HarborExited
+                        {
+                            JobId = launch.JobId,
+                            ExitCode = exitCode,
+                            DurationMs = durationMs,
+                            TimeToFirstTokenMs = ttftMs,
+                            DiscoveredContextLength = discovered ? inference!.DiscoveredContextLength : null,
+                            DiscoveredContextSource = discovered ? inference!.DiscoveredContextSource : null
+                        });
                         jobs.RemoveLiveJob(launch.JobId);
                         LogEntry(_LogClassifier.Exited(launch, exitCode, durationMs, ttftMs));
                     },

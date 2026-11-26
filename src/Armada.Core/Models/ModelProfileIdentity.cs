@@ -29,6 +29,13 @@ namespace Armada.Core.Models
         public int? ServedContextTokens { get; set; } = null;
 
         /// <summary>
+        /// Where <see cref="ServedContextTokens"/> came from (configured on the endpoint, discovered from the model server,
+        /// or measured by a probe), or null when unknown or recorded before 1.5.0. Recorded when the profile is created; not
+        /// part of the identity key, so the same window from two sources is one profile.
+        /// </summary>
+        public Armada.Core.Enums.ContextLengthSourceEnum? ServedContextSource { get; set; } = null;
+
+        /// <summary>
         /// Instantiate.
         /// </summary>
         public ModelProfileIdentity()

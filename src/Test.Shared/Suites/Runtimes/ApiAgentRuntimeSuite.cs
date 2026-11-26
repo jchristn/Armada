@@ -343,6 +343,44 @@ namespace Test.Shared.Suites.Runtimes
                 }
             }));
 
+            cases.Add(CaseAsync("discovered_window_applies_without_configured", "RS-7.8: with no configured window, the window discovery reports before the first turn stops a full prompt, as a configured one does", TestTags.Positive, async () =>
+            {
+                string dir = NewTempDir();
+                try
+                {
+                    Queue<ToolChatResponse> script = new Queue<ToolChatResponse>();
+                    script.Enqueue(new ToolChatResponse { Success = true, Usage = new TokenUsage { PromptTokens = 31500 }, ToolCalls = new List<ToolCall> { new ToolCall { Id = "read", Name = "list_directory", ArgumentsJson = "{}" } } });
+                    script.Enqueue(new ToolChatResponse { Success = true, Usage = new TokenUsage { PromptTokens = 31500 }, Text = "done", ToolCalls = new List<ToolCall>() });
+                    ModelEndpoint endpoint = new ModelEndpoint { Kind = ModelEndpointKindEnum.Inference, Provider = ModelProviderEnum.Ollama, BaseUrl = "http://localhost:1",
+                        InferenceOptions = new InferenceOptions { McpToolsEnabled = false } };
+                    int discoveries = 0;
+                    ApiAgentRuntime runtime = new ApiAgentRuntime(endpoint, CreateLogging(), 20, (ep, log) => new ScriptedClient(script, log))
+                    {
+                        ContextDiscovery = (snapshot, model, ct) =>
+                        {
+                            discoveries++;
+                            snapshot.DiscoveredContextLength = 32768;
+                            snapshot.DiscoveredContextSource = "ollama /api/ps";
+                            return Task.CompletedTask;
+                        }
+                    };
+                    using ManualResetEventSlim exited = new ManualResetEventSlim(false); int code = -1;
+                    RuntimeProviderError? failure = null;
+                    System.Collections.Concurrent.ConcurrentQueue<string> lines = new System.Collections.Concurrent.ConcurrentQueue<string>();
+                    runtime.OnOutputReceived += (pid, line) => lines.Enqueue(line);
+                    runtime.OnProviderError += (pid, error) => failure = error;
+                    runtime.OnProcessExited += (pid, value) => { code = value ?? -1; exited.Set(); };
+                    await runtime.StartAsync(dir, "list the files").ConfigureAwait(false);
+                    AssertTrue(exited.Wait(TimeSpan.FromSeconds(10)), "The run must finish.");
+                    AssertEqual(1, discoveries, "discovery runs once, before the first turn");
+                    AssertEqual(1, code);
+                    AssertEqual("context_limit_exceeded", failure?.ErrorType);
+                    AssertTrue(lines.Any(l => l.Contains("discovered from ollama /api/ps", StringComparison.Ordinal)), "the discovered window is reported in the log");
+                    AssertNull(endpoint.InferenceOptions.ContextLength, "only the run snapshot gets the window");
+                }
+                finally { Cleanup(dir); }
+            }));
+
             cases.Add(CaseAsync("context_length_reaches_ollama_clients_only", "ContextLength becomes num_ctx on Ollama and Ollama Cloud clients and is validated", TestTags.Positive, () =>
             {
                 ModelEndpoint ollama = new ModelEndpoint { Kind = ModelEndpointKindEnum.Inference, Provider = ModelProviderEnum.Ollama, BaseUrl = "http://localhost:11434", Model = "qwen3",

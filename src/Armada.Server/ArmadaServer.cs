@@ -427,6 +427,10 @@ namespace Armada.Server
             _HarborMetricsRecorder = new HarborMetricsRecorder(_Database, _Logging, _Settings.Harbor);
             _HarborConnectionManager.RestoredJobReconnectGrace = TimeSpan.FromSeconds(_Settings.Harbor.HeartbeatTimeoutSeconds);
             _HarborConnectionManager.Metrics = _HarborMetricsRecorder;
+            // RS-7.8: the Admiral discovers the context window of in-process API captains, and stores what Harbors report.
+            ModelContextDiscoveryService contextDiscovery = new ModelContextDiscoveryService(_Database, _Logging);
+            _RuntimeFactory.ContextDiscovery = contextDiscovery.EnsureAsync;
+            _HarborMetricsRecorder.ContextDiscovery = contextDiscovery;
             _StorageInventory = new StorageInventoryService(_Database, _Settings, _HarborConnectionManager.IsConnected);
             _HarborConnectionManager.StorageReportReceived = _StorageInventory.Receive;
 

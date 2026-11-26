@@ -8,6 +8,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
     using Npgsql;
     using Armada.Core.Database;
     using Armada.Core.Database.Interfaces;
+    using Armada.Core.Enums;
     using Armada.Core.Models;
     using Armada.Core.Settings;
     using SyslogLogging;
@@ -20,11 +21,11 @@ namespace Armada.Core.Database.Postgresql.Implementations
         #region Private-Members
 
         private static readonly string _InsertProfile = @"INSERT INTO model_profiles
-            (id, tenant_id, identity_key, runtime, provider, model, served_context_tokens, tools_available, mcp_available,
+            (id, tenant_id, identity_key, runtime, provider, model, served_context_tokens, served_context_source, tools_available, mcp_available,
              rendering_template, rendering_repeat_contract_at_end, rendering_max_files_per_mission,
              recovery_max_resumes, recovery_unclassified_resumes, recovery_transient_grace_minutes, recovery_judge_rework_rounds, recovery_output_repair_attempts, recovery_escalate_after_resumes, notes, created_utc, last_update_utc)
             VALUES
-            (@id, @tenant_id, @identity_key, @runtime, @provider, @model, @served_context_tokens, @tools_available, @mcp_available,
+            (@id, @tenant_id, @identity_key, @runtime, @provider, @model, @served_context_tokens, @served_context_source, @tools_available, @mcp_available,
              @rendering_template, @rendering_repeat_contract_at_end, @rendering_max_files_per_mission,
              @recovery_max_resumes, @recovery_unclassified_resumes, @recovery_transient_grace_minutes, @recovery_judge_rework_rounds, @recovery_output_repair_attempts, @recovery_escalate_after_resumes, @notes, @created_utc, @last_update_utc);";
 
@@ -83,6 +84,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
                     PostgresqlCommandHelper.Add(cmd, "@provider", profile.Identity.Provider);
                     PostgresqlCommandHelper.Add(cmd, "@model", profile.Identity.Model);
                     PostgresqlCommandHelper.Add(cmd, "@served_context_tokens", profile.Identity.ServedContextTokens);
+                    PostgresqlCommandHelper.Add(cmd, "@served_context_source", profile.Identity.ServedContextSource.HasValue ? profile.Identity.ServedContextSource.Value.ToString() : null);
                     PostgresqlCommandHelper.AddDate(cmd, "@created_utc", profile.CreatedUtc);
                     BindMutable(cmd, profile);
                 }, token).ConfigureAwait(false);
@@ -319,6 +321,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
             profile.Identity.Provider = PostgresqlCommandHelper.ReadString(reader["provider"]);
             profile.Identity.Model = PostgresqlCommandHelper.ReadString(reader["model"]);
             profile.Identity.ServedContextTokens = PostgresqlCommandHelper.ReadNullableInt(reader["served_context_tokens"]);
+            profile.Identity.ServedContextSource = Enum.TryParse(PostgresqlCommandHelper.ReadString(reader["served_context_source"]), true, out ContextLengthSourceEnum contextSource) ? contextSource : null;
             profile.Capabilities.ToolsAvailable = PostgresqlCommandHelper.ReadNullableBool(reader["tools_available"]);
             profile.Capabilities.McpAvailable = PostgresqlCommandHelper.ReadNullableBool(reader["mcp_available"]);
             profile.Rendering.Template = PostgresqlCommandHelper.ReadString(reader["rendering_template"]);

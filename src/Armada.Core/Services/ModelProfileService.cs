@@ -245,6 +245,9 @@ namespace Armada.Core.Services
                 Provider = run.ModelProvider,
                 Model = run.Model,
                 ServedContextTokens = run.ServedContextTokens ?? run.ConfiguredContextTokens,
+                ServedContextSource = run.ServedContextTokens.HasValue
+                    ? Enums.ContextLengthSourceEnum.Measured
+                    : (run.ConfiguredContextTokens.HasValue ? Enums.ContextLengthSourceEnum.Configured : null),
                 RuntimeVersion = run.RuntimeVersion,
                 ModelDigest = run.ModelDigest
             };

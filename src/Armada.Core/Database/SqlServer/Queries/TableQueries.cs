@@ -2511,7 +2511,8 @@ namespace Armada.Core.Database.SqlServer.Queries
                 Armada.Core.Database.ModelProfileRecoverySchema.Migration(Armada.Core.Enums.DatabaseTypeEnum.SqlServer),
                 Armada.Core.Database.EscalationLadderSchema.Migration(Armada.Core.Enums.DatabaseTypeEnum.SqlServer),
                 Armada.Core.Database.HandoffAttemptSchema.Migration(Armada.Core.Enums.DatabaseTypeEnum.SqlServer),
-                Armada.Core.Database.StageSubmissionTableSchema.Migration(Armada.Core.Enums.DatabaseTypeEnum.SqlServer)
+                Armada.Core.Database.StageSubmissionTableSchema.Migration(Armada.Core.Enums.DatabaseTypeEnum.SqlServer),
+                Armada.Core.Database.ContextDiscoverySchema.Migration(Armada.Core.Enums.DatabaseTypeEnum.SqlServer)
 
             };
         }

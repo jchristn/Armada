@@ -52,6 +52,22 @@ namespace Armada.Core.Models
         public string? Note { get; set; } = null;
 
         /// <summary>
+        /// Context window the model server reported during validation, in tokens, or null (RS-7.8). Read only when the
+        /// endpoint configures no context length.
+        /// </summary>
+        public int? DiscoveredContextLength { get; set; } = null;
+
+        /// <summary>
+        /// Where <see cref="DiscoveredContextLength"/> was read, or null.
+        /// </summary>
+        public string? DiscoveredContextSource { get; set; } = null;
+
+        /// <summary>
+        /// Why discovery found no window, or null when it found one or did not run.
+        /// </summary>
+        public string? ContextDiscoveryNote { get; set; } = null;
+
+        /// <summary>
         /// When the probe ran (UTC).
         /// </summary>
         public DateTime TimestampUtc { get; set; } = DateTime.UtcNow;
