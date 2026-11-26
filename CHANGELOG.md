@@ -181,6 +181,12 @@ Conductor) with Opus and GPT-6.1 reliable. The work is tracked item by item in `
   the same database write that prepares the next stage, and keyed by attempt (migration 137, `attempt_id`), so two
   attempts are never merged because their outputs had the same length. A later stage also sees the earlier stages of its
   chain, newest first, within its budget, so the Judge sees the Worker's report and not only the Test Engineer's.
+- **Every output contract comes from one place and is stated once.** The Worker result, the verifier sections, the Judge
+  verdicts (now including SPEC_CONFLICT everywhere) and the Architect v4 plan with a complete JSON example are generated
+  from the models by `StageOutputContract` and appended once under `## Output Contract`. Before, the Judge prompt stated
+  its contract three times and the brief omitted SPEC_CONFLICT. Markers are no longer shown in backticks, and the .NET
+  restore advice comes from the .NET workflow profile. Built-in templates you have not edited are upgraded; edited ones
+  are kept, with the generated contract appended after them.
 - **Recovery state survives a restart.** Endpoint circuit breakers, launch backoff (with the captains that failed to
   start the mission), the start of a transient outage, and escalation rule cooldowns were kept only in memory, so a
   restart sent missions straight back to a failing endpoint, relaunched a broken captain at once, granted an outage a

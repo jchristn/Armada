@@ -805,14 +805,18 @@ routing; a renamed Architect slice breaks fan-out recovery. Everything a program
 The biggest single cost for open models today is that a formatting slip reruns the whole stage. This phase makes
 the contract a schema, lets the model submit through a tool, and repairs format problems without redoing the work.
 
-- [ ] **RS-6.1** One contract source. Generate the Architect plan, Judge verdict, Worker result, Test Engineer, and
+- [x] **RS-6.1** One contract source. Generate the Architect plan, Judge verdict, Worker result, Test Engineer, and
   Verifier contracts (prompt text, JSON example, field table, accepted verdicts) from the C# models and
   `JudgeVerdictEnum`. Remove the copies in `PromptTemplateService.cs:1065-1080` and `:1116-1181`,
   `JudgeContract.OutputContract`/`PersonaPromptFallback`/`RoleSummary`, `PersonaPromptVariants`,
   `MissionService.Instructions.cs:836`, and `ContractRepair.CanonicalVerdictLine`. The Architect prompt shows one
   versioned contract (v4) with a complete JSON example. `RoleSummary` loses its .NET-specific advice (move it to the
   .NET workflow profile). Test that every persona prompt contains exactly one contract and that it matches the
-  parser. Evidence:
+  parser. Evidence: `StageOutputContract` generates all contracts; `Services.StageOutputContract` checks the Architect
+  example parses as a valid v4 plan, every verdict line parses, and every result contract ends with the completion line;
+  `PromptVariants.every_persona_instructions_state_one_contract`. Untouched templates upgrade via briefs v7 and variant
+  snapshots; edited templates are kept. 18 affected suites 357/357. Rework and rescue briefs still repeat the completion
+  sentence (RS-6.11).
 - [ ] **RS-6.2** Submit tools. MCP tools `armada_submit_plan`, `armada_submit_verdict`, and `armada_submit_result`
   with `inputSchema` generated from the models, validated synchronously, errors returned in the same call so the
   model fixes them in-loop. The validated submission is stored as a typed record on the mission attempt; parsers stop
