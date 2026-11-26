@@ -222,6 +222,12 @@ Conductor) with Opus and GPT-6.1 reliable. The work is tracked item by item in `
   `proxy_timeout`) is Transient. Ollama's "token repeat limit reached" 500 was retried unchanged as a server error; it
   is now a degenerate-output task failure. A keep_alive warm-up for Ollama endpoints loads the model without
   generating (RS-7.16, RS-7.17).
+- **OpenCode captains work again, and CLI replies no longer carry reasoning.** OpenCode runs with `--format json`, but
+  its output was read as plain text, so every final message held raw JSON event lines; the reply is now rebuilt from
+  its text events, and its error events reach the provider error parser (exit 0 after an unrecovered error is a
+  failure). The `--dir` flag, which OpenCode 2 rejects, is no longer passed. Think blocks, a bare closing think tag and
+  an unclosed think block are stripped from the final message of Mux, OpenCode, pi, Gemini and Cursor captains
+  (RS-7.12).
 - **Recovery state survives a restart.** Endpoint circuit breakers, launch backoff (with the captains that failed to
   start the mission), the start of a transient outage, and escalation rule cooldowns were kept only in memory, so a
   restart sent missions straight back to a failing endpoint, relaunched a broken captain at once, granted an outage a

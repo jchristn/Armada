@@ -942,9 +942,14 @@ this phase it is Armada's job to absorb the predictable failures.
   characters per token for code otherwise. Evidence:
 - [ ] **RS-7.11** Extract `ApiAgentRuntime.RunLoopAsync` into a turn loop, terminal-handling policy, and context
   policy classes with unit tests per class. Evidence:
-- [ ] **RS-7.12** Audit Mux, OpenCode, and Pi runtimes for the same failure modes (text tool calls, reasoning
+- [x] **RS-7.12** Audit Mux, OpenCode, and Pi runtimes for the same failure modes (text tool calls, reasoning
   leakage into the final message, error text reaching `RuntimeProviderErrorParser`). Fix or document each gap.
-  Evidence:
+  Evidence: (7963adf69) fixed: `ReasoningText.Strip` on every CLI final message
+  and on Mux's own file; OpenCode reply rebuilt from JSON text events (`OpenCodeFinalMessage`); OpenCode stdout error
+  events parsed (`TryParseOpenCodeJsonLine`); `--dir` dropped (OpenCode 2 rejects it). Documented in the
+  MODEL_HETEROGENEITY.md audit table: CLI text tool calls cannot be executed by Armada; OpenCode 2 replaced `--variant`
+  with a `#variant` suffix. Suites ReasoningText, OpenCodeRuntime, RuntimeProviderErrorParser 41/41, PiRuntime 31/31,
+  MuxRunOutcome/MuxRuntime/AgentRuntimeFactory 32/32.
 - [ ] **RS-7.13** Harbor compatibility. The runtime changes run on Harbor in split mode. Add a Harbor capability flag
   for each new runtime behavior; a 1.5.0 Admiral with a 1.4.0 Harbor falls back to 1.4.0 behavior and shows "Harbor
   update recommended" in the Harbor and captain views. Update `docs/HARBOR_PROTOCOL.md`. Evidence:
