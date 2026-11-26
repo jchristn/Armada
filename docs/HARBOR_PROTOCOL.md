@@ -217,7 +217,7 @@ the Admiral falls back to it: the launch still goes to that Harbor and nothing n
 | `api-tool-limits-scaled-v1` | scales tool output limits to the context window | 1.5.0 |
 | `api-edit-encoding-preserve-v1` | keeps a file's byte order mark and line endings on edits | 1.5.0 |
 | `api-edit-line-prefix-guard-v1` | rejects edits and writes whose text carries `read_file` line-number prefixes | 1.5.0 |
-| `api-context-discovery-v1` | discovers a model's served context window on the Harbor | reserved |
+| `api-context-discovery-v1` | discovers a model's served context window on the Harbor | 1.5.0 |
 | `api-model-warmup-v1` | warms the model before the first turn | reserved |
 
 Reserved flags are declared but not advertised until their behavior ships. The Admiral expects every flag its own

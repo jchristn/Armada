@@ -202,7 +202,7 @@ namespace Armada.Core.Services
             connection.HostsCheckouts = connection.HostsDocks && HasAvailableCapability(handshake.Capabilities, HarborProtocol.CheckoutCapability);
             connection.OpensTerminals = connection.HostsCheckouts && HasAvailableCapability(handshake.Capabilities, HarborProtocol.OpenTerminalCapability);
             connection.HostsUsageProbes = HasAvailableCapability(handshake.Capabilities, HarborProtocol.UsageProbeCapability);
-            connection.DiscoversContext = HasAvailableCapability(handshake.Capabilities, HarborContextDiscovery.Capability);
+            connection.DiscoversContext = HasAvailableCapability(handshake.Capabilities, HarborCapabilityFlags.ContextDiscovery);
             connection.PromptRuntimes = ReadPromptRuntimes(handshake.Capabilities);
             connection.Capabilities = handshake.Capabilities != null ? new List<HarborCapability>(handshake.Capabilities) : new List<HarborCapability>();
             connection.Name = handshake.Name;

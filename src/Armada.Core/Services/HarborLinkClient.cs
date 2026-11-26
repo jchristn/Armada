@@ -211,8 +211,6 @@ namespace Armada.Core.Services
                 _Capabilities.Add(new HarborCapability { Name = HarborProtocol.InferenceContextCapability, Available = true });
             if (jobRunner != null && !_Capabilities.Exists(c => String.Equals(c.Name, HarborProtocol.InferenceStreamingCapability, StringComparison.OrdinalIgnoreCase)))
                 _Capabilities.Add(new HarborCapability { Name = HarborProtocol.InferenceStreamingCapability, Available = true });
-            if (jobRunner != null && !_Capabilities.Exists(c => String.Equals(c.Name, HarborContextDiscovery.Capability, StringComparison.OrdinalIgnoreCase)))
-                _Capabilities.Add(new HarborCapability { Name = HarborContextDiscovery.Capability, Available = true });
             if (jobRunner != null && !_Capabilities.Exists(c => String.Equals(c.Name, HarborProtocol.CliPermissionPromptCapability, StringComparison.OrdinalIgnoreCase)))
             {
                 // Claude Code always can; Mux only from 1.5.0 (mux print --permission-prompt-tool).

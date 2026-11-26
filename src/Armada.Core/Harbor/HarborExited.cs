@@ -30,7 +30,7 @@ namespace Armada.Core.Harbor
 
         /// <summary>
         /// Context window the Harbor read from the model server for an API captain whose endpoint configures none, or null
-        /// (RS-7.8; only from a Harbor that advertises <see cref="HarborContextDiscovery.Capability"/>). The Admiral stores
+        /// (RS-7.8; only from a Harbor that advertises <see cref="HarborCapabilityFlags.ContextDiscovery"/>). The Admiral stores
         /// it on the endpoint as discovered.
         /// </summary>
         public int? DiscoveredContextLength { get; set; } = null;

@@ -354,7 +354,7 @@ namespace Test.Shared.Suites.Runtimes
                     script.Enqueue(new ChatResponse { Success = true, Usage = new TokenUsage { PromptTokens = 31500 }, ToolCalls = new List<ToolCall> { new ToolCall { Id = "read", Name = "list_directory", ArgumentsJson = "{}" } } });
                     script.Enqueue(new ChatResponse { Success = true, Usage = new TokenUsage { PromptTokens = 31500 }, Text = "done", ToolCalls = new List<ToolCall>() });
                     ModelEndpoint endpoint = new ModelEndpoint { Kind = ModelEndpointKindEnum.Inference, Provider = ModelProviderEnum.Ollama, BaseUrl = "http://localhost:1",
-                        InferenceOptions = new InferenceOptions { McpToolsEnabled = false } };
+                        InferenceOptions = new InferenceOptions { StreamingMode = InferenceStreamingModeEnum.Off, McpToolsEnabled = false } };
                     int discoveries = 0;
                     ApiAgentRuntime runtime = new ApiAgentRuntime(endpoint, CreateLogging(), 20, (ep, log) => new ScriptedClient(script, log))
                     {
@@ -386,19 +386,19 @@ namespace Test.Shared.Suites.Runtimes
             cases.Add(CaseAsync("context_length_reaches_ollama_clients_only", "ContextLength becomes num_ctx on Ollama and Ollama Cloud clients and is validated", TestTags.Positive, () =>
             {
                 ModelEndpoint ollama = new ModelEndpoint { Kind = ModelEndpointKindEnum.Inference, Provider = ModelProviderEnum.Ollama, BaseUrl = "http://localhost:11434", Model = "qwen3",
-                    InferenceOptions = new InferenceOptions { StreamingMode = InferenceStreamingModeEnum.Off, ContextLength = 65536 } };
-                using (CompletionClientBase client = Armada.Core.Services.ModelEndpointClientFactory.CreateCompletion(ollama, CreateLogging()))
-                    AssertEqual(65536, (client.Defaults as PolyPrompt.Options.OllamaCompletionOptions)?.ContextLength);
+                    InferenceOptions = new InferenceOptions { ContextLength = 65536 } };
+                using (ProviderClientBase client = Armada.Core.Services.ModelEndpointClientFactory.CreateCompletion(ollama, CreateLogging()))
+                    AssertEqual(65536, (client.Defaults.Completion as PolyPrompt.Options.OllamaCompletionOptions)?.ContextLength);
 
                 ModelEndpoint cloud = new ModelEndpoint { Kind = ModelEndpointKindEnum.Inference, Provider = ModelProviderEnum.OllamaCloud, Model = "glm-4.6",
-                    InferenceOptions = new InferenceOptions { StreamingMode = InferenceStreamingModeEnum.Off, ContextLength = 131072 } };
+                    InferenceOptions = new InferenceOptions { ContextLength = 131072 } };
                 cloud.ApiKey = "test-token";
                 using (ProviderClientBase client = Armada.Core.Services.ModelEndpointClientFactory.CreateCompletion(cloud, CreateLogging()))
                     AssertEqual(131072, (client.Defaults.Completion as PolyPrompt.Options.OllamaCompletionOptions)?.ContextLength);
 
-                ModelEndpoint unset = new ModelEndpoint { InferenceOptions = new InferenceOptions { StreamingMode = InferenceStreamingModeEnum.Off }, Kind = ModelEndpointKindEnum.Inference, Provider = ModelProviderEnum.Ollama, BaseUrl = "http://localhost:11434", Model = "qwen3" };
-                using (CompletionClientBase client = Armada.Core.Services.ModelEndpointClientFactory.CreateCompletion(unset, CreateLogging()))
-                    AssertNull((client.Defaults as PolyPrompt.Options.OllamaCompletionOptions)?.ContextLength, "unset keeps the model default");
+                ModelEndpoint unset = new ModelEndpoint { Kind = ModelEndpointKindEnum.Inference, Provider = ModelProviderEnum.Ollama, BaseUrl = "http://localhost:11434", Model = "qwen3" };
+                using (ProviderClientBase client = Armada.Core.Services.ModelEndpointClientFactory.CreateCompletion(unset, CreateLogging()))
+                    AssertNull((client.Defaults.Completion as PolyPrompt.Options.OllamaCompletionOptions)?.ContextLength, "unset keeps the model default");
 
                 AssertThrows<ArgumentException>(() => new InferenceOptions { ContextLength = 100 }.Validate());
                 AssertThrows<ArgumentException>(() => new InferenceOptions { ContextLength = 3000000 }.Validate());

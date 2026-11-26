@@ -74,7 +74,7 @@ namespace Armada.Core.Harbor
         /// </summary>
         public static IReadOnlyList<string> Advertised { get; } = new List<string>
         {
-            SubmitTool, ToolScope, CompletionLine, CliFinalMessageHygiene, ToolLimitsScaled, EditEncodingPreserve, EditLinePrefixGuard
+            SubmitTool, ToolScope, CompletionLine, CliFinalMessageHygiene, ToolLimitsScaled, EditEncodingPreserve, EditLinePrefixGuard, ContextDiscovery
         };
 
         #endregion

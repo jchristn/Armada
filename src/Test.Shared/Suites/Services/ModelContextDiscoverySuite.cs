@@ -222,7 +222,7 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(65536, shipped.ToEndpoint().DiscoveredContextLength);
                 HarborExited wire = (HarborExited)HarborProtocol.Deserialize(HarborProtocol.Serialize(new HarborExited { JobId = "j", DiscoveredContextLength = 4096, DiscoveredContextSource = "s" }));
                 AssertEqual(4096, wire.DiscoveredContextLength);
-                AssertEqual("api-context-discovery-v1", HarborContextDiscovery.Capability);
+                AssertEqual("api-context-discovery-v1", HarborCapabilityFlags.ContextDiscovery);
             }));
 
             cases.Add(Case("profile_records_context_source", "A model profile created from a discovered window records Discovered as its source; the source is not part of identity", TestTags.Positive, async () =>

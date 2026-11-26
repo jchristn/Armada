@@ -89,7 +89,7 @@ namespace Armada.Core.Services
 
         /// <summary>
         /// Whether the Harbor discovers the context window of API captain endpoints that configure none on its host and
-        /// reports it on exit (it advertised <see cref="Armada.Core.Harbor.HarborContextDiscovery.Capability"/>). The Admiral
+        /// reports it on exit (it advertised <see cref="Armada.Core.Harbor.HarborCapabilityFlags.ContextDiscovery"/>). The Admiral
         /// stores a reported window only from such a Harbor.
         /// </summary>
         public bool DiscoversContext { get; set; } = false;

@@ -248,6 +248,16 @@ Conductor) with Opus and GPT-6.1 reliable. The work is tracked item by item in `
   OpenAI uses the v1 Chat Completions route with the `api-key` header, so `ApiVersion` is now ignored (RS-7.1).
 - **The API runtime's turn loop is split into tested parts.** `ApiAgentRuntime.RunLoopAsync` became a turn loop, a
   terminal policy and a context policy, each with its own suite; behavior is unchanged (RS-7.11).
+- **Streaming is on by default for OpenAI-compatible and Ollama endpoints.** The new inference option `streamingMode`
+  (`Automatic`, `On`, `Off`; default `Automatic`) streams OpenAI-compatible, Ollama and Ollama Cloud endpoints, so
+  progress reaches the stall detector; hosted providers stay off. A stored 1.4.0 `streaming: false` reads as
+  `Automatic`, so turning streaming off now means choosing `Off`. On a Harbor, `Automatic` streams only when the Harbor
+  advertises `api-inference-streaming-v1` (RS-7.7).
+- **Harbor update recommended.** Each 1.5.0 runtime behavior that runs on a Harbor has a capability flag
+  (`HarborCapabilityFlags`; table in `docs/HARBOR_PROTOCOL.md`). A Harbor that lacks one keeps its 1.4.0 behavior and
+  is marked `updateRecommended`, with the missing flags in `missingCapabilities`; a captain whose session or active
+  mission is on such a Harbor carries `harborUpdateRecommended`. The dashboard, TUI, mobile app and Harbor app show
+  "Harbor update recommended" (RS-7.13).
 - **Recovery state survives a restart.** Endpoint circuit breakers, launch backoff (with the captains that failed to
   start the mission), the start of a transient outage, and escalation rule cooldowns were kept only in memory, so a
   restart sent missions straight back to a failing endpoint, relaunched a broken captain at once, granted an outage a

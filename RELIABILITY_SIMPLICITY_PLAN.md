@@ -934,8 +934,12 @@ this phase it is Armada's job to absorb the predictable failures.
 - [ ] **RS-7.6** Reasoning hygiene: strip reasoning when only `</think>` is present, and strip reasoning from history
   before it is sent back (`ToAssistantMessage()` near line 691), except where the provider requires reasoning replay
   (keep the PolyPrompt 3.4.0 regression passing). Evidence:
-- [ ] **RS-7.7** Streaming on by default for OpenAI-compatible and Ollama endpoints (`InferenceOptions.Streaming`),
-  so progress heartbeats reach the stall detector. Evidence:
+- [x] **RS-7.7** Streaming on by default for OpenAI-compatible and Ollama endpoints (`InferenceOptions.Streaming`),
+  so progress heartbeats reach the stall detector. Evidence: (75bbb3a20) `InferenceStreamingModeEnum` and `InferenceOptions.StreamingMode`; Automatic streams
+  OpenAI-compatible, Ollama and Ollama Cloud in process and, through `RemoteAgentRuntime`, on Harbors advertising
+  `api-inference-streaming-v1`; explicit On/Off win; stored 1.4.0 `false` reads as Automatic. Forms on dashboard, TUI,
+  mobile. Tests `streaming_mode_defaults_and_compatibility`, `harbor_launch_resolves_automatic_streaming`. Open: a 429
+  Retry-After on the streaming path (checked in RS-7.3).
 - [x] **RS-7.8** Context discovery. When `ContextLength` is null, discover it at endpoint validation and on first use
   (PolyPrompt model info, Ollama `/api/ps`, vLLM `/v1/models` `max_model_len`), store it on the model profile as
   "discovered", and let a configured value override it. Compaction is always on with a known window. Evidence: (045d128e4) discovery at validation and before the first API turn (cached 10 min); stored
@@ -965,9 +969,14 @@ this phase it is Armada's job to absorb the predictable failures.
   MODEL_HETEROGENEITY.md audit table: CLI text tool calls cannot be executed by Armada; OpenCode 2 replaced `--variant`
   with a `#variant` suffix. Suites ReasoningText, OpenCodeRuntime, RuntimeProviderErrorParser 41/41, PiRuntime 31/31,
   MuxRunOutcome/MuxRuntime/AgentRuntimeFactory 32/32.
-- [ ] **RS-7.13** Harbor compatibility. The runtime changes run on Harbor in split mode. Add a Harbor capability flag
+- [x] **RS-7.13** Harbor compatibility. The runtime changes run on Harbor in split mode. Add a Harbor capability flag
   for each new runtime behavior; a 1.5.0 Admiral with a 1.4.0 Harbor falls back to 1.4.0 behavior and shows "Harbor
-  update recommended" in the Harbor and captain views. Update `docs/HARBOR_PROTOCOL.md`. Evidence:
+  update recommended" in the Harbor and captain views. Update `docs/HARBOR_PROTOCOL.md`. Evidence: (e97124297, d382bbc4a) `HarborCapabilityFlags` with `Supports`/`Missing`/`Advertised`;
+  handshake ack `missingCapabilities`; REST Harbor `missingCapabilities`/`updateRecommended`, Captain
+  `harborUpdateRecommended` (`CaptainHarborUpdateResolver`); shown on dashboard, TUI, mobile and Harbor app;
+  HARBOR_PROTOCOL.md flag table. RS-7.8's flag folded into the helper and advertised. Merged head: 14 Harbor, runtime
+  and client suites 243/243 after the merge fixes. Wave 2 flags (text tool-call recovery, malformed-call retry,
+  repetition guard, reasoning hygiene, warm-up) are advertised when those items land.
 
 - [x] **RS-7.14** Edit and write tools keep a UTF-8 byte order mark and line endings (`EditFileTool.cs:94,150`,
   `MultiEditTool.cs:111,184`, `WriteFileTool.cs:93` read and write with no encoding; Mux fixed the same bug in 1.4.1,
