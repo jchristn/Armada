@@ -490,7 +490,7 @@ Customized templates can still emit an unversioned fenced `armada-plan` JSON blo
 - **It does not run when a slice failed.** A mission in another slice that ended Failed or LandingFailed cancels the integration and its stages (`DependencyFailed`, naming that mission), or marks them Blocked when `BlockDependentsOfFailedStages` is on. Restarting the failed mission brings the integration back; restarting the integration itself works once the slice is resolved.
 - **It leaves out a slice an operator cancelled.** That slice's commits are not merged, and the integration Worker is told the slice is out of scope. A stage cancelled because something it depended on failed is not a decision to drop it.
 
-When there is no plan block, Armada falls back to the legacy `[ARMADA:MISSION]` markers (optionally closed with `[/ARMADA:MISSION]`, with a `Depends on:` line for sequencing), and then to numbered summary lines:
+When there is no plan block, Armada falls back to the legacy `[ARMADA:MISSION]` markers (optionally closed with `[/ARMADA:MISSION]`, with a `Depends on:` line for sequencing). Numbered summary lines are never turned into missions. The marker format is deprecated (D-027 in [DEPRECATION.md](../DEPRECATION.md)) and removed in 2.0: each use logs a warning, and setting `AcceptLegacyMissionMarkers` to `false` turns it off, so marker output gets the output repair turn like a missing plan:
 
 ```
 [ARMADA:MISSION] Add CacheService with TTL support

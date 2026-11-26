@@ -5057,6 +5057,14 @@
     },
     {
       "kind": "setting",
+      "key": "settings.acceptLegacyMissionMarkers",
+      "status": "implemented",
+      "surface": "view:armadaNav",
+      "milestone": "V6",
+      "notes": ""
+    },
+    {
+      "kind": "setting",
       "key": "settings.admiralPort",
       "status": "implemented",
       "surface": "view:armadaNav",

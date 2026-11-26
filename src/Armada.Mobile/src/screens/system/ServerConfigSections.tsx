@@ -109,12 +109,14 @@ export function AgentSettingsSection({ settings, locked, onSaved }: SectionProps
     idleCaptainTimeoutSeconds: String(settings.idleCaptainTimeoutSeconds),
     landingMode: settings.landingMode || DEFAULT_GLOBAL_LANDING_MODE,
     blockDependentsOfFailedStages: settings.blockDependentsOfFailedStages ?? false,
+    acceptLegacyMissionMarkers: settings.acceptLegacyMissionMarkers ?? true,
   });
   const { save, saving } = useSettingsSave(onSaved);
   const v = draft.value;
   const modes = getGlobalLandingModes(t);
   // Shown only when the server reports the setting (older servers do not have it).
   const blockingSupported = settings.blockDependentsOfFailedStages !== undefined;
+  const legacyMarkersSupported = settings.acceptLegacyMissionMarkers !== undefined;
   const help = t('How finished missions land when neither the vessel nor the voyage sets a landing mode (default Merge and Push).');
   return (
     <SettingsSection title={t('Agent Settings')} description={t('Settings that control captain monitoring, stalling, cleanup, and how finished missions land.')} testID="settings-agent">
@@ -142,6 +144,16 @@ export function AgentSettingsSection({ settings, locked, onSaved }: SectionProps
           testID="settings-block-dependents"
         />
       )}
+      {legacyMarkersSupported && (
+        <SwitchField
+          label={t('Accept Legacy Mission Markers')}
+          hint={t('Deprecated. On: [ARMADA:MISSION] plans still work. Off: the Architect must emit an armada-plan block.')}
+          value={v.acceptLegacyMissionMarkers}
+          onChange={(x) => draft.set({ acceptLegacyMissionMarkers: x })}
+          disabled={locked}
+          testID="settings-legacy-mission-markers"
+        />
+      )}
       <SaveRow
         label={t('Save Agent Settings')}
         saving={saving}
@@ -157,6 +169,7 @@ export function AgentSettingsSection({ settings, locked, onSaved }: SectionProps
             idleCaptainTimeoutSeconds: intOr(v.idleCaptainTimeoutSeconds, 0),
             landingMode: v.landingMode || DEFAULT_GLOBAL_LANDING_MODE,
             ...(blockingSupported ? { blockDependentsOfFailedStages: v.blockDependentsOfFailedStages } : {}),
+            ...(legacyMarkersSupported ? { acceptLegacyMissionMarkers: v.acceptLegacyMissionMarkers } : {}),
           }, t('Agent settings saved'));
           if (ok) draft.reset();
         }}

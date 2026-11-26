@@ -298,6 +298,14 @@ namespace Armada.Core.Settings
         }
 
         /// <summary>
+        /// Whether an Architect plan written as legacy <c>[ARMADA:MISSION]</c> markers is still accepted when the output
+        /// has no <c>armada-plan</c> block. Deprecated (D-027): each use logs a warning, and the marker format is removed
+        /// in 2.0. When false, marker output is treated like a missing plan and gets the output repair turn. Defaults to
+        /// true.
+        /// </summary>
+        public bool AcceptLegacyMissionMarkers { get; set; } = true;
+
+        /// <summary>
         /// Maximum number of output-contract repair turns per mission. When a Judge or Architect finishes with output
         /// that breaks its contract (no verdict, conflicting verdicts, an unsubstantiated PASS, a block without an
         /// affected case, or an invalid or missing plan), the same stage runs again with the exact errors quoted, up to

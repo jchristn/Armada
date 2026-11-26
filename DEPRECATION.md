@@ -26,6 +26,7 @@ The whole-list APIs that were deprecated here were retired; see [Removed](#remov
 | ID | Surface | Item | Replacement | Deprecated in | Removed in | First-party clients |
 |---|---|---|---|---|---|---|
 | D-025 | Model | `VesselConcurrencyLimit` | `VesselVoyageLimit` and `VoyageMissionLimit` (the reason is kept only so stored events and waits still read) | 1.3.0 | 2.0 | Migrated (no client produces it) |
+| D-027 | Contract | `[ARMADA:MISSION]` markers | One `armada-plan` block, contract version 4 (markers are read only while `AcceptLegacyMissionMarkers` is on, the default, and each use logs a warning) | 1.5.0 | 2.0 | Migrated (built-in Architect prompts emit `armada-plan`) |
 | D-026 | Contract | `dependsOn` | `parent` in `armada-plan` contract version 4 (`dependsOn` is read as `parent` with a warning) | 1.3.0 | 2.0 | Migrated (built-in Architect prompts emit `parent`) |
 
 ## Bounded, not retired

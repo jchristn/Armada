@@ -185,7 +185,9 @@ namespace Armada.Core.Services
                 bool hadArchitectMarkers = !String.IsNullOrEmpty(completedMission.AgentOutput) &&
                     completedMission.AgentOutput.Contains("[ARMADA:MISSION]", StringComparison.Ordinal);
 
-                string failureReason = hadArchitectMarkers
+                string failureReason = hadArchitectMarkers && !_Settings.AcceptLegacyMissionMarkers
+                    ? "Architect used [ARMADA:MISSION] markers, which this Admiral no longer accepts (AcceptLegacyMissionMarkers is false); emit one ```" + ArchitectPlanParser.FenceInfo + " plan block instead"
+                    : hadArchitectMarkers
                     ? "Architect produced no valid [ARMADA:MISSION] definitions in output"
                     : "Architect produced no ```" + ArchitectPlanParser.FenceInfo + " plan block and no [ARMADA:MISSION] markers in output";
 

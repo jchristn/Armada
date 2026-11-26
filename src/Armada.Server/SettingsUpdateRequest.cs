@@ -133,6 +133,12 @@ namespace Armada.Server
         public bool? BlockDependentsOfFailedStages { get; set; }
 
         /// <summary>
+        /// When true, an Architect plan written as legacy [ARMADA:MISSION] markers is still accepted (deprecated, removed
+        /// in 2.0). Null leaves the stored value unchanged.
+        /// </summary>
+        public bool? AcceptLegacyMissionMarkers { get; set; }
+
+        /// <summary>
         /// Optional remote-control tunnel settings update.
         /// When supplied, replaces the full remoteControl settings object.
         /// </summary>

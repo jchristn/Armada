@@ -275,6 +275,7 @@ export default function Server() {
         landingMode: settings.landingMode || DEFAULT_GLOBAL_LANDING_MODE,
         ...(settings.requireHarborForLaunch !== undefined ? { requireHarborForLaunch: settings.requireHarborForLaunch } : {}),
         ...(settings.blockDependentsOfFailedStages !== undefined ? { blockDependentsOfFailedStages: settings.blockDependentsOfFailedStages } : {}),
+        ...(settings.acceptLegacyMissionMarkers !== undefined ? { acceptLegacyMissionMarkers: settings.acceptLegacyMissionMarkers } : {}),
       };
       const updated = await updateSettings(sent);
       applyIncomingSettings(updated as unknown as ServerSettings, sent);
@@ -857,6 +858,20 @@ export default function Server() {
                     <span>{t('Block Stages After a Failure')}</span>
                   </label>
                   <small className="text-dim">{t('On: stages after a failed one show Blocked until it is restarted. Off: they are cancelled.')}</small>
+                </div>
+              )}
+              {settings.acceptLegacyMissionMarkers !== undefined && (
+                <div className="form-group">
+                  <label className="settings-checkbox-label" title={t('Deprecated, removed in 2.0. On (the default): an Architect plan written as [ARMADA:MISSION] markers is still accepted and logs a warning. Off: such output gets the format repair turn and must use an armada-plan block.')}>
+                    <input
+                      type="checkbox"
+                      title={t('Deprecated, removed in 2.0. On (the default): an Architect plan written as [ARMADA:MISSION] markers is still accepted and logs a warning. Off: such output gets the format repair turn and must use an armada-plan block.')}
+                      checked={settings.acceptLegacyMissionMarkers}
+                      onChange={(e) => setSettings({ ...settings, acceptLegacyMissionMarkers: e.target.checked })}
+                    />
+                    <span>{t('Accept Legacy Mission Markers')}</span>
+                  </label>
+                  <small className="text-dim">{t('Deprecated. On: [ARMADA:MISSION] plans still work. Off: the Architect must emit an armada-plan block.')}</small>
                 </div>
               )}
             </div>

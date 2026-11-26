@@ -28069,6 +28069,12 @@
   ],
   "settings": [
     {
+      "key": "acceptLegacyMissionMarkers",
+      "type": "bool",
+      "default": "true",
+      "experimental": false
+    },
+    {
       "key": "admiralPort",
       "type": "int",
       "default": "7890",

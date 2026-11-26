@@ -260,7 +260,8 @@ is recorded on the stage outcome as `OwnershipViolation` (or added to its cause 
 v1.3.0 this is a warning and never fails the mission.
 
 Fallback: when the output has no valid `armada-plan` block, the older `[ARMADA:MISSION]`
-marker format is still read (title on the marker line, description below, an optional
+marker format is still read while `AcceptLegacyMissionMarkers` is on (the default; deprecated as D-027, removed in 2.0,
+and each use logs a warning) (title on the marker line, description below, an optional
 standalone `Parent: N` or `Depends on: Mission N` line naming the parent, and an optional `Owns: a, b` line). For that format only, deferral wording such as
 "after both implementation missions complete" is converted once, at parse time, into
 `WaitForVoyageWorkers`; a mission created any other way is never deferred by its wording.

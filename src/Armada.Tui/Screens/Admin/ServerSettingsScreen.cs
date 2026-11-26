@@ -149,6 +149,9 @@ namespace Armada.Tui.Screens.Admin
         /// <summary>Agent: mark stages after a failed one Blocked instead of Cancelled.</summary>
         public ToggleField BlockDependentsOfFailedStages { get; } = new ToggleField();
 
+        /// <summary>Agent: accept legacy [ARMADA:MISSION] Architect plans (deprecated).</summary>
+        public ToggleField AcceptLegacyMissionMarkers { get; } = new ToggleField();
+
         /// <summary>Planning idle timeout.</summary>
         public InputField PlanningInactivity { get; } = new InputField();
 
@@ -650,6 +653,9 @@ namespace Armada.Tui.Screens.Admin
             BlockDependentsOfFailedStages.Caption = "Block Stages After a Failure";
             BlockDependentsOfFailedStages.Visible = false;
             AddTracked(agent, "Failure blocking", BlockDependentsOfFailedStages, "When on, the stages after a failed stage show Blocked and the voyage stays open until you restart the failed stage. Off (the default): they are cancelled and the voyage ends Failed; restarting the failed stage still restores them.");
+            AcceptLegacyMissionMarkers.Caption = "Accept Legacy Mission Markers";
+            AcceptLegacyMissionMarkers.Visible = false;
+            AddTracked(agent, "Legacy plans", AcceptLegacyMissionMarkers, "Deprecated, removed in 2.0. When on (the default), an Architect plan written as [ARMADA:MISSION] markers is still accepted and logs a warning. Off: such output gets the format repair turn and must use an armada-plan block.");
             AddButtons(agent);
 
             // Planning Session Settings.
@@ -1260,6 +1266,8 @@ namespace Armada.Tui.Screens.Admin
                 RequireHarborForLaunch.SetValue(s.RequireHarborForLaunch ?? false, false);
                 BlockDependentsOfFailedStages.Visible = s.BlockDependentsOfFailedStages.HasValue;
                 BlockDependentsOfFailedStages.SetValue(s.BlockDependentsOfFailedStages ?? false, false);
+                AcceptLegacyMissionMarkers.Visible = s.AcceptLegacyMissionMarkers.HasValue;
+                AcceptLegacyMissionMarkers.SetValue(s.AcceptLegacyMissionMarkers ?? true, false);
             });
             Apply("planning", force, () =>
             {
@@ -1630,6 +1638,7 @@ namespace Armada.Tui.Screens.Admin
                 d.LandingMode = Enum.TryParse<LandingModeEnum>(DefaultLandingMode.Value ?? "", out LandingModeEnum landingMode) ? landingMode : (LandingModeEnum?)null;
                 d.RequireHarborForLaunch = RequireHarborForLaunch.Visible ? RequireHarborForLaunch.Value : (bool?)null;
                 d.BlockDependentsOfFailedStages = BlockDependentsOfFailedStages.Visible ? BlockDependentsOfFailedStages.Value : (bool?)null;
+                d.AcceptLegacyMissionMarkers = AcceptLegacyMissionMarkers.Visible ? AcceptLegacyMissionMarkers.Value : (bool?)null;
                 return d;
             }, "Agent settings saved");
         }

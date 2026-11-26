@@ -642,6 +642,102 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
+            cases.Add(CaseAsync("architect_legacy_markers_rejected_when_disabled", "With AcceptLegacyMissionMarkers off, [ARMADA:MISSION] output is not fanned out and fails as a missing plan (RS-6.12)", TestTags.Negative, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    LoggingModule logging = CreateLogging();
+                    ArmadaSettings settings = CreateSettings();
+                    settings.MaxOutputRepairAttempts = 0; // fail-closed outcome once output repair is exhausted
+                    settings.AcceptLegacyMissionMarkers = false;
+                    DirCreatingGitStub git = new DirCreatingGitStub();
+                    IDockService dockService = new DockService(logging, testDb.Driver, settings, git);
+                    ICaptainService captainService = new CaptainService(logging, testDb.Driver, settings, git, dockService);
+                    MissionService missionService = new MissionService(logging, testDb.Driver, settings, dockService, captainService, git: git);
+
+                    int landingCalls = 0;
+                    missionService.OnMissionComplete = (Mission mission, Dock dock) =>
+                    {
+                        landingCalls++;
+                        return Task.CompletedTask;
+                    };
+                    missionService.OnGetMissionOutput = _ => "[ARMADA:MISSION] Add API endpoint\nImplement endpoint\n[ARMADA:MISSION] Update docs\nDocument endpoint";
+
+                    Vessel vessel = new Vessel("architect-failure-vessel", "https://github.com/test/repo.git");
+                    vessel.LocalPath = Path.Combine(Path.GetTempPath(), "armada_test_bare_" + Guid.NewGuid().ToString("N"));
+                    vessel.WorkingDirectory = Path.Combine(Path.GetTempPath(), "armada_test_work_" + Guid.NewGuid().ToString("N"));
+                    vessel.DefaultBranch = "main";
+                    vessel = await testDb.Driver.Vessels.CreateAsync(vessel).ConfigureAwait(false);
+
+                    Captain captain = new Captain("architect-failure-captain");
+                    captain.State = CaptainStateEnum.Working;
+                    captain = await CaptainAssignmentFixture.CreateAsync(testDb.Driver, captain).ConfigureAwait(false);
+
+                    Voyage voyage = new Voyage("architect-failure-voyage");
+                    voyage = await testDb.Driver.Voyages.CreateAsync(voyage).ConfigureAwait(false);
+
+                    Dock dock = new Dock(vessel.Id);
+                    dock.CaptainId = captain.Id;
+                    dock.WorktreePath = Path.Combine(Path.GetTempPath(), "armada_test_wt_" + Guid.NewGuid().ToString("N"));
+                    dock.BranchName = "armada/architect-failure/msn_arch";
+                    dock.Active = true;
+                    dock = await testDb.Driver.Docks.CreateAsync(dock).ConfigureAwait(false);
+
+                    Mission architectMission = new Mission("[Architect] Plan work", "Break this down");
+                    architectMission.VesselId = vessel.Id;
+                    architectMission.VoyageId = voyage.Id;
+                    architectMission.CaptainId = captain.Id;
+                    architectMission.DockId = dock.Id;
+                    architectMission.Persona = "Architect";
+                    architectMission.Status = MissionStatusEnum.InProgress;
+                    architectMission.BranchName = dock.BranchName;
+                    architectMission = await testDb.Driver.Missions.CreateAsync(architectMission).ConfigureAwait(false);
+
+                    Mission workerMission = new Mission("[Worker] Placeholder", "Original dispatch description");
+                    workerMission.VesselId = vessel.Id;
+                    workerMission.VoyageId = voyage.Id;
+                    workerMission.Persona = "Worker";
+                    workerMission.Status = MissionStatusEnum.Pending;
+                    workerMission.DependsOnMissionId = architectMission.Id;
+                    workerMission = await testDb.Driver.Missions.CreateAsync(workerMission).ConfigureAwait(false);
+
+                    captain.Assignment = architectMission;
+                    captain.Assignment ??= new Mission("fixture assignment"); captain.Assignment.DockId = dock.Id;
+                    await CaptainAssignmentFixture.UpdateAsync(testDb.Driver, captain).ConfigureAwait(false);
+
+                    try
+                    {
+                        await missionService.HandleCompletionAsync(captain, architectMission.Id).ConfigureAwait(false);
+
+                        Mission? updatedArchitect = await testDb.Driver.Missions.ReadAsync(architectMission.Id).ConfigureAwait(false);
+                        Mission? updatedWorker = await testDb.Driver.Missions.ReadAsync(workerMission.Id).ConfigureAwait(false);
+                        Voyage? updatedVoyage = await testDb.Driver.Voyages.ReadAsync(voyage.Id).ConfigureAwait(false);
+                        Captain? updatedCaptain = await testDb.Driver.Captains.ReadAsync(captain.Id).ConfigureAwait(false);
+                        Dock? updatedDock = await testDb.Driver.Docks.ReadAsync(dock.Id).ConfigureAwait(false);
+
+                        AssertNotNull(updatedArchitect, "Architect mission should still exist");
+                        AssertEqual(MissionStatusEnum.Failed, updatedArchitect!.Status, "Architect mission should fail when no mission markers are produced");
+                        AssertContains("no longer accepts (AcceptLegacyMissionMarkers is false)", updatedArchitect.FailureReason ?? String.Empty);
+                        AssertEqual(MissionFailureKindEnum.InvalidOutput, updatedArchitect.FailureKind, "failure kind is recorded where the failure happens");
+                        AssertNotNull(updatedWorker, "Dependent worker mission should still exist");
+                        AssertEqual(MissionStatusEnum.Cancelled, updatedWorker!.Status, "Dependent worker mission should be cancelled when architect handoff fails");
+                        AssertContains("Blocked by failed dependency", updatedWorker.FailureReason ?? String.Empty);
+                        AssertEqual(MissionFailureKindEnum.DependencyFailed, updatedWorker.FailureKind, "failure kind is recorded where the failure happens");
+                        AssertNotNull(updatedVoyage, "Voyage should still exist");
+                        AssertEqual(VoyageStatusEnum.Failed, updatedVoyage!.Status, "Voyage should fail when architect handoff failure blocks the remaining pipeline");
+                        AssertEqual(0, landingCalls, "Landing should not run when handoff fails");
+                        AssertNotNull(updatedCaptain, "Captain should still exist");
+                        AssertEqual(CaptainStateEnum.Idle, updatedCaptain!.State, "Captain should be released after architect handoff failure");
+                        AssertNotNull(updatedDock, "Dock should still exist");
+                        AssertFalse(updatedDock!.Active, "Dock should be reclaimed after architect handoff failure");
+                    }
+                    finally
+                    {
+                        try { Directory.Delete(settings.DocksDirectory, true); } catch { }
+                    }
+                }
+            }));
+
             cases.Add(CaseAsync("invalid_versioned_plan_never_fans_out", "Invalid structured contract blocks fan-out, cancels dependents and reports remediation", TestTags.Negative, async () =>
             {
                 using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
@@ -1147,6 +1243,8 @@ namespace Test.Shared.Suites.Services
                 using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
                 {
                     LoggingModule logging = CreateLogging();
+                    List<string> warnings = new List<string>();
+                    logging.MessageLogged += (LogEntry entry) => { if (entry.Severity == Severity.Warn) lock (warnings) warnings.Add(entry.Message ?? String.Empty); };
                     ArmadaSettings settings = CreateSettings();
                     DirCreatingGitStub git = new DirCreatingGitStub();
                     IDockService dockService = new DockService(logging, testDb.Driver, settings, git);
@@ -1240,6 +1338,7 @@ namespace Test.Shared.Suites.Services
 
                     List<Mission> afterArchitect = await testDb.Driver.Missions.EnumerateByVoyageAsync(voyage.Id).ConfigureAwait(false);
                     AssertEqual(7, afterArchitect.Count, "Architect fan-out should create full cloned downstream chain");
+                    lock (warnings) AssertTrue(warnings.Any(w => w.Contains("deprecated [ARMADA:MISSION] markers (D-027", StringComparison.Ordinal)), "accepting legacy markers logs the deprecation warning (RS-6.12)");
                     AssertEqual(0, landingCalls, "Architect completion should not land while downstream stages remain");
                     AssertTrue(git.DeletedLocalBranches.Contains(architect.BranchName), "Architect branch should be deleted locally after successful handoff");
                     AssertTrue(git.DeletedRemoteBranches.Contains(architect.BranchName), "Architect branch should be deleted remotely after successful handoff");

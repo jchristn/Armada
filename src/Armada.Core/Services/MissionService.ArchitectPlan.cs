@@ -15,6 +15,19 @@ namespace Armada.Core.Services
     /// </summary>
     public partial class MissionService
     {
+        #region Private-Members
+
+        private static readonly System.Text.RegularExpressions.Regex _MissionMarkerSplitRegex = new System.Text.RegularExpressions.Regex(
+            @"(?m)^\[ARMADA:MISSION\][ \t]*", System.Text.RegularExpressions.RegexOptions.Compiled);
+
+        private static readonly System.Text.RegularExpressions.Regex _MarkerMissionNumberRegex = new System.Text.RegularExpressions.Regex(
+            @"^(?:mission\s+)?(?<index>\d+)\b", System.Text.RegularExpressions.RegexOptions.Compiled | System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+        private static readonly System.Text.RegularExpressions.Regex _TelemetryNumberRegex = new System.Text.RegularExpressions.Regex(
+            @"^[\d,]+$", System.Text.RegularExpressions.RegexOptions.Compiled);
+
+        #endregion
+
         #region Private-Methods
 
         private async Task CloneDependentChainAsync(
@@ -238,8 +251,11 @@ namespace Armada.Core.Services
             }
 
             // Only what the Architect produced counts: its output, then a plan it committed (the diff). Explicit
-            // [ARMADA:MISSION] markers remain supported for customized templates. Numbered narration ("1. Read the
-            // README") is never inferred into missions: a plan without a structured block gets a repair turn instead.
+            // [ARMADA:MISSION] markers remain supported for customized templates while AcceptLegacyMissionMarkers is on
+            // (deprecated, D-027, removed in 2.0). Numbered narration ("1. Read the README") is never inferred into
+            // missions: a plan without a structured block gets a repair turn instead.
+            if (!_Settings.AcceptLegacyMissionMarkers) return results;
+
             string?[] candidateSources =
             {
                 architectMission.AgentOutput,
@@ -256,6 +272,10 @@ namespace Armada.Core.Services
                 if (results.Count > 0) break;
             }
 
+            if (results.Count > 0)
+                _Logging.Warn(_Header + "architect mission " + architectMission.Id + " used deprecated [ARMADA:MISSION] markers (D-027, removed in 2.0); emit an "
+                    + ArchitectPlanParser.FenceInfo + " block instead, or set AcceptLegacyMissionMarkers to false to require one");
+
             ResolveMarkerDependencies(results);
             return results;
         }
@@ -268,8 +288,7 @@ namespace Armada.Core.Services
             {
                 if (parsed[i].DependsOnIndex.HasValue || String.IsNullOrWhiteSpace(parsed[i].DependsOnReference)) continue;
                 string reference = NormalizeArchitectDependencyReference(parsed[i].DependsOnReference!);
-                System.Text.RegularExpressions.Match numeric = System.Text.RegularExpressions.Regex.Match(
-                    reference, @"^(?:mission\s+)?(?<index>\d+)\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                System.Text.RegularExpressions.Match numeric = _MarkerMissionNumberRegex.Match(reference);
                 if (numeric.Success && Int32.TryParse(numeric.Groups["index"].Value, out int number)) parsed[i].DependsOnIndex = number;
                 else
                 {
@@ -303,7 +322,7 @@ namespace Armada.Core.Services
         {
             if (String.IsNullOrWhiteSpace(source)) return;
 
-            string[] segments = System.Text.RegularExpressions.Regex.Split(source, @"(?m)^\[ARMADA:MISSION\][ \t]*");
+            string[] segments = _MissionMarkerSplitRegex.Split(source);
 
             for (int i = 1; i < segments.Length; i++)
             {
@@ -532,7 +551,7 @@ namespace Armada.Core.Services
             if (ProgressParser.TryParse(trimmed) != null) return true;
 
             return trimmed.Equals("tokens used", StringComparison.OrdinalIgnoreCase) ||
-                System.Text.RegularExpressions.Regex.IsMatch(trimmed, @"^[\d,]+$");
+                _TelemetryNumberRegex.IsMatch(trimmed);
         }
 
         private static bool IsArchitectPlaceholderTitle(string? title)

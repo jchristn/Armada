@@ -82,6 +82,8 @@ export interface ServerSettings {
   /** True: missions wait for a Harbor instead of running on the Admiral host. Absent on older servers. */
   requireHarborForLaunch?: boolean;
   blockDependentsOfFailedStages?: boolean;
+  /** True: legacy [ARMADA:MISSION] Architect plans are still accepted (deprecated, removed in 2.0). Absent on older servers. */
+  acceptLegacyMissionMarkers?: boolean;
   remoteControl: RemoteControlSettings;
   import?: VesselImportSettingsData;
   fleetActions?: FleetActionSettingsData;

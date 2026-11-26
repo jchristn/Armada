@@ -88,7 +88,7 @@ inside the dispatched scope. First stage of `FullPipeline`.
 ### Architect
 
 Reads the codebase and decomposes the goal into right-sized missions, emitted as an `armada-plan` block
-(`contractVersion` 4; `[ARMADA:MISSION]` blocks are still accepted as a fallback). In v4 each mission names a
+(`contractVersion` 4; `[ARMADA:MISSION]` blocks are still accepted as a deprecated fallback while `AcceptLegacyMissionMarkers` is on). In v4 each mission names a
 `parent` only when it needs another mission's code, and lists its `ownedPaths`; two missions that can run in
 parallel must not own the same file, or Armada rejects the plan and asks for a repair.
 

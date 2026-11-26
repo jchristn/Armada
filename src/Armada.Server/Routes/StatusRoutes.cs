@@ -669,6 +669,9 @@ namespace Armada.Server.Routes
                 if (body.BlockDependentsOfFailedStages.HasValue)
                     _settings.BlockDependentsOfFailedStages = body.BlockDependentsOfFailedStages.Value;
 
+                if (body.AcceptLegacyMissionMarkers.HasValue)
+                    _settings.AcceptLegacyMissionMarkers = body.AcceptLegacyMissionMarkers.Value;
+
                 if (body.Concurrency != null)
                 {
                     // Applied in place: admission, hierarchy validation and retention read this object on every use.
@@ -933,6 +936,7 @@ namespace Armada.Server.Routes
                 RebuildSlotRetentionCount = _settings.RebuildSlotRetentionCount,
                 RequireHarborForLaunch = _settings.RequireHarborForLaunch,
                 BlockDependentsOfFailedStages = _settings.BlockDependentsOfFailedStages,
+                AcceptLegacyMissionMarkers = _settings.AcceptLegacyMissionMarkers,
                 RemoteControl = RedactRemoteControl(_settings.RemoteControl),
                 Import = _settings.Import,
                 FleetActions = _settings.FleetActions,
