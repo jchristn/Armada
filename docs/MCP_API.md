@@ -1394,9 +1394,11 @@ next time the Admiral starts; disable it (`enabled` false) to keep it out of cla
 A handoff artifact (`hoa_`) is the durable, versioned record one stage attempt hands to the next stage: numbered
 findings (file, line, severity, required fix), acceptance criteria, required actions, check results (passed, failed,
 skipped with a reason, could not run), commit references, protocol lines, the full stage output and the full diff (or
-where to regenerate it). Armada stores one per stage attempt, linked to its stage outcome. At launch the next stage
+where to regenerate it). Armada stores one per stage attempt when the stage completes, linked to its stage outcome;
+`attemptId` names the attempt (mission id and launch time, null on artifacts stored before 1.5.0). At launch the next stage
 receives a budgeted rendering of it whose pointer names `get_handoff_artifact` and the artifact id when the captain has
-Armada MCP tools. The shapes, the budget and the delivery order are in
+Armada MCP tools, followed by the earlier stages of its chain, newest first. The shapes, the budget and the delivery
+order are in
 [REST_API.md](REST_API.md#handoff-artifacts); the tools enforce the same access rules through the same service.
 
 | Tool | Caller |

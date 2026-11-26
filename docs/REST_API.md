@@ -4808,7 +4808,10 @@ curl -X POST http://localhost:7890/api/v1/stage-outcomes/reclassify \
 
 A **handoff artifact** is the durable, versioned record one stage attempt hands to the next stage
 (docs/MODEL_HETEROGENEITY.md, 3.1). Armada stores one per stage attempt (Worker, Test Engineer, Judge, ...) when the
-attempt's exit has been handled, linked to its stage outcome (`StageOutcomeId`), mission, persona and captain. It holds:
+stage completes, in the same database write that prepares the next stage, linked to its stage outcome (`StageOutcomeId`),
+mission, persona and captain. `AttemptId` names the attempt: the mission id and the captain's launch time to the
+millisecond (for example `msn_abc123@20261126T090000123`, or `msn_abc123@unstarted`); it is null on artifacts stored
+before 1.5.0 (migration 137). It holds:
 `SchemaVersion` (1), numbered `Findings` (each with `File`, `Line`, `Severity` `Blocking`/`NonBlocking`/`Unknown`,
 `Summary` and `RequiredFix`, parsed from the stage's `Affected Case`, `Findings` and `Issues` sections), `Verdict`
 (`PASS`, `NEEDS_REVISION`, `BLOCKED`, `COMPLETE`, ...), `AcceptanceCriteria` (from the task description),
@@ -4830,6 +4833,13 @@ complete artifact through a tool the captain has (MCP `get_handoff_artifact`, or
 the file `.armada/handoff/<persona>-<missionId>.md` written into its worktree, git-excluded and never committed), and an
 explicit list of what did not fit. A captain with neither MCP nor file access is told that nothing beyond the block can
 reach it. Nothing is inlined past the budget.
+
+A stage whose prior stage has earlier stages of its own (a Judge after a Test Engineer after a Worker) also gets an
+`Earlier stages (newest first)` section: the prior stage's artifact gets two thirds of the budget, and the earlier
+stages, up to 8 and only within the same voyage, share what is left, each with its verdict, required actions, open
+findings and the tail of its output. An earlier stage that does not fit is named with its artifact id. The launch only
+reads stored artifacts; a stage that completed before 1.5.0 has none, so Armada builds one from the stage for that
+launch without storing it and logs it as a legacy handoff.
 
 | Method | Path | Body | Response |
 |--------|------|------|----------|

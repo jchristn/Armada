@@ -676,6 +676,13 @@ Measure first, then change handoffs and contracts, then prompts, then add profil
    through `GET /api/v1/missions/{id}/handoff-artifacts`, `GET /api/v1/handoff-artifacts/{id}`, `get_handoff_artifact`
    and `list_handoff_artifacts`. Tests: `Services.HandoffArtifacts`, `Database.HandoffArtifacts`,
    `E2E.HandoffArtifacts`, `Client.Contract.HandoffArtifacts`.
+   Since 1.5.0 (RS-6.9, RS-6.10) the artifact is written once, when the stage completes, in the same write that
+   prepares the next stage, and keyed by `AttemptId` (migration 137) instead of a match on output and diff lengths; the
+   launch only reads it. A stage completed before migration 137 gets an unstored artifact built at launch and logged as
+   a legacy handoff. The rendering also covers the chain: the prior stage gets two thirds of the budget and an
+   `Earlier stages (newest first)` section shares the rest among up to 8 earlier stages in the same voyage (verdict,
+   required actions, open findings, output tail), naming by artifact id any stage that does not fit. A Judge therefore
+   sees the Worker's report as well as the Test Engineer's.
 2. Rework prompts built from the artifact, one demand per line. Addresses C2 and C5.
    Status: done. `ReworkPromptBuilder` replaces the one-paragraph rework instruction. When the rework is scheduled, the
    description gets a rework section: a findings placeholder, the demands as a numbered list with one demand per line
