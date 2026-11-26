@@ -919,10 +919,14 @@ this phase it is Armada's job to absorb the predictable failures.
   `ModelEndpointAuthHandler`. ModelEndpointService 43/43 and ApiAgentRuntime 49/49 against the local postman fixture
   (reasoning-continuation regression included); ModelEndpointAuth 8/8. 5.x still lacks json_schema and text tool-call
   recovery.
-- [ ] **RS-7.2** Text tool-call recovery. When a turn has no `ToolCalls`, parse `<tool_call>{json}</tool_call>`,
+- [x] **RS-7.2** Text tool-call recovery. When a turn has no `ToolCalls`, parse `<tool_call>{json}</tool_call>`,
   `<function=name>...</function>`, and fenced JSON tool-call blocks (at the terminal branch near
   `ApiAgentRuntime.cs:693`, or in PolyPrompt if it belongs there) and execute them as real calls. Count recoveries
-  per model. Evidence:
+  per model. Evidence: (44f78592a) `TextToolCallParser` (Hermes `<tool_call>`, `<function=name>` with JSON or
+  `<parameter=x>`, fenced JSON) in `ApiTurnLoop`, permitted tools only, never from an unsuccessful or length-cut reply;
+  counted in `ApiTurnLoopResult.TextToolCallRecoveries` and `[recovery]` diagnostics per turn and per model (not
+  stored). Switch `ApiRuntimeBehaviors.TextToolCallRecovery`; flag `api-text-tool-call-recovery-v1`. Suite
+  `Runtimes.TextToolCallParser` (13), ApiTurnLoop and OpenModelSimulator recovery runs.
 - [x] **RS-7.3** Malformed-tool-call 500. In `IsRetryableInferenceStatus`/`WithInferenceRetryAsync`
   (`ApiAgentRuntime.cs:456-460`), when the 500 body names a tool or JSON parse failure, do not resend the identical
   request: add a corrective user turn with the valid tool names and a schema hint, and vary the seed or temperature
@@ -932,10 +936,14 @@ this phase it is Armada's job to absorb the predictable failures.
   `api-malformed-call-retry-v1`. Streamed 429 Retry-After via `UsageHeaders.LatestObservation`. Tests
   `malformed_call_gets_corrective_turn`, `repeat_loop_gets_no_repeat_turn`, `malformed_call_retries_are_bounded`,
   `api_runtime_corrects_degenerate_generation`, `retry_after_is_honored_when_streaming`. Plain chat (no tools) unchanged.
-- [ ] **RS-7.4** Unknown tool name returns "unknown tool <name>; available: ..." instead of "disabled by the
-  endpoint's inference policy" (`ApiAgentRuntime.cs:727`). Evidence:
-- [ ] **RS-7.5** Repetition guard: N identical consecutive tool calls (setting, default 3) inject a corrective note;
-  2N end the run as a classified `TaskFailure` (feeds escalation). Evidence:
+- [x] **RS-7.4** Unknown tool name returns "unknown tool <name>; available: ..." instead of "disabled by the
+  endpoint's inference policy" (`ApiAgentRuntime.cs:727`). Evidence: (44f78592a) `unknown_tool` lists up to 40 available tools; `tool_not_allowed` kept for
+  policy-disabled tools. Tests `unknown_tool_lists_available`, `unknown_tool_list_is_capped`.
+- [x] **RS-7.5** Repetition guard: N identical consecutive tool calls (setting, default 3) inject a corrective note;
+  2N end the run as a classified `TaskFailure` (feeds escalation). Evidence: (44f78592a) inference option `repeatedToolCallLimit` (default 3, 2 to 20) on REST, dashboard, TUI,
+  mobile; note appended to results from call N, 2N ends as `degenerate_output` (TaskFailure). Flag
+  `api-repetition-guard-v1`. Tests `repeated_calls_get_note`, `repeated_calls_stop_run`,
+  `different_arguments_reset_count`. Merged head: nine affected suites 195/195.
 - [x] **RS-7.6** Reasoning hygiene: strip reasoning when only `</think>` is present, and strip reasoning from history
   before it is sent back (`ToAssistantMessage()` near line 691), except where the provider requires reasoning replay
   (keep the PolyPrompt 3.4.0 regression passing). Evidence: (5e634c424) `ApiTerminalPolicy.VisibleText` uses `ReasoningText.Strip`; history text cleaned in

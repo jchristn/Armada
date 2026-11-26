@@ -271,6 +271,15 @@ Conductor) with Opus and GPT-6.1 reliable. The work is tracked item by item in `
   sent back; provider state that must be replayed is kept (RS-7.6).
 - **Ollama models are loaded before the first turn.** API captains on Ollama endpoints send the keep_alive warm-up
   first, so a cold load no longer eats into the first turn; a failed warm-up only logs a warning (RS-7.16).
+- **Tool calls written as text are run.** When an API captain's model writes a tool call as text (`<tool_call>` JSON,
+  `<function=name>` tags, or a fenced JSON call) instead of a native call, Armada runs it as a real call if the tool is
+  permitted; never from a failed or length-cut reply. Each recovery is logged as a `[recovery]` diagnostic with a
+  per-model total (RS-7.2).
+- **An unknown tool name gets a useful error.** A call to a tool that does not exist returns `unknown_tool` with
+  "unknown tool <name>; available: ..." instead of saying the endpoint's policy disabled it (RS-7.4).
+- **Repeated identical tool calls are stopped.** From the `repeatedToolCallLimit`-th identical consecutive call (new
+  inference option, default 3, 2 to 20) each result carries a corrective note; at twice the limit the run ends as
+  degenerate output, a task failure that escalation sees (RS-7.5).
 - **Recovery state survives a restart.** Endpoint circuit breakers, launch backoff (with the captains that failed to
   start the mission), the start of a transient outage, and escalation rule cooldowns were kept only in memory, so a
   restart sent missions straight back to a failing endpoint, relaunched a broken captain at once, granted an outage a
