@@ -6,8 +6,8 @@ namespace Armada.Core.Services
 
     /// <summary>
     /// The Quick probe set: the prompts each mechanical probe sends through the captain's runtime. The prompts use
-    /// Armada's real output contracts (the Worker completion line, <see cref="StageOutputContract.For"/> and
-    /// <see cref="ArchitectPlanParser.FormatInstructions"/>) and its real ASCII rules. Change
+    /// Armada's real output contracts (the Worker completion line, <see cref="StageOutputContract.For"/>, including
+    /// the Architect plan contract) and its real ASCII rules. Change
     /// <see cref="ProbeSetVersion"/> whenever a prompt or a scoring rule changes, so runs stay comparable.
     /// </summary>
     public static class ModelProbeCatalog

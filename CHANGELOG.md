@@ -192,6 +192,14 @@ Conductor) with Opus and GPT-6.1 reliable. The work is tracked item by item in `
   catalog of about 270 tools (about 62,000 tokens). The rest stays reachable through `armada_discover_mcp_tools`, and
   permissions are unchanged. The context-window check now counts the tool schemas sent on every turn, and a reply
   without tools uses the same explicit completion requirement as the tool loop.
+- **A broken report is reformatted before the stage is rerun.** When a Judge, verifier or Architect finishes its work
+  but its report breaks the output contract, one tool-less call restates the stage's own output in the contract's format,
+  given the parser's errors. The original output and diff are kept. The restatement is accepted only when it parses and
+  adds no verdict, evidence, finding or mission the original lacked; otherwise the stage reruns as before. Review-gated
+  stages are never repaired. `OutputRepairNormalizerCaptainId` (dashboard, TUI and mobile Agent settings) picks the
+  captain that does it; empty uses the stage's own captain.
+- **A Judge PASS must cite evidence.** A PASS that names no check it ran and no file it inspected is a format failure.
+  Citing one inspected file is enough.
 - **Recovery state survives a restart.** Endpoint circuit breakers, launch backoff (with the captains that failed to
   start the mission), the start of a transient outage, and escalation rule cooldowns were kept only in memory, so a
   restart sent missions straight back to a failing endpoint, relaunched a broken captain at once, granted an outage a

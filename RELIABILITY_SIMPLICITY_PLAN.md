@@ -826,13 +826,19 @@ the contract a schema, lets the model submit through a tool, and repairs format 
   tools without submitting, send `tool_choice` set to the submit tool (PolyPrompt `ToolChatRequest.ToolChoice`);
   where the endpoint supports `response_format: json_schema`, use it for the final turn as a second fallback.
   Evidence:
-- [ ] **RS-6.4** Format-only repair turn. Replace "Do the same job again" in `TryScheduleOutputRepairAsync`
+- [x] **RS-6.4** Format-only repair turn. Replace "Do the same job again" in `TryScheduleOutputRepairAsync`
   (`MissionService.cs:1395`) for format-only failures: (1) in-session restatement when the runtime supports resume
   (ApiEndpoint always; Claude Code and Codex via session resume), (2) otherwise a tool-less format call that gets the
   stored output, the contract, and the parser's error list, optionally routed to a configured normalizer captain
   (for example Opus). The repair keeps the original output and diff, is bounded (RS-5.5), never creates a PASS,
   findings, or evidence the original lacked (MODEL_HETEROGENEITY principle 4), and records its outcome (RS-1.4). A
-  full rerun is the last resort. Evidence:
+  full rerun is the last resort. Evidence: f0a1b86f0. `FormatRepair` and `MissionService.FormatRepair`: one tool-less call through the
+  probe executor (or `OutputRepairNormalizerCaptainId`), accepted only with no invented verdict, PASS, file, check,
+  scenario or mission, recorded as `ContractRepairKind.FormatRepairTurn`, then the full rerun. No runtime keeps a
+  session after exit, so there is no in-session restatement yet; recorded as a repair kind instead of a new
+  `StageDispositionEnum` value; the format turn does not consume `OutputRepairAttempts` (at most one per attempt).
+  Tests: `FormatRepair` (7), `MultiRuntimeFlow.judge_format_turn_restates_without_rerun`, `judge_format_turn_cannot_invent_pass`,
+  `gated_judge_gets_no_format_turn`, `PipelineDispatch.architect_plan_type_error_gets_format_turn`.
 - [x] **RS-6.5** Plan parser tolerance (`ArchitectPlanParser.cs`, `ContractRepair.TryRecoverArchitectPlan`): reuse
   `Protocol/EmbeddedJsonExtractor` for bare JSON, `~~~` fences, and prose in fences, preferring the last valid
   candidate; `NumberHandling = AllowReadingFromString`; case-insensitive `kind` and `branchStrategy`; keep the
@@ -853,8 +859,10 @@ the contract a schema, lets the model submit through a tool, and repairs format 
   `{file, line, severity, scenario, requiredFix}` through RS-6.2; the Judge template asks for a `## Findings`
   section for text runtimes; the eight-regex heading scraper in `HandoffArtifactBuilder.ExtractFindings` becomes the
   fallback. Evidence:
-- [ ] **RS-6.8** PASS evidence. A PASS must cite the checks it ran or at least one inspected file (deferred R19 in
-  `archive/PROMPT_AND_HANDOFF_IMPROVEMENTS.md`). A PASS without it becomes a format-only failure. Evidence:
+- [x] **RS-6.8** PASS evidence. A PASS must cite the checks it ran or at least one inspected file (deferred R19 in
+  `archive/PROMPT_AND_HANDOFF_IMPROVEMENTS.md`). A PASS without it becomes a format-only failure. Evidence: f0a1b86f0.
+  `JudgeEvidence.HasPassEvidence` (a file path or a named check) in `JudgeContract.ValidatePass` and the generated
+  contract. Tests: `FormatRepair.pass_without_evidence_is_rejected`, `MultiRuntimeFlow.judge_pass_without_evidence_reruns`.
 - [x] **RS-6.9** One handoff store. Every stage reads handoffs from `HandoffArtifact` rows created once, at stage
   completion, in the completion transaction. Remove the lazy `GetOrCreateForStageAsync` at launch and the unstored
   build in `MissionPromptBuilder.BuildTemplateParams`; replace the length-based `IsSameAttempt` with an attempt id.

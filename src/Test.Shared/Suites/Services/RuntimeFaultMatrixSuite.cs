@@ -109,7 +109,7 @@ namespace Test.Shared.Suites.Services
                 AssertTrue(after!.State != CaptainStateEnum.Quarantined, "overload is backpressure, not an exhausted quota");
             }));
 
-            cases.Add(CaseAsync("unclassified_crash_fails_once_with_reason", "An exit 1 with no structured error is a crash: the mission fails once with a reason and is not relaunched", TestTags.Negative, async () =>
+            cases.Add(CaseAsync("unclassified_crash_fails_once_with_reason", "An exit 1 with no structured error and no side-effect tool is resumed in place once (R4), then fails with a reason", TestTags.Negative, async () =>
             {
                 using HarborDockGitFixture git = await HarborDockGitFixture.CreateAsync().ConfigureAwait(false);
                 StubCaptainBehavior behavior = new StubCaptainBehavior
@@ -125,7 +125,7 @@ namespace Test.Shared.Suites.Services
                 Mission done = await WaitForSettledAsync(s, mission.Id).ConfigureAwait(false);
                 AssertEqual(MissionStatusEnum.Failed, done.Status);
                 AssertFalse(String.IsNullOrWhiteSpace(done.FailureReason), "the failure says why");
-                AssertEqual(1, behavior.MissionLaunches, "a crash is not relaunched");
+                AssertEqual(2, behavior.MissionLaunches, "an unclassified exit with no side effects resumes once, then fails");
                 await WaitForCaptainIdleAsync(s, captain.Id).ConfigureAwait(false);
             }));
 
