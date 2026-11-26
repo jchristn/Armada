@@ -602,10 +602,26 @@ routing; a renamed Architect slice breaks fan-out recovery. Everything a program
   (`running_on_vessel_returns_only_running_missions_of_that_vessel`, `a_pass_reads_shared_state_once_for_every_pending_mission`,
   `a_claim_in_the_pass_is_seen_by_the_next_mission`, which fails with the post-claim refresh removed). SQLite affected
   suites: 880 tests, 0 failed, 6 skipped.
-- [ ] **RS-4.8** One capacity model per (captain, runtime, endpoint), computed from the snapshot, replacing the three
+- [x] **RS-4.8** One capacity model per (captain, runtime, endpoint), computed from the snapshot, replacing the three
   calculations in `HasAvailableCapacityAsync` (`AdmiralService.cs:2654`), `SchedulerAllowsAdmissionObservationAsync`
   (`:2638`), and `EvaluateGlobalAdmissionAsync` (`CaptainRouting.cs:435`). Skip a mission early when every eligible
-  captain is limited. Evidence:
+  captain is limited. Evidence: `CapacityModel` (global limit from `CountExecutionSlotsAsync`, runtime and endpoint
+  occupancy from one captain snapshot, endpoint budget keyed by normalized base URL) is built once per pass state
+  (`PassCapacityAsync`, dropped with the claim-sensitive cache). `EvaluateGlobalAdmissionAsync`, the runtime and
+  endpoint caps in `ApplyCapacityLimitsAsync`, and the Admiral's `HasAvailableCapacityAsync` (through
+  `IMissionService.ReadDispatchCapacityAsync`) all read it; the Admiral's own Working-captain count is gone, and its
+  order (global limit, memory gate, captain room) is kept. `SchedulerAllowsAdmissionObservationAsync` no longer
+  existed. Early skip: the Admiral pass stops when no captain has room under any cap (previously it stopped only on
+  the global limit or no captain with a free slot, and tried each mission against full runtime or endpoint caps), and
+  a mission skips the shared lock when the global limit is full. Per-mission early skip on eligible captains is not
+  added: the eligible set depends on routing and the existing blocker detail would change. Also fixes an RS-4.7 gap:
+  a claim outside the pass (voyage creation, verification repair) bumps a claim generation, and a pass that sees a
+  newer one under `_CapacityLock` drops its claim-sensitive reads (`PassRevalidateUnderLock`). Endpoint availability
+  (disabled, unhealthy, open circuit) stays outside the model. Tests: Services.CapacityModel
+  (`the_dispatch_check_counts_the_global_limit_like_admission`, `every_captain_at_its_runtime_cap_leaves_no_dispatch_capacity`,
+  `captains_sharing_an_endpoint_share_its_cap`, `a_full_global_limit_skips_the_mission_before_the_shared_lock`,
+  `a_claim_outside_the_pass_is_counted_under_the_lock`, which fails with the under-lock revalidation removed).
+  SQLite affected suites: 893 tests, 0 failed, 6 skipped.
 - [ ] **RS-4.9** Narrow `_CapacityLock` (`MissionService.cs:135`): select and place before the lock, then claim with
   a conditional write and re-validate. The lock covers only the counter check and claim. Concurrency test with
   parallel dispatch passes proving no over-admission. Evidence:

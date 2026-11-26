@@ -8,11 +8,15 @@ namespace Armada.Core.Services
     {
         private readonly AsyncLocal<DispatchPassCache?> _Pass = new AsyncLocal<DispatchPassCache?>();
 
+        // Bumped before every claim write, under _CapacityLock. A pass that sees a newer value under the lock drops its
+        // claim-sensitive reads, so a claim made outside the pass (voyage creation, verification repair) is counted.
+        private long _ClaimGeneration;
+
         /// <inheritdoc />
         public IDisposable BeginDispatchPass()
         {
             DispatchPassCache? outer = _Pass.Value;
-            _Pass.Value = new DispatchPassCache();
+            _Pass.Value = new DispatchPassCache { Generation = Interlocked.Read(ref _ClaimGeneration) };
             return new PassScope(this, outer);
         }
 
@@ -20,6 +24,40 @@ namespace Armada.Core.Services
         internal int DispatchPassReads => _Pass.Value?.Reads ?? -1;
 
         private void PassStateChanged() => _Pass.Value?.AfterStateChange();
+
+        private void NoteClaimAttempt() => Interlocked.Increment(ref _ClaimGeneration);
+
+        // Call with _CapacityLock held, so no claim can land between the comparison and the reads that follow.
+        private void PassRevalidateUnderLock()
+        {
+            DispatchPassCache? pass = _Pass.Value;
+            if (pass == null) return;
+            long current = Interlocked.Read(ref _ClaimGeneration);
+            if (pass.Generation == current) return;
+            pass.AfterStateChange();
+            pass.Generation = current;
+        }
+
+        private async Task<CapacityModel> PassCapacityAsync(CancellationToken token)
+        {
+            DispatchPassCache? pass = _Pass.Value;
+            if (pass?.Capacity != null) return pass.Capacity;
+            List<Captain> captains = await PassCaptainsAsync(token).ConfigureAwait(false);
+            int slots = await PassExecutionSlotsAsync(token).ConfigureAwait(false);
+            Dictionary<string, ModelEndpoint?> endpoints = new Dictionary<string, ModelEndpoint?>(StringComparer.Ordinal);
+            foreach (string endpointId in CapacityModel.EndpointIds(captains))
+                endpoints[endpointId] = await PassEndpointAsync(endpointId, token).ConfigureAwait(false);
+            CapacityModel model = new CapacityModel(captains, slots, endpoints, _Settings);
+            if (pass != null) pass.Capacity = model;
+            return model;
+        }
+
+        /// <inheritdoc />
+        public async Task<DispatchCapacity> ReadDispatchCapacityAsync(CancellationToken token = default)
+        {
+            CapacityModel model = await PassCapacityAsync(token).ConfigureAwait(false);
+            return new DispatchCapacity { GlobalLimitReached = model.GlobalBlocker() != null, AnyCaptainHasRoom = model.AnyCaptainHasRoom() };
+        }
 
         private async Task<List<Captain>> PassCaptainsAsync(CancellationToken token)
         {

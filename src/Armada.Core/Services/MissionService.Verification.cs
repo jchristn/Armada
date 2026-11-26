@@ -22,6 +22,7 @@ namespace Armada.Core.Services
             if (!await _CapacityLock.WaitAsync(timeout, token).ConfigureAwait(false)) return false;
             try
             {
+                PassRevalidateUnderLock();
                 if (await EvaluateGlobalAdmissionAsync(token).ConfigureAwait(false) != null) return false;
                 Captain? current = await _Database.Captains.ReadAsync(captain.Id, token).ConfigureAwait(false);
                 if (current == null || !current.HasMissionCapacity || !CaptainVisibleToMission(current, mission)
@@ -60,7 +61,7 @@ namespace Armada.Core.Services
                 return await _Database.CaptainSelections.TryAdmitLegacyRepairAsync(current.Id, mission.Id, mission.LastUpdateUtc, mission.AssignedHarborId ?? UsageSelectionLocalHostId,
                     _Settings.Concurrency.MaxCaptainConcurrency, token).ConfigureAwait(false);
             }
-            finally { _CapacityLock.Release(); }
+            finally { NoteClaimAttempt(); _CapacityLock.Release(); }
         }
     }
 }

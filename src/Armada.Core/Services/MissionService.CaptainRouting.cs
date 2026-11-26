@@ -424,15 +424,7 @@ namespace Armada.Core.Services
             => PassRunningOnVesselAsync(vesselId, token);
 
         private async Task<MissionAssignmentBlocker?> EvaluateGlobalAdmissionAsync(CancellationToken token)
-        {
-            int limit = _Settings.MaxConcurrentMissions;
-            if (limit == 0) return null;
-            int running = await PassExecutionSlotsAsync(token).ConfigureAwait(false);
-            if (running < limit) return null;
-            // Do not expose other tenants' mission IDs through a deployment-wide limit.
-            return MissionAdmissionEvaluator.Capacity(MissionAssignmentBlockerReasonEnum.GlobalMissionLimit,
-                "Armada", running, limit, AssignmentBlockerActionEnum.EditSettings, "settings", null, "MaxConcurrentMissions", Constants.GlobalMissionConcurrencyCeiling);
-        }
+            => (await PassCapacityAsync(token).ConfigureAwait(false)).GlobalBlocker();
 
         private async Task<MissionAssignmentBlocker?> EvaluateVesselAdmissionAsync(Mission mission, Vessel vessel, CancellationToken token)
         {

@@ -20,6 +20,12 @@ namespace Armada.Core.Services
         internal readonly Dictionary<string, ModelEndpoint?> Endpoints = new Dictionary<string, ModelEndpoint?>(StringComparer.Ordinal);
         internal readonly Dictionary<string, ModelProfile?> Profiles = new Dictionary<string, ModelProfile?>(StringComparer.Ordinal);
 
+        /// <summary>The capacity model built from Captains, ExecutionSlots and Endpoints (RS-4.8).</summary>
+        internal CapacityModel? Capacity;
+
+        /// <summary>The service's claim generation this cache reflects; a newer one means another caller claimed.</summary>
+        internal long Generation;
+
         /// <summary>Database reads this pass made through the cache, for tests and the dispatch log.</summary>
         internal int Reads;
 
@@ -28,6 +34,7 @@ namespace Armada.Core.Services
         {
             Captains = null;
             ExecutionSlots = null;
+            Capacity = null;
             RunningByVessel.Clear();
             AdmissionByVessel.Clear();
             Voyages.Clear();

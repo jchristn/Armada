@@ -161,6 +161,14 @@ namespace Armada.Core.Services.Interfaces
         IDisposable BeginDispatchPass();
 
         /// <summary>
+        /// Read the one capacity model (RS-4.8): whether the global mission limit is full and whether any captain has
+        /// room under its own, its runtime's and its endpoint's caps. Inside a dispatch pass this reads the pass snapshot.
+        /// </summary>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The global and per-captain answers.</returns>
+        Task<DispatchCapacity> ReadDispatchCapacityAsync(CancellationToken token = default);
+
+        /// <summary>
         /// Whether the mission's voyage binds its persona to one captain strictly ("wait for selected captain"), so no
         /// recovery path may hand it to a different captain.
         /// </summary>

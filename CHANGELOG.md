@@ -88,6 +88,13 @@ Conductor) with Opus and GPT-6.1 reliable. The work is tracked item by item in `
   instead of reading them again for each mission. A claim drops the state it can change, so the next mission in the
   pass never admits against counts from before it. Running missions on a vessel come from one indexed query
   (`EnumerateRunningOnVesselAsync`) instead of a scan of every active status on every vessel (RS-4.7).
+- **One capacity model.** The Admiral's dispatch check, mission admission and the verification repair path now read
+  one model of the global mission limit, runtime caps and endpoint caps, built from the same captain snapshot and
+  execution-slot count. The Admiral used to count Working captains while admission counted Assigned and InProgress
+  missions, so the two could disagree; and a dispatch pass now stops as soon as no captain has room under any cap,
+  instead of trying every pending mission against a full runtime or endpoint. A mission is skipped before the shared
+  admission lock when the global limit is already full. A claim made outside a dispatch pass (voyage creation, a
+  repair) is now counted when the pass takes the lock, so the pass cannot admit against counts from before it (RS-4.8).
 - **Recovery state survives a restart.** Endpoint circuit breakers, launch backoff (with the captains that failed to
   start the mission), the start of a transient outage, and escalation rule cooldowns were kept only in memory, so a
   restart sent missions straight back to a failing endpoint, relaunched a broken captain at once, granted an outage a

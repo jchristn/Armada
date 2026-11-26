@@ -615,6 +615,10 @@ namespace Armada.Core.Services
                 return false;
             }
 
+            // RS-4.8: skip early, without the shared lock, when the deployment-wide limit is already full.
+            MissionAssignmentBlocker? fullBeforeLock = await EvaluateGlobalAdmissionAsync(token).ConfigureAwait(false);
+            if (fullBeforeLock != null) { NoteWait(mission, fullBeforeLock); return false; }
+
             // Only shared capacity checks and the claim serialize across vessels. Vessel gates
             // above run independently, so a blocked voyage cannot stall unrelated vessels.
             long capacityLockStart = System.Diagnostics.Stopwatch.GetTimestamp();
@@ -628,6 +632,7 @@ namespace Armada.Core.Services
                 return false;
             }
             capacityHeld = true;
+            PassRevalidateUnderLock();
             MissionAssignmentBlocker? globalBlocker = await EvaluateGlobalAdmissionAsync(token).ConfigureAwait(false);
             if (globalBlocker != null) { NoteWait(mission, globalBlocker); return false; }
 
@@ -756,6 +761,7 @@ namespace Armada.Core.Services
             // concurrent dispatcher can never take it in the gap, and from here on the captain names this mission,
             // which keeps orphan recovery from reverting the assignment while its dock is being provisioned.
             bool claimed;
+            NoteClaimAttempt();
             if (usageSelection != null)
             {
                 // Evidence and the actual compatibility choice commit with the slot, before any process/dock work.
@@ -792,6 +798,7 @@ namespace Armada.Core.Services
             else claimed = await _Database.CaptainSelections.TryAdmitLegacyAsync(captain.Id, mission.Id, usageExecutionHost, _Settings.Concurrency.MaxCaptainConcurrency, token).ConfigureAwait(false);
             // RS-4.7: a claim attempt changes captain and slot state, so the next mission in this pass reads it again.
             PassStateChanged();
+            PassRevalidateUnderLock();
             if (!claimed)
             {
                 _Logging.Info(_Header + "captain " + captain.Id + " was claimed by another mission before " + mission.Id + " could take it; retrying next cycle");
@@ -1302,57 +1309,24 @@ namespace Armada.Core.Services
         {
             if (idleCaptains.Count == 0) return idleCaptains;
 
-            // Per-runtime caps (AgentSettings.MaxConcurrent, 0 = unlimited) and per-endpoint caps
-            // (InferenceOptions.MaxConcurrentMissions) count occupied execution slots, so several captains pointed at one
+            // Runtime and endpoint caps come from the one capacity model (RS-4.8), so several captains pointed at one
             // local model server share its budget instead of each starting a run against it.
-            Dictionary<AgentRuntimeEnum, int> runtimeLimits = ConcurrencyCapacityPolicy.RuntimeLimits(_Settings.Agents);
-
-            bool anyEndpoint = idleCaptains.Any(c => !String.IsNullOrEmpty(c.ModelEndpointId));
-            if (runtimeLimits.Count == 0 && !anyEndpoint) return idleCaptains;
-
-            List<Captain> working = (await PassCaptainsAsync(token).ConfigureAwait(false)).Where(c => c.ActiveMissionCount > 0 || c.State == CaptainStateEnum.Working).ToList();
-            Dictionary<string, ModelEndpoint?> endpoints = new Dictionary<string, ModelEndpoint?>(StringComparer.Ordinal);
-            async Task<ModelEndpoint?> EndpointOf(Captain captain)
-            {
-                if (String.IsNullOrEmpty(captain.ModelEndpointId)) return null;
-                if (!endpoints.TryGetValue(captain.ModelEndpointId!, out ModelEndpoint? endpoint))
-                {
-                    endpoint = await PassEndpointAsync(captain.ModelEndpointId!, token).ConfigureAwait(false);
-                    endpoints[captain.ModelEndpointId!] = endpoint;
-                }
-                return endpoint;
-            }
-
-            Dictionary<string, int> workingByEndpoint = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-            if (anyEndpoint)
-            {
-                foreach (Captain busy in working)
-                {
-                    ModelEndpoint? endpoint = await EndpointOf(busy).ConfigureAwait(false);
-                    if (endpoint == null) continue;
-                    string key = EndpointCapacityKey(endpoint);
-                    workingByEndpoint[key] = (workingByEndpoint.TryGetValue(key, out int count) ? count : 0) + ConcurrencyCapacityPolicy.Occupancy(busy);
-                }
-            }
+            CapacityModel capacity = await PassCapacityAsync(token).ConfigureAwait(false);
 
             List<Captain> admitted = new List<Captain>();
             foreach (Captain candidate in idleCaptains)
             {
-                if (runtimeLimits.TryGetValue(candidate.Runtime, out int runtimeLimit) && working.Where(w => w.Runtime == candidate.Runtime).Sum(w => ConcurrencyCapacityPolicy.Occupancy(w)) >= runtimeLimit)
+                if (!capacity.KnowsEndpointOf(candidate))
+                    capacity.AddEndpoint(candidate.ModelEndpointId!, await PassEndpointAsync(candidate.ModelEndpointId!, token).ConfigureAwait(false));
+                MissionAssignmentBlocker? runtimeBlocker = capacity.RuntimeBlocker(candidate);
+                if (runtimeBlocker != null)
                 {
-                    if (excluded != null) excluded[candidate.Id] = MissionAdmissionEvaluator.Capacity(MissionAssignmentBlockerReasonEnum.RuntimeMissionLimit,
-                        candidate.Runtime + " runtime", working.Where(w => w.Runtime == candidate.Runtime).Sum(w => ConcurrencyCapacityPolicy.Occupancy(w)), runtimeLimit,
-                        AssignmentBlockerActionEnum.EditSettings, "settings", null, "Agents." + candidate.Runtime + ".MaxConcurrent");
-                    if (excluded != null)
-                    {
-                        excluded[candidate.Id].Advice[0].Action = null;
-                        excluded[candidate.Id].Advice[0].Text += " Update this runtime cap in settings.json, or wait for running work to finish.";
-                    }
-                    _Logging.Debug(_Header + "captain " + candidate.Id + " skipped for mission " + mission.Id + ": " + candidate.Runtime + " is at its MaxConcurrent of " + runtimeLimit);
+                    if (excluded != null) excluded[candidate.Id] = runtimeBlocker;
+                    _Logging.Debug(_Header + "captain " + candidate.Id + " skipped for mission " + mission.Id + ": " + runtimeBlocker.Summary);
                     continue;
                 }
 
-                ModelEndpoint? endpoint = await EndpointOf(candidate).ConfigureAwait(false);
+                ModelEndpoint? endpoint = capacity.EndpointOf(candidate);
                 if (endpoint != null)
                 {
                     if (!endpoint.Enabled)
@@ -1385,13 +1359,11 @@ namespace Armada.Core.Services
                         }
                     }
 
-                    int? endpointLimit = endpoint.InferenceOptions?.MaxConcurrentMissions;
-                    if (endpointLimit.HasValue && (workingByEndpoint.TryGetValue(EndpointCapacityKey(endpoint), out int busyCount) ? busyCount : 0) >= endpointLimit.Value)
+                    MissionAssignmentBlocker? endpointBlocker = capacity.EndpointBlocker(candidate);
+                    if (endpointBlocker != null)
                     {
-                        if (excluded != null) excluded[candidate.Id] = MissionAdmissionEvaluator.Capacity(MissionAssignmentBlockerReasonEnum.EndpointMissionLimit,
-                            "Endpoint " + endpoint.Name, workingByEndpoint.TryGetValue(EndpointCapacityKey(endpoint), out int count) ? count : 0, endpointLimit.Value,
-                            AssignmentBlockerActionEnum.EditEndpoint, "endpoint", endpoint.Id, "InferenceOptions.MaxConcurrentMissions", 64);
-                        _Logging.Debug(_Header + "captain " + candidate.Id + " skipped for mission " + mission.Id + ": endpoint " + endpoint.BaseUrl + " is at its limit of " + endpointLimit.Value + " concurrent mission(s)");
+                        if (excluded != null) excluded[candidate.Id] = endpointBlocker;
+                        _Logging.Debug(_Header + "captain " + candidate.Id + " skipped for mission " + mission.Id + ": " + endpointBlocker.Summary);
                         continue;
                     }
                 }

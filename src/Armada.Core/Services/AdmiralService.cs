@@ -2232,7 +2232,8 @@ namespace Armada.Core.Services
                 _Logging.Debug(_Header + "retrying dispatch for pending missions that previously could not be assigned");
             }
 
-            // Check for any idle captains with available capacity
+            // One capacity model for the whole pass (RS-4.8): when no captain has room under any cap, no mission is tried.
+            using IDisposable pass = _Missions.BeginDispatchPass();
             bool hasCapacity = await HasAvailableCapacityAsync(token).ConfigureAwait(false);
             if (!hasCapacity)
             {
@@ -2241,7 +2242,6 @@ namespace Armada.Core.Services
             }
 
             bool anyFailed = false;
-            using IDisposable pass = _Missions.BeginDispatchPass();
             Dictionary<string, Vessel?> vessels = new Dictionary<string, Vessel?>(StringComparer.Ordinal);
 
             foreach (Mission mission in pendingMissions)
@@ -2328,13 +2328,10 @@ namespace Armada.Core.Services
         private async Task<bool> HasAvailableCapacityAsync(CancellationToken token)
         {
             _LastMemoryDeferral = null;
-            // Global concurrency ceiling: refuse new work once the configured number of missions
-            // is already running, as backpressure against unbounded captain execution.
-            if (_Settings.MaxConcurrentMissions > 0)
-            {
-                List<Captain> workingCaptains = await _Database.Captains.EnumerateByStateAsync(CaptainStateEnum.Working, token).ConfigureAwait(false);
-                if (workingCaptains.Sum(c => Math.Max(1, c.ActiveMissionCount)) >= _Settings.MaxConcurrentMissions) return false;
-            }
+            // The same capacity model admission uses (RS-4.8): the global limit counted from execution slots, then the
+            // memory gate, then some captain with room under its own, its runtime's and its endpoint's caps.
+            DispatchCapacity capacity = await _Missions.ReadDispatchCapacityAsync(token).ConfigureAwait(false);
+            if (capacity.GlobalLimitReached) return false;
 
             // Resource-pressure admission: defer rather than launch a captain onto a memory-starved host,
             // where it would be OOM-killed mid-mission and burn a redispatch. Disabled when the floor is 0,
@@ -2361,9 +2358,7 @@ namespace Armada.Core.Services
 
             _LastMemoryDeferral = null;
             _DeferralsRecorded.Clear();
-
-            List<Captain> candidates = await _Database.Captains.EnumerateAsync(token).ConfigureAwait(false);
-            return candidates.Any(c => c.HasMissionCapacity && c.ActiveMissionCount < _Settings.Concurrency.MaxCaptainConcurrency);
+            return capacity.AnyCaptainHasRoom;
         }
 
         /// <summary>
