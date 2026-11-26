@@ -17,7 +17,7 @@ namespace Armada.Core.Services
     {
         #region Private-Methods
 
-        private async Task<Mission> CreateArchitectSliceAsync(Mission architect, Mission template, List<Mission> voyageMissions, List<ParsedArchitectMission> parsed, int index, CancellationToken token)
+        private async Task<Mission> CreateArchitectSliceAsync(Mission architect, Mission template, ArchitectFanOutWork work, List<ParsedArchitectMission> parsed, int index, CancellationToken token)
         {
             Mission worker = new Mission(parsed[index].Title + " [Worker]", parsed[index].Description
                 + await BuildArchitectSliceContextAsync(architect, parsed, index, token).ConfigureAwait(false));
@@ -35,20 +35,20 @@ namespace Armada.Core.Services
             worker.RequiresReview = template.RequiresReview;
             worker.ReviewDenyAction = template.ReviewDenyAction;
             worker.BranchName = null;
-            worker = await _Database.Missions.CreateAsync(worker, token).ConfigureAwait(false);
-            await CopyPlaybookSnapshotsAsync(template.Id, worker.Id, token).ConfigureAwait(false);
-            _Logging.Info(_Header + "architect created additional worker mission " + worker.Id + ": " + parsed[index].Title);
+            work.Create(worker);
+            await CopyPlaybookSnapshotsAsync(work, template.Id, worker.Id, token).ConfigureAwait(false);
 
-            await CloneDependentChainAsync(voyageMissions, template, worker, parsed[index].Title, parsed[index].Description, token).ConfigureAwait(false);
-            await ApplyArchitectWorkerEnvelopeAsync(architect, worker, parsed[index], voyageMissions, token).ConfigureAwait(false);
+            await CloneDependentChainAsync(work, template, worker, parsed[index].Title, parsed[index].Description, token).ConfigureAwait(false);
+            await ApplyArchitectWorkerEnvelopeAsync(architect, worker, parsed[index], work, token).ConfigureAwait(false);
             return worker;
         }
 
         // A slice or stage created by the fan-out carries the playbooks of the mission it is cloned from: the voyage's
         // selections are snapshotted per mission at dispatch, and a mission reads only its own snapshots (RS-2.8).
-        private async Task CopyPlaybookSnapshotsAsync(string fromMissionId, string toMissionId, CancellationToken token)
+        private async Task CopyPlaybookSnapshotsAsync(ArchitectFanOutWork work, string fromMissionId, string toMissionId, CancellationToken token)
         {
-            List<MissionPlaybookSnapshot> snapshots = await _Database.Playbooks.GetMissionSnapshotsAsync(fromMissionId, token).ConfigureAwait(false);
+            List<MissionPlaybookSnapshot> snapshots = work.PendingSnapshots(fromMissionId)
+                ?? await _Database.Playbooks.GetMissionSnapshotsAsync(fromMissionId, token).ConfigureAwait(false);
             if (snapshots.Count == 0) return;
 
             // Content is copied; where a playbook was materialized is per mission and is resolved again at launch.
@@ -61,7 +61,7 @@ namespace Armada.Core.Services
                 DeliveryMode = s.DeliveryMode,
                 SourceLastUpdateUtc = s.SourceLastUpdateUtc
             }).ToList();
-            await _Database.Playbooks.SetMissionSnapshotsAsync(toMissionId, copies, token).ConfigureAwait(false);
+            work.SetSnapshots(toMissionId, copies);
         }
 
         /// <summary>
@@ -79,23 +79,55 @@ namespace Armada.Core.Services
                 .FirstOrDefault();
         }
 
-        private async Task MarkArchitectFanOutCompleteAsync(Mission architect, CancellationToken token)
+        /// <summary>
+        /// Write a computed fan-out in one transaction together with the Architect's completion mark (RS-4.3): every slice,
+        /// stage, rewiring and ownership change exists, or none does. A slice or the Architect whose status changed since
+        /// it was read refuses the whole write; recovery computes the fan-out again from what is stored.
+        /// </summary>
+        private async Task<bool> CommitArchitectFanOutAsync(Mission architect, ArchitectFanOutWork work, CancellationToken token)
         {
+            CrashPoints.Hit(CrashPointNames.FanOutPlanned);
             Mission? current = await _Database.Missions.ReadAsync(architect.Id, token).ConfigureAwait(false);
-            if (current == null || current.FanOutCompletedUtc.HasValue) return;
-            current.FanOutCompletedUtc = DateTime.UtcNow;
-            current.LastUpdateUtc = current.FanOutCompletedUtc.Value;
-            if (await _Database.Missions.TryUpdateIfStatusAsync(current, new MissionStatusEnum[] { current.Status }, token).ConfigureAwait(false))
-                architect.FanOutCompletedUtc = current.FanOutCompletedUtc;
+            if (current == null) return false;
+            List<MissionGuardedWrite> extra = new List<MissionGuardedWrite>();
+            if (!current.FanOutCompletedUtc.HasValue)
+            {
+                current.FanOutCompletedUtc = DateTime.UtcNow;
+                extra.Add(new MissionGuardedWrite(current, new[] { current.Status }));
+            }
+
+            if (!await _Database.Missions.WriteBatchAsync(work.ToBatch(extra.ToArray()), token).ConfigureAwait(false))
+            {
+                _Logging.Warn(_Header + "the fan-out of Architect mission " + architect.Id + " was not written: a mission it changes moved on meanwhile; recovery will compute it again");
+                return false;
+            }
+
+            architect.FanOutCompletedUtc = current.FanOutCompletedUtc;
+            CrashPoints.Hit(CrashPointNames.FanOutWritten);
+            if (work.CreatedCount > 0)
+                _Logging.Info(_Header + "architect mission " + architect.Id + " fanned out: " + work.CreatedCount + " mission(s) created");
+
+            foreach (ArmadaEvent evt in work.Events)
+            {
+                try
+                {
+                    await _Database.Events.CreateAsync(evt, token).ConfigureAwait(false);
+                }
+                catch (Exception ex) when (!(ex is OperationCanceledException && token.IsCancellationRequested))
+                {
+                    _Logging.Warn(_Header + "could not record event " + evt.EventType + " for mission " + evt.MissionId + ": " + ex.Message);
+                }
+            }
+            return true;
         }
 
         /// <summary>
-        /// Finish an Architect fan-out that an Admiral restart interrupted (H11). The fan-out writes several rows (the first
-        /// slice into the existing Worker, one new Worker and stage chain per further slice, then the plan's dependencies)
-        /// and marks the Architect complete only at the end. An unmarked Architect in a running voyage is reconciled
-        /// against its own plan: a slice whose Worker (found by its unique plan title) is missing is created, a Worker
-        /// missing its stage chain gets one, and dependencies are applied to slices that have not started. Nothing that
-        /// exists is created twice, and a slice that already started is never rewired.
+        /// Finish an Architect fan-out that was not marked complete (H11). The fan-out is written in one transaction with its
+        /// completion mark (RS-4.3), so an unmarked Architect normally has written nothing and the normal fan-out runs again.
+        /// A partial fan-out written before that change is reconciled against the plan: a slice whose Worker (found by its
+        /// plan index) is missing is created, a Worker missing its stage chain gets one, and dependencies are applied to
+        /// slices that have not started, all in one transaction. Nothing that exists is created twice, and a slice that
+        /// already started is never rewired.
         /// </summary>
         private async Task<bool> TryRecoverArchitectFanOutAsync(Mission architect, CancellationToken token)
         {
@@ -119,25 +151,26 @@ namespace Armada.Core.Services
             Mission? template = FindArchitectSlice(voyageMissions, architect.Id, 0);
             if (template == null) return false;
 
+            ArchitectFanOutWork work = new ArchitectFanOutWork(voyageMissions);
             int repaired = 0;
             bool templateHasChain = voyageMissions.Any(m => m.DependsOnMissionId == template.Id);
             for (int i = 1; i < parsed.Count; i++)
             {
-                Mission? worker = FindArchitectSlice(voyageMissions, architect.Id, i);
+                Mission? worker = FindArchitectSlice(work.Missions, architect.Id, i);
                 if (worker == null)
                 {
-                    await CreateArchitectSliceAsync(architect, template, voyageMissions, parsed, i, token).ConfigureAwait(false);
+                    await CreateArchitectSliceAsync(architect, template, work, parsed, i, token).ConfigureAwait(false);
                     repaired++;
                 }
-                else if (templateHasChain && !voyageMissions.Any(m => m.DependsOnMissionId == worker.Id))
+                else if (templateHasChain && !work.Missions.Any(m => m.DependsOnMissionId == worker.Id))
                 {
-                    await CloneDependentChainAsync(voyageMissions, template, worker, parsed[i].Title, parsed[i].Description, token).ConfigureAwait(false);
+                    await CloneDependentChainAsync(work, template, worker, parsed[i].Title, parsed[i].Description, token).ConfigureAwait(false);
                     repaired++;
                 }
             }
 
-            await ApplyArchitectMissionDependenciesAsync(architect, parsed, token).ConfigureAwait(false);
-            await MarkArchitectFanOutCompleteAsync(architect, token).ConfigureAwait(false);
+            ApplyArchitectMissionDependencies(architect, parsed, work);
+            if (!await CommitArchitectFanOutAsync(architect, work, token).ConfigureAwait(false)) return false;
             if (repaired > 0)
                 _Logging.Warn(_Header + "finished the interrupted fan-out of Architect mission " + architect.Id + ": " + repaired + " slice(s) repaired");
             return repaired > 0;

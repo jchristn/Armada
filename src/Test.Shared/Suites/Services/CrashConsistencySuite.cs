@@ -86,8 +86,12 @@ namespace Test.Shared.Suites.Services
             cases.Add(Case("handoff_crash_between_dependents_recovers", "Crash after a stage handoff prepared one of two dependents: restart recovery prepares the other on the same branch",
                 null, HandoffCrashAsync));
 
-            cases.Add(Case("fanout_crash_between_slices_recovers_once", "Crash after the second of three Architect slices: restart recovery creates the third once, each with its Judge stage",
-                null, FanOutCrashAsync));
+            foreach (string point in new[] { CrashPointNames.FanOutPlanned, CrashPointNames.FanOutWritten })
+            {
+                string crashPoint = point;
+                cases.Add(Case("fanout_crash_at_" + crashPoint.Replace('.', '_').Replace('-', '_'), "Crash at " + crashPoint + " during a three-slice Architect fan-out: all of it was written or none, and after restart each slice exists once with its Judge stage",
+                    null, () => FanOutCrashAsync(crashPoint)));
+            }
 
             return new TestSuiteDescriptor(suiteId: SuiteId, displayName: "Crash consistency", cases: cases);
         }
@@ -252,7 +256,7 @@ namespace Test.Shared.Suites.Services
             }
         }
 
-        private static async Task FanOutCrashAsync()
+        private static async Task FanOutCrashAsync(string crashPoint)
         {
             using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
             DatabaseDriver db = testDb.Driver;
@@ -287,8 +291,23 @@ namespace Test.Shared.Suites.Services
             Mission worker = await db.Missions.CreateAsync(new Mission("[Worker] Build", "Build it") { VesselId = vessel.Id, VoyageId = voyage.Id, Persona = "Worker", DependsOnMissionId = architect.Id }).ConfigureAwait(false);
             await db.Missions.CreateAsync(new Mission("[Judge] Review", "Review it") { VesselId = vessel.Id, VoyageId = voyage.Id, Persona = "Judge", DependsOnMissionId = worker.Id }).ConfigureAwait(false);
 
-            CrashRunOutcomeEnum outcome = await CrashRun.RunAsync(CrashPointNames.FanOutSliceCreated, () => before.HandleCompletionAsync(captain, architect.Id)).ConfigureAwait(false);
+            CrashRunOutcomeEnum outcome = await CrashRun.RunAsync(crashPoint, () => before.HandleCompletionAsync(captain, architect.Id)).ConfigureAwait(false);
             AssertEqual(CrashRunOutcomeEnum.Crashed, outcome, "the operation reached the crash point");
+
+            // RS-4.3: the fan-out is one transaction, so the crash leaves all of it or none of it.
+            List<Mission> atCrash = await db.Missions.EnumerateByVoyageAsync(voyage.Id).ConfigureAwait(false);
+            Mission? architectAtCrash = atCrash.Single(m => m.Id == architect.Id);
+            if (crashPoint == CrashPointNames.FanOutPlanned)
+            {
+                AssertEqual(3, atCrash.Count, "nothing of the fan-out was written");
+                AssertEqual("[Worker] Build", atCrash.Single(m => m.Id == worker.Id).Title, "the waiting Worker is untouched");
+                AssertFalse(architectAtCrash.FanOutCompletedUtc.HasValue, "the Architect is not marked");
+            }
+            else
+            {
+                AssertEqual(7, atCrash.Count, "every slice and stage was written");
+                AssertTrue(architectAtCrash.FanOutCompletedUtc.HasValue, "the Architect is marked in the same write");
+            }
 
             MissionService after = CreateMissionService(db, settings, git);
             after.OnGetMissionOutput = _ => plan;

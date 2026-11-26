@@ -18,14 +18,14 @@ namespace Armada.Core.Services
         #region Private-Methods
 
         private async Task CloneDependentChainAsync(
-            List<Mission> voyageMissions,
+            ArchitectFanOutWork work,
             Mission templateMission,
             Mission newDependency,
             string parsedTitle,
             string parsedDescription,
             CancellationToken token)
         {
-            List<Mission> directDependents = voyageMissions
+            List<Mission> directDependents = work.Missions
                 .Where(m => m.DependsOnMissionId == templateMission.Id)
                 .OrderBy(m => m.CreatedUtc)
                 .ToList();
@@ -50,22 +50,21 @@ namespace Armada.Core.Services
                 clonedStage.RequiresReview = templateChild.RequiresReview;
                 clonedStage.ReviewDenyAction = templateChild.ReviewDenyAction;
                 clonedStage.BranchName = null;
-                clonedStage = await _Database.Missions.CreateAsync(clonedStage, token).ConfigureAwait(false);
-                await CopyPlaybookSnapshotsAsync(templateChild.Id, clonedStage.Id, token).ConfigureAwait(false);
-                _Logging.Info(_Header + "architect created chained stage " + clonedStage.Id +
+                work.Create(clonedStage);
+                await CopyPlaybookSnapshotsAsync(work, templateChild.Id, clonedStage.Id, token).ConfigureAwait(false);
+                _Logging.Debug(_Header + "architect planned chained stage " + clonedStage.Id +
                     " (" + clonedStage.Persona + ") depending on " + newDependency.Id);
-                await CloneDependentChainAsync(voyageMissions, templateChild, clonedStage, parsedTitle, parsedDescription, token).ConfigureAwait(false);
+                await CloneDependentChainAsync(work, templateChild, clonedStage, parsedTitle, parsedDescription, token).ConfigureAwait(false);
             }
         }
 
-        private async Task RetitleDependentChainAsync(
-            List<Mission> voyageMissions,
+        private static void RetitleDependentChain(
+            ArchitectFanOutWork work,
             Mission dependency,
             string parsedTitle,
-            string parsedDescription,
-            CancellationToken token)
+            string parsedDescription)
         {
-            List<Mission> directDependents = voyageMissions
+            List<Mission> directDependents = work.Missions
                 .Where(m => m.DependsOnMissionId == dependency.Id)
                 .OrderBy(m => m.CreatedUtc)
                 .ToList();
@@ -79,22 +78,21 @@ namespace Armada.Core.Services
                 dependent.Title = parsedTitle + " [" + dependentPersona + "]";
                 dependent.Description = parsedDescription;
                 dependent.BranchName = null;
-                dependent.LastUpdateUtc = DateTime.UtcNow;
-                await _Database.Missions.UpdateAsync(dependent, token).ConfigureAwait(false);
-                await RetitleDependentChainAsync(voyageMissions, dependent, parsedTitle, parsedDescription, token).ConfigureAwait(false);
+                work.Changed(dependent);
+                RetitleDependentChain(work, dependent, parsedTitle, parsedDescription);
             }
         }
 
-        private async Task ApplyArchitectMissionDependenciesAsync(
+        private void ApplyArchitectMissionDependencies(
             Mission architectMission,
             List<ParsedArchitectMission> parsed,
-            CancellationToken token)
+            ArchitectFanOutWork work)
         {
             if (architectMission == null) throw new ArgumentNullException(nameof(architectMission));
             if (String.IsNullOrEmpty(architectMission.VoyageId)) return;
             if (parsed == null || parsed.Count == 0) return;
 
-            List<Mission> voyageMissions = await _Database.Missions.EnumerateByVoyageAsync(architectMission.VoyageId, token).ConfigureAwait(false);
+            List<Mission> voyageMissions = work.Missions;
             Dictionary<int, Mission> workerRootsByIndex = new Dictionary<int, Mission>();
             Dictionary<int, Mission> terminalStagesByIndex = new Dictionary<int, Mission>();
             Dictionary<string, Mission> terminalStagesByTitle = new Dictionary<string, Mission>(StringComparer.OrdinalIgnoreCase);
@@ -119,7 +117,7 @@ namespace Armada.Core.Services
                 // Idempotent: only a slice still waiting on the Architect is changed, so a recovery pass never touches one
                 // that already started (H11).
                 bool waitingOnArchitect = workerRoot.Status == MissionStatusEnum.Pending && workerRoot.DependsOnMissionId == architectMission.Id;
-                if (waitingOnArchitect) await ApplySliceOwnershipAsync(voyageMissions, workerRoot, parsed[i], token).ConfigureAwait(false);
+                if (waitingOnArchitect) ApplySliceOwnership(work, workerRoot, parsed[i]);
 
                 string? dependencyReference = parsed[i].DependsOnReference;
                 int? dependencyIndex = parsed[i].DependsOnIndex;
@@ -168,8 +166,7 @@ namespace Armada.Core.Services
                     : parsed[i].BranchStrategy == "fork" ? MissionBranchStrategyEnum.ForkFromParent
                     : MissionBranchStrategyEnum.New;
                 workerRoot.BranchName = null;
-                workerRoot.LastUpdateUtc = DateTime.UtcNow;
-                await _Database.Missions.UpdateAsync(workerRoot, token).ConfigureAwait(false);
+                work.Changed(workerRoot);
                 depthByIndex[i + 1] = depth;
 
                 _Logging.Debug(_Header + "architect made worker mission " + workerRoot.Id + " a child of " + parentRoot.Id +
@@ -178,19 +175,18 @@ namespace Armada.Core.Services
         }
 
         // Ownership is copied onto every stage of the slice, so any stage's prompt can name the slice's paths.
-        private async Task ApplySliceOwnershipAsync(List<Mission> voyageMissions, Mission workerRoot, ParsedArchitectMission slice, CancellationToken token)
+        private static void ApplySliceOwnership(ArchitectFanOutWork work, Mission workerRoot, ParsedArchitectMission slice)
         {
             string? owned = slice.OwnedPaths.Count == 0 ? null : JsonSerializer.Serialize(slice.OwnedPaths);
             string? reads = slice.ReadsPaths.Count == 0 ? null : JsonSerializer.Serialize(slice.ReadsPaths);
             HashSet<string> chain = new HashSet<string>(StringComparer.Ordinal);
             for (Mission? member = workerRoot; member != null && chain.Add(member.Id);
-                member = voyageMissions.Where(m => m.DependsOnMissionId == member.Id).OrderBy(m => m.CreatedUtc).FirstOrDefault())
+                member = work.Missions.Where(m => m.DependsOnMissionId == member.Id).OrderBy(m => m.CreatedUtc).FirstOrDefault())
             {
                 if (member.OwnedPathsJson == owned && member.ReadsPathsJson == reads) continue;
                 member.OwnedPathsJson = owned;
                 member.ReadsPathsJson = reads;
-                member.LastUpdateUtc = DateTime.UtcNow;
-                await _Database.Missions.UpdateAsync(member, token).ConfigureAwait(false);
+                work.Changed(member);
             }
         }
 

@@ -175,6 +175,44 @@ namespace Test.Shared.Suites.Database
                 }
             }));
 
+            cases.Add(CaseAsync("mission_write_batch_is_all_or_nothing", "WriteBatchAsync writes new missions, guarded updates and playbook snapshots together; a guard that finds the status changed writes nothing", TestTags.Reliability, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    DatabaseDriver db = testDb.Driver;
+                    MissionTestPrerequisites prereqs = await CreatePrerequisitesAsync(db);
+                    Mission slot = await db.Missions.CreateAsync(new Mission("Slot", "w") { VesselId = prereqs.Vessel.Id, VoyageId = prereqs.Voyage.Id });
+                    Mission started = await db.Missions.CreateAsync(new Mission("Started", "w") { VesselId = prereqs.Vessel.Id, VoyageId = prereqs.Voyage.Id, Status = MissionStatusEnum.InProgress });
+                    List<MissionPlaybookSnapshot> snapshots = new List<MissionPlaybookSnapshot> { new MissionPlaybookSnapshot { FileName = "rules.md", Content = "be careful" } };
+
+                    Mission slice = new Mission("Slice", "w") { VesselId = prereqs.Vessel.Id, VoyageId = prereqs.Voyage.Id, DependsOnMissionId = slot.Id };
+                    slot.Title = "Slot, filled";
+                    MissionWriteBatch batch = new MissionWriteBatch();
+                    batch.Created.Add(slice);
+                    batch.Updated.Add(new MissionGuardedWrite(slot, new[] { MissionStatusEnum.Pending }));
+                    batch.Snapshots.Add(new MissionSnapshotSet(slice.Id, snapshots));
+                    AssertTrue(await db.Missions.WriteBatchAsync(batch), "the batch was written");
+                    AssertNotNull(await db.Missions.ReadAsync(slice.Id), "the new mission exists");
+                    AssertEqual("Slot, filled", (await db.Missions.ReadAsync(slot.Id))!.Title, "the guarded update applied");
+                    AssertEqual("be careful", (await db.Playbooks.GetMissionSnapshotsAsync(slice.Id)).Single().Content, "the snapshot was written with it");
+
+                    // The second guard expects Pending but the mission started: nothing of this batch may land.
+                    Mission orphan = new Mission("Orphan", "w") { VesselId = prereqs.Vessel.Id, VoyageId = prereqs.Voyage.Id };
+                    slot.Title = "Slot, refilled";
+                    started.Title = "Started, rewritten";
+                    MissionWriteBatch refused = new MissionWriteBatch();
+                    refused.Created.Add(orphan);
+                    refused.Updated.Add(new MissionGuardedWrite(slot, new[] { MissionStatusEnum.Pending }));
+                    refused.Updated.Add(new MissionGuardedWrite(started, new[] { MissionStatusEnum.Pending }));
+                    refused.Snapshots.Add(new MissionSnapshotSet(orphan.Id, snapshots));
+                    AssertFalse(await db.Missions.WriteBatchAsync(refused), "a failed guard refuses the batch");
+                    AssertNull(await db.Missions.ReadAsync(orphan.Id), "the new mission was rolled back");
+                    AssertEqual("Slot, filled", (await db.Missions.ReadAsync(slot.Id))!.Title, "the earlier update was rolled back");
+                    AssertEqual("Started", (await db.Missions.ReadAsync(started.Id))!.Title, "the guarded mission is untouched");
+                    AssertEqual(0, (await db.Playbooks.GetMissionSnapshotsAsync(orphan.Id)).Count, "no snapshot was written");
+                }
+            }));
+
             cases.Add(CaseAsync("cancelled_mission_is_not_revived_by_a_stale_update", "A plain update cannot move a Cancelled mission to another status except Pending (a restart); the caller sees Cancelled", TestTags.Reliability, async () =>
             {
                 using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())

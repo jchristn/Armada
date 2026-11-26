@@ -28,6 +28,16 @@ namespace Armada.Core.Database.Interfaces
         Task CreateChainAsync(IReadOnlyList<Mission> created, IReadOnlyList<MissionDependencyUpdate> repointed, CancellationToken token = default);
 
         /// <summary>
+        /// Write a batch of mission rows in one transaction: the created missions, then each guarded update, then the
+        /// playbook snapshots. When any guarded update finds the stored status changed, nothing is written.
+        /// </summary>
+        /// <param name="batch">The rows to write.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>True when the whole batch was written; false when a guard failed and nothing was written.</returns>
+        /// <exception cref="ArgumentNullException">The batch is null.</exception>
+        Task<bool> WriteBatchAsync(MissionWriteBatch batch, CancellationToken token = default);
+
+        /// <summary>
         /// Read a mission by identifier.
         /// </summary>
         Task<Mission?> ReadAsync(string id, CancellationToken token = default);

@@ -26,14 +26,14 @@ namespace Armada.Core.Services
         /// <summary>A stage handoff updated one dependent stage; other dependents may not be updated yet.</summary>
         public const string HandoffDependentUpdated = "handoff.dependent-updated";
 
-        /// <summary>The Architect's first Worker slot was filled; the other slices do not exist yet.</summary>
-        public const string FanOutFirstSlice = "fanout.first-slice";
+        /// <summary>An Architect fan-out was computed in memory; none of its rows is written.</summary>
+        public const string FanOutPlanned = "fanout.planned";
 
-        /// <summary>An additional Architect slice was created; later slices may not exist yet.</summary>
-        public const string FanOutSliceCreated = "fanout.slice-created";
-
-        /// <summary>All slices and dependencies exist; the fan-out is not marked complete.</summary>
-        public const string FanOutBeforeComplete = "fanout.before-complete";
+        /// <summary>
+        /// An Architect fan-out (every slice, stage, rewiring and the completion mark) was written in one transaction; its
+        /// envelope events are not recorded yet.
+        /// </summary>
+        public const string FanOutWritten = "fanout.written";
 
         /// <summary>The merge queue pushed the verified commit; the entry is not marked Landed.</summary>
         public const string MergeQueuePushed = "mergequeue.pushed";

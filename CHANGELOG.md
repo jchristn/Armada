@@ -56,6 +56,12 @@ Conductor) with Opus and GPT-6.1 reliable. The work is tracked item by item in `
   `Building` voyage is never admitted. A creation that fails or is cut short by a restart is moved to `Failed` by the
   next health check, its missions cancelled with a black box entry. The dispatch advisor still sees the voyage's
   earlier missions, so overlap warnings and chaining inside one voyage are unchanged (RS-4.3).
+- **An Architect's plan becomes missions in one write.** The fan-out (the first slice written into the waiting Worker,
+  every further slice with its Judge and other stages, ownership, Worker envelopes, the plan's parent links and the
+  Architect's completion mark) is computed first and written in one transaction with its playbook snapshots. Before,
+  each row was written in turn, so a slice could start while its siblings did not exist yet, and a restart part-way
+  left a partial fan-out for recovery to patch. If a slice moved on meanwhile, nothing is written and recovery
+  computes the fan-out again (RS-4.3).
 - **Recovery state survives a restart.** Endpoint circuit breakers, launch backoff (with the captains that failed to
   start the mission), the start of a transient outage, and escalation rule cooldowns were kept only in memory, so a
   restart sent missions straight back to a failing endpoint, relaunched a broken captain at once, granted an outage a

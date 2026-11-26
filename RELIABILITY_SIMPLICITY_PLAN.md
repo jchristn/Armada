@@ -532,7 +532,12 @@ routing; a renamed Architect slice breaks fan-out recovery. Everything a program
   `FailInterruptedVoyageCreationsAsync`, advisor overload with planned missions; `Services.VoyageCreation`
   (`nothing_admitted_while_building`, `interrupted_creation_fails_on_health_check`, `advisor_sees_earlier_missions`) and
   `Services.CrashConsistency` crash cases at `voyage.created`, `voyage.mission-created`, `voyage.opened`,
-  `voyage.mission-assigned` (the pending voyage crash case now runs). Fan-out (RS-4.3b) and handoff (RS-4.3c) pending.
+  `voyage.mission-assigned` (the pending voyage crash case now runs). Fan-out done (RS-4.3b): new
+  `IMissionMethods.WriteBatchAsync` (inserts, status-guarded full-row updates and playbook snapshots in one transaction on
+  all four providers; a failed guard rolls everything back), the fan-out helpers build an `ArchitectFanOutWork` in
+  memory and `CommitArchitectFanOutAsync` writes it with the Architect's `FanOutCompletedUtc`; recovery of a pre-change
+  partial fan-out uses the same path. Crash points `fanout.planned` and `fanout.written` replace the three per-row
+  points; `Database.MissionDatabase` `mission_write_batch_is_all_or_nothing`. Handoff (RS-4.3c) pending.
 - [ ] **RS-4.4** One hierarchy and ownership validator: a pure function over (index, parent, dependsOn, ownedPaths)
   used by REST, MCP, Architect v3/v4 plans, and legacy plans, with one outcome per rule (reject with a typed error
   list). Ownership overlap is checked for all dispatch paths. Replaces `MissionHierarchyPlan.Resolve`,

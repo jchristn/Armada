@@ -102,6 +102,38 @@ namespace Armada.Core.Database.Postgresql.Implementations
             }
         }
 
+        /// <inheritdoc />
+        public async Task<bool> WriteBatchAsync(MissionWriteBatch batch, CancellationToken token = default)
+        {
+            if (batch == null) throw new ArgumentNullException(nameof(batch));
+            if (batch.IsEmpty) return true;
+            foreach (Mission mission in batch.Created) mission.LastUpdateUtc = DateTime.UtcNow;
+
+            using (NpgsqlConnection conn = new NpgsqlConnection(_Settings.GetConnectionString()))
+            {
+                await conn.OpenAsync(token).ConfigureAwait(false);
+                using (NpgsqlTransaction tx = (NpgsqlTransaction)await conn.BeginTransactionAsync(token).ConfigureAwait(false))
+                {
+                    foreach (Mission mission in batch.Created)
+                        await InsertMissionAsync(conn, tx, mission, token).ConfigureAwait(false);
+                    foreach (MissionGuardedWrite write in batch.Updated)
+                    {
+                        if (await UpdateRowAsync(conn, tx, write.Mission, write.ExpectedStatuses, null, token).ConfigureAwait(false) > 0) continue;
+                        await tx.RollbackAsync(token).ConfigureAwait(false);
+                        return false;
+                    }
+                    foreach (MissionSnapshotSet set in batch.Snapshots)
+                        await PlaybookMethods.ReplaceMissionSnapshotsAsync(conn, tx, set.MissionId, set.Snapshots, token).ConfigureAwait(false);
+                    await tx.CommitAsync(token).ConfigureAwait(false);
+                }
+
+                Mission? touched = batch.Created.Concat(batch.Updated.Select(w => w.Mission)).FirstOrDefault(m => !String.IsNullOrEmpty(m.VoyageId));
+                if (touched != null) await TouchVoyageAsync(conn, touched.VoyageId, touched.LastUpdateUtc, token).ConfigureAwait(false);
+            }
+
+            return true;
+        }
+
         /// <summary>
         /// Read a mission by identifier.
         /// </summary>
@@ -925,48 +957,53 @@ namespace Armada.Core.Database.Postgresql.Implementations
         private async Task<bool> UpdateWhereAsync(Mission mission, IReadOnlyCollection<MissionStatusEnum>? expectedStatuses, CancellationToken token, DateTime? expectedLastUpdateUtc = null)
         {
             if (mission == null) throw new ArgumentNullException(nameof(mission));
-            // PostgreSQL timestamps store microseconds; keep the returned optimistic version byte-for-byte round-trippable.
-            mission.LastUpdateUtc = new DateTime(DateTime.UtcNow.Ticks / 10 * 10, DateTimeKind.Utc);
             int rows = 0;
 
             using (NpgsqlConnection conn = new NpgsqlConnection(_Settings.GetConnectionString()))
             {
                 await conn.OpenAsync(token).ConfigureAwait(false);
-                using (NpgsqlCommand cmd = new NpgsqlCommand())
-                {
-                    cmd.Connection = conn;
-                    cmd.CommandText = @"UPDATE missions SET
-                        tenant_id = @tenant_id,
-                            user_id = @user_id,
-                        voyage_id = @voyage_id, vessel_id = @vessel_id, captain_id = @captain_id,
-                        requested_captain_id = @requested_captain_id,
-                        assigned_harbor_id = @assigned_harbor_id,
-                        title = @title, description = @description, status = @status,
-                        mode = @mode,
-                        priority = @priority, parent_mission_id = @parent_mission_id, rescue_of_mission_id = @rescue_of_mission_id, escalation_count = @escalation_count, escalated_from_captain_id = @escalated_from_captain_id, escalated_from_model = @escalated_from_model, fan_out_completed_utc = @fan_out_completed_utc, architect_source_mission_id = @architect_source_mission_id, architect_plan_index = @architect_plan_index, launch_intent_utc = @launch_intent_utc, launch_job_id = @launch_job_id, notes_json = @notes_json, base_branch_name = @base_branch_name, ready_utc = @ready_utc, assigned_utc = COALESCE(@assigned_utc, assigned_utc), owned_paths_json = @owned_paths_json, reads_paths_json = @reads_paths_json, depth = @depth, branch_strategy = @branch_strategy,
-                        branch_name = @branch_name, dock_id = @dock_id, process_id = @process_id,
-                        pr_url = @pr_url, commit_hash = @commit_hash, diff_snapshot = @diff_snapshot,
-                        agent_output = @agent_output,
-                        persona = @persona, depends_on_mission_id = @depends_on_mission_id,
-                        failure_reason = @failure_reason, failure_kind = @failure_kind, last_blackbox_entry_id = COALESCE(@last_blackbox_entry_id, last_blackbox_entry_id), start_commit = @start_commit, wait_for_voyage_workers = @wait_for_voyage_workers, requires_review = @requires_review,
-                        review_deny_action = @review_deny_action, review_comment = @review_comment,
-                        reviewed_by_user_id = @reviewed_by_user_id, review_requested_utc = @review_requested_utc,
-                        reviewed_utc = @reviewed_utc, review_deadline_utc = @review_deadline_utc,
-                        total_runtime_ms = @total_runtime_ms,
-                        stall_recovery_attempts = @stall_recovery_attempts, redispatch_attempts = @redispatch_attempts, output_repair_attempts = @output_repair_attempts, noop_redispatch_attempts = @noop_redispatch_attempts, is_rescue = @is_rescue, is_evaluation = @is_evaluation, worker_envelope_json = @worker_envelope_json, rework_round = @rework_round, rework_escalated = @rework_escalated, tier = @tier,
-                        started_utc = @started_utc, completed_utc = @completed_utc,
-                        last_update_utc = @last_update_utc
-                        WHERE id = @id" + ExpectedStatusClause(cmd, expectedStatuses) + (expectedLastUpdateUtc.HasValue ? " AND last_update_utc = @expected_last_update_utc" : "") + ";";
-                    if (expectedLastUpdateUtc.HasValue) PostgresqlCommandHelper.AddDate(cmd, "@expected_last_update_utc", expectedLastUpdateUtc.Value);
-                    AddMissionParameters(cmd, mission);
-                    rows = await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
-                }
+                rows = await UpdateRowAsync(conn, null, mission, expectedStatuses, expectedLastUpdateUtc, token).ConfigureAwait(false);
 
                 if (rows > 0)
                     await TouchVoyageAsync(conn, mission.VoyageId, mission.LastUpdateUtc, token).ConfigureAwait(false);
             }
 
             return rows > 0;
+        }
+
+        private async Task<int> UpdateRowAsync(NpgsqlConnection conn, NpgsqlTransaction? tx, Mission mission, IReadOnlyCollection<MissionStatusEnum>? expectedStatuses, DateTime? expectedLastUpdateUtc, CancellationToken token)
+        {
+            // PostgreSQL timestamps store microseconds; keep the returned optimistic version byte-for-byte round-trippable.
+            mission.LastUpdateUtc = new DateTime(DateTime.UtcNow.Ticks / 10 * 10, DateTimeKind.Utc);
+            using (NpgsqlCommand cmd = conn.CreateCommand())
+            {
+                cmd.Transaction = tx;
+                cmd.CommandText = @"UPDATE missions SET
+                    tenant_id = @tenant_id,
+                        user_id = @user_id,
+                    voyage_id = @voyage_id, vessel_id = @vessel_id, captain_id = @captain_id,
+                    requested_captain_id = @requested_captain_id,
+                    assigned_harbor_id = @assigned_harbor_id,
+                    title = @title, description = @description, status = @status,
+                    mode = @mode,
+                    priority = @priority, parent_mission_id = @parent_mission_id, rescue_of_mission_id = @rescue_of_mission_id, escalation_count = @escalation_count, escalated_from_captain_id = @escalated_from_captain_id, escalated_from_model = @escalated_from_model, fan_out_completed_utc = @fan_out_completed_utc, architect_source_mission_id = @architect_source_mission_id, architect_plan_index = @architect_plan_index, launch_intent_utc = @launch_intent_utc, launch_job_id = @launch_job_id, notes_json = @notes_json, base_branch_name = @base_branch_name, ready_utc = @ready_utc, assigned_utc = COALESCE(@assigned_utc, assigned_utc), owned_paths_json = @owned_paths_json, reads_paths_json = @reads_paths_json, depth = @depth, branch_strategy = @branch_strategy,
+                    branch_name = @branch_name, dock_id = @dock_id, process_id = @process_id,
+                    pr_url = @pr_url, commit_hash = @commit_hash, diff_snapshot = @diff_snapshot,
+                    agent_output = @agent_output,
+                    persona = @persona, depends_on_mission_id = @depends_on_mission_id,
+                    failure_reason = @failure_reason, failure_kind = @failure_kind, last_blackbox_entry_id = COALESCE(@last_blackbox_entry_id, last_blackbox_entry_id), start_commit = @start_commit, wait_for_voyage_workers = @wait_for_voyage_workers, requires_review = @requires_review,
+                    review_deny_action = @review_deny_action, review_comment = @review_comment,
+                    reviewed_by_user_id = @reviewed_by_user_id, review_requested_utc = @review_requested_utc,
+                    reviewed_utc = @reviewed_utc, review_deadline_utc = @review_deadline_utc,
+                    total_runtime_ms = @total_runtime_ms,
+                    stall_recovery_attempts = @stall_recovery_attempts, redispatch_attempts = @redispatch_attempts, output_repair_attempts = @output_repair_attempts, noop_redispatch_attempts = @noop_redispatch_attempts, is_rescue = @is_rescue, is_evaluation = @is_evaluation, worker_envelope_json = @worker_envelope_json, rework_round = @rework_round, rework_escalated = @rework_escalated, tier = @tier,
+                    started_utc = @started_utc, completed_utc = @completed_utc,
+                    last_update_utc = @last_update_utc
+                    WHERE id = @id" + ExpectedStatusClause(cmd, expectedStatuses) + (expectedLastUpdateUtc.HasValue ? " AND last_update_utc = @expected_last_update_utc" : "") + ";";
+                if (expectedLastUpdateUtc.HasValue) PostgresqlCommandHelper.AddDate(cmd, "@expected_last_update_utc", expectedLastUpdateUtc.Value);
+                AddMissionParameters(cmd, mission);
+                return await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
+            }
         }
 
         private static string ExpectedStatusClause(NpgsqlCommand cmd, IReadOnlyCollection<MissionStatusEnum>? expectedStatuses)

@@ -166,7 +166,7 @@ namespace Armada.Core.Services
         /// Judge sees the same envelope). The plan may only tighten the vessel default: a looser field is clamped and an
         /// invalid envelope is dropped (the vessel default applies), and either is recorded as an event with the reason.
         /// </summary>
-        private async Task ApplyArchitectWorkerEnvelopeAsync(Mission architect, Mission worker, ParsedArchitectMission parsed, List<Mission> knownMissions, CancellationToken token)
+        private async Task ApplyArchitectWorkerEnvelopeAsync(Mission architect, Mission worker, ParsedArchitectMission parsed, ArchitectFanOutWork work, CancellationToken token)
         {
             if (parsed.WorkerEnvelope == null) return;
             Vessel? vessel = String.IsNullOrEmpty(worker.VesselId) ? null : await _Database.Vessels.ReadAsync(worker.VesselId, token).ConfigureAwait(false);
@@ -183,62 +183,46 @@ namespace Armada.Core.Services
             }
 
             List<Mission> chain = new List<Mission> { worker };
-            if (!String.IsNullOrEmpty(worker.VoyageId))
+            HashSet<string> members = new HashSet<string>(StringComparer.Ordinal) { worker.Id };
+            bool grew = true;
+            while (grew)
             {
-                List<Mission> voyageMissions = await _Database.Missions.EnumerateByVoyageAsync(worker.VoyageId, token).ConfigureAwait(false);
-                HashSet<string> members = new HashSet<string>(StringComparer.Ordinal) { worker.Id };
-                bool grew = true;
-                while (grew)
+                grew = false;
+                foreach (Mission candidate in work.Missions)
                 {
-                    grew = false;
-                    foreach (Mission candidate in voyageMissions)
-                    {
-                        if (members.Contains(candidate.Id) || String.IsNullOrEmpty(candidate.DependsOnMissionId) || !members.Contains(candidate.DependsOnMissionId)) continue;
-                        if (PersonaCatalog.Matches(candidate.Persona, PersonaCatalog.Worker)) continue;
-                        members.Add(candidate.Id);
-                        chain.Add(candidate);
-                        grew = true;
-                    }
+                    if (members.Contains(candidate.Id) || String.IsNullOrEmpty(candidate.DependsOnMissionId) || !members.Contains(candidate.DependsOnMissionId)) continue;
+                    if (PersonaCatalog.Matches(candidate.Persona, PersonaCatalog.Worker)) continue;
+                    members.Add(candidate.Id);
+                    chain.Add(candidate);
+                    grew = true;
                 }
             }
-            // Keep the caller's in-memory copies in step so a later update of one of them does not drop the envelope.
-            HashSet<string> chainIds = new HashSet<string>(chain.Select(m => m.Id), StringComparer.Ordinal);
-            foreach (Mission known in knownMissions)
-                if (chainIds.Contains(known.Id)) known.WorkerEnvelope = envelope;
             foreach (Mission stage in chain)
             {
                 stage.WorkerEnvelope = envelope;
-                stage.LastUpdateUtc = DateTime.UtcNow;
-                await _Database.Missions.UpdateAsync(stage, token).ConfigureAwait(false);
+                work.Changed(stage);
             }
 
             if (problems.Count == 0) return;
             string message = "Worker envelope for '" + worker.Title + "' was clamped to the vessel default: " + String.Join("; ", problems) + ".";
             _Logging.Warn(_Header + "mission " + worker.Id + ": " + message);
-            try
+            ArmadaEvent evt = new ArmadaEvent(WorkerEnvelopeRules.ClampedEventType, message);
+            evt.TenantId = worker.TenantId;
+            evt.UserId = worker.UserId;
+            evt.EntityType = "mission";
+            evt.EntityId = worker.Id;
+            evt.MissionId = worker.Id;
+            evt.VesselId = worker.VesselId;
+            evt.VoyageId = worker.VoyageId;
+            evt.Payload = JsonSerializer.Serialize(new WorkerEnvelopeDecision
             {
-                ArmadaEvent evt = new ArmadaEvent(WorkerEnvelopeRules.ClampedEventType, message);
-                evt.TenantId = worker.TenantId;
-                evt.UserId = worker.UserId;
-                evt.EntityType = "mission";
-                evt.EntityId = worker.Id;
-                evt.MissionId = worker.Id;
-                evt.VesselId = worker.VesselId;
-                evt.VoyageId = worker.VoyageId;
-                evt.Payload = JsonSerializer.Serialize(new WorkerEnvelopeDecision
-                {
-                    MissionId = worker.Id,
-                    Outcome = WorkerEnvelopeOutcomeEnum.Clamped,
-                    Envelope = envelope ?? new WorkerEnvelope(),
-                    Description = WorkerEnvelopeRules.Describe(envelope),
-                    Summary = message
-                });
-                await _Database.Events.CreateAsync(evt, token).ConfigureAwait(false);
-            }
-            catch (Exception ex) when (!(ex is OperationCanceledException && token.IsCancellationRequested))
-            {
-                _Logging.Warn(_Header + "could not record the Worker envelope clamp for mission " + worker.Id + " (Architect " + architect.Id + "): " + ex.Message);
-            }
+                MissionId = worker.Id,
+                Outcome = WorkerEnvelopeOutcomeEnum.Clamped,
+                Envelope = envelope ?? new WorkerEnvelope(),
+                Description = WorkerEnvelopeRules.Describe(envelope),
+                Summary = message
+            });
+            work.Events.Add(evt);
         }
 
         private static string SummarizeEnvelopeDecision(Mission mission, WorkerEnvelopeDecision decision)

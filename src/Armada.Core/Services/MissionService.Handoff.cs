@@ -153,35 +153,31 @@ namespace Armada.Core.Services
                     await ProjectArchitectMissionsToLogAsync(completedMission, parsed, token).ConfigureAwait(false);
                     _Logging.Debug(_Header + "architect produced " + parsed.Count + " mission definitions");
 
+                    // RS-4.3: the whole fan-out (the first slice written into the waiting Worker, every further slice
+                    // with its stage chain, ownership, envelopes and the plan's dependencies) is computed in memory and
+                    // written in one transaction with the Architect's completion mark.
+                    ArchitectFanOutWork work = new ArchitectFanOutWork(voyageMissions);
                     foreach (Mission nextMission in dependentMissions)
                     {
-                if (PersonaCatalog.Matches(nextMission.Persona, PersonaCatalog.Worker))
-                {
-                    // Update the first parsed mission into this existing Worker mission slot
-                    ParsedArchitectMission first = parsed[0];
-                    nextMission.Title = first.Title + " [Worker]";
-                    nextMission.ArchitectSourceMissionId = completedMission.Id;
-                    nextMission.ArchitectPlanIndex = 0;
-                    nextMission.Description = first.Description + await BuildArchitectSliceContextAsync(completedMission, parsed, 0, token).ConfigureAwait(false);
-                    nextMission.WaitForVoyageWorkers = first.WaitForOtherMissions;
-                    nextMission.BranchName = null;
-                    nextMission.LastUpdateUtc = DateTime.UtcNow;
-                    await _Database.Missions.UpdateAsync(nextMission, token).ConfigureAwait(false);
-                    await RetitleDependentChainAsync(voyageMissions, nextMission, first.Title, first.Description, token).ConfigureAwait(false);
-                    CrashPoints.Hit(CrashPointNames.FanOutFirstSlice);
-                    await ApplyArchitectWorkerEnvelopeAsync(completedMission, nextMission, first, voyageMissions, token).ConfigureAwait(false);
+                        if (!PersonaCatalog.Matches(nextMission.Persona, PersonaCatalog.Worker)) continue;
+                        ParsedArchitectMission first = parsed[0];
+                        nextMission.Title = first.Title + " [Worker]";
+                        nextMission.ArchitectSourceMissionId = completedMission.Id;
+                        nextMission.ArchitectPlanIndex = 0;
+                        nextMission.Description = first.Description + await BuildArchitectSliceContextAsync(completedMission, parsed, 0, token).ConfigureAwait(false);
+                        nextMission.WaitForVoyageWorkers = first.WaitForOtherMissions;
+                        nextMission.BranchName = null;
+                        work.Changed(nextMission);
+                        RetitleDependentChain(work, nextMission, first.Title, first.Description);
+                        await ApplyArchitectWorkerEnvelopeAsync(completedMission, nextMission, first, work, token).ConfigureAwait(false);
 
-                    // Find what depends on this worker mission (Judge, Test Engineer stages)
-                    // Create additional worker missions for remaining parsed items
-                    for (int i = 1; i < parsed.Count; i++)
-                        await CreateArchitectSliceAsync(completedMission, nextMission, voyageMissions, parsed, i, token).ConfigureAwait(false);
-                        CrashPoints.Hit(CrashPointNames.FanOutSliceCreated);
-                }
-            }
+                        // The Worker slot and its stages are the template for every further slice.
+                        for (int i = 1; i < parsed.Count; i++)
+                            await CreateArchitectSliceAsync(completedMission, nextMission, work, parsed, i, token).ConfigureAwait(false);
+                    }
 
-                    await ApplyArchitectMissionDependenciesAsync(completedMission, parsed, token).ConfigureAwait(false);
-                    CrashPoints.Hit(CrashPointNames.FanOutBeforeComplete);
-                    await MarkArchitectFanOutCompleteAsync(completedMission, token).ConfigureAwait(false);
+                    ApplyArchitectMissionDependencies(completedMission, parsed, work);
+                    await CommitArchitectFanOutAsync(completedMission, work, token).ConfigureAwait(false);
                     return true; // Architect special handling complete, skip normal handoff
                 }
 
