@@ -93,7 +93,7 @@ namespace Armada.Core.Services
                     sb.Append("\nThe end of its output:\n\n```text\n").Append(memory.OutputTail!.Replace("```", "'''").TrimEnd()).Append("\n```\n");
                 }
             }
-            return sb.ToString().Replace("—", "-").TrimEnd();
+            return sb.ToString().Replace("\u2014", "-").TrimEnd();
         }
     }
 }
