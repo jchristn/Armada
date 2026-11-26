@@ -923,17 +923,24 @@ this phase it is Armada's job to absorb the predictable failures.
   `<function=name>...</function>`, and fenced JSON tool-call blocks (at the terminal branch near
   `ApiAgentRuntime.cs:693`, or in PolyPrompt if it belongs there) and execute them as real calls. Count recoveries
   per model. Evidence:
-- [ ] **RS-7.3** Malformed-tool-call 500. In `IsRetryableInferenceStatus`/`WithInferenceRetryAsync`
+- [x] **RS-7.3** Malformed-tool-call 500. In `IsRetryableInferenceStatus`/`WithInferenceRetryAsync`
   (`ApiAgentRuntime.cs:456-460`), when the 500 body names a tool or JSON parse failure, do not resend the identical
   request: add a corrective user turn with the valid tool names and a schema hint, and vary the seed or temperature
-  within the profile's bounds. Evidence:
+  within the profile's bounds. Evidence: (5e634c424) matching failures return to `ApiTurnLoop`, which adds a `MalformedCallCorrection` turn
+  and raises temperature 0.2 per attempt (cap 1.0; PolyPrompt 5 has no seed), at most
+  `ApiRuntimeBehaviors.MalformedCallRetries` (default 2); then the existing classification. Harbor flag
+  `api-malformed-call-retry-v1`. Streamed 429 Retry-After via `UsageHeaders.LatestObservation`. Tests
+  `malformed_call_gets_corrective_turn`, `repeat_loop_gets_no_repeat_turn`, `malformed_call_retries_are_bounded`,
+  `api_runtime_corrects_degenerate_generation`, `retry_after_is_honored_when_streaming`. Plain chat (no tools) unchanged.
 - [ ] **RS-7.4** Unknown tool name returns "unknown tool <name>; available: ..." instead of "disabled by the
   endpoint's inference policy" (`ApiAgentRuntime.cs:727`). Evidence:
 - [ ] **RS-7.5** Repetition guard: N identical consecutive tool calls (setting, default 3) inject a corrective note;
   2N end the run as a classified `TaskFailure` (feeds escalation). Evidence:
-- [ ] **RS-7.6** Reasoning hygiene: strip reasoning when only `</think>` is present, and strip reasoning from history
+- [x] **RS-7.6** Reasoning hygiene: strip reasoning when only `</think>` is present, and strip reasoning from history
   before it is sent back (`ToAssistantMessage()` near line 691), except where the provider requires reasoning replay
-  (keep the PolyPrompt 3.4.0 regression passing). Evidence:
+  (keep the PolyPrompt 3.4.0 regression passing). Evidence: (5e634c424) `ApiTerminalPolicy.VisibleText` uses `ReasoningText.Strip`; history text cleaned in
+  `ApiTurnLoop`, `ProviderState` untouched (ApiAgentRuntime passes with the postman fixture). Harbor flag
+  `api-reasoning-hygiene-v1`. Tests `history_reasoning_is_stripped`, `bare_close_think_is_stripped`.
 - [x] **RS-7.7** Streaming on by default for OpenAI-compatible and Ollama endpoints (`InferenceOptions.Streaming`),
   so progress heartbeats reach the stall detector. Evidence: (75bbb3a20) `InferenceStreamingModeEnum` and `InferenceOptions.StreamingMode`; Automatic streams
   OpenAI-compatible, Ollama and Ollama Cloud in process and, through `RemoteAgentRuntime`, on Harbors advertising
@@ -992,13 +999,14 @@ this phase it is Armada's job to absorb the predictable failures.
   Evidence: (ce948cebd) `LineNumberPrefix` rejects with `line_number_prefix` (edits and write_file);
   numberless read format per profile not added (tool descriptions say numbers are display only). Suite
   `Runtimes.EditLineNumberPrefix` (8 cases).
-- [ ] **RS-7.16** Cold loads: warm the model with `keep_alive` before the first turn, and classify "model loading" and
+- [x] **RS-7.16** Cold loads: warm the model with `keep_alive` before the first turn, and classify "model loading" and
   proxy time-to-first-byte timeouts (Conductor's 504 after 300 s, seen 2026-11-25 on inkling-2-mini) as Transient
-  (HER:353, HER:685, HDR gpt-oss:120b cold start). Evidence (partial): more loading phrases read as `model_loading`, a 504
+  (HER:353, HER:685, HDR gpt-oss:120b cold start). Evidence: more loading phrases read as `model_loading`, a 504
   or upstream/gateway timeout is the new Transient `proxy_timeout`; `OllamaModelWarmup.WarmAsync` sends a prompt-less
   `/api/generate` with `keep_alive` (Ollama only, failures returned as results); simulator kinds `ModelLoading500` and
   `ProxyFirstByteTimeout504`; tests `cold_load_and_proxy_timeout_are_transient`, `ollama_warmup_sends_keep_alive`
-  (812b4c944). Remaining: call the warm-up before the first turn (wave 2).
+  (812b4c944). The runtime calls it before an Ollama endpoint's first turn (timeout is the first-response deadline,
+  300 to 3600 s; failure only warns), Harbor flag `api-model-warmup-v1` (5e634c424).
 - [x] **RS-7.17** Ollama's "token repeat limit reached" 500 (HDR, gpt-oss:20b) becomes a simulator kind (RS-1.1) and is
   handled like RS-7.3. Evidence: maps to `degenerate_output` (TaskFailure) with simulator kind `TokenRepeatLimit500`;
   `OpenModelErrorPatterns.IsMalformedOrDegenerateGeneration` covers it and the malformed tool-call 500 for RS-7.3. Tests

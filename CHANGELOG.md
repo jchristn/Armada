@@ -262,6 +262,15 @@ Conductor) with Opus and GPT-6.1 reliable. The work is tracked item by item in `
   an API captain's history keep their path and a size note instead of the full text, and old reasoning is stripped;
   the turns behind the last 6 tool outputs stay whole. Token estimates use 3.2 characters per token (was 4 in the
   instructions budget), so that budget trims slightly sooner (RS-7.10).
+- **A malformed tool call or a repeat loop gets a correction, not the same request again.** When the provider fails a
+  turn on a broken tool call or Ollama's token repeat limit, the API runtime adds a correcting turn (the valid tool
+  names and an argument example, or "do not repeat yourself") and raises the temperature by 0.2, at most twice in a
+  row; then the run fails as before. A streamed 429 now keeps its Retry-After wait (RS-7.3).
+- **Reasoning stays out of replies and history.** A lone closing think tag or an unclosed leading think block is
+  stripped from an API captain's visible text and final message, and leaked reasoning is removed from the history
+  sent back; provider state that must be replayed is kept (RS-7.6).
+- **Ollama models are loaded before the first turn.** API captains on Ollama endpoints send the keep_alive warm-up
+  first, so a cold load no longer eats into the first turn; a failed warm-up only logs a warning (RS-7.16).
 - **Recovery state survives a restart.** Endpoint circuit breakers, launch backoff (with the captains that failed to
   start the mission), the start of a transient outage, and escalation rule cooldowns were kept only in memory, so a
   restart sent missions straight back to a failing endpoint, relaunched a broken captain at once, granted an outage a
