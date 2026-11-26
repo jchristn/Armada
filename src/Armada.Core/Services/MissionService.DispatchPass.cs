@@ -52,6 +52,18 @@ namespace Armada.Core.Services
             return model;
         }
 
+        // RS-4.9: the shared caps the claim write does not enforce itself (global, runtime, endpoint), re-read for the
+        // chosen captain. Call with _CapacityLock held, after PassRevalidateUnderLock.
+        private async Task<MissionAssignmentBlocker?> CapacityBlockerUnderLockAsync(Captain captain, CancellationToken token)
+        {
+            CapacityModel model = await PassCapacityAsync(token).ConfigureAwait(false);
+            MissionAssignmentBlocker? global = model.GlobalBlocker();
+            if (global != null) return global;
+            if (!model.KnowsEndpointOf(captain))
+                model.AddEndpoint(captain.ModelEndpointId!, await PassEndpointAsync(captain.ModelEndpointId!, token).ConfigureAwait(false));
+            return model.RuntimeBlocker(captain) ?? model.EndpointBlocker(captain);
+        }
+
         /// <inheritdoc />
         public async Task<DispatchCapacity> ReadDispatchCapacityAsync(CancellationToken token = default)
         {

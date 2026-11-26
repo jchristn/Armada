@@ -622,9 +622,17 @@ routing; a renamed Architect slice breaks fan-out recovery. Everything a program
   `captains_sharing_an_endpoint_share_its_cap`, `a_full_global_limit_skips_the_mission_before_the_shared_lock`,
   `a_claim_outside_the_pass_is_counted_under_the_lock`, which fails with the under-lock revalidation removed).
   SQLite affected suites: 893 tests, 0 failed, 6 skipped.
-- [ ] **RS-4.9** Narrow `_CapacityLock` (`MissionService.cs:135`): select and place before the lock, then claim with
+- [x] **RS-4.9** Narrow `_CapacityLock` (`MissionService.cs:135`): select and place before the lock, then claim with
   a conditional write and re-validate. The lock covers only the counter check and claim. Concurrency test with
-  parallel dispatch passes proving no over-admission. Evidence:
+  parallel dispatch passes proving no over-admission. Evidence: preferred-captain resolution, captain selection, usage
+  evidence, `CanAssignMissionAsync` and dock placement moved ahead of `_CapacityLock`. Under the lock,
+  `PassRevalidateUnderLock` then `CapacityBlockerUnderLockAsync` re-check the global, runtime and endpoint caps for the
+  chosen captain (the claim write enforces only the captain's own slots), then the existing conditional claim and the
+  Assigned transition run. Vessel-then-capacity lock order and the transient-error (deadlock) retries are unchanged. A
+  pass that loses its captain to a concurrent claim waits for the next cycle, as before. Tests: Services.CapacityModel
+  (`parallel_passes_never_admit_past_the_global_limit`, `parallel_passes_never_admit_past_a_runtime_or_endpoint_cap`,
+  where every pass chooses before any claims; both over-admit, 6 of 2 and 3 of 1, with the re-check removed;
+  `a_slow_placement_does_not_hold_the_capacity_lock`). SQLite affected suites: 896 tests, 0 failed, 6 skipped.
 - [ ] **RS-4.10** Launch intent. Persist `LaunchIntentUtc` and the job or process id as part of launch. On startup,
   find and stop any orphaned agent process for a dock (by job id, worktree path, or command line) before resuming in
   that dock. Crash-point test between launch and PID record. Includes the `Services.CrashConsistency` case for

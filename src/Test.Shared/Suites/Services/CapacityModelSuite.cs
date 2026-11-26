@@ -97,6 +97,56 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(MissionStatusEnum.Pending, (await h.Db.Missions.ReadAsync(inside.Id))!.Status);
             });
 
+            // One captain with room for six, so the claim write never refuses and only the shared caps can stop a pass.
+            Add("parallel_passes_never_admit_past_the_global_limit", async () =>
+            {
+                using Harness h = await Harness.CreateAsync(launching: true); h.Settings.MaxConcurrentMissions = 2;
+                await h.Db.Captains.CreateAsync(new Captain("wide") { MaxConcurrency = 6 });
+                List<Mission> missions = await h.MissionsOnOwnVessels(6);
+                bool[] admitted = await h.RaceAsync(missions);
+                AssertEqual(2, admitted.Count(a => a), "every pass chose the captain from an empty count, and only two claims fit");
+                AssertEqual(2, await h.Db.Missions.CountExecutionSlotsAsync());
+                AssertEqual(4, missions.Count(m => h.Service.GetAdmissionResult(m.Id)?.Blocker.Reason == MissionAssignmentBlockerReasonEnum.GlobalMissionLimit));
+            });
+
+            Add("parallel_passes_never_admit_past_a_runtime_or_endpoint_cap", async () =>
+            {
+                using Harness h = await Harness.CreateAsync(launching: true);
+                h.Settings.Agents = new() { new AgentSettings { Runtime = AgentRuntimeEnum.Mux, MaxConcurrent = 1 } };
+                await h.Db.Captains.CreateAsync(new Captain("mux", AgentRuntimeEnum.Mux) { MaxConcurrency = 6 });
+                List<Mission> runtimeRace = await h.MissionsOnOwnVessels(3);
+                AssertEqual(1, (await h.RaceAsync(runtimeRace)).Count(a => a), "the Mux runtime cap of one held");
+                AssertEqual(2, runtimeRace.Count(m => h.Service.GetAdmissionResult(m.Id)?.Blocker.Reason == MissionAssignmentBlockerReasonEnum.RuntimeMissionLimit));
+
+                ModelEndpoint shared = await h.Endpoint("shared", "http://127.0.0.1:9/v1", 1);
+                await h.Db.Captains.CreateAsync(new Captain("endpoint", AgentRuntimeEnum.Codex) { ModelEndpointId = shared.Id, MaxConcurrency = 6 });
+                List<Mission> endpointRace = await h.MissionsOnOwnVessels(3);
+                AssertEqual(1, (await h.RaceAsync(endpointRace)).Count(a => a), "the endpoint cap of one held");
+                AssertEqual(2, endpointRace.Count(m => h.Service.GetAdmissionResult(m.Id)?.Blocker.Reason == MissionAssignmentBlockerReasonEnum.EndpointMissionLimit));
+            });
+
+            Add("a_slow_placement_does_not_hold_the_capacity_lock", async () =>
+            {
+                using Harness h = await Harness.CreateAsync(launching: true);
+                await h.Db.Captains.CreateAsync(new Captain("wide") { MaxConcurrency = 2 });
+                List<Mission> missions = await h.MissionsOnOwnVessels(2);
+                TaskCompletionSource<bool> placing = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                TaskCompletionSource<bool> release = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                h.Service.ResolveDockPlacementAsync = async (mission, _, _) =>
+                {
+                    if (mission.Id == missions[0].Id) { placing.TrySetResult(true); await release.Task; }
+                    return DockPlacement.OnAdmiral("test");
+                };
+                Task<bool> slow = h.AssignInOwnPassAsync(missions[0]);
+                await placing.Task.WaitAsync(TimeSpan.FromSeconds(10));
+                Task<bool> fast = h.AssignInOwnPassAsync(missions[1]);
+                Task first = await Task.WhenAny(fast, Task.Delay(TimeSpan.FromSeconds(10)));
+                release.TrySetResult(true);
+                AssertTrue(first == fast, "another vessel is admitted while the first one's placement is still running");
+                AssertTrue(await fast, "the other vessel's mission is admitted");
+                AssertTrue(await slow, "the slow mission is admitted once its placement returns");
+            });
+
             return new TestSuiteDescriptor(suite, "One capacity model", cases);
         }
 
@@ -107,6 +157,7 @@ namespace Test.Shared.Suites.Services
             internal ArmadaSettings Settings = null!;
             internal MissionService Service = null!;
             internal Vessel Vessel = null!;
+            private readonly Dictionary<string, Vessel> _Vessels = new Dictionary<string, Vessel>();
 
             internal static async Task<Harness> CreateAsync(bool launching = false)
             {
@@ -125,6 +176,45 @@ namespace Test.Shared.Suites.Services
             {
                 Mission held = await Db.Missions.CreateAsync(new Mission("held"));
                 AssertTrue(await Db.Captains.TryClaimAsync(captain.Id, held.Id, null));
+            }
+
+            internal async Task<List<Mission>> MissionsOnOwnVessels(int count)
+            {
+                List<Mission> missions = new List<Mission>();
+                for (int i = 0; i < count; i++)
+                {
+                    string name = "race" + _Vessels.Count;
+                    Vessel vessel = await Db.Vessels.CreateAsync(new Vessel(name, "https://example.invalid/" + name));
+                    _Vessels[vessel.Id] = vessel;
+                    missions.Add(await Db.Missions.CreateAsync(new Mission(name) { VesselId = vessel.Id, Mode = MissionModeEnum.Research }));
+                }
+                return missions;
+            }
+
+            // Each mission runs in its own dispatch pass. Every pass reads capacity, then waits at placement until all
+            // have chosen a captain, so every claim races the others with a count read before any of them landed.
+            internal async Task<bool[]> RaceAsync(List<Mission> missions)
+            {
+                int arrived = 0;
+                TaskCompletionSource<bool> allChose = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                Service.ResolveDockPlacementAsync = async (_, _, _) =>
+                {
+                    if (Interlocked.Increment(ref arrived) == missions.Count) allChose.TrySetResult(true);
+                    await allChose.Task.WaitAsync(TimeSpan.FromSeconds(10));
+                    return DockPlacement.OnAdmiral("test");
+                };
+                return await Task.WhenAll(missions.Select(m => AssignInOwnPassAsync(m)));
+            }
+
+            internal Task<bool> AssignInOwnPassAsync(Mission mission)
+            {
+                using (ExecutionContext.SuppressFlow())
+                    return Task.Run(async () =>
+                    {
+                        using IDisposable pass = Service.BeginDispatchPass();
+                        await Service.ReadDispatchCapacityAsync();
+                        return await Service.TryAssignAsync(mission, _Vessels[mission.VesselId!]);
+                    });
             }
 
             internal Task<ModelEndpoint> Endpoint(string name, string baseUrl, int? cap)

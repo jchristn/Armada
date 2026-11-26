@@ -619,22 +619,9 @@ namespace Armada.Core.Services
             MissionAssignmentBlocker? fullBeforeLock = await EvaluateGlobalAdmissionAsync(token).ConfigureAwait(false);
             if (fullBeforeLock != null) { NoteWait(mission, fullBeforeLock); return false; }
 
-            // Only shared capacity checks and the claim serialize across vessels. Vessel gates
-            // above run independently, so a blocked voyage cannot stall unrelated vessels.
-            long capacityLockStart = System.Diagnostics.Stopwatch.GetTimestamp();
-            bool capacityEntered = await _CapacityLock.WaitAsync(admissionTimeout, token).ConfigureAwait(false);
-            ArmadaMetrics.AdmissionLockWaitSeconds.Record(System.Diagnostics.Stopwatch.GetElapsedTime(capacityLockStart).TotalSeconds, new KeyValuePair<string, object?>("lock", "capacity"));
-            if (!capacityEntered)
-            {
-                ArmadaMetrics.AdmissionLockTimeouts.Add(1, new KeyValuePair<string, object?>("gate", "capacity"));
-                _Logging.Warn(_Header + "capacity admission lock timed out for mission " + mission.Id + "; retrying next dispatch cycle");
-                NoteUnadmitted(mission, "The capacity admission lock timed out; Armada retries on the next dispatch cycle.");
-                return false;
-            }
-            capacityHeld = true;
-            PassRevalidateUnderLock();
-            MissionAssignmentBlocker? globalBlocker = await EvaluateGlobalAdmissionAsync(token).ConfigureAwait(false);
-            if (globalBlocker != null) { NoteWait(mission, globalBlocker); return false; }
+            // RS-4.9: captain selection, usage evidence, the Harbor policy gate and dock placement run without the shared
+            // capacity lock, so a slow placement on one vessel no longer stalls admission on every other vessel. The
+            // lock covers only the cap re-check and the claim below.
 
             // Resolve the mission's preferred captain + fallback tier (per-persona default / voyage override)
             // before assignment, so per-step captain selection applies to every mission of a step, including
@@ -760,6 +747,28 @@ namespace Armada.Core.Services
             // Claim the captain before any slow work. The claim is atomic (only an Idle captain is taken), so a
             // concurrent dispatcher can never take it in the gap, and from here on the captain names this mission,
             // which keeps orphan recovery from reverting the assignment while its dock is being provisioned.
+            // Only the cap re-check and the claim serialize across vessels. The captain was chosen from counts read
+            // before the lock; a claim that landed since bumps the generation, so the re-check reads current counts.
+            long capacityLockStart = System.Diagnostics.Stopwatch.GetTimestamp();
+            bool capacityEntered = await _CapacityLock.WaitAsync(admissionTimeout, token).ConfigureAwait(false);
+            ArmadaMetrics.AdmissionLockWaitSeconds.Record(System.Diagnostics.Stopwatch.GetElapsedTime(capacityLockStart).TotalSeconds, new KeyValuePair<string, object?>("lock", "capacity"));
+            if (!capacityEntered)
+            {
+                ArmadaMetrics.AdmissionLockTimeouts.Add(1, new KeyValuePair<string, object?>("gate", "capacity"));
+                _Logging.Warn(_Header + "capacity admission lock timed out for mission " + mission.Id + "; retrying next dispatch cycle");
+                NoteUnadmitted(mission, "The capacity admission lock timed out; Armada retries on the next dispatch cycle.");
+                return false;
+            }
+            capacityHeld = true;
+            PassRevalidateUnderLock();
+            MissionAssignmentBlocker? capBlocker = await CapacityBlockerUnderLockAsync(captain, token).ConfigureAwait(false);
+            if (capBlocker != null)
+            {
+                _Logging.Debug(_Header + "mission " + mission.Id + " waits after selection: " + capBlocker.Summary);
+                NoteWait(mission, capBlocker);
+                return false;
+            }
+
             bool claimed;
             NoteClaimAttempt();
             if (usageSelection != null)

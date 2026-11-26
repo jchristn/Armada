@@ -95,6 +95,10 @@ Conductor) with Opus and GPT-6.1 reliable. The work is tracked item by item in `
   instead of trying every pending mission against a full runtime or endpoint. A mission is skipped before the shared
   admission lock when the global limit is already full. A claim made outside a dispatch pass (voyage creation, a
   repair) is now counted when the pass takes the lock, so the pass cannot admit against counts from before it (RS-4.8).
+- **A narrower admission lock.** Captain selection, usage evidence, the Harbor policy gate and dock placement now run
+  before the shared admission lock, so a slow dock placement on one vessel no longer holds up admission on every other
+  vessel. The lock covers only a final re-check of the global, runtime and endpoint caps for the chosen captain and the
+  claim itself, so parallel dispatch passes still cannot admit past any cap (RS-4.9).
 - **Recovery state survives a restart.** Endpoint circuit breakers, launch backoff (with the captains that failed to
   start the mission), the start of a transient outage, and escalation rule cooldowns were kept only in memory, so a
   restart sent missions straight back to a failing endpoint, relaunched a broken captain at once, granted an outage a
