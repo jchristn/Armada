@@ -148,6 +148,11 @@ Conductor) with Opus and GPT-6.1 reliable. The work is tracked item by item in `
   captain the escalation selector picks with the failed captain excluded (the Worker escalation ladder, or a strictly
   higher tier), and every rescue brief includes the last failed attempt's failure kind, black box hint and redacted
   output tail (RS-5.8).
+- **RecoveryExhausted means the rescue budget ran out.** The `RecoveryExhausted` escalation trigger now fires once per
+  recovery incident, keyed by the original mission, when every allowed rescue has failed. Every terminal mission failure
+  fires `MissionFailed`, keyed by the mission, instead of `RecoveryExhausted` keyed by captain. Move rules that relied on
+  the old behavior to `MissionFailed`. A mitigated recovery incident closes only after the next pass confirms the landed
+  rescue is still Complete; otherwise it reopens and recovery continues (RS-5.9).
 - **Recovery state survives a restart.** Endpoint circuit breakers, launch backoff (with the captains that failed to
   start the mission), the start of a transient outage, and escalation rule cooldowns were kept only in memory, so a
   restart sent missions straight back to a failing endpoint, relaunched a broken captain at once, granted an outage a

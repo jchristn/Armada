@@ -354,6 +354,7 @@ namespace Armada.Server
             _VesselService = new VesselService(_Database);
             _MissionRecovery = new Armada.Core.Services.MissionRecoveryCoordinator(_Logging, _Database, _Settings);
             _MissionRecovery.Transitions = _Transitions;
+            _MissionRecovery.Escalation = escalationService;
             _LandingService = new LandingService(_Logging, _Database, _Settings, _Git);
             _LandingService.Transitions = _Transitions;
             _TemplateService = new MessageTemplateService(_Logging, _PromptTemplateService);

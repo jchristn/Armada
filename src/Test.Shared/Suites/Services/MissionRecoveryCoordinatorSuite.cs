@@ -203,6 +203,8 @@ namespace Test.Shared.Suites.Services
                 ArmadaSettings settings = new ArmadaSettings();
                 settings.MaxMissionRecoveryAttempts = 2;
                 MissionRecoveryCoordinator coordinator = new MissionRecoveryCoordinator(CreateLogging(), testDb.Driver, settings);
+                RecordingEscalationService escalation = new RecordingEscalationService();
+                coordinator.Escalation = escalation;
                 IncidentService incidents = new IncidentService(testDb.Driver);
 
                 Vessel vessel = await CreateVesselAsync(testDb).ConfigureAwait(false);
@@ -227,6 +229,50 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(2, incident.RecoveryAttempts, "no rescue beyond the cap");
                 AssertEqual(IncidentStatusEnum.Open, incident.Status, "an exhausted incident is left open for a human");
                 AssertContains("exhausted", incident.RecoveryNotes ?? String.Empty, "the incident notes explain the exhausted budget");
+
+                // RS-5.9: RecoveryExhausted fires once, when the budget runs out, keyed by the original mission.
+                await coordinator.MaintainAsync().ConfigureAwait(false);
+                AssertEqual(1, escalation.Triggers.Count, "one notification, not one per failure or per pass");
+                AssertEqual(EscalationTriggerEnum.RecoveryExhausted, escalation.Triggers[0]);
+                AssertEqual(incident.MissionId, escalation.EntityIds[0], "keyed by the original mission, not a captain");
+                AssertContains("2 of 2", escalation.Messages[0]);
+            }));
+
+            cases.Add(CaseAsync("mitigation_reopens_when_rescue_regresses", "A mitigated incident closes only after verification; a landed rescue that later fails reopens it and recovery continues", TestTags.Negative, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                MissionRecoveryCoordinator coordinator = new MissionRecoveryCoordinator(CreateLogging(), testDb.Driver, new ArmadaSettings { MaxMissionRecoveryAttempts = 2 });
+                RecordingEscalationService escalation = new RecordingEscalationService();
+                coordinator.Escalation = escalation;
+                IncidentService incidents = new IncidentService(testDb.Driver);
+
+                Vessel vessel = await CreateVesselAsync(testDb).ConfigureAwait(false);
+                await CreateFailedMissionAsync(testDb, vessel.Id, MissionFailureKindEnum.TestFail, "Definition-of-Done gate failed (TestFail): test phase exited 1").ConfigureAwait(false);
+                await coordinator.MaintainAsync().ConfigureAwait(false);
+                Incident incident = (await ReadRecoveryIncidentsAsync(incidents).ConfigureAwait(false))[0];
+
+                Mission rescue = (await testDb.Driver.Missions.ReadAsync(incident.RescueMissionIds[0]).ConfigureAwait(false))!;
+                rescue.Status = MissionStatusEnum.Complete;
+                await testDb.Driver.Missions.UpdateAsync(rescue).ConfigureAwait(false);
+                await coordinator.MaintainAsync().ConfigureAwait(false);
+                AssertEqual(IncidentStatusEnum.Mitigated, (await ReadRecoveryIncidentsAsync(incidents).ConfigureAwait(false))[0].Status);
+
+                // The landed rescue's later handoff fails before the verification pass.
+                // Complete is sticky for plain writes; the real handoff path moves it only when it still expects Complete.
+                Mission regressed = (await testDb.Driver.Missions.ReadAsync(rescue.Id).ConfigureAwait(false))!;
+                regressed.Status = MissionStatusEnum.Failed;
+                regressed.FailureReason = "handoff failed";
+                AssertTrue(await testDb.Driver.Missions.TryUpdateIfStatusAsync(regressed, new[] { MissionStatusEnum.Complete }).ConfigureAwait(false), "the rescue moves from Complete to Failed");
+                await coordinator.MaintainAsync().ConfigureAwait(false);
+                incident = (await ReadRecoveryIncidentsAsync(incidents).ConfigureAwait(false))[0];
+                AssertEqual(IncidentStatusEnum.Open, incident.Status, "a fix that did not hold reopens the incident instead of closing it");
+                AssertContains("Verification failed", incident.RecoveryNotes ?? String.Empty);
+                AssertContains(rescue.Id + " is Failed", incident.RecoveryNotes ?? String.Empty, "the note names the regressed rescue");
+
+                await coordinator.MaintainAsync().ConfigureAwait(false);
+                incident = (await ReadRecoveryIncidentsAsync(incidents).ConfigureAwait(false))[0];
+                AssertEqual(2, incident.RescueMissionIds.Count, "recovery continues with another rescue under the budget");
+                AssertEqual(0, escalation.Triggers.Count, "no RecoveryExhausted while budget remains");
             }));
 
             cases.Add(CaseAsync("second_rescue_excludes_failed_captain_and_carries_memory", "From the second rescue on, the rescue goes to a stronger captain than the one whose rescue failed, and its brief carries that attempt's output tail and hint", TestTags.Positive, async () =>

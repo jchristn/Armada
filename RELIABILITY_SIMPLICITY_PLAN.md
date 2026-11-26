@@ -753,9 +753,14 @@ routing; a renamed Architect slice breaks fan-out recovery. Everything a program
   built from `EscalationMemory` and `EscalationMemoryRenderer.RenderFacts` (kind, hint, redacted 2000-character
   tail). Case `second_rescue_excludes_failed_captain_and_carries_memory`; MissionRecoveryCoordinator, EscalationLadder
   and CrashConsistency 44/44, BlackBoxCaptureSites 86/86.
-- [ ] **RS-5.9** Fix the RecoveryExhausted notification: fire it when the rescue budget is actually exhausted
+- [x] **RS-5.9** Fix the RecoveryExhausted notification: fire it when the rescue budget is actually exhausted
   (coordinator `ExhaustedNote`), not on every terminal failure keyed by captain (`AdmiralService.cs:3083`). Mitigated
-  incidents close only after a verification cycle shows the fix held. Evidence:
+  incidents close only after a verification cycle shows the fix held. Evidence: `MissionRecoveryCoordinator.Escalation`
+  fires `RecoveryExhausted` once per incident, keyed by the original mission, behind the exhausted note; the Admiral's
+  terminal-failure path fires `MissionFailed` keyed by mission. A Mitigated incident closes only when a rescue is still
+  Complete on the next pass, and otherwise reopens with a "Verification failed" note. MissionRecoveryCoordinatorSuite
+  `failed_rescue_redispatches_until_cap` (one notification) and `mitigation_reopens_when_rescue_regresses`;
+  MissionRecoveryCoordinator, EscalationService and RecoveryState suites 30/30.
 - [ ] **RS-5.10** Collapse the recovery loops into one `RecoveryPolicyEngine` that decides resume, repair,
   escalate, rescue, or fail from (failure kind, attempt history, recovery policy). Resume-in-place, escalate to
   planner, Judge rework escalation (`MissionService.Rework.cs:69`), and the incident rescue loop become actions it

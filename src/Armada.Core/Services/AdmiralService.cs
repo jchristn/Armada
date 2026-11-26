@@ -2820,7 +2820,9 @@ namespace Armada.Core.Services
 
             if (_Escalation != null)
             {
-                await _Escalation.FireAsync(EscalationTriggerEnum.RecoveryExhausted, captain.Id,
+                // Every terminal failure is MissionFailed, keyed by the mission. RecoveryExhausted fires only when the
+                // recovery coordinator uses up an incident's rescue budget (RS-5.9).
+                await _Escalation.FireAsync(EscalationTriggerEnum.MissionFailed, missionId,
                     "Captain " + captain.Id + " failed mission " + missionId + " (" + failureReason + ")", token).ConfigureAwait(false);
             }
 

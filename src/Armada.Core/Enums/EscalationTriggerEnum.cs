@@ -19,12 +19,13 @@ namespace Armada.Core.Enums
         MissionOverdue,
 
         /// <summary>
-        /// A mission has failed.
+        /// A mission has failed, keyed by mission id. Fires on every terminal failure.
         /// </summary>
         MissionFailed,
 
         /// <summary>
-        /// Recovery attempts exhausted for a captain.
+        /// A failed mission used up its autonomous rescue budget (MaxMissionRecoveryAttempts) without a rescue landing,
+        /// keyed by the original mission id. Fires once per recovery incident.
         /// </summary>
         RecoveryExhausted,
 

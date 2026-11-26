@@ -10,13 +10,15 @@ namespace Armada.Core.Services
     using Armada.Core.Database;
     using Armada.Core.Enums;
     using Armada.Core.Models;
+    using Armada.Core.Services.Interfaces;
     using Armada.Core.Settings;
 
     /// <summary>
     /// Reconciles autonomous mission recovery from Armada's own evidence. Each maintenance pass:
     /// classifies recently failed missions and opens an incident for the recoverable ones; dispatches a
     /// bounded rescue mission per incident and re-dispatches when a rescue itself fails (up to a cap); and
-    /// advances incidents Open -&gt; Mitigated -&gt; Closed as their rescue missions land. Nothing here requires a
+    /// advances incidents Open -&gt; Mitigated -&gt; Closed as their rescue missions land, closing only after a later pass
+    /// confirms the landed rescue is still Complete. Nothing here requires a
     /// human -- the state transitions are driven entirely by mission outcomes.
     /// </summary>
     public class MissionRecoveryCoordinator
@@ -27,6 +29,11 @@ namespace Armada.Core.Services
         /// Black box capture for an original mission whose rescue budget is used up, or null.
         /// </summary>
         public IBlackBoxCapture? BlackBox { get; set; } = null;
+
+        /// <summary>
+        /// Escalation rules to notify when an incident uses up its rescue budget (RS-5.9), or null for none.
+        /// </summary>
+        public IEscalationService? Escalation { get; set; } = null;
 
         #endregion
 
@@ -132,10 +139,15 @@ namespace Armada.Core.Services
 
         private async Task ReconcileIncidentAsync(AuthContext auth, Incident incident, int maxAttempts, CancellationToken token)
         {
-            // Second step of the lifecycle: a mitigated incident closes once the fix has held for a cycle.
+            // Second step of the lifecycle: a mitigated incident closes only after a verification pass shows the fix held
+            // (RS-5.9). Otherwise it reopens, and the next pass rescues again while the budget allows.
             if (incident.Status == IncidentStatusEnum.Mitigated)
             {
-                await TransitionAsync(auth, incident, IncidentStatusEnum.Closed, "Fix landed and held; incident closed.", token).ConfigureAwait(false);
+                string? broken = await FindBrokenMitigationAsync(incident, token).ConfigureAwait(false);
+                if (broken == null)
+                    await TransitionAsync(auth, incident, IncidentStatusEnum.Closed, "Fix landed and held; incident closed.", token).ConfigureAwait(false);
+                else
+                    await TransitionAsync(auth, incident, IncidentStatusEnum.Open, "Verification failed: " + broken + " Recovery continues.", token).ConfigureAwait(false);
                 return;
             }
 
@@ -214,6 +226,15 @@ namespace Armada.Core.Services
                         + String.Join(", ", rescues.Select(r => r.Id + " (" + r.Status + ")"))
                         + (lastRescue?.LastBlackBoxEntryId != null ? "; last rescue entry " + lastRescue.LastBlackBoxEntryId : "") + ".";
                 }, token).ConfigureAwait(false);
+
+                // The one notification that the rescue budget is used up (RS-5.9). The note above gates it, so it fires once
+                // per incident rather than on every failure.
+                if (Escalation != null)
+                {
+                    await Escalation.FireAsync(EscalationTriggerEnum.RecoveryExhausted, original.Id,
+                        "Mission " + original.Id + " used " + incident.RecoveryAttempts + " of " + maxAttempts
+                        + " rescue attempt(s) without landing; incident " + incident.Id + " needs a human.", token).ConfigureAwait(false);
+                }
             }
         }
 
@@ -472,6 +493,21 @@ namespace Armada.Core.Services
             }
 
             return results;
+        }
+
+        private async Task<string?> FindBrokenMitigationAsync(Incident incident, CancellationToken token)
+        {
+            // A landed rescue can still move from Complete to Failed when a later handoff fails, so the fix holds only while
+            // some rescue is still Complete.
+            List<string> states = new List<string>();
+            foreach (string rescueId in incident.RescueMissionIds)
+            {
+                Mission? rescue = await _Database.Missions.ReadAsync(rescueId, token).ConfigureAwait(false);
+                if (rescue == null) continue;
+                if (rescue.Status == MissionStatusEnum.Complete) return null;
+                states.Add(rescue.Id + " is " + rescue.Status);
+            }
+            return "no rescue is still Complete (" + (states.Count > 0 ? String.Join(", ", states) : "none found") + ").";
         }
 
         private async Task TransitionAsync(AuthContext auth, Incident incident, IncidentStatusEnum status, string note, CancellationToken token)
