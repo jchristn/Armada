@@ -10,7 +10,7 @@ namespace Armada.Runtimes.Tools
 
     /// <summary>
     /// Writes content to a file, creating parent directories as needed.
-    /// Preserves existing line ending style for existing files, uses platform default for new files.
+    /// Keeps an existing file's line endings, encoding, and byte order mark; a new file is UTF-8 without a byte order mark and uses the platform line ending.
     /// </summary>
     public class WriteFileTool : IToolExecutor
     {
@@ -25,7 +25,7 @@ namespace Armada.Runtimes.Tools
         /// A human-readable description of what this tool does.
         /// </summary>
         public string Description => "Writes content to a file. Creates parent directories if they do not exist. "
-            + "Preserves original line ending style for existing files; uses platform default for new files.";
+            + "Preserves an existing file's line endings and byte order mark; uses platform default line endings for new files.";
 
         /// <summary>
         /// The JSON Schema object describing the tool's input parameters.
@@ -74,12 +74,9 @@ namespace Armada.Runtimes.Tools
                 string content = args.Content!;
                 string resolvedPath = ResolvePath(filePath, workingDirectory);
 
-                string lineEnding = Environment.NewLine;
-
-                if (File.Exists(resolvedPath))
-                {
-                    lineEnding = DetectLineEnding(resolvedPath);
-                }
+                TextFileSnapshot format = File.Exists(resolvedPath)
+                    ? await TextFileCodec.ReadAsync(resolvedPath, cancellationToken).ConfigureAwait(false)
+                    : new TextFileSnapshot();
 
                 string? parentDir = Path.GetDirectoryName(resolvedPath);
                 if (parentDir != null && !Directory.Exists(parentDir))
@@ -87,10 +84,8 @@ namespace Armada.Runtimes.Tools
                     Directory.CreateDirectory(parentDir);
                 }
 
-                string normalizedContent = content.Replace("\r\n", "\n").Replace("\r", "\n");
-                string outputContent = normalizedContent.Replace("\n", lineEnding);
-
-                await File.WriteAllTextAsync(resolvedPath, outputContent, cancellationToken).ConfigureAwait(false);
+                string normalizedContent = TextFileCodec.NormalizeToLf(content);
+                await TextFileCodec.WriteAsync(resolvedPath, normalizedContent, format, cancellationToken).ConfigureAwait(false);
 
                 int lineCount = normalizedContent.Split('\n').Length;
 
@@ -129,34 +124,6 @@ namespace Armada.Runtimes.Tools
         #endregion
 
         #region Private-Methods
-
-        private string DetectLineEnding(string filePath)
-        {
-            using (FileStream fs = new FileStream(filePath, FileMode.Open, FileAccess.Read))
-            {
-                int current;
-                while ((current = fs.ReadByte()) != -1)
-                {
-                    if (current == '\r')
-                    {
-                        int next = fs.ReadByte();
-                        if (next == '\n')
-                        {
-                            return "\r\n";
-                        }
-
-                        return "\r";
-                    }
-
-                    if (current == '\n')
-                    {
-                        return "\n";
-                    }
-                }
-            }
-
-            return Environment.NewLine;
-        }
 
         private string ResolvePath(string filePath, string workingDirectory)
         {

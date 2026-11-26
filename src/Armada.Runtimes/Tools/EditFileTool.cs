@@ -11,7 +11,7 @@ namespace Armada.Runtimes.Tools
 
     /// <summary>
     /// Performs a single exact string replacement in a file.
-    /// Normalizes content to LF for matching, then preserves original line endings on write.
+    /// Normalizes content to LF for matching, then writes back with the file's original line endings, encoding, and byte order mark.
     /// </summary>
     public class EditFileTool : IToolExecutor
     {
@@ -91,11 +91,10 @@ namespace Armada.Runtimes.Tools
                     };
                 }
 
-                string originalContent = await File.ReadAllTextAsync(resolvedPath, cancellationToken).ConfigureAwait(false);
-                string lineEnding = DetectLineEnding(originalContent);
-                string lfContent = originalContent.Replace("\r\n", "\n").Replace("\r", "\n");
-                string lfOldString = oldString.Replace("\r\n", "\n").Replace("\r", "\n");
-                string lfNewString = newString.Replace("\r\n", "\n").Replace("\r", "\n");
+                TextFileSnapshot original = await TextFileCodec.ReadAsync(resolvedPath, cancellationToken).ConfigureAwait(false);
+                string lfContent = original.LfContent;
+                string lfOldString = TextFileCodec.NormalizeToLf(oldString);
+                string lfNewString = TextFileCodec.NormalizeToLf(newString);
 
                 List<int> matchPositions = FindAllOccurrences(lfContent, lfOldString);
 
@@ -146,8 +145,7 @@ namespace Armada.Runtimes.Tools
                     + lfNewString
                     + lfContent.Substring(matchPositions[0] + lfOldString.Length);
 
-                string outputContent = lfResult.Replace("\n", lineEnding);
-                await File.WriteAllTextAsync(resolvedPath, outputContent, cancellationToken).ConfigureAwait(false);
+                await TextFileCodec.WriteAsync(resolvedPath, lfResult, original, cancellationToken).ConfigureAwait(false);
 
                 int newLineCount = lfResult.Split('\n').Length;
 
@@ -207,30 +205,6 @@ namespace Armada.Runtimes.Tools
             }
 
             return lineNumber;
-        }
-
-        private string DetectLineEnding(string content)
-        {
-            int crlfIndex = content.IndexOf("\r\n", StringComparison.Ordinal);
-            int lfIndex = content.IndexOf("\n", StringComparison.Ordinal);
-            int crIndex = content.IndexOf("\r", StringComparison.Ordinal);
-
-            if (crlfIndex >= 0 && (crlfIndex <= lfIndex || lfIndex < 0))
-            {
-                return "\r\n";
-            }
-
-            if (lfIndex >= 0)
-            {
-                return "\n";
-            }
-
-            if (crIndex >= 0)
-            {
-                return "\r";
-            }
-
-            return Environment.NewLine;
         }
 
         private string ResolvePath(string filePath, string workingDirectory)

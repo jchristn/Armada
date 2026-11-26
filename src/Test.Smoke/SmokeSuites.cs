@@ -183,6 +183,7 @@ namespace Test.Smoke
             "Runtimes.MuxRuntime",
             "Runtimes.ReadFilePaging",
             "Runtimes.RemoteAgentRuntime",
+            "Runtimes.ToolFileFormat",
 
             // Services
             "Services.ApiSurfaceSettingEnums",
