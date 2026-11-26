@@ -672,6 +672,10 @@ namespace Armada.Runtimes
                 // routing map records which tool names must be dispatched to the MCP client rather than the
                 // local registry.
                 Dictionary<string, McpToolClient> mcpRouting = new Dictionary<string, McpToolClient>(StringComparer.Ordinal);
+                // RS-7.4: names that exist but the endpoint's policy turns off; any other unpermitted name is unknown.
+                HashSet<string> policyDisabled = new HashSet<string>(StringComparer.Ordinal);
+                foreach (PolyToolDefinition builtIn in BuildToolDefinitions(registry))
+                    if (!tools.Any(t => String.Equals(t.Name, builtIn.Name, StringComparison.Ordinal))) policyDisabled.Add(builtIn.Name);
                 DeferredMcpToolCatalog? deferredCatalog = null;
                 if (settings.McpToolsEnabled && !settings.ReadOnlyTools && !String.IsNullOrWhiteSpace(mcpUrl))
                 {
@@ -687,7 +691,11 @@ namespace Armada.Runtimes
                         List<PolyToolDefinition> remoteDefinitions = new List<PolyToolDefinition>();
                         foreach (McpRemoteTool remote in remoteTools)
                         {
-                            if (settings.AllowedTools != null && !settings.AllowedTools.Contains(remote.Name, StringComparer.Ordinal)) continue;
+                            if (settings.AllowedTools != null && !settings.AllowedTools.Contains(remote.Name, StringComparer.Ordinal))
+                            {
+                                policyDisabled.Add(remote.Name);
+                                continue;
+                            }
                             if (builtInNames.Contains(remote.Name) || mcpRouting.ContainsKey(remote.Name)) continue;
                             Dictionary<string, object> parameters = SchemaJsonToDictionary(remote.InputSchemaJson);
                             remoteDefinitions.Add(PolyToolDefinition.Function(remote.Name, remote.Description, parameters));
@@ -781,7 +789,12 @@ namespace Armada.Runtimes
                     Math.Min(_MaxIterations, settings.MaxIterations),
                     settings.Streaming,
                     _Behaviors);
+                loop.RepeatedToolCallLimit = settings.RepeatedToolCallLimit ?? ApiTurnLoop.DefaultRepeatedToolCallLimit;
+                policyDisabled.ExceptWith(permittedTools);
+                loop.DisabledTools = policyDisabled;
                 ApiTurnLoopResult outcome = await loop.RunAsync(messages, tools, permittedTools, token).ConfigureAwait(false);
+                if (outcome.TextToolCallRecoveries > 0)
+                    EmitDiagnostic(processId, ApiRuntimeDiagnosticKindEnum.Inference, "[recovery] model " + JsonSerializer.Serialize(new { model = String.IsNullOrWhiteSpace(model) ? endpoint.Model : model, textToolCalls = outcome.TextToolCallRecoveries }));
                 exitCode = outcome.ExitCode;
                 finalText = outcome.FinalText;
 

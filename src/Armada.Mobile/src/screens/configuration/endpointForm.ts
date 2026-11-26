@@ -107,7 +107,8 @@ function inferenceValues(endpoint: ModelEndpoint | null): FormValues {
     contextLength: options.contextLength == null ? '' : String(options.contextLength),
     maxConcurrentMissions: options.maxConcurrentMissions == null ? '' : String(options.maxConcurrentMissions),
     firstResponseTimeoutMs: options.firstResponseTimeoutMs == null ? '' : String(options.firstResponseTimeoutMs),
-    toolOutputWindowPercent: options.toolOutputWindowPercent == null ? '' : String(options.toolOutputWindowPercent) };
+    toolOutputWindowPercent: options.toolOutputWindowPercent == null ? '' : String(options.toolOutputWindowPercent),
+    repeatedToolCallLimit: options.repeatedToolCallLimit == null ? '' : String(options.repeatedToolCallLimit) };
 }
 
 function inferencePayload(v: FormValues) {
@@ -124,6 +125,7 @@ function inferencePayload(v: FormValues) {
       maxConcurrentMissions: str(v, 'maxConcurrentMissions').trim() ? Number(str(v, 'maxConcurrentMissions')) : null,
       firstResponseTimeoutMs: str(v, 'firstResponseTimeoutMs').trim() ? Number(str(v, 'firstResponseTimeoutMs')) : null,
       toolOutputWindowPercent: str(v, 'toolOutputWindowPercent').trim() ? Number(str(v, 'toolOutputWindowPercent')) : null,
+      repeatedToolCallLimit: str(v, 'repeatedToolCallLimit').trim() ? Number(str(v, 'repeatedToolCallLimit')) : null,
     };
 }
 
@@ -336,6 +338,7 @@ export function endpointFields(t: Translate, viewer: ScopeViewer, v: FormValues,
       { kind: 'integer' as const, key: 'contextLength', label: t('Context window (Ollama num_ctx)') },
       { kind: 'integer' as const, key: 'maxConcurrentMissions', label: t('Max concurrent missions (per base URL)') },
       { kind: 'integer' as const, key: 'toolOutputWindowPercent', label: t('Tool output window (% of context)'), hint: t('Share of a known context window one file read or command output may fill; blank uses 12.') },
+      { kind: 'integer' as const, key: 'repeatedToolCallLimit', label: t('Repeated tool call limit'), hint: t('Identical tool calls in a row (2-20) before a corrective note; twice as many stops the run. Blank uses 3.') },
     ] : []),
     scopeField(t, viewer),
     { kind: 'switch', key: 'enabled', label: t('Enabled') },

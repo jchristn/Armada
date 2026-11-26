@@ -19,6 +19,37 @@ namespace Armada.Runtimes
     /// </summary>
     public sealed class ApiTurnLoop
     {
+        #region Public-Members
+
+        /// <summary>Default number of identical consecutive tool calls that draws a corrective note (RS-7.5).</summary>
+        public const int DefaultRepeatedToolCallLimit = 3;
+
+        /// <summary>Most available tool names listed in an unknown_tool result.</summary>
+        public const int MaxListedTools = 40;
+
+        /// <summary>
+        /// Identical consecutive tool calls (same name and arguments) after which each further repeat gets a corrective
+        /// note in its result; twice this many ends the run as degenerate_output (RS-7.5). Minimum 2; default 3.
+        /// </summary>
+        /// <exception cref="ArgumentOutOfRangeException">Thrown when set below 2.</exception>
+        public int RepeatedToolCallLimit
+        {
+            get => _RepeatedToolCallLimit;
+            set
+            {
+                if (value < 2) throw new ArgumentOutOfRangeException(nameof(RepeatedToolCallLimit));
+                _RepeatedToolCallLimit = value;
+            }
+        }
+
+        /// <summary>
+        /// Tool names that exist but the endpoint's inference policy disables; a call to one gets tool_not_allowed rather
+        /// than unknown_tool (RS-7.4). Null treats every name outside the permitted set as unknown.
+        /// </summary>
+        public ISet<string>? DisabledTools { get; set; } = null;
+
+        #endregion
+
         #region Private-Members
 
         private readonly ApiTurnLoopCallbacks _Callbacks;
@@ -29,6 +60,9 @@ namespace Armada.Runtimes
         private readonly int _MaxIterations;
         private readonly bool _Streamed;
         private readonly ApiRuntimeBehaviors _Behaviors;
+        private int _RepeatedToolCallLimit = DefaultRepeatedToolCallLimit;
+        private string? _LastCallKey = null;
+        private int _RepeatCount = 0;
 
         #endregion
 
@@ -151,6 +185,8 @@ namespace Armada.Runtimes
                     break;
                 }
 
+                RecoverTextCalls(response, permittedTools, result);
+
                 string visibleText = _Terminal.VisibleText(response.Text);
                 if (!String.IsNullOrEmpty(visibleText))
                 {
@@ -180,7 +216,14 @@ namespace Armada.Runtimes
                 }
 
                 result.FinalText = String.Empty;
-                await ExecuteToolCallsAsync(response.ToolCalls, messages, permittedTools, token).ConfigureAwait(false);
+                RuntimeProviderError? repeated = await ExecuteToolCallsAsync(response.ToolCalls, messages, permittedTools, token).ConfigureAwait(false);
+                if (repeated != null)
+                {
+                    result.ExitCode = 1;
+                    _Callbacks.Diagnostic(ApiRuntimeDiagnosticKindEnum.Error, "[error] " + repeated.Reason);
+                    _Callbacks.ProviderError(repeated);
+                    break;
+                }
 
                 if (iteration == _MaxIterations - 1)
                 {
@@ -194,15 +237,48 @@ namespace Armada.Runtimes
         }
 
         /// <summary>
-        /// The tool result returned for a call to a tool the captain may not use.
+        /// The tool result returned for a call to a tool the captain may not use (RS-7.4). A tool that exists but is
+        /// disabled by the endpoint's inference policy gets tool_not_allowed; any other name gets unknown_tool with the
+        /// names the captain can call, so a model that guessed a name can correct it.
         /// </summary>
         /// <param name="call">The call.</param>
+        /// <param name="permittedTools">Tool names the captain may call.</param>
+        /// <param name="disabledTools">Tool names that exist but are disabled by policy, or null.</param>
         /// <returns>The JSON tool result.</returns>
-        /// <exception cref="ArgumentNullException">Thrown when call is null.</exception>
-        public static string DeniedToolResult(ToolCall call)
+        /// <exception cref="ArgumentNullException">Thrown when call or permittedTools is null.</exception>
+        public static string DeniedToolResult(ToolCall call, ISet<string> permittedTools, ISet<string>? disabledTools)
         {
             if (call == null) throw new ArgumentNullException(nameof(call));
-            return JsonSerializer.Serialize(new { error = "tool_not_allowed", message = "This tool is disabled by the endpoint's inference policy." });
+            if (permittedTools == null) throw new ArgumentNullException(nameof(permittedTools));
+            if (disabledTools != null && call.Name != null && disabledTools.Contains(call.Name))
+                return JsonSerializer.Serialize(new { error = "tool_not_allowed", message = "This tool is disabled by the endpoint's inference policy." });
+
+            List<string> names = permittedTools.OrderBy(n => n, StringComparer.Ordinal).ToList();
+            string available = String.Join(", ", names.Take(MaxListedTools));
+            if (names.Count > MaxListedTools) available += " and " + (names.Count - MaxListedTools) + " more";
+            return JsonSerializer.Serialize(new { error = "unknown_tool", message = "unknown tool " + (call.Name ?? String.Empty) + "; available: " + available });
+        }
+
+        /// <summary>
+        /// The key that makes two tool calls identical for the repetition guard: the name plus the arguments with
+        /// top-level keys sorted and whitespace removed. Arguments that are not a JSON object compare as written.
+        /// </summary>
+        /// <param name="call">The call.</param>
+        /// <returns>The comparison key.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when call is null.</exception>
+        public static string CallKey(ToolCall call)
+        {
+            if (call == null) throw new ArgumentNullException(nameof(call));
+            string args = String.IsNullOrWhiteSpace(call.ArgumentsJson) ? "{}" : call.ArgumentsJson.Trim();
+            try
+            {
+                Dictionary<string, object?>? parsed = JsonSerializer.Deserialize<Dictionary<string, object?>>(args);
+                if (parsed != null) args = JsonSerializer.Serialize(new SortedDictionary<string, object?>(parsed, StringComparer.Ordinal));
+            }
+            catch (JsonException)
+            {
+            }
+            return (call.Name ?? String.Empty) + "\n" + args;
         }
 
         #endregion
@@ -224,20 +300,65 @@ namespace Armada.Runtimes
             return message;
         }
 
-        private async Task ExecuteToolCallsAsync(List<ToolCall> calls, List<ChatMessage> messages, ISet<string> permittedTools, CancellationToken token)
+        private void RecoverTextCalls(ChatResponse response, ISet<string> permittedTools, ApiTurnLoopResult result)
+        {
+            // RS-7.2: only a successful, complete response. A failed or incomplete stream arrives unsuccessful, and a
+            // response cut at the token limit may hold a truncated call.
+            if (!_Behaviors.TextToolCallRecovery || !response.Success) return;
+            if (response.ToolCalls != null && response.ToolCalls.Count > 0) return;
+            if (ApiTerminalPolicy.IsTokenLimit(response.FinishReason)) return;
+            if (String.IsNullOrWhiteSpace(response.Text)) return;
+
+            TextToolCallParseResult parsed = TextToolCallParser.Parse(_Terminal.VisibleText(response.Text), permittedTools);
+            if (parsed.Calls.Count == 0) return;
+            if (response.ToolCalls == null) response.ToolCalls = new List<ToolCall>();
+            response.ToolCalls.AddRange(parsed.Calls);
+            response.Text = parsed.RemainingText;
+            result.TextToolCallRecoveries += parsed.Calls.Count;
+            _Callbacks.Diagnostic(ApiRuntimeDiagnosticKindEnum.Inference, "[recovery] " + JsonSerializer.Serialize(new { textToolCalls = parsed.Calls.Count, format = parsed.Format, tools = parsed.Calls.Select(c => c.Name).ToList() }));
+        }
+
+        private async Task<RuntimeProviderError?> ExecuteToolCallsAsync(List<ToolCall> calls, List<ChatMessage> messages, ISet<string> permittedTools, CancellationToken token)
         {
             foreach (ToolCall call in calls)
             {
                 token.ThrowIfCancellationRequested();
+                string key = CallKey(call);
+                if (String.Equals(key, _LastCallKey, StringComparison.Ordinal)) _RepeatCount++;
+                else
+                {
+                    _LastCallKey = key;
+                    _RepeatCount = 1;
+                }
+
+                // RS-7.5: twice the limit ends the run as a task failure, so escalation can pick another captain.
+                if (_RepeatCount >= _RepeatedToolCallLimit * 2)
+                {
+                    return new RuntimeProviderError
+                    {
+                        ErrorType = "degenerate_output",
+                        Reason = "API endpoint captain called " + call.Name + " with identical arguments " + _RepeatCount + " times in a row; stopping."
+                    };
+                }
+
                 string resultContent;
                 if (!permittedTools.Contains(call.Name))
                 {
-                    resultContent = DeniedToolResult(call);
+                    resultContent = DeniedToolResult(call, permittedTools, DisabledTools);
                     _Callbacks.ToolEvent(new ApiRuntimeToolEvent { Phase = ApiRuntimeToolPhaseEnum.Completed, Id = call.Id, Name = call.Name, Ok = false, PermissionDenied = true, Result = resultContent });
                 }
                 else resultContent = await _Callbacks.ExecuteToolAsync(call, token).ConfigureAwait(false);
+
+                if (_RepeatCount >= _RepeatedToolCallLimit)
+                {
+                    resultContent += "\n\n[armada] You have called " + call.Name + " with identical arguments " + _RepeatCount
+                        + " times in a row. The result will not change. Use it, try a different approach, or finish the task. The run stops at "
+                        + (_RepeatedToolCallLimit * 2) + " identical calls.";
+                    _Callbacks.Diagnostic(ApiRuntimeDiagnosticKindEnum.Warning, "[warning] " + call.Name + " called with identical arguments " + _RepeatCount + " times in a row; corrective note added.");
+                }
                 messages.Add(ChatMessage.ToolResult(call.Id, call.Name, resultContent));
             }
+            return null;
         }
 
         #endregion

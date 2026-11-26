@@ -210,9 +210,9 @@ the Admiral falls back to it: the launch still goes to that Harbor and nothing n
 | `api-tool-scope-v1` | limits scoped MCP tools to the persona's scope (`ARMADA_MCP_TOOL_SCOPE`) | 1.5.0 |
 | `api-completion-line-v1` | treats a missing completion line as incomplete (`ARMADA_REQUIRES_COMPLETION_LINE`) | 1.5.0 |
 | `cli-final-message-hygiene-v1` | CLI runtimes clean their final message: OpenCode JSON final message and stdout error events, no `--dir` for OpenCode 2, reasoning stripped | 1.5.0 |
-| `api-text-tool-call-recovery-v1` | recovers tool calls a model wrote as text | reserved |
+| `api-text-tool-call-recovery-v1` | recovers tool calls a model wrote as text and runs them; reports `unknown_tool` with the available names for a name that does not exist | 1.5.0 |
 | `api-malformed-call-retry-v1` | corrects instead of resending a request that failed on a malformed tool call or a repeat loop | 1.5.0 |
-| `api-repetition-guard-v1` | stops repeated identical tool calls | reserved |
+| `api-repetition-guard-v1` | notes repeated identical tool calls and stops the run at twice `repeatedToolCallLimit` | 1.5.0 |
 | `api-reasoning-hygiene-v1` | strips reasoning from the final message and history | 1.5.0 |
 | `api-tool-limits-scaled-v1` | scales tool output limits to the context window | 1.5.0 |
 | `api-edit-encoding-preserve-v1` | keeps a file's byte order mark and line endings on edits | 1.5.0 |

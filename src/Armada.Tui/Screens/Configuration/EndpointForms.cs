@@ -163,6 +163,7 @@ namespace Armada.Tui.Screens.Configuration
             SelectField<string> streaming = form.Enum("Stream Responses", inference.StreamingMode);
             InputField firstResponse = form.Text("First-response Timeout (ms)", inference.FirstResponseTimeoutMs?.ToString(CultureInfo.InvariantCulture), "Request timeout (1000–1800000)");
             InputField toolWindow = form.Text("Tool Output Window (%)", inference.ToolOutputWindowPercent?.ToString(CultureInfo.InvariantCulture), "12 (1–50, share of the context window)");
+            InputField repeatLimit = form.Text("Repeated Tool Call Limit", inference.RepeatedToolCallLimit?.ToString(CultureInfo.InvariantCulture), "3 (2-20 identical calls in a row before a note; twice stops the run)");
             SelectField<string> scope = form.Scope(existing != null ? existing.Scope : ScopeRules.ResolveCreateScope(context.Session, null));
             CheckField enabled = form.Check("Enabled", existing?.Enabled ?? true);
             form.MarkClean();
@@ -209,7 +210,8 @@ namespace Armada.Tui.Screens.Configuration
                         MaxConcurrentMissions = String.IsNullOrWhiteSpace(maxConcurrent.Value) ? null : Int32.Parse(maxConcurrent.Value, CultureInfo.InvariantCulture),
                         StreamingMode = EntityForm.EnumValue(streaming, InferenceStreamingModeEnum.Automatic),
                         FirstResponseTimeoutMs = String.IsNullOrWhiteSpace(firstResponse.Value) ? null : Int32.Parse(firstResponse.Value, CultureInfo.InvariantCulture),
-                        ToolOutputWindowPercent = String.IsNullOrWhiteSpace(toolWindow.Value) ? null : Int32.Parse(toolWindow.Value, CultureInfo.InvariantCulture)
+                        ToolOutputWindowPercent = String.IsNullOrWhiteSpace(toolWindow.Value) ? null : Int32.Parse(toolWindow.Value, CultureInfo.InvariantCulture),
+                        RepeatedToolCallLimit = String.IsNullOrWhiteSpace(repeatLimit.Value) ? null : Int32.Parse(repeatLimit.Value, CultureInfo.InvariantCulture)
                     };
                     payload.InferenceOptions.Validate();
                 }

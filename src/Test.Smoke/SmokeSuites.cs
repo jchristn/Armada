@@ -173,6 +173,7 @@ namespace Test.Smoke
             "Runtimes.ApiContextPolicy",
             "Runtimes.ApiTerminalPolicy",
             "Runtimes.ApiTurnLoop",
+            "Runtimes.TextToolCallParser",
             "Runtimes.BaseAgentRuntime",
             "Runtimes.BuiltInToolArguments",
             "Runtimes.ClaudeCodeRuntime",

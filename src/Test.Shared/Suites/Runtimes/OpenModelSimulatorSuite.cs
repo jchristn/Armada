@@ -324,7 +324,15 @@ namespace Test.Shared.Suites.Runtimes
                 runtime.OnProcessExited += (pid, value) => exited.Set();
                 await runtime.StartAsync(dir, "Read a.txt with read_file, then reply with exactly: DONE", new Dictionary<string, string>()).ConfigureAwait(false);
                 AssertTrue(exited.Wait(TimeSpan.FromSeconds(90)), kind + ": the runtime must end, successfully or not, within 90 seconds");
-                AssertTrue(sim.Requests.Count >= 1, kind + ": the runtime called the model");
+                List<SimulatorRequest> requests = sim.Requests;
+                AssertTrue(requests.Count >= 1, kind + ": the runtime called the model");
+                if (kind == SimulatedTurnKindEnum.HermesTextToolCall || kind == SimulatedTurnKindEnum.FunctionTagTextToolCall || kind == SimulatedTurnKindEnum.FencedJsonTextToolCall)
+                {
+                    // RS-7.2: the text call ran as read_file, so the next request carries the file's content as a tool result.
+                    List<SimulatorRequest> chats = requests.Where(r => r.Path.EndsWith("/chat", StringComparison.Ordinal) || r.Path.EndsWith("/completions", StringComparison.Ordinal)).ToList();
+                    AssertTrue(chats.Count >= 2, kind + ": the recovered call was answered with another turn");
+                    AssertContains("alpha", chats[1].Body);
+                }
             }
             finally
             {

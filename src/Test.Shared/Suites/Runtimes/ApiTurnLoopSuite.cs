@@ -7,6 +7,7 @@ namespace Test.Shared.Suites.Runtimes
     using System.Threading.Tasks;
     using Armada.Core.Enums;
     using Armada.Core.Models;
+    using Armada.Core.Services;
     using Armada.Runtimes;
     using PolyPrompt.Models;
     using Test.Shared.Infrastructure;
@@ -40,15 +41,108 @@ namespace Test.Shared.Suites.Runtimes
                 AssertEqual(1, h.Emitted.Count, "only the final text was visible");
                 AssertEqual(0, h.Errors.Count);
             }));
-            cases.Add(Case("denied_tool", "A tool outside the permitted set gets tool_not_allowed and is not executed", TestTags.Negative, async () =>
+            cases.Add(Case("denied_tool", "A tool the endpoint's policy disables gets tool_not_allowed and is not executed", TestTags.Negative, async () =>
             {
                 Harness h = new Harness(Calls("rm_rf"), Text(Done));
+                h.DisabledTools = new HashSet<string> { "rm_rf" };
                 await h.RunAsync().ConfigureAwait(false);
                 AssertEqual(0, h.Executed.Count);
                 AssertContains("tool_not_allowed", h.Messages.Single(m => m.ToolCallId == "call_0").Text!);
                 ApiRuntimeToolEvent denied = h.ToolEvents.Single();
                 AssertTrue(denied.PermissionDenied == true, "the tool event is marked denied");
                 AssertTrue(denied.Ok == false, "the tool event is not ok");
+            }));
+            cases.Add(Case("unknown_tool_lists_available", "RS-7.4: a tool that does not exist gets unknown_tool naming the tools the captain can call", TestTags.Negative, async () =>
+            {
+                Harness h = new Harness(Calls("open_file_in_editor"), Text(Done));
+                await h.RunAsync().ConfigureAwait(false);
+                AssertEqual(0, h.Executed.Count);
+                string result = h.Messages.Single(m => m.ToolCallId == "call_0").Text!;
+                AssertContains("unknown_tool", result);
+                AssertContains("unknown tool open_file_in_editor; available: read_file", result);
+                AssertFalse(result.Contains("inference policy", StringComparison.Ordinal), "an unknown name is not blamed on the policy");
+            }));
+            cases.Add(Case("unknown_tool_list_is_capped", "RS-7.4: the available list stops at the cap and counts the rest", TestTags.Negative, () =>
+            {
+                HashSet<string> permitted = new HashSet<string>(Enumerable.Range(0, ApiTurnLoop.MaxListedTools + 5).Select(i => "tool_" + i.ToString("D3")));
+                string result = ApiTurnLoop.DeniedToolResult(new ToolCall { Id = "x", Name = "nope" }, permitted, null);
+                AssertContains("and 5 more", result);
+                return Task.CompletedTask;
+            }));
+            cases.Add(Case("text_tool_call_recovered", "RS-7.2: a tool call written as text runs as a real call and the assistant turn carries it", TestTags.Positive, async () =>
+            {
+                Harness h = new Harness(Text("Reading it.\n<tool_call>\n{\"name\":\"read_file\",\"arguments\":{\"path\":\"a.txt\"}}\n</tool_call>"), Text(Done));
+                ApiTurnLoopResult result = await h.RunAsync().ConfigureAwait(false);
+                AssertEqual(0, result.ExitCode);
+                AssertEqual(1, result.TextToolCallRecoveries);
+                AssertEqual("read_file", h.Executed.Single());
+                AssertEqual("{\"path\":\"a.txt\"}", h.ExecutedArguments.Single());
+                ChatMessage assistant = h.Messages[2];
+                AssertEqual(1, assistant.ToolCalls?.Count ?? 0, "the assistant message carries the recovered call");
+                AssertEqual("Reading it.", assistant.Text);
+                AssertTrue(h.Messages.Any(m => m.ToolCallId != null && m.ToolCallId.StartsWith("text_call_", StringComparison.Ordinal)), "the tool result answers the recovered call id");
+                AssertTrue(h.Diagnostics.Any(d => d.StartsWith("[recovery] ", StringComparison.Ordinal) && d.Contains("\"format\":\"hermes\"", StringComparison.Ordinal)), "the recovery is logged");
+                AssertTrue(h.Emitted.All(e => !e.Contains("<tool_call>", StringComparison.Ordinal)), "call markup is not emitted as visible text");
+            }));
+            cases.Add(Case("text_tool_call_not_recovered_after_length_cut", "RS-7.2: a response cut at the token limit is never recovered", TestTags.Negative, async () =>
+            {
+                ChatResponse cut = Text("<tool_call>{\"name\":\"read_file\",\"arguments\":{\"path\":\"a.txt\"}}</tool_call>");
+                cut.FinishReason = "length";
+                Harness h = new Harness(cut, Text(Done));
+                ApiTurnLoopResult result = await h.RunAsync().ConfigureAwait(false);
+                AssertEqual(0, h.Executed.Count);
+                AssertEqual(0, result.TextToolCallRecoveries);
+            }));
+            cases.Add(Case("text_tool_call_recovery_off", "RS-7.2: with recovery turned off a text tool call is ordinary text", TestTags.Negative, async () =>
+            {
+                Harness h = new Harness(Text("<tool_call>{\"name\":\"read_file\",\"arguments\":{}}</tool_call>"), Text(Done));
+                h.Behaviors.TextToolCallRecovery = false;
+                await h.RunAsync().ConfigureAwait(false);
+                AssertEqual(0, h.Executed.Count);
+            }));
+            cases.Add(Case("text_tool_call_unpermitted_not_recovered", "RS-7.2: a text call to a tool outside the permitted set is not recovered", TestTags.Negative, async () =>
+            {
+                Harness h = new Harness(Text("<tool_call>{\"name\":\"rm_rf\",\"arguments\":{}}</tool_call>"), Text(Done));
+                ApiTurnLoopResult result = await h.RunAsync().ConfigureAwait(false);
+                AssertEqual(0, h.Executed.Count);
+                AssertEqual(0, result.TextToolCallRecoveries);
+                AssertEqual(0, h.ToolEvents.Count, "nothing was denied either: the text stays text");
+            }));
+            cases.Add(Case("repeated_calls_get_note", "RS-7.5: the third identical call in a row runs and its result carries a corrective note", TestTags.Negative, async () =>
+            {
+                Harness h = new Harness(Calls("read_file"), Calls("read_file"), Calls("read_file"), Text(Done));
+                ApiTurnLoopResult result = await h.RunAsync().ConfigureAwait(false);
+                AssertEqual(0, result.ExitCode);
+                AssertEqual(3, h.Executed.Count);
+                List<ChatMessage> results = h.Messages.Where(m => m.ToolCallId == "call_0").ToList();
+                AssertFalse(results[1].Text!.Contains("[armada]", StringComparison.Ordinal), "the second call gets no note");
+                AssertContains("identical arguments 3 times in a row", results[2].Text!);
+            }));
+            cases.Add(Case("different_arguments_reset_count", "RS-7.5: a call with other arguments resets the count; key order and spacing do not", TestTags.Negative, () =>
+            {
+                AssertEqual(ApiTurnLoop.CallKey(new ToolCall { Name = "grep", ArgumentsJson = "{\"a\":1, \"b\":2}" }), ApiTurnLoop.CallKey(new ToolCall { Name = "grep", ArgumentsJson = "{\"b\":2,\"a\":1}" }));
+                AssertFalse(ApiTurnLoop.CallKey(new ToolCall { Name = "grep", ArgumentsJson = "{\"a\":1}" }) == ApiTurnLoop.CallKey(new ToolCall { Name = "grep", ArgumentsJson = "{\"a\":2}" }), "other arguments are another call");
+                return Task.CompletedTask;
+            }));
+            cases.Add(Case("repeated_calls_stop_run", "RS-7.5: twice the limit of identical calls ends the run as degenerate_output without running the last", TestTags.Negative, async () =>
+            {
+                Harness h = new Harness(Calls("read_file"), Calls("read_file"), Calls("read_file"), Calls("read_file"), Calls("read_file"), Calls("read_file"), Text(Done));
+                ApiTurnLoopResult result = await h.RunAsync().ConfigureAwait(false);
+                AssertEqual(1, result.ExitCode);
+                AssertEqual(5, h.Executed.Count);
+                RuntimeProviderError error = h.Errors.Single();
+                AssertEqual("degenerate_output", error.ErrorType);
+                AssertEqual(RuntimeFailureKindEnum.TaskFailure, RuntimeFailureClassifier.Classify(1, error));
+                AssertContains("identical arguments 6 times in a row", error.Reason!);
+            }));
+            cases.Add(Case("repeated_call_limit_configurable", "RS-7.5: a limit of 2 notes the second identical call and stops at the fourth", TestTags.Negative, async () =>
+            {
+                Harness h = new Harness(Calls("read_file"), Calls("read_file"), Calls("read_file"), Calls("read_file"), Text(Done));
+                h.RepeatedToolCallLimit = 2;
+                ApiTurnLoopResult result = await h.RunAsync().ConfigureAwait(false);
+                AssertEqual(1, result.ExitCode);
+                AssertEqual(3, h.Executed.Count);
+                AssertThrows<ArgumentException>(() => new InferenceOptions { RepeatedToolCallLimit = 1 }.Validate());
             }));
             cases.Add(Case("failed_response_stops", "A failed response raises the host's inference failure and stops", TestTags.Negative, async () =>
             {
@@ -225,6 +319,9 @@ namespace Test.Shared.Suites.Runtimes
             public NativeSubmitTool? SubmitTool { get; set; } = null;
             public ApiRuntimeBehaviors Behaviors { get; } = new ApiRuntimeBehaviors();
             public double? Temperature { get; set; } = null;
+            public List<string> ExecutedArguments { get; } = new List<string>();
+            public ISet<string>? DisabledTools { get; set; } = null;
+            public int RepeatedToolCallLimit { get; set; } = ApiTurnLoop.DefaultRepeatedToolCallLimit;
             private readonly Queue<ChatResponse> _Script;
 
             public Harness(params ChatResponse[] script)
@@ -250,6 +347,7 @@ namespace Test.Shared.Suites.Runtimes
                     ExecuteToolAsync = (call, ct) =>
                     {
                         Executed.Add(call.Name);
+                        ExecutedArguments.Add(call.ArgumentsJson);
                         return Task.FromResult("ran " + call.Name);
                     },
                     Emit = text => Emitted.Add(text),
@@ -260,6 +358,8 @@ namespace Test.Shared.Suites.Runtimes
                 HashSet<string> permitted = Tools.Select(t => t.Name).ToHashSet(StringComparer.Ordinal);
                 ApiTurnLoop loop = new ApiTurnLoop(callbacks, new ApiContextPolicy(ContextLength), new ApiTerminalPolicy(SubmitTool == null, null, SubmitTool, Behaviors.ReasoningHygiene),
                     SubmitTool, new CompletionOptions { Temperature = Temperature }, MaxIterations, false, Behaviors);
+                loop.DisabledTools = DisabledTools;
+                loop.RepeatedToolCallLimit = RepeatedToolCallLimit;
                 return loop.RunAsync(Messages, Tools, permitted, token);
             }
         }

@@ -685,9 +685,10 @@ export default function Endpoints() {
                 ['temperature', 'Temperature', 0, 2, 0.01], ['topP', 'Top P', 0, 1, 0.01],
                 ['contextLength', 'Context window (Ollama num_ctx)', 512, 2097152, 1], ['maxConcurrentMissions', 'Max concurrent missions (per base URL)', 1, 64, 1],
                 ['firstResponseTimeoutMs', 'First-response timeout (ms)', 1000, 1800000, 1], ['toolOutputWindowPercent', 'Tool output window (% of context)', 1, 50, 1],
+                ['repeatedToolCallLimit', 'Repeated tool call limit', 2, 20, 1],
               ] as const).map(([key, label, min, max, step]) => <label key={key}>{t(label)}
                 <input type="number" min={min} max={max} step={step} required={key === 'maxIterations'}
-                  placeholder={t(key === 'contextLength' ? 'Model default' : key === 'maxConcurrentMissions' ? 'Unlimited' : key === 'firstResponseTimeoutMs' ? 'Request timeout' : key === 'toolOutputWindowPercent' ? '12' : 'Provider default')}
+                  placeholder={t(key === 'contextLength' ? 'Model default' : key === 'maxConcurrentMissions' ? 'Unlimited' : key === 'firstResponseTimeoutMs' ? 'Request timeout' : key === 'toolOutputWindowPercent' ? '12' : key === 'repeatedToolCallLimit' ? '3' : 'Provider default')}
                   value={form.inferenceOptions[key] ?? ''} onChange={e => setForm({ ...form, inferenceOptions: { ...form.inferenceOptions, [key]: e.target.value === '' ? null : Number(e.target.value) } })} />
               </label>)}
               </div>

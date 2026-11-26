@@ -374,6 +374,19 @@ for the whole catalog). A mission launch therefore names the few Armada tools it
 (Ask turns), a catalog of more than 32 tools is deferred behind discovery as before. The context-window check that
 compacts earlier tool output counts the tool schemas sent, not only the messages.
 
+Since 1.5.0 the loop also absorbs three common open-model tool-calling failures:
+
+- **Tool calls written as text.** When a complete reply has no native tool calls but its text holds
+  `<tool_call>{json}</tool_call>`, `<function=name>...</function>` (with a JSON body or `<parameter=x>` tags), or a fenced
+  JSON block with a tool name and arguments, the calls are run as real calls and the markup is removed from the reply.
+  Only permitted tools are recovered, and never from a reply cut at the output-token limit or from a failed stream. Each
+  recovery is logged as a `[recovery]` diagnostic, and the run ends with a per-model count.
+- **Unknown tool names.** A call to a tool that does not exist gets `unknown_tool` with the names the captain can call;
+  `tool_not_allowed` is kept for a tool the endpoint's inference policy turns off.
+- **Repeated identical calls.** After `repeatedToolCallLimit` (default 3) identical calls in a row, each further result
+  carries a note that the result will not change; twice that many ends the run as `degenerate_output`, a task failure
+  that escalation can route to another captain.
+
 ## Mission progress streaming
 
 In text mode a captain prints nothing until it finishes (Claude Code's `--print` prints only the final reply), so a

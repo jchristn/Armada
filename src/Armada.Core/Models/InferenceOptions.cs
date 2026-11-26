@@ -75,6 +75,12 @@ namespace Armada.Core.Models
         /// fixed 1 MB read and 100 KB process caps.
         /// </summary>
         public int? ToolOutputWindowPercent { get; set; } = null;
+        /// <summary>
+        /// Optional number, from 2 through 20, of identical consecutive tool calls (same tool and arguments) after which
+        /// each further repeat gets a corrective note; twice this many ends the run as degenerate_output. Null uses 3.
+        /// A Harbor that predates it runs without the guard.
+        /// </summary>
+        public int? RepeatedToolCallLimit { get; set; } = null;
 
         /// <summary>Whether launching on a Harbor requires policy-aware execution support.</summary>
         [System.Text.Json.Serialization.JsonIgnore]
@@ -92,7 +98,7 @@ namespace Armada.Core.Models
         /// <summary>Whether any setting differs from the defaults.</summary>
         [System.Text.Json.Serialization.JsonIgnore]
         public bool HasNonDefaultSettings => RequiresPolicySupport || RequiresContextSupport || RequiresStreamingSupport || MaxConcurrentMissions.HasValue
-            || ToolOutputWindowPercent.HasValue
+            || ToolOutputWindowPercent.HasValue || RepeatedToolCallLimit.HasValue
             || StreamingMode != InferenceStreamingModeEnum.Automatic;
 
         /// <summary>
@@ -131,6 +137,7 @@ namespace Armada.Core.Models
             if (ContextLength.HasValue && (ContextLength < 512 || ContextLength > 2097152)) throw new ArgumentException("InferenceOptions.ContextLength must be between 512 and 2097152.");
             if (FirstResponseTimeoutMs.HasValue && (FirstResponseTimeoutMs < 1000 || FirstResponseTimeoutMs > 1800000)) throw new ArgumentException("InferenceOptions.FirstResponseTimeoutMs must be between 1000 and 1800000.");
             if (ToolOutputWindowPercent.HasValue && (ToolOutputWindowPercent < 1 || ToolOutputWindowPercent > 50)) throw new ArgumentException("InferenceOptions.ToolOutputWindowPercent must be between 1 and 50.");
+            if (RepeatedToolCallLimit.HasValue && (RepeatedToolCallLimit < 2 || RepeatedToolCallLimit > 20)) throw new ArgumentException("InferenceOptions.RepeatedToolCallLimit must be between 2 and 20.");
             if (AllowedTools != null && (AllowedTools.Count > 256 || AllowedTools.Any(n => String.IsNullOrWhiteSpace(n) || n.Length > 256 || n != n.Trim()) || AllowedTools.Distinct(StringComparer.Ordinal).Count() != AllowedTools.Count))
                 throw new ArgumentException("InferenceOptions.AllowedTools must contain at most 256 distinct, nonblank exact tool names (maximum 256 characters each).");
         }

@@ -43,6 +43,13 @@ namespace Armada.Runtimes
         /// </summary>
         public bool ModelWarmup { get; set; } = true;
 
+        /// <summary>
+        /// Recover tool calls a model wrote as text (Hermes tool_call blocks, function tags, fenced JSON) and run them as
+        /// real calls (RS-7.2). Never applied to a failed response or one cut at the output-token limit. When off, such
+        /// text ends the turn as an ordinary reply, as in 1.4.0.
+        /// </summary>
+        public bool TextToolCallRecovery { get; set; } = true;
+
         #endregion
 
         #region Private-Members

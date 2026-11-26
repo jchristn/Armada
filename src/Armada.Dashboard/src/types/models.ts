@@ -3323,6 +3323,8 @@ export interface InferenceOptions {
   firstResponseTimeoutMs?: number | null;
   /** Percent of a known context window one read_file or run_process result may fill (1-50); null uses 12. */
   toolOutputWindowPercent?: number | null;
+  /** Identical tool calls in a row (2-20) before a corrective note; twice as many stops the run. Null uses 3. */
+  repeatedToolCallLimit?: number | null;
 }
 
 export interface ModelEndpoint {

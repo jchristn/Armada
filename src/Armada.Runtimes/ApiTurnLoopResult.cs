@@ -21,5 +21,8 @@ namespace Armada.Runtimes
         /// Model turns sent.
         /// </summary>
         public int Turns { get; set; } = 0;
+
+        /// <summary>Tool calls recovered from the model's text during the run (RS-7.2).</summary>
+        public int TextToolCallRecoveries { get; set; } = 0;
     }
 }

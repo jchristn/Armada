@@ -58,12 +58,14 @@ namespace Test.Shared.Suites.Runtimes
                         ApiAgentRuntime runtime = new ApiAgentRuntime(endpoint, CreateLogging(), 20, (ep, log) => { endpoint.InferenceOptions = new InferenceOptions(); return client = new ScriptedClient(script, log); }, (url, key, log) => { mcpDiscovered = true; throw new InvalidOperationException("MCP discovery must be disabled"); });
                         using ManualResetEventSlim exited = new ManualResetEventSlim(false);
                         int code = -1;
-                        runtime.OnToolEvent += (pid, evt) => { if (evt.PermissionDenied == true) denied = true; };
+                        string? deniedResult = null;
+                        runtime.OnToolEvent += (pid, evt) => { if (evt.PermissionDenied == true) { denied = true; deniedResult = evt.Result; } };
                         runtime.OnProcessExited += (pid, value) => { code = value ?? -1; exited.Set(); };
                         await runtime.StartAsync(dir, "try a write", new Dictionary<string, string> { ["ARMADA_MCP_URL"] = "http://localhost:1/mcp" }, model: "captain-model", captain: new Captain("effort") { ReasoningEffort = ReasoningEffortEnum.Low }).ConfigureAwait(false);
                         AssertTrue(exited.Wait(TimeSpan.FromSeconds(10)), "Run must finish.");
                         AssertEqual(0, code);
                         AssertTrue(denied, "Injected tool receives a typed permission denial.");
+                        AssertContains("tool_not_allowed", deniedResult ?? String.Empty, "RS-7.4: a built-in tool the policy turns off is reported as disabled, not unknown");
                         AssertFalse(mcpDiscovered, "Disabled or read-only MCP must never be contacted.");
                         AssertTrue(!File.Exists(Path.Combine(dir, "blocked.txt")), "An injected unadvertised tool must never execute.");
                         AssertNotNull(client);
@@ -289,7 +291,7 @@ namespace Test.Shared.Suites.Runtimes
                     Queue<ChatResponse> script = new Queue<ChatResponse>();
                     for (int i = 0; i < 8; i++)
                         script.Enqueue(new ChatResponse { Success = true, Usage = new TokenUsage { PromptTokens = i == 7 ? 31500 : 2000 + i * 1000 },
-                            ToolCalls = new List<ToolCall> { new ToolCall { Id = "r" + i, Name = "read_file", ArgumentsJson = "{\"file_path\":\"big.txt\"}" } } });
+                            ToolCalls = new List<ToolCall> { new ToolCall { Id = "r" + i, Name = "read_file", ArgumentsJson = i % 2 == 0 ? "{\"file_path\":\"big.txt\"}" : "{\"file_path\":\"./big.txt\"}" } } });
                     script.Enqueue(new ChatResponse { Success = true, Usage = new TokenUsage { PromptTokens = 9000 }, Text = "done", ToolCalls = new List<ToolCall>() });
                     ModelEndpoint endpoint = new ModelEndpoint { Kind = ModelEndpointKindEnum.Inference, Provider = ModelProviderEnum.Ollama, BaseUrl = "http://localhost:1",
                         InferenceOptions = new InferenceOptions { StreamingMode = InferenceStreamingModeEnum.Off, McpToolsEnabled = false, ContextLength = 32768 } };
