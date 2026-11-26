@@ -138,11 +138,12 @@ namespace Armada.Core.Services
 
             if (PersonaCatalog.Matches(mission.Persona, PersonaCatalog.Judge))
             {
-                JudgeVerdictEnum previousVerdict = JudgeVerdictParser.Parse(mission.AgentOutput);
+                string? judgeOutput = StageSubmissionText.EffectiveOutput(mission);
+                JudgeVerdictEnum previousVerdict = JudgeVerdictParser.Parse(judgeOutput);
                 if ((previousVerdict == JudgeVerdictEnum.Fail || previousVerdict == JudgeVerdictEnum.NeedsRevision)
-                    && !String.IsNullOrWhiteSpace(mission.AgentOutput))
+                    && !String.IsNullOrWhiteSpace(judgeOutput))
                 {
-                    string priorFindings = mission.AgentOutput.Trim();
+                    string priorFindings = judgeOutput!.Trim();
                     const int maxFindings = 12000;
                     if (priorFindings.Length > maxFindings)
                         priorFindings = priorFindings.Substring(0, maxFindings / 2)
@@ -244,7 +245,7 @@ namespace Armada.Core.Services
             return mission.Status == MissionStatusEnum.Failed
                 && mission.FailureKind == MissionFailureKindEnum.JudgeRejected
                 && VerifierContract.Applies(mission.Persona)
-                && VerifierContract.IsBlocked(mission.AgentOutput)
+                && VerifierContract.IsBlocked(StageSubmissionText.EffectiveOutput(mission))
                 && !String.IsNullOrEmpty(mission.VoyageId)
                 && !String.IsNullOrEmpty(mission.DependsOnMissionId);
         }

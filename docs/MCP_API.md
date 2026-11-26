@@ -169,6 +169,11 @@ If/when MCP-over-tunnel is added, this document will gain explicit routed-tool s
   - **Handoff Artifacts**
     - [get_handoff_artifact](#get_handoff_artifact)
     - [list_handoff_artifacts](#list_handoff_artifacts)
+  - **Stage Submissions**
+    - [armada_submit_plan](#armada_submit_plan)
+    - [armada_submit_verdict](#armada_submit_verdict)
+    - [armada_submit_result](#armada_submit_result)
+    - [get_mission_submissions](#get_mission_submissions)
   - **Evaluate**
     - [evaluate_captain](#evaluate_captain)
     - [get_model_probe_run](#get_model_probe_run)
@@ -466,7 +471,8 @@ configuration (the loopback identity above when it is allowed).
 API-endpoint mission captains also receive `ARMADA_MCP_TOOL_SCOPE`, the Armada tools their persona is shown up front
 (`PersonaToolScope`): every persona gets `get_handoff_artifact`, `search_memory`, `mission_status` and
 `update_vessel_context`; the Architect adds `voyage_status`, the Judge adds `get_mission_log`, and the Recorder adds
-`voyage_status`, `get_mission_log`, `create_memory`, `update_memory` and `delete_memory`. The rest of the catalog is
+`voyage_status`, `get_mission_log`, `create_memory`, `update_memory` and `delete_memory`. Every persona with an output contract also gets its submit tool
+(`armada_submit_plan`, `armada_submit_verdict` or `armada_submit_result`; see [Stage Submissions](#stage-submissions)). The rest of the catalog is
 found through `armada_discover_mcp_tools`, and any tool the token permits can still be called by name. The scope changes
 which schemas are sent, not what the token may do. CLI runtimes load MCP schemas themselves and get no scope.
 
@@ -1435,6 +1441,74 @@ many more there were (a `completionLines` marker starts with `[ARMADA:TRUNCATED]
 
 **Response:** `EnumerationResult<HandoffArtifact>` (`objects`, `totalRecords`, `totalPages`), newest first, without
 `output` and `diff` (their lengths stay).
+
+## Stage Submissions
+
+Since 1.5.0 a captain submits its stage output as typed JSON instead of (or as well as) marker lines. Each persona has
+one submit tool; its `inputSchema` is generated from the submission models, and the call is checked at once with the
+same rules the text parsers apply (the Judge lenses, affected case, Spec Conflict and PASS evidence rules; the persona's
+report sections and the verifier block rule; the Architect plan validator). An invalid call stores nothing and returns
+`accepted: false` with the errors in order (at most 20, with JSON path, line and position for a wrong type; types are
+never coerced), so the model fixes them and calls again in the same run. An accepted call is stored on the mission
+attempt (`stage_submissions`, migration 138); submitting again replaces it.
+
+At completion the latest submission of the attempt is appended to the mission output as a block (an
+`[ARMADA:SUBMISSION]` line and an `armada-submission` fence), and every decision about the stage reads it: the plan
+that fans out, the verdict that lands or sends work back, the completion line, the verifier block, and the handoff
+findings. A submission always wins over a marker line, section or plan block the captain also wrote; the disagreement is
+logged. Without a submission, or when a block in the output does not validate, the marker text decides as before.
+
+| Tool | Persona | Caller |
+|---|---|---|
+| `armada_submit_plan` | Architect | Only the captain of a running mission (`Assigned` or `InProgress`), with that mission's scoped token; for its own mission only |
+| `armada_submit_verdict` | Judge | Same |
+| `armada_submit_result` | Worker, Test Engineer, Linter, Usability Engineer, Product Manager | Same |
+| `get_mission_submissions` | Any | Any authenticated person, with the handoff artifact access rules; Ask sessions get `Forbidden` |
+
+A call from a caller without a mission-scoped token, or from an Ask session, is `Forbidden`. A tool that does not match
+the mission's persona (a Worker calling `armada_submit_verdict`) returns `accepted: false` naming the right tool. Every
+persona's `ARMADA_MCP_TOOL_SCOPE` includes its submit tool. API endpoint captains are offered the same tool natively
+(see [CAPTAINS.md](CAPTAINS.md#apiendpoint)).
+
+### armada_submit_plan
+
+The arguments are the plan itself: `contractVersion` (must be 4), `requirements`, `decisions` and `missions`, as in the
+Architect contract's example and field table. `contractVersion`, `missions`, and each mission's `title` and `description`
+are required by the schema; the plan validator checks the rest.
+
+### armada_submit_verdict
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `verdict` | string | Yes | `PASS`, `FAIL`, `NEEDS_REVISION` or `SPEC_CONFLICT` (exact case) |
+| `correctness`, `blastRadius`, `sourceFidelity` | string | Yes | The three review lenses |
+| `summary` | string | No | One or two sentences explaining the verdict |
+| `findings` | array | No | `{file, line, severity, scenario, requiredFix}`; `severity` is `blocking` or `non_blocking`, `scenario` is required. FAIL and NEEDS_REVISION need a blocking finding with a file or a concrete scenario; PASS cannot carry one |
+| `specConflict` | string | For SPEC_CONFLICT | The quoted criterion and the evidence it cannot be satisfied as written |
+| `evidence` | object | For PASS | `checksRun` (commands and results) and `inspectedFiles`; a PASS needs a check or an inspected file |
+
+### armada_submit_result
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `status` | string | Yes | `complete`, or `blocked` (Test Engineer, Linter and Usability Engineer only) |
+| `summary` | string | Yes | Brief plain-text summary |
+| `sections` | array | Per persona | `{heading, body}`; the report sections the persona's contract lists (for example Coverage Added, Negative Paths and Residual Risks for the Test Engineer) |
+| `findings` | array | For blocked | As for the verdict; `blocked` needs a blocking finding with a file or a concrete scenario |
+| `evidence` | object | No | `checksRun` and `inspectedFiles` |
+
+**Response (all three):** `StageSubmitResult`: `accepted`, `kind`, `submissionId` (`sbm_`, when accepted), `errors`
+and `message`.
+
+### get_mission_submissions
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `missionId` | string | Yes | Mission ID (`msn_`) |
+
+**Response:** the mission's `StageSubmission` records, newest first: `id`, `missionId`, `attemptId`, `persona`, `kind`
+(`Plan`, `Verdict`, `Result`), `source` (`Mcp`, or `Native` for an API endpoint captain without MCP access), `submission`
+(the typed plan, verdict or result) and `createdUtc`.
 
 ## Evaluate
 

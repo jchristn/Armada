@@ -287,6 +287,15 @@ namespace Armada.Runtimes
             if (environment != null && environment.TryGetValue(PersonaToolScope.EnvironmentVariable, out string? scopeValue))
                 toolScope = PersonaToolScope.Parse(scopeValue);
 
+            // RS-6.3: the Admiral names the submit tool this stage calls; the runtime offers it natively.
+            string? submitToolName = null;
+            string? submitPersona = null;
+            if (environment != null)
+            {
+                environment.TryGetValue(StageSubmissionTools.ToolEnvironmentVariable, out submitToolName);
+                environment.TryGetValue(StageSubmissionTools.PersonaEnvironmentVariable, out submitPersona);
+            }
+
             int processId = Interlocked.Increment(ref _PidCounter);
             CancellationTokenSource cts = CancellationTokenSource.CreateLinkedTokenSource(token);
             _Running[processId] = cts;
@@ -295,7 +304,8 @@ namespace Armada.Runtimes
             OnProcessStarted?.Invoke(processId);
 
             // Run the loop in the background so StartAsync returns the pid promptly, mirroring a process launch.
-            Task loop = Task.Run(() => RunLoopAsync(processId, endpoint, workingDirectory, prompt, model, captain?.ReasoningEffort, finalMessageFilePath, mcpUrl, mcpToken, requiresCompletionLine, toolScope, cts));
+            NativeSubmitTool? submitTool = NativeSubmitTool.FromEnvironment(submitToolName, submitPersona, processId);
+            Task loop = Task.Run(() => RunLoopAsync(processId, endpoint, workingDirectory, prompt, model, captain?.ReasoningEffort, finalMessageFilePath, mcpUrl, mcpToken, requiresCompletionLine, toolScope, submitTool, cts));
             _Loops[processId] = loop;
             _ = loop.ContinueWith(_ => _Loops.TryRemove(processId, out Task? _), TaskScheduler.Default);
 
@@ -532,6 +542,7 @@ namespace Armada.Runtimes
             string? mcpToken,
             bool requiresCompletionLine,
             HashSet<string>? toolScope,
+            NativeSubmitTool? submitTool,
             CancellationTokenSource cts)
         {
             int exitCode = 0;
@@ -673,6 +684,18 @@ namespace Armada.Runtimes
                     return;
                 }
 
+                // The native submit tool replaces an MCP tool of the same name; a valid call is forwarded to that MCP tool.
+                McpToolClient? submitForward = null;
+                if (submitTool != null)
+                {
+                    if (mcpRouting.TryGetValue(submitTool.Name, out McpToolClient? routed)) submitForward = routed;
+                    mcpRouting.Remove(submitTool.Name);
+                    tools.RemoveAll(t => String.Equals(t.Name, submitTool.Name, StringComparison.Ordinal));
+                    tools.Add(submitTool.Definition());
+                }
+                int forcedSubmits = 0;
+                bool forceSubmitNext = false;
+
                 EmitDiagnostic(processId, ApiRuntimeDiagnosticKindEnum.Inference, "[tools] " + tools.Count + " tool schema(s) sent, about "
                     + ApiContextCompactor.EstimateToolTokens(tools) + " input tokens per turn" + (toolScope == null ? String.Empty : "; persona scope applied"));
 
@@ -714,6 +737,13 @@ namespace Armada.Runtimes
                     request.Messages = messages;
                     request.Tools = tools;
                     request.Options = completionOptions;
+                    if (forceSubmitNext && submitTool != null)
+                    {
+                        // RS-6.3: only the submit tool is offered and a tool call is required.
+                        request.Tools = tools.Where(t => String.Equals(t.Name, submitTool.Name, StringComparison.Ordinal)).ToList();
+                        request.ToolChoice = "required";
+                        forceSubmitNext = false;
+                    }
 
                     ToolChatResponse response = await WithInferenceRetryAsync(() => settings.Streaming ? StreamToolChatAsync(client, request, firstResponseMs, idleMs, token) : client.ToolChatAsync(request, token), r => r.Success, r => r.StatusCode, r => r.Error, processId, lastCallMs, token, () => LastRetryAfterSeconds(client)).ConfigureAwait(false);
 
@@ -772,7 +802,21 @@ namespace Armada.Runtimes
                         };
                         // Only this terminal response can finish the run; earlier narration is not a result.
                         finalText = RemoveCompleteThinkBlocks(response.Text);
-                        bool complete = IsCompleteResponse(finalText, response.FinishReason, requiresCompletion);
+
+                        // RS-6.3: a stage with a submit tool that stopped without submitting, and whose reply does not meet the
+                        // text contract either, gets a forced submit turn (at most two) instead of a failed stage.
+                        if (submitTool != null && !submitTool.Submitted && forcedSubmits < 2 && iteration + 1 < maxIterations
+                            && !submitTool.TextMeetsContract(finalText) && !IsTokenLimit(response.FinishReason))
+                        {
+                            forcedSubmits++;
+                            forceSubmitNext = true;
+                            EmitDiagnostic(processId, ApiRuntimeDiagnosticKindEnum.Warning, "[warning] the captain stopped without calling " + submitTool.Name + "; requiring it (" + forcedSubmits + "/2).");
+                            messages.Add(ChatMessage.User(submitTool.ForcePrompt()));
+                            continue;
+                        }
+
+                        bool complete = (submitTool != null && submitTool.Submitted && !String.IsNullOrWhiteSpace(finalText))
+                            || IsCompleteResponse(finalText, response.FinishReason, requiresCompletion);
                         if (complete) break;
                         incompleteResponses++;
                         if (incompleteResponses <= 2 && iteration + 1 < maxIterations)
@@ -798,6 +842,8 @@ namespace Armada.Runtimes
                             resultContent = JsonSerializer.Serialize(new { error = "tool_not_allowed", message = "This tool is disabled by the endpoint's inference policy." });
                             EmitToolEvent(processId, new ApiRuntimeToolEvent { Phase = ApiRuntimeToolPhaseEnum.Completed, Id = call.Id, Name = call.Name, Ok = false, PermissionDenied = true, Result = resultContent });
                         }
+                        else if (submitTool != null && String.Equals(call.Name, submitTool.Name, StringComparison.Ordinal))
+                            resultContent = await ExecuteSubmitToolAsync(processId, submitTool, submitForward, call, token).ConfigureAwait(false);
                         else resultContent = await ExecuteToolAsync(processId, registry, mcpRouting, call, workingDirectory, deferredCatalog, token).ConfigureAwait(false);
                         messages.Add(ChatMessage.ToolResult(call.Id, call.Name, resultContent));
                     }
@@ -846,6 +892,22 @@ namespace Armada.Runtimes
                 try { cts.Dispose(); } catch { }
                 OnProcessExited?.Invoke(processId, exitCode);
             }
+        }
+
+        private async Task<string> ExecuteSubmitToolAsync(int processId, NativeSubmitTool submitTool, McpToolClient? forward, ToolCall call, CancellationToken token)
+        {
+            string argsJson = String.IsNullOrWhiteSpace(call.ArgumentsJson) ? "{}" : call.ArgumentsJson;
+            EmitDiagnostic(processId, ApiRuntimeDiagnosticKindEnum.ToolCall, "[tool] " + call.Name + " " + Truncate(argsJson, 500));
+            EmitToolEvent(processId, new ApiRuntimeToolEvent { Phase = ApiRuntimeToolPhaseEnum.Started, Id = call.Id, Name = call.Name, Arguments = Truncate(argsJson, 4000) });
+            long startTicks = Environment.TickCount64;
+            bool before = submitTool.Submitted;
+            int rejectedBefore = submitTool.RejectedCalls;
+            string result = await submitTool.HandleAsync(argsJson, forward, text => Emit(processId, text), token).ConfigureAwait(false);
+            bool ok = submitTool.RejectedCalls == rejectedBefore && (submitTool.Submitted || before);
+            long elapsed = Environment.TickCount64 - startTicks;
+            EmitDiagnostic(processId, ApiRuntimeDiagnosticKindEnum.ToolResult, "[tool:result] " + call.Name + " " + (ok ? "ok" : "failed") + " " + Truncate(result, 500));
+            EmitToolEvent(processId, new ApiRuntimeToolEvent { Phase = ApiRuntimeToolPhaseEnum.Completed, Id = call.Id, Name = call.Name, Ok = ok, ElapsedMs = elapsed, Result = Truncate(result, 16000) });
+            return result;
         }
 
         private async Task<string> ExecuteToolAsync(

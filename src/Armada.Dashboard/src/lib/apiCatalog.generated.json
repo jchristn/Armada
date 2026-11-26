@@ -3427,6 +3427,14 @@
   },
   {
    "method": "get",
+   "path": "/api/v1/missions/{id}/submissions",
+   "summary": "List a mission's stage submissions",
+   "tag": "StageSubmissions",
+   "requestType": "",
+   "auth": "Authenticated"
+  },
+  {
+   "method": "get",
    "path": "/api/v1/doctor",
    "summary": "Run system health diagnostics",
    "tag": "Status",

@@ -1669,6 +1669,10 @@ namespace Armada.Server
             new HandoffArtifactRoutes(new HandoffArtifactAccessService(_Database))
                 .Register(_App, authenticate, _AuthorizationService);
 
+            // Stage submissions (plans, verdicts and results submitted through the submit tools)
+            new StageSubmissionRoutes(new StageSubmissionAccessService(_Database, _Logging, _Settings.Concurrency.MaxHierarchyDepth))
+                .Register(_App, authenticate, _AuthorizationService);
+
             // Evaluate (probe-only Quick model probes) and its runs
             new ModelProbeRoutes(_ModelProbeAccess, _JsonOptions)
                 .Register(_App, authenticate, _AuthorizationService);

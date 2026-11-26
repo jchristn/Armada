@@ -74,6 +74,8 @@ namespace Armada.Core.Services
 
         private const string _OutsideFence = "outside any code block";
 
+        private const string FindingsInstruction = "List each defect under a ## Findings section, one numbered item each: Severity: blocking or non_blocking. File: <path>[:line]. Scenario: <inputs, violated requirement, expected and actual behavior>. Required fix: <correction>.";
+
         private const string _CompletionLead = "End successful work with this standalone line, " + _OutsideFence + ", followed by a brief plain-text summary:";
 
         private static readonly Dictionary<string, string> _PlanFieldMeanings = new Dictionary<string, string>(StringComparer.Ordinal)
@@ -341,6 +343,17 @@ namespace Armada.Core.Services
         }
 
         /// <summary>
+        /// What a documented plan field means, for the field table and the <c>armada_submit_plan</c> schema.
+        /// </summary>
+        /// <param name="path">Field path as <see cref="PlanFieldPaths"/> lists it.</param>
+        /// <returns>The meaning, or null for a field the prompt does not document.</returns>
+        public static string? PlanFieldMeaning(string path)
+        {
+            if (String.IsNullOrEmpty(path)) return null;
+            return _PlanFieldMeanings.TryGetValue(path, out string? meaning) ? meaning : null;
+        }
+
+        /// <summary>
         /// The number of generated contracts in a text (occurrences of <see cref="Heading"/> at the start of a line).
         /// </summary>
         /// <param name="text">Text to scan.</param>
@@ -359,6 +372,7 @@ namespace Armada.Core.Services
         {
             StringBuilder text = new StringBuilder();
             text.Append(Heading).Append('\n');
+            text.Append(SubmitHint(StageSubmissionKindEnum.Result)).Append('\n');
             IReadOnlyList<string> sections = RequiredSections(persona);
             if (sections.Count > 0)
             {
@@ -371,6 +385,7 @@ namespace Armada.Core.Services
                     .Append(JudgeContract.AffectedCaseSection)
                     .Append(" section with a File: <path>[:line] or Scenario: <inputs and wrong result> line, the violated requirement, expected and actual behavior, and the required correction, then end with this standalone line instead:\n")
                     .Append(VerifierContract.BlockedMarker).Append('\n');
+                text.Append(FindingsInstruction).Append('\n');
             }
             text.Append(_CompletionLead).Append('\n');
             text.Append(ResultCompleteLine).Append('\n');
@@ -381,6 +396,7 @@ namespace Armada.Core.Services
         {
             StringBuilder text = new StringBuilder();
             text.Append(Heading).Append('\n');
+            text.Append(SubmitHint(StageSubmissionKindEnum.Verdict)).Append('\n');
             text.Append("Use these sections, even when you have no findings:\n");
             foreach (string section in RequiredSections(PersonaCatalog.Judge)) text.Append("- ## ").Append(section).Append('\n');
             text.Append("A ").Append(VerdictToken(JudgeVerdictEnum.Pass))
@@ -389,6 +405,7 @@ namespace Armada.Core.Services
                 .Append("), add a ## ").Append(JudgeContract.AffectedCaseSection).Append(" section with a ")
                 .Append(JudgeContract.AffectedCaseFileField).Append(": <path>[:line] or ")
                 .Append(JudgeContract.AffectedCaseScenarioField).Append(": <inputs and wrong result> line, the violated requirement, expected and actual behavior, and the required correction. Without one you have no grounds to block.\n");
+            text.Append(FindingsInstruction).Append('\n');
             text.Append("If an acceptance criterion cannot be satisfied as written (it contradicts another requirement or a dependency's verified behavior), do not request rework: add a ## ")
                 .Append(JudgeContract.SpecConflictSection).Append(" section quoting the criterion and the evidence, and use ")
                 .Append(VerdictToken(JudgeVerdictEnum.SpecConflict)).Append("; a person decides.\n");
@@ -401,6 +418,7 @@ namespace Armada.Core.Services
         {
             StringBuilder text = new StringBuilder();
             text.Append(Heading).Append('\n');
+            text.Append(SubmitHint(StageSubmissionKindEnum.Plan)).Append('\n');
             text.Append("Respond with exactly one fenced ").Append(ArchitectPlanParser.FenceInfo).Append(" JSON block, contract version ")
                 .Append(PlanContractVersion).Append(". A complete example:\n");
             text.Append("```").Append(ArchitectPlanParser.FenceInfo).Append('\n');
@@ -416,6 +434,11 @@ namespace Armada.Core.Services
             text.Append("Plans that fail validation are returned to you with the errors before any Worker starts. Do not emit ")
                 .Append(ResultMarker).Append(" or ").Append(VerdictMarker).Append(" lines.\n");
             return text.ToString();
+        }
+
+        private static string SubmitHint(StageSubmissionKindEnum kind)
+        {
+            return "If your tools include " + StageSubmissionTools.ToolFor(kind) + ", submit through it: it checks the submission at once and returns any errors to fix, and the accepted submission is your result. Otherwise write the output below.";
         }
 
         private static string SectionList(IReadOnlyList<string> sections)

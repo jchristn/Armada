@@ -89,6 +89,7 @@ namespace Armada.Core.Database.SqlServer
             BlackBoxLinks = new BlackBoxLinkMethods(this);
             BlackBoxNotes = new BlackBoxNoteMethods(this);
             RecoveryState = new RecoveryStateMethods(this);
+            StageSubmissions = new StageSubmissionMethods(this);
             BlackBoxMigrations = new BlackBoxMigrationMethods(this);
             BlackBoxSuccesses = new BlackBoxSuccessMethods(this);
             BlackBoxRecoveryOutcomes = new BlackBoxRecoveryOutcomeMethods(this);

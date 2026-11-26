@@ -327,6 +327,15 @@ namespace Armada.Core.Database
         }
 
         /// <summary>
+        /// Plans, verdicts and results submitted through the submit tools, keyed by mission attempt.
+        /// </summary>
+        public IStageSubmissionMethods StageSubmissions
+        {
+            get => _StageSubmissions;
+            protected set => _StageSubmissions = DuplicateEntityTranslationProxy.Wrap(value);
+        }
+
+        /// <summary>
         /// Durable coordination lease operations (restart-safe, multi-instance-safe mutual exclusion).
         /// </summary>
         public ICoordinationLeaseMethods CoordinationLeases
@@ -796,6 +805,7 @@ namespace Armada.Core.Database
         private IDeploymentMethods _Deployments = null!;
         private ICoordinationLeaseMethods _CoordinationLeases = null!;
         private IRecoveryStateMethods _RecoveryState = null!;
+        private IStageSubmissionMethods _StageSubmissions = null!;
         private IModelEndpointMethods _ModelEndpoints = null!;
         private IHarborMethods _Harbors = null!;
         private IMemoryMethods _Memories = null!;

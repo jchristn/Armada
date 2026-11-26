@@ -347,6 +347,19 @@ mission launches whose persona must end with `[ARMADA:RESULT] COMPLETE` (every p
 Recorder, which end with a verdict, a plan or a record). With it set, a reply without that line gets a nudge to finish;
 bold, backticked or bulleted forms of the line are accepted. The variable travels to Harbors in the launch environment.
 
+Since 1.5.0 a mission launch also names the stage's submit tool (`ARMADA_SUBMIT_TOOL`, with the persona in
+`ARMADA_SUBMIT_PERSONA`), and the loop offers it as a native tool: `armada_submit_plan` for the Architect,
+`armada_submit_verdict` for the Judge, `armada_submit_result` for the other contract personas (see
+[MCP API](MCP_API.md#stage-submissions)). The runtime checks each call with the Admiral's validator and returns the
+errors in the same turn, so the model fixes the submission instead of the stage being rerun. A valid call is forwarded to
+the Admiral's MCP tool when the run has MCP access, which stores it at once; without MCP it is written into the run's
+output as an `[ARMADA:SUBMISSION]` block, which the Admiral stores at completion. An accepted submission finishes the
+stage without a completion line. When the model stops calling tools without submitting and its reply does not meet the
+text contract either (no valid plan, verdict line, completion line or verifier block), the loop sends up to two forced
+turns that offer only the submit tool with `tool_choice` set to `required`; if the model still does not submit, the
+marker text decides as before. A structured-output (`response_format: json_schema`) final turn is not used: the
+inference client Armada uses does not expose it.
+
 Armada's MCP catalog has about 270 tools, and their schemas are resent on every model turn (about 62,000 input tokens
 for the whole catalog). A mission launch therefore names the few Armada tools its persona uses in
 `ARMADA_MCP_TOOL_SCOPE` (see [MCP API](MCP_API.md#mission-scoped-captain-calls)); those are sent up front (about 700 to

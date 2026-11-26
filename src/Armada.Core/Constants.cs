@@ -320,6 +320,11 @@ namespace Armada.Core
         public static readonly string StageOutcomeIdPrefix = "sto_";
 
         /// <summary>
+        /// ID prefix for stage submissions (a plan, verdict or result submitted through a submit tool).
+        /// </summary>
+        public static readonly string StageSubmissionIdPrefix = "sbm_";
+
+        /// <summary>
         /// ID prefix for handoff artifacts (the structured, versioned record one stage attempt hands to the next stage).
         /// </summary>
         public static readonly string HandoffArtifactIdPrefix = "hoa_";

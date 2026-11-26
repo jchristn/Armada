@@ -346,9 +346,16 @@ namespace Armada.Core.Services
             return blocks;
         }
 
-        // Where and why the JSON failed, so the repair turn can point at the exact value.
-        private static string DescribeJsonError(JsonException ex)
+        /// <summary>
+        /// Where and why JSON failed to read, so a repair turn or a submit tool can point at the exact value: the reason,
+        /// the JSON path, and the line and position.
+        /// </summary>
+        /// <param name="ex">The exception.</param>
+        /// <returns>The description.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when ex is null.</exception>
+        public static string DescribeJsonError(JsonException ex)
         {
+            if (ex == null) throw new ArgumentNullException(nameof(ex));
             string reason = ex.Message;
             int cut = reason.IndexOf(" Path:", StringComparison.Ordinal);
             if (cut < 0) cut = reason.IndexOf(" LineNumber:", StringComparison.Ordinal);

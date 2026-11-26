@@ -72,7 +72,7 @@ namespace Armada.Core.Services
 
                 // Recovery never bypasses the gates completion applies: a Judge's work moves on only with a substantiated PASS.
                 if (PersonaCatalog.Matches(produced.Persona, PersonaCatalog.Judge)
-                    && (JudgeVerdictParser.Parse(produced.AgentOutput) != JudgeVerdictEnum.Pass || !TryValidateJudgePassOutput(produced.AgentOutput, out _)))
+                    && (JudgeVerdictParser.Parse(StageSubmissionText.EffectiveOutput(produced)) != JudgeVerdictEnum.Pass || !TryValidateJudgePassOutput(StageSubmissionText.EffectiveOutput(produced), out _)))
                 {
                     // Recovery runs every health cycle; say this once per mission, not every few seconds.
                     if (_RefusedHandoffWarnings.TryAdd(produced.Id, 0))
@@ -129,13 +129,14 @@ namespace Armada.Core.Services
             {
                 // A single valid plan outside a closed armada-plan fence is re-fenced (appended below the original output)
                 // instead of being sent back for a format repair; two plan blocks or an invalid plan are never repaired.
-                ArchitectPlanParseResult planResult = ArchitectPlanParser.Parse(completedMission.AgentOutput, _Settings.Concurrency.MaxHierarchyDepth);
+                // RS-6.2: the plan is read once, from a submitted plan when there is one, and handed to the fan-out.
+                ArchitectPlanParseResult planResult = ArchitectPlanParser.Parse(StageSubmissionText.EffectiveOutput(completedMission), _Settings.Concurrency.MaxHierarchyDepth);
                 if (planResult.Status == ArchitectPlanParseStatusEnum.NoPlanFound
                     && await TryRepairArchitectPlanAsync(completedMission, token).ConfigureAwait(false))
-                    planResult = ArchitectPlanParser.Parse(completedMission.AgentOutput, _Settings.Concurrency.MaxHierarchyDepth);
+                    planResult = ArchitectPlanParser.Parse(StageSubmissionText.EffectiveOutput(completedMission), _Settings.Concurrency.MaxHierarchyDepth);
 
                 string? planError = planResult.Error;
-                List<ParsedArchitectMission> parsed = planError == null ? ParseArchitectOutput(completedMission) : new List<ParsedArchitectMission>();
+                List<ParsedArchitectMission> parsed = planError == null ? ParseArchitectOutput(completedMission, planResult.Plan) : new List<ParsedArchitectMission>();
                 planError ??= ValidateArchitectHierarchy(parsed);
 
                 // RS-6.4: a plan that exists but breaks the contract (invalid JSON, a rejected field, a bad hierarchy) first

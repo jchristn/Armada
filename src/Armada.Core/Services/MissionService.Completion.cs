@@ -282,7 +282,7 @@ namespace Armada.Core.Services
             // answer, the stored diff is the evidence as before; the check always runs. The stored diff itself is left
             // unchanged for landing display.
             bool workStage = IsRepositoryWorkStage(mission.Persona)
-                && !(PersonaCatalog.Matches(mission.Persona, PersonaCatalog.TestEngineer) && VerifierContract.IsBlocked(mission.AgentOutput));
+                && !(PersonaCatalog.Matches(mission.Persona, PersonaCatalog.TestEngineer) && VerifierContract.IsBlocked(StageSubmissionText.EffectiveOutput(mission)));
             string? startCommit = dock == null ? null : TryReadDockStartCommit(dock, mission);
             string? changeEvidence = mission.DiffSnapshot;
             if (dock != null && !String.IsNullOrWhiteSpace(startCommit))
@@ -304,8 +304,8 @@ namespace Armada.Core.Services
             }
 
             bool unfinished = workStage && dock != null
-                && NoOpCompletionDetector.IsUnfinishedWork(changeEvidence, mission.AgentOutput, startCommit, mission.CommitHash);
-            if (!unfinished && !NoOpCompletionDetector.IsNoOp(changeEvidence, mission.AgentOutput, mission.TotalRuntimeMs))
+                && NoOpCompletionDetector.IsUnfinishedWork(changeEvidence, StageSubmissionText.EffectiveOutput(mission), startCommit, mission.CommitHash);
+            if (!unfinished && !NoOpCompletionDetector.IsNoOp(changeEvidence, StageSubmissionText.EffectiveOutput(mission), mission.TotalRuntimeMs))
                 return false;
 
             // Release the dock/captain before re-dispatching or failing.
@@ -379,7 +379,7 @@ namespace Armada.Core.Services
 
             MissionStatusEnum noOpStatusBefore = mission.Status;
             mission.FailureReason = unfinished
-                ? (CaptainBlockedContract.HasResultLine(mission.AgentOutput) || CaptainBlockedContract.IsReported(mission.AgentOutput)
+                ? (CaptainBlockedContract.HasResultLine(StageSubmissionText.EffectiveOutput(mission)) || CaptainBlockedContract.IsReported(StageSubmissionText.EffectiveOutput(mission))
                     ? "Unfinished completion: the captain repeatedly ended its run without a commit or a diff, after "
                         + mission.NoOpRedispatchAttempts + " re-dispatch attempt(s), although its output carried a result or blocking line. Read its output: the brief may ask for a change that is impossible or already present."
                     : "Unfinished completion: the captain repeatedly ended its run without a commit, a diff or the completion line, after "
@@ -435,7 +435,7 @@ namespace Armada.Core.Services
         private async Task<bool> TryFailCaptainBlockedAsync(Mission mission, Dock? dock, CancellationToken token)
         {
             if (VerifierContract.Applies(mission.Persona)) return false;
-            string? output = mission.AgentOutput;
+            string? output = StageSubmissionText.EffectiveOutput(mission);
             if (!CaptainBlockedContract.IsReported(output) || CaptainBlockedContract.HasCompletionOrVerdict(output)) return false;
 
             string? startCommit = dock != null ? TryReadDockStartCommit(dock, mission) : null;
@@ -666,6 +666,11 @@ namespace Armada.Core.Services
                 await RecordSelectionModelReportAsync(mission, reported?.Model, token).ConfigureAwait(false);
             }
 
+            // RS-6.2: the latest submission of this attempt (a submit tool call) decides the stage. It is appended to the
+            // output once, and every check below reads StageSubmissionText.EffectiveOutput, so it wins over any marker line.
+            if (await new StageSubmissionService(_Database, _Logging, _Settings.Concurrency.MaxHierarchyDepth).ApplyToOutputAsync(mission, token).ConfigureAwait(false))
+                await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
+
             // Reject a no-op false-complete (fast exit, empty diff, trivial output): re-dispatch to a
             // fresh captain up to a bounded number of times, then fail to the operator inbox. Skipped
             // when the mission already failed scope validation.
@@ -698,7 +703,7 @@ namespace Armada.Core.Services
                 // Only the structured [ARMADA:VERDICT] protocol line counts; a missing or conflicting verdict is no
                 // verdict, which blocks landing. A single unambiguous verdict in a nearby non-canonical form is repaired
                 // (the canonical line is appended below the original output); anything ambiguous stays no verdict.
-                JudgeVerdictEnum verdict = JudgeVerdictParser.Parse(mission.AgentOutput);
+                JudgeVerdictEnum verdict = JudgeVerdictParser.Parse(StageSubmissionText.EffectiveOutput(mission));
                 if (verdict == JudgeVerdictEnum.None)
                     verdict = await TryRepairJudgeVerdictAsync(mission, captain, token).ConfigureAwait(false);
                 string? verdictFailureReason = null;
@@ -707,7 +712,7 @@ namespace Armada.Core.Services
                 // A PASS must be substantiated (three lenses + real narrative). A rejected PASS is not
                 // silently re-run: it is downgraded to a blocking verdict and the mission fails terminally
                 // with an explicit reason so an operator sees it rather than a quiet re-dispatch.
-                if (verdict == JudgeVerdictEnum.Pass && !TryValidateJudgePassOutput(mission.AgentOutput, out verdictFailureReason))
+                if (verdict == JudgeVerdictEnum.Pass && !TryValidateJudgePassOutput(StageSubmissionText.EffectiveOutput(mission), out verdictFailureReason))
                 {
                     verdict = JudgeVerdictEnum.NeedsRevision;
                     rejectedPass = true;
@@ -718,7 +723,7 @@ namespace Armada.Core.Services
                 // waived automatically. A SPEC_CONFLICT without the quoted criterion is a contract violation (repaired below).
                 if (verdict == JudgeVerdictEnum.SpecConflict)
                 {
-                    string? conflict = JudgeContract.ExtractSpecConflict(mission.AgentOutput);
+                    string? conflict = JudgeContract.ExtractSpecConflict(StageSubmissionText.EffectiveOutput(mission));
                     if (conflict != null)
                     {
                         mission.RequiresReview = true;
@@ -757,7 +762,7 @@ namespace Armada.Core.Services
                     // contract violation: the mission still fails terminally, but the reason makes clear the
                     // Judge did not substantiate the block rather than the work being definitively wrong.
                     bool isBlockingVerdict = verdict == JudgeVerdictEnum.Fail || verdict == JudgeVerdictEnum.NeedsRevision;
-                    bool exhibitsAffectedCase = JudgeContract.ExhibitsAffectedCase(mission.AgentOutput);
+                    bool exhibitsAffectedCase = JudgeContract.ExhibitsAffectedCase(StageSubmissionText.EffectiveOutput(mission));
 
                     string blockingReason;
                     if (rejectedPass)
@@ -825,13 +830,13 @@ namespace Armada.Core.Services
             // A verifier stage that found a product defect it may not fix sends the work back to the Worker now, as a Judge's
             // NEEDS_REVISION does, instead of passing a known blocker down the chain (HF-25).
             if (!failedForScopeViolation && mission.Status == MissionStatusEnum.WorkProduced
-                && VerifierContract.Applies(mission.Persona) && VerifierContract.IsBlocked(mission.AgentOutput))
+                && VerifierContract.Applies(mission.Persona) && VerifierContract.IsBlocked(StageSubmissionText.EffectiveOutput(mission)))
             {
                 string? reworkUnavailableReason = null;
                 // RS-6.4: a block without an affected case first gets a format-only turn that restates it from the stage's
                 // own output; only when that is rejected does the stage run again.
                 string verifierProblem = mission.Persona + " reported " + VerifierContract.BlockedMarker + " without a concrete affected case; a block must cite a real affected file, line, or scenario";
-                bool verifierCaseShown = JudgeContract.ExhibitsAffectedCase(mission.AgentOutput)
+                bool verifierCaseShown = JudgeContract.ExhibitsAffectedCase(StageSubmissionText.EffectiveOutput(mission))
                     || (!mission.RequiresReview && await TryFormatRepairVerifierBlockAsync(mission, captain, verifierProblem, token).ConfigureAwait(false));
                 if (!verifierCaseShown)
                 {

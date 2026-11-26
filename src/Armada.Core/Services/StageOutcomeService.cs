@@ -333,7 +333,7 @@ namespace Armada.Core.Services
             outcome.ContractRepairKind = await ReadContractRepairKindAsync(mission, capture, token).ConfigureAwait(false);
             if (PersonaCatalog.Matches(outcome.Persona, PersonaCatalog.Judge))
             {
-                outcome.JudgeVerdict = JudgeVerdictParser.Parse(mission.AgentOutput).ToString();
+                outcome.JudgeVerdict = JudgeVerdictParser.Parse(StageSubmissionText.EffectiveOutput(mission)).ToString();
                 outcome.ReviewedMissionId = mission.DependsOnMissionId;
             }
 

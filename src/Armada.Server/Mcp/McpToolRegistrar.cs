@@ -184,6 +184,7 @@ namespace Armada.Server.Mcp
             McpMissionReviewTools.Register(register, database, missionService);
             McpStageOutcomeTools.Register(register, stageOutcomes);
             McpHandoffArtifactTools.Register(register, new HandoffArtifactAccessService(database));
+            McpStageSubmissionTools.Register(register, logging != null ? new StageSubmissionAccessService(database, logging, settings?.Concurrency.MaxHierarchyDepth ?? Armada.Core.Constants.DefaultMaxHierarchyDepth) : null);
             McpModelProbeTools.Register(register, modelProbes);
             McpModelProfileTools.Register(register, modelProfiles);
             McpModelAlertTools.Register(register, modelAlerts);
@@ -282,6 +283,7 @@ namespace Armada.Server.Mcp
             RegisterCatalogGroup("Armada MCP / Review Gates", register => McpMissionReviewTools.Register(register, database, null));
             RegisterCatalogGroup("Armada MCP / Stage Outcomes", register => McpStageOutcomeTools.Register(register, null));
             RegisterCatalogGroup("Armada MCP / Handoff Artifacts", register => McpHandoffArtifactTools.Register(register, null));
+            RegisterCatalogGroup("Armada MCP / Stage Submissions", register => McpStageSubmissionTools.Register(register, null));
             RegisterCatalogGroup("Armada MCP / Evaluate", register => McpModelProbeTools.Register(register, null));
             RegisterCatalogGroup("Armada MCP / Model Profiles", register => McpModelProfileTools.Register(register, null));
             RegisterCatalogGroup("Armada MCP / Model Alerts", register => McpModelAlertTools.Register(register, null));

@@ -69,6 +69,7 @@ camelizes REST responses.
   - [Captains](#captains)
   - [Ask](#ask)
   - [CLI Permissions](#cli-permissions)
+  - [Stage Submissions](#stage-submissions)
   - [Black Box](#black-box)
   - [Evaluate (Model Probe Runs)](#evaluate-model-probe-runs)
   - [Model Profiles](#model-profiles)
@@ -304,6 +305,7 @@ without a declaration requires a global admin. The complete per-route list is th
 | `/api/v1/stage-outcomes` | GET, POST `.../enumerate`; `GET .../{id}`, `PUT .../{id}/cause`, `POST .../{id}/rule` | Authenticated | Global admins see every tenant; everyone else their own tenant (`404` for another tenant's outcome). Captain sessions get `403` |
 | `/api/v1/stage-outcomes/reclassify` | POST | TenantAdmin | A tenant admin only within their tenant; global admins any tenant or every tenant |
 | `/api/v1/handoff-artifacts/{id}`, `/api/v1/missions/{id}/handoff-artifacts` (also `POST .../enumerate`) | GET | Authenticated | Global admins see every tenant; everyone else their own tenant (`404` otherwise). A captain session (mission-scoped token) sees its own voyage, or its own mission and the stage it depends on; Ask sessions get `403` |
+| `/api/v1/missions/{id}/submissions` | GET | Authenticated | Same scope as handoff artifacts; Ask sessions get `403` |
 | `/api/v1/failure-cause-rules` | GET, POST, POST `.../enumerate`; `GET`, `PUT`, `DELETE .../{id}` | Authenticated | The caller's tenant plus rules for every tenant. Anyone in the tenant may write the tenant's rules; rules for every tenant (`TenantId` null) and built-in rules need a global admin (`403`) |
 | `/api/v1/captains/{id}/evaluate` | POST | TenantAdmin | Global admin, or a tenant admin of the captain's tenant (`404` for another tenant's captain). Captain sessions get `403` |
 | `/api/v1/model-endpoints/{id}/evaluate` | POST | Authenticated | Quick: anyone who can read the endpoint (the `GET /api/v1/model-endpoints/{id}` rules); `404` otherwise. Full: a global admin or a tenant admin (`403` otherwise) |
@@ -4850,6 +4852,27 @@ launch without storing it and logs it as a legacy handoff.
 ```bash
 curl "http://localhost:7890/api/v1/missions/msn_abc123/handoff-artifacts?pageSize=5" -H "Authorization: Bearer <token>"
 curl http://localhost:7890/api/v1/handoff-artifacts/hoa_abc123 -H "Authorization: Bearer <token>"
+```
+
+---
+
+### Stage Submissions
+
+A **stage submission** (`sbm_`) is a plan, verdict or result a captain submitted through `armada_submit_plan`,
+`armada_submit_verdict` or `armada_submit_result` (MCP only, with the mission's scoped token; see
+[MCP_API.md](MCP_API.md#stage-submissions)). Each accepted submission is stored on the mission attempt
+(`stage_submissions`, migration 138). The latest one of an attempt decides that attempt's plan, verdict or result over
+any marker line in the output; at completion it is appended to `AgentOutput` as an `[ARMADA:SUBMISSION]` block.
+
+| Method | Path | Body | Response |
+|--------|------|------|----------|
+| GET | `/api/v1/missions/{id}/submissions` | | `200` `StageSubmission[]` of the mission, newest first: `Id`, `TenantId`, `MissionId`, `AttemptId`, `Persona`, `Kind` (`Plan`, `Verdict`, `Result`), `Source` (`Mcp`, or `Native` for an API endpoint captain without MCP), `Submission` (`Kind` and the typed `Plan`, `Verdict` or `Result`) and `CreatedUtc`; `404` when the mission is missing or out of scope |
+
+Access follows the handoff artifact rules: global admins see every tenant, everyone else their own tenant, a captain
+session its own voyage or its own mission and the stage it depends on; Ask sessions get `403`.
+
+```bash
+curl http://localhost:7890/api/v1/missions/msn_abc123/submissions -H "Authorization: Bearer <token>"
 ```
 
 ---

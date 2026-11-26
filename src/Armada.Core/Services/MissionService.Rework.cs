@@ -62,9 +62,9 @@ namespace Armada.Core.Services
             string? escalateTo = null;
             Mission? previousWorker = voyageMissions.FirstOrDefault(m => m.Id != worker.Id && PersonaCatalog.Matches(m.Persona, PersonaCatalog.Worker)
                 && workerChain.Contains(m.Id) && !String.IsNullOrEmpty(m.CommitHash) && m.CommitHash == worker.CommitHash);
-            string? currentCase = JudgeContract.AffectedCaseKey(judge.AgentOutput);
+            string? currentCase = JudgeContract.AffectedCaseKey(StageSubmissionText.EffectiveOutput(judge));
             bool repeatedCase = previousJudge != null && currentCase != null
-                && String.Equals(currentCase, JudgeContract.AffectedCaseKey(previousJudge.AgentOutput), StringComparison.Ordinal);
+                && String.Equals(currentCase, JudgeContract.AffectedCaseKey(StageSubmissionText.EffectiveOutput(previousJudge)), StringComparison.Ordinal);
             RecoveryDecision decision = RecoveryPolicyEngine.Decide(new RecoveryFacts(RecoverySiteEnum.JudgeRejection)
             {
                 OperatorRestart = operatorRestart,

@@ -4656,6 +4656,23 @@
     },
     {
       "method": "GET",
+      "route": "/api/v1/missions/{id}/submissions",
+      "auth": "Authenticated",
+      "resource": "Mission:Read",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "List<StageSubmission>",
+        "404": ""
+      },
+      "tags": [
+        "StageSubmissions"
+      ],
+      "summary": "List a mission's stage submissions",
+      "experimental": false
+    },
+    {
+      "method": "GET",
       "route": "/api/v1/missions/{id}/waits",
       "auth": "Authenticated",
       "resource": "Mission:Read",
@@ -9566,6 +9583,118 @@
       "experimental": false
     },
     {
+      "name": "armada_submit_plan",
+      "auth": "Authenticated",
+      "resource": "Mission:Update",
+      "arguments": [
+        {
+          "name": "contractVersion",
+          "type": "integer|null",
+          "required": true
+        },
+        {
+          "name": "decisions",
+          "type": "array<string>",
+          "required": false
+        },
+        {
+          "name": "missions",
+          "type": "array<object>",
+          "required": true
+        },
+        {
+          "name": "requirements",
+          "type": "array<string>",
+          "required": false
+        }
+      ],
+      "description": "Submit your Architect plan (contract version 4) for this mission. Only the Architect of the mission may call it. The submission is checked at once; on errors nothing is stored and the errors are returned so you can fix them and call again. The last accepted submission is your result and replaces any marker lines in your reply.",
+      "experimental": false
+    },
+    {
+      "name": "armada_submit_result",
+      "auth": "Authenticated",
+      "resource": "Mission:Update",
+      "arguments": [
+        {
+          "name": "evidence",
+          "type": "object",
+          "required": false
+        },
+        {
+          "name": "findings",
+          "type": "array<object>",
+          "required": false
+        },
+        {
+          "name": "sections",
+          "type": "array<object>",
+          "required": false
+        },
+        {
+          "name": "status",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "summary",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "description": "Submit your stage result (complete, or blocked for a verifier), the report sections your contract lists, structured findings and the evidence you checked. Only the captain of the mission may call it. The submission is checked at once; on errors nothing is stored and the errors are returned so you can fix them and call again. The last accepted submission is your result and replaces any marker lines in your reply.",
+      "experimental": false
+    },
+    {
+      "name": "armada_submit_verdict",
+      "auth": "Authenticated",
+      "resource": "Mission:Update",
+      "arguments": [
+        {
+          "name": "blastRadius",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "correctness",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "evidence",
+          "type": "object",
+          "required": false
+        },
+        {
+          "name": "findings",
+          "type": "array<object>",
+          "required": false
+        },
+        {
+          "name": "sourceFidelity",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "specConflict",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "summary",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "verdict",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "description": "Submit your Judge verdict, the three review lenses, structured findings and the evidence you checked for this mission. Only the Judge of the mission may call it. The submission is checked at once; on errors nothing is stored and the errors are returned so you can fix them and call again. The last accepted submission is your result and replaces any marker lines in your reply.",
+      "experimental": false
+    },
+    {
       "name": "authorize_captain_selection_recovery",
       "auth": "TenantAdmin",
       "resource": "Mission:Update",
@@ -12980,6 +13109,20 @@
         }
       ],
       "description": "Get the session log for a mission. Supports pagination.",
+      "experimental": false
+    },
+    {
+      "name": "get_mission_submissions",
+      "auth": "Authenticated",
+      "resource": "Mission:Read",
+      "arguments": [
+        {
+          "name": "missionId",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "description": "List what a mission submitted through armada_submit_plan, armada_submit_verdict or armada_submit_result, newest first, one entry per accepted submission with its attempt, source and typed content. The latest submission of an attempt decides that attempt's plan, verdict or result.",
       "experimental": false
     },
     {

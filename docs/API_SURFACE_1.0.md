@@ -27,8 +27,8 @@ Client contract version: `1.0` (reported as `ContractVersion` by
 
 | Surface | Total | Experimental |
 |---|---|---|
-| REST routes | 534 | 15 |
-| MCP tools | 273 | 8 |
+| REST routes | 535 | 15 |
+| MCP tools | 277 | 8 |
 | WebSocket endpoints | 2 | 1 |
 | WebSocket commands | 65 | 0 |
 | WebSocket event types | 81 | 0 |
@@ -310,6 +310,7 @@ Base path `/api/v1`. Request and response bodies are PascalCase JSON; errors are
 | POST | `/api/v1/missions/{id}/review/approve` | TenantAdmin | `MissionReviewDecisionRequest` (optional) | 200 `Mission`, 400, 404 |  |
 | POST | `/api/v1/missions/{id}/review/deny` | TenantAdmin | `MissionReviewDecisionRequest` (optional) | 200 `Mission`, 400, 404 |  |
 | PUT | `/api/v1/missions/{id}/status` | TenantAdmin | `StatusTransitionRequest` | 200 `Mission`, 400, 404 |  |
+| GET | `/api/v1/missions/{id}/submissions` | Authenticated |  | 200 `List<StageSubmission>`, 404 |  |
 | GET | `/api/v1/missions/{id}/waits` | Authenticated |  | 200 `EnumerationResult<MissionWaitInterval>`, 404 |  |
 | POST | `/api/v1/missions/{id}/waits/enumerate` | Authenticated | `EnumerationQuery` (optional) | 200 `EnumerationResult<MissionWaitInterval>`, 404 |  |
 | GET | `/api/v1/model-alerts` | Authenticated |  | 200 `EnumerationResult<ModelAlert>`, 400 |  |
@@ -592,6 +593,9 @@ Arguments are camelCase; `*` marks a required argument. See [MCP_API.md](MCP_API
 | `approve_ask_proposal` | Authenticated | `proposalId*: string`, `threadId*: string` |  |
 | `approve_deployment` | TenantAdmin | `comment: string`, `deploymentId*: string` |  |
 | `approve_mission_review` | TenantAdmin | `comment: string`, `conditional: boolean`, `missionId*: string` |  |
+| `armada_submit_plan` | Authenticated | `contractVersion*: integer\|null`, `decisions: array<string>`, `missions*: array<object>`, `requirements: array<string>` |  |
+| `armada_submit_result` | Authenticated | `evidence: object`, `findings: array<object>`, `sections: array<object>`, `status*: string`, `summary*: string` |  |
+| `armada_submit_verdict` | Authenticated | `blastRadius*: string`, `correctness*: string`, `evidence: object`, `findings: array<object>`, `sourceFidelity*: string`, `specConflict: string`, `summary: string`, `verdict*: string` |  |
 | `authorize_captain_selection_recovery` | TenantAdmin | `missionId*: string`, `recovery*: object` |  |
 | `backup` | AdminOnly | `outputPath: string` |  |
 | `cancel_ask_turn` | Authenticated | `threadId*: string` |  |
@@ -707,6 +711,7 @@ Arguments are camelCase; `*` marks a required argument. See [MCP_API.md](MCP_API
 | `get_merge_entry` | Authenticated | `entryId*: string` |  |
 | `get_mission_diff` | Authenticated | `missionId*: string` |  |
 | `get_mission_log` | Authenticated | `formatted: boolean`, `lines: integer`, `missionId*: string`, `offset: integer` |  |
+| `get_mission_submissions` | Authenticated | `missionId*: string` |  |
 | `get_model_alert` | Authenticated | `id*: string` |  |
 | `get_model_alert_thresholds` | Authenticated |  |  |
 | `get_model_endpoint` | Authenticated | `endpointId*: string` |  |

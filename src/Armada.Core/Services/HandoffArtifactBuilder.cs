@@ -92,7 +92,10 @@ namespace Armada.Core.Services
         {
             if (stage == null) throw new ArgumentNullException(nameof(stage));
 
-            string output = stage.AgentOutput ?? String.Empty;
+            // RS-6.2, RS-6.7: a submitted verdict or result decides the artifact; its structured findings replace the
+            // heading scraper, which stays the fallback for text-only output.
+            StageSubmissionEnvelope? submission = StageSubmissionText.Read(stage.AgentOutput, stage.Persona);
+            string output = (submission != null ? StageSubmissionText.Render(submission, stage.Persona) : StageSubmissionText.WithoutBlocks(stage.AgentOutput)) ?? String.Empty;
             string persona = String.IsNullOrWhiteSpace(stage.Persona) ? PersonaCatalog.Worker : PersonaCatalog.NormalizeName(stage.Persona);
 
             HandoffArtifact artifact = new HandoffArtifact
@@ -115,7 +118,7 @@ namespace Armada.Core.Services
             artifact.CompletionLines = ExtractCompletionLines(output);
             artifact.Verdict = DecideVerdict(persona, output, artifact.CompletionLines);
             bool blocking = IsBlockingVerdict(persona, output, artifact.Verdict);
-            artifact.Findings = ExtractFindings(output, blocking);
+            artifact.Findings = (submission != null ? StageSubmissionText.HandoffFindings(submission) : null) ?? ExtractFindings(output, blocking);
             artifact.AcceptanceCriteria = ExtractAcceptanceCriteria(stage.Description);
             if (check != null) artifact.CheckResults.Add(check);
             artifact.CommitReferences = ExtractCommitReferences(stage.CommitHash, output);

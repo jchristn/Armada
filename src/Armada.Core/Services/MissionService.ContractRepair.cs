@@ -45,8 +45,8 @@ namespace Armada.Core.Services
                     "The captain left non-scratch changes uncommitted; Armada committed them as " + (mission.CommitHash ?? "the dock head") + ".", token).ConfigureAwait(false);
             }
 
-            bool blockedVerifier = PersonaCatalog.Matches(mission.Persona, PersonaCatalog.TestEngineer) && VerifierContract.IsBlocked(mission.AgentOutput);
-            ContractRepairKindEnum completion = ContractRepair.ClassifyCompletionLine(mission.AgentOutput);
+            bool blockedVerifier = PersonaCatalog.Matches(mission.Persona, PersonaCatalog.TestEngineer) && VerifierContract.IsBlocked(StageSubmissionText.EffectiveOutput(mission));
+            ContractRepairKindEnum completion = ContractRepair.ClassifyCompletionLine(StageSubmissionText.EffectiveOutput(mission));
             if (completion == ContractRepairKindEnum.None || blockedVerifier || dock == null) return;
 
             string? startCommit = TryReadDockStartCommit(dock, mission);
@@ -67,7 +67,7 @@ namespace Armada.Core.Services
         /// </summary>
         private async Task<JudgeVerdictEnum> TryRepairJudgeVerdictAsync(Mission mission, Captain captain, CancellationToken token)
         {
-            if (!ContractRepair.TryRecoverVerdict(mission.AgentOutput, out JudgeVerdictEnum recovered, out string? sourceLine))
+            if (!ContractRepair.TryRecoverVerdict(StageSubmissionText.EffectiveOutput(mission), out JudgeVerdictEnum recovered, out string? sourceLine))
                 return JudgeVerdictEnum.None;
 
             mission.AgentOutput = ContractRepair.AppendRepair(mission.AgentOutput, ContractRepairKindEnum.VerdictNonCanonical, ContractRepair.CanonicalVerdictLine(recovered));
@@ -84,8 +84,9 @@ namespace Armada.Core.Services
         /// </summary>
         private async Task<bool> TryRepairArchitectPlanAsync(Mission mission, CancellationToken token)
         {
-            if (!String.IsNullOrEmpty(mission.AgentOutput) && mission.AgentOutput.Contains("[ARMADA:MISSION]", StringComparison.Ordinal)) return false;
-            if (!ContractRepair.TryRecoverArchitectPlan(mission.AgentOutput, out string? planJson) || planJson == null) return false;
+            string? output = StageSubmissionText.EffectiveOutput(mission);
+            if (!String.IsNullOrEmpty(output) && output.Contains("[ARMADA:MISSION]", StringComparison.Ordinal)) return false;
+            if (!ContractRepair.TryRecoverArchitectPlan(output, out string? planJson) || planJson == null) return false;
 
             mission.AgentOutput = ContractRepair.AppendRepair(mission.AgentOutput, ContractRepairKindEnum.PlanBlockNonCanonical,
                 "```" + ArchitectPlanParser.FenceInfo + "\n" + planJson + "\n```");

@@ -94,6 +94,7 @@ namespace Armada.Core.Authorization
             Add("GET", "/api/v1/missions/{id}/handoff-artifacts", "HandoffArtifact", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("POST", "/api/v1/missions/{id}/handoff-artifacts/enumerate", "HandoffArtifact", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("GET", "/api/v1/handoff-artifacts/{id}", "HandoffArtifact", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("GET", "/api/v1/missions/{id}/submissions", "Mission", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("GET", "/api/v1/failure-cause-rules", "FailureCauseRule", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("POST", "/api/v1/failure-cause-rules/enumerate", "FailureCauseRule", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("POST", "/api/v1/failure-cause-rules", "FailureCauseRule", ResourceOperationEnum.Create, PermissionLevel.Authenticated);

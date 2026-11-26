@@ -1214,6 +1214,18 @@ namespace Armada.Server
                         Armada.Core.Services.PersonaToolScope.Format(Armada.Core.Services.PersonaToolScope.ForPersona(mission.Persona));
                 }
 
+                // RS-6.3: name the submit tool this stage calls, so the API endpoint runtime offers it natively (CLI runtimes see
+                // the MCP submit tools directly).
+                string? submitTool = Armada.Core.Services.StageSubmissionTools.ToolForPersona(mission.Persona);
+                if (submitTool != null && captain.Runtime == AgentRuntimeEnum.ApiEndpoint)
+                {
+                    environment ??= new Dictionary<string, string>();
+                    environment[Armada.Core.Services.StageSubmissionTools.ToolEnvironmentVariable] = submitTool;
+                    environment[Armada.Core.Services.StageSubmissionTools.PersonaEnvironmentVariable] = String.IsNullOrWhiteSpace(mission.Persona)
+                        ? Armada.Core.PersonaCatalog.Worker
+                        : Armada.Core.PersonaCatalog.NormalizeName(mission.Persona);
+                }
+
                 processId = await runtime.StartAsync(
                     dock.WorktreePath ?? throw new InvalidOperationException("Dock worktree path is null"),
                     prompt,

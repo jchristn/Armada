@@ -224,12 +224,14 @@ namespace Armada.Core.Services
             return sb.ToString();
         }
 
-        private List<ParsedArchitectMission> ParseArchitectOutput(Mission architectMission)
+        private List<ParsedArchitectMission> ParseArchitectOutput(Mission architectMission, ArchitectPlan? parsedPlan = null)
         {
             List<ParsedArchitectMission> results = new List<ParsedArchitectMission>();
             HashSet<string> seenTitles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-            if (ArchitectPlanParser.TryParse(architectMission.AgentOutput, out ArchitectPlan? plan, out _, _Settings.Concurrency.MaxHierarchyDepth) && plan != null)
+            ArchitectPlan? plan = parsedPlan;
+            if (plan == null && !ArchitectPlanParser.TryParse(StageSubmissionText.EffectiveOutput(architectMission), out plan, out _, _Settings.Concurrency.MaxHierarchyDepth)) plan = null;
+            if (plan != null)
             {
                 foreach (string warning in plan.Warnings)
                     _Logging.Warn(_Header + "architect plan of " + architectMission.Id + ": " + warning);
@@ -258,7 +260,7 @@ namespace Armada.Core.Services
 
             string?[] candidateSources =
             {
-                architectMission.AgentOutput,
+                StageSubmissionText.EffectiveOutput(architectMission),
                 architectMission.DiffSnapshot
             };
 

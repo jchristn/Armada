@@ -727,6 +727,14 @@ Measure first, then change handoffs and contracts, then prompts, then add profil
    after it exits, so every format turn is a separate call.
    A Judge PASS must also cite evidence (RS-6.8): a check it ran or at least one file it inspected. A PASS with neither
    is a format failure with nothing to restate, so it goes straight to the rerun.
+   Since 1.5.0 (RS-6.2, RS-6.3, RS-6.7) a captain can submit its plan, verdict or result as typed JSON through
+   `armada_submit_plan`, `armada_submit_verdict` or `armada_submit_result` (MCP, and native in the API endpoint
+   runtime). The call is checked with the same rules as the text and its errors come back in the same turn, so a format
+   slip is fixed in the loop instead of by a repair turn or a rerun. The latest submission of an attempt wins over any
+   marker the captain also wrote; without one, the markers decide. The Judge and verifiers submit findings as
+   `{file, line, severity, scenario, requiredFix}`, which become the handoff findings; the heading scraper is the
+   fallback for text output, where the contracts now ask for a `## Findings` section. The effect on the battery has not
+   been measured.
 4. Measure each change on the battery, separately from prompt changes.
 
 ### Phase 4: prompts

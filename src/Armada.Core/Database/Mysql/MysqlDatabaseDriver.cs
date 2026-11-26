@@ -83,6 +83,7 @@ namespace Armada.Core.Database.Mysql
             BlackBoxLinks = new BlackBoxLinkMethods(_ConnectionString);
             BlackBoxNotes = new BlackBoxNoteMethods(_ConnectionString);
             RecoveryState = new RecoveryStateMethods(_ConnectionString);
+            StageSubmissions = new StageSubmissionMethods(_ConnectionString);
             BlackBoxMigrations = new BlackBoxMigrationMethods(_ConnectionString);
             BlackBoxSuccesses = new BlackBoxSuccessMethods(_ConnectionString);
             BlackBoxRecoveryOutcomes = new BlackBoxRecoveryOutcomeMethods(_ConnectionString);
@@ -1563,7 +1564,8 @@ namespace Armada.Core.Database.Mysql
                 Armada.Core.Database.RecoveryStateSchema.Migration(Armada.Core.Enums.DatabaseTypeEnum.Mysql),
                 Armada.Core.Database.ModelProfileRecoverySchema.Migration(Armada.Core.Enums.DatabaseTypeEnum.Mysql),
                 Armada.Core.Database.EscalationLadderSchema.Migration(Armada.Core.Enums.DatabaseTypeEnum.Mysql),
-                Armada.Core.Database.HandoffAttemptSchema.Migration(Armada.Core.Enums.DatabaseTypeEnum.Mysql)
+                Armada.Core.Database.HandoffAttemptSchema.Migration(Armada.Core.Enums.DatabaseTypeEnum.Mysql),
+                Armada.Core.Database.StageSubmissionTableSchema.Migration(Armada.Core.Enums.DatabaseTypeEnum.Mysql)
 
             };
         }

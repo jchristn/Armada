@@ -4267,6 +4267,27 @@
                     }
                 },
                 {
+                    "name": "List Mission Stage Submissions",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/v1/missions/{{missionId}}/submissions",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "missions",
+                                "{{missionId}}",
+                                "submissions"
+                            ]
+                        },
+                        "description": "The plans, verdicts and results the mission's captains submitted through armada_submit_plan, armada_submit_verdict or armada_submit_result, newest first, with attempt id, source (Mcp or Native) and the typed submission. The latest submission of an attempt decided it. 404 when the mission is missing or out of scope."
+                    }
+                },
+                {
                     "name": "Get Mission Log",
                     "request": {
                         "method": "GET",

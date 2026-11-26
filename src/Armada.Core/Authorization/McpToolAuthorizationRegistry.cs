@@ -86,6 +86,11 @@ namespace Armada.Core.Authorization
             Add("list_prompt_templates", "PromptTemplate", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("mission_status", "Mission", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("papercut_summary", "Mission", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            // RS-6.2: a captain submits its own mission's output; the tool itself requires the mission-scoped token.
+            Add("armada_submit_plan", "Mission", ResourceOperationEnum.Update, PermissionLevel.Authenticated);
+            Add("armada_submit_verdict", "Mission", ResourceOperationEnum.Update, PermissionLevel.Authenticated);
+            Add("armada_submit_result", "Mission", ResourceOperationEnum.Update, PermissionLevel.Authenticated);
+            Add("get_mission_submissions", "Mission", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("search_memory", "Memory", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("authorize_captain_selection_recovery", "Mission", ResourceOperationEnum.Update, PermissionLevel.TenantAdmin);
             Add("get_captain_selection", "Mission", ResourceOperationEnum.Read, PermissionLevel.Authenticated);

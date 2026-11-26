@@ -347,6 +347,7 @@ namespace Test.Smoke
             "Services.StageCheckResumeSafety",
             "Services.StageOutcomes",
             "Services.StageOutputContract",
+            "Services.StageSubmission",
             "Services.StallRecovery",
             "Services.StartupScript",
             "Services.Storage",

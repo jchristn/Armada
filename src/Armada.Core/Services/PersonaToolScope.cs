@@ -56,8 +56,9 @@ namespace Armada.Core.Services
         #region Public-Methods
 
         /// <summary>
-        /// The Armada MCP tools a persona is shown up front: <see cref="CommonTools"/> plus the persona's own. A custom or
-        /// empty persona gets the common tools.
+        /// The Armada MCP tools a persona is shown up front: <see cref="CommonTools"/>, the persona's own, and its submit tool
+        /// (<see cref="StageSubmissionTools.ToolForPersona"/>). A custom persona gets the common tools; an empty persona is a
+        /// Worker for the submit tool.
         /// </summary>
         /// <param name="persona">Mission persona, or null.</param>
         /// <returns>Distinct tool names in a stable order.</returns>
@@ -67,6 +68,9 @@ namespace Armada.Core.Services
             if (PersonaCatalog.Matches(persona, PersonaCatalog.Architect)) tools.AddRange(_ArchitectTools);
             else if (PersonaCatalog.Matches(persona, PersonaCatalog.Judge)) tools.AddRange(_JudgeTools);
             else if (PersonaCatalog.Matches(persona, PersonaCatalog.Recorder)) tools.AddRange(_RecorderTools);
+            // RS-6.2: the persona's submit tool (armada_submit_plan, armada_submit_verdict or armada_submit_result).
+            string? submitTool = StageSubmissionTools.ToolForPersona(persona);
+            if (submitTool != null) tools.Add(submitTool);
             return tools.Distinct(StringComparer.Ordinal).ToList();
         }
 

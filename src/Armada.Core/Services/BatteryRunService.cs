@@ -680,7 +680,7 @@ namespace Armada.Core.Services
             if (mission.Status == MissionStatusEnum.Failed || mission.Status == MissionStatusEnum.Cancelled || mission.Status == MissionStatusEnum.Blocked)
                 return Failed("The mission ended " + mission.Status + (String.IsNullOrWhiteSpace(mission.FailureReason) ? "." : ": " + mission.FailureReason), "Mission " + mission.Status + ".");
 
-            return await BatteryTaskGrader.GradeAsync(pack, task, mission.AgentOutput, workspace).ConfigureAwait(false);
+            return await BatteryTaskGrader.GradeAsync(pack, task, StageSubmissionText.EffectiveOutput(mission), workspace).ConfigureAwait(false);
         }
 
         private static bool Selected(BatteryTaskDefinition task, BatteryRunOptions? options)

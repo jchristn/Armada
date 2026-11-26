@@ -159,6 +159,77 @@ namespace Test.Shared.Suites.Runtimes
                 }
             }));
 
+            cases.Add(CaseAsync("native_submit_verdict_fixes_schema_error_in_loop", "A Judge on an API captain submits a verdict with schema errors, gets them back in the same call, fixes them, and its output carries the submission", TestTags.Positive, async () =>
+            {
+                string dir = NewTempDir();
+                try
+                {
+                    string lens = "The guard runs before the save on every path, so an empty name can no longer reach storage from any caller.";
+                    Queue<ToolChatResponse> script = new Queue<ToolChatResponse>();
+                    script.Enqueue(new ToolChatResponse { Success = true, ToolCalls = new List<ToolCall> { new ToolCall { Id = "s1", Name = StageSubmissionTools.SubmitVerdict, ArgumentsJson = "{\"verdict\":\"pass\",\"correctness\":\"fine\"}" } } });
+                    script.Enqueue(new ToolChatResponse { Success = true, ToolCalls = new List<ToolCall> { new ToolCall { Id = "s2", Name = StageSubmissionTools.SubmitVerdict, ArgumentsJson =
+                        "{\"verdict\":\"PASS\",\"correctness\":\"" + lens + "\",\"blastRadius\":\"" + lens + "\",\"sourceFidelity\":\"" + lens + "\",\"evidence\":{\"checksRun\":[],\"inspectedFiles\":[\"src/Widgets/Validator.cs\"]}}" } } });
+                    script.Enqueue(new ToolChatResponse { Success = true, Text = "Reviewed and approved.", FinishReason = "stop" });
+                    ModelEndpoint endpoint = new ModelEndpoint { Kind = ModelEndpointKindEnum.Inference, Provider = ModelProviderEnum.OpenAICompatible, BaseUrl = "http://localhost:1", InferenceOptions = new InferenceOptions { McpToolsEnabled = false } };
+                    ScriptedClient? client = null;
+                    ApiAgentRuntime runtime = new ApiAgentRuntime(endpoint, CreateLogging(), 10, (ep, log) => client = new ScriptedClient(script, log));
+                    using ManualResetEventSlim exited = new ManualResetEventSlim(false);
+                    int code = -1;
+                    List<string> stdout = new List<string>();
+                    List<ApiRuntimeToolEvent> events = new List<ApiRuntimeToolEvent>();
+                    runtime.OnStdoutReceived += (pid, line) => { lock (stdout) stdout.Add(line); };
+                    runtime.OnToolEvent += (pid, e) => { lock (events) events.Add(e); };
+                    runtime.OnProcessExited += (pid, value) => { code = value ?? -1; exited.Set(); };
+                    Dictionary<string, string> env = new Dictionary<string, string>
+                    {
+                        [StageSubmissionTools.ToolEnvironmentVariable] = StageSubmissionTools.SubmitVerdict,
+                        [StageSubmissionTools.PersonaEnvironmentVariable] = PersonaCatalog.Judge
+                    };
+                    await runtime.StartAsync(dir, "Review the change.", env).ConfigureAwait(false);
+                    AssertTrue(exited.Wait(TimeSpan.FromSeconds(10)), "the run ends");
+                    AssertEqual(0, code, "the submitted verdict finishes the run");
+                    AssertTrue(client!.ToolHistory[0].Contains(StageSubmissionTools.SubmitVerdict), "the submit tool is offered");
+                    List<ApiRuntimeToolEvent> done = events.Where(e => e.Phase == ApiRuntimeToolPhaseEnum.Completed).ToList();
+                    AssertFalse(done[0].Ok == true, "the first call is rejected");
+                    AssertContains("verdict must be one of", done[0].Result ?? String.Empty);
+                    AssertContains("sourceFidelity is required.", done[0].Result ?? String.Empty);
+                    AssertTrue(done[1].Ok == true, "the corrected call is accepted");
+                    string output = String.Join("\n", stdout);
+                    AssertContains(StageSubmissionText.BoundaryMarker + " verdict native-", output);
+                    AssertEqual(JudgeVerdictEnum.Pass, JudgeVerdictParser.Parse(StageSubmissionText.Effective(output, PersonaCatalog.Judge)), "the Admiral reads the submitted PASS");
+                }
+                finally { Cleanup(dir); }
+            }));
+
+            cases.Add(CaseAsync("stopping_without_submit_forces_the_submit_tool", "A Worker that stops without submitting or a completion line gets a turn offering only the submit tool with a required tool call", TestTags.Positive, async () =>
+            {
+                string dir = NewTempDir();
+                try
+                {
+                    Queue<ToolChatResponse> script = new Queue<ToolChatResponse>();
+                    script.Enqueue(new ToolChatResponse { Success = true, Text = "I made the change.", FinishReason = "stop" });
+                    script.Enqueue(new ToolChatResponse { Success = true, ToolCalls = new List<ToolCall> { new ToolCall { Id = "s1", Name = StageSubmissionTools.SubmitResult, ArgumentsJson = "{\"status\":\"complete\",\"summary\":\"Added the guard.\"}" } } });
+                    script.Enqueue(new ToolChatResponse { Success = true, Text = "Submitted.", FinishReason = "stop" });
+                    ModelEndpoint endpoint = new ModelEndpoint { Kind = ModelEndpointKindEnum.Inference, Provider = ModelProviderEnum.OpenAICompatible, BaseUrl = "http://localhost:1", InferenceOptions = new InferenceOptions { McpToolsEnabled = false } };
+                    ScriptedClient? client = null;
+                    ApiAgentRuntime runtime = new ApiAgentRuntime(endpoint, CreateLogging(), 10, (ep, log) => client = new ScriptedClient(script, log));
+                    using ManualResetEventSlim exited = new ManualResetEventSlim(false);
+                    int code = -1;
+                    runtime.OnProcessExited += (pid, value) => { code = value ?? -1; exited.Set(); };
+                    Dictionary<string, string> env = RequireCompletionLine();
+                    env[StageSubmissionTools.ToolEnvironmentVariable] = StageSubmissionTools.SubmitResult;
+                    env[StageSubmissionTools.PersonaEnvironmentVariable] = PersonaCatalog.Worker;
+                    await runtime.StartAsync(dir, "Add the guard.", env).ConfigureAwait(false);
+                    AssertTrue(exited.Wait(TimeSpan.FromSeconds(10)), "the run ends");
+                    AssertEqual(0, code, "the forced submission completes the run without a completion line");
+                    AssertEqual(1, client!.ToolHistory[1].Count, "the forced turn offers one tool");
+                    AssertEqual(StageSubmissionTools.SubmitResult, client.ToolHistory[1][0]);
+                    AssertEqual("required", client.ToolChoices[1]);
+                    AssertEqual("auto", client.ToolChoices[0], "ordinary turns keep the default tool choice");
+                }
+                finally { Cleanup(dir); }
+            }));
+
             cases.Add(CaseAsync("endpoint_turn_budget_exits_failure", "Tool loop budget exhaustion fails the mission rather than reporting success", TestTags.Negative, async () =>
             {
                 string dir = NewTempDir();
@@ -529,7 +600,11 @@ namespace Test.Shared.Suites.Runtimes
                 AssertTrue(judge.Contains("get_mission_log") && !judge.Contains("create_memory"));
                 AssertTrue(recorder.Contains("create_memory") && recorder.Contains("voyage_status"));
                 AssertEqual(PersonaToolScope.CommonTools.Count, custom.Count);
-                AssertEqual(PersonaToolScope.CommonTools.Count, PersonaToolScope.ForPersona(null).Count);
+                // A mission without a persona is a Worker, so it is also shown the Worker's submit tool (RS-6.2).
+                List<string> unnamed = PersonaToolScope.ForPersona(null);
+                AssertEqual(PersonaToolScope.CommonTools.Count + 1, unnamed.Count);
+                AssertEqual(StageSubmissionTools.SubmitResult, unnamed[unnamed.Count - 1]);
+                AssertTrue(judge.Contains(StageSubmissionTools.SubmitVerdict), "the Judge is shown its submit tool");
                 HashSet<string>? parsed = PersonaToolScope.Parse(PersonaToolScope.Format(judge));
                 AssertNotNull(parsed);
                 AssertTrue(parsed!.SetEquals(judge));
@@ -1361,6 +1436,7 @@ namespace Test.Shared.Suites.Runtimes
         {
             public List<string> ToolNames { get; private set; } = new List<string>();
             public List<List<string>> ToolHistory { get; } = new List<List<string>>();
+            public List<string?> ToolChoices { get; } = new List<string?>();
             public CompletionOptions? Settings { get; private set; }
             public bool PlainChatCalled { get; private set; }
             private readonly Queue<ToolChatResponse> _Script;
@@ -1380,6 +1456,7 @@ namespace Test.Shared.Suites.Runtimes
             {
                 ToolNames = request.Tools.Select(t => t.Name).ToList();
                 ToolHistory.Add(ToolNames.ToList());
+                ToolChoices.Add(request.ToolChoice);
                 Settings = new CompletionOptions { Model = settings.Model, MaxTokens = settings.MaxTokens, Temperature = settings.Temperature, TopP = settings.TopP, ReasoningEffort = settings.ReasoningEffort };
                 if (_Script.Count == 0) return Task.FromResult(new ToolChatResponse { Success = true, Text = "", ToolCalls = new List<ToolCall>() });
                 return Task.FromResult(_Script.Dequeue());
