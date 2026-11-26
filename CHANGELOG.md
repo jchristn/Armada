@@ -177,6 +177,10 @@ Conductor) with Opus and GPT-6.1 reliable. The work is tracked item by item in `
 - **API endpoint captains on Judge and Architect stages are no longer asked for a completion line.** The Admiral now
   says which missions need `[ARMADA:RESULT] COMPLETE` (`ARMADA_REQUIRES_COMPLETION_LINE`) instead of the runtime
   searching the prompt for it, and a bold, backticked or bulleted completion line is accepted.
+- **Handoffs are stored once and cover the whole chain.** Each stage's handoff is written when the stage completes, in
+  the same database write that prepares the next stage, and keyed by attempt (migration 137, `attempt_id`), so two
+  attempts are never merged because their outputs had the same length. A later stage also sees the earlier stages of its
+  chain, newest first, within its budget, so the Judge sees the Worker's report and not only the Test Engineer's.
 - **Recovery state survives a restart.** Endpoint circuit breakers, launch backoff (with the captains that failed to
   start the mission), the start of a transient outage, and escalation rule cooldowns were kept only in memory, so a
   restart sent missions straight back to a failing endpoint, relaunched a broken captain at once, granted an outage a

@@ -851,12 +851,16 @@ the contract a schema, lets the model submit through a tool, and repairs format 
   fallback. Evidence:
 - [ ] **RS-6.8** PASS evidence. A PASS must cite the checks it ran or at least one inspected file (deferred R19 in
   `archive/PROMPT_AND_HANDOFF_IMPROVEMENTS.md`). A PASS without it becomes a format-only failure. Evidence:
-- [ ] **RS-6.9** One handoff store. Every stage reads handoffs from `HandoffArtifact` rows created once, at stage
+- [x] **RS-6.9** One handoff store. Every stage reads handoffs from `HandoffArtifact` rows created once, at stage
   completion, in the completion transaction. Remove the lazy `GetOrCreateForStageAsync` at launch and the unstored
   build in `MissionPromptBuilder.BuildTemplateParams`; replace the length-based `IsSameAttempt` with an attempt id.
-  Evidence:
-- [ ] **RS-6.10** Chain-aware handoff. A downstream stage sees the artifacts of the whole chain, newest first,
-  within its budget (the Judge sees the Worker's report, not only the Test Engineer's). Evidence:
+  Evidence: fbe9cf638. Migration 137 adds `attempt_id`; artifacts are written in the handoff and fan-out batches
+  and before the rework chain; lazy build at launch and length dedup removed; pre-137 stages render an unstored legacy
+  handoff. Tests: `outcome_links_handed_on_artifact`, `launch_reads_without_storing`,
+  `handoff_batch_writes_artifact_atomically`; providers verified on Postgres, MySQL, SQL Server (47/47 each).
+- [x] **RS-6.10** Chain-aware handoff. A downstream stage sees the artifacts of the whole chain, newest first,
+  within its budget (the Judge sees the Worker's report, not only the Test Engineer's). Evidence: fbe9cf638.
+  `HandoffRenderer.RenderChainWithBudget`, `ReadEarlierChainAsync` (8 stages, same voyage). Test: `judge_sees_whole_chain`.
 - [ ] **RS-6.11** One prompt composer for first runs, rework (`ReworkPromptBuilder.Compose`), repair, and escalation:
   declared template slots instead of `personaPrompt.Contains(handoff.Evidence.Trim())`
   (`MissionService.Instructions.cs:115-131`), one render of the persona prompt, and a token budget for the whole
