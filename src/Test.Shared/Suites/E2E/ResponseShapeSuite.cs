@@ -76,6 +76,11 @@ namespace Test.Shared.Suites.E2E
             ["RemoteTunnelHttpRelayRequest"] = "Remote tunnel protocol frame (proxy link), not a REST or MCP response",
             ["RemoteTunnelHttpRelayResponse"] = "Remote tunnel protocol frame (proxy link), not a REST or MCP response",
             ["ShellCommandSplit"] = "Parser output for CLI permission matching",
+            ["MissionGuardedWrite"] = "Internal status-guarded mission update inside a mission write batch",
+            ["MissionSnapshotSet"] = "Internal per-mission snapshot rows written inside a mission write batch",
+            ["MissionWriteBatch"] = "Internal one-transaction mission write used by an Architect fan-out",
+            ["PlanNode"] = "Internal plan hierarchy node checked by the plan validator before dispatch",
+            ["PlanValidationResult"] = "Internal plan validator result; transports return its errors as a message string",
             ["UnifiedDiffFile"] = "Diff parser output used by landing and scope checks",
             ["UrlPathCanonicalizationResult"] = "Route matcher output used by authorization",
         };
