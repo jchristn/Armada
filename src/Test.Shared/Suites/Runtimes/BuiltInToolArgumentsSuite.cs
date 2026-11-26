@@ -463,7 +463,7 @@ namespace Test.Shared.Suites.Runtimes
 
         private static void AssertOmissionCount(string output, int totalInputBytes)
         {
-            int budget = ToolSafetyLimits.MaxProcessOutputBytes;
+            int budget = new ToolLimits().MaxProcessOutputBytes;
             AssertTrue(Encoding.UTF8.GetByteCount(output) <= budget, "Rendered stream must fit its UTF-8 byte budget.");
             int markerStart = output.IndexOf("\n[truncated - output exceeded ", StringComparison.Ordinal);
             AssertTrue(markerStart >= 0, "Expected a truncation note with an omitted-byte count.");

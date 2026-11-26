@@ -51,6 +51,13 @@ namespace Armada.Core.Models
         /// timeout. Null uses the endpoint's request timeout.
         /// </summary>
         public int? FirstResponseTimeoutMs { get; set; } = null;
+        /// <summary>
+        /// Optional share of the context window, from 1 through 50 percent, that one read_file or run_process result may
+        /// fill before it is paged or truncated. Applies when the context window is known; null uses 12 percent. The
+        /// default read page of 200 lines and 24,000 characters does not change. A Harbor that predates it keeps the
+        /// fixed 1 MB read and 100 KB process caps.
+        /// </summary>
+        public int? ToolOutputWindowPercent { get; set; } = null;
 
         /// <summary>Whether launching on a Harbor requires policy-aware execution support.</summary>
         [System.Text.Json.Serialization.JsonIgnore]
@@ -67,7 +74,8 @@ namespace Armada.Core.Models
 
         /// <summary>Whether any setting differs from the defaults.</summary>
         [System.Text.Json.Serialization.JsonIgnore]
-        public bool HasNonDefaultSettings => RequiresPolicySupport || RequiresContextSupport || RequiresStreamingSupport || MaxConcurrentMissions.HasValue;
+        public bool HasNonDefaultSettings => RequiresPolicySupport || RequiresContextSupport || RequiresStreamingSupport || MaxConcurrentMissions.HasValue
+            || ToolOutputWindowPercent.HasValue;
 
         /// <summary>Validate supplied settings without silently changing them.</summary>
         public void Validate()
@@ -79,6 +87,7 @@ namespace Armada.Core.Models
             if (MaxConcurrentMissions.HasValue && (MaxConcurrentMissions < 1 || MaxConcurrentMissions > 64)) throw new ArgumentException("InferenceOptions.MaxConcurrentMissions must be between 1 and 64.");
             if (ContextLength.HasValue && (ContextLength < 512 || ContextLength > 2097152)) throw new ArgumentException("InferenceOptions.ContextLength must be between 512 and 2097152.");
             if (FirstResponseTimeoutMs.HasValue && (FirstResponseTimeoutMs < 1000 || FirstResponseTimeoutMs > 1800000)) throw new ArgumentException("InferenceOptions.FirstResponseTimeoutMs must be between 1000 and 1800000.");
+            if (ToolOutputWindowPercent.HasValue && (ToolOutputWindowPercent < 1 || ToolOutputWindowPercent > 50)) throw new ArgumentException("InferenceOptions.ToolOutputWindowPercent must be between 1 and 50.");
             if (AllowedTools != null && (AllowedTools.Count > 256 || AllowedTools.Any(n => String.IsNullOrWhiteSpace(n) || n.Length > 256 || n != n.Trim()) || AllowedTools.Distinct(StringComparer.Ordinal).Count() != AllowedTools.Count))
                 throw new ArgumentException("InferenceOptions.AllowedTools must contain at most 256 distinct, nonblank exact tool names (maximum 256 characters each).");
         }

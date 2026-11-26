@@ -3307,6 +3307,8 @@ export interface InferenceOptions {
   streaming?: boolean;
   /** Deadline for the model to start responding (model load, prompt evaluation); null uses the request timeout. */
   firstResponseTimeoutMs?: number | null;
+  /** Percent of a known context window one read_file or run_process result may fill (1-50); null uses 12. */
+  toolOutputWindowPercent?: number | null;
 }
 
 export interface ModelEndpoint {

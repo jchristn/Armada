@@ -106,7 +106,8 @@ function inferenceValues(endpoint: ModelEndpoint | null): FormValues {
     streaming: options.streaming ?? false,
     contextLength: options.contextLength == null ? '' : String(options.contextLength),
     maxConcurrentMissions: options.maxConcurrentMissions == null ? '' : String(options.maxConcurrentMissions),
-    firstResponseTimeoutMs: options.firstResponseTimeoutMs == null ? '' : String(options.firstResponseTimeoutMs) };
+    firstResponseTimeoutMs: options.firstResponseTimeoutMs == null ? '' : String(options.firstResponseTimeoutMs),
+    toolOutputWindowPercent: options.toolOutputWindowPercent == null ? '' : String(options.toolOutputWindowPercent) };
 }
 
 function inferencePayload(v: FormValues) {
@@ -121,6 +122,7 @@ function inferencePayload(v: FormValues) {
       contextLength: str(v, 'contextLength').trim() ? Number(str(v, 'contextLength')) : null,
       maxConcurrentMissions: str(v, 'maxConcurrentMissions').trim() ? Number(str(v, 'maxConcurrentMissions')) : null,
       firstResponseTimeoutMs: str(v, 'firstResponseTimeoutMs').trim() ? Number(str(v, 'firstResponseTimeoutMs')) : null,
+      toolOutputWindowPercent: str(v, 'toolOutputWindowPercent').trim() ? Number(str(v, 'toolOutputWindowPercent')) : null,
     };
 }
 
@@ -332,6 +334,7 @@ export function endpointFields(t: Translate, viewer: ScopeViewer, v: FormValues,
       { kind: 'integer' as const, key: 'firstResponseTimeoutMs', label: t('First-response timeout (ms)') },
       { kind: 'integer' as const, key: 'contextLength', label: t('Context window (Ollama num_ctx)') },
       { kind: 'integer' as const, key: 'maxConcurrentMissions', label: t('Max concurrent missions (per base URL)') },
+      { kind: 'integer' as const, key: 'toolOutputWindowPercent', label: t('Tool output window (% of context)'), hint: t('Share of a known context window one file read or command output may fill; blank uses 12.') },
     ] : []),
     scopeField(t, viewer),
     { kind: 'switch', key: 'enabled', label: t('Enabled') },

@@ -22,8 +22,21 @@ namespace Armada.Runtimes.Tools
     {
         #region Private-Members
 
-        private const int _DefaultTimeoutMs = 120000;
         private static readonly bool _IsWindows = RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
+        private readonly ToolLimits _Limits;
+
+        #endregion
+
+        #region Constructors-and-Factories
+
+        /// <summary>
+        /// Initializes the tool with output limits.
+        /// </summary>
+        /// <param name="limits">The output limits for this run, or null for the limits of an unknown context window.</param>
+        public RunProcessTool(ToolLimits? limits = null)
+        {
+            _Limits = limits ?? new ToolLimits();
+        }
 
         #endregion
 
@@ -112,7 +125,7 @@ namespace Armada.Runtimes.Tools
             {
                 string command = args.Command!;
                 string processWorkDir = args.WorkingDirectory ?? workingDirectory;
-                int timeoutMs = args.TimeoutMs ?? _DefaultTimeoutMs;
+                int timeoutMs = args.TimeoutMs ?? _Limits.DefaultProcessTimeoutMs;
                 string resolvedWorkDir = ResolvePath(processWorkDir, workingDirectory);
 
                 ProcessStartInfo startInfo = BuildStartInfo(command, args.Args, resolvedWorkDir);
@@ -121,7 +134,7 @@ namespace Armada.Runtimes.Tools
                 {
                     process.StartInfo = startInfo;
 
-                    int maxOutput = ToolSafetyLimits.MaxProcessOutputBytes;
+                    int maxOutput = _Limits.MaxProcessOutputBytes;
                     BoundedOutputBuffer stdout = new BoundedOutputBuffer(maxOutput);
                     BoundedOutputBuffer stderr = new BoundedOutputBuffer(maxOutput);
 

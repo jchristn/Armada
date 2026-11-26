@@ -611,7 +611,7 @@ namespace Armada.Runtimes
                 }
 
                 TaskPlan taskPlan = new TaskPlan();
-                BuiltInToolRegistry registry = new BuiltInToolRegistry(taskPlan);
+                BuiltInToolRegistry registry = new BuiltInToolRegistry(taskPlan, ToolLimits.ForContextWindow(settings.ContextLength, settings.ToolOutputWindowPercent));
                 List<PolyToolDefinition> tools = BuildToolDefinitions(registry)
                     .Where(t => (!settings.ReadOnlyTools || registry.GetMutationKind(t.Name) == ToolMutationKind.ReadOnly)
                         && (settings.AllowedTools == null || settings.AllowedTools.Contains(t.Name, StringComparer.Ordinal))).ToList();

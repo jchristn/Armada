@@ -633,6 +633,7 @@ namespace Armada.Core.Services
             if (left.ContextLength != right.ContextLength) return false;
             if (left.Streaming != right.Streaming) return false;
             if (left.FirstResponseTimeoutMs != right.FirstResponseTimeoutMs) return false;
+            if (left.ToolOutputWindowPercent != right.ToolOutputWindowPercent) return false;
             return SameNames(left.AllowedTools, right.AllowedTools);
         }
 

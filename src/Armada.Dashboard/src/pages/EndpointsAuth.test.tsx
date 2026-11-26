@@ -194,7 +194,7 @@ describe('Endpoint inference policy', () => {
     await waitFor(() => expect(client.updateModelEndpoint).toHaveBeenCalledWith('mep_1', expect.objectContaining({
       inferenceOptions: { toolsEnabled: true, readOnlyTools: true, mcpToolsEnabled: false, requireHarbor: true,
         allowedTools: ['read_file', 'grep'], maxIterations: 8, maxTokens: 2048, temperature: 0, topP: null,
-        contextLength: 32768, maxConcurrentMissions: null, streaming: true, firstResponseTimeoutMs: 300000 },
+        contextLength: 32768, maxConcurrentMissions: null, streaming: true, firstResponseTimeoutMs: 300000, toolOutputWindowPercent: null },
     })));
   });
 

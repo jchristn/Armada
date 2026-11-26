@@ -162,6 +162,7 @@ namespace Armada.Tui.Screens.Configuration
             InputField maxConcurrent = form.Text("Max Concurrent Missions", inference.MaxConcurrentMissions?.ToString(CultureInfo.InvariantCulture), "Unlimited (1–64, per base URL)");
             CheckField streaming = form.Check("Stream Responses", inference.Streaming);
             InputField firstResponse = form.Text("First-response Timeout (ms)", inference.FirstResponseTimeoutMs?.ToString(CultureInfo.InvariantCulture), "Request timeout (1000–1800000)");
+            InputField toolWindow = form.Text("Tool Output Window (%)", inference.ToolOutputWindowPercent?.ToString(CultureInfo.InvariantCulture), "12 (1–50, share of the context window)");
             SelectField<string> scope = form.Scope(existing != null ? existing.Scope : ScopeRules.ResolveCreateScope(context.Session, null));
             CheckField enabled = form.Check("Enabled", existing?.Enabled ?? true);
             form.MarkClean();
@@ -207,7 +208,8 @@ namespace Armada.Tui.Screens.Configuration
                         ContextLength = String.IsNullOrWhiteSpace(contextLength.Value) ? null : Int32.Parse(contextLength.Value, CultureInfo.InvariantCulture),
                         MaxConcurrentMissions = String.IsNullOrWhiteSpace(maxConcurrent.Value) ? null : Int32.Parse(maxConcurrent.Value, CultureInfo.InvariantCulture),
                         Streaming = streaming.Value,
-                        FirstResponseTimeoutMs = String.IsNullOrWhiteSpace(firstResponse.Value) ? null : Int32.Parse(firstResponse.Value, CultureInfo.InvariantCulture)
+                        FirstResponseTimeoutMs = String.IsNullOrWhiteSpace(firstResponse.Value) ? null : Int32.Parse(firstResponse.Value, CultureInfo.InvariantCulture),
+                        ToolOutputWindowPercent = String.IsNullOrWhiteSpace(toolWindow.Value) ? null : Int32.Parse(toolWindow.Value, CultureInfo.InvariantCulture)
                     };
                     payload.InferenceOptions.Validate();
                 }
