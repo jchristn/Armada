@@ -166,6 +166,10 @@ Conductor) with Opus and GPT-6.1 reliable. The work is tracked item by item in `
   resumed once as before; if the resumed attempt stops at the limit again, the mission moves up the escalation ladder
   instead of spending more resumes, the same rule as two unparsable tool calls in a row. The stop is recognized from the
   runtime's `max_iterations_reached` error type.
+- **Legacy mission markers are deprecated.** An Architect plan written as `[ARMADA:MISSION]` markers still works while
+  `AcceptLegacyMissionMarkers` is on (the default), logs a warning each time it is used, and is removed in 2.0 (D-027).
+  Turn the setting off to require an `armada-plan` block; marker output then gets the output repair turn like a missing
+  plan. The setting is in the dashboard, TUI and mobile Agent settings.
 - **Recovery state survives a restart.** Endpoint circuit breakers, launch backoff (with the captains that failed to
   start the mission), the start of a transient outage, and escalation rule cooldowns were kept only in memory, so a
   restart sent missions straight back to a failing endpoint, relaunched a broken captain at once, granted an outage a

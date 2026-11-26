@@ -857,9 +857,13 @@ the contract a schema, lets the model submit through a tool, and repairs format 
   (`MissionService.Instructions.cs:115-131`), one render of the persona prompt, and a token budget for the whole
   instructions file (playbooks, skills, papercuts, persona prompt, contract, handoff). Remove the unused
   `MaxMissionDescriptionChars` and `MaxPersonaSummaryChars` or wire them into the budget. Evidence:
-- [ ] **RS-6.12** Deprecate the legacy `[ARMADA:MISSION]` regex plan path (`MissionService.ArchitectPlan.cs:310-625`):
+- [x] **RS-6.12** Deprecate the legacy `[ARMADA:MISSION]` regex plan path (`MissionService.ArchitectPlan.cs:310-625`):
   keep it behind a setting defaulting on in 1.5.0, log a deprecation warning when it is used, and list it in
-  `DEPRECATION.md` for removal in a later release. Precompile any regex that remains. Evidence:
+  `DEPRECATION.md` for removal in a later release. Precompile any regex that remains. Evidence: `AcceptLegacyMissionMarkers`
+  (default true) gates the marker path, each use logs a D-027 warning, and the regexes are precompiled; DEPRECATION.md
+  D-027 (removal 2.0). Tests: `PipelineDispatch.architect_legacy_markers_rejected_when_disabled` and the warning
+  assertion in the fan-out case; PipelineDispatch, Docs.Deprecation, Tui.Parity, VsCode.Parity, BlackBoxConfiguration
+  76/76.
 
 - [ ] **RS-6.13** Count tool schemas in every prompt budget (RS-6.11, RS-8.4) and scope the tool catalog per persona:
   qwen3.8 used 36,271 input tokens with the full 175-tool catalog against 723 with scoped tools (HER:1224).
