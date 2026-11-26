@@ -1,6 +1,7 @@
 namespace Armada.Core.BlackBox
 {
     using System;
+    using System.Collections.Generic;
     using System.Linq;
     using System.Threading;
     using System.Threading.Tasks;
@@ -52,11 +53,19 @@ namespace Armada.Core.BlackBox
         #region Public-Methods
 
         /// <inheritdoc />
-        public async Task<MissionDispatchAdvice?> AdviseAsync(Mission mission, Vessel vessel, CancellationToken token = default)
+        public Task<MissionDispatchAdvice?> AdviseAsync(Mission mission, Vessel vessel, CancellationToken token = default)
+        {
+            return AdviseAsync(mission, vessel, Array.Empty<Mission>(), token);
+        }
+
+        /// <inheritdoc />
+        public async Task<MissionDispatchAdvice?> AdviseAsync(Mission mission, Vessel vessel, IReadOnlyList<Mission> planned, CancellationToken token = default)
         {
             if (mission == null) throw new ArgumentNullException(nameof(mission));
             if (vessel == null) throw new ArgumentNullException(nameof(vessel));
+            if (planned == null) throw new ArgumentNullException(nameof(planned));
             VesselOverlapContext context = await _Analyzer.LoadAsync(vessel, null, token).ConfigureAwait(false);
+            foreach (Mission earlier in planned) MissionOverlapAnalyzer.AddPlannedMission(context, earlier);
             MissionFileSet likely = MissionOverlapAnalyzer.LikelyFiles(mission.Title, mission.Description, context.Tracked, out _, out _);
             MissionOverlapPreview preview = MissionOverlapAnalyzer.Compare(context, likely, mission.DependsOnMissionId, null);
             BriefLintResult lint = MissionBriefLinter.Lint(mission.Title, mission.Description, mission.DependsOnMissionId, context.Tracked, mission.Mode);

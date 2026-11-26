@@ -160,6 +160,27 @@ namespace Armada.Core.BlackBox
         }
 
         /// <summary>
+        /// Add a mission that is planned but not yet stored (an earlier mission of the voyage being created) to the
+        /// context's active missions, from its scoped files and brief paths.
+        /// </summary>
+        /// <param name="context">Context from <see cref="LoadAsync"/>.</param>
+        /// <param name="mission">Planned mission.</param>
+        /// <exception cref="ArgumentNullException">Thrown when an argument is null.</exception>
+        public static void AddPlannedMission(VesselOverlapContext context, Mission mission)
+        {
+            if (context == null) throw new ArgumentNullException(nameof(context));
+            if (mission == null) throw new ArgumentNullException(nameof(mission));
+            ActiveMissionFileSet set = new ActiveMissionFileSet(mission);
+            foreach (string f in MissionService.ParseMissionScopedFiles(mission.Description ?? String.Empty))
+            {
+                set.Scoped.AddFile(f);
+                set.Likely.AddFile(f);
+            }
+            AddBriefPaths(set.Likely, mission.Title, mission.Description, context.Tracked);
+            context.ActiveMissions.Add(set);
+        }
+
+        /// <summary>
         /// The likely files of a mission brief: its scoped-files directive plus the paths it names that exist in the
         /// vessel (files, or directories with a trailing slash in the result). Paths are only used when the tracked files
         /// are known.

@@ -244,7 +244,8 @@ export type MissionStatus =
   | 'Blocked';
 
 /** Wire values of VoyageStatusEnum. */
-export type VoyageStatus = 'Open' | 'InProgress' | 'Complete' | 'Failed' | 'Cancelled';
+/** Building: the voyage's missions are still being written; none starts until it is Open. */
+export type VoyageStatus = 'Building' | 'Open' | 'InProgress' | 'Complete' | 'Failed' | 'Cancelled';
 
 /** Wire values of CaptainStateEnum. */
 export type CaptainState = 'Idle' | 'Working' | 'Planning' | 'Refining' | 'Stalled' | 'Stopping' | 'Quarantined' | 'Analyzing';

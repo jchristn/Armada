@@ -11913,9 +11913,11 @@ Ownership scope for Category B configuration entities (see [Data Scoping](#data-
 
 | Value | Description |
 |---|---|
-| `Open` | Created, missions being set up |
+| `Building` | Being created: its missions are written in one transaction and none is admitted until the voyage is `Open`. A creation that does not finish (an error, or a restart part-way) is moved to `Failed` by the next health check and its missions are cancelled |
+| `Open` | Every mission exists; waiting for its first mission to be admitted |
 | `InProgress` | Has active missions in progress |
 | `Complete` | All missions completed |
+| `Failed` | A mission failed the voyage, or its creation did not finish |
 | `Cancelled` | Voyage was cancelled |
 
 ---

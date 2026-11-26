@@ -130,6 +130,76 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(scope.Owner.Id, stored.UserId, "Armada's own dispatch belongs to the vessel owner");
             }));
 
+            cases.Add(CaseAsync("nothing_admitted_while_building", "A mission of a Building voyage is not admitted even with an idle captain; it is once the voyage is Open", TestTags.Positive, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                DatabaseDriver db = testDb.Driver;
+                LoggingModule logging = new LoggingModule();
+                logging.Settings.EnableConsole = false;
+                ArmadaSettings settings = new ArmadaSettings();
+                settings.DocksDirectory = TestTemp.NewDirectory("creation_hold_docks");
+                settings.ReposDirectory = TestTemp.NewDirectory("creation_hold_repos");
+                DirCreatingGitService git = new DirCreatingGitService();
+                IDockService docks = new DockService(logging, db, settings, git);
+                CaptainService captains = new CaptainService(logging, db, settings, git, docks);
+                MissionService missions = new MissionService(logging, db, settings, docks, captains, git: git);
+                captains.OnLaunchAgent = (_, _, _) => Task.FromResult(4321);
+
+                Vessel vessel = new Vessel("creation-hold", "https://github.com/test/repo.git");
+                vessel.LocalPath = TestTemp.NewDirectory("creation_hold_bare");
+                vessel.WorkingDirectory = TestTemp.NewDirectory("creation_hold_work");
+                vessel.DefaultBranch = "main";
+                vessel = await db.Vessels.CreateAsync(vessel).ConfigureAwait(false);
+                Captain captain = new Captain("creation-hold-worker") { State = CaptainStateEnum.Idle };
+                captain = await db.Captains.CreateAsync(captain).ConfigureAwait(false);
+                Voyage voyage = await db.Voyages.CreateAsync(new Voyage("building") { Status = VoyageStatusEnum.Building }).ConfigureAwait(false);
+                Mission mission = await db.Missions.CreateAsync(new Mission("held", "do it") { VoyageId = voyage.Id, VesselId = vessel.Id, Persona = "Worker" }).ConfigureAwait(false);
+
+                AssertFalse(await missions.TryAssignAsync(mission, vessel, false).ConfigureAwait(false), "held while Building");
+                Mission held = (await db.Missions.ReadAsync(mission.Id).ConfigureAwait(false))!;
+                AssertEqual(MissionStatusEnum.Pending, held.Status);
+                AssertNull(held.CaptainId, "no captain while Building");
+
+                voyage.Status = VoyageStatusEnum.Open;
+                await db.Voyages.UpdateAsync(voyage).ConfigureAwait(false);
+                AssertTrue(await missions.TryAssignAsync(held, vessel, false).ConfigureAwait(false), "admitted once Open");
+            }));
+
+            cases.Add(CaseAsync("interrupted_creation_fails_on_health_check", "A Building voyage no creation is writing is failed by the health check and its missions are cancelled", TestTags.Negative, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                Scope scope = await Scope.CreateAsync(testDb.Driver).ConfigureAwait(false);
+                Voyage voyage = await testDb.Driver.Voyages.CreateAsync(new Voyage("interrupted") { Status = VoyageStatusEnum.Building, TenantId = scope.Tenant.Id }).ConfigureAwait(false);
+                for (int i = 0; i < 2; i++)
+                    await testDb.Driver.Missions.CreateAsync(new Mission("m" + i, "d") { VoyageId = voyage.Id, VesselId = scope.Vessel.Id, TenantId = scope.Tenant.Id }).ConfigureAwait(false);
+
+                await scope.Admiral.HealthCheckAsync().ConfigureAwait(false);
+
+                AssertEqual(VoyageStatusEnum.Failed, (await testDb.Driver.Voyages.ReadAsync(voyage.Id).ConfigureAwait(false))!.Status);
+                foreach (Mission m in await testDb.Driver.Missions.EnumerateByVoyageAsync(voyage.Id).ConfigureAwait(false))
+                {
+                    AssertEqual(MissionStatusEnum.Cancelled, m.Status, m.Title);
+                    AssertContains("did not finish", m.FailureReason ?? "");
+                }
+            }));
+
+            cases.Add(CaseAsync("advisor_sees_earlier_missions", "The advisor sees the voyage's earlier missions before any is stored, and a chain it sets is written with them", TestTags.Positive, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                Scope scope = await Scope.CreateAsync(testDb.Driver).ConfigureAwait(false);
+                ChainingAdvisor advisor = new ChainingAdvisor();
+                scope.Admiral.DispatchAdvisor = advisor;
+
+                Voyage voyage = await scope.Admiral.CreateVoyageAsync(null, scope.Request(new MissionDescription("a", "d"), new MissionDescription("b", "d"), new MissionDescription("c", "d"))).ConfigureAwait(false);
+
+                AssertEqual("0,1,2", String.Join(",", advisor.PlannedCounts), "earlier missions seen by the advisor");
+                List<Mission> stored = await testDb.Driver.Missions.EnumerateByVoyageAsync(voyage.Id).ConfigureAwait(false);
+                AssertEqual(3, stored.Count);
+                Mission a = stored.Single(m => m.Title == "a");
+                AssertEqual(a.Id, stored.Single(m => m.Title == "b").DependsOnMissionId, "b chained after a");
+                AssertEqual(VoyageStatusEnum.Open, (await testDb.Driver.Voyages.ReadAsync(voyage.Id).ConfigureAwait(false))!.Status, "opened after its missions");
+            }));
+
             return new TestSuiteDescriptor(suiteId: SuiteId, displayName: "Voyage creation: one path for every surface", cases: cases);
         }
 
@@ -141,6 +211,23 @@ namespace Test.Shared.Suites.Services
                 displayName: displayName,
                 executeAsync: (CancellationToken ct) => body(),
                 tags: new List<string> { tag });
+        }
+
+        private sealed class ChainingAdvisor : IMissionDispatchAdvisor
+        {
+            public List<int> PlannedCounts { get; } = new List<int>();
+
+            public Task<MissionDispatchAdvice?> AdviseAsync(Mission mission, Vessel vessel, CancellationToken token = default)
+            {
+                return AdviseAsync(mission, vessel, Array.Empty<Mission>(), token);
+            }
+
+            public Task<MissionDispatchAdvice?> AdviseAsync(Mission mission, Vessel vessel, IReadOnlyList<Mission> planned, CancellationToken token = default)
+            {
+                PlannedCounts.Add(planned.Count);
+                if (mission.Title == "b") mission.DependsOnMissionId = planned[0].Id;
+                return Task.FromResult<MissionDispatchAdvice?>(null);
+            }
         }
 
         private sealed class Scope

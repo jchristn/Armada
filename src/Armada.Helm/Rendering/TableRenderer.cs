@@ -118,6 +118,7 @@ namespace Armada.Helm.Rendering
         {
             return status switch
             {
+                VoyageStatusEnum.Building => "grey",
                 VoyageStatusEnum.Open => "dodgerblue1",
                 VoyageStatusEnum.InProgress => "green",
                 VoyageStatusEnum.Complete => "dim",

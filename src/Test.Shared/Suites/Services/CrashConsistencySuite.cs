@@ -76,8 +76,12 @@ namespace Test.Shared.Suites.Services
             cases.Add(Case("recovery_crash_after_rescue_created", "Crash after a rescue is created: the next cycle adopts it instead of dispatching a second rescue",
                 null, () => RecoveryCrashAsync(CrashPointNames.RecoveryRescueCreated)));
 
-            cases.Add(Case("voyage_crash_mid_build_is_completed_or_failed", "Crash while a voyage's missions are being created: after restart the voyage is whole or failed, never half-built and open",
-                "Building the voyage and its missions atomically is RS-4.3.", VoyageCrashAsync));
+            foreach (string point in new[] { CrashPointNames.VoyageCreated, CrashPointNames.VoyageMissionCreated, CrashPointNames.VoyageOpened, CrashPointNames.VoyageMissionAssigned })
+            {
+                string crashPoint = point;
+                cases.Add(Case("voyage_crash_at_" + crashPoint.Replace('.', '_').Replace('-', '_'), "Crash at " + crashPoint + " while creating a voyage: after restart it has all of its missions or none, and a voyage that never opened is failed with nothing started",
+                    null, () => VoyageCrashAsync(crashPoint)));
+            }
 
             cases.Add(Case("handoff_crash_between_dependents_recovers", "Crash after a stage handoff prepared one of two dependents: restart recovery prepares the other on the same branch",
                 null, HandoffCrashAsync));
@@ -160,10 +164,11 @@ namespace Test.Shared.Suites.Services
             AssertTrue(forMission[0].RescueMissionIds.Contains(rescues[0].Id), "the incident references the rescue");
         }
 
-        private static async Task VoyageCrashAsync()
+        private static async Task VoyageCrashAsync(string crashPoint)
         {
             using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
             Vessel vessel = await testDb.Driver.Vessels.CreateAsync(new Vessel("crash-voyage-vessel", "https://github.com/test/repo.git") { DefaultBranch = "main" }).ConfigureAwait(false);
+            await testDb.Driver.Captains.CreateAsync(new Captain("crash-voyage-idle") { State = CaptainStateEnum.Idle }).ConfigureAwait(false);
             List<MissionDescription> work = new List<MissionDescription>
             {
                 new MissionDescription("First", "Do the first part"),
@@ -172,7 +177,7 @@ namespace Test.Shared.Suites.Services
             };
 
             AdmiralService before = CreateAdmiral(testDb.Driver);
-            CrashRunOutcomeEnum outcome = await CrashRun.RunAsync(CrashPointNames.VoyageMissionCreated,
+            CrashRunOutcomeEnum outcome = await CrashRun.RunAsync(crashPoint,
                 () => before.DispatchVoyageAsync("Crash voyage", "Three-part change", vessel.Id, work)).ConfigureAwait(false);
             AssertEqual(CrashRunOutcomeEnum.Crashed, outcome, "the operation reached the crash point");
 
@@ -185,10 +190,19 @@ namespace Test.Shared.Suites.Services
             List<Voyage> voyages = (await testDb.Driver.Voyages.EnumerateAsync().ConfigureAwait(false)).Where(v => v.Title == "Crash voyage").ToList();
             AssertEqual(1, voyages.Count, "one voyage row");
             List<Mission> missions = await testDb.Driver.Missions.EnumerateByVoyageAsync(voyages[0].Id).ConfigureAwait(false);
-            bool whole = missions.Count == work.Count;
-            bool failed = voyages[0].Status == VoyageStatusEnum.Failed || voyages[0].Status == VoyageStatusEnum.Cancelled;
-            AssertTrue(whole || (failed && missions.All(m => m.Status != MissionStatusEnum.Pending && m.Status != MissionStatusEnum.Assigned && m.Status != MissionStatusEnum.InProgress)),
-                "voyage is whole or failed with no live work; it has " + missions.Count + " of " + work.Count + " missions and status " + voyages[0].Status);
+            AssertTrue(missions.Count == 0 || missions.Count == work.Count, "all of the missions or none, never part: " + missions.Count + " of " + work.Count);
+            bool opened = crashPoint == CrashPointNames.VoyageOpened || crashPoint == CrashPointNames.VoyageMissionAssigned;
+            if (opened)
+            {
+                AssertEqual(work.Count, missions.Count, "an opened voyage is whole");
+                AssertTrue(voyages[0].Status != VoyageStatusEnum.Building && voyages[0].Status != VoyageStatusEnum.Failed, "an opened voyage keeps running: " + voyages[0].Status);
+            }
+            else
+            {
+                AssertEqual(VoyageStatusEnum.Failed, voyages[0].Status, "a voyage that never opened is failed");
+                AssertTrue(missions.All(m => m.Status == MissionStatusEnum.Cancelled && String.IsNullOrEmpty(m.CaptainId)),
+                    "none of its missions started, even with an idle captain");
+            }
         }
 
         private static async Task HandoffCrashAsync()

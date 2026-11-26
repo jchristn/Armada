@@ -510,6 +510,7 @@ namespace Armada.Core.Services
             await RunHealthPhaseAsync("reconcile unreserved usage executions", () => new UsageUntrackedExecutionReconciler(_Database, _Settings).ReconcileAsync(DateTime.UtcNow, token: token), token).ConfigureAwait(false);
             await RunHealthPhaseAsync("concurrency invariants", () => _ConcurrencyInvariants.CheckAsync(token), token).ConfigureAwait(false);
             await RunHealthPhaseAsync("lift expired quarantines", () => LiftExpiredQuarantinesAsync(token), token).ConfigureAwait(false);
+            await RunHealthPhaseAsync("fail interrupted voyage creations", () => FailInterruptedVoyageCreationsAsync(token), token).ConfigureAwait(false);
             await RunHealthPhaseAsync("release recovered stalled captains", () => ReleaseRecoveredStalledCaptainsAsync(token), token).ConfigureAwait(false);
             await RunHealthPhaseAsync("relaunch captains whose Harbor reconnected", async () =>
             {
@@ -1077,6 +1078,48 @@ namespace Armada.Core.Services
                 _Logging.Info(_Header + "returned stalled captain " + captain.Id + " to Idle after " + _StalledCaptainRetryAfter.TotalMinutes.ToString("0") + " minutes; it is tried again with the next mission");
                 await EmitEventAsync("captain.stall_released", "Captain " + captain.Name + " returned to Idle after being stalled for " + _StalledCaptainRetryAfter.TotalMinutes.ToString("0") + " minutes",
                     entityType: "captain", entityId: captain.Id, captainId: captain.Id, token: token).ConfigureAwait(false);
+            }
+        }
+
+        // RS-4.3: a Building voyage that no creation in this process is writing was interrupted (the create threw, or the
+        // Admiral stopped part-way). None of its missions was admitted; they are cancelled and the voyage fails.
+        private async Task FailInterruptedVoyageCreationsAsync(CancellationToken token)
+        {
+            List<Voyage> building = await _Database.Voyages.EnumerateByStatusAsync(VoyageStatusEnum.Building, token).ConfigureAwait(false);
+            foreach (Voyage voyage in building)
+            {
+                if (_VoyageCreation.IsCreating(voyage.Id)) continue;
+                const string reason = "Voyage creation did not finish (an error or a restart while its missions were being written); nothing was started.";
+                List<Mission> missions = await _Database.Missions.EnumerateByVoyageAsync(voyage.Id, token).ConfigureAwait(false);
+                int cancelled = 0;
+                foreach (Mission mission in missions.Where(m => m.Status == MissionStatusEnum.Pending))
+                {
+                    try
+                    {
+                        await CancelMissionAsync(mission, new MissionCancelOptions
+                        {
+                            BlackBoxStep = BlackBoxStepEnum.VoyageParentNotRunnable,
+                            FailureKind = MissionFailureKindEnum.Infra,
+                            FailureReason = reason,
+                            ConfigureCapture = context => context.Reason = reason
+                        }, token).ConfigureAwait(false);
+                        cancelled++;
+                    }
+                    catch (InvalidOperationException ex)
+                    {
+                        _Logging.Warn(_Header + "could not cancel mission " + mission.Id + " of interrupted voyage " + voyage.Id + ": " + ex.Message);
+                    }
+                }
+
+                Voyage? current = await _Database.Voyages.ReadAsync(voyage.Id, token).ConfigureAwait(false);
+                if (current == null) continue;
+                VoyageStatusEnum statusBefore = VoyageStatusEnum.Building;
+                current.Status = VoyageStatusEnum.Failed;
+                current.CompletedUtc = DateTime.UtcNow;
+                current.LastUpdateUtc = DateTime.UtcNow;
+                current = await _Database.Voyages.UpdateAsync(current, token).ConfigureAwait(false);
+                await BlackBox.RecordVoyageFailureAsync(current, statusBefore, BlackBoxStepEnum.Halted, reason, null, token).ConfigureAwait(false);
+                _Logging.Warn(_Header + "voyage " + voyage.Id + " was still Building with no creation running; failed it and cancelled " + cancelled + " of " + missions.Count + " mission(s)");
             }
         }
 

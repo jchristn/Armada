@@ -1,6 +1,7 @@
 namespace Armada.Core.Services
 {
     using System;
+    using System.Collections.Concurrent;
     using System.Collections.Generic;
     using System.Linq;
     using System.Threading;
@@ -49,6 +50,7 @@ namespace Armada.Core.Services
         private readonly ArmadaSettings _Settings;
         private readonly IMissionService _Missions;
         private readonly IPlaybookService _Playbooks;
+        private readonly ConcurrentDictionary<string, byte> _Creating = new ConcurrentDictionary<string, byte>(StringComparer.Ordinal);
 
         #endregion
 
@@ -136,6 +138,17 @@ namespace Armada.Core.Services
         }
 
         /// <summary>
+        /// Whether this instance is still creating a voyage. A <see cref="VoyageStatusEnum.Building"/> voyage that no
+        /// instance is creating was interrupted (an error, or a restart part-way through) and is failed by the health check.
+        /// </summary>
+        /// <param name="voyageId">Voyage id.</param>
+        /// <returns>True while the creation is running.</returns>
+        public bool IsCreating(string voyageId)
+        {
+            return !String.IsNullOrEmpty(voyageId) && _Creating.ContainsKey(voyageId);
+        }
+
+        /// <summary>
         /// Check a dispatch request without creating anything: objective existence, pipeline by id or name, and whether
         /// it is a bare voyage.
         /// </summary>
@@ -198,13 +211,18 @@ namespace Armada.Core.Services
 
         #region Internal-Methods
 
-        internal async Task<MissionDispatchAdvice?> AdviseAsync(Mission mission, Vessel vessel, CancellationToken token)
+        internal Task<MissionDispatchAdvice?> AdviseAsync(Mission mission, Vessel vessel, CancellationToken token)
+        {
+            return AdviseAsync(mission, vessel, Array.Empty<Mission>(), token);
+        }
+
+        internal async Task<MissionDispatchAdvice?> AdviseAsync(Mission mission, Vessel vessel, IReadOnlyList<Mission> planned, CancellationToken token)
         {
             IMissionDispatchAdvisor? advisor = DispatchAdvisor;
             if (advisor == null) return null;
             try
             {
-                return await advisor.AdviseAsync(mission, vessel, token).ConfigureAwait(false);
+                return await advisor.AdviseAsync(mission, vessel, planned, token).ConfigureAwait(false);
             }
             catch (Exception ex) when (!(ex is OperationCanceledException && token.IsCancellationRequested))
             {
@@ -305,86 +323,122 @@ namespace Armada.Core.Services
             bool staged = stages.Count > 1 || (stages.Count == 1 && !PersonaCatalog.Matches(stages[0]!.PersonaName, PersonaCatalog.Worker));
             if (!staged && stages.Count == 0) stages.Add(null);
 
+            // RS-4.3: the voyage is written as Building, every mission of every stage is planned in memory and written in
+            // one transaction, playbook snapshots follow, and only then does the voyage open and get one assignment pass.
+            // Nothing is admitted while the voyage is Building, so no captain starts before the whole voyage exists. A
+            // creation that fails or is cut short leaves the voyage Building; the Admiral's health check fails it.
             Voyage voyage = NewVoyage(caller, request, vessel.TenantId, vessel.UserId);
-            voyage = await _Database.Voyages.CreateAsync(voyage, token).ConfigureAwait(false);
-            CrashPoints.Hit(CrashPointNames.VoyageCreated);
-            await PersistVoyagePlaybooksAsync(voyage, playbooks, token).ConfigureAwait(false);
-            _Logging.Info(_Header + "created voyage " + voyage.Id + ": " + voyage.Title + (pipeline != null ? " (pipeline: " + pipeline.Name + ")" : ""));
-
-            Dictionary<int, Mission> roots = new Dictionary<int, Mission>();
-            List<MissionOverlapWarning> voyageWarnings = new List<MissionOverlapWarning>();
-            List<BriefLintFinding> voyageLint = new List<BriefLintFinding>();
-            for (int index = 0; index < missions.Count; index++)
+            voyage.Status = VoyageStatusEnum.Building;
+            _Creating.TryAdd(voyage.Id, 0);
+            try
             {
-                MissionDescription md = missions[index];
-                string baseTitle = md.Title.Length > 60 ? md.Title.Substring(0, 60).TrimEnd() + "..." : md.Title;
-                string? previousMissionId = null;
-                foreach (PipelineStage? stage in stages)
+                voyage = await _Database.Voyages.CreateAsync(voyage, token).ConfigureAwait(false);
+                CrashPoints.Hit(CrashPointNames.VoyageCreated);
+                await PersistVoyagePlaybooksAsync(voyage, playbooks, token).ConfigureAwait(false);
+                _Logging.Info(_Header + "creating voyage " + voyage.Id + ": " + voyage.Title + (pipeline != null ? " (pipeline: " + pipeline.Name + ")" : ""));
+
+                Dictionary<int, Mission> roots = new Dictionary<int, Mission>();
+                List<Mission> chain = new List<Mission>();
+                List<Mission> firstStages = new List<Mission>();
+                List<MissionOverlapWarning> voyageWarnings = new List<MissionOverlapWarning>();
+                List<BriefLintFinding> voyageLint = new List<BriefLintFinding>();
+                for (int index = 0; index < missions.Count; index++)
                 {
-                    bool first = previousMissionId == null;
-                    Mission mission;
-                    if (staged)
+                    MissionDescription md = missions[index];
+                    string baseTitle = md.Title.Length > 60 ? md.Title.Substring(0, 60).TrimEnd() + "..." : md.Title;
+                    string? previousMissionId = null;
+                    foreach (PipelineStage? stage in stages)
                     {
-                        string persona = PersonaCatalog.NormalizeName(stage!.PersonaName);
-                        if (String.IsNullOrEmpty(persona)) persona = stage.PersonaName;
-                        mission = new Mission("[" + persona + "] " + baseTitle, md.Description);
-                        mission.Persona = persona;
-                        mission.DependsOnMissionId = previousMissionId;
-                    }
-                    else
-                    {
-                        mission = new Mission(md.Title, md.Description);
-                        if (stage != null) mission.Persona = stage.PersonaName;
-                        if (!String.IsNullOrWhiteSpace(md.Persona)) mission.Persona = md.Persona!.Trim();
-                    }
+                        bool first = previousMissionId == null;
+                        Mission mission;
+                        if (staged)
+                        {
+                            string persona = PersonaCatalog.NormalizeName(stage!.PersonaName);
+                            if (String.IsNullOrEmpty(persona)) persona = stage.PersonaName;
+                            mission = new Mission("[" + persona + "] " + baseTitle, md.Description);
+                            mission.Persona = persona;
+                            mission.DependsOnMissionId = previousMissionId;
+                        }
+                        else
+                        {
+                            mission = new Mission(md.Title, md.Description);
+                            if (stage != null) mission.Persona = stage.PersonaName;
+                            if (!String.IsNullOrWhiteSpace(md.Persona)) mission.Persona = md.Persona!.Trim();
+                        }
 
-                    // Every stage carries its logical mission's parent so the tree shows it; only the root waits on it.
-                    ApplyHierarchy(mission, md, hierarchy, roots, index);
-                    mission.TenantId = voyage.TenantId;
-                    mission.UserId = voyage.UserId;
-                    mission.VoyageId = voyage.Id;
-                    mission.VesselId = vessel.Id;
-                    mission.IsEvaluation = voyage.IsEvaluation;
-                    mission.Mode = md.Mode;
-                    mission.Tier = md.Tier;
-                    if (stage != null)
-                    {
-                        mission.RequiresReview = stage.RequiresReview;
-                        mission.ReviewDenyAction = stage.ReviewDenyAction;
+                        // Every stage carries its logical mission's parent so the tree shows it; only the root waits on it.
+                        ApplyHierarchy(mission, md, hierarchy, roots, index);
+                        mission.TenantId = voyage.TenantId;
+                        mission.UserId = voyage.UserId;
+                        mission.VoyageId = voyage.Id;
+                        mission.VesselId = vessel.Id;
+                        mission.IsEvaluation = voyage.IsEvaluation;
+                        mission.Mode = md.Mode;
+                        mission.Tier = md.Tier;
+                        if (stage != null)
+                        {
+                            mission.RequiresReview = stage.RequiresReview;
+                            mission.ReviewDenyAction = stage.ReviewDenyAction;
+                        }
+
+                        // A requested captain applies to the first stage only; later stages are routed by their persona.
+                        if (first) mission.RequestedCaptainId = md.RequestedCaptainId;
+
+                        // The advisor sees the voyage's earlier first stages as active work, as it did when each was stored
+                        // before the next was advised; it may chain this mission after one of them.
+                        if (first)
+                        {
+                            MissionDispatchAdvice? advice = await AdviseAsync(mission, vessel, firstStages, token).ConfigureAwait(false);
+                            ApplyAdvice(mission, advice, voyageWarnings, voyageLint);
+                            roots[index] = mission;
+                            firstStages.Add(mission);
+                        }
+
+                        chain.Add(mission);
+                        previousMissionId = mission.Id;
                     }
+                }
 
-                    // A requested captain applies to the first stage only; later stages are routed by their persona.
-                    if (first) mission.RequestedCaptainId = md.RequestedCaptainId;
-
-                    MissionDispatchAdvice? advice = first ? await AdviseAsync(mission, vessel, token).ConfigureAwait(false) : null;
-                    mission = await _Database.Missions.CreateAsync(mission, token).ConfigureAwait(false);
-                    CrashPoints.Hit(CrashPointNames.VoyageMissionCreated);
-                    if (first) roots[index] = mission;
-                    ApplyAdvice(mission, advice, voyageWarnings, voyageLint);
+                await _Database.Missions.CreateChainAsync(chain, Array.Empty<MissionDependencyUpdate>(), token).ConfigureAwait(false);
+                CrashPoints.Hit(CrashPointNames.VoyageMissionCreated);
+                foreach (Mission mission in chain)
+                {
                     await PersistMissionPlaybooksAsync(mission, voyage.SelectedPlaybooks, token).ConfigureAwait(false);
                     _Logging.Info(_Header + "created mission " + mission.Id + ": " + mission.Title
-                        + (staged ? " (persona " + mission.Persona + (first ? "" : ", depends on " + previousMissionId) + ")" : ""));
-
-                    // Later stages wait for their dependency; a first stage chained after an overlapping mission waits too.
-                    if (first)
-                    {
-                        await _Missions.TryAssignAsync(mission, vessel, LaunchInBackground, token).ConfigureAwait(false);
-                        CrashPoints.Hit(CrashPointNames.VoyageMissionAssigned);
-                    }
-
-                    previousMissionId = mission.Id;
+                        + (staged ? " (persona " + mission.Persona + (String.IsNullOrEmpty(mission.DependsOnMissionId) ? "" : ", depends on " + mission.DependsOnMissionId) + ")" : ""));
                 }
-            }
 
-            // InProgress only once a mission was admitted.
-            List<Mission> created = await _Database.Missions.EnumerateByVoyageAsync(voyage.Id, token).ConfigureAwait(false);
-            if (created.Any(m => m.Status == MissionStatusEnum.Assigned || m.Status == MissionStatusEnum.InProgress))
-                voyage.Status = VoyageStatusEnum.InProgress;
-            voyage.LastUpdateUtc = DateTime.UtcNow;
-            await _Database.Voyages.UpdateAsync(voyage, token).ConfigureAwait(false);
-            voyage.OverlapWarnings = voyageWarnings.Count > 0 ? voyageWarnings.Take(BlackBoxInsightLimits.MaxOverlapWarnings).ToList() : null;
-            voyage.BriefLintWarnings = voyageLint.Count > 0 ? voyageLint.Take(BlackBoxInsightLimits.MaxLintFindings).ToList() : null;
-            return voyage;
+                voyage.Status = VoyageStatusEnum.Open;
+                voyage.LastUpdateUtc = DateTime.UtcNow;
+                voyage = await _Database.Voyages.UpdateAsync(voyage, token).ConfigureAwait(false);
+                CrashPoints.Hit(CrashPointNames.VoyageOpened);
+                _Logging.Info(_Header + "opened voyage " + voyage.Id + " with " + chain.Count + " mission(s)");
+
+                // One assignment pass over the first stages. Later stages wait for their dependency, and a first stage
+                // chained after an overlapping mission waits too.
+                foreach (Mission mission in firstStages)
+                {
+                    await _Missions.TryAssignAsync(mission, vessel, LaunchInBackground, token).ConfigureAwait(false);
+                    CrashPoints.Hit(CrashPointNames.VoyageMissionAssigned);
+                }
+
+                // InProgress only once a mission was admitted.
+                List<Mission> created = await _Database.Missions.EnumerateByVoyageAsync(voyage.Id, token).ConfigureAwait(false);
+                if (created.Any(m => m.Status == MissionStatusEnum.Assigned || m.Status == MissionStatusEnum.InProgress))
+                {
+                    voyage.Status = VoyageStatusEnum.InProgress;
+                    voyage.LastUpdateUtc = DateTime.UtcNow;
+                    voyage = await _Database.Voyages.UpdateAsync(voyage, token).ConfigureAwait(false);
+                }
+
+                voyage.OverlapWarnings = voyageWarnings.Count > 0 ? voyageWarnings.Take(BlackBoxInsightLimits.MaxOverlapWarnings).ToList() : null;
+                voyage.BriefLintWarnings = voyageLint.Count > 0 ? voyageLint.Take(BlackBoxInsightLimits.MaxLintFindings).ToList() : null;
+                return voyage;
+            }
+            finally
+            {
+                _Creating.TryRemove(voyage.Id, out _);
+            }
         }
 
         private static Voyage NewVoyage(AuthContext? caller, VoyageCreationRequest request, string? tenantId, string? vesselOwnerId)

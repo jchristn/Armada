@@ -831,7 +831,7 @@ Paginated enumeration of any entity type with filtering and sorting. This is the
 | `vessels` | `fleetId`, `createdAfter`, `createdBefore` |
 | `captains` | `status` (Idle/Working/Planning/Refining/Stalled/Stopping/Quarantined/Analyzing), `createdAfter`, `createdBefore` |
 | `missions` | `status`, `vesselId`, `captainId`, `voyageId`, `createdAfter`, `createdBefore` |
-| `voyages` | `status` (Open/InProgress/Complete/Failed/Cancelled), `createdAfter`, `createdBefore` |
+| `voyages` | `status` (Building/Open/InProgress/Complete/Failed/Cancelled), `createdAfter`, `createdBefore` |
 | `docks` | `vesselId`, `createdAfter`, `createdBefore` |
 | `signals` | `signalType`, `captainId`, `toCaptainId`, `unreadOnly`, `createdAfter`, `createdBefore` |
 | `events` | `eventType`, `captainId`, `missionId`, `vesselId`, `voyageId`, `createdAfter`, `createdBefore` |
@@ -3183,7 +3183,7 @@ Same scope as `enumerate` voyages.
   "properties": {
     "pageNumber": { "type": "integer", "description": "Page number (1-based, default 1)" },
     "pageSize": { "type": "integer", "description": "Page size (1 to 1000, default 10; out-of-range values are normalized)" },
-    "status": { "type": "string", "description": "Open, InProgress, Complete, Failed, or Cancelled" },
+    "status": { "type": "string", "description": "Building, Open, InProgress, Complete, Failed, or Cancelled" },
     "order": { "type": "string", "description": "CreatedDescending (default) or CreatedAscending" }
   }
 }

@@ -527,7 +527,12 @@ routing; a renamed Architect slice breaks fan-out recovery. Everything a program
 - [ ] **RS-4.3** Atomic creation. Create the voyage (status `Building`) and all mission rows in one transaction, then
   move it to `Open` and run one assignment pass. No captain launches before every stage of the voyage exists. Same
   for Architect fan-out (one transaction for all slice rows, rewiring, and ownership) and stage handoff (reuse the
-  `CreateChainAsync` pattern). Crash-point tests. Evidence:
+  `CreateChainAsync` pattern). Crash-point tests. Evidence: voyage creation done (RS-4.3a): `VoyageStatusEnum.Building`,
+  missions written with one `CreateChainAsync`, `TryAssignAsync` holds missions of a Building voyage, health phase
+  `FailInterruptedVoyageCreationsAsync`, advisor overload with planned missions; `Services.VoyageCreation`
+  (`nothing_admitted_while_building`, `interrupted_creation_fails_on_health_check`, `advisor_sees_earlier_missions`) and
+  `Services.CrashConsistency` crash cases at `voyage.created`, `voyage.mission-created`, `voyage.opened`,
+  `voyage.mission-assigned` (the pending voyage crash case now runs). Fan-out (RS-4.3b) and handoff (RS-4.3c) pending.
 - [ ] **RS-4.4** One hierarchy and ownership validator: a pure function over (index, parent, dependsOn, ownedPaths)
   used by REST, MCP, Architect v3/v4 plans, and legacy plans, with one outcome per rule (reject with a typed error
   list). Ownership overlap is checked for all dispatch paths. Replaces `MissionHierarchyPlan.Resolve`,

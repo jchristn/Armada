@@ -6,13 +6,18 @@ namespace Armada.Core.Services
     /// </summary>
     public static class CrashPointNames
     {
-        /// <summary>The voyage row exists; none of its missions do.</summary>
+        /// <summary>The Building voyage row exists; none of its missions do.</summary>
         public const string VoyageCreated = "voyage.created";
 
-        /// <summary>A voyage mission row was created; later missions of the voyage may not exist yet.</summary>
+        /// <summary>Every mission of a Building voyage was written in one transaction; the voyage is not Open yet.</summary>
         public const string VoyageMissionCreated = "voyage.mission-created";
 
-        /// <summary>A voyage mission was assigned (and possibly launched) before the rest of the voyage was built.</summary>
+        /// <summary>
+        /// After a voyage's missions are written and it moved from Building to Open, before the assignment pass.
+        /// </summary>
+        public const string VoyageOpened = "voyage.opened";
+
+        /// <summary>A first-stage mission of an Open voyage was assigned (and possibly launched); every mission exists.</summary>
         public const string VoyageMissionAssigned = "voyage.mission-assigned";
 
         /// <summary>The agent process started; the captain's process id is not recorded yet.</summary>

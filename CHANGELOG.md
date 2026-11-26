@@ -49,6 +49,13 @@ Conductor) with Opus and GPT-6.1 reliable. The work is tracked item by item in `
   dashboard and mobile voyage forms and the TUI Create Voyage screen have a Persona and a Mode per mission,
   `armada voyage create` has `--persona` and `--mode`, the .NET client's `DispatchRequest` has both fields, and Postman
   has a "Dispatch Persona and Mode Voyage" example (RS-4.2).
+- **No captain starts before its whole voyage exists.** A voyage is now created with the new status `Building`; every
+  mission of every stage is written in one transaction, playbook snapshots follow, and only then does the voyage move
+  to `Open` and get one assignment pass. Before, each mission was written and assigned in turn, so the first could be
+  running while the rest were still being created, and a crash part-way left a half-built open voyage. A mission of a
+  `Building` voyage is never admitted. A creation that fails or is cut short by a restart is moved to `Failed` by the
+  next health check, its missions cancelled with a black box entry. The dispatch advisor still sees the voyage's
+  earlier missions, so overlap warnings and chaining inside one voyage are unchanged (RS-4.3).
 - **Recovery state survives a restart.** Endpoint circuit breakers, launch backoff (with the captains that failed to
   start the mission), the start of a transient outage, and escalation rule cooldowns were kept only in memory, so a
   restart sent missions straight back to a failing endpoint, relaunched a broken captain at once, granted an outage a

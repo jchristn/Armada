@@ -194,7 +194,7 @@ namespace Armada.Server.Mcp.Tools
                     {
                         pageNumber = new { type = "integer", description = "Page number (1-based, default 1)" },
                         pageSize = new { type = "integer", description = "Page size (1 to 1000, default 10; out-of-range values are normalized)" },
-                        status = new { type = "string", description = "Optional voyage status: Open, InProgress, Complete, Failed, or Cancelled" },
+                        status = new { type = "string", description = "Optional voyage status: Building, Open, InProgress, Complete, Failed, or Cancelled" },
                         order = new { type = "string", description = "CreatedDescending (default) or CreatedAscending" }
                     }
                 },

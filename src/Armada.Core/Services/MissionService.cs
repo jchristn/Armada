@@ -508,6 +508,14 @@ namespace Armada.Core.Services
                 if (!String.IsNullOrEmpty(mission.VoyageId))
                 {
                     Voyage? voyage = await _Database.Voyages.ReadAsync(mission.VoyageId, token).ConfigureAwait(false);
+                    // RS-4.3: nothing of a voyage starts until every one of its missions exists.
+                    if (voyage != null && voyage.Status == VoyageStatusEnum.Building)
+                    {
+                        _Logging.Debug(_Header + "mission " + mission.Id + " waits: voyage " + voyage.Id + " is still being created");
+                        NoteLeftPending(mission);
+                        return false;
+                    }
+
                     if (voyage != null &&
                         (voyage.Status == VoyageStatusEnum.Cancelled ||
                          voyage.Status == VoyageStatusEnum.Failed ||
