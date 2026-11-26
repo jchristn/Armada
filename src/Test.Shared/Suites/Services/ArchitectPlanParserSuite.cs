@@ -47,6 +47,32 @@ namespace Test.Shared.Suites.Services
                 AssertEqual("C", plan.Missions[2].Description, "a missing description falls back to the title");
             }));
 
+            cases.Add(Case("parse_reports_status_and_error_detail", "Parse returns a status instead of a null error, and a JSON error names the path, line and position", TestTags.Negative, () =>
+            {
+                AssertEqual(ArchitectPlanParseStatusEnum.NoPlanFound, ArchitectPlanParser.Parse("No plan here.", 5).Status);
+                AssertEqual(ArchitectPlanParseStatusEnum.Parsed, ArchitectPlanParser.Parse("~~~armada-plan\n{\"missions\":[{\"title\":\"A\"}]}\n~~~\n", 5).Status, "a tilde fence is a plan block");
+
+                ArchitectPlanParseResult invalid = ArchitectPlanParser.Parse("```armada-plan\n{\"missions\":[{\"title\":\"A\",\n\"parent\":\"x\"}]}\n```\n", 5);
+                AssertEqual(ArchitectPlanParseStatusEnum.InvalidJson, invalid.Status);
+                AssertContains("$.missions[0].parent", invalid.Error!);
+                AssertContains("(line 2, position", invalid.Error!);
+                AssertContains("wrong type", invalid.Error!);
+
+                ArchitectPlanParseResult rejected = ArchitectPlanParser.Parse("```armada-plan\n{\"contractVersion\":4,\"missions\":[{\"title\":\"A\",\"description\":\"do a\",\"kind\":\"Implementation\"}]}\n```\n", 5);
+                AssertEqual(ArchitectPlanParseStatusEnum.Rejected, rejected.Status, "kind stays case-sensitive (R6)");
+                AssertTrue(rejected.Errors.Count > 1, "every contract error is listed in order");
+                AssertTrue(rejected.Errors.Count <= ArchitectPlanParseResult.MaxErrors + 1, "the list is capped");
+            }));
+
+            cases.Add(Case("error_list_is_capped", "More than the error cap keeps the first errors in order and counts the rest", TestTags.Negative, () =>
+            {
+                List<string> errors = Enumerable.Range(1, ArchitectPlanParseResult.MaxErrors + 5).Select(i => "e" + i).ToList();
+                List<string> capped = ArchitectPlanParseResult.Cap(errors);
+                AssertEqual(ArchitectPlanParseResult.MaxErrors + 1, capped.Count);
+                AssertEqual("e1", capped[0]);
+                AssertEqual("... and 5 more", capped[capped.Count - 1]);
+            }));
+
             cases.Add(Case("last_plan_wins", "When the plan is revised, the last valid block wins", TestTags.Positive, () =>
             {
                 string output =

@@ -70,7 +70,8 @@ namespace Armada.Core.Services
         /// <summary>
         /// Whether a work stage stopped before finishing: it produced no commit beyond the one it started from, left no
         /// diff, and never wrote a standalone <c>[ARMADA:RESULT] COMPLETE</c> line outside a fenced block. A marker
-        /// quoted in prose, placed inside a fence, or followed by more words on the same line does not count. Unlike
+        /// quoted in prose, placed inside a fence, or followed by more words on the same line does not count; bold or
+        /// code-span decoration around the line does (<see cref="CompletionLine.IsCompletionLine"/>). Unlike
         /// <see cref="IsNoOp"/>, this holds however long the run took and however much it narrated, which is how a
         /// model that ends its turn mid-task (still reading files) looks. Unknown commits are treated as "made
         /// progress" so a gap in the evidence never rejects real work.
@@ -85,7 +86,7 @@ namespace Armada.Core.Services
             if (!String.IsNullOrWhiteSpace(diffSnapshot)) return false;
             if (String.IsNullOrWhiteSpace(startCommit) || String.IsNullOrWhiteSpace(producedCommit)) return false;
             if (!String.Equals(startCommit.Trim(), producedCommit.Trim(), StringComparison.OrdinalIgnoreCase)) return false;
-            return !ModelProbeScorer.HasWorkerResultLine(agentOutput);
+            return !CompletionLine.HasCompletionLine(agentOutput);
         }
 
         #endregion

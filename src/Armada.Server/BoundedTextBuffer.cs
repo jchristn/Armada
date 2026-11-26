@@ -8,7 +8,7 @@ namespace Armada.Server
     /// </summary>
     internal static class BoundedTextBuffer
     {
-        private const string TruncationMarker = "\n[...output truncated...]\n";
+        private const string TruncationMarker = "\n" + Armada.Core.Services.ProtocolLines.TruncationMarker + "\n";
 
         public static void AppendLine(StringBuilder builder, string line, int maxChars)
         {

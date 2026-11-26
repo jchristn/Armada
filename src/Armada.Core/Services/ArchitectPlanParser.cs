@@ -5,10 +5,11 @@ namespace Armada.Core.Services
     using System.Linq;
     using System.Text;
     using System.Text.Json;
+    using Armada.Core.Enums;
     using Armada.Core.Models;
 
     /// <summary>
-    /// Reads the structured plan an Architect captain emits as a fenced code block whose info string is
+    /// Reads the structured plan an Architect captain emits as a fenced code block (backticks or tildes) whose info string is
     /// <c>armada-plan</c>:
     /// <code>
     /// ```armada-plan
@@ -74,42 +75,79 @@ namespace Armada.Core.Services
         /// <returns>True when a valid plan was found.</returns>
         public static bool TryParse(string? output, out ArchitectPlan? plan, out string? error, int maxHierarchyDepth)
         {
-            plan = null;
-            error = null;
-            if (String.IsNullOrWhiteSpace(output)) return false;
+            ArchitectPlanParseResult result = Parse(output, maxHierarchyDepth);
+            plan = result.Plan;
+            error = result.Error;
+            return result.Status == ArchitectPlanParseStatusEnum.Parsed;
+        }
+
+        /// <summary>
+        /// Read an Architect plan from the final <c>armada-plan</c> block (a backtick or tilde fence). The final block must be
+        /// valid: an Architect that revises its plan emits the final one last, and a malformed final block never falls back
+        /// to an earlier one. Validation stays strict; a value of the wrong type or a wrong-case <c>kind</c> is reported, not
+        /// coerced, so the Architect fixes it in a repair turn.
+        /// </summary>
+        /// <param name="output">Architect output.</param>
+        /// <param name="maxHierarchyDepth">Deepest allowed parent chain (Concurrency.MaxHierarchyDepth).</param>
+        /// <returns>The status, the plan when valid, and the ordered, capped error list when not.</returns>
+        public static ArchitectPlanParseResult Parse(string? output, int maxHierarchyDepth)
+        {
+            ArchitectPlanParseResult result = new ArchitectPlanParseResult();
+            if (String.IsNullOrWhiteSpace(output)) return result;
             foreach (string block in ExtractPlanBlocks(output))
             {
+                result = new ArchitectPlanParseResult();
                 ArchitectPlan? candidate;
                 try { candidate = JsonSerializer.Deserialize<ArchitectPlan>(block, _Options); }
-                catch (JsonException)
+                catch (JsonException ex)
                 {
                     // A later malformed revision must not silently dispatch an older plan.
-                    plan = null;
-                    error = "Architect plan JSON is invalid. Emit a complete armada-plan block with numeric dependencies.";
+                    string detail = DescribeJsonError(ex);
+                    result.Status = ArchitectPlanParseStatusEnum.InvalidJson;
+                    result.Errors.Add(detail);
+                    result.Error = "Architect plan JSON is invalid: " + detail + ". Emit a complete armada-plan block with numeric dependencies.";
                     continue;
                 }
                 try { CollectionBounds.Validate(candidate); }
                 catch (CollectionLimitExceededException limit)
                 {
                     // An oversized plan is rejected (never truncated): the Architect must split the work.
-                    plan = null;
-                    error = "Architect plan rejected: " + limit.Message + " Split the work into smaller plans.";
+                    result.Status = ArchitectPlanParseStatusEnum.TooLarge;
+                    result.Errors.Add(limit.Message);
+                    result.Error = "Architect plan rejected: " + limit.Message + " Split the work into smaller plans.";
                     continue;
                 }
                 if (candidate?.ContractVersion != null)
                 {
-                    List<string> errors = ValidateContract(candidate, maxHierarchyDepth);
-                    plan = errors.Count == 0 ? candidate : null;
-                    error = errors.Count == 0 ? null : "Architect plan contract rejected: " + String.Join("; ", errors)
+                    List<string> errors = ArchitectPlanParseResult.Cap(ValidateContract(candidate, maxHierarchyDepth));
+                    if (errors.Count == 0)
+                    {
+                        result.Status = ArchitectPlanParseStatusEnum.Parsed;
+                        result.Plan = candidate;
+                        continue;
+                    }
+
+                    result.Status = ArchitectPlanParseStatusEnum.Rejected;
+                    result.Errors = errors;
+                    result.Error = "Architect plan contract rejected: " + String.Join("; ", errors)
                         + ". Remediation: correct the plan before dispatching Workers; retain objective requirement IDs and explicit failure-case evidence.";
                 }
                 else
                 {
-                    plan = Normalize(candidate, maxHierarchyDepth, out string? normalizeError);
-                    error = plan == null ? normalizeError ?? "Architect plan contains no valid missions." : null;
+                    ArchitectPlan? normalized = Normalize(candidate, maxHierarchyDepth, out string? normalizeError);
+                    if (normalized != null)
+                    {
+                        result.Status = ArchitectPlanParseStatusEnum.Parsed;
+                        result.Plan = normalized;
+                        continue;
+                    }
+
+                    result.Status = ArchitectPlanParseStatusEnum.Rejected;
+                    result.Error = normalizeError ?? "Architect plan contains no valid missions.";
+                    result.Errors.Add(result.Error);
                 }
             }
-            return plan != null;
+            return result;
         }
 
         /// <summary>Render validated structured criteria into the persisted slice, so every downstream stage sees the same contract.</summary>
@@ -296,21 +334,25 @@ namespace Armada.Core.Services
             string[] lines = output.Replace("\r\n", "\n").Split('\n');
             StringBuilder? current = null;
 
+            string? openFence = null;
+
             foreach (string rawLine in lines)
             {
                 string line = rawLine.Trim();
                 if (current == null)
                 {
-                    if (line.StartsWith("```", StringComparison.Ordinal)
+                    // The plan block may use a backtick or a tilde fence; it closes with the same fence.
+                    if (ProtocolLines.IsFence(line)
                         && String.Equals(line.Substring(3).Trim(), FenceInfo, StringComparison.OrdinalIgnoreCase))
                     {
+                        openFence = line.Substring(0, 3);
                         current = new StringBuilder();
                     }
 
                     continue;
                 }
 
-                if (line.StartsWith("```", StringComparison.Ordinal))
+                if (line.StartsWith(openFence!, StringComparison.Ordinal))
                 {
                     blocks.Add(current.ToString());
                     current = null;
@@ -321,6 +363,22 @@ namespace Armada.Core.Services
             }
 
             return blocks;
+        }
+
+        // Where and why the JSON failed, so the repair turn can point at the exact value.
+        private static string DescribeJsonError(JsonException ex)
+        {
+            string reason = ex.Message;
+            int cut = reason.IndexOf(" Path:", StringComparison.Ordinal);
+            if (cut < 0) cut = reason.IndexOf(" LineNumber:", StringComparison.Ordinal);
+            if (cut > 0) reason = reason.Substring(0, cut);
+            reason = reason.TrimEnd('.', ' ');
+            if (reason.StartsWith("The JSON value could not be converted", StringComparison.Ordinal))
+                reason = "value has the wrong type (numbers and booleans must not be quoted)";
+            StringBuilder text = new StringBuilder(reason);
+            if (!String.IsNullOrEmpty(ex.Path)) text.Append(" at ").Append(ex.Path);
+            if (ex.LineNumber.HasValue) text.Append(" (line ").Append(ex.LineNumber.Value + 1).Append(", position ").Append(ex.BytePositionInLine ?? 0).Append(')');
+            return text.ToString();
         }
 
         private static bool IsPlaceholder(string title)

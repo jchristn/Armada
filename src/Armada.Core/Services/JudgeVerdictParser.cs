@@ -8,7 +8,7 @@ namespace Armada.Core.Services
     /// <summary>
     /// Reads a Judge mission's verdict from its output using only the structured protocol line
     /// <c>[ARMADA:VERDICT] PASS|FAIL|NEEDS_REVISION|SPEC_CONFLICT</c>, which must be a whole line on its own outside any fenced code
-    /// block. Prose ("Verdict: PASS", "### Verdict: **PASS**"), bare PASS/FAIL lines (for example test-runner output),
+    /// block (fence state resets at the output truncation marker). Prose ("Verdict: PASS", "### Verdict: **PASS**"), bare PASS/FAIL lines (for example test-runner output),
     /// inline mentions, and quoted examples are never verdicts. The contract asks for exactly one verdict line: a
     /// repeated identical line is accepted, but conflicting verdict lines are treated as no verdict so that an echoed
     /// line can never override the Judge's own.
@@ -39,7 +39,14 @@ namespace Armada.Core.Services
             foreach (string rawLine in output.Replace("\r\n", "\n").Split('\n'))
             {
                 string line = rawLine.Trim();
-                if (line.StartsWith("```", StringComparison.Ordinal) || line.StartsWith("~~~", StringComparison.Ordinal))
+                // A fence cut open by output truncation ends at the truncation marker, not at the end of the output.
+                if (ProtocolLines.IsTruncationMarker(line))
+                {
+                    inFence = false;
+                    continue;
+                }
+
+                if (ProtocolLines.IsFence(line))
                 {
                     inFence = !inFence;
                     continue;

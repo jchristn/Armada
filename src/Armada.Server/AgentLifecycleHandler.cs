@@ -1196,6 +1196,14 @@ namespace Armada.Server
                     // so the Harbor's API runtime enforces the policy reported in this mission's log.
                 }
 
+                // Tell the runtime explicitly whether this persona must end with the completion line (the API endpoint
+                // runtime reads it; a Harbor receives it in the launch environment).
+                if (Armada.Core.Services.CompletionLine.IsRequiredFor(mission.Persona))
+                {
+                    environment ??= new Dictionary<string, string>();
+                    environment[Armada.Core.Services.CompletionLine.RequiredEnvironmentVariable] = "1";
+                }
+
                 processId = await runtime.StartAsync(
                     dock.WorktreePath ?? throw new InvalidOperationException("Dock worktree path is null"),
                     prompt,

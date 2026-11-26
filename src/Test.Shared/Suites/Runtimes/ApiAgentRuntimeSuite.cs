@@ -105,6 +105,17 @@ namespace Test.Shared.Suites.Runtimes
 
             cases.Add(CaseAsync("plain_chat_complete_think_block_keeps_visible_verdict", "A complete think block in a plain-chat reply is not stored with the visible verdict", TestTags.Positive, () => AssertThinkBlockReplyAsync(true)));
 
+            cases.Add(CaseAsync("completion_requirement_is_explicit", "The completion line is required only when the launch says so, and decoration around it is accepted", TestTags.Positive, async () =>
+            {
+                // A Judge prompt that mentions the marker (the shared progress-signals section does) is not asked for it.
+                AssertEqual(0, await RunTerminalReplyAsync("Review. Workers end with [ARMADA:RESULT] COMPLETE; you end with a verdict.", null, "Reviewed the diff.\n\n[ARMADA:VERDICT] PASS").ConfigureAwait(false));
+                // A required line written in bold or as a code span is the same line Core accepts.
+                AssertEqual(0, await RunTerminalReplyAsync("Implement it.", RequireCompletionLine(), "Implemented and tested.\n\n**[ARMADA:RESULT] COMPLETE**").ConfigureAwait(false));
+                AssertEqual(0, await RunTerminalReplyAsync("Implement it.", RequireCompletionLine(), "Implemented and tested.\n\n`[ARMADA:RESULT] COMPLETE`").ConfigureAwait(false));
+                // Required but missing: bounded continuation, then failure.
+                AssertEqual(1, await RunTerminalReplyAsync("Implement it.", RequireCompletionLine(), "Implemented and tested.").ConfigureAwait(false));
+            }));
+
             cases.Add(CaseAsync("incomplete_terminal_responses_are_not_success", "Empty or introductory terminal replies cannot reuse earlier narration as a mission result", TestTags.Negative, async () =>
             {
                 foreach (bool recover in new[] { false, true })
@@ -126,7 +137,7 @@ namespace Test.Shared.Suites.Runtimes
                         runtime.OnDiagnostic += (pid, diagnostic) => diagnostics.Add(diagnostic);
                         runtime.OnProcessExited += (pid, value) => { code = value ?? -1; exited.Set(); };
                         string finalPath = Path.Combine(dir, "result.txt");
-                        await runtime.StartAsync(dir, "Implement the mission. End with [ARMADA:RESULT] COMPLETE", finalMessageFilePath: finalPath).ConfigureAwait(false);
+                        await runtime.StartAsync(dir, "Implement the mission. End with [ARMADA:RESULT] COMPLETE", RequireCompletionLine(), finalMessageFilePath: finalPath).ConfigureAwait(false);
                         AssertTrue(exited.Wait(TimeSpan.FromSeconds(10)), "Incomplete responses must terminate or recover within the bounded budget.");
                         AssertEqual(recover ? 0 : 1, code);
                         AssertFalse(File.ReadAllText(finalPath).Contains("I will start"), "The final failed empty response clears earlier narration.");
@@ -567,7 +578,7 @@ namespace Test.Shared.Suites.Runtimes
                     runtime.OnProcessExited += (pid, value) => { code = value ?? -1; exited.Set(); };
                     string finalPath = Path.Combine(dir, "result.txt");
 
-                    await runtime.StartAsync(dir, "Implement the mission. End with [ARMADA:RESULT] COMPLETE", finalMessageFilePath: finalPath).ConfigureAwait(false);
+                    await runtime.StartAsync(dir, "Implement the mission. End with [ARMADA:RESULT] COMPLETE", RequireCompletionLine(), finalMessageFilePath: finalPath).ConfigureAwait(false);
                     AssertTrue(exited.Wait(TimeSpan.FromSeconds(10)), "the run finishes");
                     AssertEqual(0, code, "one transient failure does not end the run");
                     AssertContains("Done after the retry.", File.ReadAllText(finalPath));
@@ -591,7 +602,7 @@ namespace Test.Shared.Suites.Runtimes
                     int code = -1;
                     runtime.OnProcessExited += (pid, value) => { code = value ?? -1; exited.Set(); };
 
-                    await runtime.StartAsync(dir, "Implement the mission. End with [ARMADA:RESULT] COMPLETE").ConfigureAwait(false);
+                    await runtime.StartAsync(dir, "Implement the mission. End with [ARMADA:RESULT] COMPLETE", RequireCompletionLine()).ConfigureAwait(false);
                     AssertTrue(exited.Wait(TimeSpan.FromSeconds(10)));
                     AssertEqual(1, code);
                     AssertEqual(1, script.Count, "the second scripted reply was never requested");
@@ -933,7 +944,7 @@ namespace Test.Shared.Suites.Runtimes
                             endpoint.ApiKey = "test-token";
                             LocalHarborJobRunner runner = new LocalHarborJobRunner(CreateLogging(), new AgentRuntimeFactory(CreateLogging()), Path.Combine(dir, "scratch"));
                             Armada.Core.Harbor.HarborLaunchRequest request = new Armada.Core.Harbor.HarborLaunchRequest { JobId = "reasoning-budget", Runtime = "ApiEndpoint", WorkingDirectory = dir,
-                                Prompt = "Finish the mission with [ARMADA:RESULT] COMPLETE", InferenceEndpoint = Armada.Core.Harbor.HarborInferenceEndpoint.FromEndpoint(endpoint), ReturnProviderErrors = reportErrors };
+                                Prompt = "Finish the mission with [ARMADA:RESULT] COMPLETE", Environment = RequireCompletionLine(), InferenceEndpoint = Armada.Core.Harbor.HarborInferenceEndpoint.FromEndpoint(endpoint), ReturnProviderErrors = reportErrors };
                             RuntimeProviderError? failure = null;
                             List<string> lines = new List<string>();
                             int code = -1; using ManualResetEventSlim exited = new ManualResetEventSlim(false);
@@ -980,7 +991,7 @@ namespace Test.Shared.Suites.Runtimes
                             runtime.OnProcessExited += (pid, value) => { code = value ?? -1; exited.Set(); };
                             string finalPath = Path.Combine(dir, "final.txt");
                             File.WriteAllText(finalPath, "stale result from an earlier run");
-                            await runtime.StartAsync(dir, "Finish the task with [ARMADA:RESULT] COMPLETE", finalMessageFilePath: finalPath).ConfigureAwait(false);
+                            await runtime.StartAsync(dir, "Finish the task with [ARMADA:RESULT] COMPLETE", RequireCompletionLine(), finalMessageFilePath: finalPath).ConfigureAwait(false);
                             AssertTrue(exited.Wait(TimeSpan.FromSeconds(20)), "Native HTTP continuation must be bounded.");
                             AssertEqual(recover ? 0 : 1, code);
                             AssertFalse(File.ReadAllText(finalPath).Contains("stale result"), "The terminal result replaces earlier output even when empty.");
@@ -1159,6 +1170,34 @@ namespace Test.Shared.Suites.Runtimes
             finally
             {
                 Cleanup(dir);
+            }
+        }
+
+        private static Dictionary<string, string> RequireCompletionLine()
+        {
+            return new Dictionary<string, string> { [CompletionLine.RequiredEnvironmentVariable] = "1" };
+        }
+
+        private static async Task<int> RunTerminalReplyAsync(string prompt, Dictionary<string, string>? environment, string reply)
+        {
+            string dir = NewTempDir();
+            try
+            {
+                Queue<ToolChatResponse> script = new Queue<ToolChatResponse>();
+                script.Enqueue(new ToolChatResponse { Success = true, Text = "Reading.", ToolCalls = new List<ToolCall> { new ToolCall { Id = "read", Name = "list_directory", ArgumentsJson = "{}" } } });
+                script.Enqueue(new ToolChatResponse { Success = true, Text = reply, FinishReason = "stop" });
+                ModelEndpoint endpoint = new ModelEndpoint { Kind = ModelEndpointKindEnum.Inference, Provider = ModelProviderEnum.OpenAICompatible, BaseUrl = "http://localhost:1", InferenceOptions = new InferenceOptions { McpToolsEnabled = false } };
+                ApiAgentRuntime runtime = new ApiAgentRuntime(endpoint, CreateLogging(), 10, (ep, log) => new ScriptedClient(script, log));
+                using ManualResetEventSlim exited = new ManualResetEventSlim(false);
+                int code = -1;
+                runtime.OnProcessExited += (pid, value) => { code = value ?? -1; exited.Set(); };
+                await runtime.StartAsync(dir, prompt, environment).ConfigureAwait(false);
+                AssertTrue(exited.Wait(TimeSpan.FromSeconds(10)), "The run must finish.");
+                return code;
+            }
+            finally
+            {
+                try { Directory.Delete(dir, true); } catch { }
             }
         }
 

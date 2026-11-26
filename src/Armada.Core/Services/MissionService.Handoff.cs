@@ -129,10 +129,12 @@ namespace Armada.Core.Services
             {
                 // A single valid plan outside a closed armada-plan fence is re-fenced (appended below the original output)
                 // instead of being sent back for a format repair; two plan blocks or an invalid plan are never repaired.
-                if (!ArchitectPlanParser.TryParse(completedMission.AgentOutput, out _, out string? canonicalError, _Settings.Concurrency.MaxHierarchyDepth) && canonicalError == null)
-                    await TryRepairArchitectPlanAsync(completedMission, token).ConfigureAwait(false);
+                ArchitectPlanParseResult planResult = ArchitectPlanParser.Parse(completedMission.AgentOutput, _Settings.Concurrency.MaxHierarchyDepth);
+                if (planResult.Status == ArchitectPlanParseStatusEnum.NoPlanFound
+                    && await TryRepairArchitectPlanAsync(completedMission, token).ConfigureAwait(false))
+                    planResult = ArchitectPlanParser.Parse(completedMission.AgentOutput, _Settings.Concurrency.MaxHierarchyDepth);
 
-                ArchitectPlanParser.TryParse(completedMission.AgentOutput, out _, out string? planError, _Settings.Concurrency.MaxHierarchyDepth);
+                string? planError = planResult.Error;
                 List<ParsedArchitectMission> parsed = planError == null ? ParseArchitectOutput(completedMission) : new List<ParsedArchitectMission>();
                 planError ??= ValidateArchitectHierarchy(parsed);
                 if (planError != null)

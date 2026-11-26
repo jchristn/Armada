@@ -277,6 +277,11 @@ namespace Armada.Runtimes
                 environment.TryGetValue("ARMADA_MCP_TOKEN", out mcpToken);
             }
 
+            // The Admiral states whether this launch must end with the completion line; the prompt is never searched for it.
+            bool requiresCompletionLine = environment != null
+                && environment.TryGetValue(CompletionLine.RequiredEnvironmentVariable, out string? requiredFlag)
+                && String.Equals(requiredFlag, "1", StringComparison.Ordinal);
+
             int processId = Interlocked.Increment(ref _PidCounter);
             CancellationTokenSource cts = CancellationTokenSource.CreateLinkedTokenSource(token);
             _Running[processId] = cts;
@@ -285,7 +290,7 @@ namespace Armada.Runtimes
             OnProcessStarted?.Invoke(processId);
 
             // Run the loop in the background so StartAsync returns the pid promptly, mirroring a process launch.
-            Task loop = Task.Run(() => RunLoopAsync(processId, endpoint, workingDirectory, prompt, model, captain?.ReasoningEffort, finalMessageFilePath, mcpUrl, mcpToken, cts));
+            Task loop = Task.Run(() => RunLoopAsync(processId, endpoint, workingDirectory, prompt, model, captain?.ReasoningEffort, finalMessageFilePath, mcpUrl, mcpToken, requiresCompletionLine, cts));
             _Loops[processId] = loop;
             _ = loop.ContinueWith(_ => _Loops.TryRemove(processId, out Task? _), TaskScheduler.Default);
 
@@ -520,6 +525,7 @@ namespace Armada.Runtimes
             string? finalMessageFilePath,
             string? mcpUrl,
             string? mcpToken,
+            bool requiresCompletionLine,
             CancellationTokenSource cts)
         {
             int exitCode = 0;
@@ -663,7 +669,7 @@ namespace Armada.Runtimes
                 int maxIterations = Math.Min(_MaxIterations, settings.MaxIterations);
                 int incompleteResponses = 0;
                 RuntimeProviderError? tokenLimitFailure = null;
-                bool requiresCompletion = prompt.Contains("[ARMADA:RESULT] COMPLETE", StringComparison.Ordinal);
+                bool requiresCompletion = requiresCompletionLine;
                 long lastPromptTokens = 0;
                 for (int iteration = 0; iteration < maxIterations; iteration++)
                 {
@@ -1088,8 +1094,10 @@ namespace Armada.Runtimes
             if (String.IsNullOrWhiteSpace(text) || IsTokenLimit(finishReason)) return false;
             if (!requiresCompletion) return true;
             string[] lines = text.Replace("\r", "").Split('\n');
-            // A verifier that found a blocking product defect ends with the blocked outcome instead; that is also a finished reply.
-            bool IsEnding(string line) => line.Trim() == "[ARMADA:RESULT] COMPLETE" || line.Trim() == VerifierContract.BlockedMarker;
+            // The same decoration-tolerant matcher Core uses. A verifier that found a blocking product defect ends with the
+            // blocked outcome instead; that is also a finished reply.
+            bool IsEnding(string line) => CompletionLine.IsCompletionLine(line)
+                || String.Equals(ProtocolLines.StripDecoration(line), VerifierContract.BlockedMarker, StringComparison.Ordinal);
             return lines.Any(IsEnding) && lines.Any(line => !String.IsNullOrWhiteSpace(line) && !IsEnding(line));
         }
 
