@@ -201,16 +201,18 @@ namespace Armada.Core.Services.Interfaces
 
         /// <summary>
         /// Return the mission to Pending pinned to the chosen captain, with an escalation note and the escalation columns
-        /// updated. The caller commits the dock's work first and releases the dock and the failed captain after.
+        /// updated. The note carries the previous attempt's memory (RS-5.7): failure kind, black box rule hint, changed
+        /// files and output tail, which this method reads from the mission and its dock before clearing them. The caller
+        /// commits the dock's work first and releases the dock and the failed captain after.
         /// </summary>
         /// <param name="mission">Mission.</param>
         /// <param name="failedCaptain">The captain that could not finish.</param>
         /// <param name="choice">The chosen captain.</param>
-        /// <param name="failureReason">Why the captain could not finish.</param>
+        /// <param name="memory">The trigger: reason, failure kinds and black box step. Filled in by this method.</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>True when the mission moved to Pending; false when another writer changed it first.</returns>
-        /// <exception cref="ArgumentNullException">Thrown when mission, failed captain or choice is null.</exception>
-        Task<bool> ApplyEscalationAsync(Mission mission, Captain failedCaptain, EscalationChoice choice, string failureReason, CancellationToken token = default);
+        /// <exception cref="ArgumentNullException">Thrown when mission, failed captain, choice or memory is null.</exception>
+        Task<bool> ApplyEscalationAsync(Mission mission, Captain failedCaptain, EscalationChoice choice, EscalationMemory memory, CancellationToken token = default);
 
         /// <summary>
         /// Re-drive pipeline handoffs that dangled: WorkProduced missions whose Pending downstream

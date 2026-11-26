@@ -732,8 +732,18 @@ routing; a renamed Architect slice breaks fan-out recovery. Everything a program
   `Tui.Personas`, dashboard and mobile persona tests (2026-11-25). Not done here: a pipeline-level ladder (optional in
   this item; persona ladders cover pipelines, whose stages resolve personas); the malformed-tool-call count is in memory
   and restarts with the Admiral; the iteration-limit trigger is RS-5.12; G12 is measured by the gate in RS-14.6.
-- [ ] **RS-5.7** Escalation carries memory: the escalated attempt's prompt gets the prior attempt's failure kind,
-  output tail, diff summary, and BlackBox rule hint, rendered from typed records. Evidence:
+- [x] **RS-5.7** Escalation carries memory: the escalated attempt's prompt gets the prior attempt's failure kind,
+  output tail, diff summary, and BlackBox rule hint, rendered from typed records. Evidence: `EscalationMemory` (typed
+  trigger plus recalled facts) filled by `MissionService.ApplyEscalationAsync` before the dock goes (output tail from
+  the mission or the peeked runtime output, redacted, 2000 characters; non-scratch files changed since the dock start
+  commit) and rendered by `EscalationMemoryRenderer` into the escalation note. The hint runs `BlackBoxAdvisor.Analyze`
+  over an in-memory record (step, kinds, exit code, output tail) and keeps the strongest non-catch-all finding. All
+  three triggers pass typed input: runtime exits (`BlackBoxSiteFacts.ExecutionStepOf`), stage-check failures
+  (StageCheck) and no-op exhaustion (NoOp or Unfinished). The previous output is cleared on escalation. Tests:
+  Services.EscalationLadder `apply_escalation_pins_and_records` (note content, redaction, bound, cleared output) and
+  `escalation_memory_renders_hint_and_files`; EscalationLadder plus NoOpCompletion 30/30, AdmiralService plus
+  MultiRuntimeFlow 109/109. Docs: CAPTAIN_ROUTING.md, CHANGELOG. Diff summary is the changed-file list, not line
+  counts (the branch diff is not read on this path).
 - [ ] **RS-5.8** Rescue routing. From the second rescue on, `MissionRecoveryCoordinator.DispatchRescueAsync` uses
   the escalation selector with the failed captain excluded (`rescue.Tier = original.Tier`, line 316, is replaced).
   The rescue brief includes the output tail and BlackBox hint. Evidence:

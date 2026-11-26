@@ -140,6 +140,10 @@ Conductor) with Opus and GPT-6.1 reliable. The work is tracked item by item in `
   A model profile's `EscalateAfterResumes` escalates before the resumes are spent, and `EscalateOnOpenEndpointBreaker`
   (off by default) escalates a transient failure at once when the endpoint's breaker is open. Strict captain
   assignments still never escalate. Migration 136 adds the ladder table and the profile column (RS-5.6).
+- **Escalation carries memory.** The escalated captain's note now says how the previous attempt failed (failure kind,
+  runtime classification, exit code), the black box rule hint for that failure, which files it changed, and the end of
+  its output (redacted, at most 2000 characters), so the stronger model starts from the evidence instead of only the
+  branch (RS-5.7).
 - **Recovery state survives a restart.** Endpoint circuit breakers, launch backoff (with the captains that failed to
   start the mission), the start of a transient outage, and escalation rule cooldowns were kept only in memory, so a
   restart sent missions straight back to a failing endpoint, relaunched a broken captain at once, granted an outage a

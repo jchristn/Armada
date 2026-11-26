@@ -1084,7 +1084,7 @@ namespace Armada.Core.Services
                 // up the escalation ladder now instead of waiting out the outage.
                 if (_Settings.EscalateOnOpenEndpointBreaker && exitInfo.FailureKind == RuntimeFailureKindEnum.Transient && mission != null
                     && await _Missions.IsEndpointBreakerOpenAsync(captain, token).ConfigureAwait(false)
-                    && await TryEscalateAsync(captain, mission, failureReason + " (endpoint circuit breaker open)", capture, token).ConfigureAwait(false))
+                    && await TryEscalateAsync(captain, mission, EscalationTrigger(failureReason + " (endpoint circuit breaker open)", exitInfo), capture, token).ConfigureAwait(false))
                 {
                     RequestDispatch();
                     return;
@@ -1092,7 +1092,7 @@ namespace Armada.Core.Services
 
                 // RS-5.6: a model that emits a tool call the server cannot parse twice in a row rarely recovers on a resume.
                 if (TrackMalformedToolCall(missionId, exitInfo) && mission != null
-                    && await TryEscalateAsync(captain, mission, failureReason + " (repeated malformed tool calls)", capture, token).ConfigureAwait(false))
+                    && await TryEscalateAsync(captain, mission, EscalationTrigger(failureReason + " (repeated malformed tool calls)", exitInfo), capture, token).ConfigureAwait(false))
                 {
                     _MalformedToolCallExits.TryRemove(missionId, out int _);
                     RequestDispatch();
@@ -1125,7 +1125,7 @@ namespace Armada.Core.Services
                 // the same branch with the work so far, to the next rung of the escalation ladder (RS-5.6).
                 if ((resumable || exitInfo.FailureKind == RuntimeFailureKindEnum.Unclassified)
                     && mission != null
-                    && await TryEscalateAsync(captain, mission, failureReason, capture, token).ConfigureAwait(false))
+                    && await TryEscalateAsync(captain, mission, EscalationTrigger(failureReason, exitInfo), capture, token).ConfigureAwait(false))
                 {
                     RequestDispatch();
                     return;
@@ -2601,7 +2601,16 @@ namespace Armada.Core.Services
             return after != null && after.Status != MissionStatusEnum.Failed;
         }
 
-        private async Task<bool> TryEscalateAsync(Captain captain, Mission mission, string failureReason, StageAttemptCapture capture, CancellationToken token)
+        private static EscalationMemory EscalationTrigger(string reason, RuntimeExitInfo exitInfo)
+        {
+            return new EscalationMemory(reason, BlackBoxSiteFacts.ExecutionStepOf(exitInfo.FailureKind))
+            {
+                RuntimeFailureKind = exitInfo.FailureKind,
+                ExitCode = exitInfo.ExitCode
+            };
+        }
+
+        private async Task<bool> TryEscalateAsync(Captain captain, Mission mission, EscalationMemory memory, StageAttemptCapture capture, CancellationToken token)
         {
             // RS-5.6: the next rung of the persona's escalation ladder, or a strictly stronger captain; standalone missions
             // escalate too, up to MaxEscalations hops.
@@ -2625,7 +2634,7 @@ namespace Armada.Core.Services
                 capture.EscalatedCommit = await TryReadDockHeadAsync(dock, token).ConfigureAwait(false);
             }
 
-            if (!await _Missions.ApplyEscalationAsync(mission, captain, choice, failureReason, token).ConfigureAwait(false))
+            if (!await _Missions.ApplyEscalationAsync(mission, captain, choice, memory, token).ConfigureAwait(false))
                 return true;
 
             await ReclaimDockAsync(captain, mission, token).ConfigureAwait(false);

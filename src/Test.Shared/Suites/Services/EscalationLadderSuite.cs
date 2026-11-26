@@ -105,9 +105,13 @@ namespace Test.Shared.Suites.Services
                 await CreateLadderPersonaAsync(testDb).ConfigureAwait(false);
                 Captain qwen = await CreateCaptainAsync(testDb, "qwen", "qwen3.8").ConfigureAwait(false);
                 Captain gpt = await CreateCaptainAsync(testDb, "gpt", "gpt-6.1").ConfigureAwait(false);
-                Mission mission = await testDb.Driver.Missions.CreateAsync(new Mission("Build", "Build it") { Persona = "Worker", Status = MissionStatusEnum.InProgress, CaptainId = qwen.Id, BranchName = "armada/b" }).ConfigureAwait(false);
+                string output = new string('x', 3000) + "\nusing key sk-ant-abcdefghijklmnopqrstuv\nerror: tool call could not be parsed";
+                Mission mission = await testDb.Driver.Missions.CreateAsync(new Mission("Build", "Build it") { Persona = "Worker", Status = MissionStatusEnum.InProgress, CaptainId = qwen.Id, BranchName = "armada/b", AgentOutput = output }).ConfigureAwait(false);
                 EscalationChoice choice = (await missions.ChooseEscalationAsync(mission, qwen.Id).ConfigureAwait(false))!;
-                AssertTrue(await missions.ApplyEscalationAsync(mission, qwen, choice, "exhausted resumes").ConfigureAwait(false));
+                EscalationMemory memory = new EscalationMemory("exhausted resumes", BlackBoxStepEnum.InvalidOutput) { RuntimeFailureKind = RuntimeFailureKindEnum.TaskFailure, ExitCode = 1 };
+                AssertTrue(await missions.ApplyEscalationAsync(mission, qwen, choice, memory).ConfigureAwait(false));
+                AssertEqual(MissionFailureKindEnum.InvalidOutput, memory.FailureKind, "the mission kind comes from the runtime kind");
+                AssertEqual("qwen3.8", memory.FromModel);
                 Mission stored = (await testDb.Driver.Missions.ReadAsync(mission.Id).ConfigureAwait(false))!;
                 AssertEqual(MissionStatusEnum.Pending, stored.Status);
                 AssertEqual(gpt.Id, stored.RequestedCaptainId);
@@ -116,7 +120,36 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(qwen.Id, stored.EscalatedFromCaptainId);
                 AssertEqual("qwen3.8", stored.EscalatedFromModel);
                 AssertEqual("armada/b", stored.BranchName, "the work continues on the same branch");
+                string note = MissionNotes.Get(stored, MissionNoteKindEnum.Escalation)!;
                 AssertContains("## Escalated to gpt", MissionNotes.EffectiveDescription(stored));
+                AssertContains("qwen (qwen3.8) could not finish this mission (exhausted resumes)", note);
+                AssertContains("- Failure kind: InvalidOutput, runtime TaskFailure, exit 1", note);
+                AssertContains("error: tool call could not be parsed", note, "the output tail reaches the next captain");
+                AssertFalse(note.Contains("sk-ant-abcdefghijklmnopqrstuv"), "the output tail is redacted");
+                AssertTrue(memory.OutputTail!.Length <= EscalationMemoryRenderer.MaxOutputTailChars, "the output tail is bounded");
+                AssertNull(stored.AgentOutput, "the previous attempt's output does not leak into the escalated attempt");
+            }));
+
+            cases.Add(Case("escalation_memory_renders_hint_and_files", "The escalation note names the black box rule hint and the changed files, and leaves out what is unknown", TestTags.Positive, () =>
+            {
+                EscalationMemory memory = new EscalationMemory("it repeatedly completed with no changes", BlackBoxStepEnum.NoOp, MissionFailureKindEnum.NoOp) { FromCaptainName = "qwen" };
+                EscalationMemoryRenderer.ApplyHint(memory);
+                AssertNotNull(memory.Hint, "a no-op has a specific black box rule");
+                AssertFalse(memory.HintRuleId!.StartsWith("BBX-UNKNOWN", StringComparison.Ordinal), "the catch-all rule is not a hint");
+                memory.ChangedFiles = new List<string>();
+                for (int i = 0; i < 30; i++) memory.ChangedFiles.Add("src/F" + i + ".cs");
+                string note = EscalationMemoryRenderer.Render(memory, "opus");
+                AssertContains("- Likely cause: ", note);
+                AssertContains("(" + memory.HintRuleId + ")", note);
+                AssertContains("- Changed files (30): src/F0.cs", note);
+                AssertContains("and 5 more", note);
+                AssertFalse(note.Contains("```text"), "no output section without output");
+                AssertFalse(note.Contains("\u2014"), "no em-dashes");
+
+                EscalationMemory bare = new EscalationMemory("stopped", BlackBoxStepEnum.Unknown);
+                string bareNote = EscalationMemoryRenderer.Render(bare, "opus");
+                AssertFalse(bareNote.Contains("### What the previous attempt left"), "nothing known, no memory section");
+                AssertContains("The previous captain could not finish this mission (stopped).", bareNote);
             }));
 
             cases.Add(Case("ladder_entries_validated", "A ladder rung needs at least one matching field and is named in the error", TestTags.Negative, () =>

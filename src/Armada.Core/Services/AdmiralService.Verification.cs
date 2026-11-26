@@ -68,7 +68,8 @@ namespace Armada.Core.Services
                         after = resumed;
                         if (await TryResumeInPlaceAsync(captain, resumed, failure, token).ConfigureAwait(false)) return;
                     }
-                    if (await TryEscalateAsync(captain, after, failure, capture, token).ConfigureAwait(false))
+                    EscalationMemory checkMemory = new EscalationMemory(failure, BlackBoxStepEnum.StageCheck) { RuntimeFailureKind = RuntimeFailureKindEnum.TaskFailure, ExitCode = check.ExitCode };
+                    if (await TryEscalateAsync(captain, after, checkMemory, capture, token).ConfigureAwait(false))
                     { RequestDispatch(); return; }
                     await HandleTerminalProcessExitFailureAsync(captain, after, after.Id, failure, RuntimeFailureKindEnum.TaskFailure, token,
                         step: BlackBoxStepEnum.StageCheck, check: check, exitCode: 0).ConfigureAwait(false);

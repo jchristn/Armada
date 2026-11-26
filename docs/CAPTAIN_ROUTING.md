@@ -174,6 +174,13 @@ and Recorder stages, never escalate. Standalone missions escalate too. Migration
 `persona_escalation_rungs` child table on all four providers; the dashboard, mobile and terminal persona editors edit it
 with the same rung controls as the priorities.
 
+The escalated captain also gets the previous attempt's memory (RS-5.7) in the mission's escalation note: the failure
+kind (mission kind, runtime classification and exit code), the black box rule hint for that failure (the strongest
+specific rule the catalog matches; the catch-all rule is left out), the files changed on the branch since the dock
+started (up to 25 named), and the last 2000 characters of the previous output, redacted with the black box redactor.
+Parts that are not known are left out. The previous output is then cleared from the mission so it is not read as the
+escalated attempt's output.
+
 ## Explicit overrides and legacy defaults
 
 An explicit mission RequestedCaptainId takes precedence, followed by the voyage's exact per-persona captain assignment, then its wildcard (`*`) assignment. Those choices retain legacy behavior: an available requested captain bypasses AllowedPersonas and tier checks; a busy or deleted one falls back through ordinary persona/tier routing. Ownership and quarantine checks still apply. These explicit overrides bypass the hierarchy.
