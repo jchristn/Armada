@@ -106,7 +106,7 @@ namespace Armada.Core.Services
 
         #region Private-Methods
 
-        private static string? OllamaRoot(string? baseUrl)
+        internal static string? OllamaRoot(string? baseUrl)
         {
             if (String.IsNullOrWhiteSpace(baseUrl)) return null;
             string root = baseUrl.Trim().TrimEnd('/');

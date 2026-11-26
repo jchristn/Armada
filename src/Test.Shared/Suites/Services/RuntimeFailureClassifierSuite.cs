@@ -116,6 +116,7 @@ namespace Test.Shared.Suites.Services
                     { "unavailable_error", RuntimeFailureKindEnum.Transient },
                     { "runner_terminated", RuntimeFailureKindEnum.Transient },
                     { "model_loading", RuntimeFailureKindEnum.Transient },
+                    { "proxy_timeout", RuntimeFailureKindEnum.Transient },
                     { "max_iterations_reached", RuntimeFailureKindEnum.TaskFailure },
                     { "budget_exceeded", RuntimeFailureKindEnum.TaskFailure },
                     { "degenerate_output", RuntimeFailureKindEnum.TaskFailure },

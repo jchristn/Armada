@@ -127,7 +127,7 @@ namespace Armada.Core.Services
             "output_token_limit_reached", "tool_call_limit_reached", "context_limit_exceeded", "schema_validation_failed",
             "tool_call_parse_error",
             "llm_connection_error", "llm_timeout", "llm_stream_error", "api_error", "server_error", "overloaded_error",
-            "unavailable_error", "runner_terminated", "model_loading",
+            "unavailable_error", "runner_terminated", "model_loading", "proxy_timeout",
             "timeout_error", "inference_error", "llm_error", "error", "turn.failed",
             "runtime_error", "cancelled"
         };
@@ -209,7 +209,7 @@ namespace Armada.Core.Services
                     return RuntimeFailureKindEnum.ModelUnavailable;
                 case "max_iterations_reached":
                 case "budget_exceeded":
-                case "degenerate_output":
+                case OpenModelErrorPatterns.DegenerateOutput:
                 case "incomplete_completion":
                 case "output_token_limit_reached":
                 case "tool_call_limit_reached":
@@ -227,6 +227,7 @@ namespace Armada.Core.Services
                 case "unavailable_error":
                 case OpenModelErrorPatterns.RunnerTerminated:
                 case OpenModelErrorPatterns.ModelLoading:
+                case OpenModelErrorPatterns.ProxyTimeout:
                     // Overload is capacity backpressure, not an exhausted quota: retry with backoff rather than
                     // quarantining the captain as if its account were out of credit.
                     return RuntimeFailureKindEnum.Transient;

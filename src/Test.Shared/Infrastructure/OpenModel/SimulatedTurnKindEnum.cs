@@ -57,6 +57,15 @@ namespace Test.Shared.Infrastructure.OpenModel
         /// <summary>No response headers until the client gives up (a cold load or a stuck runner).</summary>
         Hang,
 
+        /// <summary>Ollama's HTTP 500 when a cold model's runner did not start in time ("timed out waiting for llama runner to start").</summary>
+        ModelLoading500,
+
+        /// <summary>A proxy's HTTP 504 after it gave up waiting for the first byte from a cold model (Conductor after 300 s).</summary>
+        ProxyFirstByteTimeout504,
+
+        /// <summary>Ollama's HTTP 500 when the model repeated one token until the server stopped it ("token repeat limit reached").</summary>
+        TokenRepeatLimit500,
+
         /// <summary>An arbitrary status code and body taken from <see cref="SimulatedTurn.Body"/>.</summary>
         RawResponse
     }

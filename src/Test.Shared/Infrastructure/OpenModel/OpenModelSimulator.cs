@@ -10,7 +10,7 @@ namespace Test.Shared.Infrastructure.OpenModel
     using System.Threading.Tasks;
 
     /// <summary>
-    /// A loopback model server that speaks the Ollama API (<c>/api/chat</c>, <c>/api/show</c>, <c>/api/ps</c>,
+    /// A loopback model server that speaks the Ollama API (<c>/api/chat</c>, <c>/api/generate</c> load requests, <c>/api/show</c>, <c>/api/ps</c>,
     /// <c>/api/tags</c>) and the OpenAI-compatible API (<c>/v1/chat/completions</c>, <c>/v1/models</c>) and answers
     /// each chat request with the next <see cref="SimulatedTurn"/> in its script. It reproduces open-model and
     /// model-server behavior on demand (text tool calls, malformed arguments, Ollama's tool-call parse 500, local 429
@@ -158,6 +158,7 @@ namespace Test.Shared.Infrastructure.OpenModel
 
                 if (path.EndsWith("/api/show", StringComparison.Ordinal)) { await WriteJsonAsync(context, 200, ShowJson()).ConfigureAwait(false); return; }
                 if (path.EndsWith("/api/ps", StringComparison.Ordinal)) { await WriteJsonAsync(context, 200, PsJson()).ConfigureAwait(false); return; }
+                if (path.EndsWith("/api/generate", StringComparison.Ordinal)) { await WriteJsonAsync(context, 200, LoadJson()).ConfigureAwait(false); return; }
                 if (path.EndsWith("/api/tags", StringComparison.Ordinal)) { await WriteJsonAsync(context, 200, TagsJson()).ConfigureAwait(false); return; }
                 if (path.EndsWith("/v1/models", StringComparison.Ordinal)) { await WriteJsonAsync(context, 200, ModelsJson()).ConfigureAwait(false); return; }
 
@@ -204,6 +205,15 @@ namespace Test.Shared.Infrastructure.OpenModel
                 case SimulatedTurnKindEnum.ContextOverflow400:
                     string overflow = "This model's maximum context length is " + _ContextLength + " tokens. However, your messages resulted in " + (_ContextLength + 4096) + " tokens.";
                     await WriteJsonAsync(context, 400, ollama ? "{\"error\":" + JsonSerializer.Serialize("input length exceeds the context length: " + overflow) + "}" : "{\"error\":{\"message\":" + JsonSerializer.Serialize(overflow) + ",\"type\":\"invalid_request_error\",\"code\":\"context_length_exceeded\"}}").ConfigureAwait(false);
+                    return;
+                case SimulatedTurnKindEnum.ModelLoading500:
+                    await WriteJsonAsync(context, 500, ErrorJson(ollama, "timed out waiting for llama runner to start - progress 0.00 - ", "server_error")).ConfigureAwait(false);
+                    return;
+                case SimulatedTurnKindEnum.ProxyFirstByteTimeout504:
+                    await WriteJsonAsync(context, 504, "<html><head><title>504 Gateway Time-out</title></head><body><center><h1>504 Gateway Time-out</h1></center></body></html>").ConfigureAwait(false);
+                    return;
+                case SimulatedTurnKindEnum.TokenRepeatLimit500:
+                    await WriteJsonAsync(context, 500, ErrorJson(ollama, "token repeat limit reached", "server_error")).ConfigureAwait(false);
                     return;
                 case SimulatedTurnKindEnum.Hang:
                     try { await Task.Delay(_HangMs, _Stop.Token).ConfigureAwait(false); } catch (OperationCanceledException) { }
@@ -425,6 +435,11 @@ namespace Test.Shared.Infrastructure.OpenModel
                 ["capabilities"] = new List<string> { "completion", "tools", "thinking" }
             };
             return JsonSerializer.Serialize(show);
+        }
+
+        private string LoadJson()
+        {
+            return JsonSerializer.Serialize(new Dictionary<string, object?> { ["model"] = _ModelName, ["response"] = String.Empty, ["done"] = true, ["done_reason"] = "load" });
         }
 
         private string PsJson()

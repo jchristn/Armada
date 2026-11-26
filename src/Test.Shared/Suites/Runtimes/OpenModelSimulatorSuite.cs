@@ -149,6 +149,79 @@ namespace Test.Shared.Suites.Runtimes
                 AssertFalse(replied, "the client never gets a successful reply");
             }));
 
+            cases.Add(Case("cold_load_and_proxy_timeout_are_transient", "A cold runner start and a proxy first-byte 504 classify as Transient, not a task or model failure (RS-7.16)", async () =>
+            {
+                using OpenModelSimulator sim = new OpenModelSimulator();
+                sim.Enqueue(SimulatedTurn.Of(SimulatedTurnKindEnum.ModelLoading500), SimulatedTurn.Of(SimulatedTurnKindEnum.ProxyFirstByteTimeout504));
+                using HttpClient http = new HttpClient();
+                RuntimeProviderError loading = await ProviderErrorAsync(http, sim.BaseUrl + "/api/chat").ConfigureAwait(false);
+                RuntimeProviderError proxy = await ProviderErrorAsync(http, sim.BaseUrl + "/v1/chat/completions").ConfigureAwait(false);
+                AssertEqual(500, loading.HttpStatusCode ?? 0);
+                AssertEqual(OpenModelErrorPatterns.ModelLoading, loading.ErrorType);
+                AssertEqual(RuntimeFailureKindEnum.Transient, RuntimeFailureClassifier.Classify(1, loading));
+                AssertEqual(504, proxy.HttpStatusCode ?? 0);
+                AssertEqual(OpenModelErrorPatterns.ProxyTimeout, proxy.ErrorType);
+                AssertEqual(RuntimeFailureKindEnum.Transient, RuntimeFailureClassifier.Classify(1, proxy));
+
+                AssertEqual(OpenModelErrorPatterns.ModelLoading, OpenModelErrorPatterns.Match(503, "Model is still loading, please retry"));
+                AssertEqual(OpenModelErrorPatterns.ProxyTimeout, OpenModelErrorPatterns.Match(502, "upstream request timeout"));
+                AssertEqual(OpenModelErrorPatterns.ProxyTimeout, OpenModelErrorPatterns.Match(504, "{\"error\":\"timeout\"}"));
+                AssertEqual(RuntimeFailureKindEnum.ModelUnavailable, RuntimeFailureClassifier.Classify(1, RuntimeProviderErrorParser.FromHttpStatus(500, "model requires more system memory (21.3 GiB) than is available (12.1 GiB)")),
+                    "an out-of-memory load is still not transient");
+                AssertFalse(OpenModelErrorPatterns.IsMalformedOrDegenerateGeneration(500, "timed out waiting for llama runner to start - progress 0.00 - "), "a cold load is not a degenerate generation");
+                AssertFalse(OpenModelErrorPatterns.IsMalformedOrDegenerateGeneration(504, "504 Gateway Time-out"), "a proxy timeout is not a degenerate generation");
+            }));
+
+            cases.Add(Case("token_repeat_limit_is_degenerate_task_failure", "Ollama's token repeat limit 500 is a degenerate-output task failure and, with the tool-call parse 500, a malformed or degenerate generation (RS-7.17)", async () =>
+            {
+                using OpenModelSimulator sim = new OpenModelSimulator();
+                sim.Enqueue(SimulatedTurn.Of(SimulatedTurnKindEnum.TokenRepeatLimit500), SimulatedTurn.Of(SimulatedTurnKindEnum.OllamaToolCallParse500), SimulatedTurn.Of(SimulatedTurnKindEnum.RunnerTerminated500));
+                using HttpClient http = new HttpClient();
+                RuntimeProviderError repeat = await ProviderErrorAsync(http, sim.BaseUrl + "/api/chat").ConfigureAwait(false);
+                RuntimeProviderError parse = await ProviderErrorAsync(http, sim.BaseUrl + "/api/chat").ConfigureAwait(false);
+                RuntimeProviderError runner = await ProviderErrorAsync(http, sim.BaseUrl + "/api/chat").ConfigureAwait(false);
+                AssertEqual(OpenModelErrorPatterns.DegenerateOutput, repeat.ErrorType);
+                AssertEqual(RuntimeFailureKindEnum.TaskFailure, RuntimeFailureClassifier.Classify(1, repeat), "a repetition loop is the model's task failure, not a transient server fault");
+                AssertTrue(OpenModelErrorPatterns.IsMalformedOrDegenerateGeneration(repeat.HttpStatusCode, repeat.Message), "token repeat limit");
+                AssertTrue(OpenModelErrorPatterns.IsMalformedOrDegenerateGeneration(parse.HttpStatusCode, parse.Message), "tool-call parse 500");
+                AssertFalse(OpenModelErrorPatterns.IsMalformedOrDegenerateGeneration(runner.HttpStatusCode, runner.Message), "a runner crash is retried as is");
+
+                AssertTrue(OpenModelErrorPatterns.IsMalformedOrDegenerateGeneration(500, "failed to parse JSON for tool call arguments: invalid character '}' looking for beginning of value"));
+                AssertTrue(OpenModelErrorPatterns.IsMalformedOrDegenerateGeneration(null, "token repeat limit reached"), "an unknown status is judged from the body");
+                AssertFalse(OpenModelErrorPatterns.IsMalformedOrDegenerateGeneration(500, "invalid character 'x' in request body"), "a JSON failure that names no tool call");
+                AssertFalse(OpenModelErrorPatterns.IsMalformedOrDegenerateGeneration(200, "token repeat limit reached"), "a success status never counts");
+                AssertFalse(OpenModelErrorPatterns.IsMalformedOrDegenerateGeneration(429, "error parsing tool call"), "a 429 is backpressure");
+                AssertFalse(OpenModelErrorPatterns.IsMalformedOrDegenerateGeneration(500, null));
+            }));
+
+            cases.Add(Case("ollama_warmup_sends_keep_alive", "The Ollama warm-up sends a prompt-less /api/generate load with keep_alive; other providers and bad URLs are skipped; failures are results (RS-7.16)", async () =>
+            {
+                using OpenModelSimulator sim = new OpenModelSimulator { ModelName = "qwen-sim" };
+                ModelEndpoint ollama = new ModelEndpoint { Name = "sim", Kind = ModelEndpointKindEnum.Inference, Provider = ModelProviderEnum.Ollama, Model = "qwen-sim", BaseUrl = sim.BaseUrl + "/v1" };
+                AssertTrue(OllamaModelWarmup.Applies(ollama));
+                OllamaWarmupResult warmed = await OllamaModelWarmup.WarmAsync(ollama, keepAlive: "45m", timeoutSeconds: 10).ConfigureAwait(false);
+                AssertTrue(warmed.Attempted && warmed.Succeeded, "the load request succeeds: " + warmed.Reason);
+                AssertEqual(200, warmed.HttpStatusCode ?? 0);
+                SimulatorRequest load = sim.Requests.Single();
+                AssertEqual("POST", load.Method);
+                AssertEqual("/api/generate", load.Path);
+                AssertContains("\"model\":\"qwen-sim\"", load.Body);
+                AssertContains("\"keep_alive\":\"45m\"", load.Body);
+                AssertFalse(load.Body.Contains("prompt", StringComparison.Ordinal), "no prompt, so nothing is generated");
+
+                ModelEndpoint openAi = new ModelEndpoint { Name = "oa", Kind = ModelEndpointKindEnum.Inference, Provider = ModelProviderEnum.OpenAI, Model = "m", BaseUrl = sim.BaseUrl + "/v1" };
+                AssertFalse(OllamaModelWarmup.Applies(openAi));
+                OllamaWarmupResult skipped = await OllamaModelWarmup.WarmAsync(openAi, timeoutSeconds: 10).ConfigureAwait(false);
+                AssertFalse(skipped.Attempted, "only Ollama endpoints are warmed");
+                AssertEqual(1, sim.Requests.Count);
+
+                ModelEndpoint unreachable = new ModelEndpoint { Name = "down", Kind = ModelEndpointKindEnum.Inference, Provider = ModelProviderEnum.Ollama, Model = "m", BaseUrl = "http://127.0.0.1:" + TestPorts.Reserve(1)[0] };
+                OllamaWarmupResult failed = await OllamaModelWarmup.WarmAsync(unreachable, timeoutSeconds: 10).ConfigureAwait(false);
+                AssertTrue(failed.Attempted && !failed.Succeeded, "an unreachable server is a failed result, not an exception");
+                AssertNotNull(failed.Reason);
+                AssertThrows<ArgumentOutOfRangeException>(() => OllamaModelWarmup.WarmAsync(ollama, timeoutSeconds: 0).GetAwaiter().GetResult());
+            }));
+
             foreach (SimulatedTurnKindEnum kind in Enum.GetValues(typeof(SimulatedTurnKindEnum)).Cast<SimulatedTurnKindEnum>().Where(k => k != SimulatedTurnKindEnum.RawResponse))
             {
                 SimulatedTurnKindEnum captured = kind;
@@ -268,6 +341,15 @@ namespace Test.Shared.Suites.Runtimes
             using StringContent content = new StringContent(json, Encoding.UTF8, "application/json");
             using HttpResponseMessage response = await http.PostAsync(url, content).ConfigureAwait(false);
             return await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+        }
+
+        private static async Task<RuntimeProviderError> ProviderErrorAsync(HttpClient http, string url)
+        {
+            using HttpResponseMessage response = await RawPostAsync(http, url).ConfigureAwait(false);
+            string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+            RuntimeProviderError? error = RuntimeProviderErrorParser.FromHttpStatus((int)response.StatusCode, body);
+            AssertNotNull(error, "an error status yields a provider error");
+            return error!;
         }
 
         private static async Task<HttpResponseMessage> RawPostAsync(HttpClient http, string url)

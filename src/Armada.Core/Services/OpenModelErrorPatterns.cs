@@ -27,6 +27,18 @@ namespace Armada.Core.Services
         /// <summary>The server could not parse the tool call the model produced. A task failure, not an endpoint failure.</summary>
         public const string ToolCallParseError = "tool_call_parse_error";
 
+        /// <summary>
+        /// The model fell into repeating itself and the server stopped it (Ollama's "token repeat limit reached"). A task
+        /// failure: resending the identical request tends to repeat the loop.
+        /// </summary>
+        public const string DegenerateOutput = "degenerate_output";
+
+        /// <summary>
+        /// A proxy in front of the model server gave up waiting for the first byte (a 504 or an upstream timeout, typically
+        /// while a cold model loads). Transient.
+        /// </summary>
+        public const string ProxyTimeout = "proxy_timeout";
+
         #endregion
 
         #region Public-Methods
@@ -55,6 +67,11 @@ namespace Armada.Core.Services
                 || text.Contains("malformed tool call"))
                 return ToolCallParseError;
 
+            if (text.Contains("token repeat limit")
+                || text.Contains("repeated token limit")
+                || text.Contains("repetition limit reached"))
+                return DegenerateOutput;
+
             if (MentionsContextLimit(text)) return "context_limit_exceeded";
 
             if (text.Contains("out of memory")
@@ -74,8 +91,21 @@ namespace Armada.Core.Services
 
             if (text.Contains("loading model")
                 || text.Contains("model is loading")
-                || text.Contains("is currently loading"))
+                || text.Contains("is currently loading")
+                || text.Contains("is still loading")
+                || text.Contains("waiting for llama runner to start")
+                || text.Contains("model is not ready")
+                || text.Contains("model not ready")
+                || text.Contains("model is not yet loaded"))
                 return ModelLoading;
+
+            if (httpStatusCode == 504
+                || text.Contains("gateway time-out")
+                || text.Contains("gateway timeout")
+                || text.Contains("upstream request timeout")
+                || text.Contains("upstream timed out")
+                || text.Contains("time to first byte"))
+                return ProxyTimeout;
 
             if (text.Contains("no models loaded")
                 || text.Contains("not attached to this virtual model runner")
@@ -93,6 +123,32 @@ namespace Armada.Core.Services
                 return "schema_validation_failed";
 
             return null;
+        }
+
+        /// <summary>
+        /// Whether a failed inference response means the model produced output the server could not use: a tool call the
+        /// server could not parse (Ollama's "error parsing tool call", or a JSON parse failure that names the tool call or
+        /// its arguments) or a repetition loop the server cut off ("token repeat limit reached"). Resending the identical
+        /// request tends to reproduce the same output, so a caller should add a corrective turn or vary sampling instead
+        /// (RS-7.3, RS-7.17). Only 400 and 5xx statuses count; an unknown status is judged from the body alone.
+        /// </summary>
+        /// <param name="httpStatusCode">The HTTP status, when known.</param>
+        /// <param name="body">The provider error message or response body.</param>
+        /// <returns>True for a malformed tool call or a degenerate generation.</returns>
+        public static bool IsMalformedOrDegenerateGeneration(int? httpStatusCode, string? body)
+        {
+            if (httpStatusCode.HasValue && httpStatusCode.Value != 400 && (httpStatusCode.Value < 500 || httpStatusCode.Value > 599)) return false;
+            if (String.IsNullOrWhiteSpace(body)) return false;
+            string? type = Match(httpStatusCode, body);
+            if (type == ToolCallParseError || type == DegenerateOutput) return true;
+            string text = body.ToLowerInvariant();
+            bool namesToolCall = text.Contains("tool call") || text.Contains("tool_call") || text.Contains("function call") || text.Contains("arguments");
+            bool namesJsonFailure = text.Contains("unexpected end of json")
+                || text.Contains("invalid character")
+                || text.Contains("cannot unmarshal")
+                || text.Contains("failed to parse json")
+                || text.Contains("invalid json");
+            return namesToolCall && namesJsonFailure;
         }
 
         /// <summary>
