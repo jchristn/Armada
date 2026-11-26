@@ -23,8 +23,11 @@ namespace Armada.Core.Services
         /// <summary>The agent process started; the captain's process id is not recorded yet.</summary>
         public const string LaunchBeforeProcessRecorded = "launch.before-process-recorded";
 
-        /// <summary>A stage handoff updated one dependent stage; other dependents may not be updated yet.</summary>
-        public const string HandoffDependentUpdated = "handoff.dependent-updated";
+        /// <summary>A stage handoff prepared its dependent stages in memory; none is written.</summary>
+        public const string HandoffPlanned = "handoff.planned";
+
+        /// <summary>A stage handoff wrote every dependent stage's branch and handoff note in one transaction.</summary>
+        public const string HandoffWritten = "handoff.written";
 
         /// <summary>An Architect fan-out was computed in memory; none of its rows is written.</summary>
         public const string FanOutPlanned = "fanout.planned";

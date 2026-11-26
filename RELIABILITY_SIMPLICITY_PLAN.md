@@ -524,7 +524,7 @@ routing; a renamed Architect slice breaks fan-out recovery. Everything a program
   SDK `DispatchRequest`, dashboard and mobile voyage forms (shared `voyageForm.ts`), TUI `VoyageCreateScreen`,
   `armada voyage create --persona --mode`, Postman "Dispatch Persona and Mode Voyage", `REST_API.md` and `MCP_API.md`.
   Tests: `E2E.MissionPersonaMode` (REST, MCP, SDK; bad mode is 400), `voyageForm.test.ts`, `VoyageCreate.test.tsx`.
-- [ ] **RS-4.3** Atomic creation. Create the voyage (status `Building`) and all mission rows in one transaction, then
+- [x] **RS-4.3** Atomic creation. Create the voyage (status `Building`) and all mission rows in one transaction, then
   move it to `Open` and run one assignment pass. No captain launches before every stage of the voyage exists. Same
   for Architect fan-out (one transaction for all slice rows, rewiring, and ownership) and stage handoff (reuse the
   `CreateChainAsync` pattern). Crash-point tests. Evidence: voyage creation done (RS-4.3a): `VoyageStatusEnum.Building`,
@@ -537,7 +537,10 @@ routing; a renamed Architect slice breaks fan-out recovery. Everything a program
   all four providers; a failed guard rolls everything back), the fan-out helpers build an `ArchitectFanOutWork` in
   memory and `CommitArchitectFanOutAsync` writes it with the Architect's `FanOutCompletedUtc`; recovery of a pre-change
   partial fan-out uses the same path. Crash points `fanout.planned` and `fanout.written` replace the three per-row
-  points; `Database.MissionDatabase` `mission_write_batch_is_all_or_nothing`. Handoff (RS-4.3c) pending.
+  points; `Database.MissionDatabase` `mission_write_batch_is_all_or_nothing`. Handoff done (RS-4.3c): every dependent
+  stage's branch and handoff note is written with one `WriteBatchAsync`, each guarded on Pending; crash points
+  `handoff.planned` and `handoff.written` replace `handoff.dependent-updated`, and the crash cases check both dependents
+  were prepared or neither.
 - [ ] **RS-4.4** One hierarchy and ownership validator: a pure function over (index, parent, dependsOn, ownedPaths)
   used by REST, MCP, Architect v3/v4 plans, and legacy plans, with one outcome per rule (reject with a typed error
   list). Ownership overlap is checked for all dispatch paths. Replaces `MissionHierarchyPlan.Resolve`,

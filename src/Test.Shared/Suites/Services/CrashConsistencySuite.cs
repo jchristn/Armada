@@ -83,8 +83,12 @@ namespace Test.Shared.Suites.Services
                     null, () => VoyageCrashAsync(crashPoint)));
             }
 
-            cases.Add(Case("handoff_crash_between_dependents_recovers", "Crash after a stage handoff prepared one of two dependents: restart recovery prepares the other on the same branch",
-                null, HandoffCrashAsync));
+            foreach (string point in new[] { CrashPointNames.HandoffPlanned, CrashPointNames.HandoffWritten })
+            {
+                string crashPoint = point;
+                cases.Add(Case("handoff_crash_at_" + crashPoint.Replace('.', '_').Replace('-', '_'), "Crash at " + crashPoint + " during a stage handoff to two dependents: both were prepared or neither, and after restart both are on the worker's branch",
+                    null, () => HandoffCrashAsync(crashPoint)));
+            }
 
             foreach (string point in new[] { CrashPointNames.FanOutPlanned, CrashPointNames.FanOutWritten })
             {
@@ -209,7 +213,7 @@ namespace Test.Shared.Suites.Services
             }
         }
 
-        private static async Task HandoffCrashAsync()
+        private static async Task HandoffCrashAsync(string crashPoint)
         {
             using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
             DatabaseDriver db = testDb.Driver;
@@ -243,8 +247,13 @@ namespace Test.Shared.Suites.Services
             Mission testEngineer = await db.Missions.CreateAsync(new Mission("[TestEngineer] Test", "Test it") { VesselId = vessel.Id, VoyageId = voyage.Id, Persona = "TestEngineer", DependsOnMissionId = worker.Id }).ConfigureAwait(false);
             Mission judge = await db.Missions.CreateAsync(new Mission("[Judge] Review", "Review it") { VesselId = vessel.Id, VoyageId = voyage.Id, Persona = "Judge", DependsOnMissionId = worker.Id }).ConfigureAwait(false);
 
-            CrashRunOutcomeEnum outcome = await CrashRun.RunAsync(CrashPointNames.HandoffDependentUpdated, () => before.HandleCompletionAsync(captain, worker.Id)).ConfigureAwait(false);
+            CrashRunOutcomeEnum outcome = await CrashRun.RunAsync(crashPoint, () => before.HandleCompletionAsync(captain, worker.Id)).ConfigureAwait(false);
             AssertEqual(CrashRunOutcomeEnum.Crashed, outcome, "the operation reached the crash point");
+
+            // RS-4.3: the handoff is one transaction, so both dependents were prepared or neither was.
+            string? expectedAtCrash = crashPoint == CrashPointNames.HandoffWritten ? worker.BranchName : null;
+            foreach (Mission dependent in new[] { testEngineer, judge })
+                AssertEqual(expectedAtCrash, (await db.Missions.ReadAsync(dependent.Id).ConfigureAwait(false))!.BranchName, dependent.Persona + " at the crash");
 
             MissionService after = CreateMissionService(db, settings, git);
             await after.RecoverDanglingHandoffsAsync().ConfigureAwait(false);

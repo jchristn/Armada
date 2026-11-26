@@ -213,20 +213,30 @@ namespace Armada.Core.Services
             // transport exceptions retain the existing best-effort logging behavior.
             if (!await HardenStageBranchAsync(completedMission, token).ConfigureAwait(false)) return false;
 
+            // RS-4.3: every dependent stage is prepared in one transaction, each only while it is still Pending, so a
+            // restart never leaves some stages on the branch and others without it.
+            MissionWriteBatch batch = new MissionWriteBatch();
             foreach (Mission nextMission in dependentMissions)
             {
                 // The persona template supplies role instructions; keep the persisted handoff concise.
                 MissionNotes.Set(nextMission, MissionNoteKindEnum.PipelineHandoff, PipelineHandoffContext.Build(completedMission));
                 nextMission.BranchName = completedMission.BranchName;
                 nextMission.LastUpdateUtc = DateTime.UtcNow;
-                await _Database.Missions.UpdateAsync(nextMission, token).ConfigureAwait(false);
-                CrashPoints.Hit(CrashPointNames.HandoffDependentUpdated);
+                batch.Updated.Add(new MissionGuardedWrite(nextMission, new[] { MissionStatusEnum.Pending }));
+            }
 
+            CrashPoints.Hit(CrashPointNames.HandoffPlanned);
+            if (!await _Database.Missions.WriteBatchAsync(batch, token).ConfigureAwait(false))
+            {
+                _Logging.Warn(_Header + "pipeline handoff from mission " + completedMission.Id + " was not written: a dependent stage left Pending meanwhile; recovery will prepare the rest");
+                return false;
+            }
+            CrashPoints.Hit(CrashPointNames.HandoffWritten);
+
+            foreach (Mission nextMission in dependentMissions)
                 _Logging.Debug(_Header + "pipeline handoff: prepared mission " + nextMission.Id +
                     " (" + nextMission.Persona + ") with context from " + completedMission.Id +
                     " (" + completedMission.Persona + ")");
-
-            }
 
             return true;
         }

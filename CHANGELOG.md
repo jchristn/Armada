@@ -62,6 +62,9 @@ Conductor) with Opus and GPT-6.1 reliable. The work is tracked item by item in `
   each row was written in turn, so a slice could start while its siblings did not exist yet, and a restart part-way
   left a partial fan-out for recovery to patch. If a slice moved on meanwhile, nothing is written and recovery
   computes the fan-out again (RS-4.3).
+- **A stage handoff prepares every next stage at once.** When a stage finishes, all the stages waiting on it get its
+  branch and handoff note in one transaction. Before, a restart between them could leave a Judge prepared and a Test
+  Engineer not until recovery ran (RS-4.3).
 - **Recovery state survives a restart.** Endpoint circuit breakers, launch backoff (with the captains that failed to
   start the mission), the start of a transient outage, and escalation rule cooldowns were kept only in memory, so a
   restart sent missions straight back to a failing endpoint, relaunched a broken captain at once, granted an outage a
