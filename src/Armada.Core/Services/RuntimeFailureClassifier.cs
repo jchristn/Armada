@@ -98,6 +98,22 @@ namespace Armada.Core.Services
         }
 
         /// <summary>
+        /// Provider error type a runtime reports when the captain stops at its iteration (model-turn) limit.
+        /// </summary>
+        public const string MaxIterationsReached = "max_iterations_reached";
+
+        /// <summary>
+        /// Whether the exit was the captain stopping at its iteration (model-turn) limit (RS-5.12), decided from the
+        /// provider error type, never from the message.
+        /// </summary>
+        /// <param name="error">Provider error, or null.</param>
+        /// <returns>True for an iteration-limit stop.</returns>
+        public static bool IsIterationLimit(RuntimeProviderError? error)
+        {
+            return error != null && String.Equals(error.ErrorType, MaxIterationsReached, StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
         /// Every machine error type a built-in runtime is known to report, so a test can assert that each one has a
         /// deliberate classification rather than falling through to <see cref="RuntimeFailureKindEnum.Unclassified"/> by accident.
         /// Types classified only through their HTTP status are listed with the status-less outcome.

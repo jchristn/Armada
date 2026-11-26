@@ -587,7 +587,7 @@ Notes:
   many resumes instead of spending them all; transient outages keep resuming.
 - **Escalation ladder (RS-5.6):** a persona's `EscalationLadder` lists captain classes, lowest rung first, for example
   Qwen3.8, then GPT-6.1, then Opus. A work stage whose captain cannot finish (resumes spent, `Unclassified` after its
-  resume, two unparsable tool calls in a row, repeated no-op completions, or Judge rejections past the rework budget)
+  resume, two unparsable tool calls in a row, two iteration-limit stops in a row, repeated no-op completions, or Judge rejections past the rework budget)
   moves on the same branch to the next rung with an eligible captain, up to `MaxEscalations` hops (default 2). With no
   ladder, a hop must reach a strictly higher effective tier, so an escalation never goes sideways (G12). Strict captain
   assignments never escalate. `EscalateOnOpenEndpointBreaker` optionally escalates a transient failure at once when the

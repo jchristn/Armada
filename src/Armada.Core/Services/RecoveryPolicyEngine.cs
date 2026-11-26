@@ -74,6 +74,10 @@ namespace Armada.Core.Services
             if (facts.RepeatedMalformedToolCalls)
                 decision.Steps.Add(new RecoveryStep(RecoveryActionEnum.Escalate, "repeated malformed tool calls"));
 
+            // A model that runs out of iterations twice in a row is not converging; a fresh budget rarely helps (RS-5.12).
+            if (facts.RepeatedIterationLimit)
+                decision.Steps.Add(new RecoveryStep(RecoveryActionEnum.Escalate, "repeated iteration limit"));
+
             // Transient and task failures resume in place up to MaxResumes; a transient outage keeps resuming within its
             // grace period. A task failure escalates after EscalateAfterResumes. An Unclassified exit gets its own, smaller
             // allowance so the budget is not spent on a cause nobody named.

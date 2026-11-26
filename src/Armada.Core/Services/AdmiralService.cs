@@ -207,6 +207,9 @@ namespace Armada.Core.Services
         // Consecutive exits per mission whose provider error was an unparsable tool call (RS-5.6), in memory only.
         private readonly System.Collections.Concurrent.ConcurrentDictionary<string, int> _MalformedToolCallExits =
             new System.Collections.Concurrent.ConcurrentDictionary<string, int>(StringComparer.Ordinal);
+        // Consecutive exits per mission that stopped at the iteration limit (RS-5.12), in memory only.
+        private readonly System.Collections.Concurrent.ConcurrentDictionary<string, int> _IterationLimitExits =
+            new System.Collections.Concurrent.ConcurrentDictionary<string, int>(StringComparer.Ordinal);
         private readonly System.Collections.Concurrent.ConcurrentDictionary<string, List<long>> _CaptainCrashTimes =
             new System.Collections.Concurrent.ConcurrentDictionary<string, List<long>>();
         private TimeProvider _Time = TimeProvider.System;
@@ -1046,6 +1049,7 @@ namespace Armada.Core.Services
                 // Clean exit — delegate to the normal completion flow
                 await ForgetTransientOutageAsync(missionId).ConfigureAwait(false);
                 _MalformedToolCallExits.TryRemove(missionId, out int _);
+                _IterationLimitExits.TryRemove(missionId, out int _);
                 _Logging.Info(_Header + "agent process " + processId + " exited cleanly for mission " + missionId + " — handling completion");
                 await _Missions.HandleClaimedCompletionAsync(captain, missionId, mission!.LastUpdateUtc, token).ConfigureAwait(false);
             }
@@ -1089,6 +1093,7 @@ namespace Armada.Core.Services
                         if (await TryEscalateAsync(captain, mission, EscalationTrigger(trigger, exitInfo), capture, token).ConfigureAwait(false))
                         {
                             _MalformedToolCallExits.TryRemove(missionId, out int _);
+                            _IterationLimitExits.TryRemove(missionId, out int _);
                             RequestDispatch();
                             return;
                         }
@@ -2468,7 +2473,9 @@ namespace Armada.Core.Services
             // The rest of the facts cost a read or update tracking state, so they are gathered only for a real failure.
             bool transient = exitInfo.FailureKind == RuntimeFailureKindEnum.Transient;
             if (!transient) await ForgetTransientOutageAsync(missionId).ConfigureAwait(false);
-            facts.RepeatedMalformedToolCalls = TrackMalformedToolCall(missionId, exitInfo);
+            facts.RepeatedMalformedToolCalls = TrackRepeatedExit(_MalformedToolCallExits, missionId,
+                String.Equals(exitInfo.ProviderError?.ErrorType, OpenModelErrorPatterns.ToolCallParseError, StringComparison.OrdinalIgnoreCase));
+            facts.RepeatedIterationLimit = TrackRepeatedExit(_IterationLimitExits, missionId, RuntimeFailureClassifier.IsIterationLimit(exitInfo.ProviderError));
             if (mission != null && transient)
             {
                 facts.WithinOutageGrace = await WithinTransientOutageGraceAsync(mission.Id, policy.TransientGraceMinutes).ConfigureAwait(false);
@@ -2479,14 +2486,14 @@ namespace Armada.Core.Services
             return decision;
         }
 
-        private bool TrackMalformedToolCall(string missionId, RuntimeExitInfo exitInfo)
+        private static bool TrackRepeatedExit(System.Collections.Concurrent.ConcurrentDictionary<string, int> exits, string missionId, bool matches)
         {
-            if (!String.Equals(exitInfo.ProviderError?.ErrorType, OpenModelErrorPatterns.ToolCallParseError, StringComparison.OrdinalIgnoreCase))
+            if (!matches)
             {
-                _MalformedToolCallExits.TryRemove(missionId, out int _);
+                exits.TryRemove(missionId, out int _);
                 return false;
             }
-            return _MalformedToolCallExits.AddOrUpdate(missionId, 1, (_, count) => count + 1) >= 2;
+            return exits.AddOrUpdate(missionId, 1, (_, count) => count + 1) >= 2;
         }
 
         private async Task ForgetTransientOutageAsync(string missionId)

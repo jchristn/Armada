@@ -41,6 +41,9 @@ namespace Armada.Core.Models
         /// <summary>True when the captain emitted a tool call the server could not parse twice in a row.</summary>
         public bool RepeatedMalformedToolCalls { get; set; } = false;
 
+        /// <summary>True when the captain stopped at its iteration (model-turn) limit twice in a row.</summary>
+        public bool RepeatedIterationLimit { get; set; } = false;
+
         /// <summary>Output-contract repairs already spent on this mission.</summary>
         public int OutputRepairs { get; set; } = 0;
 

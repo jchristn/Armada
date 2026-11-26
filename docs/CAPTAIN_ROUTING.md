@@ -163,7 +163,7 @@ A captain of any runtime that finishes a work stage (any persona except Product 
 
 A persona's `EscalationLadder` (RS-5.6) lists captain classes, lowest rung first, with the same matcher fields as
 `CaptainPriorities`. When a work stage's captain cannot finish (its resumes are spent, or the model profile's
-`EscalateAfterResumes` is reached; an `Unclassified` exit past its resume; two unparsable tool calls in a row; repeated
+`EscalateAfterResumes` is reached; an `Unclassified` exit past its resume; two unparsable tool calls in a row; two iteration-limit stops in a row; repeated
 no-op completions; Judge rejections past the rework budget; optionally an open endpoint breaker with
 `EscalateOnOpenEndpointBreaker`), the mission returns to Pending on the same branch, pinned to the first eligible
 captain on a rung above the failed captain's rung (rung 1 when the failed captain matches none). Idle captains are
@@ -195,7 +195,7 @@ example, no stronger captain is free). The decisions:
 | Where | Order of actions |
 |---|---|
 | Agent exit, interrupted (negative exit code) | Redispatch while `MaxNoOpRedispatchAttempts` (at least 3) lasts, then fail |
-| Agent exit, transient or task failure | Escalate first if the endpoint breaker is open (opt-in) or two tool calls in a row were unparsable; resume in place within `MaxResumes` (a task failure stops resuming at `EscalateAfterResumes`; a transient outage also resumes within its grace); escalate; fail |
+| Agent exit, transient or task failure | Escalate first if the endpoint breaker is open (opt-in), two tool calls in a row were unparsable, or the captain stopped at its iteration limit twice in a row; resume in place within `MaxResumes` (a task failure stops resuming at `EscalateAfterResumes`; a transient outage also resumes within its grace); escalate; fail |
 | Agent exit, Unclassified | Resume within `UnclassifiedResumes`, escalate, fail |
 | Agent exit, usage limit, auth failure or crash | Fail (the captain may be quarantined) |
 | Process lost (health monitor) | Redispatch an interruption within the budget, else fail |

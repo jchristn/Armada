@@ -788,8 +788,17 @@ routing; a renamed Architect slice breaks fan-out recovery. Everything a program
   changes. Tests: LandingConflict, MergeQueue, MergeQueueProcessing, LandingPipeline 87/87. Remaining message matches
   (DB unique violations, git identity, quota, Harbor "not installed") are outside this item; RS-11.4 tracks them.
 
-- [ ] **RS-5.12** Iteration-limit exhaustion (gpt-oss:120b hit the limit 4 times, HDR) becomes a typed failure kind
-  and an escalation trigger in RS-5.6. Evidence:
+- [x] **RS-5.12** Iteration-limit exhaustion (gpt-oss:120b hit the limit 4 times, HDR) becomes a typed failure kind
+  and an escalation trigger in RS-5.6. Evidence: `RuntimeFailureClassifier.IsIterationLimit` recognizes the stop from
+  the `max_iterations_reached` error type (Mux and the API endpoint runtime report it), never the message; the runtime
+  failure kind stays TaskFailure, so REST, MCP, SDKs and the dashboard see no new enum value. The Admiral counts
+  consecutive iteration-limit exits per mission (in memory, like malformed tool calls; reset on a clean exit, a
+  different failure or an escalation) and sets `RecoveryFacts.RepeatedIterationLimit` on the second, which makes
+  `RecoveryPolicyEngine` escalate before resuming. A first stop still resumes. Claude Code's `error_max_turns` is not
+  mapped to a provider error today, so it is not covered. Tests: `Services.RecoveryPolicyEngine`
+  `repeated_iteration_limit_escalates_first`, `Services.AdmiralService` `repeated_iteration_limit_escalates`;
+  RecoveryPolicyEngine, AdmiralService, EscalationLadder, RuntimeFailureClassifier 111/111. Docs: CAPTAIN_ROUTING.md,
+  MODEL_HETEROGENEITY.md, REST_API.md, CHANGELOG.
 
 ## Phase 6: Output contracts and repair
 

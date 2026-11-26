@@ -8244,7 +8244,7 @@ Each priority has optional Runtime (AgentRuntimeEnum), Model (exact case-insensi
 
 `EscalationLadder` (RS-5.6) lists captain classes, lowest rung first, that a work stage of this persona moves up when
 its captain cannot finish: after its resumes are spent (or after the model profile's `EscalateAfterResumes`), after an
-`Unclassified` exit past its resume, after two unparsable tool calls in a row, after repeated no-op completions, or when
+`Unclassified` exit past its resume, after two unparsable tool calls in a row, after two iteration-limit stops in a row, after repeated no-op completions, or when
 the Judge rejects the work past the rework budget. The mission goes, on the same branch with the work so far, to the
 first eligible captain on a rung above the failed captain's rung (rung 1 when the failed captain matches none); past the
 top rung there is no escalation. With an empty ladder, escalation goes only to a captain with a strictly higher effective

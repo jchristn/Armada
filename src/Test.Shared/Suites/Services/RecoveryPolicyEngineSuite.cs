@@ -101,6 +101,19 @@ namespace Test.Shared.Suites.Services
                 AssertEqual("repeated malformed tool calls", decision.First.Reason);
             }));
 
+            cases.Add(Case("repeated_iteration_limit_escalates_first", "RS-5.12: a second iteration-limit exit in a row escalates before resuming; a first one resumes", TestTags.Positive, () =>
+            {
+                RecoveryFacts facts = Exit(RuntimeFailureKindEnum.TaskFailure, 1);
+                AssertEqual("Resume, Escalate, Fail", Plan(facts, Policy()), "a first iteration-limit exit resumes");
+                facts.RepeatedIterationLimit = true;
+                RecoveryDecision decision = RecoveryPolicyEngine.Decide(facts, Policy());
+                AssertEqual("Escalate, Resume, Escalate, Fail", Plan(facts, Policy()));
+                AssertEqual("repeated iteration limit", decision.First.Reason);
+                AssertTrue(RuntimeFailureClassifier.IsIterationLimit(new RuntimeProviderError { ErrorType = "max_iterations_reached" }), "typed from the error type");
+                AssertFalse(RuntimeFailureClassifier.IsIterationLimit(new RuntimeProviderError { ErrorType = "degenerate_output", Reason = "max_iterations_reached" }), "never from the message");
+                AssertFalse(RuntimeFailureClassifier.IsIterationLimit(null));
+            }));
+
             cases.Add(Case("noop_redispatches_then_escalates", "A no-op completion redispatches, then escalates, then fails", TestTags.Positive, () =>
             {
                 RecoveryFacts facts = new RecoveryFacts(RecoverySiteEnum.NoOpCompletion) { RedispatchLimit = 2, Redispatches = 1 };

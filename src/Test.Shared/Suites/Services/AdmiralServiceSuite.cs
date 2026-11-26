@@ -941,6 +941,24 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
+            cases.Add(CaseAsync("repeated_iteration_limit_escalates", "RS-5.12: a second iteration-limit exit in a row moves the mission up the escalation ladder instead of resuming again", TestTags.Reliability, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    LadderScenario scenario = await LadderScenario.CreateAsync(testDb.Driver, CreateLogging(), CreateSettings()).ConfigureAwait(false);
+                    RuntimeProviderError limit = new RuntimeProviderError { ErrorType = RuntimeFailureClassifier.MaxIterationsReached, Reason = "mux stopped: reached the 50-iteration limit" };
+                    await scenario.Service.HandleProcessExitAsync(4646, RuntimeFailureClassifier.Decide(1, limit), scenario.Qwen.Id, scenario.Mission.Id).ConfigureAwait(false);
+                    Mission? resumed = await testDb.Driver.Missions.ReadAsync(scenario.Mission.Id).ConfigureAwait(false);
+                    AssertEqual(MissionStatusEnum.InProgress, resumed!.Status, "the first iteration-limit exit resumes in place");
+                    await scenario.Service.HandleProcessExitAsync(resumed.ProcessId!.Value, RuntimeFailureClassifier.Decide(1, limit), scenario.Qwen.Id, scenario.Mission.Id).ConfigureAwait(false);
+                    Mission? escalated = await testDb.Driver.Missions.ReadAsync(scenario.Mission.Id).ConfigureAwait(false);
+                    AssertEqual(MissionStatusEnum.Pending, escalated!.Status, "the second one escalates");
+                    AssertEqual(scenario.Gpt.Id, escalated.RequestedCaptainId, "to the next rung");
+                    AssertEqual(1, escalated.EscalationCount);
+                    scenario.Cleanup();
+                }
+            }));
+
             cases.Add(CaseAsync("escalate_after_resumes_skips_remaining_resumes", "RS-5.6: a profile with EscalateAfterResumes 0 escalates a task failure at once while resumes remain", TestTags.Reliability, async () =>
             {
                 using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())

@@ -162,6 +162,10 @@ Conductor) with Opus and GPT-6.1 reliable. The work is tracked item by item in `
   `MergeQueueEntryNotFoundException`; the merge queue on a Harbor merges the pushed copy of a branch when the local
   branch is gone, decided from the git refs rather than git's message; and a process that could not start is detected
   from the exception type alone.
+- **Two iteration-limit stops in a row escalate.** A captain that stops at its iteration (model-turn) limit is
+  resumed once as before; if the resumed attempt stops at the limit again, the mission moves up the escalation ladder
+  instead of spending more resumes, the same rule as two unparsable tool calls in a row. The stop is recognized from the
+  runtime's `max_iterations_reached` error type.
 - **Recovery state survives a restart.** Endpoint circuit breakers, launch backoff (with the captains that failed to
   start the mission), the start of a transient outage, and escalation rule cooldowns were kept only in memory, so a
   restart sent missions straight back to a failing endpoint, relaunched a broken captain at once, granted an outage a
