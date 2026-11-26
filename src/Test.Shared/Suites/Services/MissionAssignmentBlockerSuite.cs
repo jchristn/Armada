@@ -495,12 +495,14 @@ namespace Test.Shared.Suites.Services
                     MissionAssignmentBlocker? blocker = await h.Missions.GetAssignmentBlockerAsync(mission);
                     AssertEqual(MissionAssignmentBlockerReasonEnum.PlacementWaiting, blocker!.Reason, "reason");
                     AssertContains("api-inference-context-v1", blocker.Summary);
-                    AssertContains("api-inference-context-v1", h.Missions.GetPlacementWaitReason(mission.Id) ?? String.Empty);
+                    MissionAdmissionResult? recorded = h.Missions.GetAdmissionResult(mission.Id);
+                    AssertEqual(MissionAssignmentBlockerReasonEnum.PlacementWaiting, recorded!.Blocker.Reason, "dispatch recorded the same typed reason");
+                    AssertEqual(blocker.Summary, recorded.Blocker.Summary, "the blocker reads the dispatch result");
 
                     // Placement now succeeds; provisioning afterwards may still fail in this harness, which is not under test.
                     h.Missions.ResolveDockPlacementAsync = (m, c, v) => Task.FromResult(DockPlacement.OnAdmiral("test"));
                     await h.Missions.TryAssignAsync(mission, h.Vessel);
-                    AssertNull(h.Missions.GetPlacementWaitReason(mission.Id), "the reason is dropped once placement succeeds");
+                    AssertTrue(h.Missions.GetAdmissionResult(mission.Id)?.Blocker.Reason != MissionAssignmentBlockerReasonEnum.PlacementWaiting, "the placement reason is dropped once placement succeeds");
                 }
             }));
 

@@ -26,7 +26,12 @@ namespace Armada.Core.Services
         public Task ReconcileWaitsAsync(IEnumerable<string> pendingMissionIds, DateTime snapshotUtc, CancellationToken token = default)
         {
             if (pendingMissionIds == null) throw new ArgumentNullException(nameof(pendingMissionIds));
-            return _WaitTracker.ReconcileAsync(pendingMissionIds, snapshotUtc, token);
+            HashSet<string> pending = new HashSet<string>(pendingMissionIds, StringComparer.Ordinal);
+            // A result belongs to a Pending mission; one that left Pending outside admission is dropped here.
+            foreach (KeyValuePair<string, MissionAdmissionResult> entry in _AdmissionResults)
+                if (!pending.Contains(entry.Key) && entry.Value.LastObservedUtc < snapshotUtc)
+                    _AdmissionResults.TryRemove(entry);
+            return _WaitTracker.ReconcileAsync(pending, snapshotUtc, token);
         }
 
         /// <summary>
@@ -49,11 +54,45 @@ namespace Armada.Core.Services
             return true;
         }
 
-        private void NoteWait(Mission mission, MissionAssignmentBlocker blocker)
-            => NoteWait(mission, MissionWaitGates.FromBlocker(blocker.Reason), blocker.SelectionReasonCode ?? blocker.Reason.ToString());
+        /// <inheritdoc />
+        public MissionAdmissionResult? GetAdmissionResult(string missionId)
+            => !String.IsNullOrEmpty(missionId) && _AdmissionResults.TryGetValue(missionId, out MissionAdmissionResult? result) ? result : null;
 
-        private void NoteWait(Mission mission, MissionWaitGateEnum gate, string? detail)
-            => _AttemptWaits[mission.Id] = new MissionWaitObservation { Mission = mission, Gate = gate, Detail = detail };
+        private void NoteWait(Mission mission, MissionAssignmentBlocker blocker)
+            => NoteWait(mission, blocker, MissionWaitGates.FromBlocker(blocker.Reason), blocker.SelectionReasonCode ?? blocker.Reason.ToString());
+
+        // The wait tracker keeps its own gate and detail; the blocker is the one typed result every reader sees.
+        private void NoteWait(Mission mission, MissionAssignmentBlocker blocker, MissionWaitGateEnum? gate, string? detail)
+            => _AttemptWaits[mission.Id] = new MissionWaitObservation { Mission = mission, Gate = gate, Detail = detail, Blocker = blocker };
+
+        // Every gate was open but the attempt did not claim a captain (a lock timeout, a lost claim, a policy change).
+        private void NoteUnadmitted(Mission mission, string summary)
+            => NoteWait(mission, new MissionAssignmentBlocker { Reason = MissionAssignmentBlockerReasonEnum.AwaitingDispatch, Summary = summary }, null, null);
+
+        private static MissionAssignmentBlocker LaunchFailingBlocker(MissionLaunchFailure failure) => new MissionAssignmentBlocker
+        {
+            Reason = MissionAssignmentBlockerReasonEnum.LaunchFailing,
+            UntilUtc = failure.NextAttemptUtc,
+            Summary = "Starting the captain failed " + failure.Count + (failure.Count == 1 ? " time" : " times")
+                + ": " + failure.Reason + " Armada tries again at " + failure.NextAttemptUtc.ToString("HH:mm:ss") + " UTC."
+        };
+
+        private void RecordAdmissionResult(MissionWaitObservation observation)
+        {
+            string id = observation.Mission.Id;
+            if (observation.LeftPending || observation.Blocker == null) { _AdmissionResults.TryRemove(id, out _); return; }
+            DateTime now = DateTime.UtcNow;
+            MissionAssignmentBlocker blocker = observation.Blocker;
+            _AdmissionResults.AddOrUpdate(id,
+                _ => new MissionAdmissionResult { Mission = observation.Mission, Blocker = blocker, FirstObservedUtc = now, LastObservedUtc = now },
+                (_, previous) => new MissionAdmissionResult
+                {
+                    Mission = observation.Mission,
+                    Blocker = blocker,
+                    FirstObservedUtc = previous.Blocker.Reason == blocker.Reason ? previous.FirstObservedUtc : now,
+                    LastObservedUtc = now
+                });
+        }
 
         private void RequestDispatch()
         {
@@ -69,17 +108,26 @@ namespace Armada.Core.Services
         }
 
         private void NoteLeftPending(Mission mission)
-            => _AttemptWaits[mission.Id] = new MissionWaitObservation { Mission = mission };
+            => _AttemptWaits[mission.Id] = new MissionWaitObservation { Mission = mission, LeftPending = true };
 
         // Runs after the attempt released its admission locks, so interval writes never extend a lock hold.
-        private async Task RecordAttemptWaitAsync(string missionId, CancellationToken token)
+        private async Task RecordAttemptWaitAsync(Mission mission, bool assigned, CancellationToken token)
         {
-            if (!_AttemptWaits.TryRemove(missionId, out MissionWaitObservation? observation)) return;
+            string missionId = mission.Id;
+            if (!_AttemptWaits.TryRemove(missionId, out MissionWaitObservation? observation))
+            {
+                // No gate spoke: the mission was assigned, or it failed after the claim. An older result is stale either way.
+                if (!assigned && _LaunchFailures.TryGetValue(missionId, out MissionLaunchFailure? failure))
+                    RecordAdmissionResult(new MissionWaitObservation { Mission = mission, Blocker = LaunchFailingBlocker(failure) });
+                else _AdmissionResults.TryRemove(missionId, out _);
+                return;
+            }
+            RecordAdmissionResult(observation);
             try
             {
                 if (observation.Gate.HasValue)
                     await _WaitTracker.ObserveWaitAsync(observation.Mission, observation.Gate.Value, observation.Detail, token).ConfigureAwait(false);
-                else
+                else if (observation.LeftPending)
                     await _WaitTracker.ReleaseAsync(missionId, token).ConfigureAwait(false);
             }
             catch (Exception ex) when (!(ex is OperationCanceledException))

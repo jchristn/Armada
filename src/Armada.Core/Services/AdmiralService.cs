@@ -657,28 +657,23 @@ namespace Armada.Core.Services
             // Reclaim docks stuck in Provisioned state with no active captain
             await RunHealthPhaseAsync("orphaned dock reclamation", () => ReclaimOrphanedDocksAsync(token), token).ConfigureAwait(false);
 
-            AdmissionStuckMonitor.Window? admissionWindow = null;
             List<Mission>? dispatchSnapshot = null;
-            await RunHealthPhaseAsync("admission readiness snapshot", async () =>
+            await RunHealthPhaseAsync("pending mission snapshot", async () =>
             {
-                bool capacity = await SchedulerAllowsAdmissionObservationAsync(token).ConfigureAwait(false);
                 DateTime snapshotUtc = DateTime.UtcNow;
                 dispatchSnapshot = await _Database.Missions.EnumerateByStatusAsync(MissionStatusEnum.Pending, token).ConfigureAwait(false);
                 // Missions that left Pending outside admission (cancelled, deleted, assigned directly) close their waits here.
                 await _Missions.ReconcileWaitsAsync(dispatchSnapshot.Select(m => m.Id), snapshotUtc, token).ConfigureAwait(false);
-                admissionWindow = await _AdmissionStuck.CaptureAsync(() => capacity, _Missions.IsAdmissionReadyForMonitoringAsync, token, dispatchSnapshot).ConfigureAwait(false);
             }, token).ConfigureAwait(false);
             bool dispatchCompleted = false;
+            List<MissionAdmissionResult> attempted = new List<MissionAdmissionResult>();
             await RunHealthPhaseAsync("pending mission dispatch", async () =>
             {
-                dispatchCompleted = await DispatchPendingMissionsAsync(token, dispatchSnapshot).ConfigureAwait(false);
+                dispatchCompleted = await DispatchPendingMissionsAsync(token, dispatchSnapshot, attempted).ConfigureAwait(false);
             }, token).ConfigureAwait(false);
-            await RunHealthPhaseAsync("stuck admission observation", async () =>
-            {
-                bool capacity = _LastMemoryDeferral == null && await SchedulerAllowsAdmissionObservationAsync(token).ConfigureAwait(false);
-                await _AdmissionStuck.CompleteAsync(admissionWindow, dispatchCompleted, () => capacity,
-                    _Missions.IsAdmissionReadyForMonitoringAsync, token).ConfigureAwait(false);
-            }, token).ConfigureAwait(false);
+            // The monitor reads the results this pass recorded; it never evaluates admission itself (RS-4.6).
+            await RunHealthPhaseAsync("stuck admission observation",
+                () => _AdmissionStuck.ObserveAsync(attempted, dispatchCompleted, token), token).ConfigureAwait(false);
 
             // Captain pool management: auto-spawn if below minimum idle count
             if (_Settings.MinIdleCaptains > 0)
@@ -2193,29 +2188,6 @@ namespace Armada.Core.Services
             }
         }
 
-        private async Task<string> DescribePendingReasonAsync(Mission mission, CancellationToken token)
-        {
-            if (!String.IsNullOrEmpty(mission.DependsOnMissionId))
-            {
-                Mission? dependency = await _Database.Missions.ReadAsync(mission.DependsOnMissionId, token).ConfigureAwait(false);
-                if (dependency == null)
-                    return "its upstream mission " + mission.DependsOnMissionId + " was not found";
-                if (dependency.Status != MissionStatusEnum.Complete && dependency.Status != MissionStatusEnum.WorkProduced)
-                    return "waiting on upstream mission " + dependency.Id + " which is " + dependency.Status
-                        + (dependency.Status == MissionStatusEnum.Review ? " (awaiting your review/approval)" : "");
-                return "upstream mission " + dependency.Id + " is " + dependency.Status + " but the branch/context handoff is not yet ready";
-            }
-
-            string? placementReason = _Missions.GetPlacementWaitReason(mission.Id);
-            if (placementReason != null)
-                return "its dock cannot be placed yet: " + placementReason;
-
-            if (!String.IsNullOrEmpty(mission.RequestedCaptainId))
-                return "no idle captain matches the requested captain " + mission.RequestedCaptainId;
-
-            return "assignment preconditions are not yet met (captain routing, vessel path configuration, or a transient in-flight assignment)";
-        }
-
         private async Task RunDispatcherAsync(CancellationToken token)
         {
             while (!token.IsCancellationRequested)
@@ -2237,15 +2209,16 @@ namespace Armada.Core.Services
             }
         }
 
-        // The one dispatch pass (RS-4.5), serialized by _DispatchGate. The heartbeat passes its pending snapshot.
-        private async Task<bool> DispatchPendingMissionsAsync(CancellationToken token, List<Mission>? snapshot = null)
+        // The one dispatch pass (RS-4.5), serialized by _DispatchGate. The heartbeat passes its pending snapshot and
+        // collects the typed result of every mission the pass attempted but did not assign (RS-4.6).
+        private async Task<bool> DispatchPendingMissionsAsync(CancellationToken token, List<Mission>? snapshot = null, List<MissionAdmissionResult>? attempted = null)
         {
             await _DispatchGate.WaitAsync(token).ConfigureAwait(false);
-            try { return await DispatchPassAsync(token, snapshot).ConfigureAwait(false); }
+            try { return await DispatchPassAsync(token, snapshot, attempted).ConfigureAwait(false); }
             finally { _DispatchGate.Release(); }
         }
 
-        private async Task<bool> DispatchPassAsync(CancellationToken token, List<Mission>? snapshot)
+        private async Task<bool> DispatchPassAsync(CancellationToken token, List<Mission>? snapshot, List<MissionAdmissionResult>? attempted)
         {
             List<Mission> pendingMissions = snapshot ?? await _Database.Missions.EnumerateByStatusAsync(MissionStatusEnum.Pending, token).ConfigureAwait(false);
             if (pendingMissions.Count == 0)
@@ -2286,8 +2259,11 @@ namespace Armada.Core.Services
                     bool assigned = await _Missions.TryAssignAsync(mission, vessel, LaunchInBackground, token).ConfigureAwait(false);
                     if (!assigned)
                     {
-                        string reason = await DescribePendingReasonAsync(mission, token).ConfigureAwait(false);
-                        _Logging.Info(_Header + "pending mission " + mission.Id + " not yet assigned: " + reason + " - will retry on the next health check cycle");
+                        MissionAdmissionResult? result = _Missions.GetAdmissionResult(mission.Id);
+                        _Logging.Info(_Header + "pending mission " + mission.Id + " not yet assigned: "
+                            + (result != null ? result.Blocker.Reason + ": " + result.Blocker.Summary : "it left Pending or another attempt holds it")
+                            + " - will retry on the next dispatch cycle");
+                        if (result != null) attempted?.Add(result);
                         anyFailed = true;
                     }
                 }
@@ -2298,6 +2274,8 @@ namespace Armada.Core.Services
                 catch (Exception ex)
                 {
                     _Logging.Warn(_Header + "error dispatching pending mission " + mission.Id + ": " + ex.ToString() + " - will retry on the next health check cycle");
+                    MissionAdmissionResult? result = _Missions.GetAdmissionResult(mission.Id);
+                    if (result != null) attempted?.Add(result);
                     anyFailed = true;
                 }
             }
@@ -2343,18 +2321,6 @@ namespace Armada.Core.Services
             }
             if (_DeferralsRecorded.Count > 10000) _DeferralsRecorded.Clear();
         }
-
-        private async Task<bool> SchedulerAllowsAdmissionObservationAsync(CancellationToken token)
-        {
-            if (!MemoryAllowsAdmissionObservation()) return false;
-            if (_Settings.MaxConcurrentMissions <= 0) return true;
-            return (await _Database.Captains.EnumerateByStateAsync(CaptainStateEnum.Working, token).ConfigureAwait(false))
-                .Sum(ConcurrencyCapacityPolicy.Occupancy) < _Settings.MaxConcurrentMissions;
-        }
-
-        private bool MemoryAllowsAdmissionObservation() => _Settings.MinAvailableMemoryBytesForLaunch <= 0
-            || ResourceAdmission.Evaluate(_ResourceProbe.GetAvailablePhysicalBytes(), _ResourceProbe.GetTotalPhysicalBytes(),
-                _Settings.MinAvailableMemoryBytesForLaunch).Admit;
 
         private async Task<bool> HasAvailableCapacityAsync(CancellationToken token)
         {

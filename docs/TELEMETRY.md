@@ -55,7 +55,7 @@ as `armada_*_total` series:
 | Prometheus series                       | Meaning                                             |
 |-----------------------------------------|-----------------------------------------------------|
 | `armada_concurrency_limit_violations_total` | New or changed captain/vessel/global/runtime/endpoint overruns; bounded labels `gate` and `cause` |
-| `armada_admission_stuck_total` | Pending missions observed ready before/after three dispatch opportunities; no identifying labels |
+| `armada_admission_stuck_total` | Pending missions left unclaimed by three consecutive dispatch passes with every admission gate open; no identifying labels |
 | `armada_captains_stalls_total`          | Captain stalls detected                             |
 | `armada_captains_recoveries_total`      | Captain auto-recovery attempts                      |
 | `armada_missions_failed_total`          | Missions that reached Failed                        |

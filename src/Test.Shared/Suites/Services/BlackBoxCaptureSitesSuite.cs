@@ -569,8 +569,8 @@ namespace Test.Shared.Suites.Services
                 Mission a = await t.Driver.Missions.CreateAsync(new Mission("waits a") { Status = MissionStatusEnum.Pending, VesselId = vessel.Id }).ConfigureAwait(false);
                 Mission b = await t.Driver.Missions.CreateAsync(new Mission("waits b") { Status = MissionStatusEnum.Pending, VesselId = vessel.Id }).ConfigureAwait(false);
 
-                await InvokeAsync(s.Admiral, "DispatchPendingMissionsAsync", CancellationToken.None, null).ConfigureAwait(false);
-                await InvokeAsync(s.Admiral, "DispatchPendingMissionsAsync", CancellationToken.None, null).ConfigureAwait(false);
+                await s.Admiral.DispatchOnceAsync().ConfigureAwait(false);
+                await s.Admiral.DispatchOnceAsync().ConfigureAwait(false);
                 foreach (Mission m in new[] { a, b })
                 {
                     EnumerationResult<ArmadaEvent> events = await t.Driver.Events.EnumerateAsync(new EnumerationQuery { MissionId = m.Id, EventType = "mission.dispatch_deferred", PageSize = 10 }).ConfigureAwait(false);

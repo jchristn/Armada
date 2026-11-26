@@ -77,6 +77,12 @@ Conductor) with Opus and GPT-6.1 reliable. The work is tracked item by item in `
   completing mission never waits for dispatch. The separate head-of-queue dispatch that ran inside completion, and
   assigned only one mission, is gone: one pass now fills every free captain. Background launches stop with the
   server instead of running on after shutdown (RS-4.5).
+- **One admission result per mission.** Every dispatch attempt records one typed `MissionAssignmentBlocker` for a
+  mission it leaves Pending, including the gates only dispatch can check (launch policy, dock placement, usage
+  selection, lock timeouts, lost claims). The dispatch log, the assignment blocker shown in the dashboard, TUI and
+  API, and the stuck-admission monitor all read that result, so they can no longer disagree. The monitor stops
+  re-running admission on 64 sampled missions every heartbeat; it flags a mission that three passes left unclaimed
+  with every gate open, and reports how long it has waited (RS-4.6).
 - **Recovery state survives a restart.** Endpoint circuit breakers, launch backoff (with the captains that failed to
   start the mission), the start of a transient outage, and escalation rule cooldowns were kept only in memory, so a
   restart sent missions straight back to a failing endpoint, relaunched a broken captain at once, granted an outage a

@@ -34,9 +34,6 @@ namespace Armada.Core.Services.Interfaces
         /// </summary>
         Func<string, string?>? OnGetMissionOutput { get; set; }
 
-        /// <summary>Read-only full preflight for observing a dispatch opportunity; never claims or launches work.</summary>
-        Task<bool> IsAdmissionReadyForMonitoringAsync(Mission mission, CancellationToken token = default);
-
         /// <summary>Readmit a verified repair through current safety/capacity gates before relaunch.</summary>
         Task<bool> TryAdmitVerificationResumeAsync(Mission mission, Captain captain, CancellationToken token = default);
 
@@ -148,12 +145,12 @@ namespace Armada.Core.Services.Interfaces
         Task RecordEndpointOutcomeAsync(Captain captain, bool healthy, CancellationToken token = default);
 
         /// <summary>
-        /// Why a Pending mission's dock could not be placed on the last dispatch attempt, or null when placement was not
-        /// the obstacle.
+        /// The typed result of the last dispatch attempt for a Pending mission (RS-4.6), or null when it has not been
+        /// attempted since it last changed status. Dispatch logging and the stuck-admission monitor read this result.
         /// </summary>
         /// <param name="missionId">Mission ID.</param>
-        /// <returns>The placement wait reason, or null.</returns>
-        string? GetPlacementWaitReason(string missionId);
+        /// <returns>The recorded result, or null.</returns>
+        MissionAdmissionResult? GetAdmissionResult(string missionId);
 
         /// <summary>
         /// Whether the mission's voyage binds its persona to one captain strictly ("wait for selected captain"), so no

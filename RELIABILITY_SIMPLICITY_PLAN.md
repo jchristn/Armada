@@ -571,11 +571,21 @@ routing; a renamed Architect slice breaks fan-out recovery. Everything a program
   `background_launch_stops_on_shutdown`; 11 cases that relied on inline re-dispatch now assert the wake and run one pass
   (`DispatchWakeProbe`). The fan-out case now allows the cloned worker to start in the same pass (one pass fills every
   free captain). SQLite affected suites: 813 tests, 0 failed, 6 skipped.
-- [ ] **RS-4.6** Admission pipeline. Ordered gates (readiness, dependency, barrier, global capacity, persona routing,
+- [x] **RS-4.6** Admission pipeline. Ordered gates (readiness, dependency, barrier, global capacity, persona routing,
   captain eligibility, runtime and endpoint capacity, usage selection, placement), each returning a typed
   `MissionAssignmentBlocker`. Dispatch, `DescribePendingReasonAsync`, `_PlacementWaitReasons`, and
   `AdmissionStuckMonitor` all read that one result. The stuck monitor stops re-running admission and only watches
-  blocker age. Evidence:
+  blocker age. Evidence: every exit of `TryAssignAsync` records one typed blocker (`NoteWait`/`NoteUnadmitted`);
+  the wrapper stores it as `MissionAdmissionResult` (`IMissionService.GetAdmissionResult`, with `FirstObservedUtc`)
+  after the locks are released. The captain gate is one function (`CaptainGateBlocker`) used by dispatch and by
+  `GetAssignmentBlockerAsync`, which only adds per-captain detail. `DescribePendingReasonAsync`,
+  `_PlacementWaitReasons`/`GetPlacementWaitReason`, `IsAdmissionReadyForMonitoringAsync`, and
+  `SchedulerAllowsAdmissionObservationAsync` are deleted. `AdmissionStuckMonitor.ObserveAsync` reads the results of
+  each heartbeat pass (AwaitingDispatch with every gate open, three passes, same version) and reads the database only
+  to confirm a flagged mission; the event payload adds `BlockedSinceUtc` and `LastResult`. Tests:
+  AdmissionStuck rewritten (`dispatch_records_the_blocker_reason_*`, reset cases, dedupe), parity assertions added
+  to CaptainAdmissionParity and MissionAssignmentBlocker. SQLite affected suites: 858 tests, 0 failed (after
+  switching one reflection call to `DispatchOnceAsync`), 6 skipped.
 - [ ] **RS-4.7** Admission snapshot. One read per pass of captains, active missions grouped by vessel, endpoints,
   voyages, overrides, and personas; every pending mission is evaluated against it in memory; only the atomic claim
   re-reads. Add projection queries (`WHERE vessel_id = ... AND status IN (...)`, no description column) on all four
