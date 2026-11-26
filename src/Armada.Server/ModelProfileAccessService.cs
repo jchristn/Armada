@@ -9,11 +9,12 @@ namespace Armada.Server
     using Armada.Core.Database;
     using Armada.Core.Models;
     using Armada.Core.Services;
+    using Armada.Core.Settings;
 
     /// <summary>
     /// Caller-scoped access to model profiles, shared by REST and MCP. Anyone signed in reads the profiles of their own
     /// tenant (a global admin reads every tenant); only a global admin or a tenant admin of the profile's tenant changes
-    /// the mutable parts (capabilities, rendering, notes) or marks revisions compatible. Revisions themselves are never
+    /// the mutable parts (capabilities, rendering, recovery policy, notes) or marks revisions compatible. Revisions themselves are never
     /// edited. Throws KeyNotFound (404), Argument (400) and UnauthorizedAccess (403) exceptions.
     /// </summary>
     public class ModelProfileAccessService
@@ -24,6 +25,7 @@ namespace Armada.Server
         private readonly DatabaseDriver _Database;
         private readonly LoggingModule _Logging;
         private readonly ModelScorecardService _Scorecards;
+        private readonly ArmadaSettings _Settings;
 
         #endregion
 
@@ -34,11 +36,13 @@ namespace Armada.Server
         /// </summary>
         /// <param name="database">Database driver.</param>
         /// <param name="logging">Logging module.</param>
-        /// <exception cref="ArgumentNullException">Thrown when an argument is null.</exception>
-        public ModelProfileAccessService(DatabaseDriver database, LoggingModule logging)
+        /// <param name="settings">Global settings, the defaults a profile's recovery policy overrides; null uses the defaults.</param>
+        /// <exception cref="ArgumentNullException">Thrown when database or logging is null.</exception>
+        public ModelProfileAccessService(DatabaseDriver database, LoggingModule logging, ArmadaSettings? settings = null)
         {
             _Database = database ?? throw new ArgumentNullException(nameof(database));
             _Logging = logging ?? throw new ArgumentNullException(nameof(logging));
+            _Settings = settings ?? new ArmadaSettings();
             _Scorecards = new ModelScorecardService(database, logging);
         }
 
@@ -87,6 +91,7 @@ namespace Armada.Server
             profile.Measured = ModelProfileMeasured.From(revisions);
             if (revisions.Count > ModelProfile.MaxRevisions) revisions.RemoveRange(0, revisions.Count - ModelProfile.MaxRevisions);
             profile.Revisions = revisions;
+            profile.EffectiveRecovery = RecoveryPolicyResolver.Resolve(_Settings, profile);
             return profile;
         }
 
@@ -138,6 +143,18 @@ namespace Armada.Server
                     Template = template,
                     RepeatContractAtEnd = request.Rendering.RepeatContractAtEnd,
                     MaxFilesPerMission = request.Rendering.MaxFilesPerMission
+                };
+            }
+
+            if (request.Recovery != null)
+            {
+                profile.Recovery = new ModelProfileRecovery
+                {
+                    MaxResumes = request.Recovery.MaxResumes,
+                    UnclassifiedResumes = request.Recovery.UnclassifiedResumes,
+                    TransientGraceMinutes = request.Recovery.TransientGraceMinutes,
+                    JudgeReworkRounds = request.Recovery.JudgeReworkRounds,
+                    OutputRepairAttempts = request.Recovery.OutputRepairAttempts
                 };
             }
 

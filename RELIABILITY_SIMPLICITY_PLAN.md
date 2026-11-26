@@ -691,10 +691,22 @@ routing; a renamed Architect slice breaks fan-out recovery. Everything a program
   error; `TransientResumeDelay` honors it. Cases `rate_limit_is_transient_unless_quota_is_gone` and the simulator's
   `retry_after_is_honored` (real HTTP 429); 375 cases across the classifier, parser, Admiral, runtime, Mux, handoff and
   usage-enforcement suites pass. Docs: CAPTAIN_ROUTING.md. Also fixes a MuxRunOutcome case RS-5.2 left failing.
-- [ ] **RS-5.5** Recovery policy per model profile (or tier default): in-place resumes, transient grace, Judge rework
+- [x] **RS-5.5** Recovery policy per model profile (or tier default): in-place resumes, transient grace, Judge rework
   rounds (replacing the hard-coded `_MaxJudgeReworkRounds = 2`, `MissionService.cs:2264`), format repairs, and
   "escalate after". Global settings become the defaults. Surfaces: REST, MCP, SDK, dashboard model profile page,
-  TUI, mobile (read-only), docs. Evidence:
+  TUI, mobile (read-only), docs. Evidence: `ModelProfile.Recovery` (`MaxResumes` 0-10, `UnclassifiedResumes` 0-3,
+  `TransientGraceMinutes` 0-120, `JudgeReworkRounds` 1-5, `OutputRepairAttempts` 0-3; null uses the global setting),
+  migration 135 on all four providers, and `RecoveryPolicyResolver` (Judge rounds take the larger value, so a profile
+  never shortens the chain; Unclassified resumes are capped by the resumes). New settings `UnclassifiedResumeLimit`
+  (1) and `JudgeReworkRounds` (2) replace the two constants. The Admiral resume path, output repair and Judge rework
+  read the policy of the mission's captain; stall recovery keeps `MaxRecoveryAttempts`. REST PUT and GET (plus
+  `EffectiveRecovery` on single reads), MCP `get_model_profile`, the .NET SDK (shared models), Postman, REST_API.md,
+  MODEL_HETEROGENEITY.md, README settings, and the regenerated API surface. New suite `Services.RecoveryPolicy`, Admiral
+  case `model_profile_recovery_policy_overrides_unclassified_resumes`, and round-trip assertions in
+  `Database.ModelProfiles` (passes on SQLite, PostgreSQL, MySQL and SQL Server), `E2E.ModelProfiles` and
+  `Client.Contract.ModelProfiles`. Not done here: there is no tier default (the global settings are the defaults);
+  "escalate after" moves to RS-5.6, which adds the ladder it acts on; the dashboard, TUI and mobile have no model
+  profile screen yet, so the editor lands with RS-12.12, RS-12.9 and RS-12.16.
 - [ ] **RS-5.6** Escalation ladder. Personas (and optionally pipelines) get an ordered escalation ladder of captain
   matchers, stored as relational child rows like `CaptainPriorities`. Escalation is allowed for standalone missions,
   can take more than one hop, and must move to the next rung or a strictly higher effective tier (G12). Triggers:

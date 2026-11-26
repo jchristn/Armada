@@ -21,15 +21,18 @@ namespace Armada.Core.Database.Sqlite.Implementations
 
         private static readonly string _InsertProfile = @"INSERT INTO model_profiles
             (id, tenant_id, identity_key, runtime, provider, model, served_context_tokens, tools_available, mcp_available,
-             rendering_template, rendering_repeat_contract_at_end, rendering_max_files_per_mission, notes, created_utc, last_update_utc)
+             rendering_template, rendering_repeat_contract_at_end, rendering_max_files_per_mission,
+             recovery_max_resumes, recovery_unclassified_resumes, recovery_transient_grace_minutes, recovery_judge_rework_rounds, recovery_output_repair_attempts, notes, created_utc, last_update_utc)
             VALUES
             (@id, @tenant_id, @identity_key, @runtime, @provider, @model, @served_context_tokens, @tools_available, @mcp_available,
-             @rendering_template, @rendering_repeat_contract_at_end, @rendering_max_files_per_mission, @notes, @created_utc, @last_update_utc);";
+             @rendering_template, @rendering_repeat_contract_at_end, @rendering_max_files_per_mission,
+             @recovery_max_resumes, @recovery_unclassified_resumes, @recovery_transient_grace_minutes, @recovery_judge_rework_rounds, @recovery_output_repair_attempts, @notes, @created_utc, @last_update_utc);";
 
         private static readonly string _UpdateProfile = @"UPDATE model_profiles SET
             tools_available = @tools_available, mcp_available = @mcp_available, rendering_template = @rendering_template,
             rendering_repeat_contract_at_end = @rendering_repeat_contract_at_end,
-            rendering_max_files_per_mission = @rendering_max_files_per_mission, notes = @notes, last_update_utc = @last_update_utc
+            rendering_max_files_per_mission = @rendering_max_files_per_mission,
+            recovery_max_resumes = @recovery_max_resumes, recovery_unclassified_resumes = @recovery_unclassified_resumes, recovery_transient_grace_minutes = @recovery_transient_grace_minutes, recovery_judge_rework_rounds = @recovery_judge_rework_rounds, recovery_output_repair_attempts = @recovery_output_repair_attempts, notes = @notes, last_update_utc = @last_update_utc
             WHERE id = @id;";
 
         private static readonly string _InsertRevision = @"INSERT INTO model_profile_revisions
@@ -292,8 +295,18 @@ namespace Armada.Core.Database.Sqlite.Implementations
             SqliteCommandHelper.Add(cmd, "@rendering_template", profile.Rendering.Template);
             SqliteCommandHelper.Add(cmd, "@rendering_repeat_contract_at_end", profile.Rendering.RepeatContractAtEnd);
             SqliteCommandHelper.Add(cmd, "@rendering_max_files_per_mission", profile.Rendering.MaxFilesPerMission);
+            SqliteCommandHelper.Add(cmd, "@recovery_max_resumes", profile.Recovery.MaxResumes);
+            SqliteCommandHelper.Add(cmd, "@recovery_unclassified_resumes", profile.Recovery.UnclassifiedResumes);
+            SqliteCommandHelper.Add(cmd, "@recovery_transient_grace_minutes", profile.Recovery.TransientGraceMinutes);
+            SqliteCommandHelper.Add(cmd, "@recovery_judge_rework_rounds", profile.Recovery.JudgeReworkRounds);
+            SqliteCommandHelper.Add(cmd, "@recovery_output_repair_attempts", profile.Recovery.OutputRepairAttempts);
             SqliteCommandHelper.Add(cmd, "@notes", profile.Notes);
             SqliteCommandHelper.AddDate(cmd, "@last_update_utc", profile.LastUpdateUtc);
+        }
+
+        private static int? ReadRecovery(int? value, int min, int max)
+        {
+            return value.HasValue && value.Value >= min && value.Value <= max ? value : null;
         }
 
         private static ModelProfile FromReader(SqliteDataReader reader)
@@ -311,6 +324,11 @@ namespace Armada.Core.Database.Sqlite.Implementations
             profile.Rendering.RepeatContractAtEnd = SqliteCommandHelper.ReadNullableBool(reader["rendering_repeat_contract_at_end"]);
             int? maxFiles = SqliteCommandHelper.ReadNullableInt(reader["rendering_max_files_per_mission"]);
             profile.Rendering.MaxFilesPerMission = maxFiles.HasValue && maxFiles.Value >= 1 ? maxFiles : null;
+            profile.Recovery.MaxResumes = ReadRecovery(SqliteCommandHelper.ReadNullableInt(reader["recovery_max_resumes"]), 0, 10);
+            profile.Recovery.UnclassifiedResumes = ReadRecovery(SqliteCommandHelper.ReadNullableInt(reader["recovery_unclassified_resumes"]), 0, 3);
+            profile.Recovery.TransientGraceMinutes = ReadRecovery(SqliteCommandHelper.ReadNullableInt(reader["recovery_transient_grace_minutes"]), 0, 120);
+            profile.Recovery.JudgeReworkRounds = ReadRecovery(SqliteCommandHelper.ReadNullableInt(reader["recovery_judge_rework_rounds"]), 1, 5);
+            profile.Recovery.OutputRepairAttempts = ReadRecovery(SqliteCommandHelper.ReadNullableInt(reader["recovery_output_repair_attempts"]), 0, 3);
             profile.Notes = SqliteCommandHelper.ReadString(reader["notes"]);
             profile.CreatedUtc = SqliteCommandHelper.ReadDate(reader["created_utc"]);
             profile.LastUpdateUtc = SqliteCommandHelper.ReadDate(reader["last_update_utc"]);

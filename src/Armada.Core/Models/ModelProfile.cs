@@ -61,6 +61,22 @@ namespace Armada.Core.Models
         }
 
         /// <summary>
+        /// Recovery policy overrides set by an administrator (RS-5.5); every value is null unless set, and null means the
+        /// global setting applies. Editable.
+        /// </summary>
+        public ModelProfileRecovery Recovery
+        {
+            get => _Recovery;
+            set => _Recovery = value ?? new ModelProfileRecovery();
+        }
+
+        /// <summary>
+        /// The recovery policy in effect for captains linked to this profile: the global settings with
+        /// <see cref="Recovery"/> applied. Filled only by single-profile reads; list pages leave it null. Read-only.
+        /// </summary>
+        public RecoveryPolicy? EffectiveRecovery { get; set; } = null;
+
+        /// <summary>
         /// Free-text administrator notes, or null. Editable.
         /// </summary>
         public string? Notes { get; set; } = null;
@@ -100,6 +116,7 @@ namespace Armada.Core.Models
         private ModelProfileIdentity _Identity = new ModelProfileIdentity();
         private ModelProfileCapabilities _Capabilities = new ModelProfileCapabilities();
         private ModelProfileRendering _Rendering = new ModelProfileRendering();
+        private ModelProfileRecovery _Recovery = new ModelProfileRecovery();
         private List<ModelProfileRevision> _Revisions = new List<ModelProfileRevision>();
 
         #endregion

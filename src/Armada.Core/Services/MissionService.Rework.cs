@@ -51,11 +51,14 @@ namespace Armada.Core.Services
 
             if (worker == null) return Unavailable("Automatic Judge rework is unavailable because the reviewed Worker could not be found in the dependency chain.");
 
+            // RS-5.5: JudgeReworkRounds, raised (never lowered) by the Worker captain's model profile.
+            int maxRounds = (await RecoveryPolicyResolver.ResolveForCaptainIdAsync(_Database, _Settings, worker.CaptainId, token).ConfigureAwait(false)).JudgeReworkRounds;
+
             // Give the Worker bounded rework, then try one different captain. Unchanged rejected work
             // switches earlier. Escalation also works in voyages with no planning stage.
             // An operator restart of a blocked stage is an explicit decision to spend another round: the automatic
             // budget and the automatic captain escalation do not apply to it (normal routing picks the captain).
-            if (!operatorRestart && (escalated || rounds > _MaxJudgeReworkRounds))
+            if (!operatorRestart && (escalated || rounds > maxRounds))
                 return Unavailable("Automatic Judge rework limit reached after " + rounds + " rework round(s)" + (escalated ? ", including an escalated attempt." : "."));
             string? escalateTo = null;
             Mission? previousWorker = voyageMissions.FirstOrDefault(m => m.Id != worker.Id && PersonaCatalog.Matches(m.Persona, PersonaCatalog.Worker)
@@ -66,10 +69,10 @@ namespace Armada.Core.Services
             bool repeatedCase = previousJudge != null && currentCase != null
                 && String.Equals(currentCase, JudgeContract.AffectedCaseKey(previousJudge.AgentOutput), StringComparison.Ordinal);
             bool stagnant = (previousWorker != null || repeatedCase) && !MissionModeContract.IsReadOnly(worker.Mode);
-            if (!operatorRestart && (rounds == _MaxJudgeReworkRounds || stagnant))
+            if (!operatorRestart && (rounds == maxRounds || stagnant))
             {
-                string escalationTrigger = rounds == _MaxJudgeReworkRounds
-                    ? "Automatic Judge rework budget exhausted for this slice (" + rounds + " of " + _MaxJudgeReworkRounds + " rounds). "
+                string escalationTrigger = rounds == maxRounds
+                    ? "Automatic Judge rework budget exhausted for this slice (" + rounds + " of " + maxRounds + " rounds). "
                     : previousWorker != null
                         ? "The Worker produced the same rejected commit after " + rounds + " rework round(s). "
                         : "The Judge reported the same affected case (" + currentCase + ") after " + rounds + " rework round(s). ";

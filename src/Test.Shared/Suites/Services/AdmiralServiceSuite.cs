@@ -674,6 +674,75 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
+            cases.Add(CaseAsync("model_profile_recovery_policy_overrides_unclassified_resumes", "RS-5.5: a captain's model profile recovery policy replaces the global Unclassified resume limit for its missions", TestTags.Reliability, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    DatabaseDriver db = testDb.Driver;
+                    StubGitService git = new StubGitService();
+                    ArmadaSettings settings = CreateSettings();
+                    settings.MaxRecoveryAttempts = 3;
+                    settings.UnclassifiedResumeLimit = 1;
+                    settings.LogDirectory = Path.Combine(Path.GetTempPath(), "armada_test_logs_" + Guid.NewGuid().ToString("N"));
+                    LoggingModule logging = CreateLogging();
+                    IDockService dockService = new DockService(logging, db, settings, git);
+                    CaptainService captainService = new CaptainService(logging, db, settings, git, dockService);
+                    int relaunches = 0;
+                    captainService.OnLaunchAgent = (_, _, _) => { relaunches++; return Task.FromResult(7200 + relaunches); };
+                    IMissionService missionService = new MissionService(logging, db, settings, dockService, captainService);
+                    AdmiralService service = new AdmiralService(logging, db, settings, captainService, missionService, new VoyageService(logging, db), dockService);
+
+                    Vessel vessel = await db.Vessels.CreateAsync(new Vessel("policy-vessel", "https://github.com/test/repo.git")).ConfigureAwait(false);
+                    Voyage voyage = new Voyage("Policy Voyage");
+                    voyage.Status = VoyageStatusEnum.InProgress;
+                    await db.Voyages.CreateAsync(voyage);
+
+                    Dock dock = new Dock(vessel.Id);
+                    dock.WorktreePath = Path.Combine(Path.GetTempPath(), "armada_policy_dock_" + Guid.NewGuid().ToString("N"));
+                    Directory.CreateDirectory(dock.WorktreePath);
+                    dock.Active = true;
+                    dock = await db.Docks.CreateAsync(dock).ConfigureAwait(false);
+
+                    Mission mission = new Mission("Worker on an open model", "Do the work.");
+                    mission.VoyageId = voyage.Id;
+                    mission.VesselId = vessel.Id;
+                    mission.Persona = "Worker";
+                    mission.Status = MissionStatusEnum.InProgress;
+                    mission.ProcessId = 4444;
+                    mission.DockId = dock.Id;
+                    await db.Missions.CreateAsync(mission);
+
+                    Captain captain = new Captain("mux", AgentRuntimeEnum.Mux);
+                    captain.State = CaptainStateEnum.Working;
+                    captain.Assignment = mission;
+                    captain.ProcessId = 4444;
+                    await CaptainAssignmentFixture.CreateAsync(db, captain);
+
+                    // The profile the captain's stage outcomes resolve to (same identity key), so a relaunch keeps the link.
+                    ModelProfile profile = new ModelProfile();
+                    profile.Identity.Runtime = "Mux";
+                    profile.Recovery.UnclassifiedResumes = 2;
+                    profile = await db.ModelProfiles.CreateAsync(profile, ModelProfileRules.IdentityKey(null, profile.Identity)).ConfigureAwait(false);
+                    AssertTrue(await db.ModelProfiles.LinkCaptainAsync(captain.Id, profile.Id).ConfigureAwait(false), "captain linked to the profile");
+
+                    int processId = 4444;
+                    for (int exit = 1; exit <= 2; exit++)
+                    {
+                        await service.HandleProcessExitAsync(processId, RuntimeFailureClassifier.Decide(1, null), captain.Id, mission.Id).ConfigureAwait(false);
+                        Mission? resumed = await db.Missions.ReadAsync(mission.Id).ConfigureAwait(false);
+                        AssertEqual(MissionStatusEnum.InProgress, resumed!.Status, "unexplained exit " + exit + " resumes under the profile's limit of 2");
+                        processId = resumed.ProcessId!.Value;
+                    }
+
+                    AssertEqual(2, relaunches);
+                    await service.HandleProcessExitAsync(processId, RuntimeFailureClassifier.Decide(1, null), captain.Id, mission.Id).ConfigureAwait(false);
+                    Mission? failed = await db.Missions.ReadAsync(mission.Id).ConfigureAwait(false);
+                    AssertEqual(MissionStatusEnum.Failed, failed!.Status, "the third unexplained exit does not resume");
+                    AssertEqual(2, relaunches);
+                    try { Directory.Delete(dock.WorktreePath, true); } catch { }
+                }
+            }));
+
             cases.Add(CaseAsync("transient_outage_is_ridden_out_past_max_recovery", "Within TransientOutageGraceMinutes a repeating endpoint 5xx keeps resuming past MaxRecoveryAttempts, recording the failure once", TestTags.Reliability, async () =>
             {
                 using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())

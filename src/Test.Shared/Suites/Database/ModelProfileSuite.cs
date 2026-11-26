@@ -56,6 +56,7 @@ namespace Test.Shared.Suites.Database
                     Identity = new ModelProfileIdentity { Runtime = "Mux", Provider = "Ollama", Model = "qwen3.8:27b", ServedContextTokens = 131072 },
                     Capabilities = new ModelProfileCapabilities { ToolsAvailable = true, McpAvailable = false },
                     Rendering = new ModelProfileRendering { Template = "Compact", RepeatContractAtEnd = true, MaxFilesPerMission = 3 },
+                    Recovery = new ModelProfileRecovery { MaxResumes = 5, UnclassifiedResumes = 2, TransientGraceMinutes = 0, JudgeReworkRounds = 3, OutputRepairAttempts = 2 },
                     Notes = "Slow but careful.",
                     CreatedUtc = _Fixed
                 };
@@ -73,6 +74,11 @@ namespace Test.Shared.Suites.Database
                 AssertEqual("Compact", read.Rendering.Template);
                 AssertEqual((bool?)true, read.Rendering.RepeatContractAtEnd);
                 AssertEqual((int?)3, read.Rendering.MaxFilesPerMission);
+                AssertEqual((int?)5, read.Recovery.MaxResumes);
+                AssertEqual((int?)2, read.Recovery.UnclassifiedResumes);
+                AssertEqual((int?)0, read.Recovery.TransientGraceMinutes, "0 round-trips as a value, not null");
+                AssertEqual((int?)3, read.Recovery.JudgeReworkRounds);
+                AssertEqual((int?)2, read.Recovery.OutputRepairAttempts);
                 AssertEqual("Slow but careful.", read.Notes);
                 AssertSameInstant(_Fixed, read.CreatedUtc, "created");
                 AssertEqual(0, read.Revisions.Count, "ReadAsync returns no revisions");
@@ -92,6 +98,11 @@ namespace Test.Shared.Suites.Database
                 AssertNull(min.Rendering.Template, "template");
                 AssertNull(min.Rendering.RepeatContractAtEnd, "repeat");
                 AssertNull(min.Rendering.MaxFilesPerMission, "max files");
+                AssertNull(min.Recovery.MaxResumes, "max resumes");
+                AssertNull(min.Recovery.UnclassifiedResumes, "unclassified resumes");
+                AssertNull(min.Recovery.TransientGraceMinutes, "grace");
+                AssertNull(min.Recovery.JudgeReworkRounds, "rework rounds");
+                AssertNull(min.Recovery.OutputRepairAttempts, "repairs");
                 AssertNull(min.Notes, "notes");
                 AssertNull(await db.ModelProfiles.ReadAsync("mdl_missing").ConfigureAwait(false), "missing");
                 AssertNull(await db.ModelProfiles.ReadByIdentityKeyAsync("key-missing").ConfigureAwait(false), "missing key");
@@ -117,6 +128,7 @@ namespace Test.Shared.Suites.Database
                 profile.Identity = new ModelProfileIdentity { Runtime = "Codex", Model = "m2", ServedContextTokens = 4096 };
                 profile.Capabilities = new ModelProfileCapabilities { ToolsAvailable = false, McpAvailable = true };
                 profile.Rendering = new ModelProfileRendering { Template = "Full", RepeatContractAtEnd = false, MaxFilesPerMission = 1 };
+                profile.Recovery = new ModelProfileRecovery { MaxResumes = 0, JudgeReworkRounds = 5 };
                 profile.Notes = "edited";
                 await db.ModelProfiles.UpdateAsync(profile).ConfigureAwait(false);
 
@@ -131,16 +143,22 @@ namespace Test.Shared.Suites.Database
                 AssertEqual("Full", read.Rendering.Template);
                 AssertEqual((bool?)false, read.Rendering.RepeatContractAtEnd);
                 AssertEqual((int?)1, read.Rendering.MaxFilesPerMission);
+                AssertEqual((int?)0, read.Recovery.MaxResumes);
+                AssertEqual((int?)5, read.Recovery.JudgeReworkRounds);
+                AssertNull(read.Recovery.OutputRepairAttempts, "unset override stays null");
                 AssertEqual("edited", read.Notes);
 
                 profile.Capabilities = new ModelProfileCapabilities();
                 profile.Rendering = new ModelProfileRendering();
+                profile.Recovery = new ModelProfileRecovery();
                 profile.Notes = null;
                 await db.ModelProfiles.UpdateAsync(profile).ConfigureAwait(false);
                 ModelProfile cleared = (await db.ModelProfiles.ReadAsync(profile.Id).ConfigureAwait(false))!;
                 AssertNull(cleared.Capabilities.ToolsAvailable, "tools cleared");
                 AssertNull(cleared.Rendering.Template, "template cleared");
                 AssertNull(cleared.Rendering.MaxFilesPerMission, "max files cleared");
+                AssertNull(cleared.Recovery.MaxResumes, "recovery override cleared");
+                AssertNull(cleared.Recovery.JudgeReworkRounds, "rework override cleared");
                 AssertNull(cleared.Notes, "notes cleared");
             }));
 

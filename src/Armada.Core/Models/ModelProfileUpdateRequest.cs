@@ -18,6 +18,11 @@ namespace Armada.Core.Models
         public ModelProfileRendering? Rendering { get; set; } = null;
 
         /// <summary>
+        /// Replacement recovery policy overrides, or null to keep them.
+        /// </summary>
+        public ModelProfileRecovery? Recovery { get; set; } = null;
+
+        /// <summary>
         /// Replacement notes (empty clears), or null to keep them.
         /// </summary>
         public string? Notes { get; set; } = null;

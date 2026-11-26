@@ -648,7 +648,7 @@ namespace Armada.Server
             });
             _ModelProbeService = new ModelProbeService(_Database, _Logging, modelProbeExecutor, () => _Settings.Evaluation, modelProbeProvenance);
             _ModelProbeAccess = new ModelProbeAccessService(_Database, _ModelProbeService, _ModelEndpointService, _Logging);
-            _ModelProfileAccess = new ModelProfileAccessService(_Database, _Logging);
+            _ModelProfileAccess = new ModelProfileAccessService(_Database, _Logging, _Settings);
             _ModelAlertService = new ModelAlertService(_Database, _Logging, () => _Settings.ModelAlerts);
             _ModelAlertAccess = new ModelAlertAccessService(_Database, _ModelAlertService, () => _Settings.ModelAlerts, () => _Settings.SaveAsync(), _ModelProbeAccess, _Logging);
             try

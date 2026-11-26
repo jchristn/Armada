@@ -1560,7 +1560,8 @@ namespace Armada.Core.Database.Mysql
                 Armada.Core.Database.ProcessLaunchSchema.Migration(Armada.Core.Enums.DatabaseTypeEnum.Mysql),
                 Armada.Core.Database.AskThreadLocationSchema.Migration(Armada.Core.Enums.DatabaseTypeEnum.Mysql),
                 Armada.Core.Database.MissionTypedStateSchema.Migration(Armada.Core.Enums.DatabaseTypeEnum.Mysql),
-                Armada.Core.Database.RecoveryStateSchema.Migration(Armada.Core.Enums.DatabaseTypeEnum.Mysql)
+                Armada.Core.Database.RecoveryStateSchema.Migration(Armada.Core.Enums.DatabaseTypeEnum.Mysql),
+                Armada.Core.Database.ModelProfileRecoverySchema.Migration(Armada.Core.Enums.DatabaseTypeEnum.Mysql)
 
             };
         }

@@ -33,7 +33,7 @@ Client contract version: `1.0` (reported as `ContractVersion` by
 | WebSocket commands | 65 | 0 |
 | WebSocket event types | 81 | 0 |
 | CLI commands | 101 | 0 |
-| Settings keys | 352 | 12 |
+| Settings keys | 354 | 12 |
 
 ## REST API
 
@@ -1069,7 +1069,7 @@ Commands of the `armada` CLI (Helm). `*` marks a required argument or option. Gl
 | `armada vessel update` | `<vessel>*` | `--json`, `--page`, `--page-size`, `--profile`, `--serialize-overlapping-missions`, `--server`, `--token`, `--verbose` |
 | `armada voyage cancel` | `<voyage>*` | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
 | `armada voyage cascade` | `<voyageId>*` | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
-| `armada voyage create` | `<title>*` | `--json`, `--mission\|-m`, `--page`, `--page-size`, `--playbook\|-p`, `--profile`, `--server`, `--token`, `--verbose`, `--vessel\|-v` |
+| `armada voyage create` | `<title>*` | `--json`, `--mission\|-m`, `--mode`, `--page`, `--page-size`, `--persona`, `--playbook\|-p`, `--profile`, `--server`, `--token`, `--verbose`, `--vessel\|-v` |
 | `armada voyage failure` | `<id>*` | `--brief`, `--json`, `--page`, `--page-size`, `--profile`, `--redact-hosts`, `--server`, `--token`, `--verbose` |
 | `armada voyage list` |  | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--status\|-s`, `--token`, `--verbose` |
 | `armada voyage retry` | `<voyage>*` | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
@@ -1258,6 +1258,7 @@ install with the home directory written as `~`; defaults are not frozen (see COM
 | `import.inlineBatchLimit` | int | `25` |  |
 | `import.maxDepth` | int | `6` |  |
 | `isolateCaptainLaunch` | bool | `false` |  |
+| `judgeReworkRounds` | int | `2` |  |
 | `landingDeferralDeadlineHours` | int | `24` |  |
 | `landingMode` | enum LandingModeEnum (LocalMerge\|PullRequest\|MergeQueue\|None\|MergeAndPush)? | `"MergeAndPush"` |  |
 | `logDirectory` | string | `"~/.armada/logs"` |  |
@@ -1407,6 +1408,7 @@ install with the home directory written as `~`; defaults are not frozen (see COM
 | `toolWaitHardLimitMinutes` | int | `60` |  |
 | `transientOutageGraceMinutes` | int | `10` |  |
 | `transientResumeDelaySeconds` | int | `5` |  |
+| `unclassifiedResumeLimit` | int | `1` |  |
 | `usageCapture` | object |  |  |
 | `usageCapture.allowPtyFallback` | bool? | `null` |  |
 | `usageCapture.defaultsRevision` | int | `2` |  |

@@ -179,10 +179,6 @@ namespace Armada.Core.Services
         // many times (more when MaxNoOpRedispatchAttempts is higher) before an interruption fails it.
         private const int _MinInterruptedRedispatches = 3;
 
-        // RS-5.2: an Unclassified runtime exit gets this many resumes in place before escalation. RS-5.5 moves it into the
-        // per-model recovery policy.
-        private const int _UnclassifiedResumeLimit = 1;
-
         private int InterruptedRedispatchLimit => Math.Max(_Settings.MaxNoOpRedispatchAttempts, _MinInterruptedRedispatches);
 
         private string _Header = "[AdmiralService] ";
@@ -1076,19 +1072,22 @@ namespace Armada.Core.Services
 
                 // A model endpoint hiccup (Transient) or a run that ran out of iterations or budget (TaskFailure) is not
                 // the end of the mission: relaunch the captain in the same dock, where its edits so far still are, with
-                // a note about the earlier attempt, up to MaxRecoveryAttempts times.
-                // Transient failures past MaxRecoveryAttempts keep resuming while the outage is younger than
-                // TransientOutageGraceMinutes, so a proxy or model-server restart does not fail work in progress.
-                bool withinOutageGrace = exitInfo.FailureKind == RuntimeFailureKindEnum.Transient && mission != null && await WithinTransientOutageGraceAsync(mission.Id).ConfigureAwait(false);
+                // a note about the earlier attempt, up to the policy's MaxResumes times (MaxRecoveryAttempts by default).
+                // Transient failures past that keep resuming while the outage is younger than the policy's
+                // TransientGraceMinutes (TransientOutageGraceMinutes by default), so a proxy or model-server restart does
+                // not fail work in progress.
+                // RS-5.5: the resume budgets come from the captain's model profile when it overrides the global settings.
+                RecoveryPolicy policy = await RecoveryPolicyResolver.ResolveAsync(_Database, _Settings, captain, token).ConfigureAwait(false);
+                bool withinOutageGrace = exitInfo.FailureKind == RuntimeFailureKindEnum.Transient && mission != null && await WithinTransientOutageGraceAsync(mission.Id, policy.TransientGraceMinutes).ConfigureAwait(false);
                 if (exitInfo.FailureKind != RuntimeFailureKindEnum.Transient) await ForgetTransientOutageAsync(missionId).ConfigureAwait(false);
                 // An Unclassified exit (no provider error Armada recognizes, not an abnormal death) gets one resume in place:
                 // a second unexplained exit goes to escalation instead of spending the whole budget on a cause nobody named.
                 bool resumable = exitInfo.FailureKind == RuntimeFailureKindEnum.Transient || exitInfo.FailureKind == RuntimeFailureKindEnum.TaskFailure;
                 bool unclassifiedResume = exitInfo.FailureKind == RuntimeFailureKindEnum.Unclassified
-                    && captain.RecoveryAttempts < Math.Min(_UnclassifiedResumeLimit, _Settings.MaxRecoveryAttempts);
+                    && captain.RecoveryAttempts < policy.UnclassifiedResumes;
                 if ((resumable || unclassifiedResume)
                     && mission != null
-                    && (unclassifiedResume || captain.RecoveryAttempts < _Settings.MaxRecoveryAttempts || withinOutageGrace)
+                    && (unclassifiedResume || captain.RecoveryAttempts < policy.MaxResumes || withinOutageGrace)
                     && await TryResumeInPlaceAsync(captain, mission, failureReason, token,
                         exitInfo.FailureKind == RuntimeFailureKindEnum.Transient ? TransientResumeDelay(captain.RecoveryAttempts, exitInfo.ProviderError?.RetryAfterSeconds) : TimeSpan.Zero).ConfigureAwait(false))
                 {
@@ -2437,9 +2436,9 @@ namespace Armada.Core.Services
         /// Pending for a fresh assignment, and the voyage is left running. Bounded by the caller against
         /// <see cref="ArmadaSettings.MaxNoOpRedispatchAttempts"/>.
         /// </summary>
-        internal async Task<bool> WithinTransientOutageGraceAsync(string missionId)
+        internal async Task<bool> WithinTransientOutageGraceAsync(string missionId, int? graceMinutesOverride = null)
         {
-            int graceMinutes = _Settings.TransientOutageGraceMinutes;
+            int graceMinutes = graceMinutesOverride ?? _Settings.TransientOutageGraceMinutes;
             if (graceMinutes <= 0) return false;
             DateTime now = DateTime.UtcNow;
             DateTime started = _TransientOutageStarts.GetOrAdd(missionId, now);
@@ -2555,7 +2554,7 @@ namespace Armada.Core.Services
                 _Logging.Warn(_Header + "could not rewrite the instructions for mission " + mission.Id + " before resuming: " + ex.Message);
             }
 
-            _Logging.Warn(_Header + "mission " + mission.Id + " stopped (" + failureReason + "); resuming captain " + captain.Id + " in the same dock (attempt " + attempt + "/" + _Settings.MaxRecoveryAttempts + ")");
+            _Logging.Warn(_Header + "mission " + mission.Id + " stopped (" + failureReason + "); resuming captain " + captain.Id + " in the same dock (attempt " + attempt + ")");
             await EmitEventAsync("mission.resumed", "Mission resumed in place after: " + failureReason,
                 entityType: "mission", entityId: mission.Id, captainId: captain.Id, missionId: mission.Id,
                 vesselId: mission.VesselId, voyageId: mission.VoyageId, token: token).ConfigureAwait(false);

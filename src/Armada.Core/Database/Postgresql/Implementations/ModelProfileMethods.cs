@@ -21,15 +21,18 @@ namespace Armada.Core.Database.Postgresql.Implementations
 
         private static readonly string _InsertProfile = @"INSERT INTO model_profiles
             (id, tenant_id, identity_key, runtime, provider, model, served_context_tokens, tools_available, mcp_available,
-             rendering_template, rendering_repeat_contract_at_end, rendering_max_files_per_mission, notes, created_utc, last_update_utc)
+             rendering_template, rendering_repeat_contract_at_end, rendering_max_files_per_mission,
+             recovery_max_resumes, recovery_unclassified_resumes, recovery_transient_grace_minutes, recovery_judge_rework_rounds, recovery_output_repair_attempts, notes, created_utc, last_update_utc)
             VALUES
             (@id, @tenant_id, @identity_key, @runtime, @provider, @model, @served_context_tokens, @tools_available, @mcp_available,
-             @rendering_template, @rendering_repeat_contract_at_end, @rendering_max_files_per_mission, @notes, @created_utc, @last_update_utc);";
+             @rendering_template, @rendering_repeat_contract_at_end, @rendering_max_files_per_mission,
+             @recovery_max_resumes, @recovery_unclassified_resumes, @recovery_transient_grace_minutes, @recovery_judge_rework_rounds, @recovery_output_repair_attempts, @notes, @created_utc, @last_update_utc);";
 
         private static readonly string _UpdateProfile = @"UPDATE model_profiles SET
             tools_available = @tools_available, mcp_available = @mcp_available, rendering_template = @rendering_template,
             rendering_repeat_contract_at_end = @rendering_repeat_contract_at_end,
-            rendering_max_files_per_mission = @rendering_max_files_per_mission, notes = @notes, last_update_utc = @last_update_utc
+            rendering_max_files_per_mission = @rendering_max_files_per_mission,
+            recovery_max_resumes = @recovery_max_resumes, recovery_unclassified_resumes = @recovery_unclassified_resumes, recovery_transient_grace_minutes = @recovery_transient_grace_minutes, recovery_judge_rework_rounds = @recovery_judge_rework_rounds, recovery_output_repair_attempts = @recovery_output_repair_attempts, notes = @notes, last_update_utc = @last_update_utc
             WHERE id = @id;";
 
         private static readonly string _InsertRevision = @"INSERT INTO model_profile_revisions
@@ -292,8 +295,18 @@ namespace Armada.Core.Database.Postgresql.Implementations
             PostgresqlCommandHelper.Add(cmd, "@rendering_template", profile.Rendering.Template);
             PostgresqlCommandHelper.Add(cmd, "@rendering_repeat_contract_at_end", profile.Rendering.RepeatContractAtEnd);
             PostgresqlCommandHelper.Add(cmd, "@rendering_max_files_per_mission", profile.Rendering.MaxFilesPerMission);
+            PostgresqlCommandHelper.Add(cmd, "@recovery_max_resumes", profile.Recovery.MaxResumes);
+            PostgresqlCommandHelper.Add(cmd, "@recovery_unclassified_resumes", profile.Recovery.UnclassifiedResumes);
+            PostgresqlCommandHelper.Add(cmd, "@recovery_transient_grace_minutes", profile.Recovery.TransientGraceMinutes);
+            PostgresqlCommandHelper.Add(cmd, "@recovery_judge_rework_rounds", profile.Recovery.JudgeReworkRounds);
+            PostgresqlCommandHelper.Add(cmd, "@recovery_output_repair_attempts", profile.Recovery.OutputRepairAttempts);
             PostgresqlCommandHelper.Add(cmd, "@notes", profile.Notes);
             PostgresqlCommandHelper.AddDate(cmd, "@last_update_utc", profile.LastUpdateUtc);
+        }
+
+        private static int? ReadRecovery(int? value, int min, int max)
+        {
+            return value.HasValue && value.Value >= min && value.Value <= max ? value : null;
         }
 
         private static ModelProfile FromReader(NpgsqlDataReader reader)
@@ -311,6 +324,11 @@ namespace Armada.Core.Database.Postgresql.Implementations
             profile.Rendering.RepeatContractAtEnd = PostgresqlCommandHelper.ReadNullableBool(reader["rendering_repeat_contract_at_end"]);
             int? maxFiles = PostgresqlCommandHelper.ReadNullableInt(reader["rendering_max_files_per_mission"]);
             profile.Rendering.MaxFilesPerMission = maxFiles.HasValue && maxFiles.Value >= 1 ? maxFiles : null;
+            profile.Recovery.MaxResumes = ReadRecovery(PostgresqlCommandHelper.ReadNullableInt(reader["recovery_max_resumes"]), 0, 10);
+            profile.Recovery.UnclassifiedResumes = ReadRecovery(PostgresqlCommandHelper.ReadNullableInt(reader["recovery_unclassified_resumes"]), 0, 3);
+            profile.Recovery.TransientGraceMinutes = ReadRecovery(PostgresqlCommandHelper.ReadNullableInt(reader["recovery_transient_grace_minutes"]), 0, 120);
+            profile.Recovery.JudgeReworkRounds = ReadRecovery(PostgresqlCommandHelper.ReadNullableInt(reader["recovery_judge_rework_rounds"]), 1, 5);
+            profile.Recovery.OutputRepairAttempts = ReadRecovery(PostgresqlCommandHelper.ReadNullableInt(reader["recovery_output_repair_attempts"]), 0, 3);
             profile.Notes = PostgresqlCommandHelper.ReadString(reader["notes"]);
             profile.CreatedUtc = PostgresqlCommandHelper.ReadDate(reader["created_utc"]);
             profile.LastUpdateUtc = PostgresqlCommandHelper.ReadDate(reader["last_update_utc"]);

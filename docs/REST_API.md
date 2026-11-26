@@ -6222,8 +6222,8 @@ never edited. Profile ids use the `mdl_` prefix.
 |---|---|---|---|
 | GET | `/api/v1/model-profiles` | | `200` `EnumerationResult<ModelProfile>` (without revisions), newest first. Query: `tenantId` (global admins), `runtime`, `provider` (case-insensitive), `model` (contains, case-insensitive), `pageNumber`, `pageSize` (1-1000, default 100); `400` for a page value that does not parse |
 | POST | `/api/v1/model-profiles/enumerate` | `ModelProfileQuery` (optional): `TenantId` (global admins), `Runtime`, `Provider`, `ModelContains`, `PageNumber`, `PageSize` | `200` the same page as the GET; `400` for a body that does not parse |
-| GET | `/api/v1/model-profiles/{id}` | | `200` `ModelProfile` with `Identity`, `Capabilities`, `Rendering`, `Notes`, `Revisions` (oldest first) and `Measured` (see below); `404` when missing or in another tenant |
-| PUT | `/api/v1/model-profiles/{id}` | `ModelProfileUpdateRequest`: `Capabilities` (`ToolsAvailable`, `McpAvailable`), `Rendering` (`Template`, `RepeatContractAtEnd`, `MaxFilesPerMission` 1 or more; null means no override), `Notes` (empty clears). An omitted section keeps its value | `200` the profile with revisions; `400` invalid value; `403` not an admin; `404` |
+| GET | `/api/v1/model-profiles/{id}` | | `200` `ModelProfile` with `Identity`, `Capabilities`, `Rendering`, `Recovery`, `EffectiveRecovery`, `Notes`, `Revisions` (oldest first) and `Measured` (see below); `404` when missing or in another tenant |
+| PUT | `/api/v1/model-profiles/{id}` | `ModelProfileUpdateRequest`: `Capabilities` (`ToolsAvailable`, `McpAvailable`), `Rendering` (`Template`, `RepeatContractAtEnd`, `MaxFilesPerMission` 1 or more; null means no override), `Recovery` (see below; null values use the global setting), `Notes` (empty clears). An omitted section keeps its value | `200` the profile with revisions; `400` invalid value; `403` not an admin; `404` |
 | PUT | `/api/v1/model-profiles/{id}/revisions/{revisionId}/compatible-with` | `ModelProfileCompatibilityRequest`: `CompatibleWith` (revision ids of the same tenant; empty removes every mark). Symmetric | `200` `ModelProfileRevision` with `CompatibleWith`; `400` missing list or unknown revision; `403`; `404` profile or revision (of that profile) not found |
 | GET | `/api/v1/model-profiles/{id}/scorecard` | | `200` `ModelScorecard` for one persona (see [Model scorecard](#model-scorecard)). Query: `persona` (required), `vesselId`, `windowDays` (1-365, default 30), `windowMissions` (1-500, default 50); `400` missing persona, a window value out of range or not an integer; `404` when missing or in another tenant (checked before the query is validated) |
 
@@ -6235,11 +6235,26 @@ id). An incomplete report (a cancelled or timed-out run) is also recorded as an 
 `EvaluationIncomplete` true, but it never fills `Measured`, never replaces a complete report, and observations never
 pool into it. The list routes leave `Measured` null. MCP `get_model_profile` returns the same shape.
 
+`Recovery` holds the per-model recovery policy overrides for missions run by captains linked to the profile. Each value
+is null unless an administrator sets it, and null means the global setting applies:
+
+| Field | Range | Overrides | Effect |
+|---|---|---|---|
+| `MaxResumes` | 0-10 | `MaxRecoveryAttempts` | In-place resumes after a transient or task failure |
+| `UnclassifiedResumes` | 0-3 | `UnclassifiedResumeLimit` | In-place resumes after an `Unclassified` exit, never more than `MaxResumes` |
+| `TransientGraceMinutes` | 0-120 | `TransientOutageGraceMinutes` | How long a transient endpoint outage is ridden out past the resumes |
+| `JudgeReworkRounds` | 1-5 | `JudgeReworkRounds` | Automatic Judge rework rounds for a Worker slice; it can raise the global value but never lower it |
+| `OutputRepairAttempts` | 0-3 | `MaxOutputRepairAttempts` | Output-contract repair turns per mission |
+
+`EffectiveRecovery` (single-profile reads only) is the policy in effect: the same five values after the overrides are
+applied, plus `ModelProfileId`. Stall recovery of a captain whose process stopped reporting keeps using
+`MaxRecoveryAttempts`.
+
 ```bash
 curl "http://localhost:7890/api/v1/model-profiles?runtime=Mux&pageSize=10" -H "Authorization: Bearer <token>"
 curl -X PUT http://localhost:7890/api/v1/model-profiles/mdl_abc123 \
   -H "Authorization: Bearer <token>" -H "Content-Type: application/json" \
-  -d '{"rendering":{"template":"Compact","maxFilesPerMission":3},"notes":"Keep each mission to one objective."}'
+  -d '{"rendering":{"template":"Compact","maxFilesPerMission":3},"recovery":{"maxResumes":5,"judgeReworkRounds":3},"notes":"Keep each mission to one objective."}'
 ```
 
 ### Model scorecard

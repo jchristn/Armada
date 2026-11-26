@@ -1474,7 +1474,8 @@ namespace Armada.Core.Services
             // A person decides review-gated stages; never re-run behind their back.
             if (mission.RequiresReview) return false;
 
-            int max = _Settings.MaxOutputRepairAttempts;
+            // RS-5.5: the model profile of the captain that broke the contract can override MaxOutputRepairAttempts.
+            int max = (await RecoveryPolicyResolver.ResolveForCaptainIdAsync(_Database, _Settings, mission.CaptainId, token).ConfigureAwait(false)).OutputRepairAttempts;
             if (mission.OutputRepairAttempts >= max) return false;
 
             MissionStatusEnum observedStatus = mission.Status;
@@ -2279,7 +2280,6 @@ namespace Armada.Core.Services
             return null;
         }
 
-        private const int _MaxJudgeReworkRounds = 2;
 
         /// <summary>
         /// The persona a mission is routed as: its own, or Worker for a mission dispatched without one (a plain dispatch

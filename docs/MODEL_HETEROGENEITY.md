@@ -540,6 +540,13 @@ envelope and the administrator; it does not set `Captain.Tier` or change routing
     "repeatContractAtEnd": true,
     "maxFilesPerMission": 3
   },
+  "recovery": {
+    "maxResumes": 5,
+    "unclassifiedResumes": 1,
+    "transientGraceMinutes": 20,
+    "judgeReworkRounds": 3,
+    "outputRepairAttempts": 2
+  },
   "measured": [
     {
       "revisionId": "mdv_...",
@@ -569,6 +576,13 @@ Notes:
   show the same results.
 - `rendering` holds explicit overrides only. Manual values always win; measured results are shown beside them as
   advice.
+- `recovery` (RS-5.5) is the per-model recovery policy: in-place resumes (`MaxRecoveryAttempts`), resumes after an
+  `Unclassified` exit (`UnclassifiedResumeLimit`), the transient outage grace (`TransientOutageGraceMinutes`), Judge
+  rework rounds (`JudgeReworkRounds`) and output-contract repairs (`MaxOutputRepairAttempts`). Each value is null unless
+  set, and null uses the global setting named in brackets. Judge rework rounds take the larger of the profile and global
+  values, so a profile never shortens the FullPipeline rework chain. A single-profile read also returns
+  `effectiveRecovery`, the policy in effect. The policy applies to missions run by captains linked to the profile; a
+  captain is linked from its stage outcomes, so the override belongs on the profile those outcomes resolve to.
 - `measured` holds counts with provenance, not synthetic scores. Speed observations feed inference and inactivity
   timeout advice only.
 

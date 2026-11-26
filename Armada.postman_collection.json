@@ -14445,7 +14445,7 @@
                                 "{{modelProfileId}}"
                             ]
                         },
-                        "description": "The profile with its revisions, oldest first. 404 when missing or in another tenant."
+                        "description": "The profile with its revisions, oldest first, and EffectiveRecovery (the recovery policy in effect for its captains). 404 when missing or in another tenant."
                     }
                 },
                 {
@@ -14460,7 +14460,7 @@
                         ],
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n  \"Capabilities\": {\n    \"ToolsAvailable\": true,\n    \"McpAvailable\": false\n  },\n  \"Rendering\": {\n    \"Template\": \"Compact\",\n    \"RepeatContractAtEnd\": true,\n    \"MaxFilesPerMission\": 3\n  },\n  \"Notes\": \"Keep each mission to one objective.\"\n}"
+                            "raw": "{\n  \"Capabilities\": {\n    \"ToolsAvailable\": true,\n    \"McpAvailable\": false\n  },\n  \"Rendering\": {\n    \"Template\": \"Compact\",\n    \"RepeatContractAtEnd\": true,\n    \"MaxFilesPerMission\": 3\n  },\n  \"Recovery\": {\n    \"MaxResumes\": 5,\n    \"UnclassifiedResumes\": 1,\n    \"TransientGraceMinutes\": 20,\n    \"JudgeReworkRounds\": 3,\n    \"OutputRepairAttempts\": 2\n  },\n  \"Notes\": \"Keep each mission to one objective.\"\n}"
                         },
                         "url": {
                             "raw": "{{baseUrl}}/api/v1/model-profiles/{{modelProfileId}}",
@@ -14474,7 +14474,7 @@
                                 "{{modelProfileId}}"
                             ]
                         },
-                        "description": "Update Capabilities, Rendering (explicit overrides; null means no override) and Notes (empty clears). An omitted section keeps its value. Global admin or tenant admin."
+                        "description": "Update Capabilities, Rendering (explicit overrides; null means no override), Recovery (per-model recovery policy: MaxResumes 0-10, UnclassifiedResumes 0-3, TransientGraceMinutes 0-120, JudgeReworkRounds 1-5 which can raise but never lower the global value, OutputRepairAttempts 0-3; null uses the global setting) and Notes (empty clears). An omitted section keeps its value. The response includes EffectiveRecovery, the policy in effect. Global admin or tenant admin."
                     }
                 },
                 {

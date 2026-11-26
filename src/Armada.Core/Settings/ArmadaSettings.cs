@@ -438,6 +438,38 @@ namespace Armada.Core.Settings
         }
 
         /// <summary>
+        /// In-place resumes a captain gets after an Unclassified exit (non-zero, no provider error Armada recognizes, not
+        /// an abnormal death) before the mission goes to escalation. Never more than MaxRecoveryAttempts. A model profile's
+        /// recovery policy can override it. Must be in range [0, 3].
+        /// </summary>
+        public int UnclassifiedResumeLimit
+        {
+            get => _UnclassifiedResumeLimit;
+            set
+            {
+                if (value < 0) value = 0;
+                if (value > 3) value = 3;
+                _UnclassifiedResumeLimit = value;
+            }
+        }
+
+        /// <summary>
+        /// Automatic Judge rework rounds for one implementation slice before Armada tries a different Worker captain and
+        /// then stops. A model profile's recovery policy can raise it for the Worker's model but never lower it. Must be in
+        /// range [1, 5].
+        /// </summary>
+        public int JudgeReworkRounds
+        {
+            get => _JudgeReworkRounds;
+            set
+            {
+                if (value < 1) value = 1;
+                if (value > 5) value = 5;
+                _JudgeReworkRounds = value;
+            }
+        }
+
+        /// <summary>
         /// How long, in minutes, a captain whose process runs on a Harbor that lost its link to the Admiral is held as
         /// unreachable instead of stalled. While held, missing output is not judged a stall: no recovery starts, no recovery
         /// attempt is counted, and the mission stays InProgress, because the captain may still be working on the Harbor.
@@ -1131,6 +1163,8 @@ namespace Armada.Core.Settings
         private int _MaxMissionRecoveryAttempts = 2;
         private int _TransientResumeDelaySeconds = 5;
         private int _TransientOutageGraceMinutes = 10;
+        private int _UnclassifiedResumeLimit = 1;
+        private int _JudgeReworkRounds = 2;
         private int _HarborDisconnectGraceMinutes = 60;
         private int _LandingDeferralDeadlineHours = 24;
         private int _MinIdleCaptains = 0;

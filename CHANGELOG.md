@@ -125,6 +125,12 @@ Conductor) with Opus and GPT-6.1 reliable. The work is tracked item by item in `
   `Retry-After` over 10 minutes. Otherwise the captain resumes after the endpoint's `Retry-After`. API captains now
   read `Retry-After` from the response and wait out up to 30 seconds inside the run. HTTP 402 stays a usage limit
   (RS-5.4).
+- **Recovery policy per model.** A model profile has a `Recovery` section that overrides, for the missions of its
+  captains, the in-place resumes, the resumes after an `Unclassified` exit, the transient outage grace, the Judge rework
+  rounds and the output-contract repairs. Each value is null unless set, and null uses the global setting. Judge rework
+  rounds take the larger of the two, so a profile never shortens the rework chain. A profile read returns
+  `EffectiveRecovery`, the policy in effect. Two new settings replace hard-coded values: `UnclassifiedResumeLimit`
+  (default 1) and `JudgeReworkRounds` (default 2). Migration 135 adds the columns (RS-5.5).
 - **Recovery state survives a restart.** Endpoint circuit breakers, launch backoff (with the captains that failed to
   start the mission), the start of a transient outage, and escalation rule cooldowns were kept only in memory, so a
   restart sent missions straight back to a failing endpoint, relaunched a broken captain at once, granted an outage a

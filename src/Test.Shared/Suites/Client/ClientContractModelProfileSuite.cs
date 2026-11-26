@@ -70,10 +70,13 @@ namespace Test.Shared.Suites.Client
                 ModelProfile updated = (await c.UpdateModelProfileAsync(first.Profile.Id, new ModelProfileUpdateRequest
                 {
                     Rendering = new ModelProfileRendering { Template = "Compact", MaxFilesPerMission = 2 },
+                    Recovery = new ModelProfileRecovery { UnclassifiedResumes = 0 },
                     Notes = "contract"
                 }))!;
                 AssertEqual("Compact", updated.Rendering.Template, "template");
                 AssertEqual((int?)2, updated.Rendering.MaxFilesPerMission, "max files");
+                AssertEqual((int?)0, updated.Recovery.UnclassifiedResumes, "recovery override");
+                AssertEqual(0, updated.EffectiveRecovery!.UnclassifiedResumes, "policy in effect");
                 AssertEqual("contract", updated.Notes, "notes");
 
                 ModelProfileRevision marked = (await c.SetModelProfileRevisionCompatibilityAsync(first.Profile.Id, first.Revision.Id,

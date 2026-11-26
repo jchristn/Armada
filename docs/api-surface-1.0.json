@@ -13038,7 +13038,7 @@
           "required": true
         }
       ],
-      "description": "Get one model profile visible to the caller (the model as served: runtime, provider, model and served context) with its capabilities, rendering overrides, notes and immutable revisions (runtime version, model digest, sampling, tool configuration, compatibleWith, firstSeenUtc), oldest first. Profiles are advisory: they do not set a captain's tier or change routing. A captain's modelProfileId points at its profile.",
+      "description": "Get one model profile visible to the caller (the model as served: runtime, provider, model and served context) with its capabilities, rendering overrides, recovery policy overrides (recovery) and the policy in effect for its captains (effectiveRecovery: maxResumes, unclassifiedResumes, transientGraceMinutes, judgeReworkRounds, outputRepairAttempts), notes and immutable revisions (runtime version, model digest, sampling, tool configuration, compatibleWith, firstSeenUtc), oldest first. Profiles are advisory: they do not set a captain's tier or change routing. A captain's modelProfileId points at its profile.",
       "experimental": false
     },
     {
@@ -27532,6 +27532,14 @@
         },
         {
           "kind": "option",
+          "name": "mode",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "MissionModeEnum?",
+          "required": false
+        },
+        {
+          "kind": "option",
           "name": "page",
           "short": null,
           "valueKind": "scalar",
@@ -27544,6 +27552,14 @@
           "short": null,
           "valueKind": "scalar",
           "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "persona",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
           "required": false
         },
         {
@@ -29141,6 +29157,12 @@
       "experimental": false
     },
     {
+      "key": "judgeReworkRounds",
+      "type": "int",
+      "default": "2",
+      "experimental": false
+    },
+    {
       "key": "landingDeferralDeadlineHours",
       "type": "int",
       "default": "24",
@@ -30057,6 +30079,12 @@
       "key": "transientResumeDelaySeconds",
       "type": "int",
       "default": "5",
+      "experimental": false
+    },
+    {
+      "key": "unclassifiedResumeLimit",
+      "type": "int",
+      "default": "1",
       "experimental": false
     },
     {
