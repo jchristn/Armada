@@ -504,6 +504,30 @@ namespace Armada.Core.Database.Sqlite.Implementations
         }
 
         /// <inheritdoc />
+        public async Task<List<Mission>> EnumerateByStatusAsync(MissionStatusEnum status, DateTime updatedSince, CancellationToken token = default)
+        {
+            List<Mission> results = new List<Mission>();
+
+            using (SqliteConnection conn = new SqliteProviderConnection(_Driver.ConnectionString))
+            {
+                await conn.OpenAsync(token).ConfigureAwait(false);
+                using (SqliteCommand cmd = conn.CreateCommand())
+                {
+                    cmd.CommandText = "SELECT * FROM missions WHERE status = @status AND last_update_utc >= @updated_since ORDER BY priority ASC, created_utc ASC;";
+                    cmd.Parameters.AddWithValue("@status", status.ToString());
+                    cmd.Parameters.AddWithValue("@updated_since", SqliteDatabaseDriver.ToIso8601(updatedSince.ToUniversalTime()));
+                    using (SqliteDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
+                    {
+                        while (await reader.ReadAsync(token).ConfigureAwait(false))
+                            results.Add(SqliteDatabaseDriver.MissionFromReader(reader));
+                    }
+                }
+            }
+
+            return results;
+        }
+
+        /// <inheritdoc />
         public async Task<EnumerationResult<Mission>> EnumerateAsync(EnumerationQuery query, CancellationToken token = default)
         {
             if (query == null) query = new EnumerationQuery();

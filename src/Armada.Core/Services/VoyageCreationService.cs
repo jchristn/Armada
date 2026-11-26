@@ -218,16 +218,16 @@ namespace Armada.Core.Services
 
         internal Task<MissionDispatchAdvice?> AdviseAsync(Mission mission, Vessel vessel, CancellationToken token)
         {
-            return AdviseAsync(mission, vessel, Array.Empty<Mission>(), token);
+            return AdviseAsync(mission, vessel, Array.Empty<Mission>(), new MissionDispatchBatch(), token);
         }
 
-        internal async Task<MissionDispatchAdvice?> AdviseAsync(Mission mission, Vessel vessel, IReadOnlyList<Mission> planned, CancellationToken token)
+        internal async Task<MissionDispatchAdvice?> AdviseAsync(Mission mission, Vessel vessel, IReadOnlyList<Mission> planned, MissionDispatchBatch batch, CancellationToken token)
         {
             IMissionDispatchAdvisor? advisor = DispatchAdvisor;
             if (advisor == null) return null;
             try
             {
-                return await advisor.AdviseAsync(mission, vessel, planned, token).ConfigureAwait(false);
+                return await advisor.AdviseAsync(mission, vessel, planned, batch, token).ConfigureAwait(false);
             }
             catch (Exception ex) when (!(ex is OperationCanceledException && token.IsCancellationRequested))
             {
@@ -356,6 +356,7 @@ namespace Armada.Core.Services
                 Dictionary<int, Mission> roots = new Dictionary<int, Mission>();
                 List<Mission> chain = new List<Mission>();
                 List<Mission> firstStages = new List<Mission>();
+                MissionDispatchBatch adviceBatch = new MissionDispatchBatch();
                 List<MissionOverlapWarning> voyageWarnings = new List<MissionOverlapWarning>();
                 List<BriefLintFinding> voyageLint = new List<BriefLintFinding>();
                 for (int index = 0; index < missions.Count; index++)
@@ -404,7 +405,7 @@ namespace Armada.Core.Services
                         // before the next was advised; it may chain this mission after one of them.
                         if (first)
                         {
-                            MissionDispatchAdvice? advice = await AdviseAsync(mission, vessel, firstStages, token).ConfigureAwait(false);
+                            MissionDispatchAdvice? advice = await AdviseAsync(mission, vessel, firstStages, adviceBatch, token).ConfigureAwait(false);
                             ApplyAdvice(mission, advice, voyageWarnings, voyageLint);
                             roots[index] = mission;
                             firstStages.Add(mission);

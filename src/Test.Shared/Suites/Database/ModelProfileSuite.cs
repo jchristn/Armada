@@ -45,6 +45,33 @@ namespace Test.Shared.Suites.Database
         {
             List<TestCaseDescriptor> cases = new List<TestCaseDescriptor>();
 
+            cases.Add(CaseAsync("read_many_profiles", "ReadManyAsync returns every existing profile by id in one call, ignoring null, empty, repeated and unknown ids (RS-10.3)", TestTags.Positive, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                DatabaseDriver db = testDb.Driver;
+                List<string> ids = new List<string>();
+                for (int i = 0; i < 3; i++)
+                {
+                    ModelProfile profile = new ModelProfile
+                    {
+                        TenantId = "ten_many",
+                        Identity = new ModelProfileIdentity { Runtime = "ApiEndpoint", Provider = "Ollama", Model = "many-" + i }
+                    };
+                    await db.ModelProfiles.CreateAsync(profile, "key-many-" + i).ConfigureAwait(false);
+                    ids.Add(profile.Id);
+                }
+
+                Dictionary<string, ModelProfile> read = await db.ModelProfiles.ReadManyAsync(new string?[] { ids[0], ids[1], ids[1], null, "", "mdl_missing", ids[2] }).ConfigureAwait(false);
+                AssertEqual(3, read.Count, "three distinct existing profiles");
+                AssertEqual("many-1", read[ids[1]].Identity.Model);
+                AssertFalse(read.ContainsKey("mdl_missing"), "unknown ids are absent");
+                AssertEqual(0, (await db.ModelProfiles.ReadManyAsync(new string?[0]).ConfigureAwait(false)).Count, "no ids, no query result");
+
+                List<string?> many = Enumerable.Range(0, 1200).Select(i => (string?)("mdl_none_" + i)).ToList();
+                many.Add(ids[0]);
+                AssertEqual(1, (await db.ModelProfiles.ReadManyAsync(many).ConfigureAwait(false)).Count, "more than one chunk of ids");
+            }));
+
             cases.Add(CaseAsync("profile_roundtrip", "A fully and a minimally populated profile round-trip every persisted field", TestTags.Positive, async () =>
             {
                 using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);

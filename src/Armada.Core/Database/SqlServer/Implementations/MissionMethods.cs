@@ -589,6 +589,30 @@ namespace Armada.Core.Database.SqlServer.Implementations
         }
 
         /// <inheritdoc />
+        public async Task<List<Mission>> EnumerateByStatusAsync(MissionStatusEnum status, DateTime updatedSince, CancellationToken token = default)
+        {
+            List<Mission> results = new List<Mission>();
+
+            using (SqlConnection conn = new SqlConnection(_Driver.ConnectionString))
+            {
+                await conn.OpenAsync(token).ConfigureAwait(false);
+                using (SqlCommand cmd = conn.CreateCommand())
+                {
+                    cmd.CommandText = "SELECT * FROM missions WHERE status = @status AND last_update_utc >= @updated_since ORDER BY priority ASC, created_utc ASC;";
+                    cmd.Parameters.AddWithValue("@status", status.ToString());
+                    cmd.Parameters.AddWithValue("@updated_since", SqlServerDatabaseDriver.ToIso8601(updatedSince.ToUniversalTime()));
+                    using (SqlDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
+                    {
+                        while (await reader.ReadAsync(token).ConfigureAwait(false))
+                            results.Add(SqlServerDatabaseDriver.MissionFromReader(reader));
+                    }
+                }
+            }
+
+            return results;
+        }
+
+        /// <inheritdoc />
         public async Task<bool> ExistsAsync(string id, CancellationToken token = default)
         {
             if (string.IsNullOrEmpty(id)) throw new ArgumentNullException(nameof(id));

@@ -103,6 +103,27 @@ namespace Armada.Core.Database.Postgresql.Implementations
         }
 
         /// <inheritdoc />
+        public async Task<Dictionary<string, ModelProfile>> ReadManyAsync(IEnumerable<string?> ids, CancellationToken token = default)
+        {
+            if (ids == null) throw new ArgumentNullException(nameof(ids));
+            List<string> distinct = ids.Where(id => !String.IsNullOrEmpty(id)).Select(id => id!).Distinct(StringComparer.Ordinal).ToList();
+            Dictionary<string, ModelProfile> result = new Dictionary<string, ModelProfile>(StringComparer.Ordinal);
+            for (int offset = 0; offset < distinct.Count; offset += 500)
+            {
+                List<string> chunk = distinct.Skip(offset).Take(500).ToList();
+                string names = String.Join(", ", chunk.Select((string id, int i) => "@id" + i));
+                List<ModelProfile> rows = await PostgresqlCommandHelper.QueryAsync(_ConnectionString,
+                    "SELECT * FROM model_profiles WHERE id IN (" + names + ");",
+                    cmd =>
+                    {
+                        for (int i = 0; i < chunk.Count; i++) PostgresqlCommandHelper.Add(cmd, "@id" + i, chunk[i]);
+                    }, FromReader, token).ConfigureAwait(false);
+                foreach (ModelProfile row in rows) result[row.Id] = row;
+            }
+            return result;
+        }
+
+        /// <inheritdoc />
         public async Task<ModelProfile?> ReadByIdentityKeyAsync(string identityKey, CancellationToken token = default)
         {
             if (String.IsNullOrEmpty(identityKey)) throw new ArgumentNullException(nameof(identityKey));

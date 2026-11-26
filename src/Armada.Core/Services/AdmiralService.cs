@@ -1805,6 +1805,7 @@ namespace Armada.Core.Services
             {
                 List<Dock> allDocks = await _Database.Docks.EnumerateAsync(token).ConfigureAwait(false);
                 DateTime threshold = DateTime.UtcNow.AddMinutes(-5);
+                HashSet<string>? preservedDockIds = null;
 
                 foreach (Dock dock in allDocks)
                 {
@@ -1828,18 +1829,11 @@ namespace Armada.Core.Services
                     {
                         // Preserve the dock if a Pending mission is holding it for re-dispatch, or an
                         // in-review mission is retaining its worktree for the reviewer (the held
-                        // captain may have been released by the review-timeout watchdog).
-                        List<Mission> pendingMissions = await _Database.Missions.EnumerateByStatusAsync(MissionStatusEnum.Pending, token).ConfigureAwait(false);
-                        List<Mission> reviewMissions = await _Database.Missions.EnumerateByStatusAsync(MissionStatusEnum.Review, token).ConfigureAwait(false);
-                        List<Mission> failedMissions = await _Database.Missions.EnumerateByStatusAsync(MissionStatusEnum.Failed, token).ConfigureAwait(false);
-                        // Unlanded work keeps its worktree so retry_landing can land it.
-                        List<Mission> landingFailedMissions = await _Database.Missions.EnumerateByStatusAsync(MissionStatusEnum.LandingFailed, token).ConfigureAwait(false);
-                        List<Mission> workProducedMissions = await _Database.Missions.EnumerateByStatusAsync(MissionStatusEnum.WorkProduced, token).ConfigureAwait(false);
-                        bool preservedForMission = pendingMissions.Any(m => m.DockId == dock.Id) ||
-                                                   reviewMissions.Any(m => m.DockId == dock.Id) ||
-                                                   landingFailedMissions.Any(m => m.DockId == dock.Id) ||
-                                                   workProducedMissions.Any(m => m.DockId == dock.Id) ||
-                                                   failedMissions.Any(m => m.DockId == dock.Id && m.FailureKind == MissionFailureKindEnum.StallRecoveryExhausted);
+                        // captain may have been released by the review-timeout watchdog). The five
+                        // status scans run once per sweep, on the first dock that needs them (RS-10.1).
+                        if (preservedDockIds == null)
+                            preservedDockIds = await LoadPreservedDockIdsAsync(token).ConfigureAwait(false);
+                        bool preservedForMission = preservedDockIds.Contains(dock.Id);
                         if (preservedForMission)
                         {
                             _Logging.Debug(_Header + "skipping reclaim of dock " + dock.Id + " -- preserved for a pending re-dispatch or an in-review mission");
@@ -1862,6 +1856,32 @@ namespace Armada.Core.Services
             {
                 _Logging.Warn(_Header + "error in orphaned dock reclamation: " + ex.ToString());
             }
+        }
+
+        /// <summary>
+        /// Ids of docks a mission still holds: Pending (re-dispatch), Review (reviewer worktree), LandingFailed and
+        /// WorkProduced (unlanded work for retry_landing), and Failed after exhausted stall recovery.
+        /// </summary>
+        private async Task<HashSet<string>> LoadPreservedDockIdsAsync(CancellationToken token)
+        {
+            HashSet<string> ids = new HashSet<string>(StringComparer.Ordinal);
+            MissionStatusEnum[] holding = new MissionStatusEnum[]
+            {
+                MissionStatusEnum.Pending,
+                MissionStatusEnum.Review,
+                MissionStatusEnum.LandingFailed,
+                MissionStatusEnum.WorkProduced
+            };
+            foreach (MissionStatusEnum status in holding)
+            {
+                List<Mission> missions = await _Database.Missions.EnumerateByStatusAsync(status, token).ConfigureAwait(false);
+                foreach (Mission m in missions)
+                    if (!String.IsNullOrEmpty(m.DockId)) ids.Add(m.DockId);
+            }
+            List<Mission> failed = await _Database.Missions.EnumerateByStatusAsync(MissionStatusEnum.Failed, token).ConfigureAwait(false);
+            foreach (Mission m in failed)
+                if (!String.IsNullOrEmpty(m.DockId) && m.FailureKind == MissionFailureKindEnum.StallRecoveryExhausted) ids.Add(m.DockId);
+            return ids;
         }
 
         /// <summary>

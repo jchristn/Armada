@@ -516,6 +516,30 @@ namespace Armada.Core.Database.Mysql.Implementations
             return results;
         }
 
+        /// <inheritdoc />
+        public async Task<List<Mission>> EnumerateByStatusAsync(MissionStatusEnum status, DateTime updatedSince, CancellationToken token = default)
+        {
+            List<Mission> results = new List<Mission>();
+
+            using (MySqlConnection conn = new MySqlConnection(_ConnectionString))
+            {
+                await conn.OpenAsync(token).ConfigureAwait(false);
+                using (MySqlCommand cmd = conn.CreateCommand())
+                {
+                    cmd.CommandText = "SELECT * FROM missions WHERE status = @status AND last_update_utc >= @updated_since ORDER BY priority ASC, created_utc ASC;";
+                    cmd.Parameters.AddWithValue("@status", status.ToString());
+                    cmd.Parameters.AddWithValue("@updated_since", updatedSince.ToUniversalTime());
+                    using (MySqlDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
+                    {
+                        while (await reader.ReadAsync(token).ConfigureAwait(false))
+                            results.Add(MissionFromReader(reader));
+                    }
+                }
+            }
+
+            return results;
+        }
+
         /// <summary>
         /// Enumerate missions with pagination and filtering.
         /// </summary>

@@ -94,7 +94,7 @@ namespace Armada.Server
         /// <summary>
         /// Accumulates agent stdout per mission for pipeline handoff.
         /// </summary>
-        private System.Collections.Concurrent.ConcurrentDictionary<string, System.Text.StringBuilder> _MissionOutput = new System.Collections.Concurrent.ConcurrentDictionary<string, System.Text.StringBuilder>();
+        private System.Collections.Concurrent.ConcurrentDictionary<string, BoundedTextBuffer> _MissionOutput = new System.Collections.Concurrent.ConcurrentDictionary<string, BoundedTextBuffer>();
 
         /// <summary>
         /// Tracks how many papercuts each mission has stored, so a runaway reporter is capped.
@@ -520,7 +520,7 @@ namespace Armada.Server
                     _Logging.Debug(_Header + "could not read the final message artifact for mission " + missionId + ": " + ex.Message);
                 }
             }
-            if (_MissionOutput.TryGetValue(missionId, out System.Text.StringBuilder? sb))
+            if (_MissionOutput.TryGetValue(missionId, out BoundedTextBuffer? sb))
             {
                 lock (sb)
                 {
@@ -540,7 +540,7 @@ namespace Armada.Server
             if (String.IsNullOrEmpty(missionId)) return null;
             _MissionPapercutCounts.TryRemove(missionId, out _);
             string? streamedOutput = null;
-            if (_MissionOutput.TryRemove(missionId, out System.Text.StringBuilder? sb))
+            if (_MissionOutput.TryRemove(missionId, out BoundedTextBuffer? sb))
             {
                 streamedOutput = sb.ToString().Trim();
                 if (String.IsNullOrEmpty(streamedOutput))
@@ -1550,8 +1550,8 @@ namespace Armada.Server
             }
             if (!String.IsNullOrEmpty(outputMissionId))
             {
-                System.Text.StringBuilder sb = _MissionOutput.GetOrAdd(outputMissionId, _ => new System.Text.StringBuilder());
-                BoundedTextBuffer.AppendLine(sb, line, _MaxMissionOutputChars);
+                BoundedTextBuffer sb = _MissionOutput.GetOrAdd(outputMissionId, _ => new BoundedTextBuffer(_MaxMissionOutputChars));
+                lock (sb) sb.AppendLine(line);
             }
 
             ProgressParser.ProgressSignal? signal = ProgressParser.TryParse(line);

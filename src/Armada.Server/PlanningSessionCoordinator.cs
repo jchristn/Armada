@@ -807,7 +807,7 @@ namespace Armada.Server
                     prompt = InlinePromptFile(prompt, promptFilePath);
                 TaskCompletionSource<int?> exitSource = new TaskCompletionSource<int?>(TaskCreationOptions.RunContinuationsAsynchronously);
                 object outputLock = new object();
-                StringBuilder output = new StringBuilder();
+                BoundedTextBuffer output = new BoundedTextBuffer(_MaxPlanningOutputChars);
                 // Turn telemetry is recorded by the same component as Ask Armada turns, on the monotonic clock: a
                 // wall-clock difference grows by however long the host slept during the turn (or goes negative on a
                 // backward NTP step).
@@ -867,11 +867,10 @@ namespace Armada.Server
                             // Mux assistant_text and Claude text_delta events are partial tokens: append raw
                             // (no line breaks) so the streamed reply reads naturally.
                             output.Append(delta);
-                            BoundedTextBuffer.Trim(output, _MaxPlanningOutputChars);
                         }
                         else
                         {
-                            BoundedTextBuffer.AppendLine(output, delta, _MaxPlanningOutputChars);
+                            output.AppendLine(delta);
                         }
                         updatedContent = output.ToString();
                     }
@@ -1227,7 +1226,7 @@ namespace Armada.Server
             if (runtime is RemoteAgentRuntime)
                 prompt = InlinePromptFile(prompt, promptFilePath);
             TaskCompletionSource<int?> exitSource = new TaskCompletionSource<int?>(TaskCreationOptions.RunContinuationsAsynchronously);
-            StringBuilder output = new StringBuilder();
+            BoundedTextBuffer output = new BoundedTextBuffer(_MaxPlanningOutputChars);
             object outputLock = new object();
             int? processId = null;
             string? providerFailure = null;
@@ -1248,7 +1247,6 @@ namespace Armada.Server
                         lock (outputLock)
                         {
                             output.Append(piText);
-                            BoundedTextBuffer.Trim(output, _MaxPlanningOutputChars);
                         }
                     }
                     return;
@@ -1272,7 +1270,7 @@ namespace Armada.Server
                     {
                         lock (outputLock)
                         {
-                            BoundedTextBuffer.AppendLine(output, openCodeText!, _MaxPlanningOutputChars);
+                            output.AppendLine(openCodeText!);
                         }
                     }
                     return;
@@ -1280,7 +1278,7 @@ namespace Armada.Server
 
                 lock (outputLock)
                 {
-                    BoundedTextBuffer.AppendLine(output, line, _MaxPlanningOutputChars);
+                    output.AppendLine(line);
                 }
             };
             runtime.OnProcessExited += (processId, exitCode) => exitSource.TrySetResult(exitCode);

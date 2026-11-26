@@ -242,8 +242,8 @@ namespace Armada.Core.Services
             DateTime cutoff = DateTime.UtcNow - _FailureLookback;
 
             List<Mission> failed = new List<Mission>();
-            failed.AddRange(await _Database.Missions.EnumerateByStatusAsync(MissionStatusEnum.Failed, token).ConfigureAwait(false));
-            failed.AddRange(await _Database.Missions.EnumerateByStatusAsync(MissionStatusEnum.LandingFailed, token).ConfigureAwait(false));
+            failed.AddRange(await _Database.Missions.EnumerateByStatusAsync(MissionStatusEnum.Failed, cutoff, token).ConfigureAwait(false));
+            failed.AddRange(await _Database.Missions.EnumerateByStatusAsync(MissionStatusEnum.LandingFailed, cutoff, token).ConfigureAwait(false));
 
             foreach (Mission mission in failed)
             {

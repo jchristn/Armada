@@ -123,13 +123,7 @@ namespace Armada.Core.BlackBox
             int lookups = 0;
             foreach (Mission mission in active)
             {
-                ActiveMissionFileSet set = new ActiveMissionFileSet(mission);
-                foreach (string f in MissionService.ParseMissionScopedFiles(mission.Description ?? String.Empty))
-                {
-                    set.Scoped.AddFile(f);
-                    set.Likely.AddFile(f);
-                }
-                AddBriefPaths(set.Likely, mission.Title, mission.Description, context.Tracked);
+                ActiveMissionFileSet set = NewActiveSet(mission, context.Tracked);
                 Dock? dock = String.IsNullOrEmpty(mission.DockId) ? null : await _Database.Docks.ReadAsync(mission.DockId!, token).ConfigureAwait(false);
                 foreach (string p in AnchorPaths(dock)) set.Likely.AddFile(p);
                 if (!String.IsNullOrEmpty(mission.DiffSnapshot))
@@ -170,14 +164,24 @@ namespace Armada.Core.BlackBox
         {
             if (context == null) throw new ArgumentNullException(nameof(context));
             if (mission == null) throw new ArgumentNullException(nameof(mission));
-            ActiveMissionFileSet set = new ActiveMissionFileSet(mission);
-            foreach (string f in MissionService.ParseMissionScopedFiles(mission.Description ?? String.Empty))
-            {
-                set.Scoped.AddFile(f);
-                set.Likely.AddFile(f);
-            }
-            AddBriefPaths(set.Likely, mission.Title, mission.Description, context.Tracked);
-            context.ActiveMissions.Add(set);
+            context.ActiveMissions.Add(NewActiveSet(mission, context.Tracked));
+        }
+
+        /// <summary>
+        /// The likely files of a mission: its declared owned paths (<see cref="Mission.OwnedPathsJson"/>) when it has any,
+        /// since a declaration is better evidence than paths guessed from prose; otherwise its scoped-files directive and
+        /// the paths its brief names.
+        /// </summary>
+        /// <param name="mission">Mission.</param>
+        /// <param name="tracked">Tracked files, or null.</param>
+        /// <returns>The set.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when mission is null.</exception>
+        public static MissionFileSet LikelyFiles(Mission mission, VesselTrackedFiles? tracked)
+        {
+            if (mission == null) throw new ArgumentNullException(nameof(mission));
+            MissionFileSet set = new MissionFileSet();
+            if (AddOwnedPaths(set, mission.OwnedPathsJson, tracked) > 0) return set;
+            return LikelyFiles(mission.Title, mission.Description, tracked, out _, out _);
         }
 
         /// <summary>
@@ -354,6 +358,50 @@ namespace Armada.Core.BlackBox
         #endregion
 
         #region Private-Methods
+
+        private static ActiveMissionFileSet NewActiveSet(Mission mission, VesselTrackedFiles? tracked)
+        {
+            ActiveMissionFileSet set = new ActiveMissionFileSet(mission);
+            // Declared owned paths replace the guess from prose (RS-10.4); they are the mission's scope.
+            if (AddOwnedPaths(set.Scoped, mission.OwnedPathsJson, tracked) > 0)
+            {
+                AddOwnedPaths(set.Likely, mission.OwnedPathsJson, tracked);
+                return set;
+            }
+            foreach (string f in MissionService.ParseMissionScopedFiles(mission.Description ?? String.Empty))
+            {
+                set.Scoped.AddFile(f);
+                set.Likely.AddFile(f);
+            }
+            AddBriefPaths(set.Likely, mission.Title, mission.Description, tracked);
+            return set;
+        }
+
+        private static int AddOwnedPaths(MissionFileSet set, string? ownedPathsJson, VesselTrackedFiles? tracked)
+        {
+            int added = 0;
+            foreach (string owned in MissionOwnership.Paths(ownedPathsJson))
+            {
+                int star = owned.IndexOf('*');
+                if (star >= 0)
+                {
+                    // A glob owns the directory before its first wildcard; a root-level glob is too broad to compare.
+                    int slash = star == 0 ? -1 : owned.LastIndexOf('/', star - 1);
+                    if (slash <= 0) continue;
+                    set.AddDirectory(owned.Substring(0, slash));
+                }
+                else if (owned.EndsWith("/", StringComparison.Ordinal) || (tracked != null && tracked.IsDirectory(owned)))
+                {
+                    set.AddDirectory(owned.TrimEnd('/'));
+                }
+                else
+                {
+                    set.AddFile(owned);
+                }
+                added++;
+            }
+            return added;
+        }
 
         private static int AddBriefPaths(MissionFileSet set, string? title, string? description, VesselTrackedFiles? tracked)
         {

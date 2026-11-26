@@ -167,6 +167,16 @@ namespace Armada.Core.Database.Interfaces
         Task<List<Mission>> EnumerateByStatusAsync(MissionStatusEnum status, CancellationToken token = default);
 
         /// <summary>
+        /// Enumerate missions in a status whose last update is at or after a cutoff, so a periodic sweep reads only
+        /// recent rows instead of the whole status (RS-10.2). Ordered by priority, then creation time.
+        /// </summary>
+        /// <param name="status">Mission status.</param>
+        /// <param name="updatedSince">Inclusive lower bound on <see cref="Mission.LastUpdateUtc"/> (UTC).</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>Matching missions.</returns>
+        Task<List<Mission>> EnumerateByStatusAsync(MissionStatusEnum status, DateTime updatedSince, CancellationToken token = default);
+
+        /// <summary>
         /// Count missions grouped by status.
         /// </summary>
         Task<Dictionary<MissionStatusEnum, int>> CountByStatusAsync(CancellationToken token = default);

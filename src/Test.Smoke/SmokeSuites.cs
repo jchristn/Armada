@@ -204,6 +204,7 @@ namespace Test.Smoke
             "Services.AuthorizationConfig",
             "Services.AuthorizationService",
             "Services.AutoLandPredicate",
+            "Services.BoundedTextBuffer",
             "Services.CaptainAutoApproveOverride",
             "Services.CaptainLaunchIsolation",
             "Services.CaptainRouting",

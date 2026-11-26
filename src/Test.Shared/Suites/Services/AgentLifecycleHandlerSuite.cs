@@ -1521,11 +1521,13 @@ namespace Test.Shared.Suites.Services
             FieldInfo outputField = typeof(AgentLifecycleHandler).GetField("_MissionOutput", BindingFlags.Instance | BindingFlags.NonPublic)
                 ?? throw new InvalidOperationException("Could not find _MissionOutput field");
 
-            System.Collections.Concurrent.ConcurrentDictionary<string, System.Text.StringBuilder> outputMap =
-                (System.Collections.Concurrent.ConcurrentDictionary<string, System.Text.StringBuilder>)(outputField.GetValue(handler)
+            System.Collections.Concurrent.ConcurrentDictionary<string, BoundedTextBuffer> outputMap =
+                (System.Collections.Concurrent.ConcurrentDictionary<string, BoundedTextBuffer>)(outputField.GetValue(handler)
                 ?? throw new InvalidOperationException("Mission output map was null"));
 
-            outputMap[missionId] = new System.Text.StringBuilder(output);
+            BoundedTextBuffer buffer = new BoundedTextBuffer(262144);
+            buffer.Append(output);
+            outputMap[missionId] = buffer;
         }
 
         private static void RegisterFinalMessageArtifact(AgentLifecycleHandler handler, string missionId, string artifactPath)

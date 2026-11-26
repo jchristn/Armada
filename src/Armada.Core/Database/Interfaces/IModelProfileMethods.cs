@@ -30,6 +30,16 @@ namespace Armada.Core.Database.Interfaces
         Task<ModelProfile?> ReadAsync(string id, CancellationToken token = default);
 
         /// <summary>
+        /// Read several profiles by id (any tenant) in one query per 500 ids, without their revisions (RS-10.3). Ids
+        /// that match no row are absent from the result; null, empty and repeated ids are ignored.
+        /// </summary>
+        /// <param name="ids">Profile identifiers.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The profiles found, keyed by id.</returns>
+        /// <exception cref="System.ArgumentNullException">The id collection is null.</exception>
+        Task<Dictionary<string, ModelProfile>> ReadManyAsync(IEnumerable<string?> ids, CancellationToken token = default);
+
+        /// <summary>
         /// Read a profile by its identity key, without its revisions.
         /// </summary>
         /// <param name="identityKey">Normalized identity key.</param>

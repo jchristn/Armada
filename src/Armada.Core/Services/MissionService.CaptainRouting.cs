@@ -31,13 +31,44 @@ namespace Armada.Core.Services
             if (!PersonaCatalog.Matches(mission.Persona, PersonaCatalog.Judge)) return authors;
             HashSet<string> seen = new HashSet<string>(StringComparer.Ordinal) { mission.Id };
             string? parentId = mission.DependsOnMissionId;
+            if (String.IsNullOrEmpty(parentId)) return authors;
+
+            // Parents of a voyage mission come from one summary read of the voyage instead of one read per hop (RS-10.3).
+            Dictionary<string, MissionSummary>? voyage = null;
+            if (!String.IsNullOrEmpty(mission.VoyageId))
+            {
+                voyage = new Dictionary<string, MissionSummary>(StringComparer.Ordinal);
+                foreach (MissionSummary summary in await _Database.Missions.EnumerateSummariesByVoyageAsync(mission.VoyageId, token).ConfigureAwait(false))
+                    voyage[summary.Id] = summary;
+            }
+
             while (!String.IsNullOrEmpty(parentId) && seen.Add(parentId))
             {
-                Mission? parent = await _Database.Missions.ReadAsync(parentId, token).ConfigureAwait(false);
-                if (parent == null || parent.VoyageId != mission.VoyageId || PersonaCatalog.Matches(parent.Persona, PersonaCatalog.Judge)) break;
-                if (!String.IsNullOrEmpty(parent.CaptainId)) authors.Add(parent.CaptainId);
-                if (PersonaCatalog.Matches(parent.Persona, PersonaCatalog.Worker)) break;
-                parentId = parent.DependsOnMissionId;
+                string? parentVoyageId;
+                string? parentPersona;
+                string? parentCaptainId;
+                string? nextId;
+                if (voyage != null)
+                {
+                    if (!voyage.TryGetValue(parentId, out MissionSummary? summary)) break;
+                    parentVoyageId = summary.VoyageId;
+                    parentPersona = summary.Persona;
+                    parentCaptainId = summary.CaptainId;
+                    nextId = summary.DependsOnMissionId;
+                }
+                else
+                {
+                    Mission? parent = await _Database.Missions.ReadAsync(parentId, token).ConfigureAwait(false);
+                    if (parent == null) break;
+                    parentVoyageId = parent.VoyageId;
+                    parentPersona = parent.Persona;
+                    parentCaptainId = parent.CaptainId;
+                    nextId = parent.DependsOnMissionId;
+                }
+                if (parentVoyageId != mission.VoyageId || PersonaCatalog.Matches(parentPersona, PersonaCatalog.Judge)) break;
+                if (!String.IsNullOrEmpty(parentCaptainId)) authors.Add(parentCaptainId);
+                if (PersonaCatalog.Matches(parentPersona, PersonaCatalog.Worker)) break;
+                parentId = nextId;
             }
             return authors;
         }

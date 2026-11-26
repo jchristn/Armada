@@ -40,6 +40,32 @@ namespace Test.Shared.Suites.Database
         {
             List<TestCaseDescriptor> cases = new List<TestCaseDescriptor>();
 
+            cases.Add(CaseAsync("status_scan_since_cutoff", "EnumerateByStatusAsync with updatedSince returns only missions in that status updated at or after the cutoff (RS-10.2)", TestTags.Positive, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    DatabaseDriver db = testDb.Driver;
+                    MissionTestPrerequisites prereqs = await CreatePrerequisitesAsync(db);
+
+                    Mission old = new Mission("Old failure", "desc") { VesselId = prereqs.Vessel.Id, Status = MissionStatusEnum.Failed };
+                    await db.Missions.CreateAsync(old);
+                    await Task.Delay(300);
+                    DateTime cutoff = DateTime.UtcNow;
+                    await Task.Delay(300);
+                    Mission recent = new Mission("Recent failure", "desc") { VesselId = prereqs.Vessel.Id, Status = MissionStatusEnum.Failed };
+                    await db.Missions.CreateAsync(recent);
+                    Mission otherStatus = new Mission("Recent landing failure", "desc") { VesselId = prereqs.Vessel.Id, Status = MissionStatusEnum.LandingFailed };
+                    await db.Missions.CreateAsync(otherStatus);
+
+                    List<Mission> since = await db.Missions.EnumerateByStatusAsync(MissionStatusEnum.Failed, cutoff);
+                    AssertEqual(1, since.Count, "only the recent Failed mission");
+                    AssertEqual(recent.Id, since[0].Id);
+                    AssertEqual(2, (await db.Missions.EnumerateByStatusAsync(MissionStatusEnum.Failed, cutoff.AddHours(-1))).Count, "an earlier cutoff includes both");
+                    AssertEqual(1, (await db.Missions.EnumerateByStatusAsync(MissionStatusEnum.LandingFailed, cutoff)).Count, "status still filters");
+                    AssertEqual(0, (await db.Missions.EnumerateByStatusAsync(MissionStatusEnum.Failed, DateTime.UtcNow.AddMinutes(5))).Count, "a future cutoff returns nothing");
+                }
+            }));
+
             cases.Add(CaseAsync("mission_failure_kind_and_wait_flag_round_trip", "Mission FailureKind and WaitForVoyageWorkers persist through create, update, read, and summary", TestTags.Positive, async () =>
             {
                 using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())

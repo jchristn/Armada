@@ -569,6 +569,30 @@ namespace Armada.Core.Database.Postgresql.Implementations
             return await EnumerateByColumnAsync("status", status.ToString(), token).ConfigureAwait(false);
         }
 
+        /// <inheritdoc />
+        public async Task<List<Mission>> EnumerateByStatusAsync(MissionStatusEnum status, DateTime updatedSince, CancellationToken token = default)
+        {
+            List<Mission> results = new List<Mission>();
+
+            using (NpgsqlConnection conn = new NpgsqlConnection(_Settings.GetConnectionString()))
+            {
+                await conn.OpenAsync(token).ConfigureAwait(false);
+                using (NpgsqlCommand cmd = conn.CreateCommand())
+                {
+                    cmd.CommandText = "SELECT * FROM missions WHERE status = @status AND last_update_utc >= @updated_since ORDER BY priority ASC, created_utc ASC;";
+                    cmd.Parameters.AddWithValue("@status", status.ToString());
+                    cmd.Parameters.Add(PostgresqlCommandHelper.DateParameter("@updated_since", updatedSince.ToUniversalTime()));
+                    using (NpgsqlDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
+                    {
+                        while (await reader.ReadAsync(token).ConfigureAwait(false))
+                            results.Add(MissionFromReader(reader));
+                    }
+                }
+            }
+
+            return results;
+        }
+
         /// <summary>
         /// Check if a mission exists by identifier.
         /// </summary>

@@ -132,10 +132,13 @@ namespace Armada.Core.Services
             Vessel? vessel = String.IsNullOrEmpty(mission.VesselId) ? null : await database.Vessels.ReadAsync(mission.VesselId, token).ConfigureAwait(false);
             WorkerEnvelope? envelope = WorkerEnvelopeRules.Effective(vessel?.WorkerEnvelope, mission.WorkerEnvelope);
             if (!WorkerEnvelopeRules.ConstrainsCaptains(envelope)) return captains;
+            // One read for every linked profile instead of one per captain (RS-10.3).
+            Dictionary<string, ModelProfile> profiles = await database.ModelProfiles.ReadManyAsync(captains.Select(c => c.ModelProfileId), token).ConfigureAwait(false);
             List<Captain> meeting = new List<Captain>();
             foreach (Captain captain in captains)
             {
-                ModelProfile? profile = String.IsNullOrEmpty(captain.ModelProfileId) ? null : await database.ModelProfiles.ReadAsync(captain.ModelProfileId, token).ConfigureAwait(false);
+                ModelProfile? profile = null;
+                if (!String.IsNullOrEmpty(captain.ModelProfileId)) profiles.TryGetValue(captain.ModelProfileId, out profile);
                 if (WorkerEnvelopeRules.IneligibilityReason(envelope, captain, profile) == null) meeting.Add(captain);
             }
             return meeting;
