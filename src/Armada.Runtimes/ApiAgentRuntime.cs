@@ -7,7 +7,6 @@ namespace Armada.Runtimes
     using System.Linq;
     using System.Runtime.CompilerServices;
     using System.Text.Json;
-    using System.Text.RegularExpressions;
     using System.Threading;
     using System.Threading.Tasks;
     using Armada.Core.Models;
@@ -169,11 +168,6 @@ namespace Armada.Runtimes
         private readonly string _Header = "[ApiAgentRuntime] ";
         private StreamWriter? _LogWriter;
         private readonly object _LogLock = new object();
-        // A complete think block is <think> or <think ...> through </think>. The name must end at the tag
-        // boundary, so a longer name and an unmatched tag stay in the text.
-        private static readonly Regex _CompleteThinkBlock = new Regex(
-            @"<think(?:\s[^>]*)?>.*?</think\s*>",
-            RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
         #endregion
 
@@ -606,11 +600,12 @@ namespace Armada.Runtimes
                         WriteFinalMessage(finalMessageFilePath, String.Empty);
                         return;
                     }
-                    finalText = RemoveCompleteThinkBlocks(reply.Text);
-                    if (!IsCompleteResponse(finalText, reply.FinishReason, requiresCompletionLine))
+                    ApiTerminalDecision plain = new ApiTerminalPolicy(requiresCompletionLine, settings.MaxTokens, null).DecidePlain(reply);
+                    finalText = plain.FinalText;
+                    if (plain.Action == ApiTerminalActionEnum.Fail)
                     {
                         exitCode = 1;
-                        RaiseProviderError(processId, new RuntimeProviderError { ErrorType = IsTokenLimit(reply.FinishReason) ? "output_token_limit_reached" : "incomplete_completion", Reason = IsTokenLimit(reply.FinishReason) ? "The inference response hit its output-token limit (finish reason: " + reply.FinishReason + "). The mission did not finish." : "Plain inference did not produce a valid mission completion." });
+                        RaiseProviderError(processId, plain.Failure);
                     }
                     if (finalText.Length > 0) Emit(processId, finalText);
                     WriteFinalMessage(finalMessageFilePath, finalText);
@@ -704,8 +699,6 @@ namespace Armada.Runtimes
                     tools.RemoveAll(t => String.Equals(t.Name, submitTool.Name, StringComparison.Ordinal));
                     tools.Add(submitTool.Definition());
                 }
-                int forcedSubmits = 0;
-                bool forceSubmitNext = false;
 
                 EmitDiagnostic(processId, ApiRuntimeDiagnosticKindEnum.Inference, "[tools] " + tools.Count + " tool schema(s) sent, about "
                     + ApiContextCompactor.EstimateToolTokens(tools) + " input tokens per turn" + (toolScope == null ? String.Empty : "; persona scope applied"));
@@ -720,152 +713,30 @@ namespace Armada.Runtimes
                 // Deferral is a context optimization, not an authorization change. A permitted tool named
                 // directly in mission instructions can still be called without a discovery round trip.
                 permittedTools.UnionWith(mcpRouting.Keys);
-                int maxIterations = Math.Min(_MaxIterations, settings.MaxIterations);
-                int incompleteResponses = 0;
-                RuntimeProviderError? tokenLimitFailure = null;
-                bool requiresCompletion = requiresCompletionLine;
-                long lastPromptTokens = 0;
-                for (int iteration = 0; iteration < maxIterations; iteration++)
+
+                ApiTurnLoopCallbacks callbacks = new ApiTurnLoopCallbacks
                 {
-                    token.ThrowIfCancellationRequested();
-
-                    // Keep the conversation inside the window before it is sent: the provider's count can lag or undercount
-                    // (Ollama does not count cached prompt tokens), so the local estimate also decides.
-                    // Tool schemas are resent on every turn, so they count toward the window too (discovery can add more).
-                    long pressure = Math.Max(lastPromptTokens, ApiContextCompactor.EstimateTokens(messages) + ApiContextCompactor.EstimateToolTokens(tools));
-                    if (ApiContextCompactor.ShouldCompact(pressure, settings.ContextLength))
-                    {
-                        long removed = ApiContextCompactor.Compact(messages);
-                        if (removed > 0)
-                        {
-                            lastPromptTokens = 0;
-                            EmitDiagnostic(processId, ApiRuntimeDiagnosticKindEnum.Inference, "[context] about " + pressure + " of " + settings.ContextLength
-                                + " tokens in use; replaced earlier tool output (about " + (removed / 4) + " tokens) with short notes to stay inside the window");
-                        }
-                    }
-
-                    ChatRequest request = new ChatRequest();
-                    request.Messages = messages;
-                    request.Tools = tools;
-                    request.Options = completionOptions;
-                    if (forceSubmitNext && submitTool != null)
-                    {
-                        // RS-6.3: only the submit tool is offered and a tool call is required.
-                        request.Tools = tools.Where(t => String.Equals(t.Name, submitTool.Name, StringComparison.Ordinal)).ToList();
-                        request.ToolChoice = "required";
-                        forceSubmitNext = false;
-                    }
-
-                    ChatResponse response = await WithInferenceRetryAsync(() => settings.Streaming ? StreamToolChatAsync(client, request, firstResponseMs, idleMs, token) : client.ChatAsync(request, token), r => r.Success, r => r.StatusCode, r => r.Error, processId, lastCallMs, token, () => LastRetryAfterSeconds(client)).ConfigureAwait(false);
-
-                    EmitDiagnostic(processId, ApiRuntimeDiagnosticKindEnum.Inference, "[inference] " + JsonSerializer.Serialize(new { iteration = iteration + 1, maxIterations, streamed = settings.Streaming, response.Success, response.ResponseId, response.FinishReason, response.Usage, reasoningLength = response.Reasoning?.Length ?? 0, textLength = response.Text?.Length ?? 0, toolCalls = response.ToolCalls?.Count ?? 0 }));
-
-                    if (!response.Success)
-                    {
-                        string reason = String.IsNullOrEmpty(response.Error) ? "the inference endpoint reported failure without detail" : response.Error!;
-                        EmitDiagnostic(processId, ApiRuntimeDiagnosticKindEnum.Error, "[error] inference call failed: " + reason);
-                        RaiseProviderError(processId, InferenceFailure(response.StatusCode, response.Error, "Inference request failed: " + reason, lastCallMs.Value, settings.Streaming, LastRetryAfterSeconds(client)));
-                        exitCode = 1;
-                        break;
-                    }
-
-                    // A prompt that fills the configured window means the server has started (or is about to start) dropping
-                    // the oldest turns, which hold the mission brief. Stop with a typed error rather than act on a partial view.
-                    RuntimeProviderError? contextFailure = ContextLimitFailure(settings, response.Usage);
-                    if (response.Usage?.PromptTokens != null) lastPromptTokens = response.Usage.PromptTokens.Value;
-                    // Still below the window, nothing has been dropped yet: make room and carry on rather than stop.
-                    if (contextFailure != null && response.Usage!.PromptTokens!.Value < settings.ContextLength!.Value)
-                    {
-                        long removed = ApiContextCompactor.Compact(messages);
-                        if (removed > 0)
-                        {
-                            EmitDiagnostic(processId, ApiRuntimeDiagnosticKindEnum.Inference, "[context] prompt reached " + response.Usage.PromptTokens + " of " + settings.ContextLength
-                                + " tokens; replaced earlier tool output (about " + (removed / 4) + " tokens) with short notes and continued");
-                            lastPromptTokens = 0;
-                            contextFailure = null;
-                        }
-                    }
-                    if (contextFailure != null)
-                    {
-                        EmitDiagnostic(processId, ApiRuntimeDiagnosticKindEnum.Error, "[error] " + contextFailure.Reason);
-                        RaiseProviderError(processId, contextFailure);
-                        exitCode = 1;
-                        break;
-                    }
-
-                    string visibleText = RemoveCompleteThinkBlocks(response.Text);
-                    if (!String.IsNullOrEmpty(visibleText))
-                    {
-                        finalText = visibleText;
-                        Emit(processId, visibleText);
-                    }
-
-                    messages.Add(response.ToAssistantMessage());
-
-                    if (response.ToolCalls == null || response.ToolCalls.Count == 0)
-                    {
-                        if (IsTokenLimit(response.FinishReason)) tokenLimitFailure = new RuntimeProviderError
-                        {
-                            ErrorType = "output_token_limit_reached",
-                            Reason = "The inference response hit the output-token limit (finish reason: " + response.FinishReason
-                                + "; configured Max Output Tokens: " + (settings.MaxTokens?.ToString() ?? "provider default")
-                                + "; completion tokens: " + response.Usage?.CompletionTokens + "). The mission did not finish."
-                        };
-                        // Only this terminal response can finish the run; earlier narration is not a result.
-                        finalText = RemoveCompleteThinkBlocks(response.Text);
-
-                        // RS-6.3: a stage with a submit tool that stopped without submitting, and whose reply does not meet the
-                        // text contract either, gets a forced submit turn (at most two) instead of a failed stage.
-                        if (submitTool != null && !submitTool.Submitted && forcedSubmits < 2 && iteration + 1 < maxIterations
-                            && !submitTool.TextMeetsContract(finalText) && !IsTokenLimit(response.FinishReason))
-                        {
-                            forcedSubmits++;
-                            forceSubmitNext = true;
-                            EmitDiagnostic(processId, ApiRuntimeDiagnosticKindEnum.Warning, "[warning] the captain stopped without calling " + submitTool.Name + "; requiring it (" + forcedSubmits + "/2).");
-                            messages.Add(ChatMessage.User(submitTool.ForcePrompt()));
-                            continue;
-                        }
-
-                        bool complete = (submitTool != null && submitTool.Submitted && !String.IsNullOrWhiteSpace(finalText))
-                            || IsCompleteResponse(finalText, response.FinishReason, requiresCompletion);
-                        if (complete) break;
-                        incompleteResponses++;
-                        if (incompleteResponses <= 2 && iteration + 1 < maxIterations)
-                        {
-                            EmitDiagnostic(processId, ApiRuntimeDiagnosticKindEnum.Warning, "[warning] incomplete terminal response; asking the captain to continue (" + incompleteResponses + "/2).");
-                            messages.Add(ChatMessage.User("Your last response did not complete the task. Continue implementing and validating the mission using tools. Do not repeat an introductory plan. When finished, provide a substantive summary" + (requiresCompletion ? " and the required standalone [ARMADA:RESULT] COMPLETE line." : ".")));
-                            continue;
-                        }
-                        exitCode = 1;
-                        RaiseProviderError(processId, tokenLimitFailure ?? new RuntimeProviderError { ErrorType = "incomplete_completion",
-                            Reason = "The endpoint stopped without a nonempty final response and the required mission completion marker after bounded continuation attempts." });
-                        EmitDiagnostic(processId, ApiRuntimeDiagnosticKindEnum.Error, "[error] incomplete completion; the mission is not finished.");
-                        break;
-                    }
-
-                    finalText = String.Empty;
-                    foreach (ToolCall call in response.ToolCalls)
-                    {
-                        token.ThrowIfCancellationRequested();
-                        string resultContent;
-                        if (!permittedTools.Contains(call.Name))
-                        {
-                            resultContent = JsonSerializer.Serialize(new { error = "tool_not_allowed", message = "This tool is disabled by the endpoint's inference policy." });
-                            EmitToolEvent(processId, new ApiRuntimeToolEvent { Phase = ApiRuntimeToolPhaseEnum.Completed, Id = call.Id, Name = call.Name, Ok = false, PermissionDenied = true, Result = resultContent });
-                        }
-                        else if (submitTool != null && String.Equals(call.Name, submitTool.Name, StringComparison.Ordinal))
-                            resultContent = await ExecuteSubmitToolAsync(processId, submitTool, submitForward, call, token).ConfigureAwait(false);
-                        else resultContent = await ExecuteToolAsync(processId, registry, mcpRouting, call, workingDirectory, deferredCatalog, token).ConfigureAwait(false);
-                        messages.Add(ChatMessage.ToolResult(call.Id, call.Name, resultContent));
-                    }
-
-                    if (iteration == maxIterations - 1)
-                    {
-                        exitCode = 1;
-                        RaiseProviderError(processId, new RuntimeProviderError { ErrorType = "max_iterations_reached", Reason = "API endpoint captain stopped at the configured " + maxIterations + " model-turn limit." });
-                        EmitDiagnostic(processId, ApiRuntimeDiagnosticKindEnum.Warning, "[warning] reached the maximum of " + maxIterations + " model turns; stopping.");
-                    }
-                }
+                    InferAsync = (request, ct) => WithInferenceRetryAsync(() => settings.Streaming ? StreamToolChatAsync(client, request, firstResponseMs, idleMs, ct) : client.ChatAsync(request, ct), r => r.Success, r => r.StatusCode, r => r.Error, processId, lastCallMs, ct, () => LastRetryAfterSeconds(client)),
+                    InferenceFailure = (response, reason) => InferenceFailure(response.StatusCode, response.Error, reason, lastCallMs.Value, settings.Streaming, LastRetryAfterSeconds(client)),
+                    ExecuteToolAsync = (call, ct) => submitTool != null && String.Equals(call.Name, submitTool.Name, StringComparison.Ordinal)
+                        ? ExecuteSubmitToolAsync(processId, submitTool, submitForward, call, ct)
+                        : ExecuteToolAsync(processId, registry, mcpRouting, call, workingDirectory, deferredCatalog, ct),
+                    Emit = text => Emit(processId, text),
+                    Diagnostic = (kind, text) => EmitDiagnostic(processId, kind, text),
+                    ToolEvent = toolEvent => EmitToolEvent(processId, toolEvent),
+                    ProviderError = error => RaiseProviderError(processId, error)
+                };
+                ApiTurnLoop loop = new ApiTurnLoop(
+                    callbacks,
+                    new ApiContextPolicy(settings.ContextLength),
+                    new ApiTerminalPolicy(requiresCompletionLine, settings.MaxTokens, submitTool),
+                    submitTool,
+                    completionOptions,
+                    Math.Min(_MaxIterations, settings.MaxIterations),
+                    settings.Streaming);
+                ApiTurnLoopResult outcome = await loop.RunAsync(messages, tools, permittedTools, token).ConfigureAwait(false);
+                exitCode = outcome.ExitCode;
+                finalText = outcome.FinalText;
 
                 WriteFinalMessage(finalMessageFilePath, finalText);
             }
@@ -1152,47 +1023,6 @@ namespace Armada.Runtimes
                 try { _LogWriter?.Dispose(); } catch { }
                 _LogWriter = null;
             }
-        }
-
-        private static RuntimeProviderError? ContextLimitFailure(InferenceOptions settings, TokenUsage? usage)
-        {
-            if (!settings.ContextLength.HasValue || usage?.PromptTokens == null) return null;
-            int window = settings.ContextLength.Value;
-            long prompt = usage.PromptTokens.Value;
-            if (prompt * 100 < (long)window * 95) return null;
-            return new RuntimeProviderError
-            {
-                ErrorType = "context_limit_exceeded",
-                Reason = "The conversation reached the configured context window (prompt tokens: " + prompt + " of " + window
-                    + "). Further turns would run on truncated history, so the run stopped."
-            };
-        }
-
-        private static bool IsTokenLimit(string? reason) => String.Equals(reason, "length", StringComparison.OrdinalIgnoreCase) || String.Equals(reason, "max_tokens", StringComparison.OrdinalIgnoreCase) || String.Equals(reason, "max_output_tokens", StringComparison.OrdinalIgnoreCase);
-
-        /// <summary>
-        /// Remove every complete think block from assistant text before that text is emitted or stored.
-        /// A block opens with a think tag whose name ends at the tag boundary and closes with the matching end tag.
-        /// A longer name, an unmatched tag, and text with no complete block stay as they were.
-        /// </summary>
-        /// <param name="text">Assistant text from the inference client.</param>
-        /// <returns>The text with complete think blocks removed.</returns>
-        private static string RemoveCompleteThinkBlocks(string? text)
-        {
-            if (String.IsNullOrEmpty(text)) return String.Empty;
-            return _CompleteThinkBlock.Replace(text, String.Empty);
-        }
-
-        private static bool IsCompleteResponse(string text, string? finishReason, bool requiresCompletion)
-        {
-            if (String.IsNullOrWhiteSpace(text) || IsTokenLimit(finishReason)) return false;
-            if (!requiresCompletion) return true;
-            string[] lines = text.Replace("\r", "").Split('\n');
-            // The same decoration-tolerant matcher Core uses. A verifier that found a blocking product defect ends with the
-            // blocked outcome instead; that is also a finished reply.
-            bool IsEnding(string line) => CompletionLine.IsCompletionLine(line)
-                || String.Equals(ProtocolLines.StripDecoration(line), VerifierContract.BlockedMarker, StringComparison.Ordinal);
-            return lines.Any(IsEnding) && lines.Any(line => !String.IsNullOrWhiteSpace(line) && !IsEnding(line));
         }
 
         private void WriteFinalMessage(string? finalMessageFilePath, string finalText)

@@ -169,6 +169,9 @@ namespace Test.Smoke
 
             // Runtimes
             "Runtimes.AgentRuntimeFactory",
+            "Runtimes.ApiContextPolicy",
+            "Runtimes.ApiTerminalPolicy",
+            "Runtimes.ApiTurnLoop",
             "Runtimes.BaseAgentRuntime",
             "Runtimes.BuiltInToolArguments",
             "Runtimes.ClaudeCodeRuntime",
