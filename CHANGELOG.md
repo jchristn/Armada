@@ -217,6 +217,11 @@ Conductor) with Opus and GPT-6.1 reliable. The work is tracked item by item in `
   notes and rescue briefs no longer repeat it. When the captain's context length is known, the whole file plus the API
   runtime's tool schemas is held to a quarter of it: papercuts, skills and similar sections are replaced by a one-line
   note first, and the description, acceptance criteria, handoff, rules and contract are never trimmed.
+- **Cold loads and proxy timeouts are retried; a token repeat loop is not.** Errors such as "waiting for llama runner
+  to start" now count as a model still loading, and a 504 or upstream timeout from a proxy (new error type
+  `proxy_timeout`) is Transient. Ollama's "token repeat limit reached" 500 was retried unchanged as a server error; it
+  is now a degenerate-output task failure. A keep_alive warm-up for Ollama endpoints loads the model without
+  generating (RS-7.16, RS-7.17).
 - **Recovery state survives a restart.** Endpoint circuit breakers, launch backoff (with the captains that failed to
   start the mission), the start of a transient outage, and escalation rule cooldowns were kept only in memory, so a
   restart sent missions straight back to a failing endpoint, relaunched a broken captain at once, granted an outage a

@@ -957,9 +957,16 @@ this phase it is Armada's job to absorb the predictable failures.
   Evidence:
 - [ ] **RS-7.16** Cold loads: warm the model with `keep_alive` before the first turn, and classify "model loading" and
   proxy time-to-first-byte timeouts (Conductor's 504 after 300 s, seen 2026-11-25 on inkling-2-mini) as Transient
-  (HER:353, HER:685, HDR gpt-oss:120b cold start). Evidence:
-- [ ] **RS-7.17** Ollama's "token repeat limit reached" 500 (HDR, gpt-oss:20b) becomes a simulator kind (RS-1.1) and is
-  handled like RS-7.3. Evidence:
+  (HER:353, HER:685, HDR gpt-oss:120b cold start). Evidence (partial): more loading phrases read as `model_loading`, a 504
+  or upstream/gateway timeout is the new Transient `proxy_timeout`; `OllamaModelWarmup.WarmAsync` sends a prompt-less
+  `/api/generate` with `keep_alive` (Ollama only, failures returned as results); simulator kinds `ModelLoading500` and
+  `ProxyFirstByteTimeout504`; tests `cold_load_and_proxy_timeout_are_transient`, `ollama_warmup_sends_keep_alive`
+  (812b4c944). Remaining: call the warm-up before the first turn (wave 2).
+- [x] **RS-7.17** Ollama's "token repeat limit reached" 500 (HDR, gpt-oss:20b) becomes a simulator kind (RS-1.1) and is
+  handled like RS-7.3. Evidence: maps to `degenerate_output` (TaskFailure) with simulator kind `TokenRepeatLimit500`;
+  `OpenModelErrorPatterns.IsMalformedOrDegenerateGeneration` covers it and the malformed tool-call 500 for RS-7.3. Tests
+  `Runtimes.OpenModelSimulator.token_repeat_limit_is_degenerate_task_failure`, `api_runtime_ends_on_tokenrepeatlimit500`
+  (812b4c944).
 
 ## Phase 8: Capability-aware routing and prompts
 
