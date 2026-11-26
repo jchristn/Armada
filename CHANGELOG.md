@@ -211,6 +211,12 @@ Conductor) with Opus and GPT-6.1 reliable. The work is tracked item by item in `
 - **Structured findings.** The Judge and verifiers submit findings as file, line, severity, scenario and required fix,
   and these become the handoff findings. Text output is asked for a `## Findings` section; the heading scraper is the
   fallback.
+- **One prompt composer, one contract, one budget.** Every launch (first run, rework, repair rerun, rescue) builds its
+  instructions the same way. The persona template's declared slots decide where the handoff goes, so it is delivered
+  once, also for edited templates. The output contract is stated once, at the end of the file; rework sections, repair
+  notes and rescue briefs no longer repeat it. When the captain's context length is known, the whole file plus the API
+  runtime's tool schemas is held to a quarter of it: papercuts, skills and similar sections are replaced by a one-line
+  note first, and the description, acceptance criteria, handoff, rules and contract are never trimmed.
 - **Recovery state survives a restart.** Endpoint circuit breakers, launch backoff (with the captains that failed to
   start the mission), the start of a transient outage, and escalation rule cooldowns were kept only in memory, so a
   restart sent missions straight back to a failing endpoint, relaunched a broken captain at once, granted an outage a

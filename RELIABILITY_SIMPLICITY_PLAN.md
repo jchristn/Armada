@@ -880,11 +880,16 @@ the contract a schema, lets the model submit through a tool, and repairs format 
 - [x] **RS-6.10** Chain-aware handoff. A downstream stage sees the artifacts of the whole chain, newest first,
   within its budget (the Judge sees the Worker's report, not only the Test Engineer's). Evidence: fbe9cf638.
   `HandoffRenderer.RenderChainWithBudget`, `ReadEarlierChainAsync` (8 stages, same voyage). Test: `judge_sees_whole_chain`.
-- [ ] **RS-6.11** One prompt composer for first runs, rework (`ReworkPromptBuilder.Compose`), repair, and escalation:
+- [x] **RS-6.11** One prompt composer for first runs, rework (`ReworkPromptBuilder.Compose`), repair, and escalation:
   declared template slots instead of `personaPrompt.Contains(handoff.Evidence.Trim())`
   (`MissionService.Instructions.cs:115-131`), one render of the persona prompt, and a token budget for the whole
   instructions file (playbooks, skills, papercuts, persona prompt, contract, handoff). Remove the unused
-  `MaxMissionDescriptionChars` and `MaxPersonaSummaryChars` or wire them into the budget. Evidence:
+  `MaxMissionDescriptionChars` and `MaxPersonaSummaryChars` or wire them into the budget. Evidence: be14a9980.
+  `InstructionsComposer` (declared sections, trim ranks, budget = context/4 minus `PersonaToolScope.EstimateSchemaTokens`,
+  floor 2048, no trim when context is unknown); one persona render; slot-based `DeliverHandoff`; contract once at the
+  file end. Unused private constants removed. Tests: `Services.InstructionsComposer` (5),
+  `PromptVariants.every_launch_kind_states_one_contract`, `small_context_trims_in_order_and_keeps_contract`,
+  `ReworkPrompt.legacy_section_contract_removed`; 14 suites 348/348.
 - [x] **RS-6.12** Deprecate the legacy `[ARMADA:MISSION]` regex plan path (`MissionService.ArchitectPlan.cs:310-625`):
   keep it behind a setting defaulting on in 1.5.0, log a deprecation warning when it is used, and list it in
   `DEPRECATION.md` for removal in a later release. Precompile any regex that remains. Evidence: `AcceptLegacyMissionMarkers`
