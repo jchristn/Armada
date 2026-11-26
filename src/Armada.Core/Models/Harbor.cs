@@ -118,6 +118,19 @@ namespace Armada.Core.Models
         /// </summary>
         public DateTime LastUpdateUtc { get; set; } = DateTime.UtcNow;
 
+        /// <summary>
+        /// Capability flags this Admiral expects that the Harbor did not advertise at its last handshake (see
+        /// <see cref="Armada.Core.Harbor.HarborCapabilityFlags.Advertised"/>). The Admiral runs the earlier behavior for each.
+        /// Empty for a Harbor that is current or has never connected. Computed; not stored.
+        /// </summary>
+        public List<string> MissingCapabilities => String.IsNullOrWhiteSpace(ProtocolVersion) ? new List<string>() : Armada.Core.Harbor.HarborCapabilityFlags.Missing(_Capabilities);
+
+        /// <summary>
+        /// Whether an update is recommended because the Harbor is missing a capability flag this Admiral expects (it runs
+        /// 1.4.0 behavior for those features). Computed; not stored.
+        /// </summary>
+        public bool UpdateRecommended => MissingCapabilities.Count > 0;
+
         #endregion
 
         #region Private-Members

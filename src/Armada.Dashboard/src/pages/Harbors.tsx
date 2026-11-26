@@ -198,7 +198,12 @@ export default function Harbors() {
         </>
       ),
     },
-    { key: 'status', label: t('Status'), headerTitle: t('Connection as the Admiral sees it: Connected, Degraded (heartbeats late), Disconnected (no link) or Unknown (never connected).'), cellClassName: 'cell-nowrap', render: (harbor) => <span className={`tag ${(harbor.connectionStatus || '').toLowerCase()}`} title={t(STATUS_TIPS[harbor.connectionStatus] ?? harbor.connectionStatus)}>{t(harbor.connectionStatus)}</span> },
+    { key: 'status', label: t('Status'), headerTitle: t('Connection as the Admiral sees it: Connected, Degraded (heartbeats late), Disconnected (no link) or Unknown (never connected).'), cellClassName: 'cell-nowrap', render: (harbor) => (
+      <>
+        <span className={`tag ${(harbor.connectionStatus || '').toLowerCase()}`} title={t(STATUS_TIPS[harbor.connectionStatus] ?? harbor.connectionStatus)}>{t(harbor.connectionStatus)}</span>
+        {harbor.updateRecommended && <>{' '}<span className="tag stalled" title={t('Harbor update recommended: this Harbor did not advertise {{flags}}, so the Admiral runs the 1.4.0 behavior for those features. Update the Harbor app on that machine.', { flags: (harbor.missingCapabilities ?? []).join(', ') })}>{t('Harbor update recommended')}</span></>}
+      </>
+    ) },
     {
       key: 'capabilities', label: t('Capabilities'), headerTitle: t('Agent runtimes and tools this Harbor reported when it connected, such as git or claude. Work needing a runtime goes only to Harbors that have it.'), cellClassName: 'text-dim',
       render: (harbor) => {
@@ -291,6 +296,12 @@ export default function Harbors() {
               <dd>{detail.harbor.maxConcurrentJobs}</dd>
               <dt title={t('Operating system and processor the Harbor reported, for example macOS / Arm64.')}>{t('Platform')}</dt>
               <dd>{[detail.harbor.osPlatform, detail.harbor.architecture].filter(Boolean).join(' / ') || '-'}</dd>
+              {detail.harbor.updateRecommended && (
+                <>
+                  <dt title={t('Capability flags this Admiral expects that the Harbor did not advertise when it connected. The Admiral runs the 1.4.0 behavior for each one until the Harbor app is updated.')}>{t('Update')}</dt>
+                  <dd><span className="tag stalled">{t('Harbor update recommended')}</span> <span className="text-dim mono">{(detail.harbor.missingCapabilities ?? []).join(', ')}</span></dd>
+                </>
+              )}
               <dt title={t('Version of the Harbor link protocol the Harbor app speaks. A dash means it has never connected.')}>{t('Protocol')}</dt>
               <dd>{detail.harbor.protocolVersion || '-'}</dd>
               <dt title={t('When the Harbor last sent a heartbeat or message.')}>{t('Last Seen')}</dt>

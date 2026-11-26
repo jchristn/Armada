@@ -11259,6 +11259,7 @@ A worker AI agent instance executing missions.
 | `LastProcessAliveUtc` | datetime? | null | When the captain's OS process was last seen alive (distinct from `LastHeartbeatUtc`, which advances only on agent output) |
 | `SupportsPlanningSessions` | bool | computed | Whether the captain's runtime supports planning sessions (read-only) |
 | `PlanningSessionSupportReason` | string? | computed | Why the captain cannot host planning sessions, if it cannot (read-only) |
+| `HarborUpdateRecommended` | bool | computed | True on captain reads when the Harbor running this captain's exclusive session or an active mission is missing a capability flag this Admiral expects (read-only; see Harbor `updateRecommended`) |
 | `CreatedUtc` | datetime | now | Creation timestamp (UTC) |
 | `LastUpdateUtc` | datetime | now | Last update timestamp (UTC) |
 
@@ -11614,6 +11615,8 @@ A registered host-side runner (see the [Harbors](#harbors) endpoints). Only `Nam
 | `lastConnectedUtc` | datetime? | null | Last link-establishment timestamp (UTC) |
 | `createdUtc` | datetime | now | Creation timestamp (UTC) |
 | `lastUpdateUtc` | datetime | now | Last update timestamp (UTC) |
+| `missingCapabilities` | string[] | [] | Read-only. Capability flags this Admiral expects that the Harbor did not advertise at its last handshake (see HARBOR_PROTOCOL.md, API captain capability flags); empty for a current or never-connected Harbor |
+| `updateRecommended` | bool | false | Read-only. True when `missingCapabilities` is not empty: the Admiral runs the earlier behavior for those features until the Harbor app is updated |
 
 ---
 

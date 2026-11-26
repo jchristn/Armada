@@ -263,6 +263,12 @@ namespace Armada.Core.Models
         public int? ProcessId { get; set; } = null;
 
         /// <summary>
+        /// Whether a Harbor running this captain's current work is missing a capability flag this Admiral expects, so it runs
+        /// 1.4.0 behavior for those features and an update is recommended. Filled in on captain reads; not stored.
+        /// </summary>
+        public bool HarborUpdateRecommended { get; set; } = false;
+
+        /// <summary>
         /// Number of auto-recovery attempts for the current mission.
         /// </summary>
         public int RecoveryAttempts { get; set; } = 0;

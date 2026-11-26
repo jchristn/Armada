@@ -120,6 +120,14 @@ export function CaptainDetailScreen({ id, embedded, onRemoved }: CaptainDetailSc
             {captain.active === false ? <StatusBadge label={t('Inactive')} tone="skipped" /> : null}
           </View>
           {resource.error ? <Banner tone="danger" title={resource.error} /> : null}
+          {captain.harborUpdateRecommended ? (
+            <Banner
+              tone="warning"
+              title={t('Harbor update recommended')}
+              message={t("A Harbor running this captain's work is missing a capability flag this Admiral expects, so it runs the 1.4.0 behavior for that feature.")}
+              testID="captain-harbor-update"
+            />
+          ) : null}
           {captain.state === 'Quarantined' ? (
             <View>
               <Banner

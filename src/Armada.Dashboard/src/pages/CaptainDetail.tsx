@@ -560,6 +560,7 @@ export default function CaptainDetail() {
           <StatusBadge status={captain.state} />
           <span>{t('Active')}: {t(captain.active === false ? 'No' : 'Yes')}</span>
           <span>{t('Running missions')}: {captain.activeMissionCount ?? 0} / {captain.maxConcurrency ?? 1}</span>
+          {captain.harborUpdateRecommended && <span className="tag stalled" title={t("Harbor update recommended: a Harbor running this captain's work is missing a capability flag this Admiral expects, so it runs the 1.4.0 behavior for that feature. See the Harbors page.")}>{t('Harbor update recommended')}</span>}
         </div>
         {captain.state === 'Quarantined' && (
           <div className="detail-field">

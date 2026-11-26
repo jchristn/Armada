@@ -108,6 +108,105 @@ namespace Test.Shared.Suites.Services
                 AssertFalse(manager.CanPrompt("hbr_prompt", AgentRuntimeEnum.ClaudeCode), "a disconnected Harbor cannot prompt");
             }));
 
+            cases.Add(CaseAsync("capability_flags_report_update_recommended", "A Harbor missing an expected API capability flag is acked with the missing names and reads UpdateRecommended; a current one does not", TestTags.Positive, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                HarborService harbors = new HarborService(testDb.Driver, CreateLogging());
+                HarborConnectionManager manager = new HarborConnectionManager(harbors, CreateLogging(), null);
+
+                HarborHandshake older = new HarborHandshake
+                {
+                    HarborId = "hbr_flags_old",
+                    Name = "Old",
+                    ProtocolVersion = HarborProtocol.Version,
+                    MaxConcurrentJobs = 4,
+                    Capabilities = new List<HarborCapability> { new HarborCapability { Name = HarborProtocol.InferenceStreamingCapability, Available = true } }
+                };
+                HarborHandshakeAck olderAck = await manager.OnHandshakeAsync(older, "ten_f", "usr_f", NoopSend).ConfigureAwait(false);
+                AssertNotNull(olderAck.MissingCapabilities, "an older Harbor is told what it is missing");
+                AssertEqual(String.Join(",", HarborCapabilityFlags.Advertised), String.Join(",", olderAck.MissingCapabilities!));
+                AssertTrue(manager.UpdateRecommended("hbr_flags_old"), "older Harbor: update recommended");
+                AssertTrue(manager.Supports("hbr_flags_old", HarborCapabilityFlags.InferenceStreaming), "1.4.0 flag still supported");
+                AssertFalse(manager.Supports("hbr_flags_old", HarborCapabilityFlags.SubmitTool), "1.5.0 flag missing");
+
+                List<HarborCapability> current = new List<HarborCapability> { new HarborCapability { Name = HarborProtocol.InferenceStreamingCapability, Available = true } };
+                HarborCapabilityFlags.AddAdvertised(current);
+                HarborCapabilityFlags.AddAdvertised(current);
+                AssertEqual(1 + HarborCapabilityFlags.Advertised.Count, current.Count, "AddAdvertised does not duplicate");
+                HarborHandshake newer = new HarborHandshake { HarborId = "hbr_flags_new", Name = "New", ProtocolVersion = HarborProtocol.Version, MaxConcurrentJobs = 4, Capabilities = current };
+                HarborHandshakeAck newerAck = await manager.OnHandshakeAsync(newer, "ten_f", "usr_f", NoopSend).ConfigureAwait(false);
+                AssertNull(newerAck.MissingCapabilities, "a current Harbor gets no missing list");
+                AssertFalse(manager.UpdateRecommended("hbr_flags_new"), "current Harbor: no update");
+                AssertTrue(manager.Supports("hbr_flags_new", HarborCapabilityFlags.ToolScope.ToUpperInvariant()), "flag names are case-insensitive");
+                AssertFalse(manager.UpdateRecommended("hbr_unknown"), "unknown Harbor: no update");
+                AssertFalse(manager.Supports(null, HarborCapabilityFlags.SubmitTool), "null Harbor id");
+                AssertThrows<ArgumentNullException>(() => manager.Supports("hbr_flags_new", ""));
+
+                Harbor? storedOld = await testDb.Driver.Harbors.ReadAsync("hbr_flags_old").ConfigureAwait(false);
+                Harbor? storedNew = await testDb.Driver.Harbors.ReadAsync("hbr_flags_new").ConfigureAwait(false);
+                AssertTrue(storedOld!.UpdateRecommended, "the stored older Harbor reads UpdateRecommended on REST");
+                AssertEqual(HarborCapabilityFlags.Advertised.Count, storedOld.MissingCapabilities.Count);
+                AssertFalse(storedNew!.UpdateRecommended, "the stored current Harbor does not");
+                AssertFalse(new Harbor().UpdateRecommended, "a Harbor that never connected is not flagged");
+
+                List<HarborCapability> unavailable = new List<HarborCapability> { new HarborCapability { Name = HarborCapabilityFlags.SubmitTool, Available = false } };
+                AssertFalse(HarborCapabilityFlags.Supports(unavailable, HarborCapabilityFlags.SubmitTool), "an unavailable flag does not count");
+                AssertFalse(HarborCapabilityFlags.Supports(null, HarborCapabilityFlags.SubmitTool), "null list");
+                foreach (string flag in HarborCapabilityFlags.Advertised)
+                    AssertTrue(((IList<string>)HarborCapabilityFlags.All).Contains(flag), "every advertised flag is declared: " + flag);
+            }));
+
+            cases.Add(CaseAsync("link_client_advertises_capability_flags", "A Harbor link client with a job runner advertises the expected flags; one without is told it is missing them", TestTags.Positive, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                HarborService harbors = new HarborService(testDb.Driver, CreateLogging());
+                HarborConnectionManager manager = new HarborConnectionManager(harbors, CreateLogging(), null);
+
+                HarborLinkClient runs = new HarborLinkClient("hbr_link_runs", "Runs", new List<HarborCapability>(), 4,
+                    new StubHostCommandExecutor(new HostCommandResult { ExitCode = 0 }), CreateLogging(), 0, null, new ControlledHarborJobRunner());
+                LoopbackHarborSession current = await LoopbackHarborSession.ConnectAsync(manager, "hbr_link_runs", runs).ConfigureAwait(false);
+                AssertFalse(manager.UpdateRecommended("hbr_link_runs"), "a current Harbor advertises every expected flag");
+                AssertFalse(runs.UpdateRecommended, "the Admiral reported nothing missing");
+                AssertEqual(0, runs.MissingCapabilities.Count);
+
+                HarborLinkClient bare = new HarborLinkClient("hbr_link_bare", "Bare", new List<HarborCapability>(), 4,
+                    new StubHostCommandExecutor(new HostCommandResult { ExitCode = 0 }), CreateLogging(), 0, null, null);
+                LoopbackHarborSession older = await LoopbackHarborSession.ConnectAsync(manager, "hbr_link_bare", bare).ConfigureAwait(false);
+                AssertTrue(manager.UpdateRecommended("hbr_link_bare"), "no job runner, no flags");
+                AssertTrue(bare.UpdateRecommended, "the ack's missing list reaches the Harbor");
+                AssertEqual(String.Join(",", HarborCapabilityFlags.Advertised), String.Join(",", bare.MissingCapabilities));
+
+                await current.DropAsync().ConfigureAwait(false);
+                await older.DropAsync().ConfigureAwait(false);
+            }));
+
+            cases.Add(CaseAsync("captain_reads_harbor_update_recommended", "A captain whose active mission runs on a Harbor missing an expected flag reads HarborUpdateRecommended", TestTags.Positive, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                HarborService harbors = new HarborService(testDb.Driver, CreateLogging());
+                HarborConnectionManager manager = new HarborConnectionManager(harbors, CreateLogging(), null);
+                Armada.Server.CaptainHarborUpdateResolver resolver = new Armada.Server.CaptainHarborUpdateResolver(testDb.Driver, manager);
+
+                Captain idle = new Captain { Name = "idle" };
+                await resolver.ApplyAsync(new List<Captain> { idle }).ConfigureAwait(false);
+                AssertFalse(idle.HarborUpdateRecommended, "no Harbor connected");
+
+                await manager.OnHandshakeAsync(new HarborHandshake { HarborId = "hbr_cap_old", Name = "Old", ProtocolVersion = HarborProtocol.Version, MaxConcurrentJobs = 4 }, null, null, NoopSend).ConfigureAwait(false);
+                List<HarborCapability> current = new List<HarborCapability>();
+                HarborCapabilityFlags.AddAdvertised(current);
+                await manager.OnHandshakeAsync(new HarborHandshake { HarborId = "hbr_cap_new", Name = "New", ProtocolVersion = HarborProtocol.Version, MaxConcurrentJobs = 4, Capabilities = current }, null, null, NoopSend).ConfigureAwait(false);
+
+                Mission onOld = await testDb.Driver.Missions.CreateAsync(new Mission("on old") { AssignedHarborId = "hbr_cap_old", Status = MissionStatusEnum.InProgress }).ConfigureAwait(false);
+                Mission onNew = await testDb.Driver.Missions.CreateAsync(new Mission("on new") { AssignedHarborId = "hbr_cap_new", Status = MissionStatusEnum.InProgress }).ConfigureAwait(false);
+                Captain oldWork = new Captain { Name = "old", ActiveMissionIds = new List<string> { onNew.Id, onOld.Id } };
+                Captain newWork = new Captain { Name = "new", ActiveMissionIds = new List<string> { onNew.Id, "msn_missing" } };
+                await resolver.ApplyAsync(new List<Captain> { oldWork, newWork, idle }).ConfigureAwait(false);
+                AssertTrue(oldWork.HarborUpdateRecommended, "work on the older Harbor");
+                AssertFalse(newWork.HarborUpdateRecommended, "work on a current Harbor");
+                AssertFalse(idle.HarborUpdateRecommended, "no active work");
+                AssertThrows<ArgumentNullException>(() => resolver.ApplyAsync(null!).GetAwaiter().GetResult());
+            }));
+
             cases.Add(CaseAsync("eligible_harbor_is_scoped_to_the_owning_user", "HasEligibleHarborForUserAsync matches only the owning user's connected Harbor", TestTags.Positive, async () =>
             {
                 using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);

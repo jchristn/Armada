@@ -251,6 +251,8 @@ export type VoyageStatus = 'Building' | 'Open' | 'InProgress' | 'Complete' | 'Fa
 export type CaptainState = 'Idle' | 'Working' | 'Planning' | 'Refining' | 'Stalled' | 'Stopping' | 'Quarantined' | 'Analyzing';
 
 export interface Captain {
+  /** True when a Harbor running this captain's work is missing an expected capability flag; absent on older servers. */
+  harborUpdateRecommended?: boolean;
   maxConcurrency?: number;
   activeMissionCount?: number;
   activeMissionIds?: string[];
@@ -3103,6 +3105,10 @@ export interface Harbor {
   lastConnectedUtc: string | null;
   createdUtc: string;
   lastUpdateUtc: string;
+  /** Capability flags this Admiral expects that the Harbor did not advertise; absent on older servers. */
+  missingCapabilities?: string[];
+  /** True when the Harbor is missing an expected capability flag and runs earlier behavior for it. */
+  updateRecommended?: boolean;
 }
 
 /** One captain launch the Admiral recorded on a Harbor. */

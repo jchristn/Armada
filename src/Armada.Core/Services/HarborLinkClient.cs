@@ -34,6 +34,15 @@ namespace Armada.Core.Services
         public string? McpBaseUrl { get; private set; } = null;
 
         /// <summary>
+        /// Capability flags the Admiral reported missing in its last handshake acknowledgement; empty when this Harbor is
+        /// current or the Admiral predates the report.
+        /// </summary>
+        public IReadOnlyList<string> MissingCapabilities { get; private set; } = new List<string>();
+
+        /// <summary>Whether the Admiral recommends updating this Harbor (it reported a missing capability flag).</summary>
+        public bool UpdateRecommended => MissingCapabilities.Count > 0;
+
+        /// <summary>
         /// Time source. Waits (the deferred-launch health poll) and job durations are measured on its monotonic clock
         /// (<see cref="TimeProvider.GetTimestamp"/>), never on its wall clock, so a wall-clock jump (the host sleeping
         /// and waking, an NTP step) cannot end a wait early or inflate a duration. Defaults to
@@ -212,6 +221,7 @@ namespace Armada.Core.Services
                     : Armada.Core.Enums.AgentRuntimeEnum.ClaudeCode.ToString();
                 _Capabilities.Add(new HarborCapability { Name = HarborProtocol.CliPermissionPromptCapability, Available = true, Detail = runtimes });
             }
+            if (jobRunner != null) HarborCapabilityFlags.AddAdvertised(_Capabilities);
             if (usageProbe != null && !_Capabilities.Exists(c => String.Equals(c.Name, HarborProtocol.UsageProbeCapability, StringComparison.OrdinalIgnoreCase)))
                 _Capabilities.Add(new HarborCapability { Name = HarborProtocol.UsageProbeCapability, Available = true });
 
@@ -379,6 +389,7 @@ namespace Armada.Core.Services
             if (message is HarborHandshakeAck ack)
             {
                 McpBaseUrl = ack.McpBaseUrl;
+                MissingCapabilities = ack.MissingCapabilities != null ? new List<string>(ack.MissingCapabilities) : new List<string>();
                 if (!ack.Accepted)
                 {
                     _Logging.Warn(_Header + "handshake rejected: " + (ack.Reason ?? "unspecified"));

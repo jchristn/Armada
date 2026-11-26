@@ -323,6 +323,8 @@ namespace Armada.Tui.Screens.Build
             doc.Field("Active", c.Active ? "Yes" : "No");
             doc.Field("Running Missions", c.ActiveMissionCount + " / " + c.MaxConcurrency);
             doc.Field("State", StatusBadge.Label(c.State), StatusBadge.Style(c.State, doc.Theme));
+            if (c.HarborUpdateRecommended)
+                doc.Field("Harbor", Tr("Harbor update recommended") + ": " + Tr("a Harbor running this captain's work runs 1.4.0 behavior for some features"), doc.Theme.Warning);
             if (c.State == CaptainStateEnum.Quarantined)
             {
                 string q = String.IsNullOrEmpty(c.QuarantineReason) ? Tr("quarantined") : c.QuarantineReason!;

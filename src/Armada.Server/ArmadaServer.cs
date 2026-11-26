@@ -1776,6 +1776,7 @@ namespace Armada.Server
             // Captains
             new CaptainRoutes(_Database, _Admiral, _Settings, _AgentLifecycle, _CaptainTools, EmitEventAsync, _JsonOptions, _PlanningSessions, _ObjectiveRefinementSessions)
             {
+                HarborUpdates = new CaptainHarborUpdateResolver(_Database, _HarborConnectionManager),
                 OnUsageCaptureConfigurationChanged = async () =>
                 {
                     _UsageCapture.Invalidate();

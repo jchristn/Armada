@@ -88,7 +88,7 @@ Connect and register:
 
 ```
 Harbor -> handshake { harborId, name, protocolVersion, osPlatform, architecture, capabilities, maxConcurrentJobs }
-Admiral -> handshakeAck { accepted: true, mcpBaseUrl }
+Admiral -> handshakeAck { accepted: true, mcpBaseUrl, missingCapabilities }
 Harbor -> heartbeat { liveJobIds: [], sequence: 1, lastRoundTripMs: null, reconnectCount: 0, lastReconnectUtc: null }
 Admiral -> heartbeatAck { sequence: 1 }
 Harbor -> heartbeat { liveJobIds: [], sequence: 2, lastRoundTripMs: 14, reconnectCount: 0, lastReconnectUtc: null }
@@ -196,6 +196,35 @@ disconnected when its link closes. `kill.gracefulTimeoutMs` defaults to 10000. A
 Harbor that cannot launch (for example a build without a job runner, a CLI that is not installed on the Harbor host, or
 a working directory that does not exist there) answers with `error { jobId, message }`; the Admiral fails that launch at
 once with the Harbor's message instead of waiting for `started`.
+
+### API captain capability flags
+
+A Harbor that runs jobs also advertises one flag per captain runtime behavior that runs on the Harbor, each a capability
+with `available: true` (names in `HarborCapabilityFlags`). A Harbor that lacks a flag runs the earlier behavior, and
+the Admiral falls back to it: the launch still goes to that Harbor and nothing new is required of it.
+
+| flag | behavior | advertised |
+|------|----------|------------|
+| `api-inference-streaming-v1` | streams API captain responses with idle and first-response deadlines | since 1.4.0 |
+| `api-submit-tool-v1` | honors the native submit tool for a stage's structured output (`ARMADA_SUBMIT_TOOL`) | 1.5.0 |
+| `api-tool-scope-v1` | limits scoped MCP tools to the persona's scope (`ARMADA_MCP_TOOL_SCOPE`) | 1.5.0 |
+| `api-completion-line-v1` | treats a missing completion line as incomplete (`ARMADA_REQUIRES_COMPLETION_LINE`) | 1.5.0 |
+| `cli-final-message-hygiene-v1` | CLI runtimes clean their final message: OpenCode JSON final message and stdout error events, no `--dir` for OpenCode 2, reasoning stripped | 1.5.0 |
+| `api-text-tool-call-recovery-v1` | recovers tool calls a model wrote as text | reserved |
+| `api-malformed-call-retry-v1` | corrects instead of resending a request that failed on a malformed tool call | reserved |
+| `api-repetition-guard-v1` | stops repeated identical tool calls | reserved |
+| `api-reasoning-hygiene-v1` | strips reasoning from the final message and history | reserved |
+| `api-tool-limits-scaled-v1` | scales tool output limits to the context window | reserved |
+| `api-edit-encoding-preserve-v1` | keeps a file's byte order mark and line endings on edits | reserved |
+| `api-context-discovery-v1` | discovers a model's served context window on the Harbor | reserved |
+| `api-model-warmup-v1` | warms the model before the first turn | reserved |
+
+Reserved flags are declared but not advertised until their behavior ships. The Admiral expects every flag its own
+Harbor build advertises. For a Harbor that lacks one, `handshakeAck.missingCapabilities` lists the missing names (null
+when none are missing; an older Harbor ignores the field), the Harbor record's `missingCapabilities` and
+`updateRecommended` (computed, not stored) report it on REST, and a captain whose exclusive session or active mission
+runs on such a Harbor reads `harborUpdateRecommended: true`. The dashboard, TUI, and mobile app show "Harbor update
+recommended" on the Harbor and the captain; the Harbor app shows it in its connection detail.
 
 Delegate a git operation:
 

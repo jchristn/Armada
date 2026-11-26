@@ -102,6 +102,11 @@ namespace Armada.Core.Services
         public HashSet<Armada.Core.Enums.AgentRuntimeEnum> PromptRuntimes { get; set; } = new HashSet<Armada.Core.Enums.AgentRuntimeEnum>();
 
         /// <summary>
+        /// The capabilities the Harbor advertised in its handshake on this link.
+        /// </summary>
+        public List<Armada.Core.Models.HarborCapability> Capabilities { get; set; } = new List<Armada.Core.Models.HarborCapability>();
+
+        /// <summary>
         /// The Harbor's name from its handshake on this link.
         /// </summary>
         public string Name { get; set; } = string.Empty;

@@ -72,6 +72,8 @@ namespace Armada.Tui.Screens.Configuration
             view.Row("Enabled", harbor.Enabled ? context.Loc.T("Yes") : context.Loc.T("No"));
             view.Row("Capacity", harbor.MaxConcurrentJobs.ToString(CultureInfo.InvariantCulture));
             view.Row("Platform", Platform(harbor));
+            if (harbor.UpdateRecommended)
+                view.Row("Update", context.Loc.T("Harbor update recommended") + " (" + String.Join(", ", harbor.MissingCapabilities) + ")", t => t.Warning);
             view.Row("Protocol", EntityUi.Dash(harbor.ProtocolVersion));
             view.Row("Last Seen", harbor.LastSeenUtc.HasValue ? EntityUi.Date(context, harbor.LastSeenUtc) : context.Loc.T("Never"));
             view.Section("Capabilities");

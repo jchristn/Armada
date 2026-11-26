@@ -37,6 +37,11 @@ namespace Armada.Server.Routes
         public Func<Task>? OnUsageCaptureConfigurationChanged { get; set; }
 
         /// <summary>
+        /// Optional resolver that fills <see cref="Captain.HarborUpdateRecommended"/> on captain reads (list, enumerate, get).
+        /// </summary>
+        public CaptainHarborUpdateResolver? HarborUpdates { get; set; }
+
+        /// <summary>
         /// Instantiate.
         /// </summary>
         /// <param name="database">Database driver.</param>
@@ -140,6 +145,7 @@ namespace Armada.Server.Routes
                 query.ApplyQuerystringOverrides(key => QueryValueReader.Read(req.Query, key));
                 Stopwatch sw = Stopwatch.StartNew();
                 EnumerationResult<Captain> result = await Armada.Core.Models.EnumerationScope.EnumerateScopedAsync(ctx, query, q => _database.Captains.EnumerateAsync(q), (t, q) => _database.Captains.EnumerateAsync(t, q), (t, u, q) => _database.Captains.EnumerateAsync(t, u, q)).ConfigureAwait(false);
+                if (HarborUpdates != null) await HarborUpdates.ApplyAsync(result.Objects).ConfigureAwait(false);
                 result.TotalMs = Math.Round(sw.Elapsed.TotalMilliseconds, 2);
                 return result;
             },
@@ -162,6 +168,7 @@ namespace Armada.Server.Routes
                 query.ApplyQuerystringOverrides(key => QueryValueReader.Read(req.Query, key));
                 Stopwatch sw = Stopwatch.StartNew();
                 EnumerationResult<Captain> result = await Armada.Core.Models.EnumerationScope.EnumerateScopedAsync(ctx, query, q => _database.Captains.EnumerateAsync(q), (t, q) => _database.Captains.EnumerateAsync(t, q), (t, u, q) => _database.Captains.EnumerateAsync(t, u, q)).ConfigureAwait(false);
+                if (HarborUpdates != null) await HarborUpdates.ApplyAsync(result.Objects).ConfigureAwait(false);
                 result.TotalMs = Math.Round(sw.Elapsed.TotalMilliseconds, 2);
                 return result;
             },
@@ -233,6 +240,7 @@ namespace Armada.Server.Routes
                         ? await _database.Captains.ReadAsync(ctx.TenantId!, id).ConfigureAwait(false)
                         : await _database.Captains.ReadAsync(ctx.TenantId!, ctx.UserId!, id).ConfigureAwait(false);
                 if (captain == null) { req.Http.Response.StatusCode = 404; return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Captain not found" }; }
+                if (HarborUpdates != null) await HarborUpdates.ApplyAsync(new List<Captain> { captain }).ConfigureAwait(false);
                 return (object)captain;
             },
             api => api

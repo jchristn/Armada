@@ -184,7 +184,11 @@ namespace Armada.Harbor
                         await client.RunSessionAsync(transport, token, () =>
                         {
                             OnLinkState?.Invoke(HarborLinkStateEnum.Connected);
-                            OnDetail?.Invoke("Ready. Work the Admiral sends to this computer runs here.");
+                            OnDetail?.Invoke(client.UpdateRecommended
+                                ? "Ready. Harbor update recommended: the Admiral expects " + String.Join(", ", client.MissingCapabilities) + ", which this Harbor does not have, and runs the earlier behavior for them."
+                                : "Ready. Work the Admiral sends to this computer runs here.");
+                            if (client.UpdateRecommended)
+                                Info("Harbor update recommended; missing " + String.Join(", ", client.MissingCapabilities), HarborLogCategoryEnum.Link, HarborLogOutcomeEnum.None);
                             OnMcp?.Invoke(client.McpBaseUrl);
                         }).ConfigureAwait(false);
 

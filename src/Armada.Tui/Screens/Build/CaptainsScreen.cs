@@ -207,6 +207,8 @@ namespace Armada.Tui.Screens.Build
                     : "  [" + Tr("quarantined") + "]";
             }
 
+            if (c.HarborUpdateRecommended) text += "  [" + Tr("Harbor update recommended") + "]";
+
             return text;
         }
 

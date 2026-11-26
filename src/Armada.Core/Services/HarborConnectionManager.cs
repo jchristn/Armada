@@ -204,6 +204,7 @@ namespace Armada.Core.Services
             connection.HostsUsageProbes = HasAvailableCapability(handshake.Capabilities, HarborProtocol.UsageProbeCapability);
             connection.DiscoversContext = HasAvailableCapability(handshake.Capabilities, HarborContextDiscovery.Capability);
             connection.PromptRuntimes = ReadPromptRuntimes(handshake.Capabilities);
+            connection.Capabilities = handshake.Capabilities != null ? new List<HarborCapability>(handshake.Capabilities) : new List<HarborCapability>();
             connection.Name = handshake.Name;
             connection.HeartbeatIntervalMs = handshake.HeartbeatIntervalMs;
             connection.LastSeenUtc = now;
@@ -230,6 +231,7 @@ namespace Armada.Core.Services
             }
 
             long? lastJobSequence = null;
+            List<string> missingCapabilities = HarborCapabilityFlags.Missing(handshake.Capabilities);
             if (!String.IsNullOrWhiteSpace(handshake.JobOutboxEpoch))
             {
                 HarborJobSequenceState state = _JobSequences.GetOrAdd(handshake.HarborId, _ => new HarborJobSequenceState());
@@ -266,7 +268,8 @@ namespace Armada.Core.Services
                 Accepted = true,
                 McpBaseUrl = _AdvertisedMcpBaseUrl,
                 OwnedJobIds = owned,
-                LastJobSequence = lastJobSequence
+                LastJobSequence = lastJobSequence,
+                MissingCapabilities = missingCapabilities.Count > 0 ? missingCapabilities : null
             };
         }
 
@@ -601,6 +604,33 @@ namespace Armada.Core.Services
         public bool OpensTerminals(string harborId)
         {
             return !String.IsNullOrWhiteSpace(harborId) && _Connections.TryGetValue(harborId, out HarborConnection? connection) && connection!.OpensTerminals;
+        }
+
+        /// <summary>
+        /// Whether a connected Harbor advertised a capability flag (see <see cref="HarborCapabilityFlags"/>) in its handshake
+        /// on the current link. False for a Harbor that is not connected.
+        /// </summary>
+        /// <param name="harborId">Harbor ID.</param>
+        /// <param name="flag">Flag name.</param>
+        /// <returns>True when the Harbor is connected and advertises the flag.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="flag"/> is null or empty.</exception>
+        public bool Supports(string? harborId, string flag)
+        {
+            if (String.IsNullOrWhiteSpace(flag)) throw new ArgumentNullException(nameof(flag));
+            if (String.IsNullOrWhiteSpace(harborId) || !_Connections.TryGetValue(harborId, out HarborConnection? connection)) return false;
+            return HarborCapabilityFlags.Supports(connection.Capabilities, flag);
+        }
+
+        /// <summary>
+        /// Whether a connected Harbor lacks a capability flag this Admiral expects, so it runs earlier behavior and an
+        /// update is recommended. False for a Harbor that is not connected.
+        /// </summary>
+        /// <param name="harborId">Harbor ID.</param>
+        /// <returns>True when the connected Harbor is missing an expected flag.</returns>
+        public bool UpdateRecommended(string? harborId)
+        {
+            if (String.IsNullOrWhiteSpace(harborId) || !_Connections.TryGetValue(harborId, out HarborConnection? connection)) return false;
+            return HarborCapabilityFlags.Missing(connection.Capabilities).Count > 0;
         }
 
         /// <summary>
