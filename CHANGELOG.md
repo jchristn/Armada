@@ -158,6 +158,10 @@ Conductor) with Opus and GPT-6.1 reliable. The work is tracked item by item in `
   attempts spent and the captain's recovery policy, instead of separate checks in each path. Behavior is unchanged,
   except that a successful escalation now resets the malformed tool call count for the mission. The order of actions is
   in [Captain routing](docs/CAPTAIN_ROUTING.md#how-recovery-is-chosen) (RS-5.10).
+- **Recovery no longer depends on error message text.** A landing handoff that records no merge queue entry raises
+  `MergeQueueEntryNotFoundException`; the merge queue on a Harbor merges the pushed copy of a branch when the local
+  branch is gone, decided from the git refs rather than git's message; and a process that could not start is detected
+  from the exception type alone.
 - **Recovery state survives a restart.** Endpoint circuit breakers, launch backoff (with the captains that failed to
   start the mission), the start of a transient outage, and escalation rule cooldowns were kept only in memory, so a
   restart sent missions straight back to a failing endpoint, relaunched a broken captain at once, granted an outage a

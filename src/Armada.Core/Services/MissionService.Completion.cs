@@ -948,7 +948,7 @@ namespace Armada.Core.Services
                         EnumerationResult<MergeEntry> entries = await _Database.MergeEntries.EnumerateAsync(
                             new EnumerationQuery { MissionId = mission.Id, PageSize = 1 }, token).ConfigureAwait(false);
                         if (entries.Objects.Count == 0)
-                            throw new InvalidOperationException("Landing handoff returned without recording a merge queue entry.");
+                            throw new MergeQueueEntryNotFoundException(mission.Id);
                     }
                 }
                 catch (Exception ex)
@@ -966,7 +966,7 @@ namespace Armada.Core.Services
                         if (await Transitions.TryTransitionAsync(stranded, strandedFailure, token).ConfigureAwait(false))
                         {
                             mission = stranded;
-                            bool queueHandoffMissing = ex is InvalidOperationException && ex.Message.Contains("merge queue entry", StringComparison.Ordinal);
+                            bool queueHandoffMissing = ex is MergeQueueEntryNotFoundException;
                             BlackBoxStepEnum strandedStep = queueHandoffMissing ? BlackBoxStepEnum.MissingMergeHandoff
                                 : BlackBoxSiteFacts.LandingStepOf(ex, stranded.FailureKind == MissionFailureKindEnum.LandingConflict ? BlackBoxStepEnum.TargetIntegration : BlackBoxStepEnum.Unknown);
                             await RecordFailureAsync(stranded, MissionStatusEnum.WorkProduced, strandedStep, dock, context =>

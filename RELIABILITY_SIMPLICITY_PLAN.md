@@ -777,10 +777,16 @@ routing; a renamed Architect slice breaks fan-out recovery. Everything a program
   RecoveryPolicyEngine, RecoveryPolicy, EscalationLadder, NoOpCompletion and MissionRecoveryCoordinator 74/74;
   AdmiralService, MultiRuntimeFlow, PipelineDispatch, ContractRepair and CaptainRouting 219/219. Docs: CAPTAIN_ROUTING.md
   "How recovery is chosen", CHANGELOG. No REST, MCP, settings or SDK change.
-- [ ] **RS-5.11** Typed exceptions instead of message matching: `MergeQueueEntryNotFoundException` for
+- [x] **RS-5.11** Typed exceptions instead of message matching: `MergeQueueEntryNotFoundException` for
   `ex.Message.Contains("merge queue entry")` (`MissionService.Completion.cs:954`), a typed git result for
   `"not something we can merge"` (`MergeQueueService.cs:927`), and process-start detection without
-  `"trying to start process"` (`LandingFailureClassifier.cs:49`). Evidence:
+  `"trying to start process"` (`LandingFailureClassifier.cs:49`). Evidence: the handoff check throws
+  `MergeQueueEntryNotFoundException` (an `InvalidOperationException`, so other handlers are unchanged) and the
+  MissingMergeHandoff step tests its type. The Harbor merge fallback now runs when the merge fails, the local branch
+  does not resolve and `origin/<branch>` does (two `rev-parse --verify` calls, only on failure). `FailureKindMapper.IsProcessStartFailure`
+  drops the message clause: it only fed `FromLandingException`, whose fallthrough is Infra anyway, so no outcome
+  changes. Tests: LandingConflict, MergeQueue, MergeQueueProcessing, LandingPipeline 87/87. Remaining message matches
+  (DB unique violations, git identity, quota, Harbor "not installed") are outside this item; RS-11.4 tracks them.
 
 - [ ] **RS-5.12** Iteration-limit exhaustion (gpt-oss:120b hit the limit 4 times, HDR) becomes a typed failure kind
   and an escalation trigger in RS-5.6. Evidence:

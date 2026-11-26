@@ -173,7 +173,8 @@ namespace Armada.Core.Services
 
         /// <summary>
         /// Whether a failure is a process that could not start (missing working directory, missing executable) rather than a
-        /// git command that ran and failed.
+        /// git command that ran and failed. Decided from the exception types (<see cref="Win32Exception"/>,
+        /// <see cref="IOException"/>) anywhere in the chain, never from the message text.
         /// </summary>
         /// <param name="exception">The failure.</param>
         /// <returns>True for a process start failure.</returns>
@@ -184,8 +185,6 @@ namespace Armada.Core.Services
             for (Exception? current = exception; current != null; current = current.InnerException)
             {
                 if (current is Win32Exception || current is IOException) return true;
-                if (current is InvalidOperationException
-                    && current.Message.Contains("trying to start process", StringComparison.OrdinalIgnoreCase)) return true;
             }
             return false;
         }

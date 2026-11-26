@@ -966,9 +966,12 @@ namespace Armada.Core.Services
             {
                 throw;
             }
-            catch (InvalidOperationException ex) when (host.IsHarbor && ex.Message.Contains("not something we can merge", StringComparison.OrdinalIgnoreCase))
+            catch (InvalidOperationException ex) when (host.IsHarbor)
             {
-                // The branch was pushed and then removed locally: merge the pushed copy.
+                // The branch was pushed and then removed locally: merge the pushed copy. Decide from the refs, not the git message.
+                bool localMissing = !await RefResolvesAsync(host, "refs/heads/" + branchName, token).ConfigureAwait(false);
+                if (!localMissing || !await RefResolvesAsync(host, "refs/remotes/origin/" + branchName, token).ConfigureAwait(false))
+                    return await ConcludeFailedMergeAsync(host, worktreePath, ex.Message, token).ConfigureAwait(false);
                 try
                 {
                     await RunGitAsync(host, worktreePath, token, "merge", "--no-ff", "origin/" + branchName).ConfigureAwait(false);
