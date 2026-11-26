@@ -47,9 +47,9 @@ namespace Test.Shared.Suites.Runtimes
                     string dir = NewTempDir();
                     try
                     {
-                        Queue<ToolChatResponse> script = new Queue<ToolChatResponse>();
-                        script.Enqueue(new ToolChatResponse { Success = true, ToolCalls = new List<ToolCall> { new ToolCall { Id = "forged", Name = "write_file", ArgumentsJson = "{\"file_path\":\"blocked.txt\",\"content\":\"bad\"}" } } });
-                        script.Enqueue(new ToolChatResponse { Success = true, Text = "done", ToolCalls = new List<ToolCall>() });
+                        Queue<ChatResponse> script = new Queue<ChatResponse>();
+                        script.Enqueue(new ChatResponse { Success = true, ToolCalls = new List<ToolCall> { new ToolCall { Id = "forged", Name = "write_file", ArgumentsJson = "{\"file_path\":\"blocked.txt\",\"content\":\"bad\"}" } } });
+                        script.Enqueue(new ChatResponse { Success = true, Text = "done", ToolCalls = new List<ToolCall>() });
                         ScriptedClient? client = null;
                         bool mcpDiscovered = false;
                         bool denied = false;
@@ -87,7 +87,7 @@ namespace Test.Shared.Suites.Runtimes
                     {
                         ScriptedClient? client = null;
                         ModelEndpoint endpoint = new ModelEndpoint { Name = "plain", Kind = ModelEndpointKindEnum.Inference, Provider = ModelProviderEnum.OpenAICompatible, BaseUrl = "http://localhost:1", InferenceOptions = policy };
-                        ApiAgentRuntime runtime = new ApiAgentRuntime(endpoint, CreateLogging(), 20, (ep, log) => client = new ScriptedClient(new Queue<ToolChatResponse>(), log), (url, key, log) => throw new InvalidOperationException("No MCP"));
+                        ApiAgentRuntime runtime = new ApiAgentRuntime(endpoint, CreateLogging(), 20, (ep, log) => client = new ScriptedClient(new Queue<ChatResponse>(), log), (url, key, log) => throw new InvalidOperationException("No MCP"));
                         using ManualResetEventSlim exited = new ManualResetEventSlim(false);
                         int code = -1; runtime.OnProcessExited += (pid, value) => { code = value ?? -1; exited.Set(); };
                         string finalPath = Path.Combine(dir, "answer.txt");
@@ -125,10 +125,10 @@ namespace Test.Shared.Suites.Runtimes
                     string dir = NewTempDir();
                     try
                     {
-                        Queue<ToolChatResponse> script = new Queue<ToolChatResponse>();
-                        script.Enqueue(new ToolChatResponse { Success = true, Text = "I will start by reading instructions.", ToolCalls = new List<ToolCall> { new ToolCall { Id = "read", Name = "list_directory", ArgumentsJson = "{}" } } });
-                        script.Enqueue(new ToolChatResponse { Success = true, Text = terminal, FinishReason = terminal?.Contains("Truncated") == true ? "length" : "stop" });
-                        if (recover) script.Enqueue(new ToolChatResponse { Success = true, Text = "[ARMADA:RESULT] COMPLETE\nImplemented and tested.", FinishReason = "stop", Usage = new TokenUsage { PromptTokens = 42, CompletionTokens = 7 } });
+                        Queue<ChatResponse> script = new Queue<ChatResponse>();
+                        script.Enqueue(new ChatResponse { Success = true, Text = "I will start by reading instructions.", ToolCalls = new List<ToolCall> { new ToolCall { Id = "read", Name = "list_directory", ArgumentsJson = "{}" } } });
+                        script.Enqueue(new ChatResponse { Success = true, Text = terminal, FinishReason = terminal?.Contains("Truncated") == true ? "length" : "stop" });
+                        if (recover) script.Enqueue(new ChatResponse { Success = true, Text = "[ARMADA:RESULT] COMPLETE\nImplemented and tested.", FinishReason = "stop", Usage = new TokenUsage { PromptTokens = 42, CompletionTokens = 7 } });
                         ModelEndpoint endpoint = new ModelEndpoint { Kind = ModelEndpointKindEnum.Inference, Provider = ModelProviderEnum.OpenAICompatible, BaseUrl = "http://localhost:1", InferenceOptions = new InferenceOptions { McpToolsEnabled = false } };
                         ApiAgentRuntime runtime = new ApiAgentRuntime(endpoint, CreateLogging(), 10, (ep, log) => new ScriptedClient(script, log));
                         using ManualResetEventSlim exited = new ManualResetEventSlim(false);
@@ -165,11 +165,11 @@ namespace Test.Shared.Suites.Runtimes
                 try
                 {
                     string lens = "The guard runs before the save on every path, so an empty name can no longer reach storage from any caller.";
-                    Queue<ToolChatResponse> script = new Queue<ToolChatResponse>();
-                    script.Enqueue(new ToolChatResponse { Success = true, ToolCalls = new List<ToolCall> { new ToolCall { Id = "s1", Name = StageSubmissionTools.SubmitVerdict, ArgumentsJson = "{\"verdict\":\"pass\",\"correctness\":\"fine\"}" } } });
-                    script.Enqueue(new ToolChatResponse { Success = true, ToolCalls = new List<ToolCall> { new ToolCall { Id = "s2", Name = StageSubmissionTools.SubmitVerdict, ArgumentsJson =
+                    Queue<ChatResponse> script = new Queue<ChatResponse>();
+                    script.Enqueue(new ChatResponse { Success = true, ToolCalls = new List<ToolCall> { new ToolCall { Id = "s1", Name = StageSubmissionTools.SubmitVerdict, ArgumentsJson = "{\"verdict\":\"pass\",\"correctness\":\"fine\"}" } } });
+                    script.Enqueue(new ChatResponse { Success = true, ToolCalls = new List<ToolCall> { new ToolCall { Id = "s2", Name = StageSubmissionTools.SubmitVerdict, ArgumentsJson =
                         "{\"verdict\":\"PASS\",\"correctness\":\"" + lens + "\",\"blastRadius\":\"" + lens + "\",\"sourceFidelity\":\"" + lens + "\",\"evidence\":{\"checksRun\":[],\"inspectedFiles\":[\"src/Widgets/Validator.cs\"]}}" } } });
-                    script.Enqueue(new ToolChatResponse { Success = true, Text = "Reviewed and approved.", FinishReason = "stop" });
+                    script.Enqueue(new ChatResponse { Success = true, Text = "Reviewed and approved.", FinishReason = "stop" });
                     ModelEndpoint endpoint = new ModelEndpoint { Kind = ModelEndpointKindEnum.Inference, Provider = ModelProviderEnum.OpenAICompatible, BaseUrl = "http://localhost:1", InferenceOptions = new InferenceOptions { McpToolsEnabled = false } };
                     ScriptedClient? client = null;
                     ApiAgentRuntime runtime = new ApiAgentRuntime(endpoint, CreateLogging(), 10, (ep, log) => client = new ScriptedClient(script, log));
@@ -206,10 +206,10 @@ namespace Test.Shared.Suites.Runtimes
                 string dir = NewTempDir();
                 try
                 {
-                    Queue<ToolChatResponse> script = new Queue<ToolChatResponse>();
-                    script.Enqueue(new ToolChatResponse { Success = true, Text = "I made the change.", FinishReason = "stop" });
-                    script.Enqueue(new ToolChatResponse { Success = true, ToolCalls = new List<ToolCall> { new ToolCall { Id = "s1", Name = StageSubmissionTools.SubmitResult, ArgumentsJson = "{\"status\":\"complete\",\"summary\":\"Added the guard.\"}" } } });
-                    script.Enqueue(new ToolChatResponse { Success = true, Text = "Submitted.", FinishReason = "stop" });
+                    Queue<ChatResponse> script = new Queue<ChatResponse>();
+                    script.Enqueue(new ChatResponse { Success = true, Text = "I made the change.", FinishReason = "stop" });
+                    script.Enqueue(new ChatResponse { Success = true, ToolCalls = new List<ToolCall> { new ToolCall { Id = "s1", Name = StageSubmissionTools.SubmitResult, ArgumentsJson = "{\"status\":\"complete\",\"summary\":\"Added the guard.\"}" } } });
+                    script.Enqueue(new ChatResponse { Success = true, Text = "Submitted.", FinishReason = "stop" });
                     ModelEndpoint endpoint = new ModelEndpoint { Kind = ModelEndpointKindEnum.Inference, Provider = ModelProviderEnum.OpenAICompatible, BaseUrl = "http://localhost:1", InferenceOptions = new InferenceOptions { McpToolsEnabled = false } };
                     ScriptedClient? client = null;
                     ApiAgentRuntime runtime = new ApiAgentRuntime(endpoint, CreateLogging(), 10, (ep, log) => client = new ScriptedClient(script, log));
@@ -235,8 +235,8 @@ namespace Test.Shared.Suites.Runtimes
                 string dir = NewTempDir();
                 try
                 {
-                    Queue<ToolChatResponse> script = new Queue<ToolChatResponse>();
-                    script.Enqueue(new ToolChatResponse { Success = true, ToolCalls = new List<ToolCall> { new ToolCall { Id = "read", Name = "list_directory", ArgumentsJson = "{}" } } });
+                    Queue<ChatResponse> script = new Queue<ChatResponse>();
+                    script.Enqueue(new ChatResponse { Success = true, ToolCalls = new List<ToolCall> { new ToolCall { Id = "read", Name = "list_directory", ArgumentsJson = "{}" } } });
                     ModelEndpoint endpoint = new ModelEndpoint { Kind = ModelEndpointKindEnum.Inference, Provider = ModelProviderEnum.OpenAICompatible, BaseUrl = "http://localhost:1", InferenceOptions = new InferenceOptions { MaxIterations = 1 } };
                     ApiAgentRuntime runtime = new ApiAgentRuntime(endpoint, CreateLogging(), 20, (ep, log) => new ScriptedClient(script, log));
                     using ManualResetEventSlim exited = new ManualResetEventSlim(false); int code = -1;
@@ -267,10 +267,10 @@ namespace Test.Shared.Suites.Runtimes
                 AssertTrue(ApiContextCompactor.EstimateTokens(messages) < before);
                 List<ChatMessage> results = messages.Where(m => !String.IsNullOrEmpty(m.ToolCallId) && (m.ToolCalls == null || m.ToolCalls.Count == 0)).ToList();
                 AssertEqual(10, results.Count, "every tool result stays, so each tool call keeps its answer");
-                AssertTrue(results[0].Content!.StartsWith(ApiContextCompactor.CompactedMarker, StringComparison.Ordinal), "the oldest large output is compacted");
-                AssertEqual(100, results[1].Content!.Length, "a short output is left alone");
-                for (int i = 4; i < 10; i++) AssertEqual(4000, results[i].Content!.Length, "the six most recent outputs are kept whole");
-                AssertEqual("the mission brief", messages[1].Content);
+                AssertTrue(results[0].Text!.StartsWith(ApiContextCompactor.CompactedMarker, StringComparison.Ordinal), "the oldest large output is compacted");
+                AssertEqual(100, results[1].Text!.Length, "a short output is left alone");
+                for (int i = 4; i < 10; i++) AssertEqual(4000, results[i].Text!.Length, "the six most recent outputs are kept whole");
+                AssertEqual("the mission brief", messages[1].Text);
                 AssertEqual(0L, ApiContextCompactor.Compact(messages), "compacting again changes nothing");
                 AssertFalse(ApiContextCompactor.ShouldCompact(1000000, null), "an unknown window is never compacted");
                 AssertFalse(ApiContextCompactor.ShouldCompact(26000, 32768));
@@ -284,11 +284,11 @@ namespace Test.Shared.Suites.Runtimes
                 try
                 {
                     File.WriteAllText(Path.Combine(dir, "big.txt"), new string('y', 5000));
-                    Queue<ToolChatResponse> script = new Queue<ToolChatResponse>();
+                    Queue<ChatResponse> script = new Queue<ChatResponse>();
                     for (int i = 0; i < 8; i++)
-                        script.Enqueue(new ToolChatResponse { Success = true, Usage = new TokenUsage { PromptTokens = i == 7 ? 31500 : 2000 + i * 1000 },
+                        script.Enqueue(new ChatResponse { Success = true, Usage = new TokenUsage { PromptTokens = i == 7 ? 31500 : 2000 + i * 1000 },
                             ToolCalls = new List<ToolCall> { new ToolCall { Id = "r" + i, Name = "read_file", ArgumentsJson = "{\"file_path\":\"big.txt\"}" } } });
-                    script.Enqueue(new ToolChatResponse { Success = true, Usage = new TokenUsage { PromptTokens = 9000 }, Text = "done", ToolCalls = new List<ToolCall>() });
+                    script.Enqueue(new ChatResponse { Success = true, Usage = new TokenUsage { PromptTokens = 9000 }, Text = "done", ToolCalls = new List<ToolCall>() });
                     ModelEndpoint endpoint = new ModelEndpoint { Kind = ModelEndpointKindEnum.Inference, Provider = ModelProviderEnum.Ollama, BaseUrl = "http://localhost:1",
                         InferenceOptions = new InferenceOptions { McpToolsEnabled = false, ContextLength = 32768 } };
                     ApiAgentRuntime runtime = new ApiAgentRuntime(endpoint, CreateLogging(), 20, (ep, log) => new ScriptedClient(script, log));
@@ -313,9 +313,9 @@ namespace Test.Shared.Suites.Runtimes
                     string dir = NewTempDir();
                     try
                     {
-                        Queue<ToolChatResponse> script = new Queue<ToolChatResponse>();
-                        script.Enqueue(new ToolChatResponse { Success = true, Usage = new TokenUsage { PromptTokens = promptTokens }, ToolCalls = new List<ToolCall> { new ToolCall { Id = "read", Name = "list_directory", ArgumentsJson = "{}" } } });
-                        script.Enqueue(new ToolChatResponse { Success = true, Usage = new TokenUsage { PromptTokens = promptTokens }, Text = "done", ToolCalls = new List<ToolCall>() });
+                        Queue<ChatResponse> script = new Queue<ChatResponse>();
+                        script.Enqueue(new ChatResponse { Success = true, Usage = new TokenUsage { PromptTokens = promptTokens }, ToolCalls = new List<ToolCall> { new ToolCall { Id = "read", Name = "list_directory", ArgumentsJson = "{}" } } });
+                        script.Enqueue(new ChatResponse { Success = true, Usage = new TokenUsage { PromptTokens = promptTokens }, Text = "done", ToolCalls = new List<ToolCall>() });
                         ModelEndpoint endpoint = new ModelEndpoint { Kind = ModelEndpointKindEnum.Inference, Provider = ModelProviderEnum.Ollama, BaseUrl = "http://localhost:1",
                             InferenceOptions = new InferenceOptions { McpToolsEnabled = false, ContextLength = 32768 } };
                         ApiAgentRuntime runtime = new ApiAgentRuntime(endpoint, CreateLogging(), 20, (ep, log) => new ScriptedClient(script, log));
@@ -385,18 +385,18 @@ namespace Test.Shared.Suites.Runtimes
             {
                 ModelEndpoint ollama = new ModelEndpoint { Kind = ModelEndpointKindEnum.Inference, Provider = ModelProviderEnum.Ollama, BaseUrl = "http://localhost:11434", Model = "qwen3",
                     InferenceOptions = new InferenceOptions { ContextLength = 65536 } };
-                using (CompletionClientBase client = Armada.Core.Services.ModelEndpointClientFactory.CreateCompletion(ollama, CreateLogging()))
-                    AssertEqual(65536, (client.Defaults as PolyPrompt.Options.OllamaCompletionOptions)?.ContextLength);
+                using (ProviderClientBase client = Armada.Core.Services.ModelEndpointClientFactory.CreateCompletion(ollama, CreateLogging()))
+                    AssertEqual(65536, (client.Defaults.Completion as PolyPrompt.Options.OllamaCompletionOptions)?.ContextLength);
 
                 ModelEndpoint cloud = new ModelEndpoint { Kind = ModelEndpointKindEnum.Inference, Provider = ModelProviderEnum.OllamaCloud, Model = "glm-4.6",
                     InferenceOptions = new InferenceOptions { ContextLength = 131072 } };
                 cloud.ApiKey = "test-token";
-                using (CompletionClientBase client = Armada.Core.Services.ModelEndpointClientFactory.CreateCompletion(cloud, CreateLogging()))
-                    AssertEqual(131072, (client.Defaults as PolyPrompt.Options.OllamaCompletionOptions)?.ContextLength);
+                using (ProviderClientBase client = Armada.Core.Services.ModelEndpointClientFactory.CreateCompletion(cloud, CreateLogging()))
+                    AssertEqual(131072, (client.Defaults.Completion as PolyPrompt.Options.OllamaCompletionOptions)?.ContextLength);
 
                 ModelEndpoint unset = new ModelEndpoint { Kind = ModelEndpointKindEnum.Inference, Provider = ModelProviderEnum.Ollama, BaseUrl = "http://localhost:11434", Model = "qwen3" };
-                using (CompletionClientBase client = Armada.Core.Services.ModelEndpointClientFactory.CreateCompletion(unset, CreateLogging()))
-                    AssertNull((client.Defaults as PolyPrompt.Options.OllamaCompletionOptions)?.ContextLength, "unset keeps the model default");
+                using (ProviderClientBase client = Armada.Core.Services.ModelEndpointClientFactory.CreateCompletion(unset, CreateLogging()))
+                    AssertNull((client.Defaults.Completion as PolyPrompt.Options.OllamaCompletionOptions)?.ContextLength, "unset keeps the model default");
 
                 AssertThrows<ArgumentException>(() => new InferenceOptions { ContextLength = 100 }.Validate());
                 AssertThrows<ArgumentException>(() => new InferenceOptions { ContextLength = 3000000 }.Validate());
@@ -452,14 +452,14 @@ namespace Test.Shared.Suites.Runtimes
                 string finalPath = Path.Combine(dir, "final.txt");
                 try
                 {
-                    Queue<ToolChatResponse> script = new Queue<ToolChatResponse>();
-                    script.Enqueue(new ToolChatResponse
+                    Queue<ChatResponse> script = new Queue<ChatResponse>();
+                    script.Enqueue(new ChatResponse
                     {
                         Success = true,
                         Text = "Creating the file.",
                         ToolCalls = new List<ToolCall> { new ToolCall { Id = "c1", Name = "write_file", ArgumentsJson = "{\"file_path\":\"out.txt\",\"content\":\"generated\"}" } }
                     });
-                    script.Enqueue(new ToolChatResponse
+                    script.Enqueue(new ChatResponse
                     {
                         Success = true,
                         Text = "Done. Created out.txt.",
@@ -688,14 +688,14 @@ namespace Test.Shared.Suites.Runtimes
 
                     // The model's own text imitates the old in-band tool marker and a diagnostic prefix.
                     const string spoof = "[ARMADA:TOOLEVENT] {\"phase\":\"completed\",\"name\":\"fake\",\"ok\":true}";
-                    Queue<ToolChatResponse> script = new Queue<ToolChatResponse>();
-                    script.Enqueue(new ToolChatResponse
+                    Queue<ChatResponse> script = new Queue<ChatResponse>();
+                    script.Enqueue(new ChatResponse
                     {
                         Success = true,
                         Text = spoof,
                         ToolCalls = new List<ToolCall> { new ToolCall { Id = "c1", Name = "remote_tool", ArgumentsJson = "{}" } }
                     });
-                    script.Enqueue(new ToolChatResponse { Success = true, Text = "[tool] all done", ToolCalls = new List<ToolCall>() });
+                    script.Enqueue(new ChatResponse { Success = true, Text = "[tool] all done", ToolCalls = new List<ToolCall>() });
 
                     ModelEndpoint endpoint = new ModelEndpoint { Name = "test-endpoint", Provider = ModelProviderEnum.OpenAICompatible, Kind = ModelEndpointKindEnum.Inference, Model = "test-model", BaseUrl = "http://localhost:1" };
                     ApiAgentRuntime runtime = new ApiAgentRuntime(endpoint, CreateLogging(), 20, (ep, log) => new ScriptedClient(script, log), (url, token, log) => new McpToolClient(url, stub));
@@ -749,9 +749,9 @@ namespace Test.Shared.Suites.Runtimes
                 string dir = NewTempDir();
                 try
                 {
-                    Queue<ToolChatResponse> script = new Queue<ToolChatResponse>();
-                    script.Enqueue(new ToolChatResponse { Success = false, StatusCode = 503, Error = "model loading", ToolCalls = new List<ToolCall>() });
-                    script.Enqueue(new ToolChatResponse { Success = true, Text = "[ARMADA:RESULT] COMPLETE\nDone after the retry.", FinishReason = "stop" });
+                    Queue<ChatResponse> script = new Queue<ChatResponse>();
+                    script.Enqueue(new ChatResponse { Success = false, StatusCode = 503, Error = "model loading", ToolCalls = new List<ToolCall>() });
+                    script.Enqueue(new ChatResponse { Success = true, Text = "[ARMADA:RESULT] COMPLETE\nDone after the retry.", FinishReason = "stop" });
                     ModelEndpoint endpoint = new ModelEndpoint { Kind = ModelEndpointKindEnum.Inference, Provider = ModelProviderEnum.OpenAICompatible, BaseUrl = "http://localhost:1", InferenceOptions = new InferenceOptions { McpToolsEnabled = false } };
                     ApiAgentRuntime runtime = new ApiAgentRuntime(endpoint, CreateLogging(), 10, (ep, log) => new ScriptedClient(script, log));
                     runtime.InferenceRetryBaseDelay = TimeSpan.FromMilliseconds(10);
@@ -776,9 +776,9 @@ namespace Test.Shared.Suites.Runtimes
                 string dir = NewTempDir();
                 try
                 {
-                    Queue<ToolChatResponse> script = new Queue<ToolChatResponse>();
-                    script.Enqueue(new ToolChatResponse { Success = false, StatusCode = 400, Error = "unsupported tool shape", ToolCalls = new List<ToolCall>() });
-                    script.Enqueue(new ToolChatResponse { Success = true, Text = "[ARMADA:RESULT] COMPLETE\nmust not be reached", FinishReason = "stop" });
+                    Queue<ChatResponse> script = new Queue<ChatResponse>();
+                    script.Enqueue(new ChatResponse { Success = false, StatusCode = 400, Error = "unsupported tool shape", ToolCalls = new List<ToolCall>() });
+                    script.Enqueue(new ChatResponse { Success = true, Text = "[ARMADA:RESULT] COMPLETE\nmust not be reached", FinishReason = "stop" });
                     ModelEndpoint endpoint = new ModelEndpoint { Kind = ModelEndpointKindEnum.Inference, Provider = ModelProviderEnum.OpenAICompatible, BaseUrl = "http://localhost:1", InferenceOptions = new InferenceOptions { McpToolsEnabled = false } };
                     ApiAgentRuntime runtime = new ApiAgentRuntime(endpoint, CreateLogging(), 10, (ep, log) => new ScriptedClient(script, log));
                     runtime.InferenceRetryBaseDelay = TimeSpan.FromMilliseconds(10);
@@ -799,8 +799,8 @@ namespace Test.Shared.Suites.Runtimes
                 string dir = NewTempDir();
                 try
                 {
-                    Queue<ToolChatResponse> script = new Queue<ToolChatResponse>();
-                    script.Enqueue(new ToolChatResponse { Success = false, Error = null, Text = null, ToolCalls = new List<ToolCall>() });
+                    Queue<ChatResponse> script = new Queue<ChatResponse>();
+                    script.Enqueue(new ChatResponse { Success = false, Error = null, Text = null, ToolCalls = new List<ToolCall>() });
 
                     ModelEndpoint endpoint = new ModelEndpoint { Name = "test-endpoint", Provider = ModelProviderEnum.OpenAICompatible, Kind = ModelEndpointKindEnum.Inference, Model = "test-model", BaseUrl = "http://localhost:1" };
                     ApiAgentRuntime runtime = new ApiAgentRuntime(endpoint, CreateLogging(), 20, (ep, log) => new ScriptedClient(script, log));
@@ -954,7 +954,7 @@ namespace Test.Shared.Suites.Runtimes
                 {
                     Queue<StreamPlan> plans = new Queue<StreamPlan>();
                     StreamPlan cut = new StreamPlan();
-                    cut.Chunks.Add(new ToolChatStreamingChunk { ToolCallDeltas = new List<ToolCallDelta> { new ToolCallDelta { Index = 0, Id = "c1", Type = "function", Name = "write_file", ArgumentsJson = "{\"file_path\":\"cut.txt\",\"content\":\"partial\"}" } } });
+                    cut.Chunks.Add(new ChatStreamingChunk { ToolCallDeltas = new List<ToolCallDelta> { new ToolCallDelta { Index = 0, Id = "c1", Type = "function", Name = "write_file", ArgumentsJson = "{\"file_path\":\"cut.txt\",\"content\":\"partial\"}" } } });
                     plans.Enqueue(cut);
                     plans.Enqueue(StreamPlan.Text(gapMs: 0, "recovered"));
                     StreamingClient? client = null;
@@ -974,8 +974,8 @@ namespace Test.Shared.Suites.Runtimes
                 {
                     Queue<StreamPlan> plans = new Queue<StreamPlan>();
                     StreamPlan call = new StreamPlan();
-                    call.Chunks.Add(new ToolChatStreamingChunk { ToolCallDeltas = new List<ToolCallDelta> { new ToolCallDelta { Index = 0, Id = "c1", Type = "function", Name = "write_file", ArgumentsJson = "{\"file_path\":\"made.txt\",\"content\":\"streamed\"}" } } });
-                    call.Chunks.Add(new ToolChatStreamingChunk { Done = true, FinishReason = "tool_calls" });
+                    call.Chunks.Add(new ChatStreamingChunk { ToolCallDeltas = new List<ToolCallDelta> { new ToolCallDelta { Index = 0, Id = "c1", Type = "function", Name = "write_file", ArgumentsJson = "{\"file_path\":\"made.txt\",\"content\":\"streamed\"}" } } });
+                    call.Chunks.Add(new ChatStreamingChunk { Done = true, FinishReason = "tool_calls" });
                     plans.Enqueue(call);
                     plans.Enqueue(StreamPlan.Text(gapMs: 0, "wrote it"));
                     StreamRunResult result = await RunStreamingAsync(dir, new InferenceOptions { Streaming = true }, 1000, plans, log => new StreamingClient(plans, log)).ConfigureAwait(false);
@@ -1285,8 +1285,8 @@ namespace Test.Shared.Suites.Runtimes
             string dir = NewTempDir();
             try
             {
-                Queue<ToolChatResponse> script = new Queue<ToolChatResponse>();
-                script.Enqueue(new ToolChatResponse
+                Queue<ChatResponse> script = new Queue<ChatResponse>();
+                script.Enqueue(new ChatResponse
                 {
                     Success = true,
                     Text = responseText,
@@ -1331,14 +1331,14 @@ namespace Test.Shared.Suites.Runtimes
             string dir = NewTempDir();
             try
             {
-                Queue<ToolChatResponse> script = new Queue<ToolChatResponse>();
-                script.Enqueue(new ToolChatResponse
+                Queue<ChatResponse> script = new Queue<ChatResponse>();
+                script.Enqueue(new ChatResponse
                 {
                     Success = true,
                     Text = "Running.",
                     ToolCalls = new List<ToolCall> { new ToolCall { Id = "sh1", Name = "run_process", ArgumentsJson = "{\"command\":\"echo hi\"}" } }
                 });
-                script.Enqueue(new ToolChatResponse { Success = true, Text = "Done.", ToolCalls = new List<ToolCall>() });
+                script.Enqueue(new ChatResponse { Success = true, Text = "Done.", ToolCalls = new List<ToolCall>() });
                 ModelEndpoint endpoint = new ModelEndpoint { Name = "test-endpoint", Provider = ModelProviderEnum.OpenAICompatible, Kind = ModelEndpointKindEnum.Inference, Model = "test-model", BaseUrl = "http://localhost:1" };
                 ApiAgentRuntime runtime = new ApiAgentRuntime(endpoint, CreateLogging(), 20, (ep, log) => new ScriptedClient(script, log));
                 runtime.ShellPolicy = policy;
@@ -1367,9 +1367,9 @@ namespace Test.Shared.Suites.Runtimes
             string dir = NewTempDir();
             try
             {
-                Queue<ToolChatResponse> script = new Queue<ToolChatResponse>();
-                script.Enqueue(new ToolChatResponse { Success = true, Text = "Reading.", ToolCalls = new List<ToolCall> { new ToolCall { Id = "read", Name = "list_directory", ArgumentsJson = "{}" } } });
-                script.Enqueue(new ToolChatResponse { Success = true, Text = reply, FinishReason = "stop" });
+                Queue<ChatResponse> script = new Queue<ChatResponse>();
+                script.Enqueue(new ChatResponse { Success = true, Text = "Reading.", ToolCalls = new List<ToolCall> { new ToolCall { Id = "read", Name = "list_directory", ArgumentsJson = "{}" } } });
+                script.Enqueue(new ChatResponse { Success = true, Text = reply, FinishReason = "stop" });
                 ModelEndpoint endpoint = new ModelEndpoint { Kind = ModelEndpointKindEnum.Inference, Provider = ModelProviderEnum.OpenAICompatible, BaseUrl = "http://localhost:1", InferenceOptions = new InferenceOptions { McpToolsEnabled = false } };
                 ApiAgentRuntime runtime = new ApiAgentRuntime(endpoint, CreateLogging(), 10, (ep, log) => new ScriptedClient(script, log));
                 using ManualResetEventSlim exited = new ManualResetEventSlim(false);
@@ -1404,8 +1404,8 @@ namespace Test.Shared.Suites.Runtimes
                 stub.Respond = request => request.Method == "tools/list" ? ToolClientStubHandler.Json(request.Id, catalog)
                     : request.Method == "tools/call" ? ToolClientStubHandler.Json(request.Id, "{\"content\":[{\"type\":\"text\",\"text\":\"remote result\"}],\"isError\":" + (remoteError ? "true" : "false") + "}")
                     : ToolClientStubHandler.Json(request.Id, "{}");
-                Queue<ToolChatResponse> script = new Queue<ToolChatResponse>(calls.Select(c => new ToolChatResponse { Success = true, ToolCalls = new List<ToolCall> { c } }));
-                script.Enqueue(new ToolChatResponse { Success = true, Text = "done", ToolCalls = new List<ToolCall>() });
+                Queue<ChatResponse> script = new Queue<ChatResponse>(calls.Select(c => new ChatResponse { Success = true, ToolCalls = new List<ToolCall> { c } }));
+                script.Enqueue(new ChatResponse { Success = true, Text = "done", ToolCalls = new List<ToolCall>() });
                 ScriptedClient client = new ScriptedClient(script, CreateLogging());
                 ModelEndpoint endpoint = new ModelEndpoint { Name = "catalog", Provider = ModelProviderEnum.OpenAICompatible, Kind = ModelEndpointKindEnum.Inference, BaseUrl = "http://localhost:1", InferenceOptions = policy ?? new InferenceOptions() };
                 ApiAgentRuntime runtime = new ApiAgentRuntime(endpoint, CreateLogging(), 20, (ep, log) => client, (url, key, log) => new McpToolClient(url, stub));
@@ -1449,7 +1449,7 @@ namespace Test.Shared.Suites.Runtimes
             return logging;
         }
 
-        private static async Task<StreamRunResult> RunStreamingAsync(string dir, InferenceOptions options, int timeoutMs, Queue<StreamPlan> plans, Func<LoggingModule, CompletionClientBase> factory, int retries = 2)
+        private static async Task<StreamRunResult> RunStreamingAsync(string dir, InferenceOptions options, int timeoutMs, Queue<StreamPlan> plans, Func<LoggingModule, ProviderClientBase> factory, int retries = 2)
         {
             ModelEndpoint endpoint = new ModelEndpoint { Name = "stream", Provider = ModelProviderEnum.OpenAICompatible, Kind = ModelEndpointKindEnum.Inference, Model = "m", BaseUrl = "http://localhost:1", TimeoutMs = timeoutMs, InferenceOptions = options };
             ApiAgentRuntime runtime = new ApiAgentRuntime(endpoint, CreateLogging(), 20, (ep, log) => factory(log));
@@ -1482,84 +1482,103 @@ namespace Test.Shared.Suites.Runtimes
 
         #region Fake-Clients
 
-        private sealed class ScriptedClient : CompletionClientBase
+        private sealed class FakeDefaults : ClientDefaults
+        {
+            private readonly CompletionOptions _Completion;
+
+            public FakeDefaults(string model)
+            {
+                _Completion = new CompletionOptions { Model = model };
+            }
+
+            public override CompletionOptions? Completion => _Completion;
+        }
+
+        private sealed class ScriptedClient : ProviderClientBase
         {
             public List<string> ToolNames { get; private set; } = new List<string>();
             public List<List<string>> ToolHistory { get; } = new List<List<string>>();
             public List<string?> ToolChoices { get; } = new List<string?>();
             public CompletionOptions? Settings { get; private set; }
             public bool PlainChatCalled { get; private set; }
-            private readonly Queue<ToolChatResponse> _Script;
+            private readonly Queue<ChatResponse> _Script;
             private readonly string? _PlainChatText;
-            private readonly CompletionOptions _Defaults = new CompletionOptions { Model = "scripted-model" };
+            private readonly FakeDefaults _Defaults = new FakeDefaults("scripted-model");
 
-            public ScriptedClient(Queue<ToolChatResponse> script, LoggingModule logging, string? plainChatText = null)
-                : base("http://localhost:1", null, logging)
+            public ScriptedClient(Queue<ChatResponse> script, LoggingModule logging, string? plainChatText = null)
+                : base("http://localhost:1", null, new ClientOptions { Logging = logging })
             {
                 _Script = script;
                 _PlainChatText = plainChatText;
             }
 
-            public override CompletionOptions Defaults => _Defaults;
+            public override ClientDefaults Defaults => _Defaults;
+            public override Capability Capabilities => Capability.Chat | Capability.ToolCalling;
+            public override string ProviderName => "fake";
 
-            protected override Task<ToolChatResponse> ToolChatCoreAsync(ToolChatRequest request, List<ChatMessage> messages, ResolvedCompletion settings, CancellationToken token)
+            protected override Task<ChatResponse> ChatCoreAsync(ChatRequest request, List<ChatMessage> messages, ResolvedCompletion settings, CancellationToken token)
             {
+                if (request.Tools.Count == 0)
+                {
+                    PlainChatCalled = true;
+                    Settings = new CompletionOptions { Model = settings.Model, MaxTokens = settings.MaxTokens, Temperature = settings.Temperature, TopP = settings.TopP, ReasoningEffort = settings.ReasoningEffort };
+                    return Task.FromResult(new ChatResponse { Success = true, Text = _PlainChatText ?? "plain answer", FinishReason = "stop" });
+                }
+
                 ToolNames = request.Tools.Select(t => t.Name).ToList();
                 ToolHistory.Add(ToolNames.ToList());
                 ToolChoices.Add(request.ToolChoice);
                 Settings = new CompletionOptions { Model = settings.Model, MaxTokens = settings.MaxTokens, Temperature = settings.Temperature, TopP = settings.TopP, ReasoningEffort = settings.ReasoningEffort };
-                if (_Script.Count == 0) return Task.FromResult(new ToolChatResponse { Success = true, Text = "", ToolCalls = new List<ToolCall>() });
+                if (_Script.Count == 0) return Task.FromResult(new ChatResponse { Success = true, Text = "", ToolCalls = new List<ToolCall>() });
                 return Task.FromResult(_Script.Dequeue());
             }
 
             public override Task<bool> ValidateConnectivityAsync(CancellationToken token = default) => Task.FromResult(true);
-            protected override Task<ChatResponse> ChatCoreAsync(string prompt, ResolvedCompletion settings, CancellationToken token) { PlainChatCalled = true; Settings = new CompletionOptions { Model = settings.Model, MaxTokens = settings.MaxTokens, Temperature = settings.Temperature, TopP = settings.TopP, ReasoningEffort = settings.ReasoningEffort }; return Task.FromResult(new ChatResponse { Success = true, Text = _PlainChatText ?? "plain answer", FinishReason = "stop" }); }
-            protected override Task<ChatStreamingResponse> ChatStreamingCoreAsync(string prompt, ResolvedCompletion settings, CancellationToken token) => throw new NotImplementedException();
-            protected override Task<ToolChatStreamingResponse> ToolChatStreamingCoreAsync(ToolChatRequest request, List<ChatMessage> messages, ResolvedCompletion settings, CancellationToken token) => throw new NotImplementedException();
+            protected override Task<ChatStreamingResponse> ChatStreamingCoreAsync(ChatRequest request, List<ChatMessage> messages, ResolvedCompletion settings, CancellationToken token) => throw new NotImplementedException();
             protected override Task<GenerationResponse> GenerateCoreAsync(string prompt, ResolvedCompletion settings, CancellationToken token) => throw new NotImplementedException();
             protected override Task<GenerationStreamingResponse> GenerateStreamingCoreAsync(string prompt, ResolvedCompletion settings, CancellationToken token) => throw new NotImplementedException();
         }
 
-        private sealed class BlockingClient : CompletionClientBase
+        private sealed class BlockingClient : ProviderClientBase
         {
-            private readonly CompletionOptions _Defaults = new CompletionOptions { Model = "blocking-model" };
+            private readonly FakeDefaults _Defaults = new FakeDefaults("blocking-model");
 
-            public BlockingClient(LoggingModule logging) : base("http://localhost:1", null, logging) { }
+            public BlockingClient(LoggingModule logging) : base("http://localhost:1", null, new ClientOptions { Logging = logging }) { }
 
-            public override CompletionOptions Defaults => _Defaults;
+            public override ClientDefaults Defaults => _Defaults;
+            public override Capability Capabilities => Capability.Chat | Capability.ToolCalling;
+            public override string ProviderName => "fake";
 
-            protected override async Task<ToolChatResponse> ToolChatCoreAsync(ToolChatRequest request, List<ChatMessage> messages, ResolvedCompletion settings, CancellationToken token)
+            protected override async Task<ChatResponse> ChatCoreAsync(ChatRequest request, List<ChatMessage> messages, ResolvedCompletion settings, CancellationToken token)
             {
                 await Task.Delay(Timeout.Infinite, token).ConfigureAwait(false);
-                return new ToolChatResponse { Success = true, ToolCalls = new List<ToolCall>() };
+                return new ChatResponse { Success = true, ToolCalls = new List<ToolCall>() };
             }
 
             public override Task<bool> ValidateConnectivityAsync(CancellationToken token = default) => Task.FromResult(true);
-            protected override Task<ChatResponse> ChatCoreAsync(string prompt, ResolvedCompletion settings, CancellationToken token) => throw new NotImplementedException();
-            protected override Task<ChatStreamingResponse> ChatStreamingCoreAsync(string prompt, ResolvedCompletion settings, CancellationToken token) => throw new NotImplementedException();
-            protected override Task<ToolChatStreamingResponse> ToolChatStreamingCoreAsync(ToolChatRequest request, List<ChatMessage> messages, ResolvedCompletion settings, CancellationToken token) => throw new NotImplementedException();
+            protected override Task<ChatStreamingResponse> ChatStreamingCoreAsync(ChatRequest request, List<ChatMessage> messages, ResolvedCompletion settings, CancellationToken token) => throw new NotImplementedException();
             protected override Task<GenerationResponse> GenerateCoreAsync(string prompt, ResolvedCompletion settings, CancellationToken token) => throw new NotImplementedException();
             protected override Task<GenerationStreamingResponse> GenerateStreamingCoreAsync(string prompt, ResolvedCompletion settings, CancellationToken token) => throw new NotImplementedException();
         }
 
-        private sealed class TimeoutClient : CompletionClientBase
+        private sealed class TimeoutClient : ProviderClientBase
         {
-            private readonly CompletionOptions _Defaults = new CompletionOptions { Model = "timeout-model" };
+            private readonly FakeDefaults _Defaults = new FakeDefaults("timeout-model");
 
-            public TimeoutClient(LoggingModule logging) : base("http://localhost:1", null, logging) { }
+            public TimeoutClient(LoggingModule logging) : base("http://localhost:1", null, new ClientOptions { Logging = logging }) { }
 
-            public override CompletionOptions Defaults => _Defaults;
+            public override ClientDefaults Defaults => _Defaults;
+            public override Capability Capabilities => Capability.Chat | Capability.ToolCalling;
+            public override string ProviderName => "fake";
 
-            protected override Task<ToolChatResponse> ToolChatCoreAsync(ToolChatRequest request, List<ChatMessage> messages, ResolvedCompletion settings, CancellationToken token)
+            protected override Task<ChatResponse> ChatCoreAsync(ChatRequest request, List<ChatMessage> messages, ResolvedCompletion settings, CancellationToken token)
             {
                 // What HttpClient throws when its own Timeout elapses: a cancellation the caller never requested.
                 throw new TaskCanceledException("The request was canceled due to the configured HttpClient.Timeout of 100 seconds elapsing.");
             }
 
             public override Task<bool> ValidateConnectivityAsync(CancellationToken token = default) => Task.FromResult(true);
-            protected override Task<ChatResponse> ChatCoreAsync(string prompt, ResolvedCompletion settings, CancellationToken token) => throw new NotImplementedException();
-            protected override Task<ChatStreamingResponse> ChatStreamingCoreAsync(string prompt, ResolvedCompletion settings, CancellationToken token) => throw new NotImplementedException();
-            protected override Task<ToolChatStreamingResponse> ToolChatStreamingCoreAsync(ToolChatRequest request, List<ChatMessage> messages, ResolvedCompletion settings, CancellationToken token) => throw new NotImplementedException();
+            protected override Task<ChatStreamingResponse> ChatStreamingCoreAsync(ChatRequest request, List<ChatMessage> messages, ResolvedCompletion settings, CancellationToken token) => throw new NotImplementedException();
             protected override Task<GenerationResponse> GenerateCoreAsync(string prompt, ResolvedCompletion settings, CancellationToken token) => throw new NotImplementedException();
             protected override Task<GenerationStreamingResponse> GenerateStreamingCoreAsync(string prompt, ResolvedCompletion settings, CancellationToken token) => throw new NotImplementedException();
         }
@@ -1578,33 +1597,33 @@ namespace Test.Shared.Suites.Runtimes
             }
         }
 
-        private sealed class GatewayClient : CompletionClientBase
+        private sealed class GatewayClient : ProviderClientBase
         {
             private readonly int _DelayMs;
-            private readonly CompletionOptions _Defaults = new CompletionOptions { Model = "gateway-model" };
+            private readonly FakeDefaults _Defaults = new FakeDefaults("gateway-model");
 
-            public GatewayClient(LoggingModule logging, int delayMs) : base("http://localhost:1", null, logging)
+            public GatewayClient(LoggingModule logging, int delayMs) : base("http://localhost:1", null, new ClientOptions { Logging = logging })
             {
                 _DelayMs = delayMs;
             }
 
-            public override CompletionOptions Defaults => _Defaults;
+            public override ClientDefaults Defaults => _Defaults;
+            public override Capability Capabilities => Capability.Chat | Capability.ToolCalling;
+            public override string ProviderName => "fake";
 
-            protected override async Task<ToolChatResponse> ToolChatCoreAsync(ToolChatRequest request, List<ChatMessage> messages, ResolvedCompletion settings, CancellationToken token)
+            protected override async Task<ChatResponse> ChatCoreAsync(ChatRequest request, List<ChatMessage> messages, ResolvedCompletion settings, CancellationToken token)
             {
                 if (_DelayMs > 0) await Task.Delay(_DelayMs, token).ConfigureAwait(false);
-                return new ToolChatResponse { Success = false, StatusCode = 502, Error = "Bad Gateway" };
+                return new ChatResponse { Success = false, StatusCode = 502, Error = "Bad Gateway" };
             }
 
-            protected override async Task<ToolChatStreamingResponse> ToolChatStreamingCoreAsync(ToolChatRequest request, List<ChatMessage> messages, ResolvedCompletion settings, CancellationToken token)
+            protected override async Task<ChatStreamingResponse> ChatStreamingCoreAsync(ChatRequest request, List<ChatMessage> messages, ResolvedCompletion settings, CancellationToken token)
             {
                 if (_DelayMs > 0) await Task.Delay(_DelayMs, token).ConfigureAwait(false);
-                return new ToolChatStreamingResponse { Success = false, StatusCode = 502, Error = "Bad Gateway" };
+                return new ChatStreamingResponse { Success = false, StatusCode = 502, Error = "Bad Gateway" };
             }
 
             public override Task<bool> ValidateConnectivityAsync(CancellationToken token = default) => Task.FromResult(true);
-            protected override Task<ChatResponse> ChatCoreAsync(string prompt, ResolvedCompletion settings, CancellationToken token) => throw new NotImplementedException();
-            protected override Task<ChatStreamingResponse> ChatStreamingCoreAsync(string prompt, ResolvedCompletion settings, CancellationToken token) => throw new NotImplementedException();
             protected override Task<GenerationResponse> GenerateCoreAsync(string prompt, ResolvedCompletion settings, CancellationToken token) => throw new NotImplementedException();
             protected override Task<GenerationStreamingResponse> GenerateStreamingCoreAsync(string prompt, ResolvedCompletion settings, CancellationToken token) => throw new NotImplementedException();
         }
@@ -1623,58 +1642,51 @@ namespace Test.Shared.Suites.Runtimes
             public int FirstDelayMs { get; set; }
             public int GapMs { get; set; }
             public bool HangAfter { get; set; }
-            public List<ToolChatStreamingChunk> Chunks { get; } = new List<ToolChatStreamingChunk>();
+            public List<ChatStreamingChunk> Chunks { get; } = new List<ChatStreamingChunk>();
 
             public static StreamPlan Text(int gapMs, params string[] parts)
             {
                 StreamPlan plan = new StreamPlan { GapMs = gapMs };
-                foreach (string part in parts) plan.Chunks.Add(new ToolChatStreamingChunk { Text = part });
-                plan.Chunks.Add(new ToolChatStreamingChunk { Done = true, FinishReason = "stop" });
+                foreach (string part in parts) plan.Chunks.Add(new ChatStreamingChunk { Text = part });
+                plan.Chunks.Add(new ChatStreamingChunk { Done = true, FinishReason = "stop" });
                 return plan;
             }
         }
 
-        private sealed class StreamingClient : CompletionClientBase
+        private sealed class StreamingClient : ProviderClientBase
         {
             public int StreamCalls { get; private set; }
             public int BlockingCalls { get; private set; }
             public int ObservedTimeoutMs { get; private set; }
             private readonly Queue<StreamPlan> _Plans;
-            private readonly CompletionOptions _Defaults = new CompletionOptions { Model = "stream-model" };
+            private readonly FakeDefaults _Defaults = new FakeDefaults("stream-model");
 
-            public StreamingClient(Queue<StreamPlan> plans, LoggingModule logging) : base("http://localhost:1", null, logging)
+            public StreamingClient(Queue<StreamPlan> plans, LoggingModule logging) : base("http://localhost:1", null, new ClientOptions { Logging = logging })
             {
                 _Plans = plans;
             }
 
-            public override CompletionOptions Defaults => _Defaults;
+            public override ClientDefaults Defaults => _Defaults;
+            public override Capability Capabilities => Capability.Chat | Capability.ToolCalling;
+            public override string ProviderName => "fake";
 
-            protected override Task<ToolChatStreamingResponse> ToolChatStreamingCoreAsync(ToolChatRequest request, List<ChatMessage> messages, ResolvedCompletion settings, CancellationToken token)
-            {
-                StreamCalls++;
-                StreamPlan plan = _Plans.Count > 0 ? _Plans.Dequeue() : StreamPlan.Text(0, "done");
-                ToolChatStreamingResponse response = new ToolChatStreamingResponse { Success = true, StatusCode = 200 };
-                response.Chunks = WrapToolChatChunksWithTiming(response, ProduceAsync(plan, token), System.Diagnostics.Stopwatch.StartNew(), token, null!);
-                return Task.FromResult(response);
-            }
-
-            protected override Task<ChatStreamingResponse> ChatStreamingCoreAsync(string prompt, ResolvedCompletion settings, CancellationToken token)
+            protected override Task<ChatStreamingResponse> ChatStreamingCoreAsync(ChatRequest request, List<ChatMessage> messages, ResolvedCompletion settings, CancellationToken token)
             {
                 StreamCalls++;
                 StreamPlan plan = _Plans.Count > 0 ? _Plans.Dequeue() : StreamPlan.Text(0, "done");
                 ChatStreamingResponse response = new ChatStreamingResponse { Success = true, StatusCode = 200 };
-                response.Chunks = WrapChunksWithTiming(response, ProduceChatAsync(plan, token), System.Diagnostics.Stopwatch.StartNew(), token, null!);
+                response.Chunks = WrapChunksWithTiming(response, ProduceAsync(plan, token), System.Diagnostics.Stopwatch.StartNew(), token, null!);
                 return Task.FromResult(response);
             }
 
-            protected override Task<ToolChatResponse> ToolChatCoreAsync(ToolChatRequest request, List<ChatMessage> messages, ResolvedCompletion settings, CancellationToken token)
+            protected override Task<ChatResponse> ChatCoreAsync(ChatRequest request, List<ChatMessage> messages, ResolvedCompletion settings, CancellationToken token)
             {
                 BlockingCalls++;
                 ObservedTimeoutMs = TimeoutMs;
-                return Task.FromResult(new ToolChatResponse { Success = true, Text = "blocking done", FinishReason = "stop", ToolCalls = new List<ToolCall>() });
+                return Task.FromResult(new ChatResponse { Success = true, Text = "blocking done", FinishReason = "stop", ToolCalls = new List<ToolCall>() });
             }
 
-            private static async IAsyncEnumerable<ToolChatStreamingChunk> ProduceAsync(StreamPlan plan, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken token = default)
+            private static async IAsyncEnumerable<ChatStreamingChunk> ProduceAsync(StreamPlan plan, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken token = default)
             {
                 if (plan.FirstDelayMs != 0) await Task.Delay(plan.FirstDelayMs, token).ConfigureAwait(false);
                 for (int i = 0; i < plan.Chunks.Count; i++)
@@ -1685,14 +1697,7 @@ namespace Test.Shared.Suites.Runtimes
                 if (plan.HangAfter) await Task.Delay(Timeout.Infinite, token).ConfigureAwait(false);
             }
 
-            private static async IAsyncEnumerable<ChatStreamingChunk> ProduceChatAsync(StreamPlan plan, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken token = default)
-            {
-                await foreach (ToolChatStreamingChunk chunk in ProduceAsync(plan, token).ConfigureAwait(false))
-                    yield return new ChatStreamingChunk { Text = chunk.Text, Done = chunk.Done, FinishReason = chunk.FinishReason };
-            }
-
             public override Task<bool> ValidateConnectivityAsync(CancellationToken token = default) => Task.FromResult(true);
-            protected override Task<ChatResponse> ChatCoreAsync(string prompt, ResolvedCompletion settings, CancellationToken token) => throw new NotImplementedException();
             protected override Task<GenerationResponse> GenerateCoreAsync(string prompt, ResolvedCompletion settings, CancellationToken token) => throw new NotImplementedException();
             protected override Task<GenerationStreamingResponse> GenerateStreamingCoreAsync(string prompt, ResolvedCompletion settings, CancellationToken token) => throw new NotImplementedException();
         }

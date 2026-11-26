@@ -170,6 +170,47 @@ namespace Test.Shared.Suites.Services
                 AssertEqual("cf-header-value-7731", shipped.Headers.Single().Value);
             }));
 
+            cases.Add(CaseAsync("required_key_placeholder_never_reaches_the_wire", "A provider client that requires a key gets a placeholder under Armada authentication, and the handler removes it before sending", TestTags.Positive, async () =>
+            {
+                ModelEndpoint anthropic = Endpoint(ModelEndpointAuthTypeEnum.Bearer, "tok");
+                anthropic.Provider = ModelProviderEnum.Anthropic;
+                anthropic.BaseUrl = "https://gateway.example.com";
+                using (PolyPrompt.Clients.ProviderClientBase client = ModelEndpointClientFactory.CreateCompletion(anthropic, CreateLogging()))
+                    AssertTrue(client is PolyPrompt.Clients.AnthropicClient, "Bearer authentication still builds the Anthropic client");
+
+                CapturingHandler inner = new CapturingHandler();
+                using (HttpMessageInvoker invoker = new HttpMessageInvoker(new ModelEndpointAuthHandler(anthropic, inner)))
+                using (HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Post, "https://gateway.example.com/v1/messages"))
+                {
+                    request.Headers.TryAddWithoutValidation("x-api-key", ModelEndpointAuthHandler.ExternalAuthPlaceholder);
+                    request.Headers.TryAddWithoutValidation("anthropic-version", "2023-06-01");
+                    await invoker.SendAsync(request, CancellationToken.None).ConfigureAwait(false);
+                }
+                AssertFalse(inner.Last!.Headers.Contains("x-api-key"), "the placeholder key header is removed");
+                AssertTrue(inner.Last!.Headers.Contains("anthropic-version"), "other provider headers stay");
+                AssertEqual("Bearer tok", inner.Last!.Headers.Authorization?.ToString());
+
+                ModelEndpoint missing = Endpoint(ModelEndpointAuthTypeEnum.ProviderDefault, null);
+                missing.Provider = ModelProviderEnum.Anthropic;
+                missing.Headers = new List<ModelEndpointHeader>();
+                AssertThrows<InvalidOperationException>(() => ModelEndpointClientFactory.CreateCompletion(missing, CreateLogging()));
+            }));
+
+            cases.Add(Case("azure_uses_v1_chat_completions", "Azure OpenAI is built as a Chat Completions client on the v1 route with the api-key header", TestTags.Positive, () =>
+            {
+                ModelEndpoint azure = new ModelEndpoint { Name = "Azure", Provider = ModelProviderEnum.AzureOpenAI, Kind = ModelEndpointKindEnum.Inference,
+                    BaseUrl = "https://my-resource.openai.azure.com/", Model = "my-deployment" };
+                azure.ApiKey = "azure-key";
+                using (PolyPrompt.Clients.ProviderClientBase client = ModelEndpointClientFactory.CreateCompletion(azure, CreateLogging()))
+                {
+                    PolyPrompt.Clients.OpenAiCompatibleClient? compatible = client as PolyPrompt.Clients.OpenAiCompatibleClient;
+                    AssertNotNull(compatible, "Azure uses the Chat Completions client");
+                    AssertEqual("https://my-resource.openai.azure.com/openai/v1", compatible!.Endpoint);
+                    AssertEqual("api-key", compatible.AuthPlacement.Name);
+                    AssertEqual("my-deployment", client.Defaults.Completion?.Model);
+                }
+            }));
+
             return new TestSuiteDescriptor(suiteId: SuiteId, displayName: "Model Endpoint Authentication", cases: cases);
         }
 

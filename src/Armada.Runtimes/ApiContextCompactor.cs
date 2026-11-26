@@ -54,7 +54,7 @@ namespace Armada.Runtimes
             long characters = 0;
             foreach (ChatMessage message in messages)
             {
-                characters += 16 + (message.Content?.Length ?? 0);
+                characters += 16 + (message.Text?.Length ?? 0);
                 if (message.ToolCalls == null) continue;
                 foreach (ToolCall call in message.ToolCalls) characters += (call.Name?.Length ?? 0) + (call.ArgumentsJson?.Length ?? 0);
             }
@@ -112,7 +112,7 @@ namespace Armada.Runtimes
             {
                 int index = toolResults[n];
                 ChatMessage original = messages[index];
-                string content = original.Content ?? String.Empty;
+                string content = original.Text ?? String.Empty;
                 if (content.Length < MinimumCompactedLength || content.StartsWith(CompactedMarker, StringComparison.Ordinal)) continue;
 
                 string note = CompactedMarker + ": " + content.Length.ToString(System.Globalization.CultureInfo.InvariantCulture) + " characters from "

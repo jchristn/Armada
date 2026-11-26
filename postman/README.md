@@ -1,7 +1,7 @@
 # Model provider smoke simulation
 
 The fixture models the native xAI Responses and embeddings contracts used by
-PolyPrompt 3.5.0, following the upstream PolyPrompt `postman/xai.openapi.json` and
+PolyPrompt 5.0.1, following the upstream PolyPrompt `postman/xai.openapi.json` and
 its xAI fixture. The owner's published mock search was unavailable because the
 Postman CLI was signed out. This fixture runs locally without login or real keys.
 

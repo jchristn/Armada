@@ -164,7 +164,7 @@ namespace Armada.Runtimes
         private readonly Func<string, ModelEndpoint?>? _EndpointResolver;
         private readonly LoggingModule _Logging;
         private readonly int _MaxIterations;
-        private readonly Func<ModelEndpoint, LoggingModule, CompletionClientBase> _ClientFactory;
+        private readonly Func<ModelEndpoint, LoggingModule, ProviderClientBase> _ClientFactory;
         private readonly Func<string, string?, LoggingModule, McpToolClient> _McpClientFactory;
         private readonly string _Header = "[ApiAgentRuntime] ";
         private StreamWriter? _LogWriter;
@@ -193,7 +193,7 @@ namespace Armada.Runtimes
             ModelEndpoint endpoint,
             LoggingModule logging,
             int maxIterations = 1000,
-            Func<ModelEndpoint, LoggingModule, CompletionClientBase>? clientFactory = null,
+            Func<ModelEndpoint, LoggingModule, ProviderClientBase>? clientFactory = null,
             Func<string, string?, LoggingModule, McpToolClient>? mcpClientFactory = null)
         {
             _McpClientFactory = mcpClientFactory ?? ((url, sessionToken, log) => new McpToolClient(url, sessionToken, null, log));
@@ -217,7 +217,7 @@ namespace Armada.Runtimes
             Func<string, ModelEndpoint?> endpointResolver,
             LoggingModule logging,
             int maxIterations = 1000,
-            Func<ModelEndpoint, LoggingModule, CompletionClientBase>? clientFactory = null,
+            Func<ModelEndpoint, LoggingModule, ProviderClientBase>? clientFactory = null,
             Func<string, string?, LoggingModule, McpToolClient>? mcpClientFactory = null)
         {
             _McpClientFactory = mcpClientFactory ?? ((url, sessionToken, log) => new McpToolClient(url, sessionToken, null, log));
@@ -382,16 +382,16 @@ namespace Armada.Runtimes
             }
         }
 
-        private static async Task<ToolChatResponse> StreamToolChatAsync(CompletionClientBase client, ToolChatRequest request, int firstResponseMs, int idleMs, CancellationToken token)
+        private static async Task<ChatResponse> StreamToolChatAsync(ProviderClientBase client, ChatRequest request, int firstResponseMs, int idleMs, CancellationToken token)
         {
             using CancellationTokenSource watchdog = CancellationTokenSource.CreateLinkedTokenSource(token);
             watchdog.CancelAfter(firstResponseMs);
             bool received = false;
             try
             {
-                ToolChatStreamingResponse stream = await client.ToolChatStreamingAsync(request, watchdog.Token).ConfigureAwait(false);
-                if (!stream.Success) return new ToolChatResponse { Success = false, StatusCode = stream.StatusCode, Error = stream.Error, Model = stream.Model };
-                await foreach (ToolChatStreamingChunk chunk in stream.Chunks.WithCancellation(watchdog.Token).ConfigureAwait(false))
+                ChatStreamingResponse stream = await client.ChatStreamingAsync(request, watchdog.Token).ConfigureAwait(false);
+                if (!stream.Success) return new ChatResponse { Success = false, StatusCode = stream.StatusCode, Error = stream.Error, Model = stream.Model };
+                await foreach (ChatStreamingChunk chunk in stream.Chunks.WithCancellation(watchdog.Token).ConfigureAwait(false))
                 {
                     received = true;
                     watchdog.CancelAfter(idleMs);
@@ -399,9 +399,9 @@ namespace Armada.Runtimes
 
                 // Partial output is never acted on: tools run only after the provider signalled a complete response.
                 if (stream.State != StreamingState.Completed)
-                    return new ToolChatResponse { Success = false, Model = stream.Model, Error = "The response stream ended before the model finished (" + stream.State + "): " + (stream.StreamError ?? "no detail") };
+                    return new ChatResponse { Success = false, Model = stream.Model, Error = "The response stream ended before the model finished (" + stream.State + "): " + (stream.StreamError ?? "no detail") };
 
-                return new ToolChatResponse
+                return new ChatResponse
                 {
                     Success = true,
                     StatusCode = stream.StatusCode,
@@ -422,7 +422,7 @@ namespace Armada.Runtimes
             }
         }
 
-        private static async Task<ChatResponse> StreamChatAsync(CompletionClientBase client, string prompt, CompletionOptions options, int firstResponseMs, int idleMs, CancellationToken token)
+        private static async Task<ChatResponse> StreamChatAsync(ProviderClientBase client, string prompt, CompletionOptions options, int firstResponseMs, int idleMs, CancellationToken token)
         {
             using CancellationTokenSource watchdog = CancellationTokenSource.CreateLinkedTokenSource(token);
             watchdog.CancelAfter(firstResponseMs);
@@ -488,7 +488,7 @@ namespace Armada.Runtimes
                 : "The model did not start responding within " + firstResponseMs + " ms (first-response deadline: model load and prompt evaluation).";
         }
 
-        private static int? LastRetryAfterSeconds(CompletionClientBase client)
+        private static int? LastRetryAfterSeconds(ProviderClientBase client)
         {
             List<CallDetail> calls = client.CallDetails;
             if (calls.Count == 0) return null;
@@ -563,8 +563,8 @@ namespace Armada.Runtimes
                 if (ContextDiscovery != null && !endpoint.InferenceOptions.ContextLength.HasValue) await ContextDiscovery(endpoint, model, token).ConfigureAwait(false);
                 if (ModelContextDiscovery.ApplyWindow(endpoint))
                     EmitDiagnostic(processId, ApiRuntimeDiagnosticKindEnum.Inference, "[context] window " + endpoint.InferenceOptions.ContextLength + " tokens, discovered from " + endpoint.DiscoveredContextSource);
-                using CompletionClientBase client = _ClientFactory(endpoint, _Logging);
-                if (!String.IsNullOrWhiteSpace(model)) client.Model = model;
+                using ProviderClientBase client = _ClientFactory(endpoint, _Logging);
+                if (!String.IsNullOrWhiteSpace(model) && client.Defaults.Completion != null) client.Defaults.Completion.Model = model;
                 // Only the last call's response headers are read (Retry-After); retaining more holds request bodies in memory.
                 client.MaxCallDetails = 2;
 
@@ -744,7 +744,7 @@ namespace Armada.Runtimes
                         }
                     }
 
-                    ToolChatRequest request = new ToolChatRequest();
+                    ChatRequest request = new ChatRequest();
                     request.Messages = messages;
                     request.Tools = tools;
                     request.Options = completionOptions;
@@ -756,7 +756,7 @@ namespace Armada.Runtimes
                         forceSubmitNext = false;
                     }
 
-                    ToolChatResponse response = await WithInferenceRetryAsync(() => settings.Streaming ? StreamToolChatAsync(client, request, firstResponseMs, idleMs, token) : client.ToolChatAsync(request, token), r => r.Success, r => r.StatusCode, r => r.Error, processId, lastCallMs, token, () => LastRetryAfterSeconds(client)).ConfigureAwait(false);
+                    ChatResponse response = await WithInferenceRetryAsync(() => settings.Streaming ? StreamToolChatAsync(client, request, firstResponseMs, idleMs, token) : client.ChatAsync(request, token), r => r.Success, r => r.StatusCode, r => r.Error, processId, lastCallMs, token, () => LastRetryAfterSeconds(client)).ConfigureAwait(false);
 
                     EmitDiagnostic(processId, ApiRuntimeDiagnosticKindEnum.Inference, "[inference] " + JsonSerializer.Serialize(new { iteration = iteration + 1, maxIterations, streamed = settings.Streaming, response.Success, response.ResponseId, response.FinishReason, response.Usage, reasoningLength = response.Reasoning?.Length ?? 0, textLength = response.Text?.Length ?? 0, toolCalls = response.ToolCalls?.Count ?? 0 }));
 

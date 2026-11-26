@@ -108,8 +108,8 @@ namespace Armada.Core.Models
         }
 
         /// <summary>
-        /// API version for Azure OpenAI (defaults to the provider's current GA version when omitted).
-        /// Null/unused for other providers.
+        /// API version for Azure OpenAI. Kept for stored endpoints and ignored since 1.5.0: Azure OpenAI is reached
+        /// through its v1 API, which takes no api-version. Null/unused for other providers.
         /// </summary>
         public string? ApiVersion
         {

@@ -6942,7 +6942,7 @@ Get details of a specific model endpoint (managed embedding or inference provide
 
 **Ollama Cloud and xAI endpoints**
 
-`OllamaCloud` and `XAI` support both `Inference` and `Embedding` through PolyPrompt 3.5.0. Both require an API key and accept only `ProviderDefault` or `Bearer` authentication. Credentials are write-only; omit the API key on update to preserve it.
+`OllamaCloud` and `XAI` support both `Inference` and `Embedding` through PolyPrompt 5.0.1 (xAI embeddings use the OpenAI-compatible `/v1/embeddings` route). Both require an API key and accept only `ProviderDefault` or `Bearer` authentication. Credentials are write-only; omit the API key on update to preserve it.
 
 Ollama Cloud uses the fixed URL `https://ollama.com:443` (omit the base URL or supply that address). Choose a hosted model; embedding availability depends on the cloud catalog. xAI defaults to `https://api.x.ai` when the base URL is omitted, uses the native Responses API for inference, and requires an explicit accessible embedding model for embeddings.
 
@@ -7766,7 +7766,7 @@ A managed reference to an external embedding or inference model behind a provide
 | `Model` | string \| null | Model name to target. For Azure OpenAI this is the deployment name; for Bedrock, the Bedrock model id. |
 | `Region` | string \| null | Cloud region. Required for `VertexAI` and `Bedrock`. |
 | `Project` | string \| null | GCP project id. Required for `VertexAI`. |
-| `ApiVersion` | string \| null | API version for `AzureOpenAI` (defaults to the provider's current GA version when omitted). |
+| `ApiVersion` | string \| null | Ignored since 1.5.0. `AzureOpenAI` uses the v1 API, which takes no API version. |
 | `AccessKeyId` | string \| null | AWS access key id for `Bedrock`. The paired secret access key is supplied write-only via `apiKey`. |
 | `Dimensionality` | int | Embedding dimensionality (default 0) |
 | `TimeoutMs` | int | Request timeout in milliseconds (default 120000, clamped to [1000, 600000]) |

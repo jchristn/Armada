@@ -478,7 +478,7 @@ namespace Armada.Core.Services
             {
                 if (endpoint.Kind == ModelEndpointKindEnum.Embedding)
                 {
-                    using (EmbeddingClientBase client = ModelEndpointClientFactory.CreateEmbedding(endpoint, _Logging))
+                    using (ProviderClientBase client = ModelEndpointClientFactory.CreateEmbedding(endpoint, _Logging))
                     {
                         EmbeddingResponse resp = await client.EmbedAsync("Armada model endpoint connectivity check.", null, token).ConfigureAwait(false);
                         sw.Stop();
@@ -492,7 +492,7 @@ namespace Armada.Core.Services
                 }
                 else
                 {
-                    using (CompletionClientBase client = ModelEndpointClientFactory.CreateCompletion(endpoint, _Logging))
+                    using (ProviderClientBase client = ModelEndpointClientFactory.CreateCompletion(endpoint, _Logging))
                     {
                         CompletionOptions options = new CompletionOptions();
                         options.MaxTokens = 16;
@@ -527,7 +527,7 @@ namespace Armada.Core.Services
 
             try
             {
-                using (ClientBase client = ModelEndpointClientFactory.Create(endpoint, _Logging))
+                using (ProviderClientBase client = ModelEndpointClientFactory.Create(endpoint, _Logging))
                 {
                     bool reachable = await client.ValidateConnectivityAsync(token).ConfigureAwait(false);
                     sw.Stop();
