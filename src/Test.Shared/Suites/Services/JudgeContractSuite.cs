@@ -4,6 +4,7 @@ namespace Test.Shared.Suites.Services
     using System.Collections.Generic;
     using System.Threading;
     using System.Threading.Tasks;
+    using Armada.Core;
     using Armada.Core.Services;
     using Test.Shared.Infrastructure;
     using Touchstone.Core;
@@ -212,13 +213,13 @@ namespace Test.Shared.Suites.Services
 
             cases.Add(Case("output_contract_names_lenses_and_case", "The output contract names the three lenses and the affected-case rule", TestTags.Positive, () =>
             {
-                string contract = JudgeContract.OutputContract();
+                string contract = StageOutputContract.For(PersonaCatalog.Judge);
                 AssertContains("Correctness", contract);
                 AssertContains("Blast Radius", contract);
                 AssertContains("Source Fidelity", contract);
                 AssertContains("Affected Case", contract);
-                AssertContains("Restore dependencies", JudgeContract.RoleSummary());
-                AssertContains("--no-restore", JudgeContract.RoleSummary());
+                AssertFalse(StageOutputContract.RoleSummary(PersonaCatalog.Judge).Contains("--no-restore"), "toolchain advice lives in the .NET workflow profile");
+                AssertContains("--no-restore", WorkflowProfileTemplates.DotNetValidationGuidance);
             }));
 
             cases.Add(Case("block_with_affected_case_file_ref", "A block that exhibits a file reference is a valid block", TestTags.Positive, () =>

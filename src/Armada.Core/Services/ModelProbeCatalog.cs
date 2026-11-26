@@ -6,7 +6,7 @@ namespace Armada.Core.Services
 
     /// <summary>
     /// The Quick probe set: the prompts each mechanical probe sends through the captain's runtime. The prompts use
-    /// Armada's real output contracts (the Worker completion line, <see cref="JudgeContract.OutputContract"/> and
+    /// Armada's real output contracts (the Worker completion line, <see cref="StageOutputContract.For"/> and
     /// <see cref="ArchitectPlanParser.FormatInstructions"/>) and its real ASCII rules. Change
     /// <see cref="ProbeSetVersion"/> whenever a prompt or a scoring rule changes, so runs stay comparable.
     /// </summary>
@@ -76,7 +76,7 @@ namespace Armada.Core.Services
         {
             return _Preamble + "Do not call any tools and do not modify any files.\n\n" +
                 "You are an Armada worker agent. Task: explain in two plain sentences what a git worktree is.\n\n" +
-                "End with a standalone [ARMADA:RESULT] COMPLETE line followed by a brief plain-text summary.\n" + AsciiRules;
+                StageOutputContract.For(PersonaCatalog.Worker) + AsciiRules;
         }
 
         /// <summary>
@@ -93,7 +93,7 @@ namespace Armada.Core.Services
                 "+        public static int Add(int a, int b) => a + b;\n" +
                 "```\n\n" +
                 "The worker reports that the existing test AddReturnsSum now passes.\n\n" +
-                JudgeContract.OutputContract() + "\n" + AsciiRules;
+                StageOutputContract.For(PersonaCatalog.Judge) + AsciiRules;
         }
 
         /// <summary>
@@ -105,7 +105,7 @@ namespace Armada.Core.Services
             return _Preamble + "Do not call any tools and do not modify any files.\n\n" +
                 "You are an Armada architect agent. Objective (REQ-1): add a --version flag to a small C# command-line tool " +
                 "that prints the assembly version and exits with code 0. The tool is built with `dotnet build` and tested with `dotnet test`.\n\n" +
-                ArchitectPlanParser.FormatInstructions() + "\n" + AsciiRules;
+                StageOutputContract.For(PersonaCatalog.Architect) + AsciiRules;
         }
 
         /// <summary>

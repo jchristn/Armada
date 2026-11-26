@@ -8,6 +8,7 @@ namespace Test.Shared.Suites.Services
     using System.Threading;
     using System.Threading.Tasks;
     using Armada.Core.Database;
+    using Armada.Core;
     using Armada.Core.Enums;
     using Armada.Core.Models;
     using Armada.Core.Services;
@@ -43,10 +44,10 @@ namespace Test.Shared.Suites.Services
 
         private static readonly PersonaCase[] _Personas = new[]
         {
-            new PersonaCase("Worker", "persona.worker", PersonaPromptVariants.WorkerContract),
-            new PersonaCase("Test Engineer", "persona.test_engineer", PersonaPromptVariants.TestEngineerContract),
-            new PersonaCase("Judge", "persona.judge", PersonaPromptVariants.JudgeContract),
-            new PersonaCase("Architect", "persona.architect", PersonaPromptVariants.ArchitectContract)
+            new PersonaCase("Worker", "persona.worker", StageOutputContract.For("Worker")),
+            new PersonaCase("Test Engineer", "persona.test_engineer", StageOutputContract.For("Test Engineer")),
+            new PersonaCase("Judge", "persona.judge", StageOutputContract.For("Judge")),
+            new PersonaCase("Architect", "persona.architect", StageOutputContract.For("Architect"))
         };
 
         private static readonly PromptVariantEnum[] _Variants = new[] { PromptVariantEnum.Current, PromptVariantEnum.Lean, PromptVariantEnum.Compact };
@@ -100,11 +101,11 @@ namespace Test.Shared.Suites.Services
                     {
                         Fixture fixture = CreateFixture(persona.Name);
                         Dictionary<string, string> templateParams = MissionPromptBuilder.BuildTemplateParams(fixture.Mission, fixture.Vessel, fixture.Captain);
-                        string direct = await templates.RenderAsync(persona.TemplateName, templateParams).ConfigureAwait(false);
+                        string direct = StageOutputContract.AppendTo(persona.Name, await templates.RenderAsync(persona.TemplateName, templateParams).ConfigureAwait(false));
                         string legacy = await MissionPromptBuilder.ResolvePersonaPromptAsync(persona.Name, null, templateParams, templates).ConfigureAwait(false);
                         string current = await MissionPromptBuilder.ResolvePersonaPromptAsync(persona.Name, null, PromptVariantEnum.Current, templateParams, templates).ConfigureAwait(false);
-                        AssertEqual(direct, legacy, persona.Name + " legacy overload renders the persona template");
-                        AssertEqual(direct, current, persona.Name + " Current renders the persona template byte for byte");
+                        AssertEqual(direct, legacy, persona.Name + " legacy overload renders the persona template and its contract");
+                        AssertEqual(direct, current, persona.Name + " Current renders the persona template and its contract byte for byte");
 
                         string baseline = await GenerateAsync(service, fixture, null).ConfigureAwait(false);
                         string explicitCurrent = await GenerateAsync(service, fixture, "{\"promptVariant\":\"Current\"}").ConfigureAwait(false);
@@ -143,11 +144,13 @@ namespace Test.Shared.Suites.Services
                             AssertContains(StyleGuide, doc, label + " style guide");
                             AssertContains("REPO RULE: run `dotnet build src/Widgets.sln` before committing.", doc, label + " repository rules");
                             AssertContains(prompt, doc, label + " persona prompt");
+                            AssertEqual(1, StageOutputContract.CountContracts(doc), label + " instructions state exactly one output contract");
+                            AssertContains(persona.Contract, doc, label + " instructions carry the generated contract");
                             AssertEqual(currentDoc.Replace(currentPrompt, "<PERSONA>"), doc.Replace(prompt, "<PERSONA>"), label + " differs from Current only in the persona prompt");
 
                             if (variant != PromptVariantEnum.Current)
                             {
-                                AssertEqual(await templates.RenderAsync(MissionPromptBuilder.GetPersonaVariantTemplateName(persona.Name, variant), templateParams).ConfigureAwait(false), prompt, label + " renders its variant template");
+                                AssertEqual(StageOutputContract.AppendTo(persona.Name, await templates.RenderAsync(MissionPromptBuilder.GetPersonaVariantTemplateName(persona.Name, variant), templateParams).ConfigureAwait(false)), prompt, label + " renders its variant template and the contract");
                                 AssertFalse(String.Equals(prompt, currentPrompt, StringComparison.Ordinal), label + " is not the Current prompt");
                             }
                         }
@@ -155,7 +158,24 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
-            cases.Add(CaseAsync("lean_repeats_contract_at_end_and_compact_is_shorter", "Lean states the output contract first and repeats it as the last line; Compact is the shortest tier", TestTags.Positive, async () =>
+            cases.Add(CaseAsync("every_persona_instructions_state_one_contract", "The generated instructions of every persona with a contract state it exactly once; the Recorder states none", TestTags.Positive, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                {
+                    MissionService service = CreateMissionService(CreateLogging(), testDb.Driver, out IPromptTemplateService templates);
+                    foreach (string persona in new[] { PersonaCatalog.Worker, PersonaCatalog.TestEngineer, PersonaCatalog.Judge, PersonaCatalog.Architect, PersonaCatalog.Linter, PersonaCatalog.ProductManager, PersonaCatalog.UsabilityEngineer, PersonaCatalog.Recorder })
+                    {
+                        string doc = await GenerateAsync(service, CreateFixture(persona), null).ConfigureAwait(false);
+                        string contract = StageOutputContract.For(persona);
+                        AssertEqual(contract.Length == 0 ? 0 : 1, StageOutputContract.CountContracts(doc), persona + " contract count");
+                        if (contract.Length > 0) AssertContains(contract, doc, persona + " carries the generated contract");
+                        AssertFalse(doc.Contains("`[ARMADA:RESULT]", StringComparison.Ordinal) || doc.Contains("`[ARMADA:VERDICT]", StringComparison.Ordinal), persona + " shows no result or verdict marker in backticks");
+                        AssertFalse(doc.Contains("[ARMADA:MISSION]", StringComparison.Ordinal), persona + " shows only the versioned plan contract");
+                    }
+                }
+            }));
+
+            cases.Add(CaseAsync("every_variant_ends_with_the_one_contract_and_compact_is_shorter", "Every variant ends with the one generated output contract, stated once; Lean puts one demand on each line; Compact is the shortest tier", TestTags.Positive, async () =>
             {
                 using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
                 {
@@ -168,18 +188,16 @@ namespace Test.Shared.Suites.Services
                         string lean = await MissionPromptBuilder.ResolvePersonaPromptAsync(persona.Name, null, PromptVariantEnum.Lean, templateParams, templates).ConfigureAwait(false);
                         string compact = await MissionPromptBuilder.ResolvePersonaPromptAsync(persona.Name, null, PromptVariantEnum.Compact, templateParams, templates).ConfigureAwait(false);
 
-                        List<string> leanLines = lean.Split('\n').Select(l => l.TrimEnd()).Where(l => l.Length > 0).ToList();
-                        AssertEqual(persona.Contract, leanLines.Last(), persona.Name + " Lean ends with the output contract");
-                        AssertContains(persona.Contract, leanLines[1], persona.Name + " Lean states the output contract first");
-                        AssertEqual(2, Regex.Matches(lean, Regex.Escape(persona.Contract)).Count, persona.Name + " Lean states the contract twice");
-                        AssertContains("## Output contract (repeated)", lean, persona.Name + " Lean marks the repeated contract");
+                        foreach (string prompt in new[] { current, lean, compact })
+                        {
+                            AssertTrue(prompt.EndsWith(persona.Contract, StringComparison.Ordinal), persona.Name + " ends with the generated contract");
+                            AssertEqual(1, StageOutputContract.CountContracts(prompt), persona.Name + " states the contract once");
+                        }
                         AssertFalse(Regex.IsMatch(lean, "\\b(MUST|CRITICAL|IMPORTANT|NEVER|ALWAYS)\\b"), persona.Name + " Lean has no emphasis wording");
                         string leanTemplate = templates.GetEmbeddedDefault(MissionPromptBuilder.GetPersonaVariantTemplateName(persona.Name, PromptVariantEnum.Lean))!;
-                        foreach (string line in leanTemplate.Split('\n').Where(l => !l.StartsWith("Output contract:", StringComparison.Ordinal)))
+                        foreach (string line in leanTemplate.Split('\n'))
                             AssertFalse(Regex.IsMatch(line, "\\.\\s+[A-Z]"), persona.Name + " Lean puts one demand on each line: " + line);
 
-                        List<string> compactLines = compact.Split('\n').Select(l => l.TrimEnd()).Where(l => l.Length > 0).ToList();
-                        AssertEqual(persona.Contract, compactLines.Last(), persona.Name + " Compact ends with the output contract");
                         AssertTrue(compact.Length < current.Length, persona.Name + " Compact (" + compact.Length + ") is shorter than Current (" + current.Length + ")");
                         AssertTrue(compact.Length < lean.Length, persona.Name + " Compact (" + compact.Length + ") is shorter than Lean (" + lean.Length + ")");
                     }
@@ -213,15 +231,15 @@ namespace Test.Shared.Suites.Services
                     Dictionary<string, string> templateParams = new Dictionary<string, string>();
 
                     string personaOwn = await MissionPromptBuilder.ResolvePersonaPromptAsync("Worker", "custom.worker", PromptVariantEnum.Lean, templateParams, templates).ConfigureAwait(false);
-                    AssertEqual("CUSTOM WORKER PROMPT", personaOwn, "a persona's own (non-default) template beats the variant");
+                    AssertEqual(StageOutputContract.AppendTo("Worker", "CUSTOM WORKER PROMPT"), personaOwn, "a persona's own (non-default) template beats the variant");
 
                     PersonaOverride profile = new PersonaOverride { PersonaName = "Worker", PromptTemplateName = "profile.worker", AdditionalInstructions = "PROFILE EXTRA" };
                     string profiled = await MissionPromptBuilder.ResolvePersonaPromptAsync("Worker", null, PromptVariantEnum.Compact, templateParams, templates, profile).ConfigureAwait(false);
-                    AssertEqual("PROFILE WORKER PROMPT\n\nPROFILE EXTRA", profiled, "a project-profile template beats the variant");
+                    AssertEqual(StageOutputContract.AppendTo("Worker", "PROFILE WORKER PROMPT\n\nPROFILE EXTRA"), profiled, "a project-profile template beats the variant");
 
                     PersonaOverride extraOnly = new PersonaOverride { PersonaName = "Worker", AdditionalInstructions = "PROFILE EXTRA" };
                     string leanWithExtra = await MissionPromptBuilder.ResolvePersonaPromptAsync("Worker", "persona.worker", PromptVariantEnum.Lean, templateParams, templates, extraOnly).ConfigureAwait(false);
-                    AssertEqual(templates.GetEmbeddedDefault("persona.worker.lean") + "\n\nPROFILE EXTRA", leanWithExtra, "the default template name takes the variant; profile instructions still append");
+                    AssertEqual(StageOutputContract.AppendTo("Worker", templates.GetEmbeddedDefault("persona.worker.lean") + "\n\nPROFILE EXTRA"), leanWithExtra, "the default template name takes the variant; profile instructions still append");
 
                     string linterLean = await MissionPromptBuilder.ResolvePersonaPromptAsync("Linter", null, PromptVariantEnum.Lean, templateParams, templates).ConfigureAwait(false);
                     string linterCurrent = await MissionPromptBuilder.ResolvePersonaPromptAsync("Linter", null, PromptVariantEnum.Current, templateParams, templates).ConfigureAwait(false);

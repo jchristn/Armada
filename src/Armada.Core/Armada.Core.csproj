@@ -14,6 +14,11 @@
     <EmbeddedResource Include="Prompts\persona-briefs-v4.json" />
     <EmbeddedResource Include="Prompts\persona-briefs-v5.json" />
     <EmbeddedResource Include="Prompts\persona-briefs-v6.json" />
+    <EmbeddedResource Include="Prompts\persona-briefs-v7.json" />
+    <EmbeddedResource Include="Prompts\persona-defaults-v0.json" />
+    <EmbeddedResource Include="Prompts\persona-variants.json" />
+    <EmbeddedResource Include="Prompts\persona-variants-previous.json" />
+    <EmbeddedResource Include="Prompts\progress-signals-previous.json" />
   </ItemGroup>
 
   <ItemGroup>

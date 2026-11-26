@@ -775,7 +775,7 @@ namespace Armada.Core.Services
                         _Logging.Warn(_Header + "judge mission " + mission.Id + " blocked landing, sent to review: " + blockingReason);
                     }
                     else if ((rejectedPass || !isBlockingVerdict || !exhibitsAffectedCase)
-                        && await TryScheduleOutputRepairAsync(mission, blockingReason, JudgeContract.OutputContract(), token).ConfigureAwait(false))
+                        && await TryScheduleOutputRepairAsync(mission, blockingReason, StageOutputContract.For(PersonaCatalog.Judge), token).ConfigureAwait(false))
                     {
                         // The Judge broke its output contract (no verdict, conflicting verdicts, an unsubstantiated
                         // PASS, or a block without an affected case). That is a formatting failure, not a review

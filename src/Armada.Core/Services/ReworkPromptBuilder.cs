@@ -30,7 +30,7 @@ namespace Armada.Core.Services
         /// <summary>
         /// The required completion line of a rework Worker, stated at the end of the rework prompt.
         /// </summary>
-        public const string OutputContract = "End your response with a standalone line `[ARMADA:RESULT] COMPLETE` followed by a brief plain-text summary.";
+        public const string OutputContract = StageOutputContract.CompletionSentence;
 
         /// <summary>
         /// The rework demands, one per line, in the order they are numbered in the prompt.

@@ -166,10 +166,10 @@ namespace Test.Shared.Suites.Services
 
             cases.Add(Case("format_instructions_name_the_fence", "The prompt contract names the fence and the fields", TestTags.Positive, () =>
             {
-                string text = ArchitectPlanParser.FormatInstructions();
+                string text = StageOutputContract.For("Architect");
                 AssertContains("armada-plan", text);
-                AssertContains("contractVersion:4", text);
-                AssertContains("parent:earlier 1-based index", text);
+                AssertContains("\"contractVersion\": 4", text);
+                AssertContains("| missions[].parent |", text);
                 AssertContains("ownedPaths", text);
                 AssertContains("waitForOtherMissions", text);
             }));
@@ -189,8 +189,8 @@ namespace Test.Shared.Suites.Services
                 AssertContains("unknown objective requirement ID \"REQ-READ\"", error!);
                 AssertContains("requirements contains IDs only", error!);
                 AssertEqual(1, error!.Split("unknown objective requirement ID \"REQ-READ\"").Length - 1, "Repeated references need one actionable ID diagnostic.");
-                AssertContains("requirements:[\"REQ-1\"]", ArchitectPlanParser.FormatInstructions());
-                AssertContains("match exactly", ArchitectPlanParser.FormatInstructions());
+                AssertContains("never \"REQ-1: text\"", StageOutputContract.For("Architect"));
+                AssertContains("matched exactly including case", StageOutputContract.For("Architect"));
                 AssertEqual("REQ-READ: handle HTTP errors", input.Requirements[0], "Never silently rewrite a rejected plan.");
             }));
 

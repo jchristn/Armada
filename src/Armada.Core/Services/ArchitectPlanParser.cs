@@ -305,25 +305,6 @@ namespace Armada.Core.Services
             return errors;
         }
 
-        /// <summary>
-        /// One-sentence output contract for Architect prompts.
-        /// </summary>
-        /// <returns>Contract text.</returns>
-        public static string FormatInstructions()
-        {
-            return "Respond with one fenced ```" + FenceInfo + " JSON block using contractVersion:4, requirements:[\"REQ-1\"], decisions:[atomic resolved compatibility/default/override rules], " +
-                "missions:[{title,description,kind:implementation|investigation|integration,parent:earlier 1-based index or null,ownedPaths:[files or dir/ prefixes this mission may change],readsPaths:[context it must not change],branchStrategy:continue|fork (optional, needs parent),waitForOtherMissions:false," +
-                "decisionIndexes:[1-based indexes of only relevant decisions; empty if none],validationCommands:[exact commands],acceptanceCriteria:[{id,requirementIds:[objective IDs],decisionIndexes:[plan decisions verified by this check; [] for general checks],scenario,expected,verification,negativeCases:[inputs and expected failures],negativeCasesNotApplicableReason:only if none apply}]}]. " +
-                "requirements contains IDs only, never \"REQ-1: explanation\"; put requirement text in descriptions. Each requirementIds entry must match exactly a requirements string, including case. " +
-                "REQ-1 is illustrative: retain every ID assigned by the objective or Product Manager, not this single example. If upstream supplies no IDs, assign one per independent objective requirement. " +
-                "Challenge interacting invariants with concrete counterexamples, including user input equal to a fixed output marker and partial fragments outside matched spans. Resolve conflicts against the original objective before implementation; do not weaken it. " +
-                "Descriptions define one bounded outcome, components, approach, scope exclusions, invariants and uncertainties. Split compound decisions into separately verifiable rules. Every objective ID and decision must have a named acceptance check. Criterion decision indexes must be within its slice scope. " +
-                "Prefer small missions (one coherent change, usually 1-5 files). Set parent only when a mission needs code another mission produces: a child starts after its parent finishes and branches from its result; independent missions are siblings and run in parallel. Keep the tree shallow. " +
-                "Give every mission ownedPaths; two missions that can run at the same time (neither an ancestor of the other) must never own the same file, so shared files (project files, index exports, lockfiles, migration registries, changelogs) belong to one mission, usually a parent or the final integration mission. A plan with overlapping parallel ownership is rejected. " +
-                "Resolve correctness-critical uncertainty before implementation. Last mission must be integration with waitForOtherMissions:true. Invalid versioned plans are rejected before dispatch; " +
-                "legacy [ARMADA:MISSION] blocks remain supported for customized templates.";
-        }
-
         #endregion
 
         #region Private-Methods

@@ -296,7 +296,8 @@ namespace Armada.Core.Services
             if (overrideActive && !String.IsNullOrWhiteSpace(personaOverride!.AdditionalInstructions))
                 result = result + "\n\n" + personaOverride.AdditionalInstructions!.Trim();
 
-            return result;
+            // The one output contract, generated from the models the parsers read (StageOutputContract).
+            return StageOutputContract.AppendTo(persona, result);
         }
 
         /// <summary>
@@ -327,7 +328,7 @@ namespace Armada.Core.Services
                 sections.Add(
                     "Read " + instructionsFileName + " in the working directory. " +
                     "It contains the objective, repository context, and mission-format requirements. " +
-                    "Do not ask for more input. Read the file immediately and respond only with real mission definitions derived from that file: one fenced `armada-plan` JSON block (preferred) or real [ARMADA:MISSION] blocks.");
+                    "Do not ask for more input. Read the file immediately and respond only with the plan its Output Contract section describes.");
             }
             else
             {
@@ -347,17 +348,7 @@ namespace Armada.Core.Services
 
         private static string BuildBootstrapRoleSummary(string? persona)
         {
-            return PersonaCatalog.NormalizeName(persona) switch
-            {
-                PersonaCatalog.Architect => "You are an Armada architect agent. Respond only with real mission definitions: one fenced `armada-plan` JSON block (preferred) or real [ARMADA:MISSION] blocks. Do not emit [ARMADA:RESULT] or [ARMADA:VERDICT] lines.",
-                PersonaCatalog.ProductManager => "You are an Armada product manager agent. Include `## Product Vision`, `## Use Cases`, `## Experience Requirements`, `## Validation`, and `## Future Readiness` sections before a standalone [ARMADA:RESULT] COMPLETE line.",
-                PersonaCatalog.UsabilityEngineer => "You are an Armada usability engineer agent. Include `## Usability`, `## Consistency`, `## Edge Cases`, and `## Residual Risks` sections before a standalone [ARMADA:RESULT] COMPLETE line.",
-                PersonaCatalog.Worker => "You are an Armada worker agent. End with a standalone [ARMADA:RESULT] COMPLETE line followed by a brief plain-text summary.",
-                PersonaCatalog.TestEngineer => "You are an Armada test engineer agent. Include `## Coverage Added`, `## Negative Paths`, and `## Residual Risks` sections before a standalone [ARMADA:RESULT] COMPLETE line.",
-                PersonaCatalog.Linter => "You are an Armada linter agent. Evaluate the changed code and documentation for style and correctness, fix clear in-scope violations, include `## Code Style`, `## Code Correctness`, `## Documentation`, `## Fixes Applied`, and `## Residual Issues` sections before a standalone [ARMADA:RESULT] COMPLETE line.",
-                PersonaCatalog.Judge => JudgeContract.RoleSummary(),
-                _ => "You are an Armada captain executing a mission."
-            };
+            return StageOutputContract.RoleSummary(persona);
         }
 
         private static string SummarizeText(string? input, int maxChars)
@@ -370,65 +361,23 @@ namespace Armada.Core.Services
             return compact.Substring(0, maxChars - 3).TrimEnd() + "...";
         }
 
-        private static string BuildRoleSummary(string? persona, string personaSummary)
-        {
-            if (PersonaCatalog.Matches(persona, PersonaCatalog.Architect))
-            {
-                return "You are an Armada architect agent. Analyze the objective and decompose it into bounded, independently verifiable slices in one fenced `armada-plan` JSON block (or [ARMADA:MISSION] markers). Use parent only where a slice needs another's code, and give slices that can run at the same time disjoint ownedPaths. Do not emit [ARMADA:RESULT] or [ARMADA:VERDICT] lines.";
-            }
-
-            if (!String.IsNullOrEmpty(personaSummary))
-                return personaSummary;
-
-            return GetPersonaPromptFallback(persona);
-        }
-
         private static string BuildCaptainInstructions(string? existingInstructions, string? persona)
         {
-            string existing = existingInstructions?.Trim() ?? String.Empty;
-            string outputContract = GetPersonaOutputContract(persona);
-
-            if (String.IsNullOrEmpty(outputContract))
-                return existing;
-
-            if (String.IsNullOrEmpty(existing))
-                return outputContract;
-
-            return existing + "\n\n## Required Output Contract\n" + outputContract;
-        }
-
-        private static string GetPersonaOutputContract(string? persona)
-        {
-            return PersonaCatalog.NormalizeName(persona) switch
-            {
-                PersonaCatalog.Architect =>
-                    ArchitectPlanParser.FormatInstructions() + " Do not emit [ARMADA:RESULT] or [ARMADA:VERDICT] lines.",
-                PersonaCatalog.ProductManager =>
-                    "Before your result line, include `## Product Vision`, `## Use Cases`, `## Experience Requirements`, `## Validation`, and `## Future Readiness` sections. End with a standalone line `[ARMADA:RESULT] COMPLETE` followed by a brief plain-text summary.",
-                PersonaCatalog.UsabilityEngineer =>
-                    "Before your result line, include `## Usability`, `## Consistency`, `## Edge Cases`, and `## Residual Risks` sections. End with a standalone line `[ARMADA:RESULT] COMPLETE` followed by a brief plain-text summary." + VerifierContract.BlockingInstruction(),
-                PersonaCatalog.Worker =>
-                    "Stay within scope and make the requested changes. Derive acceptance cases from the behaviors the change advertises, including configuration create/edit/save transitions and negative paths when applicable. For provider or API integrations, exercise the actual request path against a local HTTP fixture and verify URL, authentication, payload, and response handling; successful compilation or client construction alone does not establish working integration. Report executed checks separately from unverified behavior. End with a standalone line `[ARMADA:RESULT] COMPLETE` followed by a brief plain-text summary.",
-                PersonaCatalog.TestEngineer =>
-                    "Before your result line, include short `## Coverage Added`, `## Negative Paths`, and `## Residual Risks` sections. End with a standalone line `[ARMADA:RESULT] COMPLETE` followed by a brief plain-text summary." + VerifierContract.BlockingInstruction(),
-                PersonaCatalog.Linter =>
-                    "Evaluate the changed code and documentation for style and correctness, staying strictly within the files this mission changed. Fix clear in-scope violations and flag judgment calls. Before your result line, include `## Code Style`, `## Code Correctness`, `## Documentation`, `## Fixes Applied`, and `## Residual Issues` sections. End with a standalone line `[ARMADA:RESULT] COMPLETE` followed by a brief plain-text summary." + VerifierContract.BlockingInstruction(),
-                PersonaCatalog.Judge => JudgeContract.OutputContract(),
-                _ => String.Empty
-            };
+            // The output contract is appended to the persona prompt once (StageOutputContract), not repeated here.
+            return existingInstructions?.Trim() ?? String.Empty;
         }
 
         private static string GetPersonaPromptFallback(string? persona)
         {
             return PersonaCatalog.NormalizeName(persona) switch
             {
-                PersonaCatalog.Architect => "You are an Armada architect agent. Analyze the codebase and decompose the objective into bounded, independently verifiable slices in one fenced `armada-plan` JSON block (or [ARMADA:MISSION] markers). Use parent only where a slice needs another's code, and give slices that can run at the same time disjoint ownedPaths. Do not emit [ARMADA:RESULT] or [ARMADA:VERDICT] lines.",
-                PersonaCatalog.ProductManager => "You are an Armada product manager agent. Clarify the whole product picture, define user value and experience requirements, include `## Product Vision`, `## Use Cases`, `## Experience Requirements`, `## Validation`, and `## Future Readiness` sections, and end with a standalone [ARMADA:RESULT] COMPLETE line.",
-                PersonaCatalog.UsabilityEngineer => "You are an Armada usability engineer agent. Improve the work through the lens of usability, consistency, and edge-case handling, include `## Usability`, `## Consistency`, `## Edge Cases`, and `## Residual Risks` sections, and end with a standalone [ARMADA:RESULT] COMPLETE line.",
-                PersonaCatalog.Worker => "You are an Armada worker agent. Implement the requested code changes carefully, stay within scope, and end with a standalone [ARMADA:RESULT] COMPLETE line.",
-                PersonaCatalog.TestEngineer => "You are an Armada test engineer agent. Write tests for the current mission scope, cover negative and edge paths for validation, timeout, cancellation, retry, cleanup, and error-handling changes when applicable, include `## Coverage Added`, `## Negative Paths`, and `## Residual Risks` sections, and end with a standalone [ARMADA:RESULT] COMPLETE line.",
-                PersonaCatalog.Linter => "You are an Armada linter agent. Evaluate the changed code and documentation for style and correctness, fix clear in-scope violations and flag judgment calls, include `## Code Style`, `## Code Correctness`, `## Documentation`, `## Fixes Applied`, and `## Residual Issues` sections, and end with a standalone [ARMADA:RESULT] COMPLETE line.",
-                PersonaCatalog.Judge => JudgeContract.PersonaPromptFallback(),
+                PersonaCatalog.Architect => "You are an Armada architect agent. Analyze the codebase and decompose the objective into bounded, independently verifiable slices. Use parent only where a slice needs another's code, and give slices that can run at the same time disjoint ownedPaths.",
+                PersonaCatalog.ProductManager => "You are an Armada product manager agent. Clarify the whole product picture and define user value and experience requirements.",
+                PersonaCatalog.UsabilityEngineer => "You are an Armada usability engineer agent. Improve the work through the lens of usability, consistency, and edge-case handling.",
+                PersonaCatalog.Worker => "You are an Armada worker agent. Implement the requested code changes carefully and stay within scope.",
+                PersonaCatalog.TestEngineer => "You are an Armada test engineer agent. Write tests for the current mission scope, covering negative and edge paths for validation, timeout, cancellation, retry, cleanup, and error-handling changes when applicable.",
+                PersonaCatalog.Linter => "You are an Armada linter agent. Evaluate the changed code and documentation for style and correctness, fix clear in-scope violations and flag judgment calls.",
+                PersonaCatalog.Judge => "You are an Armada judge agent. Review the completed work through three lenses (correctness, blast radius, and source fidelity) and assume there may be a hidden defect.",
                 _ => "You are an Armada captain executing a mission. Follow these instructions carefully."
             };
         }

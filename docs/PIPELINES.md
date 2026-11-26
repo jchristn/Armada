@@ -119,7 +119,7 @@ Key design decisions:
 | Name | Template | Description |
 |------|----------|-------------|
 | Worker | `persona.worker` | Standard mission executor -- writes code, makes changes, commits |
-| Architect | `persona.architect` | Plans work, decomposes goals into missions using `[ARMADA:MISSION]` markers |
+| Architect | `persona.architect` | Plans work, decomposes goals into missions in one `armada-plan` JSON block (contract version 4) |
 | Product Manager | `persona.product_manager` | Shapes the product picture, clarifies user outcomes, turns work into durable requirements |
 | Usability Engineer | `persona.usability_engineer` | Improves usability, edge-case experience, and consistency with the surrounding product |
 | Test Engineer | `persona.test_engineer` | Writes tests for changes, follows existing test patterns |
@@ -440,6 +440,20 @@ Branch: armada/captain-1/msn_abc123
 ## 9. Architect Special Handling
 
 The Architect persona is special: instead of passing context to the next stage, its output can define multiple Worker missions.
+
+### Stage output contracts
+
+Every stage's output contract comes from one place, `StageOutputContract` (Armada.Core): the Worker's completion line,
+the sections the Test Engineer, Linter, Usability Engineer and Product Manager report, the Judge's sections and
+accepted verdict lines (generated from `JudgeVerdictEnum`, including `SPEC_CONFLICT`), and the Architect's contract
+version 4 plan with a complete JSON example and a field table generated from the plan models. The mission instructions
+state it once, under `## Output Contract`, after the persona prompt; persona templates (Current, Lean and Compact),
+captain instructions and the runtime signals list no longer repeat it, and markers are shown on their own lines rather
+than in backticks. The launch prompt's one-line role summary and the format repair turn use the same source.
+
+Built-in templates an operator has not edited are upgraded in place at startup. A template the operator edited is kept
+as written, and the generated contract is still appended after it, so an edited template that kept an old contract
+sentence states it twice; remove that sentence from the template to state it once.
 
 ### Validated slice contracts
 

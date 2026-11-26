@@ -182,14 +182,7 @@ namespace Armada.Core.Services
         /// <exception cref="ArgumentOutOfRangeException">Thrown for any other verdict.</exception>
         public static string CanonicalVerdictLine(JudgeVerdictEnum verdict)
         {
-            return verdict switch
-            {
-                JudgeVerdictEnum.Pass => "[ARMADA:VERDICT] PASS",
-                JudgeVerdictEnum.Fail => "[ARMADA:VERDICT] FAIL",
-                JudgeVerdictEnum.NeedsRevision => "[ARMADA:VERDICT] NEEDS_REVISION",
-                JudgeVerdictEnum.SpecConflict => "[ARMADA:VERDICT] SPEC_CONFLICT",
-                _ => throw new ArgumentOutOfRangeException(nameof(verdict))
-            };
+            return StageOutputContract.VerdictLine(verdict);
         }
 
         /// <summary>

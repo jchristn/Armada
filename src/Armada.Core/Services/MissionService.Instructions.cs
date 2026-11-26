@@ -105,6 +105,13 @@ namespace Armada.Core.Services
                 content += "## Skills\n\n" + skillsMarkdown + "\n";
             }
 
+            // Toolchain validation advice from the vessel's workflow profile (best-effort), for example .NET restore.
+            string validationGuidance = await ResolveValidationGuidanceAsync(vessel, token).ConfigureAwait(false);
+            if (!String.IsNullOrEmpty(validationGuidance))
+            {
+                content += "## Validation Notes\n\n" + validationGuidance + "\n\n";
+            }
+
             // Mission preamble and metadata -- resolve persona prompt first, then inject into metadata template.
             // Apply the vessel's project-profile persona override (if any) so per-project customization takes effect.
             PersonaOverride? personaOverride = await ResolvePersonaOverrideAsync(vessel, mission.Persona, token).ConfigureAwait(false);
@@ -656,6 +663,23 @@ namespace Armada.Core.Services
         /// injection. Best-effort: returns an empty string on any error or when no profile/skills apply.
         /// Skill references in the profile may be skill ids (skl_...) or skill names.
         /// </summary>
+        private async Task<string> ResolveValidationGuidanceAsync(Vessel vessel, CancellationToken token)
+        {
+            if (vessel == null) return String.Empty;
+            try
+            {
+                List<WorkflowProfile> profiles = await _Database.WorkflowProfiles.EnumerateAllAsync(
+                    new WorkflowProfileQuery { VesselId = vessel.Id, Active = true },
+                    token).ConfigureAwait(false);
+                return WorkflowProfileTemplates.ValidationGuidance(profiles);
+            }
+            catch (Exception ex)
+            {
+                _Logging.Debug(_Header + "could not read workflow profiles for vessel " + vessel.Id + ": " + ex.Message);
+                return String.Empty;
+            }
+        }
+
         private async Task<string> ResolveSkillsMarkdownAsync(Vessel vessel, CancellationToken token)
         {
             if (vessel == null) return String.Empty;
@@ -833,12 +857,7 @@ namespace Armada.Core.Services
                         "- `[ARMADA:STATUS] Testing` -- report that you are now running tests (informational; `[ARMADA:STATUS] InProgress` switches back)\n" +
                         "- `[ARMADA:MESSAGE] your message here` -- send a progress message\n" +
                         "- `[ARMADA:TOKENS] input=1234 output=567 cached=0` -- report the tokens you consumed this session (input/prompt, output/completion, and cache-read). Emit this once near the end if your runtime can determine the counts; it lets the Admiral record real token usage instead of an estimate.\n" +
-                        "- `[ARMADA:RESULT] COMPLETE` -- worker/test engineer mission finished successfully\n" +
-                        CaptainBlockedContract.SignalLine +
-                        "- `[ARMADA:VERDICT] PASS` -- judge approves the mission\n" +
-                        "- `[ARMADA:VERDICT] FAIL` -- judge rejects the mission\n" +
-                        "- `[ARMADA:VERDICT] NEEDS_REVISION` -- judge requests follow-up changes\n" +
-                        "Architect missions must not emit `[ARMADA:RESULT]` or `[ARMADA:VERDICT]`; they must output only real mission definitions: one fenced `armada-plan` JSON block (preferred) or real `[ARMADA:MISSION]` blocks.\n";
+                        CaptainBlockedContract.SignalLine;
 
                 case "mission.model_context_updates":
                     return

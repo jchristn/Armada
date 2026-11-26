@@ -2,6 +2,7 @@ namespace Armada.Core.Services
 {
     using System;
     using System.Collections.Generic;
+    using System.Linq;
     using Armada.Core.Enums;
     using Armada.Core.Models;
 
@@ -39,9 +40,31 @@ namespace Armada.Core.Services
         /// <summary>Template key for a repository Armada does not recognize (no commands).</summary>
         public const string Generic = "generic";
 
+        /// <summary>
+        /// Validation advice for .NET repositories, added to mission instructions when the vessel's workflow profile is
+        /// .NET. Restoring is a separate step in a fresh worktree, so a failed restore must not read as broken source.
+        /// </summary>
+        public const string DotNetValidationGuidance =
+            "Restore dependencies before validation in a fresh worktree. For .NET, omit --no-restore until restore succeeds. " +
+            "A missing project.assets.json means the check is unverified, not that the source is broken.";
+
         #endregion
 
         #region Public-Methods
+
+        /// <summary>
+        /// Validation advice for the mission instructions from a vessel's active workflow profiles, or an empty string.
+        /// </summary>
+        /// <param name="profiles">The vessel's profiles; null or empty yields no advice.</param>
+        /// <returns>Advice text.</returns>
+        public static string ValidationGuidance(IEnumerable<WorkflowProfile>? profiles)
+        {
+            if (profiles == null) return String.Empty;
+            bool dotnet = profiles.Any(p => p != null && p.Active
+                && (String.Equals(p.SourceTemplate, DotNet, StringComparison.OrdinalIgnoreCase)
+                    || p.LanguageHints.Any(h => String.Equals(h, ".NET", StringComparison.OrdinalIgnoreCase))));
+            return dotnet ? DotNetValidationGuidance : String.Empty;
+        }
 
         /// <summary>
         /// The template key for a repository layout, or <see cref="Generic"/> when nothing is recognized.

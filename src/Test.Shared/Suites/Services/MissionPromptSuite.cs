@@ -622,8 +622,10 @@ namespace Test.Shared.Suites.Services
                         await service.GenerateClaudeMdAsync(tempDir, mission, vessel);
 
                         string content = await File.ReadAllTextAsync(Path.Combine(tempDir, "CLAUDE.md"));
-                        AssertContains("[ARMADA:RESULT] COMPLETE", content);
-                        AssertContains("[ARMADA:VERDICT] PASS", content);
+                        AssertContains("\n[ARMADA:VERDICT] PASS\n", content);
+                        AssertContains("\n[ARMADA:VERDICT] SPEC_CONFLICT\n", content);
+                        AssertFalse(content.Contains("[ARMADA:RESULT]", StringComparison.Ordinal), "a Judge is only told about verdict lines");
+                        AssertEqual(1, StageOutputContract.CountContracts(content), "one output contract");
                         AssertContains("standalone", content.ToLowerInvariant());
                     }
                     finally
@@ -759,7 +761,7 @@ namespace Test.Shared.Suites.Services
                         string content = await File.ReadAllTextAsync(Path.Combine(tempDir, "CLAUDE.md"));
                         AssertContains("## Captain Instructions", content, "Custom captain instructions should still be included");
                         AssertContains("brief explanation", content, "Original captain instruction text should be preserved");
-                        AssertContains("## Required Output Contract", content, "Generated instructions should append a structured output contract");
+                        AssertEqual(1, StageOutputContract.CountContracts(content), "Generated instructions should state one structured output contract");
                         AssertContains("## Correctness", content, "Judge output contract should require the Correctness lens");
                         AssertContains("## Blast Radius", content, "Judge output contract should require the Blast Radius lens");
                         AssertContains("## Affected Case", content, "Judge output contract should require a concrete affected case to block");
@@ -793,8 +795,9 @@ namespace Test.Shared.Suites.Services
                             Runtime = Armada.Core.Enums.AgentRuntimeEnum.ApiEndpoint,
                             SystemInstructions = captainMode == "whitespace" ? "   " : String.Empty
                         };
-                        string contract = MissionPromptBuilder.BuildTemplateParams(mission, vessel, captain)["CaptainInstructions"];
+                        string contract = StageOutputContract.For(persona);
                         AssertTrue(!String.IsNullOrWhiteSpace(contract), "the role has a required contract independently of custom instructions");
+                        AssertEqual(String.Empty, MissionPromptBuilder.BuildTemplateParams(mission, vessel, captain)["CaptainInstructions"], "captain instructions do not repeat the contract");
                         await service.GenerateClaudeMdAsync(tempDir, mission, vessel, captain);
                         string instructions = await File.ReadAllTextAsync(Path.Combine(tempDir, "CLAUDE.md"));
                         AssertContains(contract, instructions, "the generated artifact must deliver the complete role contract even without custom captain instructions");
@@ -1076,7 +1079,7 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
-            cases.Add(CaseAsync("architect_launch_prompt_explicitly_requires_armada_mission_markers", "Architect launch prompt explicitly requires ARMADA mission markers", TestTags.Positive, async () =>
+            cases.Add(CaseAsync("architect_launch_prompt_requires_the_versioned_plan", "Architect launch prompt requires the versioned plan from the output contract", TestTags.Positive, async () =>
             {
                 using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
                 {
@@ -1098,9 +1101,9 @@ namespace Test.Shared.Suites.Services
                     string prompt = await MissionPromptBuilder.BuildLaunchPromptAsync(
                         mission, vessel, captain, dock, templateService).ConfigureAwait(false);
 
-                    AssertContains("[ARMADA:MISSION]", prompt);
+                    AssertFalse(prompt.Contains("[ARMADA:MISSION]", StringComparison.Ordinal), "only the versioned plan contract is offered");
                     AssertContains("Do not ask for more input.", prompt);
-                    AssertContains("respond only with real mission definitions", prompt);
+                    AssertContains("respond only with the plan its Output Contract section describes", prompt);
                     AssertContains("armada-plan", prompt);
                 }
             }));

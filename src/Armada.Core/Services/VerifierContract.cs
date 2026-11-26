@@ -53,8 +53,8 @@ namespace Armada.Core.Services
         public static string BlockingInstruction()
         {
             return " If you find a defect in the product code that your role must not fix (it is outside what this stage may change), do not report COMPLETE and do not work around it: "
-                + "add `## Affected Case` with `File: <path>[:line]` or `Scenario: <inputs and wrong result>`, the violated requirement, expected and actual behavior, and the required correction, "
-                + "then end with the standalone line `" + BlockedMarker + "` instead of `[ARMADA:RESULT] COMPLETE`. The work goes back to the Worker with your finding, and the later stages wait for the fix.";
+                + "add ## Affected Case with File: <path>[:line] or Scenario: <inputs and wrong result>, the violated requirement, expected and actual behavior, and the required correction, "
+                + "then end with the standalone line " + BlockedMarker + " instead of " + StageOutputContract.ResultCompleteLine + ". The work goes back to the Worker with your finding, and the later stages wait for the fix.";
         }
 
         #endregion

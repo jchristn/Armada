@@ -55,7 +55,8 @@ namespace Test.Shared.Suites.Services
                 AssertContains("READ-ONLY", section, "audit brief must flag read-only");
                 AssertContains("Do NOT modify", section, "audit brief must forbid modifications");
                 AssertContains("empty diff is a successful outcome", section, "audit brief must state empty diff is success");
-                AssertContains("[ARMADA:RESULT] COMPLETE", section, "audit brief must require the completion marker");
+                AssertContains("Output Contract", section, "audit brief points to the one output contract");
+                AssertFalse(section.Contains("[ARMADA:", StringComparison.Ordinal), "audit brief does not repeat the completion marker");
             }));
 
             cases.Add(Case("research_brief_forbids_changes", "Research brief forbids repository changes and asks for a report", TestTags.Negative, () =>
