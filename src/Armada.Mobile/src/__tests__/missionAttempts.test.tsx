@@ -229,7 +229,7 @@ describe('escalation and recovery pushes', () => {
     const escalated = parsePushData({ kind: 'escalated', url: '/missions/msn_1', entityId: 'msn_1', category: 'MissionEscalated' });
     expect(escalated?.kind).toBe('escalated');
     expect(escalated?.path).toBe('/missions/msn_1');
-    expect(escalated?.category).toBeNull();
+    expect(escalated?.category).toBe('MissionEscalated');
     expect(parsePushData({ kind: 'recovery_exhausted', url: '/missions/msn_1', entityId: 'msn_1' })?.path).toBe('/missions/msn_1');
   });
 });
