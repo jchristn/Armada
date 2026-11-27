@@ -60,6 +60,7 @@ namespace Armada.Core.Services
         private readonly string _ArmadaVersion;
         private readonly ConcurrentDictionary<string, string[]> _ActivePackDirectories = new ConcurrentDictionary<string, string[]>(StringComparer.Ordinal);
         private readonly ConcurrentDictionary<string, Task<BatteryRun>> _Running = new ConcurrentDictionary<string, Task<BatteryRun>>(StringComparer.Ordinal);
+        private readonly ConcurrentDictionary<string, BatteryRunStopHandle> _Stops = new ConcurrentDictionary<string, BatteryRunStopHandle>(StringComparer.Ordinal);
 
         private static readonly JsonSerializerOptions _Json = new JsonSerializerOptions
         {
@@ -330,12 +331,19 @@ namespace Armada.Core.Services
             BatteryRun returned = await _Database.BatteryRuns.ReadAsync(run.Id, token).ConfigureAwait(false) ?? run;
             BatteryRun created = run;
             _ActivePackDirectories[run.Id] = packs.Select(p => p.Directory).ToArray();
-            Task<BatteryRun> execution = Task.Run(() => ExecuteAsync(created, captain, packs, vessels, promptVariant, options ?? new BatteryRunOptions()));
+
+            // A run can be stopped by its caller's token (Full Evaluate) or by CancelAsync (REST, MCP, a gate client).
+            BatteryRunOptions effective = options ?? new BatteryRunOptions();
+            BatteryRunStopHandle stop = new BatteryRunStopHandle(effective);
+            effective.Cancellation = stop.Source.Token;
+            _Stops[run.Id] = stop;
+            Task<BatteryRun> execution = Task.Run(() => ExecuteAsync(created, captain, packs, vessels, promptVariant, effective));
             _Running[run.Id] = execution;
             _ = execution.ContinueWith(t =>
             {
                 _Running.TryRemove(created.Id, out Task<BatteryRun>? _);
                 _ActivePackDirectories.TryRemove(created.Id, out string[]? _);
+                if (_Stops.TryRemove(created.Id, out BatteryRunStopHandle? finished)) finished.Dispose();
             }, TaskScheduler.Default);
             return returned;
         }
@@ -353,6 +361,69 @@ namespace Armada.Core.Services
             if (_Running.TryGetValue(runId, out Task<BatteryRun>? running))
                 await running.WaitAsync(token).ConfigureAwait(false);
             return await ReadAsync(runId, token).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Stop a run: no further task is dispatched, its open mission is cancelled (releasing its dock and captain), and
+        /// the run ends Cancelled with what finished kept, as a stopped Full Evaluate does. A run this process is not
+        /// executing but still recorded Queued or Running (an interrupted run) is marked Cancelled directly. A run that
+        /// already finished is returned unchanged.
+        /// </summary>
+        /// <param name="runId">Run identifier.</param>
+        /// <param name="reason">Reason recorded on the run, or null for "Cancelled by request.".</param>
+        /// <param name="wait">How long to wait for the run to finish stopping before returning; zero returns at once.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The run as stored after the stop, or null when it does not exist.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when runId is null or empty.</exception>
+        public async Task<BatteryRun?> CancelAsync(string runId, string? reason, TimeSpan wait, CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(runId)) throw new ArgumentNullException(nameof(runId));
+            string why = String.IsNullOrWhiteSpace(reason) ? "Cancelled by request." : reason!.Trim();
+            if (_Stops.TryGetValue(runId, out BatteryRunStopHandle? stop))
+            {
+                stop.Stop(why);
+                _Logging.Info(_Header + runId + " cancel requested: " + why);
+                if (wait > TimeSpan.Zero && _Running.TryGetValue(runId, out Task<BatteryRun>? running))
+                {
+                    try
+                    {
+                        await running.WaitAsync(wait, token).ConfigureAwait(false);
+                    }
+                    catch (TimeoutException)
+                    {
+                        // Still stopping (its open mission is being cancelled); the caller polls the run.
+                    }
+                }
+
+                return await _Database.BatteryRuns.ReadAsync(runId, token).ConfigureAwait(false);
+            }
+
+            BatteryRun? run = await _Database.BatteryRuns.ReadAsync(runId, token).ConfigureAwait(false);
+            if (run == null) return null;
+            if (run.Status == BatteryRunStatusEnum.Queued || run.Status == BatteryRunStatusEnum.Running)
+            {
+                run.Status = BatteryRunStatusEnum.Cancelled;
+                run.FailureReason = why;
+                run.CompletedUtc = DateTime.UtcNow;
+                run.LastUpdateUtc = DateTime.UtcNow;
+                run = await _Database.BatteryRuns.UpdateAsync(run, token).ConfigureAwait(false);
+                _Logging.Info(_Header + runId + " was not executing here; marked Cancelled: " + why);
+            }
+
+            return run;
+        }
+
+        /// <summary>
+        /// One page of runs, newest first, paged in the database.
+        /// </summary>
+        /// <param name="query">Filters and paging.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>One page of runs, without their results.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when query is null.</exception>
+        public async Task<EnumerationResult<BatteryRun>> EnumerateRunsAsync(BatteryRunQuery query, CancellationToken token = default)
+        {
+            if (query == null) throw new ArgumentNullException(nameof(query));
+            return await _Database.BatteryRuns.EnumerateAsync(query, token).ConfigureAwait(false);
         }
 
         /// <summary>

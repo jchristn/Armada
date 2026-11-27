@@ -609,6 +609,18 @@ namespace Armada.Server.Routes
                     req.Http.Response.StatusCode = 400;
                     return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "StageCheckTimeoutMinutes must be between 1 and 240." };
                 }
+                string? rangeError = null;
+                if (body.TimeoutScaleReferenceTokensPerSecond.HasValue && (body.TimeoutScaleReferenceTokensPerSecond.Value < 0 || body.TimeoutScaleReferenceTokensPerSecond.Value > 1000))
+                    rangeError = "TimeoutScaleReferenceTokensPerSecond must be between 0 and 1000.";
+                else if (body.PromptVariantCompactMaxContextTokens.HasValue && (body.PromptVariantCompactMaxContextTokens.Value < 0 || body.PromptVariantCompactMaxContextTokens.Value > 2097152))
+                    rangeError = "PromptVariantCompactMaxContextTokens must be between 0 and 2097152.";
+                else if (body.PromptVariantLeanMaxContextTokens.HasValue && (body.PromptVariantLeanMaxContextTokens.Value < 0 || body.PromptVariantLeanMaxContextTokens.Value > 2097152))
+                    rangeError = "PromptVariantLeanMaxContextTokens must be between 0 and 2097152.";
+                if (rangeError != null)
+                {
+                    req.Http.Response.StatusCode = 400;
+                    return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = rangeError };
+                }
                 if (body.BlackBox != null)
                 {
                     // Storage secrets come back from GET masked; a masked value keeps the stored secret. The target's settings
@@ -674,6 +686,18 @@ namespace Armada.Server.Routes
 
                 if (body.OutputRepairNormalizerCaptainId != null)
                     _settings.OutputRepairNormalizerCaptainId = String.IsNullOrWhiteSpace(body.OutputRepairNormalizerCaptainId) ? null : body.OutputRepairNormalizerCaptainId.Trim();
+
+                if (body.TimeoutScaleReferenceTokensPerSecond.HasValue) _settings.TimeoutScaleReferenceTokensPerSecond = body.TimeoutScaleReferenceTokensPerSecond.Value;
+                if (body.PromptVariantCompactMaxContextTokens.HasValue) _settings.PromptVariantCompactMaxContextTokens = body.PromptVariantCompactMaxContextTokens.Value;
+                if (body.PromptVariantLeanMaxContextTokens.HasValue) _settings.PromptVariantLeanMaxContextTokens = body.PromptVariantLeanMaxContextTokens.Value;
+                if (body.MergeQueueRequeueLimit.HasValue) _settings.MergeQueueRequeueLimit = body.MergeQueueRequeueLimit.Value;
+                if (body.MergeQueueBatchSize.HasValue) _settings.MergeQueueBatchSize = body.MergeQueueBatchSize.Value;
+                if (body.MergeQueueLeaseSeconds.HasValue) _settings.MergeQueueLeaseSeconds = body.MergeQueueLeaseSeconds.Value;
+                if (body.UnclassifiedResumeLimit.HasValue) _settings.UnclassifiedResumeLimit = body.UnclassifiedResumeLimit.Value;
+                if (body.JudgeReworkRounds.HasValue) _settings.JudgeReworkRounds = body.JudgeReworkRounds.Value;
+                if (body.MaxEscalations.HasValue) _settings.MaxEscalations = body.MaxEscalations.Value;
+                if (body.EscalateOnOpenEndpointBreaker.HasValue) _settings.EscalateOnOpenEndpointBreaker = body.EscalateOnOpenEndpointBreaker.Value;
+                if (body.RoutingData != null) _settings.RoutingData = body.RoutingData;
 
                 if (body.Concurrency != null)
                 {
@@ -941,6 +965,17 @@ namespace Armada.Server.Routes
                 BlockDependentsOfFailedStages = _settings.BlockDependentsOfFailedStages,
                 AcceptLegacyMissionMarkers = _settings.AcceptLegacyMissionMarkers,
                 OutputRepairNormalizerCaptainId = _settings.OutputRepairNormalizerCaptainId ?? "",
+                TimeoutScaleReferenceTokensPerSecond = _settings.TimeoutScaleReferenceTokensPerSecond,
+                PromptVariantCompactMaxContextTokens = _settings.PromptVariantCompactMaxContextTokens,
+                PromptVariantLeanMaxContextTokens = _settings.PromptVariantLeanMaxContextTokens,
+                MergeQueueRequeueLimit = _settings.MergeQueueRequeueLimit,
+                MergeQueueBatchSize = _settings.MergeQueueBatchSize,
+                MergeQueueLeaseSeconds = _settings.MergeQueueLeaseSeconds,
+                UnclassifiedResumeLimit = _settings.UnclassifiedResumeLimit,
+                JudgeReworkRounds = _settings.JudgeReworkRounds,
+                MaxEscalations = _settings.MaxEscalations,
+                EscalateOnOpenEndpointBreaker = _settings.EscalateOnOpenEndpointBreaker,
+                RoutingData = _settings.RoutingData,
                 RemoteControl = RedactRemoteControl(_settings.RemoteControl),
                 Import = _settings.Import,
                 FleetActions = _settings.FleetActions,

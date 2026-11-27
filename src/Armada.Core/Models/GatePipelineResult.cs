@@ -1,4 +1,4 @@
-namespace Armada.Gate
+namespace Armada.Core.Models
 {
     using System;
 

@@ -1695,6 +1695,10 @@ namespace Armada.Server
             new BatteryRoutes(_BatteryAccess, _JsonOptions)
                 .Register(_App, authenticate, _AuthorizationService);
 
+            // Pipeline reliability: mission attempt history, reliability summary, acceptance gate reports
+            new ReliabilityRoutes(new ReliabilityAccessService(_Database, new GateReportStore(_Settings.DataDirectory)), _JsonOptions)
+                .Register(_App, authenticate, _AuthorizationService);
+
             // Push notification devices (mobile apps)
             new PushRoutes(_PushDevices, _PushNotifications!, _JsonOptions)
                 .Register(_App, authenticate, _AuthorizationService);

@@ -9,7 +9,7 @@ namespace Armada.Server.Mcp.Tools
     using Armada.Core.Services;
 
     /// <summary>
-    /// Registers the fixture battery MCP tools: list_battery_packs, run_battery and get_battery_run. Every tool enforces
+    /// Registers the fixture battery MCP tools: list_battery_packs, run_battery, get_battery_run, list_battery_runs, cancel_battery_run and list_battery_results. Every tool enforces
     /// the same rules as REST through <see cref="BatteryAccessService"/>; its typed exceptions become typed tool errors.
     /// </summary>
     public static class McpBatteryTools
@@ -230,6 +230,60 @@ namespace Armada.Server.Mcp.Tools
                     AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     BatteryRunIdArgs request = Read<BatteryRunIdArgs>(args);
                     return (object)await service.GetRunAsync(caller, request.Id).ConfigureAwait(false);
+                });
+
+            register(
+                "list_battery_runs",
+                "List one page of fixture battery runs visible to the caller, newest first, without their per-task results. A global admin sees every tenant (tenantId filters); everyone else their own tenant. Returns an enumeration result (objects, totalRecords, totalPages).",
+                new
+                {
+                    type = "object",
+                    properties = new
+                    {
+                        tenantId = new { type = "string", description = "Tenant filter (global admins only)" },
+                        captainId = new { type = "string", description = "Captain filter (cpt_ prefix)" },
+                        status = new { type = "string", @enum = Enum.GetNames<BatteryRunStatusEnum>(), description = "Status filter" },
+                        pageNumber = new { type = "integer", description = "Page number (default 1)" },
+                        pageSize = new { type = "integer", description = "Page size (1-1000, default 25)" }
+                    }
+                },
+                async (args) =>
+                {
+                    if (service == null) return (object)McpToolError.Unavailable(UnavailableMessage);
+                    AuthContext caller = McpToolHelpers.ResolveCallerContext();
+                    BatteryRunListArgs request = Read<BatteryRunListArgs>(args);
+                    BatteryRunQuery query = new BatteryRunQuery { TenantId = request.TenantId, CaptainId = request.CaptainId };
+                    if (!String.IsNullOrWhiteSpace(request.Status))
+                    {
+                        if (!Enum.TryParse(request.Status.Trim(), true, out BatteryRunStatusEnum status) || !Enum.IsDefined(status))
+                            return (object)McpToolError.InvalidArgument("status must be Queued, Running, Completed, Failed or Cancelled.");
+                        query.Status = status;
+                    }
+
+                    if (request.PageNumber.HasValue) query.PageNumber = request.PageNumber.Value;
+                    if (request.PageSize.HasValue) query.PageSize = request.PageSize.Value;
+                    return (object)await service.EnumerateRunsAsync(caller, query).ConfigureAwait(false);
+                });
+
+            register(
+                "cancel_battery_run",
+                "Cancel a fixture battery run as a stopped Full Evaluate does: no further task is dispatched, the open mission is cancelled (releasing its dock and captain), and the run ends Cancelled with finished results kept. Waits up to 10 seconds, then returns the run (still Running while its open mission stops; poll get_battery_run). A finished run is returned unchanged. Needs a global admin or a tenant admin of the run's tenant.",
+                new
+                {
+                    type = "object",
+                    properties = new
+                    {
+                        id = new { type = "string", description = "Run ID (bat_ prefix)" },
+                        reason = new { type = "string", description = "Reason recorded on the run (at most 500 characters)" }
+                    },
+                    required = new[] { "id" }
+                },
+                async (args) =>
+                {
+                    if (service == null) return (object)McpToolError.Unavailable(UnavailableMessage);
+                    AuthContext caller = McpToolHelpers.ResolveCallerContext();
+                    BatteryRunCancelArgs request = Read<BatteryRunCancelArgs>(args);
+                    return (object)await service.CancelRunAsync(caller, request.Id, request.Reason).ConfigureAwait(false);
                 });
 
             register(

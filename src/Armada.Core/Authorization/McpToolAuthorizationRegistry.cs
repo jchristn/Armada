@@ -172,6 +172,12 @@ namespace Armada.Core.Authorization
             Add("list_battery_packs", "BatteryPack", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("run_battery", "BatteryRun", ResourceOperationEnum.Execute, PermissionLevel.Authenticated);
             Add("get_battery_run", "BatteryRun", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("list_battery_runs", "BatteryRun", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("get_mission_attempts", "Mission", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("get_reliability_summary", "StageOutcome", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("list_gate_reports", "GateReport", ResourceOperationEnum.Read, PermissionLevel.TenantAdmin);
+            Add("get_gate_report", "GateReport", ResourceOperationEnum.Read, PermissionLevel.TenantAdmin);
+            Add("cancel_battery_run", "BatteryRun", ResourceOperationEnum.Execute, PermissionLevel.TenantAdmin);
             Add("list_battery_results", "BatteryRun", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
 
             // Mission and voyage black box (entry visibility is checked by IBlackBoxService: an invisible entry is NotFound;

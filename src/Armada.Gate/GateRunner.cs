@@ -156,10 +156,21 @@ namespace Armada.Gate
                 _Log("running " + pipeline.Name + " on " + String.Join(",", packs) + " x" + request.RunCount);
                 BatteryRun? run = await _Client.RunBatteryAsync(request, token).ConfigureAwait(false);
                 if (run == null) throw new InvalidOperationException("The battery run for " + pipeline.Name + " was not created.");
-                while (run.Status == BatteryRunStatusEnum.Queued || run.Status == BatteryRunStatusEnum.Running)
+                try
                 {
-                    await Task.Delay(poll, token).ConfigureAwait(false);
-                    run = await _Client.GetBatteryRunAsync(run.Id, token).ConfigureAwait(false) ?? run;
+                    while (run.Status == BatteryRunStatusEnum.Queued || run.Status == BatteryRunStatusEnum.Running)
+                    {
+                        await Task.Delay(poll, token).ConfigureAwait(false);
+                        run = await _Client.GetBatteryRunAsync(run.Id, token).ConfigureAwait(false) ?? run;
+                    }
+                }
+                catch (OperationCanceledException) when (token.IsCancellationRequested)
+                {
+                    // Stopping the gate client stops its run on the Admiral too, so no mission keeps executing.
+                    _Log("stopping " + run.Id + " on the Admiral");
+                    try { await _Client.CancelBatteryRunAsync(run.Id, "The gate client was stopped.", CancellationToken.None).ConfigureAwait(false); }
+                    catch (Exception ex) { _Log("could not cancel " + run.Id + ": " + ex.Message); }
+                    throw;
                 }
 
                 report.Pipelines.Add(new GatePipelineResult

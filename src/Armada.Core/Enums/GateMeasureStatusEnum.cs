@@ -1,4 +1,4 @@
-namespace Armada.Gate
+namespace Armada.Core.Enums
 {
     using System.Text.Json.Serialization;
 

@@ -137,7 +137,11 @@ namespace Armada.Server.WebSocket
 
             // Entity change events with dedicated payloads
             events.Add(new WebSocketEventDescriptor("usage.snapshot", "tenant", false, null, new[] { "tenantId", "snapshotId", "hostId", "runtime", "provider", "captainIds", "capturedUtc", "status" }, false));
-            events.Add(new WebSocketEventDescriptor("mission.changed", "tenant", false, null, new[] { "id", "title", "status", "voyageId", "activity" }, false));
+            events.Add(new WebSocketEventDescriptor("mission.changed", "tenant", false, null, new[] { "id", "title", "status", "voyageId", "activity", "persona", "mode", "captainId", "tier", "escalationCount", "redispatchAttempts", "outputRepairAttempts" }, false));
+            string[] attemptFields = new[] { "missionId", "voyageId", "status", "captainId", "persona", "tier", "escalationCount", "escalatedFromCaptainId", "escalatedFromModel", "redispatchAttempts", "outputRepairAttempts", "noOpRedispatchAttempts", "stallRecoveryAttempts" };
+            events.Add(new WebSocketEventDescriptor("mission.escalated", "tenant", false, "MissionAttemptChange", attemptFields, false));
+            events.Add(new WebSocketEventDescriptor("mission.repaired", "tenant", false, "MissionAttemptChange", attemptFields, false));
+            events.Add(new WebSocketEventDescriptor("mission.attempt_changed", "tenant", false, "MissionAttemptChange", attemptFields, false));
             events.Add(new WebSocketEventDescriptor("mission.activity", "tenant", false, null, new[] { "id", "voyageId", "activity" }, false));
             events.Add(new WebSocketEventDescriptor("mission.waiting_gate_changed", "tenant", false, "MissionWaitGateChange", null, false));
             events.Add(new WebSocketEventDescriptor("mission.starving", "tenant", false, "ArmadaEvent", null, false));

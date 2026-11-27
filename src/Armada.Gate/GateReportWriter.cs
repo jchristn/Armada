@@ -6,6 +6,8 @@ namespace Armada.Gate
     using System.Text;
     using System.Text.Json;
     using System.Text.Json.Serialization;
+    using Armada.Core.Enums;
+    using Armada.Core.Models;
 
     /// <summary>
     /// Writes a <see cref="GateReport"/> as JSON and Markdown.

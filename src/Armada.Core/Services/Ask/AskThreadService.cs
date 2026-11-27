@@ -155,7 +155,7 @@ namespace Armada.Core.Services.Ask
             if (!String.IsNullOrWhiteSpace(request.CaptainId))
             {
                 Captain? captain = await ReadVisibleCaptainAsync(auth, request.CaptainId!, token).ConfigureAwait(false);
-                if (captain == null) throw new ArgumentException("Captain not found: " + request.CaptainId, nameof(request));
+                if (captain == null) throw new AskReferenceNotFoundException("Captain not found: " + request.CaptainId, nameof(request));
                 CaptainEligibility.RequireActive(captain);
                 thread.CaptainId = captain.Id;
             }
@@ -371,7 +371,7 @@ namespace Armada.Core.Services.Ask
                 else
                 {
                     Captain? captain = await ReadVisibleCaptainAsync(auth, request.CaptainId!, token).ConfigureAwait(false);
-                    if (captain == null) throw new ArgumentException("Captain not found: " + request.CaptainId, nameof(request));
+                    if (captain == null) throw new AskReferenceNotFoundException("Captain not found: " + request.CaptainId, nameof(request));
                     CaptainEligibility.RequireActive(captain);
                     thread.CaptainId = captain.Id;
                 }
@@ -923,7 +923,7 @@ namespace Armada.Core.Services.Ask
             bool visible = harbor != null
                 && (String.IsNullOrEmpty(harbor.TenantId) || String.Equals(harbor.TenantId, auth.TenantId, StringComparison.Ordinal));
             if (!visible)
-                throw new ArgumentException("Harbor not found: " + id + ". HarborId must name a Harbor registered in your tenant.");
+                throw new AskReferenceNotFoundException("Harbor not found: " + id + ". HarborId must name a Harbor registered in your tenant.");
             return harbor!.Id;
         }
 

@@ -143,6 +143,43 @@ namespace Armada.Client
             return PostAsync<EnumerationResult<BatteryTaskResult>>($"/api/v1/battery/runs/{E(id)}/results/enumerate", query ?? new EnumerationQuery(), null, token);
         }
 
+        /// <summary>
+        /// GET /api/v1/battery/runs: one page of the battery runs visible to the caller, newest first, without their
+        /// per-task results.
+        /// </summary>
+        /// <param name="query">Filters (tenant for global admins, captain, status) and paging, or null for the first page of 25.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>One page of runs.</returns>
+        /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
+        public Task<EnumerationResult<BatteryRun>?> ListBatteryRunsAsync(BatteryRunQuery? query = null, CancellationToken token = default)
+        {
+            BatteryRunQuery source = query ?? new BatteryRunQuery();
+            List<string> parts = new List<string>();
+            if (!String.IsNullOrWhiteSpace(source.TenantId)) parts.Add("tenantId=" + Uri.EscapeDataString(source.TenantId));
+            if (!String.IsNullOrWhiteSpace(source.CaptainId)) parts.Add("captainId=" + Uri.EscapeDataString(source.CaptainId));
+            if (source.Status.HasValue) parts.Add("status=" + source.Status.Value.ToString());
+            parts.Add("pageNumber=" + source.PageNumber.ToString(CultureInfo.InvariantCulture));
+            parts.Add("pageSize=" + source.PageSize.ToString(CultureInfo.InvariantCulture));
+            return GetAsync<EnumerationResult<BatteryRun>>("/api/v1/battery/runs?" + String.Join("&", parts), null, token);
+        }
+
+        /// <summary>
+        /// POST /api/v1/battery/runs/{id}/cancel: stop a run (no further task is dispatched, its open mission is cancelled
+        /// and its dock released). Returns the run after the stop; it may still be Running for a few seconds while its open
+        /// mission stops.
+        /// </summary>
+        /// <param name="id">Run id (bat_ prefix).</param>
+        /// <param name="reason">Reason recorded on the run (at most 500 characters), or null.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The run.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when id is null or empty.</exception>
+        /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
+        public Task<BatteryRun?> CancelBatteryRunAsync(string id, string? reason = null, CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(id)) throw new ArgumentNullException(nameof(id));
+            return PostAsync<BatteryRun>($"/api/v1/battery/runs/{E(id)}/cancel", new BatteryRunCancelRequest { Reason = reason }, null, token);
+        }
+
         #endregion
     }
 }

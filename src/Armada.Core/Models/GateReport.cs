@@ -1,14 +1,20 @@
-namespace Armada.Gate
+namespace Armada.Core.Models
 {
     using System;
     using System.Collections.Generic;
 
     /// <summary>
-    /// The acceptance gate report written to benchmarks/results: per-pipeline counts and the G1 to G12 measures. It
+    /// The acceptance gate report written to benchmarks/results (and uploaded to the Admiral): per-pipeline counts and the G1 to G12 measures. It
     /// names models and pipelines and never contains endpoint addresses or credentials.
     /// </summary>
     public sealed class GateReport
     {
+        /// <summary>Id the Admiral assigned when the report was uploaded (POST /api/v1/reliability/gate-reports), or null.</summary>
+        public string? Id { get; set; }
+
+        /// <summary>When the Admiral stored the report, or null before upload.</summary>
+        public DateTime? UploadedUtc { get; set; }
+
         /// <summary>When the gate started.</summary>
         public DateTime StartedUtc { get; set; }
 

@@ -8,10 +8,13 @@ namespace Armada.Gate
     using System.Threading;
     using System.Threading.Tasks;
     using Armada.Client;
+    using Armada.Core.Enums;
+    using Armada.Core.Models;
 
     /// <summary>
     /// Entry point: <c>Armada.Gate [--url http://127.0.0.1:25160] [--token default] [--pipelines Gate-A,Gate-D]
-    /// [--packs csharp,python] [--runs N] [--setup-only] [--preset path] [--endpoints path] [--out dir]</c>.
+    /// [--packs csharp,python] [--runs N] [--setup-only] [--no-upload] [--preset path] [--endpoints path] [--out dir]</c>.
+    /// Ctrl+C cancels the running battery run on the Admiral; the finished report is uploaded unless --no-upload.
     /// </summary>
     public static class Program
     {
@@ -62,6 +65,20 @@ namespace Armada.Gate
             string written = GateReportWriter.Write(report, Option(options, "out", Path.Combine(root, "benchmarks", "results")));
             Console.WriteLine(GateReportWriter.ToMarkdown(report));
             Console.WriteLine("[gate] report: " + written);
+            if (!options.ContainsKey("no-upload"))
+            {
+                // The Admiral keeps the report for the dashboard reliability view; a failed upload never fails the gate.
+                try
+                {
+                    GateReport? stored = await client.UploadGateReportAsync(report, CancellationToken.None).ConfigureAwait(false);
+                    Console.WriteLine("[gate] uploaded as " + stored?.Id);
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine("[gate] could not upload the report: " + ex.Message);
+                }
+            }
+
             return report.Measures.Any(m => m.Status == GateMeasureStatusEnum.Fail) ? 1 : 0;
         }
 

@@ -1,6 +1,7 @@
-namespace Armada.Gate
+namespace Armada.Core.Models
 {
     using System;
+    using Armada.Core.Enums;
 
     /// <summary>
     /// One acceptance gate measure (G1 to G12 in RELIABILITY_SIMPLICITY_PLAN.md) with its value and threshold.

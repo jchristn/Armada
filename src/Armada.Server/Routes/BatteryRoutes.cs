@@ -14,7 +14,7 @@ namespace Armada.Server.Routes
 
     /// <summary>
     /// REST routes for the fixture battery: GET /api/v1/battery/packs, POST /api/v1/battery/runs,
-    /// GET /api/v1/battery/runs/{id} and its paged results (GET .../results, POST .../results/enumerate). Rules live in <see cref="BatteryAccessService"/>, shared with MCP.
+    /// GET /api/v1/battery/runs (list), POST /api/v1/battery/runs/{id}/cancel, GET /api/v1/battery/runs/{id} and its paged results (GET .../results, POST .../results/enumerate). Rules live in <see cref="BatteryAccessService"/>, shared with MCP.
     /// </summary>
     public class BatteryRoutes
     {
@@ -315,6 +315,60 @@ namespace Armada.Server.Routes
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())
                 .WithSecurity("ApiKey"));
 
+            app.Get("/api/v1/battery/runs", async (ApiRequest req) =>
+            {
+                AuthContext ctx = await authenticate(req.Http).ConfigureAwait(false);
+                ApiErrorResponse? denied = Deny(req, ctx, authz);
+                if (denied != null) return denied;
+                try
+                {
+                    return await _Service.EnumerateRunsAsync(ctx, ReadRunQuery(req)).ConfigureAwait(false);
+                }
+                catch (Exception ex) when (RouteErrorMapper.IsMapped(ex))
+                {
+                    return RouteErrorMapper.ToResponse(req, ex);
+                }
+            },
+            api => api
+                .WithTag("Battery")
+                .WithSummary("List battery runs")
+                .WithDescription("One page of battery runs, newest first, without their per-task results. A global admin sees every tenant (tenantId filters); everyone else sees their own tenant. Captain sessions are refused. 400 for an unknown status or a non-numeric page value.")
+                .WithParameter(OpenApiParameterMetadata.Query("tenantId", "Tenant filter (global admins only; ignored otherwise)", false))
+                .WithParameter(OpenApiParameterMetadata.Query("captainId", "Captain filter (cpt_ prefix)", false))
+                .WithParameter(OpenApiParameterMetadata.Query("status", "Queued, Running, Completed, Failed or Cancelled", false))
+                .WithParameter(OpenApiParameterMetadata.Query("pageNumber", "Page number (default 1)", false, OpenApiSchemaMetadata.Integer()))
+                .WithParameter(OpenApiParameterMetadata.Query("pageSize", "Page size (1-1000, default 25)", false, OpenApiSchemaMetadata.Integer()))
+                .WithResponse(200, OpenApiJson.For<EnumerationResult<BatteryRun>>("One page of runs"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
+                .WithSecurity("ApiKey"));
+
+            app.Post("/api/v1/battery/runs/{id}/cancel", async (ApiRequest req) =>
+            {
+                AuthContext ctx = await authenticate(req.Http).ConfigureAwait(false);
+                ApiErrorResponse? denied = Deny(req, ctx, authz);
+                if (denied != null) return denied;
+                try
+                {
+                    BatteryRunCancelRequest body = ReadCancelBody(req);
+                    return await _Service.CancelRunAsync(ctx, req.Parameters["id"], body.Reason).ConfigureAwait(false);
+                }
+                catch (Exception ex) when (RouteErrorMapper.IsMapped(ex))
+                {
+                    return RouteErrorMapper.ToResponse(req, ex);
+                }
+            },
+            api => api
+                .WithTag("Battery")
+                .WithSummary("Cancel a battery run")
+                .WithDescription("Stops a run as a stopped Full Evaluate does: no further task is dispatched, the open mission is cancelled (releasing its dock and captain), and the run ends Cancelled with the finished results kept. Waits up to 10 seconds for the stop, then returns the run (Running while its open mission is still stopping; poll GET /api/v1/battery/runs/{id}). A run this Admiral is not executing but still recorded Queued or Running is marked Cancelled. A finished run is returned unchanged. The body (optional) carries a reason of at most 500 characters. Global admins and tenant admins of the run's tenant only (403 otherwise); 404 when the run does not exist or belongs to another tenant.")
+                .WithParameter(OpenApiParameterMetadata.Path("id", "Run ID (bat_ prefix)"))
+                .WithRequestBody(OpenApiJson.BodyFor<BatteryRunCancelRequest>("Optional reason", false))
+                .WithResponse(200, OpenApiJson.For<BatteryRun>("The run after the stop"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
+                .WithResponse(403, OpenApiJson.For<ApiErrorResponse>("Not an admin"))
+                .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithSecurity("ApiKey"));
+
             app.Get("/api/v1/battery/runs/{id}", async (ApiRequest req) =>
             {
                 AuthContext ctx = await authenticate(req.Http).ConfigureAwait(false);
@@ -422,6 +476,50 @@ namespace Armada.Server.Routes
                     ?? throw new ArgumentException("A request body is required.");
             }
             catch (JsonException ex) { throw new ArgumentException("Invalid request body: " + ex.Message, ex); }
+        }
+
+        private static BatteryRunQuery ReadRunQuery(ApiRequest req)
+        {
+            BatteryRunQuery query = new BatteryRunQuery();
+            query.TenantId = QueryValueReader.Read(req.Query, "tenantId");
+            query.CaptainId = QueryValueReader.Read(req.Query, "captainId");
+            string? status = QueryValueReader.Read(req.Query, "status");
+            if (!String.IsNullOrWhiteSpace(status))
+            {
+                if (!Enum.TryParse(status.Trim(), true, out BatteryRunStatusEnum parsed) || !Enum.IsDefined(parsed))
+                    throw new ArgumentException("status must be Queued, Running, Completed, Failed or Cancelled.");
+                query.Status = parsed;
+            }
+
+            string? pageNumber = QueryValueReader.Read(req.Query, "pageNumber");
+            if (!String.IsNullOrWhiteSpace(pageNumber))
+            {
+                if (!Int32.TryParse(pageNumber, NumberStyles.Integer, CultureInfo.InvariantCulture, out int number)) throw new ArgumentException("pageNumber must be an integer.");
+                query.PageNumber = number;
+            }
+
+            string? pageSize = QueryValueReader.Read(req.Query, "pageSize");
+            if (!String.IsNullOrWhiteSpace(pageSize))
+            {
+                if (!Int32.TryParse(pageSize, NumberStyles.Integer, CultureInfo.InvariantCulture, out int size)) throw new ArgumentException("pageSize must be an integer.");
+                query.PageSize = size;
+            }
+
+            return query;
+        }
+
+        private BatteryRunCancelRequest ReadCancelBody(ApiRequest req)
+        {
+            string body = req.Http.Request.DataAsString ?? String.Empty;
+            if (String.IsNullOrWhiteSpace(body)) return new BatteryRunCancelRequest();
+            try
+            {
+                return JsonSerializer.Deserialize<BatteryRunCancelRequest>(body, _JsonOptions) ?? new BatteryRunCancelRequest();
+            }
+            catch (JsonException ex)
+            {
+                throw new ArgumentException("Invalid request body: " + ex.Message, ex);
+            }
         }
 
         private BatteryRunRequest? ReadBody(ApiRequest req)

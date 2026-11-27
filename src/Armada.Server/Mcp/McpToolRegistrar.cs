@@ -189,6 +189,7 @@ namespace Armada.Server.Mcp
             McpModelProfileTools.Register(register, modelProfiles);
             McpModelAlertTools.Register(register, modelAlerts);
             McpBatteryTools.Register(register, battery);
+            McpReliabilityTools.Register(register, settings != null ? new ReliabilityAccessService(database, new GateReportStore(settings.DataDirectory)) : null);
             McpBlackBoxTools.Register(register, blackBox);
             McpBlackBoxInsightTools.Register(register, blackBoxInsights);
         }
@@ -288,6 +289,7 @@ namespace Armada.Server.Mcp
             RegisterCatalogGroup("Armada MCP / Model Profiles", register => McpModelProfileTools.Register(register, null));
             RegisterCatalogGroup("Armada MCP / Model Alerts", register => McpModelAlertTools.Register(register, null));
             RegisterCatalogGroup("Armada MCP / Battery", register => McpBatteryTools.Register(register, null));
+            RegisterCatalogGroup("Armada MCP / Reliability", register => McpReliabilityTools.Register(register, null));
             RegisterCatalogGroup("Armada MCP / Black Box", register => McpBlackBoxTools.Register(register, null));
             RegisterCatalogGroup("Armada MCP / Black Box Insights", register => McpBlackBoxInsightTools.Register(register, null));
 
