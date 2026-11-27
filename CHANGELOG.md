@@ -405,6 +405,9 @@ Conductor) with Opus and GPT-6.1 reliable. The work is tracked item by item in `
 
 ### Code health
 
+- **`MissionService` partials no longer share mutable collections.** Circuit breakers, launch backoff, admission
+  results, background launches, completion runs, usage-selection blockers, and warning flags each live in one owning
+  class; the readiness gate returns a typed outcome instead of a tuple (RS-11.1 in part, RS-11.2).
 - **`SlotManager` is now `RebuildSlotManager`** (and `IRebuildSlotManager`), naming the binary rebuild slots it
   manages (RS-11.3).
 - **Unique-violation and git identity handling no longer match exception text.** Captain selection and captain slot

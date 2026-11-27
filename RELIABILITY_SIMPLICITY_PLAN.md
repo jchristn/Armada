@@ -1097,10 +1097,10 @@ the job and keep it from coming back.
   into classes with one responsibility each, following what Phases 3 to 6 created: `MissionTransitions`,
   `AdmissionPipeline`, `MissionLauncher`, `StageCompletionHandler`, `HandoffService`, `ReworkService`,
   `OutputRepairService`, `ArchitectFanOutService`. No partial shares mutable state with another. Same for the
-  orchestration parts of `AdmiralService` (3,272 lines). Evidence:
-- [ ] **RS-11.2** Style fixes: `var` and tuples in `MissionService.cs` (around line 548), `MissionService.Readiness.cs:11`,
+  orchestration parts of `AdmiralService` (3,272 lines). Evidence: (in progress) step 1 done: every mutable collection shared by two or more partials moved to an owning class (EndpointCircuitBreakers, MissionLaunchBackoff, MissionAdmissionResultStore, BackgroundLaunchSet, CompletionRunTracker, UsageSelectionBlockerStore, MissionFlagSet, ArchitectPlanText); AdmiralService link-episode lookup unified. 23 suites 518/518 SQLite; merged head 152/152. Remaining: split into separate services; shared `_CapacityLock`, `_VesselAdmissionLocks`, `_Pass`.
+- [x] **RS-11.2** Style fixes: `var` and tuples in `MissionService.cs` (around line 548), `MissionService.Readiness.cs:11`,
   and `AdmissionStuckMonitor.cs:57-66`; the mis-indented blocks at `MissionService.Handoff.cs:162-178`; inline
-  non-compiled regexes in `MissionService.ArchitectPlan.cs:317, 547, 577`. Evidence:
+  non-compiled regexes in `MissionService.ArchitectPlan.cs:317, 547, 577`. Evidence: readiness gate tuple and `var` replaced by `ReadinessAdmissionOutcome`; the other targets were already fixed by earlier phases (no `var`/tuples in AdmissionStuckMonitor, compiled ArchitectPlan regexes, Handoff indentation correct).
 - [x] **RS-11.3** Rename `SlotManager` to describe what it manages (binary rebuild slots). Evidence: `RebuildSlotManager`/`IRebuildSlotManager`, suite Services.RebuildSlotManager 7/7.
 - [x] **RS-11.4** Source-scan tests that keep the simplifications in place: no direct mission status writes (RS-3.6),
   no reads of control markers from `Description`, no `ex.Message.Contains` in Core, no second dispatcher. Evidence: Suite Services.SourceGuards (no control markers read from descriptions, no exception message matching in Core with two reasoned allow-list entries, one dispatcher); direct status writes already guarded by Services.MissionTransitions `no_direct_status_writes`. Fixed CaptainSelectionMethods, CaptainSlotStore (provider error codes) and GitService.CommitAllAsync (`git var` identity check). Guards plus rename 10/10 on the merged head; 113 affected tests SQLite, 28/28 PostgreSQL. Outside the Core scan: `McpAskTools` still matches "not found" text.
