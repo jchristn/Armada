@@ -66,6 +66,32 @@ namespace Test.Shared.Suites.Database
                 }
             }));
 
+            cases.Add(CaseAsync("status_scan_dispatch_order", "EnumerateByStatusAsync returns missions by priority, then oldest first, with and without a tenant (the dispatcher's order on every provider)", TestTags.Positive, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    DatabaseDriver db = testDb.Driver;
+                    MissionTestPrerequisites prereqs = await CreatePrerequisitesAsync(db);
+                    TenantMetadata tenant = new TenantMetadata("Order " + Guid.NewGuid().ToString("N").Substring(0, 8));
+                    await db.Tenants.CreateAsync(tenant);
+
+                    Mission first = new Mission("First", "desc") { VesselId = prereqs.Vessel.Id, TenantId = tenant.Id, Status = MissionStatusEnum.Pending, Priority = 100 };
+                    await db.Missions.CreateAsync(first);
+                    await Task.Delay(50);
+                    Mission second = new Mission("Second", "desc") { VesselId = prereqs.Vessel.Id, TenantId = tenant.Id, Status = MissionStatusEnum.Pending, Priority = 100 };
+                    await db.Missions.CreateAsync(second);
+                    await Task.Delay(50);
+                    Mission urgent = new Mission("Urgent", "desc") { VesselId = prereqs.Vessel.Id, TenantId = tenant.Id, Status = MissionStatusEnum.Pending, Priority = 1 };
+                    await db.Missions.CreateAsync(urgent);
+
+                    string expected = urgent.Id + "," + first.Id + "," + second.Id;
+                    List<Mission> all = await db.Missions.EnumerateByStatusAsync(MissionStatusEnum.Pending);
+                    AssertEqual(expected, String.Join(",", all.Select(m => m.Id)), "priority first, then oldest first");
+                    List<Mission> scoped = await db.Missions.EnumerateByStatusAsync(tenant.Id, MissionStatusEnum.Pending);
+                    AssertEqual(expected, String.Join(",", scoped.Select(m => m.Id)), "the tenant-scoped scan uses the same order");
+                }
+            }));
+
             cases.Add(CaseAsync("mission_failure_kind_and_wait_flag_round_trip", "Mission FailureKind and WaitForVoyageWorkers persist through create, update, read, and summary", TestTags.Positive, async () =>
             {
                 using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())

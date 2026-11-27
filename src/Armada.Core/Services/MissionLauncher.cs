@@ -839,10 +839,13 @@ namespace Armada.Core.Services
             // released the captain. Both writes below are therefore compare-and-set: the captain's process handle is
             // recorded only while it still holds this mission, and the launch only while the mission is still Assigned.
             // A failure past this point must not roll back: the agent is running and its exit handler owns the outcome.
+            // These writes run outside the admission retry loop, so a deadlock victim or lock timeout (rolled back, so safe
+            // to repeat) is retried here; otherwise a server provider under concurrent admissions leaves the mission
+            // Assigned with a running agent until the health check notices.
             CrashPoints.Hit(CrashPointNames.LaunchBeforeProcessRecorded);
             try
             {
-                if (await _Database.Captains.TrySetProcessAsync(captain.Id, mission.Id, processId, CancellationToken.None).ConfigureAwait(false))
+                if (await RetryTransientAsync(() => _Database.Captains.TrySetProcessAsync(captain.Id, mission.Id, processId, CancellationToken.None)).ConfigureAwait(false))
                 {
                     captain.ProcessId = processId;
                 }
@@ -850,7 +853,13 @@ namespace Armada.Core.Services
                 mission.ProcessId = processId;
                 mission.StartedUtc = DateTime.UtcNow;
                 mission.LaunchIntentUtc = null;
-                bool launchRecorded = await _Service.Transitions.TryTransitionAsync(mission, new[] { MissionStatusEnum.Assigned }, MissionStatusEnum.InProgress, null, CancellationToken.None).ConfigureAwait(false);
+                MissionStatusEnum statusBeforeLaunch = mission.Status;
+                bool launchRecorded = await RetryTransientAsync(() =>
+                {
+                    // A failed attempt leaves the in-memory status at InProgress; restore it so the retry sees the real edge.
+                    mission.Status = statusBeforeLaunch;
+                    return _Service.Transitions.TryTransitionAsync(mission, new[] { MissionStatusEnum.Assigned }, MissionStatusEnum.InProgress, null, CancellationToken.None);
+                }).ConfigureAwait(false);
                 Mission? currentMission = launchRecorded ? null : await _Database.Missions.ReadAsync(mission.Id, CancellationToken.None).ConfigureAwait(false);
                 if (currentMission != null)
                 {
@@ -917,6 +926,18 @@ namespace Armada.Core.Services
         }
 
         private static string EndpointCapacityKey(ModelEndpoint endpoint) => ConcurrencyCapacityPolicy.EndpointKey(endpoint);
+
+        private static async Task<bool> RetryTransientAsync(Func<Task<bool>> write)
+        {
+            for (int attempt = 1; ; attempt++)
+            {
+                try { return await write().ConfigureAwait(false); }
+                catch (Exception ex) when (attempt < _TransientAssignmentAttempts && TransientDatabaseError.IsTransient(ex))
+                {
+                    await Task.Delay(TimeSpan.FromMilliseconds(25 * attempt + Random.Shared.Next(0, 50))).ConfigureAwait(false);
+                }
+            }
+        }
 
         private async Task RollbackAssignmentAsync(Mission mission, Captain captain, Dock? dock, bool preserveExistingBranch)
         {

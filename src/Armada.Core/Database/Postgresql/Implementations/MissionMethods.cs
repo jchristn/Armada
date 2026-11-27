@@ -569,7 +569,25 @@ namespace Armada.Core.Database.Postgresql.Implementations
         /// <returns>List of missions with the specified status.</returns>
         public async Task<List<Mission>> EnumerateByStatusAsync(MissionStatusEnum status, CancellationToken token = default)
         {
-            return await EnumerateByColumnAsync("status", status.ToString(), token).ConfigureAwait(false);
+            List<Mission> results = new List<Mission>();
+
+            using (NpgsqlConnection conn = new NpgsqlConnection(_Settings.GetConnectionString()))
+            {
+                await conn.OpenAsync(token).ConfigureAwait(false);
+                using (NpgsqlCommand cmd = conn.CreateCommand())
+                {
+                    // Dispatch order, as on the other providers: priority first, then oldest first.
+                    cmd.CommandText = "SELECT * FROM missions WHERE status = @status ORDER BY priority ASC, created_utc ASC;";
+                    cmd.Parameters.AddWithValue("@status", status.ToString());
+                    using (NpgsqlDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
+                    {
+                        while (await reader.ReadAsync(token).ConfigureAwait(false))
+                            results.Add(MissionFromReader(reader));
+                    }
+                }
+            }
+
+            return results;
         }
 
         /// <inheritdoc />
@@ -803,7 +821,25 @@ namespace Armada.Core.Database.Postgresql.Implementations
         public async Task<List<Mission>> EnumerateByStatusAsync(string tenantId, MissionStatusEnum status, CancellationToken token = default)
         {
             if (string.IsNullOrEmpty(tenantId)) throw new ArgumentNullException(nameof(tenantId));
-            return await EnumerateByTenantColumnAsync(tenantId, "status", status.ToString(), token).ConfigureAwait(false);
+            List<Mission> results = new List<Mission>();
+
+            using (NpgsqlConnection conn = new NpgsqlConnection(_Settings.GetConnectionString()))
+            {
+                await conn.OpenAsync(token).ConfigureAwait(false);
+                using (NpgsqlCommand cmd = conn.CreateCommand())
+                {
+                    cmd.CommandText = "SELECT * FROM missions WHERE tenant_id = @tenantId AND status = @status ORDER BY priority ASC, created_utc ASC;";
+                    cmd.Parameters.AddWithValue("@tenantId", tenantId);
+                    cmd.Parameters.AddWithValue("@status", status.ToString());
+                    using (NpgsqlDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
+                    {
+                        while (await reader.ReadAsync(token).ConfigureAwait(false))
+                            results.Add(MissionFromReader(reader));
+                    }
+                }
+            }
+
+            return results;
         }
 
         /// <inheritdoc />

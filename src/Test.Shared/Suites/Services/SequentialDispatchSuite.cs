@@ -108,9 +108,11 @@ namespace Test.Shared.Suites.Services
                 AssertTrue(await services.Missions.TryAssignAsync(work.Missions[1], work.Vessel, true), "admitted before the failing launch");
                 for (int i = 0; i < 100 && (await db.Missions.ReadAsync(work.Missions[1].Id))!.Status != MissionStatusEnum.Pending; i++) await Task.Delay(20);
                 AssertEqual(MissionStatusEnum.Pending, (await db.Missions.ReadAsync(work.Missions[1].Id))!.Status, "a failed background launch rolls back");
-                AssertEqual(0, (await db.Captains.ReadAsync(work.Captains[0].Id))!.ActiveMissionCount, "and releases the captain");
-                // Failure handling continues after the rollback; let it finish before the next case resets the shared database.
+                // The rollback reverts the mission, then releases the captain in a separate write; on a server provider a
+                // read can land between the two, so let the launch finish before checking the captain (and before the next
+                // case resets the shared database).
                 AssertTrue(await services.Missions.WaitForBackgroundLaunchesAsync(TimeSpan.FromSeconds(30)), "background launches drain");
+                AssertEqual(0, (await db.Captains.ReadAsync(work.Captains[0].Id))!.ActiveMissionCount, "and releases the captain");
             }));
 
             cases.Add(CaseAsync("dispatch_wake_coalesces", "Many dispatch wakes raised while one is pending collapse into one pass", TestTags.Positive, async () =>
