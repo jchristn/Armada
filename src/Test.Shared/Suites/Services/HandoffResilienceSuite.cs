@@ -306,7 +306,7 @@ namespace Test.Shared.Suites.Services
                 AssertEqual("5555555555555555555555555555555555555555", finished!.CommitHash);
             }));
 
-            cases.Add(CaseAsync("endpoint_concurrency_cap_is_shared_across_captains", "Captains sharing one endpoint base URL share its MaxConcurrentMissions budget", TestTags.Reliability, async () =>
+            cases.Add(CaseAsync("endpoint_concurrency_cap_is_shared_across_captains", "Captains sharing one endpoint server and model share its MaxConcurrentMissions budget, however the URL is written", TestTags.Reliability, async () =>
             {
                 using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
                 Harness h = new Harness(testDb, new DirCreatingGitService());
@@ -316,7 +316,7 @@ namespace Test.Shared.Suites.Services
                 ModelEndpoint first = new ModelEndpoint { Name = "gpu-a", BaseUrl = "http://gpu-box:11434/", Model = "qwen" };
                 first.InferenceOptions = new InferenceOptions { MaxConcurrentMissions = 1 };
                 first = await db.ModelEndpoints.CreateAsync(first).ConfigureAwait(false);
-                ModelEndpoint second = new ModelEndpoint { Name = "gpu-b", BaseUrl = "http://GPU-BOX:11434", Model = "llama" };
+                ModelEndpoint second = new ModelEndpoint { Name = "gpu-b", BaseUrl = "http://GPU-BOX:11434/v1", Model = "qwen" };
                 second.InferenceOptions = new InferenceOptions { MaxConcurrentMissions = 1 };
                 second = await db.ModelEndpoints.CreateAsync(second).ConfigureAwait(false);
 
