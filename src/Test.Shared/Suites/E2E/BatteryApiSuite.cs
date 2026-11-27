@@ -133,6 +133,19 @@ namespace Test.Shared.Suites.E2E
                 AssertStatusCode(HttpStatusCode.NotFound, await a.GetAsync("/api/v1/battery/runs/bat_missing").ConfigureAwait(false), "unknown run");
                 AssertStatusCode(HttpStatusCode.Unauthorized, await fx.UnauthClient.GetAsync("/api/v1/battery/runs/" + run.Id).ConfigureAwait(false), "anonymous");
 
+                // Run list and cancel (RS-12.1a): tenant scoped; cancelling needs an admin of the run's tenant.
+                EnumerationResult<BatteryRun> listedA = await GetAsync<EnumerationResult<BatteryRun>>(ua, "/api/v1/battery/runs?pageSize=100").ConfigureAwait(false);
+                AssertTrue(listedA.Objects.Any(r => r.Id == run.Id), "same-tenant user lists the run");
+                EnumerationResult<BatteryRun> listedB = await GetAsync<EnumerationResult<BatteryRun>>(b, "/api/v1/battery/runs?pageSize=100&tenantId=" + adminA.TenantId).ConfigureAwait(false);
+                AssertFalse(listedB.Objects.Any(r => r.Id == run.Id), "other tenant does not list it, even naming the tenant");
+                EnumerationResult<BatteryRun> listedGlobal = await GetAsync<EnumerationResult<BatteryRun>>(fx.AuthClient, "/api/v1/battery/runs?pageSize=100&tenantId=" + adminA.TenantId).ConfigureAwait(false);
+                AssertTrue(listedGlobal.Objects.Any(r => r.Id == run.Id), "global admin filters by tenant");
+                AssertStatusCode(HttpStatusCode.BadRequest, await a.GetAsync("/api/v1/battery/runs?status=Bogus").ConfigureAwait(false), "unknown status");
+                AssertStatusCode(HttpStatusCode.Forbidden, await ua.PostAsync("/api/v1/battery/runs/" + run.Id + "/cancel", null).ConfigureAwait(false), "non-admin cannot cancel");
+                AssertStatusCode(HttpStatusCode.NotFound, await b.PostAsync("/api/v1/battery/runs/" + run.Id + "/cancel", null).ConfigureAwait(false), "other tenant cannot cancel");
+                AssertStatusCode(HttpStatusCode.BadRequest, await a.PostAsync("/api/v1/battery/runs/" + run.Id + "/cancel", JsonHelper.ToJsonContent(new BatteryRunCancelRequest { Reason = new string('x', 501) })).ConfigureAwait(false), "reason too long");
+                AssertStatusCode(HttpStatusCode.OK, await a.PostAsync("/api/v1/battery/runs/" + run.Id + "/cancel", null).ConfigureAwait(false), "cancelling a finished run is a no-op");
+
                 using (DatabaseDriver db = await OpenDatabaseAsync(fx).ConfigureAwait(false))
                 {
                     Vessel? vessel = await db.Vessels.ReadByNameAsync(adminA.TenantId, "battery-csharp-" + adminA.TenantId).ConfigureAwait(false);

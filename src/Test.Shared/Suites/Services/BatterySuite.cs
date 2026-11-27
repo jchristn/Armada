@@ -388,6 +388,41 @@ namespace Test.Shared.Suites.Services
                 AssertTrue(run.Results.Where(r => r.TaskId == "review").All(r => r.Outcome == BatteryTaskOutcomeEnum.Passed), "tasks without the tool still run");
             }));
 
+            cases.Add(CaseAsync("runner_cancel_stops_executing_run", "Runner: CancelAsync stops an executing run; it ends Cancelled with the reason and no further task is dispatched", TestTags.Reliability, async () =>
+            {
+                using TempDir dir = new TempDir();
+                WriteSyntheticPack(dir, "syn", missingTool: false);
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                await SeedPipelineAsync(testDb.Driver).ConfigureAwait(false);
+                using ManualResetEventSlim entered = new ManualResetEventSlim(false);
+                using ManualResetEventSlim release = new ManualResetEventSlim(false);
+                Func<BatteryDispatchRequest, string, string?> scripted = ScriptedCaptain(true);
+                using CannedBatteryTaskDispatcher dispatcher = new CannedBatteryTaskDispatcher
+                {
+                    Captain = (r, worktree) =>
+                    {
+                        entered.Set();
+                        release.Wait(TimeSpan.FromSeconds(30));
+                        return scripted(r, worktree);
+                    }
+                };
+                BatteryRunService service = NewService(testDb.Driver, dir, dispatcher);
+                BatteryRun started = await service.StartAsync(TestCaptain(), null, new List<string> { "syn" }, 3, 5, true, Constants.DefaultTenantId, null).ConfigureAwait(false);
+                AssertTrue(entered.Wait(TimeSpan.FromSeconds(30)), "first task dispatched");
+
+                BatteryRun? requested = await service.CancelAsync(started.Id, "Gate client stopped", TimeSpan.Zero).ConfigureAwait(false);
+                AssertNotNull(requested, "run returned");
+                release.Set();
+                BatteryRun run = (await service.WaitAsync(started.Id).ConfigureAwait(false))!;
+                AssertEqual(BatteryRunStatusEnum.Cancelled, run.Status, run.FailureReason);
+                AssertEqual("Gate client stopped", run.FailureReason, "reason recorded");
+                AssertEqual(1, dispatcher.Requests.Count, "no task dispatched after the cancel");
+
+                BatteryRun again = (await service.CancelAsync(started.Id, "again", TimeSpan.Zero).ConfigureAwait(false))!;
+                AssertEqual("Gate client stopped", again.FailureReason, "a finished run is unchanged");
+                AssertNull(await service.CancelAsync("bat_missing", null, TimeSpan.Zero).ConfigureAwait(false), "unknown run");
+            }));
+
             cases.Add(CaseAsync("runner_prompt_variant_reaches_every_dispatch_and_configuration", "Runner: a run's prompt variant reaches every task dispatch and the run configuration; a run without one records none", TestTags.Positive, async () =>
             {
                 using TempDir dir = new TempDir();
