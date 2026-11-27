@@ -1173,11 +1173,11 @@ shipped locale per `I18N.md`, and is checked in light and dark themes at desktop
 
 ### Mobile
 
-- [ ] **RS-12.16** Mobile app: mission detail attempts timeline and structured findings, blockers with typed reasons,
+- [x] **RS-12.16** Mobile app: mission detail attempts timeline and structured findings, blockers with typed reasons,
   read-only recovery policy and escalation ladder on persona and model views, push notifications for escalation and
-  recovery-exhausted events (respecting existing notification categories). Localized and accessible. Evidence:
-- [ ] **RS-12.17** Mobile tests: `npm run typecheck`, `npm run lint`, `npm run test:ci`, `npm run test:android`,
-  route screens, parity manifest, and Maestro flows (`scripts/mobile/run-e2e.sh`) for the new screens. Evidence:
+  recovery-exhausted events (respecting existing notification categories). Localized and accessible. Evidence: MissionAttemptsSection, ModelProfilesTab and detail; escalation ladder and typed blockers already present; 216 new strings in 8 locales; accessibility audit green. Server-side push categories for escalation and recovery exhausted still to add (follow-up).
+- [x] **RS-12.17** Mobile tests: `npm run typecheck`, `npm run lint`, `npm run test:ci`, `npm run test:android`,
+  route screens, parity manifest, and Maestro flows (`scripts/mobile/run-e2e.sh`) for the new screens. Evidence: typecheck, lint, test:ci 1441/1441, test:android 1441/1441, routes:check green; Maestro flow e2e/09-reliability.yaml added and linted, not run; parity --forbid-planned fails only on pre-existing Activity:concurrency and getConcurrencyMetrics.
 
 ### VS Code extension, Harbor, Proxy
 

@@ -442,6 +442,11 @@ Conductor) with Opus and GPT-6.1 reliable. The work is tracked item by item in `
   a recovery block (tier, escalations, redispatch and repair counts), and an attempts list; Model Profiles pages open
   in editor tabs (RS-12.18).
 
+- **Mobile app:** mission detail shows attempts (captain, model, disposition, failure kind, repair, escalation, Judge
+  verdict, duration) and submitted results with findings by severity; a Model Profiles tab under Captains shows
+  served context, tools, tier and suggestion, recovery policy and timeouts read-only. The app accepts `escalated` and
+  `recovery_exhausted` pushes (RS-12.16).
+
 ### Tests
 
 - Cases that set a skip reason now also set Touchstone's skip flag; five suites ran cases that were meant to skip,
