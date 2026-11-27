@@ -1194,18 +1194,18 @@ shipped locale per `I18N.md`, and is checked in light and dark themes at desktop
 Documents written for people follow `WRITING_DOCUMENTS.md`: prose that explains, not only lists; no em-dashes; a
 humanizer pass and a manual check against the Signs of AI writing page before an item is complete.
 
-- [ ] **RS-13.1** New `docs/OPEN_MODELS.md`: how to run Qwen3.8 (and the second family) in a pipeline with Opus and
+- [x] **RS-13.1** New `docs/OPEN_MODELS.md`: how to run Qwen3.8 (and the second family) in a pipeline with Opus and
   GPT-6.1. Endpoint setup for Ollama, vLLM, and LM Studio; served context; streaming; the reference pipelines; what
   the escalation ladder and judge rule do; what the gate measured for 1.5.0 with the real numbers; known limits.
-  Evidence:
-- [ ] **RS-13.2** `docs/MODEL_GUIDANCE.md`: replace the "tool-calling reliability is the model's responsibility"
-  stance with what Armada now absorbs (RS-7.2 to RS-7.6) and what still belongs to the model. Evidence:
-- [ ] **RS-13.3** `docs/MODEL_HETEROGENEITY.md`: update "Where Armada stands today", the failure taxonomy mapping
+  Evidence: `docs/OPEN_MODELS.md` added (c5c7ba2e4); the Measured results section holds the `<!-- RS-10.6 gate numbers -->` marker for RS-10.6.
+- [x] **RS-13.2** `docs/MODEL_GUIDANCE.md`: replace the "tool-calling reliability is the model's responsibility"
+  stance with what Armada now absorbs (RS-7.2 to RS-7.6) and what still belongs to the model. Evidence: c5c7ba2e4: table of absorbed slips (RS-7.2 to RS-7.6) and what remains the model's.
+- [x] **RS-13.3** `docs/MODEL_HETEROGENEITY.md`: update "Where Armada stands today", the failure taxonomy mapping
   (RS-5.1), escalation with memory (RS-5.7), rendering (RS-8.2, RS-8.3), and the scorecard feeding routing (RS-8.6).
-  Evidence:
-- [ ] **RS-13.4** `docs/CAPTAIN_ROUTING.md`, `docs/PERSONAS.md`, `docs/PERSONAS_GUIDE.md`, `docs/PIPELINES.md`:
+  Evidence: c5c7ba2e4: 1.5.0 state, prompt variants, escalation with memory, new failure mapping rows.
+- [x] **RS-13.4** `docs/CAPTAIN_ROUTING.md`, `docs/PERSONAS.md`, `docs/PERSONAS_GUIDE.md`, `docs/PIPELINES.md`:
   escalation ladders, judge strength rule, capability filters, ranking, the admission gate order, typed blockers.
-  Evidence:
+  Evidence: c5c7ba2e4: admission order and typed blockers, escalation ladders, Judge strength, service source pointers.
 - [ ] **RS-13.5** `docs/REST_API.md`, `docs/MCP_API.md` (including the submit tools and their schemas),
   `docs/WEBSOCKET_API.md`, `docs/PROXY_API.md` if changed, `docs/HARBOR_PROTOCOL.md`. Evidence:
 - [ ] **RS-13.6** `docs/OPERATIONS.md` (every new setting with default, minimum, maximum, and effect),
@@ -1225,9 +1225,9 @@ humanizer pass and a manual check against the Signs of AI writing page before an
   open and frontier pipelines and link `docs/OPEN_MODELS.md`. Evidence:
 - [ ] **RS-13.11** `CHANGELOG.md`: every user-visible change, setting, migration, deprecation, and behavior change
   under the 1.5.0 entries, with the before and after gate numbers. Evidence:
-- [ ] **RS-13.12** Update `CLAUDE.md` and `AGENTS.md` architecture notes where this plan changed the architecture they
+- [x] **RS-13.12** Update `CLAUDE.md` and `AGENTS.md` architecture notes where this plan changed the architecture they
   describe (new services replacing `MissionService` partials, single dispatcher, submit tools). Joel approved
-  editing `AGENTS.md` on 2026-11-25; keep the two files in sync in the same commit. Evidence:
+  editing `AGENTS.md` on 2026-11-25; keep the two files in sync in the same commit. Evidence: c5c7ba2e4: same architecture section in both files, no-partial-classes rule, comma-separated `--suites` example.
 
 ## Phase 14: Verification
 

@@ -468,6 +468,12 @@ Conductor) with Opus and GPT-6.1 reliable. The work is tracked item by item in `
   the model profile page shows and edits tier, recovery, and timeouts with their source; mission detail has an
   Attempts panel and names the typed blocker reason; pipelines edit the Judge strength rule (RS-12.9).
 
+### Documentation
+
+- New `docs/OPEN_MODELS.md`: running Qwen3.8 and other open models in pipelines with Opus and GPT-6.1 (endpoint setup, served context and prompt variants, streaming and timeouts, concurrency caps, escalation ladder, Judge strength, tiers and outcome ranking, reference pipelines, known limits).
+- `docs/MODEL_GUIDANCE.md`, `docs/MODEL_HETEROGENEITY.md`, `docs/CAPTAIN_ROUTING.md`, `docs/PERSONAS.md`, `docs/PERSONAS_GUIDE.md` and `docs/PIPELINES.md` describe the 1.5.0 behavior: what the ApiEndpoint runtime absorbs, admission order and typed blockers, escalation ladders, Judge strength, and source pointers to the services that replaced the MissionService partial files.
+- `CLAUDE.md` and `AGENTS.md` describe the MissionService facade and its services, the SourceGuards scans, SDK sub-clients, and the no-partial-classes rule.
+
 ### Tests
 
 - Cases that set a skip reason now also set Touchstone's skip flag; five suites ran cases that were meant to skip,
