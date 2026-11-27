@@ -457,6 +457,10 @@ namespace Armada.Core.Services
             }
         }
 
+        // The captain's open link episode when its stop is still unconfirmed, or null.
+        private CaptainLinkEpisode? PendingStopEpisode(Captain captain)
+            => _LinkEpisodes.TryGetValue(captain.Assignment?.Id ?? captain.Id, out CaptainLinkEpisode? episode) && episode.StopPending ? episode : null;
+
         private async Task<CaptainLinkEpisode> LoadEpisodeAsync(Captain captain, Mission? mission, int? processId, CancellationToken token)
         {
             string? missionId = mission?.Id ?? captain.Assignment?.Id;

@@ -28,9 +28,7 @@ namespace Armada.Core.Services
             if (pendingMissionIds == null) throw new ArgumentNullException(nameof(pendingMissionIds));
             HashSet<string> pending = new HashSet<string>(pendingMissionIds, StringComparer.Ordinal);
             // A result belongs to a Pending mission; one that left Pending outside admission is dropped here.
-            foreach (KeyValuePair<string, MissionAdmissionResult> entry in _AdmissionResults)
-                if (!pending.Contains(entry.Key) && entry.Value.LastObservedUtc < snapshotUtc)
-                    _AdmissionResults.TryRemove(entry);
+            _AdmissionResults.DropNotPending(pending, snapshotUtc);
             return _WaitTracker.ReconcileAsync(pending, snapshotUtc, token);
         }
 
@@ -40,30 +38,18 @@ namespace Armada.Core.Services
         /// </summary>
         /// <param name="timeout">Longest time to wait.</param>
         /// <returns>True when none remain in flight.</returns>
-        public async Task<bool> WaitForBackgroundLaunchesAsync(TimeSpan timeout)
-        {
-            DateTime deadline = DateTime.UtcNow + timeout;
-            while (!_BackgroundLaunches.IsEmpty)
-            {
-                TimeSpan remaining = deadline - DateTime.UtcNow;
-                if (remaining <= TimeSpan.Zero) return false;
-                Task all = Task.WhenAll(_BackgroundLaunches.Values.ToArray());
-                await Task.WhenAny(all, Task.Delay(remaining)).ConfigureAwait(false);
-                await Task.Yield();
-            }
-            return true;
-        }
+        public Task<bool> WaitForBackgroundLaunchesAsync(TimeSpan timeout) => _BackgroundLaunches.WaitAllAsync(timeout);
 
         /// <inheritdoc />
         public MissionAdmissionResult? GetAdmissionResult(string missionId)
-            => !String.IsNullOrEmpty(missionId) && _AdmissionResults.TryGetValue(missionId, out MissionAdmissionResult? result) ? result : null;
+            => _AdmissionResults.Get(missionId);
 
         private void NoteWait(Mission mission, MissionAssignmentBlocker blocker)
             => NoteWait(mission, blocker, MissionWaitGates.FromBlocker(blocker.Reason), blocker.SelectionReasonCode ?? blocker.Reason.ToString());
 
         // The wait tracker keeps its own gate and detail; the blocker is the one typed result every reader sees.
         private void NoteWait(Mission mission, MissionAssignmentBlocker blocker, MissionWaitGateEnum? gate, string? detail)
-            => _AttemptWaits[mission.Id] = new MissionWaitObservation { Mission = mission, Gate = gate, Detail = detail, Blocker = blocker };
+            => _AdmissionResults.NoteAttempt(new MissionWaitObservation { Mission = mission, Gate = gate, Detail = detail, Blocker = blocker });
 
         // Every gate was open but the attempt did not claim a captain (a lock timeout, a lost claim, a policy change).
         private void NoteUnadmitted(Mission mission, string summary)
@@ -76,23 +62,6 @@ namespace Armada.Core.Services
             Summary = "Starting the captain failed " + failure.Count + (failure.Count == 1 ? " time" : " times")
                 + ": " + failure.Reason + " Armada tries again at " + failure.NextAttemptUtc.ToString("HH:mm:ss") + " UTC."
         };
-
-        private void RecordAdmissionResult(MissionWaitObservation observation)
-        {
-            string id = observation.Mission.Id;
-            if (observation.LeftPending || observation.Blocker == null) { _AdmissionResults.TryRemove(id, out _); return; }
-            DateTime now = DateTime.UtcNow;
-            MissionAssignmentBlocker blocker = observation.Blocker;
-            _AdmissionResults.AddOrUpdate(id,
-                _ => new MissionAdmissionResult { Mission = observation.Mission, Blocker = blocker, FirstObservedUtc = now, LastObservedUtc = now },
-                (_, previous) => new MissionAdmissionResult
-                {
-                    Mission = observation.Mission,
-                    Blocker = blocker,
-                    FirstObservedUtc = previous.Blocker.Reason == blocker.Reason ? previous.FirstObservedUtc : now,
-                    LastObservedUtc = now
-                });
-        }
 
         private void RequestDispatch()
         {
@@ -109,7 +78,7 @@ namespace Armada.Core.Services
 
         private void NoteLeftPending(Mission mission)
         {
-            _AttemptWaits[mission.Id] = new MissionWaitObservation { Mission = mission, LeftPending = true };
+            _AdmissionResults.NoteAttempt(new MissionWaitObservation { Mission = mission, LeftPending = true });
             PassStateChanged();
         }
 
@@ -117,15 +86,16 @@ namespace Armada.Core.Services
         private async Task RecordAttemptWaitAsync(Mission mission, bool assigned, CancellationToken token)
         {
             string missionId = mission.Id;
-            if (!_AttemptWaits.TryRemove(missionId, out MissionWaitObservation? observation))
+            if (!_AdmissionResults.TryTakeAttempt(missionId, out MissionWaitObservation? taken))
             {
                 // No gate spoke: the mission was assigned, or it failed after the claim. An older result is stale either way.
-                if (!assigned && _LaunchFailures.TryGetValue(missionId, out MissionLaunchFailure? failure))
-                    RecordAdmissionResult(new MissionWaitObservation { Mission = mission, Blocker = LaunchFailingBlocker(failure) });
-                else _AdmissionResults.TryRemove(missionId, out _);
+                if (!assigned && _LaunchBackoff.TryGet(missionId, out MissionLaunchFailure? failure))
+                    _AdmissionResults.Record(new MissionWaitObservation { Mission = mission, Blocker = LaunchFailingBlocker(failure) });
+                else _AdmissionResults.Remove(missionId);
                 return;
             }
-            RecordAdmissionResult(observation);
+            MissionWaitObservation observation = taken;
+            _AdmissionResults.Record(observation);
             try
             {
                 if (observation.Gate.HasValue)

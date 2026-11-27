@@ -256,7 +256,7 @@ namespace Armada.Core.Services
                     + ". The captain finished without committing these changes, so Armada committed them.";
                 if (await git.CommitAllAsync(dock.WorktreePath!, message, token).ConfigureAwait(false))
                 {
-                    _LeftoverCommitted[mission.Id] = 0;
+                    _LeftoverCommitted.Set(mission.Id);
                     _Logging.Info(_Header + "mission " + mission.Id + ": captain " + captain.Id + " left uncommitted changes in dock " + dock.Id + "; committed them");
                 }
             }

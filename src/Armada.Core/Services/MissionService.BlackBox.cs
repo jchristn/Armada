@@ -20,6 +20,9 @@ namespace Armada.Core.Services
 
         #region Private-Methods
 
+        // A provisioned dock ends the failure streak, so the next provision failure is captured again.
+        private void ForgetProvisionFailureCapture(string missionId) => _ProvisionFailureCaptures.TryRemove(missionId, out string? _);
+
         private Task<string?> RecordFailureAsync(
             Mission mission,
             MissionStatusEnum? statusBefore,

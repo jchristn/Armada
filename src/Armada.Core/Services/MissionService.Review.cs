@@ -16,6 +16,9 @@ namespace Armada.Core.Services
     /// </summary>
     public partial class MissionService
     {
+        // Serializes review decisions so an approve and a deny of the same stage cannot both apply.
+        private readonly SemaphoreSlim _ReviewDecisionGate = new SemaphoreSlim(1, 1);
+
         #region Public-Methods
 
         /// <inheritdoc />

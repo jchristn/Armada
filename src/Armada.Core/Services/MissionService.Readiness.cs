@@ -7,7 +7,7 @@ namespace Armada.Core.Services
     {
         // Readiness never claims capacity or mutates missions. Dispatch alone applies a failed-slice
         // transition; diagnostics use the exact same observation without side effects.
-        private async Task<(MissionAssignmentBlocker? Blocker, Mission? FailedSlice)> EvaluateReadinessAdmissionAsync(
+        private async Task<ReadinessAdmissionOutcome> EvaluateReadinessAdmissionAsync(
             Mission mission, CancellationToken token)
         {
             if (!String.IsNullOrEmpty(mission.DependsOnMissionId))
@@ -15,11 +15,11 @@ namespace Armada.Core.Services
                 Mission? dependency = await _Database.Missions.ReadAsync(mission.DependsOnMissionId, token).ConfigureAwait(false);
                 MissionAssignmentBlocker? dependencyBlocker = MissionAdmissionEvaluator.Dependency(mission, dependency,
                     dependency != null && IsPipelineHandoffPrepared(mission, dependency));
-                if (dependencyBlocker != null) return (dependencyBlocker, null);
+                if (dependencyBlocker != null) return new ReadinessAdmissionOutcome(dependencyBlocker);
             }
 
             HierarchyReadiness hierarchy = await EvaluateParentReadinessAsync(mission, token).ConfigureAwait(false);
-            if (hierarchy.Blocker != null) return (hierarchy.Blocker, null);
+            if (hierarchy.Blocker != null) return new ReadinessAdmissionOutcome(hierarchy.Blocker);
 
             IntegrationBarrierState barrier = await EvaluateIntegrationBarrierAsync(mission, token).ConfigureAwait(false);
             if (barrier.FailedMission != null)
@@ -34,15 +34,15 @@ namespace Armada.Core.Services
                         + " on the next dispatch pass. Restart that mission to continue."
                 };
                 blocker.SetBlockingMissions(new[] { failed.Id });
-                return (blocker, failed);
+                return new ReadinessAdmissionOutcome(blocker, failed);
             }
             if (barrier.Waiting)
-                return (new MissionAssignmentBlocker
+                return new ReadinessAdmissionOutcome(new MissionAssignmentBlocker
                 {
                     Reason = MissionAssignmentBlockerReasonEnum.WaitingForVoyageWorkers,
                     Summary = barrier.WaitingSummary ?? "Waiting for the voyage's other implementation pipelines, including reviews and checks, to settle."
-                }, null);
-            return (null, null);
+                });
+            return ReadinessAdmissionOutcome.Ready;
         }
     }
 }

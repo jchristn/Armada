@@ -17,7 +17,7 @@ namespace Armada.Core.Services
         /// <summary>
         /// Missions whose leftover work Armada committed during this attempt, read once by the completion handler.
         /// </summary>
-        private readonly ConcurrentDictionary<string, byte> _LeftoverCommitted = new ConcurrentDictionary<string, byte>(StringComparer.Ordinal);
+        private readonly MissionFlagSet _LeftoverCommitted = new MissionFlagSet();
 
         #endregion
 

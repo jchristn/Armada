@@ -99,19 +99,12 @@ namespace Armada.Core.Services
 
         #region Private-Members
 
-        private readonly System.Collections.Concurrent.ConcurrentDictionary<string, EndpointBreakerState> _EndpointBreakers = new System.Collections.Concurrent.ConcurrentDictionary<string, EndpointBreakerState>(StringComparer.OrdinalIgnoreCase);
-        private const int _EndpointBreakerThreshold = 3;
-        private static readonly TimeSpan _EndpointBreakerOpenFor = TimeSpan.FromMinutes(2);
+        private readonly EndpointCircuitBreakers _EndpointBreakers;
         private static readonly TimeSpan _UnhealthyEndpointWindow = TimeSpan.FromMinutes(15);
-        private readonly System.Collections.Concurrent.ConcurrentDictionary<string, int> _CompletionsInFlight = new System.Collections.Concurrent.ConcurrentDictionary<string, int>(StringComparer.Ordinal);
-        // Running Definition-of-Done gates, each mapped to its mission, so cancelling the mission stops the gate's command.
-        private readonly System.Collections.Concurrent.ConcurrentDictionary<CancellationTokenSource, string> _CompletionCommandRuns = new System.Collections.Concurrent.ConcurrentDictionary<CancellationTokenSource, string>();
-        private readonly SemaphoreSlim _ReviewDecisionGate = new SemaphoreSlim(1, 1);
+        private readonly CompletionRunTracker _CompletionRuns = new CompletionRunTracker();
 
         private const int _MaxLaunchFailuresBeforeFail = 6;
-        private readonly RecoveryStateStore _RecoveryState;
-        private static readonly TimeSpan _RecoveryStateRetention = TimeSpan.FromDays(1);
-        private readonly System.Collections.Concurrent.ConcurrentDictionary<string, MissionLaunchFailure> _LaunchFailures = new System.Collections.Concurrent.ConcurrentDictionary<string, MissionLaunchFailure>(StringComparer.Ordinal);
+        private readonly MissionLaunchBackoff _LaunchBackoff;
 
         private string _Header = "[MissionService] ";
         private LoggingModule _Logging;
@@ -124,10 +117,7 @@ namespace Armada.Core.Services
         private IDefinitionOfDoneGate? _DefinitionOfDone;
         private readonly IDockFileSystem _LocalFiles = new LocalDockFileSystem();
         private readonly IHostCommandExecutor _LocalCommands = new LocalHostCommandExecutor();
-        private readonly System.Collections.Concurrent.ConcurrentDictionary<string, MissionAdmissionResult> _AdmissionResults =
-            new System.Collections.Concurrent.ConcurrentDictionary<string, MissionAdmissionResult>(StringComparer.Ordinal);
-        private readonly System.Collections.Concurrent.ConcurrentDictionary<string, byte> _RefusedHandoffWarnings =
-            new System.Collections.Concurrent.ConcurrentDictionary<string, byte>(StringComparer.Ordinal);
+        private readonly MissionAdmissionResultStore _AdmissionResults = new MissionAdmissionResultStore();
         private static readonly System.Text.RegularExpressions.Regex _ScopedFilesDirectiveRegex =
             new System.Text.RegularExpressions.Regex(@"^\s*(?:Touch|Edit|Modify)\s+only\s+(?<files>.+)$",
                 System.Text.RegularExpressions.RegexOptions.IgnoreCase |
@@ -159,11 +149,7 @@ namespace Armada.Core.Services
         /// </summary>
         private const int _TransientAssignmentAttempts = 3;
         private readonly MissionWaitTracker _WaitTracker;
-        private readonly System.Collections.Concurrent.ConcurrentDictionary<string, Task> _BackgroundLaunches =
-            new System.Collections.Concurrent.ConcurrentDictionary<string, Task>(StringComparer.Ordinal);
-        // The gate each failed admission attempt stopped at, recorded by the public wrapper once the locks are released.
-        private readonly System.Collections.Concurrent.ConcurrentDictionary<string, MissionWaitObservation> _AttemptWaits =
-            new System.Collections.Concurrent.ConcurrentDictionary<string, MissionWaitObservation>(StringComparer.Ordinal);
+        private readonly BackgroundLaunchSet _BackgroundLaunches = new BackgroundLaunchSet();
         private System.Collections.Concurrent.ConcurrentDictionary<string, byte> _InFlightAssignments =
             new System.Collections.Concurrent.ConcurrentDictionary<string, byte>(StringComparer.Ordinal);
 
@@ -219,13 +205,6 @@ namespace Armada.Core.Services
             public string RelativePath { get; set; } = String.Empty;
         }
 
-        private sealed class ArchitectDependencyExtractionResult
-        {
-            public string Description { get; set; } = String.Empty;
-
-            public string? DependsOnReference { get; set; } = null;
-        }
-
         private sealed class MissionOutcomeSignalDefinition
         {
             public SignalTypeEnum Type { get; set; }
@@ -276,7 +255,9 @@ namespace Armada.Core.Services
             _WaitTracker = new MissionWaitTracker(_Database, _Settings, _Logging);
             Transitions = new MissionTransitions(_Database, _Logging);
             Transitions.VoyageChanged = ReevaluateVoyageAsync;
-            _RecoveryState = new RecoveryStateStore(_Database, _Logging);
+            RecoveryStateStore recoveryState = new RecoveryStateStore(_Database, _Logging);
+            _EndpointBreakers = new EndpointCircuitBreakers(recoveryState, _Logging, _Header, ScheduleDispatchAfter);
+            _LaunchBackoff = new MissionLaunchBackoff(recoveryState);
         }
 
         #endregion
@@ -312,9 +293,9 @@ namespace Armada.Core.Services
                 return blocker;
             }
 
-            if (_LaunchFailures.TryGetValue(mission.Id, out MissionLaunchFailure? launchFailure)) return LaunchFailingBlocker(launchFailure);
+            if (_LaunchBackoff.TryGet(mission.Id, out MissionLaunchFailure? launchFailure)) return LaunchFailingBlocker(launchFailure);
 
-            var readiness = await EvaluateReadinessAdmissionAsync(mission, token).ConfigureAwait(false);
+            ReadinessAdmissionOutcome readiness = await EvaluateReadinessAdmissionAsync(mission, token).ConfigureAwait(false);
             if (readiness.Blocker != null) return readiness.Blocker;
 
             MissionAssignmentBlocker? admission = await EvaluateSafetyAdmissionAsync(mission, vessel, token).ConfigureAwait(false);
@@ -323,7 +304,7 @@ namespace Armada.Core.Services
             if (globalAdmission != null) return globalAdmission;
 
             if (_Settings.EffectiveUsageSelection.Mode != UsageSelectionModeEnum.Disabled
-                && _UsageSelectionBlockers.TryGetValue(mission.Id, out UsageSelectionTransientBlocker? usageFailure)
+                && _UsageSelection.TryGetBlocker(mission.Id, out UsageSelectionTransientBlocker? usageFailure)
                 && usageFailure.PolicyKey == UsagePolicyKey() && usageFailure.RetryUtc > DateTime.UtcNow) return usageFailure.Blocker;
 
             CaptainAdmissionSelection selection = await SelectCaptainAdmissionAsync(mission, token).ConfigureAwait(false);
@@ -479,9 +460,9 @@ namespace Armada.Core.Services
                 }
                 catch (Exception ex) when (!TransientDatabaseError.IsTransient(ex) && !(ex is OperationCanceledException))
                 {
-                    _AttemptWaits.TryRemove(mission.Id, out _);
+                    _AdmissionResults.TryTakeAttempt(mission.Id, out MissionWaitObservation? _);
                     PassStateChanged();
-                    RecordAdmissionResult(new MissionWaitObservation { Mission = mission, Blocker = new MissionAssignmentBlocker
+                    _AdmissionResults.Record(new MissionWaitObservation { Mission = mission, Blocker = new MissionAssignmentBlocker
                     { Reason = MissionAssignmentBlockerReasonEnum.AwaitingDispatch, Summary = "Assignment failed with an error: " + ex.Message } });
                     throw;
                 }
@@ -547,7 +528,7 @@ namespace Armada.Core.Services
                     return false;
                 }
 
-                if (_LaunchFailures.TryGetValue(mission.Id, out MissionLaunchFailure? backoff) && DateTime.UtcNow < backoff.NextAttemptUtc
+                if (_LaunchBackoff.TryGet(mission.Id, out MissionLaunchFailure? backoff) && DateTime.UtcNow < backoff.NextAttemptUtc
                     && !await HasUntriedIdleCaptainAsync(mission, backoff, token).ConfigureAwait(false))
                 {
                     _Logging.Debug(_Header + "mission " + mission.Id + " backing off after " + backoff.Count + " failed launch(es) until " + backoff.NextAttemptUtc.ToString("o"));
@@ -608,7 +589,7 @@ namespace Armada.Core.Services
                     return false;
                 }
 
-            var readiness = await EvaluateReadinessAdmissionAsync(mission, token).ConfigureAwait(false);
+            ReadinessAdmissionOutcome readiness = await EvaluateReadinessAdmissionAsync(mission, token).ConfigureAwait(false);
             if (readiness.Blocker != null)
             {
                 if (readiness.FailedSlice != null)
@@ -679,7 +660,7 @@ namespace Armada.Core.Services
                     UsageWait(mission, "CandidateLimitExceeded", "The complete captain comparison exceeds the configured candidate bound. An administrator can increase MaximumCandidates.");
                     return false;
                 }
-                _UsageSelectionBlockers.TryRemove(mission.Id, out _);
+                _UsageSelection.ClearBlocker(mission.Id);
                 if (captain == null && !await RecordUsageSelectionWaitAsync(usageSelection, mission, token).ConfigureAwait(false))
                 { NoteWait(mission, UsageBlocker(usageSelection.Evaluation.ReasonCode, "No captain currently satisfies the configured usage policy."), MissionWaitGateEnum.CaptainSlot, usageSelection.Evaluation.ReasonCode); return false; }
             }
@@ -688,10 +669,10 @@ namespace Armada.Core.Services
                 if (usageSelection?.Settings.Mode == UsageSelectionModeEnum.Enforce)
                 {
                     UsageSelectionCandidateResult? blocked = usageSelection.Evaluation.Candidates.FirstOrDefault();
-                    _UsageSelectionBlockers[mission.Id] = new UsageSelectionTransientBlocker { PolicyKey = UsagePolicyKey(), RetryUtc = DateTime.MinValue,
+                    _UsageSelection.SetBlocker(mission.Id, new UsageSelectionTransientBlocker { PolicyKey = UsagePolicyKey(), RetryUtc = DateTime.MinValue,
                         Blocker = AddRecoveryAdvice(new MissionAssignmentBlocker { Reason = MissionAssignmentBlockerReasonEnum.NoEligibleCaptain,
                             SelectionReasonCode = usageSelection.Evaluation.ReasonCode, Summary = "No captain currently satisfies the configured usage policy.",
-                            SelectionNextReconsiderUtc = blocked?.NextReconsiderUtc }, mission, usageSelection) };
+                            SelectionNextReconsiderUtc = blocked?.NextReconsiderUtc }, mission, usageSelection) });
                 }
                 _Logging.Warn(_Header + "no idle captains available for mission " + mission.Id +
                     (mission.Persona != null ? " (persona: " + mission.Persona + ")" : ""));
@@ -820,7 +801,7 @@ namespace Armada.Core.Services
                 RecordAdmissionTelemetry(admissionStage, usageSelection, decision, receipt);
                 if (claimed)
                 {
-                    _NoOpRedispatchCarry.TryRemove(mission.Id, out _);
+                    _UsageSelection.ClearCarry(mission.Id);
                     mission.UsageAdmissionExecutionKey = decision.Decision.ExecutionAttemptId;
                     NotifySelectionChanged(mission, decision.Decision.Id, CaptainSelectionOutcomes.Admitted);
                 }
@@ -840,7 +821,7 @@ namespace Armada.Core.Services
 
             if (usageSelection == null && !String.IsNullOrEmpty(mission.TenantId))
                 mission.UsageAdmissionExecutionKey = await _Database.CaptainSelections.ReadUsageExecutionKeyAsync(mission.TenantId, mission.Id, token).ConfigureAwait(false);
-            _UsageSelectionBlockers.TryRemove(mission.Id, out _);
+            _UsageSelection.ClearBlocker(mission.Id);
             mission.BranchName = branchName;
             mission.CaptainId = captain.Id;
             DateTime? previousReadyUtc = mission.ReadyUtc;
@@ -883,8 +864,7 @@ namespace Armada.Core.Services
                     catch (Exception ex) { _Logging.Warn(_Header + "background launch of mission " + deferredMissionId + " failed: " + ex.Message); }
                     finally { _InFlightAssignments.TryRemove(deferredMissionId, out _); }
                 });
-                _BackgroundLaunches[deferredMissionId] = background;
-                _ = background.ContinueWith(_ => _BackgroundLaunches.TryRemove(new KeyValuePair<string, Task>(deferredMissionId, background)), TaskScheduler.Default);
+                _BackgroundLaunches.Track(deferredMissionId, background);
                 return true;
             }
             return await ProvisionAndLaunchAsync(token).ConfigureAwait(false);
@@ -928,7 +908,7 @@ namespace Armada.Core.Services
 
                 // Track the dock on the mission and the captain, each only while they still describe this assignment. The
                 // mission keeps the commit its dock started from (durable evidence for scope checks and the black box).
-                _ProvisionFailureCaptures.TryRemove(mission.Id, out string? _);
+                ForgetProvisionFailureCapture(mission.Id);
                 mission.DockId = dock.Id;
                 mission.StartCommit = DockStartCommit.FromDock(dock) ?? mission.StartCommit;
                 mission.LastUpdateUtc = DateTime.UtcNow;
@@ -1153,15 +1133,14 @@ namespace Armada.Core.Services
             // the completion of a later attempt of the same mission. Each process exit is claimed once by its caller
             // (IMissionMethods.TryClaimProcessExitAsync), and the core's first write is a compare-and-set on the status
             // it read, so a duplicate for the same attempt loses that write and stops.
-            _CompletionsInFlight.AddOrUpdate(missionId, 1, (_, count) => count + 1);
+            _CompletionRuns.Enter(missionId);
             try
             {
                 await HandleCompletionCoreAsync(captain, missionId, token).ConfigureAwait(false);
             }
             finally
             {
-                if (_CompletionsInFlight.AddOrUpdate(missionId, 0, (_, count) => count - 1) <= 0)
-                    _CompletionsInFlight.TryRemove(new KeyValuePair<string, int>(missionId, 0));
+                _CompletionRuns.Exit(missionId);
             }
         }
 
@@ -1175,15 +1154,14 @@ namespace Armada.Core.Services
             // the completion of a later attempt of the same mission. Each process exit is claimed once by its caller
             // (IMissionMethods.TryClaimProcessExitAsync), and the core's first write is a compare-and-set on the status
             // it read, so a duplicate for the same attempt loses that write and stops.
-            _CompletionsInFlight.AddOrUpdate(missionId, 1, (_, count) => count + 1);
+            _CompletionRuns.Enter(missionId);
             try
             {
                 await HandleCompletionCoreAsync(captain, missionId, token, expectedVersion).ConfigureAwait(false);
             }
             finally
             {
-                if (_CompletionsInFlight.AddOrUpdate(missionId, 0, (_, count) => count - 1) <= 0)
-                    _CompletionsInFlight.TryRemove(new KeyValuePair<string, int>(missionId, 0));
+                _CompletionRuns.Exit(missionId);
             }
         }
 
@@ -1200,8 +1178,7 @@ namespace Armada.Core.Services
             if (captain == null) throw new ArgumentNullException(nameof(captain));
             if (String.IsNullOrEmpty(captain.ModelEndpointId)) return false;
             ModelEndpoint? endpoint = await _Database.ModelEndpoints.ReadAsync(captain.ModelEndpointId!, token).ConfigureAwait(false);
-            if (endpoint == null || !_EndpointBreakers.TryGetValue(EndpointCapacityKey(endpoint), out EndpointBreakerState? state)) return false;
-            lock (state) return state.OpenUntilUtc.HasValue && state.OpenUntilUtc.Value > DateTime.UtcNow;
+            return endpoint != null && _EndpointBreakers.IsOpen(EndpointCapacityKey(endpoint));
         }
 
         /// <inheritdoc />
@@ -1212,43 +1189,7 @@ namespace Armada.Core.Services
             ModelEndpoint? endpoint = await _Database.ModelEndpoints.ReadAsync(captain.ModelEndpointId!, token).ConfigureAwait(false);
             if (endpoint == null) return;
 
-            string key = EndpointCapacityKey(endpoint);
-            EndpointBreakerState state = _EndpointBreakers.GetOrAdd(key, _ => new EndpointBreakerState());
-            EndpointBreakerState snapshot = new EndpointBreakerState();
-            bool wasClean;
-            lock (state)
-            {
-                wasClean = state.ConsecutiveFailures == 0 && !state.OpenUntilUtc.HasValue;
-                if (healthy)
-                {
-                    if (state.OpenUntilUtc.HasValue) _Logging.Info(_Header + "endpoint " + endpoint.BaseUrl + " ran cleanly; circuit closed");
-                    state.ConsecutiveFailures = 0;
-                    state.OpenUntilUtc = null;
-                }
-                else
-                {
-                    state.ConsecutiveFailures++;
-                    if (state.ConsecutiveFailures >= _EndpointBreakerThreshold)
-                    {
-                        state.OpenUntilUtc = DateTime.UtcNow.Add(_EndpointBreakerOpenFor);
-                        _Logging.Warn(_Header + "endpoint " + endpoint.BaseUrl + " failed " + state.ConsecutiveFailures + " run(s) in a row; no new missions go to it until " + state.OpenUntilUtc.Value.ToString("o"));
-                        ScheduleDispatchAfter(_EndpointBreakerOpenFor);
-                    }
-                }
-                snapshot.ConsecutiveFailures = state.ConsecutiveFailures;
-                snapshot.OpenUntilUtc = state.OpenUntilUtc;
-            }
-
-            // Kept across a restart so an Admiral restarted mid-outage does not send the next missions straight back to
-            // the failing endpoint. A clean run on a clean breaker writes nothing.
-            if (healthy)
-            {
-                if (!wasClean) await _RecoveryState.DeleteAsync(RecoveryStateKinds.EndpointBreaker, key, token).ConfigureAwait(false);
-            }
-            else
-            {
-                await _RecoveryState.SaveAsync(RecoveryStateKinds.EndpointBreaker, key, snapshot, (snapshot.OpenUntilUtc ?? DateTime.UtcNow).Add(_RecoveryStateRetention), token).ConfigureAwait(false);
-            }
+            await _EndpointBreakers.RecordAsync(EndpointCapacityKey(endpoint), endpoint.BaseUrl, healthy, token).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -1259,32 +1200,22 @@ namespace Armada.Core.Services
         /// <returns>Task.</returns>
         public async Task LoadRecoveryStateAsync(CancellationToken token = default)
         {
-            foreach (KeyValuePair<string, EndpointBreakerState> breaker in await _RecoveryState.LoadAsync<EndpointBreakerState>(RecoveryStateKinds.EndpointBreaker, token).ConfigureAwait(false))
-                _EndpointBreakers[breaker.Key] = breaker.Value;
-            foreach (KeyValuePair<string, MissionLaunchFailure> failure in await _RecoveryState.LoadAsync<MissionLaunchFailure>(RecoveryStateKinds.LaunchFailure, token).ConfigureAwait(false))
-            {
-                failure.Value.FailedCaptainIds = new HashSet<string>(failure.Value.FailedCaptainIds ?? new HashSet<string>(), StringComparer.Ordinal);
-                _LaunchFailures[failure.Key] = failure.Value;
-            }
+            await _EndpointBreakers.LoadAsync(token).ConfigureAwait(false);
+            await _LaunchBackoff.LoadAsync(token).ConfigureAwait(false);
         }
 
         /// <inheritdoc />
         public bool IsCompletionInFlight(string missionId)
         {
             if (String.IsNullOrEmpty(missionId)) return false;
-            return _CompletionsInFlight.TryGetValue(missionId, out int count) && count > 0;
+            return _CompletionRuns.IsInFlight(missionId);
         }
 
         /// <inheritdoc />
         public void StopCompletionCommands(string missionId)
         {
             if (String.IsNullOrEmpty(missionId)) return;
-            foreach (KeyValuePair<CancellationTokenSource, string> run in _CompletionCommandRuns)
-            {
-                if (!String.Equals(run.Value, missionId, StringComparison.Ordinal)) continue;
-                try { run.Key.Cancel(); }
-                catch (ObjectDisposedException) { } // The run finished between the lookup and the cancel.
-            }
+            _CompletionRuns.StopCommands(missionId);
         }
 
         /// <inheritdoc />
@@ -1322,7 +1253,6 @@ namespace Armada.Core.Services
 
         #region Private-Methods
 
-        private readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> _BaseCommitCheckFailures = new System.Collections.Concurrent.ConcurrentDictionary<string, bool>(StringComparer.Ordinal);
 
         private async Task<bool> HasUntriedIdleCaptainAsync(Mission mission, MissionLaunchFailure failure, CancellationToken token)
         {
@@ -1412,16 +1342,11 @@ namespace Armada.Core.Services
                         continue;
                     }
 
-                    if (_EndpointBreakers.TryGetValue(EndpointCapacityKey(endpoint), out EndpointBreakerState? breaker))
+                    if (_EndpointBreakers.IsOpen(EndpointCapacityKey(endpoint)))
                     {
-                        bool open;
-                        lock (breaker) open = breaker.OpenUntilUtc.HasValue && breaker.OpenUntilUtc.Value > DateTime.UtcNow;
-                        if (open)
-                        {
-                            if (excluded != null) excluded[candidate.Id] = EndpointUnavailable(endpoint, "temporarily unavailable after repeated failures");
-                            _Logging.Debug(_Header + "captain " + candidate.Id + " skipped for mission " + mission.Id + ": endpoint " + endpoint.BaseUrl + " circuit is open after repeated failures");
-                            continue;
-                        }
+                        if (excluded != null) excluded[candidate.Id] = EndpointUnavailable(endpoint, "temporarily unavailable after repeated failures");
+                        _Logging.Debug(_Header + "captain " + candidate.Id + " skipped for mission " + mission.Id + ": endpoint " + endpoint.BaseUrl + " circuit is open after repeated failures");
+                        continue;
                     }
 
                     MissionAssignmentBlocker? endpointBlocker = capacity.EndpointBlocker(candidate);
@@ -2041,7 +1966,7 @@ namespace Armada.Core.Services
             {
                 string line = rawLine.Trim();
                 if (String.IsNullOrWhiteSpace(line)) continue;
-                if (IsAgentTelemetryLine(line)) continue;
+                if (ArchitectPlanText.IsAgentTelemetryLine(line)) continue;
                 if (JudgeVerdictParser.ParseLine(line).HasValue) continue;
 
                 lines.Add(line);
@@ -2271,37 +2196,16 @@ namespace Armada.Core.Services
         /// The Harbor host of a Harbor-hosted dock, or null for a dock on this machine (which keeps using the local git
         /// service and disk exactly as before).
         /// </summary>
-        private async Task SaveLaunchFailureAsync(string missionId, MissionLaunchFailure failure)
-        {
-            MissionLaunchFailure snapshot = new MissionLaunchFailure();
-            snapshot.Count = failure.Count;
-            snapshot.Reason = failure.Reason;
-            snapshot.LastUtc = failure.LastUtc;
-            snapshot.NextAttemptUtc = failure.NextAttemptUtc;
-            lock (failure.FailedCaptainIds) snapshot.FailedCaptainIds = new HashSet<string>(failure.FailedCaptainIds, StringComparer.Ordinal);
-            await _RecoveryState.SaveAsync(RecoveryStateKinds.LaunchFailure, missionId, snapshot, snapshot.NextAttemptUtc.Add(_RecoveryStateRetention), CancellationToken.None).ConfigureAwait(false);
-        }
+        private Task SaveLaunchFailureAsync(string missionId, MissionLaunchFailure failure) => _LaunchBackoff.SaveAsync(missionId, failure);
 
-        private async Task ForgetLaunchFailureAsync(string missionId)
-        {
-            if (_LaunchFailures.TryRemove(missionId, out MissionLaunchFailure? _))
-                await _RecoveryState.DeleteAsync(RecoveryStateKinds.LaunchFailure, missionId, CancellationToken.None).ConfigureAwait(false);
-        }
+        private Task ForgetLaunchFailureAsync(string missionId) => _LaunchBackoff.ForgetAsync(missionId);
 
         private MissionLaunchFailure RecordLaunchFailure(Mission mission, Captain captain, Exception ex)
         {
-            MissionLaunchFailure failure = _LaunchFailures.AddOrUpdate(mission.Id,
-                _ => new MissionLaunchFailure { Count = 1 },
-                (_, existing) => { existing.Count++; return existing; });
-            lock (failure.FailedCaptainIds) failure.FailedCaptainIds.Add(captain.Id);
             HarborJobFailedException? harborFailure = FindInnerException<HarborJobFailedException>(ex);
             AgentRuntimeNotInstalledException? notInstalled = FindInnerException<AgentRuntimeNotInstalledException>(ex);
             string reason = notInstalled != null ? notInstalled.Message : harborFailure != null ? harborFailure.HarborMessage : ex.Message;
-            failure.Reason = reason.Trim().TrimEnd('.') + ".";
-            failure.LastUtc = DateTime.UtcNow;
-            // 30s, 60s, 2m, 4m, then every 5 minutes.
-            double seconds = Math.Min(300, 30 * Math.Pow(2, Math.Max(0, failure.Count - 1)));
-            failure.NextAttemptUtc = DateTime.UtcNow.AddSeconds(seconds);
+            MissionLaunchFailure failure = _LaunchBackoff.Record(mission.Id, captain.Id, reason, out double seconds);
             _Logging.Warn(_Header + "mission " + mission.Id + ": launch " + failure.Count + " of captain " + captain.Id + " failed (" + failure.Reason + "); next attempt in " + seconds.ToString("0") + "s");
             return failure;
         }

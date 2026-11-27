@@ -60,6 +60,9 @@ namespace Armada.Core.Services
             }
         }
 
+        // Vessel, base commit and command to whether the command already fails on the base commit.
+        private readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> _BaseCommitCheckFailures = new System.Collections.Concurrent.ConcurrentDictionary<string, bool>(StringComparer.Ordinal);
+
         private async Task<bool?> FailsOnBaseCommitAsync(IHostCommandExecutor executor, bool windows, string vesselId, string worktree, string baseCommit, string command, DateTime deadline, CancellationToken token)
         {
             string key = vesselId + "|" + baseCommit + "|" + command;

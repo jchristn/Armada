@@ -138,7 +138,7 @@ namespace Armada.Core.Services
             DefinitionOfDoneResult result;
             using (CancellationTokenSource missionRun = CancellationTokenSource.CreateLinkedTokenSource(token))
             {
-                _CompletionCommandRuns[missionRun] = mission.Id;
+                _CompletionRuns.RegisterCommand(missionRun, mission.Id);
                 try
                 {
                     // A cancel that landed before the run was registered is read here; a later one cancels missionRun.
@@ -156,7 +156,7 @@ namespace Armada.Core.Services
                 }
                 finally
                 {
-                    _CompletionCommandRuns.TryRemove(missionRun, out _);
+                    _CompletionRuns.UnregisterCommand(missionRun);
                 }
 
                 // Cancelled after the gate finished: neither land nor fail the cancelled mission.
@@ -326,7 +326,7 @@ namespace Armada.Core.Services
             {
                 // The retry takes over this attempt's usage reservation instead of adding a second one (in memory only:
                 // after a restart the retry simply reserves again, which over-reserves but never under-reserves).
-                if (!String.IsNullOrEmpty(mission.UsageAdmissionExecutionKey)) _NoOpRedispatchCarry[mission.Id] = mission.UsageAdmissionExecutionKey;
+                if (!String.IsNullOrEmpty(mission.UsageAdmissionExecutionKey)) _UsageSelection.SetCarry(mission.Id, mission.UsageAdmissionExecutionKey);
                 MissionStatusEnum noOpRetryFrom = mission.Status;
                 mission.NoOpRedispatchAttempts++;
                 mission.CaptainId = null;
@@ -583,7 +583,7 @@ namespace Armada.Core.Services
             // A captain that edited files but never ran git commit (common for smaller local models) would otherwise
             // produce an empty diff, and the edits would be deleted with the dock. Commit them first.
             if (dock != null) await CommitLeftoverWorkAsync(mission, captain, dock, token).ConfigureAwait(false);
-            bool leftoverCommitted = _LeftoverCommitted.TryRemove(mission.Id, out _);
+            bool leftoverCommitted = _LeftoverCommitted.TryTake(mission.Id);
 
             // Record the exact commit this stage produced. The next stage verifies its dock starts from it, and rework
             // stagnation detection compares it across rounds. Landing later replaces it with the landed commit.

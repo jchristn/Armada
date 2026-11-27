@@ -17,6 +17,9 @@ namespace Armada.Core.Services
     /// </summary>
     public partial class MissionService
     {
+        // Produced missions whose refused handoff was already warned about, so each warns once.
+        private readonly MissionFlagSet _RefusedHandoffWarnings = new MissionFlagSet();
+
         #region Private-Methods
 
         /// <inheritdoc />
@@ -75,7 +78,7 @@ namespace Armada.Core.Services
                     && (JudgeVerdictParser.Parse(StageSubmissionText.EffectiveOutput(produced)) != JudgeVerdictEnum.Pass || !TryValidateJudgePassOutput(StageSubmissionText.EffectiveOutput(produced), out _)))
                 {
                     // Recovery runs every health cycle; say this once per mission, not every few seconds.
-                    if (_RefusedHandoffWarnings.TryAdd(produced.Id, 0))
+                    if (_RefusedHandoffWarnings.TrySetFirst(produced.Id))
                         _Logging.Warn(_Header + "not re-driving handoff for Judge mission " + produced.Id + ": its recorded output is not a substantiated PASS");
                     continue;
                 }

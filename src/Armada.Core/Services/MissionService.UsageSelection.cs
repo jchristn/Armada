@@ -14,17 +14,13 @@ namespace Armada.Core.Services
         /// <summary>Stable Admiral credential-host identity. Required for local usage enforcement; the server supplies its protected usage identity.</summary>
         public string? UsageSelectionLocalHostId { get; set; }
 
-        // Mission ID to the execution attempt whose reservation its pending no-op redispatch takes over.
-        private readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> _NoOpRedispatchCarry =
-            new System.Collections.Concurrent.ConcurrentDictionary<string, string>(StringComparer.Ordinal);
-        private readonly System.Collections.Concurrent.ConcurrentDictionary<string, UsageSelectionTransientBlocker> _UsageSelectionBlockers =
-            new System.Collections.Concurrent.ConcurrentDictionary<string, UsageSelectionTransientBlocker>(StringComparer.Ordinal);
+        private readonly UsageSelectionBlockerStore _UsageSelection = new UsageSelectionBlockerStore();
 
         /// <inheritdoc />
         public void ReconsiderCaptainSelection(Mission mission)
         {
             ArgumentNullException.ThrowIfNull(mission);
-            _UsageSelectionBlockers.TryRemove(mission.Id, out _);
+            _UsageSelection.ClearBlocker(mission.Id);
             NotifySelectionChanged(mission, null, CaptainSelectionOutcomes.RecoveryAuthorized);
         }
 
@@ -61,7 +57,7 @@ namespace Armada.Core.Services
 
         private bool UsageRetryPending(Mission mission)
         {
-            return _UsageSelectionBlockers.TryGetValue(mission.Id, out UsageSelectionTransientBlocker? failure)
+            return _UsageSelection.TryGetBlocker(mission.Id, out UsageSelectionTransientBlocker? failure)
                 && failure.PolicyKey == UsagePolicyKey() && failure.RetryUtc > DateTime.UtcNow;
         }
 
@@ -71,18 +67,12 @@ namespace Armada.Core.Services
         private void UsageWait(Mission mission, string code, string summary)
         {
             NoteWait(mission, UsageBlocker(code, summary), MissionWaitGateEnum.CaptainSlot, code);
-            if (_UsageSelectionBlockers.Count >= _MaxEnvelopeDecisionsTracked)
-            {
-                // Evict the blocker whose retry is due soonest; it is the least valuable to keep.
-                string? oldest = _UsageSelectionBlockers.OrderBy(pair => pair.Value.RetryUtc).Select(pair => pair.Key).FirstOrDefault();
-                if (oldest != null) _UsageSelectionBlockers.TryRemove(oldest, out _);
-            }
-            _UsageSelectionBlockers[mission.Id] = new UsageSelectionTransientBlocker
+            _UsageSelection.SetBlockerBounded(mission.Id, new UsageSelectionTransientBlocker
             {
                 PolicyKey = UsagePolicyKey(), RetryUtc = DateTime.UtcNow.AddSeconds(_Settings.EffectiveUsageSelection.UnknownRetrySeconds),
                 Blocker = new MissionAssignmentBlocker { Reason = MissionAssignmentBlockerReasonEnum.NoEligibleCaptain,
                     SelectionReasonCode = code, Summary = summary }
-            };
+            }, _MaxEnvelopeDecisionsTracked);
         }
 
         /// <summary>Read-only current-state selection preview using shared readiness, eligibility and routing rules.</summary>
@@ -102,7 +92,7 @@ namespace Armada.Core.Services
             string? readiness = null;
             if (mission.Status != MissionStatusEnum.Pending) readiness = UsageSelectionReasonCodes.MissionNotPending;
             else if (String.IsNullOrEmpty(mission.TenantId)) readiness = UsageSelectionReasonCodes.MissionScopeUnavailable;
-            else if (_LaunchFailures.TryGetValue(mission.Id, out MissionLaunchFailure? backoff) && DateTime.UtcNow < backoff.NextAttemptUtc
+            else if (_LaunchBackoff.TryGet(mission.Id, out MissionLaunchFailure? backoff) && DateTime.UtcNow < backoff.NextAttemptUtc
                 && !await HasUntriedIdleCaptainAsync(mission, backoff, token).ConfigureAwait(false)) readiness = UsageSelectionReasonCodes.LaunchRetryPending;
             else if (!String.IsNullOrWhiteSpace(mission.VoyageId))
             {
@@ -287,7 +277,7 @@ namespace Armada.Core.Services
         {
             UsageSelectionSnapshot snapshot = new UsageSelectionSnapshot { Settings = settings, Recovery = selection.Mission.UsageRecovery, EvaluatedUtc = DateTime.UtcNow,
                 ActualCaptainId = selection.Selected?.Id, CaptureEnabled = _Settings.UsageCapture.EffectiveEnabled, Captains = selection.Visible.ToDictionary(c => c.Id, StringComparer.Ordinal),
-                CarriedExecutionAttemptId = _NoOpRedispatchCarry.TryGetValue(selection.Mission.Id, out string? carried) ? carried : null };
+                CarriedExecutionAttemptId = _UsageSelection.GetCarry(selection.Mission.Id) };
             if (selection.Visible.Count > settings.MaximumCandidates)
             {
                 snapshot.Evaluation = new UsageSelectionEvaluation { CandidateLimitExceeded = true, ReasonCode = UsageSelectionReasonCodes.CandidateLimitExceeded };

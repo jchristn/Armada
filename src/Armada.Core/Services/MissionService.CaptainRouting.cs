@@ -291,7 +291,7 @@ namespace Armada.Core.Services
 
             // A captain that already failed to start this mission is used again only when no other idle captain could
             // take it (a single-captain setup keeps retrying with backoff). A strict assignment names its only captain.
-            if (_LaunchFailures.TryGetValue(mission.Id, out MissionLaunchFailure? priorFailures)
+            if (_LaunchBackoff.TryGet(mission.Id, out MissionLaunchFailure? priorFailures)
                 && !(!String.IsNullOrEmpty(requestedCaptainId) && await HasStrictCaptainOverrideAsync(mission, token).ConfigureAwait(false)))
             {
                 List<Captain> untried;

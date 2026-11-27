@@ -1589,7 +1589,7 @@ namespace Armada.Core.Services
                             + (awaitingFirstOutput ? "launch with no output" : "last heartbeat") + ")");
                         ArmadaMetrics.CaptainStalls.Add(1);
                         string stallReason = StallReason(elapsed.TotalMinutes, stallMinutes, awaitingFirstOutput);
-                        CaptainLinkEpisode? pending = _LinkEpisodes.TryGetValue(captain.Assignment?.Id ?? captain.Id, out CaptainLinkEpisode? known) && known.StopPending ? known : null;
+                        CaptainLinkEpisode? pending = PendingStopEpisode(captain);
                         int retryDelay = pending != null ? NextRetryDelayMinutes(pending) : 1;
                         bool underLimit = captain.RecoveryAttempts < _Settings.MaxRecoveryAttempts;
                         string recovery;
@@ -1672,7 +1672,8 @@ namespace Armada.Core.Services
         /// </summary>
         private async Task SettleConfirmedStopAsync(Captain captain, Mission? mission, CancellationToken token)
         {
-            if (!_LinkEpisodes.TryGetValue(captain.Assignment?.Id ?? captain.Id, out CaptainLinkEpisode? episode) || !episode.StopPending) return;
+            CaptainLinkEpisode? episode = PendingStopEpisode(captain);
+            if (episode == null) return;
             string? harborId = episode.HarborId;
             DateTime? reconnected = harborId != null ? HarborLinks?.GetLinkedSinceUtc(harborId) : null;
             await CloseEpisodeAsync(captain, mission, episode, CaptainReconcileOutcomeEnum.Stopped, reconnected, token).ConfigureAwait(false);
