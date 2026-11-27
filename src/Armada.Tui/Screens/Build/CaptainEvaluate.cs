@@ -58,8 +58,8 @@ namespace Armada.Tui.Screens.Build
             {
                 ArmadaPageQuery query = new ArmadaPageQuery();
                 query.PageSize = 1000;
-                EnumerationResult<Captain>? captains = await c.ListCaptainsAsync(query, t).ConfigureAwait(false);
-                EnumerationResult<BatteryPackInfo>? packs = await c.ListBatteryPacksAsync(1, 1000, t).ConfigureAwait(false);
+                EnumerationResult<Captain>? captains = await c.Captains.ListAsync(query, t).ConfigureAwait(false);
+                EnumerationResult<BatteryPackInfo>? packs = await c.Battery.ListPacksAsync(1, 1000, t).ConfigureAwait(false);
                 return new KeyValuePair<List<Captain>, List<BatteryPackInfo>>(captains?.Objects ?? new List<Captain>(), packs?.Objects ?? new List<BatteryPackInfo>());
             }, data => ShowForm(screen, captain, IdleEvaluators(captain, data.Key), data.Value), "Failed to load evaluation options.");
         }
@@ -139,7 +139,7 @@ namespace Armada.Tui.Screens.Build
                     personaChecks.Where(p => p.Value.Checked).Select(p => p.Key),
                     runCount.Value,
                     out error);
-                screen.Call((c, t) => c.EvaluateCaptainWithRequestAsync(captain.Id, request, t), run =>
+                screen.Call((c, t) => c.ModelProbes.EvaluateCaptainWithRequestAsync(captain.Id, request, t), run =>
                 {
                     d.Complete();
                     if (run != null) ShowRun(screen, captain.Name, run);
@@ -189,7 +189,7 @@ namespace Armada.Tui.Screens.Build
                 view.Invalidate();
             }
 
-            modal.CancelRequested += (s, e) => screen.Call((c, t) => c.CancelModelProbeRunAsync(current.Id, t), Update, null, ex =>
+            modal.CancelRequested += (s, e) => screen.Call((c, t) => c.ModelProbes.CancelRunAsync(current.Id, t), Update, null, ex =>
             {
                 error = OpsFormDialog.ServerMessage(ex) ?? screen.Tr("Evaluate failed.");
                 view.Invalidate();
@@ -207,7 +207,7 @@ namespace Armada.Tui.Screens.Build
                 timer = new Timer(_ =>
                 {
                     if (closed || !screen.IsLive) return;
-                    screen.Call((c, t) => c.GetModelProbeRunAsync(current.Id, t), Update, null, ex =>
+                    screen.Call((c, t) => c.ModelProbes.GetRunAsync(current.Id, t), Update, null, ex =>
                     {
                         error = OpsFormDialog.ServerMessage(ex) ?? screen.Tr("Failed to load evaluation.");
                         timer?.Dispose();

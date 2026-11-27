@@ -63,8 +63,8 @@ namespace Armada.Gate
         {
             if (pipelines == null) throw new ArgumentNullException(nameof(pipelines));
             List<string> roleNames = pipelines.SelectMany(p => p.Staffing.Values).Distinct(StringComparer.Ordinal).ToList();
-            List<Captain> captains = (await _Client.ListCaptainsAsync(new ArmadaPageQuery { PageSize = 1000 }, token).ConfigureAwait(false))?.Objects ?? new List<Captain>();
-            List<ModelEndpoint> endpoints = await _Client.ListModelEndpointsAsync(token).ConfigureAwait(false) ?? new List<ModelEndpoint>();
+            List<Captain> captains = (await _Client.Captains.ListAsync(new ArmadaPageQuery { PageSize = 1000 }, token).ConfigureAwait(false))?.Objects ?? new List<Captain>();
+            List<ModelEndpoint> endpoints = await _Client.ModelEndpoints.ListAsync(token).ConfigureAwait(false) ?? new List<ModelEndpoint>();
             Dictionary<string, string> captainByRole = new Dictionary<string, string>(StringComparer.Ordinal);
 
             foreach (string roleName in roleNames)
@@ -92,7 +92,7 @@ namespace Armada.Gate
                     captain.Model = role.Model;
                 }
 
-                Captain created = await _Client.CreateCaptainAsync(captain, token).ConfigureAwait(false) ?? throw new InvalidOperationException("Creating captain " + captainName + " returned nothing.");
+                Captain created = await _Client.Captains.CreateAsync(captain, token).ConfigureAwait(false) ?? throw new InvalidOperationException("Creating captain " + captainName + " returned nothing.");
                 captainByRole[role.Name] = created.Id;
                 _Log("created captain " + captainName + " (" + captain.Runtime + ", " + captain.Model + ")");
             }
@@ -101,7 +101,7 @@ namespace Armada.Gate
             {
                 token.ThrowIfCancellationRequested();
                 Pipeline? found = null;
-                try { found = await _Client.GetPipelineAsync(pipeline.Name, token).ConfigureAwait(false); }
+                try { found = await _Client.Pipelines.GetAsync(pipeline.Name, token).ConfigureAwait(false); }
                 catch (ArmadaApiException) { found = null; }
                 if (found != null) continue;
                 Pipeline created = new Pipeline(pipeline.Name)
@@ -109,7 +109,7 @@ namespace Armada.Gate
                     Description = pipeline.Description,
                     Stages = pipeline.Stages.Select((persona, index) => new PipelineStage(index + 1, persona)).ToList()
                 };
-                await _Client.CreatePipelineAsync(created, token).ConfigureAwait(false);
+                await _Client.Pipelines.CreateAsync(created, token).ConfigureAwait(false);
                 _Log("created pipeline " + pipeline.Name + " (" + String.Join(" -> ", pipeline.Stages) + ")");
             }
 
@@ -133,7 +133,7 @@ namespace Armada.Gate
             if (packs == null || packs.Count == 0) throw new ArgumentException("Name at least one pack.", nameof(packs));
 
             GateReport report = new GateReport { StartedUtc = DateTime.UtcNow, Packs = packs };
-            try { report.ArmadaVersion = (await _Client.GetHealthAsync(token).ConfigureAwait(false))?.Version; }
+            try { report.ArmadaVersion = (await _Client.Status.GetHealthAsync(token).ConfigureAwait(false))?.Version; }
             catch (ArmadaApiException) { report.ArmadaVersion = null; }
 
             foreach (GatePipeline pipeline in pipelines)
@@ -154,21 +154,21 @@ namespace Armada.Gate
                 };
 
                 _Log("running " + pipeline.Name + " on " + String.Join(",", packs) + " x" + request.RunCount);
-                BatteryRun? run = await _Client.RunBatteryAsync(request, token).ConfigureAwait(false);
+                BatteryRun? run = await _Client.Battery.RunAsync(request, token).ConfigureAwait(false);
                 if (run == null) throw new InvalidOperationException("The battery run for " + pipeline.Name + " was not created.");
                 try
                 {
                     while (run.Status == BatteryRunStatusEnum.Queued || run.Status == BatteryRunStatusEnum.Running)
                     {
                         await Task.Delay(poll, token).ConfigureAwait(false);
-                        run = await _Client.GetBatteryRunAsync(run.Id, token).ConfigureAwait(false) ?? run;
+                        run = await _Client.Battery.GetRunAsync(run.Id, token).ConfigureAwait(false) ?? run;
                     }
                 }
                 catch (OperationCanceledException) when (token.IsCancellationRequested)
                 {
                     // Stopping the gate client stops its run on the Admiral too, so no mission keeps executing.
                     _Log("stopping " + run.Id + " on the Admiral");
-                    try { await _Client.CancelBatteryRunAsync(run.Id, "The gate client was stopped.", CancellationToken.None).ConfigureAwait(false); }
+                    try { await _Client.Battery.CancelRunAsync(run.Id, "The gate client was stopped.", CancellationToken.None).ConfigureAwait(false); }
                     catch (Exception ex) { _Log("could not cancel " + run.Id + ": " + ex.Message); }
                     throw;
                 }
@@ -309,7 +309,7 @@ namespace Armada.Gate
                 throw new InvalidOperationException("Role " + role.Name + " has an unknown source " + role.Source + ".");
             }
 
-            ModelEndpoint created = await _Client.CreateModelEndpointAsync(endpoint, apiKey, token).ConfigureAwait(false)
+            ModelEndpoint created = await _Client.ModelEndpoints.CreateAsync(endpoint, apiKey, token).ConfigureAwait(false)
                 ?? throw new InvalidOperationException("Creating endpoint " + name + " returned nothing.");
             _Log("created model endpoint " + name + " (" + endpoint.Provider + ", " + endpoint.Model + ")");
             return created;
@@ -320,7 +320,7 @@ namespace Armada.Gate
             List<StageOutcome> all = new List<StageOutcome>();
             for (int page = 1; page <= 100; page++)
             {
-                EnumerationResult<StageOutcome>? result = await _Client.EnumerateStageOutcomesAsync(new StageOutcomeQuery
+                EnumerationResult<StageOutcome>? result = await _Client.StageOutcomes.EnumerateAsync(new StageOutcomeQuery
                 {
                     IsEvaluation = true,
                     FromUtc = fromUtc,

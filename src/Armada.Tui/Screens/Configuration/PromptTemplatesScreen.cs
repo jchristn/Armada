@@ -117,7 +117,7 @@ namespace Armada.Tui.Screens.Configuration
         /// <inheritdoc />
         protected override async Task<GridPage<PromptTemplate>> FetchPageAsync(GridQuery query, CancellationToken token)
         {
-            List<PromptTemplate> all = await ArmadaPaging.ReadAllAsync<PromptTemplate>((p, ct) => Context.Client.ListPromptTemplatesAsync(new ArmadaPageQuery(p, 500), ct), 20, token).ConfigureAwait(false);
+            List<PromptTemplate> all = await ArmadaPaging.ReadAllAsync<PromptTemplate>((p, ct) => Context.Client.PromptTemplates.ListAsync(new ArmadaPageQuery(p, 500), ct), 20, token).ConfigureAwait(false);
             string category = Filter("category");
             List<PromptTemplate> filtered = all.Where(p => Matches(Filter("name"), p.Name)
                 && Matches(Filter("description"), p.Description)

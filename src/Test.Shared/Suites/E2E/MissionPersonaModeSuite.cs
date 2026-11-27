@@ -95,7 +95,7 @@ namespace Test.Shared.Suites.E2E
                 sdkRequest.Title = "sdk";
                 sdkRequest.VesselId = vessel.Id;
                 sdkRequest.Missions = new List<DispatchRequest> { new DispatchRequest { Title = "sdk research", Description = "r", VesselId = vessel.Id, Persona = "Judge", Mode = MissionModeEnum.Research } };
-                Voyage? sdkVoyage = await client.CreateVoyageAsync(sdkRequest, ct).ConfigureAwait(false);
+                Voyage? sdkVoyage = await client.Voyages.CreateAsync(sdkRequest, ct).ConfigureAwait(false);
                 AssertNotNull(sdkVoyage, "sdk voyage");
                 Mission sdkMission = (await MissionsAsync(rest, sdkVoyage!.Id, ct).ConfigureAwait(false)).Single();
                 AssertEqual("Judge", sdkMission.Persona);

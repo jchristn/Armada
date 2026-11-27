@@ -84,7 +84,7 @@ namespace Armada.Tui.Screens.Operations
         {
             try
             {
-                EnumerationResult<Job>? result = await Context.Client.ListJobsAsync(token).ConfigureAwait(false);
+                EnumerationResult<Job>? result = await Context.Client.Jobs.ListAsync(token).ConfigureAwait(false);
                 List<Job> rows = result?.Objects ?? new List<Job>();
                 return new GridPage<Job>(rows, rows.Count);
             }
@@ -106,7 +106,7 @@ namespace Armada.Tui.Screens.Operations
 
         private void Cancel(Job job)
         {
-            Run((c, t) => c.CancelJobAsync(job.Id, t), () =>
+            Run((c, t) => c.Jobs.CancelAsync(job.Id, t), () =>
             {
                 Toast(NotificationSeverityEnum.Warning, Tr("Job \"{{name}}\" cancelled.", LocalizationArgs.Of("name", job.Name)));
                 Refresh();

@@ -76,7 +76,7 @@ namespace Armada.Tui.Screens.Build
         /// <inheritdoc />
         protected override async Task<GridPage<Vessel>> FetchAsync(GridQuery query, CancellationToken token)
         {
-            EnumerationResult<Vessel>? result = await Context.Client.ListVesselsAsync(new ArmadaPageQuery(1, 9999), token).ConfigureAwait(false);
+            EnumerationResult<Vessel>? result = await Context.Client.Vessels.ListAsync(new ArmadaPageQuery(1, 9999), token).ConfigureAwait(false);
             List<Vessel> vessels = result?.Objects ?? new List<Vessel>();
             List<string> recent = Context.Prefs.Current.WorkspaceRecentVessels ?? new List<string>();
             List<Vessel> ordered = recent.Select(id => vessels.FirstOrDefault(v => v.Id == id)).Where(v => v != null).Select(v => v!).ToList();
@@ -87,7 +87,7 @@ namespace Armada.Tui.Screens.Build
             {
                 List<Task> tasks = preview.Select(async id =>
                 {
-                    try { StatusByVessel[id] = await client.GetWorkspaceStatusAsync(id).ConfigureAwait(false); }
+                    try { StatusByVessel[id] = await client.Workspace.GetStatusAsync(id).ConfigureAwait(false); }
                     catch (Exception) { StatusByVessel[id] = null; }
                 }).ToList();
                 try { await Task.WhenAll(tasks).ConfigureAwait(false); }

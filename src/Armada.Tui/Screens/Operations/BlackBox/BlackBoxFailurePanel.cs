@@ -142,11 +142,11 @@ namespace Armada.Tui.Screens.Operations
             BlackBoxPanelSourceEnum source = Source;
             _Screen.Call(async (c, t) =>
             {
-                BlackBoxEntry? entry = source == BlackBoxPanelSourceEnum.Mission ? await c.GetMissionBlackBoxAsync(id, true, t).ConfigureAwait(false)
-                    : source == BlackBoxPanelSourceEnum.Voyage ? await c.GetVoyageBlackBoxAsync(id, true, t).ConfigureAwait(false)
-                    : await c.GetBlackBoxAsync(id, true, t).ConfigureAwait(false);
+                BlackBoxEntry? entry = source == BlackBoxPanelSourceEnum.Mission ? await c.BlackBox.GetForMissionAsync(id, true, t).ConfigureAwait(false)
+                    : source == BlackBoxPanelSourceEnum.Voyage ? await c.BlackBox.GetForVoyageAsync(id, true, t).ConfigureAwait(false)
+                    : await c.BlackBox.GetAsync(id, true, t).ConfigureAwait(false);
                 string? brief = null;
-                if (entry != null) brief = await c.GetBlackBoxBriefAsync(entry.Id, false, t).ConfigureAwait(false);
+                if (entry != null) brief = await c.BlackBox.GetBriefAsync(entry.Id, false, t).ConfigureAwait(false);
                 return new BlackBoxPanelLoad(entry, brief);
             }, r =>
             {
@@ -325,7 +325,7 @@ namespace Armada.Tui.Screens.Operations
             BlackBoxRecoveryRunRequest request = new BlackBoxRecoveryRunRequest();
             request.DryRun = true;
             request.AuthorKind = BlackBoxNoteAuthorKindEnum.Operator;
-            _Screen.Call((c, t) => c.RunBlackBoxRecoveryAsync(entryId, path.Id, request, t), r =>
+            _Screen.Call((c, t) => c.BlackBox.RunRecoveryAsync(entryId, path.Id, request, t), r =>
             {
                 if (r == null) return;
                 string plan = PlanText(path, r);
@@ -356,7 +356,7 @@ namespace Armada.Tui.Screens.Operations
             request.ConfirmToken = confirmToken;
             request.AcknowledgeDataLoss = acknowledgeDataLoss;
             request.AuthorKind = BlackBoxNoteAuthorKindEnum.Operator;
-            _Screen.Call((c, t) => c.RunBlackBoxRecoveryAsync(entryId, path.Id, request, t), r =>
+            _Screen.Call((c, t) => c.BlackBox.RunRecoveryAsync(entryId, path.Id, request, t), r =>
             {
                 if (r == null) return;
                 _Screen.Toast(r.Succeeded ? NotificationSeverityEnum.Success : NotificationSeverityEnum.Error, r.Succeeded
@@ -401,7 +401,7 @@ namespace Armada.Tui.Screens.Operations
 
             ArmadaPageQuery query = new ArmadaPageQuery();
             query.PageSize = 1000;
-            _Screen.Call((c, t) => c.ListVesselsAsync(query, t), r => OpenDispatch(change, BlackBoxResilienceText.ArmadaVesselId(r?.Objects)), null, ex => OpenDispatch(change, null));
+            _Screen.Call((c, t) => c.Vessels.ListAsync(query, t), r => OpenDispatch(change, BlackBoxResilienceText.ArmadaVesselId(r?.Objects)), null, ex => OpenDispatch(change, null));
             return true;
         }
 
@@ -445,7 +445,7 @@ namespace Armada.Tui.Screens.Operations
                 request.Resolution = resolution.Value;
                 request.Note = String.IsNullOrWhiteSpace(note.Text) ? null : note.Text.Trim();
                 request.Link = String.IsNullOrWhiteSpace(link.Value) ? null : link.Value.Trim();
-                _Screen.Call((c, t) => c.ResolveBlackBoxAsync(entryId, request, t), e =>
+                _Screen.Call((c, t) => c.BlackBox.ResolveAsync(entryId, request, t), e =>
                 {
                     d.Complete();
                     _Screen.Toast(NotificationSeverityEnum.Success, _Screen.Tr("Black box entry marked {{resolution}}.", LocalizationArgs.Of("resolution", request.Resolution.ToString())));
@@ -465,7 +465,7 @@ namespace Armada.Tui.Screens.Operations
             if (Entry == null) return;
             string entryId = Entry.Id;
             bool pin = !Entry.Pinned;
-            _Screen.Call((c, t) => pin ? c.PinBlackBoxAsync(entryId, t) : c.UnpinBlackBoxAsync(entryId, t), e =>
+            _Screen.Call((c, t) => pin ? c.BlackBox.PinAsync(entryId, t) : c.BlackBox.UnpinAsync(entryId, t), e =>
             {
                 _Screen.Toast(NotificationSeverityEnum.Success, pin ? _Screen.Tr("Black box entry pinned.") : _Screen.Tr("Black box entry unpinned."));
                 AfterChange();
@@ -490,7 +490,7 @@ namespace Armada.Tui.Screens.Operations
                 BlackBoxNoteAddRequest request = new BlackBoxNoteAddRequest();
                 request.Body = body.Text.Trim();
                 request.AuthorKind = BlackBoxNoteAuthorKindEnum.Operator;
-                _Screen.Call((c, t) => c.AddBlackBoxNoteAsync(entryId, request, t), n =>
+                _Screen.Call((c, t) => c.BlackBox.AddNoteAsync(entryId, request, t), n =>
                 {
                     d.Complete();
                     _Screen.Toast(NotificationSeverityEnum.Success, _Screen.Tr("Note added."));

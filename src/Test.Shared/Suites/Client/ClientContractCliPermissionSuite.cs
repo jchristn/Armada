@@ -33,16 +33,16 @@ namespace Test.Shared.Suites.Client
 
             cases.Add(Case("requests", "CLI permission requests: list by status; get and decide an unknown id fail", async (c, fx) =>
             {
-                EnumerationResult<CliPermissionRequest> page = (await c.ListCliPermissionRequestsAsync(new CliPermissionRequestEnumerateRequest { Status = "Pending", PageNumber = 1, PageSize = 5 }))!;
+                EnumerationResult<CliPermissionRequest> page = (await c.CliPermissions.ListRequestsAsync(new CliPermissionRequestEnumerateRequest { Status = "Pending", PageNumber = 1, PageSize = 5 }))!;
                 AssertNotNull(page, "list");
                 AssertTrue(page.Success, "page success");
                 AssertEqual(5, page.PageSize, "page size echoed");
                 AssertTrue(page.Objects.Count <= 5, "bounded page");
                 List<CliPermissionRequest> pending = page.Objects;
                 AssertTrue(pending.All(r => r.Status == CliPermissionRequestStatusEnum.Pending), "status filter");
-                await ClientContract.ExpectErrorAsync(() => c.GetCliPermissionRequestAsync("cpr_missing"), "get unknown", 404, 404);
+                await ClientContract.ExpectErrorAsync(() => c.CliPermissions.GetRequestAsync("cpr_missing"), "get unknown", 404, 404);
                 CliPermissionDecisionRequest decision = new CliPermissionDecisionRequest { Decision = CliPermissionDecisionEnum.AllowOnce };
-                await ClientContract.ExpectErrorAsync(() => c.DecideCliPermissionRequestAsync("cpr_missing", decision), "decide unknown", 404, 404);
+                await ClientContract.ExpectErrorAsync(() => c.CliPermissions.DecideRequestAsync("cpr_missing", decision), "decide unknown", 404, 404);
             }));
 
             cases.Add(Case("rules", "CLI permission rules: create, get, list, update, delete", async (c, fx) =>
@@ -53,38 +53,38 @@ namespace Test.Shared.Suites.Client
                 rule.Action = CliPermissionRuleActionEnum.Allow;
                 rule.Scope = CliPermissionRuleScopeEnum.Global;
                 rule.Description = "contract";
-                CliPermissionRule created = (await c.CreateCliPermissionRuleAsync(rule))!;
+                CliPermissionRule created = (await c.CliPermissions.CreateRuleAsync(rule))!;
                 AssertEqual(rule.Pattern, created.Pattern, "created pattern");
-                AssertEqual(rule.Pattern, (await c.GetCliPermissionRuleAsync(created.Id))?.Pattern, "get");
-                List<CliPermissionRule> global = (await c.ListCliPermissionRulesAsync(new CliPermissionRuleQuery { Scope = CliPermissionRuleScopeEnum.Global }))!;
-                EnumerationResult<CliPermissionRule>? rulePage = await c.EnumerateCliPermissionRulesAsync(new CliPermissionRuleQuery { Scope = CliPermissionRuleScopeEnum.Global }, 1, 1);
+                AssertEqual(rule.Pattern, (await c.CliPermissions.GetRuleAsync(created.Id))?.Pattern, "get");
+                List<CliPermissionRule> global = (await c.CliPermissions.ListRulesAsync(new CliPermissionRuleQuery { Scope = CliPermissionRuleScopeEnum.Global }))!;
+                EnumerationResult<CliPermissionRule>? rulePage = await c.CliPermissions.EnumerateRulesAsync(new CliPermissionRuleQuery { Scope = CliPermissionRuleScopeEnum.Global }, 1, 1);
                 AssertEqual((long)global.Count, rulePage!.TotalRecords, "page total matches every rule");
                 AssertTrue(rulePage.Objects.Count <= 1, "rule page bounded");
                 AssertTrue(global.Any(r => r.Id == created.Id), "listed");
                 created.Description = "updated";
                 created.Action = CliPermissionRuleActionEnum.Deny;
-                CliPermissionRule updated = (await c.UpdateCliPermissionRuleAsync(created.Id, created))!;
+                CliPermissionRule updated = (await c.CliPermissions.UpdateRuleAsync(created.Id, created))!;
                 AssertEqual("updated", updated.Description, "description updated");
                 AssertEqual(CliPermissionRuleActionEnum.Deny, updated.Action, "action updated");
-                await c.DeleteCliPermissionRuleAsync(created.Id);
-                await ClientContract.ExpectErrorAsync(() => c.GetCliPermissionRuleAsync(created.Id), "deleted", 404, 404);
+                await c.CliPermissions.DeleteRuleAsync(created.Id);
+                await ClientContract.ExpectErrorAsync(() => c.CliPermissions.GetRuleAsync(created.Id), "deleted", 404, 404);
             }));
 
             cases.Add(Case("policies", "Captain and Ask thread CLI permission policy set and clear", async (c, fx) =>
             {
                 Captain captain = await LiveServerSetup.CreateCaptainAsync(c, "contract-cli-" + ClientContract.Suffix());
-                Captain? refused = await c.SetCaptainCliPermissionPolicyAsync(captain.Id, CliPermissionPolicyEnum.Refuse);
+                Captain? refused = await c.CliPermissions.SetCaptainPolicyAsync(captain.Id, CliPermissionPolicyEnum.Refuse);
                 AssertEqual(CliPermissionPolicyEnum.Refuse, refused?.CliPermissionPolicy, "captain policy set");
-                Captain? cleared = await c.SetCaptainCliPermissionPolicyAsync(captain.Id, null);
+                Captain? cleared = await c.CliPermissions.SetCaptainPolicyAsync(captain.Id, null);
                 AssertNull(cleared?.CliPermissionPolicy, "captain policy cleared");
 
-                AskThread thread = (await c.CreateAskThreadAsync(new AskThreadCreateRequest { Title = "Contract CLI policy", CaptainId = captain.Id }))!;
-                AskThread? overridden = await c.SetAskThreadCliPermissionPolicyAsync(thread.Id, CliPermissionPolicyEnum.Refuse);
+                AskThread thread = (await c.Ask.CreateThreadAsync(new AskThreadCreateRequest { Title = "Contract CLI policy", CaptainId = captain.Id }))!;
+                AskThread? overridden = await c.CliPermissions.SetAskThreadPolicyAsync(thread.Id, CliPermissionPolicyEnum.Refuse);
                 AssertEqual(CliPermissionPolicyEnum.Refuse, overridden?.CliPermissionPolicy, "thread override set");
                 AssertEqual(CliPermissionPolicySourceEnum.AskThread, overridden?.CliPermission?.Source, "resolution names the thread");
-                AskThread? inherited = await c.SetAskThreadCliPermissionPolicyAsync(thread.Id, null);
+                AskThread? inherited = await c.CliPermissions.SetAskThreadPolicyAsync(thread.Id, null);
                 AssertNull(inherited?.CliPermissionPolicy, "thread override cleared");
-                await c.DeleteAskThreadAsync(thread.Id);
+                await c.Ask.DeleteThreadAsync(thread.Id);
             }));
 
             return new TestSuiteDescriptor(suiteId: Suite, displayName: "Armada.Client contract: CLI tool permissions", cases: cases);

@@ -31,21 +31,21 @@ namespace Test.Shared.Suites.Client
         /// </summary>
         private static readonly Dictionary<string, string> _CoveredElsewhere = new Dictionary<string, string>(StringComparer.Ordinal)
         {
-            ["AuthorizeCaptainSelectionRecoveryAsync"] = "Authenticated SDK administrator recovery mutation, scope, revisions and running-state conflicts covered by E2E.CaptainSelectionApi",
-            ["GetCaptainSelectionAsync"] = "Live SDK/Core-client owner, retained history, redaction and read-only preview contracts covered by E2E.CaptainSelectionApi",
-            ["GetCaptainSelectionHistoryAsync"] = "Live SDK/Core-client owner, retained history, redaction and read-only preview contracts covered by E2E.CaptainSelectionApi",
-            ["GetCaptainSelectionDecisionAsync"] = "Live SDK/Core-client owner, retained history, redaction and read-only preview contracts covered by E2E.CaptainSelectionApi",
-            ["GetCaptainSelectionCandidatesAsync"] = "Live SDK/Core-client owner, retained history, redaction and read-only preview contracts covered by E2E.CaptainSelectionApi",
-            ["PreviewCaptainSelectionAsync"] = "Live SDK/Core-client owner, retained history, redaction and read-only preview contracts covered by E2E.CaptainSelectionApi",
-            ["GenerateSyntheticActivityAsync"] = "Live generated activity replay covered by E2E.SyntheticActivity",
-            ["OpenWorkspaceTerminalAsync"] = "Opens a real terminal window on the machine that holds the checkout, so the live contract suites do not call it; the route is checked by Client.RouteSurface and its answers (Harbor, older Harbor, owner, refused roots, Admiral host) by Services.WorkspaceTerminal",
-            ["ImportSyntheticTokenUsageAsync"] = "Live SDK import, replay, scope, summary, and conflict coverage in E2E.TokenUsageSyntheticApi",
-            ["StopServerAsync"] = Destructive,
-            ["RestartServerAsync"] = Destructive,
-            ["ResetServerAsync"] = Destructive,
-            ["RebuildServerAsync"] = Destructive,
-            ["RollbackServerAsync"] = Destructive,
-            ["RestoreBackupAsync"] = Destructive + "; the live restore path is drilled by E2E.BackupRestoreDrill"
+            ["CaptainSelection.AuthorizeRecoveryAsync"] = "Authenticated SDK administrator recovery mutation, scope, revisions and running-state conflicts covered by E2E.CaptainSelectionApi",
+            ["CaptainSelection.GetAsync"] = "Live SDK/Core-client owner, retained history, redaction and read-only preview contracts covered by E2E.CaptainSelectionApi",
+            ["CaptainSelection.GetHistoryAsync"] = "Live SDK/Core-client owner, retained history, redaction and read-only preview contracts covered by E2E.CaptainSelectionApi",
+            ["CaptainSelection.GetDecisionAsync"] = "Live SDK/Core-client owner, retained history, redaction and read-only preview contracts covered by E2E.CaptainSelectionApi",
+            ["CaptainSelection.GetCandidatesAsync"] = "Live SDK/Core-client owner, retained history, redaction and read-only preview contracts covered by E2E.CaptainSelectionApi",
+            ["CaptainSelection.PreviewAsync"] = "Live SDK/Core-client owner, retained history, redaction and read-only preview contracts covered by E2E.CaptainSelectionApi",
+            ["Server.GenerateSyntheticActivityAsync"] = "Live generated activity replay covered by E2E.SyntheticActivity",
+            ["Workspace.OpenTerminalAsync"] = "Opens a real terminal window on the machine that holds the checkout, so the live contract suites do not call it; the route is checked by Client.RouteSurface and its answers (Harbor, older Harbor, owner, refused roots, Admiral host) by Services.WorkspaceTerminal",
+            ["TokenUsage.ImportSyntheticAsync"] = "Live SDK import, replay, scope, summary, and conflict coverage in E2E.TokenUsageSyntheticApi",
+            ["Server.StopAsync"] = Destructive,
+            ["Server.RestartAsync"] = Destructive,
+            ["Server.ResetAsync"] = Destructive,
+            ["Server.RebuildAsync"] = Destructive,
+            ["Server.RollbackAsync"] = Destructive,
+            ["Server.RestoreBackupAsync"] = Destructive + "; the live restore path is drilled by E2E.BackupRestoreDrill"
         };
 
         #endregion
@@ -60,13 +60,14 @@ namespace Test.Shared.Suites.Client
             cases.Add(TuiCase.Sync(Suite, "every_method_exercised", "Every client method is exercised against the live server or listed as covered elsewhere", () =>
             {
                 List<string> methods = ClientRouteMap.ApiMethods().Select(m => m.Name).Distinct().ToList();
+                HashSet<string> areas = new HashSet<string>(ClientRouteMap.ApiMethods().Select(m => m.Area.Name), StringComparer.Ordinal);
                 string folder = Path.Combine(ApiSurfaceFiles.FindRepositoryRoot(), "src", "Test.Shared", "Suites", "Client");
                 HashSet<string> called = new HashSet<string>(StringComparer.Ordinal);
                 foreach (string file in Directory.GetFiles(folder, "ClientContract*.cs"))
                 {
-                    foreach (Match match in Regex.Matches(File.ReadAllText(file), @"\.(\w+Async)\("))
+                    foreach (Match match in Regex.Matches(File.ReadAllText(file), @"\.(\w+)\.(\w+Async)\("))
                     {
-                        called.Add(match.Groups[1].Value);
+                        if (areas.Contains(match.Groups[1].Value)) called.Add(match.Groups[1].Value + "." + match.Groups[2].Value);
                     }
                 }
 

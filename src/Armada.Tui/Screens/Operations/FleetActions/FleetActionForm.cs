@@ -206,7 +206,7 @@ namespace Armada.Tui.Screens.Operations
                     payload.RequiresNetwork = source.RequiresNetwork;
                 }
                 string? editId = edit && source != null ? source.Id : null;
-                screen.Call((c, t) => editId != null ? c.UpdateFleetActionAsync(editId, payload, t) : c.CreateFleetActionAsync(payload, t), result =>
+                screen.Call((c, t) => editId != null ? c.FleetActions.UpdateAsync(editId, payload, t) : c.FleetActions.CreateAsync(payload, t), result =>
                 {
                     d.Complete();
                     if (result != null) saved(result);

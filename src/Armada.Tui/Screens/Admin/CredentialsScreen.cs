@@ -155,11 +155,11 @@ namespace Armada.Tui.Screens.Admin
             ScreenOps.Run(Context, async () =>
             {
                 CredentialsLoad load = new CredentialsLoad();
-                load.Credentials = (await Context.Client.ListCredentialsAsync().ConfigureAwait(false))?.Objects ?? new List<Credential>();
-                load.Users = (await Context.Client.ListUsersAsync().ConfigureAwait(false))?.Objects ?? new List<UserMaster>();
+                load.Credentials = (await Context.Client.Credentials.ListAsync().ConfigureAwait(false))?.Objects ?? new List<Credential>();
+                load.Users = (await Context.Client.Users.ListAsync().ConfigureAwait(false))?.Objects ?? new List<UserMaster>();
                 if (Context.Session.IsGlobalAdmin)
                 {
-                    load.Tenants = (await Context.Client.ListTenantsAsync().ConfigureAwait(false))?.Objects ?? new List<TenantMetadata>();
+                    load.Tenants = (await Context.Client.Tenants.ListAsync().ConfigureAwait(false))?.Objects ?? new List<TenantMetadata>();
                 }
                 else
                 {
@@ -226,14 +226,14 @@ namespace Armada.Tui.Screens.Admin
                     body.Id = editing.Id;
                     body.Name = String.IsNullOrEmpty(name.Value) ? null : name.Value;
                     body.Active = active.Value;
-                    await Context.Client.UpdateCredentialAsync(editing.Id, body).ConfigureAwait(false);
+                    await Context.Client.Credentials.UpdateAsync(editing.Id, body).ConfigureAwait(false);
                 }
                 else
                 {
                     if (String.IsNullOrEmpty(user.Value) || String.IsNullOrEmpty(tenant.Value)) return "A selection is required.";
                     Credential body = new Credential(tenant.Value!, user.Value!);
                     body.Name = String.IsNullOrEmpty(name.Value) ? null : name.Value;
-                    Credential? created = await Context.Client.CreateCredentialAsync(body).ConfigureAwait(false);
+                    Credential? created = await Context.Client.Credentials.CreateAsync(body).ConfigureAwait(false);
                     createdToken = created?.BearerToken;
                 }
 
@@ -348,7 +348,7 @@ namespace Armada.Tui.Screens.Admin
             string label = String.IsNullOrEmpty(row.Name) ? row.Id : row.Name!;
             Context.Confirm("Delete Credential", Context.Loc.T("Delete credential \"{{name}}\"? This cannot be undone.", LocalizationArgs.Of("name", label)), () =>
             {
-                DeleteProgress.RunVoid(Context, "Deleting credential", ct => Context.Client.DeleteCredentialAsync(id, ct), () =>
+                DeleteProgress.RunVoid(Context, "Deleting credential", ct => Context.Client.Credentials.DeleteAsync(id, ct), () =>
                 {
                     ScreenOps.Toast(Context, NotificationSeverityEnum.Warning, "Credential \"{{name}}\" deleted.", LocalizationArgs.Of("name", label));
                     Load();
@@ -365,7 +365,7 @@ namespace Armada.Tui.Screens.Admin
             Context.Confirm("Delete Selected Credentials", Context.Loc.T("Delete {{count}} credential(s)?", LocalizationArgs.Of("count", ids.Count)), () =>
             {
                 Grid.ClearMarks();
-                UserAdminOps.BulkDelete(Context, ids, id => Context.Client.DeleteCredentialAsync(id), "credentials", Load, "{count, plural, one {Deleting # credential} other {Deleting # credentials}}");
+                UserAdminOps.BulkDelete(Context, ids, id => Context.Client.Credentials.DeleteAsync(id), "credentials", Load, "{count, plural, one {Deleting # credential} other {Deleting # credentials}}");
             }, "Delete", "delete");
         }
 

@@ -38,7 +38,7 @@ namespace Armada.Helm.Commands
 
             return await RunBlackBoxAsync(settings.Json, async client =>
             {
-                BlackBoxCascadeGraph? graph = await client.GetVoyageBlackBoxCascadeAsync(voyageId, cancellationToken).ConfigureAwait(false);
+                BlackBoxCascadeGraph? graph = await client.BlackBoxInsights.GetVoyageCascadeAsync(voyageId, cancellationToken).ConfigureAwait(false);
                 if (graph == null)
                 {
                     Status("Error: no cascade for " + voyageId + ".");

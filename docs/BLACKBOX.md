@@ -406,8 +406,8 @@ kind on the server, paged as you scroll, refreshed on `blackbox.*` events) with 
   WebSocket command) and the events `blackbox.captured`, `blackbox.capture_failed`, `blackbox.analyzed`,
   `blackbox.resolved`, `blackbox.deleted`, `blackbox.storage_fallback`, `blackbox.gc_completed` and
   `blackbox.recovery_run`, delivered to the entry's tenant. See [WEBSOCKET_API.md](WEBSOCKET_API.md).
-- .NET: `Armada.Client` has a method per route (`GetMissionBlackBoxAsync`, `GetBlackBoxBriefAsync`,
-  `RunBlackBoxRecoveryAsync`, ...).
+- .NET: `Armada.Client` has a method per route on `client.BlackBox` (`BlackBox.GetForMissionAsync`, `BlackBox.GetBriefAsync`,
+  `BlackBox.RunRecoveryAsync`, ...).
 
 Who sees what: a global administrator sees every tenant's entries, a tenant administrator their tenant's, and a
 user their own. An entry you cannot see reads exactly like one that does not exist (404 `BlackBoxNotFound`, never 403).
@@ -1916,19 +1916,19 @@ Task<EnumerationResult<BlackBoxRecoveryStat>> EnumerateRecoveryStatsAsync(AuthCo
 ```
 
 Surfaces (REST tag `BlackBox`, every MCP tool read-only and in `AskToolPolicy`'s read-only allowlist, authorization
-`Authenticated`, resource `BlackBox`; client methods in `ArmadaClient.BlackBoxInsights.cs`):
+`Authenticated`, resource `BlackBox`; client methods on `ArmadaClient.BlackBoxInsights`, in `BlackBoxInsightsClient.cs`):
 
 | Feature | REST | MCP | Armada.Client |
 |---|---|---|---|
-| Overlap preview | `POST /api/v1/vessels/{id}/overlap-preview` | `preview_mission_overlap` | `PreviewMissionOverlapAsync` |
-| Reservations | `GET /api/v1/vessels/{id}/reservations`, `POST .../reservations/enumerate` | `list_vessel_reservations` | `ListVesselReservationsAsync` |
-| Brief lint | `POST /api/v1/missions/lint-brief` | `lint_mission_brief` | `LintMissionBriefAsync` |
-| Configuration doctor | `GET /api/v1/vessels/{id}/blackbox-doctor`, `POST .../blackbox-doctor/enumerate` | `get_vessel_blackbox_doctor` | `GetVesselBlackBoxDoctorAsync` |
-| Attempt diff | `GET /api/v1/blackbox/{id}/diff/{otherId}` | `diff_blackbox_entries` | `DiffBlackBoxEntriesAsync` |
-| Nearby successes | `GET /api/v1/blackbox/{id}/nearby-successes`, `POST .../nearby-successes/enumerate` | `list_blackbox_nearby_successes` | `ListBlackBoxNearbySuccessesAsync` |
-| Timeline | `GET /api/v1/blackbox/{id}/timeline`, `POST .../timeline/enumerate` | `get_blackbox_timeline` | `GetBlackBoxTimelineAsync` |
-| Cascade graph | `GET /api/v1/voyages/{id}/blackbox/cascade` | `get_voyage_blackbox_cascade` | `GetVoyageBlackBoxCascadeAsync` |
-| Recovery statistics | `GET /api/v1/blackbox/recovery-stats`, `POST .../recovery-stats/enumerate` | `get_blackbox_recovery_stats` | `GetBlackBoxRecoveryStatsAsync` |
+| Overlap preview | `POST /api/v1/vessels/{id}/overlap-preview` | `preview_mission_overlap` | `BlackBoxInsights.PreviewMissionOverlapAsync` |
+| Reservations | `GET /api/v1/vessels/{id}/reservations`, `POST .../reservations/enumerate` | `list_vessel_reservations` | `BlackBoxInsights.ListVesselReservationsAsync` |
+| Brief lint | `POST /api/v1/missions/lint-brief` | `lint_mission_brief` | `BlackBoxInsights.LintMissionBriefAsync` |
+| Configuration doctor | `GET /api/v1/vessels/{id}/blackbox-doctor`, `POST .../blackbox-doctor/enumerate` | `get_vessel_blackbox_doctor` | `BlackBoxInsights.GetVesselDoctorAsync` |
+| Attempt diff | `GET /api/v1/blackbox/{id}/diff/{otherId}` | `diff_blackbox_entries` | `BlackBoxInsights.DiffEntriesAsync` |
+| Nearby successes | `GET /api/v1/blackbox/{id}/nearby-successes`, `POST .../nearby-successes/enumerate` | `list_blackbox_nearby_successes` | `BlackBoxInsights.ListNearbySuccessesAsync` |
+| Timeline | `GET /api/v1/blackbox/{id}/timeline`, `POST .../timeline/enumerate` | `get_blackbox_timeline` | `BlackBoxInsights.GetTimelineAsync` |
+| Cascade graph | `GET /api/v1/voyages/{id}/blackbox/cascade` | `get_voyage_blackbox_cascade` | `BlackBoxInsights.GetVoyageCascadeAsync` |
+| Recovery statistics | `GET /api/v1/blackbox/recovery-stats`, `POST .../recovery-stats/enumerate` | `get_blackbox_recovery_stats` | `BlackBoxInsights.GetRecoveryStatsAsync` |
 
 #### Overlap warnings and chaining (13.1.1)
 

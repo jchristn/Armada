@@ -102,7 +102,7 @@ namespace Armada.Tui.Screens.Operations
         public override void Load()
         {
             bool initial = !Loaded;
-            Call((c, t) => c.GetMergeEntryAsync(EntryId, t), e =>
+            Call((c, t) => c.MergeQueue.GetAsync(EntryId, t), e =>
             {
                 if (e == null)
                 {
@@ -149,7 +149,7 @@ namespace Armada.Tui.Screens.Operations
             }
 
             _LoadingPreview = LandingPreview == null;
-            Call((c, t) => c.GetVesselLandingPreviewAsync(e.VesselId!, e.BranchName, t), p =>
+            Call((c, t) => c.Vessels.GetLandingPreviewAsync(e.VesselId!, e.BranchName, t), p =>
             {
                 LandingPreview = p;
                 _LoadingPreview = false;
@@ -167,7 +167,7 @@ namespace Armada.Tui.Screens.Operations
             if (Entry == null) return;
             Confirm("Process Entry", Tr("Process merge entry for branch \"{{branchName}}\"?", LocalizationArgs.Of("branchName", Entry.BranchName)), () =>
             {
-                Run((c, t) => c.ProcessMergeEntryAsync(EntryId, t), () =>
+                Run((c, t) => c.MergeQueue.ProcessAsync(EntryId, t), () =>
                 {
                     Toast(NotificationSeverityEnum.Success, Tr("Merge entry {{id}} processing started.", LocalizationArgs.Of("id", EntryId)));
                     Load();
@@ -180,7 +180,7 @@ namespace Armada.Tui.Screens.Operations
             if (Entry == null) return;
             Confirm("Cancel Entry", Tr("Cancel merge entry for branch \"{{branchName}}\"?", LocalizationArgs.Of("branchName", Entry.BranchName)), () =>
             {
-                Run((c, t) => c.CancelMergeEntryAsync(EntryId, t), () =>
+                Run((c, t) => c.MergeQueue.CancelAsync(EntryId, t), () =>
                 {
                     Toast(NotificationSeverityEnum.Warning, Tr("Merge entry {{id}} cancelled.", LocalizationArgs.Of("id", EntryId)));
                     Load();
@@ -192,7 +192,7 @@ namespace Armada.Tui.Screens.Operations
         {
             Confirm("Delete Entry", Tr("Delete merge entry {{id}}? This cannot be undone.", LocalizationArgs.Of("id", EntryId)), () =>
             {
-                DeleteProgress.RunVoid(Context, "Deleting merge queue entry", t => Context.Client.DeleteMergeEntryAsync(EntryId, t), () =>
+                DeleteProgress.RunVoid(Context, "Deleting merge queue entry", t => Context.Client.MergeQueue.DeleteAsync(EntryId, t), () =>
                 {
                     Toast(NotificationSeverityEnum.Warning, Tr("Merge entry {{id}} deleted.", LocalizationArgs.Of("id", EntryId)));
                     Context.Navigate("/missions?tab=merge-queue");

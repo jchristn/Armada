@@ -151,7 +151,7 @@ namespace Armada.Tui.Screens.Activity
             AddFill(Grid);
             Scope.Focus(Grid);
             Grid.Reload();
-            ScreenOps.Quiet(context, () => context.Client.ListCaptainsAsync(new ArmadaPageQuery(1, 1000)), r =>
+            ScreenOps.Quiet(context, () => context.Client.Captains.ListAsync(new ArmadaPageQuery(1, 1000)), r =>
             {
                 _Captains = r?.Objects ?? new List<Captain>();
                 SetCaptainOptions();
@@ -222,7 +222,7 @@ namespace Armada.Tui.Screens.Activity
                 body.ToCaptainId = String.IsNullOrEmpty(to.Value) ? null : to.Value;
                 try
                 {
-                    await Context.Client.SendSignalAsync(body).ConfigureAwait(false);
+                    await Context.Client.Signals.SendAsync(body).ConfigureAwait(false);
                 }
                 catch (Armada.Client.ArmadaApiException)
                 {
@@ -246,7 +246,7 @@ namespace Armada.Tui.Screens.Activity
         /// <param name="id">Signal id.</param>
         public void MarkRead(string id)
         {
-            ScreenOps.RunVoid(Context, () => Context.Client.MarkSignalReadAsync(id), () =>
+            ScreenOps.RunVoid(Context, () => Context.Client.Signals.MarkReadAsync(id), () =>
             {
                 ScreenOps.Toast(Context, NotificationSeverityEnum.Success, "Signal marked as read.");
                 Refresh();
@@ -326,7 +326,7 @@ namespace Armada.Tui.Screens.Activity
             string id = row.Id;
             Context.Confirm("Delete", Context.Loc.T("Delete signal {{id}}?", LocalizationArgs.Of("id", id)), () =>
             {
-                DeleteProgress.Run(Context, "Deleting signal", ct => Context.Client.DeleteSignalsBatchAsync(new List<string> { id }, ct), r =>
+                DeleteProgress.Run(Context, "Deleting signal", ct => Context.Client.Signals.DeleteBatchAsync(new List<string> { id }, ct), r =>
                 {
                     ScreenOps.Toast(Context, NotificationSeverityEnum.Warning, "Signal {{id}} deleted.", LocalizationArgs.Of("id", id));
                     Refresh();
@@ -341,7 +341,7 @@ namespace Armada.Tui.Screens.Activity
             if (ids.Count == 0) return;
             Context.Confirm("Delete", Context.Loc.T("Delete {{count}} selected signal(s)?", LocalizationArgs.Of("count", ids.Count)), () =>
             {
-                DeleteProgress.Run(Context, "{count, plural, one {Deleting # signal} other {Deleting # signals}}", ct => Context.Client.DeleteSignalsBatchAsync(ids, ct), r =>
+                DeleteProgress.Run(Context, "{count, plural, one {Deleting # signal} other {Deleting # signals}}", ct => Context.Client.Signals.DeleteBatchAsync(ids, ct), r =>
                 {
                     ScreenOps.Toast(Context, NotificationSeverityEnum.Warning, "Deleted {{count}} signal(s).", LocalizationArgs.Of("count", ids.Count));
                     Grid.ClearMarks();
@@ -380,7 +380,7 @@ namespace Armada.Tui.Screens.Activity
 
         private async Task<GridPage<Signal>> LoadAsync(GridQuery query, CancellationToken token)
         {
-            EnumerationResult<Signal>? result = await Context.Client.ListSignalsAsync(BuildQuery(query.PageNumber, query.PageSize), token).ConfigureAwait(false);
+            EnumerationResult<Signal>? result = await Context.Client.Signals.ListAsync(BuildQuery(query.PageNumber, query.PageSize), token).ConfigureAwait(false);
             List<Signal> rows = result?.Objects ?? new List<Signal>();
             long total = result?.TotalRecords ?? rows.Count;
             Context.Dispatcher.Post(() =>

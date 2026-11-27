@@ -70,7 +70,7 @@ namespace Armada.Tui.Screens.Configuration
         /// <inheritdoc />
         protected override Task<Skill?> FetchAsync(CancellationToken token)
         {
-            return Context.Client.GetSkillAsync(EntityId, token);
+            return Context.Client.Skills.GetAsync(EntityId, token);
         }
 
         /// <inheritdoc />
@@ -147,7 +147,7 @@ namespace Armada.Tui.Screens.Configuration
             if (s == null || !CanManage()) return;
             Context.Confirm("Delete Skill", T("Delete this skill? This cannot be undone."), () =>
             {
-                DeleteProgress.RunVoid(Context, "Deleting skill", ct => Context.Client.DeleteSkillAsync(s.Id, ct), () =>
+                DeleteProgress.RunVoid(Context, "Deleting skill", ct => Context.Client.Skills.DeleteAsync(s.Id, ct), () =>
                 {
                     EntityUi.Toast(Context, NotificationSeverityEnum.Warning, T("Skill deleted."));
                     Context.Navigate("/configuration?tab=skills");

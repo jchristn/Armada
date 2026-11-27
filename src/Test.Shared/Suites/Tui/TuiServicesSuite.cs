@@ -213,7 +213,7 @@ namespace Test.Shared.Suites.Tui
                 List<TimeSpan> durations = new List<TimeSpan>();
                 client.RequestCompleted += (sender, e) => durations.Add(e.Duration);
 
-                await client.GetHealthAsync();
+                await client.Status.GetHealthAsync();
                 AssertEqual(1, durations.Count, "one completed request");
                 AssertTrue(durations[0] >= TimeSpan.Zero && durations[0] < TimeSpan.FromMinutes(1), "the duration is the real request time, not the wall-clock jumps: " + durations[0]);
             }));
@@ -279,7 +279,7 @@ namespace Test.Shared.Suites.Tui
                 client.Unauthorized += (s, e) => unauthorized++;
                 try
                 {
-                    await client.DiscoverVesselImportAsync(new VesselDiscoveryRequest());
+                    await client.VesselImport.DiscoverAsync(new VesselDiscoveryRequest());
                     throw new AssertionException("expected an exception");
                 }
                 catch (ArmadaApiException ex)
@@ -290,12 +290,12 @@ namespace Test.Shared.Suites.Tui
                     AssertStartsWith("req_", ex.RequestId, "request id");
                 }
 
-                await AssertThrowsAsync<ArmadaApiException>(() => client.WhoamiAsync());
+                await AssertThrowsAsync<ArmadaApiException>(() => client.Auth.WhoamiAsync());
                 AssertEqual(1, unauthorized, "unauthorized hook");
                 ArmadaClient unreachable = new ArmadaClient(new ArmadaClientOptions("http://127.0.0.1:1") { TimeoutMs = 2000 });
                 try
                 {
-                    await unreachable.GetHealthAsync();
+                    await unreachable.Status.GetHealthAsync();
                     throw new AssertionException("expected transport error");
                 }
                 catch (ArmadaApiException ex)

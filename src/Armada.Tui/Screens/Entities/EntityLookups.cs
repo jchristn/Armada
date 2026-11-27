@@ -37,7 +37,7 @@ namespace Armada.Tui.Screens.Entities
         /// <returns>Vessels.</returns>
         public static Task<List<Vessel>> VesselsAsync(ArmadaClient client, CancellationToken token = default)
         {
-            return Safe(() => ArmadaPaging.ReadAllAsync<Vessel>((p, ct) => client.ListVesselsAsync(new ArmadaPageQuery(p, PageSize), ct), 20, token));
+            return Safe(() => ArmadaPaging.ReadAllAsync<Vessel>((p, ct) => client.Vessels.ListAsync(new ArmadaPageQuery(p, PageSize), ct), 20, token));
         }
 
         /// <summary>
@@ -48,7 +48,7 @@ namespace Armada.Tui.Screens.Entities
         /// <returns>Environments.</returns>
         public static Task<List<DeploymentEnvironment>> EnvironmentsAsync(ArmadaClient client, CancellationToken token = default)
         {
-            return Safe(() => ArmadaPaging.ReadAllAsync<DeploymentEnvironment>((p, ct) => client.ListEnvironmentsAsync(new DeploymentEnvironmentQuery { PageNumber = p, PageSize = PageSize }, ct), 20, token));
+            return Safe(() => ArmadaPaging.ReadAllAsync<DeploymentEnvironment>((p, ct) => client.Environments.ListAsync(new DeploymentEnvironmentQuery { PageNumber = p, PageSize = PageSize }, ct), 20, token));
         }
 
         /// <summary>
@@ -59,7 +59,7 @@ namespace Armada.Tui.Screens.Entities
         /// <returns>Releases.</returns>
         public static Task<List<Release>> ReleasesAsync(ArmadaClient client, CancellationToken token = default)
         {
-            return Safe(() => ArmadaPaging.ReadAllAsync<Release>((p, ct) => client.ListReleasesAsync(new ReleaseQuery { PageNumber = p, PageSize = PageSize }, ct), 20, token));
+            return Safe(() => ArmadaPaging.ReadAllAsync<Release>((p, ct) => client.Releases.ListAsync(new ReleaseQuery { PageNumber = p, PageSize = PageSize }, ct), 20, token));
         }
 
         /// <summary>
@@ -70,7 +70,7 @@ namespace Armada.Tui.Screens.Entities
         /// <returns>Deployments.</returns>
         public static Task<List<Deployment>> DeploymentsAsync(ArmadaClient client, CancellationToken token = default)
         {
-            return Safe(() => ArmadaPaging.ReadAllAsync<Deployment>((p, ct) => client.ListDeploymentsAsync(new DeploymentQuery { PageNumber = p, PageSize = PageSize }, ct), 20, token));
+            return Safe(() => ArmadaPaging.ReadAllAsync<Deployment>((p, ct) => client.Deployments.ListAsync(new DeploymentQuery { PageNumber = p, PageSize = PageSize }, ct), 20, token));
         }
 
         /// <summary>
@@ -81,7 +81,7 @@ namespace Armada.Tui.Screens.Entities
         /// <returns>Profiles.</returns>
         public static Task<List<WorkflowProfile>> WorkflowProfilesAsync(ArmadaClient client, CancellationToken token = default)
         {
-            return Safe(() => ArmadaPaging.ReadAllAsync<WorkflowProfile>((p, ct) => client.ListWorkflowProfilesAsync(new ArmadaPageQuery(p, PageSize), ct), 20, token));
+            return Safe(() => ArmadaPaging.ReadAllAsync<WorkflowProfile>((p, ct) => client.WorkflowProfiles.ListAsync(new ArmadaPageQuery(p, PageSize), ct), 20, token));
         }
 
         /// <summary>
@@ -92,7 +92,7 @@ namespace Armada.Tui.Screens.Entities
         /// <returns>Personas.</returns>
         public static Task<List<Persona>> PersonasAsync(ArmadaClient client, CancellationToken token = default)
         {
-            return Safe(() => ArmadaPaging.ReadAllAsync<Persona>((p, ct) => client.ListPersonasAsync(new ArmadaPageQuery(p, PageSize), ct), 20, token));
+            return Safe(() => ArmadaPaging.ReadAllAsync<Persona>((p, ct) => client.Personas.ListAsync(new ArmadaPageQuery(p, PageSize), ct), 20, token));
         }
 
         /// <summary>
@@ -103,7 +103,7 @@ namespace Armada.Tui.Screens.Entities
         /// <returns>Templates.</returns>
         public static Task<List<PromptTemplate>> PromptTemplatesAsync(ArmadaClient client, CancellationToken token = default)
         {
-            return Safe(() => ArmadaPaging.ReadAllAsync<PromptTemplate>((p, ct) => client.ListPromptTemplatesAsync(new ArmadaPageQuery(p, PageSize), ct), 20, token));
+            return Safe(() => ArmadaPaging.ReadAllAsync<PromptTemplate>((p, ct) => client.PromptTemplates.ListAsync(new ArmadaPageQuery(p, PageSize), ct), 20, token));
         }
 
         /// <summary>
@@ -114,7 +114,7 @@ namespace Armada.Tui.Screens.Entities
         /// <returns>Captains.</returns>
         public static Task<List<Captain>> CaptainsAsync(ArmadaClient client, CancellationToken token = default)
         {
-            return Safe(() => ArmadaPaging.ReadAllAsync<Captain>((p, ct) => client.ListCaptainsAsync(new ArmadaPageQuery(p, PageSize), ct), 20, token));
+            return Safe(() => ArmadaPaging.ReadAllAsync<Captain>((p, ct) => client.Captains.ListAsync(new ArmadaPageQuery(p, PageSize), ct), 20, token));
         }
 
         /// <summary>
@@ -125,7 +125,7 @@ namespace Armada.Tui.Screens.Entities
         /// <returns>Fleets.</returns>
         public static Task<List<Fleet>> FleetsAsync(ArmadaClient client, CancellationToken token = default)
         {
-            return Safe(() => ArmadaPaging.ReadAllAsync<Fleet>((p, ct) => client.ListFleetsAsync(new ArmadaPageQuery(p, PageSize), ct), 20, token));
+            return Safe(() => ArmadaPaging.ReadAllAsync<Fleet>((p, ct) => client.Fleets.ListAsync(new ArmadaPageQuery(p, PageSize), ct), 20, token));
         }
 
         /// <summary>
@@ -136,7 +136,7 @@ namespace Armada.Tui.Screens.Entities
         /// <returns>Pipelines.</returns>
         public static Task<List<Pipeline>> PipelinesAsync(ArmadaClient client, CancellationToken token = default)
         {
-            return Safe(() => ArmadaPaging.ReadAllAsync<Pipeline>((p, ct) => client.ListPipelinesAsync(new ArmadaPageQuery(p, PageSize), ct), 20, token));
+            return Safe(() => ArmadaPaging.ReadAllAsync<Pipeline>((p, ct) => client.Pipelines.ListAsync(new ArmadaPageQuery(p, PageSize), ct), 20, token));
         }
 
         /// <summary>

@@ -28,7 +28,7 @@ namespace Armada.Helm.Commands
             return await RunBlackBoxAsync(settings.Json, async client =>
             {
                 BlackBoxNoteAddRequest request = new BlackBoxNoteAddRequest { Body = settings.Text.Trim(), AuthorKind = BlackBoxNoteAuthorKindEnum.Operator };
-                BlackBoxNote? note = await client.AddBlackBoxNoteAsync(settings.Id, request, cancellationToken).ConfigureAwait(false);
+                BlackBoxNote? note = await client.BlackBox.AddNoteAsync(settings.Id, request, cancellationToken).ConfigureAwait(false);
                 if (settings.Json) WritePureJson(note);
                 else AnsiConsole.MarkupLine("[green]Note added[/] to " + Markup.Escape(settings.Id) + ".");
                 return 0;

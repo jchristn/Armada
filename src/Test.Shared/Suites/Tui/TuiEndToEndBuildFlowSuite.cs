@@ -43,7 +43,7 @@ namespace Test.Shared.Suites.Tui
                 using (ArmadaClient admin = LiveServerSetup.Admin(fx))
                 {
                     string suffix = Guid.NewGuid().ToString("N").Substring(0, 6);
-                    Fleet fleet = (await admin.CreateFleetAsync(new Fleet { Name = "tui-import-fleet-" + suffix }))!;
+                    Fleet fleet = (await admin.Fleets.CreateAsync(new Fleet { Name = "tui-import-fleet-" + suffix }))!;
                     string root = TestTemp.NewDirectory("tui-import");
                     List<string> names = new List<string> { "tui-imp-alpha-" + suffix, "tui-imp-beta-" + suffix };
                     foreach (string name in names) CreateRepository(Path.Combine(root, name));
@@ -73,7 +73,7 @@ namespace Test.Shared.Suites.Tui
 
                         foreach (string id in vesselIds)
                         {
-                            Vessel? vessel = await admin.GetVesselAsync(id);
+                            Vessel? vessel = await admin.Vessels.GetAsync(id);
                             AssertNotNull(vessel, "vessel " + id + " on the server");
                             AssertTrue(names.Contains(vessel!.Name), "vessel name " + vessel.Name);
                             AssertEqual(fleet.Id, vessel.FleetId, "vessel " + vessel.Name + " in the chosen fleet");
@@ -107,7 +107,7 @@ namespace Test.Shared.Suites.Tui
                         VesselHealthDetail? detail = null;
                         AssertTrue(LiveServerSetup.PumpUntilServer(host, async () =>
                         {
-                            detail = await admin.GetVesselHealthAsync(setup.Vessel.Id);
+                            detail = await admin.VesselHealth.GetAsync(setup.Vessel.Id);
                             return detail?.Health.EvaluatedUtc != null;
                         }, LiveTimeoutMs), "the server evaluated the vessel");
                         AssertTrue(host.PumpUntil(() => !screen.Evaluation.Running && screen.Grid.Rows.Count == 1 && screen.Grid.Rows[0].EvaluatedUtc != null, LiveTimeoutMs), "the grid shows the evaluated row\n" + host.Screen());

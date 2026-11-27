@@ -279,7 +279,7 @@ namespace Armada.Tui.Screens.Build
         public void Load()
         {
             bool initial = Vessel == null;
-            Call((c, t) => c.GetVesselAsync(VesselId, t), v =>
+            Call((c, t) => c.Vessels.GetAsync(VesselId, t), v =>
             {
                 if (v == null)
                 {
@@ -421,7 +421,7 @@ namespace Armada.Tui.Screens.Build
         public void PickBranch()
         {
             if (Vessel == null) return;
-            Call((c, t) => c.GetVesselBranchesAsync(VesselId, t), result =>
+            Call((c, t) => c.Vessels.GetBranchesAsync(VesselId, t), result =>
             {
                 List<SelectOption<string>> options = new List<SelectOption<string>>();
                 foreach (BranchInfo b in result?.Branches ?? new List<BranchInfo>())
@@ -655,7 +655,7 @@ namespace Armada.Tui.Screens.Build
             query.From = from.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
             query.To = to.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
             query.UtcOffsetMinutes = UtcOffsetMinutes;
-            Call((c, t) => c.GetVesselCommitActivityAsync(VesselId, query, t), activity =>
+            Call((c, t) => c.Vessels.GetCommitActivityAsync(VesselId, query, t), activity =>
             {
                 if (generation != _ActivityGeneration) return;
                 if (activity == null)
@@ -728,7 +728,7 @@ namespace Armada.Tui.Screens.Build
 
             query.Limit = PageLimit;
             RebuildRows();
-            Call((c, t) => c.GetVesselCommitsAsync(VesselId, query, t), page =>
+            Call((c, t) => c.Vessels.GetCommitsAsync(VesselId, query, t), page =>
             {
                 if (generation != _ListGeneration) return;
                 CommitsLoading = false;

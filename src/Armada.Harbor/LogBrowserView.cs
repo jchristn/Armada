@@ -322,7 +322,7 @@ namespace Armada.Harbor
                     {
                         try
                         {
-                            Armada.Core.Models.Mission? mission = await client.GetMissionAsync(id).ConfigureAwait(true);
+                            Armada.Core.Models.Mission? mission = await client.Missions.GetAsync(id).ConfigureAwait(true);
                             if (mission != null) path = logs.ResolveMissionLog(mission.Id, mission.CaptainId);
                         }
                         catch (ArmadaApiException)

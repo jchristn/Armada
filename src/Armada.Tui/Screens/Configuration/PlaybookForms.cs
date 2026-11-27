@@ -54,8 +54,8 @@ namespace Armada.Tui.Screens.Configuration
                 payload.Active = active.Value;
                 payload.Scope = ScopeRules.ResolveCreateScope(context.Session, EntityForm.EnumValue(scope, ScopeEnum.TenantWide));
                 saved = existing != null
-                    ? await context.Client.UpdatePlaybookAsync(existing.Id, payload, ct).ConfigureAwait(false)
-                    : await context.Client.CreatePlaybookAsync(payload, ct).ConfigureAwait(false);
+                    ? await context.Client.Playbooks.UpdateAsync(existing.Id, payload, ct).ConfigureAwait(false)
+                    : await context.Client.Playbooks.CreateAsync(payload, ct).ConfigureAwait(false);
                 return null;
             }, () =>
             {
@@ -84,7 +84,7 @@ namespace Armada.Tui.Screens.Configuration
             payload.Content = source.Content;
             payload.Active = source.Active;
             payload.Scope = keepScope ? ScopeRules.ResolveCreateScope(context.Session, source.Scope) : ScopeRules.ResolveCreateScope(context.Session, null);
-            EntityUi.Run<Playbook?>(context, ct => context.Client.CreatePlaybookAsync(payload, ct), created =>
+            EntityUi.Run<Playbook?>(context, ct => context.Client.Playbooks.CreateAsync(payload, ct), created =>
             {
                 if (created == null) return;
                 EntityUi.Toast(context, NotificationSeverityEnum.Success, EntityUi.T(context, "Playbook \"{{name}}\" duplicated.", "name", created.FileName));

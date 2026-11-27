@@ -65,7 +65,7 @@ namespace Armada.Tui.Screens.Operations
         /// <param name="title">Viewer title (translated).</param>
         public void ViewDiff(string id, string title)
         {
-            _Screen.Call((c, t) => c.GetMissionDiffAsync(id, t), result => _Screen.ShowDiff(title, result?.Diff ?? ""), null, ex => _Screen.ShowDiff(title, ""));
+            _Screen.Call((c, t) => c.Missions.GetDiffAsync(id, t), result => _Screen.ShowDiff(title, result?.Diff ?? ""), null, ex => _Screen.ShowDiff(title, ""));
         }
 
         /// <summary>
@@ -81,7 +81,7 @@ namespace Armada.Tui.Screens.Operations
             TuiContext ctx = _Screen.Context;
             OpsLogModal modal = new OpsLogModal(
                 title,
-                (lines, token) => ctx.Client.GetMissionLogAsync(id, lines, token),
+                (lines, token) => ctx.Client.Missions.GetLogAsync(id, lines, token),
                 completed ?? (() => false),
                 ctx.Dispatcher,
                 text => ctx.Clipboard.Copy(text, "Log"),
@@ -99,7 +99,7 @@ namespace Armada.Tui.Screens.Operations
         /// <param name="id">Mission id.</param>
         public void ViewInstructions(string id)
         {
-            _Screen.Call((c, t) => c.GetMissionInstructionsAsync(id, t), result =>
+            _Screen.Call((c, t) => c.Missions.GetInstructionsAsync(id, t), result =>
             {
                 string file = result != null && !String.IsNullOrEmpty(result.FileName) ? result.FileName : _Screen.Tr("Mission Instructions");
                 string content = result != null && !String.IsNullOrEmpty(result.Content) ? result.Content : _Screen.Tr("No mission instructions found.");
@@ -116,7 +116,7 @@ namespace Armada.Tui.Screens.Operations
         /// <param name="after">Runs after success.</param>
         public void Restart(string id, string title, bool confirm, Action? after)
         {
-            Action run = () => _Screen.Call((c, t) => c.RestartMissionAsync(id, t), m =>
+            Action run = () => _Screen.Call((c, t) => c.Missions.RestartAsync(id, t), m =>
             {
                 _Screen.Toast(NotificationSeverityEnum.Success, _Screen.Tr("Mission \"{{title}}\" restarted.", LocalizationArgs.Of("title", title)));
                 after?.Invoke();
@@ -139,7 +139,7 @@ namespace Armada.Tui.Screens.Operations
         /// <param name="after">Runs after success.</param>
         public void RetryLanding(string id, string title, bool detailToast, Action? after)
         {
-            _Screen.Call((c, t) => c.RetryMissionLandingAsync(id, t), r =>
+            _Screen.Call((c, t) => c.Missions.RetryLandingAsync(id, t), r =>
             {
                 string text = detailToast
                     ? _Screen.Tr("Landing succeeded! Mission status updated.")
@@ -177,7 +177,7 @@ namespace Armada.Tui.Screens.Operations
                 string target = status.Value ?? "";
                 TransitionRequest req = new TransitionRequest();
                 req.Status = target;
-                _Screen.Call((c, t) => c.TransitionMissionAsync(id, req, t), m =>
+                _Screen.Call((c, t) => c.Missions.TransitionAsync(id, req, t), m =>
                 {
                     d.Complete();
                     string text = !String.IsNullOrEmpty(title)
@@ -202,7 +202,7 @@ namespace Armada.Tui.Screens.Operations
         {
             _Screen.Confirm("Cancel Mission", _Screen.Tr("Cancel mission \"{{title}}\"? The mission will be set to Cancelled status but remains in the database. Use Purge to permanently remove it.", LocalizationArgs.Of("title", title)), () =>
             {
-                _Screen.Run((c, t) => c.DeleteMissionAsync(id, t), () =>
+                _Screen.Run((c, t) => c.Missions.DeleteAsync(id, t), () =>
                 {
                     _Screen.Toast(NotificationSeverityEnum.Warning, _Screen.Tr("Mission \"{{title}}\" cancelled.", LocalizationArgs.Of("title", title)));
                     after?.Invoke();
@@ -224,7 +224,7 @@ namespace Armada.Tui.Screens.Operations
                 : _Screen.Tr("Purge mission \"{{title}}\"? This will permanently remove it and clean up all associated resources. This cannot be undone.", LocalizationArgs.Of("title", title));
             _Screen.Confirm("Purge Mission", message, () =>
             {
-                DeleteProgress.RunVoid(_Screen.Context, "Purging mission", t => _Screen.Context.Client.PurgeMissionAsync(id, t), () =>
+                DeleteProgress.RunVoid(_Screen.Context, "Purging mission", t => _Screen.Context.Client.Missions.PurgeAsync(id, t), () =>
                 {
                     _Screen.Toast(NotificationSeverityEnum.Warning, _Screen.Tr("Mission \"{{title}}\" purged.", LocalizationArgs.Of("title", title)));
                     after?.Invoke();
@@ -242,7 +242,7 @@ namespace Armada.Tui.Screens.Operations
         {
             _Screen.Confirm("Delete Mission", _Screen.Tr("Permanently delete mission \"{{title}}\"? This cannot be undone.", LocalizationArgs.Of("title", title)), () =>
             {
-                _Screen.Run((c, t) => c.DeleteMissionAsync(id, t), () =>
+                _Screen.Run((c, t) => c.Missions.DeleteAsync(id, t), () =>
                 {
                     _Screen.Toast(NotificationSeverityEnum.Warning, _Screen.Tr("Mission \"{{title}}\" deleted.", LocalizationArgs.Of("title", title)));
                     after?.Invoke();
@@ -262,7 +262,7 @@ namespace Armada.Tui.Screens.Operations
             {
                 TransitionRequest req = new TransitionRequest();
                 req.Status = "Complete";
-                _Screen.Call((c, t) => c.TransitionMissionAsync(id, req, t), m =>
+                _Screen.Call((c, t) => c.Missions.TransitionAsync(id, req, t), m =>
                 {
                     _Screen.Toast(NotificationSeverityEnum.Success, _Screen.Tr("Mission \"{{title}}\" marked Complete.", LocalizationArgs.Of("title", title)));
                     after?.Invoke();
@@ -327,7 +327,7 @@ namespace Armada.Tui.Screens.Operations
                 updated.Description = description.Text;
                 updated.Priority = Int32.Parse(priority.Value, System.Globalization.CultureInfo.InvariantCulture);
                 string newTitle = updated.Title;
-                _Screen.Call((c, t) => c.UpdateMissionAsync(mission.Id, updated, t), m =>
+                _Screen.Call((c, t) => c.Missions.UpdateAsync(mission.Id, updated, t), m =>
                 {
                     d.Complete();
                     _Screen.Toast(NotificationSeverityEnum.Success, _Screen.Tr("Mission \"{{title}}\" saved.", LocalizationArgs.Of("title", newTitle)));

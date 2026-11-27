@@ -84,7 +84,7 @@ namespace Test.Shared.Suites.Tui
                         Mission? landed = null;
                         AssertTrue(LiveServerSetup.PumpUntilServer(host, async () =>
                         {
-                            landed = (await admin.ListMissionsAsync(new ArmadaPageQuery(1, 50)))?.Objects.FirstOrDefault(m => m.Title == missionTitle);
+                            landed = (await admin.Missions.ListAsync(new ArmadaPageQuery(1, 50)))?.Objects.FirstOrDefault(m => m.Title == missionTitle);
                             return landed != null && landed.Status == MissionStatusEnum.Complete;
                         }, LiveTimeoutMs), "mission landed (status " + (landed?.Status.ToString() ?? "none") + " " + landed?.FailureReason + "): " + Errors() + "\n" + FixtureLog(fx));
 
@@ -110,12 +110,12 @@ namespace Test.Shared.Suites.Tui
 
                     using (TuiTestHost host = SignIn(fx, "/approvals"))
                     {
-                        AskThread first = (await admin.CreateAskThreadAsync(new AskThreadCreateRequest { Title = "Approvals first", CaptainId = captain.Id }))!;
-                        await admin.SendAskMessageAsync(first.Id, "Dispatch the first change " + DispatchMarker);
+                        AskThread first = (await admin.Ask.CreateThreadAsync(new AskThreadCreateRequest { Title = "Approvals first", CaptainId = captain.Id }))!;
+                        await admin.Ask.SendMessageAsync(first.Id, "Dispatch the first change " + DispatchMarker);
                         AssertTrue(host.PumpUntil(() => FindProposal(host, first.Id) != null, LiveTimeoutMs), "first proposal reaches the center live: " + Errors());
                         AssertTrue(LiveServerSetup.PumpUntilServer(host, async () => await TurnIdleAsync(admin, first.Id), LiveTimeoutMs), "first turn finished");
-                        AskThread second = (await admin.CreateAskThreadAsync(new AskThreadCreateRequest { Title = "Approvals second", CaptainId = captain.Id }))!;
-                        await admin.SendAskMessageAsync(second.Id, "Dispatch the second change " + DispatchMarker);
+                        AskThread second = (await admin.Ask.CreateThreadAsync(new AskThreadCreateRequest { Title = "Approvals second", CaptainId = captain.Id }))!;
+                        await admin.Ask.SendMessageAsync(second.Id, "Dispatch the second change " + DispatchMarker);
                         AssertTrue(host.PumpUntil(() => FindProposal(host, second.Id) != null, LiveTimeoutMs), "second proposal reaches the center live: " + Errors());
 
                         Deployment deployment = await LiveServerSetup.CreatePendingDeploymentAsync(admin, setup.Vessel.Id, "E2E production deploy");
@@ -128,13 +128,13 @@ namespace Test.Shared.Suites.Tui
                         host.Press("a");
                         AssertTrue(LiveServerSetup.PumpUntilServer(host, async () => await ProposalStatusAsync(admin, first.Id, approveItem.EntityId) == AskProposalStatusEnum.Executed, LiveTimeoutMs), "approved proposal executed on the server");
                         AssertTrue(host.PumpUntil(() => host.Tui.Context.Approvals.Find(ApprovalKindEnum.AskProposal, approveItem.EntityId) == null, 10000), "approved proposal left the center");
-                        AssertTrue(LiveServerSetup.PumpUntilServer(host, async () => ((await admin.ListVoyagesAsync(new ArmadaPageQuery(1, 100)))?.Objects ?? new List<Voyage>()).Any(v => v.Title == approveTitle), 15000), "the approved dispatch created its voyage");
+                        AssertTrue(LiveServerSetup.PumpUntilServer(host, async () => ((await admin.Voyages.ListAsync(new ArmadaPageQuery(1, 100)))?.Objects ?? new List<Voyage>()).Any(v => v.Title == approveTitle), 15000), "the approved dispatch created its voyage");
 
                         ApprovalItem rejectItem = FindProposal(host, second.Id)!;
                         SelectItem(host, rejectItem);
                         host.Press("r");
                         AssertTrue(LiveServerSetup.PumpUntilServer(host, async () => await ProposalStatusAsync(admin, second.Id, rejectItem.EntityId) == AskProposalStatusEnum.Rejected, LiveTimeoutMs), "rejected proposal recorded on the server");
-                        AssertFalse(((await admin.ListVoyagesAsync(new ArmadaPageQuery(1, 100)))?.Objects ?? new List<Voyage>()).Any(v => v.Title == rejectTitle), "the rejected dispatch never ran");
+                        AssertFalse(((await admin.Voyages.ListAsync(new ArmadaPageQuery(1, 100)))?.Objects ?? new List<Voyage>()).Any(v => v.Title == rejectTitle), "the rejected dispatch never ran");
 
                         AssertTrue(host.PumpUntil(() => host.Tui.Context.Approvals.Find(ApprovalKindEnum.AskProposal, rejectItem.EntityId) == null, 10000), "rejected proposal left the center");
                         // The item may come from the deployment.changed event or from an inbox poll; both name it
@@ -151,11 +151,11 @@ namespace Test.Shared.Suites.Tui
                         DeploymentStatusEnum? deployStatus = null;
                         AssertTrue(LiveServerSetup.PumpUntilServer(host, async () =>
                         {
-                            Deployment? current = await admin.GetDeploymentAsync(deployment.Id);
+                            Deployment? current = await admin.Deployments.GetAsync(deployment.Id);
                             deployStatus = current?.Status;
                             return current != null && current.Status != DeploymentStatusEnum.PendingApproval;
                         }, LiveTimeoutMs), "deployment approved on the server: " + deployStatus + "\n" + host.Screen());
-                        Deployment? after = await admin.GetDeploymentAsync(deployment.Id);
+                        Deployment? after = await admin.Deployments.GetAsync(deployment.Id);
                         AssertNotEqual(DeploymentStatusEnum.Denied, after!.Status, "approved, not denied");
                         StopLive(host);
                     }
@@ -173,13 +173,13 @@ namespace Test.Shared.Suites.Tui
                         IncidentUpsertRequest incident = new IncidentUpsertRequest();
                         incident.Title = "E2E incident " + Guid.NewGuid().ToString("N").Substring(0, 6);
                         incident.VesselId = setup.Vessel.Id;
-                        await admin.CreateIncidentAsync(incident);
+                        await admin.Incidents.CreateAsync(incident);
                         AssertTrue(host.PumpUntil(() => host.Tui.Context.Notifications.History.Any(n => n.AssetType == "Incident" && n.Name == incident.Title), 15000), "incident.changed raised a notification");
                         AssertTrue(host.PumpUntil(() => host.Tui.Context.Notifications.ActiveToasts().Any(t => t.Text.Contains(incident.Title!, StringComparison.Ordinal)), 5000), "and a toast");
 
                         Mission request = new Mission("E2E pending mission " + Guid.NewGuid().ToString("N").Substring(0, 6), "No captain can take this one.");
                         request.VesselId = setup.Vessel.Id;
-                        Mission pending = (await admin.CreateMissionAsync(request))!;
+                        Mission pending = (await admin.Missions.CreateAsync(request))!;
                         AssertStartsWith("msn_", pending.Id, "mission id read from the wrapped { Mission, Warning } reply");
                         AssertTrue(host.PumpUntil(() => host.Tui.Context.Notifications.History.Any(n => n.AssetType == "Mission" && n.Name == pending.Title), 15000), "mission.changed raised a notification");
 
@@ -212,14 +212,14 @@ namespace Test.Shared.Suites.Tui
                     VesselSetup setup = await LiveServerSetup.CreateVesselAsync(admin, "fa-e2e");
                     // The first listing seeds the built-in actions (more than one page); list first so the custom
                     // action created below is the newest and lands on the first page.
-                    await admin.EnumerateFleetActionsAsync();
+                    await admin.FleetActions.EnumerateAsync();
                     FleetActionUpsertRequest action = new FleetActionUpsertRequest();
                     action.Name = "E2E status " + Guid.NewGuid().ToString("N").Substring(0, 6);
                     action.Kind = FleetActionKindEnum.Command;
                     action.CommandText = "git status --short";
                     action.TimeoutSeconds = 60;
                     action.DefaultConcurrency = 1;
-                    FleetAction created = (await admin.CreateFleetActionAsync(action))!;
+                    FleetAction created = (await admin.FleetActions.CreateAsync(action))!;
 
                     using (TuiTestHost host = SignIn(fx, "/fleet-actions"))
                     {
@@ -250,7 +250,7 @@ namespace Test.Shared.Suites.Tui
                         FleetActionRunStatusEnum? serverStatus = null;
                         AssertTrue(LiveServerSetup.PumpUntilServer(host, async () =>
                         {
-                            FleetActionRunDetail? detail = await admin.GetFleetActionRunAsync(runId);
+                            FleetActionRunDetail? detail = await admin.FleetActions.GetRunAsync(runId);
                             serverStatus = detail?.Run?.Status;
                             return serverStatus == FleetActionRunStatusEnum.Completed;
                         }, LiveTimeoutMs), "run completed on the server: " + serverStatus);
@@ -265,7 +265,7 @@ namespace Test.Shared.Suites.Tui
                 E2EServerFixture fx = await AcquireAsync();
                 using (ArmadaClient admin = LiveServerSetup.Admin(fx))
                 {
-                    SettingsData before = (await admin.GetSettingsAsync())!;
+                    SettingsData before = (await admin.Server.GetSettingsAsync())!;
                     int original = before.MaxCaptains ?? 0;
                     int next = original == 7 ? 8 : 7;
                     using (TuiTestHost host = SignIn(fx, "/server?tab=server"))
@@ -280,14 +280,14 @@ namespace Test.Shared.Suites.Tui
                         screen.Form.Scope.Focus(screen.MaxCaptains);
                         host.Press("ctrl+u").Type(next.ToString(CultureInfo.InvariantCulture)).Press("ctrl+s");
                         AssertTrue(host.WaitForText("Server configuration saved", 15000), "saved toast\n" + host.Screen());
-                        SettingsData after = (await admin.GetSettingsAsync())!;
+                        SettingsData after = (await admin.Server.GetSettingsAsync())!;
                         AssertEqual(next, after.MaxCaptains ?? 0, "server has the new value");
                         StopLive(host);
                     }
 
-                    SettingsData restore = (await admin.GetSettingsAsync())!;
+                    SettingsData restore = (await admin.Server.GetSettingsAsync())!;
                     restore.MaxCaptains = original;
-                    await admin.UpdateSettingsAsync(restore);
+                    await admin.Server.UpdateSettingsAsync(restore);
                 }
             }, TestTags.EndToEnd));
 
@@ -356,14 +356,14 @@ namespace Test.Shared.Suites.Tui
 
         private static async Task<AskProposalStatusEnum?> ProposalStatusAsync(ArmadaClient admin, string threadId, string proposalId)
         {
-            AskMessagePage? page = await admin.EnumerateAskMessagesAsync(threadId);
+            AskMessagePage? page = await admin.Ask.EnumerateMessagesAsync(threadId);
             AskMessage? message = page?.Messages.FirstOrDefault(m => m.ProposalId == proposalId && m.Proposal != null);
             return message?.Proposal?.Status;
         }
 
         private static async Task<bool> TurnIdleAsync(ArmadaClient admin, string threadId)
         {
-            AskMessagePage? page = await admin.EnumerateAskMessagesAsync(threadId);
+            AskMessagePage? page = await admin.Ask.EnumerateMessagesAsync(threadId);
             return page != null && page.Messages.Any(m => m.ContentText.StartsWith("I proposed a dispatch", StringComparison.Ordinal));
         }
 

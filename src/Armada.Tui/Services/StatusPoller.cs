@@ -233,7 +233,7 @@ namespace Armada.Tui.Services
         private async Task PollHealthAsync(CancellationToken token)
         {
             HealthResult? health;
-            try { health = await _Client().GetHealthAsync(token).ConfigureAwait(false); }
+            try { health = await _Client().Status.GetHealthAsync(token).ConfigureAwait(false); }
             catch (ArmadaApiException) { health = null; }
             _Dispatcher.Post(() =>
             {
@@ -247,7 +247,7 @@ namespace Armada.Tui.Services
         {
             try
             {
-                EnumerationResult<Job>? jobs = await _Client().ListJobsAsync(token).ConfigureAwait(false);
+                EnumerationResult<Job>? jobs = await _Client().Jobs.ListAsync(token).ConfigureAwait(false);
                 List<Job> active = (jobs?.Objects ?? new List<Job>()).Where(j => j.Status == JobStatusEnum.Queued || j.Status == JobStatusEnum.Running).ToList();
                 _Dispatcher.Post(() =>
                 {
@@ -270,7 +270,7 @@ namespace Armada.Tui.Services
             }
             try
             {
-                List<InboxItem>? inbox = await _Client().GetInboxAsync(token).ConfigureAwait(false);
+                List<InboxItem>? inbox = await _Client().Inbox.GetAsync(token).ConfigureAwait(false);
                 _Dispatcher.Post(() =>
                 {
                     Inbox = inbox ?? new List<InboxItem>();

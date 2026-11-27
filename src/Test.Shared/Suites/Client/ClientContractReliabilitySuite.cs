@@ -41,7 +41,7 @@ namespace Test.Shared.Suites.Client
                 string frontier = "opus-contract-" + suffix;
                 Mission mission = await SeedAsync(fx, open, frontier).ConfigureAwait(false);
 
-                MissionAttemptHistory history = (await c.GetMissionAttemptsAsync(mission.Id))!;
+                MissionAttemptHistory history = (await c.Reliability.GetMissionAttemptsAsync(mission.Id))!;
                 AssertEqual(mission.Id, history.MissionId, "mission");
                 AssertEqual(1, history.EscalationCount, "escalation count");
                 AssertEqual(open, history.EscalatedFromModel, "escalated from");
@@ -53,13 +53,13 @@ namespace Test.Shared.Suites.Client
                 AssertEqual("cpt_next_" + suffix, history.Attempts[1].NextCaptainId, "escalation target");
                 AssertEqual(RuntimeFailureKindEnum.Unclassified, history.Attempts[1].RuntimeFailureKind, "runtime failure kind");
                 AssertEqual(StageDispositionEnum.Completed, history.Attempts[2].Disposition, "final attempt");
-                await ClientContract.ExpectErrorAsync(() => c.GetMissionAttemptsAsync("msn_missing"), "unknown mission", 404, 404);
+                await ClientContract.ExpectErrorAsync(() => c.Reliability.GetMissionAttemptsAsync("msn_missing"), "unknown mission", 404, 404);
 
-                List<StageSubmission> submissions = (await c.ListMissionSubmissionsAsync(mission.Id))!;
+                List<StageSubmission> submissions = (await c.StageSubmissions.ListForMissionAsync(mission.Id))!;
                 AssertEqual(0, submissions.Count, "no submissions for a seeded mission");
-                await ClientContract.ExpectErrorAsync(() => c.ListMissionSubmissionsAsync("msn_missing"), "unknown mission submissions", 404, 404);
+                await ClientContract.ExpectErrorAsync(() => c.StageSubmissions.ListForMissionAsync("msn_missing"), "unknown mission submissions", 404, 404);
 
-                ReliabilitySummary summary = (await c.GetReliabilitySummaryAsync(new ReliabilitySummaryQuery { Model = open, Sort = ReliabilitySortEnum.Escalations }))!;
+                ReliabilitySummary summary = (await c.Reliability.GetSummaryAsync(new ReliabilitySummaryQuery { Model = open, Sort = ReliabilitySortEnum.Escalations }))!;
                 ReliabilitySummaryRow row = summary.Rows.Single();
                 AssertEqual("Worker", row.Persona, "persona");
                 AssertEqual(2, row.Attempts, "attempts of the open model");
@@ -70,13 +70,13 @@ namespace Test.Shared.Suites.Client
                 AssertEqual(0.0, row.CompletionRate, "the open model finished nothing");
                 AssertEqual(2, summary.Totals.Attempts, "totals follow the filter");
 
-                ReliabilitySummary both = (await c.GetReliabilitySummaryAsync(new ReliabilitySummaryQuery { Persona = "Worker", Sort = ReliabilitySortEnum.CompletionRate, PageSize = 1000 }))!;
+                ReliabilitySummary both = (await c.Reliability.GetSummaryAsync(new ReliabilitySummaryQuery { Persona = "Worker", Sort = ReliabilitySortEnum.CompletionRate, PageSize = 1000 }))!;
                 ReliabilitySummaryRow best = both.Rows.First(r => r.Model == frontier);
                 AssertEqual(1.0, best.CompletionRate, "frontier completed");
                 int frontierIndex = both.Rows.FindIndex(r => r.Model == frontier);
                 int openIndex = both.Rows.FindIndex(r => r.Model == open);
                 AssertTrue(frontierIndex < openIndex, "sorted by completion rate, descending");
-                await ClientContract.ExpectErrorAsync(() => c.GetReliabilitySummaryAsync(new ReliabilitySummaryQuery { FromUtc = DateTime.UtcNow.AddDays(-200) }), "window too long", 400, 400);
+                await ClientContract.ExpectErrorAsync(() => c.Reliability.GetSummaryAsync(new ReliabilitySummaryQuery { FromUtc = DateTime.UtcNow.AddDays(-200) }), "window too long", 400, 400);
             }));
 
             cases.Add(Case("gate_reports", "Upload a gate report, list it newest first, read it by id and as latest", async (c, fx) =>
@@ -89,17 +89,17 @@ namespace Test.Shared.Suites.Client
                     Pipelines = new List<GatePipelineResult> { new GatePipelineResult { Pipeline = "Gate-A", Status = "Completed", Passed = 9, Failed = 1 } },
                     Measures = new List<GateMeasure> { new GateMeasure { Id = "G1", Name = "Completion", Value = "90%", Threshold = ">= 95%", Status = GateMeasureStatusEnum.Fail } }
                 };
-                GateReport stored = (await c.UploadGateReportAsync(report))!;
+                GateReport stored = (await c.Reliability.UploadGateReportAsync(report))!;
                 AssertFalse(String.IsNullOrEmpty(stored.Id), "id assigned");
                 AssertNotNull(stored.UploadedUtc, "uploaded time");
-                GateReport latest = (await c.GetGateReportAsync("latest"))!;
+                GateReport latest = (await c.Reliability.GetGateReportAsync("latest"))!;
                 AssertEqual(stored.Id, latest.Id, "latest");
                 AssertEqual(GateMeasureStatusEnum.Fail, latest.Measures.Single().Status, "measure round trip");
-                AssertEqual(stored.Id, (await c.GetGateReportAsync(stored.Id!))?.Id, "by id");
-                EnumerationResult<GateReport> page = (await c.ListGateReportsAsync(1, 5))!;
+                AssertEqual(stored.Id, (await c.Reliability.GetGateReportAsync(stored.Id!))?.Id, "by id");
+                EnumerationResult<GateReport> page = (await c.Reliability.ListGateReportsAsync(1, 5))!;
                 AssertEqual(stored.Id, page.Objects.First().Id, "newest first");
-                await ClientContract.ExpectErrorAsync(() => c.GetGateReportAsync("gate-00000000-000000000"), "unknown report", 404, 404);
-                await ClientContract.ExpectErrorAsync(() => c.UploadGateReportAsync(new GateReport()), "empty report", 400, 400);
+                await ClientContract.ExpectErrorAsync(() => c.Reliability.GetGateReportAsync("gate-00000000-000000000"), "unknown report", 404, 404);
+                await ClientContract.ExpectErrorAsync(() => c.Reliability.UploadGateReportAsync(new GateReport()), "empty report", 400, 400);
             }));
 
             return new TestSuiteDescriptor(suiteId: Suite, displayName: "Armada.Client contract: pipeline reliability", cases: cases);

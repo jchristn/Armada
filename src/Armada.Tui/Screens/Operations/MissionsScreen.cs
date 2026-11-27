@@ -138,7 +138,7 @@ namespace Armada.Tui.Screens.Operations
             ArmadaPageQuery q = new ArmadaPageQuery(query.PageNumber, query.PageSize);
             q.With("status", StatusFilter.Value);
             q.With("userId", UserScope?.Value);
-            EnumerationResult<MissionSummary>? result = await Context.Client.ListMissionSummariesAsync(q, token).ConfigureAwait(false);
+            EnumerationResult<MissionSummary>? result = await Context.Client.Missions.ListSummariesAsync(q, token).ConfigureAwait(false);
             List<MissionSummary> rows = result?.Objects ?? new List<MissionSummary>();
             return new GridPage<MissionSummary>(rows, result?.TotalRecords ?? rows.Count);
         }
@@ -222,7 +222,7 @@ namespace Armada.Tui.Screens.Operations
                 mission.Priority = Int32.Parse(priority.Value, CultureInfo.InvariantCulture);
                 mission.Mode = Enum.TryParse(mode.Value, out MissionModeEnum m) ? m : MissionModeEnum.Implementation;
                 string created = mission.Title;
-                Call((c, t) => c.CreateMissionAsync(mission, t), r =>
+                Call((c, t) => c.Missions.CreateAsync(mission, t), r =>
                 {
                     d.Complete();
                     Toast(NotificationSeverityEnum.Success, Tr("Mission \"{{title}}\" created.", LocalizationArgs.Of("title", created)));
@@ -246,7 +246,7 @@ namespace Armada.Tui.Screens.Operations
                     int failed = 0;
                     foreach (string id in ids)
                     {
-                        try { await Context.Client.PurgeMissionAsync(id, t).ConfigureAwait(false); }
+                        try { await Context.Client.Missions.PurgeAsync(id, t).ConfigureAwait(false); }
                         catch (Armada.Client.ArmadaApiException) { failed++; }
                     }
 

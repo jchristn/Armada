@@ -124,19 +124,19 @@ namespace Armada.Tui.Screens.Activity
         /// </summary>
         public void Load()
         {
-            ScreenOps.Run(Context, () => Context.Client.GetEventAsync(EventId), e =>
+            ScreenOps.Run(Context, () => Context.Client.Events.GetAsync(EventId), e =>
             {
                 Event = e;
                 Banner = e == null ? Context.Loc.T("Failed to load event.") : "";
                 if (e == null) ShowUnavailable();
                 Rebuild();
             }, "Failed to load event.", ex => { Banner = Context.Loc.T("Failed to load event."); ShowUnavailable(); });
-            ScreenOps.Quiet(Context, () => Context.Client.ListCaptainsAsync(new ArmadaPageQuery(1, 1000)), r =>
+            ScreenOps.Quiet(Context, () => Context.Client.Captains.ListAsync(new ArmadaPageQuery(1, 1000)), r =>
             {
                 _CaptainNames = (r?.Objects ?? new List<Captain>()).ToDictionary(c => c.Id, c => c.Name, StringComparer.Ordinal);
                 Rebuild();
             });
-            ScreenOps.Quiet(Context, () => Context.Client.ListVesselsAsync(new ArmadaPageQuery(1, 1000)), r =>
+            ScreenOps.Quiet(Context, () => Context.Client.Vessels.ListAsync(new ArmadaPageQuery(1, 1000)), r =>
             {
                 _VesselNames = (r?.Objects ?? new List<Vessel>()).ToDictionary(v => v.Id, v => v.Name, StringComparer.Ordinal);
                 Rebuild();
@@ -215,7 +215,7 @@ namespace Armada.Tui.Screens.Activity
             string id = Event.Id;
             Context.Confirm("Delete", Context.Loc.T("Delete {{entity}} {{name}}?", LocalizationArgs.Of("entity", Context.Loc.T("Event").ToLowerInvariant(), "name", id)), () =>
             {
-                DeleteProgress.Run(Context, "Deleting event", ct => Context.Client.DeleteEventsBatchAsync(new List<string> { id }, ct), r =>
+                DeleteProgress.Run(Context, "Deleting event", ct => Context.Client.Events.DeleteBatchAsync(new List<string> { id }, ct), r =>
                 {
                     ScreenOps.Toast(Context, NotificationSeverityEnum.Warning, "Event {{id}} deleted.", LocalizationArgs.Of("id", id));
                     Context.Navigate("/activity?source=events");

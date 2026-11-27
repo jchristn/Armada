@@ -120,9 +120,9 @@ namespace Armada.Tui.Screens.Build
         protected override async Task<GridPage<Fleet>> FetchAsync(GridQuery query, CancellationToken token)
         {
             ArmadaPageQuery all = new ArmadaPageQuery(1, 9999);
-            Task<EnumerationResult<Fleet>?> fleets = Context.Client.ListFleetsAsync(all, token);
-            Task<EnumerationResult<Vessel>?> vessels = Context.Client.ListVesselsAsync(new ArmadaPageQuery(1, 9999), token);
-            Task<List<Pipeline>> pipelines = ArmadaPaging.ReadAllAsync<Pipeline>((p, ct) => Context.Client.ListPipelinesAsync(new ArmadaPageQuery(p, 1000), ct), ArmadaPaging.DefaultMaxPages, token);
+            Task<EnumerationResult<Fleet>?> fleets = Context.Client.Fleets.ListAsync(all, token);
+            Task<EnumerationResult<Vessel>?> vessels = Context.Client.Vessels.ListAsync(new ArmadaPageQuery(1, 9999), token);
+            Task<List<Pipeline>> pipelines = ArmadaPaging.ReadAllAsync<Pipeline>((p, ct) => Context.Client.Pipelines.ListAsync(new ArmadaPageQuery(p, 1000), ct), ArmadaPaging.DefaultMaxPages, token);
             await Task.WhenAll(fleets, vessels, pipelines).ConfigureAwait(false);
             Dictionary<string, int> counts = new Dictionary<string, int>(StringComparer.Ordinal);
             foreach (Vessel v in vessels.Result?.Objects ?? new List<Vessel>())
@@ -172,7 +172,7 @@ namespace Armada.Tui.Screens.Build
 
         private void Duplicate(Fleet fleet)
         {
-            Call((c, t) => c.CreateFleetAsync(FleetForm.DuplicatePayload(fleet), t), created =>
+            Call((c, t) => c.Fleets.CreateAsync(FleetForm.DuplicatePayload(fleet), t), created =>
             {
                 if (created == null) return;
                 Toast(NotificationSeverityEnum.Success, Tr("Fleet \"{{name}}\" duplicated.", LocalizationArgs.Of("name", created.Name)));
@@ -184,7 +184,7 @@ namespace Armada.Tui.Screens.Build
         {
             Confirm("Delete Fleet", Tr("Delete fleet \"{{name}}\"? This cannot be undone.", LocalizationArgs.Of("name", fleet.Name)), () =>
             {
-                DeleteProgress.RunVoid(Context, "Deleting fleet", t => Context.Client.DeleteFleetAsync(fleet.Id, t), () =>
+                DeleteProgress.RunVoid(Context, "Deleting fleet", t => Context.Client.Fleets.DeleteAsync(fleet.Id, t), () =>
                 {
                     Toast(NotificationSeverityEnum.Warning, Tr("Fleet \"{{name}}\" deleted.", LocalizationArgs.Of("name", fleet.Name)));
                     Refresh();
@@ -204,7 +204,7 @@ namespace Armada.Tui.Screens.Build
                     int failed = 0;
                     foreach (string id in ids)
                     {
-                        try { await Context.Client.DeleteFleetAsync(id, t).ConfigureAwait(false); }
+                        try { await Context.Client.Fleets.DeleteAsync(id, t).ConfigureAwait(false); }
                         catch (ArmadaApiException) { failed++; }
                     }
 

@@ -29,7 +29,7 @@ namespace Armada.Helm.Commands
                 }
 
                 BlackBoxResolveRequest request = new BlackBoxResolveRequest { Resolution = resolution.Value, Note = settings.Note, Link = settings.Link };
-                BlackBoxEntry? entry = await client.ResolveBlackBoxAsync(settings.Id, request, cancellationToken).ConfigureAwait(false);
+                BlackBoxEntry? entry = await client.BlackBox.ResolveAsync(settings.Id, request, cancellationToken).ConfigureAwait(false);
                 if (settings.Json) WritePureJson(entry);
                 else AnsiConsole.MarkupLine("[green]Resolved[/] " + Markup.Escape(settings.Id) + " as " + Markup.Escape(resolution.Value.ToString()) + ".");
                 return 0;

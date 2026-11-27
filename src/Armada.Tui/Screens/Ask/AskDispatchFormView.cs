@@ -299,11 +299,11 @@ namespace Armada.Tui.Screens.Ask
                 {
                     ArmadaPageQuery vq = new ArmadaPageQuery();
                     vq.PageSize = 9999;
-                    EnumerationResult<Vessel>? vessels = await client.ListVesselsAsync(vq).ConfigureAwait(false);
+                    EnumerationResult<Vessel>? vessels = await client.Vessels.ListAsync(vq).ConfigureAwait(false);
                     List<Pipeline> pipelines;
                     try
                     {
-                        pipelines = await ArmadaPaging.ReadAllAsync<Pipeline>((p, ct) => client.ListPipelinesAsync(new ArmadaPageQuery(p, 1000), ct)).ConfigureAwait(false);
+                        pipelines = await ArmadaPaging.ReadAllAsync<Pipeline>((p, ct) => client.Pipelines.ListAsync(new ArmadaPageQuery(p, 1000), ct)).ConfigureAwait(false);
                     }
                     catch (ArmadaApiException)
                     {

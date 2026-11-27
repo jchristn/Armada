@@ -47,8 +47,8 @@ namespace Armada.Tui.Screens.Configuration
                 payload.Active = active.Value;
                 payload.Scope = ScopeRules.ResolveCreateScope(context.Session, EntityForm.EnumValue(scope, ScopeEnum.TenantWide));
                 saved = existing != null
-                    ? await context.Client.UpdateSkillAsync(existing.Id, payload, ct).ConfigureAwait(false)
-                    : await context.Client.CreateSkillAsync(payload, ct).ConfigureAwait(false);
+                    ? await context.Client.Skills.UpdateAsync(existing.Id, payload, ct).ConfigureAwait(false)
+                    : await context.Client.Skills.CreateAsync(payload, ct).ConfigureAwait(false);
                 return null;
             }, () =>
             {

@@ -36,7 +36,7 @@ namespace Armada.Helm.Commands
 
             return await RunBlackBoxAsync(settings.Json, async client =>
             {
-                BlackBoxAttemptDiff? diff = await client.DiffBlackBoxEntriesAsync(id, other, cancellationToken).ConfigureAwait(false);
+                BlackBoxAttemptDiff? diff = await client.BlackBoxInsights.DiffEntriesAsync(id, other, cancellationToken).ConfigureAwait(false);
                 if (diff == null)
                 {
                     Status("Error: no diff for " + id + " and " + other + ".");

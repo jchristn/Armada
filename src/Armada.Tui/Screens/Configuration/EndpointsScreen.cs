@@ -77,7 +77,7 @@ namespace Armada.Tui.Screens.Configuration
             if (!Context.Session.IsTenantAdmin || Sweeping) return;
             Sweeping = true;
             EntityUi.Toast(Context, NotificationSeverityEnum.Info, T("Sweeping..."));
-            EntityUi.Run<ModelEndpointHealthSweepResponse?>(Context, ct => Context.Client.HealthCheckModelEndpointsAsync(ct), result =>
+            EntityUi.Run<ModelEndpointHealthSweepResponse?>(Context, ct => Context.Client.ModelEndpoints.HealthCheckAsync(ct), result =>
             {
                 Sweeping = false;
                 EntityUi.Toast(Context, NotificationSeverityEnum.Success, EntityUi.T(Context, "Health sweep probed {{count}} base URL(s).", "count", result?.DistinctBaseUrlsProbed ?? 0));
@@ -260,7 +260,7 @@ namespace Armada.Tui.Screens.Configuration
         /// <inheritdoc />
         protected override Task DeleteAsync(ModelEndpoint row, CancellationToken token)
         {
-            return Context.Client.DeleteModelEndpointAsync(row.Id, token);
+            return Context.Client.ModelEndpoints.DeleteAsync(row.Id, token);
         }
 
         /// <inheritdoc />
@@ -281,7 +281,7 @@ namespace Armada.Tui.Screens.Configuration
 
         private async Task<List<ModelEndpoint>> ReadAllAsync(CancellationToken token)
         {
-            List<ModelEndpoint>? list = await Context.Client.ListModelEndpointsAsync(token).ConfigureAwait(false);
+            List<ModelEndpoint>? list = await Context.Client.ModelEndpoints.ListAsync(token).ConfigureAwait(false);
             return list ?? new List<ModelEndpoint>();
         }
 

@@ -166,7 +166,7 @@ namespace Armada.Tui.Screens.Delivery
             string state = Filter("state");
             if (state == "active") q.Active = true;
             else if (state == "inactive") q.Active = false;
-            EnumerationResult<Runbook>? result = await Context.Client.ListRunbooksAsync(q, token).ConfigureAwait(false);
+            EnumerationResult<Runbook>? result = await Context.Client.Runbooks.ListAsync(q, token).ConfigureAwait(false);
             return PageOf(result);
         }
 
@@ -250,7 +250,7 @@ namespace Armada.Tui.Screens.Delivery
         /// <inheritdoc />
         protected override Task DeleteAsync(Runbook row, CancellationToken token)
         {
-            return Context.Client.DeleteRunbookAsync(row.Id, token);
+            return Context.Client.Runbooks.DeleteAsync(row.Id, token);
         }
 
         /// <inheritdoc />
@@ -288,7 +288,7 @@ namespace Armada.Tui.Screens.Delivery
         {
             try
             {
-                return await ArmadaPaging.ReadAllAsync<Runbook>((p, ct) => Context.Client.ListRunbooksAsync(new RunbookQuery { PageNumber = p, PageSize = EntityLookups.PageSize }, ct), 20, token).ConfigureAwait(false);
+                return await ArmadaPaging.ReadAllAsync<Runbook>((p, ct) => Context.Client.Runbooks.ListAsync(new RunbookQuery { PageNumber = p, PageSize = EntityLookups.PageSize }, ct), 20, token).ConfigureAwait(false);
             }
             catch (ArmadaApiException)
             {
@@ -300,7 +300,7 @@ namespace Armada.Tui.Screens.Delivery
         {
             try
             {
-                return await ArmadaPaging.ReadAllAsync<RunbookExecution>((p, ct) => Context.Client.ListRunbookExecutionsAsync(new RunbookExecutionQuery { PageNumber = p, PageSize = EntityLookups.PageSize }, ct), 20, token).ConfigureAwait(false);
+                return await ArmadaPaging.ReadAllAsync<RunbookExecution>((p, ct) => Context.Client.Runbooks.ListExecutionsAsync(new RunbookExecutionQuery { PageNumber = p, PageSize = EntityLookups.PageSize }, ct), 20, token).ConfigureAwait(false);
             }
             catch (ArmadaApiException)
             {

@@ -278,7 +278,7 @@ namespace Armada.Tui.Screens.Operations
         public override void Load()
         {
             bool initial = !Loaded;
-            Call((c, t) => c.GetMissionAsync(MissionId, t), m =>
+            Call((c, t) => c.Missions.GetAsync(MissionId, t), m =>
             {
                 if (m == null)
                 {
@@ -345,7 +345,7 @@ namespace Armada.Tui.Screens.Operations
         private void LoadPreview()
         {
             _LoadingPreview = LandingPreview == null;
-            Call((c, t) => c.GetMissionLandingPreviewAsync(MissionId, t), p =>
+            Call((c, t) => c.Missions.GetLandingPreviewAsync(MissionId, t), p =>
             {
                 LandingPreview = p;
                 _LoadingPreview = false;
@@ -363,7 +363,7 @@ namespace Armada.Tui.Screens.Operations
             // The note is written once per launch, before the captain starts; read it until it is there.
             if (CliPermissionNote != null || _LoadingNote) return;
             _LoadingNote = true;
-            Call((c, t) => c.GetMissionLogAsync(MissionId, NoteLogLines, t), log =>
+            Call((c, t) => c.Missions.GetLogAsync(MissionId, NoteLogLines, t), log =>
             {
                 _LoadingNote = false;
                 string? note = CliPermissionPolicyResolver.FindMissionLogNote(log?.Log);
@@ -381,11 +381,11 @@ namespace Armada.Tui.Screens.Operations
             Invalidate();
             Call(async (c, t) =>
             {
-                GitHubPullRequestDetail? pr = await c.GetMissionGitHubPullRequestAsync(MissionId, t).ConfigureAwait(false);
+                GitHubPullRequestDetail? pr = await c.Missions.GetGitHubPullRequestAsync(MissionId, t).ConfigureAwait(false);
                 EnumerationQuery page = new EnumerationQuery();
                 page.PageSize = PullRequestPageSize;
-                EnumerationResult<GitHubPullRequestReview>? reviews = pr == null || pr.ReviewCount == 0 ? null : await c.EnumerateMissionPullRequestReviewsAsync(MissionId, page, t).ConfigureAwait(false);
-                EnumerationResult<GitHubPullRequestCheck>? checks = pr == null || pr.CheckCount == 0 ? null : await c.EnumerateMissionPullRequestChecksAsync(MissionId, page, t).ConfigureAwait(false);
+                EnumerationResult<GitHubPullRequestReview>? reviews = pr == null || pr.ReviewCount == 0 ? null : await c.Missions.EnumeratePullRequestReviewsAsync(MissionId, page, t).ConfigureAwait(false);
+                EnumerationResult<GitHubPullRequestCheck>? checks = pr == null || pr.CheckCount == 0 ? null : await c.Missions.EnumeratePullRequestChecksAsync(MissionId, page, t).ConfigureAwait(false);
                 return new PullRequestEvidence(pr, reviews?.Objects, checks?.Objects);
             }, evidence =>
             {
@@ -409,7 +409,7 @@ namespace Armada.Tui.Screens.Operations
                 ArmadaPageQuery q = new ArmadaPageQuery();
                 q.PageSize = 1000;
                 q.With("missionId", MissionId);
-                return c.ListCheckRunsAsync(q, t);
+                return c.CheckRuns.ListAsync(q, t);
             }, r =>
             {
                 LinkedChecks = r?.Objects ?? new List<CheckRun>();
@@ -420,7 +420,7 @@ namespace Armada.Tui.Screens.Operations
                 DeploymentQuery q = new DeploymentQuery();
                 q.PageSize = 1000;
                 q.MissionId = MissionId;
-                return c.ListDeploymentsAsync(q, t);
+                return c.Deployments.ListAsync(q, t);
             }, r =>
             {
                 LinkedDeployments = r?.Objects ?? new List<Deployment>();
@@ -430,12 +430,12 @@ namespace Armada.Tui.Screens.Operations
 
         private void LoadHierarchyAndWaits()
         {
-            Call((c, t) => c.GetMissionWaitsAsync(MissionId, 1, 100, t), page =>
+            Call((c, t) => c.Concurrency.GetMissionWaitsAsync(MissionId, 1, 100, t), page =>
             {
                 Waits = page?.Objects ?? new List<MissionWaitInterval>();
                 Invalidate();
             }, null, ex => { });
-            Call((c, t) => c.ListMissionSummariesAsync(new ArmadaPageQuery(1, 50).With("parentMissionId", MissionId).With("order", "CreatedAscending"), t), page =>
+            Call((c, t) => c.Missions.ListSummariesAsync(new ArmadaPageQuery(1, 50).With("parentMissionId", MissionId).With("order", "CreatedAscending"), t), page =>
             {
                 Children = page?.Objects ?? new List<MissionSummary>();
                 ChildCount = page?.TotalRecords ?? 0;

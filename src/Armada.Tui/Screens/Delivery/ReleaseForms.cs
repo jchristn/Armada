@@ -152,8 +152,8 @@ namespace Armada.Tui.Screens.Delivery
             {
                 ReleaseUpsertRequest payload = fields.BuildPayload(new List<string>());
                 saved = existing != null
-                    ? await context.Client.UpdateReleaseAsync(existing.Id, payload, ct).ConfigureAwait(false)
-                    : await context.Client.CreateReleaseAsync(payload, ct).ConfigureAwait(false);
+                    ? await context.Client.Releases.UpdateAsync(existing.Id, payload, ct).ConfigureAwait(false)
+                    : await context.Client.Releases.CreateAsync(payload, ct).ConfigureAwait(false);
                 return null;
             }, () =>
             {

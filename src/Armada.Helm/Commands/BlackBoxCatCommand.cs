@@ -35,7 +35,7 @@ namespace Armada.Helm.Commands
                 while (remaining > 0)
                 {
                     long length = Math.Min(remaining, ChunkBytes);
-                    BlackBoxObjectContent chunk = await client.ReadBlackBoxObjectAsync(settings.Id, settings.Name, offset, length, cancellationToken).ConfigureAwait(false);
+                    BlackBoxObjectContent chunk = await client.BlackBox.ReadObjectAsync(settings.Id, settings.Name, offset, length, cancellationToken).ConfigureAwait(false);
                     if (chunk.Content.Length == 0) break;
                     char[] chars = new char[decoder.GetCharCount(chunk.Content, 0, chunk.Content.Length)];
                     decoder.GetChars(chunk.Content, 0, chunk.Content.Length, chars, 0);

@@ -623,7 +623,7 @@ namespace Armada.Tui.Screens.Admin
             Fleet payload = new Fleet(FleetName.Value.Trim());
             string description = FleetDescription.Value.Trim();
             payload.Description = description.Length > 0 ? description : null;
-            RunStep(() => Context.Client.CreateFleetAsync(payload), fleet =>
+            RunStep(() => Context.Client.Fleets.CreateAsync(payload), fleet =>
             {
                 if (fleet == null) return;
                 Fleets = Upsert(Fleets, fleet, f => f.Id);
@@ -689,7 +689,7 @@ namespace Armada.Tui.Screens.Admin
             if (ProjectContext.Value.Trim().Length > 0) payload.ProjectContext = ProjectContext.Value.Trim();
             if (StyleGuide.Value.Trim().Length > 0) payload.StyleGuide = StyleGuide.Value.Trim();
             if (landing.Length > 0 && Enum.TryParse<LandingModeEnum>(landing, out LandingModeEnum mode)) payload.LandingMode = mode;
-            RunStep(() => Context.Client.CreateVesselAsync(payload), vessel =>
+            RunStep(() => Context.Client.Vessels.CreateAsync(payload), vessel =>
             {
                 if (vessel == null) return;
                 Vessels = Upsert(Vessels, vessel, v => v.Id);
@@ -766,7 +766,7 @@ namespace Armada.Tui.Screens.Admin
                         Model = payload.Model, Tier = payload.Tier, SystemInstructions = payload.SystemInstructions,
                         RuntimeOptionsJson = payload.RuntimeOptionsJson, MaxConcurrency = payload.MaxConcurrency
                     };
-                    Captain? made = await Context.Client.CreateCaptainAsync(next).ConfigureAwait(false);
+                    Captain? made = await Context.Client.Captains.CreateAsync(next).ConfigureAwait(false);
                     if (made != null) created.Add(made);
                 }
                 return created.FirstOrDefault();
@@ -818,7 +818,7 @@ namespace Armada.Tui.Screens.Admin
             request.Title = MissionTitle.Value.Trim();
             request.Description = MissionDescription.Value.Trim();
             request.Priority = ParsePriority(Priority.Value);
-            RunStep(() => Context.Client.DispatchMissionAsync(request), response =>
+            RunStep(() => Context.Client.Missions.DispatchAsync(request), response =>
             {
                 if (response == null || response.Mission == null)
                 {
@@ -841,7 +841,7 @@ namespace Armada.Tui.Screens.Admin
         {
             Mission? mission = DispatchedMission;
             if (mission == null || Busy) return;
-            RunStep(() => Context.Client.GetMissionAsync(mission.Id), loaded =>
+            RunStep(() => Context.Client.Missions.GetAsync(mission.Id), loaded =>
             {
                 if (loaded == null) return;
                 DispatchedMission = loaded;
@@ -885,7 +885,7 @@ namespace Armada.Tui.Screens.Admin
                 string error = "";
                 try
                 {
-                    MuxEndpointPage? result = await Context.Client.ListMuxEndpointsAsync(dir.Length > 0 ? dir : null).ConfigureAwait(false);
+                    MuxEndpointPage? result = await Context.Client.MuxEndpoints.ListAsync(dir.Length > 0 ? dir : null).ConfigureAwait(false);
                     if (result == null || !result.Success)
                     {
                         error = result != null && !String.IsNullOrEmpty(result.ErrorMessage) ? result.ErrorMessage : result != null && !String.IsNullOrEmpty(result.ErrorCode) ? result.ErrorCode : L("Mux endpoint discovery failed.");
@@ -1548,9 +1548,9 @@ namespace Armada.Tui.Screens.Admin
             {
                 try
                 {
-                    EnumerationResult<Fleet>? fleets = await Context.Client.ListFleetsAsync(new ArmadaPageQuery(1, 9999)).ConfigureAwait(false);
-                    EnumerationResult<Vessel>? vessels = await Context.Client.ListVesselsAsync(new ArmadaPageQuery(1, 9999)).ConfigureAwait(false);
-                    EnumerationResult<Captain>? captains = await Context.Client.ListCaptainsAsync(new ArmadaPageQuery(1, 9999)).ConfigureAwait(false);
+                    EnumerationResult<Fleet>? fleets = await Context.Client.Fleets.ListAsync(new ArmadaPageQuery(1, 9999)).ConfigureAwait(false);
+                    EnumerationResult<Vessel>? vessels = await Context.Client.Vessels.ListAsync(new ArmadaPageQuery(1, 9999)).ConfigureAwait(false);
+                    EnumerationResult<Captain>? captains = await Context.Client.Captains.ListAsync(new ArmadaPageQuery(1, 9999)).ConfigureAwait(false);
                     Context.Dispatcher.Post(() =>
                     {
                         Fleets = fleets?.Objects ?? new List<Fleet>();
@@ -1627,14 +1627,14 @@ namespace Armada.Tui.Screens.Admin
                     IncidentQuery query = new IncidentQuery();
                     query.MissionId = missionId;
                     query.PageSize = 50;
-                    EnumerationResult<Incident>? incidents = await Context.Client.ListIncidentsAsync(query).ConfigureAwait(false);
+                    EnumerationResult<Incident>? incidents = await Context.Client.Incidents.ListAsync(query).ConfigureAwait(false);
                     List<string> ids = (incidents?.Objects ?? new List<Incident>())
                         .SelectMany(i => i.RescueMissionIds ?? new List<string>())
                         .Distinct(StringComparer.Ordinal)
                         .ToList();
                     foreach (string id in ids)
                     {
-                        Mission? rescue = await Context.Client.GetMissionAsync(id).ConfigureAwait(false);
+                        Mission? rescue = await Context.Client.Missions.GetAsync(id).ConfigureAwait(false);
                         if (rescue != null) rescues.Add(rescue);
                     }
                 }
@@ -1661,7 +1661,7 @@ namespace Armada.Tui.Screens.Admin
             string id = mission.Id;
             OpsLogModal modal = new OpsLogModal(
                 Context.Loc.T("Log: {{title}}", LocalizationArgs.Of("title", mission.Title)),
-                (lines, token) => Context.Client.GetMissionLogAsync(id, lines, token),
+                (lines, token) => Context.Client.Missions.GetLogAsync(id, lines, token),
                 () => true,
                 Context.Dispatcher,
                 text => Context.Clipboard.Copy(text, "Log"),
@@ -1683,13 +1683,13 @@ namespace Armada.Tui.Screens.Admin
                 List<DeploymentEnvironment> environments = new List<DeploymentEnvironment>();
                 try
                 {
-                    readiness = await Context.Client.GetVesselReadinessAsync(vesselId).ConfigureAwait(false);
-                    List<WorkflowProfile> allProfiles = await ArmadaPaging.ReadAllAsync<WorkflowProfile>((p, ct) => Context.Client.ListWorkflowProfilesAsync(new ArmadaPageQuery(p, 1000), ct)).ConfigureAwait(false);
+                    readiness = await Context.Client.Vessels.GetReadinessAsync(vesselId).ConfigureAwait(false);
+                    List<WorkflowProfile> allProfiles = await ArmadaPaging.ReadAllAsync<WorkflowProfile>((p, ct) => Context.Client.WorkflowProfiles.ListAsync(new ArmadaPageQuery(p, 1000), ct)).ConfigureAwait(false);
                     DeploymentEnvironmentQuery envQuery = new DeploymentEnvironmentQuery();
                     envQuery.PageNumber = 1;
                     envQuery.PageSize = 9999;
                     envQuery.VesselId = vesselId;
-                    EnumerationResult<DeploymentEnvironment>? envResult = await Context.Client.ListEnvironmentsAsync(envQuery).ConfigureAwait(false);
+                    EnumerationResult<DeploymentEnvironment>? envResult = await Context.Client.Environments.ListAsync(envQuery).ConfigureAwait(false);
                     profiles = allProfiles.Where(p =>
                         p.Scope == WorkflowProfileScopeEnum.Global
                         || (p.Scope == WorkflowProfileScopeEnum.Fleet && fleetId.Length > 0 && p.FleetId == fleetId)
@@ -1741,7 +1741,7 @@ namespace Armada.Tui.Screens.Admin
             }
 
             if (mission == null || SettledStatuses.Contains(mission.Status)) return;
-            ScreenOps.Quiet(Context, () => Context.Client.GetMissionAsync(mission.Id), loaded =>
+            ScreenOps.Quiet(Context, () => Context.Client.Missions.GetAsync(mission.Id), loaded =>
             {
                 if (loaded == null || generation != _PollGeneration) return;
                 DispatchedMission = loaded;

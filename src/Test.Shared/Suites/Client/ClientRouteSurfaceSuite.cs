@@ -138,9 +138,9 @@ namespace Test.Shared.Suites.Client
                 HashSet<string> nonSurfaceSeen = new HashSet<string>(StringComparer.Ordinal);
                 StringBuilder problems = new StringBuilder();
 
-                List<MethodInfo> methods = ClientRouteMap.ApiMethods();
+                List<ClientApiMethod> methods = ClientRouteMap.ApiMethods();
                 AssertTrue(methods.Count >= 300, "client methods found: " + methods.Count);
-                foreach (MethodInfo method in methods)
+                foreach (ClientApiMethod method in methods)
                 {
                     List<string> requests = await ClientRouteMap.RequestsOfAsync(method);
                     if (requests.Count == 0)
@@ -279,7 +279,7 @@ namespace Test.Shared.Suites.Client
                 }
 
                 foreach (DashboardApiCall call in DashboardSource.ApiCalls()) Check("client.ts " + call.Export, call.Method + " " + call.Path, call.HasQuery);
-                foreach (MethodInfo method in ClientRouteMap.ApiMethods())
+                foreach (ClientApiMethod method in ClientRouteMap.ApiMethods())
                     foreach (string request in await ClientRouteMap.RequestsOfAsync(method, true)) Check("Armada.Client " + method.Name, StripQuery(request), request.Contains('?'));
                 string root = DashboardSource.RepoRoot();
                 List<string> files = System.IO.Directory.GetFiles(System.IO.Path.Combine(root, "src", "Armada.Helm"), "*.cs", System.IO.SearchOption.AllDirectories)

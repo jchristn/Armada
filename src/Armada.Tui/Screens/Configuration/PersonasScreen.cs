@@ -132,7 +132,7 @@ namespace Armada.Tui.Screens.Configuration
         /// <inheritdoc />
         protected override async Task<GridPage<Persona>> FetchPageAsync(GridQuery query, CancellationToken token)
         {
-            List<Persona> all = await ArmadaPaging.ReadAllAsync<Persona>((p, ct) => Context.Client.ListPersonasAsync(new ArmadaPageQuery(p, 500), ct), 20, token).ConfigureAwait(false);
+            List<Persona> all = await ArmadaPaging.ReadAllAsync<Persona>((p, ct) => Context.Client.Personas.ListAsync(new ArmadaPageQuery(p, 500), ct), 20, token).ConfigureAwait(false);
             List<Persona> filtered = all.Where(p => Matches(Filter("name"), p.Name)
                 && Matches(Filter("description"), p.Description)
                 && Matches(Filter("template"), p.PromptTemplateName))
@@ -204,7 +204,7 @@ namespace Armada.Tui.Screens.Configuration
         /// <inheritdoc />
         protected override Task DeleteAsync(Persona row, CancellationToken token)
         {
-            return Context.Client.DeletePersonaAsync(row.Name, token);
+            return Context.Client.Personas.DeleteAsync(row.Name, token);
         }
 
         /// <inheritdoc />

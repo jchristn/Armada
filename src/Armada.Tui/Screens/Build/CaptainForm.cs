@@ -303,7 +303,7 @@ namespace Armada.Tui.Screens.Build
                 muxHint = loc.T("Loading saved Mux endpoints...");
                 applyRuntime();
                 string dir = muxConfig.Value.Trim();
-                screen.Call((c, t) => c.ListMuxEndpointsAsync(dir.Length > 0 ? dir : null, t), result =>
+                screen.Call((c, t) => c.MuxEndpoints.ListAsync(dir.Length > 0 ? dir : null, t), result =>
                 {
                     muxLoading = false;
                     muxRefresh.Label = loc.T("Refresh Mux Endpoints");
@@ -351,7 +351,7 @@ namespace Armada.Tui.Screens.Build
                 if (runtime.Value == AgentRuntimeEnum.Mux && discovered.Count == 0) loadMux();
             };
 
-            screen.Call((c, t) => c.ListHarborsAsync(t), list =>
+            screen.Call((c, t) => c.Harbors.ListAsync(t), list =>
             {
                 string selected = usageHarbor.Value ?? "";
                 usageHarbor.Options = new List<SelectOption<string>> { new SelectOption<string>("", loc.T("Automatic (current dock or standalone Admiral)")) };
@@ -366,7 +366,7 @@ namespace Armada.Tui.Screens.Build
                 dialog.Form.Rows.First(row => ReferenceEquals(row.Field, usageHarbor)).Hint = loc.T("Credential Harbors could not be loaded.");
             });
 
-            screen.Call((c, t) => c.ListModelEndpointsAsync(t), list =>
+            screen.Call((c, t) => c.ModelEndpoints.ListAsync(t), list =>
             {
                 inference.Clear();
                 inference.AddRange((list ?? new List<ModelEndpoint>()).Where(e => e.Kind == ModelEndpointKindEnum.Inference));
@@ -440,7 +440,7 @@ namespace Armada.Tui.Screens.Build
                         saved?.Invoke(result);
                     };
                     Action<Exception> fail = ex => d.Fail(ex, screen.Tr("Save failed."));
-                    screen.Call((c, t) => c.UpdateCaptainAsync(editing.Id, body, t), result =>
+                    screen.Call((c, t) => c.Captains.UpdateAsync(editing.Id, body, t), result =>
                     {
                         if (!canManagePolicy || chosenPolicy == storedPolicy)
                         {
@@ -448,13 +448,13 @@ namespace Armada.Tui.Screens.Build
                             return;
                         }
 
-                        screen.Call((c, t) => c.SetCaptainCliPermissionPolicyAsync(editing.Id, chosenPolicy, t), updated => finish(updated ?? result), null, fail);
+                        screen.Call((c, t) => c.CliPermissions.SetCaptainPolicyAsync(editing.Id, chosenPolicy, t), updated => finish(updated ?? result), null, fail);
                     }, null, fail);
                 }
                 else
                 {
                     body.CliPermissionPolicy = canManagePolicy ? chosenPolicy : null;
-                    screen.Call((c, t) => c.CreateCaptainAsync(body, t), result =>
+                    screen.Call((c, t) => c.Captains.CreateAsync(body, t), result =>
                     {
                         d.Complete();
                         screen.Toast(NotificationSeverityEnum.Success, screen.Tr("Captain \"{{name}}\" created.", LocalizationArgs.Of("name", label)));

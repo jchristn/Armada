@@ -139,7 +139,7 @@ namespace Armada.Tui.Screens.Configuration
             ArmadaPageQuery q = new ArmadaPageQuery(query.PageNumber, query.PageSize);
             q.With("type", EntityUi.Blank(Filter("type")));
             q.With("search", EntityUi.Blank(Filter("search")));
-            EnumerationResult<Memory>? result = await Context.Client.ListMemoriesAsync(q, token).ConfigureAwait(false);
+            EnumerationResult<Memory>? result = await Context.Client.Memories.ListAsync(q, token).ConfigureAwait(false);
             return PageOf(result);
         }
 
@@ -196,7 +196,7 @@ namespace Armada.Tui.Screens.Configuration
         /// <inheritdoc />
         protected override Task DeleteAsync(Memory row, CancellationToken token)
         {
-            return Context.Client.DeleteMemoryAsync(row.Id, token);
+            return Context.Client.Memories.DeleteAsync(row.Id, token);
         }
 
         /// <inheritdoc />

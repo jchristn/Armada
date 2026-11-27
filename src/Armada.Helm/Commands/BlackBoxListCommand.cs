@@ -26,7 +26,7 @@ namespace Armada.Helm.Commands
                 request.PageNumber = settings.Page ?? 1;
                 request.PageSize = settings.PageSize ?? 25;
                 request.Order = Armada.Core.Enums.EnumerationOrderEnum.CreatedDescending;
-                EnumerationResult<BlackBoxEntrySummary>? result = await client.EnumerateBlackBoxAsync(request, cancellationToken).ConfigureAwait(false);
+                EnumerationResult<BlackBoxEntrySummary>? result = await client.BlackBox.EnumerateAsync(request, cancellationToken).ConfigureAwait(false);
                 if (settings.Json)
                 {
                     WritePureJson(result);

@@ -47,7 +47,7 @@ namespace Armada.Tui.Screens.Kit
             SetValue("");
             Visible = context.Session.IsGlobalAdmin || context.Session.IsTenantAdmin;
             if (!Visible) return;
-            _ = ScreenOps.Quiet(context, () => context.Client.ListUsersAsync(), result =>
+            _ = ScreenOps.Quiet(context, () => context.Client.Users.ListAsync(), result =>
             {
                 List<SelectOption<string>> options = new List<SelectOption<string>> { new SelectOption<string>("", context.Loc.T("All users")) };
                 foreach (UserMaster user in result?.Objects ?? new List<UserMaster>())

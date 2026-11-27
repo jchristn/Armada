@@ -70,7 +70,7 @@ namespace Armada.Gate
                 // The Admiral keeps the report for the dashboard reliability view; a failed upload never fails the gate.
                 try
                 {
-                    GateReport? stored = await client.UploadGateReportAsync(report, CancellationToken.None).ConfigureAwait(false);
+                    GateReport? stored = await client.Reliability.UploadGateReportAsync(report, CancellationToken.None).ConfigureAwait(false);
                     Console.WriteLine("[gate] uploaded as " + stored?.Id);
                 }
                 catch (Exception ex)

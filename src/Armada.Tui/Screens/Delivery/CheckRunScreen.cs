@@ -91,17 +91,17 @@ namespace Armada.Tui.Screens.Delivery
         /// <inheritdoc />
         protected override Task<CheckRun?> FetchAsync(CancellationToken token)
         {
-            return Context.Client.GetCheckRunAsync(EntityId, token);
+            return Context.Client.CheckRuns.GetAsync(EntityId, token);
         }
 
         /// <inheritdoc />
         protected override async Task FetchRelatedAsync(CheckRun run, CancellationToken token)
         {
-            Task<Vessel?> vessel = String.IsNullOrEmpty(run.VesselId) ? Task.FromResult<Vessel?>(null) : Safe(() => Context.Client.GetVesselAsync(run.VesselId!, token));
-            Task<WorkflowProfile?> profile = String.IsNullOrEmpty(run.WorkflowProfileId) ? Task.FromResult<WorkflowProfile?>(null) : Safe(() => Context.Client.GetWorkflowProfileAsync(run.WorkflowProfileId!, token));
+            Task<Vessel?> vessel = String.IsNullOrEmpty(run.VesselId) ? Task.FromResult<Vessel?>(null) : Safe(() => Context.Client.Vessels.GetAsync(run.VesselId!, token));
+            Task<WorkflowProfile?> profile = String.IsNullOrEmpty(run.WorkflowProfileId) ? Task.FromResult<WorkflowProfile?>(null) : Safe(() => Context.Client.WorkflowProfiles.GetAsync(run.WorkflowProfileId!, token));
             Task<EnumerationResult<CheckRun>?> related = String.IsNullOrEmpty(run.VesselId)
                 ? Task.FromResult<EnumerationResult<CheckRun>?>(null)
-                : Safe(() => Context.Client.ListCheckRunsAsync(new ArmadaPageQuery(1, 1000).With("vesselId", run.VesselId).With("type", run.Type.ToString()), token));
+                : Safe(() => Context.Client.CheckRuns.ListAsync(new ArmadaPageQuery(1, 1000).With("vesselId", run.VesselId).With("type", run.Type.ToString()), token));
             await Task.WhenAll(vessel, profile, related).ConfigureAwait(false);
             _Vessel = vessel.Result;
             _Profile = profile.Result;
@@ -271,7 +271,7 @@ namespace Armada.Tui.Screens.Delivery
             if (run == null || _Retrying) return;
             _Retrying = true;
             EntityUi.Toast(Context, NotificationSeverityEnum.Info, T("Retrying..."));
-            EntityUi.Run<CheckRun?>(Context, ct => Context.Client.RetryCheckRunAsync(run.Id, ct), retried =>
+            EntityUi.Run<CheckRun?>(Context, ct => Context.Client.CheckRuns.RetryAsync(run.Id, ct), retried =>
             {
                 _Retrying = false;
                 if (retried == null) return;
@@ -287,7 +287,7 @@ namespace Armada.Tui.Screens.Delivery
             if (run == null) return;
             Context.Confirm("Delete Check Run", EntityUi.T(Context, "Delete check run \"{{id}}\"?", "id", run.Id), () =>
             {
-                DeleteProgress.RunVoid(Context, "Deleting check run", ct => Context.Client.DeleteCheckRunAsync(run.Id, ct), () =>
+                DeleteProgress.RunVoid(Context, "Deleting check run", ct => Context.Client.CheckRuns.DeleteAsync(run.Id, ct), () =>
                 {
                     EntityUi.Toast(Context, NotificationSeverityEnum.Warning, T("Check run deleted."));
                     Context.Navigate("/delivery?tab=checks");

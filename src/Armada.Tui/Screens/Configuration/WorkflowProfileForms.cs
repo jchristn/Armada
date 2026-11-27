@@ -109,8 +109,8 @@ namespace Armada.Tui.Screens.Configuration
                 }
 
                 saved = existing != null
-                    ? await context.Client.UpdateWorkflowProfileAsync(existing.Id, payload, ct).ConfigureAwait(false)
-                    : await context.Client.CreateWorkflowProfileAsync(payload, ct).ConfigureAwait(false);
+                    ? await context.Client.WorkflowProfiles.UpdateAsync(existing.Id, payload, ct).ConfigureAwait(false)
+                    : await context.Client.WorkflowProfiles.CreateAsync(payload, ct).ConfigureAwait(false);
                 return null;
             }, () =>
             {
@@ -132,7 +132,7 @@ namespace Armada.Tui.Screens.Configuration
         {
             if (context == null) throw new ArgumentNullException(nameof(context));
             if (profile == null) throw new ArgumentNullException(nameof(profile));
-            EntityUi.Run<WorkflowProfile?>(context, ct => context.Client.CreateWorkflowProfileAsync(DuplicatePayload(profile), ct), created =>
+            EntityUi.Run<WorkflowProfile?>(context, ct => context.Client.WorkflowProfiles.CreateAsync(DuplicatePayload(profile), ct), created =>
             {
                 if (created == null) return;
                 EntityUi.Toast(context, NotificationSeverityEnum.Success, EntityUi.T(context, "Workflow profile \"{{name}}\" duplicated.", "name", created.Name));

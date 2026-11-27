@@ -290,7 +290,7 @@ namespace Armada.Tui.Screens.Operations
             q.PageSize = 9999;
             string? user = UserScope?.Value;
             if (!String.IsNullOrEmpty(user)) q.UserId = user;
-            EnumerationResult<Objective>? result = await Context.Client.ListBacklogAsync(q, token).ConfigureAwait(false);
+            EnumerationResult<Objective>? result = await Context.Client.Objectives.ListBacklogAsync(q, token).ConfigureAwait(false);
             List<Objective> rows = result?.Objects ?? new List<Objective>();
             return new GridPage<Objective>(rows, rows.Count);
         }
@@ -461,7 +461,7 @@ namespace Armada.Tui.Screens.Operations
             b.ObjectiveId = other.Id;
             b.Rank = current.Rank;
             req.Items = new List<ObjectiveReorderItem> { a, b };
-            Call((c, t) => c.ReorderBacklogAsync(req, t), updated =>
+            Call((c, t) => c.Objectives.ReorderBacklogAsync(req, t), updated =>
             {
                 Toast(NotificationSeverityEnum.Success, Tr("Backlog ranking updated."));
                 Refresh();
@@ -472,7 +472,7 @@ namespace Armada.Tui.Screens.Operations
         {
             Confirm("Delete Backlog Item", Tr("Delete \"{{title}}\"? This removes the backlog item and its objective snapshot history, but leaves linked missions, releases, deployments, and incidents intact.", LocalizationArgs.Of("title", objective.Title)), () =>
             {
-                DeleteProgress.RunVoid(Context, "Deleting backlog item", t => Context.Client.DeleteBacklogItemAsync(objective.Id, t), () =>
+                DeleteProgress.RunVoid(Context, "Deleting backlog item", t => Context.Client.Objectives.DeleteBacklogItemAsync(objective.Id, t), () =>
                 {
                     Toast(NotificationSeverityEnum.Warning, Tr("Backlog item \"{{title}}\" deleted.", LocalizationArgs.Of("title", objective.Title)));
                     Refresh();
@@ -483,7 +483,7 @@ namespace Armada.Tui.Screens.Operations
         private void Duplicate(Objective objective)
         {
             ObjectiveUpsertRequest payload = BacklogLogic.DuplicatePayload(objective);
-            Call((c, t) => c.CreateBacklogItemAsync(payload, t), created =>
+            Call((c, t) => c.Objectives.CreateBacklogItemAsync(payload, t), created =>
             {
                 if (created == null) return;
                 Toast(NotificationSeverityEnum.Success, Tr("Backlog item \"{{title}}\" duplicated.", LocalizationArgs.Of("title", created.Title)));
@@ -525,7 +525,7 @@ namespace Armada.Tui.Screens.Operations
                 req.SourceType = source.Value;
                 req.Number = Int32.Parse(number.Value.Trim(), CultureInfo.InvariantCulture);
                 string sourceType = req.SourceType.ToString();
-                Call((c, t) => c.ImportObjectiveFromGitHubAsync(req, t), imported =>
+                Call((c, t) => c.Objectives.ImportFromGitHubAsync(req, t), imported =>
                 {
                     d.Complete();
                     if (imported == null) return;

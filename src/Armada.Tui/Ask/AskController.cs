@@ -472,7 +472,7 @@ namespace Armada.Tui.Ask
             {
                 try
                 {
-                    CaptainToolAccessResult? result = await client.GetCaptainToolsAsync(id).ConfigureAwait(false);
+                    CaptainToolAccessResult? result = await client.Captains.GetToolsAsync(id).ConfigureAwait(false);
                     Context.Dispatcher.Post(() =>
                     {
                         if (result == null) return;
@@ -535,7 +535,7 @@ namespace Armada.Tui.Ask
             {
                 try
                 {
-                    EnumerationResult<AskThread>? result = await client.EnumerateAskThreadsAsync(query).ConfigureAwait(false);
+                    EnumerationResult<AskThread>? result = await client.Ask.EnumerateThreadsAsync(query).ConfigureAwait(false);
                     Context.Dispatcher.Post(() =>
                     {
                         ListLoading = false;
@@ -588,7 +588,7 @@ namespace Armada.Tui.Ask
                     AskMessageEnumerateQuery q = new AskMessageEnumerateQuery();
                     q.PageSize = MessagePageSize;
                     Task<AskThreadState> detailTask = AskThreadState.ReadAsync(client, threadId);
-                    Task<AskMessagePage?> pageTask = client.EnumerateAskMessagesAsync(threadId, q);
+                    Task<AskMessagePage?> pageTask = client.Ask.EnumerateMessagesAsync(threadId, q);
                     await Task.WhenAll(detailTask, pageTask).ConfigureAwait(false);
                     AskThreadState state = detailTask.Result;
                     AskThreadDetail? detail = state.Detail;
@@ -635,7 +635,7 @@ namespace Armada.Tui.Ask
                 {
                     AskMessageEnumerateQuery q = new AskMessageEnumerateQuery();
                     q.PageSize = MessagePageSize;
-                    AskMessagePage? page = await client.EnumerateAskMessagesAsync(threadId, q).ConfigureAwait(false);
+                    AskMessagePage? page = await client.Ask.EnumerateMessagesAsync(threadId, q).ConfigureAwait(false);
                     await OnUiAsync(() =>
                     {
                         if (Conversation.Latest(threadId, page?.Messages ?? new List<AskMessage>())) FetchToolCalls(threadId);
@@ -712,7 +712,7 @@ namespace Armada.Tui.Ask
                 if (existing == null) await OnUiAsync(() => AddOptimistic(id, localId, trimmed)).ConfigureAwait(false);
                 try
                 {
-                    AskSendMessageResult? result = await client.SendAskMessageAsync(id, trimmed, showThinking).ConfigureAwait(false);
+                    AskSendMessageResult? result = await client.Ask.SendMessageAsync(id, trimmed, showThinking).ConfigureAwait(false);
                     Context.Dispatcher.Post(() =>
                     {
                         if (Conversation.ThreadId == id) Conversation.ConfirmUser(localId, result?.MessageId, result?.TurnId, Context.Clock.UtcNow);
@@ -746,7 +746,7 @@ namespace Armada.Tui.Ask
             {
                 try
                 {
-                    await client.CancelAskTurnAsync(id).ConfigureAwait(false);
+                    await client.Ask.CancelTurnAsync(id).ConfigureAwait(false);
                 }
                 catch (ArmadaApiException ex)
                 {
@@ -800,7 +800,7 @@ namespace Armada.Tui.Ask
                 try
                 {
                     string id = existing ?? await CreateThreadAsync(client, draftCaptain).ConfigureAwait(false);
-                    AskActionProposal? proposal = await client.RunAskQuickActionAsync(id, tool, new ArmadaRawJson(json)).ConfigureAwait(false);
+                    AskActionProposal? proposal = await client.Ask.RunQuickActionAsync(id, tool, new ArmadaRawJson(json)).ConfigureAwait(false);
                     await OnUiAsync(() =>
                     {
                         if (proposal != null && Conversation.ThreadId == id) Conversation.ApplyProposal(proposal);
@@ -849,8 +849,8 @@ namespace Armada.Tui.Ask
                 try
                 {
                     AskActionProposal? updated = approve
-                        ? await client.ApproveAskProposalAsync(threadId, proposalId).ConfigureAwait(false)
-                        : await client.RejectAskProposalAsync(threadId, proposalId).ConfigureAwait(false);
+                        ? await client.Ask.ApproveProposalAsync(threadId, proposalId).ConfigureAwait(false)
+                        : await client.Ask.RejectProposalAsync(threadId, proposalId).ConfigureAwait(false);
                     Context.Dispatcher.Post(() =>
                     {
                         ReleaseProposal(proposalId);
@@ -949,7 +949,7 @@ namespace Armada.Tui.Ask
             {
                 try
                 {
-                    AskThread? updated = await client.SetAskThreadCliPermissionPolicyAsync(target.Id, policy).ConfigureAwait(false);
+                    AskThread? updated = await client.CliPermissions.SetAskThreadPolicyAsync(target.Id, policy).ConfigureAwait(false);
                     Context.Dispatcher.Post(() =>
                     {
                         AskThread merged = updated ?? target;
@@ -1009,7 +1009,7 @@ namespace Armada.Tui.Ask
             {
                 try
                 {
-                    AskThread? updated = await client.UpdateAskThreadAsync(target.Id, patch).ConfigureAwait(false);
+                    AskThread? updated = await client.Ask.UpdateThreadAsync(target.Id, patch).ConfigureAwait(false);
                     Context.Dispatcher.Post(() =>
                     {
                         AskThread merged = updated ?? Patched(target, patch);
@@ -1138,7 +1138,7 @@ namespace Armada.Tui.Ask
             {
                 try
                 {
-                    await client.SummarizeAskThreadAsync(target.Id).ConfigureAwait(false);
+                    await client.Ask.SummarizeThreadAsync(target.Id).ConfigureAwait(false);
                     Context.Dispatcher.Post(() => Context.Notifications.Toast(NotificationSeverityEnum.Info,
                         Context.Loc.T("Summarizing \"{{title}}\". The summary will appear in the conversation.", LocalizationArgs.Of("title", title))));
                 }
@@ -1169,7 +1169,7 @@ namespace Armada.Tui.Ask
         public void DeleteNow(AskThread target)
         {
             ArmadaClient client = Context.Client;
-            DeleteProgress.RunVoid(Context, "Deleting conversation", ct => client.DeleteAskThreadAsync(target.Id, ct), () =>
+            DeleteProgress.RunVoid(Context, "Deleting conversation", ct => client.Ask.DeleteThreadAsync(target.Id, ct), () =>
             {
                 Threads = Threads.Where(t => t.Id != target.Id).ToList();
                 foreach (ApprovalItem item in Context.Approvals.Items.Where(i => i.Kind == ApprovalKindEnum.AskProposal && i.ParentId == target.Id).ToList())
@@ -1207,7 +1207,7 @@ namespace Armada.Tui.Ask
             {
                 try
                 {
-                    AskMessagePage? page = await client.EnumerateAskMessagesAsync(id, q).ConfigureAwait(false);
+                    AskMessagePage? page = await client.Ask.EnumerateMessagesAsync(id, q).ConfigureAwait(false);
                     Context.Dispatcher.Post(() =>
                     {
                         LoadingOlder = false;
@@ -1243,7 +1243,7 @@ namespace Armada.Tui.Ask
             ArmadaClient client = Context.Client;
             _ = Task.Run(async () =>
             {
-                try { await client.MarkAskThreadReadAsync(threadId).ConfigureAwait(false); }
+                try { await client.Ask.MarkThreadReadAsync(threadId).ConfigureAwait(false); }
                 catch (ArmadaApiException) { }
             });
             return true;
@@ -1321,11 +1321,11 @@ namespace Armada.Tui.Ask
                 string? name = null;
                 try
                 {
-                    if (kind == "vessel") name = (await client.GetVesselAsync(id).ConfigureAwait(false))?.Name;
-                    else if (kind == "mission") name = (await client.GetMissionAsync(id).ConfigureAwait(false))?.Title;
-                    else if (kind == "voyage") name = (await client.GetVoyageDetailAsync(id).ConfigureAwait(false))?.Voyage?.Title;
-                    else if (kind == "captain") name = (await client.GetCaptainAsync(id).ConfigureAwait(false))?.Name;
-                    else if (kind == "fleet") name = (await client.GetFleetAsync(id).ConfigureAwait(false))?.Fleet?.Name;
+                    if (kind == "vessel") name = (await client.Vessels.GetAsync(id).ConfigureAwait(false))?.Name;
+                    else if (kind == "mission") name = (await client.Missions.GetAsync(id).ConfigureAwait(false))?.Title;
+                    else if (kind == "voyage") name = (await client.Voyages.GetDetailAsync(id).ConfigureAwait(false))?.Voyage?.Title;
+                    else if (kind == "captain") name = (await client.Captains.GetAsync(id).ConfigureAwait(false))?.Name;
+                    else if (kind == "fleet") name = (await client.Fleets.GetAsync(id).ConfigureAwait(false))?.Fleet?.Name;
                 }
                 catch (ArmadaApiException)
                 {
@@ -1501,7 +1501,7 @@ namespace Armada.Tui.Ask
                             q.PageNumber = pageNumber;
                             q.PageSize = 100;
                             q.Order = EnumerationOrderEnum.CreatedAscending;
-                            EnumerationResult<AskMessageToolCall>? page = await client.EnumerateAskToolCallsAsync(threadId, messageId, q).ConfigureAwait(false);
+                            EnumerationResult<AskMessageToolCall>? page = await client.Ask.EnumerateToolCallsAsync(threadId, messageId, q).ConfigureAwait(false);
                             if (page == null || page.Objects.Count == 0) break;
                             calls.AddRange(page.Objects);
                             if (pageNumber >= page.TotalPages) break;
@@ -1550,13 +1550,13 @@ namespace Armada.Tui.Ask
                     rows = new AskWorkRows();
                     if (type == AskTrackedEntityTypeEnum.FleetActionRun)
                     {
-                        EnumerationResult<AskWorkTargetSnapshot>? page = await client.EnumerateAskWorkTargetsAsync(threadId, workId, q).ConfigureAwait(false);
+                        EnumerationResult<AskWorkTargetSnapshot>? page = await client.Ask.EnumerateWorkTargetsAsync(threadId, workId, q).ConfigureAwait(false);
                         rows.Targets = page?.Objects ?? new List<AskWorkTargetSnapshot>();
                         rows.TotalRecords = page?.TotalRecords ?? rows.Targets.Count;
                     }
                     else
                     {
-                        EnumerationResult<AskWorkMissionSnapshot>? page = await client.EnumerateAskWorkMissionsAsync(threadId, workId, q).ConfigureAwait(false);
+                        EnumerationResult<AskWorkMissionSnapshot>? page = await client.Ask.EnumerateWorkMissionsAsync(threadId, workId, q).ConfigureAwait(false);
                         rows.Missions = page?.Objects ?? new List<AskWorkMissionSnapshot>();
                         rows.TotalRecords = page?.TotalRecords ?? rows.Missions.Count;
                     }
@@ -1590,7 +1590,7 @@ namespace Armada.Tui.Ask
                 {
                     try
                     {
-                        AskWorkSnapshot? snapshot = await client.GetAskWorkSnapshotAsync(threadId, workId).ConfigureAwait(false);
+                        AskWorkSnapshot? snapshot = await client.Ask.GetWorkSnapshotAsync(threadId, workId).ConfigureAwait(false);
                         Context.Dispatcher.Post(() =>
                         {
                             if (snapshot != null && Conversation.ThreadId == threadId)
@@ -1618,7 +1618,7 @@ namespace Armada.Tui.Ask
                 {
                     ArmadaPageQuery q = new ArmadaPageQuery();
                     q.PageSize = 200;
-                    EnumerationResult<Captain>? result = await client.ListCaptainsAsync(q).ConfigureAwait(false);
+                    EnumerationResult<Captain>? result = await client.Captains.ListAsync(q).ConfigureAwait(false);
                     list = result?.Objects ?? new List<Captain>();
                 }
                 catch (ArmadaApiException)
@@ -1644,7 +1644,7 @@ namespace Armada.Tui.Ask
                 List<AskQuickAction> merged;
                 try
                 {
-                    merged = AskQuickActions.Merge(await client.GetAskQuickActionsAsync().ConfigureAwait(false));
+                    merged = AskQuickActions.Merge(await client.Ask.GetQuickActionsAsync().ConfigureAwait(false));
                 }
                 catch (ArmadaApiException)
                 {
@@ -1659,7 +1659,7 @@ namespace Armada.Tui.Ask
         {
             AskThreadCreateRequest req = new AskThreadCreateRequest();
             req.CaptainId = String.IsNullOrEmpty(draftCaptain) ? null : draftCaptain;
-            AskThread? created = await client.CreateAskThreadAsync(req).ConfigureAwait(false);
+            AskThread? created = await client.Ask.CreateThreadAsync(req).ConfigureAwait(false);
             if (created == null) throw new ArmadaApiException("The server returned no conversation.", 500, null, null, null, "POST", "/api/v1/ask/threads", null, null);
             await OnUiAsync(() =>
             {

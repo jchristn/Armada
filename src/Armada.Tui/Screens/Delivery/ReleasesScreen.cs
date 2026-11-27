@@ -132,7 +132,7 @@ namespace Armada.Tui.Screens.Delivery
             q.Search = EntityUi.Blank(Filter("search"));
             q.VesselId = EntityUi.Blank(Filter("vesselId"));
             if (Enum.TryParse<ReleaseStatusEnum>(Filter("status"), true, out ReleaseStatusEnum status)) q.Status = status;
-            return PageOf(await Context.Client.ListReleasesAsync(q, token).ConfigureAwait(false));
+            return PageOf(await Context.Client.Releases.ListAsync(q, token).ConfigureAwait(false));
         }
 
         /// <inheritdoc />
@@ -198,7 +198,7 @@ namespace Armada.Tui.Screens.Delivery
         /// <inheritdoc />
         protected override Task DeleteAsync(Release row, CancellationToken token)
         {
-            return Context.Client.DeleteReleaseAsync(row.Id, token);
+            return Context.Client.Releases.DeleteAsync(row.Id, token);
         }
 
         /// <inheritdoc />

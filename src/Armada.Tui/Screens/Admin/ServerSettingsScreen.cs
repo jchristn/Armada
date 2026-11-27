@@ -499,9 +499,9 @@ namespace Armada.Tui.Screens.Admin
                 HealthResult? health = null;
                 SettingsData? settings = null;
                 ProxySessionContext? proxy = null;
-                try { health = await Context.Client.GetHealthAsync().ConfigureAwait(false); } catch (Exception) { }
-                try { settings = await Context.Client.GetSettingsAsync().ConfigureAwait(false); } catch (Exception) { }
-                try { proxy = await Context.Client.GetProxySessionContextAsync().ConfigureAwait(false); } catch (Exception) { }
+                try { health = await Context.Client.Status.GetHealthAsync().ConfigureAwait(false); } catch (Exception) { }
+                try { settings = await Context.Client.Server.GetSettingsAsync().ConfigureAwait(false); } catch (Exception) { }
+                try { proxy = await Context.Client.Auth.GetProxySessionContextAsync().ConfigureAwait(false); } catch (Exception) { }
                 Context.Dispatcher.Post(() =>
                 {
                     if (health != null) Health = health;
@@ -522,7 +522,7 @@ namespace Armada.Tui.Screens.Admin
                     LoadBranches();
                 });
             });
-            ScreenOps.Quiet(Context, () => Context.Client.ListVesselsAsync(new ArmadaPageQuery(1, 9999)), r =>
+            ScreenOps.Quiet(Context, () => Context.Client.Vessels.ListAsync(new ArmadaPageQuery(1, 9999)), r =>
             {
                 string current = SelfVessel.Value ?? "";
                 List<SelectOption<string>> options = new List<SelectOption<string>> { new SelectOption<string>("", Context.Loc.T("-- none --")) };
@@ -1517,7 +1517,7 @@ namespace Armada.Tui.Screens.Admin
                 return;
             }
 
-            ScreenOps.Quiet(Context, () => Context.Client.GetVesselBranchesAsync(self), r =>
+            ScreenOps.Quiet(Context, () => Context.Client.Vessels.GetBranchesAsync(self), r =>
             {
                 List<SelectOption<string>> options = new List<SelectOption<string>>(head);
                 foreach (BranchInfo b in r?.Branches ?? new List<BranchInfo>())
@@ -1561,7 +1561,7 @@ namespace Armada.Tui.Screens.Admin
                 string? error = null;
                 try
                 {
-                    updated = await Context.Client.UpdateSettingsAsync(body).ConfigureAwait(false);
+                    updated = await Context.Client.Server.UpdateSettingsAsync(body).ConfigureAwait(false);
                 }
                 catch (ArmadaApiException ex)
                 {
@@ -1818,7 +1818,7 @@ namespace Armada.Tui.Screens.Admin
                 return d;
             }, "Remote control settings saved", () =>
             {
-                ScreenOps.Quiet(Context, () => Context.Client.GetHealthAsync(), h =>
+                ScreenOps.Quiet(Context, () => Context.Client.Status.GetHealthAsync(), h =>
                 {
                     if (h != null) Health = h;
                     UpdateValues();
@@ -1850,7 +1850,7 @@ namespace Armada.Tui.Screens.Admin
 
         private void HealthCheck()
         {
-            ScreenOps.Run(Context, () => Context.Client.GetHealthAsync(), h =>
+            ScreenOps.Run(Context, () => Context.Client.Status.GetHealthAsync(), h =>
             {
                 if (h == null) return;
                 Health = h;
@@ -1876,7 +1876,7 @@ namespace Armada.Tui.Screens.Admin
                 string? error = null;
                 try
                 {
-                    file = await Context.Client.DownloadBackupAsync().ConfigureAwait(false);
+                    file = await Context.Client.Server.DownloadBackupAsync().ConfigureAwait(false);
                 }
                 catch (Exception ex)
                 {
@@ -1933,7 +1933,7 @@ namespace Armada.Tui.Screens.Admin
                         string? error = null;
                         try
                         {
-                            await Context.Client.RestoreBackupAsync(content, name).ConfigureAwait(false);
+                            await Context.Client.Server.RestoreBackupAsync(content, name).ConfigureAwait(false);
                         }
                         catch (Exception ex)
                         {
@@ -1961,7 +1961,7 @@ namespace Armada.Tui.Screens.Admin
             if (!IsAdmin || ProxyMode) return;
             Context.Confirm("Stop Server", Context.Loc.T("Stop the Admiral server? This will shut down everything."), () =>
             {
-                ScreenOps.RunVoid(Context, () => Context.Client.StopServerAsync(), () =>
+                ScreenOps.RunVoid(Context, () => Context.Client.Server.StopAsync(), () =>
                     ScreenOps.Toast(Context, NotificationSeverityEnum.Warning, "Server shutting down..."), "Failed");
             }, "Stop Server");
         }
@@ -1971,7 +1971,7 @@ namespace Armada.Tui.Screens.Admin
             if (!IsAdmin || ProxyMode) return;
             Context.Confirm("Restart Server", Context.Loc.T("Restart the Admiral server? A replacement process starts and this instance shuts down; the dashboard will be briefly unavailable while it comes back up."), () =>
             {
-                ScreenOps.RunVoid(Context, () => Context.Client.RestartServerAsync(), () =>
+                ScreenOps.RunVoid(Context, () => Context.Client.Server.RestartAsync(), () =>
                     ScreenOps.Toast(Context, NotificationSeverityEnum.Warning, "Server restarting... the dashboard will reconnect shortly."), "Failed");
             }, "Restart Server");
         }
@@ -1981,7 +1981,7 @@ namespace Armada.Tui.Screens.Admin
             if (!IsAdmin || ProxyMode) return;
             ConfirmDialog dialog = Context.Confirm("Factory Reset", Context.Loc.T("WARNING: Factory reset will delete ALL data including the database, logs, docks, and repos. Settings will be preserved. This cannot be undone. Continue?"), () =>
             {
-                ScreenOps.RunVoid(Context, () => Context.Client.ResetServerAsync(), () =>
+                ScreenOps.RunVoid(Context, () => Context.Client.Server.ResetAsync(), () =>
                     ScreenOps.Toast(Context, NotificationSeverityEnum.Success, "Factory reset complete"), "Factory reset failed");
             }, "Factory Reset");
             dialog.Destructive = true;
@@ -2002,7 +2002,7 @@ namespace Armada.Tui.Screens.Admin
                     string? error = null;
                     try
                     {
-                        started = await Context.Client.RebuildServerAsync(request).ConfigureAwait(false);
+                        started = await Context.Client.Server.RebuildAsync(request).ConfigureAwait(false);
                     }
                     catch (Exception ex)
                     {
@@ -2062,7 +2062,7 @@ namespace Armada.Tui.Screens.Admin
 
         private void RefreshRebuildOnce()
         {
-            ScreenOps.Quiet(Context, () => Context.Client.GetRebuildStatusAsync(), s =>
+            ScreenOps.Quiet(Context, () => Context.Client.Server.GetRebuildStatusAsync(), s =>
             {
                 if (s == null) return;
                 Rebuild = s;
@@ -2093,7 +2093,7 @@ namespace Armada.Tui.Screens.Admin
                     RebuildStatus? status = null;
                     try
                     {
-                        status = await Context.Client.GetRebuildStatusAsync(cts.Token).ConfigureAwait(false);
+                        status = await Context.Client.Server.GetRebuildStatusAsync(cts.Token).ConfigureAwait(false);
                     }
                     catch (Exception)
                     {
@@ -2135,7 +2135,7 @@ namespace Armada.Tui.Screens.Admin
             string slot = !String.IsNullOrEmpty(Rebuild.PreviousSlot) ? Rebuild.PreviousSlot! : Context.Loc.T("previous slot");
             Context.Confirm("Roll Back Rebuild", Context.Loc.T("Roll back to the previous build ({{slot}})? If the last rebuild changed the database schema, the pre-rebuild backup is restored and any data written since the cutover is permanently lost. The server then restarts on the previous build.", LocalizationArgs.Of("slot", slot)), () =>
             {
-                ScreenOps.Run(Context, () => Context.Client.RollbackServerAsync(), s =>
+                ScreenOps.Run(Context, () => Context.Client.Server.RollbackAsync(), s =>
                 {
                     if (s != null) Rebuild = s;
                     string target = s != null && !String.IsNullOrEmpty(s.PreviousSlot) ? s.PreviousSlot! : Context.Loc.T("previous slot");

@@ -98,7 +98,7 @@ namespace Armada.Tui.Screens.Build
         {
             ArmadaPageQuery q = new ArmadaPageQuery(query.PageNumber, query.PageSize);
             q.With("userId", UserScope?.Value);
-            EnumerationResult<Dock>? result = await Context.Client.ListDocksAsync(q, token).ConfigureAwait(false);
+            EnumerationResult<Dock>? result = await Context.Client.Docks.ListAsync(q, token).ConfigureAwait(false);
             List<Dock> rows = result?.Objects ?? new List<Dock>();
             return new GridPage<Dock>(rows, result?.TotalRecords ?? rows.Count);
         }
@@ -139,7 +139,7 @@ namespace Armada.Tui.Screens.Build
         {
             Confirm("Delete Dock", Tr("Delete dock {{id}}? This will clean up the git worktree and cannot be undone.", LocalizationArgs.Of("id", dock.Id)), () =>
             {
-                DeleteProgress.RunVoid(Context, "Deleting dock", t => Context.Client.DeleteDockAsync(dock.Id, t), () =>
+                DeleteProgress.RunVoid(Context, "Deleting dock", t => Context.Client.Docks.DeleteAsync(dock.Id, t), () =>
                 {
                     Toast(NotificationSeverityEnum.Warning, Tr("Dock {{id}} deleted.", LocalizationArgs.Of("id", dock.Id)));
                     Refresh();
@@ -159,7 +159,7 @@ namespace Armada.Tui.Screens.Build
                     int failed = 0;
                     foreach (string id in ids)
                     {
-                        try { await Context.Client.DeleteDockAsync(id, t).ConfigureAwait(false); }
+                        try { await Context.Client.Docks.DeleteAsync(id, t).ConfigureAwait(false); }
                         catch (ArmadaApiException) { failed++; }
                     }
 

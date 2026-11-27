@@ -319,7 +319,7 @@ longer owns when it reconnects.
 
 The Admiral keeps the numbers behind each Harbor's charts, so the dashboard, the mobile app, and any `Armada.Client`
 consumer show the same data. `GET /api/v1/harbors/{id}/metrics?range=1h|24h|7d` (MCP `get_harbor_metrics`,
-`ArmadaClient.GetHarborMetricsAsync`) returns, over one set of buckets (1h in 1-minute buckets, 24h in 30-minute
+`client.Harbors.GetMetricsAsync`) returns, over one set of buckets (1h in 1-minute buckets, 24h in 30-minute
 buckets, the default, and 7d in 3-hour buckets, aligned to the UTC clock and ending with the bucket that holds now):
 
 | Series | What it shows | Source |

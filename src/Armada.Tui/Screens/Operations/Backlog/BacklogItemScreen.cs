@@ -259,7 +259,7 @@ namespace Armada.Tui.Screens.Operations
                 return;
             }
 
-            Call((c, t) => c.GetBacklogItemAsync(_Id, t), item =>
+            Call((c, t) => c.Objectives.GetBacklogItemAsync(_Id, t), item =>
             {
                 if (item == null)
                 {
@@ -309,7 +309,7 @@ namespace Armada.Tui.Screens.Operations
             _Busy = true;
             if (CreateMode)
             {
-                Call((c, t) => c.CreateBacklogItemAsync(payload, t), created =>
+                Call((c, t) => c.Objectives.CreateBacklogItemAsync(payload, t), created =>
                 {
                     _Busy = false;
                     if (created == null) return;
@@ -320,7 +320,7 @@ namespace Armada.Tui.Screens.Operations
                 return;
             }
 
-            Call((c, t) => c.UpdateBacklogItemAsync(_Id, payload, t), updated =>
+            Call((c, t) => c.Objectives.UpdateBacklogItemAsync(_Id, payload, t), updated =>
             {
                 _Busy = false;
                 if (updated == null) return;
@@ -402,7 +402,7 @@ namespace Armada.Tui.Screens.Operations
             req.InitialMessage = Null(_RefinementPrompt.Text);
             _Busy = true;
             StartForm.SaveButton.Label = "Starting...";
-            Call((c, t) => c.CreateBacklogRefinementSessionAsync(o.Id, req, t), detail =>
+            Call((c, t) => c.Objectives.CreateBacklogRefinementSessionAsync(o.Id, req, t), detail =>
             {
                 _Busy = false;
                 StartForm.SaveButton.Label = "Start Refinement";
@@ -435,7 +435,7 @@ namespace Armada.Tui.Screens.Operations
             ObjectiveRefinementMessageRequest req = new ObjectiveRefinementMessageRequest();
             req.Content = text;
             _Busy = true;
-            Call((c, t) => c.SendObjectiveRefinementMessageAsync(d.Session.Id, req, t), detail =>
+            Call((c, t) => c.Objectives.SendRefinementMessageAsync(d.Session.Id, req, t), detail =>
             {
                 _Busy = false;
                 Composer.Text = "";
@@ -455,7 +455,7 @@ namespace Armada.Tui.Screens.Operations
             if (d == null || !CanManage || Transcript.SelectedId.Length == 0) return;
             ObjectiveRefinementSummaryRequest req = new ObjectiveRefinementSummaryRequest();
             req.MessageId = Transcript.SelectedId;
-            Call((c, t) => c.SummarizeObjectiveRefinementSessionAsync(d.Session.Id, req, t), summary =>
+            Call((c, t) => c.Objectives.SummarizeRefinementSessionAsync(d.Session.Id, req, t), summary =>
             {
                 if (summary == null) return;
                 SetSummary(summary);
@@ -476,7 +476,7 @@ namespace Armada.Tui.Screens.Operations
             req.MarkMessageSelected = true;
             req.PromoteBacklogState = true;
             string sessionId = d.Session.Id;
-            Call((c, t) => c.ApplyObjectiveRefinementSummaryAsync(sessionId, req, t), result =>
+            Call((c, t) => c.Objectives.ApplyRefinementSummaryAsync(sessionId, req, t), result =>
             {
                 if (result == null) return;
                 if (result.Objective != null) Hydrate(result.Objective);
@@ -493,7 +493,7 @@ namespace Armada.Tui.Screens.Operations
         {
             ObjectiveRefinementSessionDetail? d = Detail;
             if (d == null) return;
-            Call((c, t) => c.StopObjectiveRefinementSessionAsync(d.Session.Id, t), detail =>
+            Call((c, t) => c.Objectives.StopRefinementSessionAsync(d.Session.Id, t), detail =>
             {
                 if (detail != null)
                 {
@@ -514,7 +514,7 @@ namespace Armada.Tui.Screens.Operations
             ObjectiveRefinementSessionDetail? d = Detail;
             if (d == null) return;
             string sessionId = d.Session.Id;
-            DeleteProgress.RunVoid(Context, "Deleting refinement session", t => Context.Client.DeleteObjectiveRefinementSessionAsync(sessionId, t), () =>
+            DeleteProgress.RunVoid(Context, "Deleting refinement session", t => Context.Client.Objectives.DeleteRefinementSessionAsync(sessionId, t), () =>
             {
                 _SelectedSessionId = "";
                 Sessions.Reload();
@@ -534,7 +534,7 @@ namespace Armada.Tui.Screens.Operations
         {
             if (String.IsNullOrEmpty(sessionId)) return;
             _SelectedSessionId = sessionId;
-            Call((c, t) => c.GetObjectiveRefinementSessionAsync(sessionId, t), detail =>
+            Call((c, t) => c.Objectives.GetRefinementSessionAsync(sessionId, t), detail =>
             {
                 if (_SelectedSessionId != sessionId) return;
                 ShowDetail(detail != null ? MergeWithLive(detail) : null);
@@ -893,7 +893,7 @@ namespace Armada.Tui.Screens.Operations
             ObjectiveQuery q = new ObjectiveQuery();
             q.PageNumber = 1;
             q.PageSize = 9999;
-            Call((c, t) => c.ListBacklogAsync(q, t), result =>
+            Call((c, t) => c.Objectives.ListBacklogAsync(q, t), result =>
             {
                 bool dirty = Form.IsDirty;
                 _Available = result?.Objects ?? new List<Objective>();
@@ -1020,7 +1020,7 @@ namespace Armada.Tui.Screens.Operations
             EnumerationQuery query = new EnumerationQuery();
             query.PageNumber = grid.PageNumber;
             query.PageSize = grid.PageSize;
-            EnumerationResult<ObjectiveRefinementSession>? page = await Context.Client.ListBacklogRefinementSessionsAsync(o.Id, query, token).ConfigureAwait(false);
+            EnumerationResult<ObjectiveRefinementSession>? page = await Context.Client.Objectives.ListBacklogRefinementSessionsAsync(o.Id, query, token).ConfigureAwait(false);
             List<ObjectiveRefinementSession> rows = page?.Objects ?? new List<ObjectiveRefinementSession>();
             long total = page?.TotalRecords ?? rows.Count;
             Post(() =>
@@ -1058,7 +1058,7 @@ namespace Armada.Tui.Screens.Operations
             query.PageNumber = 1;
             query.PageSize = MessagePageSize;
             query.Order = EnumerationOrderEnum.CreatedDescending;
-            Call((c, t) => c.ListObjectiveRefinementMessagesAsync(sessionId, query, t), page =>
+            Call((c, t) => c.Objectives.ListRefinementMessagesAsync(sessionId, query, t), page =>
             {
                 if (page == null || Detail == null || Detail.Session.Id != sessionId) return;
                 MergeMessages(page.Objects);
@@ -1077,7 +1077,7 @@ namespace Armada.Tui.Screens.Operations
             query.PageSize = MessagePageSize;
             query.Order = EnumerationOrderEnum.CreatedDescending;
             _LoadingOlder = true;
-            Call((c, t) => c.ListObjectiveRefinementMessagesAsync(sessionId, query, t), page =>
+            Call((c, t) => c.Objectives.ListRefinementMessagesAsync(sessionId, query, t), page =>
             {
                 _LoadingOlder = false;
                 if (page == null || Detail == null || Detail.Session.Id != sessionId) return;
@@ -1298,7 +1298,7 @@ namespace Armada.Tui.Screens.Operations
             req.VesselId = vessel;
             req.SourceType = EnumNames.ParseOrNull<GitHubObjectiveSourceTypeEnum>(o.SourceType) ?? GitHubObjectiveSourceTypeEnum.Issue;
             req.Number = number.Value;
-            Call((c, t) => c.ImportObjectiveFromGitHubAsync(req, t), refreshed =>
+            Call((c, t) => c.Objectives.ImportFromGitHubAsync(req, t), refreshed =>
             {
                 if (refreshed == null) return;
                 Hydrate(refreshed);
@@ -1342,7 +1342,7 @@ namespace Armada.Tui.Screens.Operations
             Objective? o = Item;
             if (o == null || !CanManage) return;
             ObjectiveUpsertRequest payload = BacklogLogic.DuplicatePayload(o);
-            Call((c, t) => c.CreateBacklogItemAsync(payload, t), created =>
+            Call((c, t) => c.Objectives.CreateBacklogItemAsync(payload, t), created =>
             {
                 if (created == null) return;
                 Toast(NotificationSeverityEnum.Success, Tr("Backlog item \"{{title}}\" duplicated.", LocalizationArgs.Of("title", created.Title)));
@@ -1356,7 +1356,7 @@ namespace Armada.Tui.Screens.Operations
             if (o == null || !CanManage) return;
             Confirm("Delete Backlog Item", Tr("Delete \"{{title}}\"? This removes the backlog item and its objective snapshot history only.", LocalizationArgs.Of("title", o.Title)), () =>
             {
-                DeleteProgress.RunVoid(Context, "Deleting backlog item", t => Context.Client.DeleteBacklogItemAsync(o.Id, t), () =>
+                DeleteProgress.RunVoid(Context, "Deleting backlog item", t => Context.Client.Objectives.DeleteBacklogItemAsync(o.Id, t), () =>
                 {
                     Toast(NotificationSeverityEnum.Warning, Tr("Backlog item \"{{title}}\" deleted.", LocalizationArgs.Of("title", o.Title)));
                     Form.MarkClean();

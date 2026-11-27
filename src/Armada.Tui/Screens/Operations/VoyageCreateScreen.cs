@@ -259,7 +259,7 @@ namespace Armada.Tui.Screens.Operations
 
             string title = req.Title;
             Submitting = true;
-            Call((c, t) => c.CreateVoyageAsync(req, t), v =>
+            Call((c, t) => c.Voyages.CreateAsync(req, t), v =>
             {
                 Submitting = false;
                 Toast(NotificationSeverityEnum.Success, Tr("Voyage \"{{title}}\" created.", LocalizationArgs.Of("title", title)));

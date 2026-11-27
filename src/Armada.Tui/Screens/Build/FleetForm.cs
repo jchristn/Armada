@@ -47,7 +47,7 @@ namespace Armada.Tui.Screens.Build
                 string label = body.Name;
                 if (editing != null)
                 {
-                    screen.Call((c, t) => c.UpdateFleetAsync(editing.Id, body, t), r =>
+                    screen.Call((c, t) => c.Fleets.UpdateAsync(editing.Id, body, t), r =>
                     {
                         d.Complete();
                         screen.Toast(NotificationSeverityEnum.Success, screen.Tr("Fleet \"{{name}}\" saved.", LocalizationArgs.Of("name", label)));
@@ -56,7 +56,7 @@ namespace Armada.Tui.Screens.Build
                 }
                 else
                 {
-                    screen.Call((c, t) => c.CreateFleetAsync(body, t), r =>
+                    screen.Call((c, t) => c.Fleets.CreateAsync(body, t), r =>
                     {
                         d.Complete();
                         screen.Toast(NotificationSeverityEnum.Success, screen.Tr("Fleet \"{{name}}\" created.", LocalizationArgs.Of("name", label)));

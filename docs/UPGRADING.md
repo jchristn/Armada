@@ -42,6 +42,13 @@ both.
 landing, recovery and review included), not only for failures and operator transitions, and never twice for one
 change. A client that counted these events, or treated each one as a failure, should read `status` and
 `previousStatus` instead.
+
+`Armada.Client` (the .NET SDK) groups its calls into sub-clients and removes the 1.4 flat methods:
+`client.GetMissionAsync(id)` is now `client.Missions.GetAsync(id)`, `client.ListFleetsAsync()` is now
+`client.Fleets.ListAsync()`, and so on. Arguments and return types are unchanged. Recompile code that uses the SDK;
+[SDK_MIGRATION_1.5.md](SDK_MIGRATION_1.5.md) lists every old method with its new call. The REST API itself is
+unchanged.
+
 ### Changes to act on when coming from 1.0.0
 
 1.0.1 fixes the landing modes. `LocalMerge` now merges into the working directory without pushing; the new

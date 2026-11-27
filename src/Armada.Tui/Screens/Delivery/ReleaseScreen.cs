@@ -124,8 +124,8 @@ namespace Armada.Tui.Screens.Delivery
             bool create = IsCreateMode;
             _Saving = true;
             EntityUi.Run<Release?>(Context, ct => create
-                ? Context.Client.CreateReleaseAsync(payload, ct)
-                : Context.Client.UpdateReleaseAsync(EntityId, payload, ct), saved =>
+                ? Context.Client.Releases.CreateAsync(payload, ct)
+                : Context.Client.Releases.UpdateAsync(EntityId, payload, ct), saved =>
             {
                 _Saving = false;
                 if (saved == null) return;
@@ -155,7 +155,7 @@ namespace Armada.Tui.Screens.Delivery
         /// <inheritdoc />
         protected override Task<Release?> FetchAsync(CancellationToken token)
         {
-            return Context.Client.GetReleaseAsync(EntityId, token);
+            return Context.Client.Releases.GetAsync(EntityId, token);
         }
 
         /// <inheritdoc />
@@ -163,10 +163,10 @@ namespace Armada.Tui.Screens.Delivery
         {
             Task<List<Vessel>> vessels = EntityLookups.VesselsAsync(Context.Client, token);
             Task<List<WorkflowProfile>> profiles = EntityLookups.WorkflowProfilesAsync(Context.Client, token);
-            Task<List<Voyage>> voyages = SafeAll<Voyage>((p, ct) => Context.Client.ListVoyagesAsync(new ArmadaPageQuery(p, EntityLookups.PageSize), ct), token);
-            Task<List<CheckRun>> checks = SafeAll<CheckRun>((p, ct) => Context.Client.ListCheckRunsAsync(new ArmadaPageQuery(p, EntityLookups.PageSize), ct), token);
-            Task<List<Deployment>> deployments = SafeAll<Deployment>((p, ct) => Context.Client.ListDeploymentsAsync(new DeploymentQuery { ReleaseId = entity.Id, PageNumber = p, PageSize = EntityLookups.PageSize }, ct), token);
-            Task<List<Objective>> objectives = SafeAll<Objective>((p, ct) => Context.Client.ListObjectivesAsync(new ObjectiveQuery { ReleaseId = entity.Id, PageNumber = p, PageSize = EntityLookups.PageSize }, ct), token);
+            Task<List<Voyage>> voyages = SafeAll<Voyage>((p, ct) => Context.Client.Voyages.ListAsync(new ArmadaPageQuery(p, EntityLookups.PageSize), ct), token);
+            Task<List<CheckRun>> checks = SafeAll<CheckRun>((p, ct) => Context.Client.CheckRuns.ListAsync(new ArmadaPageQuery(p, EntityLookups.PageSize), ct), token);
+            Task<List<Deployment>> deployments = SafeAll<Deployment>((p, ct) => Context.Client.Deployments.ListAsync(new DeploymentQuery { ReleaseId = entity.Id, PageNumber = p, PageSize = EntityLookups.PageSize }, ct), token);
+            Task<List<Objective>> objectives = SafeAll<Objective>((p, ct) => Context.Client.Objectives.ListAsync(new ObjectiveQuery { ReleaseId = entity.Id, PageNumber = p, PageSize = EntityLookups.PageSize }, ct), token);
             await Task.WhenAll(vessels, profiles, voyages, checks, deployments, objectives).ConfigureAwait(false);
             _Vessels = vessels.Result;
             _Profiles = profiles.Result;
@@ -387,7 +387,7 @@ namespace Armada.Tui.Screens.Delivery
             if (String.IsNullOrEmpty(releaseId)) return new GridPage<GitHubPullRequestDetail>();
             try
             {
-                EnumerationResult<GitHubPullRequestDetail>? page = await Context.Client.GetReleaseGitHubPullRequestsAsync(
+                EnumerationResult<GitHubPullRequestDetail>? page = await Context.Client.Releases.GetGitHubPullRequestsAsync(
                     releaseId,
                     new EnumerationQuery { PageNumber = query.PageNumber, PageSize = query.PageSize },
                     token).ConfigureAwait(false);
@@ -406,7 +406,7 @@ namespace Armada.Tui.Screens.Delivery
             if (r == null || _Refreshing) return;
             _Refreshing = true;
             EntityUi.Toast(Context, NotificationSeverityEnum.Info, T("Refreshing..."));
-            EntityUi.Run<Release?>(Context, ct => Context.Client.RefreshReleaseAsync(r.Id, ct), refreshed =>
+            EntityUi.Run<Release?>(Context, ct => Context.Client.Releases.RefreshAsync(r.Id, ct), refreshed =>
             {
                 _Refreshing = false;
                 if (refreshed == null) return;
@@ -421,7 +421,7 @@ namespace Armada.Tui.Screens.Delivery
             if (r == null) return;
             Context.Confirm("Delete Release", EntityUi.T(Context, "Delete \"{{title}}\"? This removes only the release record.", "title", r.Title), () =>
             {
-                DeleteProgress.RunVoid(Context, "Deleting release", ct => Context.Client.DeleteReleaseAsync(r.Id, ct), () =>
+                DeleteProgress.RunVoid(Context, "Deleting release", ct => Context.Client.Releases.DeleteAsync(r.Id, ct), () =>
                 {
                     EntityUi.Toast(Context, NotificationSeverityEnum.Warning, EntityUi.T(Context, "Release \"{{title}}\" deleted.", "title", r.Title));
                     Context.Navigate("/delivery?tab=releases");

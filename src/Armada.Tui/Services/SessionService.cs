@@ -199,7 +199,7 @@ namespace Armada.Tui.Services
             while (true)
             {
                 token.ThrowIfCancellationRequested();
-                TenantLookupResult? result = await Client.LookupTenantsAsync(email.Trim(), pageNumber, _TenantLookupPageSize, token).ConfigureAwait(false);
+                TenantLookupResult? result = await Client.Auth.LookupTenantsAsync(email.Trim(), pageNumber, _TenantLookupPageSize, token).ConfigureAwait(false);
                 if (result == null) break;
                 tenants.AddRange(result.Tenants);
                 if (result.Tenants.Count == 0 || pageNumber >= result.TotalPages) break;
@@ -225,7 +225,7 @@ namespace Armada.Tui.Services
                 req.Email = email.Trim();
                 req.TenantId = tenantId;
                 req.Password = password;
-                AuthenticateResult? result = await Client.AuthenticateAsync(req, token).ConfigureAwait(false);
+                AuthenticateResult? result = await Client.Auth.AuthenticateAsync(req, token).ConfigureAwait(false);
                 if (result == null || !result.Success || String.IsNullOrEmpty(result.Token)) return SignInResult.Fail("Authentication failed.");
                 Profile.LastUser = email.Trim();
                 Profile.LastTenantId = tenantId;
@@ -262,7 +262,7 @@ namespace Armada.Tui.Services
                 WhoAmIResult? me;
                 try
                 {
-                    me = await Client.WhoamiAsync(token).ConfigureAwait(false);
+                    me = await Client.Auth.WhoamiAsync(token).ConfigureAwait(false);
                 }
                 catch (ArmadaApiException ex) when (ex.IsUnauthorized || ex.StatusCode == 403)
                 {
@@ -276,7 +276,7 @@ namespace Armada.Tui.Services
 
                 if (me == null || me.User == null) continue;
 
-                try { Proxy = await Client.GetProxySessionContextAsync(token).ConfigureAwait(false); }
+                try { Proxy = await Client.Auth.GetProxySessionContextAsync(token).ConfigureAwait(false); }
                 catch (ArmadaApiException) { Proxy = null; }
 
                 if (store) await _Credentials.SetAsync(CredentialKey(Profile), secret, token).ConfigureAwait(false);

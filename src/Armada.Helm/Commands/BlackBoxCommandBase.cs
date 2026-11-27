@@ -154,8 +154,8 @@ namespace Armada.Helm.Commands
                 return null;
             }
 
-            if (wanted.StartsWith("vsl_", StringComparison.Ordinal)) return await client.GetVesselAsync(wanted, token).ConfigureAwait(false);
-            EnumerationResult<Vessel>? list = await client.ListVesselsAsync(new ArmadaPageQuery(1, 9999), token).ConfigureAwait(false);
+            if (wanted.StartsWith("vsl_", StringComparison.Ordinal)) return await client.Vessels.GetAsync(wanted, token).ConfigureAwait(false);
+            EnumerationResult<Vessel>? list = await client.Vessels.ListAsync(new ArmadaPageQuery(1, 9999), token).ConfigureAwait(false);
             Vessel? match = EntityResolver.ResolveVessel(list?.Objects ?? new List<Vessel>(), wanted);
             if (match == null) Status("Error: no vessel named or with id '" + wanted + "'. List vessels with: armada vessel list");
             return match;

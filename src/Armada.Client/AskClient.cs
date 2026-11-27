@@ -1,0 +1,394 @@
+namespace Armada.Client
+{
+    using System;
+    using System.Collections.Generic;
+    using System.Net.Http;
+    using System.Threading;
+    using System.Threading.Tasks;
+    using Armada.Client.Http;
+    using Armada.Client.Models;
+    using Armada.Core.Enums;
+    using Armada.Core.Models;
+
+    /// <summary>
+    /// Ask API calls (dashboard <c>api/client.ts</c> parity).
+    /// </summary>
+    public sealed class AskClient
+    {
+        #region Private-Members
+
+        private readonly ArmadaTransport _Transport;
+
+        #endregion
+
+        #region Constructors-and-Factories
+
+        internal AskClient(ArmadaTransport transport)
+        {
+            _Transport = transport ?? throw new ArgumentNullException(nameof(transport));
+        }
+
+        #endregion
+
+        #region Public-Methods
+
+        /// <summary>
+        /// Dashboard <c>chatWithCaptain</c>: POST /api/v1/captains/{captainId}/chat (5.5 minute timeout; cancel the token to stop the turn).
+        /// </summary>
+        /// <param name="captainId">Captain id.</param>
+        /// <param name="body">Chat request.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The response.</returns>
+        /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
+        [DashboardExport("chatWithCaptain")]
+        public Task<CaptainChatResponse?> ChatWithCaptainAsync(string captainId, CaptainChatRequest body, CancellationToken token = default)
+        {
+            return _Transport.PostAsync<CaptainChatResponse>($"/api/v1/captains/{ArmadaQueryString.Escape(captainId)}/chat", body, ArmadaRequestOptions.WithTimeout(330000), token);
+        }
+
+        /// <summary>
+        /// Dashboard <c>enumerateAskThreads</c>: POST /api/v1/ask/threads/enumerate (pinned first, then most recent message).
+        /// </summary>
+        /// <param name="query">Query, or null for page 1 of 50.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The response.</returns>
+        /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
+        [DashboardExport("enumerateAskThreads")]
+        public Task<EnumerationResult<AskThread>?> EnumerateThreadsAsync(AskThreadEnumerateQuery? query = null, CancellationToken token = default)
+        {
+            AskThreadEnumerateQuery q = query ?? new AskThreadEnumerateQuery();
+            Dictionary<string, object?> body = new Dictionary<string, object?>();
+            body["PageNumber"] = q.PageNumber;
+            body["PageSize"] = q.PageSize;
+            if (!String.IsNullOrEmpty(q.Search)) body["Search"] = q.Search;
+            body["IncludeArchived"] = q.IncludeArchived;
+            return _Transport.PostAsync<EnumerationResult<AskThread>>("/api/v1/ask/threads/enumerate", body, null, token);
+        }
+
+        /// <summary>
+        /// Dashboard <c>createAskThread</c>: POST /api/v1/ask/threads.
+        /// </summary>
+        /// <param name="data">Optional title, captain, and auto-approve.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The response.</returns>
+        /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
+        [DashboardExport("createAskThread")]
+        public Task<AskThread?> CreateThreadAsync(AskThreadCreateRequest? data = null, CancellationToken token = default)
+        {
+            Dictionary<string, object?> body = new Dictionary<string, object?>();
+            if (data != null && !String.IsNullOrEmpty(data.Title)) body["Title"] = data.Title;
+            if (data != null && !String.IsNullOrEmpty(data.CaptainId)) body["CaptainId"] = data.CaptainId;
+            if (data != null && data.AutoApprove.HasValue) body["AutoApprove"] = data.AutoApprove.Value;
+            return _Transport.PostAsync<AskThread>("/api/v1/ask/threads", body, null, token);
+        }
+
+        /// <summary>
+        /// Dashboard <c>getAskThread</c>: GET /api/v1/ask/threads/{id}.
+        /// </summary>
+        /// <param name="id">Thread id.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The response.</returns>
+        /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
+        [DashboardExport("getAskThread")]
+        public Task<AskThreadDetail?> GetThreadAsync(string id, CancellationToken token = default)
+        {
+            return _Transport.GetAsync<AskThreadDetail>($"/api/v1/ask/threads/{ArmadaQueryString.Escape(id)}", null, token);
+        }
+
+        /// <summary>
+        /// Dashboard <c>updateAskThread</c>: PUT /api/v1/ask/threads/{id}. Only set fields are sent; set <see cref="AskThreadUpdateRequest.CaptainIdSpecified"/> with a null captain to clear it.
+        /// </summary>
+        /// <param name="id">Thread id.</param>
+        /// <param name="data">Fields to change.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The response.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="data"/> is null.</exception>
+        /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
+        [DashboardExport("updateAskThread")]
+        public Task<AskThread?> UpdateThreadAsync(string id, AskThreadUpdateRequest data, CancellationToken token = default)
+        {
+            if (data == null) throw new ArgumentNullException(nameof(data));
+            Dictionary<string, object?> body = new Dictionary<string, object?>();
+            if (data.Title != null) body["Title"] = data.Title;
+            if (data.CaptainId != null || data.CaptainIdSpecified) body["CaptainId"] = data.CaptainId;
+            if (data.AutoApprove.HasValue) body["AutoApprove"] = data.AutoApprove.Value;
+            if (data.Pinned.HasValue) body["Pinned"] = data.Pinned.Value;
+            if (data.Archived.HasValue) body["Archived"] = data.Archived.Value;
+            if (data.HarborId != null) body["HarborId"] = data.HarborId;
+            if (data.WorkingDirectory != null) body["WorkingDirectory"] = data.WorkingDirectory;
+            return _Transport.PutAsync<AskThread>($"/api/v1/ask/threads/{ArmadaQueryString.Escape(id)}", body, null, token);
+        }
+
+        /// <summary>
+        /// Dashboard <c>deleteAskThread</c>: DELETE /api/v1/ask/threads/{id}.
+        /// </summary>
+        /// <param name="id">Thread id.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
+        [DashboardExport("deleteAskThread")]
+        public Task DeleteThreadAsync(string id, CancellationToken token = default)
+        {
+            return _Transport.SendNoResultAsync(HttpMethod.Delete, $"/api/v1/ask/threads/{ArmadaQueryString.Escape(id)}", null, null, token);
+        }
+
+        /// <summary>
+        /// Dashboard <c>deleteAskThreads</c>: POST /api/v1/ask/threads/delete/multiple. Owner-scoped: another user's or an
+        /// unknown thread is skipped with a reason.
+        /// </summary>
+        /// <param name="ids">Thread ids.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The deleted ids and the skipped ids with reasons.</returns>
+        /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
+        [DashboardExport("deleteAskThreads")]
+        public Task<AskThreadDeleteMultipleResult?> DeleteThreadsAsync(List<string> ids, CancellationToken token = default)
+        {
+            return _Transport.PostAsync<AskThreadDeleteMultipleResult>("/api/v1/ask/threads/delete/multiple", new { Ids = ids }, null, token);
+        }
+
+        /// <summary>
+        /// Dashboard <c>enumerateAskMessages</c>: POST /api/v1/ask/threads/{id}/messages/enumerate (newest page when no sequence is given).
+        /// </summary>
+        /// <param name="id">Thread id.</param>
+        /// <param name="query">Paging, or null for the newest 30.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The response.</returns>
+        /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
+        [DashboardExport("enumerateAskMessages")]
+        public Task<AskMessagePage?> EnumerateMessagesAsync(string id, AskMessageEnumerateQuery? query = null, CancellationToken token = default)
+        {
+            Dictionary<string, object?> body = new Dictionary<string, object?>();
+            if (query != null && query.BeforeSequence.HasValue) body["BeforeSequence"] = query.BeforeSequence.Value;
+            body["PageSize"] = query != null ? query.PageSize : 30;
+            return _Transport.PostAsync<AskMessagePage>($"/api/v1/ask/threads/{ArmadaQueryString.Escape(id)}/messages/enumerate", body, null, token);
+        }
+
+        /// <summary>
+        /// Dashboard <c>sendAskMessage</c>: POST /api/v1/ask/threads/{id}/messages (the captain turn runs in the background).
+        /// </summary>
+        /// <param name="id">Thread id.</param>
+        /// <param name="content">Message text.</param>
+        /// <param name="showThinking">Stream thinking for this turn.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The response.</returns>
+        /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
+        [DashboardExport("sendAskMessage")]
+        public Task<AskSendMessageResult?> SendMessageAsync(string id, string content, bool showThinking = false, CancellationToken token = default)
+        {
+            return _Transport.PostAsync<AskSendMessageResult>($"/api/v1/ask/threads/{ArmadaQueryString.Escape(id)}/messages", new AskSendMessageRequest { Content = content ?? "", ShowThinking = showThinking }, null, token);
+        }
+
+        /// <summary>
+        /// Dashboard <c>cancelAskTurn</c>: POST `${askThreadPath(id)}/cancel`.
+        /// </summary>
+        /// <param name="id">id.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
+        [DashboardExport("cancelAskTurn")]
+        public Task CancelTurnAsync(string id, CancellationToken token = default)
+        {
+            return _Transport.SendNoResultAsync(HttpMethod.Post, $"/api/v1/ask/threads/{ArmadaQueryString.Escape(id)}/cancel", null, null, token);
+        }
+
+        /// <summary>
+        /// Dashboard <c>summarizeAskThread</c>: POST `${askThreadPath(id)}/summarize`.
+        /// </summary>
+        /// <param name="id">id.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
+        [DashboardExport("summarizeAskThread")]
+        public Task SummarizeThreadAsync(string id, CancellationToken token = default)
+        {
+            return _Transport.SendNoResultAsync(HttpMethod.Post, $"/api/v1/ask/threads/{ArmadaQueryString.Escape(id)}/summarize", null, null, token);
+        }
+
+        /// <summary>
+        /// Dashboard <c>markAskThreadRead</c>: POST `${askThreadPath(id)}/read`.
+        /// </summary>
+        /// <param name="id">id.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
+        [DashboardExport("markAskThreadRead")]
+        public Task MarkThreadReadAsync(string id, CancellationToken token = default)
+        {
+            return _Transport.SendNoResultAsync(HttpMethod.Post, $"/api/v1/ask/threads/{ArmadaQueryString.Escape(id)}/read", null, null, token);
+        }
+
+        /// <summary>
+        /// Dashboard <c>markAskThreadUnread</c>: POST `${askThreadPath(id)}/unread`.
+        /// </summary>
+        /// <param name="id">id.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The thread, marked unread.</returns>
+        /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
+        [DashboardExport("markAskThreadUnread")]
+        public Task<AskThread?> MarkThreadUnreadAsync(string id, CancellationToken token = default)
+        {
+            return _Transport.PostAsync<AskThread>($"/api/v1/ask/threads/{ArmadaQueryString.Escape(id)}/unread", new { }, null, token);
+        }
+
+        /// <summary>
+        /// Dashboard <c>runAskQuickAction</c>: POST `${askThreadPath(id)}/actions`.
+        /// </summary>
+        /// <param name="id">id.</param>
+        /// <param name="toolName">toolName.</param>
+        /// <param name="args">args.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The response.</returns>
+        /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
+        [DashboardExport("runAskQuickAction")]
+        public Task<AskActionProposal?> RunQuickActionAsync(string id, string toolName, ArmadaRawJson args, CancellationToken token = default)
+        {
+            return _Transport.PostAsync<AskActionProposal>($"/api/v1/ask/threads/{ArmadaQueryString.Escape(id)}/actions", new { ToolName = toolName, Arguments = args }, ArmadaRequestOptions.WithTimeout(120000), token);
+        }
+
+        /// <summary>
+        /// Dashboard <c>approveAskProposal</c>: POST `${askThreadPath(id)}/proposals/${encodeURIComponent(proposalId)}/approve`.
+        /// </summary>
+        /// <param name="id">id.</param>
+        /// <param name="proposalId">proposalId.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The response.</returns>
+        /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
+        [DashboardExport("approveAskProposal")]
+        public Task<AskActionProposal?> ApproveProposalAsync(string id, string proposalId, CancellationToken token = default)
+        {
+            return _Transport.PostAsync<AskActionProposal>($"/api/v1/ask/threads/{ArmadaQueryString.Escape(id)}/proposals/{ArmadaQueryString.Escape(proposalId)}/approve", null, ArmadaRequestOptions.WithTimeout(120000), token);
+        }
+
+        /// <summary>
+        /// Dashboard <c>rejectAskProposal</c>: POST `${askThreadPath(id)}/proposals/${encodeURIComponent(proposalId)}/reject`.
+        /// </summary>
+        /// <param name="id">id.</param>
+        /// <param name="proposalId">proposalId.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The response.</returns>
+        /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
+        [DashboardExport("rejectAskProposal")]
+        public Task<AskActionProposal?> RejectProposalAsync(string id, string proposalId, CancellationToken token = default)
+        {
+            return _Transport.PostAsync<AskActionProposal>($"/api/v1/ask/threads/{ArmadaQueryString.Escape(id)}/proposals/{ArmadaQueryString.Escape(proposalId)}/reject", null, null, token);
+        }
+
+        /// <summary>
+        /// Dashboard <c>getAskWorkSnapshot</c>: GET `${askThreadPath(id)}/work/${encodeURIComponent(workId)}`.
+        /// </summary>
+        /// <param name="id">id.</param>
+        /// <param name="workId">workId.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The response.</returns>
+        /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
+        [DashboardExport("getAskWorkSnapshot")]
+        public Task<AskWorkSnapshot?> GetWorkSnapshotAsync(string id, string workId, CancellationToken token = default)
+        {
+            return _Transport.GetAsync<AskWorkSnapshot>($"/api/v1/ask/threads/{ArmadaQueryString.Escape(id)}/work/{ArmadaQueryString.Escape(workId)}", null, token);
+        }
+
+        /// <summary>
+        /// Dashboard <c>listAskWork</c>: POST `/api/v1/ask/threads/${id}/work/enumerate`. One page of the work the thread
+        /// tracks, newest first, each item with a counts-only snapshot. Query.Status filters by state.
+        /// </summary>
+        /// <param name="id">Thread ID.</param>
+        /// <param name="query">Paging, order, and state filter, or null for the first page.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>One page with exact totals.</returns>
+        /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
+        [DashboardExport("enumerateAskWork")]
+        public Task<EnumerationResult<AskTrackedWork>?> EnumerateWorkAsync(string id, EnumerationQuery? query = null, CancellationToken token = default)
+        {
+            return _Transport.PostAsync<EnumerationResult<AskTrackedWork>>($"/api/v1/ask/threads/{ArmadaQueryString.Escape(id)}/work/enumerate", query ?? new EnumerationQuery(), null, token);
+        }
+
+        /// <summary>
+        /// Dashboard <c>listAskWorkMissions</c>: POST `/api/v1/ask/threads/${id}/work/${workId}/missions/enumerate`. One
+        /// page of the mission rows of tracked work.
+        /// </summary>
+        /// <param name="id">Thread ID.</param>
+        /// <param name="workId">Tracked work ID.</param>
+        /// <param name="query">Paging and order, or null for the first page.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>One page with exact totals.</returns>
+        /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
+        [DashboardExport("enumerateAskWorkMissions")]
+        public Task<EnumerationResult<AskWorkMissionSnapshot>?> EnumerateWorkMissionsAsync(string id, string workId, EnumerationQuery? query = null, CancellationToken token = default)
+        {
+            return _Transport.PostAsync<EnumerationResult<AskWorkMissionSnapshot>>($"/api/v1/ask/threads/{ArmadaQueryString.Escape(id)}/work/{ArmadaQueryString.Escape(workId)}/missions/enumerate", query ?? new EnumerationQuery(), null, token);
+        }
+
+        /// <summary>
+        /// Dashboard <c>listAskWorkTargets</c>: POST `/api/v1/ask/threads/${id}/work/${workId}/targets/enumerate`. One page
+        /// of the target rows of a tracked fleet action run.
+        /// </summary>
+        /// <param name="id">Thread ID.</param>
+        /// <param name="workId">Tracked work ID.</param>
+        /// <param name="query">Paging, or null for the first page.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>One page with exact totals.</returns>
+        /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
+        [DashboardExport("enumerateAskWorkTargets")]
+        public Task<EnumerationResult<AskWorkTargetSnapshot>?> EnumerateWorkTargetsAsync(string id, string workId, EnumerationQuery? query = null, CancellationToken token = default)
+        {
+            return _Transport.PostAsync<EnumerationResult<AskWorkTargetSnapshot>>($"/api/v1/ask/threads/{ArmadaQueryString.Escape(id)}/work/{ArmadaQueryString.Escape(workId)}/targets/enumerate", query ?? new EnumerationQuery(), null, token);
+        }
+
+        /// <summary>
+        /// Dashboard <c>listAskProposals</c>: POST `/api/v1/ask/threads/${id}/proposals/enumerate`. One page of the
+        /// thread's proposals, newest first. Query.Status filters by proposal status.
+        /// </summary>
+        /// <param name="id">Thread ID.</param>
+        /// <param name="query">Paging, order, and status filter, or null for the first page.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>One page with exact totals.</returns>
+        /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
+        [DashboardExport("enumerateAskProposals")]
+        public Task<EnumerationResult<AskActionProposal>?> EnumerateProposalsAsync(string id, EnumerationQuery? query = null, CancellationToken token = default)
+        {
+            return _Transport.PostAsync<EnumerationResult<AskActionProposal>>($"/api/v1/ask/threads/{ArmadaQueryString.Escape(id)}/proposals/enumerate", query ?? new EnumerationQuery(), null, token);
+        }
+
+        /// <summary>
+        /// Dashboard <c>listAskToolCalls</c>: POST `/api/v1/ask/threads/${id}/messages/${messageId}/tool-calls/enumerate`.
+        /// One page of one message's tool calls.
+        /// </summary>
+        /// <param name="id">Thread ID.</param>
+        /// <param name="messageId">Message ID.</param>
+        /// <param name="query">Paging and order, or null for the first page.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>One page with exact totals.</returns>
+        /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
+        [DashboardExport("enumerateAskToolCalls")]
+        public Task<EnumerationResult<AskMessageToolCall>?> EnumerateToolCallsAsync(string id, string messageId, EnumerationQuery? query = null, CancellationToken token = default)
+        {
+            return _Transport.PostAsync<EnumerationResult<AskMessageToolCall>>($"/api/v1/ask/threads/{ArmadaQueryString.Escape(id)}/messages/{ArmadaQueryString.Escape(messageId)}/tool-calls/enumerate", query ?? new EnumerationQuery(), null, token);
+        }
+
+        /// <summary>
+        /// Dashboard <c>listAskTurnToolCalls</c>: POST `/api/v1/ask/threads/${id}/turn/tool-calls/enumerate`. One page of
+        /// the tool calls the running turn has made so far (empty when no turn runs).
+        /// </summary>
+        /// <param name="id">Thread ID.</param>
+        /// <param name="query">Paging and order, or null for the first page.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>One page with exact totals.</returns>
+        /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
+        [DashboardExport("enumerateAskTurnToolCalls")]
+        public Task<EnumerationResult<AskMessageToolCall>?> EnumerateTurnToolCallsAsync(string id, EnumerationQuery? query = null, CancellationToken token = default)
+        {
+            return _Transport.PostAsync<EnumerationResult<AskMessageToolCall>>($"/api/v1/ask/threads/{ArmadaQueryString.Escape(id)}/turn/tool-calls/enumerate", query ?? new EnumerationQuery(), null, token);
+        }
+
+        /// <summary>
+        /// Dashboard <c>getAskQuickActions</c>: GET /api/v1/ask/quick-actions. Tolerates a bare array or a QuickActions/Actions/Objects wrapper.
+        /// </summary>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The response.</returns>
+        /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
+        [DashboardExport("getAskQuickActions")]
+        public async Task<List<AskQuickAction>> GetQuickActionsAsync(CancellationToken token = default)
+        {
+            AskQuickActionList? list = await _Transport.GetAsync<AskQuickActionList>("/api/v1/ask/quick-actions", null, token).ConfigureAwait(false);
+            return list?.Actions ?? new List<AskQuickAction>();
+        }
+
+        #endregion
+    }
+}

@@ -98,7 +98,7 @@ namespace Armada.Tui.Screens.Operations
         {
             ArmadaPageQuery q = new ArmadaPageQuery(query.PageNumber, query.PageSize);
             q.With("userId", UserScope?.Value);
-            EnumerationResult<Voyage>? result = await Context.Client.ListVoyagesAsync(q, token).ConfigureAwait(false);
+            EnumerationResult<Voyage>? result = await Context.Client.Voyages.ListAsync(q, token).ConfigureAwait(false);
             List<Voyage> rows = result?.Objects ?? new List<Voyage>();
             return new GridPage<Voyage>(rows, result?.TotalRecords ?? rows.Count);
         }
@@ -137,14 +137,14 @@ namespace Armada.Tui.Screens.Operations
 
         private void ViewStatus(Voyage v)
         {
-            Call((c, t) => c.GetVoyageStatusAsync(v.Id, t), status => ShowJsonText(Tr("Voyage Status"), status?.Json ?? ""), null, ex => ShowMessage(Tr("Failed to load voyage status.")));
+            Call((c, t) => c.Voyages.GetStatusAsync(v.Id, t), status => ShowJsonText(Tr("Voyage Status"), status?.Json ?? ""), null, ex => ShowMessage(Tr("Failed to load voyage status.")));
         }
 
         private void Cancel(Voyage v)
         {
             Confirm("Cancel Voyage", Tr("Cancel voyage \"{{title}}\"? All pending missions will be cancelled.", LocalizationArgs.Of("title", v.Title)), () =>
             {
-                Run((c, t) => c.CancelVoyageAsync(v.Id, t), () =>
+                Run((c, t) => c.Voyages.CancelAsync(v.Id, t), () =>
                 {
                     Toast(NotificationSeverityEnum.Warning, Tr("Voyage \"{{title}}\" cancelled.", LocalizationArgs.Of("title", v.Title)));
                     Refresh();
@@ -156,7 +156,7 @@ namespace Armada.Tui.Screens.Operations
         {
             Confirm("Purge Voyage", Tr("Purge voyage \"{{title}}\"? This will permanently remove the voyage and all associated missions. This cannot be undone.", LocalizationArgs.Of("title", v.Title)), () =>
             {
-                DeleteProgress.RunVoid(Context, "Purging voyage", t => Context.Client.PurgeVoyageAsync(v.Id, t), () =>
+                DeleteProgress.RunVoid(Context, "Purging voyage", t => Context.Client.Voyages.PurgeAsync(v.Id, t), () =>
                 {
                     Toast(NotificationSeverityEnum.Warning, Tr("Voyage \"{{title}}\" purged.", LocalizationArgs.Of("title", v.Title)));
                     Refresh();
@@ -176,7 +176,7 @@ namespace Armada.Tui.Screens.Operations
                     int failed = 0;
                     foreach (string id in ids)
                     {
-                        try { await c.CancelVoyageAsync(id, t).ConfigureAwait(false); }
+                        try { await c.Voyages.CancelAsync(id, t).ConfigureAwait(false); }
                         catch (Armada.Client.ArmadaApiException) { failed++; }
                     }
 

@@ -132,10 +132,10 @@ namespace Test.Shared.Suites.E2E
                     using (HttpResponseMessage denied = await owner.PostAsync(path, JsonHelper.ToJsonContent(request), token).ConfigureAwait(false)) AssertStatusCode(HttpStatusCode.Forbidden, denied);
                     using (HttpResponseMessage denied = await other.PostAsync(path, JsonHelper.ToJsonContent(request), token).ConfigureAwait(false)) AssertStatusCode(HttpStatusCode.NotFound, denied);
                     using Armada.Client.ArmadaClient sdk = new Armada.Client.ArmadaClient(new Armada.Client.ArmadaClientOptions(server.BaseUrl) { BearerToken = admin.BearerToken });
-                    UsageSelectionRecovery recovery = (await sdk.AuthorizeCaptainSelectionRecoveryAsync(mission.Id, request, token).ConfigureAwait(false))!;
+                    UsageSelectionRecovery recovery = (await sdk.CaptainSelection.AuthorizeRecoveryAsync(mission.Id, request, token).ConfigureAwait(false))!;
                     AssertEqual(1, recovery.Revision); AssertEqual(admin.UserId, recovery.ActorUserId); AssertEqual(request.Reason, recovery.Reason);
                     using (HttpResponseMessage stale = await authorized.PostAsync(path, JsonHelper.ToJsonContent(request), token).ConfigureAwait(false)) AssertStatusCode(HttpStatusCode.Conflict, stale);
-                    CaptainSelectionSummary summary = (await sdk.GetCaptainSelectionAsync(mission.Id, token).ConfigureAwait(false))!;
+                    CaptainSelectionSummary summary = (await sdk.CaptainSelection.GetAsync(mission.Id, token).ConfigureAwait(false))!;
                     AssertTrue(summary.CanManageRecovery); AssertTrue(summary.Recovery!.ReserveException);
                     using HttpClient mcp = new HttpClient { BaseAddress = new Uri("http://127.0.0.1:" + server.Settings.McpPort) };
                     mcp.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", admin.BearerToken);
@@ -276,9 +276,9 @@ namespace Test.Shared.Suites.E2E
                     await database.CaptainSelections.CreateDecisionAsync(records, token).ConfigureAwait(false);
                     string path = "/api/v1/missions/" + mission.Id + "/captain-selection";
                     using Armada.Client.ArmadaClient sdk = new Armada.Client.ArmadaClient(new Armada.Client.ArmadaClientOptions(server.BaseUrl) { BearerToken = owner.BearerToken });
-                    AssertTrue((await sdk.GetCaptainSelectionAsync(mission.Id, token).ConfigureAwait(false))!.HistoryAvailable);
-                    AssertEqual(1L, (await sdk.GetCaptainSelectionHistoryAsync(mission.Id, token: token).ConfigureAwait(false))!.TotalRecords);
-                    AssertEqual(1L, (await sdk.GetCaptainSelectionCandidatesAsync(records.Decision.Id, token: token).ConfigureAwait(false))!.TotalRecords);
+                    AssertTrue((await sdk.CaptainSelection.GetAsync(mission.Id, token).ConfigureAwait(false))!.HistoryAvailable);
+                    AssertEqual(1L, (await sdk.CaptainSelection.GetHistoryAsync(mission.Id, token: token).ConfigureAwait(false))!.TotalRecords);
+                    AssertEqual(1L, (await sdk.CaptainSelection.GetCandidatesAsync(records.Decision.Id, token: token).ConfigureAwait(false))!.TotalRecords);
 
                     using (HttpResponseMessage response = await caller.GetAsync(path, token).ConfigureAwait(false))
                     {
@@ -287,8 +287,8 @@ namespace Test.Shared.Suites.E2E
                         AssertTrue(summary.HistoryAvailable); AssertNull(summary.CurrentAttempt);
                         AssertEqual(CaptainSelectionStrategyEnum.MostRemainingAllowance, summary.LatestDecision!.Strategy);
                     }
-                    AssertNotNull(await sdk.GetCaptainSelectionDecisionAsync(records.Decision.Id, token: token).ConfigureAwait(false));
-                    AssertEqual("VesselMissing", (await sdk.PreviewCaptainSelectionAsync(mission.Id, token: token).ConfigureAwait(false))!.ReasonCode);
+                    AssertNotNull(await sdk.CaptainSelection.GetDecisionAsync(records.Decision.Id, token: token).ConfigureAwait(false));
+                    AssertEqual("VesselMissing", (await sdk.CaptainSelection.PreviewAsync(mission.Id, token: token).ConfigureAwait(false))!.ReasonCode);
                     using (Armada.Core.Client.ArmadaApiClient native = new Armada.Core.Client.ArmadaApiClient(caller, server.BaseUrl))
                     {
                         AssertTrue((await native.GetCaptainSelectionAsync(mission.Id, token).ConfigureAwait(false))!.HistoryAvailable);

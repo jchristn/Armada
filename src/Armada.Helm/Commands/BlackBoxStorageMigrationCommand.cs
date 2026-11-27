@@ -20,7 +20,7 @@ namespace Armada.Helm.Commands
             if (settings == null) throw new ArgumentNullException(nameof(settings));
             return await RunBlackBoxAsync(settings.Json, async client =>
             {
-                BlackBoxStorageMigrationJob? job = await client.GetBlackBoxStorageMigrationAsync(settings.Id, cancellationToken).ConfigureAwait(false);
+                BlackBoxStorageMigrationJob? job = await client.BlackBox.GetStorageMigrationAsync(settings.Id, cancellationToken).ConfigureAwait(false);
                 if (settings.Json)
                 {
                     WritePureJson(job);

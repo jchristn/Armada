@@ -70,9 +70,9 @@ namespace Armada.Tui.Screens.Admin
                 bool? hasCaptain = null;
                 try
                 {
-                    EnumerationResult<Fleet>? fleets = await context.Client.ListFleetsAsync(new ArmadaPageQuery(1, 1)).ConfigureAwait(false);
-                    EnumerationResult<Vessel>? vessels = await context.Client.ListVesselsAsync(new ArmadaPageQuery(1, 1)).ConfigureAwait(false);
-                    EnumerationResult<Captain>? captains = await context.Client.ListCaptainsAsync(new ArmadaPageQuery(1, 1)).ConfigureAwait(false);
+                    EnumerationResult<Fleet>? fleets = await context.Client.Fleets.ListAsync(new ArmadaPageQuery(1, 1)).ConfigureAwait(false);
+                    EnumerationResult<Vessel>? vessels = await context.Client.Vessels.ListAsync(new ArmadaPageQuery(1, 1)).ConfigureAwait(false);
+                    EnumerationResult<Captain>? captains = await context.Client.Captains.ListAsync(new ArmadaPageQuery(1, 1)).ConfigureAwait(false);
                     hasFleet = (fleets?.Objects ?? new List<Fleet>()).Count > 0;
                     hasVessel = (vessels?.Objects ?? new List<Vessel>()).Count > 0;
                     hasCaptain = (captains?.Objects ?? new List<Captain>()).Count > 0;

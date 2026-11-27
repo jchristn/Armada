@@ -135,7 +135,7 @@ namespace Armada.Tui.Screens.Delivery
             q.Search = EntityUi.Blank(Filter("search"));
             if (Enum.TryParse<IncidentStatusEnum>(Filter("status"), true, out IncidentStatusEnum status)) q.Status = status;
             if (Enum.TryParse<IncidentSeverityEnum>(Filter("severity"), true, out IncidentSeverityEnum severity)) q.Severity = severity;
-            EnumerationResult<Incident>? result = await Context.Client.ListIncidentsAsync(q, token).ConfigureAwait(false);
+            EnumerationResult<Incident>? result = await Context.Client.Incidents.ListAsync(q, token).ConfigureAwait(false);
             return PageOf(result);
         }
 
@@ -195,7 +195,7 @@ namespace Armada.Tui.Screens.Delivery
         /// <inheritdoc />
         protected override Task DeleteAsync(Incident row, CancellationToken token)
         {
-            return Context.Client.DeleteIncidentAsync(row.Id, token);
+            return Context.Client.Incidents.DeleteAsync(row.Id, token);
         }
 
         /// <inheritdoc />
@@ -231,7 +231,7 @@ namespace Armada.Tui.Screens.Delivery
         {
             try
             {
-                return await ArmadaPaging.ReadAllAsync<Incident>((p, ct) => Context.Client.ListIncidentsAsync(new IncidentQuery { PageNumber = p, PageSize = EntityLookups.PageSize }, ct), 20, token).ConfigureAwait(false);
+                return await ArmadaPaging.ReadAllAsync<Incident>((p, ct) => Context.Client.Incidents.ListAsync(new IncidentQuery { PageNumber = p, PageSize = EntityLookups.PageSize }, ct), 20, token).ConfigureAwait(false);
             }
             catch (ArmadaApiException)
             {

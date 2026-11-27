@@ -562,7 +562,7 @@ namespace Armada.Tui.Screens.Operations
             req.ObjectiveId = ObjectiveId;
             string prompt = StartPrompt.Text.Trim();
             Creating = true;
-            Call((c, t) => c.CreatePlanningSessionAsync(req, t), result =>
+            Call((c, t) => c.PlanningSessions.CreateAsync(req, t), result =>
             {
                 Creating = false;
                 PlanningSession? session = result?.Session;
@@ -605,7 +605,7 @@ namespace Armada.Tui.Screens.Operations
             req.ShowThinking = ShowThinking;
             req.Stream = Streaming;
             Sending = true;
-            Call((c, t) => c.SendPlanningSessionMessageAsync(session.Id, req, t), result =>
+            Call((c, t) => c.PlanningSessions.SendMessageAsync(session.Id, req, t), result =>
             {
                 Sending = false;
                 Composer.Text = "";
@@ -628,7 +628,7 @@ namespace Armada.Tui.Screens.Operations
         {
             PlanningSession? session = Detail?.Session;
             if (session == null) return;
-            Call((c, t) => c.StopPlanningTurnAsync(session.Id, t), result =>
+            Call((c, t) => c.PlanningSessions.StopTurnAsync(session.Id, t), result =>
             {
                 if (result?.Session != null) ApplyDetail(result);
             }, null, ex => ShowMessage(String.IsNullOrEmpty(ex.Message) ? Tr("Failed to stop the current turn.") : ex.Message));
@@ -656,7 +656,7 @@ namespace Armada.Tui.Screens.Operations
             req.MessageId = SelectedMessageId;
             req.Title = DispatchTitle.Value.Trim().Length > 0 ? DispatchTitle.Value.Trim() : null;
             Summarizing = true;
-            Call((c, t) => c.SummarizePlanningSessionAsync(session.Id, req, t), result =>
+            Call((c, t) => c.PlanningSessions.SummarizeAsync(session.Id, req, t), result =>
             {
                 Summarizing = false;
                 if (result == null) return;
@@ -710,7 +710,7 @@ namespace Armada.Tui.Screens.Operations
             req.Title = DispatchTitle.Value.Trim().Length > 0 ? DispatchTitle.Value.Trim() : null;
             req.Description = DispatchDescription.Text.Trim();
             DispatchingDraft = true;
-            Call((c, t) => c.DispatchPlanningSessionAsync(session.Id, req, t), voyage =>
+            Call((c, t) => c.PlanningSessions.DispatchAsync(session.Id, req, t), voyage =>
             {
                 DispatchingDraft = false;
                 Toast(NotificationSeverityEnum.Success, Tr("Dispatch created from planning session."));
@@ -733,7 +733,7 @@ namespace Armada.Tui.Screens.Operations
             {
                 string target = session.Id;
                 _EndingSessionId = target;
-                Call((c, t) => c.StopPlanningSessionAsync(target, t), result =>
+                Call((c, t) => c.PlanningSessions.StopAsync(target, t), result =>
                 {
                     _EndingSessionId = null;
                     if (result?.Session != null)
@@ -760,7 +760,7 @@ namespace Armada.Tui.Screens.Operations
             if (session == null) return;
             string id = session.Id;
             _Deleting = true;
-            DeleteProgress.RunVoid(Context, "Deleting planning session", t => Context.Client.DeletePlanningSessionAsync(id, t), () =>
+            DeleteProgress.RunVoid(Context, "Deleting planning session", t => Context.Client.PlanningSessions.DeleteAsync(id, t), () =>
             {
                 _Deleting = false;
                 SessionsGrid.Reload();
@@ -908,7 +908,7 @@ namespace Armada.Tui.Screens.Operations
             {
                 string id = session.Id;
                 _Deleting = true;
-                DeleteProgress.RunVoid(Context, "Deleting planning session", t => Context.Client.DeletePlanningSessionAsync(id, t), () =>
+                DeleteProgress.RunVoid(Context, "Deleting planning session", t => Context.Client.PlanningSessions.DeleteAsync(id, t), () =>
                 {
                     _Deleting = false;
                     SessionsGrid.Reload();
@@ -942,14 +942,14 @@ namespace Armada.Tui.Screens.Operations
                         EnumerationQuery query = new EnumerationQuery();
                         query.PageNumber = pageNumber;
                         query.PageSize = 100;
-                        EnumerationResult<PlanningSession>? page = await Context.Client.ListPlanningSessionsAsync(query, t).ConfigureAwait(false);
+                        EnumerationResult<PlanningSession>? page = await Context.Client.PlanningSessions.ListAsync(query, t).ConfigureAwait(false);
                         if (page == null || page.Objects.Count == 0) break;
                         bool progressed = false;
                         foreach (PlanningSession s in page.Objects)
                         {
                             if (!attempted.Add(s.Id)) continue;
                             progressed = true;
-                            try { await Context.Client.DeletePlanningSessionAsync(s.Id, t).ConfigureAwait(false); }
+                            try { await Context.Client.PlanningSessions.DeleteAsync(s.Id, t).ConfigureAwait(false); }
                             catch (ArmadaApiException) { failures++; }
                         }
 
@@ -978,7 +978,7 @@ namespace Armada.Tui.Screens.Operations
         private void ReleaseThen(PlanningSession session, string target)
         {
             string id = session.Id;
-            Call((c, t) => c.StopPlanningSessionAsync(id, t), result => Context.Navigate(target), null, ex => Context.Navigate(target));
+            Call((c, t) => c.PlanningSessions.StopAsync(id, t), result => Context.Navigate(target), null, ex => Context.Navigate(target));
         }
 
         private void LoadDetail()
@@ -986,7 +986,7 @@ namespace Armada.Tui.Screens.Operations
             if (SessionId == null) return;
             string id = SessionId;
             LoadingDetail = Detail == null;
-            Call((c, t) => c.GetPlanningSessionAsync(id, t), result =>
+            Call((c, t) => c.PlanningSessions.GetAsync(id, t), result =>
             {
                 LoadingDetail = false;
                 if (result?.Session == null)
@@ -1033,7 +1033,7 @@ namespace Armada.Tui.Screens.Operations
             query.PageNumber = 1;
             query.PageSize = MessagePageSize;
             query.Order = EnumerationOrderEnum.CreatedDescending;
-            Call((c, t) => c.ListPlanningSessionMessagesAsync(sessionId, query, t), page =>
+            Call((c, t) => c.PlanningSessions.ListMessagesAsync(sessionId, query, t), page =>
             {
                 if (page == null || Detail?.Session == null || Detail.Session.Id != sessionId) return;
                 foreach (PlanningSessionMessage m in page.Objects) _Messages = PlanningLogic.UpsertMessage(_Messages, m);
@@ -1052,7 +1052,7 @@ namespace Armada.Tui.Screens.Operations
             query.PageSize = MessagePageSize;
             query.Order = EnumerationOrderEnum.CreatedDescending;
             _LoadingOlder = true;
-            Call((c, t) => c.ListPlanningSessionMessagesAsync(sessionId, query, t), page =>
+            Call((c, t) => c.PlanningSessions.ListMessagesAsync(sessionId, query, t), page =>
             {
                 _LoadingOlder = false;
                 if (page == null || Detail?.Session == null || Detail.Session.Id != sessionId) return;
@@ -1074,7 +1074,7 @@ namespace Armada.Tui.Screens.Operations
             query.Order = EnumerationOrderEnum.CreatedDescending;
             try
             {
-                EnumerationResult<PlanningSession>? page = await Context.Client.ListPlanningSessionsAsync(query, token).ConfigureAwait(false);
+                EnumerationResult<PlanningSession>? page = await Context.Client.PlanningSessions.ListAsync(query, token).ConfigureAwait(false);
                 List<PlanningSession> rows = page?.Objects ?? new List<PlanningSession>();
                 long total = page?.TotalRecords ?? rows.Count;
                 Post(() =>
@@ -1294,7 +1294,7 @@ namespace Armada.Tui.Screens.Operations
             }
 
             LoadingReadiness = true;
-            Call((c, t) => c.GetVesselReadinessAsync(vesselId!, null, t), r =>
+            Call((c, t) => c.Vessels.GetReadinessAsync(vesselId!, null, t), r =>
             {
                 if (generation != _ReadinessGeneration) return;
                 StartReadiness = r;

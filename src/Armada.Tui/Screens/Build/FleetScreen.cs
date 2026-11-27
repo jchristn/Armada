@@ -100,9 +100,9 @@ namespace Armada.Tui.Screens.Build
             bool initial = !Loaded;
             Call(async (c, t) =>
             {
-                Task<FleetDetail?> fleet = c.GetFleetAsync(FleetId, t);
+                Task<FleetDetail?> fleet = c.Fleets.GetAsync(FleetId, t);
                 Task<List<Vessel>> vessels = LoadFleetVesselsAsync(c, t);
-                Task<List<Pipeline>> pipelines = ArmadaPaging.ReadAllAsync<Pipeline>((p, ct) => c.ListPipelinesAsync(new ArmadaPageQuery(p, 1000), ct), ArmadaPaging.DefaultMaxPages, t);
+                Task<List<Pipeline>> pipelines = ArmadaPaging.ReadAllAsync<Pipeline>((p, ct) => c.Pipelines.ListAsync(new ArmadaPageQuery(p, 1000), ct), ArmadaPaging.DefaultMaxPages, t);
                 await Task.WhenAll(fleet, vessels, pipelines).ConfigureAwait(false);
                 FleetLoad result = new FleetLoad();
                 result.Fleet = fleet.Result?.Fleet;
@@ -144,7 +144,7 @@ namespace Armada.Tui.Screens.Build
             while (true)
             {
                 token.ThrowIfCancellationRequested();
-                EnumerationResult<Vessel>? result = await client.ListVesselsAsync(new ArmadaPageQuery(page, 1000).With("fleetId", FleetId), token).ConfigureAwait(false);
+                EnumerationResult<Vessel>? result = await client.Vessels.ListAsync(new ArmadaPageQuery(page, 1000).With("fleetId", FleetId), token).ConfigureAwait(false);
                 if (result == null || result.Objects == null || result.Objects.Count == 0) break;
                 all.AddRange(result.Objects);
                 if (page >= result.TotalPages) break;
@@ -163,7 +163,7 @@ namespace Armada.Tui.Screens.Build
         private void Duplicate()
         {
             if (Fleet == null) return;
-            Call((c, t) => c.CreateFleetAsync(FleetForm.DuplicatePayload(Fleet), t), created =>
+            Call((c, t) => c.Fleets.CreateAsync(FleetForm.DuplicatePayload(Fleet), t), created =>
             {
                 if (created == null) return;
                 Toast(NotificationSeverityEnum.Success, Tr("Fleet \"{{name}}\" duplicated.", LocalizationArgs.Of("name", created.Name)));
@@ -177,7 +177,7 @@ namespace Armada.Tui.Screens.Build
             string name = Fleet.Name;
             Confirm("Delete Fleet", Tr("Delete fleet \"{{name}}\"? This cannot be undone.", LocalizationArgs.Of("name", name)), () =>
             {
-                DeleteProgress.RunVoid(Context, "Deleting fleet", t => Context.Client.DeleteFleetAsync(FleetId, t), () =>
+                DeleteProgress.RunVoid(Context, "Deleting fleet", t => Context.Client.Fleets.DeleteAsync(FleetId, t), () =>
                 {
                     Toast(NotificationSeverityEnum.Warning, Tr("Fleet \"{{name}}\" deleted.", LocalizationArgs.Of("name", name)));
                     Context.Navigate("/vessels?tab=fleets");

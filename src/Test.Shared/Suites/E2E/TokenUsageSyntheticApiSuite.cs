@@ -32,10 +32,10 @@ namespace Test.Shared.Suites.E2E
                         AssertEqual(HttpStatusCode.Forbidden, response.StatusCode, "tenant admin cannot manufacture usage");
                     using ArmadaClient client = new ArmadaClient(server.BaseUrl);
                     client.Options.ApiKey = server.ApiKey;
-                    TokenUsageSyntheticResult result = (await client.ImportSyntheticTokenUsageAsync(request, token).ConfigureAwait(false))!;
+                    TokenUsageSyntheticResult result = (await client.TokenUsage.ImportSyntheticAsync(request, token).ConfigureAwait(false))!;
                     AssertEqual(1, result.Created, "first import creates one row"); AssertEqual(150L, result.TotalTokens);
-                    AssertEqual(1, (await client.ImportSyntheticTokenUsageAsync(request, token).ConfigureAwait(false))!.Existing, "replay recognizes existing row");
-                    TokenUsageSummaryResult summary = (await client.GetTokenUsageAsync(new TokenUsageQuery { SourceId = result.SourceId, FromUtc = DateTime.UtcNow.AddDays(-40), ToUtc = DateTime.UtcNow, BucketMinutes = 1440 }, token).ConfigureAwait(false))!;
+                    AssertEqual(1, (await client.TokenUsage.ImportSyntheticAsync(request, token).ConfigureAwait(false))!.Existing, "replay recognizes existing row");
+                    TokenUsageSummaryResult summary = (await client.TokenUsage.GetSummaryAsync(new TokenUsageQuery { SourceId = result.SourceId, FromUtc = DateTime.UtcNow.AddDays(-40), ToUtc = DateTime.UtcNow, BucketMinutes = 1440 }, token).ConfigureAwait(false))!;
                     AssertEqual(1, summary.SyntheticCount, "summary includes tagged row using sourceId " + result.SourceId + "; records=" + summary.RecordCount + "; total=" + summary.TotalTokens + "; from=" + summary.FromUtc + "; to=" + summary.ToUtc); AssertEqual(150L, summary.TotalTokens);
                     request.Records[0].OutputTokens = 41;
                     using (StringContent content = JsonHelper.ToJsonContent(request))

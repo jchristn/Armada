@@ -437,8 +437,8 @@ namespace Armada.Tui.Screens.Build
             Track(new OpsCallbackDisposable(StopPolling));
             Call(async (c, t) =>
             {
-                Task<EnumerationResult<Fleet>?> fleets = c.ListFleetsAsync(new ArmadaPageQuery(1, 9999), t);
-                Task<List<Pipeline>> pipelines = ArmadaPaging.ReadAllAsync<Pipeline>((p, ct) => c.ListPipelinesAsync(new ArmadaPageQuery(p, 1000), ct), ArmadaPaging.DefaultMaxPages, t);
+                Task<EnumerationResult<Fleet>?> fleets = c.Fleets.ListAsync(new ArmadaPageQuery(1, 9999), t);
+                Task<List<Pipeline>> pipelines = ArmadaPaging.ReadAllAsync<Pipeline>((p, ct) => c.Pipelines.ListAsync(new ArmadaPageQuery(p, 1000), ct), ArmadaPaging.DefaultMaxPages, t);
                 await Task.WhenAll(fleets, pipelines).ConfigureAwait(false);
                 return new KeyValuePair<List<Fleet>, List<Pipeline>>(fleets.Result?.Objects ?? new List<Fleet>(), pipelines.Result);
             }, r =>
@@ -487,7 +487,7 @@ namespace Armada.Tui.Screens.Build
             request.RunInBackground = true;
             _Discovering = true;
             Error = null;
-            Call((c, t) => c.DiscoverVesselImportAsync(request, t), result =>
+            Call((c, t) => c.VesselImport.DiscoverAsync(request, t), result =>
             {
                 _Discovering = false;
                 if (result == null) return;
@@ -549,7 +549,7 @@ namespace Armada.Tui.Screens.Build
             _Importing = true;
             Error = null;
             _ImportErrorCode = null;
-            Call((c, t) => c.ImportVesselsAsync(request, t), response =>
+            Call((c, t) => c.VesselImport.ImportAsync(request, t), response =>
             {
                 _Importing = false;
                 if (response == null) return;
@@ -588,7 +588,7 @@ namespace Armada.Tui.Screens.Build
             StopPolling();
             ShowStep("batch");
             Error = null;
-            Call((c, t) => c.GetVesselImportBatchAsync(batchId, t), detail =>
+            Call((c, t) => c.VesselImport.GetBatchAsync(batchId, t), detail =>
             {
                 if (detail?.Batch == null)
                 {
@@ -629,7 +629,7 @@ namespace Armada.Tui.Screens.Build
             // Only a response newer than the last one applied counts, so a stale "Importing" can never overwrite a
             // "Completed" that already stopped polling.
             long sequence = ++_PollIssued;
-            Call((c, t) => c.GetVesselImportBatchAsync(batchId, t), detail =>
+            Call((c, t) => c.VesselImport.GetBatchAsync(batchId, t), detail =>
             {
                 if (!AcceptPollResponse(sequence)) return;
                 if (detail?.Batch == null) return;
@@ -1018,7 +1018,7 @@ namespace Armada.Tui.Screens.Build
         private void LoadRoots()
         {
             Browse.EmptyText = "Loading allowed roots...";
-            Call((c, t) => c.BrowseAllVesselImportAsync(null, t), r =>
+            Call((c, t) => c.VesselImport.BrowseAllAsync(null, t), r =>
             {
                 Browse.Roots = r?.Entries ?? new List<VesselBrowseEntry>();
                 if (Browse.Roots.Count == 0) Browse.EmptyText = "No browsable folders. An administrator can configure allowed roots under Settings > Import.";
@@ -1033,7 +1033,7 @@ namespace Armada.Tui.Screens.Build
         {
             Browse.Loading.Add(path);
             Browse.Errors.Remove(path);
-            Call((c, t) => c.BrowseAllVesselImportAsync(path, t), r =>
+            Call((c, t) => c.VesselImport.BrowseAllAsync(path, t), r =>
             {
                 Browse.Loading.Remove(path);
                 Browse.Children[path] = r?.Entries ?? new List<VesselBrowseEntry>();
@@ -1161,7 +1161,7 @@ namespace Armada.Tui.Screens.Build
             if (_CaptainsRequested) return;
             _CaptainsRequested = true;
             string? tenantId = Context.Session.Identity?.Tenant?.Id;
-            Call((c, t) => c.ListCaptainsAsync(new ArmadaPageQuery(1, 9999), t), r =>
+            Call((c, t) => c.Captains.ListAsync(new ArmadaPageQuery(1, 9999), t), r =>
             {
                 _Captains = (r?.Objects ?? new List<Captain>()).Where(c => String.IsNullOrEmpty(tenantId) || c.TenantId == null || c.TenantId == tenantId).ToList();
                 CategorizeCaptain.Options = _Captains.Select(c =>
@@ -1172,7 +1172,7 @@ namespace Armada.Tui.Screens.Build
                 }).ToList();
                 SyncCategorizationVisibility();
             }, null, ex => SyncCategorizationVisibility());
-            Call((c, t) => c.GetFleetCategorizationDefaultPromptAsync(t), r =>
+            Call((c, t) => c.VesselImport.GetFleetCategorizationDefaultPromptAsync(t), r =>
             {
                 if (r == null) return;
                 _DefaultPrompt = r.Prompt ?? "";
@@ -1270,7 +1270,7 @@ namespace Armada.Tui.Screens.Build
             q.PageSize = query.PageSize;
             string? status = HistoryStatus.Value;
             if (!String.IsNullOrEmpty(status)) q.Status = status;
-            EnumerationResult<VesselImportBatch>? result = await Context.Client.EnumerateVesselImportBatchesAsync(q, token).ConfigureAwait(false);
+            EnumerationResult<VesselImportBatch>? result = await Context.Client.VesselImport.EnumerateBatchesAsync(q, token).ConfigureAwait(false);
             List<VesselImportBatch> rows = result?.Objects ?? new List<VesselImportBatch>();
             Post(() => HistoryGrid.EmptyText = String.IsNullOrEmpty(status) ? Tr("No imports yet") + ". " + Tr("Each discovery is saved as a batch here, so you can come back to a review or check what an import created.") : Tr("No batches match this status"));
             return new GridPage<VesselImportBatch>(rows, result?.TotalRecords ?? rows.Count);
@@ -1362,7 +1362,7 @@ namespace Armada.Tui.Screens.Build
             string batchId = Batch.Id;
             FleetRecommendationApplyRequest request = Fleets.BuildApply();
             _FleetBusy = true;
-            Call((c, t) => c.ApplyFleetRecommendationsAsync(batchId, request, t), result =>
+            Call((c, t) => c.VesselImport.ApplyFleetRecommendationsAsync(batchId, request, t), result =>
             {
                 _FleetBusy = false;
                 Fleets.Editing = false;
@@ -1381,7 +1381,7 @@ namespace Armada.Tui.Screens.Build
             if (Batch == null || String.IsNullOrEmpty(Batch.CategorizationJobId)) return;
             string jobId = Batch.CategorizationJobId!;
             _FleetBusy = true;
-            Call((c, t) => c.CancelJobAsync(jobId, t), r =>
+            Call((c, t) => c.Jobs.CancelAsync(jobId, t), r =>
             {
                 _FleetBusy = false;
                 RefreshAfterChange();
@@ -1397,7 +1397,7 @@ namespace Armada.Tui.Screens.Build
             if (Batch == null) return;
             string batchId = Batch.Id;
             _FleetBusy = true;
-            Call((c, t) => c.CategorizeVesselImportAsync(batchId, null, t), r =>
+            Call((c, t) => c.VesselImport.CategorizeAsync(batchId, null, t), r =>
             {
                 _FleetBusy = false;
                 RefreshAfterChange();

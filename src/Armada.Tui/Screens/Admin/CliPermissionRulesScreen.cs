@@ -138,7 +138,7 @@ namespace Armada.Tui.Screens.Admin
             CliPermissionRuleQuery query = new CliPermissionRuleQuery();
             CliPermissionRuleScopeEnum? scope = ParseScope(ScopeFilter.Value);
             if (scope.HasValue) query.Scope = scope.Value;
-            ScreenOps.Run(Context, () => Context.Client.ListCliPermissionRulesAsync(query), r =>
+            ScreenOps.Run(Context, () => Context.Client.CliPermissions.ListRulesAsync(query), r =>
             {
                 _Items = r ?? new List<CliPermissionRule>();
                 Grid.EmptyText = "No rules yet.";
@@ -227,7 +227,7 @@ namespace Armada.Tui.Screens.Admin
                 savedPattern = body.Pattern;
                 if (editing != null)
                 {
-                    await Context.Client.UpdateCliPermissionRuleAsync(editing.Id, body).ConfigureAwait(false);
+                    await Context.Client.CliPermissions.UpdateRuleAsync(editing.Id, body).ConfigureAwait(false);
                     return null;
                 }
 
@@ -235,7 +235,7 @@ namespace Armada.Tui.Screens.Admin
                 body.Scope = chosen;
                 body.VesselId = chosen == CliPermissionRuleScopeEnum.Vessel ? vessel.Value : null;
                 body.CaptainId = chosen == CliPermissionRuleScopeEnum.Captain ? captain.Value : null;
-                await Context.Client.CreateCliPermissionRuleAsync(body).ConfigureAwait(false);
+                await Context.Client.CliPermissions.CreateRuleAsync(body).ConfigureAwait(false);
                 return null;
             };
             Context.Modals.Show(modal, result =>
@@ -281,7 +281,7 @@ namespace Armada.Tui.Screens.Admin
             Context.Modals.Show(dialog, result =>
             {
                 if (!(result is bool ok) || !ok) return;
-                DeleteProgress.RunVoid(Context, "Deleting CLI permission rule", ct => Context.Client.DeleteCliPermissionRuleAsync(id, ct), () =>
+                DeleteProgress.RunVoid(Context, "Deleting CLI permission rule", ct => Context.Client.CliPermissions.DeleteRuleAsync(id, ct), () =>
                 {
                     ScreenOps.Toast(Context, NotificationSeverityEnum.Success, "Rule deleted.");
                     Load();
@@ -391,12 +391,12 @@ namespace Armada.Tui.Screens.Admin
 
         private void LoadReferences()
         {
-            ScreenOps.Quiet(Context, () => Context.Client.ListVesselsAsync(new ArmadaPageQuery(1, 1000)), r =>
+            ScreenOps.Quiet(Context, () => Context.Client.Vessels.ListAsync(new ArmadaPageQuery(1, 1000)), r =>
             {
                 // The Applies to column reads the names when it renders.
                 _Vessels = (r?.Objects ?? new List<Vessel>()).OrderBy(v => v.Name, StringComparer.OrdinalIgnoreCase).ToList();
             });
-            ScreenOps.Quiet(Context, () => Context.Client.ListCaptainsAsync(new ArmadaPageQuery(1, 1000)), r =>
+            ScreenOps.Quiet(Context, () => Context.Client.Captains.ListAsync(new ArmadaPageQuery(1, 1000)), r =>
             {
                 _Captains = (r?.Objects ?? new List<Captain>()).OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase).ToList();
             });

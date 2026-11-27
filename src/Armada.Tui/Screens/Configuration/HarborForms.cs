@@ -42,8 +42,8 @@ namespace Armada.Tui.Screens.Configuration
                 payload.MaxConcurrentJobs = EntityForm.IntValue(max) ?? 4;
                 payload.Enabled = enabled.Value;
                 saved = existing != null
-                    ? await context.Client.UpdateHarborAsync(existing.Id, payload, ct).ConfigureAwait(false)
-                    : await context.Client.CreateHarborAsync(payload, ct).ConfigureAwait(false);
+                    ? await context.Client.Harbors.UpdateAsync(existing.Id, payload, ct).ConfigureAwait(false)
+                    : await context.Client.Harbors.CreateAsync(payload, ct).ConfigureAwait(false);
                 return null;
             }, () =>
             {

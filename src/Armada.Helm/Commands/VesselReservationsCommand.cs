@@ -34,7 +34,7 @@ namespace Armada.Helm.Commands
                 EnumerationQuery query = new EnumerationQuery();
                 query.PageNumber = settings.Page ?? 1;
                 query.PageSize = settings.PageSize ?? 25;
-                VesselReservationPage? page = await client.ListVesselReservationsAsync(vessel.Id, query, cancellationToken).ConfigureAwait(false);
+                VesselReservationPage? page = await client.BlackBoxInsights.ListVesselReservationsAsync(vessel.Id, query, cancellationToken).ConfigureAwait(false);
                 if (settings.Json)
                 {
                     WritePureJson(page);

@@ -203,11 +203,11 @@ namespace Armada.Tui.Screens.Activity
             Grid.SetLoading();
             ScreenOps.Run(Context, async () =>
             {
-                Task<EnumerationResult<HistoricalTimelineEntry>?> history = Context.Client.EnumerateHistoryTimelineAsync(query);
-                Task<EnumerationResult<Vessel>?> vessels = Context.Client.ListVesselsAsync(new ArmadaPageQuery(1, 9999));
+                Task<EnumerationResult<HistoricalTimelineEntry>?> history = Context.Client.History.EnumerateTimelineAsync(query);
+                Task<EnumerationResult<Vessel>?> vessels = Context.Client.Vessels.ListAsync(new ArmadaPageQuery(1, 9999));
                 ObjectiveQuery oq = new ObjectiveQuery();
                 oq.PageSize = 9999;
-                Task<EnumerationResult<Objective>?> objectives = Context.Client.ListObjectivesAsync(oq);
+                Task<EnumerationResult<Objective>?> objectives = Context.Client.Objectives.ListAsync(oq);
                 await Task.WhenAll(history, vessels, objectives).ConfigureAwait(false);
                 ActivityLoadResult result = new ActivityLoadResult();
                 result.Entries = history.Result?.Objects ?? new List<HistoricalTimelineEntry>();
@@ -425,7 +425,7 @@ namespace Armada.Tui.Screens.Activity
             string sourceId = row.SourceId;
             Context.Confirm("Delete History Entry", Context.Loc.T("Delete this request-history entry? This cannot be undone."), () =>
             {
-                DeleteProgress.RunVoid(Context, "Deleting request history entry", ct => Context.Client.DeleteRequestHistoryEntryAsync(sourceId, ct), () =>
+                DeleteProgress.RunVoid(Context, "Deleting request history entry", ct => Context.Client.RequestHistory.DeleteEntryAsync(sourceId, ct), () =>
                 {
                     ScreenOps.Toast(Context, NotificationSeverityEnum.Warning, "History entry deleted.");
                     Load();
@@ -457,7 +457,7 @@ namespace Armada.Tui.Screens.Activity
             return ArmadaPaging.ReadAllAsync<HistoricalTimelineEntry>((page, token) =>
             {
                 query.PageNumber = page;
-                return Context.Client.EnumerateHistoryTimelineAsync(query, token);
+                return Context.Client.History.EnumerateTimelineAsync(query, token);
             });
         }
 

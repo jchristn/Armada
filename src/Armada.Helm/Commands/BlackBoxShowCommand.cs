@@ -54,17 +54,17 @@ namespace Armada.Helm.Commands
                 BlackBoxSubjectTypeEnum? subject = ForcedSubject ?? BlackBoxCli.SubjectOf(id);
                 if (settings.Brief)
                 {
-                    string? brief = subject == BlackBoxSubjectTypeEnum.Mission ? await client.GetMissionBlackBoxBriefAsync(id, settings.RedactHosts, cancellationToken).ConfigureAwait(false)
-                        : subject == BlackBoxSubjectTypeEnum.Voyage ? await client.GetVoyageBlackBoxBriefAsync(id, settings.RedactHosts, cancellationToken).ConfigureAwait(false)
-                        : await client.GetBlackBoxBriefAsync(id, settings.RedactHosts, cancellationToken).ConfigureAwait(false);
+                    string? brief = subject == BlackBoxSubjectTypeEnum.Mission ? await client.BlackBox.GetMissionBriefAsync(id, settings.RedactHosts, cancellationToken).ConfigureAwait(false)
+                        : subject == BlackBoxSubjectTypeEnum.Voyage ? await client.BlackBox.GetVoyageBriefAsync(id, settings.RedactHosts, cancellationToken).ConfigureAwait(false)
+                        : await client.BlackBox.GetBriefAsync(id, settings.RedactHosts, cancellationToken).ConfigureAwait(false);
                     Console.Out.Write(brief ?? "");
                     if (!String.IsNullOrEmpty(brief) && !brief.EndsWith("\n", StringComparison.Ordinal)) Console.Out.WriteLine();
                     return 0;
                 }
 
-                BlackBoxEntry? entry = subject == BlackBoxSubjectTypeEnum.Mission ? await client.GetMissionBlackBoxAsync(id, true, cancellationToken).ConfigureAwait(false)
-                    : subject == BlackBoxSubjectTypeEnum.Voyage ? await client.GetVoyageBlackBoxAsync(id, true, cancellationToken).ConfigureAwait(false)
-                    : await client.GetBlackBoxAsync(id, true, cancellationToken).ConfigureAwait(false);
+                BlackBoxEntry? entry = subject == BlackBoxSubjectTypeEnum.Mission ? await client.BlackBox.GetForMissionAsync(id, true, cancellationToken).ConfigureAwait(false)
+                    : subject == BlackBoxSubjectTypeEnum.Voyage ? await client.BlackBox.GetForVoyageAsync(id, true, cancellationToken).ConfigureAwait(false)
+                    : await client.BlackBox.GetAsync(id, true, cancellationToken).ConfigureAwait(false);
                 if (entry == null)
                 {
                     Status("Error: no black box entry for " + id + ".");

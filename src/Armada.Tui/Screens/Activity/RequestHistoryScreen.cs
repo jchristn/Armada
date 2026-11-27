@@ -306,7 +306,7 @@ namespace Armada.Tui.Screens.Activity
             Detail.ShowLoading();
             DetailDrawer.Open("Request Detail", Detail);
             DetailDrawer.OnFocusChanged(true);
-            ScreenOps.Run(Context, () => Context.Client.GetRequestHistoryEntryAsync(id), record =>
+            ScreenOps.Run(Context, () => Context.Client.RequestHistory.GetEntryAsync(id), record =>
             {
                 if (record == null)
                 {
@@ -453,7 +453,7 @@ namespace Armada.Tui.Screens.Activity
             string id = row.Id;
             Context.Confirm("Delete Request Entry", Context.Loc.T("Delete the stored request-history entry for {{route}}?", LocalizationArgs.Of("route", row.Route)), () =>
             {
-                DeleteProgress.RunVoid(Context, "Deleting request history entry", ct => Context.Client.DeleteRequestHistoryEntryAsync(id, ct), () =>
+                DeleteProgress.RunVoid(Context, "Deleting request history entry", ct => Context.Client.RequestHistory.DeleteEntryAsync(id, ct), () =>
                 {
                     ScreenOps.Toast(Context, NotificationSeverityEnum.Warning, "Request entry deleted.");
                     if (DetailDrawer.IsOpen && Detail.Record != null && Detail.Record.Entry.Id == id) DetailDrawer.Close();
@@ -469,7 +469,7 @@ namespace Armada.Tui.Screens.Activity
             if (ids.Count == 0) return;
             Context.Confirm("Delete Selected Requests", Context.Loc.T("Delete {{count}} selected request-history entries?", LocalizationArgs.Of("count", ids.Count)), () =>
             {
-                DeleteProgress.Run(Context, "{count, plural, one {Deleting # request history entry} other {Deleting # request history entries}}", ct => Context.Client.DeleteRequestHistoryEntriesAsync(ids, ct), r =>
+                DeleteProgress.Run(Context, "{count, plural, one {Deleting # request history entry} other {Deleting # request history entries}}", ct => Context.Client.RequestHistory.DeleteEntriesAsync(ids, ct), r =>
                 {
                     ScreenOps.Toast(Context, NotificationSeverityEnum.Warning, "Deleted {{count}} request entries.", LocalizationArgs.Of("count", ids.Count));
                     Grid.ClearMarks();
@@ -583,7 +583,7 @@ namespace Armada.Tui.Screens.Activity
         private async Task<GridPage<RequestHistoryEntry>> LoadAsync(GridQuery query, CancellationToken token)
         {
             RequestHistoryQuery q = BuildQuery(query.PageNumber, query.PageSize);
-            EnumerationResult<RequestHistoryEntry>? result = await Context.Client.ListRequestHistoryAsync(q, token).ConfigureAwait(false);
+            EnumerationResult<RequestHistoryEntry>? result = await Context.Client.RequestHistory.ListAsync(q, token).ConfigureAwait(false);
             List<RequestHistoryEntry> rows = result?.Objects ?? new List<RequestHistoryEntry>();
             return new GridPage<RequestHistoryEntry>(rows, result?.TotalRecords ?? rows.Count);
         }
@@ -596,7 +596,7 @@ namespace Armada.Tui.Screens.Activity
             RequestHistoryQuery q = BuildSummaryQuery();
             RequestHistoryRange range = Range;
             DateTime now = Context.Clock.UtcNow;
-            ScreenOps.Run(Context, () => Context.Client.GetRequestHistorySummaryAsync(q), summary =>
+            ScreenOps.Run(Context, () => Context.Client.RequestHistory.GetSummaryAsync(q), summary =>
             {
                 if (generation != _SummaryGeneration) return;
                 _SummaryLoading = false;
@@ -663,7 +663,7 @@ namespace Armada.Tui.Screens.Activity
             RequestHistoryQuery q = BuildQuery(1, Grid.PageSize);
             Context.Confirm("Delete Filtered Requests", Context.Loc.T("Delete all request-history entries matching the current filters?"), () =>
             {
-                DeleteProgress.Run(Context, "Deleting matching request history entries", ct => Context.Client.DeleteRequestHistoryByFilterAsync(q, ct), r =>
+                DeleteProgress.Run(Context, "Deleting matching request history entries", ct => Context.Client.RequestHistory.DeleteByFilterAsync(q, ct), r =>
                 {
                     ScreenOps.Toast(Context, NotificationSeverityEnum.Warning, "Deleted the current filtered request set.");
                     Grid.ClearMarks();

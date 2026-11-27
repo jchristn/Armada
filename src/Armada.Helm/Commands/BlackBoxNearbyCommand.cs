@@ -26,7 +26,7 @@ namespace Armada.Helm.Commands
                 EnumerationQuery query = new EnumerationQuery();
                 query.PageNumber = settings.Page ?? 1;
                 query.PageSize = settings.PageSize ?? 25;
-                EnumerationResult<BlackBoxNearbySuccess>? page = await client.ListBlackBoxNearbySuccessesAsync(settings.Id, query, cancellationToken).ConfigureAwait(false);
+                EnumerationResult<BlackBoxNearbySuccess>? page = await client.BlackBoxInsights.ListNearbySuccessesAsync(settings.Id, query, cancellationToken).ConfigureAwait(false);
                 if (settings.Json)
                 {
                     WritePureJson(page);

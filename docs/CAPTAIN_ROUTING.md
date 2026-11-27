@@ -48,7 +48,7 @@ persona.CaptainPriorities.Add(new PersonaCaptainPriority
     Runtime = AgentRuntimeEnum.ApiEndpoint,
     Endpoint = inferenceEndpoint.Id
 });
-await client.UpdatePersonaAsync(persona.Name, persona);
+await client.Personas.UpdateAsync(persona.Name, persona);
 ```
 
 ## API endpoint captains in pipelines
@@ -113,7 +113,7 @@ Example REST create body (also usable with `create_model_endpoint`):
 }
 ```
 
-The .NET SDK uses the same contract: set `endpoint.InferenceOptions = new InferenceOptions { ReadOnlyTools = true, RequireHarbor = true, MaxIterations = 25 };` before `CreateModelEndpointAsync` or `UpdateModelEndpointAsync`. Dashboard/mobile share the typed `InferenceOptions` model.
+The .NET SDK uses the same contract: set `endpoint.InferenceOptions = new InferenceOptions { ReadOnlyTools = true, RequireHarbor = true, MaxIterations = 25 };` before `ModelEndpoints.CreateAsync` or `ModelEndpoints.UpdateAsync`. Dashboard/mobile share the typed `InferenceOptions` model.
 
 ### Remaining configuration queue
 

@@ -188,8 +188,8 @@ namespace Armada.Tui.Screens.Configuration
             bool create = Entity == null;
             string id = Entity?.Id ?? "";
             EntityUi.Run<ProjectProfile?>(Context, ct => create
-                ? Context.Client.CreateProjectProfileAsync(payload, ct)
-                : Context.Client.UpdateProjectProfileAsync(id, payload, ct), saved =>
+                ? Context.Client.ProjectProfiles.CreateAsync(payload, ct)
+                : Context.Client.ProjectProfiles.UpdateAsync(id, payload, ct), saved =>
             {
                 _Saving = false;
                 if (saved == null) return;
@@ -214,7 +214,7 @@ namespace Armada.Tui.Screens.Configuration
             if (Entity == null) return;
             string persona = _PreviewPersona.Value ?? "Architect";
             string id = Entity.Id;
-            EntityUi.Run<PersonaPromptPreview?>(Context, ct => Context.Client.PreviewPersonaPromptAsync(id, persona, ct), preview =>
+            EntityUi.Run<PersonaPromptPreview?>(Context, ct => Context.Client.ProjectProfiles.PreviewPersonaPromptAsync(id, persona, ct), preview =>
             {
                 if (preview == null) return;
                 Preview = preview;
@@ -240,7 +240,7 @@ namespace Armada.Tui.Screens.Configuration
         /// <inheritdoc />
         protected override Task<ProjectProfile?> FetchAsync(CancellationToken token)
         {
-            return Context.Client.GetProjectProfileAsync(EntityId, token);
+            return Context.Client.ProjectProfiles.GetAsync(EntityId, token);
         }
 
         /// <inheritdoc />
@@ -402,7 +402,7 @@ namespace Armada.Tui.Screens.Configuration
             if (p == null || !CanManage) return;
             Context.Confirm("Delete Project Profile", T("Delete this project profile? This cannot be undone."), () =>
             {
-                DeleteProgress.RunVoid(Context, "Deleting project profile", ct => Context.Client.DeleteProjectProfileAsync(p.Id, ct), () =>
+                DeleteProgress.RunVoid(Context, "Deleting project profile", ct => Context.Client.ProjectProfiles.DeleteAsync(p.Id, ct), () =>
                 {
                     EntityUi.Toast(Context, NotificationSeverityEnum.Warning, T("Project profile deleted."));
                     Context.Navigate("/configuration?tab=project-profiles");

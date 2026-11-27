@@ -103,11 +103,11 @@ namespace Armada.Tui.Screens.Activity
             AddFill(Grid);
             Scope.Focus(Grid);
             Grid.Reload();
-            ScreenOps.Quiet(context, () => context.Client.ListCaptainsAsync(new ArmadaPageQuery(1, 1000)), r =>
+            ScreenOps.Quiet(context, () => context.Client.Captains.ListAsync(new ArmadaPageQuery(1, 1000)), r =>
             {
                 _CaptainNames = (r?.Objects ?? new List<Captain>()).ToDictionary(c => c.Id, c => c.Name, StringComparer.Ordinal);
             });
-            ScreenOps.Quiet(context, () => context.Client.ListVesselsAsync(new ArmadaPageQuery(1, 1000)), r =>
+            ScreenOps.Quiet(context, () => context.Client.Vessels.ListAsync(new ArmadaPageQuery(1, 1000)), r =>
             {
                 _VesselNames = (r?.Objects ?? new List<Vessel>()).ToDictionary(v => v.Id, v => v.Name, StringComparer.Ordinal);
             });
@@ -192,7 +192,7 @@ namespace Armada.Tui.Screens.Activity
             string id = row.Id;
             Context.Confirm("Delete Event", Context.Loc.T("Delete event {{id}}?", LocalizationArgs.Of("id", id)), () =>
             {
-                DeleteProgress.Run(Context, "Deleting event", ct => Context.Client.DeleteEventsBatchAsync(new List<string> { id }, ct), r =>
+                DeleteProgress.Run(Context, "Deleting event", ct => Context.Client.Events.DeleteBatchAsync(new List<string> { id }, ct), r =>
                 {
                     ScreenOps.Toast(Context, NotificationSeverityEnum.Warning, "Event {{id}} deleted.", LocalizationArgs.Of("id", id));
                     Refresh();
@@ -207,7 +207,7 @@ namespace Armada.Tui.Screens.Activity
             if (ids.Count == 0) return;
             Context.Confirm("Delete Selected Events", Context.Loc.T("Delete {{count}} selected event(s)?", LocalizationArgs.Of("count", ids.Count)), () =>
             {
-                DeleteProgress.Run(Context, "{count, plural, one {Deleting # event} other {Deleting # events}}", ct => Context.Client.DeleteEventsBatchAsync(ids, ct), r =>
+                DeleteProgress.Run(Context, "{count, plural, one {Deleting # event} other {Deleting # events}}", ct => Context.Client.Events.DeleteBatchAsync(ids, ct), r =>
                 {
                     ScreenOps.Toast(Context, NotificationSeverityEnum.Warning, "Deleted {{count}} event(s).", LocalizationArgs.Of("count", ids.Count));
                     Grid.ClearMarks();
@@ -238,7 +238,7 @@ namespace Armada.Tui.Screens.Activity
         {
             ArmadaPageQuery page = new ArmadaPageQuery(query.PageNumber, query.PageSize);
             page.With("userId", UserScope.UserId);
-            EnumerationResult<ArmadaEvent>? result = await Context.Client.ListEventsAsync(page, token).ConfigureAwait(false);
+            EnumerationResult<ArmadaEvent>? result = await Context.Client.Events.ListAsync(page, token).ConfigureAwait(false);
             List<ArmadaEvent> rows = result?.Objects ?? new List<ArmadaEvent>();
             long total = result?.TotalRecords ?? rows.Count;
             Context.Dispatcher.Post(() =>

@@ -238,7 +238,7 @@ namespace Armada.Tui.Screens.Operations
         public override void Load()
         {
             bool initial = !Loaded;
-            Call((c, t) => c.GetVoyageDetailAsync(VoyageId, t), d =>
+            Call((c, t) => c.Voyages.GetDetailAsync(VoyageId, t), d =>
             {
                 if (d == null || d.Voyage == null)
                 {
@@ -272,7 +272,7 @@ namespace Armada.Tui.Screens.Operations
             _TreeLoaded = true;
             int generation = ++_TreeGeneration;
             if (MissionTree == null) Tree.SetLoading();
-            Call((c, t) => c.GetVoyageTreeAsync(VoyageId, t), tree =>
+            Call((c, t) => c.Concurrency.GetVoyageTreeAsync(VoyageId, t), tree =>
             {
                 if (generation != _TreeGeneration) return;
                 MissionTree = tree;
@@ -296,7 +296,7 @@ namespace Armada.Tui.Screens.Operations
             _CascadeLoaded = true;
             int generation = ++_CascadeGeneration;
             Cascade.SetLoading();
-            Call((c, t) => c.GetVoyageBlackBoxCascadeAsync(VoyageId, t), g =>
+            Call((c, t) => c.BlackBoxInsights.GetVoyageCascadeAsync(VoyageId, t), g =>
             {
                 if (generation != _CascadeGeneration) return;
                 CascadeGraph = g;
@@ -327,7 +327,7 @@ namespace Armada.Tui.Screens.Operations
         private async Task<GridPage<Mission>> LoadMissionsAsync(GridQuery query, CancellationToken token)
         {
             ArmadaPageQuery page = new ArmadaPageQuery(query.PageNumber, query.PageSize).With("voyageId", VoyageId).With("order", EnumerationOrderEnum.CreatedAscending.ToString());
-            EnumerationResult<Mission>? result = await Context.Client.ListMissionsAsync(page, token).ConfigureAwait(false);
+            EnumerationResult<Mission>? result = await Context.Client.Missions.ListAsync(page, token).ConfigureAwait(false);
             List<Mission> rows = result?.Objects ?? new List<Mission>();
             long total = result?.TotalRecords ?? rows.Count;
             List<MissionPlaybookSnapshot> snapshots = new List<MissionPlaybookSnapshot>();
@@ -337,7 +337,7 @@ namespace Armada.Tui.Screens.Operations
                 // gets the voyage's playbook selections).
                 try
                 {
-                    Mission? first = await Context.Client.GetMissionAsync(rows[0].Id, token).ConfigureAwait(false);
+                    Mission? first = await Context.Client.Missions.GetAsync(rows[0].Id, token).ConfigureAwait(false);
                     snapshots = first?.PlaybookSnapshots ?? new List<MissionPlaybookSnapshot>();
                 }
                 catch (ArmadaApiException)
@@ -417,7 +417,7 @@ namespace Armada.Tui.Screens.Operations
             string name = Name();
             Confirm("Cancel Voyage", Tr("Cancel this voyage? All pending missions will be cancelled."), () =>
             {
-                Run((c, t) => c.CancelVoyageAsync(VoyageId, t), () =>
+                Run((c, t) => c.Voyages.CancelAsync(VoyageId, t), () =>
                 {
                     Toast(NotificationSeverityEnum.Warning, Tr("Voyage \"{{title}}\" cancelled.", LocalizationArgs.Of("title", name)));
                     Load();
@@ -431,7 +431,7 @@ namespace Armada.Tui.Screens.Operations
             string name = Name();
             Confirm("Delete Voyage", Tr("Permanently delete this voyage and all its missions? This cannot be undone."), () =>
             {
-                DeleteProgress.RunVoid(Context, "Purging voyage", t => Context.Client.PurgeVoyageAsync(VoyageId, t), () =>
+                DeleteProgress.RunVoid(Context, "Purging voyage", t => Context.Client.Voyages.PurgeAsync(VoyageId, t), () =>
                 {
                     Toast(NotificationSeverityEnum.Warning, Tr("Voyage \"{{title}}\" deleted.", LocalizationArgs.Of("title", name)));
                     Context.Navigate("/missions?tab=voyages");
@@ -453,7 +453,7 @@ namespace Armada.Tui.Screens.Operations
                     for (int pageNumber = 1; ; pageNumber++)
                     {
                         ArmadaPageQuery fq = new ArmadaPageQuery(pageNumber, 100).With("voyageId", VoyageId).With("status", MissionStatusEnum.Failed.ToString());
-                        EnumerationResult<Mission>? page = await c.ListMissionsAsync(fq, t).ConfigureAwait(false);
+                        EnumerationResult<Mission>? page = await c.Missions.ListAsync(fq, t).ConfigureAwait(false);
                         if (page == null || page.Objects.Count == 0) break;
                         failed.AddRange(page.Objects);
                         if (pageNumber >= page.TotalPages) break;
@@ -465,7 +465,7 @@ namespace Armada.Tui.Screens.Operations
                         retry.VesselId = m.VesselId;
                         retry.VoyageId = m.VoyageId;
                         retry.Priority = m.Priority;
-                        await c.CreateMissionAsync(retry, t).ConfigureAwait(false);
+                        await c.Missions.CreateAsync(retry, t).ConfigureAwait(false);
                     }
                 }, () =>
                 {

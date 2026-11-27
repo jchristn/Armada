@@ -54,7 +54,7 @@ namespace Test.Shared.Suites.E2E
                     using (ArmadaClient sdk = new ArmadaClient(server.BaseUrl))
                     {
                         sdk.Options.ApiKey = server.ApiKey;
-                        SyntheticActivityResult replay = (await sdk.GenerateSyntheticActivityAsync(profile, token).ConfigureAwait(false))!;
+                        SyntheticActivityResult replay = (await sdk.Server.GenerateSyntheticActivityAsync(profile, token).ConfigureAwait(false))!;
                         AssertEqual(0, replay.Created.Count, "typed SDK replay");
                     }
                     profile.Density = -1;

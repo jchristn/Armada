@@ -115,7 +115,7 @@ namespace Armada.Tui.Screens.Delivery
         /// <inheritdoc />
         protected override Task<Incident?> FetchAsync(CancellationToken token)
         {
-            return Context.Client.GetIncidentAsync(EntityId, token);
+            return Context.Client.Incidents.GetAsync(EntityId, token);
         }
 
         /// <inheritdoc />
@@ -249,7 +249,7 @@ namespace Armada.Tui.Screens.Delivery
         {
             try
             {
-                EnumerationResult<RunbookExecution>? result = await Context.Client.ListRunbookExecutionsAsync(new RunbookExecutionQuery { IncidentId = id, PageSize = 500 }, token).ConfigureAwait(false);
+                EnumerationResult<RunbookExecution>? result = await Context.Client.Runbooks.ListExecutionsAsync(new RunbookExecutionQuery { IncidentId = id, PageSize = 500 }, token).ConfigureAwait(false);
                 return result?.Objects ?? new List<RunbookExecution>();
             }
             catch (ArmadaApiException)
@@ -289,11 +289,11 @@ namespace Armada.Tui.Screens.Delivery
             {
                 EntityUi.Run<Incident?>(Context, async ct =>
                 {
-                    await Context.Client.RollbackDeploymentAsync(deploymentId, ct).ConfigureAwait(false);
+                    await Context.Client.Deployments.RollbackAsync(deploymentId, ct).ConfigureAwait(false);
                     IncidentUpsertRequest update = new IncidentUpsertRequest();
                     update.RollbackDeploymentId = deploymentId;
                     update.Status = IncidentStatusEnum.RolledBack;
-                    return await Context.Client.UpdateIncidentAsync(i.Id, update, ct).ConfigureAwait(false);
+                    return await Context.Client.Incidents.UpdateAsync(i.Id, update, ct).ConfigureAwait(false);
                 }, updated =>
                 {
                     if (updated != null)
@@ -313,7 +313,7 @@ namespace Armada.Tui.Screens.Delivery
             if (i == null) return;
             Context.Confirm("Delete Incident", EntityUi.T(Context, "Delete \"{{title}}\"? This removes only the incident record.", "title", i.Title), () =>
             {
-                DeleteProgress.RunVoid(Context, "Deleting incident", ct => Context.Client.DeleteIncidentAsync(i.Id, ct), () =>
+                DeleteProgress.RunVoid(Context, "Deleting incident", ct => Context.Client.Incidents.DeleteAsync(i.Id, ct), () =>
                 {
                     EntityUi.Toast(Context, NotificationSeverityEnum.Warning, EntityUi.T(Context, "Incident \"{{title}}\" deleted.", "title", i.Title));
                     Context.Navigate("/delivery?tab=incidents");

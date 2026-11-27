@@ -258,7 +258,7 @@ namespace Armada.Tui
         {
             _ = Task.Run(async () =>
             {
-                try { await context.Client.ClearProxySessionInstanceAsync().ConfigureAwait(false); }
+                try { await context.Client.Auth.ClearProxySessionInstanceAsync().ConfigureAwait(false); }
                 catch (Armada.Client.ArmadaApiException) { }
                 context.Dispatcher.Post(() => context.Session.Expire("Choose a deployment in Armada.Proxy, then sign in again."));
             });
@@ -268,7 +268,7 @@ namespace Armada.Tui
         {
             _ = Task.Run(async () =>
             {
-                try { await context.Client.LogoutProxyAsync().ConfigureAwait(false); }
+                try { await context.Client.Auth.LogoutProxyAsync().ConfigureAwait(false); }
                 catch (Armada.Client.ArmadaApiException) { }
                 await context.Session.SignOutAsync().ConfigureAwait(false);
             });

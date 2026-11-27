@@ -12990,10 +12990,10 @@ Access-Control-Expose-Headers: Retry-After
 
 ### .NET SDK persona priorities
 
-`Armada.Client` 1.2.0 uses the shared `Armada.Core.Models.Persona` contract. `CreatePersonaAsync`, `GetPersonaAsync`, `ListPersonasAsync`, and `UpdatePersonaAsync` carry `CaptainPriorities`, `PriorityAvailability`, and `PriorityExhaustion` without additional SDK methods. Read the persona before editing it, then pass the updated object to `UpdatePersonaAsync`; this method sends the complete persona, including its routing settings. Clear `CaptainPriorities` to restore legacy routing.
+`Armada.Client` uses the shared `Armada.Core.Models.Persona` contract (1.2.0 and later; from 1.5.0 the persona calls are on `client.Personas`). `Personas.CreateAsync`, `Personas.GetAsync`, `Personas.ListAsync`, and `Personas.UpdateAsync` carry `CaptainPriorities`, `PriorityAvailability`, and `PriorityExhaustion` without additional SDK methods. Read the persona before editing it, then pass the updated object to `Personas.UpdateAsync`; this method sends the complete persona, including its routing settings. Clear `CaptainPriorities` to restore legacy routing.
 
 ```csharp
-Persona persona = (await client.GetPersonaAsync("reviewer"))!;
+Persona persona = (await client.Personas.GetAsync("reviewer"))!;
 persona.CaptainPriorities = new List<PersonaCaptainPriority>
 {
     new PersonaCaptainPriority { Runtime = AgentRuntimeEnum.Codex },
@@ -13001,7 +13001,7 @@ persona.CaptainPriorities = new List<PersonaCaptainPriority>
 };
 persona.PriorityAvailability = PersonaPriorityAvailabilityEnum.FallThrough;
 persona.PriorityExhaustion = PersonaPriorityExhaustionEnum.Wait;
-await client.UpdatePersonaAsync(persona.Name, persona);
+await client.Personas.UpdateAsync(persona.Name, persona);
 ```
 
 ### Persona prompt improvements

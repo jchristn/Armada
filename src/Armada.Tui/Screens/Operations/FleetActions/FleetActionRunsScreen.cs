@@ -82,7 +82,7 @@ namespace Armada.Tui.Screens.Operations
             q.Order = query.SortKey == "createdUtc" && !query.SortDescending ? "CreatedAscending" : "CreatedDescending";
             string? status = StatusFilter.Value;
             if (!String.IsNullOrEmpty(status) && Enum.TryParse(status, out FleetActionRunStatusEnum parsed)) q.Status = parsed;
-            EnumerationResult<FleetActionRun>? result = await Context.Client.EnumerateFleetActionRunsAsync(q, token).ConfigureAwait(false);
+            EnumerationResult<FleetActionRun>? result = await Context.Client.FleetActions.EnumerateRunsAsync(q, token).ConfigureAwait(false);
             List<FleetActionRun> rows = result?.Objects ?? new List<FleetActionRun>();
             return new GridPage<FleetActionRun>(rows, result?.TotalRecords ?? rows.Count);
         }

@@ -40,24 +40,24 @@ namespace Test.Shared.Suites.Client
             {
                 VesselSetup setup = await LiveServerSetup.CreateVesselAsync(c, "insights");
                 string id = setup.Vessel.Id;
-                MissionOverlapPreview? preview = await c.PreviewMissionOverlapAsync(id, new MissionOverlapPreviewRequest { Title = "Edit readme", Description = "Touch only README.md" });
+                MissionOverlapPreview? preview = await c.BlackBoxInsights.PreviewMissionOverlapAsync(id, new MissionOverlapPreviewRequest { Title = "Edit readme", Description = "Touch only README.md" });
                 AssertEqual(id, preview?.VesselId, "preview vessel");
                 AssertTrue(preview!.LikelyFiles.Contains("README.md"), "scoped file is likely");
-                await ClientContract.ExpectErrorAsync(() => c.PreviewMissionOverlapAsync(id, new MissionOverlapPreviewRequest()), "empty preview", 400, 400);
-                await ClientContract.ExpectErrorAsync(() => c.PreviewMissionOverlapAsync("vsl_missing_insights", new MissionOverlapPreviewRequest { Title = "x" }), "unknown vessel", 404, 404);
+                await ClientContract.ExpectErrorAsync(() => c.BlackBoxInsights.PreviewMissionOverlapAsync(id, new MissionOverlapPreviewRequest()), "empty preview", 400, 400);
+                await ClientContract.ExpectErrorAsync(() => c.BlackBoxInsights.PreviewMissionOverlapAsync("vsl_missing_insights", new MissionOverlapPreviewRequest { Title = "x" }), "unknown vessel", 404, 404);
 
-                VesselReservationPage? reservations = await c.ListVesselReservationsAsync(id, new EnumerationQuery { PageSize = 5 });
+                VesselReservationPage? reservations = await c.BlackBoxInsights.ListVesselReservationsAsync(id, new EnumerationQuery { PageSize = 5 });
                 AssertEqual(id, reservations?.VesselId); AssertEqual(5, reservations!.PageSize, "page size sent");
 
-                BriefLintResult? lint = await c.LintMissionBriefAsync(new BriefLintRequest { Title = "Next", Description = "Do this after mission 2 lands.", VesselId = id });
+                BriefLintResult? lint = await c.BlackBoxInsights.LintMissionBriefAsync(new BriefLintRequest { Title = "Next", Description = "Do this after mission 2 lands.", VesselId = id });
                 AssertTrue(lint!.Findings.Any(f => f.RuleId == MissionBriefLinter.DependencyRule), "dependency flagged");
-                await ClientContract.ExpectErrorAsync(() => c.LintMissionBriefAsync(new BriefLintRequest()), "empty brief", 400, 400);
+                await ClientContract.ExpectErrorAsync(() => c.BlackBoxInsights.LintMissionBriefAsync(new BriefLintRequest()), "empty brief", 400, 400);
 
-                BlackBoxDoctorPage? doctor = await c.GetVesselBlackBoxDoctorAsync(id, new BlackBoxDoctorRequest { WindowDays = 14, PageSize = 3 });
+                BlackBoxDoctorPage? doctor = await c.BlackBoxInsights.GetVesselDoctorAsync(id, new BlackBoxDoctorRequest { WindowDays = 14, PageSize = 3 });
                 AssertEqual(14, doctor?.WindowDays, "window sent"); AssertEqual(3, doctor!.PageSize);
-                await ClientContract.ExpectErrorAsync(() => c.GetVesselBlackBoxDoctorAsync(id, new BlackBoxDoctorRequest { WindowDays = 400 }), "window over 365", 400, 400);
+                await ClientContract.ExpectErrorAsync(() => c.BlackBoxInsights.GetVesselDoctorAsync(id, new BlackBoxDoctorRequest { WindowDays = 400 }), "window over 365", 400, 400);
 
-                EnumerationResult<BlackBoxRecoveryStat>? stats = await c.GetBlackBoxRecoveryStatsAsync(new BlackBoxRecoveryStatsRequest { RuleId = "BBX-LAND-001", PageSize = 2 });
+                EnumerationResult<BlackBoxRecoveryStat>? stats = await c.BlackBoxInsights.GetRecoveryStatsAsync(new BlackBoxRecoveryStatsRequest { RuleId = "BBX-LAND-001", PageSize = 2 });
                 AssertEqual(2, stats?.PageSize, "stats page");
             }));
 
@@ -79,24 +79,24 @@ namespace Test.Shared.Suites.Client
                 string second = (await runtime.Capture.RecordMissionFailureAsync(mission, MissionStatusEnum.InProgress, BlackBoxStepEnum.NoOp).ConfigureAwait(false))!;
                 await runtime.Queue.DrainAsync().ConfigureAwait(false);
 
-                BlackBoxAttemptDiff? diff = await c.DiffBlackBoxEntriesAsync(first, second);
+                BlackBoxAttemptDiff? diff = await c.BlackBoxInsights.DiffEntriesAsync(first, second);
                 AssertTrue(diff!.SameMission, "same mission"); AssertTrue(diff.Differences.Any(d => d.Field == "Step"), "step differs");
-                await ClientContract.ExpectErrorAsync(() => c.DiffBlackBoxEntriesAsync(first, first), "same entry", 400, 400);
-                await ClientContract.ExpectErrorAsync(() => c.DiffBlackBoxEntriesAsync(first, "bbx_missing"), "unknown entry", 404, 404);
+                await ClientContract.ExpectErrorAsync(() => c.BlackBoxInsights.DiffEntriesAsync(first, first), "same entry", 400, 400);
+                await ClientContract.ExpectErrorAsync(() => c.BlackBoxInsights.DiffEntriesAsync(first, "bbx_missing"), "unknown entry", 404, 404);
 
-                EnumerationResult<BlackBoxNearbySuccess>? nearby = await c.ListBlackBoxNearbySuccessesAsync(first, new EnumerationQuery { PageSize = 4 });
+                EnumerationResult<BlackBoxNearbySuccess>? nearby = await c.BlackBoxInsights.ListNearbySuccessesAsync(first, new EnumerationQuery { PageSize = 4 });
                 AssertEqual(4, nearby?.PageSize, "nearby page");
-                BlackBoxTimelinePage? timeline = await c.GetBlackBoxTimelineAsync(first);
+                BlackBoxTimelinePage? timeline = await c.BlackBoxInsights.GetTimelineAsync(first);
                 AssertEqual(first, timeline?.EntryId);
                 AssertTrue(timeline!.Objects.Any(i => i.Kind == "entry.captured"), "entry milestone");
                 for (int i = 1; i < timeline.Objects.Count; i++) AssertTrue(timeline.Objects[i - 1].TimestampUtc <= timeline.Objects[i].TimestampUtc, "oldest first by default");
-                BlackBoxTimelinePage? newest = await c.GetBlackBoxTimelineAsync(first, new EnumerationQuery { Order = EnumerationOrderEnum.CreatedDescending, PageSize = 1 });
+                BlackBoxTimelinePage? newest = await c.BlackBoxInsights.GetTimelineAsync(first, new EnumerationQuery { Order = EnumerationOrderEnum.CreatedDescending, PageSize = 1 });
                 AssertEqual(1, newest!.Objects.Count, "order and size sent");
-                await ClientContract.ExpectErrorAsync(() => c.GetBlackBoxTimelineAsync("bbx_missing"), "unknown timeline", 404, 404);
+                await ClientContract.ExpectErrorAsync(() => c.BlackBoxInsights.GetTimelineAsync("bbx_missing"), "unknown timeline", 404, 404);
 
-                BlackBoxCascadeGraph? graph = await c.GetVoyageBlackBoxCascadeAsync(voyage.Id);
+                BlackBoxCascadeGraph? graph = await c.BlackBoxInsights.GetVoyageCascadeAsync(voyage.Id);
                 AssertEqual(mission.Id, graph!.RootMissionId, "root failure"); AssertEqual(1L, graph.MissionCount);
-                await ClientContract.ExpectErrorAsync(() => c.GetVoyageBlackBoxCascadeAsync("vyg_missing"), "unknown voyage", 404, 404);
+                await ClientContract.ExpectErrorAsync(() => c.BlackBoxInsights.GetVoyageCascadeAsync("vyg_missing"), "unknown voyage", 404, 404);
             }));
 
             return new TestSuiteDescriptor(suiteId: Suite, displayName: "Armada.Client contract: black box insights (live server)", cases: cases);

@@ -185,7 +185,7 @@ namespace Armada.Tui.Screens.Build
             if (_Rows[group].Count >= _Totals[group]) return;
             int page = _PagesLoaded[group] + 1;
             Busy = "page";
-            _Screen.Call((c, t) => c.ListVesselCleanupResourcesAsync(_VesselId, PageQuery(group, page, GroupPageSize), t), result =>
+            _Screen.Call((c, t) => c.Vessels.ListCleanupResourcesAsync(_VesselId, PageQuery(group, page, GroupPageSize), t), result =>
             {
                 Busy = "";
                 if (result == null) return;
@@ -406,7 +406,7 @@ namespace Armada.Tui.Screens.Build
         private async Task<VesselCleanupSnapshot> ScanAsync(ArmadaClient client, CancellationToken token)
         {
             VesselCleanupSnapshot snapshot = new VesselCleanupSnapshot();
-            snapshot.Inventory = await client.GetVesselCleanupInventoryAsync(_VesselId, token).ConfigureAwait(false);
+            snapshot.Inventory = await client.Vessels.GetCleanupInventoryAsync(_VesselId, token).ConfigureAwait(false);
             await ReadGroupsAsync(client, snapshot, token).ConfigureAwait(false);
             return snapshot;
         }
@@ -416,7 +416,7 @@ namespace Armada.Tui.Screens.Build
             if (snapshot.Inventory == null || snapshot.Inventory.ResourceCount == 0) return;
             foreach (VesselCleanupDispositionEnum d in Groups())
             {
-                EnumerationResult<VesselCleanupResource>? page = await client.ListVesselCleanupResourcesAsync(_VesselId, PageQuery(d, 1, GroupPageSize), token).ConfigureAwait(false);
+                EnumerationResult<VesselCleanupResource>? page = await client.Vessels.ListCleanupResourcesAsync(_VesselId, PageQuery(d, 1, GroupPageSize), token).ConfigureAwait(false);
                 if (page != null) snapshot.Pages[d] = page;
             }
         }
@@ -426,7 +426,7 @@ namespace Armada.Tui.Screens.Build
             List<VesselCleanupResource> all = new List<VesselCleanupResource>();
             for (int pageNumber = 1; pageNumber <= _MaxSelectAllPages; pageNumber++)
             {
-                EnumerationResult<VesselCleanupResource>? page = await client.ListVesselCleanupResourcesAsync(_VesselId, PageQuery(VesselCleanupDispositionEnum.Safe, pageNumber, _SelectAllPageSize), token).ConfigureAwait(false);
+                EnumerationResult<VesselCleanupResource>? page = await client.Vessels.ListCleanupResourcesAsync(_VesselId, PageQuery(VesselCleanupDispositionEnum.Safe, pageNumber, _SelectAllPageSize), token).ConfigureAwait(false);
                 if (page?.Objects == null || page.Objects.Count == 0) break;
                 all.AddRange(page.Objects);
                 if (pageNumber >= page.TotalPages) break;
@@ -438,7 +438,7 @@ namespace Armada.Tui.Screens.Build
         private async Task<VesselCleanupSnapshot> RunAsync(ArmadaClient client, List<string> keys, CancellationToken token)
         {
             VesselCleanupSnapshot snapshot = new VesselCleanupSnapshot();
-            snapshot.Result = await client.RunVesselCleanupAsync(_VesselId, keys, token).ConfigureAwait(false);
+            snapshot.Result = await client.Vessels.RunCleanupAsync(_VesselId, keys, token).ConfigureAwait(false);
             snapshot.Inventory = snapshot.Result?.Inventory;
             await ReadGroupsAsync(client, snapshot, token).ConfigureAwait(false);
             return snapshot;

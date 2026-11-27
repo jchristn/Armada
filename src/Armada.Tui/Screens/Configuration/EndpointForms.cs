@@ -236,8 +236,8 @@ namespace Armada.Tui.Screens.Configuration
                 payload.Headers = extra;
                 string? key = at == ModelEndpointAuthTypeEnum.None || String.IsNullOrEmpty(apiKey.Value) ? null : apiKey.Value;
                 saved = existing != null
-                    ? await context.Client.UpdateModelEndpointAsync(existing.Id, payload, key, ct).ConfigureAwait(false)
-                    : await context.Client.CreateModelEndpointAsync(payload, key, ct).ConfigureAwait(false);
+                    ? await context.Client.ModelEndpoints.UpdateAsync(existing.Id, payload, key, ct).ConfigureAwait(false)
+                    : await context.Client.ModelEndpoints.CreateAsync(payload, key, ct).ConfigureAwait(false);
                 return null;
             }, () =>
             {
@@ -261,7 +261,7 @@ namespace Armada.Tui.Screens.Configuration
             if (context == null) throw new ArgumentNullException(nameof(context));
             if (endpoint == null) throw new ArgumentNullException(nameof(endpoint));
             EntityUi.Toast(context, NotificationSeverityEnum.Info, context.Loc.T("Validating..."));
-            EntityUi.Run<ModelEndpointProbeResult?>(context, ct => context.Client.ValidateModelEndpointAsync(endpoint.Id, ct), result =>
+            EntityUi.Run<ModelEndpointProbeResult?>(context, ct => context.Client.ModelEndpoints.ValidateAsync(endpoint.Id, ct), result =>
             {
                 if (result == null) return;
                 ShowProbe(context, endpoint, result);

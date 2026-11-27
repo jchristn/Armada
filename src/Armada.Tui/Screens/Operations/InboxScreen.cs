@@ -210,7 +210,7 @@ namespace Armada.Tui.Screens.Operations
         public void Load()
         {
             Loading = true;
-            Call((c, t) => c.GetInboxAsync(t), result =>
+            Call((c, t) => c.Inbox.GetAsync(t), result =>
             {
                 Loading = false;
                 Loaded = result ?? new List<InboxItem>();
@@ -376,8 +376,8 @@ namespace Armada.Tui.Screens.Operations
             if (!action.Available) return;
             string alertId = alert.Id;
             Func<ArmadaClient, CancellationToken, Task<ModelAlertApplyResult?>> call = action.Action == ModelAlertActionEnum.Ignore
-                ? (c, t) => c.IgnoreModelAlertAsync(alertId, null, t)
-                : (c, t) => c.ApplyModelAlertActionAsync(alertId, new ModelAlertApplyRequest { Action = action.Action }, t);
+                ? (c, t) => c.ModelAlerts.IgnoreAsync(alertId, null, t)
+                : (c, t) => c.ModelAlerts.ApplyActionAsync(alertId, new ModelAlertApplyRequest { Action = action.Action }, t);
             Call(call, result =>
             {
                 string text = result?.Record?.Result ?? "";

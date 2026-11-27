@@ -72,7 +72,7 @@ namespace Armada.Tui.Screens.Configuration
 
         private static void Edit(TuiContext context, string title, PersonaCaptainPriority? priority, Action<PersonaCaptainPriority> done)
         {
-            EntityUi.Run(context, ct => context.Client.ListModelEndpointsAsync(ct), endpoints => EditLoaded(context, title, priority, done, endpoints ?? new List<ModelEndpoint>()), "Failed to load endpoints.");
+            EntityUi.Run(context, ct => context.Client.ModelEndpoints.ListAsync(ct), endpoints => EditLoaded(context, title, priority, done, endpoints ?? new List<ModelEndpoint>()), "Failed to load endpoints.");
         }
 
         private static void EditLoaded(TuiContext context, string title, PersonaCaptainPriority? priority, Action<PersonaCaptainPriority> done, List<ModelEndpoint> endpoints)

@@ -130,7 +130,7 @@ namespace Armada.Tui.Screens.Build
             if (vesselIds != null && vesselIds.Count > 0) body.VesselIds = vesselIds.ToList();
             body.Force = true;
             Starting = true;
-            _Screen.Call((c, t) => c.EvaluateVesselHealthAsync(body, t), result =>
+            _Screen.Call((c, t) => c.VesselHealth.EvaluateAsync(body, t), result =>
             {
                 Starting = false;
                 if (result == null) return;
@@ -150,7 +150,7 @@ namespace Armada.Tui.Screens.Build
         /// </summary>
         public void Discover()
         {
-            _Screen.Call((c, t) => c.ListJobsAsync(t), jobs =>
+            _Screen.Call((c, t) => c.Jobs.ListAsync(t), jobs =>
             {
                 Job? match = (jobs?.Objects ?? new List<Job>()).Where(j => j.Name == JobName).OrderByDescending(j => j.CreatedUtc).FirstOrDefault();
                 if (match == null) return;
@@ -179,7 +179,7 @@ namespace Armada.Tui.Screens.Build
             string? id = TrackedJobId;
             if (id == null || _Polling || !_Screen.IsLive) return;
             _Polling = true;
-            _Screen.Call((c, t) => c.GetJobAsync(id, t), job =>
+            _Screen.Call((c, t) => c.Jobs.GetAsync(id, t), job =>
             {
                 _Polling = false;
                 if (job == null || TrackedJobId != id) return;

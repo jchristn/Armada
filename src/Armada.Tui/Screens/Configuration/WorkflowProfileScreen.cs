@@ -240,8 +240,8 @@ namespace Armada.Tui.Screens.Configuration
             bool create = Entity == null;
             string id = Entity?.Id ?? "";
             EntityUi.Run<WorkflowProfile?>(Context, ct => create
-                ? Context.Client.CreateWorkflowProfileAsync(payload, ct)
-                : Context.Client.UpdateWorkflowProfileAsync(id, payload, ct), saved =>
+                ? Context.Client.WorkflowProfiles.CreateAsync(payload, ct)
+                : Context.Client.WorkflowProfiles.UpdateAsync(id, payload, ct), saved =>
             {
                 _Saving = false;
                 if (saved == null) return;
@@ -266,7 +266,7 @@ namespace Armada.Tui.Screens.Configuration
             if (!Editor.View.ValidateAll()) return;
             WorkflowProfile? payload = BuildPayload();
             if (payload == null) return;
-            EntityUi.Run<WorkflowProfileValidationResult?>(Context, ct => Context.Client.ValidateWorkflowProfileAsync(payload, ct), result =>
+            EntityUi.Run<WorkflowProfileValidationResult?>(Context, ct => Context.Client.WorkflowProfiles.ValidateAsync(payload, ct), result =>
             {
                 if (result == null) return;
                 ShowValidation(result);
@@ -326,7 +326,7 @@ namespace Armada.Tui.Screens.Configuration
         {
             if (Entity == null) return;
             string profileId = Entity.Id;
-            EntityUi.Run<WorkflowProfileResolutionPreviewResult?>(Context, ct => Context.Client.PreviewWorkflowProfileForVesselAsync(vesselId, profileId, ct), result =>
+            EntityUi.Run<WorkflowProfileResolutionPreviewResult?>(Context, ct => Context.Client.WorkflowProfiles.PreviewForVesselAsync(vesselId, profileId, ct), result =>
             {
                 PreviewView.Reset(false);
                 PreviewView.Section("Resolved Commands");
@@ -356,7 +356,7 @@ namespace Armada.Tui.Screens.Configuration
         /// <inheritdoc />
         protected override Task<WorkflowProfile?> FetchAsync(CancellationToken token)
         {
-            return Context.Client.GetWorkflowProfileAsync(EntityId, token);
+            return Context.Client.WorkflowProfiles.GetAsync(EntityId, token);
         }
 
         /// <inheritdoc />
@@ -561,7 +561,7 @@ namespace Armada.Tui.Screens.Configuration
             if (p == null || !CanManage) return;
             Context.Confirm("Delete Workflow Profile", EntityUi.T(Context, "Delete \"{{name}}\"? Existing check runs remain, but future runs will not be able to resolve this profile.", "name", p.Name), () =>
             {
-                DeleteProgress.RunVoid(Context, "Deleting workflow profile", ct => Context.Client.DeleteWorkflowProfileAsync(p.Id, ct), () =>
+                DeleteProgress.RunVoid(Context, "Deleting workflow profile", ct => Context.Client.WorkflowProfiles.DeleteAsync(p.Id, ct), () =>
                 {
                     EntityUi.Toast(Context, NotificationSeverityEnum.Warning, EntityUi.T(Context, "Workflow profile \"{{name}}\" deleted.", "name", p.Name));
                     Context.Navigate("/configuration?tab=workflow-profiles");

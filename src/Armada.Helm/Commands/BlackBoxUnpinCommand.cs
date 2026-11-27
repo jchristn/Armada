@@ -27,7 +27,7 @@ namespace Armada.Helm.Commands
             {
                 foreach (string id in settings.Ids)
                 {
-                    await client.UnpinBlackBoxAsync(id, cancellationToken).ConfigureAwait(false);
+                    await client.BlackBox.UnpinAsync(id, cancellationToken).ConfigureAwait(false);
                     if (!settings.Json) AnsiConsole.MarkupLine("[green]Unpinned[/] " + Markup.Escape(id));
                 }
 

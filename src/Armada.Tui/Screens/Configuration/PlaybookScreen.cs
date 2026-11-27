@@ -94,7 +94,7 @@ namespace Armada.Tui.Screens.Configuration
         /// <inheritdoc />
         protected override Task<Playbook?> FetchAsync(CancellationToken token)
         {
-            return Context.Client.GetPlaybookAsync(EntityId, token);
+            return Context.Client.Playbooks.GetAsync(EntityId, token);
         }
 
         /// <inheritdoc />
@@ -175,7 +175,7 @@ namespace Armada.Tui.Screens.Configuration
             if (p == null || !CanManage()) return;
             Context.Confirm("Delete Playbook", EntityUi.T(Context, "Delete \"{{name}}\"? Existing mission snapshots remain immutable, but future dispatches will no longer be able to select it.", "name", p.FileName), () =>
             {
-                DeleteProgress.RunVoid(Context, "Deleting playbook", ct => Context.Client.DeletePlaybookAsync(p.Id, ct), () =>
+                DeleteProgress.RunVoid(Context, "Deleting playbook", ct => Context.Client.Playbooks.DeleteAsync(p.Id, ct), () =>
                 {
                     EntityUi.Toast(Context, NotificationSeverityEnum.Warning, EntityUi.T(Context, "Playbook \"{{name}}\" deleted.", "name", p.FileName));
                     Context.Navigate("/configuration?tab=playbooks");

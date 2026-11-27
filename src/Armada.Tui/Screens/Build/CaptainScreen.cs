@@ -131,15 +131,15 @@ namespace Armada.Tui.Screens.Build
         /// <inheritdoc />
         public override void Load()
         {
-            Call((client, token) => client.GetUsageLatestAsync(new UsageQuery { CaptainId = CaptainId }, token), result => { _UsageViews = result?.Objects ?? new List<UsageSnapshotView>(); _UsageError = null; _Usage.Invalidate(); }, null, error => { _UsageError = Tr("Usage could not be loaded."); _Usage.Invalidate(); });
+            Call((client, token) => client.Usage.GetLatestAsync(new UsageQuery { CaptainId = CaptainId }, token), result => { _UsageViews = result?.Objects ?? new List<UsageSnapshotView>(); _UsageError = null; _Usage.Invalidate(); }, null, error => { _UsageError = Tr("Usage could not be loaded."); _Usage.Invalidate(); });
             bool initial = !Loaded;
             Call(async (c, t) =>
             {
                 CaptainLoad result = new CaptainLoad();
-                result.Captain = await c.GetCaptainAsync(CaptainId, t).ConfigureAwait(false);
+                result.Captain = await c.Captains.GetAsync(CaptainId, t).ConfigureAwait(false);
                 if (result.Captain != null && !String.IsNullOrEmpty(result.Captain.ActiveMissionIds.FirstOrDefault()))
                 {
-                    try { result.CurrentMission = await c.GetMissionAsync(result.Captain.ActiveMissionIds.FirstOrDefault()!, t).ConfigureAwait(false); }
+                    try { result.CurrentMission = await c.Missions.GetAsync(result.Captain.ActiveMissionIds.FirstOrDefault()!, t).ConfigureAwait(false); }
                     catch (ArmadaApiException) { result.CurrentMission = null; }
                 }
 
@@ -147,7 +147,7 @@ namespace Armada.Tui.Screens.Build
                 {
                     ArmadaPageQuery q = new ArmadaPageQuery(1, 100);
                     q.With("captainId", CaptainId);
-                    result.Missions = (await c.ListMissionSummariesAsync(q, t).ConfigureAwait(false))?.Objects ?? new List<MissionSummary>();
+                    result.Missions = (await c.Missions.ListSummariesAsync(q, t).ConfigureAwait(false))?.Objects ?? new List<MissionSummary>();
                 }
                 catch (ArmadaApiException)
                 {
@@ -187,7 +187,7 @@ namespace Armada.Tui.Screens.Build
         {
             OpsLogModal modal = new OpsLogModal(
                 Tr("Captain Log") + ": " + (Captain?.Name ?? CaptainId),
-                (lines, token) => Context.Client.GetCaptainLogAsync(CaptainId, lines, LogReadable, token),
+                (lines, token) => Context.Client.Captains.GetLogAsync(CaptainId, lines, LogReadable, token),
                 () => false,
                 Context.Dispatcher,
                 text => Context.Clipboard.Copy(text, "Log"),
@@ -212,7 +212,7 @@ namespace Armada.Tui.Screens.Build
         private void Duplicate()
         {
             if (Captain == null) return;
-            Call((c, t) => c.CreateCaptainAsync(CaptainForm.DuplicatePayload(Captain), t), created =>
+            Call((c, t) => c.Captains.CreateAsync(CaptainForm.DuplicatePayload(Captain), t), created =>
             {
                 if (created == null) return;
                 Toast(NotificationSeverityEnum.Success, Tr("Captain \"{{name}}\" duplicated.", LocalizationArgs.Of("name", created.Name)));
@@ -224,7 +224,7 @@ namespace Armada.Tui.Screens.Build
         {
             if (Captain == null) return;
             string name = Captain.Name;
-            Call((c, t) => c.UnquarantineCaptainAsync(CaptainId, t), r =>
+            Call((c, t) => c.Captains.UnquarantineAsync(CaptainId, t), r =>
             {
                 Toast(NotificationSeverityEnum.Success, Tr("Quarantine lifted for \"{{name}}\".", LocalizationArgs.Of("name", name)));
                 Load();
@@ -237,7 +237,7 @@ namespace Armada.Tui.Screens.Build
             string name = Captain.Name;
             Confirm("Stop Captain", Tr("Stop captain \"{{name}}\"? This will halt the current mission.", LocalizationArgs.Of("name", name)), () =>
             {
-                Run((c, t) => c.StopCaptainAsync(CaptainId, t), () =>
+                Run((c, t) => c.Captains.StopAsync(CaptainId, t), () =>
                 {
                     Toast(NotificationSeverityEnum.Warning, Tr("Captain \"{{name}}\" stopped.", LocalizationArgs.Of("name", name)));
                     Load();
@@ -251,7 +251,7 @@ namespace Armada.Tui.Screens.Build
             string name = Captain.Name;
             Confirm("Recall Captain", Tr("Recall captain \"{{name}}\"? The captain will finish current work and return to idle.", LocalizationArgs.Of("name", name)), () =>
             {
-                Run((c, t) => c.RecallCaptainAsync(CaptainId, t), () =>
+                Run((c, t) => c.Captains.RecallAsync(CaptainId, t), () =>
                 {
                     Toast(NotificationSeverityEnum.Warning, Tr("Captain \"{{name}}\" recalled.", LocalizationArgs.Of("name", name)));
                     Load();
@@ -265,7 +265,7 @@ namespace Armada.Tui.Screens.Build
             string name = Captain.Name;
             Confirm("Remove Captain", Tr("Remove captain \"{{name}}\"? This cannot be undone.", LocalizationArgs.Of("name", name)), () =>
             {
-                DeleteProgress.RunVoid(Context, "Deleting captain", t => Context.Client.DeleteCaptainAsync(CaptainId, t), () =>
+                DeleteProgress.RunVoid(Context, "Deleting captain", t => Context.Client.Captains.DeleteAsync(CaptainId, t), () =>
                 {
                     Toast(NotificationSeverityEnum.Warning, Tr("Captain \"{{name}}\" removed.", LocalizationArgs.Of("name", name)));
                     Context.Navigate("/captains");
@@ -277,7 +277,7 @@ namespace Armada.Tui.Screens.Build
         {
             if (_UsageCapturing || Captain?.UsageCaptureActive != true || Context.Clock.UtcNow < _UsageNextEligible) return;
             _UsageCapturing = true;
-            Call((client, token) => client.CaptureCaptainUsageAsync(CaptainId, null, token), receipt =>
+            Call((client, token) => client.Usage.CaptureCaptainAsync(CaptainId, null, token), receipt =>
             {
                 _UsageCapturing = false;
                 _UsageNextEligible = receipt?.NextEligibleUtc ?? (receipt?.Status == "Passive" ? DateTime.MinValue : Context.Clock.UtcNow.AddSeconds(60));

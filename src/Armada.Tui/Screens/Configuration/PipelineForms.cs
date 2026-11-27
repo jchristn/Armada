@@ -83,12 +83,12 @@ namespace Armada.Tui.Screens.Configuration
                     body.UserId = existing.UserId;
                     body.IsBuiltIn = existing.IsBuiltIn;
                     body.Active = existing.Active;
-                    await context.Client.UpdatePipelineAsync(existing.Name, body, ct).ConfigureAwait(false);
+                    await context.Client.Pipelines.UpdateAsync(existing.Name, body, ct).ConfigureAwait(false);
                 }
                 else
                 {
                     body.Scope = ScopeRules.ResolveCreateScope(context.Session, scope != null ? EntityForm.EnumValue(scope, ScopeEnum.TenantWide) : (ScopeEnum?)null);
-                    await context.Client.CreatePipelineAsync(body, ct).ConfigureAwait(false);
+                    await context.Client.Pipelines.CreateAsync(body, ct).ConfigureAwait(false);
                 }
 
                 savedName = body.Name;
@@ -168,7 +168,7 @@ namespace Armada.Tui.Screens.Configuration
                     copy.Order = order++;
                     return copy;
                 }).ToList();
-                return context.Client.CreatePipelineAsync(body, ct);
+                return context.Client.Pipelines.CreateAsync(body, ct);
             }, created =>
             {
                 if (created == null) return;
@@ -208,7 +208,7 @@ namespace Armada.Tui.Screens.Configuration
                 mission.Title = String.IsNullOrWhiteSpace(title.Value) ? pipeline.Name : title.Value.Trim();
                 mission.Description = EntityUi.Blank(objective.Value);
                 request.Missions.Add(mission);
-                voyage = await context.Client.CreateVoyageAsync(request, ct).ConfigureAwait(false);
+                voyage = await context.Client.Voyages.CreateAsync(request, ct).ConfigureAwait(false);
                 return null;
             }, () =>
             {

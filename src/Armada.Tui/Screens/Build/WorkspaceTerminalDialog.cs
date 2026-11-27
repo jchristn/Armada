@@ -100,7 +100,7 @@ namespace Armada.Tui.Screens.Build
             Lines.Add(new WorkspaceTerminalLine("command", "$ " + cmd));
             _ScrollFromBottom = 0;
             Busy = true;
-            _Screen.Call((c, t) => c.ExecWorkspaceCommandAsync(_VesselId, cmd, null, t), result =>
+            _Screen.Call((c, t) => c.Workspace.ExecCommandAsync(_VesselId, cmd, null, t), result =>
             {
                 Busy = false;
                 if (result == null) return;

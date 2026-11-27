@@ -232,7 +232,7 @@ namespace Armada.Tui.Screens.Build
                 string label = body.Name;
                 if (editing != null)
                 {
-                    screen.Call((c, t) => c.UpdateVesselAsync(editing.Id, body, t), r =>
+                    screen.Call((c, t) => c.Vessels.UpdateAsync(editing.Id, body, t), r =>
                     {
                         d.Complete();
                         screen.Toast(NotificationSeverityEnum.Success, screen.Tr("Vessel \"{{name}}\" saved.", LocalizationArgs.Of("name", label)));
@@ -241,7 +241,7 @@ namespace Armada.Tui.Screens.Build
                 }
                 else
                 {
-                    screen.Call((c, t) => c.CreateVesselAsync(body, t), r =>
+                    screen.Call((c, t) => c.Vessels.CreateAsync(body, t), r =>
                     {
                         d.Complete();
                         screen.Toast(NotificationSeverityEnum.Success, screen.Tr("Vessel \"{{name}}\" created.", LocalizationArgs.Of("name", label)));

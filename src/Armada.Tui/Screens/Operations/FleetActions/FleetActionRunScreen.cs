@@ -179,7 +179,7 @@ namespace Armada.Tui.Screens.Operations
             ctx.Modals.Show(dialog, result =>
             {
                 if (!(result is bool ok && ok)) return;
-                screen.Call((c, t) => c.CancelFleetActionRunAsync(run.Id, t), updated =>
+                screen.Call((c, t) => c.FleetActions.CancelRunAsync(run.Id, t), updated =>
                 {
                     screen.Toast(NotificationSeverityEnum.Warning, screen.Tr("Run \"{{name}}\" cancelled.", LocalizationArgs.Of("name", run.ActionName)));
                     after?.Invoke();
@@ -192,7 +192,7 @@ namespace Armada.Tui.Screens.Operations
         public override void Load()
         {
             Loads++;
-            Call((c, t) => c.GetFleetActionRunAsync(RunId, t), detail =>
+            Call((c, t) => c.FleetActions.GetRunAsync(RunId, t), detail =>
             {
                 if (detail?.Run != null)
                 {
@@ -334,7 +334,7 @@ namespace Armada.Tui.Screens.Operations
             q.PageSize = query.PageSize;
             string? status = Body.Filter.Value;
             if (!String.IsNullOrEmpty(status) && Enum.TryParse(status, out FleetActionTargetStatusEnum parsed)) q.Status = parsed;
-            EnumerationResult<FleetActionRunTargetSummary>? result = await Context.Client.EnumerateFleetActionRunTargetsAsync(RunId, q, token).ConfigureAwait(false);
+            EnumerationResult<FleetActionRunTargetSummary>? result = await Context.Client.FleetActions.EnumerateRunTargetsAsync(RunId, q, token).ConfigureAwait(false);
             List<FleetActionRunTargetSummary> rows = result?.Objects ?? new List<FleetActionRunTargetSummary>();
             bool filtered = !String.IsNullOrEmpty(status);
             Post(() => Body.Grid.EmptyText = filtered ? "No targets match this status" : "This run has no targets");
@@ -356,7 +356,7 @@ namespace Armada.Tui.Screens.Operations
         {
             string? id = _DrawerTargetId;
             if (id == null) return;
-            Call((c, t) => c.GetFleetActionRunTargetAsync(RunId, id, t), target =>
+            Call((c, t) => c.FleetActions.GetRunTargetAsync(RunId, id, t), target =>
             {
                 if (_DrawerTargetId != id) return;
                 TargetView.Target = target;
@@ -412,7 +412,7 @@ namespace Armada.Tui.Screens.Operations
             for (int pageNumber = 1; ; pageNumber++)
             {
                 FleetActionRunTargetEnumerateQuery query = new FleetActionRunTargetEnumerateQuery { PageNumber = pageNumber, PageSize = 500, Status = status };
-                EnumerationResult<FleetActionRunTargetSummary>? page = await client.EnumerateFleetActionRunTargetsAsync(runId, query, token).ConfigureAwait(false);
+                EnumerationResult<FleetActionRunTargetSummary>? page = await client.FleetActions.EnumerateRunTargetsAsync(runId, query, token).ConfigureAwait(false);
                 if (page == null || page.Objects.Count == 0) break;
                 all.AddRange(page.Objects);
                 if (pageNumber >= page.TotalPages) break;
@@ -441,7 +441,7 @@ namespace Armada.Tui.Screens.Operations
                 for (int pageNumber = 1; pageNumber <= pages; pageNumber++)
                 {
                     FleetActionRunTargetEnumerateQuery query = new FleetActionRunTargetEnumerateQuery { PageNumber = pageNumber, PageSize = ReportPageSize };
-                    EnumerationResult<FleetActionRunTargetSummary>? page = await c.EnumerateFleetActionRunTargetsAsync(run.Id, query, t).ConfigureAwait(false);
+                    EnumerationResult<FleetActionRunTargetSummary>? page = await c.FleetActions.EnumerateRunTargetsAsync(run.Id, query, t).ConfigureAwait(false);
                     if (page == null || page.Objects.Count == 0) break;
                     targets.AddRange(page.Objects);
                     if (pageNumber >= page.TotalPages || targets.Count >= total) break;
@@ -451,7 +451,7 @@ namespace Armada.Tui.Screens.Operations
                 foreach (FleetActionRunTargetSummary summary in targets)
                 {
                     if (summary.OutputLength <= 0) continue;
-                    FleetActionRunTarget? target = await c.GetFleetActionRunTargetAsync(run.Id, summary.Id, t).ConfigureAwait(false);
+                    FleetActionRunTarget? target = await c.FleetActions.GetRunTargetAsync(run.Id, summary.Id, t).ConfigureAwait(false);
                     if (target != null && !String.IsNullOrWhiteSpace(target.OutputText)) reports[summary.Id] = target.OutputText!;
                 }
 
@@ -503,7 +503,7 @@ namespace Armada.Tui.Screens.Operations
                 {
                     try
                     {
-                        FleetAction? action = await c.GetFleetActionAsync(run.ActionId!, t).ConfigureAwait(false);
+                        FleetAction? action = await c.FleetActions.GetAsync(run.ActionId!, t).ConfigureAwait(false);
                         if (action != null && action.Active) actionId = action.Id;
                     }
                     catch (Armada.Client.ArmadaApiException)

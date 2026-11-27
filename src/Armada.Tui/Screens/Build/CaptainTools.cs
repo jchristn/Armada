@@ -40,7 +40,7 @@ namespace Armada.Tui.Screens.Build
             modal.CopyRequested += (s, e) => screen.Context.Clipboard.Copy(view.PlainText, "Tools");
             screen.Context.Modals.Show(modal);
             // One bounded page of the largest size; the document says how many tools exist when there are more.
-            screen.Call((c, t) => c.EnumerateCaptainToolsAsync(captainId, 1, 1000, null, true, t), r =>
+            screen.Call((c, t) => c.Captains.EnumerateToolsAsync(captainId, 1, 1000, null, true, t), r =>
             {
                 loading = false;
                 data = r;

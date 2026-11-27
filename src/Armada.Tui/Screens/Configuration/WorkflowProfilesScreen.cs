@@ -134,7 +134,7 @@ namespace Armada.Tui.Screens.Configuration
             q.With("scope", EntityUi.Blank(Filter("scope")));
             string status = Filter("status");
             q.With("active", status == "active" ? "true" : status == "inactive" ? "false" : null);
-            EnumerationResult<WorkflowProfile>? result = await Context.Client.ListWorkflowProfilesAsync(q, token).ConfigureAwait(false);
+            EnumerationResult<WorkflowProfile>? result = await Context.Client.WorkflowProfiles.ListAsync(q, token).ConfigureAwait(false);
             return PageOf(result);
         }
 
@@ -210,7 +210,7 @@ namespace Armada.Tui.Screens.Configuration
         /// <inheritdoc />
         protected override Task DeleteAsync(WorkflowProfile row, CancellationToken token)
         {
-            return Context.Client.DeleteWorkflowProfileAsync(row.Id, token);
+            return Context.Client.WorkflowProfiles.DeleteAsync(row.Id, token);
         }
 
         /// <inheritdoc />

@@ -72,7 +72,7 @@ namespace Armada.Tui.Screens.Configuration
         /// <inheritdoc />
         protected override Task<Pipeline?> FetchAsync(CancellationToken token)
         {
-            return Context.Client.GetPipelineAsync(EntityId, token);
+            return Context.Client.Pipelines.GetAsync(EntityId, token);
         }
 
         /// <inheritdoc />
@@ -171,7 +171,7 @@ namespace Armada.Tui.Screens.Configuration
 
             Context.Confirm("Delete Pipeline", EntityUi.T(Context, "Delete pipeline \"{{name}}\"? This cannot be undone.", "name", p.Name), () =>
             {
-                DeleteProgress.RunVoid(Context, "Deleting pipeline", ct => Context.Client.DeletePipelineAsync(p.Name, ct), () =>
+                DeleteProgress.RunVoid(Context, "Deleting pipeline", ct => Context.Client.Pipelines.DeleteAsync(p.Name, ct), () =>
                 {
                     EntityUi.Toast(Context, NotificationSeverityEnum.Warning, EntityUi.T(Context, "Pipeline \"{{name}}\" deleted.", "name", p.Name));
                     Context.Navigate("/configuration?tab=pipelines");

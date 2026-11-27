@@ -38,7 +38,7 @@ namespace Armada.Helm.Commands
                 request.Description = brief;
                 request.DependsOnMissionId = String.IsNullOrWhiteSpace(settings.DependsOn) ? null : settings.DependsOn.Trim();
                 request.ExcludeMissionId = String.IsNullOrWhiteSpace(settings.ExcludeMission) ? null : settings.ExcludeMission.Trim();
-                MissionOverlapPreview? preview = await client.PreviewMissionOverlapAsync(vessel.Id, request, cancellationToken).ConfigureAwait(false);
+                MissionOverlapPreview? preview = await client.BlackBoxInsights.PreviewMissionOverlapAsync(vessel.Id, request, cancellationToken).ConfigureAwait(false);
                 if (settings.Json)
                 {
                     WritePureJson(preview);

@@ -479,7 +479,7 @@ namespace Test.Shared.Suites.Services
 
                     using (ArmadaClient anonymous = new ArmadaClient(new ArmadaClientOptions("http://127.0.0.1:" + harness.Port)))
                     {
-                        AssertNull(await anonymous.GetProxySessionContextAsync().ConfigureAwait(false), "no proxy session without the option");
+                        AssertNull(await anonymous.Auth.GetProxySessionContextAsync().ConfigureAwait(false), "no proxy session without the option");
                     }
 
                     ArmadaClientOptions options = new ArmadaClientOptions("http://127.0.0.1:" + harness.Port)
@@ -489,7 +489,7 @@ namespace Test.Shared.Suites.Services
                     };
                     using (ArmadaClient client = new ArmadaClient(options))
                     {
-                        AssertNotNull(await client.GetProxySessionContextAsync().ConfigureAwait(false), "ProxySessionToken authenticates to the proxy");
+                        AssertNotNull(await client.Auth.GetProxySessionContextAsync().ConfigureAwait(false), "ProxySessionToken authenticates to the proxy");
                     }
                 }
                 finally

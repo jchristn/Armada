@@ -30,27 +30,27 @@ namespace Test.Shared.Suites.Client
 
             cases.Add(Case("identity", "Tenants, users, and credentials enumerate one page", async (c, fx) =>
             {
-                AssertPage(await c.EnumerateTenantsAsync(new EnumerationQuery { PageSize = 2 }).ConfigureAwait(false), 2, "tenants");
-                AssertPage(await c.EnumerateUsersAsync(new EnumerationQuery { PageSize = 2 }).ConfigureAwait(false), 2, "users");
-                AssertPage(await c.EnumerateCredentialsAsync(new EnumerationQuery { PageSize = 2 }).ConfigureAwait(false), 2, "credentials");
+                AssertPage(await c.Tenants.EnumerateAsync(new EnumerationQuery { PageSize = 2 }).ConfigureAwait(false), 2, "tenants");
+                AssertPage(await c.Users.EnumerateAsync(new EnumerationQuery { PageSize = 2 }).ConfigureAwait(false), 2, "users");
+                AssertPage(await c.Credentials.EnumerateAsync(new EnumerationQuery { PageSize = 2 }).ConfigureAwait(false), 2, "credentials");
             }));
 
             cases.Add(Case("operations", "Jobs, request history, token usage, CLI permission requests, and Harbor jobs enumerate one page", async (c, fx) =>
             {
-                AssertPage(await c.EnumerateJobsAsync(new JobQuery { PageSize = 3 }).ConfigureAwait(false), 3, "jobs");
-                AssertPage(await c.EnumerateRequestHistoryAsync(new RequestHistoryQuery { PageSize = 3 }).ConfigureAwait(false), 3, "request history");
-                AssertPage(await c.EnumerateTokenUsageAsync(new TokenUsageQuery { PageSize = 3 }).ConfigureAwait(false), 3, "token usage");
-                AssertPage(await c.ListCliPermissionRequestsAsync(new CliPermissionRequestEnumerateRequest { PageSize = 3, Status = "Pending" }).ConfigureAwait(false), 3, "cli permission requests");
-                await AssertThrowsAsync<ArmadaApiException>(() => c.EnumerateHarborJobsAsync("hbr_missing", false, new EnumerationQuery { PageSize = 3 }), "unknown harbor").ConfigureAwait(false);
+                AssertPage(await c.Jobs.EnumerateAsync(new JobQuery { PageSize = 3 }).ConfigureAwait(false), 3, "jobs");
+                AssertPage(await c.RequestHistory.EnumerateAsync(new RequestHistoryQuery { PageSize = 3 }).ConfigureAwait(false), 3, "request history");
+                AssertPage(await c.TokenUsage.EnumerateAsync(new TokenUsageQuery { PageSize = 3 }).ConfigureAwait(false), 3, "token usage");
+                AssertPage(await c.CliPermissions.ListRequestsAsync(new CliPermissionRequestEnumerateRequest { PageSize = 3, Status = "Pending" }).ConfigureAwait(false), 3, "cli permission requests");
+                await AssertThrowsAsync<ArmadaApiException>(() => c.Harbors.EnumerateJobsAsync("hbr_missing", false, new EnumerationQuery { PageSize = 3 }), "unknown harbor").ConfigureAwait(false);
             }));
 
             cases.Add(Case("evaluation", "Stage outcomes, failure-cause rules, model probe runs, battery packs, and handoff artifacts enumerate one page", async (c, fx) =>
             {
-                AssertPage(await c.EnumerateStageOutcomesAsync(new StageOutcomeQuery { PageSize = 4 }).ConfigureAwait(false), 4, "stage outcomes");
-                AssertPage(await c.EnumerateFailureCauseRulesAsync(new EnumerationQuery { PageSize = 4 }).ConfigureAwait(false), 4, "failure-cause rules");
-                AssertPage(await c.EnumerateModelProbeRunsAsync(new ModelProbeRunQuery { PageSize = 4 }).ConfigureAwait(false), 4, "model probe runs");
-                AssertPage(await c.EnumerateBatteryPacksAsync(new EnumerationQuery { PageSize = 4 }).ConfigureAwait(false), 4, "battery packs");
-                await AssertThrowsAsync<ArmadaApiException>(() => c.EnumerateMissionHandoffArtifactsAsync("msn_missing", new EnumerationQuery { PageSize = 4 }), "unknown mission").ConfigureAwait(false);
+                AssertPage(await c.StageOutcomes.EnumerateAsync(new StageOutcomeQuery { PageSize = 4 }).ConfigureAwait(false), 4, "stage outcomes");
+                AssertPage(await c.StageOutcomes.EnumerateFailureCauseRulesAsync(new EnumerationQuery { PageSize = 4 }).ConfigureAwait(false), 4, "failure-cause rules");
+                AssertPage(await c.ModelProbes.EnumerateRunsAsync(new ModelProbeRunQuery { PageSize = 4 }).ConfigureAwait(false), 4, "model probe runs");
+                AssertPage(await c.Battery.EnumeratePacksAsync(new EnumerationQuery { PageSize = 4 }).ConfigureAwait(false), 4, "battery packs");
+                await AssertThrowsAsync<ArmadaApiException>(() => c.HandoffArtifacts.EnumerateForMissionAsync("msn_missing", new EnumerationQuery { PageSize = 4 }), "unknown mission").ConfigureAwait(false);
             }));
 
             return new TestSuiteDescriptor(Suite, "Armada.Client enumerate routes", cases);

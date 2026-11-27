@@ -1025,7 +1025,7 @@ namespace Armada.Tui.Screens.Ask
             {
                 try
                 {
-                    LogResult? log = await client.GetMissionLogAsync(missionId).ConfigureAwait(false);
+                    LogResult? log = await client.Missions.GetLogAsync(missionId).ConfigureAwait(false);
                     _Context.Dispatcher.Post(() =>
                     {
                         LogViewer viewer = new LogViewer();
@@ -1047,7 +1047,7 @@ namespace Armada.Tui.Screens.Ask
             {
                 try
                 {
-                    DiffResult? diff = await client.GetMissionDiffAsync(missionId).ConfigureAwait(false);
+                    DiffResult? diff = await client.Missions.GetDiffAsync(missionId).ConfigureAwait(false);
                     _Context.Dispatcher.Post(() =>
                     {
                         DiffViewer viewer = new DiffViewer(diff?.Diff ?? "");

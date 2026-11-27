@@ -182,7 +182,7 @@ namespace Armada.Tui.Screens.Delivery
             q.With("status", EntityUi.Blank(Filter("status")));
             q.With("source", EntityUi.Blank(Filter("source")));
             q.With("type", EntityUi.Blank(Filter("type")));
-            EnumerationResult<CheckRun>? result = await Context.Client.ListCheckRunsAsync(q, token).ConfigureAwait(false);
+            EnumerationResult<CheckRun>? result = await Context.Client.CheckRuns.ListAsync(q, token).ConfigureAwait(false);
             return PageOf(result);
         }
 
@@ -246,7 +246,7 @@ namespace Armada.Tui.Screens.Delivery
         {
             try
             {
-                return await ArmadaPaging.ReadAllAsync<CheckRun>((p, ct) => Context.Client.ListCheckRunsAsync(new ArmadaPageQuery(p, EntityLookups.PageSize), ct), 20, token).ConfigureAwait(false);
+                return await ArmadaPaging.ReadAllAsync<CheckRun>((p, ct) => Context.Client.CheckRuns.ListAsync(new ArmadaPageQuery(p, EntityLookups.PageSize), ct), 20, token).ConfigureAwait(false);
             }
             catch (ArmadaApiException)
             {
