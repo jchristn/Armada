@@ -16,7 +16,7 @@ namespace Test.Shared.Suites.Services
     /// RELIABILITY_SIMPLICITY_PLAN.md RS-11.4: source scans that keep the Phase 3 to 5 simplifications in place. Nothing
     /// reads control markers back from a mission description or finds Architect slices by title (RS-3.2 to RS-3.4),
     /// Armada.Core does not decide by matching exception or error message text (RS-5.11), and only the Admiral
-    /// dispatcher runs a dispatch pass (RS-4.5). Direct mission status writes are scanned by
+    /// dispatcher runs a dispatch pass (RS-4.5), and no type is a partial class (RS-11.1). Direct mission status writes are scanned by
     /// <c>Services.MissionTransitions</c> <c>no_direct_status_writes</c> (RS-3.6). The scans match patterns across whole
     /// projects and allow owners by the class a file declares, so moving code between files does not break them.
     /// </summary>
@@ -104,6 +104,25 @@ namespace Test.Shared.Suites.Services
                 return Task.CompletedTask;
             }));
 
+            cases.Add(Case("no_partial_classes", "No type is split across partial files, except the Avalonia windows the XAML compiler generates the other half of", () =>
+            {
+                List<string> offenders = new List<string>();
+                foreach (SourceFile file in Sources(_AllCSharpProjects))
+                {
+                    bool xamlOwner = file.Relative.StartsWith("Armada.Harbor/", StringComparison.Ordinal)
+                        && (file.Declares("App") || file.Declares("MainWindow") || file.Declares("AboutWindow"));
+                    if (xamlOwner) continue;
+                    for (int i = 0; i < file.Code.Length; i++)
+                        if (_PartialDeclaration.IsMatch(file.Code[i])) offenders.Add(file.Location(i));
+                }
+
+                AssertEqual(0, offenders.Count, "partial type declarations (split the type into collaborating classes, one per file):\n" + String.Join("\n", offenders));
+                AssertTrue(_PartialDeclaration.IsMatch("    public sealed partial class ArmadaClient"), "the scan recognizes a partial class");
+                AssertTrue(_PartialDeclaration.IsMatch("    internal partial record Foo"), "the scan recognizes a partial record");
+                AssertFalse(_PartialDeclaration.IsMatch("            // the partial class as it was"), "a comment is not a declaration");
+                return Task.CompletedTask;
+            }));
+
             return new TestSuiteDescriptor(
                 suiteId: "Services.SourceGuards",
                 displayName: "Source Guards",
@@ -115,6 +134,15 @@ namespace Test.Shared.Suites.Services
         #region Private-Members
 
         private static readonly string[] _ProductProjects = new[] { "Armada.Core", "Armada.Server", "Armada.Runtimes" };
+
+        private static readonly string[] _AllCSharpProjects = new[]
+        {
+            "Armada.Benchmark", "Armada.Client", "Armada.Core", "Armada.Gate", "Armada.Harbor", "Armada.Helm", "Armada.LoadGenerator",
+            "Armada.PerfSeed", "Armada.Proxy", "Armada.Publisher", "Armada.Runtimes", "Armada.Server", "Armada.Tui",
+            "Test.Automated", "Test.Nunit", "Test.Shared", "Test.Smoke", "Test.Xunit"
+        };
+
+        private static readonly Regex _PartialDeclaration = new Regex(@"^\s*((public|internal|private|protected|sealed|static|abstract|readonly|unsafe|file)\s+)*partial\s+(class|record|struct|interface)\s+\w+", RegexOptions.Compiled);
 
         private static readonly Regex _LegacyMarker = new Regex(@"## Escalated to|ARMADA:ARCHITECT-HANDOFF|armada:fanout-complete|\bLegacy(EscalatedHeading|ArchitectHandoffMarker|FanOutCompleteMarker)\b", RegexOptions.Compiled | RegexOptions.IgnoreCase);
         private static readonly Regex _DescriptionMatch = new Regex(@"\b[dD]escription\w*\??\.(Contains|IndexOf|LastIndexOf|StartsWith|EndsWith)\(|Regex\.\w+\([^;]*[dD]escription", RegexOptions.Compiled);
