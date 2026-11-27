@@ -63,8 +63,28 @@ Check these before judging quality. A model that fails one should not run a pers
 | Stops cleanly | Every persona | No iteration-limit hits and no runaway output on a small task |
 
 Armada's runtimes differ here. Claude Code, Codex, Gemini, and Cursor are vendor harnesses with their own tool loop
-tuned to their own models. ApiEndpoint, Mux, OpenCode, and pi drive a model you choose through a generic tool loop, so
-tool-calling reliability is the model's responsibility. Most tool-use failures seen so far were local models on Mux.
+tuned to their own models. ApiEndpoint, Mux, OpenCode, and pi drive a model you choose through a generic tool loop.
+Until 1.4.0 that made tool-calling reliability entirely the model's problem, and most tool-use failures seen were local
+models on Mux.
+
+Since 1.5.0 the ApiEndpoint runtime absorbs the slips an open model makes most often, so a model that is good at the
+work but sloppy at the format still finishes:
+
+| Slip | What Armada does |
+|---|---|
+| A tool call written as text (`<tool_call>` JSON, `<function=name>` tags, a fenced JSON call) | Runs it as a real call when the tool is permitted, never from a failed or length-cut reply, and logs a `[recovery]` diagnostic |
+| A malformed tool call the server rejects, or Ollama's "token repeat limit reached" | Adds a correcting turn (the valid tool names and an argument example, or "do not repeat yourself") and raises the temperature by 0.2, at most twice in a row |
+| A call to a tool that does not exist | Returns `unknown_tool` with the list of available tools |
+| The same tool call over and over | Adds a corrective note from the `repeatedToolCallLimit`-th identical call (default 3) and ends the run as degenerate output at twice the limit |
+| Reasoning leaking into the reply (a lone closing think tag, an unclosed think block) | Strips it from the visible text, the final message, and the history sent back |
+
+What still belongs to the model is everything Armada cannot decide without guessing: picking the right tool, reading
+its result correctly, making the right edit, and stopping when the work is done. A model that keeps making the same
+malformed call after two corrections, or loops on the same read, fails the mission, and that failure now counts
+toward escalation (two unparsable tool calls in a row move the stage up the persona's escalation ladder) instead of
+burning resumes. The hard requirement above still holds: run one small mission first and read the log. The
+corrections show up there as `[recovery]` lines, and a model that needs one on every turn will be slow and expensive
+even when it finishes.
 
 ## Persona by persona
 
@@ -301,9 +321,15 @@ Encode what you learned in each persona's captain priorities ([CAPTAIN_ROUTING.m
   choice falls through to the next entry; with `WaitForFirstPriority`, missions wait for it.
 - **Keep the Judge on a different family than the Worker.** List the Judge's priorities so it never lands on the
   Worker's model.
-- **Do not trust tier inference for quality.** A captain's effective tier is inferred from the model name (size and
-  family keywords) unless you set it. It is a cost heuristic, not a measurement. After evaluating a model, set the
-  captain's `tier` explicitly so `minimumTier` routes on what you measured.
+- **Do not trust tier inference for quality.** A captain's effective tier comes from the captain's own `tier`, then
+  the model profile's administrator-set tier (`tiering.tier`), then the model name (size and family keywords). The name
+  is a cost heuristic, not a measurement. After evaluating a model, set the tier on its model profile so every captain
+  on that model routes on what you measured. With `RoutingData.SuggestTiers` on, Armada suggests a profile tier from
+  outcome data as a TierSuggestion alert in Needs You; it never applies one on its own.
+- **Let outcome data order equal captains.** With `RoutingData.RankByOutcomes` (on by default), captains of one tier
+  whose model has at least `MinimumSamples` results for the persona (default 20, weighted with a 14-day half-life) go
+  first by their record. Below that sample size nothing changes, so a new model is not punished for having no
+  history.
 - **Pin by model or endpoint when it matters.** A priority entry can match an exact model or a specific managed
   inference endpoint, so a persona can prefer one evaluated model rather than any captain on a runtime.
 - **Revisit after upgrades.** A new model version, a new runtime version, or a change to the vessel's build can change

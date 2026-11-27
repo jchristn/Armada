@@ -92,6 +92,7 @@ Key design decisions:
 | `PriorityAvailability` | enum | FallThrough (default) or WaitForFirstPriority |
 | `PriorityExhaustion` | enum | Wait (default) or UseEligibleCaptain |
 | `DefaultCaptainId` | string? | Optional preferred captain for missions of this persona (see [CAPTAIN_ROUTING.md](CAPTAIN_ROUTING.md)) |
+| `EscalationLadder` | ordered matchers | Captain classes a stage escalates through when its captain cannot finish, lowest rung first, with the same fields as `CaptainPriorities`. Empty means escalate only to a strictly higher tier. See [CAPTAIN_ROUTING.md](CAPTAIN_ROUTING.md#escalation-ladder) |
 
 **Source:** `src/Armada.Core/Models/Persona.cs`
 
@@ -287,7 +288,7 @@ if (!String.IsNullOrEmpty(mission.DependsOnMissionId))
 
 A dependency waiting in `Review` (a review gate) is neither `Complete` nor `WorkProduced`, so the next stage waits until the review is approved. This runs on every assignment attempt (including health check retries), so dependent missions are automatically picked up once their dependency completes.
 
-**Source:** `src/Armada.Core/Services/MissionService.cs`, method `TryAssignAsync`
+**Source:** `src/Armada.Core/Services/MissionLauncher.cs`, method `TryAssignAsync`; the gates run in `MissionAdmissionPipeline.cs`
 
 ### Captain Selection
 
@@ -310,12 +311,14 @@ A dependency waiting in `Review` (a review gate) is neither `Complete` nor `Work
 ```
 
 Since 1.5.0 a captain whose served context cannot hold the prompt is never eligible, a Judge follows the voyage's
-Judge strength rule, and captains of one tier can be ranked by their persona results. See
-[CAPTAIN_ROUTING.md](CAPTAIN_ROUTING.md#capability-aware-routing-150).
+Judge strength rule, and captains of one tier are ranked by their persona results once a model has enough of them.
+See [CAPTAIN_ROUTING.md](CAPTAIN_ROUTING.md#capability-aware-routing-150). When a mission stays Pending, the first gate
+that refused it is recorded as one typed blocker; the gates and their order are in
+[CAPTAIN_ROUTING.md](CAPTAIN_ROUTING.md#admission-order-and-typed-blockers).
 
 The preferred captain comes from the dispatch payload, the voyage's per-persona override, or the persona's `DefaultCaptainId`. See [CAPTAIN_ROUTING.md](CAPTAIN_ROUTING.md) and [SCHEDULING.md](SCHEDULING.md#why-a-mission-is-waiting).
 
-**Source:** `src/Armada.Core/Services/MissionService.cs`, method `FindAvailableCaptainAsync`
+**Source:** `src/Armada.Core/Services/MissionCaptainRouter.cs` (eligibility, tier, context fit, Judge strength and ranking)
 
 ---
 
@@ -438,7 +441,7 @@ Branch: armada/captain-1/msn_abc123
 ```
 ```
 
-**Source:** `src/Armada.Core/Services/MissionService.cs`, method `TryHandoffToNextStageAsync`
+**Source:** `src/Armada.Core/Services/MissionHandoffService.cs`, method `TryHandoffToNextStageAsync`
 
 ---
 
@@ -547,7 +550,7 @@ Files: src/Middleware/CacheMiddleware.cs, src/Startup.cs
 
 `ParseArchitectOutput` first looks for an `armada-plan` block in the architect mission's `AgentOutput`. Without one, it searches `AgentOutput`, then `DiffSnapshot`, then `Description` for `[ARMADA:MISSION]` markers (then numbered summary lines). Marker blocks split on the marker; the first line is the title and the remaining lines are the description.
 
-**Source:** `src/Armada.Core/Services/MissionService.cs`, method `ParseArchitectOutput`
+**Source:** `src/Armada.Core/Services/ArchitectFanOutService.cs`, method `ParseArchitectOutput`
 
 ### Mission Fan-Out
 
@@ -579,7 +582,7 @@ Result for an Architect that produces 2 mission definitions in a FullPipeline:
 
 If the Architect produces no valid mission definitions, the Architect mission is marked `Failed` (failure kind `InvalidOutput`, reason "Architect produced no [ARMADA:MISSION] markers in output" or "...no valid [ARMADA:MISSION] definitions...") rather than handing its raw output to the Worker.
 
-**Source:** `src/Armada.Core/Services/MissionService.cs`, within `TryHandoffToNextStageAsync`
+**Source:** `src/Armada.Core/Services/ArchitectFanOutService.cs`, called from `MissionHandoffService.TryHandoffToNextStageAsync`
 
 ---
 
@@ -624,7 +627,7 @@ Mission prompts use the template named by the persona's `PromptTemplateName`, so
 
 All built-in templates (27 in 1.0.0) are seeded into the database on startup via `PromptTemplateService.SeedDefaultsAsync()`. Users can edit them via dashboard, MCP, or REST without touching code.
 
-**Source:** `src/Armada.Core/Services/MissionService.cs`, `src/Armada.Core/Services/PromptTemplateService.cs`
+**Source:** `src/Armada.Core/Services/MissionInstructionWriter.cs`, `src/Armada.Core/Services/PromptTemplateService.cs`
 
 ---
 
@@ -872,7 +875,13 @@ Assign captains to specific roles:
 | `src/Armada.Core/Models/Persona.cs` | Persona model |
 | `src/Armada.Core/Models/PromptTemplate.cs` | Template model |
 | `src/Armada.Core/Services/AdmiralService.cs` | Dispatch + pipeline resolution |
-| `src/Armada.Core/Services/MissionService.cs` | Assignment, handoff, architect parsing, captain routing |
+| `src/Armada.Core/Services/MissionService.cs` | `IMissionService` facade; forwards to the services below |
+| `src/Armada.Core/Services/MissionLauncher.cs` | Claim, capacity, provisioning and launch |
+| `src/Armada.Core/Services/MissionAdmissionPipeline.cs` | Admission gates and the typed assignment blocker |
+| `src/Armada.Core/Services/MissionCaptainRouter.cs` | Captain routing: priorities, tier, context fit, Judge strength, ranking |
+| `src/Armada.Core/Services/MissionHandoffService.cs` | Stage handoff and dependent stages |
+| `src/Armada.Core/Services/ArchitectFanOutService.cs` | Architect plan parsing and fan-out |
+| `src/Armada.Core/Services/MissionEscalationService.cs` | Escalation choice along the persona's ladder |
 | `src/Armada.Core/Services/PromptTemplateService.cs` | Template resolution + 27 embedded defaults |
 | `src/Armada.Core/Services/MissionPromptBuilder.cs` | Persona template naming and prompt assembly |
 | `src/Armada.Core/Services/PersonaSeedService.cs` | Startup seeding of personas + pipelines |

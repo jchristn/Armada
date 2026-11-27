@@ -24,6 +24,14 @@ Personas can define `captainPriorities`, an ordered list of runtime/model/endpoi
 
 A nonempty hierarchy replaces the persona default captain; explicit dispatch/voyage captain choices retain precedence. Routing is evaluated for every stage and Architect-generated mission, without binding a persona role to a provider. The hierarchy selects configured captains and does not change their model or endpoint. See [CAPTAIN_ROUTING.md](CAPTAIN_ROUTING.md) for matching, precedence, configuration, and examples.
 
+Current: since 1.5.0 a persona also has an `EscalationLadder`, an ordered list of captain classes with the same
+matcher fields, stored as rows in `persona_escalation_rungs` (migration 136). It decides where a stage goes when its
+captain cannot finish; with an empty ladder, escalation goes only to a strictly higher tier. Pipelines gained a
+`judgeStrength` rule (`Off`, `Wait`, `ProceedAndFlag`) that holds the Judge to the strength of the work it reviews.
+Routing and the mission prompt now live in separate services (`MissionCaptainRouter`, `MissionInstructionWriter`)
+behind the `MissionService` facade, so method names in the phases below point at code that has since moved. See
+[CAPTAIN_ROUTING.md](CAPTAIN_ROUTING.md#escalation-ladder) and [PERSONAS_GUIDE.md](PERSONAS_GUIDE.md#escalation-ladders).
+
 
 ## Table of Contents
 

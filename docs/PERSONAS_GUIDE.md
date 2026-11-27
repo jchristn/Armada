@@ -14,6 +14,25 @@ Personas can define `captainPriorities`, an ordered list of runtime/model/endpoi
 A nonempty hierarchy replaces the persona default captain; explicit dispatch/voyage captain choices retain precedence. Routing is evaluated for every stage and Architect-generated mission, without binding a persona role to a provider. The hierarchy selects configured captains and does not change their model or endpoint. See [CAPTAIN_ROUTING.md](CAPTAIN_ROUTING.md) for matching, precedence, configuration, and examples.
 
 
+### Escalation ladders
+
+Captain priorities decide who starts a stage. A persona's escalation ladder decides who takes over when that captain
+cannot finish. The ladder is an ordered list of captain classes, lowest rung first, built from the same fields as the
+priorities (runtime, model, endpoint, minimum tier). A typical Worker ladder for a mixed pipeline is Qwen3.8 on an API
+endpoint, then GPT-6.1 on Codex, then Opus on Claude Code: the cheap model does the work when it can, and the
+mission climbs one rung at a time when it cannot.
+
+A stage escalates when its resumes are spent, when an `Unclassified` exit has used its one resume, after two
+unparsable tool calls in a row or two iteration-limit stops in a row, after repeated no-op completions, or when Judge
+rejections outlast the rework budget. The work stays on the same branch and the new captain is told how the last
+attempt failed. Escalation stops after `MaxEscalations` hops (default 2) or at the top rung. A persona without a ladder
+escalates only to a captain of a strictly higher tier. Product Manager, Architect, Judge and Recorder stages never
+escalate, and neither does a mission pinned to a strict captain assignment.
+
+Edit the ladder in the persona form under **Escalation ladder**, with the same add, move and remove controls as the
+priorities. The TUI and the mobile app edit it too (mobile shows it read-only to non-admins). Details are in
+[CAPTAIN_ROUTING.md](CAPTAIN_ROUTING.md#escalation-ladder).
+
 ### Editing priorities in the dashboard
 
 Open a persona and choose **Actions > Edit**. On desktop, persona settings and captain priorities appear side by side; the form stacks on smaller screens. Save and Cancel stay visible while the form scrolls.
@@ -141,6 +160,14 @@ Reviews completed work through a bounded three-lens contract.
   structured verdict blocks landing. A PASS must fill all three lens sections with real reasoning; a
   shallow or verdict-only PASS is rejected and the mission fails terminally rather
   than silently re-running.
+- **Typed verdicts:** A Judge can call `armada_submit_verdict` with its verdict and
+  structured findings (file, line, severity, scenario, required fix). The tool checks
+  the submission against the same rules and returns any errors in the same call, and
+  a stored submission decides the verdict over any marker line. The text verdict
+  stays the fallback.
+- **Strength:** A pipeline's Judge strength rule can require the Judge to be at
+  least as strong as the captains whose work it reviews. See
+  [Judge strength](#judge-strength).
 - **Prompt template:** `persona.judge`
 - **When to use:** Quality gate after Worker and/or Test Engineer stages.
 
@@ -198,6 +225,21 @@ previous one.
 | **Tested** | Worker -> Test Engineer -> Judge | Work is implemented, tests are written, then everything is reviewed. |
 | **FullPipeline** | Product Manager -> Architect -> Worker -> Usability Engineer -> Test Engineer -> Linter -> Judge -> Recorder | Full lifecycle: frame, plan, implement, refine, test, lint, review, and record durable memory. |
 | **Recorded** | Worker -> Recorder | Do the work, then distill durable memories from it. |
+
+### Judge strength
+
+A cheap Judge passing a frontier model's work is not much of a review. Each pipeline has a `judgeStrength` rule that
+the voyages it creates copy at creation:
+
+| Value | What happens |
+|---|---|
+| `Off` | Any eligible captain judges. Pipelines and voyages stored before 1.5.0 read as Off. |
+| `Wait` | A Judge whose tier is below the highest tier of the captains that ran the reviewed stages is not eligible, so the review waits for a strong enough captain (`judge_strength`). New pipelines default to this. |
+| `ProceedAndFlag` | A strong enough Judge is preferred; when none is free the best available one runs and the mission gets a `mission.judge_strength_exception` event. |
+
+With the rule on, a Judge from a different model family than the authors is preferred, so a Qwen Worker is reviewed by
+GPT-6.1 or Opus rather than by another Qwen when both are free. A captain named explicitly for the Judge stage is not
+held to the rule. Set it in the pipeline form in the dashboard or TUI, or with `judgeStrength` on the pipeline API.
 
 ### Pipeline Resolution Order (Precedence)
 

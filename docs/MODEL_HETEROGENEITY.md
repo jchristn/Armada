@@ -142,21 +142,23 @@ run the model inside their own CLI, so Armada sees only the CLI's events and fin
 
 ## Where Armada stands today
 
-Most of the pieces this needs already exist. This is what the design builds on, and the gaps.
+This section described the gaps when the design was written. Most of them are closed now, and the table below is
+the state as of 1.5.0. What remains open is mostly measurement: the reference gate (RS-10.6) has to run on real
+models before anyone can say how much each piece moved the completion rate.
 
-| Area | What exists | Gap |
+| Area | What exists in 1.5.0 | Still open |
 |---|---|---|
-| Captain identity | `Captain.Runtime`, `Model`, `Tier`, `ReasoningEffort`, `SystemInstructions`, `AllowedPersonas` | No measured outcomes. `Tier` is inferred from the model name by regex (`CaptainTierSelector`) unless set by hand. |
-| Endpoint settings | `InferenceOptions.ContextLength`, `ToolsEnabled`, `McpToolsEnabled`, `MaxIterations`; Mux `ContextWindow`; `ApiContextCompactor` | Known to the runtime, not to the prompt builder or to upstream stages. |
-| Endpoint probing | `validate_model_endpoint`, `health_check_model_endpoints`, `ModelEndpointProbeResult` (latency, status, sample text) | It checks that the endpoint responds, not what the model can do. |
-| Stage checks | `VerifyStageWorkAsync` runs the workflow profile's build and test commands after a stage; `VerifyAllStageRuntimes` defaults to `true` | Returns `null` for both "passed" and every skip reason, so results cannot be reported as passed, failed, skipped or could not run. |
-| Prompt assembly | `MissionPromptBuilder`, prompt templates resolved per persona with project-profile overrides (`ResolvePersonaPromptAsync`), persona briefs, `CaptainInstructions` (up to 800 characters) | One template set for every reader. The only per-captain variation is the captain's free-text instructions. |
-| Handoff | `PipelineHandoffContext.Build` (3000-character output excerpt plus mission and branch references); a 4000-character previous-stage diff cap in `MissionPromptBuilder`; Architect `armada-plan` JSON with requirements, decisions, acceptance criteria and validation commands | The plan is structured, but each mission's `Description` is free text, and later stages hand off excerpts with no record of what was dropped. |
-| Protocol recovery | `TryScheduleOutputRepairAsync` reruns a stage with the exact format contract for the Architect, the Judge and the Verifier contracts; `MissionFailureKindEnum.InvalidOutput` | No repair for other personas (for example the Worker's commit and completion line); repairs are not counted per model; the repair rules on tools and evidence are not stated. |
-| Failure taxonomy | `MissionFailureKindEnum`: Compile, TestFail, Timeout, NoOp, ScopeViolation, JudgeRejected, Infra, InvalidOutput, and others | A good base. Not combined per model and persona, and no suspected cause. |
-| Rework and escalation | Judge rework rounds, stagnation detection, `CaptainEscalationSelector` | The escalated captain gets the same prompt; the failed model is not recorded anywhere that drives later routing. |
-| Quarantine | `Captain.QuarantineUntilUtc`, `QuarantineReason` | Used for configuration failures, not for poor quality. |
-| Data | Token usage records, mission events, Judge verdicts, papercuts | Everything a scorecard needs is recorded but not combined, and attempts do not record runtime version, sampling or prompt version. |
+| Captain identity and tier | `Captain.Runtime`, `Model`, `Tier`, `ReasoningEffort`, `SystemInstructions`, `AllowedPersonas`. The effective tier is the captain's own `Tier`, then the model profile's administrator-set tier (`Tiering.Tier`), then the model name (`CaptainTierSelector`). With `RoutingData.SuggestTiers` on, `ModelTierSuggester` raises a TierSuggestion alert from outcome data; it is never applied automatically. | Suggestions are off by default until the gate shows they agree with hand-set tiers. |
+| Endpoint settings and served context | `InferenceOptions.ContextLength`, `ToolsEnabled`, `McpToolsEnabled`, `MaxIterations`, `streamingMode`, `repeatedToolCallLimit`, `toolOutputWindowPercent`. When no context length is configured, `ModelContextDiscovery` reads the served window from Ollama (`/api/ps`, then the Modelfile `num_ctx`) or an OpenAI-compatible `/v1/models` that reports `max_model_len` (vLLM does) and stores it as `DiscoveredContextLength` with its source. | A server that reports neither (no `/api/ps` and no `max_model_len` in `/v1/models`) has no discovered window; set `ContextLength` by hand. |
+| Endpoint probing | `validate_model_endpoint`, health checks, and model probes. A tool-calling probe records whether the model's tool calls and MCP tools work on its profile, and a Speed probe records tokens per second and time to first output. | Probes measure the mechanics, not the quality of the work. |
+| Prompt assembly | One composer for every launch. The prompt variant (Current, Lean or Compact) comes from the voyage override, the captain option, the profile template, then the served context (`PromptVariantResolver`). The whole instructions file plus tool schemas is held to a quarter of a known context window. | Two variants are enough so far; more would need battery evidence. |
+| Output contracts | `StageOutputContract` generates each persona's contract once. Captains can submit typed JSON through `armada_submit_plan`, `armada_submit_verdict` and `armada_submit_result`, checked in the same call. A broken report is reformatted by one tool-less call before the stage is rerun. | Marker text stays as the fallback, so the text parsers remain. |
+| Tool loop | The ApiEndpoint runtime runs tool calls written as text, corrects malformed calls and repeat loops, names unknown tools, stops identical repeated calls, and strips leaked reasoning (RS-7.2 to RS-7.6). | Mux, OpenCode and pi get the reasoning stripping but keep their own tool loops. |
+| Failure taxonomy | `FailureKindMapper` maps every source to one `MissionFailureKindEnum`; open-model server errors get a machine type in `RuntimeProviderErrorParser`; an exit Armada cannot explain is `Unclassified`, not `Crash`. | The `Unclassified` share per model is the number to watch in the gate. |
+| Recovery and escalation | `RecoveryPolicyEngine` picks resume, repair, rework, escalation or rescue; profiles override the recovery limits; a persona's `EscalationLadder` sets the rungs; the escalated captain gets the failure evidence (`EscalationMemoryRenderer`). | |
+| Timeouts | Per-profile overrides, and timers scaled by measured speed below `TimeoutScaleReferenceTokensPerSecond` (`TimeoutPolicyResolver`). | |
+| Routing from data | Stage outcomes per attempt, `PersonaOutcomeStatsService`, ranking within a tier (`RoutingData.RankByOutcomes`), the context fit filter (`MissionPromptFit`), and the pipeline Judge strength rule. | Ranking needs 20 results per model and persona before it changes anything. |
+| Quarantine | `Captain.QuarantineUntilUtc`, `QuarantineReason`. A 429 is backpressure unless the provider says the quota is gone. | Persona-scoped quarantine for poor quality is still not built. |
 
 ## Design principles
 
@@ -341,18 +343,20 @@ been measured on the battery.
 
 ### 3.2 Render prompts for the reader (Armada, at launch)
 
-`MissionPromptBuilder` already runs when the captain is known, and `ResolvePersonaPromptAsync` already chooses a
-template per persona with project-profile overrides. Rendering uses that path instead of new machinery:
+`MissionPromptBuilder` runs when the captain is known, so it can render for that reader. It picks one of three prompt
+variants: Current (the full prompt), Lean (one demand per line, less emphasis wording, less boilerplate) and Compact
+(the smallest form, for small windows). Acceptance criteria, project rules, the handoff and the output contract are kept
+in all three.
 
-- **First, test a lean default.** Compare today's default against a leaner prompt (one demand per line, the
-  contract repeated at the end, less emphasis wording, less boilerplate) on the battery for strong and weak models.
-  If the lean version does not hurt strong models, replace the default instead of forking it.
-- **Then, at most two tiers: Full and Compact.** The profile selects the tier. Acceptance criteria and project rules
-  are kept in both.
-- **Rules that need no judgment** come from hard facts: the served context sets the budget, and the reader's actual
-  tools decide how the full artifact is offered (3.1).
-- A small set of explicit rendering overrides on the profile (tier, contract repeated at the end, maximum files per
-  mission) can be edited by hand. Further settings are added only when the battery shows they matter.
+`PromptVariantResolver` decides the variant in a fixed order. A voyage override wins, then the captain's option, then
+the model profile's `Rendering.Template`. When none of those is set, the served context decides: Compact at or below
+`PromptVariantCompactMaxContextTokens` (default 32768), Lean at or below `PromptVariantLeanMaxContextTokens` (default
+65536), Current above that. Setting either threshold to 0 turns that step off. A Qwen served at 32K therefore gets
+Compact without anyone configuring it, while the same model served at 128K gets the full prompt.
+
+The profile also carries two other rendering overrides an administrator can set by hand: `RepeatContractAtEnd`
+repeats the output contract at the end of the launch prompt, and `MaxFilesPerMission` adds a file limit to the
+instructions of personas that write changes. Further settings get added only when the battery shows they matter.
 
 ### 3.3 Size missions with a Worker eligibility envelope
 
@@ -372,12 +376,18 @@ actionable by the rework reader.
 
 ### 3.4 Escalation with memory
 
-When work escalates to a different captain:
+An escalated captain used to get the same prompt as the one that failed, which wasted the stronger model's first turns
+on rediscovering what had gone wrong. Since 1.5.0 the escalation note, rendered by `EscalationMemoryRenderer`, tells the
+new captain how the previous attempt failed (failure kind, runtime classification and exit code), the black box rule
+hint for that failure, which files it changed, and the end of its output, redacted and capped at 2000 characters. The
+work continues on the same branch, so the new captain sees the prior commits and is told to keep what is correct.
 
-- the prompt says what was attempted, by which model, and what failed (findings and check output), rendered for the
-  new reader from the handoff artifact;
-- the escalation is recorded against the failed profile, revision and persona (Part 4);
-- the new captain is told, in one clear line, to keep correct parts of the prior work rather than start over.
+Where the work goes is decided by the persona's `EscalationLadder`, a list of captain classes from the lowest rung up
+(for example Qwen3.8, then GPT-6.1, then Opus). With no ladder, escalation goes only to a captain with a strictly
+higher tier, never sideways. A mission can take up to `MaxEscalations` hops (default 2). The triggers are spent
+resumes, an `Unclassified` exit past its one resume, two unparsable tool calls in a row, two iteration-limit stops in
+a row, repeated no-op completions and Judge rejections past the rework budget. Each escalation is recorded against the
+failed profile and persona (Part 4), and from the second rescue of a failed mission on, the failed captain is excluded.
 
 ### 3.5 Translate when the gap is large (deferred)
 
@@ -425,9 +435,16 @@ set one.
 | Merge queue merge | Conflicted files reported | `LandingConflict`, otherwise `Infra` |
 | Merge queue verification | Check failed / timed out / rewrote the tree | `TestFail` / `Timeout` / `Infra` |
 | Merge queue other steps | Any exception that is not a merge conflict | `Infra` |
-| Lost landing handoff | Nonblocking stage check, no merge queue entry after five minutes | `Infra` |
+| Merge queue push | Refused because the target branch moved (detected from git exit codes after a fresh fetch) | Requeued up to `MergeQueueRequeueLimit` times (default 3), then `Infra` |
+| Lost landing handoff | Nonblocking stage check, no merge queue entry after five minutes | Enqueued again under the same limit, then `Infra` |
 | Mission status | `LandingFailed` with no recorded kind | `LandingConflict` |
 | Mission status | Any other failure with no recorded kind | `Unknown` |
+
+Open-model servers report most failures only as a message, so `RuntimeProviderErrorParser` gives Ollama, vLLM, LM
+Studio, llama.cpp and LiteLLM messages a machine type before the mapping runs. A crashed runner, a model still
+loading, or a proxy timeout is transient. Out of memory and a model without tool support make the captain
+unavailable. A context overflow, a tool call the server could not parse, or Ollama's token repeat limit is a task
+failure, and a tool-call parse error does not count against the endpoint's circuit breaker.
 
 The runtime kind itself is `Crash` only for an abnormal death (killed by a signal, a negative Windows crash status, or
 a runtime-reported cancellation). A non-zero exit with no provider error Armada recognizes is `Unclassified`: it gets
@@ -514,6 +531,16 @@ When a threshold is crossed:
    which applies to the whole captain and only for configuration errors.
 
 ### Closing the loop
+
+The scorecard now feeds routing directly, within limits an administrator controls. `PersonaOutcomeStatsService`
+scores each model per persona from success, Judge pass rate, no-op rate, tool-call validity and repair rate, with older
+attempts weighted down on a `RoutingData.HalfLifeDays` half-life (default 14). With `RoutingData.RankByOutcomes` on
+(the default), captains of one tier whose model has at least `RoutingData.MinimumSamples` attempts for the persona
+(default 20) are tried in score order, ahead of captains without enough history, and each ranked choice is recorded as
+a `mission.routing_ranked` event. Ranking never crosses a tier, never overrides a persona's captain priorities, and
+never overrides the Judge's preference for a captain that did not author the reviewed work. Tier changes stay with
+the administrator: a suggestion arrives in Needs You and changes nothing until someone applies it.
+
 
 - The scorecard is shown beside the evaluation results, and a large gap is flagged ("evaluated: 3 of 3 Worker tasks;
   observed: 5 of 11; re-evaluate").

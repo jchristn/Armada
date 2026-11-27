@@ -71,7 +71,7 @@ Configure the endpoint in dashboard, mobile, or TUI create/edit, or use the REST
 | `topP` | `null` | Optional nucleus sampling setting, 0–1. |
 | `requireHarbor` | `false` | Require an eligible Harbor owned by the launching user. Never fall back to execution on the Admiral. |
 | `contextLength` | `null` | Optional context window, 512–2097152 tokens, sent as `num_ctx` on Ollama and Ollama Cloud. From 80% of the window, the oldest large tool outputs (all but the six most recent) are replaced with a one-line note saying what was removed, and assistant turns older than those six outputs keep only the path and a size note of the files they wrote (`write_file`, `edit_file`, `multi_edit`) and lose their reasoning, so long missions keep going; the system prompt and mission brief are never removed. The local estimate counts about 3.2 characters per token. A run stops with `context_limit_exceeded` only when its prompt reaches 95% and nothing is left to compact. Null uses the model default; Armada then reads the window the server runs (see [Context discovery](#context-discovery)) and compacts against it, and with no window found nothing is compacted. |
-| `maxConcurrentMissions` | `null` | Optional cap, 1–64, on missions running at once against this endpoint's base URL across every captain that uses it. Null is unlimited. |
+| `maxConcurrentMissions` | `null` | Optional cap, 1–64, on missions running at once against one server and model, across every captain and endpoint record that uses them. URLs are normalized (`localhost`, `127.0.0.1` and `::1`, a trailing slash, and `/v1` are the same server), two models on one server count separately, and a loopback URL gets its own budget on each Harbor and on the Admiral. Null is unlimited. |
 | `streamingMode` | `Automatic` | `Automatic`, `On`, or `Off`. Streaming makes the endpoint's request timeout limit only the silence between chunks, so a long generation is not cut by an idle-based proxy or by the timeout itself, and each chunk is progress the stall detector sees. Tools run only after the provider signals a complete response; a stream that stops early is retried. `Automatic` streams on OpenAI-compatible, Ollama, and Ollama Cloud endpoints, in process and on a Harbor that advertises `api-inference-streaming-v1`; on an older Harbor it does not stream. `On` and `Off` always apply. |
 | `streaming` | `false` | Compatibility form of `streamingMode` for clients before 1.5.0: reads true when the mode is `On`; writing true turns an `Automatic` mode `On`, and writing false changes nothing. A stored 1.4.0 `false` therefore reads as `Automatic`. |
 | `firstResponseTimeoutMs` | `null` | Optional deadline, 1000–1800000 ms, for the model to start responding (cold model load, long prompt evaluation). With streaming it applies to each call's first chunk; without streaming it extends each call's timeout. Null uses the request timeout. |
@@ -146,7 +146,7 @@ records whether the window was configured, discovered, or measured.
 
 With `FallThrough`, `priorityExhaustion: Wait` keeps unmatched work Pending until a later scheduling tick. `UseEligibleCaptain` explicitly permits normal persona/tier routing after every entry is exhausted. Empty priorities preserve legacy behavior regardless of these policies.
 
-**Effective tier.** A captain's explicit `tier` is used as declared. Without one, the tier comes from the model name: 8B parameters or fewer (`:7b`, `-3b`) and families such as Haiku, mini, flash and gpt-oss are Economy; Opus, GPT-5, o3/o4 and Gemini Pro are Premium; everything else, including an unknown model, is Standard. A Claude Code, Codex or Gemini captain with no model runs its vendor's default flagship model, so it meets any tier floor (`minimumTier`, a mission tier) but still ranks as Standard when dispatch prefers the cheapest captain that qualifies. No configuration is needed; set `tier` only to override the inference.
+**Effective tier.** A captain's explicit `tier` is used as declared. Without one, the tier is its model profile's administrator-set tier (see [Tier from data](#tier-from-data)), and without that it comes from the model name: 8B parameters or fewer (`:7b`, `-3b`) and families such as Haiku, mini, nano, flash and gpt-oss are Economy; Opus, GPT-5 and later (including `gpt-6.1`), `o3` and `o4` as model names, and Gemini models with `-pro` are Premium; everything else, including an unknown model, is Standard. A Claude Code, Codex or Gemini captain with no model runs its vendor's default flagship model, so it meets any tier floor (`minimumTier`, a mission tier) but still ranks as Standard when dispatch prefers the cheapest captain that qualifies. No configuration is needed; set `tier` only to override the inference.
 
 All hierarchy candidates must satisfy mission ownership/tenant boundaries, AllowedPersonas, the mission's tier floor, and availability. Within a matched class, PreferredPersona breaks ties, followed by the fewest active missions and then stable captain ID order. Hierarchy choices are reevaluated on every assignment attempt and are not saved as RequestedCaptainId.
 
@@ -225,6 +225,35 @@ example, no stronger captain is free). The decisions:
 
 The Admiral logs each runtime-exit decision at debug level, for example `recovery for mission msn_x after TaskFailure:
 Resume, then Escalate, then Fail`.
+
+## Admission order and typed blockers
+
+Every Pending mission goes through the same gates in the same order on each dispatch pass, and the first gate that
+says no becomes the mission's one `MissionAssignmentBlocker`. The dispatch log, the assignment blocker in the
+dashboard, TUI, mobile app and API, and the stuck-admission monitor all read that one result, so they cannot tell
+different stories about why a mission is waiting.
+
+1. **The vessel.** A missing vessel (`VesselMissing`) or one whose local repository and working directory are the same
+   folder (`VesselMisconfigured`) stops the mission outright.
+2. **Launch backoff.** A mission whose last launch failed waits out its backoff (`LaunchFailing`, with the reason and
+   the next attempt time).
+3. **Readiness.** The stage it depends on must be finished and its handoff prepared (`DependencyNotFinished`,
+   `DependencyHandoffPending`), its parent mission must be finished (`ParentNotFinished`), and an integration stage
+   waits for the voyage's Workers (`WaitingForVoyageWorkers`).
+4. **Vessel safety.** Broad-scope missions and branch locks on the vessel (`VesselBroadScopeMissionActive`,
+   `BroadScopeWaitingForVessel`, `BranchInUse`), then the vessel and voyage limits (`VesselConcurrencyLimit`,
+   `VesselVoyageLimit`, `VoyageMissionLimit`).
+5. **Global capacity.** `GlobalMissionLimit` when the server's mission limit is full.
+6. **Usage selection**, when it is on, with its own reason codes under `NoEligibleCaptain`.
+7. **The captain gate.** Routing as this page describes (priorities, tier, the context fit filter, the Judge strength
+   rule, ranking), then captain, runtime and endpoint capacity and dock placement: `NoCaptains`, `NoEligibleCaptain`
+   (with a `selectionReasonCode` such as `context_too_small` or `judge_strength`), `NoIdleCaptain`,
+   `CaptainConcurrencyLimit`, `RuntimeMissionLimit`, `EndpointMissionLimit`, `EndpointUnavailable`,
+   `PlacementWaiting`.
+
+A mission of a voyage that is still `Building` is never admitted. A mission that nothing blocks shows
+`AwaitingDispatch` until the next pass, or a launch policy such as a required Harbor connection, lets it start. Each blocker carries a summary that names what clears it, and for captain reasons a per-captain
+detail line. [SCHEDULING.md](SCHEDULING.md#why-a-mission-is-waiting) explains each reason from the operator's side.
 
 ## Capability-aware routing (1.5.0)
 

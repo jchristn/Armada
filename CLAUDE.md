@@ -16,6 +16,9 @@ dotnet build src/Armada.sln
 # Console runner (all suites; net8.0 or net10.0)
 dotnet run --project src/Test.Automated --framework net10.0
 
+# Selected suites only: --suites takes comma-separated suite ids (prefix match)
+dotnet run --project src/Test.Automated --framework net10.0 -- --suites Services.SourceGuards,Services.AdmiralService
+
 # Same suites via the xUnit / NUnit adapters
 dotnet test src/Test.Xunit --framework net10.0
 dotnet test src/Test.Nunit --framework net10.0
@@ -28,18 +31,35 @@ The dashboard's `dist/` is build output and is not committed (it is in `.gitigno
 release workflow, and deploy scripts build it from source.
 
 ## Architecture
-- `Armada.Core` - Domain models, database interfaces and providers, service interfaces, settings
+- `Armada.Core` - Domain models, database interfaces and providers, services (mission, admission, routing, landing), settings
 - `Armada.Runtimes` - Agent runtime adapters (Claude Code, Codex, Gemini, Cursor, Mux, OpenCode, Pi, ApiEndpoint; extensible via IAgentRuntime)
 - `Armada.Server` - Admiral process: REST API (Watson), MCP server (Voltaic), WebSocket, Harbor link, serves the dashboard
 - `Armada.Helm` - CLI (Spectre.Console), thin HTTP client to Admiral; hosts `armada tui`
 - `Armada.Tui` - Terminal UI (TUIKit), the dashboard in a terminal
-- `Armada.Client` - Typed .NET client for the REST API and WebSocket (used by the TUI)
+- `Armada.Client` - Typed .NET client for the REST API and WebSocket, one sub-client per area (used by the TUI and the gate)
 - `Armada.Dashboard` - React dashboard (Vite); its build (`dist/`) is served by the Admiral at `/dashboard`
 - `Armada.Harbor` - Avalonia tray app that runs captains, git, and worktrees on the developer's machine (split mode)
 - `Armada.Proxy` - Remote-access portal and tunnel relay
 - `Armada.Publisher` - Packaging orchestrator for installers (reads `publisher.json`)
 - `Armada.PerfSeed` - Seeds a throwaway data directory for the performance baseline
+- `Armada.Gate` - Runs the reliability gate's reference pipelines against an isolated Admiral
 - `Test.Shared` (suites), `Test.Automated` (console runner), `Test.Xunit` / `Test.Nunit` (adapters)
+
+## Mission and dispatch architecture (1.5.0)
+- `MissionService` is a single facade implementing `IMissionService`. Each responsibility lives in its own service
+  (`MissionLauncher`, `MissionAdmissionPipeline`, `MissionCaptainRouter`, `StageCompletionHandler`,
+  `MissionHandoffService`, `MissionReworkService`, `MissionEscalationService`, `OutputRepairService`,
+  `ArchitectFanOutService`, `MissionInstructionWriter`, `StageCheckRunner` and others) that share one
+  `MissionServiceContext`. Add new mission behavior to the service that owns it, not to the facade.
+- One dispatcher: only `AdmiralService` runs a dispatch pass; other code raises a dispatch wake. Every mission status
+  change goes through the checked transition. `Services.SourceGuards` and `Services.MissionTransitions` fail the tests
+  if a second dispatcher, a direct status write, control state read from a mission description, exception message
+  matching in Core, or a partial class comes back.
+- Captains report results through the submit tools (`armada_submit_plan`, `armada_submit_verdict`,
+  `armada_submit_result`), checked against `StageOutputContract`; marker text is the fallback.
+- The .NET SDK (`ArmadaClient`) is split into sub-clients (`client.Missions.GetAsync(id)`); see
+  `docs/SDK_MIGRATION_1.5.md`.
+- Open models in mixed pipelines: see `docs/OPEN_MODELS.md`.
 
 ## Coding Standards
 
@@ -57,6 +77,7 @@ release workflow, and deploy scripts build it from source.
 - **No tuples** - define a class or use out parameters instead of `(string, int)` or `ValueTuple`
 - **No direct `JsonElement` access** - always deserialize JSON into a strongly-typed class instance (e.g., `JsonSerializer.Deserialize<Fleet>(json)`) rather than using `GetProperty()` / `GetString()` on `JsonElement`
 - **XML documentation** - all public members must have `<summary>` XML doc comments
+- **No partial classes** (only Avalonia XAML code-behind) - split a large type into collaborating classes, one per file
 
 ### File Organization
 - One class per file, filename matches class name
