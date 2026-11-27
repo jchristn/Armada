@@ -825,6 +825,23 @@
       "experimental": false
     },
     {
+      "method": "GET",
+      "route": "/api/v1/battery/runs",
+      "auth": "Authenticated",
+      "resource": "BatteryRun:Read",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "EnumerationResult<BatteryRun>",
+        "400": ""
+      },
+      "tags": [
+        "Battery"
+      ],
+      "summary": "List battery runs",
+      "experimental": false
+    },
+    {
       "method": "POST",
       "route": "/api/v1/battery/runs",
       "auth": "TenantAdmin",
@@ -858,6 +875,25 @@
         "Battery"
       ],
       "summary": "Get a battery run",
+      "experimental": false
+    },
+    {
+      "method": "POST",
+      "route": "/api/v1/battery/runs/{id}/cancel",
+      "auth": "TenantAdmin",
+      "resource": "BatteryRun:Execute",
+      "requestType": "BatteryRunCancelRequest",
+      "requestRequired": false,
+      "responses": {
+        "200": "BatteryRun",
+        "400": "",
+        "403": "ApiErrorResponse",
+        "404": ""
+      },
+      "tags": [
+        "Battery"
+      ],
+      "summary": "Cancel a battery run",
       "experimental": false
     },
     {
@@ -4174,6 +4210,23 @@
     },
     {
       "method": "GET",
+      "route": "/api/v1/missions/{id}/attempts",
+      "auth": "Authenticated",
+      "resource": "Mission:Read",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "MissionAttemptHistory",
+        "404": ""
+      },
+      "tags": [
+        "Reliability"
+      ],
+      "summary": "Get a mission's attempt history",
+      "experimental": false
+    },
+    {
+      "method": "GET",
       "route": "/api/v1/missions/{id}/blackbox",
       "auth": "Authenticated",
       "resource": "BlackBox:Read",
@@ -6449,6 +6502,77 @@
         "Releases"
       ],
       "summary": "Refresh a release",
+      "experimental": false
+    },
+    {
+      "method": "GET",
+      "route": "/api/v1/reliability/gate-reports",
+      "auth": "TenantAdmin",
+      "resource": "GateReport:Read",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "EnumerationResult<GateReport>",
+        "400": "",
+        "403": "ApiErrorResponse"
+      },
+      "tags": [
+        "Reliability"
+      ],
+      "summary": "List gate reports",
+      "experimental": false
+    },
+    {
+      "method": "POST",
+      "route": "/api/v1/reliability/gate-reports",
+      "auth": "AdminOnly",
+      "resource": "GateReport:Create",
+      "requestType": "GateReport",
+      "requestRequired": true,
+      "responses": {
+        "201": "GateReport",
+        "400": "",
+        "403": "ApiErrorResponse"
+      },
+      "tags": [
+        "Reliability"
+      ],
+      "summary": "Upload a gate report",
+      "experimental": false
+    },
+    {
+      "method": "GET",
+      "route": "/api/v1/reliability/gate-reports/{id}",
+      "auth": "TenantAdmin",
+      "resource": "GateReport:Read",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "GateReport",
+        "403": "ApiErrorResponse",
+        "404": ""
+      },
+      "tags": [
+        "Reliability"
+      ],
+      "summary": "Get a gate report",
+      "experimental": false
+    },
+    {
+      "method": "GET",
+      "route": "/api/v1/reliability/summary",
+      "auth": "Authenticated",
+      "resource": "StageOutcome:Read",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "ReliabilitySummary",
+        "400": ""
+      },
+      "tags": [
+        "Reliability"
+      ],
+      "summary": "Reliability per model and persona",
       "experimental": false
     },
     {
@@ -9742,6 +9866,25 @@
       "experimental": false
     },
     {
+      "name": "cancel_battery_run",
+      "auth": "TenantAdmin",
+      "resource": "BatteryRun:Execute",
+      "arguments": [
+        {
+          "name": "id",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "reason",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "description": "Cancel a fixture battery run as a stopped Full Evaluate does: no further task is dispatched, the open mission is cancelled (releasing its dock and captain), and the run ends Cancelled with finished results kept. Waits up to 10 seconds, then returns the run (still Running while its open mission stops; poll get_battery_run). A finished run is returned unchanged. Needs a global admin or a tenant admin of the run's tenant.",
+      "experimental": false
+    },
+    {
       "name": "cancel_fleet_action_run",
       "auth": "TenantAdmin",
       "resource": "FleetActionRun:Execute",
@@ -11077,6 +11220,11 @@
       "arguments": [
         {
           "name": "description",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "judgeStrength",
           "type": "string",
           "required": false
         },
@@ -12994,6 +13142,20 @@
       "experimental": false
     },
     {
+      "name": "get_gate_report",
+      "auth": "TenantAdmin",
+      "resource": "GateReport:Read",
+      "arguments": [
+        {
+          "name": "id",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "description": "Get one stored acceptance gate report by id, or the newest with id latest. Global and tenant admins.",
+      "experimental": false
+    },
+    {
       "name": "get_handoff_artifact",
       "auth": "Authenticated",
       "resource": "HandoffArtifact:Read",
@@ -13066,6 +13228,20 @@
         }
       ],
       "description": "Get details of a specific merge queue entry",
+      "experimental": false
+    },
+    {
+      "name": "get_mission_attempts",
+      "auth": "Authenticated",
+      "resource": "Mission:Read",
+      "arguments": [
+        {
+          "name": "missionId",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "description": "Get a mission's attempt history: its recovery counters (redispatchAttempts, outputRepairAttempts, noOpRedispatchAttempts, stallRecoveryAttempts), escalation state (escalationCount, escalatedFromCaptainId, escalatedFromModel, tier, reworkEscalated), persona and mode, and every recorded attempt oldest first with captain, model, disposition (Completed, Relaunched, OutputRepair, Escalated, Failed, Interrupted, Cancelled, Pending), failureKind, runtimeFailureKind, contractRepairKind, isRepair, escalated, nextCaptainId, judgeVerdict and timing.",
       "experimental": false
     },
     {
@@ -13305,6 +13481,70 @@
         }
       ],
       "description": "Inspect one release record including linked voyages, missions, checks, versions, tags, notes, and derived artifacts.",
+      "experimental": false
+    },
+    {
+      "name": "get_reliability_summary",
+      "auth": "Authenticated",
+      "resource": "StageOutcome:Read",
+      "arguments": [
+        {
+          "name": "descending",
+          "type": "boolean",
+          "required": false
+        },
+        {
+          "name": "fromUtc",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "includeEvaluation",
+          "type": "boolean",
+          "required": false
+        },
+        {
+          "name": "model",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "pageNumber",
+          "type": "integer",
+          "required": false
+        },
+        {
+          "name": "pageSize",
+          "type": "integer",
+          "required": false
+        },
+        {
+          "name": "persona",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "sort",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "tenantId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "toUtc",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "vesselId",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "description": "Pipeline reliability per (model, persona) over a window from stage outcomes: attempts, completed, failed, relaunched, repairs, escalations, unclassified, completionRate, unclassifiedRate, failureKinds, runtimeFailureKinds and medianDurationMs, plus totals. Window defaults to the last 14 days (at most 90); production attempts only unless includeEvaluation. Sorted and paged on the server.",
       "experimental": false
     },
     {
@@ -13984,6 +14224,40 @@
       "experimental": false
     },
     {
+      "name": "list_battery_runs",
+      "auth": "Authenticated",
+      "resource": "BatteryRun:Read",
+      "arguments": [
+        {
+          "name": "captainId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "pageNumber",
+          "type": "integer",
+          "required": false
+        },
+        {
+          "name": "pageSize",
+          "type": "integer",
+          "required": false
+        },
+        {
+          "name": "status",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "tenantId",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "description": "List one page of fixture battery runs visible to the caller, newest first, without their per-task results. A global admin sees every tenant (tenantId filters); everyone else their own tenant. Returns an enumeration result (objects, totalRecords, totalPages).",
+      "experimental": false
+    },
+    {
       "name": "list_blackbox_entries",
       "auth": "Authenticated",
       "resource": "BlackBox:Read",
@@ -14358,6 +14632,25 @@
         }
       ],
       "description": "List the failure-cause rules visible to the caller in evaluation order (priority ascending, then name), one page at a time: the caller's tenant plus the rules for every tenant, built-in rules included. The first enabled matching rule assigns a stage outcome's suspected cause.",
+      "experimental": false
+    },
+    {
+      "name": "list_gate_reports",
+      "auth": "TenantAdmin",
+      "resource": "GateReport:Read",
+      "arguments": [
+        {
+          "name": "pageNumber",
+          "type": "integer",
+          "required": false
+        },
+        {
+          "name": "pageSize",
+          "type": "integer",
+          "required": false
+        }
+      ],
+      "description": "List stored acceptance gate reports (G1 to G12 measures with per-pipeline counts), newest first. Global and tenant admins.",
       "experimental": false
     },
     {
@@ -19008,6 +19301,28 @@
         "generic": false
       },
       {
+        "type": "mission.attempt_changed",
+        "scope": "tenant",
+        "hasMessage": false,
+        "payloadType": "MissionAttemptChange",
+        "fields": [
+          "missionId",
+          "voyageId",
+          "status",
+          "captainId",
+          "persona",
+          "tier",
+          "escalationCount",
+          "escalatedFromCaptainId",
+          "escalatedFromModel",
+          "redispatchAttempts",
+          "outputRepairAttempts",
+          "noOpRedispatchAttempts",
+          "stallRecoveryAttempts"
+        ],
+        "generic": false
+      },
+      {
         "type": "mission.batch_deleted",
         "scope": "tenant",
         "hasMessage": true,
@@ -19032,7 +19347,14 @@
           "title",
           "status",
           "voyageId",
-          "activity"
+          "activity",
+          "persona",
+          "mode",
+          "captainId",
+          "tier",
+          "escalationCount",
+          "redispatchAttempts",
+          "outputRepairAttempts"
         ],
         "generic": false
       },
@@ -19065,6 +19387,28 @@
           "voyageId"
         ],
         "generic": true
+      },
+      {
+        "type": "mission.escalated",
+        "scope": "tenant",
+        "hasMessage": false,
+        "payloadType": "MissionAttemptChange",
+        "fields": [
+          "missionId",
+          "voyageId",
+          "status",
+          "captainId",
+          "persona",
+          "tier",
+          "escalationCount",
+          "escalatedFromCaptainId",
+          "escalatedFromModel",
+          "redispatchAttempts",
+          "outputRepairAttempts",
+          "noOpRedispatchAttempts",
+          "stallRecoveryAttempts"
+        ],
+        "generic": false
       },
       {
         "type": "mission.landing_failed",
@@ -19110,6 +19454,28 @@
           "voyageId"
         ],
         "generic": true
+      },
+      {
+        "type": "mission.repaired",
+        "scope": "tenant",
+        "hasMessage": false,
+        "payloadType": "MissionAttemptChange",
+        "fields": [
+          "missionId",
+          "voyageId",
+          "status",
+          "captainId",
+          "persona",
+          "tier",
+          "escalationCount",
+          "escalatedFromCaptainId",
+          "escalatedFromModel",
+          "redispatchAttempts",
+          "outputRepairAttempts",
+          "noOpRedispatchAttempts",
+          "stallRecoveryAttempts"
+        ],
+        "generic": false
       },
       {
         "type": "mission.restarted",
@@ -20763,6 +21129,162 @@
           "short": null,
           "valueKind": "vector",
           "type": "String[]",
+          "required": false
+        }
+      ]
+    },
+    {
+      "command": "battery cancel",
+      "description": "Cancel a battery run (cancels its open mission, releases its dock)",
+      "parameters": [
+        {
+          "kind": "argument",
+          "name": "run",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": true
+        },
+        {
+          "kind": "option",
+          "name": "json",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page-size",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "profile",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "reason",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "server",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "token",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "verbose",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        }
+      ]
+    },
+    {
+      "command": "battery runs",
+      "description": "List battery runs (--status, --captain)",
+      "parameters": [
+        {
+          "kind": "option",
+          "name": "captain",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "json",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page-size",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "profile",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "server",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "status",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "token",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "verbose",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
           "required": false
         }
       ]
@@ -24845,6 +25367,76 @@
           "short": null,
           "valueKind": "scalar",
           "type": "String",
+          "required": false
+        }
+      ]
+    },
+    {
+      "command": "mission attempts",
+      "description": "Show a mission's attempts, failure kinds, repairs and escalations",
+      "parameters": [
+        {
+          "kind": "argument",
+          "name": "mission",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": true
+        },
+        {
+          "kind": "option",
+          "name": "json",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page-size",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "profile",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "server",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "token",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "verbose",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
           "required": false
         }
       ]
@@ -29492,9 +30084,21 @@
       "experimental": false
     },
     {
+      "key": "mergeQueueBatchSize",
+      "type": "int",
+      "default": "1",
+      "experimental": false
+    },
+    {
       "key": "mergeQueueLeaseSeconds",
       "type": "int",
       "default": "900",
+      "experimental": false
+    },
+    {
+      "key": "mergeQueueRequeueLimit",
+      "type": "int",
+      "default": "3",
       "experimental": false
     },
     {
@@ -29782,6 +30386,18 @@
       "key": "planningSessionRetentionDays",
       "type": "int",
       "default": "0",
+      "experimental": false
+    },
+    {
+      "key": "promptVariantCompactMaxContextTokens",
+      "type": "int",
+      "default": "32768",
+      "experimental": false
+    },
+    {
+      "key": "promptVariantLeanMaxContextTokens",
+      "type": "int",
+      "default": "65536",
       "experimental": false
     },
     {
@@ -30115,6 +30731,36 @@
       "experimental": false
     },
     {
+      "key": "routingData",
+      "type": "object",
+      "default": null,
+      "experimental": false
+    },
+    {
+      "key": "routingData.halfLifeDays",
+      "type": "int",
+      "default": "14",
+      "experimental": false
+    },
+    {
+      "key": "routingData.minimumSamples",
+      "type": "int",
+      "default": "20",
+      "experimental": false
+    },
+    {
+      "key": "routingData.rankByOutcomes",
+      "type": "bool",
+      "default": "true",
+      "experimental": false
+    },
+    {
+      "key": "routingData.suggestTiers",
+      "type": "bool",
+      "default": "false",
+      "experimental": false
+    },
+    {
       "key": "selfVesselId",
       "type": "string",
       "default": "null",
@@ -30238,6 +30884,12 @@
       "key": "terminalBell",
       "type": "bool",
       "default": "true",
+      "experimental": false
+    },
+    {
+      "key": "timeoutScaleReferenceTokensPerSecond",
+      "type": "int",
+      "default": "30",
       "experimental": false
     },
     {

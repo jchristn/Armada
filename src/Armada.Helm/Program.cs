@@ -296,6 +296,9 @@ namespace Armada.Helm
                     .WithExample("mission", "selection-recovery", "msn_example", "--allow-fallback", "--reason", "\"Preferred captain offline\"");
                 mission.AddCommand<MissionShowCommand>("show")
                     .WithDescription("Show mission details (accepts name or ID)");
+                mission.AddCommand<MissionAttemptsCommand>("attempts")
+                    .WithDescription("Show a mission's attempts, failure kinds, repairs and escalations")
+                    .WithExample("mission", "attempts", "msn_example");
                 mission.AddCommand<MissionCancelCommand>("cancel")
                     .WithDescription("Cancel a mission");
                 mission.AddCommand<MissionRestartCommand>("restart")
@@ -415,6 +418,16 @@ namespace Armada.Helm
                 blackbox.AddCommand<BlackBoxGapsCommand>("gaps")
                     .WithDescription("List Armada resilience gaps (handoff and landing failures triaged ArmadaDefect, by fingerprint)")
                     .WithExample("blackbox", "gaps", "--phase", "Landing", "--since", "30d");
+            });
+
+            config.AddBranch("battery", battery =>
+            {
+                battery.SetDescription("Fixture battery runs");
+                battery.AddCommand<BatteryRunsCommand>("runs")
+                    .WithDescription("List battery runs (--status, --captain)");
+                battery.AddCommand<BatteryCancelCommand>("cancel")
+                    .WithDescription("Cancel a battery run (cancels its open mission, releases its dock)")
+                    .WithExample("battery", "cancel", "bat_example", "--reason", "\"Wrong pack\"");
             });
 
             config.AddBranch("action", action =>

@@ -27,13 +27,13 @@ Client contract version: `1.0` (reported as `ContractVersion` by
 
 | Surface | Total | Experimental |
 |---|---|---|
-| REST routes | 535 | 15 |
-| MCP tools | 277 | 8 |
+| REST routes | 542 | 15 |
+| MCP tools | 283 | 8 |
 | WebSocket endpoints | 2 | 1 |
 | WebSocket commands | 65 | 0 |
-| WebSocket event types | 81 | 0 |
-| CLI commands | 101 | 0 |
-| Settings keys | 358 | 12 |
+| WebSocket event types | 84 | 0 |
+| CLI commands | 104 | 0 |
+| Settings keys | 368 | 12 |
 
 ## REST API
 
@@ -89,8 +89,10 @@ Base path `/api/v1`. Request and response bodies are PascalCase JSON; errors are
 | PUT | `/api/v1/battery/packs/{packId}/files` | AdminOnly | `BatteryPackTextFile` | 200 `BatteryPackDetail`, 400, 403 `ApiErrorResponse`, 404, 409 `ApiErrorResponse` |  |
 | PUT | `/api/v1/battery/packs/{packId}/manifest` | AdminOnly | `BatteryPackEditRequest` | 200 `BatteryPackDetail`, 400, 403 `ApiErrorResponse`, 404, 409 `ApiErrorResponse` |  |
 | POST | `/api/v1/battery/packs/{packId}/validate` | Authenticated |  | 200 `BatteryPackInfo`, 400, 403 `ApiErrorResponse`, 404, 409 `ApiErrorResponse` |  |
+| GET | `/api/v1/battery/runs` | Authenticated |  | 200 `EnumerationResult<BatteryRun>`, 400 |  |
 | POST | `/api/v1/battery/runs` | TenantAdmin | `BatteryRunRequest` | 201 `BatteryRun`, 400, 403 `ApiErrorResponse`, 404 |  |
 | GET | `/api/v1/battery/runs/{id}` | Authenticated |  | 200 `BatteryRun`, 404 |  |
+| POST | `/api/v1/battery/runs/{id}/cancel` | TenantAdmin | `BatteryRunCancelRequest` (optional) | 200 `BatteryRun`, 400, 403 `ApiErrorResponse`, 404 |  |
 | GET | `/api/v1/battery/runs/{id}/results` | Authenticated |  | 200 `EnumerationResult<BatteryTaskResult>`, 400, 404 |  |
 | POST | `/api/v1/battery/runs/{id}/results/enumerate` | Authenticated | `EnumerationQuery` (optional) | 200 `EnumerationResult<BatteryTaskResult>`, 400, 404 |  |
 | GET | `/api/v1/blackbox` | Authenticated |  | 200 `EnumerationResult<BlackBoxEntrySummary>`, 400 |  |
@@ -284,6 +286,7 @@ Base path `/api/v1`. Request and response bodies are PascalCase JSON; errors are
 | DELETE | `/api/v1/missions/{id}` | TenantAdmin |  | 200 `Mission`, 404 |  |
 | GET | `/api/v1/missions/{id}` | Authenticated |  | 200 `Mission`, 404 |  |
 | PUT | `/api/v1/missions/{id}` | TenantAdmin | `Mission` | 200 `Mission`, 400, 404, 409 `ApiErrorResponse` |  |
+| GET | `/api/v1/missions/{id}/attempts` | Authenticated |  | 200 `MissionAttemptHistory`, 404 |  |
 | GET | `/api/v1/missions/{id}/blackbox` | Authenticated |  | 200 `BlackBoxEntry`, 404 `ApiErrorResponse`, 409 `ApiErrorResponse` |  |
 | GET | `/api/v1/missions/{id}/blackbox/brief` | Authenticated |  | 200 `string`, 400 `ApiErrorResponse`, 404 `ApiErrorResponse` |  |
 | GET | `/api/v1/missions/{id}/blackbox/entries` | Authenticated |  | 200 `EnumerationResult<BlackBoxEntrySummary>`, 400 |  |
@@ -414,6 +417,10 @@ Base path `/api/v1`. Request and response bodies are PascalCase JSON; errors are
 | PUT | `/api/v1/releases/{id}` | TenantAdmin | `ReleaseUpsertRequest` | 200 `Release`, 404 |  |
 | POST | `/api/v1/releases/{id}/github/pull-requests/enumerate` | Authenticated | `EnumerationQuery` (optional) | 200 `EnumerationResult<GitHubPullRequestDetail>`, 404 |  |
 | POST | `/api/v1/releases/{id}/refresh` | TenantAdmin |  | 200 `Release`, 404 |  |
+| GET | `/api/v1/reliability/gate-reports` | TenantAdmin |  | 200 `EnumerationResult<GateReport>`, 400, 403 `ApiErrorResponse` |  |
+| POST | `/api/v1/reliability/gate-reports` | AdminOnly | `GateReport` | 201 `GateReport`, 400, 403 `ApiErrorResponse` |  |
+| GET | `/api/v1/reliability/gate-reports/{id}` | TenantAdmin |  | 200 `GateReport`, 403 `ApiErrorResponse`, 404 |  |
+| GET | `/api/v1/reliability/summary` | Authenticated |  | 200 `ReliabilitySummary`, 400 |  |
 | GET | `/api/v1/request-history` | Authenticated |  | 200 `EnumerationResult<RequestHistoryEntry>` |  |
 | POST | `/api/v1/request-history/delete/by-filter` | TenantAdmin | `RequestHistoryQuery` (optional) | 200 `DeleteMultipleResult` |  |
 | POST | `/api/v1/request-history/delete/multiple` | TenantAdmin | `DeleteMultipleRequest` | 200 `DeleteMultipleResult`, 400 |  |
@@ -599,6 +606,7 @@ Arguments are camelCase; `*` marks a required argument. See [MCP_API.md](MCP_API
 | `authorize_captain_selection_recovery` | TenantAdmin | `missionId*: string`, `recovery*: object` |  |
 | `backup` | AdminOnly | `outputPath: string` |  |
 | `cancel_ask_turn` | Authenticated | `threadId*: string` |  |
+| `cancel_battery_run` | TenantAdmin | `id*: string`, `reason: string` |  |
 | `cancel_fleet_action_run` | TenantAdmin | `runId*: string` |  |
 | `cancel_merge` | TenantAdmin | `entryId*: string` |  |
 | `cancel_mission` | TenantAdmin | `missionId*: string` |  |
@@ -625,7 +633,7 @@ Arguments are camelCase; `*` marks a required argument. See [MCP_API.md](MCP_API
 | `create_model_endpoint` | Authenticated | `apiKey: string`, `authHeaderName: string`, `authQueryParameter: string`, `authType: string`, `authUsername: string`, `baseUrl*: string`, `dimensionality: integer`, `enabled: boolean`, `headers: array<object>`, `inferenceOptions: object`, `kind: string`, `model: string`, `name*: string`, `provider: string`, `timeoutMs: integer` |  |
 | `create_objective` | TenantAdmin | `acceptanceCriteria: array<string>`, `backlogState: string`, `blockedByObjectiveIds: array<string>`, `category: string`, `checkRunIds: array<string>`, `deploymentIds: array<string>`, `description: string`, `dueUtc: string`, `effort: string`, `evidenceLinks: array<string>`, `fleetIds: array<string>`, `incidentIds: array<string>`, `kind: string`, `missionIds: array<string>`, `nonGoals: array<string>`, `owner: string`, `parentObjectiveId: string`, `planningSessionIds: array<string>`, `priority: string`, `rank: integer`, `refinementSessionIds: array<string>`, `refinementSummary: string`, `releaseIds: array<string>`, `rolloutConstraints: array<string>`, `status: string`, `suggestedPipelineId: string`, `tags: array<string>`, `targetVersion: string`, `title*: string`, `vesselIds: array<string>`, `voyageIds: array<string>` |  |
 | `create_persona` | Authenticated | `captainPriorities: array<object>`, `defaultCaptainId: string`, `description: string`, `escalationLadder: array<object>`, `name*: string`, `priorityAvailability: string`, `priorityExhaustion: string`, `promptTemplateName*: string`, `scope: string` |  |
-| `create_pipeline` | Authenticated | `description: string`, `name*: string`, `scope: string`, `stages*: array<object>` |  |
+| `create_pipeline` | Authenticated | `description: string`, `judgeStrength: string`, `name*: string`, `scope: string`, `stages*: array<object>` |  |
 | `create_playbook` | TenantAdmin | `active: boolean`, `content*: string`, `description: string`, `fileName*: string`, `scope: string` |  |
 | `create_prompt_template` | Authenticated | `active: boolean`, `category*: string`, `content*: string`, `description: string`, `name*: string`, `scope: string` |  |
 | `create_release` | TenantAdmin | `checkRunIds: array<string>`, `missionIds: array<string>`, `notes: string`, `status: string`, `summary: string`, `tagName: string`, `title: string`, `version: string`, `vesselId: string`, `voyageIds: array<string>`, `workflowProfileId: string` |  |
@@ -704,11 +712,13 @@ Arguments are camelCase; `*` marks a required argument. See [MCP_API.md](MCP_API
 | `get_dock` | Authenticated | `dockId*: string` |  |
 | `get_failure_cause_rule` | Authenticated | `ruleId*: string` |  |
 | `get_fleet` | Authenticated | `fleetId*: string` |  |
+| `get_gate_report` | TenantAdmin | `id*: string` |  |
 | `get_handoff_artifact` | Authenticated | `artifactId*: string` |  |
 | `get_harbor` | Authenticated | `harborId*: string` | experimental |
 | `get_harbor_metrics` | Authenticated | `harborId*: string`, `range: string` | experimental |
 | `get_memory` | Authenticated | `memoryId*: string` |  |
 | `get_merge_entry` | Authenticated | `entryId*: string` |  |
+| `get_mission_attempts` | Authenticated | `missionId*: string` |  |
 | `get_mission_diff` | Authenticated | `missionId*: string` |  |
 | `get_mission_log` | Authenticated | `formatted: boolean`, `lines: integer`, `missionId*: string`, `offset: integer` |  |
 | `get_mission_submissions` | Authenticated | `missionId*: string` |  |
@@ -724,6 +734,7 @@ Arguments are camelCase; `*` marks a required argument. See [MCP_API.md](MCP_API
 | `get_playbook` | Authenticated | `id*: string` |  |
 | `get_prompt_template` | Authenticated | `name*: string` |  |
 | `get_release` | Authenticated | `releaseId*: string` |  |
+| `get_reliability_summary` | Authenticated | `descending: boolean`, `fromUtc: string`, `includeEvaluation: boolean`, `model: string`, `pageNumber: integer`, `pageSize: integer`, `persona: string`, `sort: string`, `tenantId: string`, `toUtc: string`, `vesselId: string` |  |
 | `get_runbook` | Authenticated | `runbookId*: string` |  |
 | `get_runbook_execution` | Authenticated | `runbookExecutionId*: string` |  |
 | `get_stage_outcome` | Authenticated | `outcomeId*: string` |  |
@@ -750,6 +761,7 @@ Arguments are camelCase; `*` marks a required argument. See [MCP_API.md](MCP_API
 | `list_backlog_refinement_sessions` | Authenticated | `objectiveId*: string`, `pageNumber: integer`, `pageSize: integer` |  |
 | `list_battery_packs` | Authenticated | `pageNumber: integer`, `pageSize: integer` |  |
 | `list_battery_results` | Authenticated | `order: string`, `pageNumber: integer`, `pageSize: integer`, `runId*: string`, `status: string` |  |
+| `list_battery_runs` | Authenticated | `captainId: string`, `pageNumber: integer`, `pageSize: integer`, `status: string`, `tenantId: string` |  |
 | `list_blackbox_entries` | Authenticated | `captainId: string`, `createdAfter: string`, `createdBefore: string`, `fingerprint: string`, `fleetId: string`, `isCurrent: boolean`, `kind: string`, `missionId: string`, `order: string`, `pageNumber: integer`, `pageSize: integer`, `path: string`, `phase: string`, `pinned: boolean`, `resilienceScope: boolean`, `resolution: string`, `state: string`, `step: string`, `subjectType: string`, `triage: string`, `vesselId: string`, `voyageId: string` |  |
 | `list_blackbox_fingerprints` | Authenticated | `createdAfter: string`, `createdBefore: string`, `order: string`, `pageNumber: integer`, `pageSize: integer`, `resolution: string`, `vesselId: string` |  |
 | `list_blackbox_hotspots` | Authenticated | `createdAfter: string`, `createdBefore: string`, `order: string`, `pageNumber: integer`, `pageSize: integer`, `role: string`, `vesselId: string` |  |
@@ -758,6 +770,7 @@ Arguments are camelCase; `*` marks a required argument. See [MCP_API.md](MCP_API
 | `list_blackbox_objects` | Authenticated | `entryId: string`, `missionId: string`, `order: string`, `pageNumber: integer`, `pageSize: integer`, `voyageId: string` |  |
 | `list_blackbox_resilience_gaps` | Authenticated | `createdAfter: string`, `createdBefore: string`, `order: string`, `pageNumber: integer`, `pageSize: integer`, `phase: string`, `resolution: string`, `vesselId: string` |  |
 | `list_failure_cause_rules` | Authenticated | `pageNumber: integer`, `pageSize: integer` |  |
+| `list_gate_reports` | TenantAdmin | `pageNumber: integer`, `pageSize: integer` |  |
 | `list_handoff_artifacts` | Authenticated | `missionId*: string`, `pageNumber: integer`, `pageSize: integer` |  |
 | `list_harbor_jobs` | Authenticated | `harborId*: string`, `openOnly: boolean`, `pageNumber: integer`, `pageSize: integer` | experimental |
 | `list_model_alerts` | Authenticated | `includeIgnored: boolean`, `pageNumber: integer`, `pageSize: integer`, `persona: string`, `profileId: string`, `status: string` |  |
@@ -931,13 +944,16 @@ Generic events carry a `message` and the payload `{ entityType, entityId, captai
 | `merge.batch_purged` | tenant | generic |
 | `merge.purged` | tenant | generic |
 | `mission.activity` | tenant | `id`, `voyageId`, `activity` |
+| `mission.attempt_changed` | tenant | `MissionAttemptChange` + `missionId`, `voyageId`, `status`, `captainId`, `persona`, `tier`, `escalationCount`, `escalatedFromCaptainId`, `escalatedFromModel`, `redispatchAttempts`, `outputRepairAttempts`, `noOpRedispatchAttempts`, `stallRecoveryAttempts` |
 | `mission.batch_deleted` | tenant | generic |
-| `mission.changed` | tenant | `id`, `title`, `status`, `voyageId`, `activity` |
+| `mission.changed` | tenant | `id`, `title`, `status`, `voyageId`, `activity`, `persona`, `mode`, `captainId`, `tier`, `escalationCount`, `redispatchAttempts`, `outputRepairAttempts` |
 | `mission.completed` | tenant | generic |
 | `mission.deleted` | tenant | generic |
+| `mission.escalated` | tenant | `MissionAttemptChange` + `missionId`, `voyageId`, `status`, `captainId`, `persona`, `tier`, `escalationCount`, `escalatedFromCaptainId`, `escalatedFromModel`, `redispatchAttempts`, `outputRepairAttempts`, `noOpRedispatchAttempts`, `stallRecoveryAttempts` |
 | `mission.landing_failed` | tenant | generic |
 | `mission.manual_complete_no_dock` | tenant | generic |
 | `mission.pull_request_open` | tenant | generic |
+| `mission.repaired` | tenant | `MissionAttemptChange` + `missionId`, `voyageId`, `status`, `captainId`, `persona`, `tier`, `escalationCount`, `escalatedFromCaptainId`, `escalatedFromModel`, `redispatchAttempts`, `outputRepairAttempts`, `noOpRedispatchAttempts`, `stallRecoveryAttempts` |
 | `mission.restarted` | tenant | generic |
 | `mission.review_approved` | tenant | generic |
 | `mission.review_denied` | tenant | generic |
@@ -990,6 +1006,8 @@ Commands of the `armada` CLI (Helm). `*` marks a required argument or option. Gl
 | `armada backlog reorder` | `<backlog>*` | `--json`, `--page`, `--page-size`, `--profile`, `--rank\|-r`, `--server`, `--token`, `--verbose` |
 | `armada backlog show` | `<backlog>*` | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
 | `armada backlog update` | `<backlog>*` | `--acceptance`, `--backlog-state`, `--blocked-by`, `--category`, `--constraint`, `--description\|-d`, `--due-utc`, `--effort`, `--evidence`, `--fleet`, `--json`, `--kind`, `--non-goal`, `--owner`, `--page`, `--page-size`, `--parent`, `--pipeline`, `--priority`, `--profile`, `--rank`, `--server`, `--status`, `--summary`, `--tag`, `--target-version`, `--title\|-t`, `--token`, `--verbose`, `--vessel` |
+| `armada battery cancel` | `<run>*` | `--json`, `--page`, `--page-size`, `--profile`, `--reason`, `--server`, `--token`, `--verbose` |
+| `armada battery runs` |  | `--captain`, `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--status`, `--token`, `--verbose` |
 | `armada blackbox backfill` |  | `--json`, `--max`, `--page`, `--page-size`, `--profile`, `--server`, `--since`, `--token`, `--verbose` |
 | `armada blackbox bundle` |  | `--before`, `--captain`, `--fingerprint`, `--format`, `--json`, `--kind`, `--max`, `--mission`, `--output\|-o`, `--page`, `--page-size`, `--phase`, `--pinned`, `--profile`, `--redact-hosts`, `--resolution`, `--server`, `--since`, `--step`, `--token`, `--triage`, `--verbose`, `--vessel`, `--voyage` |
 | `armada blackbox cascade` | `<voyageId>*` | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
@@ -1037,6 +1055,7 @@ Commands of the `armada` CLI (Helm). `*` marks a required argument or option. Gl
 | `armada mcp install` |  | `--dry-run`, `--json`, `--mcp-url`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose`, `--yes` |
 | `armada mcp remove` |  | `--dry-run`, `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose`, `--yes` |
 | `armada mcp stdio` |  | `--profile`, `--server`, `--token` |
+| `armada mission attempts` | `<mission>*` | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
 | `armada mission cancel` | `<mission>*` | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
 | `armada mission create` | `<title>*` | `--branch-strategy`, `--description\|-d`, `--json`, `--max-files`, `--max-steps`, `--min-context-tokens`, `--page`, `--page-size`, `--parent`, `--priority\|-p`, `--profile`, `--require-tool`, `--server`, `--token`, `--verbose`, `--vessel\|-v`, `--voyage` |
 | `armada mission failure` | `<id>*` | `--brief`, `--json`, `--page`, `--page-size`, `--profile`, `--redact-hosts`, `--server`, `--token`, `--verbose` |
@@ -1292,7 +1311,9 @@ install with the home directory written as `~`; defaults are not frozen (see COM
 | `mcp.missionScopedTokens` | bool | `true` |  |
 | `mcp.toolCallsPerSecond` | int | `100` |  |
 | `mcpPort` | int | `7891` |  |
+| `mergeQueueBatchSize` | int | `1` |  |
 | `mergeQueueLeaseSeconds` | int | `900` |  |
+| `mergeQueueRequeueLimit` | int | `3` |  |
 | `mergeQueueTestCommand` | string | `null` |  |
 | `messageTemplates` | object |  |  |
 | `messageTemplates.commitMessageTemplate` | string | `"\nArmada-Mission-Id: {MissionId}\nArmada-Voyage-Id: {VoyageId}\nArmada-Capta...` |  |
@@ -1338,6 +1359,8 @@ install with the home directory written as `~`; defaults are not frozen (see COM
 | `planningSessionAbandonmentTimeoutMinutes` | int | `240` |  |
 | `planningSessionInactivityTimeoutMinutes` | int | `60` |  |
 | `planningSessionRetentionDays` | int | `0` |  |
+| `promptVariantCompactMaxContextTokens` | int | `32768` |  |
+| `promptVariantLeanMaxContextTokens` | int | `65536` |  |
 | `push` | object |  |  |
 | `push.categories` | array<enum PushCategoryEnum (AskProposal\|CliPermission\|MissionReview\|DeploymentApproval\|MissionFailed\|LandingFailed\|CaptainStalled\|VoyageFinished\|ModelAlert)> | `["AskProposal","CliPermission","MissionReview","DeploymentApproval","MissionF...` |  |
 | `push.dedupeWindowSeconds` | int | `300` |  |
@@ -1393,6 +1416,11 @@ install with the home directory written as `~`; defaults are not frozen (see COM
 | `retention.importBatchRetentionDays` | int | `90` |  |
 | `retention.jobRetentionDays` | int | `30` |  |
 | `reviewTimeoutMinutes` | int | `1440` |  |
+| `routingData` | object |  |  |
+| `routingData.halfLifeDays` | int | `14` |  |
+| `routingData.minimumSamples` | int | `20` |  |
+| `routingData.rankByOutcomes` | bool | `true` |  |
+| `routingData.suggestTiers` | bool | `false` |  |
 | `selfVesselId` | string | `null` | experimental |
 | `sessionTokenEncryptionKey` | string | `null` |  |
 | `stageCheckConcurrencyPerHarbor` | int | `1` |  |
@@ -1414,6 +1442,7 @@ install with the home directory written as `~`; defaults are not frozen (see COM
 | `telemetry.prometheusPort` | int | `9464` |  |
 | `telemetry.serviceName` | string | `"armada"` |  |
 | `terminalBell` | bool | `true` |  |
+| `timeoutScaleReferenceTokensPerSecond` | int | `30` |  |
 | `toolWaitHardLimitMinutes` | int | `60` |  |
 | `transientOutageGraceMinutes` | int | `10` |  |
 | `transientResumeDelaySeconds` | int | `5` |  |

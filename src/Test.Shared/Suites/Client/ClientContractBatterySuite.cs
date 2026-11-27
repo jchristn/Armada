@@ -109,6 +109,34 @@ namespace Test.Shared.Suites.Client
                 AssertEqual(10, viaGet.Objects.Count, "GET twin");
                 await ClientContract.ExpectErrorAsync(() => c.GetBatteryRunAsync("bat_missing"), "unknown run", 404, 404);
                 await ClientContract.ExpectErrorAsync(() => c.EnumerateBatteryRunResultsAsync("bat_missing"), "unknown run results", 404, 404);
+
+                EnumerationResult<BatteryRun> listed = (await c.ListBatteryRunsAsync(new BatteryRunQuery { CaptainId = captain.Id, Status = BatteryRunStatusEnum.Completed, PageSize = 5 }))!;
+                AssertEqual(run.Id, listed.Objects.Single().Id, "list filters by captain and status");
+                AssertEqual(5, listed.PageSize, "page size sent");
+                AssertEqual(0, listed.Objects.Single().Results.Count, "the list does not embed results");
+                BatteryRun unchanged = (await c.CancelBatteryRunAsync(run.Id, "too late"))!;
+                AssertEqual(BatteryRunStatusEnum.Completed, unchanged.Status, "cancelling a finished run changes nothing");
+                await ClientContract.ExpectErrorAsync(() => c.CancelBatteryRunAsync("bat_missing"), "cancel unknown run", 404, 404);
+            }));
+
+            cases.Add(Case("cancel_interrupted", "Cancel a run recorded Running that this Admiral is not executing: it ends Cancelled with the reason", async (c, fx) =>
+            {
+                BatteryRun orphan;
+                LoggingModule quiet = new LoggingModule();
+                quiet.Settings.EnableConsole = false;
+                DatabaseSettings settings = new DatabaseSettings { Type = DatabaseTypeEnum.Sqlite, Filename = Path.Combine(fx.TempDir, "armada.db") };
+                using (DatabaseDriver db = DatabaseDriverFactory.Create(settings, quiet))
+                {
+                    await db.InitializeAsync().ConfigureAwait(false);
+                    orphan = await db.BatteryRuns.CreateAsync(new BatteryRun { TenantId = Armada.Core.Constants.DefaultTenantId, Packs = new List<string> { "csharp" }, Status = BatteryRunStatusEnum.Running, TotalTasks = 10 }).ConfigureAwait(false);
+                }
+
+                BatteryRun cancelled = (await c.CancelBatteryRunAsync(orphan.Id, "Gate client stopped"))!;
+                AssertEqual(BatteryRunStatusEnum.Cancelled, cancelled.Status, "cancelled");
+                AssertEqual("Gate client stopped", cancelled.FailureReason, "reason sent");
+                EnumerationResult<BatteryRun> page = (await c.ListBatteryRunsAsync(new BatteryRunQuery { Status = BatteryRunStatusEnum.Cancelled, PageSize = 100 }))!;
+                AssertTrue(page.Objects.Any(r => r.Id == orphan.Id), "listed as Cancelled");
+                AssertNotNull(await c.ListBatteryRunsAsync(), "no query");
             }));
 
             return new TestSuiteDescriptor(suiteId: Suite, displayName: "Armada.Client contract: fixture battery", cases: cases);
