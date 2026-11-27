@@ -1235,10 +1235,10 @@ humanizer pass and a manual check against the Signs of AI writing page before an
   adapters; dashboard; mobile; TUI parity; VS Code extension. Record counts. Evidence:
 - [ ] **RS-14.2** `full.yml`, `security.yml`, `db-parity.yml` (`RESULT: PARITY OK`), and `install-verify.yml` green on
   the release candidate commit. Evidence:
-- [ ] **RS-14.3** Upgrade test from the v1.4.0 baseline on all four providers (`scripts/common/run-upgrade-test.sh
+- [x] **RS-14.3** Upgrade test from the v1.4.0 baseline on all four providers (`scripts/common/run-upgrade-test.sh
   --from-ref <v1.4.0 commit> --providers all`), with seeded missions in every text-marker state so the RS-3.1
-  backfill is exercised. Evidence:
-- [ ] **RS-14.4** Crash-point matrix (RS-1.3): every named point, every provider, recorded. Evidence:
+  backfill is exercised. Evidence: benchmarks/VERIFICATION_1.5.0.md: upgrade from the Release v1.4.0 commit passes 8/8 on SQLite, PostgreSQL, MySQL and SQL Server, with seeded text-marker missions checked through the migration 133 backfill; test-side fixes for 1.3+ vessel limits and baseline selection history.
+- [x] **RS-14.4** Crash-point matrix (RS-1.3): every named point, every provider, recorded. Evidence: benchmarks/VERIFICATION_1.5.0.md: all 13 crash points plus the injector scope case pass 14/14 on each of the four providers, none skipped.
 - [ ] **RS-14.5** Simulated user testing per `SIMULATED_USER_TESTING.md` on an isolated `armada-usertest` stack,
   personas including an operator setting up Qwen3.8 for the first time from `docs/OPEN_MODELS.md` alone. S1 and S2
   findings fixed; lower ones fixed or added to `docs/BACKLOG.md` with a reason. Evidence:

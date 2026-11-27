@@ -488,6 +488,7 @@ Conductor) with Opus and GPT-6.1 reliable. The work is tracked item by item in `
   canned model outputs (`Services.ModelOutputContract`), and gate scoring (`Models.GateScoring`).
 - Fixed: the TUI focus sweep at 80x24 and 120x40 (stale placements under nested focus scopes), the passive usage
   capture contract's timestamp precision, and the compose validation's missing Grafana password.
+- The upgrade test runs from a 1.4.0 baseline: it seeds missions in every text-marker state and checks the migration 133 backfill, and seeds vessels with the numeric concurrency limits 1.3.0 and later require. Results for the upgrade test and the crash-point matrix on all four providers are in `benchmarks/VERIFICATION_1.5.0.md`.
 
 ## v1.4.0 (2026-11-21)
 
