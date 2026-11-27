@@ -216,5 +216,6 @@ After a mission's work has landed, Armada can automatically clean up the mission
 - **`MergeQueueTestCommand`** (in `ArmadaSettings`) -- default test command to run for entries that don't specify their own. Can be overridden per entry via the `testCommand` parameter on `enqueue_merge`.
 - **`MergeQueueRequeueLimit`** (default 3, 0 to 10, clamped) -- how many times a push that is not a fast-forward is requeued from a fresh fetch, and how many times a lost landing handoff is enqueued again, before the entry or mission fails. 0 fails at once.
 - **`MergeQueueBatchSize`** (default 1, which is off; 1 to 20, clamped) -- batched landing: up to this many entries of one group are merged, verified once, and pushed together, with bisection when verification fails.
+- **`MergeQueueLeaseSeconds`** (default 900, 5 to 14400, clamped) -- lifetime of the processing lease. The Admiral that holds it renews it before every entry, so a long pass with several builds is never taken over by another instance; a crashed holder's lease expires after this long.
 - **`DocksDirectory`** -- parent directory for temporary merge worktrees. Worktrees are created under `_merge-queue/` within this directory.
 - **`ReposDirectory`** -- fallback repository path when a vessel's `LocalPath` is not set.

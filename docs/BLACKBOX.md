@@ -157,7 +157,7 @@ triage works as before.
 |---|---|
 | `selfHealable`, `selfHealingProposal` | Yes, No or Unknown, and what Armada could have done automatically: retry with backoff, recreate the dock worktree from the branch, land through an integration worktree instead of a dirty checkout, regenerate generated files on conflict, rebase onto the moved target, serialize overlapping missions, re-request missing markers, refresh a stale lease, reconnect the Harbor and resume |
 | `detectionGapKind`, `detectionGap`, `invariant` | Why Armada did not catch or prevent it earlier (NoPreflightCheck, CheckTooLate, StateNotPersisted, Race, MissingInvariant, MissingRetry) and the invariant that should hold |
-| `codePointers`, `armadaVersion`, `armadaCommit` | The Armada source locations most likely involved (the failure site first, then the handoff and landing services: MissionLandingHandler, LandingService, LandingTargetSynchronization, LandingVerification, MergeQueueService, LandingIntegrityService, DockService, MissionService handoff and completion, AdmiralService recovery), at the build that failed |
+| `codePointers`, `armadaVersion`, `armadaCommit` | The Armada source locations most likely involved (the failure site first, then the handoff and landing services: MissionLandingHandler, LandingService, LandingTargetSynchronization, LandingVerification, MergeQueueService, LandingIntegrityService, DockService, MissionHandoffService, StageCompletionHandler, AdmiralService recovery), at the build that failed |
 | `proposedChanges` | Armada changes ranked by impact, each a mission brief (`title`, `change`, `acceptanceTest`, `codePointers`, `missionBrief` ready to dispatch on the Armada vessel) |
 | `severity`, `occurrences30Days`, `armadaVersionCount` | Severity escalates with recurrence of the fingerprint: seen once Medium, 3 or more times in 30 days High, 5 or more times or in 2 or more Armada versions Critical (a higher rule severity is kept) |
 | `regressionTest` | The test (suite and case) that would have caught it |
@@ -1019,7 +1019,7 @@ await BlackBox.RecordMissionFailureAsync(mission, statusBefore, BlackBoxStepEnum
 }, token).ConfigureAwait(false);
 ```
 
-The reference site is `MissionService.TryFailMissionForScopeViolationAsync` (`src/Armada.Core/Services/MissionService.cs`).
+The reference site is `MissionScopeGuard.TryFailMissionForScopeViolationAsync` (`src/Armada.Core/Services/MissionScopeGuard.cs`).
 Services that fail missions expose `public IBlackBoxCapture? BlackBox { get; set; }` and the Admiral assigns
 `runtime.Capture`. Voyages use `RecordVoyageFailureAsync(voyage, statusBefore, step, reason, configure, token)`.
 `BlackBoxCaptureContext` fields: Mission (required), StatusBefore, Step, CaptureMode, Exception, ExitCode,
@@ -1030,6 +1030,10 @@ cleared Mission.CaptainId before its write), Voyage, Dock, CallerMember, CallerF
 TargetTipBefore, TargetTipAfter, WorktreeExisted, CheckoutPath, BranchTip, GitOperation, GitStderr.
 `BlackBoxVoyageCaptureContext`: Voyage (required), StatusBefore, Step, CaptureMode, Reason, Exception, RootMissionId,
 SettlementRule, HaltReason, Note, CallerMember, CallerFile, CallerLine, Component.
+
+`Component` defaults to the calling file's name, so since 1.5.0 split `MissionService` into services, a mission
+capture names the service that failed it (`MissionLauncher`, `StageCompletionHandler`, `MissionScopeGuard` and so on)
+rather than `MissionService` or a partial file such as `MissionService.Completion`.
 
 What a capture does: numbers the attempt and supersedes the previous current entry (`CreateCurrentAsync`), builds
 Subject, Status, Site, Mechanism, Classification and Configuration (from the mission, vessel, voyage, captain, dock,
@@ -1936,7 +1940,7 @@ Surfaces (REST tag `BlackBox`, every MCP tool read-only and in `AskToolPolicy`'s
 (`ListTrackedFilesAsync` on the Admiral's repository through `VesselGitInspector`, cached five minutes; null for a
 vessel without a local repository), its active missions (`VesselGitInspector.ActiveMissionStatuses`, newest 200,
 `ActiveMissionsTruncated`), each with a `MissionFileSet` of likely files (its scoped-files directive through
-`MissionService.ParseMissionScopedFiles`, brief paths that exist in the tracked files, its dock's
+`MissionScopeGuard.ParseMissionScopedFiles`, brief paths that exist in the tracked files, its dock's
 `GitAnchorsSnapshot.RecentPathCommits`, and its `DiffSnapshot` or, for at most ten missions without one, its branch
 from its start commit or merge base), the vessel's hotspot directories (`EnumerateHotspotsAsync`, Conflicted rows, top
 1000) and the reservations they produce. `LikelyFiles(title, description, tracked)` gives a new mission's set (scoped

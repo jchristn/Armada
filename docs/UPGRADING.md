@@ -49,6 +49,61 @@ change. A client that counted these events, or treated each one as a failure, sh
 [SDK_MIGRATION_1.5.md](SDK_MIGRATION_1.5.md) lists every old method with its new call. The REST API itself is
 unchanged.
 
+Eleven schema migrations run on the first start of 1.5.0, on all four providers. None needs a step from you, but
+knowing what they add helps when you read a 1.5.0 database by hand or plan a backup window on a large install:
+
+| Migration | Adds |
+|---|---|
+| 133 | Typed mission state columns and `Notes`, filled from the old description markers |
+| 134 | `recovery_state`: circuit breakers, launch backoff, outage starts and escalation cooldowns kept across restarts |
+| 135 | Per-model recovery policy columns on model profiles |
+| 136 | The persona escalation ladder table and the profile's `EscalateAfterResumes` |
+| 137 | `attempt_id` on handoffs, so each stage attempt keeps its own handoff |
+| 138 | `stage_submissions`, the typed results captains send with the submit tools |
+| 139 | Discovered context length, source and time on model endpoints |
+| 140 | The model profile tier and tier suggestion columns |
+| 141 | Model profile timeout overrides and measured speed |
+| 142 | Probed tool and MCP capabilities on model profiles |
+| 143 | A (status, last update) index on missions for the recovery coordinator |
+
+Migration 133 is the only one that reads existing rows; the others add tables, columns or an index.
+
+A few behaviors change without a setting you have to flip. Each one is a default chosen for mixed open and frontier
+pipelines, and each can be put back:
+
+- **Outcome ranking is on.** Within one tier, captains whose model has at least 20 recorded results for the persona
+  are tried first, best results first. A fresh install has no results yet, so it routes exactly as 1.4.0 did until
+  the data builds up. Set `RoutingData.RankByOutcomes` to false to keep the old order permanently.
+- **New pipelines get the Judge strength rule `Wait`.** A Judge must be at least as strong as the work it reviews, and
+  waits with a `judge_strength` blocker until such a captain is free. Pipelines stored before 1.5.0 read as `Off` and
+  are unchanged; set `JudgeStrength` on a pipeline to opt in or out.
+- **Unexplained exits are `Unclassified`, not `Crash`.** Escalation rules and dashboards that matched `Crash` for a
+  non-zero exit should also match `Unclassified`.
+- **`RecoveryExhausted` fires once per recovery incident** when every rescue has failed. Every terminal mission
+  failure fires `MissionFailed` instead. Move escalation rules that relied on the old `RecoveryExhausted` to
+  `MissionFailed`.
+- **Streaming defaults to `Automatic`.** OpenAI-compatible and Ollama endpoints stream. A stored 1.4.0
+  `streaming: false` reads as `Automatic`, so choose `Off` in the endpoint's `streamingMode` to turn streaming off.
+- **Azure OpenAI ignores `ApiVersion`.** PolyPrompt 5 uses the v1 route; the field is still accepted and stored.
+- **Black box records name the owning service.** `MissionService` was split into services, so a record's `Component`
+  is now, for example, `MissionLauncher` or `StageCompletionHandler`. Filters on `Component` `MissionService` need the
+  new names.
+- **Instructions file names changed for three runtimes.** Codex captains get `AGENTS.override.md`, OpenCode
+  `AGENTS.md`, and API endpoint and custom runtimes `ARMADA.md`. The repository's own `AGENTS.md` or `CLAUDE.md` is
+  carried into the generated file.
+
+Update every Harbor along with the Admiral. A 1.4.0 Harbor still connects and runs jobs, but each 1.5.0 behavior that
+runs on the Harbor (text tool-call recovery, the submit tool, context discovery, model warm-up and the rest) has a
+capability flag, and a Harbor without the flag keeps its 1.4.0 behavior. The Admiral marks such a Harbor
+`updateRecommended`, and the dashboard, TUI, mobile app and the Harbor app itself say so. The flag table is in
+[HARBOR_PROTOCOL.md](HARBOR_PROTOCOL.md#api-captain-capability-flags).
+
+The legacy `[ARMADA:MISSION]` plan format is deprecated (D-027 in [DEPRECATION.md](../DEPRECATION.md)). It still works
+while `AcceptLegacyMissionMarkers` is on, which is the default, and logs a warning each time. It is removed in 2.0. Turn
+the setting off now to find custom Architect templates that still produce markers; their output then gets the output
+repair turn instead of being read. The new settings are listed with their ranges in
+[OPERATIONS.md](OPERATIONS.md#reliability-settings-added-in-150).
+
 ### Changes to act on when coming from 1.0.0
 
 1.0.1 fixes the landing modes. `LocalMerge` now merges into the working directory without pushing; the new

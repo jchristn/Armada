@@ -93,6 +93,10 @@ ARMADA_TEST_SUITES=E2E dotnet run --project src/Test.Automated --framework net10
 dotnet run --project src/Test.Automated --framework net10.0 -- --suites Database,Services.MergeQueue
 ```
 
+Separate several ids with commas, not spaces. `--suites Services.SourceGuards Services.MergeQueue` selects only the
+first prefix and quietly ignores the second, which is easy to miss when a run finishes green with fewer tests than
+expected.
+
 ## Command-Line Options
 
 `Test.Automated` accepts these arguments after `--`:
@@ -220,6 +224,60 @@ dotnet run --project src/Test.Automated --framework net10.0 -- --suites Runtimes
 That suite checks the simulator's wire formats and that the API runtime ends, rather than hangs, for every kind. The
 suites for the reliability work in `RELIABILITY_SIMPLICITY_PLAN.md` use the simulator to assert the recovery each kind
 should get.
+
+## Crash-point harness
+
+Several Admiral operations write more than one row: creating a voyage, fanning out an Architect plan, handing off to
+the next stages, landing a merge queue entry, opening a recovery incident. A crash between two of those writes is the
+failure that is hardest to reproduce by hand, so production code marks the gaps with named crash points
+(`CrashPoints.Hit`, names in `src/Armada.Core/Services/CrashPointNames.cs`, such as `voyage.mission-created`,
+`launch.before-process-recorded`, `fanout.planned` and `mergequeue.pushed`). In production they do nothing.
+
+A test installs a `CrashPointInjector` (`src/Test.Shared/Infrastructure/CrashPoints`) for one asynchronous flow and
+arms one point. When the flow reaches it, the injector freezes that flow forever instead of throwing, because a dead
+process runs no later statement, catch block or finally block either. `CrashRun` abandons the frozen operation, then
+the test starts recovery the way a restarted Admiral would and checks that the end state matches an uninterrupted run.
+The injector is held in an `AsyncLocal`, so concurrent tests never see each other's armed points.
+
+```bash
+dotnet run --project src/Test.Automated --framework net10.0 -- --suites Services.CrashConsistency
+```
+
+`Services.CrashConsistency` walks every point. Adding a new multi-write operation means adding its points to
+`CrashPointNames` and a case to that suite; a point no test arms is a gap nobody has checked.
+
+## Seeded-defect battery tasks
+
+A Judge or Linter cannot be graded by whether the code builds, so their fixture battery tasks plant known problems and
+grade the review against them. A task's `BatterySeededItem` entries name each seeded defect or violation, and
+`BatterySeededSetGrader` reads the reviewer's findings to count which seeded items it found, which findings match
+nothing (false positives) and whether the verdict is one the task accepts. The grader is pure, with no I/O, so its
+cases run in `Services.Battery` alongside the pack catalog tests. The negative controls there are the useful ones to
+read first: a review that finds all three seeded defects with no false positives and gives a FAIL verdict passes, and
+a PASS with only optional notes passes while one that invents an affected case does not.
+
+```bash
+dotnet run --project src/Test.Automated --framework net10.0 -- --suites Services.Battery
+```
+
+## Reliability gate
+
+The 1.5.0 acceptance gate is not a test suite. `src/Armada.Gate` drives an isolated Admiral through the .NET SDK, runs
+the reference pipelines from `benchmarks/config/reference-pipelines.json` as battery runs in pipeline mode, and writes
+a report that scores each gate measure or marks it `NotMeasured`, never passed by default. The setup, the endpoint file
+(git-ignored, copied from `gate-endpoints.example.json`) and the run budget are in
+[benchmarks/README.md](../benchmarks/README.md#acceptance-gate-150).
+
+```bash
+benchmarks/start-bench-server.sh --name gate --port 25160 --real-agents --telemetry
+dotnet run --project src/Armada.Gate -- --url http://127.0.0.1:25160 --pipelines Gate-D --packs csharp --runs 1
+```
+
+The report is written to `benchmarks/results/gate-<time>.md` and `.json`, then uploaded to the Admiral
+(`POST /api/v1/reliability/gate-reports`) so the dashboard's Reliability tab, the TUI and `armada battery report` show
+the latest one. Pass `--no-upload` to keep it local; a failed upload never fails the gate. Ctrl+C cancels the battery
+run on the Admiral, so stopping the client no longer leaves missions running there. The exit code is 0 when every
+measured measure passed, 1 when one failed and 2 for a usage or setup error.
 
 ## Adding Tests
 

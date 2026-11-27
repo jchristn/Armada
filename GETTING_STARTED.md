@@ -280,6 +280,11 @@ returns the same brief as Markdown, and from Claude Code you can ask:
 which calls the MCP tool `get_blackbox {"missionId": "msn_mvu1fjp0_9Wd6Uuyp262"}`. Recovery paths in the entry run as
 a dry run first and only run for real when you confirm. See [docs/BLACKBOX.md](docs/BLACKBOX.md).
 
+Before a mission reaches Failed, Armada has often already resumed its captain, repaired its report or escalated it to
+a stronger model. `armada mission attempts <mission>` (or the Attempts card on the mission page) lists every try with
+its captain, model, failure kind and what came next, which tells you whether a redispatch would only repeat one of
+them.
+
 ---
 
 ## Without the orchestrator
@@ -326,7 +331,7 @@ armada health                  Vessel health
 armada doctor                  Health check
 armada tui                     Terminal UI
 
-armada mission  list|create|show|cancel|restart|retry
+armada mission  list|create|show|attempts|cancel|restart|retry
 armada voyage   list|create|show|cancel|retry
 armada vessel   list|add|import|remove
 armada captain  list|add|update|stop|stop-all|remove
@@ -337,6 +342,9 @@ armada backlog  list|create|show|update|delete|reorder
 armada server   start|status|stop|restart
 armada config   show|set|init
 armada mcp      install|remove|stdio
+armada persona  list|show|ladder
+armada model-profile list|show|update
+armada battery  runs|cancel|report
 ```
 
 **Configuration** - `armada config show` to see all settings. Key ones: `MaxCaptains` (concurrent agents), `StallThresholdMinutes` (stall detection), `AutoPush`, `AutoCreatePullRequests`, `DefaultRuntime`.
@@ -346,6 +354,10 @@ armada mcp      install|remove|stdio
 **REST API** - Full CRUD on port 7890 under `/api/v1/`. See `docs/REST_API.md`.
 
 **MCP tools** - 146 tools for fleets, vessels, voyages, missions, captains, signals, events, docks, the merge queue, backlog, fleet actions, and more. Any MCP client can orchestrate Armada. See `docs/MCP_API.md` and `docs/CLAUDE_CODE_AS_ORCHESTRATOR.md`.
+
+**Open models in the same pipeline** - Run Qwen3.8 or another open model through an `ApiEndpoint` captain next to
+Opus and GPT-6.1. Give a persona an escalation ladder so stuck work moves up to a stronger model, and keep the
+pipeline's Judge strength rule on so a weak Judge cannot approve strong work. See [docs/OPEN_MODELS.md](docs/OPEN_MODELS.md).
 
 **Remote Admiral** - Run the Admiral on a server and use it from other machines: `armada profile add prod --server https://armada.example.com --token <bearer>`, then `--profile prod` (or `armada profile use prod`) on any command, `armada tui --profile prod`, and `armada mcp install --profile prod` for MCP clients. See [docs/REMOTE_SERVER.md](docs/REMOTE_SERVER.md).
 

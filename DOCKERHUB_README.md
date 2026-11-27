@@ -17,6 +17,14 @@
 
 ---
 
+## Open and frontier models in one pipeline
+
+Armada 1.5.0 runs open models such as Qwen3.8, served by Ollama, vLLM or an OpenAI-compatible proxy, in the same
+pipeline as Opus and GPT-6.1. Work an open model cannot finish moves up a persona's escalation ladder to a stronger
+model on the same branch, a Judge must be at least as strong as the work it reviews, and each model profile carries
+its own recovery policy, timeouts scaled to its speed and a prompt sized to its context window. See
+[Open models](https://github.com/jchristn/armada/blob/main/docs/OPEN_MODELS.md).
+
 ## Persona captain priorities
 
 Define an ordered hierarchy of preferred captain classes on each persona, matching runtime, model, Mux endpoint, and minimum capability tier. Configure whether busy classes permit lower priorities or wait for the first choice, and whether an exhausted hierarchy waits or allows any eligible captain. Pipelines and Architect-generated missions use the same routing. Existing personas retain their default-captain behavior until a hierarchy is configured. See [Captain routing](docs/CAPTAIN_ROUTING.md) for setup and examples.

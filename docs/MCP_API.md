@@ -6905,6 +6905,7 @@ Create a custom pipeline with stages. `stages` holds at most 256 entries (also o
 | `name` | string | Yes | Pipeline name |
 | `description` | string | No | Pipeline description |
 | `stages` | array | Yes | Ordered list of pipeline stages, each with `personaName` (required), `isOptional` (optional, default false), `description` (optional), `requiresReview` (optional, default false), and `reviewDenyAction` (optional, `RetryStage` or `FailPipeline`, default `RetryStage`; any other value is `InvalidArgument`) |
+| `judgeStrength` | string | No | Judge strength rule (RS-8.7): `Wait` (the default for a new pipeline), `ProceedAndFlag` or `Off`. A Judge must be at least the highest tier among the stages it reviews. `Wait` holds it with a `judge_strength` blocker until such a captain is free; `ProceedAndFlag` runs the best available Judge and records `mission.judge_strength_exception` |
 
 **Example Input:**
 
@@ -6985,6 +6986,7 @@ Update pipeline properties and stages. If `stages` is provided, it replaces all 
 | `name` | string | Yes | Pipeline name |
 | `description` | string | No | New pipeline description |
 | `stages` | array | No | New ordered list of pipeline stages (replaces all existing stages if provided); each stage takes the same fields as in `create_pipeline`, including `requiresReview` and `reviewDenyAction` |
+| `judgeStrength` | string | No | New Judge strength rule (`Off`, `Wait`, `ProceedAndFlag`); omitted keeps the current rule |
 
 **Response:** Updated [Pipeline](#pipeline) object with stages, or `{ "Error": "Pipeline not found: <name>", "ErrorCode": "NotFound" }`.
 
@@ -7836,6 +7838,7 @@ A registered host-side runner. Only `name`, `maxConcurrentJobs`, and `enabled` a
 | `Stages` | array | Ordered list of [PipelineStage](#pipelinestage) objects |
 | `IsBuiltIn` | bool | Whether this is a built-in pipeline |
 | `Active` | bool | Whether the pipeline is active |
+| `JudgeStrength` | string \| null | Judge strength rule (`Off`, `Wait`, `ProceedAndFlag`). Null reads as `Off`, which is what a pipeline stored before 1.5.0 has; voyages copy the rule when they are created |
 | `TenantId` | string \| null | Tenant identifier. |
 | `UserId` | string \| null | Owning user identifier (null for tenant-wide objects). |
 | `Scope` | string | Armada.Core.Enums.ScopeEnum value. Ownership scope: tenant-wide objects are visible to everyone in the tenant but editable only by tenant/global admins; user-specific objects are owned by `UserId`. Defaults tenant-wide. |

@@ -6282,8 +6282,9 @@ curl http://localhost:7890/api/v1/model-probe-runs/mpr_abc123 -H "Authorization:
 ## Model Profiles
 
 A model profile is the model as served: a stable identity of runtime, provider, model and served context, shared by
-every captain and Harbor that runs it (docs/MODEL_HETEROGENEITY.md, The model profile). It is advisory: it does not set
-`Captain.Tier` and does not change routing or dispatch. Armada creates profiles itself when it records a captain's
+every captain and Harbor that runs it (docs/MODEL_HETEROGENEITY.md, The model profile). Most of it is
+advisory, but four sections are applied: `Rendering`, `Recovery`, `Timeouts` and `Tiering.Tier` change how the
+profile's captains are prompted, recovered, timed out and routed (a captain's own `Tier` still wins). Armada creates profiles itself when it records a captain's
 runtime and model (each stage outcome, and each Quick Evaluate run), and points the captain at its profile
 (`Captain.ModelProfileId`, server-owned; a captain update cannot set it). What changes over time is kept as immutable
 revisions (`mdv_` prefix): runtime version, model digest, sampling (`Temperature`, `TopP`), tool configuration and
@@ -6296,8 +6297,8 @@ never edited. Profile ids use the `mdl_` prefix.
 |---|---|---|---|
 | GET | `/api/v1/model-profiles` | | `200` `EnumerationResult<ModelProfile>` (without revisions), newest first. Query: `tenantId` (global admins), `runtime`, `provider` (case-insensitive), `model` (contains, case-insensitive), `pageNumber`, `pageSize` (1-1000, default 100); `400` for a page value that does not parse |
 | POST | `/api/v1/model-profiles/enumerate` | `ModelProfileQuery` (optional): `TenantId` (global admins), `Runtime`, `Provider`, `ModelContains`, `PageNumber`, `PageSize` | `200` the same page as the GET; `400` for a body that does not parse |
-| GET | `/api/v1/model-profiles/{id}` | | `200` `ModelProfile` with `Identity`, `Capabilities`, `Rendering`, `Recovery`, `EffectiveRecovery`, `Tiering` (`Tier`, `SuggestedTier`, `SuggestedReason`, `SuggestedSamples`, `SuggestedUtc`), `Notes`, `Revisions` (oldest first) and `Measured` (see below); `404` when missing or in another tenant |
-| PUT | `/api/v1/model-profiles/{id}` | `ModelProfileUpdateRequest`: `Capabilities` (`ToolsAvailable`, `McpAvailable`; the read-only `ProbedToolsAvailable`, `ProbedMcpAvailable` and `ProbedUtc` are written by model probes and kept, and `EffectiveToolsAvailable` / `EffectiveMcpAvailable` are the administrator's value, else the probed one), `Rendering` (`Template`: `Current`, `Lean` or `Compact`, case-insensitive and stored in its canonical spelling: the persona prompt variant the profile's captains render; `RepeatContractAtEnd`: true repeats the output contract at the end of the launch prompt; `MaxFilesPerMission` 1 or more: writing personas are told to change at most that many files; null means no override), `Recovery` (see below; null values use the global setting), `Tiering` (only `Tier` is read: `Economy`, `Standard`, `Premium`, or null to classify from the model name; routing uses it for captains on the profile that set no tier), `Notes` (empty clears). An omitted section keeps its value | `200` the profile with revisions; `400` invalid value (including an unknown `Template`); `403` not an admin; `404` |
+| GET | `/api/v1/model-profiles/{id}` | | `200` `ModelProfile` with `Identity`, `Capabilities`, `Rendering`, `Recovery`, `EffectiveRecovery`, `Tiering` (`Tier`, `SuggestedTier`, `SuggestedReason`, `SuggestedSamples`, `SuggestedUtc`), `Timeouts`, `Speed` (`TokensPerSecond`, `FirstOutputMs`, `MeasuredUtc`, written by probe runs), `EffectiveTimeouts`, `Notes`, `Revisions` (oldest first) and `Measured` (see below); `404` when missing or in another tenant |
+| PUT | `/api/v1/model-profiles/{id}` | `ModelProfileUpdateRequest`: `Capabilities` (`ToolsAvailable`, `McpAvailable`; the read-only `ProbedToolsAvailable`, `ProbedMcpAvailable` and `ProbedUtc` are written by model probes and kept, and `EffectiveToolsAvailable` / `EffectiveMcpAvailable` are the administrator's value, else the probed one), `Rendering` (`Template`: `Current`, `Lean` or `Compact`, case-insensitive and stored in its canonical spelling: the persona prompt variant the profile's captains render; `RepeatContractAtEnd`: true repeats the output contract at the end of the launch prompt; `MaxFilesPerMission` 1 or more: writing personas are told to change at most that many files; null means no override), `Recovery` (see below; null values use the global setting), `Tiering` (only `Tier` is read: `Economy`, `Standard`, `Premium`, or null to classify from the model name; routing uses it for captains on the profile that set no tier), `Timeouts` (see below; null values use the measured-speed default or the global setting), `Notes` (empty clears). `Speed` is server-owned and ignored. An omitted section keeps its value | `200` the profile with revisions; `400` invalid value (including an unknown `Template`); `403` not an admin; `404` |
 | PUT | `/api/v1/model-profiles/{id}/revisions/{revisionId}/compatible-with` | `ModelProfileCompatibilityRequest`: `CompatibleWith` (revision ids of the same tenant; empty removes every mark). Symmetric | `200` `ModelProfileRevision` with `CompatibleWith`; `400` missing list or unknown revision; `403`; `404` profile or revision (of that profile) not found |
 | GET | `/api/v1/model-profiles/{id}/scorecard` | | `200` `ModelScorecard` for one persona (see [Model scorecard](#model-scorecard)). Query: `persona` (required), `vesselId`, `windowDays` (1-365, default 30), `windowMissions` (1-500, default 50); `400` missing persona, a window value out of range or not an integer; `404` when missing or in another tenant (checked before the query is validated) |
 
@@ -6325,11 +6326,26 @@ is null unless an administrator sets it, and null means the global setting appli
 applied (six with `EscalateAfterResumes`), plus `ModelProfileId`. Stall recovery of a captain whose process stopped reporting keeps using
 `MaxRecoveryAttempts`.
 
+`Timeouts` holds per-model timeout overrides (RS-8.8). Each value is null unless set:
+
+| Field | Range | Overrides | Effect |
+|---|---|---|---|
+| `StallThresholdMinutes` | 1-240 | `StallThresholdMinutes` | Minutes without output before a captain counts as stalled |
+| `ToolWaitHardLimitMinutes` | 1-1440 | `ToolWaitHardLimitMinutes` | Minutes a quiet runtime tool may run before the stall check applies anyway |
+| `MaxRuntimeMinutes` | 1-2880 | `MaxMissionRuntimeMinutes` | Minutes before a mission is failed as a runaway; ignored while the global value is 0 (no cap) |
+| `FirstOutputMinutes` | 1-240 | (the stall threshold) | Minutes a launched mission may wait for its first output; until then it replaces the stall threshold |
+
+A value the profile leaves null is not simply the global setting. When the profile's `Speed` says the model generates
+more slowly than `TimeoutScaleReferenceTokensPerSecond` (default 30), the global value is scaled up by the ratio, at
+most four times, so a model measured at 10 tokens per second gets a 30 minute stall threshold where the global value is
+10. `EffectiveTimeouts` (single-profile reads only) is the result: `ModelProfileId`, `SpeedScale` (1 to 4), each
+resolved value and its source (`Global`, `Measured` or `Profile`).
+
 ```bash
 curl "http://localhost:7890/api/v1/model-profiles?runtime=Mux&pageSize=10" -H "Authorization: Bearer <token>"
 curl -X PUT http://localhost:7890/api/v1/model-profiles/mdl_abc123 \
   -H "Authorization: Bearer <token>" -H "Content-Type: application/json" \
-  -d '{"rendering":{"template":"Compact","maxFilesPerMission":3},"recovery":{"maxResumes":5,"judgeReworkRounds":3},"notes":"Keep each mission to one objective."}'
+  -d '{"rendering":{"template":"Compact","maxFilesPerMission":3},"recovery":{"maxResumes":5,"judgeReworkRounds":3},"timeouts":{"stallThresholdMinutes":30},"tiering":{"tier":"Economy"},"notes":"Keep each mission to one objective."}'
 ```
 
 ### Model scorecard
@@ -6739,6 +6755,16 @@ Skipped entries include the entity ID and the reason (e.g., "Not found" or "Empt
 ### Events
 
 System events represent state changes and audit trail entries generated automatically by the server.
+
+Version 1.5.0 records four new event types that explain routing and landing decisions. They sit in the event log like
+any other and are the quickest way to see why a mission went where it did:
+
+| Event type | Recorded when | Payload |
+|---|---|---|
+| `mission.routing_ranked` | Outcome ranking (`RoutingData.RankByOutcomes`) ordered the captains of a tier for a mission | JSON list (at most 10) of `CaptainId`, `CaptainName`, `Score` and `Samples`; `Score` and `Samples` are null for a captain below the minimum sample count |
+| `mission.judge_strength_exception` | A pipeline with `JudgeStrength` `ProceedAndFlag` ran a Judge weaker than the work it reviews | none |
+| `merge_queue.requeued` | A push was refused because the target branch moved, and the entry went back to the queue (`MergeQueueRequeueLimit`) | none |
+| `mission.landing_handoff_requeued` | A lost landing handoff was enqueued again under the same limit | none |
 
 #### GET /api/v1/events
 
@@ -8492,6 +8518,7 @@ Create a new pipeline with stages.
 | `Name` | string | yes | Pipeline name |
 | `Description` | string | no | Pipeline description |
 | `Stages` | array | yes | Ordered list of pipeline stages |
+| `JudgeStrength` | string | no | Judge strength rule (RS-8.7): `Wait` (default when omitted), `ProceedAndFlag` or `Off`. A Judge must be at least the highest tier among the stages it reviews; `Wait` holds it with a `judge_strength` blocker until such a captain is free, `ProceedAndFlag` runs the best available Judge and records a `mission.judge_strength_exception` event |
 
 **Stage fields:**
 
@@ -8532,6 +8559,7 @@ Update an existing pipeline.
 |---|---|---|---|
 | `Description` | string | no | Updated description |
 | `Stages` | array | no | Updated ordered list of pipeline stages (replaces all existing stages) |
+| `JudgeStrength` | string | no | New Judge strength rule; omitted keeps the current rule. Voyages already created keep the rule they copied |
 
 **Response:** `200 OK` - Pipeline
 **Error:** `404` - Pipeline not found

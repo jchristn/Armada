@@ -62,6 +62,16 @@ Claude will call `status` and report active captains, missions, and voyages. If 
 
 When one mission needs another's code, dispatch both in one `dispatch` call: give the first a `key` and the dependent one a matching `parentKey`. The child starts after its parent finishes and builds on its branch; missions without a `parentKey` run in parallel. Give each mission `ownedPaths` (the files or directories it may change), and never let two missions that can run at the same time own the same file. Before adding more work, call `vessel_concurrency` to see the vessel's free voyage slots and waiting missions, and `voyage_tree` to see a voyage's missions as a tree. A CLI captain runs one mission at a time, so N parallel missions need N captains. See [`INSTRUCTIONS_FOR_CLAUDE_CODE.md`](INSTRUCTIONS_FOR_CLAUDE_CODE.md#dispatching-a-mission-tree) and [SCHEDULING.md](SCHEDULING.md#capacity).
 
+## Mixed pipelines and failed missions
+
+From 1.5.0 each mission in a `dispatch` call can name a `persona` and a `mode` (`Implementation`, `Audit`,
+`Research`). Armada applies them, except that a multi-stage pipeline still assigns its own personas; earlier
+releases accepted `persona` over MCP and dropped it. A pipeline can mix
+open models such as Qwen3.8 with Opus and GPT-6.1: a persona's escalation ladder moves a stuck stage up to a stronger
+model on the same branch, and the pipeline's Judge strength rule keeps a weak Judge from approving strong work. When a
+mission does fail, call `get_mission_attempts` before redispatching to see what Armada already tried, and
+`get_mission_submissions` for the Judge's findings. See [OPEN_MODELS.md](OPEN_MODELS.md).
+
 ## Quick Start
 
 > "Show me all fleets and vessels."

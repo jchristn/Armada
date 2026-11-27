@@ -247,18 +247,30 @@ enumerate({ entityType: "inbox", pageSize: 25 })
 
 When missions fail:
 
-1. **Read the events** to understand what happened:
+By the time a mission reaches `Failed`, Armada has usually already tried to save it: it resumed the captain in place,
+repaired a broken report, sent Judge findings back for rework, or moved the work up the persona's escalation ladder to
+a stronger model. Look at what was tried before you redispatch, or you may repeat an attempt that already failed.
+
+1. **Read the attempt history** to see each attempt's captain, model, failure kind, repair and escalation:
+   ```
+   get_mission_attempts({ missionId: "msn_..." })
+   get_mission_submissions({ missionId: "msn_..." })
+   ```
+   `get_mission_submissions` returns the typed plan, verdict or result each attempt submitted, including a Judge's
+   findings with file, line and severity.
+
+2. **Read the events** to understand what happened:
    ```
    enumerate({ entityType: "events", missionId: "msn_..." })
    enumerate({ entityType: "events", voyageId: "vyg_..." })
    ```
 
-2. **Read the captain's log** to see the error:
+3. **Read the captain's log** to see the error:
    ```
    get_mission_log({ missionId: "msn_...", lines: 200 })
    ```
 
-3. **Restart or redispatch.** `restart_mission({ missionId, description })` resets a Failed or Cancelled mission to Pending (optionally with a new title or description); `retry_landing({ missionId })` rebases a `LandingFailed` mission onto the current target and tries to land it again. Otherwise dispatch a new voyage with corrected mission descriptions. Common fixes:
+4. **Restart or redispatch.** `restart_mission({ missionId, description })` resets a Failed or Cancelled mission to Pending (optionally with a new title or description); `retry_landing({ missionId })` rebases a `LandingFailed` mission onto the current target and tries to land it again. Otherwise dispatch a new voyage with corrected mission descriptions. Common fixes:
    - Mission was too vague -> add specific file paths and expected behavior
    - Captain hit a dependency issue -> add setup instructions to the description
    - Files overlapped with another mission -> narrow the scope or combine into one mission
@@ -435,4 +447,5 @@ If you were launched by Armada as a worker agent (not the orchestrator), these r
 - Do NOT push, create PRs, switch branches, or modify git config -- Armada handles all of that
 - If Armada launched you with a mission-scoped MCP token (`Mcp.MissionScopedTokens`, on by default), your Armada tool calls act as the mission's owner and work only while the mission is assigned or in progress
 - You run headless via `opencode run --auto` by default -- all permissions that are not explicitly denied are auto-approved. The captain's `autoApprove` switch drops `--auto`. Avoid destructive operations outside your worktree.
+- Report your result with the submit tool for your persona when Armada offers it: `armada_submit_result` (Worker, Test Engineer, Linter and the other report personas), `armada_submit_verdict` (Judge) or `armada_submit_plan` (Architect). The tool checks the submission at once and returns any errors in the same call, so fix them and submit again. The `[ARMADA:RESULT]` and verdict marker lines still work as a fallback
 - If you hit a blocking error, describe it clearly in your output and exit -- the orchestrator will see the failure and can redispatch

@@ -565,6 +565,45 @@ Repeated failures of the same kind share a fingerprint: `POST /api/v1/blackbox/f
 `list_blackbox_hotspots`) the directories that keep conflicting. Storage, retention and garbage collection are in
 [Black box retention and storage](#black-box-retention-and-storage); the full guide is [BLACKBOX.md](BLACKBOX.md).
 
+## Reliability settings added in 1.5.0
+
+Armada 1.5.0 adds a handful of server settings that decide how hard it works to rescue a mission before giving up, and
+how it picks captains when open and frontier models share a pipeline. Every one of them has a default that keeps a
+mixed pipeline running without tuning, so the usual reason to touch them is a specific symptom: missions that escalate
+too eagerly, a merge queue that fails on a busy branch, or a small-context model that gets a prompt it cannot hold.
+
+All of them are in `settings.json`, in the runtime settings API (`GET` and `PUT /api/v1/settings`), and on the
+dashboard Settings page under Reliability and Routing. They apply live. The two prompt-variant thresholds and
+`TimeoutScaleReferenceTokensPerSecond` reject an out-of-range value with `400`; the others are clamped into range.
+
+| Setting | Default | Range | Effect |
+|---|---|---|---|
+| `UnclassifiedResumeLimit` | 1 | 0 to 3 | In-place resumes after an `Unclassified` exit (non-zero, no recognized provider error) before the mission escalates. Never more than `MaxRecoveryAttempts` |
+| `JudgeReworkRounds` | 2 | 1 to 5 | Automatic Judge rework rounds for one Worker slice before Armada tries another Worker captain and then stops |
+| `MaxEscalations` | 2 | 0 to 5 | Hops one mission may take up its persona's escalation ladder, or to a strictly higher tier without a ladder. 0 turns automatic escalation off |
+| `EscalateOnOpenEndpointBreaker` | false | | Escalates a transient failure at once when the captain's endpoint circuit breaker is open, instead of riding out the outage on resumes |
+| `TimeoutScaleReferenceTokensPerSecond` | 30 | 0 to 1000 | Reference speed for scaling the timeouts of slow models; see [Per-model timeouts](#per-model-timeouts-and-endpoint-concurrency). 0 turns scaling off |
+| `PromptVariantCompactMaxContextTokens` | 32768 | 0 to 2097152 | Served context at or below which a mission gets the Compact prompt when nothing else picks a variant. 0 turns the automatic choice off |
+| `PromptVariantLeanMaxContextTokens` | 65536 | 0 to 2097152 | The same for the Lean prompt, checked after the Compact threshold |
+| `MergeQueueRequeueLimit` | 3 | 0 to 10 | Times a push refused because the target branch moved is retried from a fresh fetch, and times a lost landing handoff is enqueued again. 0 fails at once, as 1.4.0 did |
+| `MergeQueueBatchSize` | 1 | 1 to 20 | Entries of one vessel and target branch merged, verified and pushed together. 1 is off; a failing batch is split in half until the bad entry is found |
+| `MergeQueueLeaseSeconds` | 900 | 5 to 14400 | Lifetime of the merge queue's processing lease, renewed before every entry |
+| `AcceptLegacyMissionMarkers` | true | | Accepts an Architect plan written as `[ARMADA:MISSION]` markers, with a warning each time. Deprecated; removed in 2.0 |
+| `OutputRepairNormalizerCaptainId` | null | | Captain that runs the format-only repair turn. Null uses the captain that wrote the output |
+| `RoutingData.RankByOutcomes` | true | | Ranks the captains of one tier by their model's recorded results for the persona. Until a model has `MinimumSamples` results, the 1.4.0 order applies |
+| `RoutingData.SuggestTiers` | false | | Raises a `TierSuggestion` alert in Needs You when outcome data suggests a different tier for a model profile. Never applied without an administrator |
+| `RoutingData.MinimumSamples` | 20 | 5 to 1000 | Attempts a model needs for a persona before its results rank it or suggest a tier |
+| `RoutingData.HalfLifeDays` | 14 | 1 to 365 | Days after which an attempt counts half as much as a new one |
+
+`RoutingData` is one object: a `PUT` that includes it replaces all four values, so send the whole object.
+
+Three related knobs live on each model endpoint's inference options rather than on the server, because they depend on
+the model server: `streamingMode` (`Automatic`, `On`, `Off`; `Automatic` streams OpenAI-compatible and Ollama
+endpoints), `toolOutputWindowPercent` (default 12, 1 to 50: the share of a known context window one `read_file` or
+process result may fill) and `repeatedToolCallLimit` (default 3, 2 to 20: identical consecutive tool calls before a
+corrective note; twice the limit ends the run as degenerate output). Per-model recovery, timeouts, rendering and tier
+are set on the model profile, described in [REST_API.md](REST_API.md#model-profiles).
+
 ## Per-model timeouts and endpoint concurrency
 
 The health check takes four timeouts from the captain's model profile when it has one (RS-8.8). Each value comes from

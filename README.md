@@ -148,6 +148,25 @@ Armada does not replace your agent. It runs it. The comparison is with the work 
 
 ---
 
+## v1.5.0: open and frontier models in one pipeline
+
+v1.5.0 is about one goal: a pipeline where an open model such as Qwen3.8, served by Ollama, vLLM or a proxy, does the
+bulk of the work next to Opus and GPT-6.1, and finishes as reliably as an all-frontier pipeline. Open models fail in
+different ways (tool calls written as text, small context windows, slow first tokens, servers that only report an
+error as a message), so most of the release is Armada absorbing those failures instead of passing them on as a failed
+mission.
+
+A stage that stalls or keeps failing now moves up the persona's **escalation ladder** to a stronger model on the same
+branch, and the stronger model is told how the previous attempt failed. A pipeline's **Judge strength rule** keeps a
+weak Judge from approving strong work. Captains can **submit results as typed JSON**, checked in the same call, so a
+format slip is fixed in the loop instead of by a rerun. Each **model profile** carries its own recovery policy,
+timeouts scaled to its measured speed, a tier and a prompt size that fits its context window, and captains are ranked
+by their recorded results. The dashboard, TUI, mobile app and CLI show every attempt of a mission, and a Reliability
+view shows completion, failures, repairs and escalations per model and persona.
+
+Start with [docs/OPEN_MODELS.md](docs/OPEN_MODELS.md). The .NET SDK now groups its calls into sub-clients, which is a
+breaking change for SDK users; see [UPGRADING.md](docs/UPGRADING.md#changes-to-act-on-when-coming-to-150).
+
 ## v1.3.0: concurrency and built-in fleet actions
 
 v1.3.0 has two marquee features: **parallelization and concurrency**, and **out-of-the-box fleet actions for common repository tasks**.
@@ -1308,6 +1327,7 @@ ID prefixes include `flt_` (fleet), `vsl_` (vessel), `cpt_` (captain), `msn_` (m
 |-------|------|
 | First steps | [GETTING_STARTED.md](GETTING_STARTED.md), [FAST_TRACK_SETUP.md](FAST_TRACK_SETUP.md) |
 | Ask Armada and approvals | [docs/ASK_ARMADA_HOME_BASE.md](docs/ASK_ARMADA_HOME_BASE.md) |
+| Open models in mixed pipelines | [docs/OPEN_MODELS.md](docs/OPEN_MODELS.md), [docs/MODEL_GUIDANCE.md](docs/MODEL_GUIDANCE.md), [docs/MODEL_HETEROGENEITY.md](docs/MODEL_HETEROGENEITY.md) |
 | Runtimes and captains | [docs/CAPTAINS.md](docs/CAPTAINS.md), [docs/CAPTAIN_ROUTING.md](docs/CAPTAIN_ROUTING.md), [docs/SCHEDULING.md](docs/SCHEDULING.md) |
 | Pipelines and personas | [docs/PIPELINES.md](docs/PIPELINES.md), [docs/PERSONAS_GUIDE.md](docs/PERSONAS_GUIDE.md), [docs/PERSONAS.md](docs/PERSONAS.md) |
 | Landing and the merge queue | [docs/MERGING.md](docs/MERGING.md) |
