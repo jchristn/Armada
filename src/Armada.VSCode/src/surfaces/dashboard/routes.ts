@@ -56,6 +56,7 @@ export const KIND_ROUTES: Record<string, string> = {
   importBatch: '/vessels/import',
   vesselHealth: '/vessels?tab=health',
   dock: '/captains?tab=docks',
+  modelProfile: '/captains?tab=profiles',
   batteryPack: '/captains?tab=battery',
   evaluation: '/evaluations',
   deployment: '/delivery?tab=deployments',
@@ -109,7 +110,7 @@ export function createRoute(kind: string): string | undefined {
 const ROUTE_PATTERNS: RegExp[] = [
   '/', '/dispatch', '/backlog/:id', '/objectives/:id', '/fleets/:id', '/vessels', '/vessels/import', '/vessels/health',
   '/vessels/:id', '/vessels/:id/onboarding', '/vessels/:id/history', '/workspace/:id', '/workspace/:id/:panel',
-  '/captains', '/captains/:id', '/evaluations', '/evaluations/:id', '/missions', '/missions/:id', '/voyages/create',
+  '/captains', '/captains/:id', '/evaluations', '/evaluations/:id', '/model-profiles/:id', '/missions', '/missions/:id', '/voyages/create',
   '/voyages/:id', '/activity', '/signals/:id', '/events/:id', '/docks/:id', '/merge-queue/:id', '/configuration',
   '/personas/:id', '/pipelines/:id', '/prompt-templates/create', '/prompt-templates/:id', '/playbooks/:id',
   '/workflow-profiles/:id', '/project-profiles/:id', '/skills/:id', '/inbox', '/blackbox/:id', '/delivery',
@@ -139,7 +140,7 @@ export function entityRoute(kind: 'mission' | 'voyage' | 'captain' | 'merge', id
   return `/merge-queue/${encoded}`;
 }
 
-/** The page an entity id opens by its prefix (msn_, vyg_, cpt_, mrg_, vsl_, flt_, dck_), or undefined. */
+/** The page an entity id opens by its prefix (msn_, vyg_, cpt_, mrg_, vsl_, flt_, dck_, mdl_), or undefined. */
 export function routeForId(id: string): string | undefined {
   const encoded = encodeURIComponent(id);
   if (id.startsWith('msn_')) return `/missions/${encoded}`;
@@ -149,6 +150,7 @@ export function routeForId(id: string): string | undefined {
   if (id.startsWith('vsl_')) return `/vessels/${encoded}`;
   if (id.startsWith('flt_')) return `/fleets/${encoded}`;
   if (id.startsWith('dck_')) return `/docks/${encoded}`;
+  if (id.startsWith('mdl_')) return `/model-profiles/${encoded}`;
   return undefined;
 }
 

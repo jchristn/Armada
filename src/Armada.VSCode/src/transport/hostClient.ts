@@ -45,8 +45,77 @@ export function credentialHeaders(credential: HostCredential | undefined): Recor
  * per process, so the extension talks to one Admiral at a time.
  */
 export function useAdmiral(baseUrl: string | undefined, credential: HostCredential | undefined): void {
-  configureClient({ baseUrl: baseUrl ? normalizeBaseUrl(baseUrl) : '', headers: credentialHeaders(credential) });
+  apiBase = baseUrl ? normalizeBaseUrl(baseUrl) : '';
+  apiHeaders = credentialHeaders(credential);
+  configureClient({ baseUrl: apiBase, headers: apiHeaders });
   setAuthToken(null);
+}
+
+let apiBase = '';
+let apiHeaders: Record<string, string> = {};
+
+/** One stage attempt of a mission (GET /api/v1/missions/{id}/attempts), oldest first. */
+export interface MissionAttempt {
+  outcomeId: string | null;
+  attempt: number;
+  reworkRound: number;
+  captainId: string | null;
+  captainName: string | null;
+  runtime: string | null;
+  model: string | null;
+  modelProvider: string | null;
+  modelEndpointId: string | null;
+  disposition: string | null;
+  failureKind: string | null;
+  failureReason: string | null;
+  runtimeFailureKind: string | null;
+  contractRepairKind: string | null;
+  isRepair: boolean;
+  escalated: boolean;
+  nextCaptainId: string | null;
+  judgeVerdict: string | null;
+  suspectedCause: string | null;
+  isEvaluation: boolean;
+  startedUtc: string | null;
+  endedUtc: string | null;
+  durationMs: number | null;
+}
+
+/** A mission's attempt history: its escalation and recovery counters and every stage attempt. */
+export interface MissionAttemptHistory {
+  missionId: string;
+  voyageId: string | null;
+  persona: string | null;
+  mode: string | null;
+  status: string | null;
+  captainId: string | null;
+  tier: string | null;
+  escalationCount: number;
+  escalatedFromCaptainId: string | null;
+  escalatedFromModel: string | null;
+  reworkEscalated: boolean;
+  redispatchAttempts: number;
+  outputRepairAttempts: number;
+  noOpRedispatchAttempts: number;
+  stallRecoveryAttempts: number;
+  attempts: MissionAttempt[];
+}
+
+/**
+ * A mission's attempt history, or undefined when the Admiral does not serve the route (older than 1.5.0) or the
+ * mission is out of scope. The shared client has no call for this route yet.
+ * @throws Error for an empty id or when no Admiral is configured.
+ */
+export async function getMissionAttempts(id: string): Promise<MissionAttemptHistory | undefined> {
+  const trimmed = id.trim();
+  if (!trimmed) throw new Error('A mission id is required.');
+  if (!apiBase) throw new Error('No Admiral is connected.');
+  const res = await fetch(`${apiBase}/api/v1/missions/${encodeURIComponent(trimmed)}/attempts`, { method: 'GET', headers: { Accept: 'application/json', ...apiHeaders } });
+  if (res.status === 404 || res.status === 405) return undefined;
+  if (!res.ok) throw new Error(`Attempt history failed (HTTP ${res.status}).`);
+  const body = (await res.json()) as Partial<MissionAttemptHistory> | null;
+  if (!body || typeof body !== 'object') return undefined;
+  return { ...(body as MissionAttemptHistory), attempts: Array.isArray(body.attempts) ? body.attempts : [] };
 }
 
 /** Reads the health route (no credential needed) and narrows its fields. */

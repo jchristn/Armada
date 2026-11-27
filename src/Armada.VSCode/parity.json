@@ -385,6 +385,22 @@
     },
     {
       "kind": "route",
+      "key": "/model-profiles",
+      "status": "implemented",
+      "surface": "view:armadaNav",
+      "milestone": "V1",
+      "notes": "redirect to /captains?tab=profiles"
+    },
+    {
+      "kind": "route",
+      "key": "/model-profiles/:id",
+      "status": "implemented",
+      "surface": "view:armadaNav",
+      "milestone": "V1",
+      "notes": ""
+    },
+    {
+      "kind": "route",
       "key": "/notifications",
       "status": "implemented",
       "surface": "setting:armada.notifications.needsYou",
@@ -814,6 +830,14 @@
       "surface": "view:armadaNav",
       "milestone": "V1",
       "notes": "Docks"
+    },
+    {
+      "kind": "tab",
+      "key": "CaptainsHub:profiles",
+      "status": "implemented",
+      "surface": "view:armadaNav",
+      "milestone": "V1",
+      "notes": "Model Profiles"
     },
     {
       "kind": "tab",
@@ -2913,6 +2937,14 @@
     },
     {
       "kind": "api",
+      "key": "getModelProfile",
+      "status": "implemented",
+      "surface": "view:armadaNav",
+      "milestone": "V1",
+      "notes": "Model Probes"
+    },
+    {
+      "kind": "api",
       "key": "getMuxEndpoint",
       "status": "implemented",
       "surface": "view:armadaNav",
@@ -3669,6 +3701,14 @@
       "status": "implemented",
       "surface": "view:armadaNav",
       "milestone": "",
+      "notes": "Model Probes"
+    },
+    {
+      "kind": "api",
+      "key": "listModelProfiles",
+      "status": "implemented",
+      "surface": "view:armadaNav",
+      "milestone": "V1",
       "notes": "Model Probes"
     },
     {
@@ -4641,6 +4681,14 @@
     },
     {
       "kind": "api",
+      "key": "updateModelProfile",
+      "status": "implemented",
+      "surface": "view:armadaNav",
+      "milestone": "V1",
+      "notes": "Model Probes"
+    },
+    {
+      "kind": "api",
       "key": "updateObjective",
       "status": "implemented",
       "surface": "view:armadaNav",
@@ -5065,14 +5113,6 @@
     },
     {
       "kind": "setting",
-      "key": "settings.outputRepairNormalizerCaptainId",
-      "status": "implemented",
-      "surface": "view:armadaNav",
-      "milestone": "V6",
-      "notes": ""
-    },
-    {
-      "kind": "setting",
       "key": "settings.admiralPort",
       "status": "implemented",
       "surface": "view:armadaNav",
@@ -5298,6 +5338,14 @@
     {
       "kind": "setting",
       "key": "settings.mcpPort",
+      "status": "implemented",
+      "surface": "view:armadaNav",
+      "milestone": "V6",
+      "notes": ""
+    },
+    {
+      "kind": "setting",
+      "key": "settings.outputRepairNormalizerCaptainId",
       "status": "implemented",
       "surface": "view:armadaNav",
       "milestone": "V6",

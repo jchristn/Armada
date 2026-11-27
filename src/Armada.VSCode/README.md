@@ -60,6 +60,8 @@ and actions as the browser, following the VS Code theme.
   manage what it offers; the backlog form picks its vessel.
 - **Activity**: All Activity over the last hour, day, week or month (or all time), API Requests with its chart,
   Events, Signals, the Token Usage heatmap, Captain Usage and Concurrency.
+- **Captains**: Captains, Model Profiles (each model as served: tier, recovery policy, timeouts, discovered context
+  and capabilities), Docks, Battery Packs and Evaluations. A `mdl_` id opens its model profile page.
 - **API Explorer**: every route at once from the built-in catalog, upgraded with the server's request schemas when its
   OpenAPI document loads.
 
@@ -69,7 +71,11 @@ to sign in to. Each tab has back, forward and reload, the page's breadcrumbs, li
 (`armada.pages.tabReuse`), and open tabs come back after a reload. **Armada: Open Page...** lists every page.
 
 Commands, notifications and the status bar open missions, voyages, captains and records as dashboard pages too; set
-`armada.pages.openRecords` to `details` for the extension's compact detail views. Logs and changes open as read-only
+`armada.pages.openRecords` to `details` for the extension's compact detail views. The compact mission view shows the
+mission's mode, why a waiting mission has no captain yet (the typed reason and the advice that clears it), and, on an
+Admiral with 1.5.0 or later, its attempts: each attempt's model and captain, disposition, failure kind, repair,
+escalation, Judge verdict and duration, with the tier, escalation count and recovery counters above them. It reloads
+on every mission event, including escalations, repairs and attempt changes. Logs and changes open as read-only
 documents with search and diff highlighting, and **Open Vessel Workspace** adds a vessel's checkout to the Explorer as a
 VS Code file system (browse, edit and save, search, run a command, see changes, open a terminal on its host, even on a
 remote Admiral or Harbor). Labels follow VS Code's display language through the Admiral's translation catalog
