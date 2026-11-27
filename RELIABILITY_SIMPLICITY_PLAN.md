@@ -1041,7 +1041,7 @@ rendering. This phase closes that loop.
 - [x] **RS-8.6** Rank within a tier by per-persona outcomes from `StageOutcome` and `ModelScorecardService`
   (Judge pass rate, no-op rate, tool-call validity, repair rate), with a minimum sample size and decay. Replaces the
   current `tier, ActiveMissionCount, LastUpdateUtc` order (`CaptainRouting.cs:305`) only when data exists. Selection
-  telemetry records why. Evidence: 9a5bfdf2d; `PersonaOutcomeStatsService`, 20 samples and 14-day half-life (Joel 2026-11-26), behind `RoutingData.RankByOutcomes`.
+  telemetry records why. Evidence: 9a5bfdf2d; `PersonaOutcomeStatsService`, 20 samples and 14-day half-life (Joel 2026-11-26), behind `RoutingData.RankByOutcomes`, on by default (Joel 2026-11-26); captains on one server keep a cap per model (Joel 2026-11-26).
 - [x] **RS-8.7** Judge strength rule (per pipeline or persona, default on for new pipelines and off for existing ones
   to keep 1.4.0 behavior): the Judge's effective tier is at least the highest tier among the stages it reviews, and
   a different `ModelFamily` is preferred (reuse `EvaluatorSelector`). `ExcludeReviewAuthorsFromJudge` compares model

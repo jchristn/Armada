@@ -255,7 +255,7 @@ suggests Premium, 65 percent or more Standard, otherwise Economy.
 
 ### Ranking within a tier
 
-With `RoutingData.RankByOutcomes` on (default off), captains of one routing bucket are ordered by their model's
+With `RoutingData.RankByOutcomes` on (default on), captains of one routing bucket are ordered by their model's
 recorded results for the mission's persona: completion without failed checks, Judge PASS verdicts on the work, no-op
 rate, tool-call validity and repair rate, each attempt weighted by age with a `RoutingData.HalfLifeDays` half-life
 (default 14). A model needs `RoutingData.MinimumSamples` attempts for the persona (default 20); captains without

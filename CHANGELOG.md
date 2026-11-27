@@ -361,7 +361,7 @@ Conductor) with Opus and GPT-6.1 reliable. The work is tracked item by item in `
   (`tiering.tier`), then the model name. With `RoutingData.SuggestTiers` on (off by default), outcome data suggests a
   tier as a `TierSuggestion` alert in Needs You with an "Apply tier" action; suggestions are never applied on their
   own. Migration 140 (RS-8.5).
-- **Captains can be ranked by results.** With `RoutingData.RankByOutcomes` on (off by default), captains within a tier
+- **Captains can be ranked by results.** With `RoutingData.RankByOutcomes` (on by default), captains within a tier
   whose model has at least 20 results for the persona (14-day half-life; both settings) come first by score; the rest
   keep the load and last-update order. Each ranked choice is a `mission.routing_ranked` event (RS-8.6).
 - **The Judge must be as strong as the work it reviews.** New pipeline field `judgeStrength` (`Off`, `Wait`,
