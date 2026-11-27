@@ -24,6 +24,7 @@ import type { Vessel } from '../types/models';
 import ImportFleetActionSettings from '../components/settings/ImportFleetActionSettings';
 import RetentionSettings from '../components/settings/RetentionSettings';
 import AskSettings from '../components/settings/AskSettings';
+import ReliabilitySettings, { type ReliabilitySettingsData } from '../components/settings/ReliabilitySettings';
 import BlackBoxSettings from '../components/settings/BlackBoxSettings';
 import CliPermissionSettings from '../components/settings/CliPermissionSettings';
 import UsageSelectionSettingsPanel from '../components/usage/UsageSelectionSettingsPanel';
@@ -1000,6 +1001,15 @@ export default function Server() {
       {settings && isAdmin && settings.blackBox && (
         <BlackBoxSettings
           blackBox={settings.blackBox}
+          locked={remoteSettingsLocked}
+          onSaved={(updated) => applyIncomingSettings(updated as unknown as ServerSettings)}
+          notify={showToast}
+        />
+      )}
+
+      {settings && isAdmin && (
+        <ReliabilitySettings
+          settings={settings as unknown as ReliabilitySettingsData}
           locked={remoteSettingsLocked}
           onSaved={(updated) => applyIncomingSettings(updated as unknown as ServerSettings)}
           notify={showToast}

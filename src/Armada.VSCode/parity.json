@@ -817,6 +817,14 @@
     },
     {
       "kind": "tab",
+      "key": "CaptainsHub:battery-runs",
+      "status": "implemented",
+      "surface": "view:armadaNav",
+      "milestone": "V1",
+      "notes": "Battery Runs: dashboard Captains hub tab in an editor tab"
+    },
+    {
+      "kind": "tab",
       "key": "CaptainsHub:captains",
       "status": "implemented",
       "surface": "view:armadaNav",
@@ -838,6 +846,14 @@
       "surface": "view:armadaNav",
       "milestone": "V1",
       "notes": "Model Profiles"
+    },
+    {
+      "kind": "tab",
+      "key": "CaptainsHub:reliability",
+      "status": "implemented",
+      "surface": "view:armadaNav",
+      "milestone": "V1",
+      "notes": "Reliability: dashboard Captains hub tab in an editor tab"
     },
     {
       "kind": "tab",
@@ -1262,6 +1278,14 @@
       "surface": "view:armadaConversations",
       "milestone": "",
       "notes": "Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md)"
+    },
+    {
+      "kind": "api",
+      "key": "cancelBatteryRun",
+      "status": "implemented",
+      "surface": "view:armadaNav",
+      "milestone": "V1",
+      "notes": "Reliability (1.5.0): dashboard Reliability, Battery Runs and mission pages in editor tabs"
     },
     {
       "kind": "api",
@@ -2777,6 +2801,14 @@
     },
     {
       "kind": "api",
+      "key": "getGateReport",
+      "status": "implemented",
+      "surface": "view:armadaNav",
+      "milestone": "V1",
+      "notes": "Reliability (1.5.0): dashboard Reliability, Battery Runs and mission pages in editor tabs"
+    },
+    {
+      "kind": "api",
       "key": "getHarbor",
       "status": "implemented",
       "surface": "view:armadaNav",
@@ -2846,6 +2878,14 @@
       "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Missions"
+    },
+    {
+      "kind": "api",
+      "key": "getMissionAttempts",
+      "status": "implemented",
+      "surface": "command:armada.mission.open",
+      "milestone": "V1",
+      "notes": "Mission detail attempts section (hostClient.getMissionAttempts); the dashboard mission page shows the timeline"
     },
     {
       "kind": "api",
@@ -3046,6 +3086,14 @@
       "surface": "view:armadaNav",
       "milestone": "",
       "notes": "Releases"
+    },
+    {
+      "kind": "api",
+      "key": "getReliabilitySummary",
+      "status": "implemented",
+      "surface": "view:armadaNav",
+      "milestone": "V1",
+      "notes": "Reliability (1.5.0): dashboard Reliability, Battery Runs and mission pages in editor tabs"
     },
     {
       "kind": "api",
@@ -3489,6 +3537,14 @@
     },
     {
       "kind": "api",
+      "key": "listBatteryRuns",
+      "status": "implemented",
+      "surface": "view:armadaNav",
+      "milestone": "V1",
+      "notes": "Reliability (1.5.0): dashboard Reliability, Battery Runs and mission pages in editor tabs"
+    },
+    {
+      "kind": "api",
       "key": "listBlackBox",
       "status": "implemented",
       "surface": "view:armadaNav",
@@ -3609,6 +3665,14 @@
     },
     {
       "kind": "api",
+      "key": "listGateReports",
+      "status": "implemented",
+      "surface": "view:armadaNav",
+      "milestone": "V1",
+      "notes": "Reliability (1.5.0): dashboard Reliability, Battery Runs and mission pages in editor tabs"
+    },
+    {
+      "kind": "api",
       "key": "listHarborJobs",
       "status": "implemented",
       "surface": "view:armadaNav",
@@ -3670,6 +3734,14 @@
       "surface": "command:armada.compareBlackBoxAttempts",
       "milestone": "V0",
       "notes": "Missions"
+    },
+    {
+      "kind": "api",
+      "key": "listMissionSubmissions",
+      "status": "implemented",
+      "surface": "view:armadaNav",
+      "milestone": "V1",
+      "notes": "Reliability (1.5.0): dashboard Reliability, Battery Runs and mission pages in editor tabs"
     },
     {
       "kind": "api",
@@ -4974,6 +5046,22 @@
       "surface": "view:armadaNav",
       "milestone": "V1",
       "notes": ""
+    },
+    {
+      "kind": "event",
+      "key": "mission.escalated",
+      "status": "implemented",
+      "surface": "view:armadaNav",
+      "milestone": "V1",
+      "notes": "Dashboard mission page in an editor tab reloads its attempts timeline"
+    },
+    {
+      "kind": "event",
+      "key": "mission.repaired",
+      "status": "implemented",
+      "surface": "view:armadaNav",
+      "milestone": "V1",
+      "notes": "Dashboard mission page in an editor tab reloads its attempts timeline"
     },
     {
       "kind": "event",

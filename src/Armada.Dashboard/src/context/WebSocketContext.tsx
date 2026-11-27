@@ -101,6 +101,28 @@ export function useUsageRevision(): number {
   return ctx?.usageRevision ?? 0;
 }
 
+/** Events that change a mission's attempt history (1.5.0); `mission.changed` carries `id`, the others `missionId`. */
+export const MISSION_ATTEMPT_EVENTS = ['mission.changed', 'mission.escalated', 'mission.repaired', 'mission.attempt_changed'];
+
+/**
+ * Refetch key for one mission's attempt history and submissions. Increments on any matching mission, escalation,
+ * repair, or attempt event and on reconnect; 0 outside a provider.
+ */
+export function useMissionAttemptRevision(missionId: string): number {
+  const ctx = useContext(WebSocketContext);
+  const [revision, setRevision] = useState(0);
+  const subscribe = ctx?.subscribe;
+  useEffect(() => {
+    if (!subscribe) return undefined;
+    return subscribe((msg) => {
+      if (!MISSION_ATTEMPT_EVENTS.includes(msg.type)) return;
+      const data = msg.data as { id?: unknown; missionId?: unknown } | undefined;
+      if (data?.missionId === missionId || data?.id === missionId) setRevision((value) => value + 1);
+    });
+  }, [subscribe, missionId]);
+  return revision + (ctx?.reconnectCount ?? 0);
+}
+
 /** Mission-scoped captain-selection invalidation event name. */
 export const CAPTAIN_SELECTION_CHANGED_EVENT = 'captain-selection.changed';
 

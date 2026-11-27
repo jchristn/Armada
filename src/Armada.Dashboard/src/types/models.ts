@@ -5373,6 +5373,8 @@ export interface StageVerdictSubmission {
 export interface StageResultSubmission {
   status: string;
   summary: string;
+  /** Report sections (Armada.Core.Models.StageReportSection). */
+  sections?: { heading: string; body: string }[] | null;
   findings: StageFinding[];
 }
 
@@ -5386,6 +5388,8 @@ export interface StageSubmissionEnvelope {
 
 /** A plan, verdict, or result a captain submitted (GET /api/v1/missions/{id}/submissions), newest first. */
 export interface StageSubmission {
+  /** Submission id (prefix sbm_). */
+  id?: string;
   tenantId: string | null;
   missionId: string;
   attemptId: string;

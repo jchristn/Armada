@@ -881,6 +881,14 @@
     },
     {
       "kind": "tab",
+      "key": "CaptainsHub:battery-runs",
+      "status": "planned",
+      "mobile": "/captains?tab=battery-runs",
+      "workstream": "W3.2",
+      "notes": "Battery Runs"
+    },
+    {
+      "kind": "tab",
       "key": "CaptainsHub:captains",
       "status": "implemented",
       "mobile": "src/screens/captains/CaptainsTab.tsx",
@@ -902,6 +910,14 @@
       "mobile": "src/screens/captains/ModelProfilesTab.tsx",
       "workstream": "W3.2",
       "notes": "paged list with search; rows open /model-profiles/:id (detail beside the list on tablets)"
+    },
+    {
+      "kind": "tab",
+      "key": "CaptainsHub:reliability",
+      "status": "planned",
+      "mobile": "/captains?tab=reliability",
+      "workstream": "W3.2",
+      "notes": "Reliability"
     },
     {
       "kind": "tab",
@@ -1326,6 +1342,14 @@
       "mobile": "useAskConversation",
       "workstream": "W1.1",
       "notes": "Ask Armada (shared lib/askConversation, askThreads, askEvents)"
+    },
+    {
+      "kind": "api",
+      "key": "cancelBatteryRun",
+      "status": "planned",
+      "mobile": "",
+      "workstream": "W4.3",
+      "notes": "Reliability (1.5.0)"
     },
     {
       "kind": "api",
@@ -2841,6 +2865,14 @@
     },
     {
       "kind": "api",
+      "key": "getGateReport",
+      "status": "planned",
+      "mobile": "",
+      "workstream": "W4.3",
+      "notes": "Reliability (1.5.0)"
+    },
+    {
+      "kind": "api",
       "key": "getHarbor",
       "status": "implemented",
       "mobile": "src/screens/configuration/HarborsTab",
@@ -3118,6 +3150,14 @@
       "mobile": "src/screens/delivery/ReleasesTab.tsx, ReleaseDetail.tsx",
       "workstream": "W4.1",
       "notes": "Releases"
+    },
+    {
+      "kind": "api",
+      "key": "getReliabilitySummary",
+      "status": "planned",
+      "mobile": "",
+      "workstream": "W4.3",
+      "notes": "Reliability (1.5.0)"
     },
     {
       "kind": "api",
@@ -3561,6 +3601,14 @@
     },
     {
       "kind": "api",
+      "key": "listBatteryRuns",
+      "status": "planned",
+      "mobile": "",
+      "workstream": "W4.3",
+      "notes": "Reliability (1.5.0)"
+    },
+    {
+      "kind": "api",
       "key": "listBlackBox",
       "status": "implemented",
       "mobile": "src/screens/blackbox/BlackBoxListScreen.tsx",
@@ -3678,6 +3726,14 @@
       "mobile": "src/screens/fleets",
       "workstream": "W3.2",
       "notes": "Fleets (the detail reads the fleet from listFleets, as the dashboard does)"
+    },
+    {
+      "kind": "api",
+      "key": "listGateReports",
+      "status": "planned",
+      "mobile": "",
+      "workstream": "W4.3",
+      "notes": "Reliability (1.5.0)"
     },
     {
       "kind": "api",
@@ -5086,6 +5142,22 @@
       "mobile": "NotificationContext",
       "workstream": "W0.6",
       "notes": "notification center and toast (shared lib/notificationEvents)"
+    },
+    {
+      "kind": "event",
+      "key": "mission.escalated",
+      "status": "planned",
+      "mobile": "",
+      "workstream": "W1.4",
+      "notes": ""
+    },
+    {
+      "kind": "event",
+      "key": "mission.repaired",
+      "status": "planned",
+      "mobile": "",
+      "workstream": "W1.4",
+      "notes": ""
     },
     {
       "kind": "event",

@@ -831,6 +831,14 @@
     },
     {
       "kind": "tab",
+      "key": "CaptainsHub:battery-runs",
+      "status": "planned",
+      "tui": "/captains?tab=battery-runs",
+      "workstream": "",
+      "notes": "Battery Runs"
+    },
+    {
+      "kind": "tab",
       "key": "CaptainsHub:captains",
       "status": "implemented",
       "tui": "CaptainsScreen",
@@ -852,6 +860,14 @@
       "tui": "/captains?tab=profiles",
       "workstream": "",
       "notes": "Model Profiles"
+    },
+    {
+      "kind": "tab",
+      "key": "CaptainsHub:reliability",
+      "status": "planned",
+      "tui": "/captains?tab=reliability",
+      "workstream": "",
+      "notes": "Reliability"
     },
     {
       "kind": "tab",
@@ -1276,6 +1292,14 @@
       "tui": "ArmadaClient.Ask.CancelTurnAsync",
       "workstream": "W0.2",
       "notes": "Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md)"
+    },
+    {
+      "kind": "api",
+      "key": "cancelBatteryRun",
+      "status": "implemented",
+      "tui": "ArmadaClient.CancelBatteryRunAsync",
+      "workstream": "W0.2",
+      "notes": "Reliability (1.5.0)"
     },
     {
       "kind": "api",
@@ -2791,6 +2815,14 @@
     },
     {
       "kind": "api",
+      "key": "getGateReport",
+      "status": "implemented",
+      "tui": "ArmadaClient.GetGateReportAsync",
+      "workstream": "W0.2",
+      "notes": "Reliability (1.5.0)"
+    },
+    {
+      "kind": "api",
       "key": "getHarbor",
       "status": "implemented",
       "tui": "ArmadaClient.Harbors.GetAsync",
@@ -2860,6 +2892,14 @@
       "tui": "ArmadaClient.Missions.GetAsync",
       "workstream": "W0.2",
       "notes": "Missions | used by SetupWizardScreen"
+    },
+    {
+      "kind": "api",
+      "key": "getMissionAttempts",
+      "status": "implemented",
+      "tui": "ArmadaClient.GetMissionAttemptsAsync",
+      "workstream": "W0.2",
+      "notes": "Missions"
     },
     {
       "kind": "api",
@@ -3060,6 +3100,14 @@
       "tui": "ArmadaClient.Releases.GetGitHubPullRequestsAsync",
       "workstream": "W0.2",
       "notes": "Releases"
+    },
+    {
+      "kind": "api",
+      "key": "getReliabilitySummary",
+      "status": "implemented",
+      "tui": "ArmadaClient.GetReliabilitySummaryAsync",
+      "workstream": "W0.2",
+      "notes": "Reliability (1.5.0)"
     },
     {
       "kind": "api",
@@ -3503,6 +3551,14 @@
     },
     {
       "kind": "api",
+      "key": "listBatteryRuns",
+      "status": "implemented",
+      "tui": "ArmadaClient.ListBatteryRunsAsync",
+      "workstream": "W0.2",
+      "notes": "Reliability (1.5.0)"
+    },
+    {
+      "kind": "api",
       "key": "listBlackBox",
       "status": "implemented",
       "tui": "ArmadaClient.BlackBox.ListAsync",
@@ -3623,6 +3679,14 @@
     },
     {
       "kind": "api",
+      "key": "listGateReports",
+      "status": "implemented",
+      "tui": "ArmadaClient.ListGateReportsAsync",
+      "workstream": "W0.2",
+      "notes": "Reliability (1.5.0)"
+    },
+    {
+      "kind": "api",
       "key": "listHarborJobs",
       "status": "implemented",
       "tui": "ArmadaClient.Harbors.ListJobsAsync",
@@ -3682,6 +3746,14 @@
       "key": "listMissionBlackBoxEntries",
       "status": "implemented",
       "tui": "ArmadaClient.BlackBox.ListMissionEntriesAsync",
+      "workstream": "W0.2",
+      "notes": "Missions"
+    },
+    {
+      "kind": "api",
+      "key": "listMissionSubmissions",
+      "status": "implemented",
+      "tui": "ArmadaClient.ListMissionSubmissionsAsync",
       "workstream": "W0.2",
       "notes": "Missions"
     },
@@ -5012,6 +5084,22 @@
       "tui": "NotificationService",
       "workstream": "W1.10",
       "notes": "toast and notification history; approvals queue (reviews, landings, stalls, deployment approvals)"
+    },
+    {
+      "kind": "event",
+      "key": "mission.escalated",
+      "status": "planned",
+      "tui": "BacklogItemScreen",
+      "workstream": "W3.6",
+      "notes": ""
+    },
+    {
+      "kind": "event",
+      "key": "mission.repaired",
+      "status": "planned",
+      "tui": "BacklogItemScreen",
+      "workstream": "W3.6",
+      "notes": ""
     },
     {
       "kind": "event",

@@ -1,5 +1,6 @@
 import type { MissionAttemptHistory, StageSubmission } from '../types/models';
 import type { UsageSelectionRecovery, UsageSelectionRecoveryRequest, CaptainSelectionSummary, CaptainSelectionDecisionView, CaptainSelectionDecisionDetail, CaptainSelectionCandidateView, CaptainSelectionPreview, CaptainSelectionHistoryQuery } from '../types/models';
+import type { BatteryRun, GateReport, ReliabilitySummary, ReliabilitySummaryQuery } from '../types/reliability';
 import type {
   ScopeEnum,
   UsageCaptureReceipt,
@@ -2748,3 +2749,26 @@ export const previewCaptainSelection = (missionId: string, pageNumber = 1, pageS
 
 export const authorizeCaptainSelectionRecovery = (missionId: string, request: UsageSelectionRecoveryRequest, signal?: AbortSignal) =>
   post<UsageSelectionRecovery>(`/api/v1/missions/${encodeURIComponent(missionId)}/captain-selection/recovery`, request, { signal });
+
+// ==================== Reliability (1.5.0) ====================
+/** Completion, failure kinds, repairs and escalations per model and persona; the server filters, sorts and pages. */
+export const getReliabilitySummary = (query: ReliabilitySummaryQuery = {}) =>
+  get<ReliabilitySummary>(`/api/v1/reliability/summary${cliQuery({
+    model: query.model, persona: query.persona, vesselId: query.vesselId,
+    includeEvaluation: query.includeEvaluation === undefined ? undefined : String(query.includeEvaluation),
+    fromUtc: query.fromUtc, toUtc: query.toUtc, sort: query.sort,
+    descending: query.descending === undefined ? undefined : String(query.descending),
+    pageNumber: query.pageNumber, pageSize: query.pageSize,
+  })}`);
+/** Stored acceptance gate reports, newest first (global and tenant admins). */
+export const listGateReports = (pageNumber = 1, pageSize = 25) =>
+  get<EnumerationResult<GateReport>>(`/api/v1/reliability/gate-reports${cliQuery({ pageNumber, pageSize })}`);
+/** One gate report; id `latest` reads the newest (404 when none is stored). */
+export const getGateReport = (id: string) =>
+  get<GateReport>(`/api/v1/reliability/gate-reports/${encodeURIComponent(id)}`);
+/** One page of battery runs, newest first, without per-task results. */
+export const listBatteryRuns = (query: { captainId?: string; status?: string; pageNumber?: number; pageSize?: number } = {}) =>
+  get<EnumerationResult<BatteryRun>>(`/api/v1/battery/runs${cliQuery({ captainId: query.captainId, status: query.status, pageNumber: query.pageNumber, pageSize: query.pageSize })}`);
+/** Cancel a battery run: stops its open missions and releases their docks. A finished run comes back unchanged. */
+export const cancelBatteryRun = (id: string, reason?: string) =>
+  post<BatteryRun>(`/api/v1/battery/runs/${encodeURIComponent(id)}/cancel`, reason ? { Reason: reason } : {});

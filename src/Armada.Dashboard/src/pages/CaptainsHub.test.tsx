@@ -10,6 +10,8 @@ vi.mock('./Captains', () => ({ default: () => <div>Captains panel</div> }));
 vi.mock('./Docks', () => ({ default: () => <div>Docks panel</div> }));
 vi.mock('./BatteryPacks', () => ({ default: () => <div>Battery packs panel</div> }));
 vi.mock('./ModelProfiles', () => ({ default: () => <div>Model profiles panel</div> }));
+vi.mock('./Reliability', () => ({ default: () => <div>Reliability panel</div> }));
+vi.mock('./BatteryRuns', () => ({ default: () => <div>Battery runs panel</div> }));
 
 /** Mirrors the AppRoutes.tsx routes for /captains and the legacy /battery redirect. */
 function renderAt(entry: string) {
@@ -26,9 +28,9 @@ function selected(): string | null {
 }
 
 describe('CaptainsHub Battery Packs tab', () => {
-  it('lists Captains, Model Profiles, Docks and Battery Packs, with Captains as the default tab', async () => {
+  it('lists Captains, Model Profiles, Reliability, Docks, Battery Packs and Battery Runs, with Captains as the default tab', async () => {
     renderAt('/captains');
-    expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['Captains', 'Model Profiles', 'Docks', 'Battery Packs']);
+    expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['Captains', 'Model Profiles', 'Reliability', 'Docks', 'Battery Packs', 'Battery Runs']);
     expect(await screen.findByText('Captains panel')).toBeInTheDocument();
     expect(selected()).toBe('Captains');
   });

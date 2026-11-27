@@ -17,8 +17,10 @@ export const dashboardHubs = [
     tabs: [
       { key: 'captains', label: 'Captains' },
       { key: 'profiles', label: 'Model Profiles' },
+      { key: 'reliability', label: 'Reliability' },
       { key: 'docks', label: 'Docks' },
       { key: 'battery', label: 'Battery Packs' },
+      { key: 'battery-runs', label: 'Battery Runs' },
     ],
   },
   {

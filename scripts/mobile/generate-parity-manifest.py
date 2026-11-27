@@ -49,7 +49,7 @@ AREA_WORKSTREAMS = {
     "Memories": "W4.2", "Workflow Profiles": "W4.2", "Project profiles": "W4.2", "Harbors (host runners)": "W4.2",
     "Model endpoints (embedding/inference)": "W4.2",
     "Request History": "W4.3", "History": "W4.3", "Background jobs": "W4.3",
-    "Stage outcomes and failure-cause rules": "W4.3", "Model Probes": "W4.3",
+    "Stage outcomes and failure-cause rules": "W4.3", "Model Probes": "W4.3", "Reliability (1.5.0)": "W4.3",
     "Server": "W4.4", "Settings": "W4.4", "Users (admin)": "W4.4", "Tenants (admin)": "W4.4", "Credentials (admin)": "W4.4",
     "Backup / Restore": "W4.4",
     "Auth": "W0.4",
