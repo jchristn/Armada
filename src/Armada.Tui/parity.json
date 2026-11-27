@@ -400,10 +400,10 @@
     {
       "kind": "route",
       "key": "/model-profiles/:id",
-      "status": "planned",
-      "tui": "",
-      "workstream": "",
-      "notes": ""
+      "status": "implemented",
+      "tui": "ModelProfileScreen",
+      "workstream": "RS-12.9",
+      "notes": "model profile detail: context, tools, tier and suggestion, recovery and timeouts with admin edit"
     },
     {
       "kind": "route",
@@ -832,10 +832,10 @@
     {
       "kind": "tab",
       "key": "CaptainsHub:battery-runs",
-      "status": "planned",
-      "tui": "/captains?tab=battery-runs",
-      "workstream": "",
-      "notes": "Battery Runs"
+      "status": "implemented",
+      "tui": "BatteryRunsScreen",
+      "workstream": "RS-12.9",
+      "notes": "Battery Runs with cancel"
     },
     {
       "kind": "tab",
@@ -856,18 +856,18 @@
     {
       "kind": "tab",
       "key": "CaptainsHub:profiles",
-      "status": "planned",
-      "tui": "/captains?tab=profiles",
-      "workstream": "",
+      "status": "implemented",
+      "tui": "ModelProfilesScreen",
+      "workstream": "RS-12.9",
       "notes": "Model Profiles"
     },
     {
       "kind": "tab",
       "key": "CaptainsHub:reliability",
-      "status": "planned",
-      "tui": "/captains?tab=reliability",
-      "workstream": "",
-      "notes": "Reliability"
+      "status": "implemented",
+      "tui": "ReliabilityScreen",
+      "workstream": "RS-12.9",
+      "notes": "Reliability summary per model and persona and the latest gate report"
     },
     {
       "kind": "tab",
@@ -1297,7 +1297,7 @@
       "kind": "api",
       "key": "cancelBatteryRun",
       "status": "implemented",
-      "tui": "ArmadaClient.CancelBatteryRunAsync",
+      "tui": "ArmadaClient.Battery.CancelRunAsync",
       "workstream": "W0.2",
       "notes": "Reliability (1.5.0)"
     },
@@ -2817,7 +2817,7 @@
       "kind": "api",
       "key": "getGateReport",
       "status": "implemented",
-      "tui": "ArmadaClient.GetGateReportAsync",
+      "tui": "ArmadaClient.Reliability.GetGateReportAsync",
       "workstream": "W0.2",
       "notes": "Reliability (1.5.0)"
     },
@@ -2897,7 +2897,7 @@
       "kind": "api",
       "key": "getMissionAttempts",
       "status": "implemented",
-      "tui": "ArmadaClient.GetMissionAttemptsAsync",
+      "tui": "ArmadaClient.Reliability.GetMissionAttemptsAsync",
       "workstream": "W0.2",
       "notes": "Missions"
     },
@@ -3105,7 +3105,7 @@
       "kind": "api",
       "key": "getReliabilitySummary",
       "status": "implemented",
-      "tui": "ArmadaClient.GetReliabilitySummaryAsync",
+      "tui": "ArmadaClient.Reliability.GetSummaryAsync",
       "workstream": "W0.2",
       "notes": "Reliability (1.5.0)"
     },
@@ -3553,7 +3553,7 @@
       "kind": "api",
       "key": "listBatteryRuns",
       "status": "implemented",
-      "tui": "ArmadaClient.ListBatteryRunsAsync",
+      "tui": "ArmadaClient.Battery.ListRunsAsync",
       "workstream": "W0.2",
       "notes": "Reliability (1.5.0)"
     },
@@ -3681,7 +3681,7 @@
       "kind": "api",
       "key": "listGateReports",
       "status": "implemented",
-      "tui": "ArmadaClient.ListGateReportsAsync",
+      "tui": "ArmadaClient.Reliability.ListGateReportsAsync",
       "workstream": "W0.2",
       "notes": "Reliability (1.5.0)"
     },
@@ -3753,7 +3753,7 @@
       "kind": "api",
       "key": "listMissionSubmissions",
       "status": "implemented",
-      "tui": "ArmadaClient.ListMissionSubmissionsAsync",
+      "tui": "ArmadaClient.StageSubmissions.ListForMissionAsync",
       "workstream": "W0.2",
       "notes": "Missions"
     },
@@ -5088,18 +5088,18 @@
     {
       "kind": "event",
       "key": "mission.escalated",
-      "status": "planned",
-      "tui": "BacklogItemScreen",
-      "workstream": "W3.6",
-      "notes": ""
+      "status": "implemented",
+      "tui": "MissionScreen",
+      "workstream": "RS-12.9",
+      "notes": "mission detail reloads its attempts"
     },
     {
       "kind": "event",
       "key": "mission.repaired",
-      "status": "planned",
-      "tui": "BacklogItemScreen",
-      "workstream": "W3.6",
-      "notes": ""
+      "status": "implemented",
+      "tui": "MissionScreen",
+      "workstream": "RS-12.9",
+      "notes": "mission detail reloads its attempts"
     },
     {
       "kind": "event",

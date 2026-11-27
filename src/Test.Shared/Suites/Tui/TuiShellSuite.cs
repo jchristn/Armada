@@ -152,6 +152,8 @@ namespace Test.Shared.Suites.Tui
                 using (TuiTestHost host = TuiCase.SignedIn(120, 40, "/captains"))
                 {
                     host.Press("]");
+                    AssertEqual("/captains?tab=profiles", host.Tui.Context.Router.Current!.FullPath, "model profiles tab");
+                    host.Press("]").Press("]");
                     AssertEqual("/captains?tab=docks", host.Tui.Context.Router.Current!.FullPath, "docks tab");
                     TuiCase.Contains(host.Screen(), "Git worktrees provisioned for captains", "docks tab");
                     host.Press("alt+1");

@@ -40,6 +40,7 @@ namespace Armada.Client
         /// <returns>The attempt history.</returns>
         /// <exception cref="ArgumentNullException">Thrown when missionId is null or empty.</exception>
         /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
+        [DashboardExport("getMissionAttempts")]
         public Task<MissionAttemptHistory?> GetMissionAttemptsAsync(string missionId, CancellationToken token = default)
         {
             if (String.IsNullOrEmpty(missionId)) throw new ArgumentNullException(nameof(missionId));
@@ -53,6 +54,7 @@ namespace Armada.Client
         /// <param name="token">Cancellation token.</param>
         /// <returns>The summary.</returns>
         /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
+        [DashboardExport("getReliabilitySummary")]
         public Task<ReliabilitySummary?> GetSummaryAsync(ReliabilitySummaryQuery? query = null, CancellationToken token = default)
         {
             ReliabilitySummaryQuery source = query ?? new ReliabilitySummaryQuery();
@@ -93,6 +95,7 @@ namespace Armada.Client
         /// <param name="token">Cancellation token.</param>
         /// <returns>One page of reports.</returns>
         /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
+        [DashboardExport("listGateReports")]
         public Task<EnumerationResult<GateReport>?> ListGateReportsAsync(int? pageNumber = null, int? pageSize = null, CancellationToken token = default)
         {
             List<string> parts = new List<string>();
@@ -110,6 +113,7 @@ namespace Armada.Client
         /// <returns>The report.</returns>
         /// <exception cref="ArgumentNullException">Thrown when id is null or empty.</exception>
         /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
+        [DashboardExport("getGateReport")]
         public Task<GateReport?> GetGateReportAsync(string id, CancellationToken token = default)
         {
             if (String.IsNullOrEmpty(id)) throw new ArgumentNullException(nameof(id));

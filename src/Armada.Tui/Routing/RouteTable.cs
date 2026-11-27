@@ -64,7 +64,10 @@ namespace Armada.Tui.Routing
                 new HubTab("workspace", "Workspace", "WorkspaceScreen", "W4.6"));
             HubDefinition captains = new HubDefinition("tab",
                 new HubTab("captains", "Captains", "CaptainsScreen", "W4.7"),
-                new HubTab("docks", "Docks", "DocksScreen", "W4.8"));
+                new HubTab("profiles", "Model Profiles", "ModelProfilesScreen", "RS-12.9"),
+                new HubTab("reliability", "Reliability", "ReliabilityScreen", "RS-12.9"),
+                new HubTab("docks", "Docks", "DocksScreen", "W4.8"),
+                new HubTab("battery-runs", "Battery Runs", "BatteryRunsScreen", "RS-12.9"));
             HubDefinition missions = new HubDefinition("tab",
                 new HubTab("missions", "Missions", "MissionsScreen", "W3.8"),
                 new HubTab("voyages", "Voyages", "VoyagesScreen", "W3.9"),
@@ -130,6 +133,8 @@ namespace Armada.Tui.Routing
             r.Add(Screen("/workspace/:vesselId/:panel", "Workspace", "WorkspaceScreen", "W4.6"));
             r.Add(Hub("/captains", "Captains", captains));
             r.Add(Screen("/captains/:id", "Captain", "CaptainScreen", "W4.7"));
+            r.Add(Redirect("/model-profiles", "/captains?tab=profiles"));
+            r.Add(Screen("/model-profiles/:id", "Model Profile", "ModelProfileScreen", "RS-12.9"));
             // The dashboard Evaluations list and run page; the TUI shows evaluation runs per captain in the Evaluate view.
             r.Add(Redirect("/evaluations", "/captains"));
             r.Add(Redirect("/evaluations/:id", "/captains"));

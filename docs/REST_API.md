@@ -4890,6 +4890,11 @@ Pipeline reliability reads (1.5.0). Rules live in `ReliabilityAccessService`, sh
 | POST | `/api/v1/reliability/gate-reports` | `GateReport` | `201` the stored report with `Id` (`gate-` prefix) and `UploadedUtc` |
 | GET | `/api/v1/reliability/gate-reports/{id}` | | `200` one `GateReport`; `latest` returns the newest; `404` when none |
 
+CLI: `armada mission attempts <id>` and `armada battery report [id]`. `armada mission create` takes `--persona` and
+`--mode`; `armada persona ladder <name> --rung runtime=...,model=...,endpoint=...,tier=...` (repeat in order, or
+`--clear`) replaces a persona's escalation ladder; `armada model-profile update <id>` sets `--tier` and one recovery or
+timeout override per flag (`-1` clears it), reading the profile first so the other overrides keep their values.
+
 Attempts follow the mission read rules: a global admin sees every tenant, a tenant admin the tenant, a user their own
 missions. Each attempt is one stage outcome. `IsRepair` is true for an output repair rerun or a deterministic or
 format-only contract repair. `Escalated` is true when the mission moved to `NextCaptainId` after the attempt.
@@ -6498,7 +6503,8 @@ Cancelling stops a run as a stopped Full Evaluate does. No further task is dispa
 `GET /api/v1/battery/runs/{id}`. A run this Admiral is not executing but still recorded `Queued` or `Running` is marked
 `Cancelled` directly. A finished run is returned unchanged. Cancelling needs a global admin or a tenant admin of the
 run's tenant (`403` otherwise, `404` for another tenant's run). The gate runner cancels its run when stopped with
-Ctrl+C. CLI: `armada battery runs` and `armada battery cancel <run> [--reason]`.
+Ctrl+C. CLI: `armada battery runs`, `armada battery cancel <run> [--reason]`, and `armada battery report [id]` (the
+latest gate report, or one by ID).
 
 ### Push Notifications
 

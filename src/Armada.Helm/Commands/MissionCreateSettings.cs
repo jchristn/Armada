@@ -91,5 +91,19 @@ namespace Armada.Helm.Commands
         [Description("Branch relationship to the parent: New (default), ContinueParent or ForkFromParent")]
         [CommandOption("--branch-strategy <STRATEGY>")]
         public string? BranchStrategy { get; set; }
+
+        /// <summary>
+        /// Optional persona for the mission (for example Worker, Architect, Judge).
+        /// </summary>
+        [Description("Persona for the mission (for example Worker, Architect, Judge); default Worker")]
+        [CommandOption("--persona <PERSONA>")]
+        public string? Persona { get; set; }
+
+        /// <summary>
+        /// Optional mission mode: Implementation, Audit or Research.
+        /// </summary>
+        [Description("Mission mode: Implementation (default), Audit or Research")]
+        [CommandOption("--mode <MODE>")]
+        public string? Mode { get; set; }
     }
 }

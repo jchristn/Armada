@@ -175,6 +175,7 @@ namespace Armada.Client
         /// <param name="token">Cancellation token.</param>
         /// <returns>One page of runs.</returns>
         /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
+        [DashboardExport("listBatteryRuns")]
         public Task<EnumerationResult<BatteryRun>?> ListRunsAsync(BatteryRunQuery? query = null, CancellationToken token = default)
         {
             BatteryRunQuery source = query ?? new BatteryRunQuery();
@@ -198,6 +199,7 @@ namespace Armada.Client
         /// <returns>The run.</returns>
         /// <exception cref="ArgumentNullException">Thrown when id is null or empty.</exception>
         /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
+        [DashboardExport("cancelBatteryRun")]
         public Task<BatteryRun?> CancelRunAsync(string id, string? reason = null, CancellationToken token = default)
         {
             if (String.IsNullOrEmpty(id)) throw new ArgumentNullException(nameof(id));

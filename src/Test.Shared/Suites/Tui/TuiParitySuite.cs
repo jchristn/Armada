@@ -79,7 +79,7 @@ namespace Test.Shared.Suites.Tui
             {
                 ParityManifest manifest = Load();
                 List<string> exports = DashboardSource.ApiExports();
-                AssertEqual(466, exports.Count, "server-calling exports");
+                AssertEqual(473, exports.Count, "server-calling exports");
                 Missing(manifest, "api", exports);
                 HashSet<string> mirrored = new HashSet<string>(ClientRouteMap.ApiMethods().Select(m => m.DashboardExport).Where(n => n != null).Select(n => n!), StringComparer.Ordinal);
                 List<string> missing = exports.Where(e => !mirrored.Contains(e)).ToList();

@@ -37,6 +37,7 @@ namespace Armada.Client
         /// <param name="token">Cancellation token.</param>
         /// <returns>The submissions.</returns>
         /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
+        [DashboardExport("listMissionSubmissions")]
         public Task<List<StageSubmission>?> ListForMissionAsync(string missionId, CancellationToken token = default)
         {
             return _Transport.GetAsync<List<StageSubmission>>($"/api/v1/missions/{ArmadaQueryString.Escape(missionId)}/submissions", null, token);

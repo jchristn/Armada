@@ -124,6 +124,16 @@ namespace Armada.Tui.Screens.Operations
         public OpsDocumentView Playbooks { get; } = new OpsDocumentView();
 
         /// <summary>
+        /// Attempts panel: recovery counters, escalations and each attempt (RS-12.9).
+        /// </summary>
+        public OpsDocumentView Attempts { get; } = new OpsDocumentView();
+
+        /// <summary>
+        /// The mission's attempt history, or null before it loads (or when the Admiral has no attempts route).
+        /// </summary>
+        public MissionAttemptHistory? AttemptHistory { get; private set; } = null;
+
+        /// <summary>
         /// Failure panel: the mission's black box entry (user brief, recovery paths) with its own keys.
         /// </summary>
         public BlackBoxFailurePanel Failure { get; }
@@ -200,6 +210,9 @@ namespace Armada.Tui.Screens.Operations
             AddPanel("description", "Description", Description);
             AddPanel("linked", "Linked Checks and Deployments", Linked);
             AddPanel("playbooks", "Playbooks", Playbooks);
+            Attempts.Builder = doc => MissionAttemptsText.Build(doc, AttemptHistory, s => Tr(s));
+            Attempts.Empty = "No attempts recorded yet.";
+            AddPanel("attempts", "Attempts", Attempts);
             AddPanel("selection", "Captain Selection", Selection);
             AddPanel("failure", "Failure", Failure);
             Tabs.SelectedChanged += (s, e) =>
@@ -209,10 +222,14 @@ namespace Armada.Tui.Screens.Operations
             };
 
             SubscribeCoalesced("mission.changed", Load);
+            SubscribeCoalesced(ArmadaEventTypes.MissionAttemptChanged, LoadAttempts);
+            SubscribeCoalesced(ArmadaEventTypes.MissionEscalated, LoadAttempts);
+            SubscribeCoalesced(ArmadaEventTypes.MissionRepaired, LoadAttempts);
             SubscribeCoalesced("blackbox.", () => { if (Failure.Loaded) Failure.Reload(); });
             Track(Context.Events.Subscribe(ArmadaEventTypes.CaptainSelectionChanged, Selection.OnSocketMessage));
             Load();
             LoadLinked();
+            LoadAttempts();
         }
 
         #endregion
@@ -402,6 +419,15 @@ namespace Armada.Tui.Screens.Operations
             });
         }
 
+        private void LoadAttempts()
+        {
+            Call((c, t) => c.Reliability.GetMissionAttemptsAsync(MissionId, t), r =>
+            {
+                AttemptHistory = r;
+                Invalidate();
+            }, null, ex => { });
+        }
+
         private void LoadLinked()
         {
             Call((c, t) =>
@@ -586,6 +612,7 @@ namespace Armada.Tui.Screens.Operations
         private void RenderBlocker(OpsDocument doc, MissionAssignmentBlocker blocker)
         {
             doc.Section("Why This Mission Is Waiting");
+            doc.Field("Reason", Tr(MissionBlockerText.ReasonLabel(blocker.Reason)));
             doc.Text(blocker.Summary, blocker.Reason == MissionAssignmentBlockerReasonEnum.AwaitingDispatch ? doc.Theme.Text : doc.Theme.Warning);
             if (blocker.Advice.Count > 0)
             {

@@ -52,6 +52,9 @@ namespace Armada.Tui.Screens.Configuration
             TextAreaField description = form.Area("Description", existing?.Description, 3);
             SelectField<string>? scope = null;
             if (!detailMode) scope = form.Scope(existing?.Scope ?? ScopeRules.ResolveCreateScope(context.Session, null));
+            JudgeStrengthPolicyEnum judgeDefault = existing != null ? (existing.JudgeStrength ?? JudgeStrengthPolicyEnum.Off) : JudgeStrengthPolicyEnum.Wait;
+            SelectField<string> judge = form.Select("Judge strength", JudgeStrengthOptions(context), judgeDefault.ToString(), null, true,
+                "When the only Judge captain is not stronger than the Worker: Off reviews anyway, Wait blocks until a stronger Judge is available, Proceed and flag reviews and flags the result");
             List<PipelineStage> stages = existing != null ? existing.Stages.OrderBy(s => s.Order).Select(CopyStage).ToList() : new List<PipelineStage>();
             RecordListField<PipelineStage> stageList = form.List<PipelineStage>("Stages", s => Describe(context, s), stages, 7, "a adds a stage; Enter edits; Del removes; Alt+Up/Down reorders.");
             stageList.Fingerprint = s => s.PersonaName + "|" + s.IsOptional + "|" + s.RequiresReview + "|" + s.ReviewDenyAction + "|" + s.Description;
@@ -75,6 +78,7 @@ namespace Armada.Tui.Screens.Configuration
                 body.Name = existing != null ? existing.Name : name!.Value.Trim();
                 body.Description = EntityUi.Blank(description.Value);
                 body.Stages = payloadStages;
+                body.JudgeStrength = EntityForm.EnumValue(judge, judgeDefault);
                 if (existing != null)
                 {
                     body.Id = existing.Id;
@@ -156,6 +160,7 @@ namespace Armada.Tui.Screens.Configuration
                 Pipeline body = new Pipeline();
                 body.Name = PersonaForms.DuplicateName(pipeline.Name);
                 body.Description = pipeline.Description;
+                body.JudgeStrength = pipeline.JudgeStrength;
                 int order = 1;
                 body.Stages = pipeline.Stages.OrderBy(s => s.Order).Select(s =>
                 {
@@ -253,6 +258,37 @@ namespace Armada.Tui.Screens.Configuration
         public static string DenyLabel(TuiContext context, ReviewDenyActionEnum action)
         {
             return context.Loc.T(action == ReviewDenyActionEnum.FailPipeline ? "Fail pipeline" : "Retry stage");
+        }
+
+        /// <summary>
+        /// Options for the Judge strength rule.
+        /// </summary>
+        /// <param name="context">Context.</param>
+        /// <returns>Off, Wait and Proceed and flag.</returns>
+        /// <exception cref="ArgumentNullException">When context is null.</exception>
+        public static List<SelectOption<string>> JudgeStrengthOptions(TuiContext context)
+        {
+            if (context == null) throw new ArgumentNullException(nameof(context));
+            return new List<SelectOption<string>>
+            {
+                new SelectOption<string>(JudgeStrengthPolicyEnum.Off.ToString(), context.Loc.T("Off")),
+                new SelectOption<string>(JudgeStrengthPolicyEnum.Wait.ToString(), context.Loc.T("Wait")),
+                new SelectOption<string>(JudgeStrengthPolicyEnum.ProceedAndFlag.ToString(), context.Loc.T("Proceed and flag"))
+            };
+        }
+
+        /// <summary>
+        /// A readable label for a Judge strength rule; a pipeline stored without one shows as Off.
+        /// </summary>
+        /// <param name="context">Context.</param>
+        /// <param name="policy">Rule, or null.</param>
+        /// <returns>The label.</returns>
+        /// <exception cref="ArgumentNullException">When context is null.</exception>
+        public static string JudgeStrengthLabel(TuiContext context, JudgeStrengthPolicyEnum? policy)
+        {
+            if (context == null) throw new ArgumentNullException(nameof(context));
+            JudgeStrengthPolicyEnum value = policy ?? JudgeStrengthPolicyEnum.Off;
+            return context.Loc.T(value == JudgeStrengthPolicyEnum.ProceedAndFlag ? "Proceed and flag" : value.ToString());
         }
 
         #endregion

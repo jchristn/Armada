@@ -139,6 +139,7 @@ namespace Armada.Tui.Screens.Configuration
             Overview.Row("Active", p.Active ? T("Yes") : T("No"));
             Overview.Row("Visibility", T(ScopeRules.Label(p.Scope)));
             Overview.Row("Stages", p.Stages.Count.ToString(CultureInfo.InvariantCulture));
+            Overview.Row("Judge strength", PipelineForms.JudgeStrengthLabel(Context, p.JudgeStrength));
             Overview.Row("Created", EntityUi.Date(Context, p.CreatedUtc));
             Overview.Row("Last Updated", EntityUi.Date(Context, p.LastUpdateUtc));
             List<PipelineStage> ordered = p.Stages.OrderBy(s => s.Order).ToList();
