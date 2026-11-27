@@ -361,9 +361,11 @@ Conductor) with Opus and GPT-6.1 reliable. The work is tracked item by item in `
   (`tiering.tier`), then the model name. With `RoutingData.SuggestTiers` on (off by default), outcome data suggests a
   tier as a `TierSuggestion` alert in Needs You with an "Apply tier" action; suggestions are never applied on their
   own. Migration 140 (RS-8.5).
-- **Captains can be ranked by results.** With `RoutingData.RankByOutcomes` (on by default), captains within a tier
+- **Captains can be ranked by results.** With `RoutingData.RankByOutcomes` (off by default), captains within a tier
   whose model has at least 20 results for the persona (14-day half-life; both settings) come first by score; the rest
-  keep the load and last-update order. Each ranked choice is a `mission.routing_ranked` event (RS-8.6).
+  keep the load and last-update order. Each ranked choice is a `mission.routing_ranked` event (RS-8.6) Ranking slows dispatch: in the
+  100-captain admission benchmark p50 rose from 1.47 s to 1.90 s and p95 from 1.76 s to 3.07 s, so it is off by
+  default and the dashboard's Reliability settings say so; turn it on when routing by recorded results is worth it.
 - **The Judge must be as strong as the work it reviews.** New pipeline field `judgeStrength` (`Off`, `Wait`,
   `ProceedAndFlag`): a Judge below the highest tier of the reviewed stages waits with code `judge_strength`, or runs
   and records `mission.judge_strength_exception`; a Judge from a different model family is preferred. New pipelines
@@ -481,6 +483,11 @@ Conductor) with Opus and GPT-6.1 reliable. The work is tracked item by item in `
 - Fix: on PostgreSQL the dispatcher picked the newest Pending mission instead of the oldest (`EnumerateByStatusAsync` now orders by priority, then oldest first, on every provider). On SQL Server the write that records a launch retries transient deadlocks, so a running mission no longer stays `Assigned`.
 - Mobile: the iOS bundle ID and Android package are `ai.latticetech.armada`; `eas.json` has `development`, `development-device`, `preview` and `production` profiles with EAS remote build numbers; the app version is 1.5.0 with `extra.releaseVersion` shown in Preferences; the AD_ID permission is blocked; store graphics, listing copy and screenshot scripts are under `src/Armada.Mobile/store/`, and `APP_STORE_SUBMISSION.md` records the review answers.
 - Mobile: the Captains hub gains Reliability (outcomes per model and persona, with the latest gate report) and Battery Runs (status filter, cancel for admins) tabs, and the Activity hub gains a Concurrency tab; the mobile parity manifest has no planned entries.
+- Every collection a REST route or MCP tool returns now declares a size limit (`[CollectionBound]`), including attempt
+  history, reliability summaries, gate reports and stage submissions. A captain submission over its findings (200),
+  sections (50), checks (100) or inspected-file (500) limit is rejected with the field named; escalation memory keeps
+  at most 200 changed files.
+
 ### Tests
 
 - Cases that set a skip reason now also set Touchstone's skip flag; five suites ran cases that were meant to skip,
