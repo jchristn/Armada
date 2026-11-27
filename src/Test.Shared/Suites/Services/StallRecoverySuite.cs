@@ -125,6 +125,68 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
+            cases.Add(CaseAsync("profile_stall_threshold_applies", "A model profile's stall threshold, or one scaled from its measured speed, replaces the global threshold (RS-8.8)", TestTags.Reliability, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                {
+                    ArmadaSettings settings = CreateSettings();
+                    StallTestFixture fixture = await StallTestFixture.CreateAsync(testDb.Driver, settings, DateTime.UtcNow.AddMinutes(-20)).ConfigureAwait(false);
+                    ModelProfile profile = new ModelProfile();
+                    profile.Identity.Runtime = "ApiEndpoint";
+                    profile.Timeouts.StallThresholdMinutes = 30;
+                    profile = await testDb.Driver.ModelProfiles.CreateAsync(profile, "stall-profile-" + Guid.NewGuid().ToString("N")).ConfigureAwait(false);
+                    AssertTrue(await testDb.Driver.ModelProfiles.LinkCaptainAsync(fixture.Captain.Id, profile.Id).ConfigureAwait(false));
+
+                    await fixture.Admiral.HealthCheckAsync().ConfigureAwait(false);
+                    AssertEqual(0, fixture.Stopped.Count, "20 quiet minutes are under the profile's 30-minute threshold");
+
+                    StallTestFixture measured = await StallTestFixture.CreateAsync(testDb.Driver, settings, DateTime.UtcNow.AddMinutes(-20)).ConfigureAwait(false);
+                    ModelProfile slow = new ModelProfile();
+                    slow.Identity.Runtime = "ApiEndpoint";
+                    slow.Speed.TokensPerSecond = 10;
+                    slow = await testDb.Driver.ModelProfiles.CreateAsync(slow, "stall-slow-" + Guid.NewGuid().ToString("N")).ConfigureAwait(false);
+                    AssertTrue(await testDb.Driver.ModelProfiles.LinkCaptainAsync(measured.Captain.Id, slow.Id).ConfigureAwait(false));
+                    await measured.Admiral.HealthCheckAsync().ConfigureAwait(false);
+                    AssertEqual(0, measured.Stopped.Count, "a model measured at 10 tokens/s against the reference 30 gets three times the 10-minute threshold");
+
+                    StallTestFixture plain = await StallTestFixture.CreateAsync(testDb.Driver, settings, DateTime.UtcNow.AddMinutes(-20)).ConfigureAwait(false);
+                    await plain.Admiral.HealthCheckAsync().ConfigureAwait(false);
+                    AssertEqual(1, plain.Stopped.Count, "without a profile the global 10-minute threshold applies");
+                }
+            }));
+
+            cases.Add(CaseAsync("first_output_limit_applies_until_first_output", "Until a mission's first output the profile's first-output time replaces the stall threshold (RS-8.8)", TestTags.Reliability, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                {
+                    ArmadaSettings settings = CreateSettings();
+                    settings.MaxRecoveryAttempts = 0;
+                    // The fixture's mission started 30 minutes ago; a heartbeat from before the start means no output yet.
+                    StallTestFixture waiting = await StallTestFixture.CreateAsync(testDb.Driver, settings, DateTime.UtcNow.AddMinutes(-31)).ConfigureAwait(false);
+                    ModelProfile profile = new ModelProfile();
+                    profile.Identity.Runtime = "ApiEndpoint";
+                    profile.Timeouts.FirstOutputMinutes = 40;
+                    profile = await testDb.Driver.ModelProfiles.CreateAsync(profile, "first-output-" + Guid.NewGuid().ToString("N")).ConfigureAwait(false);
+                    AssertTrue(await testDb.Driver.ModelProfiles.LinkCaptainAsync(waiting.Captain.Id, profile.Id).ConfigureAwait(false));
+                    await waiting.Admiral.HealthCheckAsync().ConfigureAwait(false);
+                    AssertEqual(0, waiting.Stopped.Count, "31 minutes without a first output are under the 40-minute first-output limit");
+
+                    StallTestFixture spoke = await StallTestFixture.CreateAsync(testDb.Driver, settings, DateTime.UtcNow.AddMinutes(-20)).ConfigureAwait(false);
+                    AssertTrue(await testDb.Driver.ModelProfiles.LinkCaptainAsync(spoke.Captain.Id, profile.Id).ConfigureAwait(false));
+                    await spoke.Admiral.HealthCheckAsync().ConfigureAwait(false);
+                    AssertEqual(1, spoke.Stopped.Count, "after output the 10-minute stall threshold applies again");
+
+                    profile.Timeouts.FirstOutputMinutes = 20;
+                    await testDb.Driver.ModelProfiles.UpdateAsync(profile).ConfigureAwait(false);
+                    StallTestFixture late = await StallTestFixture.CreateAsync(testDb.Driver, settings, DateTime.UtcNow.AddMinutes(-31)).ConfigureAwait(false);
+                    AssertTrue(await testDb.Driver.ModelProfiles.LinkCaptainAsync(late.Captain.Id, profile.Id).ConfigureAwait(false));
+                    await late.Admiral.HealthCheckAsync().ConfigureAwait(false);
+                    Mission failed = (await testDb.Driver.Missions.ReadAsync(late.Mission.Id).ConfigureAwait(false))!;
+                    AssertEqual(MissionStatusEnum.Failed, failed.Status);
+                    AssertContains("first-output limit for this model: 20 min", failed.FailureReason!);
+                }
+            }));
+
             cases.Add(CaseAsync("tool_wait_protocols", "All four runtime protocols match starts and results without extending deadlines", TestTags.Reliability, () =>
             {
                 DateTime now = DateTime.UtcNow;

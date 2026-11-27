@@ -330,6 +330,8 @@ namespace Test.Smoke
             "Services.RecorderSeeding",
             "Services.RecoveryPolicy",
             "Services.RecoveryPolicyEngine",
+            "Services.TimeoutPolicy",
+            "Services.EndpointConcurrencyKey",
             "Services.EscalationLadder",
             "Services.ReleaseService",
             "Services.ReleaseVersion",

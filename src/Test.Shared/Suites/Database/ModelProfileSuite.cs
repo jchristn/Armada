@@ -84,6 +84,8 @@ namespace Test.Shared.Suites.Database
                     Capabilities = new ModelProfileCapabilities { ToolsAvailable = true, McpAvailable = false },
                     Rendering = new ModelProfileRendering { Template = "Compact", RepeatContractAtEnd = true, MaxFilesPerMission = 3 },
                     Recovery = new ModelProfileRecovery { MaxResumes = 5, UnclassifiedResumes = 2, TransientGraceMinutes = 0, JudgeReworkRounds = 3, OutputRepairAttempts = 2 },
+                    Timeouts = new ModelProfileTimeouts { StallThresholdMinutes = 25, ToolWaitHardLimitMinutes = 120, MaxRuntimeMinutes = 600, FirstOutputMinutes = 15 },
+                    Speed = new ModelProfileSpeed { TokensPerSecond = 12.5, FirstOutputMs = 95000, MeasuredUtc = _Fixed },
                     Notes = "Slow but careful.",
                     CreatedUtc = _Fixed
                 };
@@ -106,6 +108,13 @@ namespace Test.Shared.Suites.Database
                 AssertEqual((int?)0, read.Recovery.TransientGraceMinutes, "0 round-trips as a value, not null");
                 AssertEqual((int?)3, read.Recovery.JudgeReworkRounds);
                 AssertEqual((int?)2, read.Recovery.OutputRepairAttempts);
+                AssertEqual((int?)25, read.Timeouts.StallThresholdMinutes);
+                AssertEqual((int?)120, read.Timeouts.ToolWaitHardLimitMinutes);
+                AssertEqual((int?)600, read.Timeouts.MaxRuntimeMinutes);
+                AssertEqual((int?)15, read.Timeouts.FirstOutputMinutes);
+                AssertEqual((double?)12.5, read.Speed.TokensPerSecond);
+                AssertEqual((long?)95000, read.Speed.FirstOutputMs);
+                AssertSameInstant(_Fixed, read.Speed.MeasuredUtc!.Value, "speed measured");
                 AssertEqual("Slow but careful.", read.Notes);
                 AssertSameInstant(_Fixed, read.CreatedUtc, "created");
                 AssertEqual(0, read.Revisions.Count, "ReadAsync returns no revisions");
@@ -130,6 +139,10 @@ namespace Test.Shared.Suites.Database
                 AssertNull(min.Recovery.TransientGraceMinutes, "grace");
                 AssertNull(min.Recovery.JudgeReworkRounds, "rework rounds");
                 AssertNull(min.Recovery.OutputRepairAttempts, "repairs");
+                AssertNull(min.Timeouts.StallThresholdMinutes, "stall");
+                AssertNull(min.Timeouts.FirstOutputMinutes, "first output");
+                AssertNull(min.Speed.TokensPerSecond, "speed");
+                AssertNull(min.Speed.MeasuredUtc, "speed measured");
                 AssertNull(min.Notes, "notes");
                 AssertNull(await db.ModelProfiles.ReadAsync("mdl_missing").ConfigureAwait(false), "missing");
                 AssertNull(await db.ModelProfiles.ReadByIdentityKeyAsync("key-missing").ConfigureAwait(false), "missing key");

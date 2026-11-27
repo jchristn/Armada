@@ -264,9 +264,19 @@ namespace Armada.Core.Services
             await FailStallRecoveryExhaustedAsync(captain, mission, StallReason(idle), heartbeat, token).ConfigureAwait(false);
         }
 
-        private string StallReason(double idleMinutes)
+        private string StallReason(double idleMinutes, int? thresholdMinutes = null, bool firstOutput = false)
         {
-            return "No activity for " + idleMinutes.ToString("F1") + " min (configured stall threshold: " + _Settings.StallThresholdMinutes + " min).";
+            int threshold = thresholdMinutes ?? _Settings.StallThresholdMinutes;
+            if (firstOutput)
+                return "No output for " + idleMinutes.ToString("F1") + " min since launch (first-output limit for this model: " + threshold + " min).";
+            return "No activity for " + idleMinutes.ToString("F1") + " min (configured stall threshold: " + threshold + " min).";
+        }
+
+        // A mission has had no output in this run when its output heartbeat is unset or older than its start.
+        private static bool AwaitingFirstOutput(Mission? mission)
+        {
+            if (mission == null || !mission.StartedUtc.HasValue) return false;
+            return !mission.LastHeartbeatUtc.HasValue || mission.LastHeartbeatUtc.Value < mission.StartedUtc.Value;
         }
 
         /// <summary>

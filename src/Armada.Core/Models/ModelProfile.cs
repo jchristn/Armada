@@ -77,6 +77,31 @@ namespace Armada.Core.Models
         public RecoveryPolicy? EffectiveRecovery { get; set; } = null;
 
         /// <summary>
+        /// Timeout overrides set by an administrator (RS-8.8); every value is null unless set, and null means the
+        /// measured-speed default or the global setting applies. Editable.
+        /// </summary>
+        public ModelProfileTimeouts Timeouts
+        {
+            get => _Timeouts;
+            set => _Timeouts = value ?? new ModelProfileTimeouts();
+        }
+
+        /// <summary>
+        /// The newest speed measurement from a probe run (RS-8.8). Server-owned: a profile update cannot set it.
+        /// </summary>
+        public ModelProfileSpeed Speed
+        {
+            get => _Speed;
+            set => _Speed = value ?? new ModelProfileSpeed();
+        }
+
+        /// <summary>
+        /// The timeouts in effect for captains linked to this profile: the global settings with <see cref="Timeouts"/>
+        /// and <see cref="Speed"/> applied. Filled only by single-profile reads; list pages leave it null. Read-only.
+        /// </summary>
+        public TimeoutPolicy? EffectiveTimeouts { get; set; } = null;
+
+        /// <summary>
         /// Free-text administrator notes, or null. Editable.
         /// </summary>
         public string? Notes { get; set; } = null;
@@ -117,6 +142,8 @@ namespace Armada.Core.Models
         private ModelProfileCapabilities _Capabilities = new ModelProfileCapabilities();
         private ModelProfileRendering _Rendering = new ModelProfileRendering();
         private ModelProfileRecovery _Recovery = new ModelProfileRecovery();
+        private ModelProfileTimeouts _Timeouts = new ModelProfileTimeouts();
+        private ModelProfileSpeed _Speed = new ModelProfileSpeed();
         private List<ModelProfileRevision> _Revisions = new List<ModelProfileRevision>();
 
         #endregion

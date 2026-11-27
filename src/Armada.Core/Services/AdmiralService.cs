@@ -189,6 +189,7 @@ namespace Armada.Core.Services
         private readonly AdmissionStuckMonitor _AdmissionStuck;
         private DatabaseDriver _Database;
         private ArmadaSettings _Settings;
+        private readonly TimeoutPolicyCache _Timeouts;
         private ISystemResourceProbe _ResourceProbe = new SystemResourceProbe();
         private long _MemoryPressureDeferrals = 0;
         private MissionDispatchDeferredPayload? _LastMemoryDeferral = null;
@@ -258,6 +259,7 @@ namespace Armada.Core.Services
             _RecoveryState = new RecoveryStateStore(database, logging);
             _Settings = settings ?? throw new ArgumentNullException(nameof(settings));
             _ConcurrencyInvariants = new ConcurrencyInvariantMonitor(_Database, _Settings, _Logging);
+            _Timeouts = new TimeoutPolicyCache(_Database, _Settings);
             _AdmissionStuck = new AdmissionStuckMonitor(_Database);
             _Captains = captains ?? throw new ArgumentNullException(nameof(captains));
             _Missions = missions ?? throw new ArgumentNullException(nameof(missions));
@@ -1559,16 +1561,20 @@ namespace Armada.Core.Services
                 if (processId.HasValue && !awaitingRecoveryRelaunch
                     && await CheckLinkEpisodeAsync(captain, mission, processId.Value, token).ConfigureAwait(false)) return;
 
+                // RS-8.8: the stall threshold, tool-wait limit, maximum runtime and first-output time in effect for
+                // this captain's model (profile override, else scaled from its measured speed, else the global setting).
+                TimeoutPolicy timeouts = await _Timeouts.ResolveAsync(captain, token).ConfigureAwait(false);
+
                 // Hard runaway backstop: force-fail a mission that has run past the configured
                 // max-runtime ceiling, independent of stall detection (a mission emitting steady
                 // output would never trip the stall path). 0 disables the cap.
-                if (_Settings.MaxMissionRuntimeMinutes > 0 &&
+                if (timeouts.MaxRuntimeMinutes > 0 &&
                     mission != null &&
                     mission.StartedUtc.HasValue &&
-                    (DateTime.UtcNow - mission.StartedUtc.Value).TotalMinutes > _Settings.MaxMissionRuntimeMinutes)
+                    (DateTime.UtcNow - mission.StartedUtc.Value).TotalMinutes > timeouts.MaxRuntimeMinutes)
                 {
                     _Logging.Warn(_Header + "captain " + captain.Id + " mission " + missionId +
-                        " exceeded max runtime of " + _Settings.MaxMissionRuntimeMinutes + " min - force-failing runaway");
+                        " exceeded max runtime of " + timeouts.MaxRuntimeMinutes + " min - force-failing runaway");
 
                     if (_Captains.OnStopAgent != null)
                     {
@@ -1581,23 +1587,27 @@ namespace Armada.Core.Services
                     }
 
                     await SettleConfirmedStopAsync(captain, mission, token).ConfigureAwait(false);
-                    await FailMaxRuntimeAsync(captain, mission, token).ConfigureAwait(false);
+                    await FailMaxRuntimeAsync(captain, mission, token, timeouts.MaxRuntimeMinutes).ConfigureAwait(false);
                     return;
                 }
 
-                // Check for stall (no output for too long)
+                // Check for stall (no output for too long). Until the mission's first output the first-output time
+                // applies instead of the stall threshold.
                 DateTime? outputHeartbeat = captain.LastHeartbeatUtc ?? mission?.StartedUtc;
                 if (outputHeartbeat.HasValue)
                 {
                     DateTime nowUtc = UtcNow();
                     TimeSpan elapsed = nowUtc - outputHeartbeat.Value;
                     DateTime? toolStarted = processId.HasValue ? OnGetToolWaitStartedUtc?.Invoke(processId.Value) : null;
+                    bool awaitingFirstOutput = timeouts.FirstOutputMinutes != timeouts.StallThresholdMinutes && AwaitingFirstOutput(mission);
+                    int stallMinutes = awaitingFirstOutput ? timeouts.FirstOutputMinutes : timeouts.StallThresholdMinutes;
                     if (RuntimeToolWaitTracker.IsStalled(nowUtc, outputHeartbeat, toolStarted,
-                        _Settings.StallThresholdMinutes, _Settings.ToolWaitHardLimitMinutes))
+                        stallMinutes, timeouts.ToolWaitHardLimitMinutes))
                     {
-                        _Logging.Warn(_Header + "captain " + captain.Id + " appears stalled (" + elapsed.TotalMinutes.ToString("F1") + " min since last heartbeat)");
+                        _Logging.Warn(_Header + "captain " + captain.Id + " appears stalled (" + elapsed.TotalMinutes.ToString("F1") + " min since "
+                            + (awaitingFirstOutput ? "launch with no output" : "last heartbeat") + ")");
                         ArmadaMetrics.CaptainStalls.Add(1);
-                        string stallReason = StallReason(elapsed.TotalMinutes);
+                        string stallReason = StallReason(elapsed.TotalMinutes, stallMinutes, awaitingFirstOutput);
                         CaptainLinkEpisode? pending = _LinkEpisodes.TryGetValue(captain.Assignment?.Id ?? captain.Id, out CaptainLinkEpisode? known) && known.StopPending ? known : null;
                         int retryDelay = pending != null ? NextRetryDelayMinutes(pending) : 1;
                         bool underLimit = captain.RecoveryAttempts < _Settings.MaxRecoveryAttempts;
@@ -1618,7 +1628,7 @@ namespace Armada.Core.Services
                             HarborId = ProcessHarbor(processId),
                             ProcessId = processId,
                             IdleMinutes = Math.Round(elapsed.TotalMinutes, 1),
-                            StallThresholdMinutes = _Settings.StallThresholdMinutes,
+                            StallThresholdMinutes = stallMinutes,
                             Attempt = underLimit ? captain.RecoveryAttempts + 1 : 0,
                             MaxAttempts = _Settings.MaxRecoveryAttempts,
                             WaitingOnStop = pending != null,
@@ -1690,12 +1700,13 @@ namespace Armada.Core.Services
         /// <summary>
         /// Fail a mission that ran past MaxMissionRuntimeMinutes once its process is stopped, and release its captain.
         /// </summary>
-        private async Task FailMaxRuntimeAsync(Captain captain, Mission mission, CancellationToken token)
+        private async Task FailMaxRuntimeAsync(Captain captain, Mission mission, CancellationToken token, int? ceilingMinutes = null)
         {
+            int ceiling = ceilingMinutes ?? _Settings.MaxMissionRuntimeMinutes;
             if (!MissionStateMachine.IsTerminalOrPostWork(mission.Status))
             {
                 MissionStatusEnum runtimeStatusBefore = mission.Status;
-                mission.FailureReason = "Mission exceeded max runtime of " + _Settings.MaxMissionRuntimeMinutes + " minutes";
+                mission.FailureReason = "Mission exceeded max runtime of " + ceiling + " minutes";
                 mission.FailureKind = MissionFailureKindEnum.MaxRuntimeExceeded;
                 mission.ProcessId = null;
                 mission.CompletedUtc = DateTime.UtcNow;
@@ -1705,7 +1716,7 @@ namespace Armada.Core.Services
                 await BlackBox.RecordMissionFailureAsync(mission, runtimeStatusBefore, BlackBoxStepEnum.MaxRuntime, context =>
                 {
                     context.Captain = captain;
-                    context.Note = "Ran " + (int)(DateTime.UtcNow - (mission.StartedUtc ?? DateTime.UtcNow)).TotalMinutes + " minutes; the ceiling is " + _Settings.MaxMissionRuntimeMinutes + ".";
+                    context.Note = "Ran " + (int)(DateTime.UtcNow - (mission.StartedUtc ?? DateTime.UtcNow)).TotalMinutes + " minutes; the ceiling is " + ceiling + ".";
                 }, token).ConfigureAwait(false);
 
                 await EmitEventAsync("mission.failed", "Mission failed: " + mission.Title + " (exceeded max runtime)",

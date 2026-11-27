@@ -47,21 +47,25 @@ namespace Armada.Core.Services
             Dictionary<string, ModelEndpoint?> endpoints = new Dictionary<string, ModelEndpoint?>(StringComparer.Ordinal);
             foreach (string endpointId in CapacityModel.EndpointIds(captains))
                 endpoints[endpointId] = await PassEndpointAsync(endpointId, token).ConfigureAwait(false);
-            CapacityModel model = new CapacityModel(captains, slots, endpoints, _Settings);
+            // RS-8.9: a loopback endpoint is a different server on every Harbor, so its usage is counted per dock host.
+            Dictionary<string, List<string?>>? hosts = null;
+            if (ConcurrencyCapacityPolicy.NeedsDockHosts(captains, c => !String.IsNullOrEmpty(c.ModelEndpointId) && endpoints.TryGetValue(c.ModelEndpointId!, out ModelEndpoint? e) ? e : null))
+                hosts = ConcurrencyCapacityPolicy.HostsByCaptain(await _Database.Docks.EnumerateAsync(token).ConfigureAwait(false));
+            CapacityModel model = new CapacityModel(captains, slots, endpoints, _Settings, hosts);
             if (pass != null) pass.Capacity = model;
             return model;
         }
 
         // RS-4.9: the shared caps the claim write does not enforce itself (global, runtime, endpoint), re-read for the
         // chosen captain. Call with _CapacityLock held, after PassRevalidateUnderLock.
-        private async Task<MissionAssignmentBlocker?> CapacityBlockerUnderLockAsync(Captain captain, CancellationToken token)
+        private async Task<MissionAssignmentBlocker?> CapacityBlockerUnderLockAsync(Captain captain, CancellationToken token, string? harborId = null)
         {
             CapacityModel model = await PassCapacityAsync(token).ConfigureAwait(false);
             MissionAssignmentBlocker? global = model.GlobalBlocker();
             if (global != null) return global;
             if (!model.KnowsEndpointOf(captain))
                 model.AddEndpoint(captain.ModelEndpointId!, await PassEndpointAsync(captain.ModelEndpointId!, token).ConfigureAwait(false));
-            return model.RuntimeBlocker(captain) ?? model.EndpointBlocker(captain);
+            return model.RuntimeBlocker(captain) ?? model.EndpointBlocker(captain, harborId);
         }
 
         /// <inheritdoc />

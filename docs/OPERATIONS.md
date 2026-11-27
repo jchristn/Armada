@@ -565,6 +565,32 @@ Repeated failures of the same kind share a fingerprint: `POST /api/v1/blackbox/f
 `list_blackbox_hotspots`) the directories that keep conflicting. Storage, retention and garbage collection are in
 [Black box retention and storage](#black-box-retention-and-storage); the full guide is [BLACKBOX.md](BLACKBOX.md).
 
+## Per-model timeouts and endpoint concurrency
+
+The health check takes four timeouts from the captain's model profile when it has one (RS-8.8). Each value comes from
+the profile override if one is set. If not, it is scaled from the profile's measured speed, or it is the global setting.
+
+| Value | Global setting (default) | Profile override range | Effect |
+|---|---|---|---|
+| Stall threshold | `StallThresholdMinutes` (10) | 1 to 240 | Minutes without output before the captain is stalled and recovered |
+| Tool-wait hard limit | `ToolWaitHardLimitMinutes` (60) | 1 to 1440 | Minutes a quiet runtime tool may run before the stall check applies anyway |
+| Maximum runtime | `MaxMissionRuntimeMinutes` (240; 0 is no cap) | 1 to 2880 | Minutes before a mission is failed as a runaway; a profile cannot turn on a cap that is 0 |
+| First-output time | the stall threshold | 1 to 240 | Replaces the stall threshold until the mission's first output |
+
+`TimeoutScaleReferenceTokensPerSecond` sets the reference rate for scaling. The default is 30, the range is 0 to 1000,
+and 0 turns scaling off. A profile measured slower than the reference gets each unset value multiplied by the reference
+divided by its rate, at most four times. A slow first output measured by the Speed probe raises the first-output time
+to four times that measurement. No value goes above four times its global setting. Profile reads return
+`effectiveTimeouts` with each value and its source. After an in-place stall recovery relaunch, the stall threshold
+applies from the relaunch on, not the first-output time.
+
+An endpoint's `InferenceOptions.MaxConcurrentMissions` is counted per concurrency key (RS-8.9). The key is the scope,
+the normalized URL and the model. The URL is normalized: scheme and host are lower case, the default port and trailing
+slashes are dropped, a trailing `/v1` is dropped, and every loopback name is read as `localhost`. A loopback URL is
+scoped to the host that calls it, which is the Harbor of the mission's dock or the Admiral. Any other URL is shared
+from every host. Admission checks the cap against the Admiral's host while choosing a captain, then checks it again
+against the placed Harbor before the claim. Endpoint circuit breakers use the Admiral-host key.
+
 ## Troubleshooting
 
 **The server will not start and the log says the address is in use.** Another process holds 7890 or 7891, often a

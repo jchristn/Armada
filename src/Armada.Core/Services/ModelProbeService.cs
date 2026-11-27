@@ -400,6 +400,7 @@ namespace Armada.Core.Services
                     // report, complete or not, becomes an advisory revision of that profile; nothing else changes.
                     if (plan != null) run = await RecordReportAsync(run, endpoint).ConfigureAwait(false);
                     else await _ModelProfiles.TryResolveAsync(ModelProfileService.ObservationFrom(run, endpoint)).ConfigureAwait(false);
+                    if (!stop.IsStopped) await _ModelProfiles.TryRecordSpeedAsync(ModelProfileService.ObservationFrom(run, endpoint), run.Id).ConfigureAwait(false);
                     return run;
                 }
             }

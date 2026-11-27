@@ -206,6 +206,22 @@ namespace Armada.Core.Settings
         }
 
         /// <summary>
+        /// Output rate, in tokens per second, at or above which a model keeps the global timeouts (RS-8.8). A model
+        /// profile measured slower gets its stall threshold, tool-wait hard limit and maximum runtime scaled up by this
+        /// rate divided by its own, at most four times, unless the profile sets the value itself. 0 turns the scaling off.
+        /// 0 to 1000. Default: 30.
+        /// </summary>
+        public int TimeoutScaleReferenceTokensPerSecond
+        {
+            get => _TimeoutScaleReferenceTokensPerSecond;
+            set
+            {
+                if (value < 0 || value > 1000) throw new ArgumentOutOfRangeException(nameof(TimeoutScaleReferenceTokensPerSecond), "Must be between 0 and 1000");
+                _TimeoutScaleReferenceTokensPerSecond = value;
+            }
+        }
+
+        /// <summary>
         /// Token budget for the prior stage's handoff delivered to a captain whose served context is not known (CLI
         /// runtimes, endpoints without a context length). A reader with a known served context gets one eighth of it
         /// instead. Findings and required actions are delivered first, then relevant diff sections, then a pointer to
@@ -1182,6 +1198,7 @@ namespace Armada.Core.Settings
         private int _HeartbeatIntervalSeconds = Constants.DefaultHeartbeatIntervalSeconds;
         private int _StallThresholdMinutes = Constants.DefaultStallThresholdMinutes;
         private int _ToolWaitHardLimitMinutes = 60;
+        private int _TimeoutScaleReferenceTokensPerSecond = 30;
         private int _StageCheckTimeoutMinutes = Constants.DefaultStageCheckTimeoutMinutes;
         private int _HandoffBudgetTokens = Constants.DefaultHandoffBudgetTokens;
         private int _MaxRecoveryAttempts = Constants.DefaultMaxRecoveryAttempts;

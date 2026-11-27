@@ -481,7 +481,8 @@ namespace Armada.Server
             if (mission == null) throw new ArgumentNullException(nameof(mission));
             if (_SessionTokens == null || !_Settings.Mcp.MissionScopedTokens) return null;
             if (String.IsNullOrEmpty(mission.TenantId) || String.IsNullOrEmpty(mission.UserId)) return null;
-            int runtimeMinutes = _Settings.MaxMissionRuntimeMinutes > 0 ? _Settings.MaxMissionRuntimeMinutes : 24 * 60;
+            // A model profile can raise the runtime ceiling up to TimeoutPolicyResolver.MaxScale times the global (RS-8.8).
+            int runtimeMinutes = _Settings.MaxMissionRuntimeMinutes > 0 ? (int)Math.Ceiling(_Settings.MaxMissionRuntimeMinutes * TimeoutPolicyResolver.MaxScale) : 24 * 60;
             TimeSpan lifetime = TimeSpan.FromMinutes(runtimeMinutes + 30);
             return _SessionTokens.CreateMissionScopedToken(mission.TenantId!, mission.UserId!, mission.Id, captain.Id, lifetime).Token;
         }

@@ -92,6 +92,7 @@ namespace Armada.Server
             if (revisions.Count > ModelProfile.MaxRevisions) revisions.RemoveRange(0, revisions.Count - ModelProfile.MaxRevisions);
             profile.Revisions = revisions;
             profile.EffectiveRecovery = RecoveryPolicyResolver.Resolve(_Settings, profile);
+            profile.EffectiveTimeouts = TimeoutPolicyResolver.Resolve(_Settings, profile);
             return profile;
         }
 
@@ -156,6 +157,17 @@ namespace Armada.Server
                     JudgeReworkRounds = request.Recovery.JudgeReworkRounds,
                     OutputRepairAttempts = request.Recovery.OutputRepairAttempts,
                     EscalateAfterResumes = request.Recovery.EscalateAfterResumes
+                };
+            }
+
+            if (request.Timeouts != null)
+            {
+                profile.Timeouts = new ModelProfileTimeouts
+                {
+                    StallThresholdMinutes = request.Timeouts.StallThresholdMinutes,
+                    ToolWaitHardLimitMinutes = request.Timeouts.ToolWaitHardLimitMinutes,
+                    MaxRuntimeMinutes = request.Timeouts.MaxRuntimeMinutes,
+                    FirstOutputMinutes = request.Timeouts.FirstOutputMinutes
                 };
             }
 

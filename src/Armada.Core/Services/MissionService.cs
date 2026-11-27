@@ -761,7 +761,7 @@ namespace Armada.Core.Services
             }
             capacityHeld = true;
             PassRevalidateUnderLock();
-            MissionAssignmentBlocker? capBlocker = await CapacityBlockerUnderLockAsync(captain, token).ConfigureAwait(false);
+            MissionAssignmentBlocker? capBlocker = await CapacityBlockerUnderLockAsync(captain, token, placement.HarborId).ConfigureAwait(false);
             if (capBlocker != null)
             {
                 _Logging.Debug(_Header + "mission " + mission.Id + " waits after selection: " + capBlocker.Summary);

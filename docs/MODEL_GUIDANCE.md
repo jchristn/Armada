@@ -270,6 +270,22 @@ dashboard's Server settings) before running slow models.
 | `MaxConcurrentMissions` | 0 (unlimited) | Missions running at once | Lower it when one local inference server serves several captains; parallel requests slow every one of them |
 | `ReviewTimeoutMinutes` | 1440 | How long a mission waits for human review | Rarely; it is not model-dependent |
 
+You can also set these per model instead of for the whole server. A model profile (Captains, Model profiles) has
+timeout overrides: stall threshold, tool-wait hard limit, maximum runtime, and first-output time. A profile without
+overrides gets defaults from its measured speed. When a probe run measures the model slower than
+`TimeoutScaleReferenceTokensPerSecond` (default 30 tokens per second), the global stall threshold, tool-wait hard limit
+and maximum runtime are multiplied by that reference divided by the model's rate. A 10 tokens per second model gets
+three times the global values. A slow first output in the Speed probe lengthens the first-output time the same way.
+That time applies only until a mission's first output, so a model reading a long prompt is not stopped as stalled. No
+per-model value goes above four times its global setting; raise the global setting if you need more. Set
+`TimeoutScaleReferenceTokensPerSecond` to 0 to turn scaling off. The profile's `effectiveTimeouts` shows the values in
+effect and where each one came from (`Global`, `Measured` or `Profile`).
+
+An endpoint's `MaxConcurrentMissions` cap is shared by every endpoint record that points at the same server and
+model. `http://127.0.0.1:11434/`, `http://localhost:11434` and `http://localhost:11434/v1` are one server. Two models
+on one server are counted separately. A `localhost` URL means a different machine on each Harbor, so each Harbor (and
+the Admiral) gets its own budget for it.
+
 Outside Armada, check the timeouts in front of the model:
 
 - **Proxies and gateways.** A proxy that times out after 60 seconds cuts off cold model loads and long prompt

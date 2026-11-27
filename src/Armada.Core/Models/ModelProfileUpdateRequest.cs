@@ -23,6 +23,11 @@ namespace Armada.Core.Models
         public ModelProfileRecovery? Recovery { get; set; } = null;
 
         /// <summary>
+        /// Replacement timeout overrides (RS-8.8), or null to keep them.
+        /// </summary>
+        public ModelProfileTimeouts? Timeouts { get; set; } = null;
+
+        /// <summary>
         /// Replacement notes (empty clears), or null to keep them.
         /// </summary>
         public string? Notes { get; set; } = null;

@@ -21,7 +21,13 @@ namespace Armada.Core.Services
         private readonly Dictionary<AgentRuntimeEnum, int> _RuntimeBusy = new Dictionary<AgentRuntimeEnum, int>();
         private readonly Dictionary<string, int> _EndpointBusy = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
-        internal CapacityModel(List<Captain> captains, int executionSlots, Dictionary<string, ModelEndpoint?> endpointsById, ArmadaSettings settings)
+        /// <summary>
+        /// Build the model. Endpoint usage is counted per concurrency key (RS-8.9); for a loopback endpoint that key names
+        /// the host, taken from <paramref name="hostsByCaptain"/> (the Harbors of each captain's leased docks), so the same
+        /// localhost URL on two Harbors is two budgets. Without it every slot counts on the Admiral's host.
+        /// </summary>
+        internal CapacityModel(List<Captain> captains, int executionSlots, Dictionary<string, ModelEndpoint?> endpointsById, ArmadaSettings settings,
+            Dictionary<string, List<string?>>? hostsByCaptain = null)
         {
             _Captains = captains ?? throw new ArgumentNullException(nameof(captains));
             _Endpoints = endpointsById ?? throw new ArgumentNullException(nameof(endpointsById));
@@ -37,8 +43,11 @@ namespace Armada.Core.Services
                 _RuntimeBusy[captain.Runtime] = RuntimeBusy(captain.Runtime) + occupancy;
                 ModelEndpoint? endpoint = EndpointOf(captain);
                 if (endpoint == null) continue;
-                string key = ConcurrencyCapacityPolicy.EndpointKey(endpoint);
-                _EndpointBusy[key] = EndpointBusy(key) + occupancy;
+                foreach (string? host in ConcurrencyCapacityPolicy.SlotHosts(captain, hostsByCaptain))
+                {
+                    string key = ConcurrencyCapacityPolicy.EndpointKey(endpoint, host);
+                    _EndpointBusy[key] = EndpointBusy(key) + 1;
+                }
             }
         }
 
@@ -77,13 +86,17 @@ namespace Armada.Core.Services
             return blocker;
         }
 
-        /// <summary>The captain's endpoint cap, or null when it has no endpoint, no cap, or room.</summary>
-        internal MissionAssignmentBlocker? EndpointBlocker(Captain captain)
+        /// <summary>
+        /// The captain's endpoint cap, or null when it has no endpoint, no cap, or room. <paramref name="harborId"/> is the
+        /// Harbor the mission will run on (null for the Admiral's host or not yet placed); it matters only for a loopback
+        /// endpoint.
+        /// </summary>
+        internal MissionAssignmentBlocker? EndpointBlocker(Captain captain, string? harborId = null)
         {
             ModelEndpoint? endpoint = EndpointOf(captain);
             int? limit = endpoint?.InferenceOptions?.MaxConcurrentMissions;
             if (endpoint == null || !limit.HasValue) return null;
-            int busy = EndpointBusy(ConcurrencyCapacityPolicy.EndpointKey(endpoint));
+            int busy = EndpointBusy(ConcurrencyCapacityPolicy.EndpointKey(endpoint, harborId));
             if (busy < limit.Value) return null;
             return MissionAdmissionEvaluator.Capacity(MissionAssignmentBlockerReasonEnum.EndpointMissionLimit,
                 "Endpoint " + endpoint.Name, busy, limit.Value, AssignmentBlockerActionEnum.EditEndpoint, "endpoint", endpoint.Id, "InferenceOptions.MaxConcurrentMissions", 64);

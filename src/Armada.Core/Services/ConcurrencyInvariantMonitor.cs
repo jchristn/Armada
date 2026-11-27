@@ -53,13 +53,29 @@ namespace Armada.Core.Services
                         "settings", null, null, seen, token).ConfigureAwait(false);
                 List<ModelEndpoint> endpoints = await _Database.ModelEndpoints.EnumerateAsync(token).ConfigureAwait(false);
                 Dictionary<string, ModelEndpoint> byEndpoint = endpoints.ToDictionary(e => e.Id, StringComparer.Ordinal);
-                Dictionary<string, int> endpointUsage = captains.Where(c => c.ModelEndpointId != null && byEndpoint.ContainsKey(c.ModelEndpointId))
-                    .GroupBy(c => ConcurrencyCapacityPolicy.EndpointKey(byEndpoint[c.ModelEndpointId!]), StringComparer.OrdinalIgnoreCase)
-                    .ToDictionary(g => g.Key, g => g.Sum(ConcurrencyCapacityPolicy.Occupancy), StringComparer.OrdinalIgnoreCase);
-                foreach (IGrouping<string, ModelEndpoint> group in endpoints.GroupBy(ConcurrencyCapacityPolicy.EndpointKey, StringComparer.OrdinalIgnoreCase))
+                // RS-8.9: usage is counted per concurrency key (a loopback URL per dock host); an alias group reports the
+                // busiest host, since each host's budget is the endpoint's limit.
+                Dictionary<string, List<string?>>? hosts = null;
+                if (ConcurrencyCapacityPolicy.NeedsDockHosts(captains, c => c.ModelEndpointId != null && byEndpoint.TryGetValue(c.ModelEndpointId, out ModelEndpoint? e) ? e : null))
+                    hosts = ConcurrencyCapacityPolicy.HostsByCaptain(await _Database.Docks.EnumerateAsync(token).ConfigureAwait(false));
+                Dictionary<string, int> endpointUsage = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+                Dictionary<string, int> serverUsage = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+                foreach (Captain captain in captains.Where(c => c.ModelEndpointId != null && byEndpoint.ContainsKey(c.ModelEndpointId)))
+                {
+                    ModelEndpoint endpoint = byEndpoint[captain.ModelEndpointId!];
+                    foreach (string? host in ConcurrencyCapacityPolicy.SlotHosts(captain, hosts))
+                    {
+                        string key = ConcurrencyCapacityPolicy.EndpointKey(endpoint, host);
+                        int keyUsage = (endpointUsage.TryGetValue(key, out int existing) ? existing : 0) + 1;
+                        endpointUsage[key] = keyUsage;
+                        string server = ConcurrencyCapacityPolicy.ServerKey(endpoint);
+                        if (!serverUsage.TryGetValue(server, out int busiest) || keyUsage > busiest) serverUsage[server] = keyUsage;
+                    }
+                }
+                foreach (IGrouping<string, ModelEndpoint> group in endpoints.GroupBy(ConcurrencyCapacityPolicy.ServerKey, StringComparer.OrdinalIgnoreCase))
                 {
                     bool mixedLimits = group.Select(e => e.InferenceOptions?.MaxConcurrentMissions).Distinct().Count() > 1;
-                    int usage = endpointUsage.TryGetValue(group.Key, out int count) ? count : 0;
+                    int usage = serverUsage.TryGetValue(group.Key, out int count) ? count : 0;
                     foreach (ModelEndpoint endpoint in group)
                         await ObserveAsync("endpoint", endpoint.Id, "Endpoint " + endpoint.Name, usage,
                             endpoint.InferenceOptions?.MaxConcurrentMissions ?? 0, "model_endpoint", null, null, seen, token,
