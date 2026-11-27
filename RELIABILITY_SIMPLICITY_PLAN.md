@@ -1057,16 +1057,16 @@ rendering. This phase closes that loop.
 
 ## Phase 9: Landing and the merge queue
 
-- [ ] **RS-9.1** Non-fast-forward push rejection is requeued from a fresh fetch a bounded number of times (setting,
+- [x] **RS-9.1** Non-fast-forward push rejection is requeued from a fresh fetch a bounded number of times (setting,
   default 3) before failing, instead of the hard-coded `Infra` at `MergeQueueService.cs:726`. Same for the lost
   handoff case at `AdmiralService.cs:2243`. Detect it from the git exit status through a typed result, not text.
-  Evidence:
-- [ ] **RS-9.2** Merge three landing sweeps (`LandingReconciler`, `ManualLandingReconciler`,
+  Evidence: a7c4cda43; `MergeQueuePushResult`/`MergeQueuePushOutcomeEnum`, push requeue count in memory per run, lost-handoff count from the event log.
+- [x] **RS-9.2** Merge three landing sweeps (`LandingReconciler`, `ManualLandingReconciler`,
   `LandingIntegrityService`) into one reconciler with one scan per tick and explicit cases, including the RS-2.3
-  promotion. Evidence:
-- [ ] **RS-9.3** Fetch once per (vessel, target branch) group per pass instead of per entry. Evidence:
-- [ ] **RS-9.4** Optional batched landing (setting, default off in 1.5.0, confirmed by Joel 2026-11-25): merge N
-  entries, verify once, bisect on failure. Benchmarked against serial landing. Evidence:
+  promotion. Evidence: a7c4cda43; `LandingReconciler.SweepAsync` with `LandingSweepSnapshot`, five ordered cases, one `OnLandingReconciliation` hook; crash-restart test runs the sweep after restart.
+- [x] **RS-9.3** Fetch once per (vessel, target branch) group per pass instead of per entry. Evidence: a7c4cda43; `IGitService.CreateWorktreeFromFetchedRefsAsync`; three-entry test asserts one fetch.
+- [x] **RS-9.4** Optional batched landing (setting, default off in 1.5.0, confirmed by Joel 2026-11-25): merge N
+  entries, verify once, bisect on failure. Benchmarked against serial landing. Evidence: a7c4cda43; off by default (Joel 2026-11-25); opt-in suite Services.LandingBatchBenchmark (`ARMADA_BENCH_LANDING=1`): 6 entries, no failure 6 checks 10.1 s serial vs 2 checks 3.8 s batched; one failing entry 8.0 s vs 7.8 s.
 
 ## Phase 10: Performance
 

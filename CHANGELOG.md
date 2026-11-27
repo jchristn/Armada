@@ -302,6 +302,18 @@ Conductor) with Opus and GPT-6.1 reliable. The work is tracked item by item in `
   drafted description instead of "Created from planning session ...", which Architect slices passed to every Worker
   as the overall objective. The session stays linked through `SourcePlanningSessionId` (RS-2.4).
 
+- **A push refused because the target moved is retried.** The merge queue requeues the entry and integrates it again
+  from a fresh fetch, up to `MergeQueueRequeueLimit` times (default 3, 0 to 10, 0 keeps the 1.4.0 behavior), instead
+  of failing it as Infra. Detection uses git exit codes only (`merge-base --is-ancestor` after a fresh fetch), and hook
+  or permission refusals still fail at once. A lost landing handoff is enqueued again under the same limit before it
+  is flagged LandingFailed. New events `merge_queue.requeued` and `mission.landing_handoff_requeued` (RS-9.1).
+- **One landing reconciler.** The landed-entry promotion, merged-by-hand, landing-integrity and LandingFailed sweeps
+  are one `LandingReconciler` that scans unlanded missions once per health tick and runs explicit cases (RS-9.2).
+- **The merge queue fetches once per repository and target branch per pass** instead of about twice per entry
+  (RS-9.3).
+- **Optional batched landing.** `MergeQueueBatchSize` (default 1, off; up to 20) merges several entries, verifies once,
+  pushes once, and splits the batch in half when verification fails. On a six-entry simulation it takes 3.8 s against
+  10.1 s serially; `benchmarks/run-landing-batch.sh` runs the comparison (RS-9.4).
 ### Routing and contracts
 
 - **GPT 6 and later classify as Premium.** The tier pattern stopped at GPT 5, so `gpt-6.1` ranked as Standard beside
