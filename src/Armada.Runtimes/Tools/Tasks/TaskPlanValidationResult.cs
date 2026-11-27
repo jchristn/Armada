@@ -18,7 +18,7 @@ namespace Armada.Runtimes.Tools.Tasks
         #region Public-Members
 
         /// <summary>
-        /// Whether the plan is valid — true when there are no recorded problems.
+        /// Whether the plan is valid: true when there are no recorded problems.
         /// </summary>
         public bool IsValid => _Problems.Count == 0;
 

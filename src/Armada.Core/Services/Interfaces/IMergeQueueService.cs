@@ -4,7 +4,7 @@ namespace Armada.Core.Services.Interfaces
     using Armada.Core.Models;
 
     /// <summary>
-    /// Service for managing the merge queue — sequential test-before-merge with immediate landing.
+    /// Service for managing the merge queue: sequential test-before-merge with immediate landing.
     /// </summary>
     public interface IMergeQueueService
     {

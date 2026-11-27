@@ -810,7 +810,7 @@ namespace Armada.Server.Routes
                 // This is allowed (operators may need it after restarts/cleanup) but should be visible.
                 if (newStatus == MissionStatusEnum.Complete)
                 {
-                    _logging.Warn(_Header + "mission " + id + " manually completed without active dock — landing pipeline was skipped");
+                    _logging.Warn(_Header + "mission " + id + " manually completed without active dock, landing pipeline was skipped");
                     await _emitEvent("mission.manual_complete_no_dock",
                         "Mission " + id + " manually marked Complete without an active dock (landing pipeline skipped)",
                         "mission", id, mission.CaptainId, id, mission.VesselId, mission.VoyageId).ConfigureAwait(false);

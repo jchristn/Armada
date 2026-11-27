@@ -281,7 +281,8 @@ namespace Test.Shared.Suites.Services
             string fixture = Path.Combine(root, name + ".jsonl");
             File.WriteAllText(fixture, String.Join("\n", lines) + "\n");
             File.WriteAllText(path, "#!/bin/sh\ncat > /dev/null\ncat '" + fixture + "'\nexit " + exitCode + "\n");
-            File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+            if (!OperatingSystem.IsWindows())
+                File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
             return path;
         }
 

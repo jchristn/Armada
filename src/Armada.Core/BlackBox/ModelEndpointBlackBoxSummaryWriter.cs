@@ -147,7 +147,7 @@ namespace Armada.Core.BlackBox
 
         private static string? Clean(string text)
         {
-            string t = text.Replace('—', '-').Replace('–', '-').Trim();
+            string t = text.Replace('\u2014', '-').Replace('–', '-').Trim();
             if (t.Length == 0) return null;
             return BlackBoxLimits.Clip(t, BlackBoxLimits.MaxSummaryChars);
         }

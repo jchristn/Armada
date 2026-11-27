@@ -14,7 +14,7 @@ namespace Armada.Core.Enums
         /// <summary>Measured and outside its threshold.</summary>
         Fail,
 
-        /// <summary>Not measured by this run; <see cref="GateMeasure.Detail"/> says where it is measured or what is missing.</summary>
+        /// <summary>Not measured by this run; <see cref="Armada.Core.Models.GateMeasure.Detail"/> says where it is measured or what is missing.</summary>
         NotMeasured
     }
 }

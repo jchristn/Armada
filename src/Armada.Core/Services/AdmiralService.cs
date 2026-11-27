@@ -640,7 +640,7 @@ namespace Armada.Core.Services
                 }
             }, token).ConfigureAwait(false);
 
-            // Reconcile PullRequestOpen missions — check if their PRs have been merged
+            // Reconcile PullRequestOpen missions: check if their PRs have been merged
             await RunHealthPhaseAsync("pull request reconciliation", () => ReconcilePullRequestMissionsAsync(token), token).ConfigureAwait(false);
 
             // One landing reconciliation sweep (RS-9.2): one scan of unlanded missions, then each case.
@@ -951,18 +951,18 @@ namespace Armada.Core.Services
                 return;
             }
 
-            // If the mission is already in a terminal state, nothing to do — the health check
+            // If the mission is already in a terminal state, nothing to do: the health check
             // or another handler already processed this completion/failure.
             if (MissionStateMachine.IsTerminalOrPostWork(mission.Status))
             {
-                _Logging.Debug(_Header + "mission " + missionId + " already in terminal/post-work state " + mission.Status + " — skipping process exit handling");
+                _Logging.Debug(_Header + "mission " + missionId + " already in terminal/post-work state " + mission.Status + ", skipping process exit handling");
                 return;
             }
 
             // If the captain is no longer working on this mission, skip
             if (!captain.HoldsMission(missionId))
             {
-                _Logging.Debug(_Header + "captain " + captainId + " is no longer assigned to mission " + missionId + " — skipping process exit handling");
+                _Logging.Debug(_Header + "captain " + captainId + " is no longer assigned to mission " + missionId + ", skipping process exit handling");
                 return;
             }
 
@@ -1042,16 +1042,16 @@ namespace Armada.Core.Services
                     return;
                 }
 
-                // Clean exit — delegate to the normal completion flow
+                // Clean exit: delegate to the normal completion flow
                 await ForgetTransientOutageAsync(missionId).ConfigureAwait(false);
                 _MalformedToolCallExits.TryRemove(missionId, out int _);
                 _IterationLimitExits.TryRemove(missionId, out int _);
-                _Logging.Info(_Header + "agent process " + processId + " exited cleanly for mission " + missionId + " — handling completion");
+                _Logging.Info(_Header + "agent process " + processId + " exited cleanly for mission " + missionId + ", handling completion");
                 await _Missions.HandleClaimedCompletionAsync(captain, missionId, mission!.LastUpdateUtc, token).ConfigureAwait(false);
             }
             else
             {
-                // Non-zero or unknown exit code — fail the mission deterministically.
+                // Non-zero or unknown exit code: fail the mission deterministically.
                 // Process exits should not bounce between recovery paths; preserve the
                 // captured runtime error, halt the voyage, and only stall the captain
                 // when the failure indicates the runtime itself is unavailable.
@@ -1544,7 +1544,7 @@ namespace Armada.Core.Services
             }
             else
             {
-                // Process is alive — do NOT update heartbeat here.
+                // Process is alive: do NOT update heartbeat here.
                 // Heartbeat should only be updated when the agent produces actual output
                 // (handled by HandleAgentOutput in ArmadaServer). Updating it here from the
                 // health check would mask stalled agents that are technically running but
@@ -2082,7 +2082,7 @@ namespace Armada.Core.Services
         }
 
         /// <summary>
-        /// Detect and recover orphaned missions — missions stuck in InProgress, Assigned,
+        /// Detect and recover orphaned missions: missions stuck in InProgress, Assigned,
         /// Review, or Testing whose captain has moved on to a different mission. This handles
         /// the edge case where a captain was reassigned before the health check could detect
         /// the old process exit.
@@ -2157,7 +2157,7 @@ namespace Armada.Core.Services
 
                     _Logging.Warn(_Header + "orphaned mission detected: " + mission.Id + " is " + mission.Status +
                         " but captain " + captain.Id + " is working on " + (captain.Assignment?.Id ?? "nothing") +
-                        " — checking if work was completed");
+                        ", checking if work was completed");
 
                     // Only recover missions that actually launched an agent process.
                     // Assigned-but-never-started missions can be legitimately re-routed while still pending.
@@ -2195,7 +2195,7 @@ namespace Armada.Core.Services
 
                     if (!processAlive)
                     {
-                        // Process exited — check if there are commits on the branch (work was done)
+                        // Process exited: check if there are commits on the branch (work was done)
                         Dock? dock = null;
                         if (!String.IsNullOrEmpty(mission.DockId))
                         {
@@ -3168,13 +3168,9 @@ namespace Armada.Core.Services
                 ArmadaEvent? saved = prior.Objects.FirstOrDefault();
                 if (saved?.Payload != null)
                 {
-                    try
-                    {
-                        using JsonDocument document = JsonDocument.Parse(saved.Payload);
-                        if (document.RootElement.TryGetProperty("verificationVersion", out JsonElement stamp) && stamp.GetDateTime() == version)
-                            check = StageCheckEvents.Read(saved);
-                    }
-                    catch (Exception ex) when (ex is JsonException || ex is FormatException || ex is InvalidOperationException) { }
+                    DateTime? stamp = StageCheckEvents.ReadVerificationVersion(saved);
+                    if (stamp.HasValue && stamp.Value == version)
+                        check = StageCheckEvents.Read(saved);
                 }
                 if (check == null)
                 {

@@ -113,7 +113,7 @@ namespace Test.Shared.Suites.Services
                 Id = "mep_" + Guid.NewGuid().ToString("N"),
                 BaseUrl = url,
                 Model = model,
-                InferenceOptions = cap.HasValue ? new InferenceOptions { MaxConcurrentMissions = cap } : null
+                InferenceOptions = cap.HasValue ? new InferenceOptions { MaxConcurrentMissions = cap } : new InferenceOptions()
             };
         }
 

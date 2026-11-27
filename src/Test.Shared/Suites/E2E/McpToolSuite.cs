@@ -2341,7 +2341,7 @@ namespace Test.Shared.Suites.E2E
                 string vesselId = await RestCreateVesselAsync(mcpClient, sessionId, fleetId, "PurgeVoyageVessel").ConfigureAwait(false);
                 string voyageId = await RestCreateVoyageAsync(mcpClient, sessionId, vesselId).ConfigureAwait(false);
 
-                // Cancel the voyage first — purge is blocked on Open/InProgress voyages
+                // Cancel the voyage first: purge is blocked on Open/InProgress voyages
                 await CallToolAsync(mcpClient, sessionId, "cancel_voyage", new { voyageId = voyageId }).ConfigureAwait(false);
 
                 // Also cancel any InProgress missions individually (cancel_voyage only cancels Pending/Assigned)

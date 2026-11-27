@@ -30,12 +30,12 @@ namespace Armada.Server.Mcp
         public string? Order { get; set; }
 
         /// <summary>
-        /// ISO 8601 timestamp — only return entities created after this time.
+        /// ISO 8601 timestamp: only return entities created after this time.
         /// </summary>
         public string? CreatedAfter { get; set; }
 
         /// <summary>
-        /// ISO 8601 timestamp — only return entities created before this time.
+        /// ISO 8601 timestamp: only return entities created before this time.
         /// </summary>
         public string? CreatedBefore { get; set; }
 

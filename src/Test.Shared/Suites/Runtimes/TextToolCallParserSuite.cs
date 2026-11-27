@@ -31,7 +31,7 @@ namespace Test.Shared.Suites.Runtimes
                 AssertEqual("{\"path\":\"a.txt\"}", r.Calls[0].ArgumentsJson);
                 AssertEqual(TextToolCallParser.HermesFormat, r.Format);
                 AssertEqual("Let me look.", r.RemainingText);
-                AssertTrue(r.Calls[0].Id.StartsWith("text_call_", StringComparison.Ordinal), "recovered calls get their own ids");
+                AssertTrue((r.Calls[0].Id ?? String.Empty).StartsWith("text_call_", StringComparison.Ordinal), "recovered calls get their own ids");
             }));
             cases.Add(Case("hermes_string_arguments", "Arguments given as a JSON string are unwrapped", TestTags.Positive, () =>
             {

@@ -2,6 +2,7 @@ namespace Armada.Core.Services
 {
     using System;
     using System.Text.Json;
+    using System.Text.Json.Nodes;
     using System.Text.Json.Serialization;
     using Armada.Core.Enums;
     using Armada.Core.Models;
@@ -59,7 +60,7 @@ namespace Armada.Core.Services
             evt.MissionId = mission.Id;
             evt.VesselId = mission.VesselId;
             evt.VoyageId = mission.VoyageId;
-            var payload = JsonSerializer.SerializeToNode(result, _JsonOptions)!.AsObject();
+            JsonObject payload = JsonSerializer.SerializeToNode(result, _JsonOptions)!.AsObject();
             if (mission.Status == MissionStatusEnum.Verifying) payload["verificationVersion"] = mission.LastUpdateUtc;
             evt.Payload = payload.ToJsonString(_JsonOptions);
             return evt;
@@ -76,6 +77,26 @@ namespace Armada.Core.Services
             try
             {
                 return JsonSerializer.Deserialize<StageCheckResult>(evt.Payload!, _JsonOptions);
+            }
+            catch (JsonException)
+            {
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Read the verification version from a stage-check event: the mission's last update time when the check ran
+        /// during verification.
+        /// </summary>
+        /// <param name="evt">Event.</param>
+        /// <returns>The version, or null when the event carries none or its payload is unreadable.</returns>
+        public static DateTime? ReadVerificationVersion(ArmadaEvent? evt)
+        {
+            if (evt == null || String.IsNullOrWhiteSpace(evt.Payload)) return null;
+            try
+            {
+                StageCheckVerificationStamp? stamp = JsonSerializer.Deserialize<StageCheckVerificationStamp>(evt.Payload!, _JsonOptions);
+                return stamp?.VerificationVersion;
             }
             catch (JsonException)
             {

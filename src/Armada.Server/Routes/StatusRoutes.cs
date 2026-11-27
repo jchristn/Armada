@@ -241,7 +241,7 @@ namespace Armada.Server.Routes
                     results.Add(new { Name = "Database", Status = DoctorCheckStatusEnum.Fail, Message = "Error checking database: " + ex.Message });
                 }
 
-                // 4. Admiral Server (self-check — always passes if we reach here)
+                // 4. Admiral Server (self-check: always passes if we reach here)
                 results.Add(new { Name = "Admiral Server", Status = DoctorCheckStatusEnum.Pass, Message = "Server is healthy" });
 
                 // 5. Stalled Captains

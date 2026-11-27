@@ -26,7 +26,7 @@ namespace Armada.Core.Enums
 
         /// <summary>
         /// Do not delete mission branches after landing. Branches are retained for inspection.
-        /// Useful for auditing or debugging — stale branches must be cleaned up manually.
+        /// Useful for auditing or debugging: stale branches must be cleaned up manually.
         /// </summary>
         [EnumMember(Value = "None")]
         None

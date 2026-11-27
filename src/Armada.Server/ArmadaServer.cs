@@ -29,7 +29,7 @@ namespace Armada.Server
     /// <summary>
     /// Admiral server orchestrating REST API, MCP server, and agent coordination.
     /// Routes, MCP tools, WebSocket commands, agent lifecycle, and mission landing
-    /// are each handled by dedicated classes — this class wires them together.
+    /// are each handled by dedicated classes: this class wires them together.
     /// </summary>
     public class ArmadaServer
     {

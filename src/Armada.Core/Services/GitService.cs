@@ -1716,7 +1716,7 @@ namespace Armada.Core.Services
             }
             catch
             {
-                // Config key missing entirely — set it
+                // Config key missing entirely: set it
                 await EnsureSafeFetchRefspecAsync(repoPath).ConfigureAwait(false);
             }
 
@@ -1729,7 +1729,7 @@ namespace Armada.Core.Services
             }
             catch
             {
-                // Best effort — don't let prune failure block fetch
+                // Best effort: don't let prune failure block fetch
             }
 
             _Logging.Debug(_Header + "fetching: " + repoPath);

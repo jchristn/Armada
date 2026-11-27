@@ -219,7 +219,7 @@ namespace Test.Shared.Suites.Services
 
             internal Task<ModelEndpoint> Endpoint(string name, string baseUrl, int? cap)
                 => Db.ModelEndpoints.CreateAsync(new ModelEndpoint { Name = name, BaseUrl = baseUrl,
-                    InferenceOptions = cap.HasValue ? new InferenceOptions { MaxConcurrentMissions = cap } : null });
+                    InferenceOptions = cap.HasValue ? new InferenceOptions { MaxConcurrentMissions = cap } : new InferenceOptions() });
 
             public void Dispose()
             {

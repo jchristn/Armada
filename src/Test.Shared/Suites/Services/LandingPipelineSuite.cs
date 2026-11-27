@@ -363,7 +363,7 @@ namespace Test.Shared.Suites.Services
                     AssertNotNull(afterFirst, "Dock should still exist");
                     Assert(!afterFirst!.Active, "Dock should be inactive after first reclaim");
 
-                    // Second reclaim — should be a no-op
+                    // Second reclaim: should be a no-op
                     await dockService.ReclaimAsync(dock.Id);
 
                     Dock? afterSecond = await testDb.Driver.Docks.ReadAsync(dock.Id);

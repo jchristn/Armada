@@ -48,7 +48,7 @@ namespace Armada.Helm.Infrastructure
 
             settings.InitializeDirectories();
 
-            // Quiet logging — no console output for embedded mode
+            // Quiet logging: no console output for embedded mode
             LoggingModule logging = new LoggingModule();
             logging.Settings.EnableConsole = false;
             logging.Settings.FileLogging = FileLoggingMode.FileWithDate;

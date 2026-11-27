@@ -172,7 +172,7 @@ namespace Test.Shared.Suites.Services
                     foreach (BlackBoxRuleChange c in res.Changes)
                     {
                         AssertFalse(String.IsNullOrWhiteSpace(c.Title) || String.IsNullOrWhiteSpace(c.Change) || String.IsNullOrWhiteSpace(c.AcceptanceTest), rule.Id + " change is mission-ready");
-                        AssertFalse((c.Title + c.Change + c.AcceptanceTest).Contains('—'), rule.Id + " no em-dashes");
+                        AssertFalse((c.Title + c.Change + c.AcceptanceTest).Contains('\u2014'), rule.Id + " no em-dashes");
                     }
                     AssertFalse(String.IsNullOrWhiteSpace(res.RegressionSuite) || String.IsNullOrWhiteSpace(res.RegressionTest), rule.Id + " regression test");
                 }
@@ -233,7 +233,7 @@ namespace Test.Shared.Suites.Services
                 AssertContains("Proposed Armada changes", brief, "mission briefs");
                 AssertContains("Regression test: Services.LandingPipeline", brief, "regression test");
                 AssertContains("Start with the Armada angle", brief, "the answer asks for the Armada angle first");
-                AssertFalse(brief.Contains('—'), "no em-dashes");
+                AssertFalse(brief.Contains('\u2014'), "no em-dashes");
 
                 BlackBoxRecord dirty = DirtyCheckout();
                 dirty.Analysis = Analyze(dirty);

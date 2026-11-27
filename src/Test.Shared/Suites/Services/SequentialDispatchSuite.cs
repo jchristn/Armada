@@ -667,7 +667,7 @@ namespace Test.Shared.Suites.Services
                     Vessel vessel = fixture.Vessel;
                     List<Mission> missions = fixture.Missions;
 
-                    // Step 1: Assign mission 1 — captain is idle, should get assigned
+                    // Step 1: Assign mission 1: captain is idle, should get assigned
                     await missionService.TryAssignAsync(missions[0], vessel);
 
                     Mission? m1 = await db.Missions.ReadAsync(missions[0].Id);
@@ -678,19 +678,19 @@ namespace Test.Shared.Suites.Services
                     AssertEqual(CaptainStateEnum.Working, captainAfterM1!.State, "Captain should be Working");
                     AssertEqual(m1.Id, captainAfterM1.ActiveMissionIds.SingleOrDefault(), "Captain should track mission 1");
 
-                    // Step 2: Try to assign mission 2 — captain is working, should NOT be assigned
+                    // Step 2: Try to assign mission 2: captain is working, should NOT be assigned
                     await missionService.TryAssignAsync(missions[1], vessel);
 
                     Mission? m2 = await db.Missions.ReadAsync(missions[1].Id);
                     AssertEqual(MissionStatusEnum.Pending, m2!.Status, "Mission 2 should still be Pending");
 
-                    // Step 3: Try to assign mission 3 — same, should NOT be assigned
+                    // Step 3: Try to assign mission 3: same, should NOT be assigned
                     await missionService.TryAssignAsync(missions[2], vessel);
 
                     Mission? m3 = await db.Missions.ReadAsync(missions[2].Id);
                     AssertEqual(MissionStatusEnum.Pending, m3!.Status, "Mission 3 should still be Pending");
 
-                    // Step 4: Complete mission 1 — should release captain and pick up mission 2
+                    // Step 4: Complete mission 1: should release captain and pick up mission 2
                     Captain? captainForCompletion = await db.Captains.ReadAsync(captain.Id);
                     await missionService.HandleCompletionAsync(captainForCompletion!, captainForCompletion!.ActiveMissionIds.SingleOrDefault()!);
                     await services.Dispatcher.DispatchAsync();
@@ -705,7 +705,7 @@ namespace Test.Shared.Suites.Services
                     Captain? captainAfterM2Assign = await db.Captains.ReadAsync(captain.Id);
                     AssertEqual(CaptainStateEnum.Working, captainAfterM2Assign!.State, "Captain should be Working with mission 2");
 
-                    // Step 5: Complete mission 2 — should pick up mission 3
+                    // Step 5: Complete mission 2: should pick up mission 3
                     captainForCompletion = await db.Captains.ReadAsync(captain.Id);
                     await missionService.HandleCompletionAsync(captainForCompletion!, m2.Id);
                     await services.Dispatcher.DispatchAsync();
@@ -717,7 +717,7 @@ namespace Test.Shared.Suites.Services
                     AssertEqual(MissionStatusEnum.InProgress, m3!.Status, "Mission 3 should be InProgress after mission 2 completion");
                     AssertEqual(captain.Id, m3.CaptainId, "Mission 3 should be assigned to the same captain");
 
-                    // Step 6: Complete mission 3 — captain should be released to Idle
+                    // Step 6: Complete mission 3: captain should be released to Idle
                     captainForCompletion = await db.Captains.ReadAsync(captain.Id);
                     await missionService.HandleCompletionAsync(captainForCompletion!, m3.Id);
                     await services.Dispatcher.DispatchAsync();
@@ -756,7 +756,7 @@ namespace Test.Shared.Suites.Services
                     await db.Vessels.UpdateAsync(vessel);
                     List<Mission> missions = fixture.Missions;
 
-                    // Assign first 2 missions — each captain should get one
+                    // Assign first 2 missions: each captain should get one
                     await missionService.TryAssignAsync(missions[0], vessel);
                     await missionService.TryAssignAsync(missions[1], vessel);
 
@@ -783,7 +783,7 @@ namespace Test.Shared.Suites.Services
                     AssertEqual(MissionStatusEnum.Pending, m4!.Status, "Mission 4 should be Pending");
                     AssertEqual(MissionStatusEnum.Pending, m5!.Status, "Mission 5 should be Pending");
 
-                    // Complete mission 1 — the captain should pick up mission 3
+                    // Complete mission 1: the captain should pick up mission 3
                     Captain? captain1 = await db.Captains.ReadAsync(m1CaptainId!);
                     await missionService.HandleCompletionAsync(captain1!, m1.Id);
                     await services.Dispatcher.DispatchAsync();
@@ -794,7 +794,7 @@ namespace Test.Shared.Suites.Services
                     m3 = await db.Missions.ReadAsync(missions[2].Id);
                     AssertEqual(MissionStatusEnum.InProgress, m3!.Status, "Mission 3 should be InProgress after mission 1 completion");
 
-                    // Complete mission 2 — the other captain should pick up mission 4
+                    // Complete mission 2: the other captain should pick up mission 4
                     Captain? captain2 = await db.Captains.ReadAsync(m2CaptainId!);
                     await missionService.HandleCompletionAsync(captain2!, m2.Id);
                     await services.Dispatcher.DispatchAsync();
@@ -805,7 +805,7 @@ namespace Test.Shared.Suites.Services
                     m4 = await db.Missions.ReadAsync(missions[3].Id);
                     AssertEqual(MissionStatusEnum.InProgress, m4!.Status, "Mission 4 should be InProgress after mission 2 completion");
 
-                    // Complete mission 3 — should pick up mission 5
+                    // Complete mission 3: should pick up mission 5
                     captain1 = await db.Captains.ReadAsync(m3.CaptainId!);
                     await missionService.HandleCompletionAsync(captain1!, m3.Id);
                     await services.Dispatcher.DispatchAsync();
@@ -816,7 +816,7 @@ namespace Test.Shared.Suites.Services
                     m5 = await db.Missions.ReadAsync(missions[4].Id);
                     AssertEqual(MissionStatusEnum.InProgress, m5!.Status, "Mission 5 should be InProgress after mission 3 completion");
 
-                    // Complete mission 4 — no more pending, captain should go Idle
+                    // Complete mission 4: no more pending, captain should go Idle
                     captain2 = await db.Captains.ReadAsync(m4.CaptainId!);
                     await missionService.HandleCompletionAsync(captain2!, m4.Id);
                     await services.Dispatcher.DispatchAsync();
@@ -827,7 +827,7 @@ namespace Test.Shared.Suites.Services
                     captain2 = await db.Captains.ReadAsync(captain2!.Id);
                     AssertEqual(CaptainStateEnum.Idle, captain2!.State, "Captain 2 should be Idle");
 
-                    // Complete mission 5 — last captain should go Idle
+                    // Complete mission 5: last captain should go Idle
                     captain1 = await db.Captains.ReadAsync(m5.CaptainId!);
                     await missionService.HandleCompletionAsync(captain1!, m5.Id);
                     await services.Dispatcher.DispatchAsync();
@@ -875,7 +875,7 @@ namespace Test.Shared.Suites.Services
                     string? worktreePath1 = dock1!.WorktreePath;
                     AssertNotNull(worktreePath1, "Dock should have a worktree path");
 
-                    // Complete mission 1 — should auto-assign mission 2
+                    // Complete mission 1: should auto-assign mission 2
                     Captain? captainForCompletion = await db.Captains.ReadAsync(captain.Id);
                     await missionService.HandleCompletionAsync(captainForCompletion!, m1.Id);
                     await services.Dispatcher.DispatchAsync();
@@ -923,7 +923,7 @@ namespace Test.Shared.Suites.Services
                     Mission? m1 = await db.Missions.ReadAsync(fixture.Missions[0].Id);
                     AssertEqual(MissionStatusEnum.InProgress, m1!.Status, "Mission 1 should be InProgress");
 
-                    // Complete mission 1 — OnMissionComplete will throw (fire-and-forget),
+                    // Complete mission 1: OnMissionComplete will throw (fire-and-forget),
                     // but captain should still be released and mission 2 should be picked up
                     Captain? captainForCompletion = await db.Captains.ReadAsync(captain.Id);
                     await missionService.HandleCompletionAsync(captainForCompletion!, m1.Id);
@@ -937,7 +937,7 @@ namespace Test.Shared.Suites.Services
 
                     // Verify mission 2 was picked up (re-dispatch was attempted)
                     Mission? m2 = await db.Missions.ReadAsync(fixture.Missions[1].Id);
-                    AssertEqual(MissionStatusEnum.InProgress, m2!.Status, "Mission 2 should be InProgress — handler failure should not block re-dispatch");
+                    AssertEqual(MissionStatusEnum.InProgress, m2!.Status, "Mission 2 should be InProgress, handler failure should not block re-dispatch");
                     AssertEqual(captain.Id, m2.CaptainId, "Mission 2 should be assigned to the same captain");
                 }
             }));
@@ -1031,7 +1031,7 @@ namespace Test.Shared.Suites.Services
                     // Assign the single mission
                     await missionService.TryAssignAsync(fixture.Missions[0], vessel);
 
-                    // Complete it — no more pending missions, captain should become Idle
+                    // Complete it: no more pending missions, captain should become Idle
                     Captain? captainForCompletion = await db.Captains.ReadAsync(captain.Id);
                     await missionService.HandleCompletionAsync(captainForCompletion!, fixture.Missions[0].Id);
 

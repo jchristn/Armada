@@ -641,7 +641,7 @@ namespace Armada.Core.BlackBox
 
         private static string NoDashes(string text)
         {
-            return text.Replace('—', '-').Replace('–', '-');
+            return text.Replace('\u2014', '-').Replace('–', '-');
         }
 
         #endregion

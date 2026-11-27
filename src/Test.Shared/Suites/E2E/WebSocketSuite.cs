@@ -786,7 +786,7 @@ namespace Test.Shared.Suites.E2E
 
                 string voyageId = await CreateVoyageViaRestAsync(authClient, "ws-purge-voyage").ConfigureAwait(false);
 
-                // Cancel first — purge is blocked on Open/InProgress voyages
+                // Cancel first: purge is blocked on Open/InProgress voyages
                 await WsCommandAsync(restPort, "cancel_voyage", new { id = voyageId }).ConfigureAwait(false);
 
                 JsonElement resp = await WsCommandAsync(restPort, "purge_voyage", new { id = voyageId }).ConfigureAwait(false);
@@ -1565,7 +1565,7 @@ namespace Test.Shared.Suites.E2E
 
                 string missionId = await CreateMissionViaRestAsync(authClient, "ws-diff-mission").ConfigureAwait(false);
                 JsonElement resp = await WsCommandAsync(restPort, "get_mission_diff", new { id = missionId }).ConfigureAwait(false);
-                // May return error (no worktree/settings) or result — just verify action is correct
+                // May return error (no worktree/settings) or result: just verify action is correct
                 string action = resp.GetProperty("action").GetString()!;
                 AssertEqual("get_mission_diff", action);
             }));
@@ -1875,7 +1875,7 @@ namespace Test.Shared.Suites.E2E
                 CancelVoyageResponse cancelData = DeserializeData<CancelVoyageResponse>(cancelResp);
                 AssertEqual("Cancelled", cancelData.Voyage!.Status.ToString());
 
-                // Cancel second before purge — purge is blocked on Open/InProgress voyages
+                // Cancel second before purge: purge is blocked on Open/InProgress voyages
                 await WsCommandAsync(restPort, "cancel_voyage", new { id = purgeId }).ConfigureAwait(false);
 
                 // Purge second
@@ -2041,7 +2041,7 @@ namespace Test.Shared.Suites.E2E
                         return root;
                 }
 
-                // Not a command response — skip and read next message
+                // Not a command response: skip and read next message
             }
         }
 
