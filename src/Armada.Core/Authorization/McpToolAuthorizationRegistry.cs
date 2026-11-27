@@ -153,6 +153,7 @@ namespace Armada.Core.Authorization
             Add("cancel_model_probe_run", "ModelProbeRun", ResourceOperationEnum.Execute, PermissionLevel.TenantAdmin);
             Add("get_model_profile", "ModelProfile", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("list_model_profiles", "ModelProfile", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("update_model_profile", "ModelProfile", ResourceOperationEnum.Update, PermissionLevel.TenantAdmin);
             Add("get_model_scorecard", "ModelProfile", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("list_model_alerts", "ModelAlert", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("get_model_alert", "ModelAlert", ResourceOperationEnum.Read, PermissionLevel.Authenticated);

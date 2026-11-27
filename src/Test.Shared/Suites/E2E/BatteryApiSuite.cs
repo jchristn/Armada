@@ -201,6 +201,15 @@ namespace Test.Shared.Suites.E2E
                     await ErrorAsync(b, "list_battery_results", new { runId = queued.Id }, McpToolErrorCodeEnum.NotFound).ConfigureAwait(false);
                     await ErrorAsync(b, "get_battery_run", new { id = queued.Id }, McpToolErrorCodeEnum.NotFound).ConfigureAwait(false);
                     await ErrorAsync(admin, "get_battery_run", new { id = "bat_missing" }, McpToolErrorCodeEnum.NotFound).ConfigureAwait(false);
+
+                    EnumerationResult<BatteryRun> runs = await OkAsync<EnumerationResult<BatteryRun>>(user, "list_battery_runs", new { status = "Completed", pageSize = 100 }).ConfigureAwait(false);
+                    AssertTrue(runs.Objects.Any(r => r.Id == queued.Id), "list_battery_runs in the tenant");
+                    EnumerationResult<BatteryRun> other = await OkAsync<EnumerationResult<BatteryRun>>(b, "list_battery_runs", new { tenantId = adminA.TenantId, pageSize = 100 }).ConfigureAwait(false);
+                    AssertFalse(other.Objects.Any(r => r.Id == queued.Id), "other tenant does not list it");
+                    await ErrorAsync(user, "cancel_battery_run", new { id = queued.Id }, McpToolErrorCodeEnum.Forbidden).ConfigureAwait(false);
+                    await ErrorAsync(b, "cancel_battery_run", new { id = queued.Id }, McpToolErrorCodeEnum.NotFound).ConfigureAwait(false);
+                    BatteryRun same = await OkAsync<BatteryRun>(admin, "cancel_battery_run", new { id = queued.Id, reason = "late" }).ConfigureAwait(false);
+                    AssertEqual(BatteryRunStatusEnum.Completed, same.Status, "a finished run is unchanged");
                 }
             }));
 

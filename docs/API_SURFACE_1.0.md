@@ -28,7 +28,7 @@ Client contract version: `1.0` (reported as `ContractVersion` by
 | Surface | Total | Experimental |
 |---|---|---|
 | REST routes | 542 | 15 |
-| MCP tools | 283 | 8 |
+| MCP tools | 284 | 8 |
 | WebSocket endpoints | 2 | 1 |
 | WebSocket commands | 65 | 0 |
 | WebSocket event types | 84 | 0 |
@@ -855,6 +855,7 @@ Arguments are camelCase; `*` marks a required argument. See [MCP_API.md](MCP_API
 | `update_mission` | TenantAdmin | `branchName: string`, `description: string`, `missionId*: string`, `mode: string`, `parentMissionId: string`, `persona: string`, `prUrl: string`, `priority: integer`, `title: string`, `vesselId: string`, `voyageId: string`, `workerEnvelope: object` |  |
 | `update_model_alert_thresholds` | Authenticated | `defaults: object`, `overrides: array<object>` |  |
 | `update_model_endpoint` | Authenticated | `apiKey: string`, `authHeaderName: string`, `authQueryParameter: string`, `authType: string`, `authUsername: string`, `baseUrl: string`, `dimensionality: integer`, `enabled: boolean`, `endpointId*: string`, `headers: array<object>`, `inferenceOptions: object`, `kind: string`, `model: string`, `name: string`, `provider: string`, `timeoutMs: integer` |  |
+| `update_model_profile` | TenantAdmin | `capabilities: object`, `id*: string`, `notes: string`, `recovery: object`, `rendering: object`, `tiering: object`, `timeouts: object` |  |
 | `update_objective` | TenantAdmin | `acceptanceCriteria: array<string>`, `backlogState: string`, `blockedByObjectiveIds: array<string>`, `category: string`, `checkRunIds: array<string>`, `deploymentIds: array<string>`, `description: string`, `dueUtc: string`, `effort: string`, `evidenceLinks: array<string>`, `fleetIds: array<string>`, `incidentIds: array<string>`, `kind: string`, `missionIds: array<string>`, `nonGoals: array<string>`, `objectiveId*: string`, `owner: string`, `parentObjectiveId: string`, `planningSessionIds: array<string>`, `priority: string`, `rank: integer`, `refinementSessionIds: array<string>`, `refinementSummary: string`, `releaseIds: array<string>`, `rolloutConstraints: array<string>`, `status: string`, `suggestedPipelineId: string`, `tags: array<string>`, `targetVersion: string`, `title: string`, `vesselIds: array<string>`, `voyageIds: array<string>` |  |
 | `update_persona` | Authenticated | `captainPriorities: array<object>`, `defaultCaptainId: string`, `description: string`, `escalationLadder: array<object>`, `name*: string`, `priorityAvailability: string`, `priorityExhaustion: string`, `promptTemplateName: string`, `scope: string` |  |
 | `update_pipeline` | Authenticated | `description: string`, `name*: string`, `stages: array<object>` |  |

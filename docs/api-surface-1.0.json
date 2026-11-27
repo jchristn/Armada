@@ -17631,6 +17631,50 @@
       "experimental": false
     },
     {
+      "name": "update_model_profile",
+      "auth": "TenantAdmin",
+      "resource": "ModelProfile:Update",
+      "arguments": [
+        {
+          "name": "capabilities",
+          "type": "object",
+          "required": false
+        },
+        {
+          "name": "id",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "notes",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "recovery",
+          "type": "object",
+          "required": false
+        },
+        {
+          "name": "rendering",
+          "type": "object",
+          "required": false
+        },
+        {
+          "name": "tiering",
+          "type": "object",
+          "required": false
+        },
+        {
+          "name": "timeouts",
+          "type": "object",
+          "required": false
+        }
+      ],
+      "description": "Update the mutable parts of a model profile, as PUT /api/v1/model-profiles/{id}: capabilities, rendering (template Current, Lean or Compact), recovery policy overrides, per-profile timeouts, the administrator's tier, and notes. A section left out keeps its value; inside a section, a null value uses the global setting. Admins only. Returns the profile with its effective recovery policy and timeouts.",
+      "experimental": false
+    },
+    {
       "name": "update_objective",
       "auth": "TenantAdmin",
       "resource": "Objective:Update",
