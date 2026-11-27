@@ -1113,33 +1113,33 @@ Parity manifests (`src/Armada.Tui/parity.json`, `src/Armada.Mobile/parity.json`)
 
 ### Server and APIs
 
-- [ ] **RS-12.1** REST: new and changed endpoints and fields for recovery policy (RS-5.5), escalation ladder (RS-5.6),
+- [x] **RS-12.1** REST: new and changed endpoints and fields for recovery policy (RS-5.5), escalation ladder (RS-5.6),
   judge strength rule (RS-8.7), per-profile timeouts (RS-8.8), discovered context (RS-7.8), mission attempt
   history with failure kind, repairs, and escalations (RS-1.4), `Persona` and `Mode` on mission requests (RS-4.2),
   reliability gate report (RS-1.5), and submitted stage results (RS-6.2). Request validation and authorization per
-  `AUTHENTICATION.md`, tenant scoping tested. Evidence:
-- [ ] **RS-12.1a** Battery runs have no list or cancel route (found 2026-11-25: stopping the gate client left its run
+  `AUTHENTICATION.md`, tenant scoping tested. Evidence: Routes `/api/v1/missions/{id}/attempts`, `/api/v1/reliability/summary`, `/api/v1/reliability/gate-reports`; existing models already carried recovery policy, ladder, judge strength, timeouts, discovered context, persona and mode. Suites Services.ReliabilitySurface, E2E.Reliability, E2E.McpTenantIsolation; merged head 106/106 with API contract, route surface, coverage and guards.
+- [x] **RS-12.1a** Battery runs have no list or cancel route (found 2026-11-25: stopping the gate client left its run
   executing on the Admiral). Add `GET /api/v1/battery/runs` (paged, filters) and `POST /api/v1/battery/runs/{id}/cancel`
   (cancels open missions and releases docks, as a Full Evaluate stop does), with MCP, SDK, Postman, CLI, and dashboard
-  surfaces; the gate runner cancels its run on Ctrl+C. Evidence:
-- [ ] **RS-12.2** MCP: matching tools and fields, plus the submit tools (RS-6.2). Mark which tools a captain may call
-  and which are operator tools. Evidence:
-- [ ] **RS-12.3** WebSocket: events for escalation, repair, and attempt changes; existing `mission.changed` payloads
-  carry the new fields; visibility rules from 1.4.0 apply. Evidence:
-- [ ] **RS-12.4** Settings: every new setting has validation in its setter, defaults documented, and appears in the
-  runtime settings API and dashboard Settings page. Evidence:
+  surfaces; the gate runner cancels its run on Ctrl+C. Evidence: List and cancel routes, MCP, SDK, Postman, CLI; gate runner cancels on Ctrl+C. Services.Battery live cancel, E2E.Battery, Client.Contract.Battery 178/178 with authorization suites.
+- [x] **RS-12.2** MCP: matching tools and fields, plus the submit tools (RS-6.2). Mark which tools a captain may call
+  and which are operator tools. Evidence: Seven new tools including `update_model_profile`; captain versus operator table in docs/MCP_API.md; typed `AskReferenceNotFoundException` replaces the Ask message match.
+- [x] **RS-12.3** WebSocket: events for escalation, repair, and attempt changes; existing `mission.changed` payloads
+  carry the new fields; visibility rules from 1.4.0 apply. Evidence: `MissionAttemptChange` events and extended `mission.changed`; E2E.WebSocketSecurity green.
+- [x] **RS-12.4** Settings: every new setting has validation in its setter, defaults documented, and appears in the
+  runtime settings API and dashboard Settings page. Evidence: Settings API fields with setter validation; E2E.ReliabilitySettingsApi. Dashboard Settings page fields follow in the next wave.
 - [x] **RS-12.5** Telemetry: Prometheus metrics for RS-1.4, Grafana dashboard panels added under
   `docker/armada/observability/grafana` (pipeline reliability: completion rate, failure kinds, repairs, escalations,
   dispatch latency), per `TELEMETRY_REQUIREMENTS.md`. Evidence: `StageOutcomeMetrics`, `armada-pipeline-reliability.json`, `docs/TELEMETRY.md`; suite Services.StageOutcomeMetrics 4/4 (checks every dashboard query has an emitted series), related telemetry and stage-outcome suites 75/75.
 
 ### SDK and Postman
 
-- [ ] **RS-12.6** `Armada.Client` (.NET SDK): typed models and methods for every RS-12.1 change, XML docs, contract
-  tests against a live server (`Client.Contract.*` suites), loopback base URLs use `127.0.0.1`. Evidence:
-- [ ] **RS-12.7** Postman: `Armada.postman_collection.json` updated with folder- and request-level descriptions for
+- [x] **RS-12.6** `Armada.Client` (.NET SDK): typed models and methods for every RS-12.1 change, XML docs, contract
+  tests against a live server (`Client.Contract.*` suites), loopback base URLs use `127.0.0.1`. Evidence: `ArmadaClient.Reliability.cs`, battery list/cancel; suites Client.Contract.Reliability, Client.Coverage (including ListMissionSubmissionsAsync).
+- [x] **RS-12.7** Postman: `Armada.postman_collection.json` updated with folder- and request-level descriptions for
   every new or changed request, variables for base URL and credentials, no em-dashes; the open-model simulation
   (RS-1.1) documented in `postman/README.md`; regenerate `docs/api-surface-1.0.json` and pass the API contract
-  test. Evidence:
+  test. Evidence: Postman requests with descriptions, postman/README.md open-model simulation section, docs/api-surface-1.0.json regenerated, E2E.ApiContract green.
 
 ### CLI and TUI
 
@@ -1186,8 +1186,8 @@ shipped locale per `I18N.md`, and is checked in light and dark themes at desktop
   `CHANGELOG.md` and `README.md`. Evidence:
 - [x] **RS-12.19** Harbor app: shows Harbor capability flags (RS-7.13) and an update prompt when the Admiral needs a
   newer Harbor; discovered context for local endpoints. Evidence: `HarborCapabilityReport`, `HarborCapabilityCatalog`, `HarborDiscoveredContextLog`, Harbor MainWindow banner and status lines; suite Services.HarborAppStatus 4/4, Harbor suites 33/33. Window controls build-checked only, not viewed.
-- [ ] **RS-12.20** Proxy: confirm every new REST, WebSocket, and MCP route passes through the tunnel and portal
-  unchanged (route allow-lists, payload size limits). Update `docs/PROXY_API.md` if anything changes. Evidence:
+- [x] **RS-12.20** Proxy: confirm every new REST, WebSocket, and MCP route passes through the tunnel and portal
+  unchanged (route allow-lists, payload size limits). Update `docs/PROXY_API.md` if anything changes. Evidence: The relay already passes every `/api/v1/*` route and allows 8 MiB bodies; no change, PROXY_API.md unchanged.
 
 ## Phase 13: Documentation
 

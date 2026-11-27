@@ -414,6 +414,30 @@ Conductor) with Opus and GPT-6.1 reliable. The work is tracked item by item in `
   writes use provider error codes; a failed commit retries as Armada only when `git var` reports no author or committer
   identity (RS-11.4).
 
+- **Battery runs can be listed and cancelled.** `GET /api/v1/battery/runs` (paged; tenant, captain, status filters)
+  and `POST /api/v1/battery/runs/{id}/cancel` (stops open missions and releases docks), with MCP `list_battery_runs`
+  and `cancel_battery_run`, SDK methods, Postman requests, and `armada battery runs` / `armada battery cancel`. The
+  gate runner cancels its run on Ctrl+C and uploads its report unless run with `--no-upload` (RS-12.1a).
+- **Mission attempt history.** `GET /api/v1/missions/{id}/attempts`, MCP `get_mission_attempts`, and
+  `armada mission attempts <id>` list each attempt's captain, model, disposition, failure kind, repair, escalation,
+  Judge verdict, and duration (RS-12.1, RS-12.8).
+- **Reliability summary and gate reports.** `GET /api/v1/reliability/summary` (per model and persona completion,
+  failure kinds, repairs, escalations, `Unclassified` rate; server-side filtering, sorting, paging) and
+  `/api/v1/reliability/gate-reports` (list, upload, get by id or `latest`; stored under `<data>/gate-reports/`, newest
+  200 kept), with MCP tools and SDK methods (RS-12.1).
+- **MCP `update_model_profile`** sets a profile's tier, timeouts, and recovery policy. `docs/MCP_API.md` marks which
+  tools a captain calls and which are operator tools (RS-12.2).
+- **WebSocket attempt events.** `mission.escalated`, `mission.repaired`, and `mission.attempt_changed`;
+  `mission.changed` also carries persona, mode, captain, tier, escalation count, and redispatch and repair attempts
+  (RS-12.3).
+- **The settings API carries every 1.5.0 setting**, including `TimeoutScaleReferenceTokensPerSecond`, the prompt
+  variant thresholds, `MergeQueueRequeueLimit`, `MergeQueueBatchSize`, and `RoutingData` (RS-12.4).
+- **Dashboard: Model Profiles** under Captains, with served context and its source, configured or probed tools,
+  tier and outcome suggestion, recovery policy and timeouts (override, value in effect, and source), and an admin
+  editor. Pipelines gain the Judge strength rule and "Create from template"; endpoints show discovered context; the
+  mission create form has Persona and Dispatch has Mode. Localized in all eight locales (RS-12.11, RS-12.12,
+  RS-12.14).
+
 ### Tests
 
 - Cases that set a skip reason now also set Touchstone's skip flag; five suites ran cases that were meant to skip,
