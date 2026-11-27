@@ -2514,6 +2514,7 @@ namespace Armada.Core.Database.SqlServer.Queries
                 Armada.Core.Database.StageSubmissionTableSchema.Migration(Armada.Core.Enums.DatabaseTypeEnum.SqlServer),
                 Armada.Core.Database.ContextDiscoverySchema.Migration(Armada.Core.Enums.DatabaseTypeEnum.SqlServer),
                 Armada.Core.Database.ModelProfileTimeoutsSchema.Migration(Armada.Core.Enums.DatabaseTypeEnum.SqlServer),
+                Armada.Core.Database.ProbedCapabilitiesSchema.Migration(Armada.Core.Enums.DatabaseTypeEnum.SqlServer),
                 Armada.Core.Database.TimeBoundedScanSchema.Migration(Armada.Core.Enums.DatabaseTypeEnum.SqlServer)
 
             };

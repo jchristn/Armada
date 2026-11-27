@@ -509,6 +509,48 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(before, JsonSerializer.Serialize(await db.ModelEndpoints.ReadAsync(endpoint.Id).ConfigureAwait(false)), "nothing changes the endpoint");
             }));
 
+            cases.Add(CaseAsync("rs8_1_probe_fills_capabilities_and_served_context", "RS-8.1: a passing tool-calling probe fills the profile's probed capabilities, a failing one sets them false, and a served window is written as the endpoint's discovered context when none is configured", TestTags.Database, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                DatabaseDriver db = testDb.Driver;
+                ModelEndpoint unconfigured = OllamaEndpoint("ten_c", 65536);
+                unconfigured.InferenceOptions.ContextLength = null;
+                ModelEndpoint endpoint = await db.ModelEndpoints.CreateAsync(unconfigured).ConfigureAwait(false);
+
+                ModelProbeService service = NewService(db, CannedExecutor.Good(), new EvaluationSettings());
+                service.ServedContextReader = (ep, model, ct) => Task.FromResult<int?>(32768);
+                ModelProbeRun run = (await service.WaitAsync((await service.StartEndpointAsync(endpoint, ModelProbeDepthEnum.Quick, "ten_c", "usr_c").ConfigureAwait(false)).Id).ConfigureAwait(false))!;
+                AssertEqual(ModelProbeRunStatusEnum.Completed, run.Status, run.FailureReason);
+
+                ModelEndpoint discovered = (await db.ModelEndpoints.ReadAsync(endpoint.Id).ConfigureAwait(false))!;
+                AssertEqual((int?)32768, discovered.DiscoveredContextLength, "the served window is the discovered context");
+                AssertEqual(ModelProbeService.ProbeServedContextSource, discovered.DiscoveredContextSource);
+                AssertNull(discovered.InferenceOptions.ContextLength, "nothing is configured");
+
+                List<ModelProfile> profiles = (await db.ModelProfiles.EnumerateAsync(new ModelProfileQuery { TenantId = "ten_c" }).ConfigureAwait(false)).Objects;
+                AssertEqual(1, profiles.Count, "one profile");
+                ModelProfile profile = profiles[0];
+                bool expectedMcp = HandoffReaderResolver.Resolve(new Captain("x") { Runtime = AgentRuntimeEnum.ApiEndpoint }, endpoint).HasMcpTools;
+                AssertEqual((bool?)true, profile.Capabilities.ProbedToolsAvailable, "a passing probe means working tool calls");
+                AssertEqual((bool?)expectedMcp, profile.Capabilities.ProbedMcpAvailable, "MCP as the endpoint serves it");
+                AssertNotNull(profile.Capabilities.ProbedUtc);
+                AssertNull(profile.Capabilities.ToolsAvailable, "the administrator's value is untouched");
+
+                CannedExecutor badTools = new CannedExecutor(request =>
+                {
+                    ModelProbeExchange good = CannedExecutor.Good().RunAsync(request).GetAwaiter().GetResult();
+                    if (request.Label == "Tool calling") good.Output = "I could not call any tools.";
+                    return good;
+                });
+                ModelProbeService failing = NewService(db, badTools, new EvaluationSettings());
+                failing.ServedContextReader = (ep, model, ct) => Task.FromResult<int?>(32768);
+                ModelProbeRun second = (await failing.WaitAsync((await failing.StartEndpointAsync(discovered, ModelProbeDepthEnum.Quick, "ten_c", "usr_c").ConfigureAwait(false)).Id).ConfigureAwait(false))!;
+                AssertEqual(ModelProbeRunStatusEnum.Completed, second.Status, second.FailureReason);
+                ModelProfile after = (await db.ModelProfiles.ReadAsync(profile.Id).ConfigureAwait(false))!;
+                AssertEqual((bool?)false, after.Capabilities.ProbedToolsAvailable, "a failing probe corrects the probed value");
+                AssertEqual((bool?)false, after.Capabilities.ProbedMcpAvailable, "no MCP without tool calls");
+            }));
+
             cases.Add(CaseAsync("run_vendor_cli_captain", "A vendor CLI captain is probed; served context is could-not-run with a reason, never failed", TestTags.Database, async () =>
             {
                 using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);

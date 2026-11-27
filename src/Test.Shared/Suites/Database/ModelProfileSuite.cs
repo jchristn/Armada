@@ -202,6 +202,46 @@ namespace Test.Shared.Suites.Database
                 AssertNull(cleared.Notes, "notes cleared");
             }));
 
+            cases.Add(CaseAsync("probed_capabilities_round_trip", "RS-8.1: UpdateProbedCapabilitiesAsync writes only the probed columns; UpdateAsync never clears them", TestTags.Positive, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                DatabaseDriver db = testDb.Driver;
+                ModelProfile profile = new ModelProfile { TenantId = "ten_p", Identity = new ModelProfileIdentity { Runtime = "ApiEndpoint", Model = "qwen", ServedContextTokens = 32768 }, CreatedUtc = _Fixed };
+                profile.Capabilities = new ModelProfileCapabilities { McpAvailable = false };
+                profile.Notes = "kept";
+                await db.ModelProfiles.CreateAsync(profile, "key-p").ConfigureAwait(false);
+                ModelProfile fresh = (await db.ModelProfiles.ReadAsync(profile.Id).ConfigureAwait(false))!;
+                AssertNull(fresh.Capabilities.ProbedToolsAvailable, "nothing probed yet");
+                AssertNull(fresh.Capabilities.ProbedUtc, "no probe time yet");
+                DateTime lastUpdate = fresh.LastUpdateUtc;
+
+                AssertTrue(await db.ModelProfiles.UpdateProbedCapabilitiesAsync(profile.Id, true, true, _Fixed.AddHours(1)).ConfigureAwait(false), "updated");
+                AssertFalse(await db.ModelProfiles.UpdateProbedCapabilitiesAsync("mdl_missing", true, true, _Fixed).ConfigureAwait(false), "a missing profile is not updated");
+                ModelProfile read = (await db.ModelProfiles.ReadAsync(profile.Id).ConfigureAwait(false))!;
+                AssertEqual((bool?)true, read.Capabilities.ProbedToolsAvailable);
+                AssertEqual((bool?)true, read.Capabilities.ProbedMcpAvailable);
+                AssertSameInstant(_Fixed.AddHours(1), read.Capabilities.ProbedUtc!.Value, "probe time");
+                AssertNull(read.Capabilities.ToolsAvailable, "the administrator's tools value is untouched");
+                AssertEqual((bool?)false, read.Capabilities.McpAvailable, "the administrator's MCP value is untouched");
+                AssertEqual((bool?)true, read.Capabilities.EffectiveToolsAvailable, "probed tools in effect");
+                AssertEqual((bool?)false, read.Capabilities.EffectiveMcpAvailable, "the administrator's MCP value wins");
+                AssertEqual("kept", read.Notes, "notes untouched");
+                AssertSameInstant(lastUpdate, read.LastUpdateUtc, "a probe write is not an administrator edit");
+
+                read.Notes = "edited";
+                read.Capabilities = new ModelProfileCapabilities { ToolsAvailable = false };
+                await db.ModelProfiles.UpdateAsync(read).ConfigureAwait(false);
+                ModelProfile after = (await db.ModelProfiles.ReadAsync(profile.Id).ConfigureAwait(false))!;
+                AssertEqual((bool?)true, after.Capabilities.ProbedToolsAvailable, "UpdateAsync keeps the probed tools value");
+                AssertEqual((bool?)true, after.Capabilities.ProbedMcpAvailable, "UpdateAsync keeps the probed MCP value");
+                AssertEqual((bool?)false, after.Capabilities.EffectiveToolsAvailable, "the administrator's false wins");
+
+                AssertTrue(await db.ModelProfiles.UpdateProbedCapabilitiesAsync(profile.Id, false, false, _Fixed.AddHours(2)).ConfigureAwait(false), "a later probe corrects its own values");
+                ModelProfile corrected = (await db.ModelProfiles.ReadAsync(profile.Id).ConfigureAwait(false))!;
+                AssertEqual((bool?)false, corrected.Capabilities.ProbedToolsAvailable);
+                AssertEqual((bool?)false, corrected.Capabilities.ProbedMcpAvailable);
+            }));
+
             cases.Add(CaseAsync("enumerate_filters_paging", "EnumerateAsync filters by tenant, runtime, provider and model text and pages newest first", TestTags.Positive, async () =>
             {
                 using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);

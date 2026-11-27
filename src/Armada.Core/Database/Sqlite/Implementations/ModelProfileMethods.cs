@@ -149,6 +149,26 @@ namespace Armada.Core.Database.Sqlite.Implementations
         }
 
         /// <inheritdoc />
+        public async Task<bool> UpdateProbedCapabilitiesAsync(string profileId, bool? toolsAvailable, bool? mcpAvailable, DateTime probedUtc, CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(profileId)) throw new ArgumentNullException(nameof(profileId));
+            int changed = 0;
+            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteGate, async (SqliteConnection conn, SqliteTransaction tx) =>
+            {
+                changed = await SqliteCommandHelper.ExecuteAsync(conn, tx,
+                    "UPDATE model_profiles SET probed_tools_available = @probed_tools_available, probed_mcp_available = @probed_mcp_available, capabilities_probed_utc = @capabilities_probed_utc WHERE id = @id;",
+                    cmd =>
+                    {
+                        SqliteCommandHelper.Add(cmd, "@id", profileId);
+                        SqliteCommandHelper.Add(cmd, "@probed_tools_available", toolsAvailable);
+                        SqliteCommandHelper.Add(cmd, "@probed_mcp_available", mcpAvailable);
+                        SqliteCommandHelper.AddDate(cmd, "@capabilities_probed_utc", probedUtc);
+                    }, token).ConfigureAwait(false);
+            }, token).ConfigureAwait(false);
+            return changed == 1;
+        }
+
+        /// <inheritdoc />
         public async Task<EnumerationResult<ModelProfile>> EnumerateAsync(ModelProfileQuery query, CancellationToken token = default)
         {
             if (query == null) throw new ArgumentNullException(nameof(query));
@@ -355,6 +375,9 @@ namespace Armada.Core.Database.Sqlite.Implementations
             profile.Identity.ServedContextSource = Enum.TryParse(SqliteCommandHelper.ReadString(reader["served_context_source"]), true, out ContextLengthSourceEnum contextSource) ? contextSource : null;
             profile.Capabilities.ToolsAvailable = SqliteCommandHelper.ReadNullableBool(reader["tools_available"]);
             profile.Capabilities.McpAvailable = SqliteCommandHelper.ReadNullableBool(reader["mcp_available"]);
+            profile.Capabilities.ProbedToolsAvailable = SqliteCommandHelper.ReadNullableBool(reader["probed_tools_available"]);
+            profile.Capabilities.ProbedMcpAvailable = SqliteCommandHelper.ReadNullableBool(reader["probed_mcp_available"]);
+            profile.Capabilities.ProbedUtc = SqliteCommandHelper.ReadNullableDate(reader["capabilities_probed_utc"]);
             profile.Rendering.Template = SqliteCommandHelper.ReadString(reader["rendering_template"]);
             profile.Rendering.RepeatContractAtEnd = SqliteCommandHelper.ReadNullableBool(reader["rendering_repeat_contract_at_end"]);
             int? maxFiles = SqliteCommandHelper.ReadNullableInt(reader["rendering_max_files_per_mission"]);

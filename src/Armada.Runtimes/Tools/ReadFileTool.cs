@@ -42,7 +42,7 @@ namespace Armada.Runtimes.Tools
         /// A human-readable description of what this tool does.
         /// </summary>
         public string Description => "Reads a file from the filesystem and returns its contents with line numbers (like cat -n); the numbers are for display, so leave them out of edits. "
-            + "Defaults to pages of at most 200 lines and 24,000 characters with continuation instructions. CLAUDE.md and AGENTS.md are read completely by default. Explicit limit requests retain full/range behavior up to a size limit set by the context window, then page with continuation instructions.";
+            + "Defaults to pages of at most 200 lines and 24,000 characters with continuation instructions. Instruction files (CLAUDE.md, AGENTS.md, AGENTS.override.md, ARMADA.md) are read completely by default. Explicit limit requests retain full/range behavior up to a size limit set by the context window, then page with continuation instructions.";
 
         /// <summary>
         /// The JSON Schema object describing the tool's input parameters.
@@ -65,7 +65,7 @@ namespace Armada.Runtimes.Tools
                 limit = new
                 {
                     type = "integer",
-                    description = "The maximum number of lines to read. Omit for a bounded 200-line page (24,000 characters), except CLAUDE.md/AGENTS.md, which default to complete instructions. Explicit zero or negative reads the remaining file, paged at the context-window size limit."
+                    description = "The maximum number of lines to read. Omit for a bounded 200-line page (24,000 characters), except instruction files (CLAUDE.md, AGENTS.md, AGENTS.override.md, ARMADA.md), which default to complete instructions. Explicit zero or negative reads the remaining file, paged at the context-window size limit."
                 }
             },
             required = new[] { "file_path" }
@@ -222,7 +222,9 @@ namespace Armada.Runtimes.Tools
         {
             string name = Path.GetFileName(filePath);
             return String.Equals(name, "CLAUDE.md", StringComparison.OrdinalIgnoreCase)
-                || String.Equals(name, "AGENTS.md", StringComparison.OrdinalIgnoreCase);
+                || String.Equals(name, "AGENTS.md", StringComparison.OrdinalIgnoreCase)
+                || String.Equals(name, "AGENTS.override.md", StringComparison.OrdinalIgnoreCase)
+                || String.Equals(name, "ARMADA.md", StringComparison.OrdinalIgnoreCase);
         }
 
         private string ResolvePath(string filePath, string workingDirectory)

@@ -142,6 +142,26 @@ namespace Armada.Core.Database.Mysql.Implementations
         }
 
         /// <inheritdoc />
+        public async Task<bool> UpdateProbedCapabilitiesAsync(string profileId, bool? toolsAvailable, bool? mcpAvailable, DateTime probedUtc, CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(profileId)) throw new ArgumentNullException(nameof(profileId));
+            int changed = 0;
+            await MysqlCommandHelper.WriteAsync(_ConnectionString, _WriteLock, async (MySqlConnection conn, MySqlTransaction tx) =>
+            {
+                changed = await MysqlCommandHelper.ExecuteAsync(conn, tx,
+                    "UPDATE model_profiles SET probed_tools_available = @probed_tools_available, probed_mcp_available = @probed_mcp_available, capabilities_probed_utc = @capabilities_probed_utc WHERE id = @id;",
+                    cmd =>
+                    {
+                        MysqlCommandHelper.Add(cmd, "@id", profileId);
+                        MysqlCommandHelper.Add(cmd, "@probed_tools_available", toolsAvailable);
+                        MysqlCommandHelper.Add(cmd, "@probed_mcp_available", mcpAvailable);
+                        MysqlCommandHelper.AddDate(cmd, "@capabilities_probed_utc", probedUtc);
+                    }, token).ConfigureAwait(false);
+            }, token).ConfigureAwait(false);
+            return changed == 1;
+        }
+
+        /// <inheritdoc />
         public async Task<EnumerationResult<ModelProfile>> EnumerateAsync(ModelProfileQuery query, CancellationToken token = default)
         {
             if (query == null) throw new ArgumentNullException(nameof(query));
@@ -348,6 +368,9 @@ namespace Armada.Core.Database.Mysql.Implementations
             profile.Identity.ServedContextSource = Enum.TryParse(MysqlCommandHelper.ReadString(reader["served_context_source"]), true, out ContextLengthSourceEnum contextSource) ? contextSource : null;
             profile.Capabilities.ToolsAvailable = MysqlCommandHelper.ReadNullableBool(reader["tools_available"]);
             profile.Capabilities.McpAvailable = MysqlCommandHelper.ReadNullableBool(reader["mcp_available"]);
+            profile.Capabilities.ProbedToolsAvailable = MysqlCommandHelper.ReadNullableBool(reader["probed_tools_available"]);
+            profile.Capabilities.ProbedMcpAvailable = MysqlCommandHelper.ReadNullableBool(reader["probed_mcp_available"]);
+            profile.Capabilities.ProbedUtc = MysqlCommandHelper.ReadNullableDate(reader["capabilities_probed_utc"]);
             profile.Rendering.Template = MysqlCommandHelper.ReadString(reader["rendering_template"]);
             profile.Rendering.RepeatContractAtEnd = MysqlCommandHelper.ReadNullableBool(reader["rendering_repeat_contract_at_end"]);
             int? maxFiles = MysqlCommandHelper.ReadNullableInt(reader["rendering_max_files_per_mission"]);

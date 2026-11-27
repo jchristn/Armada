@@ -149,6 +149,26 @@ namespace Armada.Core.Database.SqlServer.Implementations
         }
 
         /// <inheritdoc />
+        public async Task<bool> UpdateProbedCapabilitiesAsync(string profileId, bool? toolsAvailable, bool? mcpAvailable, DateTime probedUtc, CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(profileId)) throw new ArgumentNullException(nameof(profileId));
+            int changed = 0;
+            await SqlServerCommandHelper.WriteAsync(_ConnectionString, _WriteLock, async (SqlConnection conn, SqlTransaction tx) =>
+            {
+                changed = await SqlServerCommandHelper.ExecuteAsync(conn, tx,
+                    "UPDATE model_profiles SET probed_tools_available = @probed_tools_available, probed_mcp_available = @probed_mcp_available, capabilities_probed_utc = @capabilities_probed_utc WHERE id = @id;",
+                    cmd =>
+                    {
+                        SqlServerCommandHelper.Add(cmd, "@id", profileId);
+                        SqlServerCommandHelper.Add(cmd, "@probed_tools_available", toolsAvailable);
+                        SqlServerCommandHelper.Add(cmd, "@probed_mcp_available", mcpAvailable);
+                        SqlServerCommandHelper.AddDate(cmd, "@capabilities_probed_utc", probedUtc);
+                    }, token).ConfigureAwait(false);
+            }, token).ConfigureAwait(false);
+            return changed == 1;
+        }
+
+        /// <inheritdoc />
         public async Task<EnumerationResult<ModelProfile>> EnumerateAsync(ModelProfileQuery query, CancellationToken token = default)
         {
             if (query == null) throw new ArgumentNullException(nameof(query));
@@ -355,6 +375,9 @@ namespace Armada.Core.Database.SqlServer.Implementations
             profile.Identity.ServedContextSource = Enum.TryParse(SqlServerCommandHelper.ReadString(reader["served_context_source"]), true, out ContextLengthSourceEnum contextSource) ? contextSource : null;
             profile.Capabilities.ToolsAvailable = SqlServerCommandHelper.ReadNullableBool(reader["tools_available"]);
             profile.Capabilities.McpAvailable = SqlServerCommandHelper.ReadNullableBool(reader["mcp_available"]);
+            profile.Capabilities.ProbedToolsAvailable = SqlServerCommandHelper.ReadNullableBool(reader["probed_tools_available"]);
+            profile.Capabilities.ProbedMcpAvailable = SqlServerCommandHelper.ReadNullableBool(reader["probed_mcp_available"]);
+            profile.Capabilities.ProbedUtc = SqlServerCommandHelper.ReadNullableDate(reader["capabilities_probed_utc"]);
             profile.Rendering.Template = SqlServerCommandHelper.ReadString(reader["rendering_template"]);
             profile.Rendering.RepeatContractAtEnd = SqlServerCommandHelper.ReadNullableBool(reader["rendering_repeat_contract_at_end"]);
             int? maxFiles = SqlServerCommandHelper.ReadNullableInt(reader["rendering_max_files_per_mission"]);

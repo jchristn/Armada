@@ -64,8 +64,18 @@ namespace Armada.Core.Services
         };
 
         /// <summary>
-        /// Resolve the runtime-specific mission instructions filename.
+        /// Instructions file for a runtime that loads no context file of its own (the API endpoint runtime, a Custom
+        /// command, or an unknown runtime). The launch prompt names it, and it collides with no repository file.
         /// </summary>
+        public const string NeutralInstructionsFileName = "ARMADA.md";
+
+        /// <summary>
+        /// Resolve the runtime-specific mission instructions filename: the file each runtime loads natively, so the
+        /// mission instructions are in context even before the captain reads the launch prompt.
+        /// </summary>
+        /// <param name="runtime">Runtime name (<see cref="AgentRuntimeEnum"/>), or null when no captain is known (CLAUDE.md,
+        /// as before: a generation without a captain renders for the default Claude Code runtime).</param>
+        /// <returns>File name relative to the dock root.</returns>
         public static string GetInstructionsFileName(string? runtime)
         {
             if (String.IsNullOrWhiteSpace(runtime)) return "CLAUDE.md";
@@ -73,14 +83,18 @@ namespace Armada.Core.Services
             return runtime.Trim() switch
             {
                 "ClaudeCode" => "CLAUDE.md",
-                "Codex" => "CODEX.md",
+                // Codex and pi load one context file per directory: AGENTS.override.md, else AGENTS.md (codex-cli 0.171
+                // instructions loader; pi also falls back to CLAUDE.md). Only the override is always read, so a repository
+                // AGENTS.md cannot hide the mission instructions and is never overwritten.
+                "Codex" => "AGENTS.override.md",
+                "Pi" => "AGENTS.override.md",
                 "Cursor" => "CURSOR.md",
                 "Gemini" => "GEMINI.md",
                 "Mux" => "MUX.md",
-                // pi loads one context file per directory: AGENTS.override.md, else AGENTS.md, else CLAUDE.md. Only the
-                // override is always read, so a repository AGENTS.md cannot hide the mission instructions.
-                "Pi" => "AGENTS.override.md",
-                _ => "CLAUDE.md"
+                // OpenCode loads AGENTS.md, and CLAUDE.md only when there is no AGENTS.md (opencode 2.2), so a generated
+                // CLAUDE.md was ignored in any repository with an AGENTS.md. It has no override file.
+                "OpenCode" => "AGENTS.md",
+                _ => NeutralInstructionsFileName
             };
         }
 
@@ -394,6 +408,24 @@ namespace Armada.Core.Services
             string overflowMessage = "\n\n" + instructionsFileName + " contains the remaining context. Keep working from that file if this launch prompt was truncated.";
             int allowed = Math.Max(256, MaxLaunchPromptChars - overflowMessage.Length);
             return Task.FromResult(prompt.Substring(0, allowed).TrimEnd() + overflowMessage);
+        }
+
+        /// <summary>
+        /// Repeat the output contract at the end of a launch prompt when the captain's model profile asks for it
+        /// (<see cref="ModelProfileRendering.RepeatContractAtEnd"/>, RS-8.2). The launch prompt opens with the role summary;
+        /// the repetition is the last thing the model reads before it starts. A persona without a contract, and a
+        /// rendering that does not set the flag to true, leave the prompt unchanged.
+        /// </summary>
+        /// <param name="prompt">The launch prompt, including anything appended after it (commit guidance).</param>
+        /// <param name="persona">Mission persona.</param>
+        /// <param name="rendering">The captain's model profile rendering overrides, or null.</param>
+        /// <returns>The prompt, with the contract summary appended when asked for.</returns>
+        public static string AppendContractReminder(string? prompt, string? persona, ModelProfileRendering? rendering)
+        {
+            string text = prompt ?? String.Empty;
+            if (rendering?.RepeatContractAtEnd != true) return text;
+            if (String.IsNullOrEmpty(StageOutputContract.For(persona))) return text;
+            return text.TrimEnd() + "\n\nOutput contract, repeated: " + StageOutputContract.RoleSummary(persona);
         }
 
         private static string BuildBootstrapRoleSummary(string? persona)

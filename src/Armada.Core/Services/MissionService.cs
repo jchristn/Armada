@@ -143,7 +143,8 @@ namespace Armada.Core.Services
             "CODEX.md",
             "CLAUDE.md",
             "MUX.md",
-            "AGENTS.override.md"
+            "AGENTS.override.md",
+            "ARMADA.md"
         };
 
         // Lock order is vessel, then capacity. Release both before provisioning/launching:

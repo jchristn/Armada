@@ -27,7 +27,9 @@ namespace Armada.Core.Services
         {
             HandoffReader reader = new HandoffReader();
             InferenceOptions? options = endpoint?.InferenceOptions;
-            if (options?.ContextLength.HasValue == true && options.ContextLength.Value > 0) reader.ContextTokens = options.ContextLength.Value;
+            // The configured window, else the one the model server reported (RS-7.8), so a discovered endpoint is budgeted too.
+            int? window = endpoint != null ? ModelContextDiscovery.WindowOf(endpoint) : null;
+            if (window.HasValue && window.Value > 0) reader.ContextTokens = window.Value;
             if (captain == null) return reader;
 
             switch (captain.Runtime)

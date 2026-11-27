@@ -2843,6 +2843,7 @@ namespace Armada.Core.Database.Sqlite.Queries
                 Armada.Core.Database.StageSubmissionTableSchema.Migration(Armada.Core.Enums.DatabaseTypeEnum.Sqlite),
                 Armada.Core.Database.ContextDiscoverySchema.Migration(Armada.Core.Enums.DatabaseTypeEnum.Sqlite),
                 Armada.Core.Database.ModelProfileTimeoutsSchema.Migration(Armada.Core.Enums.DatabaseTypeEnum.Sqlite),
+                Armada.Core.Database.ProbedCapabilitiesSchema.Migration(Armada.Core.Enums.DatabaseTypeEnum.Sqlite),
                 Armada.Core.Database.TimeBoundedScanSchema.Migration(Armada.Core.Enums.DatabaseTypeEnum.Sqlite)
 
             };

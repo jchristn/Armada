@@ -235,6 +235,37 @@ namespace Armada.Core.Settings
         }
 
         /// <summary>
+        /// Served context, in tokens, at or below which a mission renders the Compact persona prompt variant when nothing
+        /// else chooses one (no voyage override, captain <c>promptVariant</c> option, or model profile rendering template).
+        /// The served context is the captain's endpoint context (configured, else discovered), else its model profile's.
+        /// Default 32768; 0 turns the automatic Compact choice off. Must be in range [0, 2097152].
+        /// </summary>
+        public int PromptVariantCompactMaxContextTokens
+        {
+            get => _PromptVariantCompactMaxContextTokens;
+            set
+            {
+                if (value < 0 || value > 2097152) throw new ArgumentOutOfRangeException(nameof(PromptVariantCompactMaxContextTokens), "Must be between 0 and 2097152");
+                _PromptVariantCompactMaxContextTokens = value;
+            }
+        }
+
+        /// <summary>
+        /// Served context, in tokens, at or below which a mission renders the Lean persona prompt variant when nothing
+        /// else chooses one and the Compact threshold (<see cref="PromptVariantCompactMaxContextTokens"/>) does not apply.
+        /// Default 65536; 0 turns the automatic Lean choice off. Must be in range [0, 2097152].
+        /// </summary>
+        public int PromptVariantLeanMaxContextTokens
+        {
+            get => _PromptVariantLeanMaxContextTokens;
+            set
+            {
+                if (value < 0 || value > 2097152) throw new ArgumentOutOfRangeException(nameof(PromptVariantLeanMaxContextTokens), "Must be between 0 and 2097152");
+                _PromptVariantLeanMaxContextTokens = value;
+            }
+        }
+
+        /// <summary>
         /// Shared execution time limit, in minutes, for the stage-check commands and baseline checks a vessel's workflow profile defines (its build and unit-test
         /// commands, run in the dock after a stage's agent exits). A command that runs longer is reported as a timed-out
         /// check. Set it above the slowest command's real duration, or give the profile a narrower test command.
@@ -1201,6 +1232,8 @@ namespace Armada.Core.Settings
         private int _TimeoutScaleReferenceTokensPerSecond = 30;
         private int _StageCheckTimeoutMinutes = Constants.DefaultStageCheckTimeoutMinutes;
         private int _HandoffBudgetTokens = Constants.DefaultHandoffBudgetTokens;
+        private int _PromptVariantCompactMaxContextTokens = PromptVariantResolver.DefaultCompactMaxContextTokens;
+        private int _PromptVariantLeanMaxContextTokens = PromptVariantResolver.DefaultLeanMaxContextTokens;
         private int _MaxRecoveryAttempts = Constants.DefaultMaxRecoveryAttempts;
         private int _MaxMissionRuntimeMinutes = Constants.DefaultMaxMissionRuntimeMinutes;
         private int _ReviewTimeoutMinutes = Constants.DefaultReviewTimeoutMinutes;

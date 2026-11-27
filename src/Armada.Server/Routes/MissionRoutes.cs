@@ -165,7 +165,7 @@ namespace Armada.Server.Routes
                 };
             }
 
-            string[] fallbackNames = { "CLAUDE.md", "CODEX.md", "CURSOR.md", "AGENTS.md", "GEMINI.md", "MUX.md" };
+            string[] fallbackNames = { "CLAUDE.md", "AGENTS.override.md", "ARMADA.md", "CODEX.md", "CURSOR.md", "AGENTS.md", "GEMINI.md", "MUX.md" };
             foreach (string fallbackName in fallbackNames)
             {
                 string fallbackPath = Path.Combine(dock.WorktreePath, fallbackName);
@@ -1448,7 +1448,7 @@ namespace Armada.Server.Routes
                 .WithResponse(200, OpenApiResponseMetadata.Create("Successful response"))
                 .WithTag("Missions")
                 .WithSummary("Get mission instructions")
-                .WithDescription("Returns the runtime-specific instruction file generated for a mission, such as CLAUDE.md, CODEX.md, CURSOR.md, AGENTS.md, GEMINI.md, or MUX.md.")
+                .WithDescription("Returns the runtime-specific instruction file generated for a mission, such as CLAUDE.md, AGENTS.override.md, AGENTS.md, ARMADA.md, CURSOR.md, GEMINI.md, or MUX.md.")
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Mission ID (msn_ prefix)"))
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())
                 .WithSecurity("ApiKey"));

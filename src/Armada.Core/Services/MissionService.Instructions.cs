@@ -50,7 +50,9 @@ namespace Armada.Core.Services
             string instructionsPath = Path.Combine(worktreePath, instructionsFileName);
 
             Mission? previousStage = await ReadPreviousStageAsync(mission, token).ConfigureAwait(false);
-            HandoffReader reader = await ResolveReaderAsync(captain, token).ConfigureAwait(false);
+            ModelEndpoint? captainEndpoint = await ReadCaptainEndpointAsync(captain, token).ConfigureAwait(false);
+            ModelProfile? captainProfile = await ReadCaptainProfileAsync(captain, token).ConfigureAwait(false);
+            HandoffReader reader = HandoffReaderResolver.Resolve(captain, captainEndpoint);
             HandoffRendering? handoff = previousStage != null
                 ? await RenderHandoffAsync(harborHost, worktreePath, previousStage, reader, token).ConfigureAwait(false)
                 : null;
@@ -127,7 +129,7 @@ namespace Armada.Core.Services
             // Apply the vessel's project-profile persona override (if any) so per-project customization takes effect.
             PersonaOverride? personaOverride = await ResolvePersonaOverrideAsync(vessel, mission.Persona, token).ConfigureAwait(false);
             string? personaTemplateName = await ResolvePersonaTemplateNameAsync(mission, token).ConfigureAwait(false);
-            PromptVariantEnum promptVariant = await ResolvePromptVariantAsync(mission, captain, token).ConfigureAwait(false);
+            PromptVariantEnum promptVariant = await ResolvePromptVariantAsync(mission, captain, captainEndpoint, captainProfile, token).ConfigureAwait(false);
             PromptTemplate? personaTemplate = await MissionPromptBuilder.ChoosePersonaTemplateAsync(mission.Persona, personaTemplateName, promptVariant, _PromptTemplates, personaOverride, token).ConfigureAwait(false);
             string? appendedHandoff = DeliverHandoff(templateParams, handoff, personaTemplate?.Content);
             string personaPrompt = await MissionPromptBuilder.RenderPersonaPromptBodyAsync(mission.Persona, personaTemplate, templateParams, _PromptTemplates, personaOverride, token).ConfigureAwait(false);
@@ -146,6 +148,14 @@ namespace Armada.Core.Services
             if (!String.IsNullOrEmpty(missionModeSection))
             {
                 sections.Add(new InstructionSection("mission mode", missionModeSection + "\n"));
+            }
+
+            // RS-8.2: the captain's model profile can cap the files a mission changes; a writing persona is told the limit.
+            if (!MissionModeContract.IsReadOnly(mission.Mode))
+            {
+                string fileLimit = WorkerEnvelopeRules.FileLimitSection(captainProfile?.Rendering.MaxFilesPerMission,
+                    WorkerEnvelopeRules.Effective(vessel.WorkerEnvelope, mission.WorkerEnvelope, previousStage?.WorkerEnvelope), mission.Persona);
+                if (fileLimit.Length > 0) sections.Add(new InstructionSection("file limit", "\n" + fileLimit + "\n"));
             }
 
             // Resolved git anchors (start commit, target branch, working branch, recent commits on the paths
@@ -264,16 +274,16 @@ namespace Armada.Core.Services
             if (instructionsFileName == "AGENTS.override.md" && existing?.Contains("# Mission Instructions", StringComparison.Ordinal) == true)
                 existing = null;
 
-            // A runtime whose instructions file is not the repository's own (MUX.md, CODEX.md, GEMINI.md, CURSOR.md,
-            // AGENTS.override.md for pi) would otherwise never see the project's rules: mux loads MUX.md first and skips
-            // AGENTS.md and CLAUDE.md, and pi's AGENTS.override.md hides the dock's AGENTS.md.
-            // Carry the repository's AGENTS.md, else CLAUDE.md, into the generated file. Codex reads AGENTS.md itself.
+            // A runtime whose instructions file is not the repository's own (MUX.md, GEMINI.md, CURSOR.md, ARMADA.md,
+            // AGENTS.override.md for Codex and pi) would otherwise never see the project's rules: mux loads MUX.md first
+            // and skips AGENTS.md and CLAUDE.md, and the AGENTS.override.md that Codex and pi load hides the dock's
+            // AGENTS.md. Carry the repository's AGENTS.md, else CLAUDE.md, into the generated file. A generated AGENTS.md
+            // (OpenCode) already holds the repository's AGENTS.md when there is one, and carries CLAUDE.md otherwise.
             if (existing == null && !String.Equals(instructionsFileName, "CLAUDE.md", StringComparison.Ordinal))
             {
-                bool runtimeReadsAgentsMd = captain != null && captain.Runtime == AgentRuntimeEnum.Codex;
-                string[] fallbacks = runtimeReadsAgentsMd ? new[] { "CLAUDE.md" } : new[] { "AGENTS.md", "CLAUDE.md" };
-                if (runtimeReadsAgentsMd && await files.ReadTextAsync(Path.Combine(worktreePath, "AGENTS.md"), token).ConfigureAwait(false) != null)
-                    fallbacks = Array.Empty<string>();
+                string[] fallbacks = String.Equals(instructionsFileName, "AGENTS.md", StringComparison.Ordinal)
+                    ? new[] { "CLAUDE.md" }
+                    : new[] { "AGENTS.md", "CLAUDE.md" };
                 foreach (string fallback in fallbacks)
                 {
                     string? projectInstructions = await files.ReadTextAsync(Path.Combine(worktreePath, fallback), token).ConfigureAwait(false);
@@ -521,10 +531,11 @@ namespace Armada.Core.Services
 
         /// <summary>
         /// Resolve the persona prompt variant for the mission (<see cref="PromptVariantResolver"/>): the voyage's captain
-        /// override for the mission's persona, then the captain's <c>promptVariant</c> runtime option, then Current.
+        /// override for the mission's persona, then the captain's <c>promptVariant</c> runtime option, then the captain's
+        /// model profile rendering template, then the served context against the automatic thresholds, then Current.
         /// Best-effort: a voyage read failure falls back to the captain's setting.
         /// </summary>
-        private async Task<PromptVariantEnum> ResolvePromptVariantAsync(Mission mission, Captain? captain, CancellationToken token)
+        private async Task<PromptVariantEnum> ResolvePromptVariantAsync(Mission mission, Captain? captain, ModelEndpoint? endpoint, ModelProfile? profile, CancellationToken token)
         {
             List<CaptainAssignmentOverride> overrides;
             try
@@ -537,10 +548,16 @@ namespace Armada.Core.Services
                 overrides = new List<CaptainAssignmentOverride>();
             }
 
-            PromptVariantEnum variant = PromptVariantResolver.Resolve(mission.Persona, overrides, captain);
-            if (variant != PromptVariantEnum.Current)
-                _Logging.Debug(_Header + "mission " + mission.Id + " renders the " + variant + " persona prompt variant");
-            return variant;
+            PromptVariantResolution resolution = PromptVariantResolver.Resolve(mission.Persona, overrides, captain, profile?.Rendering,
+                PromptVariantResolver.ServedContextOf(endpoint, profile), _Settings.PromptVariantCompactMaxContextTokens, _Settings.PromptVariantLeanMaxContextTokens);
+            if (resolution.Source != PromptVariantSourceEnum.Default)
+            {
+                _Logging.Debug(_Header + "mission " + mission.Id + " renders the " + resolution.Variant + " persona prompt variant (from "
+                    + resolution.Source + (resolution.Source == PromptVariantSourceEnum.ServedContext ? ", " + resolution.ServedContextTokens + " tokens served" : "") + ")");
+            }
+            if (profile != null && !String.IsNullOrWhiteSpace(profile.Rendering.Template) && !PromptVariantResolver.FromRendering(profile.Rendering).HasValue)
+                _Logging.Warn(_Header + "model profile " + profile.Id + " names rendering template '" + profile.Rendering.Template + "', which is not Current, Lean or Compact; ignored");
+            return resolution.Variant;
         }
 
         /// <summary>
@@ -580,18 +597,27 @@ namespace Armada.Core.Services
         }
 
         /// <summary>
-        /// What the captain about to launch can receive (served context and tools), from its model endpoint.
+        /// The model endpoint of the captain about to launch, or null when it has none or it could not be read.
         /// </summary>
-        private async Task<HandoffReader> ResolveReaderAsync(Captain? captain, CancellationToken token)
+        private async Task<ModelEndpoint?> ReadCaptainEndpointAsync(Captain? captain, CancellationToken token)
         {
-            ModelEndpoint? endpoint = null;
-            if (!String.IsNullOrEmpty(captain?.ModelEndpointId))
-            {
-                try { endpoint = await _Database.ModelEndpoints.ReadAsync(captain!.ModelEndpointId!, token).ConfigureAwait(false); }
-                catch (Exception ex) when (!(ex is OperationCanceledException && token.IsCancellationRequested)) { endpoint = null; }
-            }
+            if (String.IsNullOrEmpty(captain?.ModelEndpointId)) return null;
+            try { return await _Database.ModelEndpoints.ReadAsync(captain!.ModelEndpointId!, token).ConfigureAwait(false); }
+            catch (Exception ex) when (!(ex is OperationCanceledException && token.IsCancellationRequested)) { return null; }
+        }
 
-            return HandoffReaderResolver.Resolve(captain, endpoint);
+        /// <summary>
+        /// The model profile of the captain about to launch, or null when it has none or it could not be read.
+        /// </summary>
+        private async Task<ModelProfile?> ReadCaptainProfileAsync(Captain? captain, CancellationToken token)
+        {
+            if (String.IsNullOrEmpty(captain?.ModelProfileId)) return null;
+            try { return await _Database.ModelProfiles.ReadAsync(captain!.ModelProfileId!, token).ConfigureAwait(false); }
+            catch (Exception ex) when (!(ex is OperationCanceledException && token.IsCancellationRequested))
+            {
+                _Logging.Debug(_Header + "could not read model profile " + captain!.ModelProfileId + " of captain " + captain.Id + ": " + ex.Message);
+                return null;
+            }
         }
 
         /// <summary>

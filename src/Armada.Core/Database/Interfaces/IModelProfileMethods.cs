@@ -57,6 +57,19 @@ namespace Armada.Core.Database.Interfaces
         Task<ModelProfile> UpdateAsync(ModelProfile profile, CancellationToken token = default);
 
         /// <summary>
+        /// Record what a model probe measured about a profile's tool support (RS-8.1). Only the probed columns are written;
+        /// the administrator's capabilities, rendering, notes and LastUpdateUtc are unchanged.
+        /// </summary>
+        /// <param name="profileId">Profile identifier.</param>
+        /// <param name="toolsAvailable">Whether the probe found working tool calls, or null when not measured.</param>
+        /// <param name="mcpAvailable">Whether MCP tools are available as probed, or null when not measured.</param>
+        /// <param name="probedUtc">When the probe ran (UTC).</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>True when the profile exists and was updated.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when profileId is null or empty.</exception>
+        Task<bool> UpdateProbedCapabilitiesAsync(string profileId, bool? toolsAvailable, bool? mcpAvailable, DateTime probedUtc, CancellationToken token = default);
+
+        /// <summary>
         /// List one page of profiles (without revisions), newest first, with the total count of matching rows.
         /// </summary>
         /// <param name="query">Filters and paging.</param>

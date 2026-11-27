@@ -1487,13 +1487,13 @@ namespace Armada.Core.Services
                     || claimedMission.Status != mission.Status || claimedMission.StartedUtc != mission.StartedUtc) return;
                 mission = claimedMission;
                 captain.Assignment = mission;
-                if (captain.Runtime == AgentRuntimeEnum.Pi)
+                if (captain.Runtime == AgentRuntimeEnum.Pi || captain.Runtime == AgentRuntimeEnum.Codex)
                 {
                     Dock? interruptedDock = await MissionDockResolver.ReadAsync(_Database, mission, token).ConfigureAwait(false);
                     if (interruptedDock != null && !DockHostResolver.IsHarborDock(interruptedDock) && !String.IsNullOrEmpty(interruptedDock.WorktreePath))
                     {
-                        PiProjectMcpConfig.RemoveGenerated(interruptedDock.WorktreePath);
-                        RemoveGeneratedInstructionsFile(interruptedDock.WorktreePath, MissionPromptBuilder.GetInstructionsFileName(AgentRuntimeEnum.Pi.ToString()));
+                        if (captain.Runtime == AgentRuntimeEnum.Pi) PiProjectMcpConfig.RemoveGenerated(interruptedDock.WorktreePath);
+                        RemoveGeneratedInstructionsFile(interruptedDock.WorktreePath, MissionPromptBuilder.GetInstructionsFileName(captain.Runtime.ToString()));
                     }
                 }
             }
@@ -2176,14 +2176,14 @@ namespace Armada.Core.Services
                         }
 
                         // A pi launch whose exit was never handled may have left its generated .pi/mcp.json in the dock
-                        // (it is git-excluded and holds no token, but it must not linger), and its generated
-                        // AGENTS.override.md, which pi would load ahead of the repository's AGENTS.md and the next mission
-                        // generation would read back as the dock's own instructions.
-                        if (captain.Runtime == AgentRuntimeEnum.Pi && dock != null && !String.IsNullOrEmpty(dock.WorktreePath))
+                        // (it is git-excluded and holds no token, but it must not linger). A pi or Codex launch may have
+                        // left its generated AGENTS.override.md, which either runtime would load ahead of the repository's
+                        // AGENTS.md and the next mission generation would read back as the dock's own instructions.
+                        if ((captain.Runtime == AgentRuntimeEnum.Pi || captain.Runtime == AgentRuntimeEnum.Codex) && dock != null && !String.IsNullOrEmpty(dock.WorktreePath))
                         {
-                            if (PiProjectMcpConfig.RemoveGenerated(dock.WorktreePath))
+                            if (captain.Runtime == AgentRuntimeEnum.Pi && PiProjectMcpConfig.RemoveGenerated(dock.WorktreePath))
                                 _Logging.Info(_Header + "removed the generated .pi/mcp.json left in orphaned mission " + mission.Id + "'s dock");
-                            if (RemoveGeneratedInstructionsFile(dock.WorktreePath, MissionPromptBuilder.GetInstructionsFileName(AgentRuntimeEnum.Pi.ToString())))
+                            if (RemoveGeneratedInstructionsFile(dock.WorktreePath, MissionPromptBuilder.GetInstructionsFileName(captain.Runtime.ToString())))
                                 _Logging.Info(_Header + "removed the generated mission instructions left in orphaned mission " + mission.Id + "'s dock");
                         }
 

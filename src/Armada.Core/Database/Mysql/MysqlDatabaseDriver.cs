@@ -1568,6 +1568,7 @@ namespace Armada.Core.Database.Mysql
                 Armada.Core.Database.StageSubmissionTableSchema.Migration(Armada.Core.Enums.DatabaseTypeEnum.Mysql),
                 Armada.Core.Database.ContextDiscoverySchema.Migration(Armada.Core.Enums.DatabaseTypeEnum.Mysql),
                 Armada.Core.Database.ModelProfileTimeoutsSchema.Migration(Armada.Core.Enums.DatabaseTypeEnum.Mysql),
+                Armada.Core.Database.ProbedCapabilitiesSchema.Migration(Armada.Core.Enums.DatabaseTypeEnum.Mysql),
                 Armada.Core.Database.TimeBoundedScanSchema.Migration(Armada.Core.Enums.DatabaseTypeEnum.Mysql)
 
             };

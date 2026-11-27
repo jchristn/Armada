@@ -51,6 +51,11 @@ namespace Armada.Core.Services
         public const int LargeSpeedContextTokens = 34000;
 
         /// <summary>
+        /// Discovered context source label for a served window a model probe read (RS-8.1).
+        /// </summary>
+        public const string ProbeServedContextSource = "model probe, " + ModelContextDiscovery.OllamaPsSource;
+
+        /// <summary>
         /// Concurrency gate (overall and per inference host).
         /// </summary>
         public EvaluationConcurrencyGate Gate { get; }
@@ -397,9 +402,11 @@ namespace Armada.Core.Services
                         + run.CouldNotRunCount + " could not run");
 
                     // The run names the model as served: find or create its profile and revision (best effort). A Full
-                    // report, complete or not, becomes an advisory revision of that profile; nothing else changes.
-                    if (plan != null) run = await RecordReportAsync(run, endpoint).ConfigureAwait(false);
-                    else await _ModelProfiles.TryResolveAsync(ModelProfileService.ObservationFrom(run, endpoint)).ConfigureAwait(false);
+                    // report, complete or not, becomes an advisory revision of that profile. The tool-calling result
+                    // fills the profile's probed capabilities (RS-8.1); an administrator's values still win.
+                    ModelProfileResolution? resolution = await _ModelProfiles.TryResolveAsync(ModelProfileService.ObservationFrom(run, endpoint)).ConfigureAwait(false);
+                    if (plan != null) run = await RecordReportAsync(run, resolution).ConfigureAwait(false);
+                    await RecordProbedCapabilitiesAsync(context, resolution).ConfigureAwait(false);
                     if (!stop.IsStopped) await _ModelProfiles.TryRecordSpeedAsync(ModelProfileService.ObservationFrom(run, endpoint), run.Id).ConfigureAwait(false);
                     return run;
                 }
@@ -762,9 +769,14 @@ namespace Armada.Core.Services
 
         private async Task<ModelProbeRun> RecordReportAsync(ModelProbeRun run, ModelEndpoint? endpoint)
         {
+            ModelProfileResolution? resolution = await _ModelProfiles.TryResolveAsync(ModelProfileService.ObservationFrom(run, endpoint)).ConfigureAwait(false);
+            return await RecordReportAsync(run, resolution).ConfigureAwait(false);
+        }
+
+        private async Task<ModelProbeRun> RecordReportAsync(ModelProbeRun run, ModelProfileResolution? resolution)
+        {
             // An incomplete report (cancel or timeout) is recorded too, marked incomplete; it never fills the measured
             // block and never becomes the current revision.
-            ModelProfileResolution? resolution = await _ModelProfiles.TryResolveAsync(ModelProfileService.ObservationFrom(run, endpoint)).ConfigureAwait(false);
             if (run.Report == null || resolution == null) return run;
             try
             {
@@ -775,6 +787,50 @@ namespace Armada.Core.Services
             {
                 _Logging.Warn(_Header + "could not record the Full Evaluate report of " + run.Id + " on profile " + resolution.Profile.Id + ": " + ex.Message);
                 return run;
+            }
+        }
+
+        private async Task RecordProbedCapabilitiesAsync(ProbeContext context, ModelProfileResolution? resolution)
+        {
+            // Passed means working tool calls, Failed means none; a probe that could not run leaves the earlier value.
+            if (resolution == null || !context.ToolCallingOutcome.HasValue) return;
+            ModelProbeOutcomeEnum outcome = context.ToolCallingOutcome.Value;
+            if (outcome != ModelProbeOutcomeEnum.Passed && outcome != ModelProbeOutcomeEnum.Failed) return;
+            bool tools = outcome == ModelProbeOutcomeEnum.Passed;
+            bool mcp = tools && HandoffReaderResolver.Resolve(context.Captain, context.Endpoint).HasMcpTools;
+            try
+            {
+                await _Database.ModelProfiles.UpdateProbedCapabilitiesAsync(resolution.Profile.Id, tools, mcp, DateTime.UtcNow).ConfigureAwait(false);
+                _Logging.Info(_Header + context.Run.Id + " recorded probed capabilities on profile " + resolution.Profile.Id + ": tool calls " + tools + ", MCP " + mcp);
+            }
+            catch (Exception ex)
+            {
+                _Logging.Warn(_Header + "could not record the probed capabilities of " + context.Run.Id + " on profile " + resolution.Profile.Id + ": " + ex.Message);
+            }
+        }
+
+        private async Task RecordServedContextAsync(ProbeContext context, int served)
+        {
+            // A served window measured from the model server is the discovered context (RS-7.8) of an endpoint that
+            // configures none; a configured value always wins and is never overwritten.
+            ModelEndpoint? endpoint = context.Endpoint;
+            if (endpoint == null || String.IsNullOrEmpty(endpoint.Id) || !ModelContextDiscovery.Applies(endpoint)) return;
+            if (endpoint.InferenceOptions?.ContextLength.HasValue == true) return;
+            if (served < ModelContextDiscovery.MinContextLength || served > ModelContextDiscovery.MaxContextLength) return;
+            if (endpoint.DiscoveredContextLength == served) return;
+            try
+            {
+                DateTime now = DateTime.UtcNow;
+                if (await _Database.ModelEndpoints.UpdateContextDiscoveryAsync(endpoint.Id, served, ProbeServedContextSource, now).ConfigureAwait(false))
+                {
+                    endpoint.DiscoveredContextLength = served;
+                    endpoint.DiscoveredContextSource = ProbeServedContextSource;
+                    endpoint.ContextDiscoveredUtc = now;
+                }
+            }
+            catch (Exception ex)
+            {
+                _Logging.Warn(_Header + "could not record the served context of " + context.Run.Id + " on endpoint " + endpoint.Id + ": " + ex.Message);
             }
         }
 
@@ -923,6 +979,7 @@ namespace Armada.Core.Services
 
             ModelProbeResult result = ModelProbeScorer.ScoreServedContext(configured, served, reason);
             if (result.Metrics.ServedContextTokens.HasValue) context.Run.ServedContextTokens = result.Metrics.ServedContextTokens;
+            if (served.HasValue) await RecordServedContextAsync(context, served.Value).ConfigureAwait(false);
             return Finish(result, new ModelProbeResult(), started);
         }
 
@@ -979,6 +1036,7 @@ namespace Armada.Core.Services
             result.RunId = context.Run.Id;
             result.TenantId = context.Run.TenantId;
             await _Database.ModelProbeResults.CreateAsync(result).ConfigureAwait(false);
+            if (result.Probe == ModelProbeKindEnum.ToolCalling) context.ToolCallingOutcome = result.Outcome;
             if (result.Outcome == ModelProbeOutcomeEnum.Passed) context.Run.PassedCount++;
             else if (result.Outcome == ModelProbeOutcomeEnum.Failed) context.Run.FailedCount++;
             else context.Run.CouldNotRunCount++;
@@ -1085,6 +1143,7 @@ namespace Armada.Core.Services
             public long Remaining { get; set; } = 0;
             public string BudgetName { get; set; } = "evaluation run token budget";
             public bool ProvenanceRead { get; set; } = false;
+            public ModelProbeOutcomeEnum? ToolCallingOutcome { get; set; } = null;
 
             public CancellationToken Stop { get; }
 

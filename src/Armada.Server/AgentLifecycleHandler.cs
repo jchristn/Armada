@@ -1095,6 +1095,7 @@ namespace Armada.Server
             string commitInstructions = await _TemplateService.RenderCommitInstructionsAsync(_Settings.MessageTemplates, templateContext).ConfigureAwait(false);
             if (!String.IsNullOrEmpty(commitInstructions))
                 prompt += "\n\n" + commitInstructions;
+            prompt = MissionPromptBuilder.AppendContractReminder(prompt, mission.Persona, (await ReadLaunchProfileAsync(captain).ConfigureAwait(false))?.Rendering);
 
             string missionLogDir = Path.Combine(_Settings.LogDirectory, "missions");
             string logFilePath = Path.Combine(missionLogDir, mission.Id + ".log");
@@ -2001,6 +2002,21 @@ namespace Armada.Server
         /// off the launch runs on the Admiral host (where the dock is); with it on the launch is refused with
         /// <see cref="HarborDockNotFoundException"/>, which fails the mission, because retrying cannot help.
         /// </summary>
+        private async Task<ModelProfile?> ReadLaunchProfileAsync(Captain captain)
+        {
+            // Best effort: the launch prompt renders without the profile's rendering overrides when it cannot be read.
+            if (String.IsNullOrEmpty(captain.ModelProfileId)) return null;
+            try
+            {
+                return await _Database.ModelProfiles.ReadAsync(captain.ModelProfileId).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _Logging.Debug(_Header + "could not read model profile " + captain.ModelProfileId + " for the launch prompt: " + ex.Message);
+                return null;
+            }
+        }
+
         private async Task<LaunchExecutorResolution> ResolveLaunchExecutorAsync(Captain captain, Mission mission, Dock dock)
         {
             string? pinnedHarborId = String.IsNullOrWhiteSpace(dock.HarborId) ? null : dock.HarborId;

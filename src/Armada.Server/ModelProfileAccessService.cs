@@ -7,6 +7,7 @@ namespace Armada.Server
     using System.Threading.Tasks;
     using SyslogLogging;
     using Armada.Core.Database;
+    using Armada.Core.Enums;
     using Armada.Core.Models;
     using Armada.Core.Services;
     using Armada.Core.Settings;
@@ -134,11 +135,23 @@ namespace Armada.Server
             if (request == null) throw new ArgumentException("A request body is required.", nameof(request));
 
             if (request.Capabilities != null)
-                profile.Capabilities = new ModelProfileCapabilities { ToolsAvailable = request.Capabilities.ToolsAvailable, McpAvailable = request.Capabilities.McpAvailable };
+            {
+                // Only the administrator's values; the probed ones are written by probes (RS-8.1) and kept.
+                profile.Capabilities.ToolsAvailable = request.Capabilities.ToolsAvailable;
+                profile.Capabilities.McpAvailable = request.Capabilities.McpAvailable;
+            }
             if (request.Rendering != null)
             {
                 string? template = Blank(request.Rendering.Template);
                 if (template != null && template.Length > 256) throw new ArgumentException("Rendering.Template must be at most 256 characters.");
+                // The template names the persona prompt variant the profile's captains render (RS-8.2).
+                if (template != null)
+                {
+                    PromptVariantEnum? variant;
+                    try { variant = PromptVariantResolver.Parse(template); }
+                    catch (ArgumentException) { throw new ArgumentException("Rendering.Template must be Current, Lean or Compact."); }
+                    template = variant.HasValue ? variant.Value.ToString() : null;
+                }
                 profile.Rendering = new ModelProfileRendering
                 {
                     Template = template,
